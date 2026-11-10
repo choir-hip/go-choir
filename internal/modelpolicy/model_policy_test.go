@@ -244,7 +244,7 @@ func TestAssignSyntheticLunaSplitsOneToOneAndNeverFailsOver(t *testing.T) {
 	// each has the other six as fallbacks, iceman first.
 	for i := range 600 {
 		chosen, fallbacks, _ := Assign(provideriface.LLMSelection{Model: "pool:default"}, fmt.Sprintf("thread-%d", i))
-		if chosen.Model != "swe-2-flash" || chosen.Provider != "devin" || len(fallbacks) != 6 || fallbacks[0].Model != "iceman-contributor-free" || fallbacks[1].Model != "beam-free" || fallbacks[4].Provider != "chatgpt" || fallbacks[5].Provider != "bedrock" {
+		if chosen.Model != "swe-2-flash" || chosen.Provider != "devin" || len(fallbacks) != 8 || fallbacks[0].Model != "iceman-contributor-free" || fallbacks[1].Model != "beam-free" || fallbacks[4].Provider != "chatgpt" {
 			t.Fatalf("default pool thread-%d: %+v with fallbacks %+v", i, chosen, fallbacks)
 		}
 	}
@@ -432,7 +432,7 @@ func TestAssignLunaSyntheticGivesLunaEveryThreadAndSyntheticAsFallback(t *testin
 	if _, fb, _ := Assign(provideriface.LLMSelection{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017"}, "t"); len(fb) != 0 {
 		t.Fatalf("explicit synthetic pin has fallbacks %+v", fb)
 	}
-	if chosen, fb, _ := Assign(provideriface.LLMSelection{Model: "pool:default"}, "t"); len(fb) != 6 || fb[0].Model == chosen.Model {
+	if chosen, fb, _ := Assign(provideriface.LLMSelection{Model: "pool:default"}, "t"); len(fb) != 8 || fb[0].Model == chosen.Model {
 		t.Fatalf("default pool changed: %+v %+v", chosen, fb)
 	}
 	seen := map[string]int{}

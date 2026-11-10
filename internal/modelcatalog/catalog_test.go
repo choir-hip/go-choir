@@ -41,12 +41,11 @@ func TestDefaultPoolMembers(t *testing.T) {
 		{Provider: "openrouter", Model: "recursive/flint-v1.0:free", FallbackOnly: true},
 		{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free", FallbackOnly: true},
 		{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true},
-		{Provider: "bedrock", Model: "us.anthropic.claude-haiku-5-5", FallbackOnly: true},
-	}
-	for _, m := range pool {
-		if m.Provider == "synthetic" || m.Provider == "river" {
-			t.Fatalf("default pool holds a synthetic member %v (owner 2026-11-09: save Synthetic DeepSeek)", m)
-		}
+		// Owner 2026-11-10: the paid tail is spread by thread, Haiku about 80%,
+		// Synthetic and River DeepSeek about 10% each.
+		{Provider: "bedrock", Model: "us.anthropic.claude-haiku-5-5", FallbackOnly: true, Spread: "paid-tail", SpreadWeight: 8},
+		{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true, Spread: "paid-tail", SpreadWeight: 1},
+		{Provider: "river", Model: "deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true, Spread: "paid-tail", SpreadWeight: 1},
 	}
 	if len(pool) != len(want) {
 		t.Fatalf("default pool = %v, want %v", pool, want)
@@ -149,7 +148,7 @@ func TestLunaSyntheticPool(t *testing.T) {
 		t.Fatal("only synthetic-luna is a no-failover pool")
 	}
 	// The other pools are unchanged.
-	if d := Pools()[DefaultPool]; len(d) != 7 || d[5] != (PoolMember{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true}) {
+	if d := Pools()[DefaultPool]; len(d) != 9 || d[5] != (PoolMember{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true}) {
 		t.Fatalf("default pool = %v", d)
 	}
 	if s := Pools()[SyntheticLunaPool]; len(s) != 2 || s[0].SlotWeight() != 1 || s[1].SlotWeight() != 1 || s[0].Provider != "synthetic" {

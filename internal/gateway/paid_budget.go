@@ -62,9 +62,12 @@ const (
 	// defaultBedrockDailyUSD: about $200 of credits that must last through
 	// Thursday and keep the paper running through the owner's meetings.
 	defaultBedrockDailyUSD = 20.0
-	// defaultRiverDailyUSD: about $20 of tokens in all; self-development gets
-	// at most about $1 a day.
-	defaultRiverDailyUSD = 1.0
+	// defaultRiverDailyUSD: owner 2026-11-10: "$1/day cap can be lifted. Yes,
+	// this would use river and synthetic faster than ideal, but it's only for
+	// swe-2-flash's downtime." The orchestrator's conservative reading is $10
+	// a day (was $1: self-development only; River now also takes about a tenth
+	// of the default pool's tail, modelcatalog.Pools).
+	defaultRiverDailyUSD = 10.0
 
 	paidSpendSummaryEvery  = time.Hour
 	paidSpendUnknownCaller = "(unknown)"

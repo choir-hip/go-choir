@@ -49,7 +49,7 @@ model = "retired-model-9"
 	}
 	m := NewManager(ManagerConfig{PolicyPath: path})
 	ids := chainIDs(m.ContinuationChain(context.Background(), "owner"))
-	want := []string{"zai/glm-5.2", "chatgpt/gpt-6-luna", "devin/swe-2-flash", "opencode-go/iceman-contributor-free", "opencode-go/beam-free", "openrouter/recursive/flint-v1.0:free", "openrouter/nvidia/nemotron-3.5-super-vl:free", "bedrock/us.anthropic.claude-haiku-5-5"}
+	want := []string{"zai/glm-5.2", "chatgpt/gpt-6-luna", "devin/swe-2-flash", "opencode-go/iceman-contributor-free", "opencode-go/beam-free", "openrouter/recursive/flint-v1.0:free", "openrouter/nvidia/nemotron-3.5-super-vl:free", "bedrock/us.anthropic.claude-haiku-5-5", "synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", "river/deepseek-ai/DeepSeek-V4.1-Flash-1017"}
 	if strings.Join(ids, ",") != strings.Join(want, ",") {
 		t.Fatalf("chain = %v, want %v: the policy's catalogued models, then the default pool, no repeats, no uncatalogued model", ids, want)
 	}
@@ -68,7 +68,7 @@ func TestContinuationChainOfADefaultComputerIsTheDefaultPool(t *testing.T) {
 	for _, id := range ids {
 		// OpenRouter's crouton-alpha joined the default pool (owner
 		// 2026-11-05); the Claude delegate is never the computer's to use.
-		if strings.Contains(id, "claude-delegate") || strings.Contains(id, "synthetic") || strings.Contains(id, "river") {
+		if strings.Contains(id, "claude-delegate") {
 			t.Fatalf("chain %v holds a model that is not the computer's to use", ids)
 		}
 	}

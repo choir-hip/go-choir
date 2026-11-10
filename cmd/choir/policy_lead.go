@@ -77,7 +77,14 @@ func renderPoolSection(pool policyPool) string {
 	fmt.Fprintf(&b, "[pools.%s]\nmembers = [\n", pool.Name)
 	for _, m := range pool.Members {
 		if m.FallbackOnly {
-			fmt.Fprintf(&b, "  { model = %q, fallback_only = true },\n", m.Model)
+			spread := ""
+			if m.Spread != "" {
+				spread = fmt.Sprintf(", spread = %q", m.Spread)
+				if m.SpreadWeight > 1 {
+					spread += fmt.Sprintf(", spread_weight = %d", m.SpreadWeight)
+				}
+			}
+			fmt.Fprintf(&b, "  { model = %q, fallback_only = true%s },\n", m.Model, spread)
 			continue
 		}
 		weight := m.Weight
@@ -182,7 +189,7 @@ func policyLead(x *call) (any, error) {
 	next := policyPool{Name: poolName, Source: "file", Failover: pool.Failover, Members: []policyPoolMember{{Model: model, Weight: 1}}}
 	for _, m := range pool.Members {
 		if m.Model != model {
-			next.Members = append(next.Members, policyPoolMember{Model: m.Model, FallbackOnly: true})
+			next.Members = append(next.Members, policyPoolMember{Model: m.Model, FallbackOnly: true, Spread: m.Spread, SpreadWeight: m.SpreadWeight})
 		}
 	}
 	res, err := policyPutPools(x, file, []policyPool{next})

@@ -309,3 +309,21 @@ Named residuals, not fixed in M1:
   is treated as metered, so a truly free model with no `-free` id and no zero
   entry needs `--allow-paid` until the table lists it.
 
+
+## Amendment 2026-11-10: spread groups
+
+Owner, 2026-11-10: "I don't want DeepSeek before haiku but spread the load
+during Devin's downtime"; "use river and synthetic just a bit in autopaper.
+Like 10% each". A pool member gains two optional keys:
+`spread = "<name>"` and `spread_weight = N` (1 to 1000, default 1; refused
+without `spread`). Adjacent members with the same `spread` form a group.
+`Assign` picks the group's first member per thread, in proportion to
+`spread_weight`, from a hash of the thread (`thread + "|spread"`, so a
+thread keeps its member between turns and keeps its prompt cache); the other
+members of the group follow in pool order, wrapping, so each still falls
+through to the others. A pool with no `spread` is strict order, as before.
+The default pool's paid tail is one group: Bedrock Haiku 8, Synthetic
+DeepSeek 1, River DeepSeek 1. `choir policy get` shows `spread` and
+`spread_weight`; `policy pin` and `policy lead` write them back. This is a
+rollout-free schema field, not a switch: a pool that does not name it is
+unchanged.
