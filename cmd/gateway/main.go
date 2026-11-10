@@ -78,6 +78,7 @@ func main() {
 	}
 
 	handler.SetBreakers(breakers)
+	defer handler.StartCallTally()()
 
 	// Every provider call is counted in dollars; Bedrock and River stop at
 	// the owner's daily budgets (internal/gateway/paid_budget.go).

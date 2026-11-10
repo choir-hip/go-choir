@@ -224,6 +224,11 @@ type Handler struct {
 	paidSpend *PaidSpend
 }
 
+// StartCallTally starts the one timer that logs each closed hour of the
+// per-computer call tally without waiting for the next call. The returned
+// stop function ends it; the partial hour then open is dropped, not logged.
+func (h *Handler) StartCallTally() (stop func()) { return h.calls.start() }
+
 const internalCallerHeader = "X-Internal-Caller"
 
 // NewHandlerWithRateLimit creates a gateway Handler with per-autoputer rate
@@ -489,7 +494,7 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 	// (problems/models-configured-text-only-2026-10-15.md, FM11).
 	log.Printf("gateway: inference request from autoputer %s (provider=%s model=%s messages=%d tools=%d tool_choice=%s system_chars=%d max_tokens=%d reasoning=%s stream=%v %s)",
 		computerID, p.Name(), req.Model, len(req.Messages), len(req.Tools), req.ToolChoice, len(req.System), req.MaxTokens, req.ReasoningEffort, req.Stream, provider.SummarizeMedia(req.Messages))
-	h.calls.Call(computerID, p.Name())
+	h.calls.Call(computerID, p.Name()) // a failed call stays with the provider it was admitted to (call_tally.go)
 
 	ctx, cancel := context.WithTimeout(r.Context(), inferenceTimeout)
 	defer cancel()
@@ -524,7 +529,7 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 
 	// Step 6: Return the successful response.
 	log.Print("gateway: " + inferenceSuccessLine("inference succeeded", computerID, resp))
-	h.calls.InputTokens(computerID, resp.ProviderName, resp.Usage.InputTokens)
+	h.calls.Served(computerID, p.Name(), resp.ProviderName, resp.Usage.InputTokens)
 
 	writeGatewayJSON(w, http.StatusOK, ProviderResponse{
 		ID:               resp.ID,
@@ -599,7 +604,7 @@ func (h *Handler) handleStreamingInference(w http.ResponseWriter, r *http.Reques
 	}
 
 	log.Print("gateway: " + inferenceSuccessLine("streaming inference succeeded", computerID, resp))
-	h.calls.InputTokens(computerID, resp.ProviderName, resp.Usage.InputTokens)
+	h.calls.Served(computerID, p.Name(), resp.ProviderName, resp.Usage.InputTokens)
 }
 
 // resolveProvider selects the appropriate provider for the given request.

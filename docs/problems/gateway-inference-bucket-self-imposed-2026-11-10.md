@@ -75,6 +75,30 @@ the first call after the hour. It refuses nothing and delays nothing.
    bucket's own text ("rate limit exceeded for autoputer ...") simply no
    longer occurs on these routes.
 
+## Follow-up: the tally's own failure cases (review round 1)
+
+Review found the first tally counted a call under the provider it was
+admitted to but its tokens under the provider that served it, and left a
+closed hour unlogged until the next call. Fixes and their failure cases:
+
+1. One label per call. `Served` attributes the call and its input tokens to
+   the provider that served it; if a fallback served it, the call moves from
+   the admitted provider to the serving one. A call that fails stays with the
+   provider it was admitted to and carries no tokens.
+2. A closed hour is logged by a single timer owned by the tally (one goroutine
+   per process, started with the handler, none per call). Failure cases:
+   - Timer firing during a call: both take the closed hour out of the map
+     under the same mutex; whichever is first logs it, the other finds
+     nothing. Lines are written after the lock is released, so logging never
+     holds it.
+   - Double flush of one hour (a call and the timer, or two ticks): the
+     counts are removed when taken, so one hour is logged once.
+   - Shutdown mid-hour: `stop` ends the timer and drops the partial hour,
+     which is not logged. A restart therefore loses at most the last partial
+     hour of counts. This is accepted: the tally is visibility, not a ledger.
+   - An idle gateway: the timer logs the hour that closed with no further
+     call needed. An hour with no calls has no lines.
+
 ## Tests
 
 The tests that asserted the bucket's refusals on inference and search were
