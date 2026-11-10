@@ -77,12 +77,33 @@ function." Each server lane extends the mechanism named in section 3.
 - 0.2 **The frozen API.** The app cannot change after review, so the
   endpoints it calls are listed, versioned and frozen, with a rule for what
   the app does when the server is newer.
-- 0.3 **The nsh spike.** A blank nsh app embedded in our own Xcode project,
-  on a real iPhone, that plays audio in the background with the screen
-  locked and captures the microphone at the same time. This settles whether
-  nsh can carry the app before anything is built on it. If it cannot after
-  the planned upstream pieces, stop and write the finding; do not fall back
-  silently to another stack.
+- 0.3 **The runtime spike: nsh and Exact, side by side.** The same blank
+  app is built on each, embedded in our own Xcode project, on a real
+  iPhone. Each must:
+  - play long audio with the screen locked, with Now Playing and remote
+    commands;
+  - run a Swift module of ours that captures the microphone with voice
+    processing while that audio plays as the echo reference;
+  - render a 20,000-word page with cites and images, scroll it, and read it
+    with VoiceOver.
+
+  `expo/exact` was announced on 2026-11-09 (owner: "maybe even better than
+  nsh"). As read that day, from its README and reference docs:
+  - it documents background playback, Now Playing and a Swift module
+    recipe, where nsh has open requests for audio basics (#1059, #1060,
+    #1194);
+  - it is pre-alpha, with no releases and "no API stability... by design",
+    and iOS push, in-app purchase and passkeys are not documented;
+  - its UI is not JavaScript, but TypeScript data modules ship as Hermes
+    bytecode. A build with Rust-only data would carry no interpreter; the
+    spike confirms whether that holds, since it bears on App Review;
+  - it is not React Native and documents no use of Expo modules.
+
+  Neither documents microphone and playback together with echo
+  cancellation, which is the highest risk. The spike picks the runtime; the
+  lanes below read "nsh" but do not otherwise depend on which wins. If
+  neither passes, stop and write the finding; do not fall back silently to
+  a third stack.
 
 **Wave 1 (parallel):**
 
