@@ -64,7 +64,7 @@ func TestRunReportsDepthFromThisRunsScores(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "scores.json")
 	// Previously scored 3; this run rescores the new revision to 8 (mode 3).
 	if err := writeScores(path, scoresFile{Version: 1, Scores: map[string]scoreRow{
-		"pub-a": {Revision: 1, Importance: 3, Section: "world"},
+		"pub-a": fullRow(1, 3),
 	}}); err != nil {
 		t.Fatal(err)
 	}
