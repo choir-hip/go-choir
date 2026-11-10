@@ -170,7 +170,7 @@ var storyFiller = strings.Repeat("The harbor authority described the schedule, t
 
 // citedOnce cites only the court capture: one outlet.
 func citedOnce(text string) string {
-	return text + "\n\nThe court ruled that the merger may proceed {{cite https://example.org/court \"the court ruled that the merger may proceed\"}}."
+	return text + "\n\n" + storyFiller + "\n\nThe court ruled that the merger may proceed {{cite https://example.org/court \"the court ruled that the merger may proceed\"}}."
 }
 
 var wireCapture = texturewrite.Capture{
