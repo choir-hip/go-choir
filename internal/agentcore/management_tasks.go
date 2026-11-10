@@ -111,6 +111,10 @@ func (rt *Runtime) managementTaskOpening(ctx context.Context, rec *types.RunReco
 	if entries, err := rt.store.ListRunMemoryEntries(ctx, rec.OwnerID, rec.RunID); err != nil || len(entries) > 0 {
 		return nil
 	}
+	// Every read below declares the task's desk as its reader, as the run's
+	// own context does once it starts: the records' capture labels and the
+	// story page are both read as that desk.
+	ctx = withDeskReader(ctx, rec.AgentProfile)
 	o := &taskOpening{rt: rt, rec: rec}
 	var b strings.Builder
 	if records, err := rt.loadCellRecords(ctx, rec.OwnerID, rec.ComputerID, strings.TrimSpace(rec.AgentID), rec.RunID); err == nil && len(records.view) > 0 {
@@ -126,9 +130,6 @@ func (rt *Runtime) managementTaskOpening(ctx context.Context, rec *types.RunReco
 	// The story page goes through the same egress the verb does, with no run
 	// id, so the read marks nothing; the library head is read first and
 	// marked on commit, so a story opened meanwhile is never hidden.
-	// The read declares the task's desk as its reader, as the run's own
-	// context does once it starts.
-	ctx = withDeskReader(ctx, rec.AgentProfile)
 	exec := toolregistry.ExecutionContext{OwnerID: rec.OwnerID, ComputerID: rec.ComputerID}
 	storiesIn := false
 	if head, headErr := rt.store.StoryLibraryHeadOf(ctx, rec.OwnerID, rec.ComputerID); headErr == nil {
