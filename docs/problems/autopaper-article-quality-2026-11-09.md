@@ -175,3 +175,43 @@ when under 14 days old at the time of the scorer's pass; below 100 words:
 | Failing feeds | `rss:venturebeat` answers 429 and `official:cisa:advisories` 403 to the paper's user agent and to curl, a browser agent and a feed-reader agent alike for CISA (read from this builder's network 2026-11-10); VentureBeat serves only fetchers it knows by name. Passing as another fetcher would be impersonation | Retire both rows with the reason here; both outlets stay reachable by search | A later change of the sites' policy would not be noticed; the audit's per-source error share shows it | registry guard updated |
 | Stories with no section | Sections vanish by date (every story 10-13 to 10-26, none after 10-27) and in partial runs (11-07, 11-08): the 14-day score retention and the newest-100 read. Lane B owns sections | Left to lane B | | |
 | Single-source stories | None since the two-outlet gate: 0 of 2,950 stories from 10-27 cite one source | Nothing to fix; the audit rerun shows it stays zero | | |
+
+### Outcome of the build (2026-11-10, after the fresh source audit)
+
+The wave 0 audit (`docs/evidence/autopaper-source-audit-2026-11-10/`) re-ranked
+the list. Built: the language stamp, the publish holds (100-word floor,
+non-English, process text) with the prompt's English and depth lines, one
+marker for adjacent citations of a source (the stored text projection,
+`internal/texturedoc/projection.go:158-168`, as well as the reader: 25% of
+stored texts had "[1] [1]", so the renderer alone was not the cause), the
+outlet fold (`internal/outlet/outlet.go`: bbc.co.uk into bbc.com, europesays.com
+none), and the two failing feeds retired. Not built, with the reason:
+
+- **Failed support checks (597 of 21,784).** The consequence already exists:
+  a failed verdict mints a record to `texture:<doc>` that wakes the writer
+  (`internal/store/support.go:178-205`, counted as work at
+  `internal/store/story_research_request.go:421`, shown to the writer at
+  `internal/texturewrite/frame.go:324`). A hold at publish cannot use the
+  verdict because the verdict is written after the commit, off its path
+  (`support_judge.go:60-90`), so a hold would mean making every publish wait
+  on a model call. Hypotheses for the 14% still carrying one, not settled
+  without the writer's turns after a `support_failure` record: (a) the count
+  includes earlier published versions that a later revision corrected; (b) the
+  judge lags (16% of 7-day checks pending), so the record arrives late; (c) the
+  writer does not correct. Needs the run ledger of a story with a failure.
+- **Duplicates.** A headline-overlap hold at publish was designed and not
+  built: nothing local records which of two similar stories published first,
+  so any hold rule either misses half the pairs or lets each of a pair hold
+  the other (both stranded). The place to decide is the platform's publish,
+  which knows the published set (not this lane's files). The Jev shortlist
+  (`intake_labels.go:50-52`) is unchanged; lane A is rewriting its call site.
+  Note the audit's duplicate pairs are within two days, inside the 72-hour
+  window, so the window is not shown to be the cause.
+- **Roundups, sections, revision churn.** Roundups: new stories show none
+  (audit). Sections: lane B's file. Revision churn (median 4 revisions) is
+  recorded, not investigated: it needs the turn-commit reasons of a few
+  stories.
+- **The floor value.** 100 words held 24% of stories from 10-27 on; the audit's
+  new-story median is 187 with 36% under 150. The floor is the guard, the
+  prompt's depth line is the lever; raise the floor only after the next audit
+  shows the prompt moved the median.

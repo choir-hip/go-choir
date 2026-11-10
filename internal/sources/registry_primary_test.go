@@ -50,7 +50,6 @@ var wave1 = map[string]struct {
 	"official:uk_dsit:news":                      {"ogl-v3.0", "primary_government", "www.gov.uk"},
 	"official:tw_cbc:press":                      {"ogdl-tw-v1.0", "primary_government", "www.cbc.gov.tw"},
 	"official:kremlin:en_news":                   {"cc-by-4.0", "state_media", "en.kremlin.ru"},
-	"official:cisa:advisories":                   {"us-federal-public-domain", "primary_government", "www.cisa.gov"},
 	"official:eia:today_in_energy":               {"us-federal-public-domain", "primary_government", "www.eia.gov"},
 }
 

@@ -3287,33 +3287,6 @@
       "retention_days": 90
     },
     {
-      "id": "rss:venturebeat",
-      "type": "rss",
-      "name": "VentureBeat",
-      "url": "https://venturebeat.com/feed/",
-      "verticals": [
-        "technology",
-        "ai",
-        "startups",
-        "internet_culture"
-      ],
-      "languages": [
-        "en"
-      ],
-      "regions": [
-        "global"
-      ],
-      "poll_interval_seconds": 900,
-      "max_items_per_poll": 100,
-      "rate_limit": "15m poll",
-      "conditional_request_mode": "etag_last_modified",
-      "tos_class": "public_feed",
-      "robots_policy": "rss_feed",
-      "auth_policy": "none",
-      "store_body_policy": "excerpt_only",
-      "retention_days": 90
-    },
-    {
       "id": "rss:wired",
       "type": "rss",
       "name": "Wired",
@@ -6155,37 +6128,6 @@
       "license": "cc-by-4.0",
       "official": true,
       "source_standing": "state_media"
-    },
-    {
-      "id": "official:cisa:advisories",
-      "type": "rss",
-      "name": "CISA Cybersecurity Advisories",
-      "url": "https://www.cisa.gov/cybersecurity-advisories/all.xml",
-      "verticals": [
-        "security",
-        "technology"
-      ],
-      "languages": [
-        "en"
-      ],
-      "regions": [
-        "us"
-      ],
-      "jurisdictions": [
-        "US"
-      ],
-      "poll_interval_seconds": 3600,
-      "max_items_per_poll": 25,
-      "rate_limit": "1h poll",
-      "conditional_request_mode": "etag_last_modified",
-      "tos_class": "official_public_feed",
-      "robots_policy": "rss_feed",
-      "auth_policy": "none",
-      "store_body_policy": "bounded_release_text",
-      "retention_days": 365,
-      "license": "us-federal-public-domain",
-      "official": true,
-      "source_standing": "primary_government"
     },
     {
       "id": "official:eia:today_in_energy",
