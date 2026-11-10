@@ -128,7 +128,7 @@ func (p *RSSPoller) Poll(ctx context.Context, source *Source) (PollResult, error
 			Published:     published.UTC(),
 			FetchedAt:     time.Now().UTC(),
 			Verticals:     source.Verticals,
-			Language:      firstString(source.Languages),
+			Language:      itemLanguage(source, feedItem.Title, bodyText),
 			Region:        firstString(source.Regions),
 			BodyKind:      BodyKindForSourceType(source.Type, bodyText),
 			BodyLength:    len([]rune(strings.TrimSpace(bodyText))),
@@ -144,6 +144,17 @@ func (p *RSSPoller) Poll(ctx context.Context, source *Source) (PollResult, error
 	fetch.ItemCount = len(items)
 
 	return PollResult{Fetch: fetch, Items: items}, nil
+}
+
+// itemLanguage is the language of one feed item: what its own text says when
+// that is clear, else the source's first language. A feed whose label does
+// not fit its items (a mixed or wrongly labelled feed) no longer stamps the
+// label on every item (lane Q, docs/problems/autopaper-article-quality-2026-11-09.md).
+func itemLanguage(source *Source, title, body string) string {
+	if guessed := GuessLanguage(title + ". " + body); guessed != "" {
+		return guessed
+	}
+	return firstString(source.Languages)
 }
 
 func cleanFeedDescriptionText(raw string) string {
