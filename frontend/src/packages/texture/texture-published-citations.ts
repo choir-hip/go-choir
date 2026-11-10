@@ -296,6 +296,13 @@ function citationBodyHTML(citation: PublishedCitation, tag: 'span' | 'blockquote
   return `${blocks}<span class="texture-citation-check">${badgeHTML(citation)}${judgementHTML(citation)}</span>`;
 }
 
+/** The source number a published citation anchor shows, or '' when it has none. */
+export function publishedCitationNumber(ctx: PublishedCitationContext, anchorId: string): string {
+  const citation = ctx.byAnchor.get(anchorId);
+  const source = citation ? ctx.sourceByKey.get(citation.sourceKey) : undefined;
+  return source ? String(source.number) : '';
+}
+
 /** The inline numbered marker for a citation, with its quote popover. */
 export function renderPublishedCitationRef(ctx: PublishedCitationContext, anchorId: string): string | null {
   const citation = ctx.byAnchor.get(anchorId);

@@ -4,6 +4,7 @@ import {
   sourceEntityID,
 } from '../../lib/app-sdk';
 import {
+  publishedCitationNumber,
   renderPublishedCitationRef,
   type PublishedCitationContext,
 } from './texture-published-citations';
@@ -253,7 +254,21 @@ function renderInlineNode(node: StructuredNode, rc: RenderContext): string {
 }
 
 function renderInlineContent(nodes: StructuredNode[] = [], rc: RenderContext): string {
-  return nodes.map((node) => renderInlineNode(node, rc)).join('');
+  // Adjacent published citations of one source read as one marker ("[1] [1]"
+  // was in a quarter of stories); every quote stays in the Sources list.
+  let previousNumber = '';
+  const out: string[] = [];
+  for (const node of nodes) {
+    if (node.type === 'source_ref' && rc.citations) {
+      const number = publishedCitationNumber(rc.citations, String(node.attrs?.id || '').trim());
+      if (number && number === previousNumber) continue;
+      previousNumber = number;
+    } else if (!(node.type === 'text' && !(node.text || '').trim())) {
+      previousNumber = '';
+    }
+    out.push(renderInlineNode(node, rc));
+  }
+  return out.join('');
 }
 
 /** The words a Write citation quotes (its ref attr), or ''. */

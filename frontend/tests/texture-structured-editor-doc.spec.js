@@ -347,3 +347,34 @@ test('literal ** in an unmarked text node renders bold; other asterisks and mark
   expect(html).toContain('<p><strong>Marked</strong> text.</p>');
   expect(html).not.toContain('**');
 });
+
+// Adjacent published citations of one source render one marker; a marker
+// after prose keeps its own (lane Q, docs/problems/autopaper-article-quality-2026-11-09.md).
+test('adjacent citations of one source render one marker and keep the later one after prose', () => {
+  const bodyDoc = writeDoc([{
+    type: 'paragraph',
+    attrs: { id: 'p-adj' },
+    content: [
+      { type: 'text', text: 'Goods stay out.' },
+      writeRef('ref-a', 'src_b', 'expanded_ref', 'We cannot go back'),
+      { type: 'text', text: ' ' },
+      writeRef('ref-b', 'src_b', 'expanded_ref', 'We cannot go back'),
+      { type: 'text', text: ' Talks continue.' },
+      writeRef('ref-c', 'src_b', 'expanded_ref', 'We cannot go back'),
+    ],
+  }]);
+  const bundle = {
+    artifact: { body_doc: bodyDoc },
+    payload: {
+      manifest: JSON.stringify({ anchors: ['ref-a', 'ref-b', 'ref-c'].map((id) => ({ anchor_id: id, relation: 'embeds', ref: { doc: 'cap-src_b', version: 'v1', cid: 'c3', quote: 'We cannot go back' }, cids: ['c3'] })) }),
+      resolved_blocks: [{ doc: 'cap-src_b', cid: 'c3', text: 'Pires said: We cannot go back to that.', kind: 'p', url: 'https://example.com/unicef', title: 'UNICEF briefing' }],
+    },
+    checks: { citations: [] },
+  };
+  const citations = buildPublishedCitationContext(bundle, []);
+  const html = renderStructuredTextureDocHTML(bodyDoc, [], { citations });
+  expect((html.match(/data-texture-source-ref /g) || []).length).toBe(2);
+  expect(html).toContain('data-citation-anchor="ref-a"');
+  expect(html).not.toContain('data-citation-anchor="ref-b"');
+  expect(html).toContain('data-citation-anchor="ref-c"');
+});

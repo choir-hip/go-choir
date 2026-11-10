@@ -164,7 +164,12 @@ func (p *projector) renderInlineContent(nodes []Node) {
 				title := sourceTitle(entity)
 				p.builder.WriteString(fmt.Sprintf("[source %d: %s]", number, title))
 			} else {
-				p.builder.WriteString(fmt.Sprintf("[%d]", number))
+				// Adjacent citations of one source read as one marker: "[1] [1]"
+				// was in 25% of stored texts. Each anchor still lands in refs.
+				marker := fmt.Sprintf("[%d]", number)
+				if !strings.HasSuffix(strings.TrimRight(p.builder.String(), " "), marker) {
+					p.builder.WriteString(marker)
+				}
 			}
 			p.refs = append(p.refs, ProjectedSourceRef{
 				Number:         number,
