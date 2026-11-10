@@ -97,8 +97,16 @@ A commit subject ends with its class and rollback, for example
 
 - **No switches.** New behavior ships on: no off-by-default setting, no
   selector, no allowlist that gates a feature. A bug is fixed, not hidden. A
-  correctness refusal is not a switch. Too many model calls is a code problem.
+  correctness refusal is not a switch.
   A grant that spends the owner's money is an owner act on the tape.
+- **No limits on our own model calls** (owner, 2026-11-10: "too many model
+  calls is a code problem to fix, not a limit to impose", enforced
+  consistently). No rate bucket, in-flight cap, spacing or call quota on our
+  own code's calls to a model or to Jev. When calls are too many, fix the
+  caller (for Jev: more questions in one call, not more calls). What stays:
+  backing off after a provider's real refusal, an owner-set spending cap,
+  bounds on what strangers can cause, and deadlines. Log volume so a spike
+  is seen.
 - **Expedite everything until the owner says Autoradio is solid.** Every
   landing commit that is not docs-only carries `Ring-Expedite: <the defect it
   unblocks>`. The deploy also expedites, without a trailer, any release that
