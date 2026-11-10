@@ -92,6 +92,9 @@ type ToolLoopRequest struct {
 	// OpenCode x-opencode-session) send it; others ignore it. Empty falls
 	// back to ConversationID where a session is required.
 	CacheKey string `json:"cache_key,omitempty"`
+	// NoShed says the run has no usable next pool member, so the gateway's
+	// hourly pacing must not shed it.
+	NoShed bool `json:"no_shed,omitempty"`
 
 	// System is the system prompt (potentially including the tool catalog).
 	System string `json:"system"`
@@ -291,6 +294,10 @@ type ProviderQuotaError struct {
 	// provider's own time.
 	RetryAt          time.Time
 	RetryAtEstimated bool
+	// Shed says the gateway's hourly pacing sent this thread to the next
+	// pool member: the model's quota is not spent, so the loop switches for
+	// this run and does not hold the model for the computer's other runs.
+	Shed bool
 }
 
 func (e *ProviderQuotaError) Error() string {

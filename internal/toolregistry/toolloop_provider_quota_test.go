@@ -293,3 +293,46 @@ func TestImageRunWithNoVisionModelLeftTakesTheIncidentPath(t *testing.T) {
 		t.Fatalf("phases = %v, want an incident", r.phases)
 	}
 }
+
+// A paced refusal (the gateway's hourly Devin pacing, Shed) moves this run to
+// the next member but never holds the model in the computer's shared ledger:
+// the quota is not spent and the computer's other threads still use it.
+func TestShedQuotaSwitchesTheRunWithoutHoldingTheModel(t *testing.T) {
+	shortenQuota(t)
+	shed := fmt.Errorf("gateway call failed: %w", &provideriface.ProviderQuotaError{Provider: "synthetic", Model: "m",
+		Reason: "provider quota exhausted (synthetic)", Message: "paced", RetryAt: time.Now().Add(10 * time.Second), RetryAtEstimated: true, Shed: true})
+	p := &poolProvider{errs: map[string][]error{"synthetic": {shed}}}
+	r := &quotaRun{}
+	ledger := NewQuotaLedger()
+	text, err := runQuota(context.Background(), p, r, quotaSetup{ledger: ledger}, synthMember, lunaMember)
+	if err != nil || text != "done by chatgpt" {
+		t.Fatalf("run = %q, %v; want the run to move to the next member", text, err)
+	}
+	if len(r.switches) != 1 || r.switches[0]["reason"] != "provider_quota" {
+		t.Fatalf("switches = %v, want one provider_quota switch", r.switches)
+	}
+	if until := ledger.Until(synthMember, time.Now()); !until.IsZero() {
+		t.Fatalf("a shed held %s in the shared ledger until %s", servingSelectionID(synthMember), until)
+	}
+}
+
+// A run with no usable next member tells the gateway (NoShed) so its hourly
+// pacing cannot shed it into "every model is out of quota"; a run with a
+// next member does not.
+func TestRunWithoutANextMemberAsksNotToBeShed(t *testing.T) {
+	shortenQuota(t)
+	alone := &poolProvider{}
+	if _, err := runQuota(context.Background(), alone, &quotaRun{}, quotaSetup{}, synthMember); err != nil {
+		t.Fatal(err)
+	}
+	if len(alone.requests) == 0 || !alone.requests[0].NoShed {
+		t.Fatalf("requests = %+v, want NoShed on a run with no next member", alone.requests)
+	}
+	pooled := &poolProvider{}
+	if _, err := runQuota(context.Background(), pooled, &quotaRun{}, quotaSetup{}, synthMember, lunaMember); err != nil {
+		t.Fatal(err)
+	}
+	if len(pooled.requests) == 0 || pooled.requests[0].NoShed {
+		t.Fatalf("requests = %+v, want no NoShed when a next member exists", pooled.requests)
+	}
+}
