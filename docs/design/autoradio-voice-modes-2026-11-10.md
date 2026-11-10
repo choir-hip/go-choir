@@ -197,6 +197,46 @@ Limits: the bench runs the open model, the phone a compressed build of it;
 simulated rooms are not real rooms. The bench ranks words; the owner's QA
 session gives the absolute numbers.
 
+## The radio is already running (owner, 2026-11-10, third pass)
+
+Owner: "it shouldn't stop playing as soon as it feels like the user starts
+speaking ... if the user doesn't produce a cogent utterance, it doesn't
+count ... it's not waking it up. The system is already running. ... when
+you interrupt it, you're probably going to give more than one word ... a
+cogent statement and usually relevant to the content."
+
+This is the difference from a smart speaker, and it replaces "wake, then
+listen" as the main path:
+
+- **Keep playing and judge the utterance.** Speech in the listener's voice
+  is buffered and transcribed while the programme continues. It counts as
+  an interruption only when it is a complete, cogent utterance. Noise,
+  fillers, half-words and other voices never register, so there is nothing
+  to resume from.
+- **Soft acknowledgement.** At the first second of the listener's speech
+  the programme lowers its volume a little; it returns if the utterance
+  does not count. Mike's hold-and-resume becomes duck-and-return.
+- **The app knows what it is saying.** It has the text of the story being
+  read and of the clip being played. Words that match the programme are
+  the programme. An utterance about the current content, or a command, is
+  likely addressed to it. This is the relevance test and the echo test,
+  from the same known text.
+- **The word becomes an override, not a gate.** Saying the word first makes
+  a short or off-topic utterance count ("tetra, pause"), and it is what
+  works when the room is noisy. The agent's coined three-syllable words are
+  dropped (owner: "we just can't force users to use cadenza or marimba").
+  If "tetra" does not measure well, the answer is a word the listener
+  chooses.
+- **Noisy rooms.** People seldom talk to a radio over a television or in a
+  café. When other voices persist, the app says so on screen and requires
+  the word or the button until the room is quiet. It does not try to win
+  that case.
+
+What this costs, to measure in the spike: transcribing continuously while
+playing (power), and the seconds the programme talks over the listener
+before the utterance is judged. The voice check runs first so recognition
+runs only on the listener's voice.
+
 ## What the spike must answer
 
 On the owner's iPhone, with a podcast playing, on the loudspeaker and on
