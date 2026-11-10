@@ -215,6 +215,7 @@
     promptSubmitter.send(promptReplay.text, {
       focus: promptReplay.focus || null,
       windowId: promptReplay.windowId || '',
+      aim: promptReplay.aim || null,
     });
   }
   $: if (mounted && desktopReady && publicRoutePath && publicRoutePath !== lastOpenedPublicRoutePath) {

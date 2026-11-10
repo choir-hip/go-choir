@@ -34,7 +34,7 @@ export async function submitConductorPrompt(text, options = {}) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Conductor submission failed (${res.status})`);
+    throw new Error(err.error || `Submission failed (${res.status})`);
   }
 
   return res.json();
@@ -44,9 +44,14 @@ export async function submitConductorPrompt(text, options = {}) {
 // request (lane D). docState is owned, foreign or none. A failure of any kind
 // is null: the caller takes the default class and the text is still sent.
 export async function classifyPromptInput(text, docState, options = {}) {
+  // A stalled classify falls to the default class after ten seconds; the text
+  // is still sent.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 10_000);
   try {
     const res = await fetchWithRenewal('/api/prompt-bar/classify', {
       method: 'POST',
+      signal: controller.signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: trimText(text), doc_state: docState, command_id: options.commandId || crypto.randomUUID() }),
     });
@@ -55,7 +60,40 @@ export async function classifyPromptInput(text, docState, options = {}) {
     return got && typeof got.class === 'string' ? got : null;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
+}
+
+// askStory is "ask for a story" (lane F): the asker's own document that the
+// desk investigates. The receipt has doc_id.
+export async function askStory(text, options = {}) {
+  const res = await fetchWithRenewal('/api/autopaper/ask', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: trimText(text), command_id: options.commandId || crypto.randomUUID() }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Ask failed (${res.status})`);
+  }
+  return res.json();
+}
+
+// addSourceFeed is "add a source" (lane F). A refusal is thrown with the
+// server's code and reason so the bar can show both.
+export async function addSourceFeed(feedUrl) {
+  const res = await fetchWithRenewal('/api/autopaper/sources/schedules', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ feed_url: feedUrl }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const detail = [err.code, err.reason || err.error].filter(Boolean).join(': ');
+    throw new Error(detail || `Could not add the source (${res.status})`);
+  }
+  return res.json().catch(() => ({}));
 }
 
 // forkPublishedVersion makes the reader's own document from a published

@@ -38,7 +38,7 @@ type PromptClass struct {
 // ClassifyPromptInput classifies the owner's text for a prompt bar aimed at
 // state. It never fails: every failure is the deterministic default (edit on
 // a document the owner owns, comment on one they do not, request with none),
-// with its cause as the rule. commandID keys the call so a retry replays.
+// with its cause as the rule. commandID only names the call's run; a retry asks again.
 func (rt *Runtime) ClassifyPromptInput(ctx context.Context, ownerID, commandID, text string, state promptroute.DocState) (class PromptClass) {
 	candidates := promptroute.ClassCandidates(state)
 	defer func() {

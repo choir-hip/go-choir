@@ -62,11 +62,23 @@ func TestClassifyInputFailureTakesTheDefault(t *testing.T) {
 	}
 }
 
-func TestClassifyInputWithNoDocumentAsksNothing(t *testing.T) {
+func TestClassifyInputWithNoDocumentTellsTheRequestKindsApart(t *testing.T) {
 	f := newSystem1Fixture(t)
-	c := f.rt.ClassifyPromptInput(context.Background(), f.owner, "cmd-5", "write me a story about tides", promptroute.DocNone)
-	if c.Class != promptroute.ClassRequest || c.Rule != promptroute.RuleSoleCandidate || f.judge.callCount() != 0 {
-		t.Fatalf("%+v calls=%d", c, f.judge.callCount())
+	f.judge.first = 0.9
+	f.judge.prefer = map[string]string{promptroute.ClassQuestionID: promptroute.ClassAskStory}
+	c := f.rt.ClassifyPromptInput(context.Background(), f.owner, "cmd-5", "what happened at the harbor strike", promptroute.DocNone)
+	if c.Class != promptroute.ClassAskStory || c.Rule != promptroute.RuleJudge {
+		t.Fatalf("%+v", c)
+	}
+	f.judge.prefer = map[string]string{promptroute.ClassQuestionID: promptroute.ClassAddSource}
+	c = f.rt.ClassifyPromptInput(context.Background(), f.owner, "cmd-5b", "add https://example.com/feed.xml", promptroute.DocNone)
+	if c.Class != promptroute.ClassAddSource {
+		t.Fatalf("%+v", c)
+	}
+	f.rt.SetCandidateJudge(nil)
+	c = f.rt.ClassifyPromptInput(context.Background(), f.owner, "cmd-5c", "anything", promptroute.DocNone)
+	if c.Class != promptroute.ClassRequest {
+		t.Fatalf("the plain agent request is the default: %+v", c)
 	}
 }
 

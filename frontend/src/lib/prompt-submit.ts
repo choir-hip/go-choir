@@ -15,7 +15,7 @@
 //  D4 a session that expired mid-submit shows an error instead of the sign-in.
 import { get, writable, type Readable } from 'svelte/store';
 import { AuthRequiredError } from './auth.js';
-import { classifyPromptInput, forkPublishedVersion, submitConductorPrompt, waitForConductorDecision } from './conductor.js';
+import { addSourceFeed, askStory, classifyPromptInput, forkPublishedVersion, submitConductorPrompt, waitForConductorDecision } from './conductor.js';
 import { TEXTURE_AGENT, promptAimOf, type PromptAim, type PromptFocus } from './prompt-focus';
 import {
   focusWindow,
@@ -61,7 +61,7 @@ export function createPromptSubmitter(host: PromptSubmitHost) {
 
   // What the last aimed send was, so one tap can send the same text under
   // another class. A re-send is a new command: the first one already happened.
-  let last: { text: string; focus: PromptFocus | null; windowId: string; aim: PromptAim } | null = null;
+  let last: { text: string; focus: PromptFocus | null; windowId: string; aim: PromptAim | null } | null = null;
   let sentAs: PromptSentAs | null = null;
 
   // A routed line clears itself; one that shows its class stays longer, so
@@ -120,6 +120,9 @@ export function createPromptSubmitter(host: PromptSubmitHost) {
       return;
     }
     if (!inputClass) sentAs = null;
+    // No document in view: Jev tells the request kinds apart. The plain agent
+    // request is the default and stays the path for anything else.
+    if (!focus && inputClass !== 'request' && (await sendRequestKind(text, inputClass))) return;
     const fallbackWindowTitle = text.length > 28 ? `${text.slice(0, 28)}…` : text;
     try {
       routing.set(true);
@@ -176,6 +179,68 @@ export function createPromptSubmitter(host: PromptSubmitHost) {
     }
   }
 
+  // The first web address in the text; the only thing read from the text itself.
+  function feedUrlIn(text: string): string {
+    const m = text.match(/https?:\/\/[^\s<>"'`)\]]+/i);
+    return m ? m[0].replace(/[.,;:!?]+$/, '') : '';
+  }
+
+  // sendRequestKind sends "ask for a story" to POST /api/autopaper/ask and
+  // "add a source" to POST /api/autopaper/sources/schedules, from the owner's
+  // session. It returns false when the text is a plain request (or the classify
+  // failed, or an add-source text has no address), and the caller sends it to
+  // the agent as ever.
+  async function sendRequestKind(text: string, inputClass: string): Promise<boolean> {
+    let cls = inputClass;
+    try {
+      routing.set(true);
+      showRoute('routing', 'Agent');
+      if (!cls) {
+        const got = await classifyPromptInput(text, 'none');
+        cls = got && ['request', 'ask_story', 'add_source'].includes(got.class) ? got.class : 'request';
+      }
+      last = { text, focus: null, windowId: '', aim: null };
+      if (cls === 'ask_story') {
+        sentAs = { class: cls, alternatives: [] };
+        const receipt = await askStory(text);
+        routing.set(false);
+        if (receipt.doc_id) {
+          showRoute('routed', appLabel('texture'));
+          openApp('texture', 'Texture', '📝', { windowTitle: text.length > 28 ? `${text.slice(0, 28)}…` : text, docId: receipt.doc_id, allowMultiple: true });
+        } else {
+          showRoute('');
+          host.toast('Asked');
+        }
+        return true;
+      }
+      if (cls === 'add_source') {
+        const url = feedUrlIn(text);
+        if (url) {
+          sentAs = { class: cls, alternatives: [] };
+          await addSourceFeed(url);
+          routing.set(false);
+          showRoute('routed', 'Sources');
+          host.toast(`Added source ${url}`);
+          return true;
+        }
+      }
+      // Still routing: the plain send below owns the end of it, so the owner's
+      // one-tap choice is not cleared between the two.
+      sentAs = { class: 'request', alternatives: ['ask_story', 'add_source'] };
+      return false;
+    } catch (err) {
+      routing.set(false);
+      showRoute('');
+      sentAs = null;
+      if (err instanceof AuthRequiredError) {
+        host.authExpired();
+        return true;
+      }
+      host.toast((err as Error).message || 'Submission failed', { kind: 'error' });
+      return true;
+    }
+  }
+
   // sendAimed is the prompt bar aimed at a document (lane D): classify, send
   // under the class, and show the class so one tap sends it under another. The
   // classify never blocks the send: a failure is the default class.
@@ -191,7 +256,10 @@ export function createPromptSubmitter(host: PromptSubmitHost) {
       }
       if (!classes.includes(cls)) cls = classes[0];
       last = { text, focus, windowId, aim };
-      sentAs = { class: cls, alternatives: classes.filter((c) => c !== cls) };
+      // Edit and comment on an owned document are one destination, and an edit,
+      // a comment or a fork has committed a revision: a re-send is offered only
+      // after a request, and only to the one document destination.
+      sentAs = { class: cls, alternatives: cls === 'request' ? [classes[0]] : [] };
       if (cls === 'request') {
         // The agent, not this document: no focus, the conductor route as ever.
         routing.set(false);
@@ -243,7 +311,7 @@ export function createPromptSubmitter(host: PromptSubmitHost) {
     const windowId = detail.windowId || detail.continueWindowId || '';
     const aim = promptAimOf(detail.aim);
     if (!host.authenticated()) {
-      host.requestAuth({ kind: 'prompt', text, focus, windowId });
+      host.requestAuth({ kind: 'prompt', text, focus, windowId, aim });
       return;
     }
     void send(text, { focus, windowId, aim, baseRevisionId: detail.baseRevisionId || aim?.baseRevisionId || '' });

@@ -33,8 +33,13 @@ func TestClassCandidatesDependOnOwnership(t *testing.T) {
 		}
 	}
 	none := classNames(ClassCandidates(DocNone))
-	if len(none) != 1 || none[0] != ClassRequest {
-		t.Fatalf("no document: %v", none)
+	if len(none) != 3 || none[0] != ClassRequest || none[1] != ClassAskStory || none[2] != ClassAddSource {
+		t.Fatalf("no document: the plain request is the default, then the two request kinds: %v", none)
+	}
+	for _, n := range owned {
+		if n == ClassAskStory || n == ClassAddSource {
+			t.Fatal("request kinds are offered only with no document in view")
+		}
 	}
 }
 

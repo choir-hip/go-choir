@@ -21,6 +21,12 @@ const (
 	// ClassRequest: something for the app agent, not about this document
 	// (ask for a story, add a source).
 	ClassRequest = "request"
+	// ClassAskStory: a request kind, with no document in view: the owner
+	// asks about a story the paper may not cover. POST /api/autopaper/ask.
+	ClassAskStory = "ask_story"
+	// ClassAddSource: a request kind, with no document in view: the owner
+	// asks to add a feed as a source. POST /api/autopaper/sources/schedules.
+	ClassAddSource = "add_source"
 )
 
 // ClassQuestionID is the id of the class question.
@@ -56,14 +62,16 @@ func ClassCandidates(state DocState) []Candidate {
 	case DocForeign:
 		return []Candidate{{Desk: ClassComment, App: ClassComment, Default: true}, {Desk: ClassRequest, App: ClassRequest}}
 	default:
-		return []Candidate{{Desk: ClassRequest, App: ClassRequest, Default: true}}
+		return []Candidate{{Desk: ClassRequest, App: ClassRequest, Default: true}, {Desk: ClassAskStory, App: ClassAskStory}, {Desk: ClassAddSource, App: ClassAddSource}}
 	}
 }
 
 var classDescriptions = map[string]string{
-	ClassEdit:    "an instruction to change the document in view: rewrite, shorten, fix, add or remove something in it",
-	ClassComment: "a remark, objection, correction or question about the whole document in view, to be answered in a revision",
-	ClassRequest: "a request to the app agent that is not about the document in view: ask for a story, add a source, find or open something",
+	ClassEdit:      "an instruction to change the document in view: rewrite, shorten, fix, add or remove something in it",
+	ClassComment:   "a remark, objection, correction or question about the whole document in view, to be answered in a revision",
+	ClassRequest:   "a request to the app agent that is not about the document in view: find or open something, or anything else for the agent",
+	ClassAskStory:  "a question or request to investigate and write up a news story or topic the paper may not cover yet",
+	ClassAddSource: "a request to add a web feed (an RSS or Atom address) as a source the paper follows",
 }
 
 // ClassDestinations is the evidence text describing each class, composed by

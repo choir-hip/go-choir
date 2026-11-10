@@ -185,6 +185,7 @@
         text: intent.text,
         focus: intent.focus || null,
         windowId: intent.windowId || '',
+        aim: intent.aim || null,
       };
       return;
     }

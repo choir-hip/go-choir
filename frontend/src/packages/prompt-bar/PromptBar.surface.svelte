@@ -644,9 +644,9 @@
       <div class="prompt-status" data-prompt-route data-prompt-route-state={route.state} aria-live="polite">
         {route.state === 'routing' ? `${route.label}…` : `→ ${route.label}`}
         {#if route.state === 'routed' && route.class}
-          <span data-prompt-class={route.class}>Sent as {route.class}.</span>
+          <span data-prompt-class={route.class}>Sent as {route.class.replace("_", " ")}.</span>
           {#each route.alternatives || [] as alt (alt)}
-            <button type="button" class="prompt-resend" data-prompt-resend={alt} on:click={() => resendAs(alt)}>Send as {alt}</button>
+            <button type="button" class="prompt-resend" data-prompt-resend={alt} on:click={() => resendAs(alt)}>Send as {alt.replace("_", " ")}</button>
           {/each}
         {/if}
       </div>
