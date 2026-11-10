@@ -665,6 +665,61 @@ recommended option. Notes where the ruling adds something:
   events of contract 3 are wave 1 (H1 defines, C1 emits). A lane that finds
   the contract wrong stops and reports; it does not fork the contract.
 
+### 8.2 Amendments after review (Devin seat, 2026-11-10: REPAIR, no blocking defect, seven should-fix)
+
+Each amendment overrides the text above it. Review output: seven findings,
+all adopted.
+
+- **A1 (take and fork, section 1.2).** A take is not one transaction. On a
+  settled document it is the existing continue-then-commit sequence: two
+  store acts, no wake, no model call. A fork is not `reviseDocument`: it is
+  `forkDocument`, which creates the document and its trajectory and then
+  commits the first revision through the same commit function and the same
+  validation. Both return the same receipt type.
+- **A2 (the wake, D6 reversed).** The op-ed wake is a system record,
+  `oped_wake`, added to the waking list in `RecordWakesReader`. It is not a
+  Cast from management. Reasons: a Cast's final report would wake the
+  management desk once per op-ed; rounds are per sender and recipient, so the
+  wake would join a real management delegation to the same document; and a
+  Cast with captures to a document inbox feeds the capture-disposition
+  index. The op-ed reference rides in the record's own body, never in
+  `Captures`. This also removes the intermediary the owner called a
+  hypothesis. File ownership: `internal/store/management_tasks.go` is lane
+  Q's in wave 1 and lane C2's for this one addition in wave 2, after Q has
+  landed.
+- **A3 (the poller, section 3.3).** Source schedules are not reused; they
+  dispatch a model-calling source poll and hold no cursor. C2 builds one
+  small mechanism, the platform poll: an object `choir.platform_poll`
+  (name, cursor, interval, last error), custodian management, re-armed at
+  boot as a standing intent under the same two-crash rule as a source
+  schedule. `oped_intake` and `notice_intake` are two rows of it. A poll
+  makes no model call.
+- **A4 (replay, sections 3.3 and 5.2).** The inbox refuses a repeated record
+  id. The poller therefore commits each item with commit-if-absent: "already
+  committed" counts as done and the cursor advances. A crash between the
+  record and the cursor cannot wedge the poll. Test: crash between the two,
+  then poll again.
+- **A5 (gate unavailable, D14).** After the third failure the paper's
+  computer posts a verdict `unavailable` through the same courier route.
+  corpusd writes the verdict object and the author's notice like any other
+  verdict, so the author never sees `pending` for ever. `unavailable` is
+  listed like a non-abusive reject. A later successful gate run supersedes
+  it with a new verdict object.
+- **A6 (ordering, section 7).** (a) C1 adds the version-read route as its
+  own slice, in a new file under `internal/platform` plus one registration
+  line; C2 takes the file over in wave 2. (b) H1's types slice lands first;
+  C1's emit slice waits for it. (c) `update_interrupted` is not written at
+  boot. It is derived on read from the closure Report the crash boot already
+  writes (fate `interrupted_by_restart`), by H1's derivation. No lane edits
+  the boot closure loop for this.
+- **A7 (deleting the switch, D7).** The citer list also includes
+  `internal/platform/config.go` (the env read), `switches/registry.yaml`
+  (the entry goes with the code), `cmd/corpusd/main.go`, `nix/node-b.nix`,
+  and `frontend/tests/oped-deployed.spec.js`. The daily limit stops being
+  an environment value: it becomes a constant in code, and
+  `CORPUSD_OPINION_DAILY_LIMIT` is deleted from the config and from nix in
+  the same change.
+
 ## 9. Standing questions that apply
 
 1. **Who settled this?** The shape (one call, sources as parents, publish and
