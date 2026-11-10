@@ -61,6 +61,7 @@ func TestRegisterRoutesPreservesCanonicalTable(t *testing.T) {
 		"/api/precommit/claims",
 		"/api/precommit/calibration",
 		"/api/subcalls",
+		"/api/system1/judgments",
 		"/api/trust",
 	} {
 		path := path
