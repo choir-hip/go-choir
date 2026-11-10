@@ -106,6 +106,10 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.worker_update", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
 		{Kind: "choir.coagent_mailbox", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
 		{Kind: "choir.source_schedule", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, OwnerEdits: true},
+		// A computer's poll of a corpusd feed (oped_intake, notice_intake):
+		// name, cursor, interval, last error. Custodian management; no model
+		// call (contract 2 and 3, amendment A3).
+		{Kind: "choir.platform_poll", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.PlatformPoll"},
 		{Kind: "choir.computer_setting", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
 		// An app's engineering lineage: the handoff its last engineer left
 		// (docs/design/engineer-reuse-2026-11-04.md, phase B).
@@ -194,6 +198,11 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.publication", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd},
 		{Kind: "choir.publication_version", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Versioned: true, Owner: OwnerCorpusd},
 		{Kind: "choir.publication_proposal", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd},
+		// The courier copy of the paper's op-ed gate verdict (one per op-ed
+		// version and gate run) and the changelog notice corpusd derives for
+		// a recipient owner (contract 2 section 3.4, contract 3 section 5.2).
+		{Kind: "choir.oped_verdict", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.opedVerdictObject"},
+		{Kind: "choir.changelog_notice", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.changelogNoticeObject"},
 		{Kind: "choir.public_route", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd},
 		{Kind: "choir.artifact_manifest", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd},
 		{Kind: "choir.artifact_blob", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerCorpusd},

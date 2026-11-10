@@ -45,6 +45,13 @@ type PublishTextureRequest struct {
 	// manifest as its public projection (types.PublicModelProvenance), never
 	// verbatim. Optional: a computer that cannot answer publishes without it.
 	ModelProvenance json.RawMessage `json:"model_provenance,omitempty"`
+	// Parents are the published versions this revision was made from, read
+	// by the proxy from the revision's own provenance (never from a body)
+	// and verified by corpusd against the graph before anything is written.
+	Parents []PublishParentRef `json:"parents,omitempty"`
+	// RespondsTo is the Autopaper story version an op-ed answers. Only an
+	// opinion piece may name one.
+	RespondsTo *PublishParentRef `json:"responds_to,omitempty"`
 }
 
 // Publish modes (PublishTextureRequest.PublishMode).

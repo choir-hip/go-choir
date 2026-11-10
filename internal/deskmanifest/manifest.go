@@ -360,6 +360,8 @@ var system = []Desk{
 			"choir.capture_disposition",
 			"choir.management_task", "choir.capture_label", "choir.capture_label_override",
 			"choir.world_event", "choir.event_membership", "choir.source_schedule",
+			// A computer's polls of corpusd feeds (oped_intake, notice_intake).
+			"choir.platform_poll",
 		},
 		ModelRole: Management, Restart: RestartContract,
 		Profile: true, Prompt: true, OwnChannel: true,

@@ -400,6 +400,10 @@ type versionMetadata struct {
 	PermalinkPath        string                 `json:"permalink_path"`
 	PublishedAt          string                 `json:"published_at"`
 	Signatures           []PublicationSignature `json:"signatures"`
+	// RespondsTo is the story version an op-ed answers; Parents are the
+	// versions this one was made from. Both are verified by corpusd.
+	RespondsTo *versionLink  `json:"responds_to,omitempty"`
+	Parents    []versionLink `json:"parents,omitempty"`
 }
 
 func decodeVersionMetadata(obj objectgraph.Object) (versionMetadata, error) {

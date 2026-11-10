@@ -94,6 +94,11 @@ func (h *Handler) requirePlatformObjectGraphCaller(r *http.Request) error {
 		if r.URL.Path == "/internal/platform/published/search" {
 			return nil
 		}
+		// A computer's own feeds (op-eds on its stories, notices for its
+		// owner): the proxy overwrites the owner with the one it bound.
+		if isGuestFeedPath(r.URL.Path) && r.URL.Path != opedVerdictsPathProxy {
+			return nil
+		}
 		// One published version by its id: a take, merge or fork reads the
 		// version it names (Texture's revise call). Public, immutable, and
 		// the id names one object, so the carve-out is a single segment.
@@ -121,6 +126,11 @@ func (h *Handler) requirePlatformObjectGraphCaller(r *http.Request) error {
 		return fmt.Errorf("object graph request too large")
 	}
 	r.Body = io.NopCloser(bytes.NewReader(body))
+	if r.URL.Path == opedVerdictsPathProxy {
+		// The paper's computer posting its gate verdict; the proxy sets the
+		// owner from the binding before relaying it.
+		return nil
+	}
 	if r.URL.Path == "/internal/platform/captures" || r.URL.Path == types.StoryVerdictsPath || r.URL.Path == types.StoryRelationsPath || r.URL.Path == types.StoryEntitiesPath || r.URL.Path == types.StoryEntityCandidatesPath {
 		// corpusd sees the proxy as an internal caller, so the guest's
 		// ownership of the captures it writes is checked here, as for
