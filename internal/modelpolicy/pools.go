@@ -53,6 +53,10 @@ type PoolMemberView struct {
 	Model        string `json:"model"`
 	Weight       int    `json:"weight"`
 	FallbackOnly bool   `json:"fallback_only,omitempty"`
+	// Spread and SpreadWeight show a member's spread group and its share
+	// (one when the file gave none).
+	Spread       string `json:"spread,omitempty"`
+	SpreadWeight int    `json:"spread_weight,omitempty"`
 }
 
 // resolvePool answers "members of pool name": the file's definition first,
@@ -116,11 +120,15 @@ func (p Policy) PoolViews() []PoolView {
 		pool, _ := p.pool(name)
 		view := PoolView{Name: name, Source: pool.Source, Failover: pool.Failover, Members: []PoolMemberView{}}
 		for _, member := range pool.Members {
-			view.Members = append(view.Members, PoolMemberView{
+			mv := PoolMemberView{
 				Model:        member.Provider + "/" + member.Model,
 				Weight:       member.SlotWeight(),
 				FallbackOnly: member.FallbackOnly,
-			})
+			}
+			if member.Spread != "" {
+				mv.Spread, mv.SpreadWeight = member.Spread, member.SpreadShare()
+			}
+			view.Members = append(view.Members, mv)
 		}
 		out = append(out, view)
 	}
@@ -139,6 +147,8 @@ type memberSpec struct {
 	provider, model string
 	weight          int // 0: unset
 	fallbackOnly    bool
+	spread          string
+	spreadWeight    int // 0: unset
 }
 
 // poolDraft is one [pools.<name>] section as read.
@@ -240,6 +250,7 @@ func buildFilePools(drafts []*poolDraft, diagnostics *[]string) (map[string]Pool
 				}
 			} else {
 				member.Weight, member.FallbackOnly = spec.weight, spec.fallbackOnly
+				member.Spread, member.SpreadWeight = spec.spread, spec.spreadWeight
 			}
 			if _, ok := modelcatalog.Lookup(member.Provider, member.Model); !ok {
 				*diagnostics = append(*diagnostics, fmt.Sprintf("model policy pool %q names %s/%s, which the catalog does not list; dropped from the pool", d.name, member.Provider, member.Model))
@@ -424,6 +435,9 @@ func readMemberTable(s string, i int) (memberSpec, int, error) {
 			if spec.weight != 0 && spec.fallbackOnly {
 				return memberSpec{}, 0, fmt.Errorf("member %s/%s has a weight and is fallback_only; a fallback takes no threads", spec.provider, spec.model)
 			}
+			if spec.spreadWeight != 0 && spec.spread == "" {
+				return memberSpec{}, 0, fmt.Errorf("member %s/%s has a spread_weight and no spread group", spec.provider, spec.model)
+			}
 			return spec, i + 1, nil
 		}
 		start := i
@@ -461,13 +475,31 @@ func readMemberTable(s string, i int) (memberSpec, int, error) {
 				return memberSpec{}, 0, err
 			}
 			haveModel, i = true, next
-		case "weight", "fallback_only":
+		case "spread":
+			if s[i] != '"' && s[i] != '\'' {
+				return memberSpec{}, 0, fmt.Errorf("member spread must be a string")
+			}
+			value, next, err := readTOMLString(s, i)
+			if err != nil {
+				return memberSpec{}, 0, err
+			}
+			if !poolName(value) {
+				return memberSpec{}, 0, fmt.Errorf("member spread %q must be a name of letters, digits, - and _", value)
+			}
+			spec.spread, i = value, next
+		case "weight", "fallback_only", "spread_weight":
 			start := i
 			for i < len(s) && s[i] != ',' && s[i] != '}' && !isBlank(s[i]) {
 				i++
 			}
 			word := s[start:i]
-			if key == "weight" {
+			if key == "spread_weight" {
+				n, err := strconv.Atoi(word)
+				if err != nil || n < 1 || n > 1000 {
+					return memberSpec{}, 0, fmt.Errorf("member spread_weight must be a whole number from 1 to 1000, got %q", word)
+				}
+				spec.spreadWeight = n
+			} else if key == "weight" {
 				n, err := strconv.Atoi(word)
 				if err != nil || n < 1 || n > 1000 {
 					return memberSpec{}, 0, fmt.Errorf("member weight must be a whole number from 1 to 1000, got %q (use fallback_only = true for a member that takes no threads)", word)
@@ -484,7 +516,7 @@ func readMemberTable(s string, i int) (memberSpec, int, error) {
 				}
 			}
 		default:
-			return memberSpec{}, 0, fmt.Errorf("unknown member key %q (a member has model, weight and fallback_only)", key)
+			return memberSpec{}, 0, fmt.Errorf("unknown member key %q (a member has model, weight, fallback_only, spread and spread_weight)", key)
 		}
 	}
 }

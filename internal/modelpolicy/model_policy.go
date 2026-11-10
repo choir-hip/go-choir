@@ -386,7 +386,7 @@ func (p Policy) Assign(selection provideriface.LLMSelection, thread string) (pro
 		return selection, nil, AssignmentUnknownPool
 	}
 	index := weightedIndex(members, fnv32(thread))
-	ordered := poolSelections(rotate(members, index), selection)
+	ordered := poolSelections(spreadGroups(rotate(members, index), fnv32(thread+"|spread")), selection)
 	if !resolved.Failover {
 		// A failing member has no pool fallbacks, not even the default
 		// pool's (owner 2026-10-23); a quota still moves it along the
@@ -434,6 +434,42 @@ func rotate(members []modelcatalog.PoolMember, start int) []modelcatalog.PoolMem
 	out := make([]modelcatalog.PoolMember, 0, len(members))
 	out = append(out, members[start:]...)
 	return append(out, members[:start]...)
+}
+
+// spreadGroups reorders each run of adjacent members that share a non-empty
+// Spread: the hash picks the run's first member in proportion to its
+// SpreadShare, and the rest follow in their order, wrapping. The same thread
+// always gets the same order (prompt cache); members with no Spread, and a
+// pool with none, are returned as they are.
+func spreadGroups(members []modelcatalog.PoolMember, hash uint32) []modelcatalog.PoolMember {
+	out := make([]modelcatalog.PoolMember, 0, len(members))
+	for i := 0; i < len(members); {
+		j := i + 1
+		if members[i].Spread != "" {
+			for j < len(members) && members[j].Spread == members[i].Spread {
+				j++
+			}
+		}
+		run := members[i:j]
+		if len(run) > 1 {
+			total := 0
+			for _, m := range run {
+				total += m.SpreadShare()
+			}
+			slot, first := int(hash%uint32(total)), 0
+			for k, m := range run {
+				if slot < m.SpreadShare() {
+					first = k
+					break
+				}
+				slot -= m.SpreadShare()
+			}
+			run = rotate(run, first)
+		}
+		out = append(out, run...)
+		i = j
+	}
+	return out
 }
 
 func poolSelections(members []modelcatalog.PoolMember, base provideriface.LLMSelection) []provideriface.LLMSelection {

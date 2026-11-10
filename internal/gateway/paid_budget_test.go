@@ -249,3 +249,15 @@ func TestPaidSpendCountsCacheWrites(t *testing.T) {
 		t.Fatalf("snapshot = %+v", snap)
 	}
 }
+
+// Owner 2026-11-10: the River cap is lifted to $10 a day for swe-2-flash's
+// downtime; it must not read $1 again.
+func TestRiverDailyBudgetIsTenDollars(t *testing.T) {
+	if defaultRiverDailyUSD != 10.0 {
+		t.Fatalf("defaultRiverDailyUSD = %v, want 10", defaultRiverDailyUSD)
+	}
+	s := newPaidSpendFromGetenv(func(string) string { return "" })
+	if s.budgets["river"] != 10.0 {
+		t.Fatalf("river budget = %v", s.budgets["river"])
+	}
+}

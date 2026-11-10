@@ -385,6 +385,23 @@ type PoolMember struct {
 	// FallbackOnly members are assigned no thread; they serve only as a
 	// failover for the members before them.
 	FallbackOnly bool `json:"fallback_only,omitempty"`
+	// Spread names a group of adjacent members whose order is chosen per
+	// thread: a stable hash of the thread picks the group's first member in
+	// proportion to SpreadWeight (zero counts as one) and the others follow
+	// in pool order, wrapping. A member with no Spread is not part of any
+	// group; a pool with no Spread is strict order. Owner 2026-11-10: the
+	// default pool's paid tail is spread so Devin's downtime lands some
+	// threads on Synthetic and River DeepSeek, not all on Haiku.
+	Spread       string `json:"spread,omitempty"`
+	SpreadWeight int    `json:"spread_weight,omitempty"`
+}
+
+// SpreadShare is the member's share inside its spread group.
+func (m PoolMember) SpreadShare() int {
+	if m.SpreadWeight < 1 {
+		return 1
+	}
+	return m.SpreadWeight
 }
 
 // SlotWeight is the member's assignment weight: zero for a fallback-only
@@ -509,7 +526,14 @@ func Pools() map[string][]PoolMember {
 			{Provider: "openrouter", Model: "recursive/flint-v1.0:free", FallbackOnly: true},
 			{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free", FallbackOnly: true},
 			{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true},
-			{Provider: "bedrock", Model: "us.anthropic.claude-haiku-5-5", FallbackOnly: true},
+			// Owner 2026-11-10: "I don't want DeepSeek before haiku but spread
+			// the load during Devin's downtime"; "use river and synthetic just
+			// a bit in autopaper. Like 10% each". The paid tail is one spread
+			// group: Haiku about 80% of threads, Synthetic DeepSeek 10%, River
+			// DeepSeek 10%, by thread hash, each falling through to the others.
+			{Provider: "bedrock", Model: "us.anthropic.claude-haiku-5-5", FallbackOnly: true, Spread: "paid-tail", SpreadWeight: 8},
+			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true, Spread: "paid-tail", SpreadWeight: 1},
+			{Provider: "river", Model: "deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true, Spread: "paid-tail", SpreadWeight: 1},
 		},
 		SyntheticLunaPool: {
 			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", Weight: 1},

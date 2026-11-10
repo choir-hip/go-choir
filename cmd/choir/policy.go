@@ -56,6 +56,8 @@ type policyPoolMember struct {
 	Model        string `json:"model"` // provider/model
 	Weight       int    `json:"weight"`
 	FallbackOnly bool   `json:"fallback_only,omitempty"`
+	Spread       string `json:"spread,omitempty"`
+	SpreadWeight int    `json:"spread_weight,omitempty"`
 }
 
 type policyWriteResult struct {

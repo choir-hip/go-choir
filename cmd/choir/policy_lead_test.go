@@ -117,11 +117,11 @@ func TestPolicyLeadReordersAndAdds(t *testing.T) {
 		t.Fatalf("members = %s, want %s", memberModels(got), strings.Join(want, ","))
 	}
 	// A catalogued model that is not in the pool is added as the lead.
-	if code, _, errOut := runPolicy("lead", leadSynth, "--allow-paid"); code != 0 {
+	if code, _, errOut := runPolicy("lead", "zai/glm-5.2", "--allow-paid"); code != 0 {
 		t.Fatalf("lead (new member): %s", errOut)
 	}
 	got = getPools(t)["default"]
-	if len(got.Members) != len(before.Members)+1 || got.Members[0].Model != leadSynth {
+	if len(got.Members) != len(before.Members)+1 || got.Members[0].Model != "zai/glm-5.2" {
 		t.Fatalf("members = %s", memberModels(got))
 	}
 }
