@@ -33,6 +33,10 @@ type promptBarSubmitRequest struct {
 	// text goes to that app agent, which decides what it is for; without one
 	// the conductor routes it. The focus never reaches the conductor.
 	Focus *promptBarFocus `json:"focus,omitempty"`
+	// BaseRevisionID is the revision the owner is responding to when the
+	// window reads an older one (lane D); empty answers the head. Only a
+	// Texture focus takes it.
+	BaseRevisionID string `json:"base_revision_id,omitempty"`
 }
 
 // promptBarFocus is a focused submit's focus: a desk id of the registry, the
@@ -123,7 +127,7 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 	commitCtx, commitCancel := context.WithTimeout(context.WithoutCancel(r.Context()), promptBarCommitTimeout)
 	defer commitCancel()
 	if req.Focus != nil {
-		h.submitFocusedPrompt(commitCtx, w, r, ownerID, *req.Focus, text, commandID)
+		h.submitFocusedPrompt(commitCtx, w, r, ownerID, *req.Focus, text, commandID, strings.TrimSpace(req.BaseRevisionID))
 		return
 	}
 	commitCtx = ownerTextContext(commitCtx, r)
@@ -211,7 +215,7 @@ func (h *Handler) HandlePromptBarClassify(w http.ResponseWriter, r *http.Request
 // opens its app. The conductor is not asked and sees nothing of the focus. A
 // focus naming any other desk (a system desk, a role, a candidate, a package
 // the owner has not installed) is refused.
-func (h *Handler) submitFocusedPrompt(ctx context.Context, w http.ResponseWriter, r *http.Request, ownerID string, focus promptBarFocus, text, commandID string) {
+func (h *Handler) submitFocusedPrompt(ctx context.Context, w http.ResponseWriter, r *http.Request, ownerID string, focus promptBarFocus, text, commandID, baseRevisionID string) {
 	defaultDesk := deskmanifest.DocumentCustodianName()
 	app := strings.TrimSpace(focus.AppAgentID)
 	ref := strings.TrimSpace(focus.ObjectRef)
@@ -238,7 +242,7 @@ func (h *Handler) submitFocusedPrompt(ctx context.Context, w http.ResponseWriter
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "focus object_ref is required"})
 			return
 		}
-		h.continuePromptBarDocument(ctx, w, r, ownerID, ref, text, commandID)
+		h.continuePromptBarDocument(ctx, w, r, ownerID, ref, text, commandID, baseRevisionID)
 		return
 	}
 	// A package desk's focus names the owner's object of a kind that desk is
@@ -277,12 +281,12 @@ func (h *Handler) submitFocusedPrompt(ctx context.Context, w http.ResponseWriter
 // id) and the owner's text as typed. A desk's in-process call is refused:
 // product_api refuses a desk any Texture write, and an owner-authored
 // revision through the prompt bar must not open that door.
-func (h *Handler) continuePromptBarDocument(ctx context.Context, w http.ResponseWriter, r *http.Request, ownerID, docID, text, commandID string) {
+func (h *Handler) continuePromptBarDocument(ctx context.Context, w http.ResponseWriter, r *http.Request, ownerID, docID, text, commandID, baseRevisionID string) {
 	if strings.TrimSpace(r.RemoteAddr) == "" {
 		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "a focused submit is an owner act; only the Texture desk writes a Texture, so address the Texture desk"})
 		return
 	}
-	receipt, err := h.reviseDocument(ctx, ReviseRequest{OwnerID: ownerID, DocID: docID, Text: text, ClientRequestID: commandID})
+	receipt, err := h.reviseDocument(ctx, ReviseRequest{OwnerID: ownerID, DocID: docID, Text: text, ClientRequestID: commandID, BaseRevisionID: baseRevisionID})
 	if err != nil {
 		writeOwnerRevisionRefusal(w, err)
 		return

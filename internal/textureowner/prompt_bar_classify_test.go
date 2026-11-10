@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // Lane D: POST /api/prompt-bar/classify. Ways it could fail:
@@ -64,5 +66,35 @@ func TestPromptBarClassifyAnswersADefaultClassAndRefusesBadInput(t *testing.T) {
 	}
 	if w := postClassify(t, handler, owner, http.MethodPost, map[string]any{"text": "x", "doc_state": "owned"}, true); w.Code != http.StatusForbidden {
 		t.Fatalf("in-process status=%d", w.Code)
+	}
+}
+
+// Lane D, "show the revision being responded to": a focused submit carries the
+// revision the window reads as base_revision_id, and the revise call records
+// the base link (D7: the prompt bar must not answer the head when the window
+// reads v1 of v2).
+func TestPromptBarFocusedSubmitCarriesTheBaseRevision(t *testing.T) {
+	core, handler := testAPISetup(t)
+	start := startObservationLifecycle(t, core.Store())
+	countWakes(core)
+	doc := start.InitialDocument.DocID
+	first := postRevise(t, handler, doc, start.OwnerID, map[string]any{"client_request_id": "pb-c1", "text": "first"})
+	if first.Code != http.StatusAccepted {
+		t.Fatalf("first status=%d body=%s", first.Code, first.Body.String())
+	}
+	older := start.InitialRevision.RevisionID
+	w := postPromptBar(t, handler, start.OwnerID, map[string]any{
+		"text": "answering the original", "command_id": "pb-c2", "focus": textureFocus(doc), "base_revision_id": older,
+	}, false)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	rev, err := core.Store().GetLifecycleRevision(t.Context(), start.OwnerID, start.ComputerID, decodeContinueReceipt(t, w).RevisionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var prov types.Provenance
+	if err := json.Unmarshal(rev.Provenance, &prov); err != nil || len(prov.ParentLinks) != 1 || prov.ParentLinks[0].RevisionID != older {
+		t.Fatalf("D7: provenance=%s err=%v, want one base link to %s", rev.Provenance, err, older)
 	}
 }
