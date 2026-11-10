@@ -17,10 +17,14 @@ import (
 
 // EvalResult holds the outcome of a Yaegi code evaluation.
 type EvalResult struct {
-	Stdout   string        `json:"stdout"`
-	Stderr   string        `json:"stderr"`
-	Value    reflect.Value `json:"-"`
-	Duration time.Duration `json:"duration"`
+	Stdout string `json:"stdout"`
+	// StdoutWrites are the byte offsets in Stdout where each Write call
+	// ended (one fmt.Println is one write): the print boundaries the cell
+	// output cut gives each print its own head (cell_output.go).
+	StdoutWrites []int         `json:"-"`
+	Stderr       string        `json:"stderr"`
+	Value        reflect.Value `json:"-"`
+	Duration     time.Duration `json:"duration"`
 }
 
 // ReuseDisposition answers whether the live interpreter may serve the next
@@ -197,6 +201,8 @@ type cappedBuffer struct {
 	buf  bytes.Buffer
 	max  int
 	full bool
+	// ends are the buffer lengths after each non-empty Write.
+	ends []int
 }
 
 func (c *cappedBuffer) Write(p []byte) (int, error) {
@@ -207,11 +213,22 @@ func (c *cappedBuffer) Write(p []byte) (int, error) {
 		remaining := c.max - c.buf.Len()
 		if remaining > 0 {
 			_, _ = c.buf.Write(p[:remaining])
+			c.ends = append(c.ends, c.buf.Len())
 		}
 		return len(p), nil
 	}
 	_, _ = c.buf.Write(p)
+	if len(p) > 0 {
+		c.ends = append(c.ends, c.buf.Len())
+	}
 	return len(p), nil
+}
+
+// writeEnds returns a copy of the recorded write boundaries.
+func (c *cappedBuffer) writeEnds() []int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]int(nil), c.ends...)
 }
 
 func (c *cappedBuffer) String() string {

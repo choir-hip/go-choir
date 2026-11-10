@@ -244,7 +244,7 @@ func serveCell(sess *Session, frame SessionFrame, drain func() []string, hooks *
 	// poisoned session could never serve the handle. The value views below
 	// keep their own bound.
 	if hooks != nil && hooks.KeepOutput != nil {
-		out.Stdout = hooks.KeepOutput(out.Stdout)
+		out.Stdout = hooks.KeepOutput(out.Stdout, res.StdoutWrites)
 	}
 	out.Stdout += sess.showListedNames(frame.Source)
 	if shown := describeCellValue(frame.Source, res.Value); shown != "" {

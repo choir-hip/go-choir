@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -61,10 +62,40 @@ func (c *cellOutputStore) instanceLocked() string {
 	return c.instance
 }
 
+// cellOutputMinShare is the smallest per-print share worth cutting a print
+// to; below it (many prints) the cut falls back to the whole stream's head
+// and tail.
+const cellOutputMinShare = 600
+
+// printSegments splits stdout at the print boundaries (byte offsets where
+// each Write ended). Offsets that are not ascending rune boundaries inside
+// stdout are ignored, and what follows the last boundary is its own print.
+func printSegments(stdout string, ends []int) []string {
+	var segs []string
+	prev := 0
+	for _, e := range ends {
+		if e <= prev || e > len(stdout) || (e < len(stdout) && !utf8.RuneStart(stdout[e])) {
+			continue
+		}
+		segs = append(segs, stdout[prev:e])
+		prev = e
+	}
+	if prev < len(stdout) {
+		segs = append(segs, stdout[prev:])
+	}
+	return segs
+}
+
 // keepCellOutput is the CellHooks.KeepOutput of a desk session: a print over
 // the bound is stored whole and returned as its cut view; anything else is
-// returned unchanged.
-func (s *ChoirScope) keepCellOutput(stdout string) string {
+// returned unchanged. The cut is per print (writeEnds are where each print
+// ended): the visible budget, head plus tail, is shared by the prints, so a
+// short print shows whole and every long one keeps its own head and tail. A
+// single stream head and tail hid the head of a later print behind earlier
+// large ones (run 0dabb5e3: the wire corpus result behind three search
+// summaries). One print, or too many for a readable share, gets the original
+// whole-stream head and tail.
+func (s *ChoirScope) keepCellOutput(stdout string, writeEnds []int) string {
 	total := utf8.RuneCountInString(stdout)
 	if s == nil || total <= cellOutputBound {
 		return stdout
@@ -79,13 +110,71 @@ func (s *ChoirScope) keepCellOutput(stdout string) string {
 		c.kept = append([]keptCellOutput(nil), c.kept[len(c.kept)-cellOutputKept:]...)
 	}
 	c.mu.Unlock()
-
-	head := runePrefix(stdout, cellOutputHead)
-	tail := runeSuffix(stdout, cellOutputTail)
 	handle := instance + ":" + strconv.Itoa(n)
-	marker := fmt.Sprintf("… stdout truncated: %s chars; %s not shown. Read all of it with out, err := choir.CellOut(%q); out is a string to slice or search in your next cell.",
-		groupDigits(total), groupDigits(total-cellOutputHead-cellOutputTail), handle)
-	return head + "\n" + marker + "\n" + tail
+
+	segs := printSegments(stdout, writeEnds)
+	share := cellOutputHead + cellOutputTail
+	if len(segs) > 1 {
+		lens := make([]int, len(segs))
+		for i, seg := range segs {
+			lens[i] = utf8.RuneCountInString(seg)
+		}
+		share = printShare(lens, share)
+	}
+	if len(segs) <= 1 || share < cellOutputMinShare {
+		segs = []string{stdout}
+		share = cellOutputHead + cellOutputTail
+	}
+	headRunes := share * cellOutputHead / (cellOutputHead + cellOutputTail)
+	tailRunes := share - headRunes
+
+	type cut struct{ at, from, to int } // rune offsets of the hidden part
+	views := make([]string, len(segs))
+	var cuts []cut
+	pos, hidden := 0, 0
+	for i, seg := range segs {
+		l := utf8.RuneCountInString(seg)
+		if l <= share {
+			views[i] = seg
+		} else {
+			cuts = append(cuts, cut{at: i, from: pos + headRunes, to: pos + l - tailRunes})
+			hidden += l - headRunes - tailRunes
+		}
+		pos += l
+	}
+	for ci, ct := range cuts {
+		seg := segs[ct.at]
+		var marker string
+		if ci == 0 {
+			marker = fmt.Sprintf("… stdout truncated: %s chars; %s not shown. Read all of it with out, err := choir.CellOut(%q); out is a string to slice or search in your next cell.",
+				groupDigits(total), groupDigits(hidden), handle)
+			if len(cuts) > 1 {
+				marker += fmt.Sprintf(" Each long print keeps its own head and tail; this one hides characters %s to %s of out.", groupDigits(ct.from), groupDigits(ct.to))
+			}
+		} else {
+			marker = fmt.Sprintf("… characters %s to %s of out (choir.CellOut(%q)) not shown.", groupDigits(ct.from), groupDigits(ct.to), handle)
+		}
+		views[ct.at] = runePrefix(seg, headRunes) + "\n" + marker + "\n" + runeSuffix(seg, tailRunes)
+	}
+	return strings.Join(views, "")
+}
+
+// printShare is the largest per-print rune share s such that the prints,
+// each capped at s, total at most budget (water filling): short prints keep
+// all of theirs and the long ones split what remains.
+func printShare(lens []int, budget int) int {
+	sorted := append([]int(nil), lens...)
+	sort.Ints(sorted)
+	remaining := budget
+	for i, l := range sorted {
+		left := len(sorted) - i
+		if l*left <= remaining {
+			remaining -= l
+			continue
+		}
+		return remaining / left
+	}
+	return budget
 }
 
 // CellOut returns the whole printed output of a cut cell by the handle its

@@ -110,11 +110,11 @@ func TestCellOutputCutShowsHandleAndCellOutReturnsTheWhole(t *testing.T) {
 func TestCellOutputBoundIsEightThousandRunes(t *testing.T) {
 	scope := &ChoirScope{}
 	at := strings.Repeat("é", cellOutputBound)
-	if got := scope.keepCellOutput(at); got != at {
+	if got := scope.keepCellOutput(at, nil); got != at {
 		t.Fatalf("an output of exactly %d runes was cut", cellOutputBound)
 	}
 	over := at + "x"
-	if got := scope.keepCellOutput(over); got == over || !strings.Contains(got, "8,001 chars") {
+	if got := scope.keepCellOutput(over, nil); got == over || !strings.Contains(got, "8,001 chars") {
 		t.Fatalf("an output of %d runes was not cut: %q", cellOutputBound+1, clip(got))
 	}
 }
@@ -152,9 +152,9 @@ func TestCellOutputNeverCutsStderrOrError(t *testing.T) {
 	_, _, scope, _ := testChoirFixture(t)
 	sess, hooks := keepingSession(t, scope)
 	var seen []string
-	hooks.KeepOutput = func(stdout string) string {
+	hooks.KeepOutput = func(stdout string, ends []int) string {
 		seen = append(seen, stdout)
-		return scope.keepCellOutput(stdout)
+		return scope.keepCellOutput(stdout, ends)
 	}
 	out := runCell(t, sess, hooks, `fmt.Print(strings.Repeat("o", 20000))`+"\n"+`s, _ := choir.CellOut("not-a-handle")`+"\n_ = s")
 	if len(seen) != 1 || seen[0] != strings.Repeat("o", 20000) {
@@ -314,7 +314,7 @@ func TestCellOutputLeavesTheResearchFindingsViewWhole(t *testing.T) {
 
 func TestCellOutNeverPanics(t *testing.T) {
 	scopes := map[string]*ChoirScope{"nil": nil, "zero": {}, "kept": {}}
-	scopes["kept"].keepCellOutput(strings.Repeat("x", 9000))
+	scopes["kept"].keepCellOutput(strings.Repeat("x", 9000), nil)
 	inputs := []string{"", "x", ":", "::", "zzzzzzzz:1", "abcdef01:-1", "abcdef01:0",
 		"abcdef01:99999999999999999999999", "abcdef01:1:2", "ABCDEF01:1", " abcdef01:1 ",
 		"中文:1", "\x00\xff:1", strings.Repeat("a", 1<<20) + ":1"}
@@ -354,7 +354,7 @@ func TestCellOutputStoreIsSafeUnderConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			view := scope.keepCellOutput(strings.Repeat("g", 9000))
+			view := scope.keepCellOutput(strings.Repeat("g", 9000), nil)
 			if m := cellOutHandleRE.FindStringSubmatch(view); m != nil {
 				_, _ = scope.CellOut(m[1])
 			}
@@ -375,5 +375,64 @@ func TestCellValueTextCutsOnARuneBoundary(t *testing.T) {
 	}
 	if !strings.HasPrefix(got, strings.Repeat("a", maxShownCellValue-1)+"…") {
 		t.Fatalf("value view did not cut back to the rune boundary: %q", got[maxShownCellValue-5:])
+	}
+}
+
+// Defect 2026-11-10 (run 0dabb5e3): a research cell printed three large
+// Searches.Summary values and then the wire corpus result; the cut kept the
+// first 6,000 and last 1,500 characters of the whole stream, so the corpus
+// result's head (published_first_note, published[]) fell in the hidden
+// middle. Ways this can fail, written before the code:
+//
+//	a. A later print's head is hidden by earlier large prints: every print
+//	   keeps its own head.
+//	b. Many small prints get a share too small to read: below the floor the
+//	   cut falls back to the whole-stream head and tail.
+//	c. The view grows past the bound's order of magnitude: the shown content
+//	   of all prints together stays within head+tail.
+//	d. The handle stops returning the whole stdout, or its marker is lost.
+//	e. Small prints between large ones are cut or reordered: they show whole,
+//	   in order.
+func TestCellOutputEveryLargePrintKeepsItsOwnHead(t *testing.T) {
+	_, _, scope, _ := testChoirFixture(t)
+	sess, hooks := keepingSession(t, scope)
+	src := `
+for i := 0; i < 3; i++ {
+	fmt.Println(fmt.Sprintf("SUMMARY%d-HEAD", i) + strings.Repeat("s", 8000))
+}
+fmt.Println("small between")
+fmt.Println("CORPUS-HEAD published_first_note " + strings.Repeat("c", 3000) + " CORPUS-TAIL")
+`
+	out := runCell(t, sess, hooks, src)
+	for _, want := range []string{"SUMMARY0-HEAD", "SUMMARY1-HEAD", "SUMMARY2-HEAD", "small between", "CORPUS-HEAD published_first_note", "CORPUS-TAIL"} {
+		if !strings.Contains(out.Stdout, want) {
+			t.Errorf("view hides %q:\n%s", want, clip(out.Stdout))
+		}
+	}
+	if i, j := strings.Index(out.Stdout, "small between"), strings.Index(out.Stdout, "CORPUS-HEAD"); i < 0 || j < i {
+		t.Errorf("prints out of order")
+	}
+	if n := utf8.RuneCountInString(out.Stdout); n > cellOutputBound+1500 {
+		t.Errorf("view is %d runes, past the bound's order of magnitude", n)
+	}
+	h := handleFromView(t, out.Stdout)
+	read := runCell(t, sess, hooks, fmt.Sprintf("whole, err := choir.CellOut(%q)\nfmt.Println(len(whole), err == nil)", h))
+	if want := 3*(8000+len("SUMMARY0-HEAD")+1) + len("small between\n") + len("CORPUS-HEAD published_first_note ") + 3000 + len(" CORPUS-TAIL\n"); read.Stdout != fmt.Sprintf("%d true\n", want) {
+		t.Errorf("CellOut did not return the whole stdout: %q want %d", read.Stdout, want)
+	}
+}
+
+func TestCellOutputManySmallPrintsFallBackToHeadAndTail(t *testing.T) {
+	scope := &ChoirScope{}
+	var b strings.Builder
+	var ends []int
+	for i := 0; i < 400; i++ {
+		fmt.Fprintf(&b, "line %03d %s\n", i, strings.Repeat("x", 30))
+		ends = append(ends, b.Len())
+	}
+	whole := b.String()
+	got := scope.keepCellOutput(whole, ends)
+	if !strings.HasPrefix(got, whole[:cellOutputHead]) || !strings.HasSuffix(got, whole[len(whole)-cellOutputTail:]) {
+		t.Fatalf("many small prints are not the whole-stream head and tail:\n%s", clip(got))
 	}
 }
