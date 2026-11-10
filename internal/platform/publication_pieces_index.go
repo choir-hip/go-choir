@@ -43,6 +43,18 @@ var (
 	publishedPieceWarmBudget  = 10 * time.Minute
 )
 
+// pieceDirtyMaxFails is how many failed loads a dirty entry survives. A
+// transient fault (a blob read racing a write, a busy store) clears in one or
+// two refreshes; a piece that fails this many in a row is unloadable, and
+// retrying it on every search would cost store reads for nothing. A later
+// update of its row indexes it again through the walk.
+const pieceDirtyMaxFails = 3
+
+type pieceDirty struct {
+	row   frontPublicationRow
+	fails int
+}
+
 type piecePosting struct {
 	doc int32
 	tf  uint16
@@ -75,7 +87,11 @@ type pieceIndex struct {
 	complete  bool
 	// dirty holds rows whose load failed while they looked searchable; the
 	// next refresh retries them.
-	dirty map[string]frontPublicationRow
+	dirty map[string]*pieceDirty
+	// gaveUp records the row version (its update time) of an entry the retry
+	// gave up on, so the walk's overlap re-read of the same unchanged row does
+	// not make it dirty again; a changed row is tried afresh.
+	gaveUp map[string]time.Time
 }
 
 // pieceTokens is a text's index terms, repeats kept, with light plural
@@ -267,11 +283,26 @@ func (s *Service) refreshPieceIndex(ctx context.Context, budget time.Duration, w
 	deadline := time.Now().Add(budget)
 	ix.mu.RLock()
 	retry := make([]frontPublicationRow, 0, len(ix.dirty))
-	for _, row := range ix.dirty {
-		retry = append(retry, row)
+	for _, d := range ix.dirty {
+		retry = append(retry, d.row)
 	}
 	ix.mu.RUnlock()
 	for _, row := range retry {
+		if ctx.Err() != nil || time.Now().After(deadline) {
+			break
+		}
+		// A publication the store no longer has, or has tombstoned, is not
+		// retried.
+		if obj, err := og.GetObject(ctx, row.CanonicalID); err != nil || obj.Tombstone {
+			if ctx.Err() != nil {
+				break
+			}
+			ix.mu.Lock()
+			ix.removeLocked(row.CanonicalID)
+			delete(ix.dirty, row.CanonicalID)
+			ix.mu.Unlock()
+			continue
+		}
 		s.indexPieceRow(ctx, og, row)
 	}
 
@@ -366,10 +397,28 @@ func (s *Service) indexPieceRow(ctx context.Context, og *ObjectGraphStore, row f
 		if s.looksSearchable(row) {
 			// A published piece that could not be read: keep what is indexed
 			// and retry on the next refresh.
-			if ix.dirty == nil {
-				ix.dirty = map[string]frontPublicationRow{}
+			if at, ok := ix.gaveUp[row.CanonicalID]; ok && at.Equal(row.UpdatedAt) {
+				return
 			}
-			ix.dirty[row.CanonicalID] = row
+			delete(ix.gaveUp, row.CanonicalID)
+			if ix.dirty == nil {
+				ix.dirty = map[string]*pieceDirty{}
+			}
+			d := ix.dirty[row.CanonicalID]
+			if d == nil {
+				d = &pieceDirty{}
+				ix.dirty[row.CanonicalID] = d
+			}
+			d.row = row
+			d.fails++
+			if d.fails >= pieceDirtyMaxFails {
+				log.Printf("corpusd: published piece index: giving up on %s after %d failed loads", row.CanonicalID, d.fails)
+				delete(ix.dirty, row.CanonicalID)
+				if ix.gaveUp == nil {
+					ix.gaveUp = map[string]time.Time{}
+				}
+				ix.gaveUp[row.CanonicalID] = row.UpdatedAt
+			}
 			return
 		}
 		// Not a searchable piece now (withdrawn, or never one).
@@ -379,6 +428,7 @@ func (s *Service) indexPieceRow(ctx context.Context, og *ObjectGraphStore, row f
 	}
 	ix.putLocked(row.CanonicalID, load.title, load.content, row.UpdatedAt)
 	delete(ix.dirty, row.CanonicalID)
+	delete(ix.gaveUp, row.CanonicalID)
 }
 
 // WarmPublishedPieceIndex builds the index from the store, in the

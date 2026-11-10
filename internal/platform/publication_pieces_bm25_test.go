@@ -187,3 +187,101 @@ func TestSearchPublishedPiecesRetriesATransientLoadFailure(t *testing.T) {
 		t.Fatalf("a failed load of a would-be piece must be kept for retry")
 	}
 }
+
+func (f frontFixture) fakeRow(t *testing.T, doc string) frontPublicationRow {
+	t.Helper()
+	ident, err := publicationIdentityFor("paper-owner", doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return frontPublicationRow{CanonicalID: ident.CanonicalID, UpdatedAt: time.Now().UTC().Truncate(time.Second),
+		Metadata: []byte(`{"state":"published","route_path":"/pub/texture/` + doc + `","publish_mode":"auto","owner_id":"paper-owner"}`)}
+}
+
+func (f frontFixture) dirtyFails(id string) (int, bool) {
+	f.svc.pieces.mu.RLock()
+	defer f.svc.pieces.mu.RUnlock()
+	d, ok := f.svc.pieces.dirty[id]
+	if !ok {
+		return 0, false
+	}
+	return d.fails, true
+}
+
+// The retry path: a piece that cannot be read is kept dirty, and the next
+// refresh indexes it once it can.
+func TestSearchPublishedPiecesDirtyRetrySucceedsOnTheNextRefresh(t *testing.T) {
+	f := newFrontFixture(t)
+	ctx := context.Background()
+	if _, err := f.svc.refreshPieceIndex(ctx, time.Minute, true); err != nil {
+		t.Fatal(err)
+	}
+	row := f.fakeRow(t, "doc-late")
+	f.svc.indexPieceRow(ctx, f.svc.ogStore(), row) // the publication does not exist yet
+	if _, dirty := f.dirtyFails(row.CanonicalID); !dirty {
+		t.Fatal("fixture: the failed load was not kept")
+	}
+	if _, ok := f.svc.pieces.slot[row.CanonicalID]; ok {
+		t.Fatal("fixture: the piece was indexed before it could be read")
+	}
+	publishStoryRevision(t, f.svc, "doc-late", 1, "Late story", "The zeppelin landed at noon.", nil)
+	if _, err := f.svc.refreshPieceIndex(ctx, time.Minute, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, dirty := f.dirtyFails(row.CanonicalID); dirty {
+		t.Fatal("a retried piece that loaded is still dirty")
+	}
+	res, err := f.svc.SearchPublishedPieces(ctx, "zeppelin", 10)
+	if err != nil || len(res.Pieces) != 1 {
+		t.Fatalf("retried piece not searchable: %v %+v", err, res)
+	}
+}
+
+// A dirty entry expires: when the store has no such publication, at once; when
+// it exists but never loads, after pieceDirtyMaxFails refreshes.
+func TestSearchPublishedPiecesDirtyEntriesExpire(t *testing.T) {
+	f := newFrontFixture(t)
+	ctx := context.Background()
+	og := f.svc.ogStore()
+	gone := f.fakeRow(t, "doc-gone-forever")
+	f.svc.indexPieceRow(ctx, og, gone)
+	if _, err := f.svc.refreshPieceIndex(ctx, time.Minute, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, dirty := f.dirtyFails(gone.CanonicalID); dirty {
+		t.Fatal("an entry whose publication is not in the store was kept")
+	}
+
+	publishStoryRevision(t, f.svc, "doc-broken", 1, "Broken story", "Unreadable.", nil)
+	broken := f.fakeRow(t, "doc-broken")
+	if _, err := f.store.corpus().Exec(`DELETE FROM og_edges WHERE from_id = ? AND kind = 'has_version'`, broken.CanonicalID); err != nil {
+		t.Fatal(err)
+	}
+	broken.UpdatedAt = time.Now().UTC().Add(time.Hour) // a row the walk does not revisit
+	f.svc.indexPieceRow(ctx, og, broken)
+	for i := 0; i < pieceDirtyMaxFails+1; i++ {
+		if _, err := f.svc.refreshPieceIndex(ctx, time.Minute, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n, dirty := f.dirtyFails(broken.CanonicalID); dirty {
+		t.Fatalf("an unloadable entry was retried forever (fails=%d)", n)
+	}
+}
+
+// The retry honours the context like the walk does.
+func TestSearchPublishedPiecesDirtyRetryHonoursTheContext(t *testing.T) {
+	f := newFrontFixture(t)
+	if _, err := f.svc.refreshPieceIndex(context.Background(), time.Minute, true); err != nil {
+		t.Fatal(err)
+	}
+	row := f.fakeRow(t, "doc-late")
+	f.svc.indexPieceRow(context.Background(), f.svc.ogStore(), row)
+	publishStoryRevision(t, f.svc, "doc-late", 1, "Late story", "The zeppelin landed at noon.", nil)
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, _ = f.svc.refreshPieceIndex(cancelled, time.Minute, true)
+	if _, dirty := f.dirtyFails(row.CanonicalID); !dirty {
+		t.Fatal("a cancelled refresh retried the dirty entry")
+	}
+}
