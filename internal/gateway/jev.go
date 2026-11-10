@@ -30,26 +30,15 @@ const (
 type JudgmentRequest struct {
 	State     json.RawMessage            `json:"state"`
 	Questions map[string]json.RawMessage `json:"questions"`
-	// Scope names the rate bucket the request draws on. Empty is the
-	// shared judgments bucket (support and candidate judgments); intake
-	// labels have their own, so a busy poll cannot starve the support
-	// judge publication needs (L2a R2-3). It is never sent upstream.
+	// Scope names the priority class of the request: "interactive" draws on
+	// the share reserved for the prompt router, the disclosure gate and a
+	// desk's own question; every other scope is bulk. It is never sent
+	// upstream.
 	Scope string `json:"scope,omitempty"`
 }
 
-// JudgmentScopeIntakeLabels is the rate scope of intake labels.
+// JudgmentScopeIntakeLabels is the scope of intake labels (bulk).
 const JudgmentScopeIntakeLabels = "intake_labels"
-
-// judgmentRateScope maps a request's scope to its rate bucket.
-func judgmentRateScope(scope string) (string, error) {
-	switch strings.TrimSpace(scope) {
-	case "":
-		return "judgments", nil
-	case JudgmentScopeIntakeLabels:
-		return "judgments:" + JudgmentScopeIntakeLabels, nil
-	}
-	return "", fmt.Errorf("unknown judgment scope %q", scope)
-}
 
 // JevTransport calls OpenRouter's Decisions alpha endpoint without exposing
 // the provider credential to VM guests.
@@ -65,13 +54,37 @@ type JevTransport struct {
 	// hold is the memory of the upstream failing: no call goes out while
 	// it holds (upstream_hold.go).
 	hold upstreamHold
+	// limiter is the one rate and in-flight limit every door shares
+	// (jev_limiter.go); built on first use so a literal transport has one.
+	limiterOnce sync.Once
+	limiter     *jevLimiter
+	stats       jevStats
+}
+
+func (t *JevTransport) limit() *jevLimiter {
+	t.limiterOnce.Do(func() {
+		if t.limiter == nil {
+			t.limiter = newJevLimiter()
+		}
+	})
+	return t.limiter
+}
+
+// newJevHTTPClient keeps connections to the provider warm: the default
+// transport keeps 2 idle connections per host, so 12 concurrent judgments
+// would each open a fresh TLS connection.
+func newJevHTTPClient() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConns = 128
+	transport.MaxIdleConnsPerHost = 64
+	return &http.Client{Timeout: jevTransportTimeout, Transport: transport}
 }
 
 func NewJevTransportFromEnv(enabled bool) *JevTransport {
 	return &JevTransport{
 		enabled:    enabled,
 		apiKey:     strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY")),
-		httpClient: &http.Client{Timeout: jevTransportTimeout},
+		httpClient: newJevHTTPClient(),
 		receipts:   newJevReceiptWriter(strings.TrimSpace(os.Getenv("GATEWAY_JEV_RECEIPT_PATH"))),
 		url:        openRouterDecisionsURL,
 		now:        time.Now,
@@ -99,6 +112,25 @@ func (t *JevTransport) Decide(ctx context.Context, computerID string, request Ju
 		return nil, &upstreamHeldError{name: "Jev judgment provider", until: until}
 	}
 
+	class, _ := judgmentRateScope(request.Scope)
+	release, queued, err := t.limit().acquire(ctx, computerID, class)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	started := time.Now()
+	response, status, err := t.call(ctx, computerID, request)
+	upstream := time.Since(started)
+	logJevCall(computerID, class, len(request.Questions), queued, upstream, status, err)
+	if line := t.stats.observe(time.Now(), upstream, queued, status, err == nil); line != "" {
+		log.Print(line)
+	}
+	return response, err
+}
+
+// call is one upstream request under a held limiter slot. It returns the
+// upstream status (0 when none arrived).
+func (t *JevTransport) call(ctx context.Context, computerID string, request JudgmentRequest) ([]byte, int, error) {
 	upstreamRequest, err := json.Marshal(struct {
 		Model     string                     `json:"model"`
 		State     json.RawMessage            `json:"state"`
@@ -109,12 +141,12 @@ func (t *JevTransport) Decide(ctx context.Context, computerID string, request Ju
 		Questions: request.Questions,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("encode Jev request: %w", err)
+		return nil, 0, fmt.Errorf("encode Jev request: %w", err)
 	}
 
 	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, t.upstreamURL(), bytes.NewReader(upstreamRequest))
 	if err != nil {
-		return nil, fmt.Errorf("create OpenRouter request: %w", err)
+		return nil, 0, fmt.Errorf("create OpenRouter request: %w", err)
 	}
 	httpRequest.Header.Set("Authorization", "Bearer "+t.apiKey)
 	httpRequest.Header.Set("Content-Type", "application/json")
@@ -125,28 +157,33 @@ func (t *JevTransport) Decide(ctx context.Context, computerID string, request Ju
 		if ctx.Err() == nil {
 			t.hold.fail(t.clock(), false)
 		}
-		return nil, fmt.Errorf("call OpenRouter: %w", err)
+		return nil, 0, fmt.Errorf("call OpenRouter: %w", err)
 	}
 	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(response.Body, jevTransportMaxBodySize+1))
 	if err != nil {
-		return nil, fmt.Errorf("read OpenRouter response: %w", err)
+		return nil, response.StatusCode, fmt.Errorf("read OpenRouter response: %w", err)
 	}
 	if len(body) > jevTransportMaxBodySize {
-		return nil, fmt.Errorf("OpenRouter response exceeds transport limit")
+		return nil, response.StatusCode, fmt.Errorf("OpenRouter response exceeds transport limit")
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		switch code := response.StatusCode; {
 		case isHardUpstreamStatus(code):
 			t.hold.fail(t.clock(), true)
-		case code >= 500 || code == http.StatusTooManyRequests || code == http.StatusRequestTimeout:
+		case code == http.StatusTooManyRequests:
+			// A rate answer is not an outage: one shared backoff for the
+			// time the provider names, not a minute-long hold on every
+			// computer.
+			t.limit().backoff(parseRetryAfter(response.Header, t.clock()))
+		case code >= 500 || code == http.StatusRequestTimeout:
 			t.hold.fail(t.clock(), false)
 		}
-		return nil, fmt.Errorf("OpenRouter returned %s", response.Status)
+		return nil, response.StatusCode, fmt.Errorf("OpenRouter returned %s", response.Status)
 	}
 	t.hold.succeed()
 	if !json.Valid(body) {
-		return nil, fmt.Errorf("OpenRouter returned invalid JSON")
+		return nil, response.StatusCode, fmt.Errorf("OpenRouter returned invalid JSON")
 	}
 	var responseIdentity struct {
 		ID    string `json:"id"`
@@ -170,9 +207,9 @@ func (t *JevTransport) Decide(ctx context.Context, computerID string, request Ju
 			Distribution:      json.RawMessage(body),
 		},
 	}); err != nil {
-		return nil, fmt.Errorf("write Jev transport receipt: %w", err)
+		return nil, response.StatusCode, fmt.Errorf("write Jev transport receipt: %w", err)
 	}
-	return body, nil
+	return body, response.StatusCode, nil
 }
 
 func validateJudgmentRequest(request JudgmentRequest) error {
@@ -261,20 +298,34 @@ func (w *jevReceiptWriter) write(receipt jevTransportReceipt) error {
 	if err != nil {
 		return fmt.Errorf("encode receipt: %w", err)
 	}
+	file, err := w.append(line)
+	if err != nil {
+		return err
+	}
+	// The fsync is outside the mutex: concurrent calls each wait for their
+	// own receipt to be durable without queueing behind one another's.
+	syncErr := file.Sync()
+	_ = file.Close()
+	return syncErr
+}
+
+// append writes the line under the mutex, so lines never interleave, and
+// returns the open file for the caller to sync.
+func (w *jevReceiptWriter) append(line []byte) (*os.File, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if err := os.MkdirAll(filepath.Dir(w.path), 0o700); err != nil {
-		return fmt.Errorf("create receipt directory: %w", err)
+		return nil, fmt.Errorf("create receipt directory: %w", err)
 	}
 	file, err := os.OpenFile(w.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
-		return fmt.Errorf("open receipt file: %w", err)
+		return nil, fmt.Errorf("open receipt file: %w", err)
 	}
-	defer func() { _ = file.Close() }()
 	if _, err := file.Write(append(line, '\n')); err != nil {
-		return fmt.Errorf("append receipt: %w", err)
+		_ = file.Close()
+		return nil, fmt.Errorf("append receipt: %w", err)
 	}
-	return file.Sync()
+	return file, nil
 }
 
 // jevPeerAllowed is the Jev route's pin check. A mismatch is refused in
@@ -318,8 +369,7 @@ func (h *Handler) HandleJudgment(w http.ResponseWriter, r *http.Request) {
 		writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: "Jev bearer is not authorized for this VM"})
 		return
 	}
-	// The body is read before the rate check so the request's scope picks
-	// its bucket.
+	// The body is read first: the request's scope names its priority class.
 	var request JudgmentRequest
 	if err := h.decodeBody(w, r, bodyRouteJudgment, computerID, &request, false); err != nil {
 		if status, ok := bodyRefusal(w, err); ok {
@@ -329,23 +379,9 @@ func (h *Handler) HandleJudgment(w http.ResponseWriter, r *http.Request) {
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid judgment request"})
 		return
 	}
-	scope, err := judgmentRateScope(request.Scope)
-	if err != nil {
+	if _, err := judgmentRateScope(request.Scope); err != nil {
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
-	}
-	if h.rateLimiter != nil {
-		bucket := rateLimitBucketKey(computerID, scope)
-		if !h.rateLimiter.Record(bucket) {
-			_, _, resetIn := h.rateLimiter.Status(bucket)
-			retrySeconds := int(resetIn.Seconds())
-			if retrySeconds < 1 {
-				retrySeconds = 1
-			}
-			w.Header().Set("Retry-After", fmt.Sprintf("%d", retrySeconds))
-			writeGatewayJSON(w, http.StatusTooManyRequests, ErrorResponse{Error: "Jev judgment rate limit exceeded"})
-			return
-		}
 	}
 
 	if err := validateJudgmentRequest(request); err != nil {
@@ -361,6 +397,11 @@ func (h *Handler) HandleJudgment(w http.ResponseWriter, r *http.Request) {
 		log.Printf("gateway: Jev judgment for %s failed: %v", computerID, err)
 		if _, disabled := err.(jevTransportDisabledError); disabled {
 			writeGatewayJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "Jev judgments are disabled"})
+			return
+		}
+		if limited, ok := err.(*jevLimitedError); ok {
+			w.Header().Set("Retry-After", fmt.Sprintf("%d", max(1, int(limited.retryAfter.Seconds()+0.999))))
+			writeGatewayJSON(w, http.StatusTooManyRequests, ErrorResponse{Error: "Jev judgment rate limit exceeded"})
 			return
 		}
 		if held, ok := err.(*upstreamHeldError); ok {
