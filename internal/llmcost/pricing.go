@@ -148,9 +148,12 @@ var pricingTable = []ModelPricing{
 	{Provider: "opencode-go", Model: "beam-free", InputPerMillion: 0, OutputPerMillion: 0},
 	// Devin SWE models (Cognition), free to us for a promotional window:
 	// swe-2-flash until 2026-12-04, swe-2 until 2026-11-30 (owner
-	// 2026-11-09). EXPIRY: after those dates these zeros are wrong; price
-	// them from the Devin plan before then, or spend goes unseen. Effort
-	// variants (swe-2-flash-medium, ...) match by prefix.
+	// 2026-11-09). EXPIRY, no automatic mechanism (and no date-triggered
+	// test): on 2026-11-30 replace the swe-2 zeros, and on 2026-12-04 the
+	// swe-2-flash zeros, with the Devin plan's per-million rates, and add
+	// devin to the gateway paid budget (internal/gateway/paid_budget.go),
+	// or its spend goes unseen. Effort variants (swe-2-flash-medium, ...)
+	// match by prefix.
 	{Provider: "devin", Model: "swe-2-flash", InputPerMillion: 0, OutputPerMillion: 0},
 	{Provider: "devin", Model: "swe-2", InputPerMillion: 0, OutputPerMillion: 0},
 	// Inkling 2 Small, OpenRouter's free model (owner 2026-11-09; listing

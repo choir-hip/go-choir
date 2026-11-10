@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 const devinTestKey = "devin-session-token$aaaaaaaa.bbbbbbbb.cccccccc"
@@ -140,11 +141,30 @@ func TestDevinRefusalsClassifyForThePool(t *testing.T) {
 				t.Fatalf("err = %v quota=%+v", err, q)
 			}
 		}},
-		{"a short rate limit is a concurrency limit, not quota", func(w http.ResponseWriter, _ int) {
-			writeFrames(w, trailer("resource_exhausted", "Rate limit exceeded: too many requests", ""))
+		{"only a retry time under 10 seconds is a short rate limit", func(w http.ResponseWriter, _ int) {
+			w.Header().Set("Retry-After", "5")
+			w.WriteHeader(429)
+			w.Write([]byte(`{"code":"resource_exhausted","message":"Rate limit exceeded"}`))
 		}, func(t *testing.T, err error) {
 			if IsQuotaExhausted(err) || !errors.Is(err, ErrUpstreamConcurrencyLimit) {
 				t.Fatalf("err = %v", err)
+			}
+		}},
+		{"rate-limit words with no reset time are still quota (fail over at once)", func(w http.ResponseWriter, _ int) {
+			writeFrames(w, trailer("resource_exhausted", "Rate limit exceeded: too many requests", ""))
+		}, func(t *testing.T, err error) {
+			if !IsQuotaExhausted(err) || errors.Is(err, ErrUpstreamConcurrencyLimit) {
+				t.Fatalf("err = %v", err)
+			}
+		}},
+		{"a 30 second retry time is quota held until then", func(w http.ResponseWriter, _ int) {
+			w.Header().Set("Retry-After", "30")
+			w.WriteHeader(429)
+			w.Write([]byte(`{"code":"resource_exhausted","message":"slow down"}`))
+		}, func(t *testing.T, err error) {
+			q, ok := AsQuotaExhausted(err)
+			if !ok || time.Until(q.RetryAt) < 20*time.Second {
+				t.Fatalf("err = %v quota=%+v", err, q)
 			}
 		}},
 		{"permission_denied is held as quota", func(w http.ResponseWriter, _ int) {
@@ -450,18 +470,109 @@ func TestDevinToolCallArgumentsAccumulateAndTruncationFails(t *testing.T) {
 	}
 }
 
-func TestDevinServerNamedBaseURLMustBeHTTPSDNS(t *testing.T) {
+func TestDevinServerNamedBaseURLIsPinned(t *testing.T) {
+	const base = "https://server.codeium.com"
 	for raw, ok := range map[string]bool{
-		"https://api.example.com":   true,
-		"http://api.example.com":    false,
-		"https://127.0.0.1":         false,
-		"https://localhost":         false,
-		"https://[::1]":             false,
-		"https://user@example.com":  false,
-		"https://svc.cluster.local": false,
+		"https://server.codeium.com":                true,
+		"https://SERVER.Codeium.com":                true,
+		"https://server.codeium.com:443":            true,
+		"https://eu.server.codeium.com":             true,
+		"https://api.windsurf.com":                  true,
+		"https://x.devin.ai":                        true,
+		"https://codeium.com":                       true,
+		"https://server.codeium.com.evil.example":   false,
+		"https://evilcodeium.com":                   false,
+		"https://evil.example:8443":                 false,
+		"https://server.codeium.com:8443":           false,
+		"https://localhost.":                        false,
+		"https://localhost":                         false,
+		"https://foo.localhost":                     false,
+		"https://169.254.169.254.nip.io":            false,
+		"https://0x7f.0.0.1":                        false,
+		"https://127.1":                             false,
+		"https://[fe80::1%25a.b]":                   false,
+		"https://[::1]":                             false,
+		"https://server.codeium.com.":               false,
+		"https://user@server.codeium.com":           false,
+		"https://user:pw@server.codeium.com":        false,
+		"http://server.codeium.com":                 false,
+		"https://":                                  false,
+		"https://-bad.codeium.com":                  false,
+		"https://under_score.codeium.com":           false,
+		"https://server.codeium.com%2eevil.example": false,
+		"https://xn--e1afmkfd.codeium.com.evil":     false,
+		"https://server.codeium.com@evil.example":   false,
+		"https://evil.example/server.codeium.com":   false,
 	} {
-		if devinAcceptableOverride(raw) != ok {
-			t.Errorf("devinAcceptableOverride(%q) != %v", raw, ok)
+		if got := devinAcceptableOverride(raw, base); got != ok {
+			t.Errorf("devinAcceptableOverride(%q) = %v, want %v", raw, got, ok)
+		}
+	}
+	// A configured base host is accepted exactly, whatever its domain.
+	if !devinAcceptableOverride("https://gw.example.org", "https://gw.example.org") || devinAcceptableOverride("https://other.example.org", "https://gw.example.org") {
+		t.Error("the configured host must be the only non-allowlisted host")
+	}
+}
+
+func TestDevinConstructorValidatesBaseURL(t *testing.T) {
+	for raw, ok := range map[string]bool{
+		"":                                true, // default
+		"https://server.codeium.com":      true,
+		"http://127.0.0.1:9999":           true, // loopback only: no remote host can receive the key
+		"http://localhost:9999":           true,
+		"http://[::1]:9999":               true,
+		"http://server.codeium.com":       false,
+		"http://evil.example":             false,
+		"https://user@server.codeium.com": false,
+		"https://user:pw@127.0.0.1":       false,
+		"ftp://server.codeium.com":        false,
+		"https://":                        false,
+		"server.codeium.com":              false,
+	} {
+		_, err := NewDevinProvider(devinTestKey, raw, "")
+		if (err == nil) != ok {
+			t.Errorf("NewDevinProvider(base %q) err=%v, want ok=%v", raw, err, ok)
+		}
+		if err != nil && strings.Contains(err.Error(), "aaaaaaaa") {
+			t.Errorf("constructor error carries the key: %v", err)
+		}
+	}
+}
+
+// A redirect must never carry the request body (the session key, the user
+// JWT) to another host: any 3xx is an error and the target sees nothing.
+func TestDevinRedirectsAreNeverFollowed(t *testing.T) {
+	var hits atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+	}))
+	defer target.Close()
+	for _, code := range []int{301, 302, 307, 308} {
+		origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, target.URL+r.URL.Path, code)
+		}))
+		p, err := NewDevinProvider(devinTestKey, origin.URL, "swe-2-flash")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = p.Call(context.Background(), devinTestReq())
+		origin.Close()
+		if err == nil {
+			t.Fatalf("redirect %d was followed to success", code)
+		}
+	}
+	if hits.Load() != 0 {
+		t.Fatalf("redirect target received %d requests", hits.Load())
+	}
+}
+
+func TestDevinSanitizeDoesNotSplitARune(t *testing.T) {
+	p := &DevinProvider{}
+	for pad := range 4 {
+		in := strings.Repeat("a", 298-pad) + strings.Repeat("é", 10)
+		out := p.devinSanitize(in)
+		if !utf8.ValidString(out) || len(out) > 300 {
+			t.Fatalf("pad %d: valid=%v len=%d", pad, utf8.ValidString(out), len(out))
 		}
 	}
 }

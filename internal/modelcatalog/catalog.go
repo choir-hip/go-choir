@@ -474,8 +474,9 @@ func (m PoolMember) SlotWeight() int {
 // reasoning for everything (except sonnet which can be med)". So the default
 // pool (the paper and ordinary computers) is crouton-alpha, the free
 // fallbacks, gpt-6-luna, then Bedrock Claude Haiku 5.5 last, with no
-// Synthetic and no River; the selfdev pool is crouton-alpha, the same free
-// fallbacks, then Synthetic, then River, with no Haiku.
+// Synthetic and no River. (Superseded for selfdev later that day: see the
+// Devin paragraph below and the SelfDevPool comment; selfdev is now Synthetic
+// then River only.)
 //
 // Owner 2026-11-09: stealth/crouton-alpha was retired by OpenRouter that day
 // and is gone from every pool; the members that followed it lead in their
@@ -538,10 +539,10 @@ const LunaSyntheticPool = "luna-synthetic"
 // DeepSeek V4.1 Flash 1017 and gpt-6-luna.
 const SyntheticLunaPool = "synthetic-luna"
 
-// SelfDevPool names the self-development pool (owner 2026-11-09): the same
-// free models as the default pool, then Synthetic's DeepSeek V4.1 Flash 1017,
-// then River's. No Haiku. The lead is the first free member (crouton-alpha
-// was retired 2026-11-09).
+// SelfDevPool names the self-development pool (owner 2026-11-09: "use
+// deepseek via Synthetic and River for self-dev"): Synthetic's DeepSeek V4.1
+// Flash 1017 leads and takes the threads, River's DeepSeek is the only
+// fallback (River has a $1 a day ruling). No free members, no Devin, no Haiku.
 const SelfDevPool = "selfdev"
 
 // NoFailover reports whether a pool's threads never move to another member

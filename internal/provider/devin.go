@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,6 +22,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // DevinProvider implements the Provider interface for Cognition's Devin
@@ -81,15 +81,43 @@ func NewDevinProvider(apiKey, baseURL, modelID string) (*DevinProvider, error) {
 	if baseURL == "" {
 		baseURL = "https://server.codeium.com"
 	}
+	if err := devinValidateBaseURL(baseURL); err != nil {
+		return nil, err
+	}
 	if modelID == "" {
 		modelID = "swe-2-flash"
 	}
 	return &DevinProvider{
-		apiKey:     apiKey,
-		baseURL:    baseURL,
-		modelID:    modelID,
-		httpClient: &http.Client{Timeout: defaultProviderHTTPTimeout},
+		apiKey:  apiKey,
+		baseURL: baseURL,
+		modelID: modelID,
+		httpClient: &http.Client{
+			Timeout: defaultProviderHTTPTimeout,
+			// Never follow a redirect: a 307/308 would replay the request
+			// body (the session key, the user JWT) to whatever host it
+			// names. Any 3xx falls to the status-code error path.
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
 	}, nil
+}
+
+// devinValidateBaseURL admits https with no userinfo, or plain http to a
+// loopback host only (the in-process test servers; no remote host can then
+// receive the credential in clear text).
+func devinValidateBaseURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" || u.Hostname() == "" || u.User != nil {
+		return fmt.Errorf("devin: base URL must be an https URL without credentials")
+	}
+	switch u.Scheme {
+	case "https":
+		return nil
+	case "http":
+		if h := u.Hostname(); h == "localhost" || h == "127.0.0.1" || h == "::1" {
+			return nil
+		}
+	}
+	return fmt.Errorf("devin: base URL must be https (http only to a loopback host)")
 }
 
 // NewDevinProviderFromEnv reads DEVIN_API_KEY (the windsurf_api_key value
@@ -189,8 +217,11 @@ func devinCodeFromHTTP(status int) string {
 var (
 	devinSecretPattern = regexp.MustCompile(`devin-session-token\$\S+|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\.?[A-Za-z0-9_-]*`)
 	devinRetryInText   = regexp.MustCompile(`(?i)\b(?:in|after)\s+(\d{1,6})\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?|days?)\b`)
-	devinBurstWords    = []string{"rate limit", "rate-limit", "too many requests", "concurrent", "slow down"}
 )
+
+// devinShortRetry is the longest retry time that still counts as a short
+// rate limit rather than a held quota.
+const devinShortRetry = 10 * time.Second
 
 // devinSanitize redacts credential-shaped text and bounds the length.
 func (p *DevinProvider) devinSanitize(s string) string {
@@ -207,7 +238,11 @@ func (p *DevinProvider) devinSanitize(s string) string {
 	}
 	s = devinSecretPattern.ReplaceAllString(s, "[redacted]")
 	if len(s) > 300 {
-		s = s[:300]
+		cut := 300
+		for cut > 0 && !utf8.RuneStart(s[cut]) {
+			cut--
+		}
+		s = s[:cut]
 	}
 	return s
 }
@@ -320,20 +355,14 @@ func (p *DevinProvider) devinClassify(endpoint string, httpStatus int, h http.He
 	var inner error
 	switch code {
 	case "resource_exhausted":
-		// A spent allowance or plan, unless the words say a short rate
-		// limit and no reset time came with it: then the guest retries the
-		// same model and the breaker counts only a long streak. When in
-		// doubt it is quota: a held Devin degrades to the other members,
-		// a hammered one is the failure the pool exists to avoid.
+		// A spent allowance or plan: held, and the pool fails over at once.
+		// Only a response that clearly gives a retry time under
+		// devinShortRetry is a short rate limit the guest retries on the
+		// same model. With swe-2-flash the sole lead, every other doubt is
+		// quota: a held Devin degrades to the other members, a retried one
+		// delays every run.
 		at := devinResetAt(h, metadata, body, now)
-		lower := strings.ToLower(body.Message)
-		burst := false
-		for _, w := range devinBurstWords {
-			if strings.Contains(lower, w) {
-				burst = true
-			}
-		}
-		if burst && at.IsZero() && !reasonSaysQuota(lower) {
+		if !at.IsZero() && at.Sub(now) <= devinShortRetry {
 			inner = &upstreamConcurrencyError{provider: "devin", status: status}
 		} else {
 			inner = &QuotaExhaustedError{Provider: "devin", Status: status, RetryAt: at}
@@ -400,19 +429,43 @@ func (p *DevinProvider) baseURLFor() string {
 	return p.baseURL
 }
 
-// devinAcceptableOverride admits a server-named API host only when it is
-// https on a DNS name: the session credential travels in every request, so a
-// response must not be able to point it at a bare IP, localhost or plain http.
-func devinAcceptableOverride(raw string) bool {
+// devinOverrideDomains are the only domains a server-named API host may be
+// under (besides the configured base host itself).
+var devinOverrideDomains = []string{"codeium.com", "windsurf.com", "devin.ai"}
+
+var devinHostLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+
+// devinAcceptableOverride admits a server-named API base only when it is
+// https on port 443 (or none), has no userinfo, and its host is a plain DNS
+// name that is exactly the configured base host or equal to or a subdomain
+// (on a label boundary) of an allowlisted domain. The session credential
+// travels in every request, so a response must not be able to move it.
+func devinAcceptableOverride(raw, base string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "https" || u.User != nil {
 		return false
 	}
-	host := u.Hostname()
-	if host == "" || !strings.Contains(host, ".") || net.ParseIP(host) != nil {
+	if port := u.Port(); port != "" && port != "443" {
 		return false
 	}
-	return !strings.HasSuffix(host, ".local") && !strings.HasSuffix(host, ".internal")
+	host := strings.ToLower(u.Hostname())
+	if host == "" || strings.HasSuffix(host, ".") {
+		return false
+	}
+	for _, label := range strings.Split(host, ".") {
+		if !devinHostLabel.MatchString(label) {
+			return false
+		}
+	}
+	if bu, err := url.Parse(base); err == nil && host == strings.ToLower(bu.Hostname()) {
+		return true
+	}
+	for _, d := range devinOverrideDomains {
+		if host == d || strings.HasSuffix(host, "."+d) {
+			return true
+		}
+	}
+	return false
 }
 
 // ensureUserJWT returns a user JWT for the session credential. stale is the
@@ -449,7 +502,7 @@ func (p *DevinProvider) ensureUserJWT(ctx context.Context, stale string) (string
 	p.mu.Lock()
 	p.userJWT = jwt
 	p.userJWTAt = time.Now()
-	if custom != "" && devinAcceptableOverride(custom) {
+	if custom != "" && devinAcceptableOverride(custom, p.baseURL) {
 		p.baseURLOverride = custom
 	}
 	p.mu.Unlock()
