@@ -226,8 +226,9 @@ listen" as the main path:
   so recognition is at its best and there is no echo. Dictation has no
   length cut (Mike cuts a turn at 60 seconds; that limit goes) and a
   patient end-of-turn, since people pause to think. When the turn is
-  handed off, the programme resumes a few seconds before the point where
-  the dip began.
+  handed off, the radio acknowledges at once and then decides what plays
+  next; resuming is one outcome among several
+  ([autoradio-turns-2026-11-10.md](autoradio-turns-2026-11-10.md)).
 - **The app knows what it is saying.** It has the text of the story being
   read and of the clip being played. Words that match the programme are
   the programme. An utterance about the current content, or a command, is
