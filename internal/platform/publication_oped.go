@@ -50,6 +50,8 @@ type OpedFeedItem struct {
 	PublishedAt  string               `json:"published_at"`
 	RespondsTo   types.OpedRespondsTo `json:"responds_to"`
 	NoticeID     string               `json:"notice_id"`
+	// StoryDocID is the paper's own document the op-ed answers.
+	StoryDocID string `json:"story_doc_id"`
 }
 
 // OpedFeed is one page of op-eds.
@@ -146,7 +148,7 @@ func (s *Service) ListOpedsForOwner(ctx context.Context, ownerID, cursor string,
 		}
 		feed.Items = append(feed.Items, OpedFeedItem{
 			VersionID: n.Child.PublicationVersionID, RoutePath: n.Child.RoutePath, AuthorLabel: n.Child.AuthorLabel,
-			ManifestHash: n.Child.ManifestHash, PublishedAt: n.Child.PublishedAt, NoticeID: obj.CanonicalID,
+			ManifestHash: n.Child.ManifestHash, PublishedAt: n.Child.PublishedAt, NoticeID: obj.CanonicalID, StoryDocID: n.RespondsTo.SourceDocID,
 			RespondsTo: types.OpedRespondsTo{PublicationVersionID: n.RespondsTo.PublicationVersionID,
 				RoutePath: n.RespondsTo.RoutePath, PublicationID: n.RespondsTo.PublicationID},
 		})

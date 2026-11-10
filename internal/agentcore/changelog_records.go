@@ -242,6 +242,16 @@ func (rt *Runtime) EmitUpdateEvents(ctx context.Context, ownerID, computerID, do
 	return nil
 }
 
+// emitOpedWithSubject commits an op-ed record with the caller's subject
+// refs (the references a reader of the tape needs without a second lookup).
+func (rt *Runtime) emitOpedWithSubject(ctx context.Context, ownerID, computerID string, body types.CommitmentOped, subject map[string]string) error {
+	req, err := opedRecordRequest(ownerID, computerID, body, subject)
+	if err != nil {
+		return err
+	}
+	return rt.commitSilentRecord(ctx, req)
+}
+
 // EmitOpedWake commits the oped_wake system record to the story document's
 // inbox: id oped-wake:<version id>. It wakes nobody until lane C2 adds it to
 // the waking list in RecordWakesReader (contract amendment A2).
