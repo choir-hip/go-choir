@@ -386,3 +386,75 @@ then the platform pool/routing record (red: provider routing).
 - **The receipt table is in corpusd's control store**, not on a computer's
   tape. Platform acts have no computer tape; the listing chain in Store B is
   the effect's durable record.
+
+## 8. Failure list (build) (2026-11-09, slices O2 and O3)
+
+Written before the build of `GET /api/platform/operator/computers`, the
+operator-gated policy acts, and `choir paper`. Each item is a way the gate
+could fail open or strand state; the test that covers it is named. Proxy tests
+are `internal/proxy/platform_operator_computers_test.go` (P), guest tests
+`internal/autoputer/policy_operator_test.go` (G), corpusd
+`internal/platform/operator_check_test.go` (C), CLI `cmd/choir/paper_test.go` (L).
+
+**What the build found that the sections above assumed otherwise.** The
+roster variable is `CHOIR_PLATFORM_OPERATOR_USERS` (O1, read by corpusd
+only), not `CHOIR_PLATFORM_OPERATORS`, which is the break-glass
+`name:token` list. O1 built only the package yank; `authorizePlatformComputerAct`,
+the platform-computer routes and the receipt on a computer's tape did not
+exist. 5.2 said the proxy records an owner-act receipt at corpusd for the
+paper; the build records the receipt on the target computer's tape instead
+(below), because corpusd's receipt table is single-use bookkeeping for acts
+corpusd executes and widening its act kinds is a second red surface.
+
+Admission
+
+- A1 no credential is admitted (P `TestOperatorAdmissionFailsClosed`).
+- A2 an unset, empty or `none` roster admits nobody (C; P `TestOperatorRosterFailsClosed`).
+- A3 one malformed entry admits nobody, the well-formed neighbours included (C; P same).
+- A4 an ordinary account's session or admin key is refused (P admission).
+- A5 near matches of the operator id (case, spaces, prefix, suffix) are refused; the match is exact on the account id (C; P admission).
+- A6 corpusd down, 5xx, malformed or untyped answers, or no corpusd URL, refuse; only a typed `{"operator":true}` admits (P roster).
+- A7 an email-code or email-link session of the operator is refused; passkey session only (P admission).
+- A8 an API key bound to a computer does not carry the role, whatever its scopes (P admission).
+- A9 a key keeps its scopes: a read key reads and cannot PUT or verify (P admission).
+- A10 the roster check answers only host callers with the host credential (C).
+
+Targeting
+
+- T1 an ordinary user's computer (`computer-7cc9...`) is unreachable by the operator (P `TestOperatorReachesOnlyPlatformComputers`).
+- T2 a test-tier computer is unreachable: the platform tier only (P same).
+- T3 case, whitespace, prefix, suffix, traversal, empty and non-computer ids are refused before vmctl is asked (P same).
+- T4 vmctl absent, or not agreeing with the roster, refuses; a stopped guest is not faked (P `TestOperatorTargetNeedsVmctlAgreement`).
+- T5 the computer comes from the path only: `X-Choir-Computer` and `computer_id` cannot retarget (P same).
+- T6 only the allowlisted guest routes are forwarded; DELETE, PATCH, POST on the policy, other files, traversal and encoded slashes are not (P `TestOperatorForwardsOnlyTheAllowlist...`).
+- T7 the operator naming a platform computer on the ordinary `/api` route still needs ownership (P `TestOperatorMarkerIsNotAnOrdinaryOwnerAct`).
+
+Receipt
+
+- R1 the receipt is recorded before the write lands, and a receipt that cannot be recorded refuses the write (G `TestOperatorPolicyWriteIsRecordedBeforeItLands`, `...NeedsItsReceipt`).
+- R2 a client-supplied operator marker never reaches the guest (P forwarding; the header is in the ingress strip list).
+- R3 the guest believes the marker only from the host peer and never in-process, so a desk cannot forge a receipt (G `TestOperatorMarkerIsNotBelieved...`).
+- R4 the receipt names the account id, the act, the revision kept and both digests, never an email, and the store accepts the event kind (G `...NamesTheAccountNotAnEmail`; agentcore `TestPlatformOperatorReceiptEventIsAppended`).
+- R5 a crash between the receipt and the write leaves a receipt for a write that did not happen (the CLI's read-back catches it); never a write with no receipt. Not testable without a crash; the order is covered by R1.
+- R6 an ordinary owner write grows no receipt (G `...ReachOnlyThePolicySurface`).
+- R7 a guest from before this build ignores the marker and would write with no receipt; the proxy writes only to a guest that says it records receipts (P `TestOperatorWriteRefusedOnAGuestThatDoesNotRecordReceipts`).
+- R8 a marked request reaches no file but the policy and its revisions, and no verb but the policy read and the validated write (G same as R6).
+
+Forwarding
+
+- F1 no Authorization, Cookie, internal token or client header reaches the guest; the request is built from nothing (P forwarding).
+- F2 the guest sees the computer's owner as the authenticated user and the operator only in the marker (P forwarding).
+- F3 the host credential is sent only by the existing corpusd call to the configured corpusd URL; the guest call carries none.
+- F4 no header of the guest's reaches the client (P forwarding).
+- F5 status reads never wake a stopped computer (P `TestOperatorStatusListsPlatformComputers`).
+
+CLI
+
+- L1 the paper verbs use the operator route and never send `X-Choir-Computer`; a non-computer id never becomes a path; two platform computers need `--computer`; the receipt is printed (L).
+- L2 the paper verbs are not MCP tools (L `TestPaperVerbsAreNotMCPTools`).
+
+Edges from the policy landing
+
+- E1 a delete then a move cannot land an unvalidated policy (G `TestPolicyCannotBeLandedUnvalidatedByMoveOrAlias`).
+- E2 a write through an in-root symlink alias of the policy is validated like a PUT (G same).
+- E3 left open: a DELETE of the policy file, which falls the computer back to the platform default (the owner path only; the operator path does not reach DELETE); no serialization of two concurrent PUTs.
