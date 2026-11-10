@@ -17,8 +17,6 @@ import (
 const (
 	publishedPieceDefaultLimit = 10
 	publishedPieceMaxLimit     = 25
-	// publishedPieceMaxTerms bounds the query's words.
-	publishedPieceMaxTerms = 8
 	// DefaultPublicBaseURL is the host a read_url names when
 	// CORPUSD_PUBLIC_BASE_URL is unset.
 	DefaultPublicBaseURL = "https://choir.news"

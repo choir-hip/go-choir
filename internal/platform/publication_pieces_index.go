@@ -53,6 +53,8 @@ type pieceDoc struct {
 	terms  []string
 	length int32
 	live   bool
+	// updated is the publication row's update time when it was indexed.
+	updated time.Time
 }
 
 // pieceIndex is the derived search state. refreshMu admits one refresher;
@@ -71,6 +73,9 @@ type pieceIndex struct {
 	cursor    *frontCursor
 	started   bool
 	complete  bool
+	// dirty holds rows whose load failed while they looked searchable; the
+	// next refresh retries them.
+	dirty map[string]frontPublicationRow
 }
 
 // pieceTokens is a text's index terms, repeats kept, with light plural
@@ -203,7 +208,7 @@ func (ix *pieceIndex) removeLocked(id string) {
 }
 
 // putLocked indexes a document, replacing any earlier version of it.
-func (ix *pieceIndex) putLocked(id, title, content string) {
+func (ix *pieceIndex) putLocked(id, title, content string, updated time.Time) {
 	ix.removeLocked(id)
 	counts := map[string]int{}
 	length := 0
@@ -229,7 +234,7 @@ func (ix *pieceIndex) putLocked(id, title, content string) {
 		ix.postings[term] = append(ix.postings[term], piecePosting{doc: slot, tf: uint16(n)})
 		terms = append(terms, term)
 	}
-	ix.docs[slot] = pieceDoc{id: id, terms: terms, length: int32(length), live: true}
+	ix.docs[slot] = pieceDoc{id: id, terms: terms, length: int32(length), live: true, updated: updated}
 	ix.totalLen += int64(length)
 	ix.live++
 }
@@ -260,6 +265,15 @@ func (s *Service) refreshPieceIndex(ctx context.Context, budget time.Duration, w
 	started, watermark, cursor, done := ix.started, ix.watermark, ix.cursor, ix.complete
 	ix.mu.Unlock()
 	deadline := time.Now().Add(budget)
+	ix.mu.RLock()
+	retry := make([]frontPublicationRow, 0, len(ix.dirty))
+	for _, row := range ix.dirty {
+		retry = append(retry, row)
+	}
+	ix.mu.RUnlock()
+	for _, row := range retry {
+		s.indexPieceRow(ctx, og, row)
+	}
 
 	// walk reads windows after the cursor and indexes each row, until the
 	// archive ends, a row is older than stopBefore, or the budget is spent.
@@ -333,19 +347,38 @@ func (s *Service) refreshPieceIndex(ctx context.Context, budget time.Duration, w
 	return complete, err
 }
 
+// looksSearchable reports whether a row's metadata says a searchable piece,
+// so a failed load of it is transient and not a withdrawal.
+func (s *Service) looksSearchable(row frontPublicationRow) bool {
+	var meta frontPublicationMeta
+	if json.Unmarshal(row.Metadata, &meta) != nil {
+		return false
+	}
+	return meta.State == "published" && strings.TrimSpace(meta.RoutePath) != "" && s.pieceKind(meta) != ""
+}
+
 func (s *Service) indexPieceRow(ctx context.Context, og *ObjectGraphStore, row frontPublicationRow) {
 	load, ok := s.loadPiece(ctx, og, row)
 	ix := &s.pieces
 	ix.mu.Lock()
 	defer ix.mu.Unlock()
 	if !ok {
-		// Not a searchable piece now (withdrawn, or never one). A transient
-		// read failure drops the piece until its row moves again; the search
-		// verifies every hit, so this only costs recall.
+		if s.looksSearchable(row) {
+			// A published piece that could not be read: keep what is indexed
+			// and retry on the next refresh.
+			if ix.dirty == nil {
+				ix.dirty = map[string]frontPublicationRow{}
+			}
+			ix.dirty[row.CanonicalID] = row
+			return
+		}
+		// Not a searchable piece now (withdrawn, or never one).
 		ix.removeLocked(row.CanonicalID)
+		delete(ix.dirty, row.CanonicalID)
 		return
 	}
-	ix.putLocked(row.CanonicalID, load.title, load.content)
+	ix.putLocked(row.CanonicalID, load.title, load.content, row.UpdatedAt)
+	delete(ix.dirty, row.CanonicalID)
 }
 
 // WarmPublishedPieceIndex builds the index from the store, in the
@@ -414,14 +447,26 @@ func (ix *pieceIndex) rank(terms []string, n int) (best []pieceCandidate, idf ma
 	return best, idf
 }
 
+// recent lists the n newest live pieces by the publication's updated time
+// (slot order is the order the index first saw them, which is not time order).
 func (ix *pieceIndex) recent(n int) []pieceCandidate {
 	ix.mu.RLock()
 	defer ix.mu.RUnlock()
 	var out []pieceCandidate
-	for slot := len(ix.docs) - 1; slot >= 0 && len(out) < n; slot-- {
+	for slot := range ix.docs {
 		if ix.docs[slot].live {
 			out = append(out, pieceCandidate{id: ix.docs[slot].id, score: 1, slot: int32(slot)})
 		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := ix.docs[out[i].slot].updated, ix.docs[out[j].slot].updated
+		if !a.Equal(b) {
+			return a.After(b)
+		}
+		return out[i].id > out[j].id
+	})
+	if len(out) > n {
+		out = out[:n]
 	}
 	return out
 }

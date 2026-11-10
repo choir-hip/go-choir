@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 )
 
 func TestSearchPublishedPiecesPartialMatchRanksByRareWords(t *testing.T) {
@@ -129,5 +130,60 @@ func TestSearchPublishedPiecesDuringTheBuildSaysCapped(t *testing.T) {
 	}
 	if !res.Capped {
 		t.Fatalf("a search during the build must report capped: %+v", res)
+	}
+}
+
+// B1: an empty or term-less query lists the newest pieces by the
+// publication's updated time, not by the order the index saw them; a
+// republished older story moves to the top.
+func TestSearchPublishedPiecesEmptyQueryListsNewestFirst(t *testing.T) {
+	f := newFrontFixture(t)
+	ctx := context.Background()
+	publishStoryRevision(t, f.svc, "doc-oldest", 1, "Oldest story", "Text of the oldest story.", nil)
+	setPublicationUpdatedAt(t, f.store, "paper-owner", "doc-oldest", timeNowMinusDay().Add(-72*time.Hour))
+	publishStoryRevision(t, f.svc, "doc-newest", 1, "Newest story", "Text of the newest story.", nil)
+	// Stored times are whole seconds: put the newest clearly before now, so a
+	// later republish is clearly newer.
+	setPublicationUpdatedAt(t, f.store, "paper-owner", "doc-newest", time.Now().UTC().Truncate(time.Second).Add(-30*time.Minute))
+	first := func(q string) []string {
+		t.Helper()
+		res, err := f.svc.SearchPublishedPieces(ctx, q, 25)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return pieceTitles(res)
+	}
+	for _, q := range []string{"", "!!! ..."} {
+		got := first(q)
+		if len(got) < 5 || got[0] != "Newest story" || got[len(got)-1] != "Oldest story" {
+			t.Fatalf("query %q = %v, want newest first and oldest last", q, got)
+		}
+	}
+	publishStoryRevision(t, f.svc, "doc-oldest", 2, "Oldest story", "Text of the oldest story, revised.", nil)
+	if got := first(""); got[0] != "Oldest story" {
+		t.Fatalf("after a republish = %v, want the republished story first", got)
+	}
+}
+
+// A transient read failure while indexing does not drop a piece for good:
+// it is retried on the next refresh.
+func TestSearchPublishedPiecesRetriesATransientLoadFailure(t *testing.T) {
+	f := newFrontFixture(t)
+	ctx := context.Background()
+	if _, err := f.svc.SearchPublishedPieces(ctx, "harbor", 10); err != nil {
+		t.Fatal(err)
+	}
+	ident, err := publicationIdentityFor("paper-owner", "doc-never-published")
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := frontPublicationRow{CanonicalID: ident.CanonicalID, Metadata: []byte(`{"state":"published","route_path":"/pub/texture/nowhere","publish_mode":"auto","owner_id":"paper-owner"}`)}
+	og := f.svc.ogStore()
+	f.svc.indexPieceRow(ctx, og, row) // cannot load: the version is not there
+	f.svc.pieces.mu.RLock()
+	_, dirty := f.svc.pieces.dirty[ident.CanonicalID]
+	f.svc.pieces.mu.RUnlock()
+	if !dirty {
+		t.Fatalf("a failed load of a would-be piece must be kept for retry")
 	}
 }
