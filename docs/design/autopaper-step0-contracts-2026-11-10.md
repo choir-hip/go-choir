@@ -229,6 +229,55 @@ checks, and H1 must say so (D6).
 | R16 | Hash chain: a stored revision's `ParentLinks` altered after commit | `TestRevisionHashCoversParentLinks` |
 | R17 | The old route still works unchanged for existing clients (no `sources`) | the existing `texture_editor_save_contract_test.go` and `prompt_bar_*` suites stay green |
 
+### 1.5 Build notes (lane C1, 2026-11-10)
+
+Mutation class: green (docs). Rollback: revert. Where the code contradicts
+the contract or the contract is silent, written before the build:
+
+1. **The version-read route is not reachable by a guest from corpusd's
+   handler alone.** A guest reaches corpusd through the proxy, which has its
+   own allow-list: `internal/proxy/guest_authority.go` (the one GET path
+   carve-out beside `published/search`) and `internal/proxy/handlers.go` (the
+   route registration). The contract names only corpusd's `handlers.go`. C1
+   builds the corpusd half in a new file under `internal/platform` plus its
+   registration line; the two proxy lines belong to whoever owns the proxy
+   routes (C2 or the orchestrator) and are NOT built by C1. Until they land,
+   take, merge and fork answer 503 on a deployed computer.
+2. **Corpusd URL for the guest client.** `agentcore.Runtime` keeps its config
+   private. C1 adds two small exported accessors in a new file in
+   `internal/agentcore` (the corpusd URL, and a run taint plus data frame
+   for the merge path's `world_untrusted` blocks).
+3. **Replay.** The contract says replay reaches the store's digest check. In
+   the code a replayed `/revise` meets the head check first (the first call
+   moved the head) and is a 409. `reviseDocument` therefore checks replay
+   itself: the revision id is derived from the request id as today, a stored
+   revision with that id is a replay when its recorded request fingerprint
+   (a hash of case, text, base, sources and body) matches, else 409 (R6, R7).
+4. **Base link.** The `base` link is recorded when the request has sources or
+   when the named base is not the head. A plain instruction or edit on the head
+   writes no provenance, so every existing revision and hash is unchanged.
+5. **Wire shape.** `/revise` takes `text` (with `prompt` and `intent` kept as
+   aliases), `base_revision_id` (alias `expected_head_revision_id`),
+   `sources[]`, and `body` (an object: `body_doc`, `source_entities`,
+   `content`, `citations`, `metadata`). It now refuses unknown fields (R13);
+   today it does not. `/revisions` keeps its own wire and maps onto the same
+   call.
+6. **Provenance on a request revision.** `AuthoredAt` is left zero for
+   link-only provenance: the command digest covers it and a replay must digest
+   the same.
+7. **Fork.** A fork starts a new lifecycle document (the existing start path)
+   with the source's body as an owner-authored first revision whose provenance
+   carries the `source` link and whose metadata carries `forked_from`. With
+   text it wakes the desk as a merge; without text nothing wakes. Its initial
+   work item stays open, as for any new document.
+8. **Local changelog facts (slice 6)** wait for lane H1's record body in
+   `internal/types`; C1 does not edit `commitment*.go`.
+
+Slice plan, each its own commit and green: 0 this note; 1
+`Provenance.ParentLinks`; 2 `reviseDocument` with `/revise`, the prompt bar and
+the editor save routed through it; 3 take and the version-read route; 4 merge;
+5 fork; 6 changelog facts if H1's type has landed.
+
 ## 2. Mutation class and review for contract 1
 
 Red: Texture canonical writes (protected surface). Additive (optional field,
