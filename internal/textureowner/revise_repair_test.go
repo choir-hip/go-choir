@@ -132,7 +132,7 @@ func TestOwnerReviseAnsweredByTheDeskYieldsStartedThenFinished(t *testing.T) {
 	if head.RevisionID != request.RevisionID || head.RevisionID == base.RevisionID {
 		t.Fatalf("head=%s, want the request revision %s", head.RevisionID, request.RevisionID)
 	}
-	turn := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: head.RevisionID, Wait: "more", Write: &yaegikernel.TextureWrite{Edits: "@replace b2\nOpening line, tightened.", Why: "tighten"}})
+	turn := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: head.RevisionID, Done: "answers the owner request", Write: &yaegikernel.TextureWrite{Edits: "@replace b2\nOpening line, tightened.", Why: "tighten"}})
 	if _, err := h.CommitCellTextureAuthor(context.Background(), &rec, turn, "upd-turn-1"); err != nil {
 		t.Fatalf("desk Write: %v", err)
 	}
@@ -144,14 +144,11 @@ func TestOwnerReviseAnsweredByTheDeskYieldsStartedThenFinished(t *testing.T) {
 	if events[1].Changelog.TapeRef == nil || events[1].Changelog.TapeRef.RevisionID != desk.RevisionID {
 		t.Fatalf("finished names %+v, want the desk's revision %s", events[1].Changelog.TapeRef, desk.RevisionID)
 	}
-	// A desk revision that answers no owner request (the next turn on its own
-	// revision) is not another update.
-	turn2 := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: desk.RevisionID, Wait: "more", Write: &yaegikernel.TextureWrite{Edits: "@replace b3\nClosing line, again.", Why: "again"}})
-	if _, err := h.CommitCellTextureAuthor(context.Background(), &rec, turn2, "upd-turn-2"); err != nil {
-		t.Fatalf("second Write: %v", err)
-	}
+	// A desk revision that answers no owner request is not another update.
+	// (The Done above settled the request; a second Write needs a new owner revise.)
+	h.emitUpdateFinished(context.Background(), rec.OwnerID, types.Document{DocID: doc, ComputerID: rec.ComputerID}, desk, "some-later-revision")
 	if kinds := changelogKinds(t, s, rec.OwnerID, rec.ComputerID); len(kinds) != 2 {
-		t.Fatalf("a desk turn on its own revision emitted %v", kinds)
+		t.Fatalf("a desk-authored base emitted %v", kinds)
 	}
 	if wakes() != wakesAfterRevise {
 		t.Fatalf("changelog records woke %d more readers", wakes()-wakesAfterRevise)

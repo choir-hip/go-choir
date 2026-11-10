@@ -155,7 +155,7 @@ func TestDeskWriteInheritsTheRequestRevisionsLinks(t *testing.T) {
 	rec := seedCellAuthorLifecycle(t, s, "owner-cell-author", "inherit", "# Merger\n\nOpening line.\n\nClosing line.", func(r *types.Revision) { r.Provenance = prov })
 	h.createAgentMutationForRun(context.Background(), &rec)
 	base := headOf(t, s, rec)
-	turn := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "more", Write: &yaegikernel.TextureWrite{Edits: "@replace b2\nOpening line, revised with the version.", Why: "merge"}})
+	turn := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Done: "answers the owner request with the version merged in", Write: &yaegikernel.TextureWrite{Edits: "@replace b2\nOpening line, revised with the version.", Why: "merge"}})
 	if _, err := h.CommitCellTextureAuthor(context.Background(), &rec, turn, "inherit-1"); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
@@ -174,13 +174,10 @@ func TestDeskWriteInheritsTheRequestRevisionsLinks(t *testing.T) {
 	if !found {
 		t.Fatalf("links=%+v, want %+v", got.ParentLinks, link)
 	}
-	// The desk's own revision is not a trigger: the next Write does not inherit from it.
-	turn2 := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: desk.RevisionID, Wait: "more", Write: &yaegikernel.TextureWrite{Edits: "@replace b3\nClosing line, again.", Why: "again"}})
-	if _, err := h.CommitCellTextureAuthor(context.Background(), &rec, turn2, "inherit-2"); err != nil {
-		t.Fatalf("second Write: %v", err)
-	}
-	var second types.Provenance
-	if err := json.Unmarshal(headOf(t, s, rec).Provenance, &second); err != nil || len(second.ParentLinks) != 0 {
-		t.Fatalf("second desk provenance links=%+v err=%v, want none", second.ParentLinks, err)
+	// The desk's own revision is not a trigger: as a base it passes no links
+	// on. (The Done above settled the request, so the next desk turn is a new
+	// owner revise, not a second Write on this one.)
+	if again := inheritParentLinks(desk.Provenance, desk); string(again) != string(desk.Provenance) {
+		t.Fatalf("a desk-authored base passed links on: %s", again)
 	}
 }
