@@ -116,7 +116,7 @@ func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	computerID, ok := h.authorizeOpenAICompatibleRequest(w, r, "openai_chat")
+	computerID, ok := h.authorizeOpenAICompatibleRequest(w, r)
 	if !ok {
 		return
 	}
@@ -201,7 +201,7 @@ func (h *Handler) HandleOpenAIModels(w http.ResponseWriter, r *http.Request) {
 		writeGatewayJSON(w, http.StatusMethodNotAllowed, openAIErrorResponse("method not allowed"))
 		return
 	}
-	if _, ok := h.authorizeOpenAICompatibleRequest(w, r, "openai_models"); !ok {
+	if _, ok := h.authorizeOpenAICompatibleRequest(w, r); !ok {
 		return
 	}
 
@@ -239,7 +239,7 @@ func (h *Handler) HandleModels(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) authorizeOpenAICompatibleRequest(w http.ResponseWriter, r *http.Request, scope string) (string, bool) {
+func (h *Handler) authorizeOpenAICompatibleRequest(w http.ResponseWriter, r *http.Request) (string, bool) {
 	computerID, err := h.authenticateAutoputer(r)
 	if err != nil {
 		log.Printf("gateway: openai-compatible authentication denied: %v", err)
