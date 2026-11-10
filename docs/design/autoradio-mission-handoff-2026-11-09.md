@@ -115,11 +115,14 @@ function." Each server lane extends the mechanism named in section 3.
   The spike, on a real iPhone, at a pinned commit:
   - play long audio with the screen locked, with Now Playing and remote
     commands;
-  - capture the microphone with voice processing while that audio plays,
-    and measure whether the played audio is cancelled. No test in Exact
-    covers this; it is the highest risk;
-  - recognise speech while the app is not in front. Exact's recogniser
-    stops on leaving the foreground today;
+  - run Mike's voice stack as a Swift module while that audio plays
+    (owner, 2026-11-09: the voice stack is ours and is good enough). The
+    risk is ownership, not quality: Exact's audio session owner is the
+    only caller of `setCategory`, so Mike's stack must take the session
+    through Exact's capture and speech claims, or through the capture
+    package's engine hatch, and not configure the session itself;
+  - keep listening while the app is not in front. Exact's own recogniser
+    stops there; ours must not;
   - render a 20,000-word page with cites and images, scroll it, and read
     it with VoiceOver;
   - produce a release build that fetches no update bundle.
@@ -133,7 +136,7 @@ function." Each server lane extends the mechanism named in section 3.
 | Lane | Scope | Depends on | Extends |
 |---|---|---|---|
 | N. Native shell | Exact app at a pinned commit; navigation; the build and TestFlight path; the Apple account, bundle id and signing | 0.3 | new tree `mobile/` |
-| V. Voice | Turn-taking and the AI voice on Exact's capture, recognition and synthesis packages, with Mike's code for what they lack; push-to-talk first, open mic after (launch checklist OD-05) | 0.3 | Mike's code, relicensed |
+| V. Voice | Port Mike's recognition, turn-taking, echo cancellation and AI voice as a Swift module that takes the audio session through Exact's claims; Exact's own speech packages are the fallback and the agent-test double; push-to-talk first, open mic after (launch checklist OD-05) | 0.3 | Mike's code, relicensed |
 | P. Playback | Long-form background playback, Now Playing and lock-screen controls, clip start and end anchored to transcripts, the podcast as the echo reference | 0.3 | new, in `mobile/` |
 | S1. Sign-in | A named, revocable device with a refreshable token, approved by passkey; account deletion from the app | 0.2 | the device authorization flow (`internal/auth/device_login.go`); no second sign-in system |
 | S2. Audio in Texture | The audio timeline on a revision; audio bytes served by the asset endpoint; published stories may carry audio and images | 0.1 | `internal/texturedoc/embed*.go`, `api_assets.go`, the publish gate |
