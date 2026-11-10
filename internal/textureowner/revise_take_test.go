@@ -116,7 +116,7 @@ func TestReviseRefusesUnknownOrMismatchedSource(t *testing.T) {
 		"wrong manifest hash (R1)":             {forged, http.StatusUnprocessableEntity},
 		"a local revision id as a source (R2)": {map[string]string{"publication_version_id": start.InitialRevision.RevisionID, "manifest_hash": "x"}, http.StatusUnprocessableEntity},
 	} {
-		for _, text := range []string{""} {
+		for _, text := range []string{"", "merge this in"} {
 			body := map[string]any{"client_request_id": "bad-" + name + text, "sources": []any{c.src}}
 			if text != "" {
 				body["text"] = text
