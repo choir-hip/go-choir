@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
@@ -29,23 +30,82 @@ const publicationExportPath = "/api/platform/publications/export"
 // ownRoute is the bare publication route a captured URL names on host, or
 // "" when the URL is not a page of the paper's own stories.
 func ownRoute(rawURL, host string) string {
+	route, _ := classifyOwnURL(rawURL, host)
+	return route
+}
+
+// classifyOwnURL is ownRoute and whether the URL is on host at all, so a log
+// can tell another site's page from an own-host URL that names no story.
+func classifyOwnURL(rawURL, host string) (route string, onHost bool) {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil || host == "" || asciiLowerHost(u.Host) != asciiLowerHost(host) {
-		return ""
+		return "", false
 	}
-	route := u.Path
+	route = u.Path
 	if u.Path == publicationExportPath {
 		route = u.Query().Get("route")
 	}
 	bare, _, ok := parsePublicationRoute(route)
 	if !ok || !strings.HasPrefix(bare, publicTexturePrefix) {
-		return ""
+		return "", true
 	}
-	return bare
+	return bare, true
 }
 
-// relianceLogMax bounds the skipped candidates one log line names.
-const relianceLogMax = 5
+const (
+	// relianceLogMax bounds the skipped candidates one log line names.
+	relianceLogMax = 5
+	// relianceRouteMax bounds the bytes of a route in a log entry.
+	relianceRouteMax = 160
+)
+
+// relianceSkips tallies the candidates that wrote no edge: a total, and the
+// first few entries, those that carry a route kept ahead of those that do not.
+type relianceSkips struct {
+	total     int
+	withRoute []string
+	bare      []string
+}
+
+func (k *relianceSkips) add(code, route string) {
+	k.total++
+	if route == "" {
+		if len(k.bare) < relianceLogMax {
+			k.bare = append(k.bare, code)
+		}
+		return
+	}
+	if len(k.withRoute) < relianceLogMax {
+		k.withRoute = append(k.withRoute, code+":"+relianceRoute(route))
+	}
+}
+
+// shown is the entries the line names, routes first, at most relianceLogMax.
+func (k *relianceSkips) shown() []string {
+	out := append(append([]string{}, k.withRoute...), k.bare...)
+	if len(out) > relianceLogMax {
+		out = out[:relianceLogMax]
+	}
+	return out
+}
+
+// relianceRoute is a route made safe for a log line. The route comes from a
+// cited capture's URL, which a page controls (percent-encoded newlines and
+// escape bytes decode into it, and a slug is any length). It is cut to
+// relianceRouteMax bytes at a rune boundary and written with strconv.Quote:
+// that escapes every control character and invalid byte, so the entry cannot
+// end the line or forge another, and it stays readable and unambiguous
+// (stripping would silently change the route and could be spoofed).
+func relianceRoute(route string) string {
+	if len(route) > relianceRouteMax {
+		cut := relianceRouteMax
+		for cut > 0 && !utf8.RuneStart(route[cut]) {
+			cut--
+		}
+		route = route[:cut] + "..."
+	}
+	return strconv.Quote(route)
+}
 
 // reliesOnEdges are the publish batch's reliance links: one per distinct
 // earlier published publication of the same owner that a cited capture
@@ -59,90 +119,92 @@ func (p *PublicationGraphStore) reliesOnEdges(ctx context.Context, params Publis
 	}
 	var edges []objectgraph.Edge
 	seen := map[string]bool{}
-	var skipped []string
+	var skips relianceSkips
 	captures, ownHost := 0, 0
-	skip := func(code, route string) {
-		if route != "" {
-			code += ":" + route
-		}
-		skipped = append(skipped, code)
-	}
 	for _, captureID := range citedCaptureIDs(params.Transclusions) {
 		captures++
 		capture, err := p.store.GetObject(ctx, captureID)
 		if err != nil || capture.Tombstone {
-			skip("capture_unreadable", "")
+			skips.add("capture_unreadable", "")
 			continue
 		}
 		meta, err := objectgraph.WebCaptureMetadataFromObject(capture)
 		if err != nil {
-			skip("capture_unreadable", "")
+			skips.add("capture_unreadable", "")
 			continue
 		}
-		route := ownRoute(meta.URL, params.OwnHost)
+		route, onHost := classifyOwnURL(meta.URL, params.OwnHost)
 		if route == "" {
-			route = ownRoute(meta.CanonicalURL, params.OwnHost)
+			var canonicalOnHost bool
+			route, canonicalOnHost = classifyOwnURL(meta.CanonicalURL, params.OwnHost)
+			onHost = onHost || canonicalOnHost
+		}
+		if onHost {
+			ownHost++
 		}
 		if route == "" {
-			skip("not_own_host", "")
+			if onHost {
+				skips.add("not_story_route", "")
+			} else {
+				skips.add("not_own_host", "")
+			}
 			continue
 		}
-		ownHost++
 		routeID, err := objectgraph.BuildCanonicalID("choir.public_route", params.OwnerID, objectgraph.StableSuffixFromKey(route))
 		if err != nil {
-			skip("route_not_found", route)
+			skips.add("route_not_found", route)
 			continue
 		}
 		routeObj, err := p.store.GetObject(ctx, routeID)
 		if err != nil || routeObj.Tombstone {
 			if other, oerr := p.store.GetObjectByMetadata(ctx, "choir.public_route", "$.route_path", route); oerr == nil && !other.Tombstone && other.OwnerID != params.OwnerID {
-				skip("different_owner", route)
+				skips.add("different_owner", route)
 			} else {
-				skip("route_not_found", route)
+				skips.add("route_not_found", route)
 			}
 			continue
 		}
 		target := routeTarget(routeObj.Metadata)
 		if target == "" {
-			skip("route_not_found", route)
+			skips.add("route_not_found", route)
 			continue
 		}
 		if target == params.PublicationCanonicalID {
-			skip("self", route)
+			skips.add("self", route)
 			continue
 		}
 		if seen[target] {
-			skip("duplicate", route)
+			skips.add("duplicate", route)
 			continue
 		}
 		pub, err := p.store.GetObject(ctx, target)
 		if err != nil || pub.Tombstone || !publicationIsPublished(pub.Metadata) {
-			skip("not_published", route)
+			skips.add("not_published", route)
 			continue
 		}
 		seen[target] = true
 		edges = append(edges, makeEdge(params.PublicationCanonicalID, target, objectgraph.EdgeReliesOn, now, []byte(objectgraph.ReliesOnMetadata)))
 	}
 	if ownHost > 0 {
-		relianceLog(params, captures, ownHost, len(edges), skipped)
+		relianceLog(params, captures, ownHost, len(edges), &skips)
 	}
 	return edges
 }
 
 // relianceLog is the step's one log line: the citing publication's id, counts
-// and the first few reason codes with route paths. It carries no story text and
-// no URL. The link is data only, so staging cannot show it by any read; this
-// line is how a deploy proof sees that the step ran. It is not a reader of the
-// link: nothing ranks, lists or prompts by it.
-func relianceLog(params PublishGraphParams, captures, ownHost, edges int, skipped []string) {
-	shown := skipped
+// and the first few reason codes with quoted route paths. It carries no story
+// text and no URL, and its length is bounded. The link is data only, so
+// staging cannot show it by any read; this line is how a deploy proof sees
+// that the step ran. It is not a reader of the link: nothing ranks, lists or
+// prompts by it.
+func relianceLog(params PublishGraphParams, captures, ownHost, edges int, skips *relianceSkips) {
+	shown := skips.shown()
 	more := ""
-	if len(shown) > relianceLogMax {
-		more = " more=" + strconv.Itoa(len(shown)-relianceLogMax)
-		shown = shown[:relianceLogMax]
+	if n := skips.total - len(shown); n > 0 {
+		more = " more=" + strconv.Itoa(n)
 	}
-	log.Printf("corpusd: reliance: publication=%s captures=%d own_host=%d edges=%d skipped=[%s]%s",
-		params.PublicationID, captures, ownHost, edges, strings.Join(shown, " "), more)
+	log.Printf("corpusd: reliance: publication=%s captures=%d own_host=%d edges=%d skipped_total=%d skipped=[%s]%s",
+		params.PublicationID, captures, ownHost, edges, skips.total, strings.Join(shown, " "), more)
 }
 
 func routeTarget(metadata []byte) string {

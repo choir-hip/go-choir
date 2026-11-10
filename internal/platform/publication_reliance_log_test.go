@@ -10,6 +10,7 @@ package platform
 import (
 	"bytes"
 	"log"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -64,7 +65,7 @@ func TestRelianceStepLogsWhatItDid(t *testing.T) {
 	}
 	line := lines[0]
 	ident, _ := publicationIdentityFor(labOwner, "doc-later")
-	for _, want := range []string{ident.PublicationID, "captures=3", "own_host=2", "edges=1", "route_not_found:/pub/texture/no-such-story", "not_own_host"} {
+	for _, want := range []string{ident.PublicationID, "captures=3", "own_host=2", "edges=1", `route_not_found:"/pub/texture/no-such-story"`, "not_own_host"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("line lacks %q: %s", want, line)
 		}
@@ -116,5 +117,70 @@ func TestRelianceStepLogIsBoundedAndQuietWithoutOwnHostCaptures(t *testing.T) {
 	lines := relianceLines(buf)
 	if len(lines) != 1 || strings.Count(lines[0], "route_not_found:") != 5 || !strings.Contains(lines[0], "own_host=9") {
 		t.Fatalf("bounded line = %q", lines)
+	}
+}
+
+// B1: the route in a skip entry comes from a cited capture's URL, which a page
+// controls. A newline in it must not forge a log line, and a huge slug must not
+// make the line unbounded.
+func TestRelianceStepLogCannotBeForgedOrInflatedByACitedURL(t *testing.T) {
+	l := newRelatedLab(t)
+	buf := captureLog(t)
+	base := l.svc.publicBase() + "/api/platform/publications/export?format=txt&raw=1&route="
+	forged := l.capture(base+url.QueryEscape("/pub/texture/x\ncorpusd: reliance: publication=forged captures=9 edges=99\r\x1b[2J"), "", "Forged route text")
+	huge := l.capture(base+url.QueryEscape("/pub/texture/"+strings.Repeat("a", 5000)), "", "Huge slug text")
+	pagePath := l.capture(l.svc.publicBase()+"/pub/texture/y%0Acorpusd:%20reliance:%20publication=forged2", "", "Escaped page path text")
+	l.publish("doc-forge", 1, "Forge story", forged, huge, pagePath)
+
+	var ours []string
+	for _, line := range strings.Split(buf.String(), "\n") {
+		if strings.Contains(line, "forged") && !strings.Contains(line, "corpusd: reliance: publication=pub-") {
+			t.Errorf("a forged line reached the log: %q", line)
+		}
+		if strings.Contains(line, "corpusd: reliance: publication=pub-") {
+			ours = append(ours, line)
+		}
+	}
+	if len(ours) != 1 {
+		t.Fatalf("reliance lines = %d, want exactly 1: %q", len(ours), ours)
+	}
+	line := ours[0]
+	for _, r := range line {
+		if r < 0x20 || r == 0x7f {
+			t.Fatalf("control character %q in the line: %q", r, line)
+		}
+	}
+	if len(line) > 1500 {
+		t.Fatalf("line is %d bytes for 3 candidates, each entry must be byte-capped: %q", len(line), line[:200])
+	}
+	if strings.Contains(line, strings.Repeat("a", 200)) {
+		t.Fatalf("a 5000-byte slug was not cut")
+	}
+}
+
+// N1, N2, N4: entries that carry a route are shown first, an own-host URL that
+// is not a story route has its own code, and the line keeps a count.
+func TestRelianceStepLogPrefersRoutesNamesNotStoryRouteAndCounts(t *testing.T) {
+	l := newRelatedLab(t)
+	buf := captureLog(t)
+	var caps []string
+	for i := 0; i < 6; i++ {
+		caps = append(caps, l.capture("https://wire.example/"+string(rune('a'+i)), "", "Foreign "+string(rune('a'+i))))
+	}
+	caps = append(caps, l.capture(l.svc.publicBase()+"/auth/session", "", "Not a story route"))
+	caps = append(caps, l.capture(l.svc.publicationExportReadURL("/pub/texture/missing-one"), "", "Missing one"))
+	l.publish("doc-order", 1, "Order story", caps...)
+	lines := relianceLines(buf)
+	if len(lines) != 1 {
+		t.Fatalf("lines = %q", lines)
+	}
+	line := lines[0]
+	for _, want := range []string{"captures=8", "own_host=2", "skipped_total=8", `route_not_found:"/pub/texture/missing-one"`, "not_story_route", "more=3"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("line lacks %q: %s", want, line)
+		}
+	}
+	if strings.Count(line, "not_own_host") > 3 {
+		t.Errorf("foreign entries crowded out the rest: %s", line)
 	}
 }
