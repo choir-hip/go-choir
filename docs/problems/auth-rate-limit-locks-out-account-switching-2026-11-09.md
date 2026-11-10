@@ -240,6 +240,43 @@ The server-side half (10 per minute per address, shared by all `/auth`
 routes) can also be a Go test on `registerRoutes` with 11 mixed calls from
 one `X-Forwarded-For`.
 
+## Logging (owner, 2026-11-10: "definitely got to log everything related to auth")
+
+What was missing: the auth service logged only some mutations
+(`session_refresh`, `login_begin`, `account_switch`). Plain session reads,
+account-list calls and limiter refusals left nothing, and Caddy has no access
+log for `/auth`. The lockout could not be confirmed from logs for that reason.
+
+What is logged now: `Handler.Instrument` is the one wrapper every route in
+`authRoutes` is registered through, so a route cannot skip it (a test serves
+each registered route and finds its line). One line per request, including
+refusals and panics:
+
+```
+[auth] operation=http_access method=GET route="/auth/session" status=200 ms=3 class=read count=4 limit=300 addr=203.0.x.x user=c061abcd sid=1a2b3c4d outcome=ok
+```
+
+- `route` is the registered pattern, never the URL or query.
+- `count`/`limit` are the limiter's state for that address and class after
+  the request (a 429 shows the attempts counted so far).
+- `addr` is a masked prefix (two IPv4 octets, or the first 32 bits of IPv6).
+- `user` is the first 8 characters of the user id in a valid access token;
+  `sid` is the first 8 hex of the SHA-256 of the refresh cookie. Both are `-`
+  when absent or invalid (an expired access token logs `user=-`).
+- `outcome` is derived from status only (ok, denied, rate_limited,
+  server_error). Handler-specific outcome words are not threaded through.
+
+Never logged: emails, full addresses, cookies, tokens, codes, challenge or
+credential bytes, request or response bodies, query strings, User-Agent.
+A test feeds secrets through every one of those and fails if any appears.
+
+Volume: a page load is 1 to 2 session reads plus an account list and a root
+status, so 3 to 5 lines at about 190 bytes each. At 100 active people and 50
+loads a day that is about 25,000 lines, roughly 5 MB a day. The hard ceiling
+per address is the limits (390 requests a minute), which no real user nears.
+journald volume is not a concern, and read-class lines are not sampled (the
+owner asked for everything). Revisit if a day exceeds about 100 MB.
+
 ## Superseded hypotheses
 
 The first guesses (client treats a successful ceremony as failure on an

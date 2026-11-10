@@ -131,6 +131,6 @@ func authRoutes(handler *auth.Handler) []authRoute {
 
 func registerRoutes(s authRouteRegistrar, handler *auth.Handler, limiters *auth.RateLimiters) {
 	for _, rt := range authRoutes(handler) {
-		s.HandleFunc(rt.pattern, limiters.Wrap(rt.class, rt.handler))
+		s.HandleFunc(rt.pattern, handler.Instrument(limiters, rt.pattern, rt.class, rt.handler))
 	}
 }

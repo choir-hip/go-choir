@@ -108,16 +108,6 @@ func NewRateLimitersWithLimits(limits map[RateClass]int) *RateLimiters {
 	return rl
 }
 
-// Wrap applies the limiter of the given class before invoking next. An
-// unknown class panics at registration, so a route cannot ship unclassified.
-func (r *RateLimiters) Wrap(c RateClass, next http.HandlerFunc) http.HandlerFunc {
-	l, ok := r.byClass[c]
-	if !ok {
-		panic("auth: route registered without a rate class")
-	}
-	return l.Wrap(next)
-}
-
 type authRateBucket struct {
 	resetAt time.Time
 	count   int
@@ -149,26 +139,34 @@ func NewIPRateLimiter(limit int, window time.Duration) *IPRateLimiter {
 }
 
 // Wrap applies the limiter before invoking next. A refusal sets Retry-After
-// (whole seconds until the window frees) and writes one log line.
+// and writes one log line. Production routes use Handler.Instrument, which
+// also writes the access line.
 func (l *IPRateLimiter) Wrap(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ip := clientIP(r)
 		ok, retry, count := l.allow(ip, time.Now().UTC())
 		if !ok {
-			secs := int((retry + time.Second - 1) / time.Second)
-			if secs < 1 {
-				secs = 1
-			}
+			secs := writeRateLimited(w, retry)
 			log.Printf("auth: rate_limited class=%s addr=%s count=%d retry_after=%d", l.class, addrPrefix(ip), count, secs)
-			w.Header().Set("Retry-After", strconv.Itoa(secs))
-			writeJSON(w, http.StatusTooManyRequests, map[string]any{
-				"error":       "too many auth requests from this address",
-				"retry_after": secs,
-			})
 			return
 		}
 		next(w, r)
 	}
+}
+
+// writeRateLimited writes the 429 with Retry-After (whole seconds until the
+// window frees) and returns those seconds.
+func writeRateLimited(w http.ResponseWriter, retry time.Duration) int {
+	secs := int((retry + time.Second - 1) / time.Second)
+	if secs < 1 {
+		secs = 1
+	}
+	w.Header().Set("Retry-After", strconv.Itoa(secs))
+	writeJSON(w, http.StatusTooManyRequests, map[string]any{
+		"error":       "too many auth requests from this address",
+		"retry_after": secs,
+	})
+	return secs
 }
 
 // addrPrefix is the only form of a client address the logs carry: the first

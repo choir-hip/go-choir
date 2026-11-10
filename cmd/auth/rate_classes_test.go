@@ -188,5 +188,5 @@ func TestUnclassifiedRoutePanics(t *testing.T) {
 			t.Fatal("expected a panic for an unset class")
 		}
 	}()
-	auth.NewRateLimiters().Wrap(auth.RateClassUnset, func(http.ResponseWriter, *http.Request) {})
+	newRateTestHandler(t).Instrument(auth.NewRateLimiters(), "/x", auth.RateClassUnset, func(http.ResponseWriter, *http.Request) {})
 }
