@@ -10,8 +10,8 @@
   screen, so the same layout serves a narrow phone window and a wide
   desktop one: one column on a phone, two on a tablet, four when wide.
 
-  Under the masthead, a row of section names (Front page, World, U.S.
-  Politics, Business & Finance, Tech & AI) switches the page to one
+  Under the masthead, a row of section names (Front page, then the server's
+  section list: World, U.S., Politics, Business and so on) switches the page to one
   section's stories, in the same rank; it scrolls sideways on a phone. A
   section page is fetched from the server (`?section=`), newest first back
   as far as the paper goes, and its "Older stories" button pages that
@@ -85,6 +85,9 @@
     loadingMore: boolean;
   };
   let sectionPages: Record<string, SectionPage> = {};
+  // The switcher's sections: the server's list once a front page has
+  // arrived, the default list before.
+  let sectionItems: { id: string; label: string }[] = AUTOPAPER_SECTIONS;
   /** Empty pages (the server stopped scanning) followed before giving up. */
   const EMPTY_PAGE_FOLLOWS = 4;
 
@@ -116,6 +119,7 @@
     try {
       const page = await fetchFrontPage('', FRONT_FIRST_PAGE_SIZE);
       frontStories = page.stories;
+      if (page.sections?.length) sectionItems = [AUTOPAPER_SECTIONS[0], ...page.sections];
       olderStories = [];
       nextCursor = page.next_cursor || '';
       sectionPages = {};
@@ -244,7 +248,7 @@
       {#if sectioned}
         <nav class="ap-sections" aria-label="Sections" data-autopaper-sections>
           <ul>
-            {#each AUTOPAPER_SECTIONS as item (item.id)}
+            {#each sectionItems as item (item.id)}
               <li>
                 <button
                   type="button"
