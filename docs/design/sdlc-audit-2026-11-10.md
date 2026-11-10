@@ -16,6 +16,7 @@ about 40 landings in 30 hours.
 | Whole-package suite or CI, after a focused run passed | 4 | two red mains (search result key), the op-ed fixture, a proxy race |
 | Orchestrator checking the diff against an outside contract | 3 | Jev option set (vendor reference), plain-list policy files refused at boot, wrong option order |
 | Review seat (Devin) | 2 blocking | log forgery in the reliance line, empty-query ordering |
+| Review seat (Gemini 3.8 flash, same afternoon, after this audit was written) | 10 blocking | eight in the Devin pacer over three rounds, two in the operator restart |
 | Staging | 3 | wave 3 inert (gateway refused the read), wrong writer on fork, polls never armed |
 
 **Where time went.** Not on writing code. A builder finishes a change in 10

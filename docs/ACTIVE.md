@@ -37,6 +37,9 @@ Goal:
 supersedes the improvement goal above as the live station: its audit is
 this mission's wave 0 and its image stations are deferred.
 
+**Autoradio goal file (drafted 2026-11-10, not executable until the owner reads it):**
+[`definitions/choir-autoradio-pass1-2026-11-10.md`](definitions/choir-autoradio-pass1-2026-11-10.md).
+
 **Next:** Autoradio, from
 [`design/autoradio-mission-handoff-2026-11-09.md`](design/autoradio-mission-handoff-2026-11-09.md).
 Every landing commit stays on expedite until the owner says Autoradio is
