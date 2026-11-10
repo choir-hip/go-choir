@@ -31,6 +31,7 @@
   import { openApp as shellOpenApp } from '../../lib/app-sdk';
   import { onMount } from 'svelte';
   import AutopaperStory from './AutopaperStory.svelte';
+  import { DEFAULT_DESIGN, fetchStyleDesign, styleAttribute } from './style-design.js';
   import {
     AUTOPAPER_SECTIONS,
     editionTime,
@@ -52,6 +53,10 @@
   } from '../../lib/app-sdk';
 
   export let windowId = '';
+
+  // The reader's design, read from their own Style Guide Texture at read time
+  // (style-design.js). The default is today's page; stories are never changed.
+  let pageStyle = styleAttribute(DEFAULT_DESIGN);
 
   /** The Autopaper tagline, as the app registry describes it. */
   const TAGLINE = 'Living stories with checked sources';
@@ -229,10 +234,13 @@
     section = loadSavedSection();
     visits = loadSectionVisits();
     void loadFront();
+    void fetchStyleDesign().then((design) => {
+      pageStyle = styleAttribute(design);
+    });
   });
 </script>
 
-<div class="autopaper" data-autopaper data-autopaper-window-id={windowId || undefined}>
+<div class="autopaper" data-autopaper data-autopaper-window-id={windowId || undefined} style={pageStyle}>
   <div class="ap-sheet">
     <header class="ap-masthead" data-autopaper-masthead>
       <h1 class="ap-nameplate">Autopaper</h1>
@@ -409,7 +417,7 @@
   .ap-nameplate {
     margin: 0;
     padding: 0.2rem 0 0.7rem;
-    border-bottom: 3px double var(--ap-ink);
+    border-bottom: var(--ap-nameplate-rule, 3px double) var(--ap-ink);
     color: var(--ap-ink);
     font-family: var(--ap-serif);
     font-size: clamp(2.6rem, 13vw, 5.4rem);

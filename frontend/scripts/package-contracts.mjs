@@ -368,6 +368,8 @@ export async function stubBackend(page, { installed = [], modules = new Map(), a
     if (p === '/api/preferences/theme' && req.method() === 'GET') return route.fulfill({ json: { theme: {} } }); // no stored preference
     if (p === '/api/preferences/packages.selection' && req.method() === 'GET') return route.fulfill({ json: { key: 'packages.selection', value: {}, default: true } }); // no selection record (L2)
     if (p.startsWith('/api/preferences/pkg.settings.background') && req.method() === 'GET') return route.fulfill({ json: { key: p.slice('/api/preferences/'.length), value: '', default: true } }); // no desktop background chosen: the theme colour
+    // Autopaper reads the reader's own Style Guide design at read time; the stub computer has no guide, so the default stands.
+    if (p === '/api/texture/style' && req.method() === 'GET') return route.fulfill({ json: { source: 'default', design: { serif: 'classic', headline_weight: '700', dek_style: 'normal', nameplate_rule: 'double' } } });
     // The shell's changelog watch polls for unseen events while signed in; the stub computer has none.
     if (p === '/api/changelog' && req.method() === 'GET') return route.fulfill({ json: { events: [], next_before: 0, head: 0, seen_seq: 0, unseen_major: 0, unseen_more: false } });
     const m = /^\/api\/packages\/modules\/([0-9a-f]{64})\.js$/.exec(p);

@@ -88,7 +88,7 @@
   .ap-headline {
     margin: 0;
     font-family: var(--ap-serif);
-    font-weight: 700;
+    font-weight: var(--ap-headline-weight, 700);
     line-height: 1.14;
     letter-spacing: 0;
     overflow-wrap: anywhere;
@@ -146,6 +146,7 @@
     margin: 0.5rem 0 0;
     color: var(--ap-ink-soft) !important;
     font-family: var(--ap-serif);
+    font-style: var(--ap-dek-style, normal);
     font-size: 0.98rem;
     line-height: 1.45;
     overflow-wrap: anywhere;
