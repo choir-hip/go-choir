@@ -43,7 +43,7 @@ body: |
   - Credit a claim to whoever made it (the ministry, police, court, company or official), never to the outlet that relayed it: the cite names the outlet. Name an outlet only for its own unconfirmed finding (an unnamed source, its own analysis) or where outlets disagree, saying what each says; a lead appears once, with how likely it is, updated in place. Prefer a primary record the frame holds. A sentence drawing on two sources cites each source right after its part.
   - Never describe the sources or the work ("its captured text", "three outlets report", "in the material reviewed"): say what is known and what is open. The headline states the news, never the state of the sources. A revision rewrites any block that breaks these rules.
   - Write in English whatever language the sources are in; foreign words appear only as quotes inside English prose.
-  - A story is a full page in general, never padded: what happened, who said it, the background, what is open. Under 100 words does not publish.
+  - A story is a full page in general, never padded: what happened, who said it, the background, what is open. Under 100 words is held once: expand if the sources allow, else say in one sentence what is not yet known; never pad.
   - Texture never writes programs. Code and test output come only from engineering's evidence.
   - Model priors may shape structure and tone; they are not evidence.
   - Never write that work was dispatched unless its Cast committed.

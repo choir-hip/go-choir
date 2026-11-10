@@ -208,41 +208,14 @@ func (rt *Runtime) AutoPublishRevision(ctx context.Context, rec types.RunRecord,
 		return ""
 	}
 	v := StoryVersion{OwnerID: ownerID, ComputerID: doc.ComputerID, DocID: doc.DocID, RevisionID: rev.RevisionID, Revision: types.RevisionNumber(rev.VersionNumber)}
-	// Station TE (E6): evidence is never published; the platform refuses it,
-	// so it is held here with the reason instead of failing there.
-	if private := texturedoc.PrivateEmbedsInBody(rev.BodyDoc); len(private) > 0 {
-		held = fmt.Sprintf("it holds %d private embed(s) (capsule evidence is never published), so v%d stays a gap", len(private), v.Revision)
-		log.Printf("story publish: %s revision %s not published: %s", v.DocID, v.RevisionID, held)
-		return held
-	}
-	if cites, err := texturewrite.CitesSource(rev); err != nil || !cites {
-		held = "it cites no captured source, so v" + strconv.Itoa(v.Revision) + " stays a gap; the next revision that cites one publishes"
-		if err != nil {
-			held = "its citations could not be read (" + err.Error() + "), so v" + strconv.Itoa(v.Revision) + " stays a gap"
-		}
-		log.Printf("story publish: %s revision %s not published: %s", v.DocID, v.RevisionID, held)
-		return held
-	}
-	if outlets, linkOnly, err := rt.citedOutlets(ctx, ownerID, rev); err != nil || len(outlets) < MinPublishOutlets {
-		held = fmt.Sprintf("it cites %d outlet%s (%s); a story publishes only when its citations span at least %d distinct outlets, so v%d stays a gap; the next revision that cites another outlet's capture publishes",
-			len(outlets), plural(len(outlets)), strings.Join(outlets, ", "), MinPublishOutlets, v.Revision)
-		if len(linkOnly) > 0 {
-			held += fmt.Sprintf(" (not counted: %s, whose capture holds only links, not the outlet's own words)", strings.Join(linkOnly, ", "))
-		}
-		if err != nil {
-			held = "its cited captures could not be read (" + err.Error() + "), so v" + strconv.Itoa(v.Revision) + " stays a gap"
-		}
-		log.Printf("story publish: %s revision %s not published: %s", v.DocID, v.RevisionID, held)
-		return held
-	}
-	if texturedoc.Headline(rev.BodyDoc) == "" {
-		held = "it does not lead with a headline (a heading as its first block, which titles the story), so v" + strconv.Itoa(v.Revision) + " stays a gap; the next revision that leads with one publishes"
+	if held = rt.publishPreconditionHold(ctx, ownerID, v, rev); held != "" {
 		log.Printf("story publish: %s revision %s not published: %s", v.DocID, v.RevisionID, held)
 		return held
 	}
 	// Lane Q: a stub, a revision with process text, or one not in English is
-	// held with its reason like the conditions above.
-	if held = qualityHold(texturedoc.TextBlocks(rev.BodyDoc), v.Revision); held != "" {
+	// held with its reason like the conditions above. The length hold applies
+	// once per story: it is a guard, not a wall.
+	if held = qualityHold(texturedoc.TextBlocks(rev.BodyDoc), v.Revision, rt.lengthHeldBefore(ctx, ownerID, doc.ComputerID, v, rev)); held != "" {
 		log.Printf("story publish: %s revision %s not published: %s", v.DocID, v.RevisionID, held)
 		return held
 	}
@@ -263,6 +236,42 @@ func (rt *Runtime) AutoPublishRevision(ctx context.Context, rec types.RunRecord,
 	rt.enqueueStoryPublish("doc:"+ownerID+":"+doc.DocID, func(ctx context.Context) {
 		rt.publishStoryVersion(ctx, publisher, v)
 	})
+	return ""
+}
+
+// publishPreconditionHold returns the reason one of the conditions that
+// come before the quality holds (private embeds, citation, outlets,
+// headline) holds rev, or "". It writes nothing and logs nothing: the
+// caller logs, and the length hold reads it for the parent revision.
+func (rt *Runtime) publishPreconditionHold(ctx context.Context, ownerID string, v StoryVersion, rev types.Revision) string {
+	// Station TE (E6): evidence is never published; the platform refuses it,
+	// so it is held here with the reason instead of failing there.
+	if private := texturedoc.PrivateEmbedsInBody(rev.BodyDoc); len(private) > 0 {
+		held := fmt.Sprintf("it holds %d private embed(s) (capsule evidence is never published), so v%d stays a gap", len(private), v.Revision)
+		return held
+	}
+	if cites, err := texturewrite.CitesSource(rev); err != nil || !cites {
+		held := "it cites no captured source, so v" + strconv.Itoa(v.Revision) + " stays a gap; the next revision that cites one publishes"
+		if err != nil {
+			held = "its citations could not be read (" + err.Error() + "), so v" + strconv.Itoa(v.Revision) + " stays a gap"
+		}
+		return held
+	}
+	if outlets, linkOnly, err := rt.citedOutlets(ctx, ownerID, rev); err != nil || len(outlets) < MinPublishOutlets {
+		held := fmt.Sprintf("it cites %d outlet%s (%s); a story publishes only when its citations span at least %d distinct outlets, so v%d stays a gap; the next revision that cites another outlet's capture publishes",
+			len(outlets), plural(len(outlets)), strings.Join(outlets, ", "), MinPublishOutlets, v.Revision)
+		if len(linkOnly) > 0 {
+			held += fmt.Sprintf(" (not counted: %s, whose capture holds only links, not the outlet's own words)", strings.Join(linkOnly, ", "))
+		}
+		if err != nil {
+			held = "its cited captures could not be read (" + err.Error() + "), so v" + strconv.Itoa(v.Revision) + " stays a gap"
+		}
+		return held
+	}
+	if texturedoc.Headline(rev.BodyDoc) == "" {
+		held := "it does not lead with a headline (a heading as its first block, which titles the story), so v" + strconv.Itoa(v.Revision) + " stays a gap; the next revision that leads with one publishes"
+		return held
+	}
 	return ""
 }
 
