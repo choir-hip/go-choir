@@ -619,3 +619,103 @@ work. Each is closed:
     own 2 minute context, made before the gate, is deleted for the same reason;
     the desk-cast path passes its settler context straight through. Test:
     `TestSubCallQueuedBehindASlowCallIsNotFailedByTheWait`.
+
+## 9. Intake flush: ways it can fail (2026-11-10, orange; rollback: revert)
+
+Owner rule (2026-11-10): never call Jev concurrently; put many questions in
+single calls. Intake labels are one sequential stream of calls per runtime,
+a **group commit with no timer**:
+
+- `enqueueIntakeLabels` holds a poll's captures in a per-computer in-memory
+  queue and returns a wait handle (a channel closed when every capture of
+  that enqueue is resolved: labelled, failed, panicked and recovered, or
+  abandoned at stop).
+- One flusher goroutine per runtime runs whenever anything is held and no call
+  is in flight, draining the computers' queues in turn. The first capture is
+  asked at once; captures that arrive while a call is in flight accumulate and
+  go out together in the next flush (at most `intakeFlushCaptures` = 12
+  captures, and at most `intakeCallCaptures` = 6 to a call, further calls in
+  sequence). Under a burst the batches form by themselves; when quiet, the
+  latency is one call.
+- The poll enqueues, waits on the handle (or its ctx), then calls
+  `announceCaptures` exactly as before, so labels exist before the wake again,
+  the durable `PendingArrivals` retry machinery is untouched, and a capture
+  whose label failed is still announced, unlabelled.
+- A call packs captures and candidate stories to the 30,000-byte guard
+  (`intakeChunkStateBytes` cuts story chunks by bytes).
+
+**Locks and scheduling at the wait.** `HandleSourcePollDue` releases
+`sourceScheduleMu` after writing the in-flight mark
+(`source_schedule.go` ~:229) and takes it again only after the arrival
+(~:307); nothing else is held across the wait, so the poll waits holding no
+lock. The wait is bounded by each call's own 5 s timeout, a stop, or the
+poll's ctx. Source polls are not strictly one at a time: each schedule has its
+own actor mailbox (`sourcePollMailbox`) and the dispatcher runs up to 4 source
+polls at once in the `source:` lane (`internal/actorruntime/adapter.go:53,
+:170`). Batches therefore form across those concurrent polls and within one
+poll; no concurrency is added to enlarge them. A poll waiting on the handle
+holds its lane slot meanwhile, which is the cost of announcing after labels.
+
+**Restart rule.** The queues are in memory. A label call that fails, a capture
+a stop abandons, and a capture lost to a crash all end the same way: the
+capture is on the tape, unlabelled, and nothing retries it (the next poll
+sees it as already captured). The poll of a crashed process is closed by the
+restart rule; a poll that is waiting at a graceful stop is released (its
+handle closes) and announces its captures unlabelled. If the stop's drain bound
+expires, the captures it did not reach are unlabelled, as after a crash. No
+boot step resumes anything.
+
+Failure list:
+
+- F1. A flush starts while another runs. Bound: one flusher goroutine per
+  runtime (`l.running`), also across computers (a runtime may be handed
+  polls for more than one computer: `HandleSourcePollDue` takes the computer
+  as an argument and does not check it against `cfg.ComputerID`).
+- F2. A capture is enqueued during a flush and is lost or labelled twice.
+  Bound: the flusher takes a batch under the lock and re-reads the queue for
+  the next.
+- F3. A call fails mid-flush and voids other calls' captures or labels one on
+  part of the evidence. Bound: a capture with any failed chunk is unlabelled,
+  others keep their labels.
+- F4. The byte guard splits one capture's questions across calls, or a call
+  goes over the guard. Bound: a capture's questions are built together; a group
+  closes before a capture that would cross the guard; a single capture over
+  the guard goes alone, never dropped.
+- F5. Shutdown with captures held. `Stop` refuses new enqueues (a refused
+  enqueue returns a closed handle), lets a running flush finish, flushes once
+  what is held, all bounded by the runtime's drain deadline, then cancels and
+  waits up to `intakeStopGrace` (2 s) for the cancelled calls to return before
+  the store may close.
+- F8. A poll with zero captures, or captures without ids: a closed handle, no
+  flusher started.
+- F9. Concurrency returns through chunks: no `fanout`, no pool, no goroutine
+  per chunk.
+- F10. A panic in the judge (recovered in `callJudgeWithin`), in `labelHeld`
+  (recovered there), or in the flusher goroutine outside it (recovered
+  there, `l.running` cleared, flusher restarted if anything is held). Each
+  leaves that flush's captures unlabelled.
+- F12. A call carries more questions than the measured 8 (accuracy above 12 is
+  unmeasured). Bound: at most `intakeCallCaptures` = 6 captures (12
+  questions) to a call. Raise it only after the shadow comparison measures
+  accuracy at the larger size.
+- F15. A handle that never closes strands a poll. Every exit path closes it:
+  the flush's own defer (normal, failed and panicked), the stop drain
+  (labelled or abandoned at the bound), and the refused enqueue. A test per
+  path.
+- F16. A shared deadline across the sequential calls drops the later calls.
+  Bound: no deadline across calls; each has its own `intakeLabelCallTimeout`
+  (5 s) started when it is sent; the story-index reads have their own
+  `intakeLabelPrepBudget`; only a stop cancels. Our measured latency is flat
+  in question count (docs/reference/system1/our-usage.md), so 5 s is not
+  expected to bite at 12 questions; the shadow comparison is where that is
+  checked.
+
+Consumers of labels while one is pending (the wait makes this moot for the
+wake; the rest never waited): corpus search ranks without a hint when the
+label is missing (`researchtools/corpus_search.go:160`), and the override
+recorder skips a capture with no label (`intake_overrides.go`).
+
+Label counts live on the flush log line (`intake labels: flush captures=
+calls= questions= bytes_max= waited_ms= unlabelled= cancelled=`);
+`SourcePollUsage.Labelled` and `.Unlabelled` were deleted because the poll
+no longer knows them.

@@ -207,8 +207,10 @@ def stories_by_capture(c, start=None, end=None):
 
 
 def label_coverage(c, start, end):
-    """Jev's label coverage of the window's polls, from the schedules route."""
-    out = {"polls": 0, "new": 0, "labelled": 0, "unlabelled": 0}
+    """The window's polls and new captures, from the schedules route. The
+    poll record no longer carries label counts (labels are written by the
+    intake flush, which logs them on its own line), so none are reported."""
+    out = {"polls": 0, "new": 0}
     scheds = c.get("/api/autopaper/sources/schedules")
     if isinstance(scheds, dict):
         scheds = scheds.get("schedules") or scheds.get("items") or []
@@ -216,8 +218,7 @@ def label_coverage(c, start, end):
         for u in sched.get("recent") or []:
             if start <= (u.get("at") or "")[:19] + "Z" < end:
                 out["polls"] += 1
-                for k in ("new", "labelled", "unlabelled"):
-                    out[k] += int(u.get(k) or 0)
+                out["new"] += int(u.get("new") or 0)
     return out
 
 

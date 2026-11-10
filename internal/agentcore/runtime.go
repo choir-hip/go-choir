@@ -446,6 +446,8 @@ type Runtime struct {
 	support supportJudging
 	// events is the event layer's queue and index (event_layer.go).
 	events eventLayer
+	// intakeLabels holds new captures for their computer's label flush.
+	intakeLabels intakeLabelLayer
 
 	assignmentHandleResolver interface {
 		AssignmentHandle(string, string) (string, error)
@@ -1404,6 +1406,7 @@ func (rt *Runtime) Stop() {
 	rt.stopSourceScheduleSweep()
 	rt.stopPlatformPolls()
 	rt.stopEventLayer()
+	rt.stopIntakeLabels()
 	rt.bgStopOnce.Do(func() { close(rt.backgroundStop()) })
 	// The sub-call settler ends before the store can: its context is
 	// cancelled and Stop waits for it, bounded.

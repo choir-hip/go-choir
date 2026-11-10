@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"log"
@@ -11,10 +12,10 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
-	"github.com/yusefmosiah/go-choir/internal/fanout"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -53,30 +54,49 @@ type ScopedCandidateJudge interface {
 
 // Budgets. Vars so a test can shorten them.
 var (
-	intakeLabelPollBudget  = 15 * time.Second
+	// intakeLabelPrepBudget bounds a flush's reads before its calls (the
+	// story index and the corrections). There is no deadline across the
+	// calls: each gets its own intakeLabelCallTimeout, started when it is
+	// about to be sent, and only a stop cancels the rest. Our measured
+	// latency is flat in question count (docs/reference/system1/
+	// our-usage.md), so 5 s is not expected to bite at 12 questions; the
+	// shadow comparison is where that is checked.
+	intakeLabelPrepBudget  = 15 * time.Second
 	intakeLabelCallTimeout = 5 * time.Second
 )
 
 const (
-	// intakeBatchCaptures is the most captures whose questions share one
-	// call (two questions each, so 8): the owner's ruling is to run many
-	// questions against the same context, not many calls
-	// (docs/design/jev-batched-questions-2026-11-10.md, step 1; vendor
-	// guidance in docs/evidence/jev-usage-best-practices-2026-11-10.md,
-	// "4 items per call for intake, then 8"). It is a start, not a measured
-	// value: accuracy at 8 questions is unmeasured, so it is a compiled
-	// constant to raise once the shadow comparison has run.
-	intakeBatchCaptures = 4
+	// intakeFlushCaptures is the most captures one flush takes from the
+	// queue (the event layer's chunk size); a call carries at most
+	// intakeCallCaptures of them, and the byte guard below can split a call
+	// earlier (docs/design/jev-batched-questions-2026-11-10.md, "Intake
+	// flush").
+	intakeFlushCaptures = 12
+	// intakeCallCaptures is the most captures one call carries (two
+	// questions each, so 12). The flush holds 12 captures, but accuracy
+	// above 12 questions a call is unmeasured and the old code carried at
+	// most 8; further calls follow in sequence. Raise it only after the
+	// shadow comparison of docs/design/jev-batched-questions-2026-11-10.md
+	// measures accuracy at the larger size.
+	intakeCallCaptures = 6
+	// intakeBatchCaptures is the count handed to labelPoll's grouping.
+	intakeBatchCaptures = intakeCallCaptures
+	// Owner rule 2026-11-10: never call Jev concurrently, put many questions
+	// in single calls. The flush is a group commit with no timer: the first
+	// capture is asked at once, and captures that arrive while a call is in
+	// flight go out together in the next, so a burst batches by itself and a
+	// quiet moment costs one call. Compiled constants, not settings.
 	// intakeRequestMaxBytes is the most a call's state and questions may
 	// carry: under OpenRouter's ~32,000-byte line past which Jev runs a
 	// slower, less accurate long-context mode. A group of captures that
 	// would cross it is split, never trimmed.
 	intakeRequestMaxBytes = 30000
-	// intakeLabelConcurrency is the calls in flight at once for a poll. The
-	// batched shape needs one call per chunk and group (a poll of three
-	// captures against 80 stories is one call), so the pool only covers a
-	// large window's chunks; the fan-out of one call per capture is gone.
-	intakeLabelConcurrency    = 2
+	// intakeChunkStateBytes is the most the stories of one call may take (the
+	// state's story entries plus each story's two option names in a
+	// question); the stories are cut into chunks by bytes, not by a count, so
+	// a quiet window fits one call. About half the guard is left for the
+	// captures' own state and questions.
+	intakeChunkStateBytes     = 15000
 	intakeShortlistOverlap    = 10
 	intakeShortlistHorizon    = 72 * time.Hour
 	intakeOverrideExamples    = 12
@@ -196,33 +216,310 @@ func intakeClip(s string, n int) string {
 	return s
 }
 
-// labelCaptures labels a poll's new captures and reports how many were
-// labelled and how many were left unlabelled. It returns within the poll
-// budget whatever Jev does.
-func (rt *Runtime) labelCaptures(ctx context.Context, ownerID, computerID, sourceID string, captured []sourcegraph.CapturedItem) (labelled, unlabelled int) {
-	var items []sourcegraph.CapturedItem
-	for _, c := range captured {
-		if strings.TrimSpace(c.CaptureID) != "" {
-			items = append(items, c)
+// intakeTicket is one enqueue's wait handle: its channel closes when every
+// capture of the enqueue is resolved (labelled, failed, panicked and
+// recovered, or abandoned at stop).
+type intakeTicket struct {
+	left atomic.Int32
+	done chan struct{}
+}
+
+func newIntakeTicket(n int) *intakeTicket {
+	t := &intakeTicket{done: make(chan struct{})}
+	t.left.Store(int32(n))
+	if n == 0 {
+		close(t.done)
+	}
+	return t
+}
+
+// resolve marks one capture resolved.
+func (t *intakeTicket) resolve() {
+	if t.left.Add(-1) == 0 {
+		close(t.done)
+	}
+}
+
+// intakeHeld is a capture waiting for its flush, with the source that
+// captured it and when it was held.
+type intakeHeld struct {
+	item     sourcegraph.CapturedItem
+	sourceID string
+	at       time.Time
+	ticket   *intakeTicket
+}
+
+// resolveIntakeHeld marks every capture of a flush resolved.
+func resolveIntakeHeld(held []intakeHeld) {
+	for _, h := range held {
+		if h.ticket != nil {
+			h.ticket.resolve()
 		}
 	}
-	if len(items) == 0 {
+}
+
+type intakeLabelQueue struct {
+	owner, computer string
+	items           []intakeHeld
+}
+
+// intakeLabelLayer is the runtime's intake-label queues, one per computer,
+// drained by ONE flusher goroutine per runtime: a runtime may be handed
+// polls for more than one computer (nothing in HandleSourcePollDue checks
+// the computer against the runtime's configured one), and the owner's rule
+// is that Jev is never called concurrently, so the flusher drains the
+// queues in turn. It is a group commit: the flusher runs whenever anything
+// is held and no call is in flight, so the first capture is asked at once
+// and captures that arrive during a call go out together in the next.
+// The queues are in memory only: a capture still held at a crash or a
+// bounded stop is left unlabelled, exactly as a capture whose label call
+// failed (nothing retries a capture; the next poll sees it as already
+// captured). No boot step resumes it.
+type intakeLabelLayer struct {
+	mu      sync.Mutex
+	queues  map[string]*intakeLabelQueue
+	stopped bool
+	running bool // the one flusher goroutine is alive
+	ctx     context.Context
+	cancel  context.CancelFunc
+	// flushes counts the flusher goroutine, so a graceful stop can wait for
+	// it (bounded).
+	flushes sync.WaitGroup
+}
+
+// intakeFlushTestHook, when set by a test, runs at the named stage of a
+// flush ("flusher": in the flusher goroutine before a flush; "labelHeld":
+// inside the flush) so a test can make that stage panic or block. Nil in
+// production.
+var intakeFlushTestHook func(stage string)
+
+// enqueueIntakeLabels holds a poll's new captures for the computer's next
+// flush and returns a channel closed when all of them are resolved. The
+// caller waits on it (and on its own ctx) before announcing the captures,
+// so labels exist before the wake; it must hold no lock while waiting. A
+// refused enqueue (stopped, or no judge) returns an already closed channel.
+func (rt *Runtime) enqueueIntakeLabels(ownerID, computerID, sourceID string, captured []sourcegraph.CapturedItem) <-chan struct{} {
+	if rt == nil || rt.candidateJudge == nil || rt.store == nil {
+		return newIntakeTicket(0).done
+	}
+	var valid []sourcegraph.CapturedItem
+	for _, c := range captured {
+		if strings.TrimSpace(c.CaptureID) != "" {
+			valid = append(valid, c)
+		}
+	}
+	ticket := newIntakeTicket(len(valid))
+	if len(valid) == 0 {
+		return ticket.done
+	}
+	now := time.Now().UTC()
+	key := eventKey(ownerID, computerID)
+	l := &rt.intakeLabels
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.stopped {
+		for range valid {
+			ticket.resolve()
+		}
+		return ticket.done
+	}
+	if l.queues == nil {
+		l.queues = map[string]*intakeLabelQueue{}
+	}
+	q := l.queues[key]
+	if q == nil {
+		q = &intakeLabelQueue{owner: ownerID, computer: computerID}
+		l.queues[key] = q
+	}
+	for _, c := range valid {
+		q.items = append(q.items, intakeHeld{item: c, sourceID: sourceID, at: now, ticket: ticket})
+	}
+	if !l.running {
+		rt.startIntakeFlusherLocked()
+	}
+	return ticket.done
+}
+
+// startIntakeFlusherLocked starts the runtime's one flusher. The caller
+// holds l.mu, l.running is false and the layer is not stopped.
+func (rt *Runtime) startIntakeFlusherLocked() {
+	l := &rt.intakeLabels
+	if l.ctx == nil {
+		l.ctx, l.cancel = context.WithCancel(context.Background())
+	}
+	l.running = true
+	ctx := l.ctx
+	l.flushes.Add(1)
+	go func() {
+		defer l.flushes.Done()
+		defer func() {
+			// A panic must not kill the process or leave the layer marked
+			// running: that flush's captures stay unlabelled (their wait
+			// handles are closed by the flush's own defer) and the flusher
+			// restarts if anything is still held.
+			if r := recover(); r != nil {
+				log.Printf("intake labels: flusher panicked: %v; that flush's captures stay unlabelled", r)
+				l.mu.Lock()
+				l.running = false
+				if !l.stopped && l.anyHeldLocked() {
+					rt.startIntakeFlusherLocked()
+				}
+				l.mu.Unlock()
+			}
+		}()
+		rt.runIntakeFlusher(ctx)
+	}()
+}
+
+func (l *intakeLabelLayer) anyHeldLocked() bool {
+	for _, q := range l.queues {
+		if len(q.items) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// runIntakeFlusher drains the computers' queues one flush at a time, the
+// queue whose first capture waited longest first, then exits.
+func (rt *Runtime) runIntakeFlusher(ctx context.Context) {
+	l := &rt.intakeLabels
+	for {
+		l.mu.Lock()
+		var next *intakeLabelQueue
+		if !l.stopped {
+			for _, q := range l.queues {
+				if len(q.items) > 0 && (next == nil || q.items[0].at.Before(next.items[0].at)) {
+					next = q
+				}
+			}
+		}
+		if next == nil {
+			l.running = false
+			l.mu.Unlock()
+			return
+		}
+		n := min(len(next.items), intakeFlushCaptures)
+		held := append([]intakeHeld(nil), next.items[:n]...)
+		next.items = append([]intakeHeld(nil), next.items[n:]...)
+		owner, computer := next.owner, next.computer
+		l.mu.Unlock()
+		func() {
+			// Every exit path, a panic included, resolves the flush's
+			// captures so no poll waits on a flush that is gone.
+			defer resolveIntakeHeld(held)
+			if hook := intakeFlushTestHook; hook != nil {
+				hook("flusher")
+			}
+			rt.labelHeld(ctx, owner, computer, held)
+		}()
+	}
+}
+
+// intakeStopGrace is how long Stop waits, after the drain deadline cancelled
+// the flush, for cancelled calls to return before the store may close.
+const intakeStopGrace = 2 * time.Second
+
+// stopIntakeLabels is the graceful stop: it refuses new captures, lets a
+// running flush finish, flushes once what is held, all bounded by the
+// runtime's drain deadline, then cancels what is left and waits (briefly)
+// for it to return, so nothing touches the store as it closes. Every wait
+// handle is closed. Nothing is persisted and nothing runs at boot, so a
+// crash still drops held captures exactly as a failed label does. Called
+// from Stop before the store closes.
+func (rt *Runtime) stopIntakeLabels() {
+	l := &rt.intakeLabels
+	l.mu.Lock()
+	already := l.stopped
+	l.stopped = true
+	type heldQueue struct {
+		owner, computer string
+		items           []intakeHeld
+	}
+	var rest []heldQueue
+	for _, q := range l.queues {
+		if len(q.items) > 0 && !already {
+			rest = append(rest, heldQueue{q.owner, q.computer, q.items})
+		}
+		q.items = nil
+	}
+	if l.ctx == nil {
+		l.ctx, l.cancel = context.WithCancel(context.Background())
+	}
+	l.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), rt.drainDeadline())
+	defer cancel()
+	// At the bound, whatever still runs is cancelled.
+	stop := context.AfterFunc(ctx, l.cancel)
+	defer stop()
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		l.flushes.Wait()
+		for _, h := range rest {
+			for len(h.items) > 0 && ctx.Err() == nil {
+				n := min(len(h.items), intakeFlushCaptures)
+				func() {
+					defer resolveIntakeHeld(h.items[:n])
+					rt.labelHeld(ctx, h.owner, h.computer, h.items[:n])
+				}()
+				h.items = h.items[n:]
+			}
+			resolveIntakeHeld(h.items) // abandoned at the bound
+		}
+	}()
+	select {
+	case <-finished:
+	case <-ctx.Done():
+		log.Printf("intake labels: stop: drain deadline reached; cancelling, held captures stay unlabelled")
+		l.cancel()
+		select {
+		case <-finished:
+		case <-time.After(intakeStopGrace):
+			log.Printf("intake labels: stop: the flush did not return within %v of its cancellation", intakeStopGrace)
+		}
+	}
+	l.cancel()
+}
+
+// labelHeld is the flush: it labels the held captures, in the order held, and
+// reports how many were labelled and how many were left unlabelled. Its calls
+// run one after another and it returns within the flush budget whatever Jev
+// does.
+func (rt *Runtime) labelHeld(ctx context.Context, ownerID, computerID string, held []intakeHeld) (labelled, unlabelled int) {
+	if len(held) == 0 {
 		return 0, 0
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("intake labels: flush of %d captures panicked: %v; they stay unlabelled", len(held), r)
+			labelled, unlabelled = 0, len(held)
+		}
+	}()
+	if hook := intakeFlushTestHook; hook != nil {
+		hook("labelHeld")
+	}
+	items := make([]sourcegraph.CapturedItem, len(held))
+	for i, h := range held {
+		items[i] = h.item
+	}
+	sourceID := held[0].sourceID
+	waited := time.Since(held[0].at)
 	judge := rt.candidateJudge
 	if judge == nil || rt.store == nil {
 		return 0, len(items)
 	}
-	budget, cancel := context.WithTimeout(ctx, intakeLabelPollBudget)
-	defer cancel()
-	lib := &intakeLibrary{rt: rt, summary: map[string]store.StorySummary{}}
 	// The labeler is management's: it reads the story index Texture
 	// publishes, never Texture's documents or revisions (X9).
-	budget = withKindReader(budget, "choir.capture_label")
-	if err := rt.store.PublishStoryIndex(budget, ownerID, computerID); err != nil {
-		log.Printf("intake labels: %s: publish story index: %v; labelling against siblings only", sourceID, err)
-	} else if sums, err := rt.store.ListStoryIndex(budget, ownerID, computerID, time.Time{}, "", 0); err != nil {
-		log.Printf("intake labels: %s: list stories: %v; labelling against siblings only", sourceID, err)
+	ctx = withKindReader(ctx, "choir.capture_label")
+	prep, cancelPrep := context.WithTimeout(ctx, intakeLabelPrepBudget)
+	defer cancelPrep()
+	lib := &intakeLibrary{rt: rt, summary: map[string]store.StorySummary{}}
+	if err := rt.store.PublishStoryIndex(prep, ownerID, computerID); err != nil {
+		log.Printf("intake labels: flush: publish story index: %v; labelling against siblings only", err)
+	} else if sums, err := rt.store.ListStoryIndex(prep, ownerID, computerID, time.Time{}, "", 0); err != nil {
+		log.Printf("intake labels: flush: list stories: %v; labelling against siblings only", err)
 	} else {
 		docs := make([]types.Document, 0, len(sums))
 		for _, sum := range sums {
@@ -231,33 +528,43 @@ func (rt *Runtime) labelCaptures(ctx context.Context, ownerID, computerID, sourc
 		}
 		lib.recent, lib.rest = intakeShortlistSplit(docs, time.Now().UTC())
 	}
-	if examples, err := rt.store.RecentCaptureLabelOverrides(budget, ownerID, computerID, intakeOverrideExamples); err != nil {
-		log.Printf("intake labels: %s: read corrections: %v", sourceID, err)
+	if examples, err := rt.store.RecentCaptureLabelOverrides(prep, ownerID, computerID, intakeOverrideExamples); err != nil {
+		log.Printf("intake labels: flush: read corrections: %v", err)
 	} else {
 		lib.examples = examples
 	}
 
-	results := rt.labelPoll(budget, lib, ownerID, computerID, sourceID, items, intakeBatchCaptures)
+	results := rt.labelPoll(ctx, lib, ownerID, computerID, sourceID, items, intakeBatchCaptures)
 	for i, r := range results {
+		r.Value.SourceID = held[i].sourceID
 		if r.Err == nil {
 			// In the poll's order; a label that cannot be written is
 			// unlabelled like one Jev did not answer.
 			_, r.Err = rt.store.AppendCaptureLabel(withKindCustodian(ctx, "choir.capture_label"), r.Value)
 		}
 		if r.Err != nil {
-			// A capture the budget ended before it started is left
-			// unlabelled without a line, as before.
-			if budget.Err() == nil {
-				log.Printf("intake labels: %s: %s unlabelled: %v", sourceID, items[i].CaptureID, r.Err)
+			// A capture a stop cancelled before it was asked is left
+			// unlabelled without a line.
+			if ctx.Err() == nil {
+				log.Printf("intake labels: flush: %s unlabelled: %v", items[i].CaptureID, r.Err)
 			}
 			continue
 		}
 		labelled++
 	}
-	// One line per poll, counts only: the per-capture lines above stop when
+	if ctx.Err() != nil {
+		notAsked := 0
+		for _, r := range results {
+			if r.Err != nil && errors.Is(r.Err, context.Canceled) {
+				notAsked++
+			}
+		}
+		log.Printf("intake labels: stopped during the flush: %d of %d captures not asked or unanswered", notAsked, len(items))
+	}
+	// One line per flush, counts only: the per-capture lines above stop when
 	// the budget ends, and a slow Jev would otherwise leave no trace.
-	log.Printf("intake labels: %s: poll captures=%d calls=%d questions=%d bytes_max=%d unlabelled=%d budget_expired=%t",
-		sourceID, len(items), lib.stats.calls, lib.stats.questions, lib.stats.maxBytes, len(items)-labelled, budget.Err() != nil)
+	log.Printf("intake labels: flush captures=%d calls=%d questions=%d bytes_max=%d waited_ms=%d unlabelled=%d cancelled=%t",
+		len(items), lib.stats.calls, lib.stats.questions, lib.stats.maxBytes, waited.Milliseconds(), len(items)-labelled, ctx.Err() != nil)
 	return labelled, len(items) - labelled
 }
 
@@ -287,6 +594,14 @@ type intakePoll struct {
 	stories []intakeStory
 	// views[i] is what items[i] is compared with.
 	views []intakeView
+	// cuts[k] is the end of chunk k in stories (see intakeChunkStateBytes).
+	cuts []int
+}
+
+// intakeLabelResult is one capture's label, or why it has none.
+type intakeLabelResult struct {
+	Value store.CaptureLabel
+	Err   error
 }
 
 type intakeStory struct {
@@ -363,6 +678,20 @@ func newIntakePoll(ctx context.Context, lib *intakeLibrary, items []sourcegraph.
 		}
 		p.views[i] = v
 	}
+	// The stories are cut into chunks by bytes, never by a count: a chunk
+	// closes when the next story would take it past intakeChunkStateBytes.
+	size := 0
+	for n, s := range p.stories {
+		cost := len(s.entry) + 2*(len(s.handle)+8)
+		if size > 0 && size+cost > intakeChunkStateBytes {
+			p.cuts = append(p.cuts, n)
+			size = 0
+		}
+		size += cost
+	}
+	if len(p.stories) > 0 {
+		p.cuts = append(p.cuts, len(p.stories))
+	}
 	for i := range items {
 		for j := range items {
 			if j != i {
@@ -389,18 +718,21 @@ func storyIndex(handle string) int {
 	return n - 1
 }
 
-// chunkCount is how many chunks of at most intakeChunkCandidates stories the
+// chunkCount is how many chunks of at most intakeChunkStateBytes of stories the
 // poll's candidates make (one, even with none: the siblings' call).
 func (p *intakePoll) chunkCount() int {
-	return max(1, (len(p.stories)+intakeChunkCandidates-1)/intakeChunkCandidates)
+	return max(1, len(p.cuts))
 }
 
 func (p *intakePoll) chunk(k int) []intakeStory {
-	lo, hi := k*intakeChunkCandidates, min((k+1)*intakeChunkCandidates, len(p.stories))
-	if lo >= hi {
+	if k >= len(p.cuts) {
 		return nil
 	}
-	return p.stories[lo:hi]
+	lo := 0
+	if k > 0 {
+		lo = p.cuts[k-1]
+	}
+	return p.stories[lo:p.cuts[k]]
 }
 
 // intakeAsk is one capture's questions in one call: the choices offered and
@@ -634,8 +966,8 @@ type intakeCallAnswer struct {
 // group of at most batch captures (the questions of a group share the chunk's
 // stories, sent once); a capture's answer is read from its own questions, so
 // one capture's bad answer, or one failed call, leaves the others' labels.
-func (rt *Runtime) labelPoll(ctx context.Context, lib *intakeLibrary, ownerID, computerID, sourceID string, items []sourcegraph.CapturedItem, batch int) []fanout.Result[store.CaptureLabel] {
-	out := make([]fanout.Result[store.CaptureLabel], len(items))
+func (rt *Runtime) labelPoll(ctx context.Context, lib *intakeLibrary, ownerID, computerID, sourceID string, items []sourcegraph.CapturedItem, batch int) []intakeLabelResult {
+	out := make([]intakeLabelResult, len(items))
 	p, err := newIntakePoll(ctx, lib, items)
 	if err != nil {
 		for i := range out {
@@ -681,16 +1013,19 @@ func (rt *Runtime) labelPoll(ctx context.Context, lib *intakeLibrary, ownerID, c
 			answers[i][k].err = errIntakeNotAsked
 		}
 	}
-	results := fanout.Do(ctx, intakeLabelConcurrency, len(calls), func(callCtx context.Context, n int) ([]intakeCallAnswer, error) {
-		return rt.askIntakeCall(callCtx, lib, calls[n])
-	})
-	for n, r := range results {
-		for a, ask := range calls[n].asks {
-			switch {
-			case r.Err != nil:
-				answers[ask.capture][calls[n].chunk] = intakeCallAnswer{err: r.Err}
-			default:
-				answers[ask.capture][calls[n].chunk] = r.Value[a]
+	// One call after another, never concurrently: Jev answers a call's
+	// questions in parallel, so the way to go faster is a bigger call.
+	for _, c := range calls {
+		var ans []intakeCallAnswer
+		err := ctx.Err()
+		if err == nil {
+			ans, err = rt.askIntakeCall(ctx, lib, c)
+		}
+		for a, ask := range c.asks {
+			if err != nil {
+				answers[ask.capture][c.chunk] = intakeCallAnswer{err: err}
+			} else {
+				answers[ask.capture][c.chunk] = ans[a]
 			}
 		}
 	}
@@ -711,7 +1046,7 @@ func siblingIndex(handle string) int {
 // mergeIntakeAnswers merges a capture's chunk answers, in chunk order, into
 // its label: the story with the highest event probability wins, a sibling
 // only when no story matched, and new only when no chunk named anything.
-func (rt *Runtime) mergeIntakeAnswers(p *intakePoll, i int, label store.CaptureLabel, answers []intakeCallAnswer) fanout.Result[store.CaptureLabel] {
+func (rt *Runtime) mergeIntakeAnswers(p *intakePoll, i int, label store.CaptureLabel, answers []intakeCallAnswer) intakeLabelResult {
 	storyOf := map[string]store.StorySummary{}
 	for _, s := range p.stories {
 		storyOf[s.handle] = s.sum
@@ -729,7 +1064,7 @@ func (rt *Runtime) mergeIntakeAnswers(p *intakePoll, i int, label store.CaptureL
 		if r.err != nil {
 			// A capture that missed part of the window is unlabelled, not
 			// labelled "new" on part of the evidence.
-			return fanout.Result[store.CaptureLabel]{Value: label, Err: r.err}
+			return intakeLabelResult{Value: label, Err: r.err}
 		}
 		a := r.answer
 		label.Model = firstNonEmpty(label.Model, a.model)
@@ -747,7 +1082,7 @@ func (rt *Runtime) mergeIntakeAnswers(p *intakePoll, i int, label store.CaptureL
 				event = a
 			}
 		default:
-			return fanout.Result[store.CaptureLabel]{Value: label, Err: fmt.Errorf("Jev chose %q, which is not a choice", a.event)}
+			return intakeLabelResult{Value: label, Err: fmt.Errorf("Jev chose %q, which is not a choice", a.event)}
 		}
 		if storyOf[a.topic].DocID != "" && (topic.topic == "" || a.topicP > topic.topicP) {
 			topic = a
@@ -761,13 +1096,13 @@ func (rt *Runtime) mergeIntakeAnswers(p *intakePoll, i int, label store.CaptureL
 	case siblingOf[choice] != "":
 		label.Event, label.EventCaptureID, label.EventP = store.CaptureLabelEventSibling, siblingOf[choice], event.eventP
 	default:
-		return fanout.Result[store.CaptureLabel]{Value: label, Err: fmt.Errorf("Jev gave no event answer")}
+		return intakeLabelResult{Value: label, Err: fmt.Errorf("Jev gave no event answer")}
 	}
 	if sum := storyOf[topic.topic]; sum.DocID != "" {
 		label.TopicDocID, label.TopicHeadline, label.TopicP = sum.DocID, sum.Headline, topic.topicP
 	}
 	label.Model = firstNonEmpty(label.Model, candidateJudgmentModel)
-	return fanout.Result[store.CaptureLabel]{Value: label}
+	return intakeLabelResult{Value: label}
 }
 
 // askIntakeCall makes one call and reads each of its captures' answers from
@@ -861,16 +1196,10 @@ const (
 	// their age, so a quiet stretch never shrinks the list below the old
 	// newest-30 reach.
 	intakeShortlistFloor = 30
-	// intakeChunkCandidates is the most stories one call lists. Entries in a
-	// chunk are a headline and a time (a lede only on the newest
-	// intakeLedeCandidates), so a chunk's state stays near 12 KB. The
-	// questions of up to intakeBatchCaptures captures ride the same call, so
-	// the request is the chunk plus about 2.5 KB a capture, under
-	// intakeRequestMaxBytes; a chunk of 80 leaves room for four captures, and
-	// when ledes or long summaries do not, the capture batch splits (the
-	// chunk size is not shrunk).
-	intakeChunkCandidates = 80
-	intakeLedeCandidates  = 30
+	// Entries in a chunk are a headline and a time (a lede only on the newest
+	// intakeLedeCandidates), so a story costs about 100 bytes and a chunk
+	// holds on the order of 100; see intakeChunkStateBytes.
+	intakeLedeCandidates = 30
 )
 
 // intakeAnswer is one chunk call's answer: the event choice and the topic
@@ -925,6 +1254,13 @@ func callJudgeWithin(ctx context.Context, judge CandidateJudge, scope string, ti
 	done := make(chan result, 1)
 	go func() {
 		var r result
+		defer func() {
+			// A judge that panics fails its call, never the process.
+			if p := recover(); p != nil {
+				r = result{err: fmt.Errorf("judge panicked: %v", p)}
+				done <- r
+			}
+		}()
 		if scoped, ok := judge.(ScopedCandidateJudge); ok && scope != "" {
 			r.raw, r.err = scoped.JudgeScoped(callCtx, scope, state, questions)
 		} else {
