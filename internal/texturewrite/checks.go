@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/quotematch"
@@ -68,14 +69,30 @@ var spaceBeforeCloseRE = regexp.MustCompile(` ([,.;:!?)\]])`)
 // 2026-10-19.md), so a paragraph drawing on two outlets failed against
 // either quote.
 func citingSpans(n texturedoc.Node) []string {
+	spans, _ := citingSpanGroups(n)
+	return spans
+}
+
+// citingSpanGroups is citingSpans with the group each citation belongs to:
+// citations that close one span (side by side) share a group number. The
+// support judge asks one question per group, with every cited passage of
+// the group as evidence (docs/problems/unsupported-cites-duplicates-and-
+// churn-2026-11-10.md, fix A).
+func citingSpanGroups(n texturedoc.Node) ([]string, []int) {
 	var spans []string
+	var groups []int
+	next := 0
 	var buf strings.Builder
 	pending := 0
 	settle := func() {
 		span := strings.Join(strings.Fields(buf.String()), " ")
 		span = spaceBeforeCloseRE.ReplaceAllString(span, "$1")
+		if pending > 0 {
+			next++
+		}
 		for ; pending > 0; pending-- {
 			spans = append(spans, span)
+			groups = append(groups, next)
 		}
 		buf.Reset()
 	}
@@ -108,10 +125,34 @@ func citingSpans(n texturedoc.Node) []string {
 	}
 	walk(n)
 	settle()
-	return spans
+	return spans, groups
 }
 
 var closingPunctRE = regexp.MustCompile(`^\s*[,.;:!?)\]"”’]+`)
+
+// maxGroupCites bounds how many cites one question carries as evidence. A
+// span cited more heavily than this is judged in groups of this size, in
+// order, so a question's evidence stays bounded.
+const maxGroupCites = 6
+
+// refIdentity names a cited quote: the same capture, block and quote is one
+// piece of evidence however many times a sentence cites it.
+func refIdentity(r types.Ref) string {
+	return r.Doc + "\x00" + r.CID + "\x00" + r.Hash + "\x00" + r.Quote
+}
+
+// GroupHash is the hash a grouped pair keys on instead of the span hash
+// alone: the span and the identities of every quote its group cites, so a
+// changed group (a cite added, dropped or swapped) is a new question and an
+// unchanged one stays memoized.
+func GroupHash(text string, group []types.Ref) string {
+	ids := make([]string, 0, len(group))
+	for _, r := range group {
+		ids = append(ids, refIdentity(r))
+	}
+	sort.Strings(ids)
+	return TextHash(text + "\x00group\x00" + strings.Join(ids, "\x01"))
+}
 
 // Checks lists every citation of doc in document order with its quote
 // check, and the support pairs of the captured ones, one per key. A
@@ -123,8 +164,31 @@ func Checks(doc texturedoc.StructuredTextureDoc, docID, revisionID string) ([]Qu
 	seen := map[string]bool{}
 	for _, block := range DocBlocks(doc) {
 		context := CitingText(block.Node)
-		spans := citingSpans(block.Node)
-		for i, ref := range sourceRefs(block.Node) {
+		spans, spanGroups := citingSpanGroups(block.Node)
+		refs := sourceRefs(block.Node)
+		// The checkable cites of each side-by-side group, deduplicated, in
+		// order. A pair carries its group (chunked to maxGroupCites) as
+		// Group when the group holds more than one quote.
+		groupOf := map[int][]types.Ref{}
+		for i, ref := range refs {
+			if i >= len(spanGroups) {
+				break
+			}
+			cited, ok := RefOf(ref)
+			if !ok || cited.Quote == "" || cited.Hash == "" {
+				continue
+			}
+			dup := false
+			for _, have := range groupOf[spanGroups[i]] {
+				if refIdentity(have) == refIdentity(cited) {
+					dup = true
+				}
+			}
+			if !dup {
+				groupOf[spanGroups[i]] = append(groupOf[spanGroups[i]], cited)
+			}
+		}
+		for i, ref := range refs {
 			text := context
 			if i < len(spans) && spans[i] != "" {
 				text = spans[i]
@@ -143,12 +207,23 @@ func Checks(doc texturedoc.StructuredTextureDoc, docID, revisionID string) ([]Qu
 				if check.Tier == "" {
 					check.Tier = quotematch.TierExact
 				}
-				check.Pair = PairKey(spanHash, cited.Hash, cited.Quote)
+				var group []types.Ref
+				keyHash := spanHash
+				if i < len(spanGroups) {
+					group = chunkOf(groupOf[spanGroups[i]], cited)
+				}
+				if len(group) > 1 {
+					keyHash = GroupHash(text, group)
+				} else {
+					group = nil
+				}
+				check.Pair = PairKey(keyHash, cited.Hash, cited.Quote)
 				if !seen[check.Pair] {
 					seen[check.Pair] = true
 					pair := types.CitationPair{
-						Key: check.Pair, DocID: docID, RevisionID: revisionID, BlockID: block.ID, BlockHash: spanHash,
+						Key: check.Pair, DocID: docID, RevisionID: revisionID, BlockID: block.ID, BlockHash: keyHash,
 						Text: text, Cited: cited, Matcher: quotematch.Version, Tier: string(check.Tier),
+						Group: group,
 					}
 					if text != context {
 						pair.Context = context
@@ -160,6 +235,20 @@ func Checks(doc texturedoc.StructuredTextureDoc, docID, revisionID string) ([]Qu
 		}
 	}
 	return checks, pairs
+}
+
+// chunkOf is the run of at most maxGroupCites quotes of group that holds
+// cited, chunking the group in order.
+func chunkOf(group []types.Ref, cited types.Ref) []types.Ref {
+	for start := 0; start < len(group); start += maxGroupCites {
+		end := min(start+maxGroupCites, len(group))
+		for _, r := range group[start:end] {
+			if refIdentity(r) == refIdentity(cited) {
+				return group[start:end]
+			}
+		}
+	}
+	return nil
 }
 
 // CitesSource reports whether rev cites at least one source: a citation

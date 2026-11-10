@@ -41,6 +41,14 @@ type CitationPair struct {
 	Cited      Ref    `json:"cited"`
 	Matcher    string `json:"matcher"`
 	Tier       string `json:"tier,omitempty"`
+	// Group lists every quote cited side by side at this pair's span (this
+	// pair's own included), when there is more than one: the sources that
+	// together carry the sentence. Jev judges the group in one question and
+	// each member pair takes that verdict, so a sentence two sources support
+	// together is not failed against each quote alone. Key then hashes the
+	// group, not the span alone: BlockHash is then the group's hash
+	// (texturewrite.GroupHash), not the span's.
+	Group []Ref `json:"group,omitempty"`
 }
 
 // SupportPairKey keys a pair by (citing block hash, cited block hash, quote
@@ -67,6 +75,11 @@ type SupportVerdict struct {
 	Pair         *CitationPair `json:"pair,omitempty"`
 	RecordID     string        `json:"record_id,omitempty"`
 	Memo         bool          `json:"memo,omitempty"`
+	// GroupSize is the number of quotes judged together when the pair was
+	// cited side by side with others (Pair.Group): the verdict is the
+	// group's, "supported as a group" when it passes. Zero is a pair judged
+	// alone.
+	GroupSize int `json:"group_size,omitempty"`
 }
 
 // CitationCheck is the memo of one pair's quote check, written when a
