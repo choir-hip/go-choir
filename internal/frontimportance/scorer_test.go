@@ -30,8 +30,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -52,37 +54,74 @@ type fakeJev struct {
 	yes map[string][]string
 	// prob overrides P(yes) for (title, section id).
 	prob map[string]map[string]float64
+	// omit makes the judge answer nothing for a title's questions (a
+	// partial answer set); callErr fails every call.
+	omit    map[string]bool
+	callErr error
+	delay   time.Duration
+	// nCalls, perCall (stories in each call), reqBytes, and the peak of
+	// calls in flight at once.
+	nCalls         int
+	perCall        []int
+	reqBytes       []int
+	inflight, peak atomic.Int64
 }
 
 func (f *fakeJev) Decide(_ context.Context, _ string, req gateway.JudgmentRequest) ([]byte, error) {
+	cur := f.inflight.Add(1)
+	defer f.inflight.Add(-1)
+	for p := f.peak.Load(); cur > p && !f.peak.CompareAndSwap(p, cur); p = f.peak.Load() {
+	}
+	if f.delay > 0 {
+		time.Sleep(f.delay)
+	}
 	var state struct {
-		Story struct {
+		Stories map[string]struct {
 			Title string `json:"title"`
-		} `json:"story"`
+		} `json:"stories"`
 	}
 	_ = json.Unmarshal(req.State, &state)
-	if len(req.Questions) > maxQuestionsPerCall {
-		return nil, errors.New("too many questions in one call")
+	if len(state.Stories) == 0 {
+		return nil, errors.New("no stories in state")
 	}
-	_, hasImportance := req.Questions["importance"]
-	if hasImportance {
-		var q struct {
-			Type    string   `json:"type"`
-			Choices []string `json:"choices"`
-		}
-		_ = json.Unmarshal(req.Questions["importance"], &q)
-		if q.Type != "choice" || len(q.Choices) != 10 || q.Choices[0] != "1" || q.Choices[9] != "10" {
-			return nil, errors.New("bad importance question shape")
-		}
-		if _, ok := req.Questions["promo"]; !ok {
-			return nil, errors.New("missing promo question")
-		}
+	if f.callErr != nil {
+		return nil, f.callErr
 	}
 	house := sectionlist.House()
 	answers := map[string]any{}
-	var texts []string
+	asked := map[string][]string{}
+	hasImportance := false
 	for name, raw := range req.Questions {
-		if !strings.HasPrefix(name, "sec_") {
+		handle, rest, ok := strings.Cut(name, "_")
+		st, known := state.Stories[handle]
+		if !ok || !known {
+			return nil, errors.New("question " + name + " names no story in state")
+		}
+		title := st.Title
+		if !strings.Contains(string(raw), "state.stories."+handle+" ") {
+			return nil, errors.New("question " + name + " does not name its own story")
+		}
+		if f.omit[title] {
+			continue // a partial answer set: this story gets nothing
+		}
+		if rest == "importance" {
+			hasImportance = true
+			var q struct {
+				Type    string   `json:"type"`
+				Choices []string `json:"choices"`
+			}
+			_ = json.Unmarshal(raw, &q)
+			if q.Type != "choice" || len(q.Choices) != 10 || q.Choices[0] != "1" || q.Choices[9] != "10" {
+				return nil, errors.New("bad importance question shape")
+			}
+			if _, ok := req.Questions[handle+"_promo"]; !ok {
+				return nil, errors.New("missing promo question")
+			}
+			answers[name] = map[string]any{"choice": f.answers[title]}
+			continue
+		}
+		if rest == "promo" {
+			answers[name] = map[string]any{"choice": f.promo[title]}
 			continue
 		}
 		var sq struct {
@@ -103,9 +142,9 @@ func (f *fakeJev) Decide(_ context.Context, _ string, req gateway.JudgmentReques
 		if id == "" {
 			id = "custom:" + sq.Instructions
 		}
-		texts = append(texts, id)
+		asked[title] = append(asked[title], id)
 		p := 0.1
-		yes, ok := f.yes[state.Story.Title]
+		yes, ok := f.yes[title]
 		if !ok {
 			yes = []string{"world"}
 		}
@@ -114,7 +153,7 @@ func (f *fakeJev) Decide(_ context.Context, _ string, req gateway.JudgmentReques
 				p = 0.9
 			}
 		}
-		if v, ok := f.prob[state.Story.Title][id]; ok {
+		if v, ok := f.prob[title][id]; ok {
 			p = v
 		}
 		choice := "no"
@@ -123,22 +162,33 @@ func (f *fakeJev) Decide(_ context.Context, _ string, req gateway.JudgmentReques
 		}
 		answers[name] = map[string]any{"choice": choice, "probabilities": map[string]float64{"yes": p, "no": 1 - p}}
 	}
-	f.mu.Lock()
-	f.calls = append(f.calls, state.Story.Title)
-	f.asked = append(f.asked, texts)
-	f.mu.Unlock()
-	if hasImportance {
-		choice := f.answers[state.Story.Title]
-		if choice == "" {
-			return nil, errors.New("jev unavailable")
-		}
-		answers["importance"] = map[string]any{"choice": choice}
-		answers["promo"] = map[string]any{"choice": f.promo[state.Story.Title]}
-	} else if f.sectionsDown {
+	if f.sectionsDown && !hasImportance {
 		return nil, errors.New("jev unavailable")
 	}
+	var titles []string
+	for _, st := range state.Stories {
+		titles = append(titles, st.Title)
+	}
+	sort.Strings(titles)
+	f.mu.Lock()
+	f.nCalls++
+	f.perCall = append(f.perCall, len(titles))
+	f.reqBytes = append(f.reqBytes, len(req.State)+questionBytes(req.Questions))
+	for _, t := range titles {
+		f.calls = append(f.calls, t)
+		f.asked = append(f.asked, asked[t])
+	}
+	f.mu.Unlock()
 	body, _ := json.Marshal(map[string]any{"model": "typesafe/jev-1.13", "answers": answers})
 	return body, nil
+}
+
+func questionBytes(qs map[string]json.RawMessage) int {
+	n := 0
+	for name, q := range qs {
+		n += len(name) + len(q)
+	}
+	return n
 }
 
 // fullRow is a row current for the house list: every question answered, so
@@ -268,7 +318,7 @@ func TestScorerHonoursCallBound(t *testing.T) {
 	jev := &fakeJev{answers: answers}
 	srv := frontServer(t, http.StatusOK, stories)
 	cfg := testConfig(srv.URL, path)
-	cfg.MaxCalls = 3
+	cfg.MaxCalls, cfg.RequestBytes = 3, 1 // one story a call
 	stats, err := run(context.Background(), cfg, srv.Client(), jev, time.Now)
 	if err != nil {
 		t.Fatal(err)
@@ -305,7 +355,7 @@ func TestScorerFillsSectionsWithinTheCallBound(t *testing.T) {
 	jev := &fakeJev{answers: answers, yes: map[string][]string{"a": {"tech_ai"}, "b": {"sports", "science"}}}
 	srv := frontServer(t, http.StatusOK, stories)
 	cfg := testConfig(srv.URL, path)
-	cfg.MaxCalls = 3
+	cfg.MaxCalls, cfg.RequestBytes = 3, 1 // one story a call
 	stats, err := run(context.Background(), cfg, srv.Client(), jev, time.Now)
 	if err != nil {
 		t.Fatal(err)
