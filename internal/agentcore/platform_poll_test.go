@@ -102,6 +102,8 @@ func newPollFixture(t *testing.T) (*Runtime, *store.Store, *fakeFeed, string, st
 	feed := &fakeFeed{versions: map[string]PublicationVersionWire{}}
 	rt.SetPlatformFeed(feed)
 	owner, computer := "owner-paper", rt.cfg.ComputerID
+	// The story the fixtures' op-eds answer is held by this computer.
+	seedBootTextureWork(t, s, owner, computer, "doc-story", currentTextureAgentID("doc-story"), "texture")
 	if err := rt.ensurePlatformPollRows(context.Background(), owner, computer); err != nil {
 		t.Fatal(err)
 	}

@@ -44,6 +44,10 @@ type platformPolls struct {
 	loops   map[string]context.CancelFunc
 	locks   map[string]*sync.Mutex
 	wg      sync.WaitGroup
+	// stopped is set by Stop: no loop starts after it. bootCancel ends the
+	// boot arm's goroutine.
+	stopped    bool
+	bootCancel context.CancelFunc
 }
 
 func (p *platformPolls) lockFor(key string) *sync.Mutex {
@@ -78,11 +82,14 @@ func (rt *Runtime) getPlatformPoll(ctx context.Context, owner, name string) (sto
 }
 
 // ensurePlatformPollRows creates the owner's poll rows when absent.
-func (rt *Runtime) ensurePlatformPollRows(ctx context.Context, owner, computer string) error {
+func (rt *Runtime) ensurePlatformPollRows(ctx context.Context, owner, computer string, names ...string) error {
 	if rt == nil || rt.store == nil {
 		return fmt.Errorf("platform poll: store unavailable")
 	}
-	for _, name := range platformPollNames() {
+	if len(names) == 0 {
+		names = platformPollNames()
+	}
+	for _, name := range names {
 		if _, err := rt.getPlatformPoll(ctx, owner, name); err == nil {
 			continue
 		} else if !errors.Is(err, store.ErrNotFound) {
@@ -100,6 +107,11 @@ func (rt *Runtime) ensurePlatformPollRows(ctx context.Context, owner, computer s
 // EnsurePlatformPolls makes the owner's polls exist and run. It is idempotent
 // and cheap: callers (a story publish, a fork) may call it on every use.
 func (rt *Runtime) EnsurePlatformPolls(ctx context.Context, owner, computer string) {
+	rt.ensurePlatformPollsNamed(ctx, owner, computer, platformPollNames()...)
+}
+
+// ensurePlatformPollsNamed is EnsurePlatformPolls for the named polls only.
+func (rt *Runtime) ensurePlatformPollsNamed(ctx context.Context, owner, computer string, names ...string) {
 	owner, computer = strings.TrimSpace(owner), strings.TrimSpace(computer)
 	if rt == nil || rt.store == nil || owner == "" || computer == "" {
 		return
@@ -107,11 +119,11 @@ func (rt *Runtime) EnsurePlatformPolls(ctx context.Context, owner, computer stri
 	if rt.platformFeed() == nil {
 		return
 	}
-	if err := rt.ensurePlatformPollRows(ctx, owner, computer); err != nil {
+	if err := rt.ensurePlatformPollRows(ctx, owner, computer, names...); err != nil {
 		log.Printf("platform poll: ensure rows for %s: %v", owner, err)
 		return
 	}
-	for _, name := range platformPollNames() {
+	for _, name := range names {
 		if poll, err := rt.getPlatformPoll(ctx, owner, name); err == nil && poll.State == store.PlatformPollActive {
 			rt.startPlatformPollLoop(poll)
 		}
@@ -136,11 +148,18 @@ func (rt *Runtime) recoverPlatformPollsAtBoot(ctx context.Context, start bool) {
 	// Once, off the boot path, it reads its notice feed; if the platform holds
 	// anything for its owner, it arms. That is a read, not resumed work.
 	if start && len(polls) == 0 && strings.TrimSpace(rt.selfdevRouteOwnerID) != "" {
-		go func() {
+		rt.polls.mu.Lock()
+		if !rt.polls.stopped {
 			armCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
-			defer cancel()
-			rt.armPollsIfNoticesWaiting(armCtx)
-		}()
+			rt.polls.bootCancel = cancel
+			rt.polls.wg.Add(1)
+			go func() {
+				defer rt.polls.wg.Done()
+				defer cancel()
+				rt.armPollsIfNoticesWaiting(armCtx)
+			}()
+		}
+		rt.polls.mu.Unlock()
 	}
 	for _, poll := range polls {
 		if poll.State != store.PlatformPollActive {
@@ -173,6 +192,10 @@ func platformPollKey(owner, name string) string { return owner + "\x00" + name }
 func (rt *Runtime) startPlatformPollLoop(poll store.PlatformPoll) {
 	key := platformPollKey(poll.OwnerID, poll.Name)
 	rt.polls.mu.Lock()
+	if rt.polls.stopped {
+		rt.polls.mu.Unlock()
+		return
+	}
 	if rt.polls.loops == nil {
 		rt.polls.loops = map[string]context.CancelFunc{}
 	}
@@ -217,6 +240,10 @@ func (rt *Runtime) stopPlatformPolls() {
 		return
 	}
 	rt.polls.mu.Lock()
+	rt.polls.stopped = true
+	if rt.polls.bootCancel != nil {
+		rt.polls.bootCancel()
+	}
 	for key, cancel := range rt.polls.loops {
 		cancel()
 		delete(rt.polls.loops, key)
@@ -327,6 +354,14 @@ func (rt *Runtime) pollOpeds(ctx context.Context, feed PlatformFeed, poll *store
 				skipPollItem(poll, item.VersionID, why)
 				continue
 			}
+			// The feed is the owner's: a sibling computer of the same owner sees
+			// op-eds on stories it does not hold. Only this computer's stories
+			// are adopted and gated (a document is local when its lifecycle
+			// document is in this computer's store).
+			if !rt.storyDocLocal(ctx, owner, computer, item.StoryDocID) {
+				skipPollItem(poll, item.VersionID, "the story document "+item.StoryDocID+" is not on this computer")
+				continue
+			}
 			if err := rt.commitOpedArrival(ctx, owner, computer, item); err != nil {
 				feedErr = fmt.Errorf("adopt op-ed %s: %w", item.VersionID, err)
 				break
@@ -401,21 +436,63 @@ func opedItemInvalid(owner, computer string, item OpedFeedItemWire) string {
 	return ""
 }
 
-// armPollsIfNoticesWaiting arms this computer's polls when the platform holds
-// a notice for its owner, which only a publisher or forker has: one read of
-// the notice feed from the start, no cursor kept, nothing consumed. A quiet
-// computer arms nothing. It is idempotent.
+// storyDocLocal reports whether the document is held by this computer: its
+// lifecycle document is in this computer's store. A computer that cannot tell
+// says no, so it gates nothing it cannot show it holds.
+func (rt *Runtime) storyDocLocal(ctx context.Context, owner, computer, doc string) bool {
+	if rt == nil || rt.store == nil || strings.TrimSpace(doc) == "" {
+		return false
+	}
+	_, err := rt.store.GetLifecycleDocument(withKernelReader(ctx), owner, computer, doc)
+	return err == nil
+}
+
+// armPollsIfNoticesWaiting arms this computer's polls from what the platform
+// holds for its owner: one read of each feed from the start, no cursor kept,
+// nothing consumed, nothing resumed. A notice waiting arms notice_intake (a
+// publisher or forker has them; sibling computers each keep a copy by design).
+// An op-ed on a story this computer holds arms oped_intake too. A quiet
+// computer, or one whose op-eds are all on its siblings' stories, arms nothing
+// for them. It is idempotent, and a fault in it ends in a log line, never a
+// crash: it runs in its own goroutine at boot.
 func (rt *Runtime) armPollsIfNoticesWaiting(ctx context.Context) {
+	if rt == nil {
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("platform poll: boot arm: recovered: %v", r)
+		}
+	}()
 	owner := strings.TrimSpace(rt.selfdevRouteOwnerID)
+	if rt.store == nil || owner == "" {
+		return
+	}
 	feed := rt.platformFeed()
-	if rt == nil || rt.store == nil || owner == "" || feed == nil {
+	if feed == nil {
 		return
 	}
-	got, err := feed.Notices(ctx, "", 1)
-	if err != nil || len(got.Items) == 0 {
+	computer := rt.cfg.ComputerID
+	notices, err := feed.Notices(ctx, "", 1)
+	switch {
+	case err != nil:
+		log.Printf("platform poll: boot arm: the first notice read failed (this computer will not hear notices until it publishes or forks): %v", err)
+	case len(notices.Items) > 0:
+		rt.ensurePlatformPollsNamed(ctx, owner, computer, store.PlatformPollNoticeIntake)
+	case len(notices.Skipped) > 0:
+		log.Printf("platform poll: boot arm: the first notice read returned only skipped rows (%d, first %q: %s)", len(notices.Skipped), notices.Skipped[0].ID, notices.Skipped[0].Reason)
+	}
+	opeds, err := feed.Opeds(ctx, "", 50)
+	if err != nil {
+		log.Printf("platform poll: boot arm: the first op-ed read failed: %v", err)
 		return
 	}
-	rt.EnsurePlatformPolls(ctx, owner, rt.cfg.ComputerID)
+	for _, item := range opeds.Items {
+		if rt.storyDocLocal(ctx, owner, computer, item.StoryDocID) {
+			rt.ensurePlatformPollsNamed(ctx, owner, computer, store.PlatformPollOpedIntake, store.PlatformPollNoticeIntake)
+			return
+		}
+	}
 }
 
 // RunPlatformPollNow runs one tick of a poll immediately: the same work its

@@ -6,6 +6,7 @@ package proxy
 // against the graph before anything is written.
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -81,12 +82,14 @@ func (h *Handler) publishLinksFor(r *http.Request, autoputerURL, userID string, 
 
 // tellComputerPublished posts the computer's /published notice for a document
 // that just published, so the computer arms its feed polls. Best effort.
-func (h *Handler) tellComputerPublished(r *http.Request, autoputerURL, userID, docID string) {
+func (h *Handler) tellComputerPublished(parent context.Context, autoputerURL, userID, docID string) {
 	target, err := joinBasePath(autoputerURL, "/api/texture/documents/"+url.PathEscape(docID)+"/published")
 	if err != nil {
 		return
 	}
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, target, nil)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, nil)
 	if err != nil {
 		return
 	}

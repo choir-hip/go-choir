@@ -63,3 +63,38 @@ func TestPublishTellsTheComputerItWasPublished(t *testing.T) {
 		t.Fatalf("refused publish = %d, told %v", w.Code, told)
 	}
 }
+
+// The publisher's response is written before the computer is told, and the
+// notice is not tied to the request's context: a hung computer cannot delay
+// the publish (the notice runs on its own bounded context).
+func TestPublishNoticeComesAfterTheResponseOnADetachedContext(t *testing.T) {
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(platform.PublishTextureResponse{RoutePath: "/pub/texture/v-abc", PermalinkPath: "/pub/texture/v-abc/v1", Revision: 1, State: "published"})
+	}))
+	defer corpusd.Close()
+	var rec *httptest.ResponseRecorder
+	var bodyWhenTold int
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/published"):
+			bodyWhenTold = rec.Body.Len()
+			w.WriteHeader(http.StatusNoContent)
+		case r.URL.Path == "/api/texture/documents/doc-1":
+			_ = json.NewEncoder(w).Encode(autoputerTextureDocument{DocID: "doc-1", OwnerID: "user-1", Title: "View", CurrentRevisionID: "rev-1"})
+		case r.URL.Path == "/api/texture/revisions/rev-1":
+			_ = json.NewEncoder(w).Encode(autoputerTextureRevision{RevisionID: "rev-1", DocID: "doc-1", OwnerID: "user-1", VersionNumber: 1, RevisionHash: "h", Content: "Words."})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer autoputer.Close()
+	h, priv := opinionTestHandler(t, autoputer.URL, corpusd.URL)
+	req := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/texture/opinions", strings.NewReader(`{"doc_id":"doc-1"}`))
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWTWithEmail(priv, "user-1", "p@example.com")})
+	rec = httptest.NewRecorder()
+	h.HandleAPI(rec, req)
+	if bodyWhenTold == 0 {
+		t.Fatal("the computer was told before the publish response was written")
+	}
+}

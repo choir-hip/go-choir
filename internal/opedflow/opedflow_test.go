@@ -122,6 +122,7 @@ func TestTwoComputersOpedFlow(t *testing.T) {
 	const paperOwner, readerOwner = "paper-owner", "reader-owner"
 	paper, paperStore := newComputer(t, "computer-paper", serviceFeed{svc, paperOwner})
 	reader, readerStore := newComputer(t, "computer-reader", serviceFeed{svc, readerOwner})
+	seedStoryDoc(t, paperStore, paperOwner, "computer-paper", "doc-story")
 	public := []byte(`{"visibility":"public","route":"public"}`)
 
 	story, err := svc.PublishTexture(ctx, platform.PublishTextureRequest{OwnerID: paperOwner, SourceDocID: "doc-story", SourceRevisionID: "doc-story-r1",
@@ -190,3 +191,22 @@ func TestTwoComputersOpedFlow(t *testing.T) {
 }
 
 func hasKey(m map[string]string, k string) bool { _, ok := m[k]; return ok }
+
+// seedStoryDoc gives the paper's computer the story's document, as it holds it in life.
+func seedStoryDoc(t *testing.T, s *store.Store, owner, computer, doc string) {
+	t.Helper()
+	agent := deskmanifest.DocumentInbox(doc)
+	req := types.StartLifecycleRequest{
+		OwnerID: owner, ComputerID: computer, CommandID: "start:" + doc, TrajectoryID: "trajectory-" + doc, Kind: types.TrajectoryKindDocument,
+		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + doc, "doc_id": doc},
+		InitialWork:     types.WorkItemRecord{WorkItemID: "work:" + doc, Objective: "report", AssignedAgentID: agent, AuthorityProfile: "texture"},
+		InitialDocument: types.Document{DocID: doc, Title: "Harbor reopens"},
+		InitialRevision: types.Revision{RevisionID: "rev:" + doc, AuthorKind: types.AuthorUser, AuthorLabel: owner, Content: "The harbor reopens at dawn."},
+		Agent:           types.AgentRecord{AgentID: agent, OwnerID: owner, ComputerID: computer, Profile: "texture", Role: "texture", ChannelID: doc},
+	}
+	req.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(req)
+	if _, err := s.StartLifecycle(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+}
