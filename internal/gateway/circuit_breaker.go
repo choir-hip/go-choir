@@ -73,9 +73,18 @@ type CircuitBreakingProvider struct {
 	// refuses is answered as the quota it is, not "model unhealthy"
 	// (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md).
 	quotaHolds map[string]quotaHold
+	// recovering is each model recovering from an exhausted quota: set when a
+	// quota opens its breaker, cleared only when the breaker closes (or is
+	// reset), so every half-open probe of one recovery episode is bounded, not
+	// just the first (a failed probe drops the quota hold).
+	recovering map[string]bool
 	// quotaCooldownMax bounds how long a known reset time keeps the
 	// breaker open: an owner top-up is seen within it.
 	quotaCooldownMax time.Duration
+	// pacer paces Devin's account-wide hourly quota; nil for other providers.
+	pacer *hourPacer
+	// probeDeadline bounds a half-open probe after a quota hold.
+	probeDeadline time.Duration
 }
 
 // quotaHold is a model's exhausted quota: when it is expected to reset, and
@@ -88,6 +97,17 @@ type quotaHold struct {
 	// later failure that reopened it (a new trip) ends the hold.
 	trips int
 }
+
+// quotaProbeDeadline bounds the one probe a quota hold lets through after the
+// reset. On 2026-11-10 an unbounded probe hung for minutes (the model stayed
+// shut from the 09:00 reset to 09:13 while the account was full), because the
+// probe slot stays taken until the call returns and the only deadline was the
+// 10-minute inference timeout. Devin's normal answers take 2-5 s in the
+// gateway log (09:13:36 to 09:13:38, 09:13:40 to 09:13:43), and a 100k-token
+// prompt with a long answer well under a minute; 90 s is a generous multiple
+// that still frees the slot long before the old hold. A failed probe reopens
+// the breaker on its doubling backoff (30 s, 60 s, ...).
+const quotaProbeDeadline = 90 * time.Second
 
 // quotaProbeWait is the reset time given to a call refused while the
 // quota's half-open probe is in flight: the caller asks again shortly.
@@ -133,7 +153,7 @@ func NewCircuitBreakingProvider(p provider.Provider, cfg health.BreakerConfig) *
 	if qMax < qBase {
 		qMax = qBase
 	}
-	return &CircuitBreakingProvider{
+	cbp := &CircuitBreakingProvider{
 		inner:             p,
 		cfg:               cfg,
 		breaker:           health.NewCircuitBreaker(cfg),
@@ -142,8 +162,15 @@ func NewCircuitBreakingProvider(p provider.Provider, cfg health.BreakerConfig) *
 		models:            make(map[string]*health.CircuitBreaker),
 		concurrencyStreak: make(map[string]int),
 		quotaHolds:        make(map[string]quotaHold),
+		recovering:        make(map[string]bool),
 		quotaCooldownMax:  qMax,
+		probeDeadline:     quotaProbeDeadline,
 	}
+	if p.Name() == "devin" {
+		// In memory only: a restart relearns the ceiling.
+		cbp.pacer = newHourPacer(cbp.now, nil)
+	}
+	return cbp
 }
 
 // now is the breakers' clock.
@@ -223,11 +250,12 @@ func (c *CircuitBreakingProvider) IsReal() bool { return c.inner.IsReal() }
 // Call executes the LLM request through the provider and model breakers.
 func (c *CircuitBreakingProvider) Call(ctx context.Context, req provider.LLMRequest) (*provider.LLMResponse, error) {
 	var resp *provider.LLMResponse
-	err := c.execute(ctx, req.Model, func() error {
+	err := c.execute(ctx, req.Model, paceThread(req), func(ctx context.Context) error {
 		var callErr error
 		resp, callErr = c.inner.Call(ctx, req)
 		return callErr
 	})
+	c.recordUsage(req, resp, err)
 	return resp, err
 }
 
@@ -237,11 +265,12 @@ func (c *CircuitBreakingProvider) Call(ctx context.Context, req provider.LLMRequ
 // callers but the breakers only transition on the terminal Stream result.
 func (c *CircuitBreakingProvider) Stream(ctx context.Context, req provider.LLMRequest, onChunk func(provider.StreamChunk)) (*provider.LLMResponse, error) {
 	var resp *provider.LLMResponse
-	err := c.execute(ctx, req.Model, func() error {
+	err := c.execute(ctx, req.Model, paceThread(req), func(ctx context.Context) error {
 		var streamErr error
 		resp, streamErr = c.inner.Stream(ctx, req, onChunk)
 		return streamErr
 	})
+	c.recordUsage(req, resp, err)
 	return resp, err
 }
 
@@ -249,21 +278,42 @@ func (c *CircuitBreakingProvider) Stream(ctx context.Context, req provider.LLMRe
 // breaker. An open model breaker hands the provider breaker's probe slot
 // back untouched: ExecuteClassified records its ErrCircuitOpen as neither a
 // failure nor a success.
-func (c *CircuitBreakingProvider) execute(ctx context.Context, model string, fn func() error) error {
+func (c *CircuitBreakingProvider) execute(ctx context.Context, model, thread string, fn func(context.Context) error) error {
 	modelBreaker := c.ModelBreaker(model)
+	// Pacing applies only while the breaker is closed: an open or half-open
+	// breaker already speaks for the quota (with the provider's own reset
+	// time), and a probe must not be shed.
+	if c.pacer != nil && thread != "" && modelBreaker.State() == health.StateClosed && !c.pacer.admit(thread) {
+		return &provider.QuotaExhaustedError{Provider: c.inner.Name(), Model: modelLabel(model), Shed: true,
+			RetryAt: c.now().Add(devinShedRetry).UTC(), RetryAtEstimated: true}
+	}
 	modelOpen := false
+	var dispatched time.Time
 	err := c.breaker.ExecuteClassified(func() error {
 		ran := false
 		var callErr error
 		innerErr := modelBreaker.ExecuteClassified(func() error {
 			ran = true
-			callErr = fn()
+			dispatched = c.now()
+			// Decided here, where the breaker has already admitted the call:
+			// a call admitted while half-open IS the probe, however the
+			// state read a moment before looked. Every probe of a quota
+			// recovery episode is bounded, until the breaker closes.
+			callCtx, cancel := ctx, context.CancelFunc(func() {})
+			if c.probeDeadline > 0 && modelBreaker.State() == health.StateHalfOpen && c.heldForQuota(model) {
+				callCtx, cancel = context.WithTimeout(ctx, c.probeDeadline)
+			}
+			callErr = fn(callCtx)
+			cancel()
 			return callErr
 		}, func(err error) bool { return providerFailureCounts(ctx, err) })
 		if innerErr == health.ErrCircuitOpen && !ran {
 			modelOpen = true
 		}
 		if ran {
+			if c.pacer != nil && provider.IsQuotaExhausted(callErr) {
+				c.pacer.trip(dispatched)
+			}
 			c.observeModelOutcome(ctx, model, modelBreaker, callErr)
 		}
 		return innerErr
@@ -284,6 +334,38 @@ func (c *CircuitBreakingProvider) execute(ctx context.Context, model string, fn 
 		return c.quotaAnswer(model, q)
 	}
 	return err
+}
+
+// heldForQuota reports whether model is in a quota recovery episode.
+func (c *CircuitBreakingProvider) heldForQuota(model string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.recovering[strings.TrimSpace(model)]
+}
+
+// paceThread is the key a call is paced by: the desk's cache key, else the
+// run's conversation id. Empty (never shed) when the caller sent neither.
+func paceThread(req provider.LLMRequest) string {
+	if req.NoShed {
+		// The caller has no next pool member to take a shed thread: it
+		// would fail with "every model is out of quota" while Devin has
+		// headroom. The call is counted, not shed.
+		return ""
+	}
+	if req.CacheKey != "" {
+		return req.CacheKey
+	}
+	return req.ConversationID
+}
+
+// recordUsage adds an answered call's input tokens to the Devin hour count.
+// Cached tokens are not added or subtracted: for Devin they are not a subset
+// of the input in 18.6% of calls, and the log's input figure is the one that
+// fits the measured trip (docs/evidence/devin-quota-capacity-2026-11-10.md).
+func (c *CircuitBreakingProvider) recordUsage(req provider.LLMRequest, resp *provider.LLMResponse, err error) {
+	if c.pacer != nil && err == nil && resp != nil {
+		c.pacer.record(resp.Usage.InputTokens, paceThread(req) != "")
+	}
 }
 
 // quotaRefusal is the answer to a call the model's open breaker refused
@@ -345,6 +427,7 @@ func (c *CircuitBreakingProvider) observeModelOutcome(ctx context.Context, model
 		delete(c.concurrencyStreak, key)
 		if b.Snapshot().State == health.StateClosed {
 			delete(c.quotaHolds, key)
+			delete(c.recovering, key)
 		}
 		c.mu.Unlock()
 	case ctx.Err() != nil && errors.Is(ctx.Err(), context.Canceled):
@@ -388,6 +471,7 @@ func (c *CircuitBreakingProvider) observeModelOutcome(ctx context.Context, model
 			// This quota opened the breaker, or held it open until its
 			// reset (TripUntil extends): the breaker is the quota's.
 			c.quotaHolds[key] = hold
+			c.recovering[key] = true
 		default:
 			// The breaker was already open for a model failure and this
 			// quota names no reset: the failure stays the breaker's reason
@@ -441,12 +525,14 @@ func (c *CircuitBreakingProvider) observeModelOutcome(ctx context.Context, model
 func (c *CircuitBreakingProvider) clearQuotaHold(model string) {
 	c.mu.Lock()
 	delete(c.quotaHolds, strings.TrimSpace(model))
+	delete(c.recovering, strings.TrimSpace(model))
 	c.mu.Unlock()
 }
 
 func (c *CircuitBreakingProvider) clearQuotaHolds() {
 	c.mu.Lock()
 	c.quotaHolds = make(map[string]quotaHold)
+	c.recovering = make(map[string]bool)
 	c.mu.Unlock()
 }
 

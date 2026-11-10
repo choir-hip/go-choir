@@ -186,3 +186,33 @@ which returns the unit and the remaining amount. Capture that one call (endpoint
 tokens) from a local CLI run, for example with its debug logging. It would give the unit, the hourly limit, the
 remaining amount, and whether the window is a clock hour, and would turn every "unknown" above into a number. If it
 exists, pacing in (a) becomes a read of the provider's own meter.
+
+## Finding: the 09:00-09:13 hold was a hung half-open probe (2026-11-10, journal read via `ssh node-b`)
+
+Class: green. Method: `ssh node-b "sudo journalctl -u go-choir-gateway ..."`, grep of Devin lines for 08:50-09:15Z,
+metadata only. Confirmed from the journal and the code; one detail is unexplained.
+
+- Code. After a quota trip with a named reset, the model breaker half-opens at the reset and admits exactly one probe
+  (`HalfOpenMaxProbes: 1`, `cmd/gateway/main.go`). The slot is held until that call returns
+  (`internal/health/circuit_breaker.go` `Allow`/`doneLocked`). Every other call is refused as "provider quota
+  exhausted ... resets at <now+15s> (estimated) (circuit open)" (`quotaRefusal`, `quotaProbeWait`). The probe had no
+  deadline of its own: only the 10-minute `inferenceTimeout` (`handlers.go`) and the 10-minute provider HTTP timeout.
+- Journal. From 09:00:13 to 09:12:08 every Devin request is refused with the 15 s "estimated" text, one every ~15-20 s.
+  One request, a 72-message call at 09:05:49, is admitted (no refusal line; the next request at 09:05:50 is refused).
+  At 09:12:09 that call (it is retried at once with 72 messages) fails `devin: read stream frame: stream error:
+  stream ID 3; INTERNAL_ERROR; received from peer`, and the next line is `circuit open (model unhealthy)`, the
+  breaker reopened on its 60 s backoff. The next Devin success is 09:13:38, then normal flow (`tokens=12225+133`,
+  2 s call). So the probe that held the slot was in flight for 6 min 20 s, and the failed probe reopened the breaker.
+- Unexplained: 09:00:13 is already refused as if a probe were in flight, but no Devin request was logged between
+  08:50:42 and 09:00:13, so the first slot-holder from 09:00 to about 09:05:4x is not in the journal. Something took
+  the slot at the reset and released it without a counted outcome (a caller that went away is released unrecorded,
+  `ExecuteClassified`/`releaseProbe`), which is consistent with a second hung probe, but the journal does not show it.
+  Total slot time from the reset to recovery: 12 min 09 s (09:00:00 to 09:12:09) plus the 87 s backoff.
+- Verdict: hypothesis confirmed in kind (an unbounded single probe held the circuit open; the account was already
+  reset, and the first probe that returned failed with a transport error), not proven for the first 5 minutes.
+- Same hour, other data: `devin/swe-2-flash` tripped again at 12:56:42 (reset 13:00). Gateway restarts in the window:
+  07:49:20 (the first trip's minute), 09:46:39, 10:09:41, 11:51:41, 12:30:09, 12:51:31. None is in 09:00-09:13.
+- Fix: the probe after a quota hold gets a 90 s deadline (`quotaProbeDeadline`, `internal/gateway/circuit_breaker.go`);
+  a probe that times out or fails reopens the breaker on its existing doubling backoff (30 s, 60 s, ...).
+  Worst case from reset to recovery with one hung probe: about 90 s plus 60 s, against 13 minutes. 90 s is a multiple of
+  Devin's normal answer (2-5 s in the same journal) and of the largest prompts (100k tokens).
