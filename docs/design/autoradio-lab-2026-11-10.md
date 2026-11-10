@@ -37,6 +37,20 @@ Three properties make it a lab.
    time each stage took, what each stage produced, and what the listener
    did next. Experiments are compared from records, not from impressions.
 
+## The phone is a client of the listener's computer
+
+Owner, 2026-11-10: "the point is that the mobile app is connected to the
+user's computer." The phone holds no desk, no edition and no learning
+record of its own. It signs in, and everything durable (the edition
+Texture, each programme, turns, Jev's judgments, commitment records)
+lives on that account's computer and is reached through it. What runs on
+the phone is what must be fast or must work offline: hearing, the fast
+decision, the holding voice, playback.
+
+Deferred (owner: "can defer this kind of detail"): signing in to more
+than one account on one phone and switching between them, as the web
+launcher does.
+
 ## The stages
 
 Named by job. The implementations listed are candidates from the research
