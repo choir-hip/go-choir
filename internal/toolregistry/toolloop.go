@@ -923,6 +923,20 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		}
 		return true
 	}
+	// noNextMember reports whether the run has no usable member after the
+	// active one. Such a run says so (NoShed) so the gateway's hourly Devin
+	// pacing never sheds it: a shed would have nowhere to go and the run would
+	// fail with "every model is out of quota" while Devin has headroom.
+	noNextMember := func() bool {
+		order := quotaOrder()
+		now := providerQuotaNow()
+		for k := 1; k < len(order); k++ {
+			if ledger.Until(order[k], now).IsZero() {
+				return false
+			}
+		}
+		return true
+	}
 	// nextImageCapable returns the index in options.fallbackLLMConfigs of the
 	// first remaining member that may take an image, or -1.
 	nextImageCapable := func() int {
@@ -1002,6 +1016,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				ReasoningEffort: activeLLMConfig.ReasoningEffort,
 				ConversationID:  options.conversationID,
 				CacheKey:        cacheKey,
+				NoShed:          noNextMember(),
 
 				System:          systemPrompt,
 				Messages:        append(snapshot[:len(snapshot):len(snapshot)], threadInstructionMessage(instruction)),
@@ -1041,6 +1056,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			ReasoningEffort: activeLLMConfig.ReasoningEffort,
 			ConversationID:  options.conversationID,
 			CacheKey:        cacheKey,
+			NoShed:          noNextMember(),
 
 			System:          systemPrompt,
 			Messages:        messages,
@@ -1183,7 +1199,12 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					until = now.Add(providerQuotaUnknownHold)
 				}
 				quotaEstimated = q.RetryAtEstimated || q.RetryAt.IsZero()
-				ledger.MarkSourced(activeLLMConfig, until, quotaEstimated || q.RetryAt.IsZero() || !q.RetryAt.After(now))
+				// A paced refusal (the gateway's hourly Devin pacing) is this
+				// thread's, not the model's: the quota is not spent, so the
+				// computer's other runs must not skip the model for it.
+				if !q.Shed {
+					ledger.MarkSourced(activeLLMConfig, until, quotaEstimated || q.RetryAt.IsZero() || !q.RetryAt.After(now))
+				}
 				if switchOnQuota("provider_quota", err) {
 					continue
 				}

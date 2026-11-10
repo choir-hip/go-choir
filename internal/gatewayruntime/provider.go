@@ -189,6 +189,7 @@ func (p *Provider) CallWithTools(ctx context.Context, req provideriface.ToolLoop
 		ReasoningEffort: firstNonEmpty(req.ReasoningEffort, p.reasoningEffort),
 		ConversationID:  req.ConversationID,
 		CacheKey:        req.CacheKey,
+		NoShed:          req.NoShed,
 	}
 
 	resp, err := p.call(ctx, llmReq)
@@ -411,13 +412,14 @@ func gatewayStatusError(status string, body []byte) error {
 		Reason           string `json:"reason"`
 		RetryAt          string `json:"retry_at"`
 		RetryAtEstimated bool   `json:"retry_at_estimated"`
+		Shed             bool   `json:"shed"`
 	}
 	if err := json.Unmarshal(body, &errResp); err == nil && errResp.Kind == gatewayKindProviderQuota {
 		// The provider's quota is spent: typed, so the tool loop switches models on
 		// it instead of retrying it as an outage
 		// (docs/problems/provider-quota-kills-desk-loops-2026-11-04.md).
 		q := &provideriface.ProviderQuotaError{Provider: errResp.Provider, Model: errResp.Model, Reason: errResp.Reason,
-			Message: firstNonEmptyString(errResp.Error, "provider quota exhausted"), RetryAtEstimated: errResp.RetryAtEstimated}
+			Message: firstNonEmptyString(errResp.Error, "provider quota exhausted"), RetryAtEstimated: errResp.RetryAtEstimated, Shed: errResp.Shed}
 		if at, perr := time.Parse(time.RFC3339, strings.TrimSpace(errResp.RetryAt)); perr == nil {
 			q.RetryAt = at.UTC()
 		} else {
@@ -600,6 +602,7 @@ type llmRequest struct {
 	ConversationID string `json:"conversation_id,omitempty"`
 	// CacheKey is the prompt-cache thread key (provideriface.ToolLoopRequest).
 	CacheKey string `json:"cache_key,omitempty"`
+	NoShed   bool   `json:"no_shed,omitempty"`
 
 	Messages        []message `json:"messages"`
 	System          string    `json:"system,omitempty"`
