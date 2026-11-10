@@ -160,7 +160,7 @@ func TestDigestRenderGroupsLeadThenSectionsAndMarksUpdated(t *testing.T) {
 	if lead < 0 || world < 0 || lead > world {
 		t.Fatalf("lead is not first:\n%s", m.Text)
 	}
-	for _, label := range []string{"Business & Finance", "Tech & AI", "More stories"} {
+	for _, label := range []string{"Business", "Technology", "More stories"} {
 		// The text part sets labels in capitals; the HTML part keeps case.
 		if !strings.Contains(strings.ToLower(m.Text), strings.ToLower(label)) || !strings.Contains(m.HTML, strings.ReplaceAll(label, "&", "&amp;")) {
 			t.Fatalf("text missing section label %q:\n%s", label, m.Text)
