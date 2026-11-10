@@ -357,8 +357,8 @@ func TestPackageMigrationMovesAPackageOnlyStackIntoInstallsAndServesTheBootedBas
 	if err != nil || again != nil {
 		t.Fatalf("re-run = %+v, %v", again, err)
 	}
-	if rec := e.record(t); len(rec.Attempts) != 1 || e.builder.builds != 1 {
-		t.Fatalf("a re-run made an attempt or a build: %d attempts, %d builds", len(rec.Attempts), e.builder.builds)
+	if rec := e.record(t); len(rec.Attempts) != 1 || e.builder.builds.Load() != 1 {
+		t.Fatalf("a re-run made an attempt or a build: %d attempts, %d builds", len(rec.Attempts), e.builder.builds.Load())
 	}
 }
 

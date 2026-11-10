@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/apppackage"
@@ -174,7 +175,7 @@ func installBody(t *testing.T, id string, record json.RawMessage, treePatch []by
 // fakeModuleBuilder verifies the release as the real builder does and
 // returns a module naming the release tree, without node.
 type fakeModuleBuilder struct {
-	builds int
+	builds atomic.Int64
 	fail   error
 }
 
@@ -185,7 +186,7 @@ func (f *fakeModuleBuilder) Build(ctx context.Context, rec pkgrelease.Record, tr
 	if f.fail != nil {
 		return pkgruntime.Module{}, f.fail
 	}
-	f.builds++
+	f.builds.Add(1)
 	raw := []byte("export const abi='choir.app-frontend/module/v1';export const requires_sdk='^1.0';export const sdk_imports=[];export function mount(){} // " + rec.Source.Tree + "\n")
 	return pkgruntime.Module{SHA256: computerevent.DigestBytes(raw), Size: len(raw), ABI: pkgruntime.ModuleABI, RequiresSDK: "^1.0", Manifest: json.RawMessage(`{"name":"` + rec.Package.Name + `"}`), Bytes: raw}, nil
 }
@@ -307,8 +308,8 @@ func TestRuntimeInstallInstallsReplacesUninstallsAndReinstalls(t *testing.T) {
 
 	// S3: a repeat answers the install, with no new build or record.
 	code, again, _ := e.post(t, installBody(t, id, raw, tree, ""))
-	if code != http.StatusOK || again.InstallID != view.InstallID || e.builder.builds != 1 || e.records(t) != 1 {
-		t.Fatalf("S3 = %d %s builds %d", code, again.InstallID, e.builder.builds)
+	if code != http.StatusOK || again.InstallID != view.InstallID || e.builder.builds.Load() != 1 || e.records(t) != 1 {
+		t.Fatalf("S3 = %d %s builds %d", code, again.InstallID, e.builder.builds.Load())
 	}
 
 	// S4: another release of the same package replaces it.
