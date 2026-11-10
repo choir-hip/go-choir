@@ -235,7 +235,7 @@ func (h *Handler) continuePromptBarDocument(ctx context.Context, w http.Response
 		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "a focused submit is an owner act; only the Texture desk writes a Texture, so address the Texture desk"})
 		return
 	}
-	receipt, err := h.reviseOwnerDocument(ctx, ownerID, docID, textureAgentRevisionRequest{Prompt: text, ClientRequestID: commandID})
+	receipt, err := h.reviseDocument(ctx, ReviseRequest{OwnerID: ownerID, DocID: docID, Text: text, ClientRequestID: commandID})
 	if err != nil {
 		writeOwnerRevisionRefusal(w, err)
 		return
