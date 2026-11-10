@@ -251,3 +251,27 @@ base `current`, including a different baseline or an operator base restore
 (bounded: the rollback restores the recorded snapshot); exits before
 staging return the entry manifest; disk growth and leaked stage directories
 (above). Not yet proved on a live computer.
+
+## Deployed proof failed: the follow never runs (2026-11-10 00:04 UTC)
+
+After 29b9c741b deployed (CI 42722583879 green), b@c booted the new build
+and still serves the 2026-11-08 frontend. Its log:
+
+    runtime: base frontend follow skipped: the route cannot be read: vmctl
+    client: ComputerVersion route resolution failed (status 403): caller not
+    bound to route slot computer: caller 10.208.201.2 is not bound to a live
+    computer
+
+The skip is the guard added in review round 1 (a route read error must not
+bind genesis refs). The error is not a hiccup: at boot vmctl does not yet
+count the computer as live (`internal/vmctl/route_authority.go:423`), so the
+route read is refused on every boot and the follow can never run. The tests
+used a route that answered or was absent; no test had the refusal a real
+boot gets. d@e (layered release) was left alone, as intended.
+
+Belief: the follow should not need the route at all. A plain base copy's
+code and artifact refs do not change when its frontend is refreshed, so the
+restaged manifest can carry the refs `current` already records. That removes
+the boot-time dependency and still never downgrades refs to genesis. This is
+the fourth round on this mechanism; the change is to remove the dependency
+the earlier rounds kept guarding, not to add another guard.
