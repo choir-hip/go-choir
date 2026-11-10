@@ -24,6 +24,9 @@ func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 	case "/api/texture/markdown-lineage/import":
 		h.HandleTextureImportMarkdownLineage(w, r)
 		return
+	case "/api/texture/fork":
+		h.HandleTextureFork(w, r)
+		return
 	case "/api/texture/lifecycle-documents":
 		h.HandleTextureLifecycleCreate(w, r)
 		return
