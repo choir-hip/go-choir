@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -113,6 +114,72 @@ func (rt *Runtime) closeOpenObligationsAtBoot(ctx context.Context) {
 	// The installs waiting on management's install review close with the
 	// fate "interrupted by a restart" (install_review_pending.go).
 	rt.closeInstallReviewPendingAfterCrash(ctx)
+	// Last, so the runs and rounds above are already closed: an open Texture
+	// work item with no run left is served by nothing.
+	rt.closeUnservedTextureWorkAfterCrash(ctx)
+}
+
+// Bounds of the crash boot's Texture work closure: a computer with thousands
+// of open items closes the oldest bootUnservedTextureCloseCap within
+// bootUnservedTextureBudget and logs the rest, which the next crash boot (or
+// the item's own next Wait) closes.
+var (
+	bootUnservedTextureCloseCap = 200
+	bootUnservedTextureBudget   = 60 * time.Second
+)
+
+// SetUnservedTextureCloser binds the Texture owner's close of one open work
+// item nothing serves (textureowner closeUnservedAtBoot).
+func (rt *Runtime) SetUnservedTextureCloser(fn func(context.Context, types.WorkItemRecord) error) {
+	rt.deliveryHooksMu.Lock()
+	defer rt.deliveryHooksMu.Unlock()
+	rt.unservedTextureCloser = fn
+}
+
+// closeUnservedTextureWorkAfterCrash is the crash boot's last leg: the boot
+// cancelled every run, so an open Texture work item with no live run and no
+// round, assignment or operation serving it will never be served. Each is
+// refused with the fate "interrupted by a restart" and management is told.
+// Nothing is resumed, re-dispatched or armed, and only the markerless boot
+// reaches here (Start). A planned restart keeps its runs for the one resume.
+func (rt *Runtime) closeUnservedTextureWorkAfterCrash(ctx context.Context) {
+	rt.deliveryHooksMu.RLock()
+	closer := rt.unservedTextureCloser
+	rt.deliveryHooksMu.RUnlock()
+	computerID := strings.TrimSpace(rt.TextureComputerID())
+	if closer == nil || rt.store == nil || computerID == "" {
+		return
+	}
+	started := time.Now()
+	ctx, cancel := context.WithTimeout(ctx, bootUnservedTextureBudget)
+	defer cancel()
+	items, err := rt.store.ListOpenAssignedLifecycleWorkItems(ctx, computerID, 0)
+	if err != nil {
+		log.Printf("runtime: crash boot Texture work closure: %v", err)
+		return
+	}
+	prefix := deskmanifest.DocumentCustodianName() + ":"
+	closed, skipped, remaining := 0, 0, 0
+	for _, item := range items {
+		if strings.TrimSpace(item.AuthorityProfile) != deskmanifest.DocumentCustodianName() || !strings.HasPrefix(strings.TrimSpace(item.AssignedAgentID), prefix) {
+			continue
+		}
+		if closed >= bootUnservedTextureCloseCap || ctx.Err() != nil {
+			remaining++
+			continue
+		}
+		// A run started since the boot closed the old ones serves its work.
+		if _, live, err := rt.activeRunByAgent(ctx, item.OwnerID, item.AssignedAgentID); err != nil || live {
+			skipped++
+			continue
+		}
+		if err := closer(ctx, item); err != nil {
+			log.Printf("runtime: crash boot Texture work closure %s: %v", item.WorkItemID, err)
+			continue
+		}
+		closed++
+	}
+	log.Printf("runtime: crash boot Texture work closure: examined %d open items, asked to close %d, skipped %d with a live run, %d beyond the bound left for the next boot, dur=%s", len(items), closed, skipped, remaining, time.Since(started).Round(time.Millisecond))
 }
 
 // deskOfRun is the desk a run belongs to for the boot tally: its role, or for a

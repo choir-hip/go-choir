@@ -79,9 +79,13 @@ func TestWriteOnlyTurnWithTheOwnersRequestOpenAndNothingWorkingIsRefused(t *test
 		t.Fatalf("work = %s, want still open", w.Status)
 	}
 
-	// The same Write with a Wait naming what it waits on commits: the
-	// revision lands, the request stays open, and the why is on the turn.
-	withWait := writeTurn(base.RevisionID, func(turn *yaegikernel.TextureTurn) { turn.Wait = "the owner said they will send the figures" })
+	// The same Write with a Wait naming what it waits on, and the Cast that
+	// asks for it, commits: the revision lands, the request stays open (the
+	// round is the next actor), and the why is on the turn.
+	withWait := writeTurn(base.RevisionID, func(turn *yaegikernel.TextureTurn) {
+		turn.Wait = "the owner said they will send the figures"
+		turn.InboxRecords = []types.CommitmentRecord{researchCast(rec, "texture-cell:cast:next-actor")}
+	})
 	if _, err := h.CommitCellTextureAuthor(ctx, &rec, turnBody(t, withWait), "write-wait"); err != nil {
 		t.Fatalf("Write with Wait: %v", err)
 	}
@@ -90,7 +94,7 @@ func TestWriteOnlyTurnWithTheOwnersRequestOpenAndNothingWorkingIsRefused(t *test
 		t.Fatal("Write with Wait committed no revision")
 	}
 	if w := textureWork(t, s, rec); w.Status != types.WorkItemOpen {
-		t.Fatalf("work after Write with Wait = %s, want open", w.Status)
+		t.Fatalf("work after Write with Wait and a Cast = %s, want open", w.Status)
 	}
 	snapshot, err := s.GetLifecycleSnapshot(ctx, rec.OwnerID, rec.ComputerID, rec.TrajectoryID)
 	if err != nil {
@@ -106,14 +110,7 @@ func TestWriteOnlyTurnWithTheOwnersRequestOpenAndNothingWorkingIsRefused(t *test
 		t.Fatal("the Wait's why did not commit with the revision")
 	}
 
-	// With a Cast in the cell (the dispatch fold), the Write commits and
-	// the round it opens is the next actor.
-	withCast := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: v1.RevisionID, InboxRecords: []types.CommitmentRecord{researchCast(rec, "texture-cell:cast:next-actor")},
-		Write: &yaegikernel.TextureWrite{Edits: "@replace b2\nResearch is checking the ruling.", Why: "say what is being checked"}})
-	if _, err := h.CommitCellTextureAuthor(ctx, &rec, withCast, "write-cast"); err != nil {
-		t.Fatalf("Write with a Cast: %v", err)
-	}
-	v2 := headOf(t, s, rec)
+	v2 := v1
 
 	// While that round is open, a Write-only turn is a progress revision
 	// and commits: research owes the desk a Report.
