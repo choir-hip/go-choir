@@ -349,10 +349,10 @@ test.describe('front-page rank', () => {
     const list = [world, tech, biz, loose];
     expect(usesSections(list)).toBe(true);
     expect(usesSections([world, loose, { ...loose, publication_id: 'pub-l2' }])).toBe(false);
-    expect(usesSections([{ ...world, section: 'sports' }, loose])).toBe(false);
+    expect(usesSections([{ ...world, section: 'Not a section' }, loose])).toBe(false);
     expect(storiesInSection(list, 'front')).toEqual(list);
     expect(storiesInSection(list, 'tech_ai')).toEqual([tech]);
-    expect(storiesInSection(list, 'nonsense')).toEqual(list);
+    expect(storiesInSection(list, 'Not a section')).toEqual(list);
     // Habit: all visits to Technology lift it by 1.25 (5 x 1.25 = 6.25 > 6).
     expect(rankFrontStories(list).map((s) => s.title)[0]).toBe('World story');
     const shares = sectionShares({ tech_ai: 4 });
@@ -374,14 +374,14 @@ test.describe('front-page rank', () => {
     expect(loadSavedSection(store)).toBe('front');
     saveSection('tech_ai', store);
     expect(loadSavedSection(store)).toBe('tech_ai');
-    saveSection('sports', store);
+    saveSection('Not a section', store);
     expect(data.get(SECTION_STORAGE_KEY)).toBe('tech_ai');
     recordSectionVisit('tech_ai', store);
     recordSectionVisit('tech_ai', store);
     recordSectionVisit('front', store);
     expect(recordSectionVisit('world', store)).toEqual({ tech_ai: 2, world: 1 });
     expect(JSON.parse(data.get(SECTION_VISITS_STORAGE_KEY))).toEqual({ tech_ai: 2, world: 1 });
-    data.set(SECTION_STORAGE_KEY, 'nonsense');
+    data.set(SECTION_STORAGE_KEY, 'Not a section');
     data.set(SECTION_VISITS_STORAGE_KEY, '{bad json');
     expect(loadSavedSection(store)).toBe('front');
     expect(loadSectionVisits(store)).toEqual({});
