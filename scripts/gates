@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# The repo gates a landing must pass, run from a worktree root:
+# the CI vocabulary gates, the desk protocol lock and the guest security epoch
+# check against origin/main. scripts/land runs this; run it by hand any time.
+# Prints "ALL GATES PASS" and exits 0, or names each failing gate and exits 1.
+# It never adds or edits a commit trailer: a missing reviewer trailer is
+# reported by check-guest-security-epoch and the landing stops there.
+set -uo pipefail
+cd "$(git rev-parse --show-toplevel)" || exit 2
+base=${GATES_BASE:-origin/main}
+f=0
+run() {
+  local out
+  out=$("$@" 2>&1) || { echo "FAIL: $*"; echo "$out" | tail -8; f=1; }
+}
+run scripts/check-v1-writer-purity.sh
+run node frontend/scripts/gen-package-kinds.mjs --check
+run scripts/check-decode-roots.sh
+run scripts/check-test-hang-guards.sh
+run scripts/check-kernel-imports
+run scripts/check-kernel-names
+run scripts/check-kernel-responsibilities
+run python3 -I scripts/check-desk-names
+run python3 -I scripts/check-store-handles
+run scripts/check-owner-files-writes
+run scripts/check-gatefixture-imports
+run python3 -I scripts/check-switch-registry
+run go run ./cmd/deskprotocol-lock
+run scripts/check-guest-security-epoch --base "$base" --head HEAD
+if [ "$f" = 0 ]; then echo "ALL GATES PASS"; else echo "GATES FAILED"; fi
+exit "$f"

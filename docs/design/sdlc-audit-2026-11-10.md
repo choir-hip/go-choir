@@ -60,6 +60,18 @@ because the script reruns everything.
 suite run, one CI run, one deploy. At 40 landings a day this roughly halves
 the serial time. A red train is bisected by lane.
 
+**Landing (items 1 and 2 built, 2026-11-10).** `scripts/land [--dry-run]
+[--no-push] [--local] <branch-or-sha>...` cherry-picks the lanes in order
+onto fresh `origin/main` (the train), selects the changed packages plus every
+package that imports one (test imports included, linux and darwin build tags
+unioned), runs build, vet, `scripts/gates` and the whole suites uncached on
+the agents VM (`-race` on the changed packages only), and pushes to main
+after one re-fetch and at most one rebase. It reports each commit's
+`Ring-Expedite` trailer and path-expedite status and never writes a trailer.
+`scripts/land.test.sh` is its selftest. A red train is not bisected by the
+script yet: it stops, names the failing package, and pushes nothing; bisect
+by landing the lanes separately.
+
 **3. A branch build on d@e.** A verb that refreshes d@e alone to a lane
 build, marker-backed, with the same guards as a ring refresh. Staging proof
 then comes before main, not after it. This is ring 0 made explicit, and it
