@@ -73,6 +73,10 @@ var builtin = []Manifest{
 		"choir.lifecycle_cancel_intent", "choir.lifecycle_command", "choir.lifecycle_event", "choir.lifecycle_sequence",
 		// The ledger and the wake outbox.
 		"choir.commitment_record", "choir.actor_wake_outbox", "choir.scheduler_sequence", "choir.migration_marker",
+		// A computer's polls of its corpusd feeds (oped_intake, notice_intake):
+		// host infrastructure state with no model call, so the kernel is its
+		// custodian, not a desk (a desk claim would be a desk protocol change).
+		"choir.platform_poll",
 		// The engineering-assignment lifecycle is a store-mediated protocol
 		// between desks, not one desk's data: open (management's act, with
 		// engineering's rebase claim), bind (the assignment with engineering's

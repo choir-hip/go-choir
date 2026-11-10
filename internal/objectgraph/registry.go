@@ -107,8 +107,8 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.coagent_mailbox", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
 		{Kind: "choir.source_schedule", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, OwnerEdits: true},
 		// A computer's poll of a corpusd feed (oped_intake, notice_intake):
-		// name, cursor, interval, last error. Custodian management; no model
-		// call (contract 2 and 3, amendment A3).
+		// name, cursor, interval, last error. Custodian: the kernel (host
+		// infrastructure; no model call; contract 2 and 3, amendment A3).
 		{Kind: "choir.platform_poll", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.PlatformPoll"},
 		{Kind: "choir.computer_setting", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
 		// An app's engineering lineage: the handoff its last engineer left
