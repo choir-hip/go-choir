@@ -36,6 +36,9 @@ import (
 // own bucket, so a busy poll never starves the support judge.
 const judgmentScopeIntakeLabels = "intake_labels"
 
+// judgmentScopeOpedGate is the gateway scope of the paper's op-ed gate.
+const judgmentScopeOpedGate = "oped_gate"
+
 // judgmentScopeInteractive is the gateway scope of the latency-critical
 // judgments (a desk's question, the prompt router, the disclosure gate): the
 // share a bulk burst cannot take.

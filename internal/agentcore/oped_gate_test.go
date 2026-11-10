@@ -29,6 +29,15 @@ type fakeJudge struct {
 	err     error
 	states  []json.RawMessage
 	calls   int
+	scopes  []string
+}
+
+// JudgeScoped records the gateway scope the call asked for.
+func (j *fakeJudge) JudgeScoped(ctx context.Context, scope string, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
+	j.mu.Lock()
+	j.scopes = append(j.scopes, scope)
+	j.mu.Unlock()
+	return j.Judge(ctx, state, questions)
 }
 
 func (j *fakeJudge) Judge(_ context.Context, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
@@ -367,5 +376,49 @@ func TestOpedGateIsBoundedPerPublisher(t *testing.T) {
 	// Accepted wakes of the story keep their gap: five accepted op-eds, one wake.
 	if wakes := docWakes(t, s, owner, computer, "doc-story"); len(wakes) != opedGatePerPublisherPerDay {
 		t.Fatalf("wakes = %d, want the %d accepted op-eds carried together in one decision", len(wakes), opedGatePerPublisherPerDay)
+	}
+}
+
+// Review B3: the gate's Jev calls ask for the oped_gate rate scope.
+func TestOpedGateUsesItsOwnRateScope(t *testing.T) {
+	rt, _, feed, judge, owner, _ := gateFixture(t, map[string]float64{})
+	addOped(feed, "pub-s-v1", "A view.")
+	if err := rt.runPlatformPollOnce(context.Background(), owner, store.PlatformPollOpedIntake); err != nil {
+		t.Fatal(err)
+	}
+	if len(judge.scopes) != 1 || judge.scopes[0] != "oped_gate" {
+		t.Fatalf("scopes = %v, want [oped_gate]", judge.scopes)
+	}
+}
+
+// Review B1: a story costs at most opedGatePerStoryPerDay calls a day, whoever publishes.
+func TestOpedGateIsBoundedPerStory(t *testing.T) {
+	rt, s, feed, judge, owner, computer := gateFixture(t, map[string]float64{})
+	ctx := context.Background()
+	var items []OpedFeedItemWire
+	for i := 0; i < opedGatePerStoryPerDay+3; i++ {
+		v := fmt.Sprintf("pub-st%d-v1", i)
+		it := opedItem(v)
+		it.AuthorLabel = fmt.Sprintf("writer-%02d", i) // distinct publishers: only the story bound applies
+		feed.versions[v] = PublicationVersionWire{PublicationVersionID: v, Title: "t", Content: "A view.", ManifestHash: it.ManifestHash}
+		items = append(items, it)
+	}
+	feed.opeds = []OpedFeedWire{{Items: items, NextCursor: "2026-11-10T00:00:00Z"}}
+	for i := 0; i < 8; i++ {
+		if err := rt.runPlatformPollOnce(ctx, owner, store.PlatformPollOpedIntake); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if judge.calls != opedGatePerStoryPerDay {
+		t.Fatalf("judge calls = %d, want the bound %d", judge.calls, opedGatePerStoryPerDay)
+	}
+	over := 0
+	for _, v := range tapeByKind(t, s, owner, computer, "doc-story", types.OpedRecordVerdict) {
+		if v.Oped.Verdict.Verdict == types.OpedUnavailable && v.Oped.Verdict.Reason != "" {
+			over++
+		}
+	}
+	if over != 3 {
+		t.Fatalf("over-the-bound verdicts = %d, want 3", over)
 	}
 }

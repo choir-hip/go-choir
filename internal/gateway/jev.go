@@ -40,6 +40,10 @@ type JudgmentRequest struct {
 // JudgmentScopeIntakeLabels is the scope of intake labels (bulk).
 const JudgmentScopeIntakeLabels = "intake_labels"
 
+// JudgmentScopeOpedGate is the scope of the paper's op-ed gate (bulk, with its
+// own small per-computer bucket; autopaper contract 3.4).
+const JudgmentScopeOpedGate = "oped_gate"
+
 // JevTransport calls OpenRouter's Decisions alpha endpoint without exposing
 // the provider credential to VM guests.
 type JevTransport struct {
