@@ -1,5 +1,12 @@
 package gateway
 
+// Exa removed from ordinary search (owner, 2026-11-10). Failure list written
+// before the edit: search_exa_test.go (ExaProvider bounds/parse/truncation
+// tests) and TestExaProvider_Integration would fail to compile once
+// ExaProvider is deleted; both are deleted. No test assumed a minimum provider
+// count or named Exa as default; searchplane tests use "exa" only as an
+// opaque provider-name string and stay valid.
+
 import (
 	"context"
 	"errors"
@@ -342,38 +349,6 @@ func TestBraveProvider_Integration(t *testing.T) {
 	}
 
 	provider := &BraveProvider{}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	results, err := provider.Search(ctx, "golang programming", 3)
-	if err != nil {
-		t.Fatalf("search failed: %v", err)
-	}
-
-	if len(results) == 0 {
-		t.Error("expected at least one result")
-	}
-
-	for _, r := range results {
-		if r.Title == "" {
-			t.Error("expected non-empty title")
-		}
-		if r.URL == "" {
-			t.Error("expected non-empty URL")
-		}
-	}
-}
-
-func TestExaProvider_Integration(t *testing.T) {
-	if os.Getenv("RUN_INTEGRATION_TESTS") == "" {
-		t.Skip("skipping live provider integration (set RUN_INTEGRATION_TESTS=1)")
-	}
-	apiKey := os.Getenv("EXA_API_KEY")
-	if apiKey == "" {
-		t.Skip("EXA_API_KEY not set, skipping integration test")
-	}
-
-	provider := &ExaProvider{}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

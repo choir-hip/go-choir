@@ -109,8 +109,8 @@ const UnknownProviderCost = 1000
 // Brave is free on its Free AI plan within its pacing (1 request/s); it has
 // no cap: on that plan a spent month is quota_limited, not billed.
 const (
-	DefaultProviderTiers  = "keenable=free,searxng=free,brave=free,serper=paid:1,parallel=paid:5,exa=paid:6,tavily=paid:8,serpapi=paid:15,chatgpt=constrained"
-	DefaultDailyCaps      = "serper=150,parallel=150,exa=150,tavily=150,serpapi=100,chatgpt=50"
+	DefaultProviderTiers  = "keenable=free,searxng=free,brave=free,serper=paid:1,parallel=paid:5,tavily=paid:8,serpapi=paid:15,chatgpt=constrained"
+	DefaultDailyCaps      = "serper=150,parallel=150,tavily=150,serpapi=100,chatgpt=50"
 	DefaultMinResults     = 10
 	DefaultDeepMinResults = 30
 	DefaultMaxPaid        = 2

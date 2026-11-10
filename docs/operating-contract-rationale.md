@@ -594,3 +594,5 @@ A final report for behavior-changing missions should name:
 - heresy delta: `discovered`, `introduced`, `repaired`;
 - conjecture delta and human-learning digest;
 - residual risks and the next realism axis.
+
+- 2026-11-10 (owner): "from now on we don't use Exa at all for ordinary search. We remove it as an ordinary search provider, and we just use it for the podcast stuff." The Exa provider is deleted from the gateway; EXA_API_KEY is no longer deployed to the gateway and is reserved for a future podcast-search feature.
