@@ -487,7 +487,8 @@ measured Jev limits are written down.
 
 ## 7. Autoradio: settled decisions for the re-evaluation
 
-Not built in this mission.
+Not built in this mission. The mission itself is drafted in
+[autoradio-mission-handoff-2026-11-09.md](autoradio-mission-handoff-2026-11-09.md).
 - **The App Store product is the Autoradio app:**
   - Texture and Autopaper, driven by voice. The Autoradio interface is the
     Texture interface, voice-driven, with images, audio and video embedded.
