@@ -345,7 +345,11 @@ func (h *Handler) reviseWithSources(ctx context.Context, doc types.Document, own
 	case ReviseComment:
 		return h.reviseComment(ctx, doc, ownerID, req, ownerRevisionExtra{Fingerprint: fingerprint})
 	case ReviseTake:
-		return h.reviseTake(ctx, doc, ownerID, req, fingerprint)
+		receipt, err := h.reviseTake(ctx, doc, ownerID, req, fingerprint)
+		if err == nil && !receipt.Replay {
+			h.emitRevisionCommitted(ctx, ownerID, doc, receipt.RevisionID, ReviseTake, req.forkedFrom)
+		}
+		return receipt, err
 	case ReviseMerge:
 		// Sources are validated before the request revision is written; the
 		// desk reads each again at request time, pinned by the hash.
@@ -355,6 +359,9 @@ func (h *Handler) reviseWithSources(ctx context.Context, doc types.Document, own
 		}
 		receipt, err := h.reviseComment(ctx, doc, ownerID, req, ownerRevisionExtra{Fingerprint: fingerprint, SourceLinks: sourceLinks(resolved)})
 		receipt.Case = ReviseMerge
+		if err == nil && !receipt.Replay {
+			h.emitRevisionCommitted(ctx, ownerID, doc, receipt.RevisionID, ReviseMerge, req.forkedFrom)
+		}
 		return receipt, err
 	default:
 		return ReviseReceipt{}, refuseOwnerRevision(http.StatusNotImplemented, "sources are not accepted by this build")
