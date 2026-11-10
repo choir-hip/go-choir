@@ -59,9 +59,15 @@ finish:
     - action: lock the screen for 30 minutes during playback and use the lock-screen controls
       proves: background playback, Now Playing and remote commands
       evidence_class: real iPhone, device log with timestamps
+    - action: the owner runs the 30-minute voice QA script in each mode (button, wake word, open, hybrid) on the loudspeaker and on AirPods
+      proves: at least one mode is above the owner's usability threshold; this gates every later lane
+      evidence_class: real iPhone, the per-mode numbers of docs/design/autoradio-voice-modes-2026-11-10.md and the owner's verdict
     - action: interrupt by voice during playback and ask about the story
       proves: barge-in over podcast audio, an answer is heard, and the request is a prompt bar submission on the tape
       evidence_class: deployed proof, tape record id
+    - action: skip three clips from one show early, then start the next session
+      proves: each run sheet choice is a precommitment record with a stated probability, settled by what the listener did, and the next run sheet reads those scores
+      evidence_class: deployed proof, the commitment record ids, their settlements, and the two run sheets
     - action: comment by voice
       proves: the reader gets their own fork, shown natively
       evidence_class: deployed proof, fork document id
@@ -148,13 +154,15 @@ now:
   conjecture:
     id: AR-C1
     claim: >
-      Mike's voice module can listen, with echo cancellation, while Exact
-      plays long audio in the background, without the module configuring the
-      audio session itself.
+      Two audio states serve the product: a listening state with full
+      quality playback and the phone's own microphone feeding a wake word
+      detector, and a talking state with playback paused and voice
+      processing on; the switch between them is fast enough not to be
+      noticed, with the screen locked, on the loudspeaker and on AirPods.
     test: >
-      The step 0.3 spike on a real iPhone: podcast audio playing, screen
-      locked, a spoken interruption recognised and playback ducked or
-      stopped, with Mike's `setCategory` and `setActive` calls removed.
+      The five questions of docs/design/autoradio-voice-modes-2026-11-10.md
+      ("What the spike must answer") on the owner's iPhone, with Mike's
+      `setCategory` and `setActive` calls replaced by Exact's session owner.
     edge: missing_oracle
     delta_o: >
       Exact's test driver on the physical phone plus a device log of every
@@ -173,7 +181,10 @@ now:
       The server side is mostly extension of running mechanisms. The risk is
       on the phone, in audio session ownership and background listening,
       which Mike does not do today.
-    main_uncertainty: whether AR-C1 holds on the pinned Exact commit
+    main_uncertainty: >
+      whether AR-C1 holds on the pinned Exact commit, and whether any voice
+      mode clears the owner's threshold (owner, 2026-11-10: pure push-to-talk
+      does not)
     next_observation: the step 0.3 spike on the owner's iPhone
   blocker_or_risk: >
     The spike needs the owner's iPhone connected and unlocked, and a free
@@ -190,7 +201,7 @@ weak_measures:
     kind: telemetry
     baseline: unknown
     desired: lower
-    decision_use: whether open mic is worth offering in pass 1
+    decision_use: which voice mode and window length to ship as the default
     cannot_prove: that the answer is right
   - name: model download size at onboarding
     kind: telemetry
@@ -234,6 +245,27 @@ otherwise follows it.
    owner's own code (owner, 2026-11-10: "Mike speech code is mine"). Lane V
    ports it. The third-party models it loads keep their own licences, which
    lane V lists.
+
+## Voice comes first (owner, 2026-11-10)
+
+Pure push-to-talk is below the usability threshold, so the voice modes are
+built and judged before the shell, the renderer and the desk. The design
+is [autoradio-voice-modes-2026-11-10.md](../design/autoradio-voice-modes-2026-11-10.md).
+Step 0.3 becomes that note's spike, then a voice-only test app with all
+three modes and the hybrid, then the owner's QA session. Lanes N, R, D and
+X start after the owner's verdict. S1, S2, 0.1 and 0.2 do not depend on it
+and may run alongside.
+
+Sign-in stays the existing device authorization flow
+(`internal/auth/device_login.go`): the app holds no passkey, the reader
+approves in a browser, and tests approve with the virtual authenticator
+the deployed specs already use.
+
+The learning loop is framed as precommitment records: a run sheet choice is
+a request with a stated probability, the listener's behaviour settles it,
+and the desk reads its own scored record when it builds the next run
+sheet. New settlement rule kinds (heard through, skipped early) and
+trusted playback events from the phone are design work for lane D.
 
 ## Order of work
 
@@ -283,6 +315,8 @@ Each runs on its default until answered.
 
 | Question | Default |
 | --- | --- |
-| Open mic or push-to-talk | push-to-talk |
+| Which voice mode is the default | decided by the owner's QA session; button, wake word, open and the hybrid are all built (owner, 2026-11-10) |
+| Wake phrase | "Hey Choir", with "Okay Choir" and bare "Choir" in the test |
+| Hybrid window length | five minutes once the voice is learned, 30 seconds before |
 | Is subscription (lane M) in pass 1? | no; it needs the paid account |
 | A branch build on d@e before main | built alongside wave 1, for the server lanes |
