@@ -367,8 +367,8 @@ type StagedIntent struct {
 	// ceiling. TargetRef is the release, Decision accept or reject.
 	InstallFindings []InstallFinding `json:"install_findings,omitempty"`
 	// PacketRef is the owed record id the verdict's packet carried.
-	PacketRef string `json:"packet_ref,omitempty"`
-	PWithinCeiling  float64          `json:"p_within_ceiling,omitempty"`
+	PacketRef      string  `json:"packet_ref,omitempty"`
+	PWithinCeiling float64 `json:"p_within_ceiling,omitempty"`
 	// Semantic-act fields (mission R2 commitment-ledger intents). TargetRef
 	// binds a Resolve/Reply/Cancel to the act it closes. Claim is a Report's
 	// typed claim text; ResolverID names the desk that accepts a Report.
@@ -997,8 +997,9 @@ type CellHooks struct {
 	// KeepOutput takes a successful cell's printed output and returns what
 	// the result shows: a print over the bound is stored whole for
 	// choir.CellOut and shown cut (LR lever 6, cell_output.go). Nil means no
-	// cut, since no store could serve a handle (the capsule path).
-	KeepOutput func(stdout string) string
+	// cut, since no store could serve a handle (the capsule path). writeEnds
+	// are the byte offsets where each print ended; nil reads as one print.
+	KeepOutput func(stdout string, writeEnds []int) string
 }
 
 // MaxVerifyReasonChars bounds a Verify reason, the truncation marker included.

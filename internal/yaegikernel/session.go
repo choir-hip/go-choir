@@ -418,6 +418,7 @@ func (s *Session) Eval(ctx context.Context, src string) (EvalResult, error) {
 
 	finish := func(err error, kind DiagnosticKind) (EvalResult, error) {
 		res.Stdout = stdoutCap.String()
+		res.StdoutWrites = stdoutCap.writeEnds()
 		res.Stderr = stderrCap.String()
 		if err == nil {
 			res.Value = val
