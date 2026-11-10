@@ -40,7 +40,7 @@ So the mission has one wide build pass, a QA pass, and a second pass. It
 has no small-v1-then-grow ladder. Everything in section 4 is in scope
 for pass 1.
 
-- Sonnet builders, one per lane in their own worktrees. Opus orchestrates.
+- Sonnet builders, one per lane in their own worktrees. Fable orchestrates.
 - Runtime checks are the main verifier: drills on d@e, then deployed
   acceptance on staging.
 - **Review** (owner, 2026-11-09: "One Devin round is good"): the Operating

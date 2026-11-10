@@ -51,7 +51,7 @@ file, it wins for that work.
    first, then finish the last mile on it. A mechanism the cutover does not
    need waits for phase 2.
 3. **Overwhelming force.** Fan out parallel Sonnet builders, each in its own
-   worktree, split by package boundary. Opus orchestrates, integrates and
+   worktree, split by package boundary. Fable orchestrates, integrates and
    adjudicates. Never wait idle on CI or a deploy; build the next piece
    while it runs.
 
@@ -373,13 +373,17 @@ capsule, apply and skew refusals; the health guards and automatic rollback;
 R0 and the paper held until each is seen healthy. Ordinary releases walk
 the rings. Name every expedite in the next report.
 
-**Agent models** (owner, 2026-10-22; widened 2026-11-06: "don't use opus
-for review. Opus for open ended design only, and sonnet for investigations,
-linear implementation, optimizing metrics, code review, etc"): Opus for
-open-ended design only. Sonnet for everything else: investigations, linear
-implementation (builders), optimizing a metric, and code review. A Claude
-review seat is always Sonnet, never Opus; when DeepSeek cannot serve a tier 2
-review, the second seat is a Sonnet subagent beside Devin.
+**Agent models** (owner, 2026-11-09: "You can orchestrate sonnet subagents
+well. Just use fable for stuff that requires design. (Fable instead of opus;
+update Claude/agents.md)"): Fable for open-ended design and for orchestration.
+Sonnet for everything else: investigations, linear implementation (builders),
+optimizing a metric, and code review. A Claude review seat is always Sonnet,
+never Fable and never Opus; when DeepSeek cannot serve a tier 2 review, the
+second seat is a Sonnet subagent beside Devin. History: owner, 2026-10-22,
+widened 2026-11-06: "don't use opus for review. Opus for open ended design
+only, and sonnet for investigations, linear implementation, optimizing
+metrics, code review, etc". The 2026-11-09 ruling replaces Opus with Fable in
+that rule.
 
 **Hard problems: change the frame before the patch** (owner, 2026-10-31:
 "when having a recurring problem, ask foundational questions, redefine it, go
