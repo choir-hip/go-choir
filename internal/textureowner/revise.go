@@ -30,6 +30,10 @@ const (
 	// hash of the request that wrote it: the same request id with another
 	// request is a conflict, the same request a replay.
 	reviseFingerprintMetadataKey = "revise_request_fingerprint"
+	// reviseClientIDMetadataKey records the request id beside it, so a retry
+	// after a take continued a settled document (a new trajectory, so a new
+	// revision id) still finds the head it wrote.
+	reviseClientIDMetadataKey = "revise_client_request_id"
 )
 
 // ReviseCase is which of the call's cases a request is, by its shape.
@@ -241,6 +245,13 @@ func (h *Handler) reviseReplay(ctx context.Context, doc types.Document, ownerID 
 	revisionID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{ownerID, doc.ComputerID, doc.TrajectoryID, clientRequestID}, "\x00"))).String()
 	stored, err := h.Store.GetLifecycleRevision(ctx, ownerID, doc.ComputerID, revisionID)
 	if err != nil {
+		if head, headErr := h.Store.GetLifecycleRevision(ctx, ownerID, doc.ComputerID, doc.CurrentRevisionID); headErr == nil {
+			meta := decodeRevisionMetadata(head.Metadata)
+			if metadataString(meta, reviseClientIDMetadataKey) == clientRequestID && metadataString(meta, reviseFingerprintMetadataKey) == fingerprint {
+				requestID, _ := textureOwnerOccurrenceIdentity(ownerID, doc.ComputerID, doc.DocID, clientRequestID)
+				return ReviseReceipt{DocID: doc.DocID, TrajectoryID: head.TrajectoryID, RevisionID: head.RevisionID, RequestID: requestID, Replay: true, Revision: &head}, true, nil
+			}
+		}
 		return ReviseReceipt{}, false, nil
 	}
 	if stored.DocID != doc.DocID {
@@ -330,6 +341,8 @@ func (h *Handler) reviseWithSources(ctx context.Context, doc types.Document, own
 	switch kase {
 	case ReviseComment:
 		return h.reviseComment(ctx, doc, ownerID, req, ownerRevisionExtra{Fingerprint: fingerprint})
+	case ReviseTake:
+		return h.reviseTake(ctx, doc, ownerID, req, fingerprint)
 	default:
 		return ReviseReceipt{}, refuseOwnerRevision(http.StatusNotImplemented, "sources are not accepted by this build")
 	}
