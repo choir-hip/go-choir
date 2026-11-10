@@ -25,6 +25,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/dbx/dbxtest"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
@@ -206,7 +207,12 @@ func seedStoryDoc(t *testing.T, s *store.Store, owner, computer, doc string) {
 		Agent:           types.AgentRecord{AgentID: agent, OwnerID: owner, ComputerID: computer, Profile: "texture", Role: "texture", ChannelID: doc},
 	}
 	req.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(req)
-	if _, err := s.StartLifecycle(context.Background(), req); err != nil {
+	// The document is Texture's kind: the seed writes it as its custodian.
+	w, ok := objectgraph.CustodianOf("choir.texture_document")
+	if !ok {
+		t.Fatal("choir.texture_document has no custodian")
+	}
+	if _, err := s.StartLifecycle(objectgraph.WithWriter(context.Background(), w), req); err != nil {
 		t.Fatal(err)
 	}
 }

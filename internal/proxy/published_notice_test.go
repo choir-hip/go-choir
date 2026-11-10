@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,24 +17,26 @@ import (
 // the notice and op-ed feeds; a failed publish does not, and a computer that
 // cannot be told does not fail the publish.
 func TestPublishTellsTheComputerItWasPublished(t *testing.T) {
-	status := http.StatusCreated
+	var status atomic.Int64 // read by server goroutines, set by the test
+	status.Store(http.StatusCreated)
 	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(status)
-		if status == http.StatusCreated {
+		w.WriteHeader(int(status.Load()))
+		if status.Load() == http.StatusCreated {
 			_ = json.NewEncoder(w).Encode(platform.PublishTextureResponse{RoutePath: "/pub/texture/v-abc", PermalinkPath: "/pub/texture/v-abc/v1", Revision: 1, State: "published"})
 		}
 	}))
 	defer corpusd.Close()
 	var told []string
 	var toldMu sync.Mutex
-	tellStatus := http.StatusNoContent
+	var tellStatus atomic.Int64
+	tellStatus.Store(http.StatusNoContent)
 	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/published"):
 			toldMu.Lock()
 			told = append(told, r.URL.Path+" as "+r.Header.Get("X-Authenticated-User"))
 			toldMu.Unlock()
-			w.WriteHeader(tellStatus)
+			w.WriteHeader(int(tellStatus.Load()))
 		case r.URL.Path == "/api/texture/documents/doc-1":
 			_ = json.NewEncoder(w).Encode(autoputerTextureDocument{DocID: "doc-1", OwnerID: "user-1", Title: "View", CurrentRevisionID: "rev-1"})
 		case r.URL.Path == "/api/texture/revisions/rev-1":
@@ -72,14 +75,15 @@ func TestPublishTellsTheComputerItWasPublished(t *testing.T) {
 		t.Fatalf("the computer was told %v", got)
 	}
 	// The computer being unable to take the notice does not fail the publish.
-	tellStatus = http.StatusInternalServerError
+	tellStatus.Store(http.StatusInternalServerError)
 	if w := post(); w.Code != http.StatusCreated {
 		t.Fatalf("publish with a failing notice = %d", w.Code)
 	}
 	// A refused publish tells no one.
 	waitTold(2)
 	toldMu.Lock()
-	told, status = nil, http.StatusConflict
+	told = nil
+	status.Store(http.StatusConflict)
 	toldMu.Unlock()
 	if w := post(); w.Code != http.StatusConflict {
 		t.Fatalf("refused publish = %d", w.Code)
