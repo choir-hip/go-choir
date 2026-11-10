@@ -578,6 +578,40 @@ who is watching what.
 | C14 | Zoom span points past the tape | `TestSpanWithinChain` |
 | C15 | The changelog app shows an event no desk produced | acceptance rule from the goal file: every event traces to a `tape_ref` or `remote_ref`; d@e check |
 
+### 5.5 H1 build notes (lane H1, 2026-11-10)
+
+The record bodies are `CommitmentRecord.Changelog` (the contract 3 event) and
+`CommitmentRecord.Oped` (the tape-side records of contract 2: `arrival`,
+`verdict`, `wake_decision`, `gate_unavailable`), both in
+`internal/types/commitment_changelog.go` and `commitment_oped.go`. Failure
+list for these types, each with its test:
+
+| # | Failure | Rule | Test |
+|---|---|---|---|
+| H1-1 | An old record fails to decode, or changes its hash, because of the new fields | both bodies are pointers with `omitempty`; a record without them marshals byte-identically to before | `TestOldRecordBytesUnchangedByChangelogFields` |
+| H1-2 | Unknown fields in a body | decode is tolerant (the repo's record decode is not strict); validation checks only what it knows; a field a later version adds survives a read | `TestChangelogBodyToleratesUnknownFieldsAtRead` |
+| H1-3 | A `Changelog` body on a record that also carries another body | refused at commit (`ValidateChangelogRecord`, `ValidateOpedRecord`): no Cast, Report, Support, Captures, Disposition, TaskOutcome, Job, Calibration, Directive, SubCall, Precommit, Resolve, Disagreement, and not both of Changelog and Oped | `TestChangelogRecordRefusesOtherBodies` |
+| H1-4 | Unbounded free text | summary at most 200 runes; reason 1000; actor label 64; ids and refs 256; route 512; oped question list 16 with 16 answers each; every bound checked at commit | `TestChangelogBoundsRefused`, `TestOpedBoundsRefused` |
+| H1-5 | An unknown kind or verdict commits, or breaks a read | refused at commit; at read the record decodes, and `ChangelogLevelOf` reports it as `minor` with `ok=false` so it shows only on zoom | `TestUnknownKindRefusedAtCommitToleratedAtRead` |
+| H1-6 | Level stored apart from kind | `ChangelogLevelOf(kind)` is the only source; a stored level that differs is refused; every kind has a level | `TestEveryChangelogKindHasLevel` (C13), `TestChangelogLevelMismatchRefused` |
+| H1-7 | A changelog or oped record wakes a reader | none is on the `RecordWakesReader` list, so each is silent; the validators require `system` emitter | `TestChangelogAndOpedRecordsWakeNoReader` (test only; `management_tasks.go` is lane Q's) |
+| H1-8 | Id or canonical JSON drift | ids come from one helper each; the event id is SHA-256 over length-prefixed parts; map fields are sorted by `encoding/json` | `TestChangelogIDsDeterministic`, `TestOpedVerdictCanonicalJSONStable` |
+| H1-9 | `reason` read as an instruction | `reason` requires `reason_untrusted: true`; refused otherwise | `TestChangelogReasonMustBeMarkedUntrusted` |
+| H1-10 | `update_finished` for an interrupted update, or no `update_interrupted` | the derivation reads the final Report's stop reason; `interrupted_by_restart` yields `update_interrupted` only (C8, C9) | `TestDeriveUpdateEvents*` |
+| H1-11 | Zoom span past the tape | `ValidateChangelogSpanWithin` against the chain head (C14) | `TestSpanWithinChain` |
+| H1-12 | Replay mints a second record | deterministic record ids; a second emit replays | `TestEmitChangelogReplayMintsOne` (store round trip) |
+| H1-13 | Registry hygiene | no object kind and no event kind is added; the semantic-kind count in `TestSemanticKindsNeverEnterTheQueue` is unchanged | the existing test |
+
+Choices the contract left open. `gate_unavailable` is a changelog kind
+(major, told to the paper's owner), because a stuck gate is a fact the owner
+must see; it was in lane H1's brief but not in the 5.2 table. The `Changelog`
+body's `tape_ref.inbox_seq` is zero at emit (the store stamps it) and read
+back from the record. Every sender inbox is `changelog-source:<origin>` for a
+changelog record, `oped:<op-ed version id>` for arrival, verdict and gate
+records, and `oped-wake:<story doc>` for a wake decision. The Algorithm²
+behavior ledger has no field-level definition in the handoff (4.H), so no
+type was defined for it.
+
 ## 6. Mutation class and review for contract 3
 
 Red: it adds a corpusd kind, a bound-guest read route, a new record body on
