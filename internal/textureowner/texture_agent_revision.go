@@ -198,6 +198,12 @@ func (h *Handler) commitLifecycleOwnerRevision(ctx context.Context, doc types.Do
 	if extra.Fingerprint != "" {
 		metadata = mergeTextureRevisionMetadata(metadata, map[string]any{reviseFingerprintMetadataKey: extra.Fingerprint})
 	}
+	if extra.ClientRequestID != "" {
+		metadata = mergeTextureRevisionMetadata(metadata, map[string]any{reviseClientIDMetadataKey: extra.ClientRequestID})
+	}
+	if extra.ForkedFrom != nil {
+		metadata = mergeTextureRevisionMetadata(metadata, map[string]any{"forked_from": extra.ForkedFrom})
+	}
 	metadata = carryForwardTextureMetadataForRecord(metadata, head.Metadata, doc.TrajectoryID)
 	revisionID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{ownerID, doc.ComputerID, doc.TrajectoryID, clientRequestID}, "\x00"))).String()
 	rev := types.Revision{
@@ -245,6 +251,7 @@ func (h *Handler) commitLifecycleOwnerRevision(ctx context.Context, doc types.Do
 	if !result.Replay {
 		h.recordTextureAudit(ctx, "revision_committed", ownerID, doc.ComputerID, doc.TrajectoryID, doc.DocID, result.Revision.RevisionID, command.CommandID, command.CommandDigest, result.Trajectory.LifecycleVersion)
 		h.emitTextureDocumentRevisionEvent(ctx, ownerID, *result.Revision)
+		h.emitUpdateStarted(ctx, ownerID, doc, result.Revision.RevisionID)
 		h.dispatchTextureRevisionWake(ownerID, doc.ComputerID, doc.TrajectoryID, *result.Revision, requestID, result.Events, targetProfile)
 		h.NoteTextureRootChange(context.WithoutCancel(ctx), ownerID, doc.ComputerID, doc.DocID)
 	}

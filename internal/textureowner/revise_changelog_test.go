@@ -49,18 +49,33 @@ func TestTakeEmitsOneRevisionCommittedAndWakesNothing(t *testing.T) {
 	}
 }
 
-func TestPlainOwnerRevisionAndBodySaveEmitNothing(t *testing.T) {
+func TestOwnerInstructionEmitsOnlyUpdateStartedAndABodySaveNothing(t *testing.T) {
 	core, handler := testAPISetup(t)
 	start := startObservationLifecycle(t, core.Store())
 	wakes := countWakes(core)
 	if w := postRevise(t, handler, start.InitialDocument.DocID, start.OwnerID, map[string]any{"client_request_id": "plain", "text": "tighten"}); w.Code != http.StatusAccepted {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
-	if kinds := changelogKinds(t, core.Store(), start.OwnerID, start.ComputerID); len(kinds) != 0 {
-		t.Fatalf("an owner instruction emitted %v; only the desk's turn and take/merge/fork do", kinds)
+	if kinds := changelogKinds(t, core.Store(), start.OwnerID, start.ComputerID); len(kinds) != 1 || kinds[0] != types.ChangelogUpdateStarted {
+		t.Fatalf("an owner instruction emitted %v, want only update_started", kinds)
 	}
-	if wakes() != 1 {
-		t.Fatalf("wakes=%d, want only the revise's own", wakes())
+	// A body save is not an update and adds no event.
+	snapshot, err := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w := postRevise(t, handler, start.InitialDocument.DocID, start.OwnerID, map[string]any{
+		"client_request_id": "save", "base_revision_id": snapshot.HeadRevision.RevisionID,
+		"body": map[string]any{"content": "typed by the owner", "expected_lifecycle_version": snapshot.Trajectory.LifecycleVersion},
+	}); w.Code != http.StatusAccepted && w.Code != http.StatusCreated {
+		t.Fatalf("body save status=%d body=%s", w.Code, w.Body.String())
+	}
+	if kinds := changelogKinds(t, core.Store(), start.OwnerID, start.ComputerID); len(kinds) != 1 {
+		t.Fatalf("a body save emitted %v", kinds)
+	}
+	// The revise wakes the desk, and so does an owner's body save (as before).
+	if wakes() != 2 {
+		t.Fatalf("wakes=%d, want 2: the revise's and the save's own", wakes())
 	}
 }
 

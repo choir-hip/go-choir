@@ -271,7 +271,10 @@ func (h *Handler) reviseReplay(ctx context.Context, doc types.Document, ownerID 
 // commits: the request fingerprint, the base the owner responded to and the
 // source links.
 type ownerRevisionExtra struct {
-	Fingerprint    string
+	Fingerprint     string
+	ClientRequestID string
+	// ForkedFrom marks the first revision of a fork made with text.
+	ForkedFrom     *types.ParentLink
 	BaseRevisionID string
 	SourceLinks    []types.ParentLink
 }
@@ -307,6 +310,15 @@ func linksProvenance(links []types.ParentLink) json.RawMessage {
 	return raw
 }
 
+// forkedFromLink is the source a fork was made from, nil for any other request.
+func forkedFromLink(req ReviseRequest, resolved []resolvedSource) *types.ParentLink {
+	if !req.forkedFrom || len(resolved) == 0 {
+		return nil
+	}
+	link := resolved[0].Link
+	return &link
+}
+
 // reviseBaseRevision checks that base names a revision of this document.
 func (h *Handler) reviseBaseRevision(ctx context.Context, doc types.Document, ownerID, base string) error {
 	rev, err := h.Store.GetLifecycleRevision(ctx, ownerID, doc.ComputerID, base)
@@ -326,6 +338,7 @@ func (h *Handler) reviseComment(ctx context.Context, doc types.Document, ownerID
 		}
 	}
 	extra.BaseRevisionID = base
+	extra.ClientRequestID = strings.TrimSpace(req.ClientRequestID)
 	resp, err := h.commitLifecycleOwnerRevision(ctx, doc, ownerID, textureAgentRevisionRequest{
 		Prompt: req.Text, ClientRequestID: strings.TrimSpace(req.ClientRequestID),
 		ExpectedHeadRevisionID: strings.TrimSpace(req.ExpectedHeadRevisionID),
@@ -357,7 +370,7 @@ func (h *Handler) reviseWithSources(ctx context.Context, doc types.Document, own
 		if err != nil {
 			return ReviseReceipt{}, err
 		}
-		receipt, err := h.reviseComment(ctx, doc, ownerID, req, ownerRevisionExtra{Fingerprint: fingerprint, SourceLinks: sourceLinks(resolved)})
+		receipt, err := h.reviseComment(ctx, doc, ownerID, req, ownerRevisionExtra{Fingerprint: fingerprint, SourceLinks: sourceLinks(resolved), ForkedFrom: forkedFromLink(req, resolved)})
 		receipt.Case = ReviseMerge
 		if err == nil && !receipt.Replay {
 			h.emitRevisionCommitted(ctx, ownerID, doc, receipt.RevisionID, ReviseMerge, req.forkedFrom)
