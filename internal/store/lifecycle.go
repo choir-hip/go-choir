@@ -4441,7 +4441,11 @@ func (s *Store) CommitLifecycleArtifactHeadWithSourceGraph(ctx context.Context, 
 	}
 	revision.DocID, revision.ParentRevisionID = docID, req.ExpectedHeadRevisionID
 	revision.CreatedAt = now
-	revision, _, _, err = prepareTextureRevisionV2(revision)
+	if ownerLiteralHead(ctx) {
+		revision, _, _, err = prepareOwnerInputTextureRevisionV2(revision)
+	} else {
+		revision, _, _, err = prepareTextureRevisionV2(revision)
+	}
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}

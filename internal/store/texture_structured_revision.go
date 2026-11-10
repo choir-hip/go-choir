@@ -29,6 +29,38 @@ func WithStrictInitialText(ctx context.Context) context.Context {
 	return context.WithValue(ctx, strictInitialTextKey{}, true)
 }
 
+type ownerLiteralHeadKey struct{}
+
+// WithOwnerLiteralHead marks a context so that a lifecycle head commit whose
+// revision carries no body_doc is prepared as the owner's literal text, as the
+// document's first revision was. A revision that carries an owner's literal
+// forward (a comment on a document the owner typed or forked) has the same
+// words the first revision had; a "[1]" the owner typed or a taken article
+// carries is not a citation an agent forgot to write as a source_ref, and the
+// strict rule would refuse every later revision of such a document.
+func WithOwnerLiteralHead(ctx context.Context) context.Context {
+	return context.WithValue(ctx, ownerLiteralHeadKey{}, true)
+}
+
+func ownerLiteralHead(ctx context.Context) bool {
+	literal, _ := ctx.Value(ownerLiteralHeadKey{}).(bool)
+	return literal
+}
+
+// IsOwnerLiteralRevision reports whether rev's body is exactly the one the
+// store builds from the owner's plain text: a user-authored revision with no
+// source entities whose body_doc is the single-paragraph form of its content.
+func IsOwnerLiteralRevision(rev types.Revision) bool {
+	if rev.AuthorKind != types.AuthorUser || len(strings.TrimSpace(string(rev.BodyDoc))) == 0 {
+		return false
+	}
+	if raw := strings.TrimSpace(string(rev.SourceEntities)); raw != "" && raw != "[]" && raw != "null" {
+		return false
+	}
+	derived, err := json.Marshal(userAuthoredTextStructuredTextureDoc(rev.DocID, rev.RevisionID, rev.Content))
+	return err == nil && string(derived) == strings.TrimSpace(string(rev.BodyDoc))
+}
+
 func strictInitialText(ctx context.Context) bool {
 	strict, _ := ctx.Value(strictInitialTextKey{}).(bool)
 	return strict

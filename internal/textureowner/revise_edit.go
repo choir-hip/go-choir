@@ -165,6 +165,7 @@ func (h *Handler) commitOwnerBodyEdit(ctx context.Context, doc types.Document, o
 		}
 		graph, graphErr := textureToolSourceGraphWriteSet(rev, materializedTextureEdit{BodyDoc: req.BodyDoc, SourceEntities: req.SourceEntities}, &types.RunRecord{RunID: requestID, OwnerID: ownerID, ComputerID: doc.ComputerID})
 		if graphErr != nil {
+			log.Printf("texture api: lifecycle revision source graph: %v", graphErr)
 			return ReviseReceipt{}, refuseOwnerRevision(http.StatusBadRequest, "invalid lifecycle revision source graph")
 		}
 		commandDigest, digestErr := store.ComputeCommitLifecycleArtifactHeadWithSourceGraphDigest(command, graph)
@@ -179,7 +180,7 @@ func (h *Handler) commitOwnerBodyEdit(ctx context.Context, doc types.Document, o
 				return ReviseReceipt{}, refuseOwnerRevision(http.StatusConflict, commitErr.Error())
 			}
 			log.Printf("texture api: commit lifecycle revision: %v", commitErr)
-			return ReviseReceipt{}, refuseOwnerRevision(http.StatusInternalServerError, "failed to commit lifecycle revision")
+			return ReviseReceipt{}, refuseCommit(commitErr, "failed to commit lifecycle revision")
 		}
 		if result.Revision == nil {
 			return ReviseReceipt{}, refuseOwnerRevision(http.StatusInternalServerError, "lifecycle revision result unavailable")

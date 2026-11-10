@@ -106,6 +106,18 @@ type ownerRevisionRefusal struct {
 
 func (e *ownerRevisionRefusal) Error() string { return e.message }
 
+// refuseCommit answers a store commit that failed for a reason other than a
+// lost race. A revision the store refuses as invalid is the request's fault (422)
+// and says why; anything else is a 500 that carries the store's one-line cause,
+// so a failed take is diagnosable from the response and not only from a
+// computer's journal.
+func refuseCommit(err error, message string) error {
+	if errors.Is(err, store.ErrInvalidTextureRevision) {
+		return refuseOwnerRevision(http.StatusUnprocessableEntity, message+": "+shortCause(err))
+	}
+	return refuseOwnerRevision(http.StatusInternalServerError, message+": "+shortCause(err))
+}
+
 func refuseOwnerRevision(status int, message string) error {
 	return &ownerRevisionRefusal{status: status, message: message}
 }
@@ -224,6 +236,16 @@ func (h *Handler) commitLifecycleOwnerRevisionOpening(ctx context.Context, doc t
 	}
 	metadata = carryForwardTextureMetadataForRecord(metadata, head.Metadata, doc.TrajectoryID)
 	revisionID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{ownerID, doc.ComputerID, doc.TrajectoryID, clientRequestID}, "\x00"))).String()
+	// The revision carries the head's body forward. A head that is the owner's
+	// plain text (typed, or a taken article with its "[1]" footnotes) is carried
+	// as text and prepared by the owner-text rule it was first written under;
+	// handing its derived body_doc to the strict authoring rules refused every
+	// revise of such a document.
+	carriedBody, carriedEntities := head.BodyDoc, head.SourceEntities
+	if store.IsOwnerLiteralRevision(head) {
+		carriedBody, carriedEntities = nil, nil
+		ctx = store.WithOwnerLiteralHead(ctx)
+	}
 	rev := types.Revision{
 		RevisionID:       revisionID,
 		DocID:            doc.DocID,
@@ -233,8 +255,8 @@ func (h *Handler) commitLifecycleOwnerRevisionOpening(ctx context.Context, doc t
 		AuthorKind:       types.AuthorUser,
 		AuthorLabel:      ownerID,
 		Content:          head.Content,
-		BodyDoc:          head.BodyDoc,
-		SourceEntities:   head.SourceEntities,
+		BodyDoc:          carriedBody,
+		SourceEntities:   carriedEntities,
 		Citations:        head.Citations,
 		Metadata:         metadata,
 		Provenance:       linksProvenance(links),
@@ -261,7 +283,7 @@ func (h *Handler) commitLifecycleOwnerRevisionOpening(ctx context.Context, doc t
 			return textureOwnerRevisionResponse{}, refuseOwnerRevision(http.StatusConflict, commitErr.Error())
 		}
 		log.Printf("texture api: commit owner revision: %v", commitErr)
-		return textureOwnerRevisionResponse{}, refuseOwnerRevision(http.StatusInternalServerError, "failed to commit owner revision")
+		return textureOwnerRevisionResponse{}, refuseCommit(commitErr, "failed to commit owner revision")
 	}
 	if result.Revision == nil {
 		return textureOwnerRevisionResponse{}, refuseOwnerRevision(http.StatusInternalServerError, "lifecycle revision result unavailable")
