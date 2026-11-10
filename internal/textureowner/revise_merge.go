@@ -25,7 +25,7 @@ func revisionSourceLinks(rev types.Revision) []types.ParentLink {
 	}
 	var out []types.ParentLink
 	for _, l := range prov.ParentLinks {
-		if l.Role == types.ParentLinkSource {
+		if l.Kind == types.ParentLinkSource {
 			out = append(out, l)
 		}
 	}

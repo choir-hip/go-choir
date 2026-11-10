@@ -213,7 +213,7 @@ func TestAlgorithm2ProposalWaitsAndAcceptIsARevise(t *testing.T) {
 	}
 	var source *types.ParentLink
 	for i := range prov.ParentLinks {
-		if prov.ParentLinks[i].Role == types.ParentLinkSource {
+		if prov.ParentLinks[i].Kind == types.ParentLinkSource {
 			source = &prov.ParentLinks[i]
 		}
 	}

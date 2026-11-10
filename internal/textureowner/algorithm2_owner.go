@@ -202,7 +202,7 @@ func (h *Handler) buildAlgorithm2Ledger(ctx context.Context, ownerID string) ([]
 			var authors []string
 			sourced := false
 			for _, l := range prov.ParentLinks {
-				if l.Role == types.ParentLinkSource {
+				if l.Kind == types.ParentLinkSource {
 					sourced = true
 					authors = append(authors, l.AuthorLabel)
 				}

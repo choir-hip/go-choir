@@ -129,7 +129,7 @@ func (h *Handler) resolveReviseSources(ctx context.Context, sources []ReviseSour
 			return nil, refuseOwnerRevision(http.StatusUnprocessableEntity, "source "+id+" holds private embeds and cannot be taken")
 		}
 		out = append(out, resolvedSource{Version: v, Link: types.ParentLink{
-			Role: types.ParentLinkSource, PublicationVersionID: id, ManifestHash: v.ManifestHash,
+			Kind: types.ParentLinkSource, PublicationVersionID: id, ManifestHash: v.ManifestHash,
 			RoutePath: v.RoutePath, AuthorLabel: v.AuthorLabel,
 		}})
 	}
@@ -181,7 +181,7 @@ func (h *Handler) reviseTake(ctx context.Context, doc types.Document, ownerID st
 		}
 		body.ExpectedLifecycleVersion = snapshot.Trajectory.LifecycleVersion
 	}
-	links := append([]types.ParentLink{{Role: types.ParentLinkBase, RevisionID: head}}, sourceLinks(resolved)...)
+	links := append([]types.ParentLink{{Kind: types.ParentLinkBase, RevisionID: head}}, sourceLinks(resolved)...)
 	metadata := map[string]any{
 		reviseFingerprintMetadataKey: fingerprint,
 		reviseClientIDMetadataKey:    strings.TrimSpace(req.ClientRequestID),

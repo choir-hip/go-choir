@@ -124,7 +124,7 @@ func TestReviseOlderBaseCommentRecordsBaseLink(t *testing.T) {
 		t.Fatalf("chain parent=%s, want the head %s", rev.ParentRevisionID, head)
 	}
 	var prov types.Provenance
-	if err := json.Unmarshal(rev.Provenance, &prov); err != nil || len(prov.ParentLinks) != 1 || prov.ParentLinks[0].Role != types.ParentLinkBase || prov.ParentLinks[0].RevisionID != older {
+	if err := json.Unmarshal(rev.Provenance, &prov); err != nil || len(prov.ParentLinks) != 1 || prov.ParentLinks[0].Kind != types.ParentLinkBase || prov.ParentLinks[0].RevisionID != older {
 		t.Fatalf("provenance=%s err=%v, want one base link to %s", rev.Provenance, err, older)
 	}
 	// The legacy strict form still refuses a head that moved.

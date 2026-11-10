@@ -66,7 +66,7 @@ func TestTakeWritesTheSourceBodyWithNoWake(t *testing.T) {
 	}
 	var base, source *types.ParentLink
 	for i := range prov.ParentLinks {
-		switch prov.ParentLinks[i].Role {
+		switch prov.ParentLinks[i].Kind {
 		case types.ParentLinkBase:
 			base = &prov.ParentLinks[i]
 		case types.ParentLinkSource:

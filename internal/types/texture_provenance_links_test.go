@@ -29,9 +29,9 @@ func TestProvenanceWithoutParentLinksKeepsItsBytesAndHash(t *testing.T) {
 
 func TestRevisionHashCoversParentLinks(t *testing.T) {
 	base := Provenance{SchemaVersion: ProvenanceSchemaVersion, ParentLinks: []ParentLink{
-		{Role: ParentLinkSource, PublicationVersionID: "pv-b", ManifestHash: "h-b"},
-		{Role: ParentLinkBase, RevisionID: "rev-1"},
-		{Role: ParentLinkSource, PublicationVersionID: "pv-a", ManifestHash: "h-a"},
+		{Kind: ParentLinkSource, PublicationVersionID: "pv-b", ManifestHash: "h-b"},
+		{Kind: ParentLinkBase, RevisionID: "rev-1"},
+		{Kind: ParentLinkSource, PublicationVersionID: "pv-a", ManifestHash: "h-a"},
 	}}
 	hashOf := func(p Provenance) string {
 		raw, err := p.CanonicalJSON()
@@ -51,7 +51,7 @@ func TestRevisionHashCoversParentLinks(t *testing.T) {
 	for name, mutate := range map[string]func(*ParentLink){
 		"manifest hash": func(l *ParentLink) { l.ManifestHash = "forged" },
 		"version id":    func(l *ParentLink) { l.PublicationVersionID = "pv-other" },
-		"role":          func(l *ParentLink) { l.Role = ParentLinkBase },
+		"kind":          func(l *ParentLink) { l.Kind = ParentLinkBase },
 	} {
 		altered := base
 		altered.ParentLinks = append([]ParentLink(nil), base.ParentLinks...)

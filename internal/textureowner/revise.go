@@ -291,7 +291,7 @@ func (e ownerRevisionExtra) parentLinks(headRevisionID string) []types.ParentLin
 	if base == "" {
 		base = headRevisionID
 	}
-	links := []types.ParentLink{{Role: types.ParentLinkBase, RevisionID: base}}
+	links := []types.ParentLink{{Kind: types.ParentLinkBase, RevisionID: base}}
 	return append(links, e.SourceLinks...)
 }
 

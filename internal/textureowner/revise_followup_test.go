@@ -147,8 +147,8 @@ func TestDeskWriteInheritsTheRequestRevisionsLinks(t *testing.T) {
 	core, h := testAPISetup(t)
 	core.SetTextureCaptures(courtCapture)
 	s := core.Store()
-	link := types.ParentLink{Role: types.ParentLinkSource, PublicationVersionID: "pub-i-v1", ManifestHash: "mh", RoutePath: "/pub/texture/i/v1", AuthorLabel: "Autopaper"}
-	prov, err := types.Provenance{SchemaVersion: types.ProvenanceSchemaVersion, ParentLinks: []types.ParentLink{{Role: types.ParentLinkBase, RevisionID: "revision-cell-author-base-inherit"}, link}}.CanonicalJSON()
+	link := types.ParentLink{Kind: types.ParentLinkSource, PublicationVersionID: "pub-i-v1", ManifestHash: "mh", RoutePath: "/pub/texture/i/v1", AuthorLabel: "Autopaper"}
+	prov, err := types.Provenance{SchemaVersion: types.ProvenanceSchemaVersion, ParentLinks: []types.ParentLink{{Kind: types.ParentLinkBase, RevisionID: "revision-cell-author-base-inherit"}, link}}.CanonicalJSON()
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -57,8 +57,13 @@ const (
 // ParentLink is one link from a revision to a thing it was made from. A base
 // link names a revision of the same document (RevisionID); a source link names
 // a published version (PublicationVersionID) pinned by its manifest hash.
+//
+// The key is "kind", not "role": after the vocabulary cutover the object-graph
+// write guard reads every leaf named "role" in an object body as a desk role
+// and refuses a value it does not know ("base", "source"), so a "role" key here
+// failed every commit of a revision with links on a cut-over computer.
 type ParentLink struct {
-	Role                 string `json:"role"`
+	Kind                 string `json:"kind"`
 	RevisionID           string `json:"revision_id,omitempty"`
 	PublicationVersionID string `json:"publication_version_id,omitempty"`
 	ManifestHash         string `json:"manifest_hash,omitempty"`
@@ -109,8 +114,8 @@ func (p Provenance) CanonicalJSON() ([]byte, error) {
 		links := make([]ParentLink, len(canonical.ParentLinks))
 		copy(links, canonical.ParentLinks)
 		sort.SliceStable(links, func(i, j int) bool {
-			if links[i].Role != links[j].Role {
-				return links[i].Role < links[j].Role
+			if links[i].Kind != links[j].Kind {
+				return links[i].Kind < links[j].Kind
 			}
 			return links[i].ref() < links[j].ref()
 		})
