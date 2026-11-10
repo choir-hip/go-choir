@@ -227,14 +227,14 @@ public actor TurnEngine {
     }
 
     func onSpeechStarted(_ f: AudioFrame) async {
-        env.log.emit(.speechStarted, at: f.t)
+        env.log.emit(.speechStarted)
         if let t = turn { t.speechSeen = true; if t.addressed { setPhase(.capturing) }; return }
         await route(.speechStarted, now: f.t)
         if let t = turn { t.speechSeen = true }
     }
 
     func onSpeechEnded(_ secs: Double, now: Double) async {
-        env.log.emit(.speechEnded(seconds: secs), at: now)
+        env.log.emit(.speechEnded(seconds: secs))
         guard let t = turn else { return }
         if t.addressed {
             if addressing?.holdsTurnOpen == true { return }   // the hand keeps the turn open

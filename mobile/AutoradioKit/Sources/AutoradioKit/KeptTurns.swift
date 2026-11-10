@@ -111,7 +111,8 @@ public enum Replayer {
         let addrID = configuration.setting(.addressing)?.id ?? ""
         if inputs.isEmpty && (addrID == "button" || addrID == "hybrid") {
             if let onset = firstOnset(mic) {
-                inputs = [ScheduledInput(t: max(0, onset - 0.1), kind: .buttonDown)]
+                let t0 = max(0, onset - 0.1)
+                inputs = [ScheduledInput(t: t0, kind: .buttonDown), ScheduledInput(t: t0 + 0.1, kind: .buttonUp)]   // a tap
                 log.emit(.note("replay: no recorded button; tapped at first speech onset \(String(format: "%.2f", onset)) s"), at: 0)
             }
         }
@@ -135,11 +136,11 @@ public enum Replayer {
 
     static func firstOnset(_ mic: [Float]) -> Double? {
         let n = Int(0.032 * busSampleRate)
+        var levels: [Double] = []
         var i = 0
-        while i + n <= mic.count {
-            if AudioFrame(samples: Array(mic[i..<i + n]), sampleRate: busSampleRate, t: 0).rmsDb > -40 { return Double(i) / busSampleRate }
-            i += n
-        }
-        return nil
+        while i + n <= mic.count { levels.append(AudioFrame(samples: Array(mic[i..<i + n]), sampleRate: busSampleRate, t: 0).rmsDb); i += n }
+        guard let floor = levels.prefix(10).min() else { return nil }
+        let thr = max(-40, floor + 10)
+        return levels.firstIndex { $0 > thr }.map { Double($0) * 0.032 }
     }
 }

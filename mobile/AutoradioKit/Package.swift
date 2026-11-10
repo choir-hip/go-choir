@@ -13,6 +13,7 @@ let package = Package(
         .executableTarget(
             name: "autoradio-replay",
             dependencies: ["AutoradioKit"],
+            exclude: ["Info.plist"],
             swiftSettings: [.swiftLanguageMode(.v5)],
             linkerSettings: [
                 // Speech recognition needs usage strings; a bare command has no bundle.

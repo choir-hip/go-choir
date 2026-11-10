@@ -64,6 +64,7 @@ public final class SFSpeechTranscriber: Transcriber, @unchecked Sendable {
                 }
             }
         }
+        func snapshot() -> String { lock.lock(); defer { lock.unlock() }; return latest }
         func complete(_ r: Result<String, Error>) {
             lock.lock()
             if done { lock.unlock(); return }
@@ -78,8 +79,7 @@ public final class SFSpeechTranscriber: Transcriber, @unchecked Sendable {
             Task { [weak self] in
                 try? await Task.sleep(nanoseconds: UInt64(tmo * 1e9))
                 guard let self else { return }
-                self.lock.lock(); let t = self.latest; self.lock.unlock()
-                self.complete(.success(t))
+                self.complete(.success(self.snapshot()))
             }
             return try await withCheckedThrowingContinuation { c in
                 lock.lock()

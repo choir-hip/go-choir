@@ -123,21 +123,21 @@ public final class EnergyVAD: SpeechBounds, @unchecked Sendable {
                                  .number("minStartSeconds", "Voiced to start (s)", 0.1, 0.02, 0.5)])
     }
     let minDb, marginDb, hangover, minStart: Double
-    var floorDb = -60.0
+    var window: [Double] = []   // last ~1.5 s of frame levels; their minimum is the noise floor
     var inSpeech = false
     var startT = 0.0, lastVoicedEnd = 0.0, voicedRun = 0.0, runStart = 0.0
     public init(_ p: StageParams) {
         minDb = p.double("minDb", -42); marginDb = p.double("marginDb", 12)
         hangover = p.double("hangoverSeconds", 0.8); minStart = p.double("minStartSeconds", 0.1)
     }
-    public func reset() async { inSpeech = false; voicedRun = 0 }
+    public func reset() async { inSpeech = false; voicedRun = 0; window = [] }
     public func speechSeconds(now: Double) async -> Double { inSpeech ? max(0, lastVoicedEnd - startT) : 0 }
     public func feed(_ f: AudioFrame) async -> BoundsUpdate {
         let db = f.rmsDb
-        let thr = max(minDb, floorDb + marginDb)
+        window.append(db); if window.count > 47 { window.removeFirst() }
+        let thr = max(minDb, (window.min() ?? db) + marginDb)
         let voiced = db > thr
         let end = f.t + f.duration
-        if !voiced { floorDb += (min(db, floorDb + 6) - floorDb) * (db < floorDb ? 0.2 : 0.02) }
         if !inSpeech {
             if voiced {
                 if voicedRun == 0 { runStart = f.t }
