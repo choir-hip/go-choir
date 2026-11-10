@@ -449,3 +449,62 @@ for the 32,000 byte long-context line and "slower and less accurate"; OpenRouter
 in parallel and cannot see each other's answers", and run-to-run variation.
 In-repo: `docs/evidence/jev-measurement-2026-11-10.md`,
 `docs/evidence/token-efficiency-2026-11-09/intake-and-jev.md`.
+
+## 7. Judges: ways the serial form can fail (2026-11-10, orange; rollback: revert)
+
+Owner rule, 2026-11-10: "It's important that we don't call Jev concurrently,
+but ask single Jev calls many questions in parallel." "Only reason to call Jev
+concurrently is with separate contexts. That can be justified but shouldn't be
+plan A." Step 3 of section 5 lands for the event layer, the support judge, the
+sub-call, desk-cast and inert judges and story analysis: one call per unit of
+arriving work carrying all its questions; overflow beyond a hard bound is
+further calls one after another. Written before the code.
+
+1. **A slow call now delays the next unit.** Deadlines per site: event layer
+   5 s a chunk (`eventCallTimeout`; a chunk past it is unresolved and its
+   captures return as `Left`, not retried); support judge 90 s a call, queue
+   wait 2 min (a revision that gets no slot logs and leaves its pairs pending
+   for the next commit that cites them, as before); sub-call, desk-cast and
+   inert 90 s a call (inert 2 min) including the gate wait (a call that waits
+   out its deadline fails that batch with the cause; sub-call work closes
+   `failed`, never re-run); story analysis 60 s a verb call. Waiting work is
+   never held past its own deadline. Test: a slow fake judge, max in flight 1.
+2. **A failed call mid-sequence.** Batches of one round are independent (each
+   Cast, record and pair has its own id), so a failed batch does not stop the
+   next; the first error is returned, as it was. Story analysis is the
+   exception: its two chunks fill one analysis, so a failure of the first sets
+   `a.Error` and the second is not asked (the pool asked it anyway and threw
+   the result away). Support: a failed call leaves only its own pairs
+   pending; earlier calls' verdicts are still recorded.
+3. **Ordering assumptions callers had about parallel results.** None: every
+   site applied results in batch order after the fact; the event layer
+   commits chunks in order, and now each chunk is asked after the previous
+   commit, so it sees the events that chunk minted (the prefetch's
+   "ask again if the question changed" path is deleted with it). The desk-cast
+   judge applies a batch's answers before asking the next (a round's counters
+   are plain fields).
+4. **A waiting revision whose document changed.** The support job claims its
+   pairs and re-reads verdicts and check memos after it gets the slot, so a
+   pair judged by an earlier job, or no longer listed, is skipped; a cited
+   block that changed fails its hash check and stays pending. A revision
+   superseded while queued is not wasted: its still-listed pairs are judged.
+   Test: two jobs queue on one slot, the second finds the pair judged.
+5. **Shutdown with work queued.** Queues are in memory only. A crash closes
+   open work at boot as interrupted and never resumes it (restart rule); a
+   queued support revision's pairs stay pending (a check memo without a
+   verdict) and are judged by a later live commit. `WaitSupportJudgements` and
+   the settler's `Stop` wait are unchanged. No boot resumer is added.
+6. **Starvation of one site by another.** Calls are serial per site, not
+   across sites: the support judge, event layer, sub-call/inert/cast gate and
+   story analysis each have their own in-flight call, so one site's backlog
+   does not hold another's. Within the sub-call gate (one in flight, shared by
+   sub-call, desk-cast and inert) a long backlog of one can delay the others
+   up to their 90 s deadline; the gate is FIFO in practice and all three are
+   background work. Accepted; revisit if a gate wait shows in the journal.
+7. **Byte bounds.** The support judge had none: each pair carries the whole
+   cited block (a lone cite's passage is not bounded) plus the sentence and
+   paragraph, so a revision with many pairs exceeds 30 KB. It now splits into
+   calls of at most 30,000 bytes (the intake bound), asked in order. Story
+   analysis: System 1's cap of 12 questions per call (not lifted here;
+   accuracy above 12 is unmeasured, section 6) forces two calls of up to 12
+   when an analysis has 13 to 24 questions, now sequential.
