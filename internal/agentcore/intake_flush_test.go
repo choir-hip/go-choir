@@ -217,8 +217,7 @@ func TestIntakeFlushSurvivesAPanicAndFlushesAgain(t *testing.T) {
 		l := &f.rt.intakeLabels
 		l.mu.Lock()
 		defer l.mu.Unlock()
-		q := l.queues[eventKey(f.owner, f.computer)]
-		return judge.panicked.Load() && q != nil && !q.inFlight
+		return judge.panicked.Load() && !l.running
 	})
 	for i := 0; i < intakeCallCaptures; i++ {
 		if l, _ := f.s.CaptureLabels(context.Background(), f.owner, f.computer, items[i].CaptureID); len(l) != 0 {

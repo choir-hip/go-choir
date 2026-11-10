@@ -53,9 +53,14 @@ type ScopedCandidateJudge interface {
 
 // Budgets. Vars so a test can shorten them.
 var (
-	// intakeLabelPollBudget bounds one flush, whose calls run one after
-	// another; a call left unasked at the end is unlabelled.
-	intakeLabelPollBudget  = 60 * time.Second
+	// intakeLabelPrepBudget bounds a flush's reads before its calls (the
+	// story index and the corrections). There is no deadline across the
+	// calls: each gets its own intakeLabelCallTimeout, started when it is
+	// about to be sent, and only a stop cancels the rest. Our measured
+	// latency is flat in question count (docs/reference/system1/
+	// our-usage.md), so 5 s is not expected to bite at 12 questions; the
+	// shadow comparison is where that is checked.
+	intakeLabelPrepBudget  = 15 * time.Second
 	intakeLabelCallTimeout = 5 * time.Second
 )
 
@@ -223,26 +228,36 @@ type intakeHeld struct {
 }
 
 type intakeLabelQueue struct {
-	items    []intakeHeld
-	timer    *time.Timer
-	inFlight bool // one flush at a time; its calls run one after another
+	owner, computer string
+	items           []intakeHeld
+	timer           *time.Timer
 }
 
-// intakeLabelLayer is the runtime's intake-label queues, one per computer.
-// The queue is in memory only: a capture still held at a crash or stop is
-// left unlabelled, exactly as a capture whose label call failed (nothing
-// retries a capture; the next poll sees it as already captured). No boot
-// step resumes it.
+// intakeLabelLayer is the runtime's intake-label queues, one per computer,
+// drained by ONE flusher goroutine per runtime: a runtime may be handed
+// polls for more than one computer (nothing in HandleSourcePollDue checks
+// the computer against the runtime's configured one), and the owner's rule
+// is that Jev is never called concurrently, so the flusher drains the
+// queues in turn. The queues are in memory only: a capture still held at a
+// crash or a bounded stop is left unlabelled, exactly as a capture whose
+// label call failed (nothing retries a capture; the next poll sees it as
+// already captured). No boot step resumes it.
 type intakeLabelLayer struct {
 	mu      sync.Mutex
 	queues  map[string]*intakeLabelQueue
 	stopped bool
+	running bool // the one flusher goroutine is alive
 	ctx     context.Context
 	cancel  context.CancelFunc
-	// flushes counts the running flush goroutines, so a graceful stop can
-	// wait for them (bounded).
+	// flushes counts the flusher goroutine, so a graceful stop can wait for
+	// it (bounded).
 	flushes sync.WaitGroup
 }
+
+// intakeFlushTestHook, when set by a test, runs at the named stage of a
+// flush ("flusher": in the flusher goroutine before a flush; "labelHeld":
+// inside the flush) so a test can make that stage panic. Nil in production.
+var intakeFlushTestHook func(stage string)
 
 // enqueueIntakeLabels holds a poll's new captures for the computer's next
 // flush. A flush runs when intakeFlushWait has passed since the first held
@@ -265,7 +280,7 @@ func (rt *Runtime) enqueueIntakeLabels(ownerID, computerID, sourceID string, cap
 	}
 	q := l.queues[key]
 	if q == nil {
-		q = &intakeLabelQueue{}
+		q = &intakeLabelQueue{owner: ownerID, computer: computerID}
 		l.queues[key] = q
 	}
 	for _, c := range captured {
@@ -273,64 +288,123 @@ func (rt *Runtime) enqueueIntakeLabels(ownerID, computerID, sourceID string, cap
 			q.items = append(q.items, intakeHeld{item: c, sourceID: sourceID, at: now})
 		}
 	}
-	rt.scheduleIntakeFlushLocked(ownerID, computerID, q)
+	rt.scheduleIntakeFlushLocked(q)
 }
 
-// scheduleIntakeFlushLocked starts the flush when it is due, or arms the
-// timer for the first held capture's deadline. The caller holds l.mu.
-func (rt *Runtime) scheduleIntakeFlushLocked(ownerID, computerID string, q *intakeLabelQueue) {
+// intakeDue reports whether q's next flush is due.
+func intakeDue(q *intakeLabelQueue) bool {
+	return len(q.items) > 0 && (len(q.items) >= intakeFlushCaptures || time.Since(q.items[0].at) >= intakeFlushWait)
+}
+
+// scheduleIntakeFlushLocked wakes the flusher when q's flush is due, or arms
+// q's timer for the first held capture's deadline. The caller holds l.mu.
+func (rt *Runtime) scheduleIntakeFlushLocked(q *intakeLabelQueue) {
 	l := &rt.intakeLabels
-	if l.stopped || q.inFlight || len(q.items) == 0 {
+	if l.stopped || len(q.items) == 0 {
 		return
 	}
-	wait := intakeFlushWait - time.Since(q.items[0].at)
-	if len(q.items) >= intakeFlushCaptures || wait <= 0 {
+	if intakeDue(q) {
 		if q.timer != nil {
 			q.timer.Stop()
 			q.timer = nil
 		}
-		if l.ctx == nil {
-			l.ctx, l.cancel = context.WithCancel(context.Background())
+		if !l.running { // a running flusher finds the due queue itself
+			rt.startIntakeFlusherLocked()
 		}
-		q.inFlight = true
-		layerCtx := l.ctx
-		l.flushes.Add(1)
-		go func() {
-			defer l.flushes.Done()
-			defer func() {
-				// A panic must not kill the process or leave the queue
-				// marked in flight: its flush's captures stay unlabelled
-				// and the next enqueue flushes normally.
-				if r := recover(); r != nil {
-					log.Printf("intake labels: flush panicked: %v; its captures stay unlabelled", r)
-					l.mu.Lock()
-					q.inFlight = false
-					rt.scheduleIntakeFlushLocked(ownerID, computerID, q)
-					l.mu.Unlock()
-				}
-			}()
-			rt.drainIntakeLabels(layerCtx, ownerID, computerID, q)
-		}()
 		return
 	}
 	if q.timer == nil {
 		var timer *time.Timer
-		timer = time.AfterFunc(wait, func() {
+		timer = time.AfterFunc(intakeFlushWait-time.Since(q.items[0].at), func() {
 			l.mu.Lock()
 			defer l.mu.Unlock()
-			if q.timer == timer { // a stale callback never clears a newer timer
-				q.timer = nil
-			}
-			rt.scheduleIntakeFlushLocked(ownerID, computerID, q)
+			rt.intakeTimerFiredLocked(q, timer)
 		})
 		q.timer = timer
+	}
+}
+
+// intakeTimerFiredLocked is a queue timer's callback. It clears q.timer only
+// if it is still the timer that fired (a stale callback never clobbers a
+// newer one), then schedules.
+func (rt *Runtime) intakeTimerFiredLocked(q *intakeLabelQueue, fired *time.Timer) {
+	if q.timer == fired {
+		q.timer = nil
+	}
+	rt.scheduleIntakeFlushLocked(q)
+}
+
+// rescheduleIntakeLocked re-evaluates every queue (arms the timers of the
+// ones not yet due, starts the flusher for a due one).
+func (rt *Runtime) rescheduleIntakeLocked() {
+	for _, q := range rt.intakeLabels.queues {
+		rt.scheduleIntakeFlushLocked(q)
+	}
+}
+
+// startIntakeFlusherLocked starts the runtime's one flusher. The caller
+// holds l.mu, l.running is false and the layer is not stopped.
+func (rt *Runtime) startIntakeFlusherLocked() {
+	l := &rt.intakeLabels
+	if l.ctx == nil {
+		l.ctx, l.cancel = context.WithCancel(context.Background())
+	}
+	l.running = true
+	ctx := l.ctx
+	l.flushes.Add(1)
+	go func() {
+		defer l.flushes.Done()
+		defer func() {
+			// A panic must not kill the process or leave the layer marked
+			// running: that flush's captures stay unlabelled and the next
+			// enqueue starts a new flusher.
+			if r := recover(); r != nil {
+				log.Printf("intake labels: flusher panicked: %v; that flush's captures stay unlabelled", r)
+				l.mu.Lock()
+				l.running = false
+				rt.rescheduleIntakeLocked()
+				l.mu.Unlock()
+			}
+		}()
+		rt.runIntakeFlusher(ctx)
+	}()
+}
+
+// runIntakeFlusher drains the computers' due flushes one at a time, oldest
+// first, then exits. Captures that arrive meanwhile keep their own 30 s
+// deadline.
+func (rt *Runtime) runIntakeFlusher(ctx context.Context) {
+	l := &rt.intakeLabels
+	for {
+		l.mu.Lock()
+		var next *intakeLabelQueue
+		if !l.stopped {
+			for _, q := range l.queues {
+				if intakeDue(q) && (next == nil || q.items[0].at.Before(next.items[0].at)) {
+					next = q
+				}
+			}
+		}
+		if next == nil {
+			l.running = false
+			rt.rescheduleIntakeLocked()
+			l.mu.Unlock()
+			return
+		}
+		held := takeIntakeFlushLocked(next)
+		owner, computer := next.owner, next.computer
+		l.mu.Unlock()
+		if hook := intakeFlushTestHook; hook != nil {
+			hook("flusher")
+		}
+		rt.labelHeld(ctx, owner, computer, held)
 	}
 }
 
 // takeIntakeFlushLocked removes the next flush's captures (at most
 // intakeFlushCaptures, oldest first) when one is due.
 func takeIntakeFlushLocked(q *intakeLabelQueue) []intakeHeld {
-	if len(q.items) == 0 || (len(q.items) < intakeFlushCaptures && time.Since(q.items[0].at) < intakeFlushWait) {
+	if !intakeDue(q) {
 		return nil
 	}
 	n := min(len(q.items), intakeFlushCaptures)
@@ -339,31 +413,16 @@ func takeIntakeFlushLocked(q *intakeLabelQueue) []intakeHeld {
 	return held
 }
 
-// drainIntakeLabels runs the computer's flushes, one at a time, while one is
-// due. Captures that arrived meanwhile keep their own 30 s deadline.
-func (rt *Runtime) drainIntakeLabels(layerCtx context.Context, ownerID, computerID string, q *intakeLabelQueue) {
-	l := &rt.intakeLabels
-	for {
-		l.mu.Lock()
-		held := takeIntakeFlushLocked(q)
-		if l.stopped || held == nil {
-			q.inFlight = false
-			if !l.stopped {
-				rt.scheduleIntakeFlushLocked(ownerID, computerID, q)
-			}
-			l.mu.Unlock()
-			return
-		}
-		l.mu.Unlock()
-		rt.labelHeld(layerCtx, ownerID, computerID, held)
-	}
-}
+// intakeStopGrace is how long Stop waits, after the drain deadline cancelled
+// the flush, for cancelled calls to return before the store may close.
+const intakeStopGrace = 2 * time.Second
 
 // stopIntakeLabels is the graceful stop: it refuses new captures, lets a
 // running flush finish, flushes once what is held, all bounded by the
-// runtime's drain deadline, then cancels what is left. Nothing is persisted
-// and nothing runs at boot, so a crash still drops held captures exactly as
-// a failed label does. Called from Stop before the store closes.
+// runtime's drain deadline, then cancels what is left and waits (briefly)
+// for it to return, so nothing touches the store as it closes. Nothing is
+// persisted and nothing runs at boot, so a crash still drops held captures
+// exactly as a failed label does. Called from Stop before the store closes.
 func (rt *Runtime) stopIntakeLabels() {
 	l := &rt.intakeLabels
 	l.mu.Lock()
@@ -374,14 +433,13 @@ func (rt *Runtime) stopIntakeLabels() {
 		items           []intakeHeld
 	}
 	var rest []heldQueue
-	for key, q := range l.queues {
+	for _, q := range l.queues {
 		if q.timer != nil {
 			q.timer.Stop()
 			q.timer = nil
 		}
 		if len(q.items) > 0 && !already {
-			owner, computer, _ := strings.Cut(key, "\x00")
-			rest = append(rest, heldQueue{owner, computer, q.items})
+			rest = append(rest, heldQueue{q.owner, q.computer, q.items})
 		}
 		q.items = nil
 	}
@@ -410,7 +468,13 @@ func (rt *Runtime) stopIntakeLabels() {
 	select {
 	case <-finished:
 	case <-ctx.Done():
-		log.Printf("intake labels: stop: drain deadline reached; held captures stay unlabelled")
+		log.Printf("intake labels: stop: drain deadline reached; cancelling, held captures stay unlabelled")
+		l.cancel()
+		select {
+		case <-finished:
+		case <-time.After(intakeStopGrace):
+			log.Printf("intake labels: stop: the flush did not return within %v of its cancellation", intakeStopGrace)
+		}
 	}
 	l.cancel()
 }
@@ -429,6 +493,9 @@ func (rt *Runtime) labelHeld(ctx context.Context, ownerID, computerID string, he
 			labelled, unlabelled = 0, len(held)
 		}
 	}()
+	if hook := intakeFlushTestHook; hook != nil {
+		hook("labelHeld")
+	}
 	items := make([]sourcegraph.CapturedItem, len(held))
 	for i, h := range held {
 		items[i] = h.item
@@ -439,15 +506,15 @@ func (rt *Runtime) labelHeld(ctx context.Context, ownerID, computerID string, he
 	if judge == nil || rt.store == nil {
 		return 0, len(items)
 	}
-	budget, cancel := context.WithTimeout(ctx, intakeLabelPollBudget)
-	defer cancel()
-	lib := &intakeLibrary{rt: rt, summary: map[string]store.StorySummary{}}
 	// The labeler is management's: it reads the story index Texture
 	// publishes, never Texture's documents or revisions (X9).
-	budget = withKindReader(budget, "choir.capture_label")
-	if err := rt.store.PublishStoryIndex(budget, ownerID, computerID); err != nil {
+	ctx = withKindReader(ctx, "choir.capture_label")
+	prep, cancelPrep := context.WithTimeout(ctx, intakeLabelPrepBudget)
+	defer cancelPrep()
+	lib := &intakeLibrary{rt: rt, summary: map[string]store.StorySummary{}}
+	if err := rt.store.PublishStoryIndex(prep, ownerID, computerID); err != nil {
 		log.Printf("intake labels: flush: publish story index: %v; labelling against siblings only", err)
-	} else if sums, err := rt.store.ListStoryIndex(budget, ownerID, computerID, time.Time{}, "", 0); err != nil {
+	} else if sums, err := rt.store.ListStoryIndex(prep, ownerID, computerID, time.Time{}, "", 0); err != nil {
 		log.Printf("intake labels: flush: list stories: %v; labelling against siblings only", err)
 	} else {
 		docs := make([]types.Document, 0, len(sums))
@@ -457,13 +524,13 @@ func (rt *Runtime) labelHeld(ctx context.Context, ownerID, computerID string, he
 		}
 		lib.recent, lib.rest = intakeShortlistSplit(docs, time.Now().UTC())
 	}
-	if examples, err := rt.store.RecentCaptureLabelOverrides(budget, ownerID, computerID, intakeOverrideExamples); err != nil {
+	if examples, err := rt.store.RecentCaptureLabelOverrides(prep, ownerID, computerID, intakeOverrideExamples); err != nil {
 		log.Printf("intake labels: flush: read corrections: %v", err)
 	} else {
 		lib.examples = examples
 	}
 
-	results := rt.labelPoll(budget, lib, ownerID, computerID, sourceID, items, intakeBatchCaptures)
+	results := rt.labelPoll(ctx, lib, ownerID, computerID, sourceID, items, intakeBatchCaptures)
 	for i, r := range results {
 		r.Value.SourceID = held[i].sourceID
 		if r.Err == nil {
@@ -472,28 +539,28 @@ func (rt *Runtime) labelHeld(ctx context.Context, ownerID, computerID string, he
 			_, r.Err = rt.store.AppendCaptureLabel(withKindCustodian(ctx, "choir.capture_label"), r.Value)
 		}
 		if r.Err != nil {
-			// A capture the budget ended before it started is left
-			// unlabelled without a line, as before.
-			if budget.Err() == nil {
+			// A capture a stop cancelled before it was asked is left
+			// unlabelled without a line.
+			if ctx.Err() == nil {
 				log.Printf("intake labels: flush: %s unlabelled: %v", items[i].CaptureID, r.Err)
 			}
 			continue
 		}
 		labelled++
 	}
-	if budget.Err() != nil {
+	if ctx.Err() != nil {
 		notAsked := 0
 		for _, r := range results {
-			if r.Err != nil && (errors.Is(r.Err, context.DeadlineExceeded) || errors.Is(r.Err, context.Canceled)) {
+			if r.Err != nil && errors.Is(r.Err, context.Canceled) {
 				notAsked++
 			}
 		}
-		log.Printf("intake labels: budget expired during the flush: %d of %d captures not asked or unanswered", notAsked, len(items))
+		log.Printf("intake labels: stopped during the flush: %d of %d captures not asked or unanswered", notAsked, len(items))
 	}
 	// One line per flush, counts only: the per-capture lines above stop when
 	// the budget ends, and a slow Jev would otherwise leave no trace.
-	log.Printf("intake labels: flush captures=%d calls=%d questions=%d bytes_max=%d waited_ms=%d unlabelled=%d budget_expired=%t",
-		len(items), lib.stats.calls, lib.stats.questions, lib.stats.maxBytes, waited.Milliseconds(), len(items)-labelled, budget.Err() != nil)
+	log.Printf("intake labels: flush captures=%d calls=%d questions=%d bytes_max=%d waited_ms=%d unlabelled=%d cancelled=%t",
+		len(items), lib.stats.calls, lib.stats.questions, lib.stats.maxBytes, waited.Milliseconds(), len(items)-labelled, ctx.Err() != nil)
 	return labelled, len(items) - labelled
 }
 

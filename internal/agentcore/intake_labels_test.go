@@ -446,7 +446,7 @@ func TestIntakeLabelsOffMakesNoJevCall(t *testing.T) {
 	f.rt.SetCandidateJudge(judge)
 	openTestStory(t, f.s, f.owner, f.computer, "Pope has lung surgery")
 	*f.items = []labelFeedItem{{"Papst an der Lunge operiert", "Der Vatikan meldet eine erfolgreiche Operation."}}
-	sched := f.poll(t)
+	f.poll(t)
 	if judge.callCount() != 0 {
 		t.Fatalf("intake.labels is off but Jev was called %d times", judge.callCount())
 	}
@@ -455,9 +455,6 @@ func TestIntakeLabelsOffMakesNoJevCall(t *testing.T) {
 	}
 	if labels, err := f.s.CaptureLabels(context.Background(), f.owner, f.computer, f.captureID(0)); err != nil || len(labels) != 0 {
 		t.Fatalf("labels with the setting off = %+v, %v", labels, err)
-	}
-	if last := sched.Recent[len(sched.Recent)-1]; last.Labelled != 0 || last.Unlabelled != 0 {
-		t.Fatalf("usage counts labels with the setting off: %+v", last)
 	}
 }
 
@@ -483,7 +480,7 @@ func TestIntakeLabelsMapAliasesBackLabelSiblingsAndStayOutOfTheArrival(t *testin
 		{"Удар по электростанции в Киеве", "Ракеты поразили электростанцию."},
 		{"Ukrainian goes on trial over pipeline", "A second suspect appears in court."},
 	}
-	sched := f.poll(t)
+	f.poll(t)
 
 	// B7: four captures and two stories are one chunk and one group, so one
 	// call carries all eight questions.
@@ -573,15 +570,12 @@ func TestIntakeLabelsMapAliasesBackLabelSiblingsAndStayOutOfTheArrival(t *testin
 	if strings.Contains(string(raw), "jev") || strings.Contains(string(raw), pope) {
 		t.Fatalf("the arrival record carries a label: %s", raw)
 	}
-	if last := sched.Recent[len(sched.Recent)-1]; last.Labelled != 0 || last.Unlabelled != 0 {
-		t.Fatalf("poll usage = %+v; labels are counted by the flush, not the poll", last)
-	}
 }
 
 func TestIntakeLabelsFailingOrSlowJevLeavesCapturesUnlabelledWithinBudget(t *testing.T) {
-	prevCall, prevPoll := intakeLabelCallTimeout, intakeLabelPollBudget
-	intakeLabelCallTimeout, intakeLabelPollBudget = 100*time.Millisecond, 300*time.Millisecond
-	t.Cleanup(func() { intakeLabelCallTimeout, intakeLabelPollBudget = prevCall, prevPoll })
+	prevCall := intakeLabelCallTimeout
+	intakeLabelCallTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { intakeLabelCallTimeout = prevCall })
 	for _, c := range []struct {
 		name  string
 		judge *fakeIntakeJudge
@@ -1301,16 +1295,16 @@ func TestIntakeLabelsLogOneLinePerPoll(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("B15: %d poll lines; want one: %v", len(got), got)
 	}
-	for _, want := range []string{"captures=5", "calls=1", "questions=10", "unlabelled=0", "budget_expired=false", "bytes_max="} {
+	for _, want := range []string{"captures=5", "calls=1", "questions=10", "unlabelled=0", "cancelled=false", "bytes_max="} {
 		if !strings.Contains(got[0], want) {
 			t.Fatalf("B15: poll line %q lacks %s", got[0], want)
 		}
 	}
 
 	// A slow Jev that ends the budget still leaves the line.
-	prevCall, prevPoll := intakeLabelCallTimeout, intakeLabelPollBudget
-	intakeLabelCallTimeout, intakeLabelPollBudget = 100*time.Millisecond, 150*time.Millisecond
-	t.Cleanup(func() { intakeLabelCallTimeout, intakeLabelPollBudget = prevCall, prevPoll })
+	prevCall := intakeLabelCallTimeout
+	intakeLabelCallTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { intakeLabelCallTimeout = prevCall })
 	g := newIntakeFixture(t, "owner-labels-pollline-slow")
 	g.enable(t)
 	openTestStory(t, g.s, g.owner, g.computer, "Pope has lung surgery")

@@ -515,3 +515,32 @@ consumers read whatever labels exist: corpus search takes label hints from
 `RecentCaptureLabels` and ranks without one when missing, and the override
 recorder skips a capture with no label (`intake_overrides.go`). Neither
 waits, so 30 s more delay changes nothing for them.
+
+### Intake flush: delta review changes (2026-11-10)
+
+- **One flusher per runtime.** `HandleSourcePollDue(ctx, ownerID, computerID,
+  ...)` takes the computer as an argument and does not check it against the
+  runtime's configured `cfg.ComputerID`, and the queues are keyed by owner and
+  computer; so code does not show that one runtime serves one computer. The
+  flusher is therefore one goroutine per runtime that drains the computers'
+  queues in turn (`runIntakeFlusher`), so Jev is never called concurrently
+  even across computers.
+- **No shared deadline across calls.** The old 60 s flush budget dropped the
+  calls not yet asked when it expired. Each call now has its own
+  `intakeLabelCallTimeout` (5 s) started when it is about to be sent; the
+  story-index reads have their own `intakeLabelPrepBudget`; only a stop
+  cancels. Our measured latency is flat in question count
+  (docs/reference/system1/our-usage.md), so 5 s is not expected to bite at 12
+  questions per call; the shadow comparison is where that is checked.
+- **Stop waits after cancelling.** When the drain deadline fires and the
+  context is cancelled, `Stop` waits up to `intakeStopGrace` (2 s) for the
+  cancelled calls to return before the store may close, and logs if they do
+  not.
+- **Label counts.** `SourcePollUsage.Labelled` and `.Unlabelled` were never
+  set after the flush moved off the poll and nothing else read them, so they
+  are deleted. Counts live on the flush log line
+  (`intake labels: flush captures= calls= questions= bytes_max= waited_ms=
+  unlabelled= cancelled=`).
+- **Open: the arrival is still announced at the poll.** See the report to the
+  coordinator; moving it to the flush changes the pending-arrival retry,
+  which belongs to the schedule record.
