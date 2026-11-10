@@ -17,6 +17,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/server"
+	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
 // The platform operator's acts on platform computers, from the operator's own
@@ -69,6 +70,9 @@ const (
 	operatorActRead   operatorAct = "platform.computer.read"
 	operatorActPolicy operatorAct = "platform.computer.model_policy"
 	operatorActVerify operatorAct = "platform.computer.model_policy.verify"
+	// O4 and O5 (docs/design/platform-operator-account-2026-11-06.md section 9).
+	operatorActSchedule operatorAct = "platform.computer.schedule"
+	operatorActRestart  operatorAct = "platform.computer.restart"
 )
 
 // platformActTarget is a platform computer the gate admitted an act on.
@@ -86,6 +90,10 @@ type platformActTarget struct {
 const (
 	operatorReceiptsHeader = "X-Choir-Operator-Receipts"
 	policyGuest            = "/api/files/System/model-policy.toml"
+	schedulesGuest         = "/api/autopaper/sources/schedules"
+	restartReceiptGuest    = "/api/platform/operator/restart-receipt"
+	operatorRestartSegment = "restart"
+	operatorReasonMax      = 280
 )
 
 // platformOperatorHolds asks corpusd, the only reader of the roster, whether
@@ -227,8 +235,59 @@ func operatorGuestRoute(method, rest string, query url.Values) (guestPath string
 		}
 	case rest == "/api/model-policy/verify" && method == http.MethodPost && len(query) == 0:
 		return rest, operatorActVerify, true
+	case rest == schedulesGuest && method == http.MethodGet && len(query) == 0:
+		return rest, operatorActRead, true
+	case rest == schedulesGuest && method == http.MethodPost && len(query) == 0:
+		return rest, operatorActSchedule, true
+	case rest == schedulesGuest && method == http.MethodDelete && operatorStopQuery(query):
+		return rest, operatorActSchedule, true
 	}
 	return "", "", false
+}
+
+// operatorStopQuery admits the query of a schedule stop: source_id (once,
+// required) and reason (at most once), nothing else.
+func operatorStopQuery(q url.Values) bool {
+	for k, v := range q {
+		if (k != "source_id" && k != "reason") || len(v) != 1 {
+			return false
+		}
+	}
+	return q.Get("source_id") != "" && len(q.Get("reason")) <= operatorReasonMax
+}
+
+// operatorScheduleStartBody parses an operator's schedule start and returns
+// the body the proxy forwards, rebuilt from the parsed fields: the four the
+// operator may set. Anything else (a feed URL, a fixture run, a second
+// document) is refused here and again at the guest.
+func operatorScheduleStartBody(raw []byte) (string, bool) {
+	var in struct {
+		SourceID        string `json:"source_id"`
+		IntervalMinutes int    `json:"interval_minutes"`
+		MaxItems        int    `json:"max_items"`
+		Reason          string `json:"reason"`
+	}
+	dec := json.NewDecoder(strings.NewReader(string(raw)))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&in); err != nil || dec.More() || strings.TrimSpace(in.SourceID) == "" || len(in.Reason) > operatorReasonMax ||
+		in.IntervalMinutes < 0 || in.MaxItems < 0 {
+		return "", false
+	}
+	out, err := json.Marshal(in)
+	if err != nil {
+		return "", false
+	}
+	return string(out), true
+}
+
+// splitOperatorRestartPath splits /api/platform/operator/computers/<id>/restart.
+func splitOperatorRestartPath(path string) (computerID string, ok bool) {
+	tail := strings.TrimPrefix(path, platformOperatorComputersPath+"/")
+	id, seg, found := strings.Cut(tail, "/")
+	if !found || id == "" || seg != operatorRestartSegment {
+		return "", false
+	}
+	return id, true
 }
 
 // splitOperatorComputerPath splits /api/platform/operator/computers/<id>/guest/<rest>.
@@ -253,6 +312,10 @@ func isPlatformOperatorComputersPath(path string) bool {
 func (h *Handler) HandlePlatformOperatorComputers(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == platformOperatorComputersPath {
 		h.handlePlatformOperatorStatus(w, r)
+		return
+	}
+	if id, ok := splitOperatorRestartPath(r.URL.Path); ok && r.URL.EscapedPath() == r.URL.Path {
+		h.handlePlatformOperatorRestart(w, r, id)
 		return
 	}
 	id, rest, ok := splitOperatorComputerPath(r.URL.Path)
@@ -282,19 +345,38 @@ func (h *Handler) handlePlatformOperatorGuest(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var body io.Reader
+	rawQuery := r.URL.RawQuery
 	if r.Body != nil && r.Method != http.MethodGet {
 		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, operatorMaxBody))
 		if err != nil {
 			writeJSON(w, http.StatusRequestEntityTooLarge, errorResponse{Error: "request body too large"})
 			return
 		}
+		if act == operatorActSchedule && r.Method == http.MethodPost {
+			rebuilt, ok := operatorScheduleStartBody(raw)
+			if !ok {
+				writeJSON(w, http.StatusBadRequest, errorResponse{Error: "an operator schedule start takes source_id, interval_minutes, max_items and reason only"})
+				return
+			}
+			raw = []byte(rebuilt)
+		}
 		body = strings.NewReader(string(raw))
 	}
-	if act == operatorActPolicy {
+	if act == operatorActSchedule && r.Method == http.MethodDelete {
+		// Rebuilt from the two admitted keys, so the guest sees nothing else.
+		q := r.URL.Query()
+		rawQuery = url.Values{"source_id": {q.Get("source_id")}, "reason": {q.Get("reason")}}.Encode()
+	}
+	if act == operatorActPolicy || act == operatorActSchedule {
 		// A guest from before the operator receipt ignores the marker and
-		// would write with no receipt. Ask first (a read of the same file);
-		// a guest that does not say it records receipts is not written to.
-		if _, _, _, err := h.operatorGuestCall(r.Context(), pa, http.MethodGet, policyGuest, "", "", nil, true); err != nil {
+		// would write with no receipt. Ask first (a read of the same
+		// surface); a guest that does not say it records receipts is not
+		// written to.
+		probe := policyGuest
+		if act == operatorActSchedule {
+			probe = schedulesGuest
+		}
+		if _, _, _, err := h.operatorGuestCall(r.Context(), pa, http.MethodGet, probe, "", "", nil, true); err != nil {
 			writeAutoputerResolveFailure(w, http.StatusBadGateway, "platform computer unavailable", err)
 			return
 		}
@@ -303,7 +385,7 @@ func (h *Handler) handlePlatformOperatorGuest(w http.ResponseWriter, r *http.Req
 			return
 		}
 	}
-	status, header, raw, err := h.operatorGuestCall(r.Context(), pa, r.Method, guestPath, r.URL.RawQuery, r.Header.Get("Content-Type"), body, true)
+	status, header, raw, err := h.operatorGuestCall(r.Context(), pa, r.Method, guestPath, rawQuery, r.Header.Get("Content-Type"), body, true)
 	if err != nil {
 		writeAutoputerResolveFailure(w, http.StatusBadGateway, "platform computer unavailable", err)
 		return
@@ -461,4 +543,94 @@ func shortOperatorErr(err error) string {
 		return "computer " + wake.State
 	}
 	return "unreachable"
+}
+
+// handlePlatformOperatorRestart is O5: POST .../computers/<id>/restart with a
+// reason. The restart is vmctl's owner update (a planned, marker-backed
+// refresh, owner_update.go) and nothing else: the guest refuses it mid
+// self-development apply or while an engineering capsule is live, and vmctl
+// defers a held or in-flight computer. This handler never calls vmctl's plain
+// stop, start, restart or refresh, so it cannot end work the way a crash
+// restart does (CLAUDE.md "Restarts End Work (Crash) Or Resume It (Planned
+// Update)"). The receipt is recorded on the computer's tape first; with no
+// receipt there is no restart. It does not wake a computer that is not active.
+func (h *Handler) handlePlatformOperatorRestart(w http.ResponseWriter, r *http.Request, computerID string) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
+	pa, ok := h.authorizePlatformComputerAct(w, r, computerID, operatorActRestart)
+	if !ok {
+		return
+	}
+	var in struct {
+		Reason string `json:"reason"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&in); err != nil || dec.More() || strings.TrimSpace(in.Reason) == "" || len(in.Reason) > operatorReasonMax {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "a restart needs a reason of at most 280 bytes, and no other field"})
+		return
+	}
+	if pa.Target.State != "active" {
+		writeJSON(w, http.StatusConflict, map[string]any{"outcome": "skipped", "reason_code": "not_active",
+			"reason": "the computer is not active (state=" + pa.Target.State + "); nothing was restarted"})
+		return
+	}
+	reqBody, _ := json.Marshal(map[string]string{"reason": in.Reason})
+	status, _, raw, err := h.operatorGuestCall(r.Context(), pa, http.MethodPost, restartReceiptGuest, "", "application/json", strings.NewReader(string(reqBody)), false)
+	if err != nil {
+		writeAutoputerResolveFailure(w, http.StatusBadGateway, "platform computer unavailable", err)
+		return
+	}
+	if !pa.GuestRecordsReceipts {
+		writeJSON(w, http.StatusConflict, errorResponse{Error: "the computer's build does not record operator receipts yet; it will after its next update, and nothing was restarted"})
+		return
+	}
+	var receipt struct {
+		Receipt string `json:"receipt"`
+	}
+	if status != http.StatusOK || json.Unmarshal(raw, &receipt) != nil || receipt.Receipt == "" {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "the restart receipt could not be recorded; nothing was restarted"})
+		return
+	}
+	if h.vmctlClient == nil {
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "computer ownership authority unavailable"})
+		return
+	}
+	opCtx, cancel := h.vmctlOpContext(vmctl.WithLifecycleCaller(r.Context(), "proxy.operator.restart"))
+	defer cancel()
+	updated, err := h.vmctlClient.OwnerUpdateContext(opCtx, pa.Target.UserID, pa.Target.DesktopID)
+	if err != nil {
+		log.Printf("proxy: platform operator restart of %s: %v", computerID, err)
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "the planned restart could not be asked of vmctl", "receipt": receipt.Receipt})
+		return
+	}
+	out := map[string]any{"outcome": updated.Outcome, "receipt": receipt.Receipt}
+	if updated.Target != "" {
+		out["target"] = updated.Target
+	}
+	switch updated.Outcome {
+	case "refreshed", "current":
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
+	code := updated.ReasonCode
+	if code == "" {
+		code = updated.Reason
+	}
+	if code != "" {
+		out["reason_code"] = code
+	}
+	if updated.Reason != "" {
+		out["reason"] = updated.Reason
+	}
+	if len(updated.Refusal) > 0 {
+		out["detail"] = updated.Refusal
+	}
+	if updated.Outcome == "failed" {
+		writeJSON(w, http.StatusInternalServerError, out)
+		return
+	}
+	writeJSON(w, http.StatusConflict, out)
 }

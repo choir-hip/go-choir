@@ -97,6 +97,8 @@ var eventStorage = map[EventKind]EventStorage{
 	EventSettingUpdated:                 StorageObjectGraph,
 	EventFileChanged:                    StorageObjectGraph,
 	EventPlatformComputerModelPolicy:    StorageObjectGraph,
+	EventPlatformComputerSchedule:       StorageObjectGraph,
+	EventPlatformComputerRestart:        StorageObjectGraph,
 }
 
 // Storage returns the kind's storage class. A kind the table does not name

@@ -189,6 +189,9 @@ type runtimeHealthResponse struct {
 // APIHandler provides HTTP handlers for the runtime API endpoints.
 type APIHandler struct {
 	rt *Runtime
+	// operatorReceipt, when set, records a platform operator's receipt in
+	// place of the runtime's tape append (a test seam; operator_receipt.go).
+	operatorReceipt func(ctx context.Context, ownerID string, kind types.EventKind, payload map[string]any) (string, error)
 }
 
 // NewAPIHandler creates an APIHandler for the given runtime.

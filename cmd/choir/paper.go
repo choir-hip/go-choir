@@ -12,6 +12,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 )
@@ -32,27 +33,9 @@ type paperStatusList struct {
 // paperCall returns x with its client aimed at one platform computer: the one
 // named by --computer, or the only one the roster has.
 func paperCall(x *call) (*call, error) {
-	id := strings.TrimSpace(x.c.computerID)
-	if id == "" {
-		var list paperStatusList
-		if err := x.c.do(http.MethodGet, paperComputersRoute, nil, &list); err != nil {
-			return nil, err
-		}
-		switch len(list.Computers) {
-		case 0:
-			return nil, fmt.Errorf("the platform roster has no computer")
-		case 1:
-			id = list.Computers[0].ComputerID
-		default:
-			var ids []string
-			for _, c := range list.Computers {
-				ids = append(ids, c.ComputerID)
-			}
-			return nil, usagef("more than one platform computer (%s); name one with --computer", strings.Join(ids, ", "))
-		}
-	}
-	if !paperComputerID.MatchString(id) {
-		return nil, usagef("--computer must be a computer id like computer-<32 hex>, got %q", id)
+	id, err := paperTargetID(x)
+	if err != nil {
+		return nil, err
 	}
 	pc := *x.c
 	pc.prefix = paperComputersRoute + "/" + id + "/guest"
@@ -62,6 +45,34 @@ func paperCall(x *call) (*call, error) {
 	px := *x
 	px.c = &pc
 	return &px, nil
+}
+
+// paperTargetID is the platform computer the verb acts on: the one named by
+// --computer, or the only one the roster has.
+func paperTargetID(x *call) (string, error) {
+	id := strings.TrimSpace(x.c.computerID)
+	if id == "" {
+		var list paperStatusList
+		if err := x.c.do(http.MethodGet, paperComputersRoute, nil, &list); err != nil {
+			return "", err
+		}
+		switch len(list.Computers) {
+		case 0:
+			return "", fmt.Errorf("the platform roster has no computer")
+		case 1:
+			id = list.Computers[0].ComputerID
+		default:
+			var ids []string
+			for _, c := range list.Computers {
+				ids = append(ids, c.ComputerID)
+			}
+			return "", usagef("more than one platform computer (%s); name one with --computer", strings.Join(ids, ", "))
+		}
+	}
+	if !paperComputerID.MatchString(id) {
+		return "", usagef("--computer must be a computer id like computer-<32 hex>, got %q", id)
+	}
+	return id, nil
 }
 
 func paperWrap(h func(*call) (any, error)) func(*call) (any, error) {
@@ -78,6 +89,48 @@ func paperStatus(x *call) (any, error) {
 	return sendRaw(x, http.MethodGet, paperComputersRoute, nil)
 }
 
+const paperSchedulesPath = "/api/autopaper/sources/schedules"
+
+// paperScheduleStart is `choir paper schedule start`: the registry source only.
+// A feed the registry does not list is the owner's own act and has no flag here.
+func paperScheduleStart(x *call) (any, error) {
+	body := map[string]any{"source_id": x.str("source")}
+	if n := x.num("interval_minutes"); n > 0 {
+		body["interval_minutes"] = n
+	}
+	if n := x.num("max_items"); n > 0 {
+		body["max_items"] = n
+	}
+	if r := x.str("reason"); r != "" {
+		body["reason"] = r
+	}
+	return sendRaw(x, http.MethodPost, paperSchedulesPath, body)
+}
+
+func paperScheduleStop(x *call) (any, error) {
+	q := url.Values{"source_id": {x.str("source")}}
+	if r := x.str("reason"); r != "" {
+		q.Set("reason", r)
+	}
+	return sendRaw(x, http.MethodDelete, paperSchedulesPath+"?"+q.Encode(), nil)
+}
+
+// paperRestart is `choir paper restart --reason`: the operator route asks for
+// vmctl's planned, marker-backed refresh. A refusal (a live capsule, a
+// self-development apply, a held or in-flight computer) is an error with the
+// server's reason code, and the command exits non-zero; there is no force.
+func paperRestart(x *call) (any, error) {
+	id, err := paperTargetID(x)
+	if err != nil {
+		return nil, err
+	}
+	rc := *x.c
+	rc.prefix, rc.computerID = "", ""
+	rx := *x
+	rx.c = &rc
+	return sendRaw(&rx, http.MethodPost, paperComputersRoute+"/"+id+"/restart", map[string]any{"reason": x.str("reason")})
+}
+
 // paperCommands are `choir paper status` and the policy verbs under `paper`.
 func paperCommands() []*command {
 	cmds := []*command{{
@@ -85,6 +138,41 @@ func paperCommands() []*command {
 		scopes: readRuntime, readOnly: true, cliOnly: paperCLIOnly,
 		handler: paperStatus,
 	}}
+	cmds = append(cmds,
+		&command{
+			path: []string{"paper", "schedule", "list"}, summary: "Paper: the source schedules (operator only)",
+			scopes: readRuntime, readOnly: true, cliOnly: paperCLIOnly,
+			handler: paperWrap(func(x *call) (any, error) { return getRaw(x, paperSchedulesPath) }),
+		},
+		&command{
+			path: []string{"paper", "schedule", "start"}, summary: "Paper: start (or re-time) a source schedule; a receipt is recorded on the paper's tape first (operator only)",
+			params: []param{
+				pStr("source", "Registry source id, such as rss:example").req().orSay("choir paper schedule start --source <id> [--interval-minutes n] [--max-items n] [--reason text]"),
+				pInt("interval_minutes", "Minutes between polls (default: the schedule's own)"),
+				pInt("max_items", "Items per poll (default: the schedule's own)"),
+				pStr("reason", "Why, kept in the receipt (at most 280 bytes)"),
+			},
+			scopes: writeRuntime, cliOnly: paperCLIOnly,
+			handler: paperWrap(paperScheduleStart),
+		},
+		&command{
+			path: []string{"paper", "schedule", "stop"}, summary: "Paper: stop a source schedule; a receipt is recorded on the paper's tape first (operator only)",
+			params: []param{
+				pStr("source", "Registry source id").req().orSay("choir paper schedule stop --source <id> [--reason text]"),
+				pStr("reason", "Why, kept in the receipt (at most 280 bytes)"),
+			},
+			scopes: writeRuntime, destructive: true, idempotent: true, cliOnly: paperCLIOnly,
+			handler: paperWrap(paperScheduleStop),
+		},
+		&command{
+			path: []string{"paper", "restart"}, summary: "Paper: ask for a planned, marker-backed restart; refused mid self-development apply or with a live capsule (operator only)",
+			params: []param{
+				pStr("reason", "Why, kept in the receipt (at most 280 bytes)").req().orSay("choir paper restart --reason <text>"),
+			},
+			scopes: writeRuntime, cliOnly: paperCLIOnly,
+			handler: paperRestart,
+		},
+	)
 	for _, p := range policyCommands() {
 		c := *p
 		c.path = append([]string{"paper"}, p.path...)

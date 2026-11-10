@@ -699,6 +699,11 @@ func (h *APIHandler) HandleSourceSchedules(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	rt := h.rt
+	// A platform operator's act (the proxy's operator gate) is recorded on the
+	// tape before it lands; an ordinary owner request falls through.
+	if h.operatorSchedule(w, r, ownerID) {
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
 		schedules, err := rt.store.ListSourceSchedules(r.Context(), ownerID)

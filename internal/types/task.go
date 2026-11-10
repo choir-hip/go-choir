@@ -401,6 +401,18 @@ const (
 	// The payload names the operator account id (never an email), the act,
 	// the revision kept, and digests of the old and new file.
 	EventPlatformComputerModelPolicy EventKind = "platform.computer.model_policy"
+
+	// EventPlatformComputerSchedule is the operator receipt for a source
+	// schedule start or stop on a platform computer (platform-operator-account
+	// design, section 9). It is recorded before the schedule changes. The
+	// payload names the operator account id, never an email.
+	EventPlatformComputerSchedule EventKind = "platform.computer.schedule"
+
+	// EventPlatformComputerRestart is the operator receipt for a request to
+	// restart a platform computer as a planned, marker-backed refresh. It
+	// records the ask; the planned-restart marker and the next boot's own
+	// record show what followed.
+	EventPlatformComputerRestart EventKind = "platform.computer.restart"
 )
 
 // EventRecord represents a single runtime event emitted during run execution

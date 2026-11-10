@@ -132,6 +132,8 @@ var eventDurability = map[EventKind]EventDurability{
 	// Acknowledged: an operator receipt is a record of authority, recorded
 	// before the effect it names.
 	EventPlatformComputerModelPolicy: DurabilityAcknowledged,
+	EventPlatformComputerSchedule:    DurabilityAcknowledged,
+	EventPlatformComputerRestart:     DurabilityAcknowledged,
 }
 
 // Durability returns the kind's class. A kind the table does not name is

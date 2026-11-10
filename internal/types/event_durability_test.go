@@ -140,8 +140,8 @@ func TestDurabilityTableIsTheDesignedTen(t *testing.T) {
 	// the authority a class stays gated on across a restart.
 	// And platform.computer.model_policy (acknowledged, 2026-11-09): the
 	// platform operator's receipt for a policy write on a platform computer.
-	if n := len(eventDurability); n != 53 {
-		t.Fatalf("eventDurability has %d entries, want 53 (the 42 designed kinds, system1.judgment, story.relation, story.entities, calibration.read, disclosure.decision, texture.search.queried, model.served, search.served, setting.updated, trust.breaker and platform.computer.model_policy)", n)
+	if n := len(eventDurability); n != 55 {
+		t.Fatalf("eventDurability has %d entries, want 55 (the 42 designed kinds, system1.judgment, story.relation, story.entities, calibration.read, disclosure.decision, texture.search.queried, model.served, search.served, setting.updated, trust.breaker, platform.computer.model_policy, platform.computer.schedule and platform.computer.restart)", n)
 	}
 }
 

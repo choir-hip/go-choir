@@ -65,7 +65,7 @@ var wantCLIOnly = []string{
 	// The platform operator's acts on a platform computer (O2, O3): they run
 	// on the operator's own login, and a hosted MCP server must not hold
 	// platform authority.
-	"paper policy get", "paper policy lead", "paper policy pin", "paper policy revisions", "paper policy rollback", "paper policy set", "paper policy verify", "paper status",
+	"paper policy get", "paper policy lead", "paper policy pin", "paper policy revisions", "paper policy rollback", "paper policy set", "paper policy verify", "paper restart", "paper schedule list", "paper schedule start", "paper schedule stop", "paper status",
 	// The platform operator's break-glass yank (F1): host only.
 	"platform yank",
 	"precommit import-ledger",

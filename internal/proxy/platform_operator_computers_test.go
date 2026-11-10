@@ -73,6 +73,11 @@ type operatorWorld struct {
 	corpusdUp  bool
 	corpusdBad string // when set, the check route answers this body with 200
 	oldGuest   bool   // a guest build from before operator receipts: it ignores the marker
+	// vmctl's other endpoints, for the restart (docs section 9, X1 to X9).
+	vmctlPaths  []string
+	refreshCode int
+	refreshBody string
+	receiptCode int // what the guest's restart-receipt route answers
 }
 
 // R7: a guest that does not record operator receipts is never written to.
@@ -94,7 +99,8 @@ func TestOperatorWriteRefusedOnAGuestThatDoesNotRecordReceipts(t *testing.T) {
 
 func newOperatorWorld(t *testing.T, roster string) *operatorWorld {
 	t.Helper()
-	w := &operatorWorld{t: t, state: "active", guestCode: http.StatusOK, guestBody: `{"ok":true}`, corpusdUp: true}
+	w := &operatorWorld{t: t, state: "active", guestCode: http.StatusOK, guestBody: `{"ok":true}`, corpusdUp: true,
+		refreshCode: http.StatusOK, refreshBody: `{"outcome":"refreshed","target":"abc123"}`}
 	ph := &platform.Handler{}
 	if _, err := ph.ConfigurePlatformOperatorUsers(roster); err != nil && roster != "malformed" {
 		t.Fatal(err)
@@ -123,6 +129,11 @@ func newOperatorWorld(t *testing.T, roster string) *operatorWorld {
 		w.mu.Lock()
 		w.guestCalls = append(w.guestCalls, guestSeen{r.Method, r.URL.Path, r.URL.RawQuery, r.Header.Clone(), string(raw)})
 		code, body := w.guestCode, w.guestBody
+		if r.URL.Path == "/api/platform/operator/restart-receipt" && w.receiptCode != 0 {
+			code, body = w.receiptCode, `{"error":"no"}`
+		} else if r.URL.Path == "/api/platform/operator/restart-receipt" {
+			body = `{"receipt":"evt-restart-1"}`
+		}
 		w.mu.Unlock()
 		rw.Header().Set("Content-Type", "application/json")
 		if !w.oldGuest {
@@ -136,6 +147,15 @@ func newOperatorWorld(t *testing.T, roster string) *operatorWorld {
 	t.Cleanup(guest.Close)
 	vm := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		w.mu.Lock()
+		w.vmctlPaths = append(w.vmctlPaths, r.URL.Path)
+		if r.URL.Path == vmctl.DeployRefreshEndpoint("") {
+			code, body := w.refreshCode, w.refreshBody
+			w.mu.Unlock()
+			rw.Header().Set("Content-Type", "application/json")
+			rw.WriteHeader(code)
+			_, _ = rw.Write([]byte(body))
+			return
+		}
 		w.lookups = append(w.lookups, r.URL.Query().Get("computer_id")+"|user="+r.URL.Query().Get("user_id"))
 		state := w.state
 		w.mu.Unlock()

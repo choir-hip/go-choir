@@ -23,7 +23,24 @@ choir paper policy set --local f  # validated, old file kept, a receipt on the p
 choir paper policy revisions
 choir paper policy rollback [--to n]
 choir paper policy verify [--role r]
+choir paper schedule list
+choir paper schedule start --source rss:<id> [--interval-minutes n] [--max-items n] [--reason text]
+choir paper schedule stop --source rss:<id> [--reason text]
+choir paper restart --reason text
 ```
+
+Schedules and restart (O4 and O5, built 2026-11-10, not yet proved on d@e or
+staging): each start, stop and restart records a
+`platform.computer.schedule` or `platform.computer.restart` receipt on the
+paper's tape before it acts, and the answer prints the receipt id. A schedule
+start takes a registry source only (no feed URL). `restart` is vmctl's planned,
+marker-backed owner update: it is refused, with a reason code and exit 1, mid
+self-development apply, with a live engineering capsule or a snapshot in
+flight, for a held or not-active computer, while a refresh is in flight, or
+while the ring has not opened. There is no force; it never stops and starts
+the computer the plain way. The paper (public_platform) takes the refresh while
+busy and resumes its work. The answer's `receipt` records the ask, not the
+outcome.
 
 `--computer <id>` names another platform computer; with one in the roster it
 is implied. Each write prints `revision` (the file kept) and `receipt` (the
