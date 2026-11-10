@@ -288,14 +288,10 @@ func TestPromptBarWithoutContinueCreatesNewDocument(t *testing.T) {
 }
 
 // P8: a retried submit with the same command_id commits no second
-// revision. The mechanism, read from the code and this test (review 284
-// item 7): the prompt-bar continue sends no expected head, so the retry
-// takes the document's current head, which is now the first owner revision.
-// The retry passes the handler's head check, but its command (same
-// owner-revise:<command_id>, new expected head and parent) has a different
-// digest, so the store's replayLifecycleCommand finds the stored command
-// and refuses it: 409 "lifecycle command digest conflict" (lifecycle.go,
-// replayLifecycleCommand). It is not a 202 replay.
+// revision and answers the first one's receipt as a replay. Before the one
+// revise call this was a 409 "lifecycle command digest conflict" (the retry
+// took the new head as its base and so digested differently); reviseDocument
+// now finds the revision the request id already wrote (contract 1, R6).
 func TestPromptBarContinueRetryCommitsOneRevision(t *testing.T) {
 	core, handler := testAPISetup(t)
 	s := core.Store()
@@ -310,8 +306,11 @@ func TestPromptBarContinueRetryCommitsOneRevision(t *testing.T) {
 	}
 	firstReceipt := decodeContinueReceipt(t, first)
 	retry := postPromptBar(t, handler, start.OwnerID, body, false)
-	if retry.Code != http.StatusConflict || !strings.Contains(retry.Body.String(), "lifecycle command digest conflict") {
-		t.Fatalf("P8: retry status=%d body=%s, want 409 lifecycle command digest conflict", retry.Code, retry.Body.String())
+	if retry.Code != http.StatusAccepted {
+		t.Fatalf("P8: retry status=%d body=%s, want a 202 replay", retry.Code, retry.Body.String())
+	}
+	if replay := decodeContinueReceipt(t, retry); !replay.Replay || replay.RevisionID != firstReceipt.RevisionID {
+		t.Fatalf("P8: retry receipt=%+v, want a replay of %s", replay, firstReceipt.RevisionID)
 	}
 	doc, err := s.GetLifecycleDocument(t.Context(), start.OwnerID, start.ComputerID, docID)
 	if err != nil || doc.CurrentRevisionID != firstReceipt.RevisionID {

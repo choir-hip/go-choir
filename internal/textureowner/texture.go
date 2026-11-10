@@ -32,7 +32,6 @@ import (
 	"github.com/google/uuid"
 
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
-	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -1109,210 +1108,21 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Verify the document exists and belongs to this owner.
-	doc, err := h.getTextureDocument(r.Context(), ownerID, docID)
+	// The editor's body save is the edit case of the one revise call.
+	receipt, err := h.reviseDocument(r.Context(), ReviseRequest{
+		OwnerID: ownerID, DocID: docID, ClientRequestID: strings.TrimSpace(req.IdempotencyKey),
+		BaseRevisionID: req.ParentRevisionID,
+		Body: &ReviseBody{
+			Content: req.Content, BodyDoc: req.BodyDoc, SourceEntities: req.SourceEntities,
+			Citations: req.Citations, Metadata: req.Metadata,
+			AllowRebase: req.AllowRebase, ExpectedLifecycleVersion: req.ExpectedLifecycleVersion,
+		},
+	})
 	if err != nil {
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
+		writeOwnerRevisionRefusal(w, err)
 		return
 	}
-	lifecycleBound := strings.TrimSpace(doc.TrajectoryID) != ""
-	if lifecycleBound && (strings.TrimSpace(req.IdempotencyKey) == "" || req.ExpectedLifecycleVersion <= 0 || strings.TrimSpace(req.ParentRevisionID) == "") {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "idempotency_key, expected_lifecycle_version, and parent_revision_id are required for lifecycle revisions"})
-		return
-	}
-
-	now := time.Now().UTC()
-	if !lifecycleBound {
-		if err := h.canonicalizeAliasedTextureDocumentTitle(asOwner(r.Context()), ownerID, &doc, now); err != nil {
-			log.Printf("texture api: canonicalize aliased document title: %v", err)
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to canonicalize document title"})
-			return
-		}
-	}
-
-	// If parent_revision_id is not specified, use the document's current head.
-	parentID := req.ParentRevisionID
-	if parentID == "" {
-		parentID = doc.CurrentRevisionID
-	}
-
-	citations := req.Citations
-	if citations == nil {
-		citations = json.RawMessage("[]")
-	}
-	metadata := req.Metadata
-	if metadata == nil {
-		metadata = json.RawMessage("{}")
-	}
-	content := req.Content
-	var parentRev types.Revision
-	var hasParentRev bool
-	if strings.TrimSpace(parentID) != "" {
-		if rev, err := h.getTextureRevision(r.Context(), ownerID, parentID); err == nil {
-			parentRev = rev
-			hasParentRev = true
-			var stabilized bool
-			content, stabilized = stabilizeTextureUserMarkdownStructures(parentRev.Content, content)
-			if stabilized {
-				metadata = mergeTextureRevisionMetadata(metadata, map[string]any{
-					"texture_structure_stabilized":        true,
-					"texture_structure_stabilized_reason": "preserved_parent_markdown_table_after_collapsed_draft",
-				})
-			}
-		} else {
-			log.Printf("texture api: load parent revision for structure stabilization %s: %v", parentID, err)
-		}
-	}
-	// A bound commit, settled-unbound included, is on doc.TrajectoryID, so its label is too.
-	recordTrajectoryID := ""
-	if lifecycleBound {
-		recordTrajectoryID = doc.TrajectoryID
-	}
-	metadata = carryForwardTextureMetadataForRecord(metadata, parentRev.Metadata, recordTrajectoryID)
-	// Only Texture's evidence path writes an embed (station TE, design E7):
-	// the owner may keep, delete or move one, never add or alter one.
-	var parentBody json.RawMessage
-	if hasParentRev {
-		parentBody = parentRev.BodyDoc
-	}
-	if added := newEmbeds(parentBody, req.BodyDoc); len(added) > 0 {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "embeds are written only by Texture (capsule_evidence from a frozen candidate's bundle); this revision adds or alters " + strings.Join(added, ", ") + "; keep, delete or move an embed, do not add or change one"})
-		return
-	}
-	if !lifecycleBound {
-		if canonicalPath, err := h.ensureCanonicalTextureProjectionPath(r.Context(), ownerID, doc); err == nil && canonicalPath != "" {
-			metadata = mergeTextureRevisionMetadata(metadata, map[string]any{
-				canonicalTextureSourcePathMetadataKey: canonicalPath,
-			})
-		} else if err != nil {
-			log.Printf("texture api: ensure canonical texture projection path: %v", err)
-		}
-	}
-
-	revisionID := uuid.New().String()
-	if lifecycleBound {
-		revisionID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{ownerID, doc.ComputerID, doc.TrajectoryID, strings.TrimSpace(req.IdempotencyKey)}, "\x00"))).String()
-	}
-	rev := types.Revision{
-		RevisionID:       revisionID,
-		DocID:            docID,
-		OwnerID:          ownerID,
-		AuthorKind:       types.AuthorUser,
-		AuthorLabel:      ownerID,
-		Content:          content,
-		BodyDoc:          req.BodyDoc,
-		SourceEntities:   req.SourceEntities,
-		Citations:        citations,
-		Metadata:         metadata,
-		ParentRevisionID: parentID,
-		CreatedAt:        now,
-	}
-
-	if lifecycleBound {
-		rev.ComputerID, rev.TrajectoryID = doc.ComputerID, doc.TrajectoryID
-		snapshot, snapshotErr := h.Store.GetLifecycleSnapshot(r.Context(), ownerID, doc.ComputerID, doc.TrajectoryID)
-		if snapshotErr != nil {
-			log.Printf("texture api: load lifecycle for revision: %v", snapshotErr)
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load lifecycle revision authority"})
-			return
-		}
-		targetAgentID := currentTextureAgentID(doc.DocID)
-		targetWorkItemID := ""
-		for _, work := range snapshot.WorkItems {
-			if work.Status == types.WorkItemOpen && work.AssignedAgentID == targetAgentID && work.AuthorityProfile == deskmanifest.DocumentCustodianName() {
-				if targetWorkItemID != "" {
-					writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle has multiple open Texture target work items"})
-					return
-				}
-				targetWorkItemID = work.WorkItemID
-			}
-		}
-		if snapshot.Trajectory.Status == types.TrajectoryLive && targetWorkItemID == "" {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle has no open Texture target work item"})
-			return
-		}
-		requestID, _ := textureOwnerOccurrenceIdentity(ownerID, doc.ComputerID, doc.DocID, strings.TrimSpace(req.IdempotencyKey))
-		command := types.CommitLifecycleArtifactHeadRequest{
-			OwnerID: ownerID, ComputerID: doc.ComputerID,
-			CommandID:    "public-head:" + strings.TrimSpace(req.IdempotencyKey),
-			TrajectoryID: doc.TrajectoryID, ExpectedLifecycleVersion: req.ExpectedLifecycleVersion,
-			ExpectedHeadRevisionID: parentID, Unbound: snapshot.Trajectory.Status != types.TrajectoryLive, Revision: rev,
-		}
-		graph, graphErr := textureToolSourceGraphWriteSet(rev, materializedTextureEdit{BodyDoc: req.BodyDoc, SourceEntities: req.SourceEntities}, &types.RunRecord{RunID: requestID, OwnerID: ownerID, ComputerID: doc.ComputerID})
-		if graphErr != nil {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid lifecycle revision source graph"})
-			return
-		}
-		commandDigest, digestErr := store.ComputeCommitLifecycleArtifactHeadWithSourceGraphDigest(command, graph)
-		if digestErr != nil {
-			log.Printf("texture api: digest lifecycle revision command: %v", digestErr)
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid lifecycle revision payload"})
-			return
-		}
-		command.CommandDigest = commandDigest
-		result, commitErr := h.Store.CommitLifecycleArtifactHeadWithSourceGraph(asOwner(r.Context()), command, graph)
-		if commitErr != nil {
-			if errors.Is(commitErr, store.ErrConcurrentStateChange) || errors.Is(commitErr, store.ErrLifecycleCommandConflict) || errors.Is(commitErr, store.ErrLifecycleInvalidTransition) {
-				writeAPIJSON(w, http.StatusConflict, apiError{Error: commitErr.Error()})
-			} else {
-				log.Printf("texture api: commit lifecycle revision: %v", commitErr)
-				writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to commit lifecycle revision"})
-			}
-			return
-		}
-		if result.Revision == nil {
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "lifecycle revision result unavailable"})
-			return
-		}
-		if !result.Replay {
-			h.recordTextureAudit(r.Context(), "revision_committed", ownerID, doc.ComputerID, doc.TrajectoryID, doc.DocID, result.Revision.RevisionID, command.CommandID, command.CommandDigest, result.Trajectory.LifecycleVersion)
-			h.emitTextureDocumentRevisionEvent(r.Context(), ownerID, *result.Revision)
-			if !command.Unbound {
-				h.dispatchTextureRevisionWake(ownerID, doc.ComputerID, doc.TrajectoryID, *result.Revision, requestID, result.Events, h.lifecycleDocDeskProfile(r.Context(), ownerID, doc))
-			}
-		}
-		writeAPIJSON(w, http.StatusCreated, h.revisionResponseFromRecord(r.Context(), *result.Revision))
-		return
-	}
-
-	if err := h.Store.CreateRevision(asOwner(r.Context()), rev); err != nil {
-		log.Printf("texture api: create revision: %v", err)
-		if errors.Is(err, store.ErrStaleDocumentHead) {
-			if req.AllowRebase && parentID != "" && len(strings.TrimSpace(string(req.BodyDoc))) == 0 {
-				req.Content = content
-				rebased, rebaseErr := h.createRebasedUserRevision(r.Context(), docID, ownerID, req, parentID, citations, metadata, now)
-				if rebaseErr == nil {
-					auditComputerID := firstNonEmpty(doc.ComputerID, h.Core.TextureComputerID())
-					auditDigest := textureAuditDigest("revision_committed", ownerID, auditComputerID, docID, rebased.RevisionID, rebased.RevisionHash)
-					h.recordTextureAudit(r.Context(), "revision_committed", ownerID, auditComputerID, rebased.TrajectoryID, docID, rebased.RevisionID, "texture-revision:"+docID+":"+rebased.RevisionID, auditDigest, 0)
-					h.emitTextureDocumentRevisionEvent(r.Context(), ownerID, rebased)
-					writeAPIJSON(w, http.StatusCreated, h.revisionResponseFromRecord(r.Context(), rebased))
-					return
-				}
-				log.Printf("texture api: rebase stale user revision: %v", rebaseErr)
-			}
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: "document head changed; reload the latest version before saving"})
-			return
-		}
-		if errors.Is(err, store.ErrInvalidTextureRevision) {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
-			return
-		}
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create revision"})
-		return
-	}
-	storedRev, err := h.getTextureRevision(r.Context(), ownerID, rev.RevisionID)
-	if err != nil {
-		log.Printf("texture api: load created revision: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load created revision"})
-		return
-	}
-	auditComputerID := firstNonEmpty(doc.ComputerID, h.Core.TextureComputerID())
-	auditDigest := textureAuditDigest("revision_committed", ownerID, auditComputerID, docID, storedRev.RevisionID, storedRev.RevisionHash)
-	h.recordTextureAudit(r.Context(), "revision_committed", ownerID, auditComputerID, storedRev.TrajectoryID, docID, storedRev.RevisionID, "texture-revision:"+docID+":"+storedRev.RevisionID, auditDigest, 0)
-	h.emitTextureDocumentRevisionEvent(r.Context(), ownerID, storedRev)
-
-	writeAPIJSON(w, http.StatusCreated, h.revisionResponseFromRecord(r.Context(), storedRev))
+	writeAPIJSON(w, http.StatusCreated, h.revisionResponseFromRecord(r.Context(), *receipt.Revision))
 }
 
 func (h *Handler) createRebasedUserRevision(ctx context.Context, docID, ownerID string, req textureCreateRevisionRequest, staleParentID string, citations, metadata json.RawMessage, now time.Time) (types.Revision, error) {
