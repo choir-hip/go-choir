@@ -4202,3 +4202,95 @@ func TestTrajectoryRunsAndEventsReadOnlyTheirTrajectory(t *testing.T) {
 		}
 	}
 }
+
+// A planned restart parks a run (passivated), which clears the agent's
+// ActiveRunID (projectLifecycleRun); the one resume reactivates it. Ways
+// reactivation can fail the resume, written before the fix
+// (docs/problems/research-round-stranded-by-restart-2026-11-10.md):
+//
+//  1. The run is pending or running again but the agent's activation slot
+//     is still empty, so a work-bound research run is refused at provider
+//     admission ("does not own the exact live run").
+//  2. Another live run already holds the slot: reactivating would give the
+//     agent two live activations (projectLifecycleRun refuses the same).
+//  3. A run already in the target state is a retried no-op and must not
+//     disturb the slot.
+func TestReactivateRunRestoresTheAgentActivationSlot(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := lifecycleStartFixture()
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	project := func(id string, run types.RunRecord) {
+		t.Helper()
+		req := types.ReplaceLifecycleActivationRequest{
+			OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+			CommandID: id, TrajectoryID: start.TrajectoryID, AgentID: start.Agent.AgentID, Run: run,
+		}
+		req.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(req)
+		if _, err := s.ReplaceLifecycleActivation(ctx, req); err != nil {
+			t.Fatalf("project %s: %v", id, err)
+		}
+	}
+	activeRun := func() string {
+		t.Helper()
+		agent, err := s.GetAgentByScope(ctx, start.OwnerID, start.ComputerID, start.Agent.AgentID)
+		if err != nil {
+			t.Fatalf("get agent: %v", err)
+		}
+		return agent.ActiveRunID
+	}
+	reactivate := func(id, runID string, target types.RunState) error {
+		req := types.ReactivateRunRequest{
+			OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: id, TrajectoryID: start.TrajectoryID,
+			AgentID: start.Agent.AgentID, RunID: runID, TargetState: target,
+		}
+		req.CommandDigest, _ = ComputeReactivateRunDigest(req)
+		_, err := s.ReactivateRun(ctx, req)
+		return err
+	}
+
+	running := lifecycleRunFixture(start, "run-slot-1", types.RunRunning)
+	project("project-slot-running", running)
+	if got := activeRun(); got != "run-slot-1" {
+		t.Fatalf("running projection did not take the slot: %q", got)
+	}
+	parked := running
+	parked.State, parked.UpdatedAt = types.RunPassivated, time.Now().UTC()
+	project("project-slot-passivated", parked)
+	if got := activeRun(); got != "" {
+		t.Fatalf("a passivated run kept the slot: %q", got)
+	}
+
+	// Failure mode 1.
+	if err := reactivate("reactivate-slot-1", "run-slot-1", types.RunRunning); err != nil {
+		t.Fatalf("reactivate: %v", err)
+	}
+	if got := activeRun(); got != "run-slot-1" {
+		t.Fatalf("reactivated run does not own the agent's activation slot: %q", got)
+	}
+	// Failure mode 3.
+	if err := reactivate("reactivate-slot-1-again", "run-slot-1", types.RunRunning); err != nil {
+		t.Fatalf("retried reactivate: %v", err)
+	}
+	if got := activeRun(); got != "run-slot-1" {
+		t.Fatalf("retried reactivation disturbed the slot: %q", got)
+	}
+
+	// Failure mode 2: park it again, a second run takes the slot, then the
+	// first may not reactivate beside it.
+	parked.UpdatedAt = time.Now().UTC()
+	project("project-slot-passivated-2", parked)
+	second := lifecycleRunFixture(start, "run-slot-2", types.RunRunning)
+	project("project-slot-second", second)
+	if got := activeRun(); got != "run-slot-2" {
+		t.Fatalf("second run did not take the slot: %q", got)
+	}
+	if err := reactivate("reactivate-slot-conflict", "run-slot-1", types.RunPending); !errors.Is(err, ErrLifecycleInvalidTransition) {
+		t.Fatalf("reactivate beside a live run: got %v, want ErrLifecycleInvalidTransition", err)
+	}
+	if got := activeRun(); got != "run-slot-2" {
+		t.Fatalf("refused reactivation moved the slot: %q", got)
+	}
+}
