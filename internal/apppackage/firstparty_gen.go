@@ -15,6 +15,7 @@ var builtinPackageNames = []string{
 	"autopaper",
 	"browser",
 	"calendar",
+	"changelog",
 	"compute-monitor",
 	"content",
 	"desktop-icons",

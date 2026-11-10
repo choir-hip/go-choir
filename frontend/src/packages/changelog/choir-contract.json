@@ -1,0 +1,46 @@
+{
+  "schema": "choir.package-contract/v1",
+  "note": "The changelog lists the owner's events newest first, major by default, and marks them seen on the owner's computer.",
+  "ready": "[data-changelog-app]",
+  "api": [
+    {
+      "method": "GET",
+      "path": "/api/changelog",
+      "status": 200,
+      "json": {
+        "events": [
+          {
+            "inbox_seq": 2,
+            "level": "major",
+            "changelog": {
+              "event_id": "e2", "kind": "update_finished", "level": "major", "occurred_at": "2026-11-10T01:02:03Z",
+              "subject": { "doc_id": "doc-1" }, "summary": "Your story was updated.", "origin": "tape",
+              "tape_ref": { "doc_id": "doc-1", "revision_id": "rev-2" }
+            }
+          },
+          {
+            "inbox_seq": 1,
+            "level": "major",
+            "changelog": {
+              "event_id": "e1", "kind": "oped_verdict", "level": "major", "occurred_at": "2026-11-10T00:02:03Z",
+              "summary": "Your op-ed was accepted.", "reason": "Clear and sourced.", "reason_untrusted": true, "origin": "paper"
+            }
+          }
+        ],
+        "next_before": 0, "head": 2, "seen_seq": 0, "unseen_major": 2, "unseen_more": false
+      }
+    },
+    { "method": "PUT", "path": "/api/changelog/seen", "status": 200, "json": { "seen_seq": 2 } }
+  ],
+  "expect": [
+    { "selector": "[data-changelog-list]", "text": "Your story was updated." },
+    { "selector": "[data-changelog-unseen]", "text": "2 new" }
+  ],
+  "steps": [
+    { "click": "[data-changelog-mark-seen]" }
+  ],
+  "expect_requests": [
+    { "request": "GET /api/changelog" },
+    { "request": "PUT /api/changelog/seen" }
+  ]
+}

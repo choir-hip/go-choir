@@ -1,0 +1,49 @@
+{
+  "schema": "choir.package/v2",
+  "name": "changelog",
+  "version": "1.0.0",
+  "display": {
+    "title": "Changelog",
+    "icon": "🗒️",
+    "description": "What happened on your computer and to your work"
+  },
+  "app": {
+    "entry": "App.svelte",
+    "abi": "choir.app-frontend/svelte-inline/v1",
+    "requires_sdk": "^2.0",
+    "aliases": [],
+    "launcher": {
+      "menu": true,
+      "desktopIcon": true,
+      "order": 46
+    },
+    "window": {
+      "singleton": true,
+      "heavy": false,
+      "desktop": {
+        "width": 720,
+        "height": 640,
+        "minWidth": 420,
+        "minHeight": 400
+      },
+      "compact": {
+        "minWidth": 280,
+        "minHeight": 420
+      }
+    },
+    "auth": {
+      "preview": "private"
+    },
+    "theme": {
+      "surface": "standard",
+      "shellDataAttr": "data-changelog-window",
+      "contentClass": "changelog-content"
+    }
+  },
+  "kinds": [],
+  "uses_kinds": [],
+  "contributes": {
+    "desks": []
+  },
+  "capabilities": []
+}

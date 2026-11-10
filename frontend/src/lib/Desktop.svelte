@@ -54,6 +54,7 @@
   import { activeSurfaces, describeRecovery, launcherState, recoveryBoot, restoreSurfacePackage, setLauncherOpen, toggleLauncher } from './shell-slots';
   import { promptTargetFor } from './prompt-focus';
   import { dismissNotification, notifications, postNotification } from './services/notifications';
+  import { startChangelogWatch } from './changelog-watch';
   import './menu-host';
   import { contextMenu } from './context-menu';
   import ModalHost from './ModalHost.svelte';
@@ -134,6 +135,7 @@
   let promptRoute = null;
   let mounted = false;
   let authenticatedStartupRunning = false;
+  let stopChangelogWatch = () => {};
   let lastAuthenticated = null;
   let lastPromptReplayId = null;
   let lastAppReplayId = null;
@@ -1650,6 +1652,7 @@
     window.addEventListener('pagehide', handlePageHide);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     lastAuthenticated = authenticated;
+    stopChangelogWatch = startChangelogWatch(() => authenticated, (message) => showToast(message, { durationMs: 9000 }));
     // The boot recovery entry (?recovery=core, L4): the recovery surface opens at once.
     if (recoveryBoot) openRecovery();
     if (authenticated) {
@@ -1677,6 +1680,7 @@
 
   onDestroy(() => {
     mounted = false;
+    stopChangelogWatch();
     void flushDesktopState({ keepalive: true });
     window.removeEventListener('resize', refreshOverviewViewport);
     window.removeEventListener('pagehide', handlePageHide);

@@ -66,7 +66,7 @@ function lookupGrant(name) {
 // First-party packages that must exist: deleting one (or filtering it out of a
 // build) fails the build instead of shipping a shell without the app.
 const REQUIRED_PACKAGES = [
-  'audio', 'autopaper', 'browser', 'calendar', 'compute-monitor', 'content', 'desktop-icons', 'files', 'image',
+  'audio', 'autopaper', 'browser', 'calendar', 'changelog', 'compute-monitor', 'content', 'desktop-icons', 'files', 'image',
   'launcher', 'library-next', 'mail', 'menu-default', 'overview', 'notifications', 'podcast', 'prompt-bar', 'pulse', 'reader', 'settings', 'slides', 'texture', 'video',
 ];
 // The shell slots a package may provide (internal/apppackage/provides.go ShellServices).
