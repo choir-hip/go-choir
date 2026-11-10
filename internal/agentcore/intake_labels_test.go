@@ -506,15 +506,15 @@ func TestIntakeShortlistTakesTheWindowThenTenByTitleOverlap(t *testing.T) {
 	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
 	var docs []types.Document
 	for i := 0; i < 50; i++ {
-		docs = append(docs, types.Document{DocID: fmt.Sprintf("doc-%02d", i), Title: fmt.Sprintf("Unrelated story %d", i), UpdatedAt: now.Add(-time.Duration(i) * 30 * time.Minute)})
+		docs = append(docs, types.Document{DocID: fmt.Sprintf("doc-%02d", i), Title: fmt.Sprintf("Unrelated story %d", i), UpdatedAt: now.Add(-time.Duration(i) * 15 * time.Minute)})
 	}
 	docs[45].Title = "Nord Stream pipeline trial"
 	docs[44].Title = "Hamburg court hears pipeline case"
 	docs = append(docs, types.Document{DocID: "doc-old", Title: "Nord Stream pipeline sabotage", UpdatedAt: now.Add(-100 * time.Hour)})
 	recent, rest := intakeShortlistSplit(docs, now)
-	// D2: a window of time (8 hours: stories 0 to 16 at 30 minutes apart), not a count.
-	if len(recent) != 17 || recent[0].DocID != "doc-00" || recent[16].DocID != "doc-16" {
-		t.Fatalf("recent = %d, first %s; want the 17 updated within 8 hours", len(recent), recent[0].DocID)
+	// D2: a window of time (8 hours: stories 0 to 32 at 15 minutes apart), not a count.
+	if len(recent) != 33 || recent[0].DocID != "doc-00" || recent[32].DocID != "doc-32" {
+		t.Fatalf("recent = %d, first %s; want the 33 updated within 8 hours", len(recent), recent[0].DocID)
 	}
 	for _, d := range rest {
 		if d.DocID == "doc-old" {
@@ -537,6 +537,16 @@ func TestIntakeShortlistTakesTheWindowThenTenByTitleOverlap(t *testing.T) {
 	}
 	if recent, rest := intakeShortlistSplit(busy[:300], now); len(recent) != 300 || len(rest) != 0 {
 		t.Fatalf("a 300-story window = %d recent, %d rest; want all 300 kept", len(recent), len(rest))
+	}
+	// A quiet stretch keeps the floor: 40 stories, all a day old, still give
+	// the newest 30 (the old reach), and a story past the 72-hour horizon none.
+	var quiet []types.Document
+	for i := 0; i < 40; i++ {
+		quiet = append(quiet, types.Document{DocID: fmt.Sprintf("quiet-%02d", i), Title: "x", UpdatedAt: now.Add(-24*time.Hour - time.Duration(i)*time.Minute)})
+	}
+	quiet = append(quiet, types.Document{DocID: "quiet-ancient", Title: "x", UpdatedAt: now.Add(-100 * time.Hour)})
+	if recent, rest := intakeShortlistSplit(quiet, now); len(recent) != intakeShortlistFloor || len(rest) != 10 {
+		t.Fatalf("a quiet stretch = %d recent, %d rest; want the newest %d and 10 for overlap", len(recent), len(rest), intakeShortlistFloor)
 	}
 	if recent, _ := intakeShortlistSplit(busy, now); len(recent) != intakeShortlistCeiling {
 		t.Fatalf("a 700-story window = %d; want the ceiling %d", len(recent), intakeShortlistCeiling)

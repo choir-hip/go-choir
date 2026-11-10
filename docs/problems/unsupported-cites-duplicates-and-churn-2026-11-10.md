@@ -497,7 +497,7 @@ Decisions.
 - Intake shortlist: the stories updated in the last 8 hours (the pairs
   opened 40 minutes to 6.5 hours after their first), then up to 10 older ones
   by title overlap as before; a ceiling of 480 stories backstops the window
-  (six chunks). The list is asked in chunks of 80 stories
+  (six chunks, seven with the overlap picks), and a floor of the newest 30 stories whatever their age keeps a quiet stretch from shrinking the list. The list is asked in chunks of 80 stories
   (`intakeChunkCandidates`), one call per chunk, concurrently through
   `fanout.Do`, with the whole poll's calls bounded by
   `intakeLabelConcurrency`. A chunk entry is a headline and a time (a lede on
@@ -517,7 +517,7 @@ Decisions.
   in 1 call over at most 40 candidates (30 newest, about 55 minutes at 33
   updates an hour, and 10); after, at the audit's 31 stories an hour, about
   250 stories in the window plus 10, so 4 calls and 8 questions over about 260
-  candidates (6 calls, 12 questions at the ceiling). The Jev question limit
+  candidates (7 calls, 14 questions at the ceiling). The Jev question limit
   measured in `docs/evidence/jev-measurement-2026-11-10.md` is not reached (2
   questions a call); what grows is calls and input tokens, about 4x. A poll of
   20 captures goes from 20 calls to about 80 against the 12 at once bound and

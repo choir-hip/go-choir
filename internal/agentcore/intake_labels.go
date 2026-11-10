@@ -104,7 +104,7 @@ func intakeShortlistSplit(docs []types.Document, now time.Time) (recent, rest []
 	}
 	sort.SliceStable(live, func(i, j int) bool { return live[i].UpdatedAt.After(live[j].UpdatedAt) })
 	in := 0
-	for in < len(live) && in < intakeShortlistCeiling && now.Sub(live[in].UpdatedAt) <= intakeShortlistWindow {
+	for in < len(live) && in < intakeShortlistCeiling && (in < intakeShortlistFloor || now.Sub(live[in].UpdatedAt) <= intakeShortlistWindow) {
 		in++
 	}
 	return live[:in], live[in:]
@@ -359,8 +359,12 @@ const (
 	// duplicates read opened 40 minutes to 6.5 hours after their first.
 	intakeShortlistWindow = 8 * time.Hour
 	// intakeShortlistCeiling backstops the window: past this many stories
-	// (six chunks) the oldest fall out.
+	// (six chunks; seven with the overlap picks) the oldest fall out.
 	intakeShortlistCeiling = 480
+	// intakeShortlistFloor is the newest stories that are candidates whatever
+	// their age, so a quiet stretch never shrinks the list below the old
+	// newest-30 reach.
+	intakeShortlistFloor = 30
 	// intakeChunkCandidates is the most stories one call lists. Entries in a
 	// chunk are a headline and a time (a lede only on the newest
 	// intakeLedeCandidates), so a chunk stays near 12 KB, under the 24 KB
