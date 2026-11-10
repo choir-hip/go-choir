@@ -12,3 +12,10 @@ Append-only. One terse entry per pass.
   as extra credit; explorations taken further without needing to land.
   Inherited candidates: shot verdict reuse 6b076c2a9 (Sonnet seat ACCEPT,
   Devin pending), management task opening 986891d1e (Devin round 2 pending).
+- 2026-11-10T03:20Z X1 review. Shot verdict reuse 6b076c2a9: Sonnet seat
+  ACCEPT, Devin seat REPAIR (the compared paths miss inputs of the shot pass:
+  go.mod and go.sum, internal/capsule, internal/lease, internal/objectgraph;
+  Sonnet adds appdesk JSON, pkgruntime, styles). The builder in the previous
+  thread is widening the set; that thread lands X1 and X2 and records the
+  result here. A new thread running this goal does not start X1 or X2; it
+  reads this ledger for their state.
