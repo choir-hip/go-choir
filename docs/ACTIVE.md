@@ -11,19 +11,34 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
-## Live station (2026-11-09): Autopaper improvement
+## Live station (2026-11-09 evening): Autopaper improvement, then one merged overnight mission
 
 **Goal:** [`definitions/choir-autopaper-improvement-2026-11-09.md`](definitions/choir-autopaper-improvement-2026-11-09.md)
-(`readiness: executable`, on the owner's order after two Devin review
-rounds). Run it with
-`/goal docs/definitions/choir-autopaper-improvement-2026-11-09.md`.
+(`readiness: executable`, `now.status: working`; ledger
+[`definitions/choir-autopaper-improvement-2026-11-09.ledger.md`](definitions/choir-autopaper-improvement-2026-11-09.ledger.md)).
+Run it with `/goal docs/definitions/choir-autopaper-improvement-2026-11-09.md`.
 
 Owner, 2026-11-09: "Okay, one more key feature before we go into the auto
 paper improvements", so the ordinary prompt path and its added features came
 first and Autopaper is next, then Autoradio. The draft's "Decisions for the
 owner" run on their recommended defaults until answered (No Blocking Asks).
-S1, the source audit, starts first (its report is read-only; its fixes are orange); the paper's /health
-contention and its stale queue (D13) are S1 items.
+S1, the source audit, started first (its report is read-only; its fixes are
+orange); the paper's /health contention and its stale queue (D13) are S1
+items.
+
+**Tonight (2026-11-09):** the owner starts one merged overnight mission. It
+bundles the remainder of the improvement goal above with the next Autopaper
+mission, whose inputs are
+[`design/autopaper-next-mission-handoff-2026-11-09.md`](design/autopaper-next-mission-handoff-2026-11-09.md).
+Goal file to be named here when authored.
+
+**Next:** Autoradio, from
+[`design/autoradio-mission-handoff-2026-11-09.md`](design/autoradio-mission-handoff-2026-11-09.md).
+Every landing commit stays on expedite until the owner says Autoradio is
+solid (CLAUDE.md).
+
+**Tabled:** the Mac app work waits until later in the week (owner,
+2026-11-09).
 
 ## Complete (2026-11-09): the ordinary prompt path
 
@@ -33,7 +48,7 @@ on d@e (baseline 202 s). The owner's added features landed and were proved on
 staging: appearance flow, account switcher, restart to update, and sandbox
 pause and resume (drill passed on d@e at 1f2493123).
 
-## Active goal (2026-11-04): the modular architecture
+## Working behind the live station (2026-11-04): the modular architecture
 
 **Goal:** [`definitions/choir-modular-architecture-2026-11-04.md`](definitions/choir-modular-architecture-2026-11-04.md)
 (`readiness: drafted`, working; reviewed after the Devin review of the design). Run it with
@@ -63,53 +78,32 @@ ordinary, non-Autopaper computers; regressions in ordinary operation (for
 example a prompt-bar prompt reaching research); UX issues; then the next
 mission, Autopaper improvements.
 
-## Complete (2026-11-04): progressive delivery, built
+## Paused / closed
 
-Closed on the owner's word, 2026-11-04: "Yes, close pd. It works." Leftovers carry into the modular-architecture goal.
+Moved here from the live view on 2026-11-09 evening. Each status is the goal
+file's own. Nothing is deleted; the goal files stay where they are.
 
-**Goal:** [`definitions/choir-progressive-delivery-2026-11-03.md`](definitions/choir-progressive-delivery-2026-11-03.md)
-(`readiness: executable` on the owner's word). Run it with
-`/goal docs/definitions/choir-progressive-delivery-2026-11-03.md`.
-
-Owner, 2026-11-03: "i hate the pattern of all these switches ... we were
-supposed to build progressive delivery ... put this self-dev mission on
-hold to handle progressive delivery." Every switch walks the rings on
-measured evidence and retires; the off backlog is cleared. Inputs: the
-ratified design [`design/progressive-delivery-2026-10-26.md`](design/progressive-delivery-2026-10-26.md)
-and the audit [`evidence/switch-audit-2026-11-03.md`](evidence/switch-audit-2026-11-03.md).
-
-## Paused (2026-11-04): self-development, the apps feature-complete
-
-Paused by owner order until the modular architecture lands; resumed by wave W8 of the modular-architecture goal.
-
-**Goal:** [`definitions/choir-selfdev-apps-feature-complete-2026-11-03.md`](definitions/choir-selfdev-apps-feature-complete-2026-11-03.md)
-(`readiness: executable` on the owner's word). Run it with
-`/goal docs/definitions/choir-selfdev-apps-feature-complete-2026-11-03.md`.
-
-Owner, 2026-11-03: "make a new through line plan, which includes all the
-work described above, from the auth to the choir CLI and MCP to
-self-development"; "we really need to make them feature complete". Four
-fresh stock arms (Claude delegate, Synthetic DeepSeek, gpt-6-luna, the
-pool), a Sonnet monitor per arm, the platform capture path deleted for
-engineer screenshots saved as files, `choir login`, `choir mcp install` and
-`choir texture export`. Feature list:
-[`design/apps-feature-complete-spec-2026-11-03.md`](design/apps-feature-complete-spec-2026-11-03.md);
-calibration seed plan:
-[`design/calibration-seed-2026-11-03.md`](design/calibration-seed-2026-11-03.md).
-Supersedes the 2026-11-02 side-by-side goal.
-
-## Settling (2026-11-01): the store header/body split, on its meter day
-
-**Goal:** [`definitions/choir-store-header-body-split-2026-11-02.md`](definitions/choir-store-header-body-split-2026-11-02.md)
-(`readiness: executable` on the owner's word). Run it with
-`/goal docs/definitions/choir-store-header-body-split-2026-11-02.md`.
-
-Owner, 2026-11-01: "Make it a throughline now, superseding", after the
-data-oriented design inspiration (redesign rather than cache). Split
-`og_objects` and `choir_events` into header and body tables so header reads
-never read bodies; delete the workaround indexes. Stations: S0 measure
-three layouts; S1 design; S2 build; S3 differential on a store copy; S4
-d@e; S5 fleet; S6 a meter day against the guest isolation baseline.
+- **Lean system** (2026-10-30), paused 2026-11-01. Goal:
+  [`definitions/choir-lean-system-2026-10-30.md`](definitions/choir-lean-system-2026-10-30.md),
+  `now.status: checkpoint_incomplete`. Stations L0 to L6 (disks, a smaller
+  paper, crash recovery, docs, data system phase 2, off-host backup, loose
+  ends).
+- **Self-development, the apps feature-complete** (2026-11-03), paused
+  2026-11-04 by owner order until the modular architecture lands; wave W8 of
+  that goal resumes it. Goal:
+  [`definitions/choir-selfdev-apps-feature-complete-2026-11-03.md`](definitions/choir-selfdev-apps-feature-complete-2026-11-03.md).
+  Four stock arms, a Sonnet monitor per arm, `choir login`, `choir mcp
+  install`, `choir texture export`. Feature list:
+  [`design/apps-feature-complete-spec-2026-11-03.md`](design/apps-feature-complete-spec-2026-11-03.md);
+  calibration seed:
+  [`design/calibration-seed-2026-11-03.md`](design/calibration-seed-2026-11-03.md).
+- **Store header/body split** (2026-11-02), closed: `now.status: complete`
+  (2026-11-03). The claim held on read volume and failed on the median
+  minute (4.1 to 46.8 MiB/min), named as a successor problem. Goal:
+  [`definitions/choir-store-header-body-split-2026-11-02.md`](definitions/choir-store-header-body-split-2026-11-02.md).
+- **Progressive delivery** (2026-11-03), closed on the owner's word,
+  2026-11-04: "Yes, close pd. It works." Goal:
+  [`definitions/choir-progressive-delivery-2026-11-03.md`](definitions/choir-progressive-delivery-2026-11-03.md).
 
 ## Superseded (2026-11-01): guest isolation
 
@@ -122,18 +116,6 @@ Stations: I0 close the memory mission with numbers; I1 per-VM pressure in
 the memory meter; I2 jail the paper; I3 disk I/O isolation; I4 disk space;
 I5 network; I6 CPU and memory backstops. It supersedes the memory mission
 ([`definitions/choir-memory-optimization-2026-11-01.md`](definitions/choir-memory-optimization-2026-11-01.md)).
-
-## Paused (2026-11-01): the lean system
-
-**Goal:** [`definitions/choir-lean-system-2026-10-30.md`](definitions/choir-lean-system-2026-10-30.md)
-(`readiness: executable` on the owner's word). Run it with
-`/goal docs/definitions/choir-lean-system-2026-10-30.md`.
-
-Owner, 2026-10-30: "let's have another aggressive night." Stations: L0 free
-the disks on Node A and Node B; L1 the paper an order of magnitude smaller;
-L2 a crashed computer comes back, a crash loop does not; L3 the docs
-describe the running system; L4 the data system's phase 2 (I1 to I6); L5
-the off-host backup, streamlined (I7); L6 loose ends and the handoff.
 
 ## Superseded (2026-10-30): the data system build
 
