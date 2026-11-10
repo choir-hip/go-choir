@@ -304,6 +304,11 @@ func inboxRecordView(rec types.CommitmentRecord) yaegikernel.InboxRecord {
 		view.CreatedAt = t
 	}
 	switch {
+	case rec.Oped != nil && rec.Oped.Wake != nil:
+		// A reference only: the op-ed's text is shown by the host in the
+		// turn's request, as pinned data, never here.
+		view.Objective = "An op-ed on this story passed the paper's gate"
+		view.Body = "op-ed " + rec.Oped.Wake.VersionID + " (" + string(rec.Oped.Wake.Why) + "); its text is in your request as data"
 	case rec.Directive != nil:
 		view.Objective = rec.Directive.Objective
 		view.Body = rec.Directive.Body
@@ -341,6 +346,8 @@ func inboxRecordKind(rec types.CommitmentRecord) string {
 		return "shots_owed"
 	case types.IsInstallReviewOwedRecord(rec):
 		return "install_review_owed"
+	case rec.Oped != nil && rec.Oped.Kind == types.OpedRecordWake:
+		return "oped_wake"
 	case rec.EmitterKind == types.CommitmentEmitterSystem:
 		return "closure"
 	case rec.Directive != nil:

@@ -653,6 +653,14 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	contextMode := textureAgentRevisionContextMode(currentRevision, previousRevision)
 	agentPrompt := buildAgentRevisionRequest(currentRevision, previousRevision, promptMetadata, req, diffSummary, ownerDirections)
 	sourcesSection := rt.reviseSourcesSection(ctx, currentRevision)
+	// A turn woken by op-eds on the story shows them as pinned data, and the
+	// host stamps them into the revision's provenance as its sources.
+	var opedLinks []types.ParentLink
+	if req.Provenance["request_source"] == "inbox_record" {
+		var opedSection string
+		opedSection, opedLinks = rt.opedWakeSection(ctx, ownerID, doc)
+		sourcesSection += opedSection
+	}
 	agentPrompt += sourcesSection
 	// The Texture root (PD3 S1): the run of the document the texture_root
 	// marker names carries the root section and the ledger in its request
@@ -769,6 +777,11 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		runMetadata["texture_initial_decision_reason"] = decision.Reason
 		runMetadata["texture_initial_decision_evidence_refs"] = decision.EvidenceRefs
 		runMetadata["texture_initial_decision_next_action"] = decision.NextAction
+	}
+	if len(opedLinks) > 0 {
+		if raw, err := json.Marshal(opedLinks); err == nil {
+			runMetadata[opedLinksMetadataKey] = string(raw)
+		}
 	}
 	rec, err := rt.Core.StartRunWithMetadata(ctx, agentPrompt, ownerID, runMetadata)
 	if err == nil && rec != nil && sourcesSection != "" {
