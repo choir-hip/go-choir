@@ -257,3 +257,35 @@ func TestNoticeIntakeReplayAndPlatformDown(t *testing.T) {
 		t.Fatalf("after recovery: %+v", poll)
 	}
 }
+
+// Review N5: one malformed feed item is recorded as a named skip and the
+// cursor moves past it; the good items on the page are still adopted.
+func TestMalformedFeedItemIsSkippedNotStalled(t *testing.T) {
+	rt, s, feed, owner, computer := newPollFixture(t)
+	ctx := context.Background()
+	bad := opedItem("pub-bad-v1")
+	bad.ManifestHash = ""
+	noStory := opedItem("pub-nostory-v1")
+	noStory.StoryDocID = ""
+	good := opedItem("pub-good-v1")
+	feed.opeds = []OpedFeedWire{{Items: []OpedFeedItemWire{bad, noStory, good}, NextCursor: "5"}}
+	if err := rt.runPlatformPollOnce(ctx, owner, store.PlatformPollOpedIntake); err != nil {
+		t.Fatalf("a malformed item failed the poll: %v", err)
+	}
+	if n := len(arrivalRecords(t, s, owner, computer)); n != 1 {
+		t.Fatalf("arrivals = %d, want only the good one", n)
+	}
+	poll, _ := s.GetPlatformPoll(ctx, owner, store.PlatformPollOpedIntake)
+	if poll.Cursor != "5" || len(poll.Skipped) != 2 || poll.Skipped[0].ID != "pub-bad-v1" || poll.Skipped[0].Reason == "" || poll.Skipped[1].ID != "pub-nostory-v1" {
+		t.Fatalf("poll = cursor %q skipped %+v", poll.Cursor, poll.Skipped)
+	}
+	// Notices: an unknown kind is skipped too.
+	feed.notices = []NoticeFeedWire{{Items: []NoticeItemWire{{ID: "obj:n:bad", Notice: types.CommitmentChangelog{EventID: "e", Kind: "update_exploded", Summary: "x", Origin: types.ChangelogOriginCorpusd}}}, NextCursor: "9"}}
+	if err := rt.runPlatformPollOnce(ctx, owner, store.PlatformPollNoticeIntake); err != nil {
+		t.Fatalf("a malformed notice failed the poll: %v", err)
+	}
+	np, _ := s.GetPlatformPoll(ctx, owner, store.PlatformPollNoticeIntake)
+	if np.Cursor != "9" || len(np.Skipped) != 1 || np.Skipped[0].ID != "obj:n:bad" {
+		t.Fatalf("notice poll = %+v", np)
+	}
+}

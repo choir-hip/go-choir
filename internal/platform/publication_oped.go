@@ -11,17 +11,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
-
-// feedOverlap re-reads the tail of the last page: object timestamps are whole
-// seconds, so an item committed late with an earlier stamp must not be
-// skipped. The consumer's deterministic ids make the repeat free.
-const feedOverlap = 10 * time.Second
 
 const (
 	feedDefaultLimit = 100
@@ -70,38 +66,48 @@ func normalizeFeedLimit(n int) int {
 	return n
 }
 
-// noticeRows reads the owner's notices created at or after the cursor
-// (minus the overlap), oldest first.
-func (s *Service) noticeRows(ctx context.Context, ownerID, cursor string, limit int) ([]objectgraph.Object, error) {
+// seqNotice is a notice row with its sequence.
+type seqNotice struct {
+	obj objectgraph.Object
+	seq int64
+}
+
+// noticeRows reads the owner's notices after the cursor, in write order. The
+// cursor is the opaque sequence of the last row a page returned: it moves on
+// every page however many rows share a second, and a row written later is
+// always after it.
+func (s *Service) noticeRows(ctx context.Context, ownerID, cursor string, limit int) ([]seqNotice, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	if ownerID == "" {
 		return nil, fmt.Errorf("a notice read needs an owner")
 	}
-	since := time.Unix(0, 0).UTC()
+	after := int64(0)
 	if c := strings.TrimSpace(cursor); c != "" {
-		t, err := time.Parse(time.RFC3339, c)
-		if err != nil {
-			return nil, fmt.Errorf("cursor is not a time")
+		n, err := strconv.ParseInt(c, 10, 64)
+		if err != nil || n < 0 {
+			return nil, fmt.Errorf("cursor is not a feed cursor")
 		}
-		since = t.Add(-feedOverlap)
+		after = n
 	}
+	const seqExpr = `COALESCE(((metadata::jsonb) ->> 'seq')::bigint, 0)`
 	rows, err := s.store.corpus().QueryContext(ctx,
-		`SELECT canonical_id, metadata, created_at FROM og_objects
-		 WHERE object_kind = 'choir.changelog_notice' AND owner_id = ? AND tombstone = FALSE AND created_at >= ?
-		 ORDER BY created_at, canonical_id LIMIT ?`, ownerID, since, normalizeFeedLimit(limit))
+		`SELECT canonical_id, metadata, created_at, `+seqExpr+` FROM og_objects
+		 WHERE object_kind = 'choir.changelog_notice' AND owner_id = ? AND tombstone = FALSE AND `+seqExpr+` > ?
+		 ORDER BY `+seqExpr+`, canonical_id LIMIT ?`, ownerID, after, normalizeFeedLimit(limit))
 	if err != nil {
 		return nil, fmt.Errorf("platform notices: %w", err)
 	}
 	defer rows.Close()
-	var out []objectgraph.Object
+	var out []seqNotice
 	for rows.Next() {
 		var obj objectgraph.Object
 		var metadata string
-		if err := rows.Scan(&obj.CanonicalID, &metadata, &obj.CreatedAt); err != nil {
+		var seq int64
+		if err := rows.Scan(&obj.CanonicalID, &metadata, &obj.CreatedAt, &seq); err != nil {
 			return nil, fmt.Errorf("platform notices: scan: %w", err)
 		}
 		obj.OwnerID, obj.Metadata = ownerID, json.RawMessage(metadata)
-		out = append(out, obj)
+		out = append(out, seqNotice{obj: obj, seq: seq})
 	}
 	return out, rows.Err()
 }
@@ -121,13 +127,13 @@ func (s *Service) ListNoticesForOwner(ctx context.Context, ownerID, cursor strin
 		return NoticeFeed{}, err
 	}
 	feed := NoticeFeed{Items: []NoticeItem{}, NextCursor: strings.TrimSpace(cursor)}
-	for _, obj := range rows {
-		feed.NextCursor = obj.CreatedAt.UTC().Format(time.RFC3339)
-		n, ok := decodeNoticeObject(obj)
+	for _, row := range rows {
+		feed.NextCursor = strconv.FormatInt(row.seq, 10)
+		n, ok := decodeNoticeObject(row.obj)
 		if !ok {
 			continue
 		}
-		feed.Items = append(feed.Items, NoticeItem{ID: obj.CanonicalID, CreatedAt: feed.NextCursor, Notice: n.Notice})
+		feed.Items = append(feed.Items, NoticeItem{ID: row.obj.CanonicalID, CreatedAt: row.obj.CreatedAt.UTC().Format(time.RFC3339), Notice: n.Notice})
 	}
 	return feed, nil
 }
@@ -140,8 +146,9 @@ func (s *Service) ListOpedsForOwner(ctx context.Context, ownerID, cursor string,
 		return OpedFeed{}, err
 	}
 	feed := OpedFeed{Items: []OpedFeedItem{}, NextCursor: strings.TrimSpace(cursor)}
-	for _, obj := range rows {
-		feed.NextCursor = obj.CreatedAt.UTC().Format(time.RFC3339)
+	for _, row := range rows {
+		obj := row.obj
+		feed.NextCursor = strconv.FormatInt(row.seq, 10)
 		n, ok := decodeNoticeObject(obj)
 		if !ok || n.Notice.Relation != types.ChangelogRelationOpedOnYourStory || n.RespondsTo == nil {
 			continue
@@ -276,7 +283,7 @@ func (s *Service) PostOpedVerdict(ctx context.Context, post OpedVerdictPost) (*O
 	if err != nil {
 		return nil, err
 	}
-	objects = append(objects, noticeObj)
+	objects = append(objects, withNoticeSeq(noticeObj, s.nextNoticeSeq()))
 	if err := og.PutBatch(ctx, objectgraph.Batch{Objects: objects}); err != nil {
 		return nil, fmt.Errorf("platform oped verdict: %w", err)
 	}

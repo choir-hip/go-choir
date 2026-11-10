@@ -274,6 +274,10 @@ func (rt *Runtime) pollNotices(ctx context.Context, feed PlatformFeed, poll *sto
 			if notice.Origin == "" {
 				notice.Origin = types.ChangelogOriginCorpusd
 			}
+			if _, verr := changelogRecordRequest(owner, computer, notice); verr != nil {
+				skipPollItem(poll, item.ID, verr.Error())
+				continue
+			}
 			if err := rt.EmitChangelog(ctx, owner, computer, notice); err != nil {
 				return fmt.Errorf("adopt notice %s: %w", item.ID, err)
 			}
@@ -303,6 +307,10 @@ func (rt *Runtime) pollOpeds(ctx context.Context, feed PlatformFeed, poll *store
 			break
 		}
 		for _, item := range got.Items {
+			if why := opedItemInvalid(owner, computer, item); why != "" {
+				skipPollItem(poll, item.VersionID, why)
+				continue
+			}
 			if err := rt.commitOpedArrival(ctx, owner, computer, item); err != nil {
 				feedErr = fmt.Errorf("adopt op-ed %s: %w", item.VersionID, err)
 				break
@@ -351,4 +359,28 @@ func (rt *Runtime) commitOpedArrival(ctx context.Context, owner, computer string
 func (rt *Runtime) opedRecordExists(ctx context.Context, owner, computer, recordID string) bool {
 	rec, err := rt.store.GetCommitmentRecord(ctx, owner, computer, recordID)
 	return err == nil && rec != nil
+}
+
+// skipPollItem records a feed item the poll cannot adopt, by its id and why,
+// so the cursor can move past it.
+func skipPollItem(poll *store.PlatformPoll, id, reason string) {
+	log.Printf("platform poll %s: skipped item %q: %s", poll.Name, id, reason)
+	poll.Skipped = append(poll.Skipped, store.PollSkipped{ID: clipChars(id, 200), Reason: clipChars(reason, 300), At: time.Now().UTC()})
+	if n := len(poll.Skipped); n > store.PollSkippedLimit {
+		poll.Skipped = append([]store.PollSkipped(nil), poll.Skipped[n-store.PollSkippedLimit:]...)
+	}
+}
+
+// opedItemInvalid is why an op-ed feed item cannot be adopted, or "".
+func opedItemInvalid(owner, computer string, item OpedFeedItemWire) string {
+	if strings.TrimSpace(item.StoryDocID) == "" {
+		return "the item names no story document"
+	}
+	a := types.OpedArrival{VersionID: item.VersionID, RoutePath: item.RoutePath, AuthorLabel: item.AuthorLabel,
+		RespondsTo: item.RespondsTo, TextHash: item.ManifestHash}
+	if _, err := opedRecordRequest(owner, computer, types.CommitmentOped{Kind: types.OpedRecordArrival, Arrival: &a},
+		map[string]string{"story_doc_id": item.StoryDocID}); err != nil {
+		return err.Error()
+	}
+	return ""
 }

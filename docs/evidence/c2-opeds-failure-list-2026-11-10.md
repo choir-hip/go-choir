@@ -42,7 +42,22 @@ test that is written first.
 
 Named residuals:
 - The feeds filter on `created_at`; the index is `(object_kind, owner_id)`. The read is bounded by owner and kind, so it is cheap now; add `(object_kind, owner_id, created_at)` if notices per owner grow.
-- A page of more than 100 notices inside the 10 second overlap stalls the cursor (it stops when the cursor does not move). Not reachable under the D11 cap of 20 a day per publisher with fewer than five publishers in one window; fix with a (time, id) cursor.
+- (Repaired in the second review round, see below: the cursor is now a strict write-order sequence.)
 - `false_reject` calibration has no source now that a reject is never stamped; it fires only if a desk revision cites a rejected op-ed by other means. A reject the desk uses needs a way for the desk to say so (not built).
 - An unread `oped_wake` surviving a crash relies on the actor runtime's generic crash-boot gate ("pre-boot work is interrupted_by_restart", `internal/actorruntime/handler.go`); no test of mine drives that.
 - `oped_intake` starts only for a computer that has published a story (the poll row is created by the first story publish) and then on every later boot; `notice_intake` only after a fork, take or merge.
+
+## Second review round (Devin seat)
+
+| # | Way it fails | Rule | Test |
+|---|---|---|---|
+| S1 | More than `limit` notices in one second wedge a victim's intake for good | the feed cursor is an opaque strict sequence (nanosecond clock, never repeated, assigned under the write lock), not whole-second `created_at`; it moves on every page; a republish keeps its place | `TestNoticeCursorDeliversEveryRowOfOneSecond` |
+| S2 | One malformed feed item stalls the cursor | validated before commit; recorded in the poll's `Skipped` with its id and reason; the cursor moves | `TestMalformedFeedItemIsSkippedNotStalled` |
+| S3 | The gate shares the computer's intake-label bucket | scope `oped_gate` is accepted by the gateway: bulk class plus a per-computer bucket (burst 5, 0.2 a second, 2 in flight); an unknown scope is still refused; the gate asks for it | `TestJevOpedGateScopeHasItsOwnBoundedBucket`, `TestOpedGateUsesItsOwnRateScope` |
+| S4 | The per-story gate bound has no test | 20 calls a story a day | `TestOpedGateIsBoundedPerStory` |
+
+More named residuals:
+- N1: the contract names management the custodian of `choir.platform_poll`; the code makes it the kernel service. A management claim is a desk-protocol major change (the lock refused it), and the poll is host state with no model call. The contract should be amended to match.
+- N3: nothing re-gates an `unavailable` op-ed, so no run 2 is ever produced. A later successful run would supersede it (corpusd and the fold already take the highest run); the trigger is not built.
+- N4: a wake interrupted by a crash on a quiet story is not re-minted: crash restarts never resume work. The op-ed stays judged and the decision is on the tape; the next op-ed or reject threshold wakes the desk.
+- The notice rows are read with the sequence in metadata, filtered by (kind, owner) and not indexed on the sequence; cheap while an owner has few notices.

@@ -151,16 +151,10 @@ func TestOpedsFeedScopedToStoryOwner(t *testing.T) {
 	if none, err := f.svc.ListOpedsForOwner(context.Background(), "reader-1", "", 50); err != nil || len(none.Items) != 0 {
 		t.Fatalf("reader feed = %+v %v", none, err)
 	}
-	// The cursor re-reads the last few seconds (object times are whole
-	// seconds), so a later page may repeat an item; it never shows another.
+	// The cursor is strict: nothing comes after the last item.
 	next, err := f.svc.ListOpedsForOwner(context.Background(), "paper-owner", feed.NextCursor, 50)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, it := range next.Items {
-		if it.VersionID != feed.Items[0].VersionID {
-			t.Fatalf("page after cursor = %+v", next.Items)
-		}
+	if err != nil || len(next.Items) != 0 || next.NextCursor != feed.NextCursor {
+		t.Fatalf("page after cursor = %+v %v", next, err)
 	}
 	again, _ := f.svc.ListOpedsForOwner(context.Background(), "paper-owner", "", 50)
 	if len(again.Items) != 1 || again.Items[0].VersionID != feed.Items[0].VersionID {
