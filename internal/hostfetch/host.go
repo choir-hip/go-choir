@@ -29,6 +29,9 @@ type Executor struct {
 	Self func(net.IP) bool
 	// MaxBody bounds a relayed body; 0 means MaxResponseBody.
 	MaxBody int64
+	// OwnSite, when set, serves the paper's own public pages from the
+	// loopback (ownsite.go); nil leaves every own-host fetch to the guard.
+	OwnSite *OwnSite
 
 	once   sync.Once
 	client *http.Client
@@ -163,8 +166,12 @@ func (e *Executor) ServeTo(w http.ResponseWriter, r *http.Request, res *Result) 
 		return
 	}
 	up.Header = stripHop(req.Header)
+	client := e.httpClient()
+	if own, ok := e.OwnSite.build(ctx, req.Method, target); ok {
+		up, client = own, e.OwnSite.client
+	}
 
-	resp, err := e.httpClient().Do(up)
+	resp, err := client.Do(up)
 	if err != nil {
 		// url.Error repeats the URL, which the log must not carry.
 		var ue *url.Error

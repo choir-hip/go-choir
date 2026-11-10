@@ -2556,6 +2556,11 @@ in
         # result instead of dropping the guest connection with EOF.
         "SERVER_WRITE_TIMEOUT=10m30s"
         "GATEWAY_PORT=8084"
+        # The paper's own public pages are fetched from the proxy on the
+        # loopback, not the public address the host guard refuses
+        # (internal/hostfetch/ownsite.go). The public host is
+        # CORPUSD_PUBLIC_BASE_URL (default https://choir.news).
+        "GATEWAY_OWN_SITE_URL=http://127.0.0.1:8082"
         # Host fetch route: the admit half (see hostFetchVMs).
         "CHOIR_HOST_FETCH_VMS=${hostFetchVMs}"
         "GATEWAY_IDENTITY_STORE_PATH=/var/lib/go-choir/gateway-identities.json"

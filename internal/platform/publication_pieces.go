@@ -9,6 +9,7 @@ package platform
 import (
 	"context"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/publicsite"
 	"math"
 	"net/url"
 	"strings"
@@ -19,7 +20,7 @@ const (
 	publishedPieceMaxLimit     = 25
 	// DefaultPublicBaseURL is the host a read_url names when
 	// CORPUSD_PUBLIC_BASE_URL is unset.
-	DefaultPublicBaseURL = "https://choir.news"
+	DefaultPublicBaseURL = publicsite.DefaultBaseURL
 )
 
 // Variables so tests can shrink them. publishedPieceBatch is how many

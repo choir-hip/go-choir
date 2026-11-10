@@ -90,7 +90,7 @@ func (h *Handler) hostFetchService() *hostFetchService {
 		return h.hostFetch
 	}
 	defaultHostFetchOnce.Do(func() {
-		defaultHostFetchSvc = newHostFetchService(&hostfetch.Executor{}, loadHostFetchAllowList(os.Getenv), defaultHostFetchPerMinute(os.Getenv), hostFetchInFlight)
+		defaultHostFetchSvc = newHostFetchService(newHostFetchExecutor(os.Getenv), loadHostFetchAllowList(os.Getenv), defaultHostFetchPerMinute(os.Getenv), hostFetchInFlight)
 	})
 	return defaultHostFetchSvc
 }
@@ -166,4 +166,16 @@ func (h *Handler) HandleHostFetch(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 	svc.exec.ServeTo(w, r, &res)
+}
+
+// newHostFetchExecutor is the host fetch executor with the own-site
+// exception when GATEWAY_OWN_SITE_URL names the proxy's loopback address
+// (hostfetch/ownsite.go). A bad value logs and leaves the exception off.
+func newHostFetchExecutor(getenv func(string) string) *hostfetch.Executor {
+	site, err := hostfetch.OwnSiteFromEnv(getenv)
+	if err != nil {
+		log.Printf("gateway: host fetch own-site exception off: %v", err)
+		site = nil
+	}
+	return &hostfetch.Executor{OwnSite: site}
 }
