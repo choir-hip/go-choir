@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"time"
 
@@ -258,6 +259,51 @@ func (h *Handler) commitTextureTurn(ctx context.Context, rec *types.RunRecord, t
 	return h.commitTextureWrite(ctx, rec, doc, mutation, turn, args, reason, durableLifecycle)
 }
 
+// writeChangesNothing reports a Write whose result reads and cites exactly as
+// its base: the same projected text (whitespace aside), the same citations
+// and the same embedded assets. Bytes of the body differ for reasons that are
+// no change to a reader (node ids, ref offsets), and such a Write used to
+// commit and publish identical text as a new version, 8% of the revision steps
+// of the stories most revised (docs/problems/unsupported-cites-duplicates-and-
+// churn-2026-11-10.md, Q3). This is the desk's own content revision only: a
+// merge request revision or an owner act commits through other paths.
+func writeChangesNothing(base texturedoc.StructuredTextureDoc, baseEntities []texturedoc.SourceEntity, next texturedoc.StructuredTextureDoc, nextEntities []texturedoc.SourceEntity, docID string) bool {
+	before, err := texturedoc.Project(base, baseEntities)
+	if err != nil {
+		return false
+	}
+	after, err := texturedoc.Project(next, nextEntities)
+	if err != nil {
+		return false
+	}
+	if strings.Join(strings.Fields(before.Text), " ") != strings.Join(strings.Fields(after.Text), " ") {
+		return false
+	}
+	citeSet := func(doc texturedoc.StructuredTextureDoc) string {
+		checks, pairs := texturewrite.Checks(doc, docID, "")
+		keys := make([]string, 0, len(pairs)+len(checks))
+		for _, p := range pairs {
+			keys = append(keys, p.Key)
+		}
+		for _, c := range checks {
+			// The outcome of every anchor, in order: a cite moved from one
+			// sentence to another or a cite dropped is a change.
+			keys = append(keys, string(c.Outcome)+"|"+c.Pair)
+		}
+		sort.Strings(keys)
+		return strings.Join(keys, "\n")
+	}
+	if citeSet(base) != citeSet(next) {
+		return false
+	}
+	assets := func(doc texturedoc.StructuredTextureDoc) string {
+		d := texturedoc.EmbeddedDigests(doc)
+		sort.Strings(d)
+		return strings.Join(d, ",")
+	}
+	return assets(base) == assets(next)
+}
+
 // commitTextureWrite materializes a Write against the head and commits it.
 func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, doc types.Document, mutation *store.AgentMutation, turn yaegikernel.TextureTurn, args textureTurnArgs, reason string, durableLifecycle bool) (string, error) {
 	ctx = asTextureReader(ctx)
@@ -296,8 +342,8 @@ func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, 
 	if err != nil {
 		return "", fmt.Errorf("encode Texture source entities: %w", err)
 	}
-	if prior, _ := json.Marshal(baseDoc); bytes.Equal(prior, bodyDoc) {
-		return "", fmt.Errorf("choir.Write refused, nothing committed: the Write changes nothing; use choir.Wait or choir.Done to close a turn without a revision")
+	if prior, _ := json.Marshal(baseDoc); bytes.Equal(prior, bodyDoc) || writeChangesNothing(baseDoc, baseEntities, result.Doc, result.Entities, doc.DocID) {
+		return "", fmt.Errorf("choir.Write refused, nothing committed: the Write changes nothing (its text and citations equal the head's); use choir.Wait or choir.Done to close a turn without a revision")
 	}
 	content := strings.TrimSpace(projection.Text)
 	if content == "" {
