@@ -27,6 +27,9 @@ func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 	case "/api/texture/algorithm2/ledger", "/api/texture/algorithm2/proposals", "/api/texture/algorithm2/round":
 		h.HandleAlgorithm2(w, r)
 		return
+	case stylePath:
+		h.HandleStyle(w, r)
+		return
 	case "/api/texture/fork":
 		h.HandleTextureFork(w, r)
 		return
