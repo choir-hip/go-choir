@@ -245,7 +245,7 @@ func TestNotCapturedCitationIsCheckedButNeverMemoized(t *testing.T) {
 	h.createAgentMutationForRun(context.Background(), &rec)
 	ctx := context.Background()
 	base := headOf(t, s, rec)
-	write := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "the next filing", Write: &yaegikernel.TextureWrite{
+	write := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "the next filing", InboxRecords: []types.CommitmentRecord{researchCast(rec, "texture-cell:cast:filing")}, Write: &yaegikernel.TextureWrite{
 		Edits: "@replace b3\nThe merger may proceed {{cite https://example.org/court \"the merger may proceed\"}}.", Why: "cite the ruling",
 	}})
 	if _, err := h.CommitCellTextureAuthor(ctx, &rec, write, "uncaptured-1"); err != nil {

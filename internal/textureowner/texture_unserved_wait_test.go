@@ -1,0 +1,276 @@
+package textureowner
+
+import (
+	"context"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
+)
+
+// docs/problems/unsettled-obligations-cluster-2026-11-09.md, "Build: failure
+// list". A Wait is accepted as a next actor for any text, nothing arms a wake
+// for it, and six b@c trajectories sat live for hours on an open work item.
+// Ways the Wait leg can fail, written before it:
+//   - a Wait nothing serves leaves the request open (the class stays);
+//   - a Wait something serves (a round, an unread waking record, a live
+//     activation, a later head) is closed anyway;
+//   - a Cast and a Wait in one turn close before the cast's round is seen;
+//   - a replayed turn closes twice or notifies management twice;
+//   - the notice wakes management, or the owner cannot reopen the work.
+
+func unattendedNotices(t *testing.T, s *store.Store, rec types.RunRecord) []types.CommitmentRecord {
+	t.Helper()
+	records, err := s.ListInboxRecords(context.Background(), rec.OwnerID, rec.ComputerID, agentprofile.Management+":"+rec.OwnerID, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []types.CommitmentRecord
+	for _, r := range records {
+		if types.IsUnattendedRequestNotice(r) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func TestWaitWithNothingServingClosesTheRequestAndTellsManagement(t *testing.T) {
+	h, s, rec := cellAuthorSetup(t, "unserved-wait")
+	ctx := context.Background()
+	base := headOf(t, s, rec)
+	wait := turnBody(t, writeTurn(base.RevisionID, func(turn *yaegikernel.TextureTurn) { turn.Wait = "provider quota resets at 14:03Z" }))
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, wait, "unserved-1"); err != nil {
+		t.Fatalf("Write with an unserved Wait: %v", err)
+	}
+	if headOf(t, s, rec).RevisionID == base.RevisionID {
+		t.Fatal("the Write did not land")
+	}
+	w := textureWork(t, s, rec)
+	if w.Status != types.WorkItemRefused || !strings.HasPrefix(w.Reason, UnattendedRequestReason) ||
+		!strings.Contains(w.Reason, "provider quota resets at 14:03Z") || !strings.Contains(w.Reason, rec.RunID) {
+		t.Fatalf("work = %s %q, want refused as unattended naming the Wait and the run", w.Status, w.Reason)
+	}
+	// A replayed turn (a retried activation end) closes nothing twice.
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, wait, "unserved-1"); err != nil {
+		t.Fatalf("replayed Wait turn: %v", err)
+	}
+	notices := unattendedNotices(t, s, rec)
+	if len(notices) != 1 || !strings.Contains(notices[0].Directive.Body, w.WorkItemID) {
+		t.Fatalf("management notices = %+v, want exactly one for %s", notices, w.WorkItemID)
+	}
+	if store.RecordWakesReader(notices[0]) {
+		t.Fatal("the notice wakes management: a Wait that closes would loop")
+	}
+	// The owner sees it on the document and the owner's next revise reopens.
+	snapshot, err := s.GetLifecycleSnapshot(ctx, rec.OwnerID, rec.ComputerID, rec.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := textureRequestUnattended(snapshot, rec.ChannelID); !strings.HasPrefix(got, UnattendedRequestReason) {
+		t.Fatalf("document unattended state = %q", got)
+	}
+	if !textureWorkSettledByDesk(snapshot, rec.ChannelID) {
+		t.Fatal("a closed Wait does not let the owner's next revise reopen work")
+	}
+}
+
+func TestWaitWithACastInTheSameTurnStaysOpen(t *testing.T) {
+	h, s, rec := cellAuthorSetup(t, "unserved-wait-cast")
+	ctx := context.Background()
+	base := headOf(t, s, rec)
+	// The Cast and the Wait commit in one transaction, before the cast's
+	// child run exists; the round on the conversation head is the next actor.
+	turn := writeTurn(base.RevisionID, func(turn *yaegikernel.TextureTurn) {
+		turn.Wait = "research is checking the ruling"
+		turn.InboxRecords = []types.CommitmentRecord{researchCast(rec, "texture-cell:cast:same-turn")}
+	})
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, turnBody(t, turn), "same-turn"); err != nil {
+		t.Fatalf("Cast with Wait: %v", err)
+	}
+	if w := textureWork(t, s, rec); w.Status != types.WorkItemOpen {
+		t.Fatalf("work = %s %q, want open while research owes a Report", w.Status, w.Reason)
+	}
+	if n := len(unattendedNotices(t, s, rec)); n != 0 {
+		t.Fatalf("management notices = %d, want none", n)
+	}
+	// A later Wait-only turn with the round still open is served too.
+	v1 := headOf(t, s, rec)
+	again := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: v1.RevisionID, Wait: "still checking"})
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, again, "same-turn-2"); err != nil {
+		t.Fatalf("Wait with the round open: %v", err)
+	}
+	if w := textureWork(t, s, rec); w.Status != types.WorkItemOpen {
+		t.Fatalf("work after a Wait-only turn = %s, want open", w.Status)
+	}
+}
+
+// The race the investigator could not rule out, the other way round: the
+// Report that closes the round lands before the check. It is unread and
+// wakes the desk, so the request stays open; once the turn has read it the
+// same Wait is unserved.
+func TestWaitStaysOpenWhileAnUnreadWakingRecordIsInTheInbox(t *testing.T) {
+	h, s, rec := cellAuthorSetup(t, "unserved-wait-unread")
+	ctx := context.Background()
+	base := headOf(t, s, rec)
+	texture, research := rec.AgentID, agentprofile.Research+":"+rec.ChannelID
+	cast := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "asked research", InboxRecords: []types.CommitmentRecord{researchCast(rec, "texture-cell:cast:unread")}})
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, cast, "unread-1"); err != nil {
+		t.Fatalf("Wait with a Cast: %v", err)
+	}
+	report := types.CommitInboxRecordsRequest{OwnerID: rec.OwnerID, ComputerID: rec.ComputerID, CommandID: "seed-unread-report", Records: []types.CommitmentRecord{{
+		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "research-cell:report:unread", Kind: types.CommitmentKindReport,
+		Report: &types.CommitmentReport{Claims: []types.ReportClaim{{Text: "the ruling is in"}}, StopReason: "answered"}, Inbox: texture, SenderInbox: research, Addressee: texture,
+		ConversationID: types.InboxConversationID(texture, research), Round: 1, Final: true,
+		ComputerID: rec.ComputerID, EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: research},
+	}}, Cursor: &types.InboxCursorAdvance{ReaderAgentID: research, Inbox: research, ExpectedSeq: 0, Seq: 1}}
+	report.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(report)
+	if _, err := s.CommitInboxRecords(ctx, report); err != nil {
+		t.Fatalf("seed report: %v", err)
+	}
+	// The round is closed now; only the unread Report serves the Wait.
+	if rounds, err := s.OpenRoundsCastBy(ctx, rec.OwnerID, rec.ComputerID, texture); err != nil || len(rounds) != 0 {
+		t.Fatalf("open rounds = %d, %v; want the Report to have closed the round", len(rounds), err)
+	}
+	unread := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "reading the report next"})
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, unread, "unread-2"); err != nil {
+		t.Fatalf("Wait with an unread Report: %v", err)
+	}
+	if w := textureWork(t, s, rec); w.Status != types.WorkItemOpen {
+		t.Fatalf("work = %s %q, want open while a waking Report is unread", w.Status, w.Reason)
+	}
+	// The turn that reads it and still only waits has nothing behind it.
+	read := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "the report was off topic",
+		InboxCursor: &types.InboxCursorAdvance{ReaderAgentID: texture, Inbox: texture, ExpectedSeq: 0, Seq: 1}})
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, read, "unread-3"); err != nil {
+		t.Fatalf("Wait after reading: %v", err)
+	}
+	if w := textureWork(t, s, rec); w.Status != types.WorkItemRefused || !strings.HasPrefix(w.Reason, UnattendedRequestReason) {
+		t.Fatalf("work = %s %q, want refused once nothing is unread", w.Status, w.Reason)
+	}
+}
+
+func TestWaitIsServedByAWakeTheRuntimeAlreadyHolds(t *testing.T) {
+	h, s, rec := cellAuthorSetup(t, "unserved-wait-wake")
+	ctx := context.Background()
+	base := headOf(t, s, rec)
+	doc, err := s.GetLifecycleDocument(ctx, rec.OwnerID, rec.ComputerID, rec.ChannelID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An owner revision after a Wait-only turn moved the head: it opened work
+	// and woke the desk.
+	stale := yaegikernel.TextureTurn{BaseRevisionID: "revision-the-turn-answered", Wait: "waiting"}
+	if served, err := h.waitServedByWake(ctx, &rec, doc, stale); err != nil || !served {
+		t.Fatalf("a moved head: served=%v err=%v, want served", served, err)
+	}
+	// A Write turn whose head is not the desk's own was followed by an owner
+	// edit (the seed head is the owner's).
+	written := yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "waiting", Write: &yaegikernel.TextureWrite{Edits: "x", Why: "y"}}
+	if served, err := h.waitServedByWake(ctx, &rec, doc, written); err != nil || !served {
+		t.Fatalf("an owner head after a Write: served=%v err=%v, want served", served, err)
+	}
+	// Nothing else: the head is the turn's, no other activation, nothing unread.
+	same := yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "waiting"}
+	if served, err := h.waitServedByWake(ctx, &rec, doc, same); err != nil || served {
+		t.Fatalf("an idle desk: served=%v err=%v, want unserved", served, err)
+	}
+	// Another live activation of the same desk is a wake already dispatched.
+	ended := rec
+	finished := time.Now().UTC()
+	ended.State, ended.UpdatedAt, ended.FinishedAt = types.RunCompleted, finished, &finished
+	end := types.ReplaceLifecycleActivationRequest{OwnerID: rec.OwnerID, ComputerID: rec.ComputerID, CommandID: "end-this-activation", TrajectoryID: rec.TrajectoryID, AgentID: rec.AgentID, Run: ended}
+	end.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(end)
+	if _, err := s.ReplaceLifecycleActivation(ctx, end); err != nil {
+		t.Fatalf("end this activation: %v", err)
+	}
+	other := rec
+	other.FinishedAt = nil
+	other.RunID = "texture-run-the-other-activation"
+	other.State = types.RunRunning
+	project := types.ReplaceLifecycleActivationRequest{OwnerID: rec.OwnerID, ComputerID: rec.ComputerID, CommandID: "project-other-activation", TrajectoryID: rec.TrajectoryID, AgentID: rec.AgentID, Run: other}
+	project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
+	if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
+		t.Fatalf("project the other activation: %v", err)
+	}
+	if served, err := h.waitServedByWake(ctx, &rec, doc, same); err != nil || !served {
+		t.Fatalf("another live activation: served=%v err=%v, want served", served, err)
+	}
+}
+
+// What serves a request besides a round is read from the trajectory and the
+// self-development store; the table pins every kind the predicate names.
+func TestTextureRequestServerNamesWhatServes(t *testing.T) {
+	live := types.LifecycleSnapshot{EngineeringAssignments: []types.EngineeringAssignment{{AssignmentID: "a1", Disposition: types.EngineeringAssignmentBound}}}
+	done := types.LifecycleSnapshot{EngineeringAssignments: []types.EngineeringAssignment{{AssignmentID: "a1", Disposition: types.EngineeringAssignmentCompleted}}}
+	for _, tc := range []struct {
+		name   string
+		snap   types.LifecycleSnapshot
+		rounds int
+		op     string
+		want   string
+	}{
+		{"a live engineering assignment (its capsule job runs under it)", live, 0, "", "engineering assignment"},
+		{"an open round Texture cast", done, 1, "", "open round"},
+		{"a live self-development operation", done, 0, "selfdev-op-1", "self-development operation"},
+		{"a finished assignment and nothing else", done, 0, "", ""},
+		{"an empty trajectory", types.LifecycleSnapshot{}, 0, "", ""},
+	} {
+		if got := textureRequestServer(tc.snap, tc.rounds, tc.op); got != tc.want {
+			t.Errorf("%s: server = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+// The crash boot's leg (agentcore closeUnservedTextureWorkAfterCrash hands
+// each open Texture work item to closeUnservedAtBoot).
+func TestCrashBootClosesTextureWorkNothingServes(t *testing.T) {
+	h, s, rec := cellAuthorSetup(t, "unserved-boot")
+	ctx := context.Background()
+	work := textureWork(t, s, rec)
+	if err := h.closeUnservedAtBoot(ctx, work); err != nil {
+		t.Fatalf("boot close: %v", err)
+	}
+	w := textureWork(t, s, rec)
+	if w.Status != types.WorkItemRefused || !strings.HasPrefix(w.Reason, UnattendedRequestReason) || !strings.Contains(w.Reason, "interrupted by a restart") {
+		t.Fatalf("work = %s %q, want refused, interrupted by a restart", w.Status, w.Reason)
+	}
+	// A second boot finds it closed and writes nothing.
+	if err := h.closeUnservedAtBoot(ctx, work); err != nil {
+		t.Fatalf("second boot close: %v", err)
+	}
+	notices := unattendedNotices(t, s, rec)
+	if len(notices) != 1 || store.RecordWakesReader(notices[0]) {
+		t.Fatalf("management notices = %+v, want one that wakes no one", notices)
+	}
+}
+
+func TestCrashBootLeavesServedAndForeignWorkAlone(t *testing.T) {
+	h, s, rec := cellAuthorSetup(t, "unserved-boot-served")
+	ctx := context.Background()
+	base := headOf(t, s, rec)
+	cast := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "asked research", InboxRecords: []types.CommitmentRecord{researchCast(rec, "texture-cell:cast:boot-served")}})
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, cast, "boot-served-1"); err != nil {
+		t.Fatalf("Wait with a Cast: %v", err)
+	}
+	work := textureWork(t, s, rec)
+	if err := h.closeUnservedAtBoot(ctx, work); err != nil {
+		t.Fatalf("boot close: %v", err)
+	}
+	if w := textureWork(t, s, rec); w.Status != types.WorkItemOpen {
+		t.Fatalf("work = %s, want open while a round Texture cast is open", w.Status)
+	}
+	// Another desk's work item is not Texture's to close.
+	foreign := work
+	foreign.AssignedAgentID = agentprofile.Research + ":" + rec.ChannelID
+	foreign.AuthorityProfile = agentprofile.Research
+	if err := h.closeUnservedAtBoot(ctx, foreign); err != nil {
+		t.Fatalf("foreign boot close: %v", err)
+	}
+	if n := len(unattendedNotices(t, s, rec)); n != 0 {
+		t.Fatalf("management notices = %d, want none", n)
+	}
+}

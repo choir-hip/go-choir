@@ -156,7 +156,7 @@ func TestWriteCommitsACitedParagraphAndKeepsUntouchedBlocks(t *testing.T) {
 	h, s, rec := cellAuthorSetup(t, "write")
 	ctx := context.Background()
 	base := headOf(t, s, rec)
-	first := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "the regulator's appeal", Write: &yaegikernel.TextureWrite{
+	first := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "the regulator's appeal", InboxRecords: []types.CommitmentRecord{researchCast(rec, "texture-cell:cast:appeal")}, Write: &yaegikernel.TextureWrite{
 		Edits: "@replace b2\nThe court ruled that the merger may proceed {{cite https://example.org/court \"the court ruled that the merger may proceed\"}}.",
 		Why:   "state the ruling",
 	}})
