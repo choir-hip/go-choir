@@ -635,6 +635,36 @@ Collision list (files two lanes would both want):
 | D14 | Gate failure policy | 3 retries over 24 hours then `gate_unavailable`; or retry forever | 3 retries. The handoff asks the author to always see a verdict; `gate_unavailable` is shown to the author as such. Cost: a stuck gate leaves the op-ed unlisted on the story |
 | D15 | Level assignment for the changelog | by kind (table 5.2), or per event by a model | By kind. Cost: no per-event nuance. A model-set level is an unreviewable channel into the notification surface |
 
+### 8.1 Rulings (orchestrator, 2026-11-10)
+
+Every recommendation in the table is adopted. Builders code against the
+recommended option. Notes where the ruling adds something:
+
+- **D5.** Poll. The paper's `oped_intake` runs at the one-minute floor; a
+  reader's `notice_intake` runs every five minutes. Each poll is one indexed
+  range read and no model call. Physics: 1,000 computers polling every five
+  minutes is about 3 reads a second at corpusd.
+- **D6.** The wake is a Cast emitted by host code under `management:<owner>`.
+  No management model run is involved, so this does not add the costly
+  intermediary the owner called a hypothesis (2026-11-09). The decision to
+  wake is its own record (`oped_wake_decision`), so moving the wake to a
+  direct system record later changes one emitter and no history.
+- **D7.** The switch is deleted in lane C2's first commit. The daily limit
+  stays.
+- **D8.** The gate runs on the paper's computer. With D5 the author sees
+  `pending` for about a minute. Each gate judgment goes through lane A's one
+  recording function, so the gate's thresholds can be calibrated.
+- **D9.** A published version is required. Named residual for the owner:
+  proposals are public until a private audience exists.
+- **D10.** C. Lane A sizes the per-computer `judgments:sections` scope
+  inside its one shared limiter; lane B does not add a limiter.
+- **D11.** The cap is derived from the notice objects, with no new counter
+  table.
+- **Scope tonight.** Contract 1 (C1, H1) is wave 1. Contract 2 and the
+  cross-computer half of contract 3 are wave 2 (C2). The local `update_*`
+  events of contract 3 are wave 1 (H1 defines, C1 emits). A lane that finds
+  the contract wrong stops and reports; it does not fork the contract.
+
 ## 9. Standing questions that apply
 
 1. **Who settled this?** The shape (one call, sources as parents, publish and
