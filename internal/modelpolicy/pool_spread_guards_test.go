@@ -7,6 +7,7 @@ package modelpolicy
 // renderer of `choir policy pin` drops a field.
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -27,9 +28,35 @@ func TestSpreadGroupMustBeAdjacent(t *testing.T) {
 	}
 }
 
-func TestPlainListCannotFlattenASpreadPool(t *testing.T) {
-	_, err := parsePolicy("[pools.default]\nmembers = [\""+memDevin+"\", \""+memHaiku+"\"]\n\n"+rolesAndDefaults(), "test")
-	if err == nil || !strings.Contains(err.Error(), "spread") {
-		t.Fatalf("plain list over the default pool accepted or unclear: %v", err)
+// An existing file with a plain-list default pool (written before the release
+// carried a spread group) still loads: its roles survive, the pool runs in
+// strict order, a diagnostic says so, and every write path refuses it.
+func TestPlainListOverSpreadPoolReadsTolerantlyAndWritesRefuse(t *testing.T) {
+	text := "[pools.default]\nmembers = [\"" + memDevin + "\", \"" + memHaiku + "\"]\n\n[defaults]\nmodel = \"pool:default\"\nreasoning = \"high\"\n\n[roles.texture]\nprovider = \"chatgpt\"\nmodel = \"gpt-6-luna\"\n"
+	policy, err := parsePolicy(text, "test")
+	if err != nil {
+		t.Fatalf("existing file rejected on read: %v", err)
+	}
+	if got := policy.Resolve("texture"); got.Model != "gpt-6-luna" {
+		t.Fatalf("role assignment lost: %+v", got)
+	}
+	if got := policy.Resolve("management"); got.ReasoningEffort != "high" {
+		t.Fatalf("defaults lost: %+v", got)
+	}
+	pool, ok := policy.pool("default")
+	if !ok || len(pool.Members) != 2 || pool.Source != PoolSourceFile {
+		t.Fatalf("pool = %+v", pool)
+	}
+	if len(policy.Diagnostics) != 1 || !strings.Contains(policy.Diagnostics[0], "spread") {
+		t.Fatalf("diagnostics = %v", policy.Diagnostics)
+	}
+	if err := ValidateText(text); err == nil || !strings.Contains(err.Error(), "spread") {
+		t.Fatalf("write path accepted the plain list: %v", err)
+	}
+	// A manager booting on that file uses it, not the platform fallback.
+	m := writePolicyFile(t, text)
+	loaded, lerr := m.Load(context.Background(), "owner")
+	if lerr != nil || loaded.Resolve("texture").Model != "gpt-6-luna" {
+		t.Fatalf("manager load: %v %+v", lerr, loaded.Resolve("texture"))
 	}
 }

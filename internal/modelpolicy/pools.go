@@ -235,8 +235,16 @@ func buildFilePools(drafts []*poolDraft, diagnostics *[]string) (map[string]Pool
 					spreads++
 				}
 			}
-			if weighted > 1 || !compiled.Failover || spreads > 0 {
-				return nil, fmt.Errorf("pool %q: a plain list of members would flatten the release's pool of that name (%s); write the members as { model = ..., weight = N, fallback_only = bool, spread = ..., spread_weight = N } tables and say failover", d.name, describeShape(weighted, compiled.Failover, spreads))
+			if weighted > 1 || !compiled.Failover {
+				return nil, fmt.Errorf("pool %q: a plain list of members would flatten the release's pool of that name (%s); write the members as { model = ..., weight = N, fallback_only = bool, spread = ..., spread_weight = N } tables and say failover", d.name, describeShape(weighted, compiled.Failover, 0))
+			}
+			if spreads > 0 {
+				// An existing file may hold this shorthand (written before the
+				// release carried a spread group). Reading it must not drop
+				// the whole file and its role assignments, so it is accepted
+				// as strict order with a diagnostic; every write path
+				// (ValidateText) refuses a policy that has a diagnostic.
+				*diagnostics = append(*diagnostics, fmt.Sprintf("model policy pool %q is a plain list over the release's pool of that name, which has a spread group; it runs in strict order with no spread (write the members as tables with spread = ... to keep the spread)", d.name))
 			}
 		}
 		failover := true
