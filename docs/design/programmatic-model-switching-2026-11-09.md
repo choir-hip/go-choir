@@ -327,3 +327,10 @@ DeepSeek 1, River DeepSeek 1. `choir policy get` shows `spread` and
 `spread_weight`; `policy pin` and `policy lead` write them back. This is a
 rollout-free schema field, not a switch: a pool that does not name it is
 unchanged.
+
+Known residual (2026-11-10): `ContinuationChain` is thread-less, so a run
+pinned to one model that exhausts its own chain reaches the default pool's
+paid tail in pool order, Haiku first, with no spread. The spread applies to
+pool-assigned runs only; plumbing the thread into the chain is deferred. A
+spread member must be `fallback_only`, a group must be one run of adjacent
+members, and a plain list cannot shadow a pool that carries a group.

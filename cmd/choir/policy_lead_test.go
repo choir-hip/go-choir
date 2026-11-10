@@ -190,7 +190,7 @@ func TestPolicyLeadUncataloguedRefused(t *testing.T) {
 func TestPolicyPutRefusesUncataloguedMember(t *testing.T) {
 	root, _ := policyServer(t)
 	seedServerPolicy(t, root, cliPolicy)
-	bad := "# owner-edited\n[pools.default]\nmembers = [\"opencode-go/no-such-model\", \"" + leadIceman + "\"]\n\n" + strings.TrimPrefix(cliPolicy, "# owner-edited\n")
+	bad := "# owner-edited\n[pools.default]\nmembers = [{ model = \"opencode-go/no-such-model\" }, { model = \"" + leadIceman + "\", fallback_only = true }]\n\n" + strings.TrimPrefix(cliPolicy, "# owner-edited\n")
 	code, _, errOut := runPolicy("set", "--local", writeLocal(t, bad))
 	if code == 0 || !strings.Contains(errOut, "no-such-model") || readServerPolicy(t, root) != cliPolicy {
 		t.Fatalf("code %d, stderr %q", code, errOut)

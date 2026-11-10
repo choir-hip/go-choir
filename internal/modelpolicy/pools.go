@@ -226,14 +226,17 @@ func buildFilePools(drafts []*poolDraft, diagnostics *[]string) (map[string]Pool
 		}
 		compiled, hasCompiled := compiledPool(d.name)
 		if d.shorthand && hasCompiled {
-			weighted := 0
+			weighted, spreads := 0, 0
 			for _, member := range compiled.Members {
 				if member.SlotWeight() > 0 {
 					weighted++
 				}
+				if member.Spread != "" {
+					spreads++
+				}
 			}
-			if weighted > 1 || !compiled.Failover {
-				return nil, fmt.Errorf("pool %q: a plain list of members would flatten the release's pool of that name (%s); write the members as { model = ..., weight = N, fallback_only = bool } tables and say failover", d.name, describeShape(weighted, compiled.Failover))
+			if weighted > 1 || !compiled.Failover || spreads > 0 {
+				return nil, fmt.Errorf("pool %q: a plain list of members would flatten the release's pool of that name (%s); write the members as { model = ..., weight = N, fallback_only = bool, spread = ..., spread_weight = N } tables and say failover", d.name, describeShape(weighted, compiled.Failover, spreads))
 			}
 		}
 		failover := true
@@ -265,18 +268,40 @@ func buildFilePools(drafts []*poolDraft, diagnostics *[]string) (map[string]Pool
 			}
 			*diagnostics = append(*diagnostics, fmt.Sprintf("model policy pool %q has no member the catalog lists; roles naming it fail closed", d.name))
 		}
+		if err := checkSpreadAdjacent(d.name, members); err != nil {
+			return nil, err
+		}
 		out[d.name] = Pool{Name: d.name, Members: members, Failover: failover, Source: PoolSourceFile}
 	}
 	return out, nil
 }
 
-func describeShape(weighted int, failover bool) string {
+// checkSpreadAdjacent refuses a spread group whose members are not adjacent:
+// the resolver orders only runs, so a split group would be silently inert.
+func checkSpreadAdjacent(pool string, members []modelcatalog.PoolMember) error {
+	closed := map[string]bool{}
+	for i, m := range members {
+		if m.Spread == "" || (i > 0 && members[i-1].Spread == m.Spread) {
+			continue
+		}
+		if closed[m.Spread] {
+			return fmt.Errorf("pool %q: spread group %q has members that are not adjacent; a group must be one run of neighbouring members", pool, m.Spread)
+		}
+		closed[m.Spread] = true
+	}
+	return nil
+}
+
+func describeShape(weighted int, failover bool, spreads int) string {
 	var parts []string
 	if weighted > 1 {
 		parts = append(parts, fmt.Sprintf("%d weighted members", weighted))
 	}
 	if !failover {
 		parts = append(parts, "failover disabled")
+	}
+	if spreads > 0 {
+		parts = append(parts, "a spread group")
 	}
 	return strings.Join(parts, ", ")
 }
@@ -434,6 +459,9 @@ func readMemberTable(s string, i int) (memberSpec, int, error) {
 			}
 			if spec.weight != 0 && spec.fallbackOnly {
 				return memberSpec{}, 0, fmt.Errorf("member %s/%s has a weight and is fallback_only; a fallback takes no threads", spec.provider, spec.model)
+			}
+			if spec.spread != "" && !spec.fallbackOnly {
+				return memberSpec{}, 0, fmt.Errorf("member %s/%s has a spread and is not fallback_only; a spread group reorders fallbacks only, so a weighted lead cannot join one", spec.provider, spec.model)
 			}
 			if spec.spreadWeight != 0 && spec.spread == "" {
 				return memberSpec{}, 0, fmt.Errorf("member %s/%s has a spread_weight and no spread group", spec.provider, spec.model)

@@ -27,7 +27,7 @@ func TestHasPoolSectionMatchesParser(t *testing.T) {
 }
 
 func TestEnsureDefaultPolicyFileKeepsSpacedPoolHeader(t *testing.T) {
-	text := "[ pools.default ]\nmembers = [\"" + memLuna + "\"]\n\n" + rolesAndDefaults()
+	text := "[ pools.default ]\nmembers = [{ model = \"" + memLuna + "\" }]\n\n" + rolesAndDefaults()
 	manager := writePolicyFile(t, text)
 	if _, err := manager.Load(context.Background(), "owner"); err != nil {
 		t.Fatal(err)

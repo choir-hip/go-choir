@@ -76,14 +76,17 @@ func renderPoolSection(pool policyPool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[pools.%s]\nmembers = [\n", pool.Name)
 	for _, m := range pool.Members {
-		if m.FallbackOnly {
-			spread := ""
-			if m.Spread != "" {
-				spread = fmt.Sprintf(", spread = %q", m.Spread)
-				if m.SpreadWeight > 1 {
-					spread += fmt.Sprintf(", spread_weight = %d", m.SpreadWeight)
-				}
+		// Every field is written, whatever the member's kind, so the server's
+		// validation (spread needs fallback_only) refuses a bad pool loudly
+		// instead of the render dropping the field.
+		spread := ""
+		if m.Spread != "" {
+			spread = fmt.Sprintf(", spread = %q", m.Spread)
+			if m.SpreadWeight > 1 {
+				spread += fmt.Sprintf(", spread_weight = %d", m.SpreadWeight)
 			}
+		}
+		if m.FallbackOnly {
 			fmt.Fprintf(&b, "  { model = %q, fallback_only = true%s },\n", m.Model, spread)
 			continue
 		}
@@ -91,7 +94,7 @@ func renderPoolSection(pool policyPool) string {
 		if weight < 1 {
 			weight = 1
 		}
-		fmt.Fprintf(&b, "  { model = %q, weight = %d },\n", m.Model, weight)
+		fmt.Fprintf(&b, "  { model = %q, weight = %d%s },\n", m.Model, weight, spread)
 	}
 	fmt.Fprintf(&b, "]\nfailover = %t\n", pool.Failover)
 	return b.String()

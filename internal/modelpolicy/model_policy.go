@@ -411,7 +411,9 @@ func FormatFallbacks(fallbacks []provideriface.LLMSelection) string {
 
 // weightedIndex maps a thread hash onto a member, each member taking a
 // share of hashes in proportion to its weight. A pool of fallback-only
-// members assigns its first.
+// members assigns its first. Fallback-only members (spread groups included)
+// take no share here; spreadGroups orders them afterwards, and a spread group
+// is refused on a weighted member so it can never reach the lead slot.
 func weightedIndex(members []modelcatalog.PoolMember, hash uint32) int {
 	total := 0
 	for _, member := range members {

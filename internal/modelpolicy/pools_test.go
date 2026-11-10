@@ -99,8 +99,8 @@ func TestShorthandShadowingWeightedOrNoFailoverPoolRefused(t *testing.T) {
 
 // Row 3.
 func TestShorthandShadowingSingleLeadPoolAccepted(t *testing.T) {
-	for _, name := range []string{modelcatalog.DefaultPool, modelcatalog.SelfDevPool} {
-		parseOK(t, "[pools."+name+"]\nmembers = [\""+memLuna+"\", \""+memIceman+"\"]\n\n"+rolesAndDefaults())
+	for _, name := range []string{modelcatalog.SelfDevPool} { // the default pool carries a spread group: a plain list is refused (pool_spread_guards_test.go)
+		parseOK(t, "[pools."+name+"]\nmembers = [{ model = \""+memLuna+"\" }, { model = \""+memIceman+"\", fallback_only = true }]\n\n"+rolesAndDefaults())
 	}
 }
 
@@ -191,7 +191,7 @@ func TestValidateTextAcceptsPoolSections(t *testing.T) {
 }
 
 func TestValidateTextRefusesUncataloguedMember(t *testing.T) {
-	text := "# owner-edited\n[pools.default]\nmembers = [\"opencode-go/no-such-model\", \"" + memIceman + "\"]\n\n" + rolesAndDefaults()
+	text := "# owner-edited\n[pools.default]\nmembers = [{ model = \"opencode-go/no-such-model\" }, { model = \"" + memIceman + "\", fallback_only = true }]\n\n" + rolesAndDefaults()
 	err := ValidateText(text)
 	if err == nil || !strings.Contains(err.Error(), "no-such-model") {
 		t.Fatalf("ValidateText: %v", err)
@@ -218,7 +218,7 @@ func TestStaleMemberDroppedWithDiagnostic(t *testing.T) {
 }
 
 func TestStaleMemberDiagnosticReachesMetadata(t *testing.T) {
-	manager := writePolicyFile(t, "# owner-edited\n[pools.default]\nmembers = [\"stealth/crouton-alpha\", \""+memIceman+"\"]\n\n"+rolesAndDefaults())
+	manager := writePolicyFile(t, "# owner-edited\n[pools.default]\nmembers = [{ model = \"stealth/crouton-alpha\" }, { model = \""+memIceman+"\", fallback_only = true }]\n\n"+rolesAndDefaults())
 	metadata := manager.EnrichMetadata(context.Background(), "owner", "texture", map[string]any{"trajectory_id": "t1"})
 	if got := metadataString(metadata, MetadataPolicyError); !strings.Contains(got, "crouton-alpha") {
 		t.Fatalf("llm_policy_error = %q", got)
@@ -230,7 +230,7 @@ func TestStaleMemberDiagnosticReachesMetadata(t *testing.T) {
 
 // Row 12.
 func TestAllMembersStaleFallsBackToCompiled(t *testing.T) {
-	policy := parseOK(t, "[pools.default]\nmembers = [\"stealth/crouton-alpha\"]\n\n"+rolesAndDefaults())
+	policy := parseOK(t, "[pools.default]\nmembers = [{ model = \"stealth/crouton-alpha\" }]\n\n"+rolesAndDefaults())
 	pool, ok := policy.pool("default")
 	if !ok || pool.Source != PoolSourceRelease || len(pool.Members) == 0 {
 		t.Fatalf("pool = %+v", pool)
@@ -246,7 +246,7 @@ func TestAllMembersStaleFallsBackToCompiled(t *testing.T) {
 
 // Rows 13, 14, 15.
 func TestFilePoolWithoutCompiledNamesAndNoMembers(t *testing.T) {
-	text := "[pools.ghost]\nmembers = [\"stealth/crouton-alpha\"]\n\n[defaults]\nmodel = \"pool:default\"\n\n[roles.texture]\nmodel = \"pool:ghost\"\n"
+	text := "[pools.ghost]\nmembers = [{ model = \"stealth/crouton-alpha\" }]\n\n[defaults]\nmodel = \"pool:default\"\n\n[roles.texture]\nmodel = \"pool:ghost\"\n"
 	policy := parseOK(t, text) // the file is not invalidated
 	if len(policy.Diagnostics) == 0 {
 		t.Fatal("no diagnostic")
@@ -277,7 +277,7 @@ func TestOverlayNamingFilePool(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "System", "model-policy-overlays"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	base := "# owner-edited\n[pools.mine]\nmembers = [\"" + memLuna + "\"]\n\n" + rolesAndDefaults()
+	base := "# owner-edited\n[pools.mine]\nmembers = [{ model = \"" + memLuna + "\" }]\n\n" + rolesAndDefaults()
 	if err := os.WriteFile(path, []byte(base), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -311,7 +311,7 @@ func TestFilePoolAssignWeightsAndFailover(t *testing.T) {
 
 // Row 20.
 func TestRetiredRemapUsesFileDefaultPool(t *testing.T) {
-	text := "[pools.default]\nmembers = [\"" + memLuna + "\"]\n\n" + rolesAndDefaults()
+	text := "[pools.default]\nmembers = [{ model = \"" + memLuna + "\" }]\n\n" + rolesAndDefaults()
 	policy := parseOK(t, text)
 	chosen, _, assignment := policy.Assign(provideriface.LLMSelection{Provider: "chatgpt", Model: "gpt-5.6-luna"}, "t")
 	if assignment != "retired_remapped" || chosen.Model != "gpt-6-luna" {
@@ -321,7 +321,7 @@ func TestRetiredRemapUsesFileDefaultPool(t *testing.T) {
 
 // Row 18.
 func TestContinuationChainReadsFilePool(t *testing.T) {
-	manager := writePolicyFile(t, "# owner-edited\n[pools.default]\nmembers = [\""+memLuna+"\"]\n\n"+rolesAndDefaults())
+	manager := writePolicyFile(t, "# owner-edited\n[pools.default]\nmembers = [{ model = \""+memLuna+"\" }]\n\n"+rolesAndDefaults())
 	var names []string
 	for _, s := range manager.ContinuationChain(context.Background(), "owner") {
 		names = append(names, s.Provider+"/"+s.Model)
@@ -345,7 +345,7 @@ func TestRoleChainReadsFilePool(t *testing.T) {
 
 // Row 7: every reader answers from the file.
 func TestEveryReaderUsesTheResolver(t *testing.T) {
-	text := "[pools.default]\nmembers = [\"" + memLuna + "\"]\n\n[defaults]\nmodel = \"pool:default\"\n\n[roles.texture]\nmodel = \"pool:default\"\n"
+	text := "[pools.default]\nmembers = [{ model = \"" + memLuna + "\" }]\n\n[defaults]\nmodel = \"pool:default\"\n\n[roles.texture]\nmodel = \"pool:default\"\n"
 	policy := parseOK(t, text)
 	if sel := policy.Selections(); len(sel) != 1 || sel[0].Model != "gpt-6-luna" {
 		t.Fatalf("Selections = %+v", sel)
@@ -384,7 +384,7 @@ func TestNoDirectCompiledPoolReaders(t *testing.T) {
 
 // Row 21.
 func TestEnsureDefaultPolicyFileKeepsPoolFile(t *testing.T) {
-	text := "[pools.default]\nmembers = [\"" + memLuna + "\"]\n\n" + rolesAndDefaults() // no version line, no mark
+	text := "[pools.default]\nmembers = [{ model = \"" + memLuna + "\" }]\n\n" + rolesAndDefaults() // no version line, no mark
 	manager := writePolicyFile(t, text)
 	if _, err := manager.Load(context.Background(), "owner"); err != nil {
 		t.Fatal(err)
@@ -397,7 +397,7 @@ func TestEnsureDefaultPolicyFileKeepsPoolFile(t *testing.T) {
 
 // Row 23: run with -race.
 func TestConcurrentPoolReads(t *testing.T) {
-	manager := writePolicyFile(t, "# owner-edited\n[pools.default]\nmembers = [\""+memLuna+"\", \""+memIceman+"\"]\n\n"+rolesAndDefaults())
+	manager := writePolicyFile(t, "# owner-edited\n[pools.default]\nmembers = [{ model = \""+memLuna+"\" }, { model = \""+memIceman+"\", fallback_only = true }]\n\n"+rolesAndDefaults())
 	var wg sync.WaitGroup
 	for i := 0; i < 16; i++ {
 		wg.Add(1)
@@ -418,7 +418,7 @@ func TestConcurrentPoolReads(t *testing.T) {
 
 // Row 32: provenance.
 func TestResolvedPoolsSource(t *testing.T) {
-	policy := parseOK(t, "[pools.default]\nmembers = [\""+memLuna+"\"]\n\n"+rolesAndDefaults())
+	policy := parseOK(t, "[pools.default]\nmembers = [{ model = \""+memLuna+"\" }]\n\n"+rolesAndDefaults())
 	sources := map[string]string{}
 	for _, v := range policy.PoolViews() {
 		sources[v.Name] = v.Source

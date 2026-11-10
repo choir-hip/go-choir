@@ -548,7 +548,8 @@ func Pools() map[string][]PoolMember {
 			// self-dev". Synthetic's DeepSeek leads and takes the threads;
 			// River's DeepSeek is the fallback. No free members and no Devin
 			// here (this replaces the earlier free-first selfdev pool). River
-			// carries a $1 a day budget ruling (the gateway's paid budget).
+			// carries a $10 a day budget (owner 2026-11-10: "$1/day cap can be lifted";
+			// the gateway's paid budget, paid_budget.go).
 			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", Weight: 1},
 			{Provider: "river", Model: "deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
 		},
@@ -566,7 +567,7 @@ const SyntheticLunaPool = "synthetic-luna"
 // SelfDevPool names the self-development pool (owner 2026-11-09: "use
 // deepseek via Synthetic and River for self-dev"): Synthetic's DeepSeek V4.1
 // Flash 1017 leads and takes the threads, River's DeepSeek is the only
-// fallback (River has a $1 a day ruling). No free members, no Devin, no Haiku.
+// fallback (River's gateway budget is $10 a day, owner 2026-11-10: "$1/day cap can be lifted"). No free members, no Devin, no Haiku.
 const SelfDevPool = "selfdev"
 
 // NoFailover reports whether a pool's threads never move to another member
