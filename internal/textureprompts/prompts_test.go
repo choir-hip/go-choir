@@ -97,9 +97,12 @@ func TestPromptCoreRetiresTheOldWriteSurface(t *testing.T) {
 	// cited YouTube video and audio episode. 6.2k once the directive and
 	// embed grammar lived only in Write's generated documentation (the
 	// 2026-11-09 prompt cut; the built prompt is pinned to teach it in
-	// agentcore's TestTexturePromptCutKeepsWriteGrammar).
-	if n := len(prompt); n > 6200 {
-		t.Errorf("prompt core is %d characters; the budget is about 6.2k", n)
+	// agentcore's TestTexturePromptCutKeepsWriteGrammar). 6.4k with the
+	// English and depth lines (lane Q, docs/problems/autopaper-article-
+	// quality-2026-11-09.md): the prompt named neither and 78% of stories
+	// were under 300 words.
+	if n := len(prompt); n > 6400 {
+		t.Errorf("prompt core is %d characters; the budget is about 6.4k", n)
 	}
 }
 

@@ -240,6 +240,12 @@ func (rt *Runtime) AutoPublishRevision(ctx context.Context, rec types.RunRecord,
 		log.Printf("story publish: %s revision %s not published: %s", v.DocID, v.RevisionID, held)
 		return held
 	}
+	// Lane Q: a stub, a revision with process text, or one not in English is
+	// held with its reason like the conditions above.
+	if held = qualityHold(texturedoc.TextBlocks(rev.BodyDoc), v.Revision); held != "" {
+		log.Printf("story publish: %s revision %s not published: %s", v.DocID, v.RevisionID, held)
+		return held
+	}
 	publisher := rt.storyPublisher()
 	if publisher == nil {
 		log.Printf("story publish: %s v%d (revision %s) is a gap: no platform to publish to", v.DocID, v.Revision, v.RevisionID)

@@ -10,7 +10,6 @@ package platform
 import (
 	"encoding/json"
 	"strings"
-	"unicode"
 
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 )
@@ -59,24 +58,5 @@ func frontDepth(bodyDoc json.RawMessage, anchors []PublicationAnchor) (*int, *in
 	return &sourceCount, &words
 }
 
-// countWords counts whitespace-separated words, except that text written
-// without spaces between words (Chinese, Japanese) counts one word per two
-// ideographs or kana, so a CJK story is not read as a stub.
-func countWords(text string) int {
-	n := 0
-	for _, field := range strings.Fields(text) {
-		dense, other := 0, false
-		for _, r := range field {
-			if unicode.Is(unicode.Han, r) || unicode.Is(unicode.Hiragana, r) || unicode.Is(unicode.Katakana, r) {
-				dense++
-			} else if unicode.IsLetter(r) || unicode.IsDigit(r) {
-				other = true
-			}
-		}
-		n += (dense + 1) / 2
-		if other || dense == 0 {
-			n++
-		}
-	}
-	return n
-}
+// countWords counts words the way the publish word floor does.
+func countWords(text string) int { return texturedoc.CountWords(text) }
