@@ -267,17 +267,22 @@ type ringMember struct {
 	// LastActiveAt: the last tick that saw the member running; an enrolled
 	// member that is rebooting after its refresh holds its ring for
 	// ringInactiveHold from it.
-	LastActiveAt  time.Time `json:"last_active_at,omitempty"`
-	BootSeenAt    time.Time `json:"boot_seen_at,omitempty"`
-	FirstOnTarget time.Time `json:"first_on_target,omitempty"`
-	ExposedAt     time.Time `json:"exposed_at,omitempty"`
-	Samples       int       `json:"samples"`
-	Healthy       int       `json:"healthy"`
-	ReadyStrikes  int       `json:"ready_strikes,omitempty"`
-	WedgeStrikes  int       `json:"wedge_strikes,omitempty"`
-	LastStatus    int       `json:"last_status,omitempty"`
-	LastDetail    string    `json:"last_detail,omitempty"`
-	LastRelease   string    `json:"last_release,omitempty"`
+	LastActiveAt time.Time `json:"last_active_at,omitempty"`
+	// OffTargetEpoch: the highest realization (boot) seen running on another
+	// release than the target. A crash record names the realization that
+	// crashed (CrashRecord.Epoch), so a crash of a realization at or below
+	// this one happened on the old release and is never the target's.
+	OffTargetEpoch int64     `json:"off_target_epoch,omitempty"`
+	BootSeenAt     time.Time `json:"boot_seen_at,omitempty"`
+	FirstOnTarget  time.Time `json:"first_on_target,omitempty"`
+	ExposedAt      time.Time `json:"exposed_at,omitempty"`
+	Samples        int       `json:"samples"`
+	Healthy        int       `json:"healthy"`
+	ReadyStrikes   int       `json:"ready_strikes,omitempty"`
+	WedgeStrikes   int       `json:"wedge_strikes,omitempty"`
+	LastStatus     int       `json:"last_status,omitempty"`
+	LastDetail     string    `json:"last_detail,omitempty"`
+	LastRelease    string    `json:"last_release,omitempty"`
 }
 
 type ringBreach struct {
@@ -757,6 +762,7 @@ func (w *ringWalk) guardClosedRing(now time.Time, p *ringProgress, members []rin
 		// mark past a crash it recorded on the target.
 		if o.Active && !onTarget {
 			m.LastOffTarget = now
+			m.OffTargetEpoch = max(m.OffTargetEpoch, o.Epoch)
 		}
 		if onTarget && m.FirstOnTarget.IsZero() {
 			m.FirstOnTarget = now
@@ -789,6 +795,7 @@ func (w *ringWalk) observeRing(now time.Time, p *ringProgress, members []ringMem
 		}
 		if o.Active && !onTarget {
 			m.LastOffTarget = now
+			m.OffTargetEpoch = max(m.OffTargetEpoch, o.Epoch)
 		}
 		reenroll := m.Enrolled && !o.Pending && o.FailedTarget != target && now.Sub(m.EnrolledAt) >= ringReenrollGap
 		if o.Active && !o.Held && !o.Divergent && (!m.Enrolled || reenroll) && !o.Pending && o.FailedTarget != target && !graced && !onTarget {
@@ -976,7 +983,13 @@ func (m *ringMember) evaluate(now time.Time, o ringMemberObs, onTarget bool, ope
 		if m.LastOffTarget.After(since) {
 			since = m.LastOffTarget
 		}
-		if c.Kind != crashKindBootFailed && (onTarget || !o.Active) && !m.FirstOnTarget.IsZero() && !at.Before(since) {
+		// Attribution: a crash record names the realization that crashed. A
+		// realization seen running off the target ran the old release, so its
+		// crash is not the target's, whenever it was recorded. A record with
+		// no realization falls back to the time of the last tick that saw
+		// the member running off the target.
+		oldRelease := c.Epoch != 0 && c.Epoch <= m.OffTargetEpoch
+		if c.Kind != crashKindBootFailed && (onTarget || !o.Active) && !m.FirstOnTarget.IsZero() && !at.Before(since) && !oldRelease {
 			return &ringBreach{ComputerID: o.ComputerID, Guard: ringGuardCrash, Detail: c.Kind + ": " + c.Cause, At: now}
 		}
 	}
