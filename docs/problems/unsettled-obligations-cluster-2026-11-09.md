@@ -150,3 +150,85 @@ re-dispatch but loses nothing.
   they have, so it should; not exercised).
 - Staging proof of anything that landed today (L7 acceptance, quota
   mitigation, deliverables): code and logs only.
+
+## Build: failure list (written before the code, 2026-11-10)
+
+Mutation classes: A red (lifecycle refusal on Texture work, boot path), B red
+(loosens a Freeze refusal), C orange (log text only). Under the data-system
+operating tempo the tiers are suspended; the runtime checks are the verifier.
+Each row names the test that pins it. A is built as one helper,
+`closeUnservedTextureRequest`, that wraps `unattendedTextureRequest` and the
+shared body of `closeUnattendedRequest` (the Idle backstop keeps its
+behaviour), called from two places: after a Texture turn that committed a Wait
+(`CommitCellTextureAuthor`), and from `closeOpenObligationsAtBoot` after the
+rounds are closed (a markerless boot only; the marker branch never reaches it).
+
+### A. Close work nobody serves
+
+What can legitimately serve a waiting Texture request, read from the code:
+
+1. an open round the Texture desk cast (`OpenRoundsCastBy`, read from the
+   conversation heads, which commit atomically with the Cast; so a Cast and a
+   Wait in one turn are visible to the post-commit check, no child run needed);
+2. a live (non-terminal) engineering assignment on the trajectory (this covers
+   a running capsule job: a capsule belongs to an assignment);
+3. a live self-development operation on the trajectory;
+4. new here: an unread waking record in the Texture desk's own inbox (a Report
+   that closed the round between the Cast and the check; the run-end records
+   re-check wakes it), by `store.RecordWakesReader`;
+5. new here: a pending, undelivered lifecycle update packet addressed to the
+   Texture agent (a control not yet bound to a run);
+6. new here: another live activation of the same Texture agent (a wake already
+   dispatched), and an owner revision that moved the head after the turn (it
+   opened new work and wakes the desk);
+7. not served, by design: a Wait on the owner. The product has no owner-ask
+   path for Texture other than the document itself; the owner's next revise is
+   the wake. Closing it with the visible fate and a management notice is the
+   cluster's stated end state for the owner-decision shape.
+8. no scheduled wake exists for a Wait (nothing arms one; fix 5 would). A
+   durable `not_before` update for the Texture agent is not consulted because
+   the actor tape is not visible to agentcore; the build adds none.
+
+| failure | test |
+|---|---|
+| closing served work: each of 1 to 6 | `TestWaitKeepsTheRequestOpenWhenSomethingServesIt` (a subtest per kind) |
+| Cast and Wait in one turn: closed before the cast round is visible | `TestWaitWithACastInTheSameTurnStaysOpen` |
+| Write and Wait in one turn closes the request | `TestWaitWithNothingServingClosesTheRequestAndTellsManagement` |
+| double close: a replayed turn, or the Idle backstop after a Wait close | same test (replay), notice count 1 |
+| close racing a late wake: the wake arrives after the close | the refusal is idempotent and the owner's next revise reopens work; `TestWaitCloseIsReopenedByTheOwnersNextRevise` |
+| closing at a planned-restart boot (marker present) | `TestPlannedBootDoesNotCloseTextureWork` (Start with `bootRestartPlanned`) |
+| crash boot with thousands of open items | the boot leg is capped at 200 closes and 60 s per boot, oldest first, and logs the remainder; `TestCrashBootClosureIsBounded`. The remainder stays open and is closed by the next crash boot or its own next Wait; a cap hit is a log line, not a silent drop |
+| the management notice wakes a run that waits again (loop) | the notice is a system Note that `RecordWakesReader` refuses; asserted in the Wait test, and the boot test asserts no run or wake is created |
+| work parked on the owner by a legitimate question | the product's only owner question is the document revision; the closed item reopens on the owner's revise (above) |
+| another desk's work items matched | the boot leg takes only items assigned to a `texture:` agent with the document-custodian profile; `TestCrashBootClosureTakesOnlyTextureWork` |
+| a Texture work item whose agent has a live run at the boot | skipped; `TestCrashBootClosureTakesOnlyTextureWork` |
+| story, publication and the Texture root | exempt (`openTextureRequest`, `textureRootFor`); `TestNextActorReadsTheTrajectory` exists |
+| a boot closer error | logged, the boot goes on; never blocks the boot |
+| b@c's six live stranded trajectories | see below |
+
+b@c's six stranded trajectories: each has an open Texture work item, no live
+run (the 00:04Z boot cancelled them) and no round. At a crash boot the boot leg
+refuses each work item ("no one is working on this request: interrupted by a
+restart"), puts one system Note per item in management's inbox, and the
+trajectory settles; that is the desired visible fate and the restart rule's
+text. At a planned, marker-backed refresh the leg does not run (the marker
+branch passivates and resumes runs, and these runs are already terminal), so
+the six stay as they are: no regression, no repair. Nothing ever re-dispatches
+them. A new Wait turn on any of them would close it. b@c must never be crashed
+or deleted to see this; the proof is on d@e.
+
+### B. The late-before check
+
+| failure | test |
+|---|---|
+| a new-package diff that needs no pair is refused for a late before shot | table test, new package only: not refused |
+| a diff that modifies or deletes an existing file, or adds to an existing package root, is no longer refused for late shots | table test: still refused |
+| a diff that mixes a new package and a changed existing surface | table test: a pair is required, so the late check runs |
+| the predicate drifts from `requireScreens` | both call one function, `needsBeforeAfterPair` |
+
+### C. The dispatcher's wait line
+
+| failure | test |
+|---|---|
+| the cause line changes behaviour | the cause is computed from values the skip already holds; a test asserts the skip decision is unchanged |
+| log volume: a line per skipped tick | the wait line already prints once per wait (it is rate-limited by the existing wait-start edge); the added fields ride that line, no new line |
