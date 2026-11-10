@@ -172,13 +172,17 @@ func (h *Handler) reviseTake(ctx context.Context, doc types.Document, ownerID st
 		body.ExpectedLifecycleVersion = snapshot.Trajectory.LifecycleVersion
 	}
 	links := append([]types.ParentLink{{Role: types.ParentLinkBase, RevisionID: head}}, sourceLinks(resolved)...)
+	metadata := map[string]any{
+		reviseFingerprintMetadataKey: fingerprint,
+		reviseClientIDMetadataKey:    strings.TrimSpace(req.ClientRequestID),
+	}
+	if req.forkedFrom {
+		metadata["forked_from"] = resolved[0].Link
+	}
 	receipt, err := h.commitOwnerBodyEdit(ctx, doc, ownerID, ownerBodyEdit{
 		Body: body, ParentRevisionID: head, IdempotencyKey: strings.TrimSpace(req.ClientRequestID),
 		Links: links, NoWake: true,
-		Metadata: map[string]any{
-			reviseFingerprintMetadataKey: fingerprint,
-			reviseClientIDMetadataKey:    strings.TrimSpace(req.ClientRequestID),
-		},
+		Metadata: metadata,
 	})
 	receipt.Case = ReviseTake
 	return receipt, err

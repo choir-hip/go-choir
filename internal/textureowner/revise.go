@@ -82,6 +82,9 @@ type ReviseRequest struct {
 	Body                   *ReviseBody
 	Sources                []ReviseSource
 	ClientRequestID        string
+	// forkedFrom is set by forkDocument: the revision is a fork's first and
+	// records the source it was forked from.
+	forkedFrom bool
 }
 
 // ReviseReceipt is what a committed (or replayed) revise returns.
@@ -188,7 +191,7 @@ func (h *Handler) reviseDocument(ctx context.Context, req ReviseRequest) (Revise
 		}
 	}
 	if strings.TrimSpace(req.DocID) == "" {
-		return h.reviseNewDocument(ctx, req, kase)
+		return ReviseReceipt{}, refuseOwnerRevision(http.StatusBadRequest, "document ID is required; a fork is made by forkDocument")
 	}
 	doc, err := h.getTextureDocument(asOwner(ctx), ownerID, req.DocID)
 	if err != nil {
@@ -356,9 +359,4 @@ func (h *Handler) reviseWithSources(ctx context.Context, doc types.Document, own
 	default:
 		return ReviseReceipt{}, refuseOwnerRevision(http.StatusNotImplemented, "sources are not accepted by this build")
 	}
-}
-
-// reviseNewDocument creates a document from a source (a fork).
-func (h *Handler) reviseNewDocument(ctx context.Context, req ReviseRequest, kase ReviseCase) (ReviseReceipt, error) {
-	return ReviseReceipt{}, refuseOwnerRevision(http.StatusNotImplemented, "forking is not accepted by this build")
 }
