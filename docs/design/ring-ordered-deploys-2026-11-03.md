@@ -333,3 +333,30 @@ field and the check stay, so launch restores them with a commit (they were
   enroll grace first.
 - **Unchanged.** Expedite (opens every ring, 10-minute watch), rollback,
   the pins and the gate.
+
+### Amendment 2, 2026-11-10: review round 1 (Gemini) on the zero floors
+
+- **A refreshed member that is rebooting holds its ring.** A member asked onto
+  the release (enrolled, or seen on it) and never seen healthy is still owed
+  while it is not running, for `ringInactiveHold` (10 minutes) from the last
+  tick that saw it running. Bounds: a boot failure breaches at once (the
+  boot-success guard, and the crash-loop bound that holds the computer and so
+  drops it); a member that stays down past the hold is treated as down; the
+  next release supersedes the walk.
+- **R5 never closes skipped for a transient state.** The paper inactive, held,
+  divergent, refresh failed or deferred holds R5 (like R0); a paper absent
+  from the fleet closes R5 empty. The hold ends when the paper is seen healthy
+  on the release, the next release supersedes the walk, or an expedite is
+  made. On origin/main inactive, held and divergent closed R5 skipped after
+  its 1-hour floor, a failed refresh held it forever, and a deferred paper
+  held it.
+- **A crash while inactive is counted** (`LastOffTarget` moves only for a
+  running member on another release; an inactive member with a crash after
+  `FirstOnTarget` breaches). Pre-existing on origin/main.
+- **An unprobed computer is neither healthy nor a strike** (`ringHealth.
+  Unprobed`: no probe slot, or the tick deadline cut the probe). Before, both
+  counted a readiness strike. The probes are 8 at a time under 25 seconds; a
+  walk's scope is every opened ring within the guard window, which with zero
+  floors is the whole fleet.
+- **A breach in a closed ring** keeps its single `ring_closed` line and
+  `ClosedAt`; rings that closed after it read `stopped_by_rollback`.
