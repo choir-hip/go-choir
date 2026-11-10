@@ -372,7 +372,11 @@ unblocks a loop (a self-development round refused or failing on a platform
 defect, the paper not publishing, a deploy or CI path that cannot land)
 carries the trailer `Ring-Expedite: <the defect it unblocks>` on its commit,
 so the release reaches every computer at once instead of after the ring
-soaks (docs/design/ring-ordered-deploys-2026-11-03.md, Expedite). An
+soaks (docs/design/ring-ordered-deploys-2026-11-03.md, Expedite). The deploy
+also expedites, with no trailer, any release that changes the paths listed in
+`.github/scripts/node-b-ci-deploy` (owner policy 2026-11-04; `internal/agentcore/`
+among them), so leaving the trailer off such a change does not make it walk
+the rings. An
 expedite keeps everything else: planned, marker-backed refreshes; the live
 capsule, apply and skew refusals; the health guards and automatic rollback;
 R0 and the paper held until each is seen healthy. Ordinary releases walk
