@@ -22,6 +22,10 @@ var languageWords = map[string]map[string]bool{
 	"es": wordSet("el los las una por con para que del se es su al más como pero fue sus está han este entre sobre también ser fue sido muy año"),
 	"pt": wordSet("os as uma não com para por que do da dos das em mais foi são seu sua também ao pelo pela como mas ele ela isso"),
 	"it": wordSet("il lo gli che di un una per con non sono della del nel alla anche più ha stato come nella dei delle questo ma"),
+	// id and ha are registered sources' Latin-script languages (Indonesian,
+	// Hausa); a story mirrored in either must not pass as English.
+	"id": wordSet("yang dan di untuk dengan dari ini itu pada adalah tidak akan dalam juga oleh sebagai telah atau karena mereka saat bahwa kata ke"),
+	"ha": wordSet("da kuma wannan cewa domin daga cikin suka aka yana tana amma shi wani wata kan ga sun zai ne ce ta ya ba"),
 	"nl": wordSet("de het een van en is dat niet voor met zijn op aan ook bij naar werd om maar nog wordt dit door"),
 }
 
@@ -72,7 +76,7 @@ func GuessLanguage(text string) string {
 	}
 	hits := languageHits(words)
 	best, second, bestLang := 0, 0, ""
-	for _, lang := range []string{"en", "fr", "de", "es", "pt", "it", "nl"} {
+	for _, lang := range []string{"en", "fr", "de", "es", "pt", "it", "nl", "id", "ha"} {
 		switch n := hits[lang]; {
 		case n > best:
 			second, best, bestLang = best, n, lang

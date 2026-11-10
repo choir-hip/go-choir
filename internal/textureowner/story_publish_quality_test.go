@@ -62,7 +62,7 @@ func TestANonEnglishStoryAndProcessTextAreHeldAndQuotesAreNot(t *testing.T) {
 		t.Fatalf("turn result %s does not name the language hold", out)
 	}
 
-	out = writeAndResult(t, h, s, &rec, headOf(t, s, rec).RevisionID, "write-status", "@all\n# Harbor\n\nStatus. Revision 4 of the harbor story.\n\n"+storyFiller+twoCites)
+	out = writeAndResult(t, h, s, &rec, headOf(t, s, rec).RevisionID, "write-status", "@all\n# Harbor\n\nStatus. Revision 4.\n\n"+storyFiller+twoCites)
 	pub.none(t, "a story with a Status line")
 	if !strings.Contains(out, "process text") {
 		t.Fatalf("turn result %s does not name the process-text hold", out)
@@ -71,4 +71,41 @@ func TestANonEnglishStoryAndProcessTextAreHeldAndQuotesAreNot(t *testing.T) {
 	quoted := cited("The harbor reopens Monday.") + " The mayor added: \"Le pont sera fermé pendant les travaux.\""
 	storyWrite(t, h, s, &rec, "write-quote", quoted)
 	pub.next(t)
+}
+
+// The length hold applies once per story, read from the revision chain: the
+// second short revision publishes. Ways it can fail: the story is held for
+// ever; the fact lives in memory only (this test reads it from the chain, so
+// a new handler would give the same answer); a revision after a different
+// hold (one outlet) is treated as already told about length.
+func TestTheLengthHoldAppliesOnceAndTheSecondShortRevisionPublishes(t *testing.T) {
+	_, h, s, pub := storySetup(t)
+	rec := openStoryForTexture(t, h, s, "once", types.CastPublishAuto)
+
+	out := writeAndResult(t, h, s, &rec, headOf(t, s, rec).RevisionID, "write-short-1", "@all\n# Harbor\n\nThe harbor reopens Monday."+twoCites)
+	pub.none(t, "the first short revision")
+	if !strings.Contains(out, "-word floor") || !strings.Contains(out, "applies once") {
+		t.Fatalf("turn result %s does not name the one-time length hold", out)
+	}
+
+	second := storyWrite(t, h, s, &rec, "write-short-2", "The harbor reopens Monday, officials said."+twoCites)
+	v := pub.next(t)
+	if v.RevisionID != second.RevisionID || v.Revision != 3 {
+		t.Fatalf("published %+v; want the second short revision %s as v3", v, second.RevisionID)
+	}
+}
+
+// A short revision held for a different reason is not yet told about length.
+func TestAShortRevisionHeldForOneOutletIsStillHeldForLengthNext(t *testing.T) {
+	_, h, s, pub := storySetup(t)
+	rec := openStoryForTexture(t, h, s, "once-outlet", types.CastPublishAuto)
+
+	writeAndResult(t, h, s, &rec, headOf(t, s, rec).RevisionID, "write-one-outlet", "@all\n# Harbor\n\nThe harbor reopens Monday.\n\nThe court ruled that the merger may proceed {{cite https://example.org/court \"the court ruled that the merger may proceed\"}}.")
+	pub.none(t, "a one-outlet revision")
+
+	out := writeAndResult(t, h, s, &rec, headOf(t, s, rec).RevisionID, "write-short-two-outlets", "@all\n# Harbor\n\nThe harbor reopens Monday."+twoCites)
+	pub.none(t, "the first two-outlet short revision")
+	if !strings.Contains(out, "-word floor") {
+		t.Fatalf("turn result %s: the revision was never told about length, so it is held for length now", out)
+	}
 }

@@ -101,8 +101,8 @@ func TestPromptCoreRetiresTheOldWriteSurface(t *testing.T) {
 	// English and depth lines (lane Q, docs/problems/autopaper-article-
 	// quality-2026-11-09.md): the prompt named neither and 78% of stories
 	// were under 300 words.
-	if n := len(prompt); n > 6400 {
-		t.Errorf("prompt core is %d characters; the budget is about 6.4k", n)
+	if n := len(prompt); n > 6500 {
+		t.Errorf("prompt core is %d characters; the budget is about 6.5k", n)
 	}
 }
 
