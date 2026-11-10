@@ -197,9 +197,22 @@ func (rt *Runtime) promptRouteReplay(ctx context.Context, ownerID, runID string)
 // and decides. A late answer is recorded on the tape by the System 1 service
 // when it lands; the route has already taken the default.
 func (rt *Runtime) askRouter(ctx context.Context, ownerID, runID, text string, candidates []promptroute.Candidate) PromptRoute {
+	return rt.askChoice(ctx, ownerID, runID, text, candidates, routerChoice{
+		qid: promptroute.QuestionID, text: promptroute.Question, inputRef: routerHostInputRef, listRef: routerHostDestinationsRef,
+		inputLead: "The owner's input to the prompt bar: ", list: promptroute.Destinations(candidates),
+	})
+}
+
+// routerChoice is one typed choice question of the router's call site: the
+// route question and the input-class question (lane D) share the flow.
+type routerChoice struct {
+	qid, text, inputRef, listRef, inputLead, list string
+}
+
+func (rt *Runtime) askChoice(ctx context.Context, ownerID, runID, text string, candidates []promptroute.Candidate, q routerChoice) PromptRoute {
 	questions, err := yaegikernel.ValidateSystem1HostQuestions([]yaegikernel.System1Question{{
-		ID: promptroute.QuestionID, Text: promptroute.Question, Choices: promptroute.Choices(candidates),
-		ContextRefs: []string{routerHostInputRef, routerHostDestinationsRef},
+		ID: q.qid, Text: q.text, Choices: promptroute.Choices(candidates),
+		ContextRefs: []string{q.inputRef, q.listRef},
 	}})
 	if err != nil {
 		return PromptRoute{Decision: promptroute.Fallback(candidates, promptroute.RuleJudgeFailed, "the question did not validate: "+err.Error())}
@@ -228,8 +241,8 @@ func (rt *Runtime) askRouter(ctx context.Context, ownerID, runID, text string, c
 		raw, err := promptRouterAsk(rt, askCtx, exec, ownerID, rt.cfg.ComputerID, system1Ask{
 			questions: questions, labels: types.NewLabelSet(routerLabel), model: &model, site: "prompt_router",
 			hostText: map[string]string{
-				routerHostInputRef:        "The owner's input to the prompt bar: " + routerBound(text),
-				routerHostDestinationsRef: promptroute.Destinations(candidates),
+				q.inputRef: q.inputLead + routerBound(text),
+				q.listRef:  q.list,
 			},
 		})
 		done <- answer{raw: raw, model: model, err: err, late: errors.Is(askCtx.Err(), context.DeadlineExceeded)}
@@ -255,7 +268,7 @@ func (rt *Runtime) askRouter(ctx context.Context, ownerID, runID, text string, c
 		return PromptRoute{Decision: promptroute.Fallback(candidates, promptroute.RuleJudgeFailed, "the answer did not decode")}
 	}
 	for _, a := range result.Answers {
-		if a.ID != promptroute.QuestionID {
+		if a.ID != q.qid {
 			continue
 		}
 		if a.Error != "" {
@@ -265,7 +278,7 @@ func (rt *Runtime) askRouter(ctx context.Context, ownerID, runID, text string, c
 		}
 		return PromptRoute{Decision: promptroute.Decide(candidates, a.Probabilities, promptroute.Theta), Model: got.model, ReceiptRef: result.ReceiptRef}
 	}
-	return PromptRoute{Decision: promptroute.Fallback(candidates, promptroute.RuleNoAnswer, "System 1 gave no answer to the route question"), Model: got.model, ReceiptRef: result.ReceiptRef}
+	return PromptRoute{Decision: promptroute.Fallback(candidates, promptroute.RuleNoAnswer, "System 1 gave no answer to the question"), Model: got.model, ReceiptRef: result.ReceiptRef}
 }
 
 // routerBound collapses whitespace and keeps the first runes of the owner's

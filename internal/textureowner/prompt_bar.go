@@ -157,6 +157,53 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+type promptBarClassifyRequest struct {
+	Text      string `json:"text"`
+	CommandID string `json:"command_id,omitempty"`
+	// DocState is what the bar is aimed at: owned, foreign or none. The
+	// revise call and the fork route enforce ownership themselves; this
+	// only chooses which classes are offered.
+	DocState string `json:"doc_state"`
+}
+
+// HandlePromptBarClassify classifies the owner's text as an edit, a comment
+// or a request (lane D). It writes nothing the owner sees and never refuses
+// for a model failure: every failure answers the default class with its rule.
+func (h *Handler) HandlePromptBarClassify(w http.ResponseWriter, r *http.Request) {
+	r = asOwnerRoute(r)
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if strings.TrimSpace(r.RemoteAddr) == "" {
+		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "classifying is an owner act"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	var req promptBarClassifyRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid classify request"})
+		return
+	}
+	text := strings.TrimSpace(req.Text)
+	state := promptroute.DocState(strings.TrimSpace(req.DocState))
+	if text == "" || !promptroute.ValidDocState(state) {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "text and a doc_state of owned, foreign or none are required"})
+		return
+	}
+	commandID := strings.TrimSpace(req.CommandID)
+	if commandID == "" {
+		commandID = uuid.NewString()
+	}
+	writeAPIJSON(w, http.StatusOK, h.Core.ClassifyPromptInput(context.WithoutCancel(r.Context()), ownerID, commandID, text, state))
+}
+
 // submitFocusedPrompt sends a focused submit to the focused app agent (plan
 // MA4.8): the default desk's focus on one of the owner's documents is that
 // document's owner revise; a package desk's focus is an owner-origin request

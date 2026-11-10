@@ -18,6 +18,7 @@ import (
 func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureowner.Handler, api *Handler, desktop *desktopstate.Handler, contentOwner *content.Service, mediaOwner *mediastate.Handler, enableTestAPIs bool) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/api/prompt-bar", texture.HandlePromptBar)
+	s.HandleFunc("/api/prompt-bar/classify", texture.HandlePromptBarClassify)
 	s.HandleFunc("/api/prompt-bar/submissions/", texture.HandlePromptBarSubmission)
 	s.HandleFunc("/api/autopaper/ask", texture.HandleAskStory)
 	s.HandleFunc("/api/runs", h.HandleRunList)
