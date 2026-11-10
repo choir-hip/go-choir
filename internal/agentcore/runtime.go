@@ -4044,10 +4044,15 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 
 	// Build the initial conversation from the run prompt.
 	initialMessages := []json.RawMessage{}
+	// A management task's records and newest story page join the first turn,
+	// wrapped as data; they are marked shown only once persisted below, and
+	// never on a resumed run (managementTaskOpening).
+	opening := rt.managementTaskOpening(ctx, rec)
+	openingText := rec.Prompt + opening.openingText()
 	userMsg, _ := json.Marshal(map[string]any{
 		"role": "user",
 		"content": []any{
-			map[string]string{"type": "text", "text": rec.Prompt},
+			map[string]string{"type": "text", "text": openingText},
 		},
 	})
 	initialMessages = append(initialMessages, userMsg)
@@ -4145,6 +4150,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		rt.handleExecutionError(ctx, rec, fmt.Errorf("initialize run memory: %w", err))
 		return
 	}
+	opening.commitAfter(memory)
 	// The calibration digest (ICRL experiment) is a user turn after the
 	// history, never the system prompt: the cached prefix holds.
 	calibrationTurns := rt.calibrationDigestInjector(rec, initialMessages)

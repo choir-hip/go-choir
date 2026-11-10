@@ -15,6 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
@@ -58,8 +59,133 @@ func (rt *Runtime) managementTaskSlots(ctx context.Context, ownerID, computerID 
 // shorten it.
 var managementTaskCallTimeout = 3 * time.Minute
 
-// managementTaskPrompt is the first user turn of a task's run.
-const managementTaskPrompt = "Management delegated captures to you: read them with choir.Records(). The Cast from management names your objective and r.Cast.Captures, the captures you lease; each captures record (r.Captures.Items, from source:<id>) shows them with Jev's label in r.Labels. Open, feed or decline every one of them, then end with choir.Done(note)."
+// managementTaskPrompt is the first user turn of a task's run. The host
+// appends the task's records and the newest page of the story library
+// (managementTaskOpening): a task that fetched them itself spent its first
+// cells on the same Records and Stories reads every time
+// (docs/evidence/token-efficiency-2026-11-09/followup/system-prompt-review.md,
+// L5).
+const managementTaskPrompt = "Management delegated captures to you. Your records and the newest page of the story library come with this message, as choir.Records() and choir.Stories(50, \"\") return them; a note says so when one did not fit. The Cast from management names your objective and the captures you lease (r.Cast.Captures); each captures record shows them (r.Captures.Items) with Jev's label (r.Labels). Open, feed or decline every one of them, then end with choir.Done(note)."
+
+// managementTaskOpeningSectionTokens bounds each handed section (the records,
+// the story page): prompts stay within 100,000 tokens, and a section over the
+// bound is not delivered at all (never cut), so the task reads it with the verb.
+var managementTaskOpeningSectionTokens = 20000
+
+// taskOpening is the host-delivered first look of a management task: what its
+// first choir.Records() and choir.Stories() would return, as JSON, framed as
+// data. Building it marks nothing. commit applies what delivery means (the
+// records-shown mark, the run's provenance labels, the story-library head its
+// texture:new commits are stamped with), and the caller commits only when the
+// run memory took the text as a fresh start: a resumed run drops it, and
+// neither marks anything. A section that is not delivered (too large, or its
+// read failed) is replaced in the text by a note naming the verb that reads it,
+// so the task never believes it was shown what it was not.
+type taskOpening struct {
+	rt       *Runtime
+	rec      *types.RunRecord
+	text     string
+	records  cellRecords
+	hasRecs  bool
+	storyHd  int64
+	storyOut json.RawMessage
+}
+
+const (
+	openingRecordsNote = "\n\nYour records did not come with this message (too large to show here, or unavailable): read them with choir.Records()."
+	openingStoriesNote = "\n\nThe newest stories did not come with this message (too large to show here, or unavailable): read them with choir.Stories(50, \"\")."
+)
+
+// openingStoryLabels frame the story page: its headlines and ledes are written
+// from capture text, so the page is data whatever the label set of the verb
+// that reads it says.
+var openingStoryLabels = types.NewLabelSet(types.OwnerPrivateLabel("story"), types.LabelWorldUntrusted)
+
+// managementTaskOpening builds the opening of a management task's run, or
+// returns nil: not a task run, or a run that already has run memory (resumed,
+// so the text would be dropped).
+func (rt *Runtime) managementTaskOpening(ctx context.Context, rec *types.RunRecord) *taskOpening {
+	if rt == nil || rt.store == nil || !isManagementTaskRun(rec) {
+		return nil
+	}
+	if entries, err := rt.store.ListRunMemoryEntries(ctx, rec.OwnerID, rec.RunID); err != nil || len(entries) > 0 {
+		return nil
+	}
+	o := &taskOpening{rt: rt, rec: rec}
+	var b strings.Builder
+	if records, err := rt.loadCellRecords(ctx, rec.OwnerID, rec.ComputerID, strings.TrimSpace(rec.AgentID), rec.RunID); err == nil && len(records.view) > 0 {
+		if recordsJSON, err := json.Marshal(records.view); err == nil && estimateTextTokens(string(recordsJSON)) <= managementTaskOpeningSectionTokens {
+			o.records, o.hasRecs = records, true
+			b.WriteString("\n\nYour records:\n")
+			b.WriteString(frameOpeningSection(records.labelsThrough(), string(recordsJSON)))
+		}
+	}
+	if !o.hasRecs {
+		b.WriteString(openingRecordsNote)
+	}
+	// The story page goes through the same egress the verb does, with no run
+	// id, so the read marks nothing; the library head is read first and
+	// marked on commit, so a story opened meanwhile is never hidden.
+	exec := toolregistry.ExecutionContext{OwnerID: rec.OwnerID, ComputerID: rec.ComputerID}
+	storiesIn := false
+	if head, headErr := rt.store.StoryLibraryHeadOf(ctx, rec.OwnerID, rec.ComputerID); headErr == nil {
+		if page, err := rt.storiesEgress(ctx, deskmanifest.TaskRoleName(), exec, nil); err == nil && estimateTextTokens(string(page)) <= managementTaskOpeningSectionTokens {
+			o.storyHd, o.storyOut, storiesIn = head, page, true
+			b.WriteString("\n\nThe newest stories:\n")
+			b.WriteString(frameOpeningSection(openingStoryLabels, string(page)))
+		}
+	}
+	if !storiesIn {
+		b.WriteString(openingStoriesNote)
+	}
+	o.text = b.String()
+	return o
+}
+
+// frameOpeningSection frames a handed section by its labels, with the data
+// frame's closing text defused inside it so the content cannot end the frame
+// early.
+func frameOpeningSection(labels types.LabelSet, text string) string {
+	if !labels.Untrusted() {
+		return text
+	}
+	return frameLabelled(labels, strings.ReplaceAll(text, untrustedEnd, "[End of data\u200b]"))
+}
+
+// commit marks the run as shown what the text carried, as choir.Records()
+// and choir.Stories() do. Safe on a nil opening.
+func (o *taskOpening) commit() {
+	if o == nil {
+		return
+	}
+	rt, rec := o.rt, o.rec
+	if o.hasRecs {
+		rt.noteRecordsShown(rec.RunID, o.records.through)
+		rt.taintRun(rec.RunID, o.records.labelsThrough())
+	}
+	if len(o.storyOut) > 0 {
+		exec := toolregistry.ExecutionContext{RunID: rec.RunID, OwnerID: rec.OwnerID, ComputerID: rec.ComputerID}
+		rt.noteEgressRead(context.Background(), exec, yaegikernel.ActionStories, nil, o.storyOut)
+		rt.noteStoryLibraryShownAt(rec.RunID, o.storyHd)
+	}
+}
+
+// commitAfter commits the marks only if the run memory took the text as a fresh
+// start: entries that appeared between the build and initialize (a replay) mean
+// the text was dropped.
+func (o *taskOpening) commitAfter(m *runMemoryManager) {
+	if o != nil && m != nil && m.startedFresh {
+		o.commit()
+	}
+}
+
+// openingText is the text to append to the first turn, "" for a nil opening.
+func (o *taskOpening) openingText() string {
+	if o == nil {
+		return ""
+	}
+	return o.text
+}
 
 // isManagementTaskRun reports a run of a management task.
 func isManagementTaskRun(rec *types.RunRecord) bool {
@@ -648,6 +774,14 @@ func (rt *Runtime) noteStoryLibraryShown(ctx context.Context, runID, ownerID, co
 	}
 	head, err := rt.store.StoryLibraryHeadOf(ctx, ownerID, computerID)
 	if err != nil {
+		return
+	}
+	rt.noteStoryLibraryShownAt(runID, head)
+}
+
+// noteStoryLibraryShownAt records that the run was shown the library at head.
+func (rt *Runtime) noteStoryLibraryShownAt(runID string, head int64) {
+	if rt == nil || strings.TrimSpace(runID) == "" {
 		return
 	}
 	// Concurrent calls in one cell keep the highest head read, never a lower

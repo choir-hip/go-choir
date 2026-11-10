@@ -65,3 +65,23 @@ memory; each section is framed with `frameLabelled` by its own labels with the
 closing marker defused; the story read is labelled through `noteEgressRead`
 (the same call `deskEgress` makes); `executeWithToolLoop` calls `commit` after
 `memory.initialize`.
+
+## Review round 1 of the repair (Devin, REPAIR) and its answers
+
+| Finding | Repair | Test |
+|---|---|---|
+| 1, blocking: the story page arrived unwrapped. Headlines and ledes are written from capture text, so a hostile feed reaches every task's first turn through the story index; `egressReadLabels(ActionStories)` is only `owner_private:story`, which is not untrusted, so `frameOpeningSection` skipped it | the story section is always framed as data (`openingStoryLabels` adds `world_untrusted`), with the closing marker defused | `TestTaskOpeningStoryPageIsWrappedAsData` (story title with instruction text and a frame-closing string) |
+| 2: the task prompt and overlay said the records and stories "follow" and forbade fetching them, also when the opening was dropped for size or a failed read | a dropped section is replaced in the text by a note that it was too large or unavailable and names the verb (`choir.Records()` / `choir.Stories(50, "")`); the prompt says they come "when they fit"; the overlay says to read with the verb when the turn says one did not come | `TestTaskOpeningOversizeSectionIsNotDeliveredOrMarked` (both sections, and no note on a full opening) |
+| 3: check and commit raced: entries appearing between the build's memory check and `initialize` made `initialize` replay while `commit` still marked | `runMemoryManager.startedFresh` is set by `initialize` only when it took the initial messages; `commitAfter(memory)` commits only then | `TestTaskOpeningEntriesBetweenBuildAndInitializeMarkNothing` |
+| nit: the empty-library test did not go through `managementTaskOpening` | `newDelegationFixtureWith(..., openPope=false)` gives an empty library; the test builds the opening | `TestTaskOpeningEmptyLibraryDeliversTheEmptyPage` |
+| nit: overlay named Go fields while the opening delivers JSON keys | both are named: JSON snake_case keys in the turn, Go fields in a cell | prompt text |
+
+### Discovered residual (not changed here)
+
+The desk's own `choir.Stories()` result reaches the model unframed when it is
+the only outside read of a cell: `tools_desk.go:908-909` frames cell stdout
+only when `runUntrustedReads` moved, and the stories read taints with
+`owner_private:story` alone (`run_labels.go:250`), which is not an untrusted
+label. A story headline echoing a hostile title therefore reaches the model as
+tool output unframed in a cell that read no capture. The opening frames the
+page; the verb path is left for its own mission.

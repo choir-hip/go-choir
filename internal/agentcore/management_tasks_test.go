@@ -148,6 +148,13 @@ type delegationFixture struct {
 // rt.cfg.ManagementTaskSlots before it delegates (S2b).
 func newDelegationFixture(t *testing.T, owner string) *delegationFixture {
 	t.Helper()
+	return newDelegationFixtureWith(t, owner, true)
+}
+
+// newDelegationFixtureWith opens the pope story only when openPope is set;
+// without it the story library starts empty.
+func newDelegationFixtureWith(t *testing.T, owner string, openPope bool) *delegationFixture {
+	t.Helper()
 	deskTestWorkerBin(t)
 	rt, s := testRuntime(t)
 	rt.cfg.ManagementTaskSlots = 1
@@ -164,7 +171,9 @@ func newDelegationFixture(t *testing.T, owner string) *delegationFixture {
 	if err := s.PutComputerSetting(ctx, store.ComputerSetting{OwnerID: owner, ComputerID: f.computer, Key: store.SettingIntakeLabels, Value: true}); err != nil {
 		t.Fatal(err)
 	}
-	f.pope = openTestStory(t, s, owner, f.computer, "Pope has lung surgery")
+	if openPope {
+		f.pope = openTestStory(t, s, owner, f.computer, "Pope has lung surgery")
+	}
 	f.model.taskCell = taskCellFor(f.pope)
 	rt.SetDispatchActor(func(dctx context.Context, ownerID, computerID, to, kind, content, _, _ string) error {
 		switch kind {
@@ -660,7 +669,10 @@ func TestManagementTasksAtACrashBootAndAPlannedBoot(t *testing.T) {
 
 // FM3 through a task cell (R2-5): a task that opens a story without
 // reading the library is refused, with the story opened since named, and
-// its cell commits nothing; one that read choir.Stories() first opens.
+// its cell commits nothing; one that read choir.Stories() first opens. The
+// host delivers the library's newest page in a task's first turn
+// (managementTaskOpening), which counts as reading it, so the first task's
+// library moves after that delivery.
 func TestTaskStoryOpenNeedsTheLibraryHead(t *testing.T) {
 	f := newDelegationFixture(t, "owner-task-library")
 	ctx := context.Background()
@@ -671,6 +683,10 @@ func TestTaskStoryOpenNeedsTheLibraryHead(t *testing.T) {
 	if len(queued) != 2 {
 		t.Fatalf("queued = %+v", queued)
 	}
+	// Another task opens a story after this one's first turn was built.
+	f.rt.provider = &libraryMovesOnFirstTaskCall{delegationModel: f.model, onFirst: func() {
+		openTestStory(t, f.s, f.owner, f.computer, "Dock workers walk out")
+	}}
 	open := func(readFirst bool) string {
 		cell := "var ids []string\nfor _, r := range choir.Records() { if r.Captures != nil { for _, c := range r.Captures.Items { ids = append(ids, c.CaptureID) } } }\n"
 		if readFirst {
@@ -692,9 +708,9 @@ choir.Done("opened the strike story")`
 		eventually(t, func() bool { return f.task(task.TaskID).State == types.ManagementTaskClosed })
 		return f.task(task.TaskID)
 	}
-	// The pope story the fixture opened is past head 0.
+	// The dock story opened after the first task's first turn was built.
 	run(queued[0], open(false))
-	if out := f.model.lastOutput(); !strings.Contains(out, "story library moved") || !strings.Contains(out, "Pope has lung surgery") {
+	if out := f.model.lastOutput(); !strings.Contains(out, "story library moved") || !strings.Contains(out, "Dock workers walk out") {
 		t.Fatalf("a task's open without the library was not refused naming the story since: %s", out)
 	}
 	if d, _, _ := f.s.CaptureDispositionOf(ctx, f.owner, f.computer, "cap-l1"); d.Kind != "" {
@@ -707,4 +723,19 @@ choir.Done("opened the strike story")`
 	if o := f.closingReport(closed).TaskOutcome; o == nil || !o.Clean || len(o.Dispositions) != 1 || o.Dispositions[0].Kind != types.DispositionOpen {
 		t.Fatalf("an open after reading the library = %+v (%s)", o, f.model.lastOutput())
 	}
+}
+
+// libraryMovesOnFirstTaskCall runs onFirst once, at the first model call of a
+// management task, after the host built its first turn.
+type libraryMovesOnFirstTaskCall struct {
+	*delegationModel
+	once    sync.Once
+	onFirst func()
+}
+
+func (m *libraryMovesOnFirstTaskCall) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
+	if strings.Contains(req.System, "You are a management task") {
+		m.once.Do(m.onFirst)
+	}
+	return m.delegationModel.CallWithTools(ctx, req)
 }

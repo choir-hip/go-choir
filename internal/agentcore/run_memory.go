@@ -47,10 +47,13 @@ const (
 )
 
 type runMemoryManager struct {
-	store *runtimestore.Store
-	rec   *types.RunRecord
-	cfg   provideriface.Config
-	emit  provideriface.EventEmitFunc
+	// startedFresh is set by initialize when it took the run's initial messages
+	// as the start of its memory (not a replay of an earlier activation).
+	startedFresh bool
+	store        *runtimestore.Store
+	rec          *types.RunRecord
+	cfg          provideriface.Config
+	emit         provideriface.EventEmitFunc
 	// contextModel only sizes the context window for the compaction
 	// threshold. No model call is made from it: a compaction asks the
 	// thread (toolregistry.ThreadCall).
@@ -99,6 +102,7 @@ func (m *runMemoryManager) initialize(ctx context.Context, initialMessages []jso
 		if err := m.appendMessages(ctx, initialMessages); err != nil {
 			return nil, err
 		}
+		m.startedFresh = true
 	} else if err := m.appendRunContextTurn(ctx, m.resumeTurn); err != nil {
 		// A resumed activation replays its history byte for byte and then
 		// reads the time; the turn is persisted so the next activation
