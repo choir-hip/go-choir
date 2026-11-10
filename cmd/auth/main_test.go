@@ -46,7 +46,10 @@ func TestRegisterRoutesAppliesGlobalAuthRateLimit(t *testing.T) {
 
 	handler := auth.NewHandler(store, wa, cfg, priv)
 	s := server.NewServer("auth", "0")
-	registerRoutes(s, handler, auth.NewIPRateLimiter(2, time.Minute))
+	registerRoutes(s, handler, auth.NewRateLimitersWithLimits(map[auth.RateClass]int{
+		auth.RateClassRead: 2, auth.RateClassAct: 2, auth.RateClassCeremony: 2,
+		auth.RateClassSensitive: 2, auth.RateClassDeviceToken: 2,
+	}))
 
 	// The renderer-readable JSON exchange issuer was deleted. Native auth has
 	// exactly one exchange-code issuer: the redirect used by

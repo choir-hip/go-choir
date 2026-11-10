@@ -94,6 +94,7 @@ export async function registerPasskey(email) {
     body: JSON.stringify({ email }),
   });
 
+  if (beginRes.status === 429) throw new RateLimitError(await retryAfterSeconds(beginRes));
   if (!beginRes.ok) {
     const err = await beginRes.json().catch(() => ({}));
     throw new Error(err.error || `Registration begin failed (${beginRes.status})`);
@@ -157,6 +158,7 @@ export async function createPasskeyFromOptions(creationOptions) {
     body: JSON.stringify(finishBody),
   });
 
+  if (finishRes.status === 429) throw new RateLimitError(await retryAfterSeconds(finishRes));
   if (!finishRes.ok) {
     const err = await finishRes.json().catch(() => ({}));
     throw new Error(err.error || `Registration finish failed (${finishRes.status})`);
@@ -341,6 +343,7 @@ export async function loginPasskey(email) {
     body: JSON.stringify({ email }),
   });
 
+  if (beginRes.status === 429) throw new RateLimitError(await retryAfterSeconds(beginRes));
   if (!beginRes.ok) {
     const err = await beginRes.json().catch(() => ({}));
     throw new Error(err.error || `Login begin failed (${beginRes.status})`);
@@ -396,6 +399,7 @@ export async function loginPasskey(email) {
     body: JSON.stringify(finishBody),
   });
 
+  if (finishRes.status === 429) throw new RateLimitError(await retryAfterSeconds(finishRes));
   if (!finishRes.ok) {
     const err = await finishRes.json().catch(() => ({}));
     throw new Error(err.error || `Login finish failed (${finishRes.status})`);
@@ -437,6 +441,28 @@ export async function prewarmAuthenticatedComputer() {
 let sessionRequestPromise = null;
 
 /**
+ * A 429 from an /auth ceremony route. It is a wait, never a failure of the
+ * account or the passkey: the message names the wait so the sheet can show it.
+ */
+export class RateLimitError extends Error {
+  constructor(retryAfterSeconds) {
+    const n = Math.max(1, Math.ceil(Number(retryAfterSeconds) || 60));
+    super(`Too many sign-in attempts from this network. Try again in ${n} second${n === 1 ? '' : 's'}.`);
+    this.name = 'RateLimitError';
+    this.retryAfterSeconds = n;
+  }
+}
+
+/** Seconds to wait after a 429: the Retry-After header, else the body's retry_after, else 60. */
+export async function retryAfterSeconds(res) {
+  const header = Number(res.headers?.get?.('Retry-After'));
+  if (Number.isFinite(header) && header > 0) return header;
+  const body = await res.clone().json().catch(() => ({}));
+  const fromBody = Number(body?.retry_after);
+  return Number.isFinite(fromBody) && fromBody > 0 ? fromBody : 60;
+}
+
+/**
  * Error thrown when /auth/session is unreachable or returns a server error
  * after all retry attempts. This is distinct from AuthRequiredError (which
  * means the server definitively says the session is invalid). A transient
@@ -444,9 +470,10 @@ let sessionRequestPromise = null;
  * a deploy restart) and the caller should not log the user out.
  */
 export class TransientAuthError extends Error {
-  constructor(message = 'Auth service temporarily unavailable') {
+  constructor(message = 'Auth service temporarily unavailable', retryAfterMs = 0) {
     super(message);
     this.name = 'TransientAuthError';
+    this.retryAfterMs = retryAfterMs;
   }
 }
 
@@ -473,6 +500,12 @@ async function requestSessionState() {
       });
       if (res.ok) {
         return res.json();
+      }
+      // 429: rate limited, not signed out. Keep the current state and retry
+      // once the window frees (the caller reads retryAfterMs).
+      if (res.status === 429) {
+        const wait = await retryAfterSeconds(res);
+        throw new TransientAuthError('/auth/session failed: 429', wait * 1000);
       }
       // 401/403: server is healthy and says not authenticated — do not retry.
       if (!isTransientStatus(res.status)) {
@@ -642,6 +675,7 @@ export async function fetchWithRenewal(url, options = {}) {
  * @returns {string}
  */
 export function passkeyErrorMessage(err, authType = 'login') {
+  if (err instanceof RateLimitError) return err.message;
   const message = String(err?.message || '');
   const normalized = message.toLowerCase();
   if (err?.name === 'NotAllowedError') {

@@ -120,9 +120,11 @@
         if (authState !== 'signed_in') {
           authState = 'reconnecting';
         }
+        // A 429 carries the wait (Retry-After); other transient errors use 3 s.
+        const retryMs = Math.min(Math.max(3000, err.retryAfterMs || 0), 120000);
         setTimeout(() => {
           if (seq === sessionCheckSeq) checkSession();
-        }, 3000);
+        }, retryMs);
         return { authenticated: authState === 'signed_in', transient: true };
       }
       // Permanent error (401/403) — server says not authenticated.
@@ -276,6 +278,11 @@
         // executes the computer's exact asset graph instead of mixing host and guest chunk hashes.
         window.location.replace(window.location.href);
         return;
+      }
+      if (session?.transient) {
+        // The passkey was accepted but the session read was refused or slow
+        // (a 429 or a restart). checkSession retries on its own timer.
+        passkeyError = 'Signed in. Choir is confirming your session; this will finish in a moment.';
       }
     } catch (err) {
       // Ceremony failed or was cancelled — stay in signed-out

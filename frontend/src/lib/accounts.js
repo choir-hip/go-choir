@@ -67,6 +67,14 @@ export class AccountError extends Error {
   }
 }
 
+/** A 429 is a wait: say how long, from Retry-After (else the body, else 60 s). */
+function rateLimited(res, data) {
+  const header = Number(res.headers?.get?.('Retry-After'));
+  const fromBody = Number(data?.retry_after);
+  const n = Math.max(1, Math.ceil(header > 0 ? header : fromBody > 0 ? fromBody : 60));
+  return new AccountError(`Too many sign-in attempts from this network. Try again in ${n} second${n === 1 ? '' : 's'}.`, 'rate_limited', 429);
+}
+
 async function postJSON(path, body) {
   const res = await fetch(path, {
     method: 'POST',
@@ -75,6 +83,7 @@ async function postJSON(path, body) {
     body: JSON.stringify(body || {}),
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 429) throw rateLimited(res, data);
   if (!res.ok) {
     throw new AccountError(data.error || `Request failed (${res.status})`, data.reason || '', res.status);
   }
@@ -84,6 +93,7 @@ async function postJSON(path, body) {
 /** The accounts signed in on this browser: [{ user_id, email, active, signed_in }], active first. */
 export async function listAccounts() {
   const res = await fetch('/auth/accounts', { credentials: 'include' });
+  if (res.status === 429) throw rateLimited(res, await res.json().catch(() => ({})));
   if (!res.ok) throw new AccountError(`Could not list accounts (${res.status})`, '', res.status);
   const data = await res.json();
   return Array.isArray(data) ? data : [];

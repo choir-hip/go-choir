@@ -83,3 +83,34 @@ func TestClientIPUsesProxyAppendedForwardedAddress(t *testing.T) {
 		t.Fatalf("handler calls: got %d, want 1", calls)
 	}
 }
+
+func TestRefusalSetsRetryAfterAndLogsOnlyAnAddressPrefix(t *testing.T) {
+	limiter := NewIPRateLimiter(1, time.Minute)
+	limiter.class = "read"
+	h := limiter.Wrap(func(w http.ResponseWriter, r *http.Request) {})
+	var rec *httptest.ResponseRecorder
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
+		req.RemoteAddr = "203.0.113.7:4000"
+		rec = httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+	}
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status %d", rec.Code)
+	}
+	if ra := rec.Header().Get("Retry-After"); ra != "60" {
+		t.Fatalf("Retry-After %q, want 60", ra)
+	}
+	var body struct {
+		RetryAfter int `json:"retry_after"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil || body.RetryAfter != 60 {
+		t.Fatalf("retry_after body %+v err %v", body, err)
+	}
+	if got := addrPrefix("203.0.113.7"); got != "203.0.x.x" {
+		t.Fatalf("v4 prefix %q", got)
+	}
+	if got := addrPrefix("2001:db8:1:2::9"); got != "2001:db8::/32" {
+		t.Fatalf("v6 prefix %q", got)
+	}
+}

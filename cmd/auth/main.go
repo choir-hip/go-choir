@@ -48,7 +48,7 @@ func main() {
 
 	// Create the auth handler with store, WebAuthn, config, and signer.
 	handler := auth.NewHandler(store, wa, cfg, signer)
-	rateLimiter := auth.NewIPRateLimiter(auth.AuthEndpointRateLimit, auth.AuthEndpointRateWindow)
+	rateLimiters := auth.NewRateLimiters()
 
 	// Email sign-in: with the switch off (AUTH_EMAIL_SIGN_IN), delete the
 	// attempts and email sessions a previous run left; a sweeper expires rows.
@@ -60,55 +60,77 @@ func main() {
 	handler.StartDeviceSweeper(context.Background(), 0)
 
 	s := server.NewServer("auth", cfg.Port)
-	registerRoutes(s, handler, rateLimiter)
+	registerRoutes(s, handler, rateLimiters)
 
 	s.Start()
 }
 
-func registerRoutes(s authRouteRegistrar, handler *auth.Handler, rateLimiter *auth.IPRateLimiter) {
-	limit := rateLimiter.Wrap
-	// Register /auth/* routes.
-	s.HandleFunc("/auth/register/begin", limit(handler.HandleRegisterBegin))
-	s.HandleFunc("/auth/register/finish", limit(handler.HandleRegisterFinish))
-	s.HandleFunc("/auth/login/begin", limit(handler.HandleLoginBegin))
-	s.HandleFunc("/auth/login/finish", limit(handler.HandleLoginFinish))
-	s.HandleFunc("/auth/session", limit(handler.HandleSession))
-	s.HandleFunc("/auth/logout", limit(handler.HandleLogout))
-	// Account switcher (docs/design/account-switcher-2026-11-09.md).
-	s.HandleFunc("/auth/accounts", limit(handler.HandleAccountsList))
-	s.HandleFunc("/auth/accounts/switch", limit(handler.HandleAccountSwitch))
-	s.HandleFunc("/auth/accounts/signout", limit(handler.HandleAccountSignout))
-	s.HandleFunc("/auth/accounts/logout-all", limit(handler.HandleAccountsLogoutAll))
-	s.HandleFunc("/auth/desktop/exchange-redirect", limit(handler.HandleDesktopExchangeRedirect))
-	s.HandleFunc("/auth/desktop/redeem", limit(handler.HandleDesktopRedeem))
-	s.HandleFunc("GET /api/auth/root/status", limit(handler.HandleRootStatus))
+// authRoute is one /auth route and its rate cost class. A route with no
+// class panics at registration and fails TestEveryAuthRouteHasARateClass.
+type authRoute struct {
+	pattern string
+	class   auth.RateClass
+	handler http.HandlerFunc
+}
 
-	// M1: API key management (headless auth).
-	s.HandleFunc("POST /auth/api-keys", limit(handler.HandleCreateAPIKey))
-	s.HandleFunc("GET /auth/api-keys", limit(handler.HandleListAPIKeys))
-	s.HandleFunc("DELETE /auth/api-keys/{id}", limit(handler.HandleRevokeAPIKey))
+// authRoutes is the route table. Classes (internal/auth/rate_limit.go):
+// read = own-session reads, act = authenticated session acts, ceremony =
+// unauthenticated begin/finish, sensitive = recovery and email routes (the
+// original 10 a minute), device_token = token polls.
+func authRoutes(handler *auth.Handler) []authRoute {
+	const (
+		read      = auth.RateClassRead
+		act       = auth.RateClassAct
+		ceremony  = auth.RateClassCeremony
+		sensitive = auth.RateClassSensitive
+	)
+	return []authRoute{
+		{"/auth/register/begin", ceremony, handler.HandleRegisterBegin},
+		{"/auth/register/finish", ceremony, handler.HandleRegisterFinish},
+		{"/auth/login/begin", ceremony, handler.HandleLoginBegin},
+		{"/auth/login/finish", ceremony, handler.HandleLoginFinish},
+		{"/auth/session", read, handler.HandleSession},
+		{"/auth/logout", act, handler.HandleLogout},
+		// Account switcher (docs/design/account-switcher-2026-11-09.md).
+		{"/auth/accounts", read, handler.HandleAccountsList},
+		{"/auth/accounts/switch", act, handler.HandleAccountSwitch},
+		{"/auth/accounts/signout", act, handler.HandleAccountSignout},
+		{"/auth/accounts/logout-all", act, handler.HandleAccountsLogoutAll},
+		{"/auth/desktop/exchange-redirect", ceremony, handler.HandleDesktopExchangeRedirect},
+		{"/auth/desktop/redeem", ceremony, handler.HandleDesktopRedeem},
+		{"GET /api/auth/root/status", read, handler.HandleRootStatus},
 
-	// choir login: device authorization (docs/design/cli-agent-onboarding-2026-11-03.md).
-	// Token polls get their own limiter: the global one would refuse a
-	// 5-second poll; slow_down paces each request.
-	tokenLimit := auth.NewIPRateLimiter(auth.DeviceTokenRateLimit, auth.AuthEndpointRateWindow).Wrap
-	s.HandleFunc("POST /auth/device/begin", limit(handler.HandleDeviceBegin))
-	s.HandleFunc("GET /auth/device/lookup", limit(handler.HandleDeviceLookup))
-	s.HandleFunc("POST /auth/device/approve", limit(handler.HandleDeviceApprove))
-	s.HandleFunc("POST /auth/device/token", tokenLimit(handler.HandleDeviceToken))
+		// M1: API key management (headless auth).
+		{"POST /auth/api-keys", act, handler.HandleCreateAPIKey},
+		{"GET /auth/api-keys", act, handler.HandleListAPIKeys},
+		{"DELETE /auth/api-keys/{id}", act, handler.HandleRevokeAPIKey},
 
-	// M7: Account recovery, multi-device passkey management, session management.
-	s.HandleFunc("POST /auth/recovery/request", limit(handler.HandleRecoveryRequest))
-	s.HandleFunc("POST /auth/recovery/verify", limit(handler.HandleRecoveryVerify))
-	s.HandleFunc("GET /auth/credentials", limit(handler.HandleListCredentials))
-	s.HandleFunc("POST /auth/credentials/rename", limit(handler.HandleRenameCredential))
-	s.HandleFunc("DELETE /auth/credentials/{id}", limit(handler.HandleDeleteCredential))
-	s.HandleFunc("GET /auth/sessions", limit(handler.HandleListSessions))
-	s.HandleFunc("DELETE /auth/sessions/{id}", limit(handler.HandleRevokeSession))
+		// choir login: device authorization (docs/design/cli-agent-onboarding-2026-11-03.md).
+		// Token polls get their own class: slow_down paces each request.
+		{"POST /auth/device/begin", ceremony, handler.HandleDeviceBegin},
+		{"GET /auth/device/lookup", ceremony, handler.HandleDeviceLookup},
+		{"POST /auth/device/approve", act, handler.HandleDeviceApprove},
+		{"POST /auth/device/token", auth.RateClassDeviceToken, handler.HandleDeviceToken},
 
-	// Email sign-in and address verification (switch auth.email_sign_in).
-	s.HandleFunc("POST /auth/email/begin", limit(handler.HandleEmailBegin))
-	s.HandleFunc("POST /auth/email/verify", limit(handler.HandleEmailVerify))
-	s.HandleFunc("POST /auth/email/verify-address/begin", limit(handler.HandleVerifyAddressBegin))
-	s.HandleFunc("POST /auth/email/verify-address/finish", limit(handler.HandleVerifyAddressFinish))
+		// M7: Account recovery, multi-device passkey management, session management.
+		{"POST /auth/recovery/request", sensitive, handler.HandleRecoveryRequest},
+		{"POST /auth/recovery/verify", sensitive, handler.HandleRecoveryVerify},
+		{"GET /auth/credentials", read, handler.HandleListCredentials},
+		{"POST /auth/credentials/rename", act, handler.HandleRenameCredential},
+		{"DELETE /auth/credentials/{id}", act, handler.HandleDeleteCredential},
+		{"GET /auth/sessions", read, handler.HandleListSessions},
+		{"DELETE /auth/sessions/{id}", act, handler.HandleRevokeSession},
+
+		// Email sign-in and address verification (switch auth.email_sign_in).
+		{"POST /auth/email/begin", sensitive, handler.HandleEmailBegin},
+		{"POST /auth/email/verify", sensitive, handler.HandleEmailVerify},
+		{"POST /auth/email/verify-address/begin", sensitive, handler.HandleVerifyAddressBegin},
+		{"POST /auth/email/verify-address/finish", sensitive, handler.HandleVerifyAddressFinish},
+	}
+}
+
+func registerRoutes(s authRouteRegistrar, handler *auth.Handler, limiters *auth.RateLimiters) {
+	for _, rt := range authRoutes(handler) {
+		s.HandleFunc(rt.pattern, limiters.Wrap(rt.class, rt.handler))
+	}
 }
