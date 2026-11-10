@@ -234,7 +234,7 @@ func (rt *Runtime) gateOne(ctx context.Context, feed PlatformFeed, owner, comput
 		return 0, err
 	}
 	started := time.Now()
-	raw, err := rt.judgeCall(ctx, jevrecord.Meta{Site: "oped_gate", DecisionID: item.VersionID}, opedGateCallTimeout, state, questions)
+	raw, err := rt.judgeCall(ctx, jevrecord.Meta{Site: "oped_gate", DecisionID: item.VersionID, Scope: judgmentScopeOpedGate}, opedGateCallTimeout, state, questions)
 	if err != nil {
 		return 0, fmt.Errorf("Jev: %w", err)
 	}

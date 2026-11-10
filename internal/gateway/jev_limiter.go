@@ -44,6 +44,13 @@ const (
 	jevInteractiveInFlight = 2
 	jevInteractiveRate     = 2.0
 	jevInteractiveBurst    = 4.0
+	// The op-ed gate judges what strangers publish about one computer's
+	// stories, so it has its own small per-computer bucket and in-flight cap
+	// beside the computer's share: a burst of op-eds cannot spend the
+	// computer's intake labels, and cannot itself exceed this.
+	jevOpedGateRate     = 0.2
+	jevOpedGateBurst    = 5.0
+	jevOpedGateInFlight = 2
 	jevQueueMaxWait     = 20 * time.Second
 	jevBackoffDefault   = 2 * time.Second
 	jevBackoffCap       = time.Minute
@@ -63,11 +70,16 @@ type jevClass int
 const (
 	jevBulk jevClass = iota
 	jevInteractive
+	// jevOpedGate is bulk, plus the per-computer gate bucket.
+	jevOpedGate
 )
 
 func (c jevClass) String() string {
 	if c == jevInteractive {
 		return "interactive"
+	}
+	if c == jevOpedGate {
+		return "oped_gate"
 	}
 	return "bulk"
 }
@@ -80,6 +92,8 @@ func judgmentRateScope(scope string) (jevClass, error) {
 		return jevBulk, nil
 	case JudgmentScopeInteractive:
 		return jevInteractive, nil
+	case JudgmentScopeOpedGate:
+		return jevOpedGate, nil
 	}
 	return jevBulk, fmt.Errorf("unknown judgment scope %q", scope)
 }
@@ -106,6 +120,8 @@ type computerShare struct {
 	inFlight    int
 	interactive rateBucket // the budget for claiming the interactive class
 	interFlight int
+	gate        rateBucket // the op-ed gate's own budget
+	gateFlight  int
 }
 
 // jevLimiter is the shared rate, in-flight cap, interactive reserve,
@@ -161,6 +177,11 @@ func (l *jevLimiter) acquire(ctx context.Context, computerID string, class jevCl
 		// A claim of the interactive class beyond this computer's budget is
 		// treated as bulk.
 		eff := class
+		gated := class == jevOpedGate
+		if gated {
+			eff = jevBulk
+			cs.gate.refill(now, jevOpedGateRate, jevOpedGateBurst)
+		}
 		if eff == jevInteractive && (cs.interFlight >= jevInteractiveInFlight || cs.interactive.tokens < 1) {
 			eff = jevBulk
 		}
@@ -170,6 +191,10 @@ func (l *jevLimiter) acquire(ctx context.Context, computerID string, class jevCl
 			wait = l.backoffUntil.Sub(now)
 		case l.inFlightFull(eff) || cs.inFlight >= jevComputerInFlight:
 			wait = jevPollCeiling
+		case gated && cs.gateFlight >= jevOpedGateInFlight:
+			wait = jevPollCeiling
+		case gated && cs.gate.tokens < 1:
+			wait = time.Duration((1 - cs.gate.tokens) / jevOpedGateRate * float64(time.Second))
 		default:
 			needed := 1.0
 			if eff == jevBulk {
@@ -190,9 +215,13 @@ func (l *jevLimiter) acquire(ctx context.Context, computerID string, class jevCl
 				cs.interFlight++
 				cs.interactive.tokens--
 			}
+			if gated {
+				cs.gateFlight++
+				cs.gate.tokens--
+			}
 			l.mu.Unlock()
 			var once sync.Once
-			return func() { once.Do(func() { l.release(computerID, eff == jevInteractive) }) }, now.Sub(start), nil
+			return func() { once.Do(func() { l.release(computerID, eff == jevInteractive, gated) }) }, now.Sub(start), nil
 		}
 		wakeCh := l.wake
 		l.mu.Unlock()
@@ -219,13 +248,16 @@ func (l *jevLimiter) inFlightFull(class jevClass) bool {
 	return l.inFlight >= l.maxInFlight
 }
 
-func (l *jevLimiter) release(computerID string, interactive bool) {
+func (l *jevLimiter) release(computerID string, interactive, gated bool) {
 	l.mu.Lock()
 	l.inFlight--
 	if cs := l.computers[computerID]; cs != nil {
 		cs.inFlight--
 		if interactive {
 			cs.interFlight--
+		}
+		if gated {
+			cs.gateFlight--
 		}
 	}
 	close(l.wake)
