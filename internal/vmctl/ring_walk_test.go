@@ -1745,3 +1745,59 @@ func TestRingReviewF5ClosedRingBreachRecordsOnce(t *testing.T) {
 		t.Fatalf("a ring closed after the breached one must read stopped_by_rollback, got %s", o)
 	}
 }
+
+// ---- review round 2: attribution of a crash to the target release ----
+//
+// Failure modes:
+//   - R2a: a member still on the OLD release crashes while not running, then
+//     boots onto the target; the pre-refresh crash (after the ring opened) is
+//     counted against the target and rolls the fleet back;
+//   - R2b: the fix swings the other way and a crash of the realization that
+//     ran the TARGET (inactive, then back) is no longer counted.
+
+func TestRingReviewR2aOldReleaseCrashWhileInactiveIsNotTheTargets(t *testing.T) {
+	f := newRwFleet(t)
+	f.add(ringProofComputer, ringR0, true)
+	t1 := f.add(rwTest1, ringR1, false)
+	t1.Epoch, t1.Health = 1, nil
+	f.tick() // R1 opens; t1 enrolled; the sweep (modelled) refreshes it
+	// Undo the modelled refresh: the member is still running the old release.
+	t1.Release = rwFrom.Single
+	f.tick() // seen running off the target, realization 1
+	// Realization 1 (old release) crashes; the member is not running.
+	t1.Active = false
+	t1.Crashes = []CrashRecord{{At: f.now.Add(10 * time.Second).Format(time.RFC3339Nano), Epoch: 1, Kind: "guest_unhealthy", Cause: "old release died"}}
+	f.tick()
+	// It boots onto the target as a new realization and answers.
+	t1.Active, t1.Release, t1.Epoch = true, rwTo.Single, 2
+	t1.Health = &ringHealth{Answered: true, Status: 200}
+	f.tick()
+	if f.s.Walk.Status == ringWalkRolledBack {
+		t.Fatalf("a crash of the old release's realization rolled the target back: %+v", f.s.Walk.Rings[1].Breach)
+	}
+	if cl := f.closed(ringR1); cl == nil || cl.Outcome != ringOutcomeClean {
+		t.Fatalf("R1 must close clean on the healthy refreshed member: %+v", cl)
+	}
+}
+
+func TestRingReviewR2bTargetRealizationCrashWhileInactiveIsCounted(t *testing.T) {
+	f := newRwFleet(t)
+	f.add(ringProofComputer, ringR0, true)
+	t1 := f.add(rwTest1, ringR1, false)
+	t1.Epoch, t1.Health = 1, nil
+	f.tick()
+	t1.Release = rwFrom.Single
+	f.tick() // off target, realization 1
+	// The refresh boots realization 2 on the target.
+	t1.Release, t1.Epoch, t1.Health = rwTo.Single, 2, &ringHealth{Answered: false}
+	f.tick()
+	// Realization 2 crashes and is not running; then realization 3 is up.
+	t1.Active, t1.Health = false, nil
+	t1.Crashes = []CrashRecord{{At: f.now.Add(10 * time.Second).Format(time.RFC3339Nano), Epoch: 2, Kind: "guest_unhealthy", Cause: "target died"}}
+	f.tick()
+	t1.Active, t1.Epoch, t1.Health = true, 3, &ringHealth{Answered: false}
+	f.tick()
+	if f.s.Walk.Status != ringWalkRolledBack {
+		t.Fatalf("a crash of the realization that ran the target was not counted: %s", f.s.Walk.Status)
+	}
+}
