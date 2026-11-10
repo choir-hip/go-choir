@@ -168,13 +168,15 @@ func (h *Handler) reviseTake(ctx context.Context, doc types.Document, ownerID st
 			return ReviseReceipt{}, refuseOwnerRevision(http.StatusConflict, "durable lifecycle state is unavailable or terminal")
 		}
 		if snapshot.Trajectory.Status == types.TrajectorySettled {
-			continued, continuedSnapshot, err := h.continueSettledDocumentForOwner(ctx, ownerID, doc, snapshot)
+			continued, continuedSnapshot, created, err := h.continueSettledDocumentCreating(ctx, ownerID, doc, snapshot)
 			if err != nil {
 				log.Printf("texture api: continue settled document %s for take: %v", doc.DocID, err)
 				return ReviseReceipt{}, refuseOwnerRevision(http.StatusConflict, "durable lifecycle state is unavailable or terminal")
 			}
 			doc, snapshot = continued, continuedSnapshot
-			_, continuedWorkID, _ = ownerRevisionTarget(snapshot, doc.DocID)
+			if created {
+				_, continuedWorkID, _ = ownerRevisionTarget(snapshot, doc.DocID)
+			}
 		}
 		if snapshot.Document.CurrentRevisionID != head {
 			return ReviseReceipt{}, refuseOwnerRevision(http.StatusConflict, "document head changed; the head is "+snapshot.Document.CurrentRevisionID+"; reload it before taking a version")

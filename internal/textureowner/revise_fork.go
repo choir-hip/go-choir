@@ -168,7 +168,7 @@ func (h *Handler) abandonFork(ctx context.Context, ownerID string, created textu
 	settle := types.SettleLifecycleTrajectoryRequest{
 		OwnerID: ownerID, ComputerID: computerID, CommandID: "fork-settle-trajectory:" + doc.TrajectoryID,
 		TrajectoryID: doc.TrajectoryID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
-		ExpectedHeadRevisionID: snapshot.Document.CurrentRevisionID,
+		ExpectedHeadRevisionID: created.RevisionID,
 	}
 	if settle.CommandDigest, err = store.ComputeSettleLifecycleTrajectoryDigest(settle); err == nil {
 		_, err = h.Store.SettleLifecycleTrajectory(asOwner(context.WithoutCancel(ctx)), settle)

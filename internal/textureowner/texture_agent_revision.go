@@ -149,10 +149,10 @@ func (h *Handler) commitLifecycleOwnerRevisionOpening(ctx context.Context, doc t
 		// falls through to the refusal below and starts nothing. A cancelled
 		// trajectory is a stop and keeps refusing.
 		if expected := strings.TrimSpace(req.ExpectedHeadRevisionID); expected == "" || expected == snapshot.Document.CurrentRevisionID {
-			if continued, continuedSnapshot, continueErr := h.continueSettledDocumentForOwner(ctx, ownerID, doc, snapshot); continueErr == nil {
+			if continued, continuedSnapshot, created, continueErr := h.continueSettledDocumentCreating(ctx, ownerID, doc, snapshot); continueErr == nil {
 				doc, snapshot = continued, continuedSnapshot
-				if _, id, multi := ownerRevisionTarget(snapshot, doc.DocID); id != "" && !multi {
-					*opened = openedWork{Doc: doc, WorkItemID: id}
+				if _, id, multi := ownerRevisionTarget(snapshot, doc.DocID); created && id != "" && !multi {
+					*opened = openedWork{Doc: doc, WorkItemID: id, HeadRevisionID: snapshot.Document.CurrentRevisionID}
 				}
 			} else {
 				log.Printf("texture api: continue settled document %s for owner revise: %v", doc.DocID, continueErr)
@@ -192,7 +192,7 @@ func (h *Handler) commitLifecycleOwnerRevisionOpening(ctx context.Context, doc t
 		if reopened, reopenErr := h.reopenTextureWorkForOwner(ctx, ownerID, doc, clientRequestID); reopenErr != nil {
 			log.Printf("texture api: reopen Texture work for owner revise: %v", reopenErr)
 		} else if reopened.WorkItem != nil && !reopened.Replay {
-			*opened = openedWork{Doc: doc, WorkItemID: reopened.WorkItem.WorkItemID}
+			*opened = openedWork{Doc: doc, WorkItemID: reopened.WorkItem.WorkItemID, HeadRevisionID: snapshot.Document.CurrentRevisionID}
 		}
 		if reloaded, reloadErr := h.Store.GetLifecycleSnapshot(ctx, ownerID, doc.ComputerID, doc.TrajectoryID); reloadErr == nil && reloaded.Trajectory.Status == types.TrajectoryLive {
 			snapshot = reloaded
@@ -296,6 +296,16 @@ func textureContinueIdentity(ownerID, computerID, docID, settledTrajectoryID str
 // document and the live snapshot the owner's revise then commits on. A lost
 // race joins whichever continue moved the document.
 func (h *Handler) continueSettledDocumentForOwner(ctx context.Context, ownerID string, doc types.Document, settled types.LifecycleSnapshot) (types.Document, types.LifecycleSnapshot, error) {
+	current, snapshot, _, err := h.continueSettledDocumentCreating(ctx, ownerID, doc, settled)
+	return current, snapshot, err
+}
+
+// continueSettledDocumentCreating is continueSettledDocumentForOwner that also
+// says whether this call started the next trajectory (and so opened its work
+// item). A call that joined another request's continue created nothing and
+// owns nothing: the item is deterministic per settled trajectory, so every
+// racing revise shares it.
+func (h *Handler) continueSettledDocumentCreating(ctx context.Context, ownerID string, doc types.Document, settled types.LifecycleSnapshot) (types.Document, types.LifecycleSnapshot, bool, error) {
 	ctx = asOwner(ctx)
 	settledID := settled.Trajectory.TrajectoryID
 	trajectoryID, commandID, workItemID := textureContinueIdentity(ownerID, doc.ComputerID, doc.DocID, settledID)
@@ -310,7 +320,7 @@ func (h *Handler) continueSettledDocumentForOwner(ctx context.Context, ownerID s
 	}
 	digest, err := store.ComputeContinueLifecycleDocumentDigest(req)
 	if err != nil {
-		return types.Document{}, types.LifecycleSnapshot{}, err
+		return types.Document{}, types.LifecycleSnapshot{}, false, err
 	}
 	req.CommandDigest = digest
 	result, continueErr := h.Store.ContinueLifecycleDocument(ctx, req)
@@ -319,22 +329,22 @@ func (h *Handler) continueSettledDocumentForOwner(ctx context.Context, ownerID s
 	}
 	current, err := h.Store.GetLifecycleDocument(ctx, ownerID, doc.ComputerID, doc.DocID)
 	if err != nil {
-		return types.Document{}, types.LifecycleSnapshot{}, err
+		return types.Document{}, types.LifecycleSnapshot{}, false, err
 	}
 	if current.TrajectoryID == settledID {
 		if continueErr == nil {
 			continueErr = errors.New("continue left the document on its settled trajectory")
 		}
-		return types.Document{}, types.LifecycleSnapshot{}, continueErr
+		return types.Document{}, types.LifecycleSnapshot{}, false, continueErr
 	}
 	snapshot, err := h.Store.GetLifecycleSnapshot(ctx, ownerID, current.ComputerID, current.TrajectoryID)
 	if err != nil {
-		return types.Document{}, types.LifecycleSnapshot{}, err
+		return types.Document{}, types.LifecycleSnapshot{}, false, err
 	}
 	if snapshot.Trajectory.Status != types.TrajectoryLive {
-		return types.Document{}, types.LifecycleSnapshot{}, fmt.Errorf("document %s moved to trajectory %s, which is %s", doc.DocID, current.TrajectoryID, snapshot.Trajectory.Status)
+		return types.Document{}, types.LifecycleSnapshot{}, false, fmt.Errorf("document %s moved to trajectory %s, which is %s", doc.DocID, current.TrajectoryID, snapshot.Trajectory.Status)
 	}
-	return current, snapshot, nil
+	return current, snapshot, continueErr == nil && !result.Replay, nil
 }
 
 // ownerRevisionTarget finds the one open desk work item an owner revise

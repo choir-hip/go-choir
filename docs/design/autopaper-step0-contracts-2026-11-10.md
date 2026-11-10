@@ -102,17 +102,17 @@ base and `sources=[the published version]`:
 - with no text: a take (the fork is a verbatim copy);
 - with text: a merge whose only source is the version. The desk writes the
   comment's answer into the fork, and the fork "updates and explains itself".
-The fork's first revision carries `parent_links=[{role:source, ...}]` and the
+The fork's first revision carries `parent_links=[{kind:source, ...}]` and the
 document records `forked_from` (the same link) in its first revision's
 provenance. A fork is private until published.
 
 **Parent-link storage (decision D3).** Add `ParentLinks []ParentLink` to
 `types.Provenance` (`texture_provenance.go:25`), `omitempty`, sorted by
-(role, ref) in `CanonicalJSON`. It is inside the rev2 hash, so a link cannot
+(kind, ref) in `CanonicalJSON`. It is inside the rev2 hash, so a link cannot
 be altered after the fact, and nothing in the revision schema changes.
 
 `ParentLink` fields:
-- `role`: `base` or `source`;
+- `kind`: `base` or `source`;
 - `revision_id`: local, for `base` only;
 - `publication_version_id`: canonical id, for `source` only;
 - `manifest_hash`: pins the exact content of a source;
@@ -845,6 +845,13 @@ all adopted.
   an environment value: it becomes a constant in code, and
   `CORPUSD_OPINION_DAILY_LIMIT` is deleted from the config and from nix in
   the same change.
+- **A8 (parent link key, section 1.2, staging a71202161).** A parent link's
+  key is `kind`, not `role`: after the vocabulary cutover the object-graph
+  write guard reads every leaf named `role` in an object body as a desk role,
+  so `role: base|source` failed every commit of a revision with links. Text
+  above that says `role` for a parent link means `kind`. (The `parents`
+  entries of a published version in 3.2 are not stored in a guarded object
+  body by C1; a lane that stores them in one uses `kind` too.)
 
 ## 9. Standing questions that apply
 
