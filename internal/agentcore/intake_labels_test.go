@@ -502,18 +502,19 @@ func TestRelabelWritesTheNextVersionAndLeavesTheArrivalDigest(t *testing.T) {
 	}
 }
 
-func TestIntakeShortlistTakesTheNewestThirtyThenTenByTitleOverlap(t *testing.T) {
+func TestIntakeShortlistTakesTheWindowThenTenByTitleOverlap(t *testing.T) {
 	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
 	var docs []types.Document
 	for i := 0; i < 50; i++ {
-		docs = append(docs, types.Document{DocID: fmt.Sprintf("doc-%02d", i), Title: fmt.Sprintf("Unrelated story %d", i), UpdatedAt: now.Add(-time.Duration(i) * time.Hour)})
+		docs = append(docs, types.Document{DocID: fmt.Sprintf("doc-%02d", i), Title: fmt.Sprintf("Unrelated story %d", i), UpdatedAt: now.Add(-time.Duration(i) * 30 * time.Minute)})
 	}
 	docs[45].Title = "Nord Stream pipeline trial"
 	docs[44].Title = "Hamburg court hears pipeline case"
 	docs = append(docs, types.Document{DocID: "doc-old", Title: "Nord Stream pipeline sabotage", UpdatedAt: now.Add(-100 * time.Hour)})
 	recent, rest := intakeShortlistSplit(docs, now)
-	if len(recent) != 30 || recent[0].DocID != "doc-00" || recent[29].DocID != "doc-29" {
-		t.Fatalf("recent = %d, first %s; want the 30 newest", len(recent), recent[0].DocID)
+	// D2: a window of time (8 hours: stories 0 to 16 at 30 minutes apart), not a count.
+	if len(recent) != 17 || recent[0].DocID != "doc-00" || recent[16].DocID != "doc-16" {
+		t.Fatalf("recent = %d, first %s; want the 17 updated within 8 hours", len(recent), recent[0].DocID)
 	}
 	for _, d := range rest {
 		if d.DocID == "doc-old" {
@@ -528,5 +529,91 @@ func TestIntakeShortlistTakesTheNewestThirtyThenTenByTitleOverlap(t *testing.T) 
 		if !strings.Contains(strings.ToLower(d.Title), "pipeline") && !strings.Contains(strings.ToLower(d.Title), "trial") {
 			t.Fatalf("overlap picked %q, which shares no title token", d.Title)
 		}
+	}
+	// A busy window is not cut to a count: 300 stories in the window all stay.
+	var busy []types.Document
+	for i := 0; i < 700; i++ {
+		busy = append(busy, types.Document{DocID: fmt.Sprintf("busy-%03d", i), Title: "x", UpdatedAt: now.Add(-time.Duration(i) * time.Second)})
+	}
+	if recent, rest := intakeShortlistSplit(busy[:300], now); len(recent) != 300 || len(rest) != 0 {
+		t.Fatalf("a 300-story window = %d recent, %d rest; want all 300 kept", len(recent), len(rest))
+	}
+	if recent, _ := intakeShortlistSplit(busy, now); len(recent) != intakeShortlistCeiling {
+		t.Fatalf("a 700-story window = %d; want the ceiling %d", len(recent), intakeShortlistCeiling)
+	}
+}
+
+// failingChunkJudge fails the call whose state includes the marker.
+type failingChunkJudge struct {
+	fakeIntakeJudge
+	marker string
+}
+
+func (j *failingChunkJudge) JudgeScoped(ctx context.Context, scope string, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
+	if strings.Contains(string(state), j.marker) {
+		return nil, fmt.Errorf("simulated timeout")
+	}
+	return j.fakeIntakeJudge.JudgeScoped(ctx, scope, state, questions)
+}
+
+// A window longer than one call carries is asked in chunks (D2). Ways it can
+// fail: C1 the list is cut to one call's worth, so a story past the cut is
+// invisible; C2 aliases collide across chunks and map to the wrong story; C3
+// the chunks are asked one after another; C4 a chunk that failed is
+// labelled "new" on part of the evidence; C5 a story in a later chunk loses
+// to the "new" answers of the others.
+func TestIntakeLabelsAskALongWindowInChunksAndKeepEveryCandidate(t *testing.T) {
+	rt, _ := testRuntime(t)
+	n := 2*intakeChunkCandidates + 20
+	now := time.Now().UTC()
+	lib := &intakeLibrary{rt: rt, summary: map[string]store.StorySummary{}}
+	for i := 0; i < n; i++ {
+		d := types.Document{DocID: fmt.Sprintf("doc-%03d", i), Title: fmt.Sprintf("Story headline %03d", i), UpdatedAt: now.Add(-time.Duration(i) * time.Minute)}
+		lib.recent = append(lib.recent, d)
+	}
+	target := fmt.Sprintf("Story headline %03d", n-3) // in the last chunk
+	judge := &failingChunkJudge{fakeIntakeJudge: fakeIntakeJudge{answers: map[string]string{"Incoming report": target}, delay: 30 * time.Millisecond}, marker: "never"}
+	rt.SetCandidateJudge(judge)
+	items := []sourcegraph.CapturedItem{{CaptureID: "cap-chunk", Title: "Incoming report"}}
+	label, err := rt.labelOneCapture(context.Background(), lib, "owner", "computer", "src", items, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := judge.callCount(); got != 3 {
+		t.Fatalf("C1: %d calls for %d candidates; want 3 chunks of at most %d", got, n, intakeChunkCandidates)
+	}
+	if len(label.CandidateDocIDs) != n {
+		t.Fatalf("C1: label lists %d candidates; want all %d", len(label.CandidateDocIDs), n)
+	}
+	if label.Event != store.CaptureLabelEventStory || label.EventHeadline != target || label.EventDocID != fmt.Sprintf("doc-%03d", n-3) {
+		t.Fatalf("C2/C5: label = %+v; want the story in the last chunk", label)
+	}
+	seen := map[string]bool{}
+	for _, c := range judge.calls {
+		stories, _ := c.state["stories"].(map[string]any)
+		if len(stories) > intakeChunkCandidates {
+			t.Errorf("a call listed %d stories", len(stories))
+		}
+		for a := range stories {
+			if seen[a] {
+				t.Errorf("C2: alias %s is in two chunks", a)
+			}
+			seen[a] = true
+		}
+	}
+	if judge.maxSeen.Load() < 2 {
+		t.Errorf("C3: chunks ran %d at a time; want them concurrent", judge.maxSeen.Load())
+	}
+
+	// No chunk matches: new.
+	rt.SetCandidateJudge(&fakeIntakeJudge{answers: map[string]string{}})
+	if label, err = rt.labelOneCapture(context.Background(), lib, "owner", "computer", "src", items, 0); err != nil || label.Event != store.CaptureLabelEventNew {
+		t.Fatalf("no match: %+v, %v", label, err)
+	}
+
+	// C4: a failed chunk leaves the capture unlabelled.
+	rt.SetCandidateJudge(&failingChunkJudge{fakeIntakeJudge: fakeIntakeJudge{answers: map[string]string{}}, marker: fmt.Sprintf("Story headline %03d", n-1)})
+	if _, err = rt.labelOneCapture(context.Background(), lib, "owner", "computer", "src", items, 0); err == nil {
+		t.Fatal("C4: a capture is labelled on part of the window after a chunk failed")
 	}
 }
