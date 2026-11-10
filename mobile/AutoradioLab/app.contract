@@ -102,7 +102,7 @@ component Autoradio
                       text modeLabel testId="mode" color="-exact-secondary-label"
                       text (st.transcript == "" ? "(listening)" : st.transcript) testId="transcript"
                       button pointerdown=talkDown pointerup=talkUp testId="talk" appearance="none"
-                        width="100%" padding=40 background="-exact-secondary-background"
+                        width="100%" padding=40 background-color="-exact-secondary-background"
                         text (st.phase == "playing" ? "Hold to talk" : st.phase)
                       text `Phase: ${st.phase} · mic ${st.micActive ? "on" : "off"} · config ${st.configName}` testId="phase" color="-exact-secondary-label"
                       text st.message testId="message" color="-exact-secondary-label"

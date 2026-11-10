@@ -77,7 +77,10 @@ public final class AutoradioModule: ExactPackage {
         case "labTrace":
             let id = (args["turn"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             reply(json(runtime.trace(id: id)))
-        case "labStart": Task { await runtime.start(); DispatchQueue.main.async { reply(state()) } }
+        case "labStart":
+            // Never start the engine inside the reply, and never open devices under the agent (the spike's simulator exit).
+            if !context.agent { DispatchQueue.main.async { [weak self] in Task { await self?.runtime.start() } } }
+            reply(state())
         case "labStop": runtime.stop(); reply(state())
         case "labTalkDown": runtime.talkDown(); reply(state())
         case "labTalkUp": runtime.talkUp(); reply(state())

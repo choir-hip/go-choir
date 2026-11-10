@@ -22,6 +22,7 @@
       "Kit/KeptTurns.swift",
       "Kit/LabRuntime.swift",
       "Kit/LiveAudio.swift",
+      "Kit/ModelStore.swift",
       "Kit/Stages.swift",
       "Kit/TurnEngine.swift"
     ]
