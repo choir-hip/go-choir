@@ -121,6 +121,14 @@ type seededSupport struct {
 // as the Texture commit path does.
 func seedListedSupportPairs(t *testing.T, s *store.Store, owner, computer, docID string, citedCIDs ...string) seededSupport {
 	t.Helper()
+	return seedSupportPairs(t, s, owner, computer, docID, false, citedCIDs...)
+}
+
+// seedSupportPairs is seedListedSupportPairs; grouped lists the cites as one
+// side-by-side group, as texturewrite.Checks does for cites that close one
+// span.
+func seedSupportPairs(t *testing.T, s *store.Store, owner, computer, docID string, grouped bool, citedCIDs ...string) seededSupport {
+	t.Helper()
 	ctx := context.Background()
 	trajectoryID, texture := "trajectory-"+docID, agentprofile.Texture+":"+docID
 	now := time.Now().UTC()
@@ -167,10 +175,19 @@ func seedListedSupportPairs(t *testing.T, s *store.Store, owner, computer, docID
 		"cid-3": {Doc: "cap-court", Version: "doc-hash-1", CID: "cid-3", Hash: texturewrite.TextHash("A block that was re-captured."), Quote: "re-captured"},
 	}
 	out := seededSupport{RunID: caller.RunID, RevisionID: revisionID}
+	var group []types.Ref
+	for _, cid := range citedCIDs {
+		group = append(group, cited[cid])
+	}
 	for _, cid := range citedCIDs {
 		ref := cited[cid]
 		pair := types.CitationPair{DocID: docID, RevisionID: revisionID, BlockID: block.ID, BlockHash: texturewrite.TextHash(citing), Text: citing, Cited: ref, Matcher: quotematch.Version}
 		pair.Key = texturewrite.PairKey(pair.BlockHash, ref.Hash, ref.Quote)
+		if grouped && len(group) > 1 {
+			pair.Group = group
+			pair.BlockHash = texturewrite.GroupHash(citing, group)
+			pair.Key = texturewrite.PairKey(pair.BlockHash, ref.Hash, ref.Quote)
+		}
 		out.Pairs = append(out.Pairs, pair)
 	}
 	rawBody, _ := json.Marshal(body)

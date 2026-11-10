@@ -231,9 +231,85 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 	unreadable := map[string]error{}
 	pairs := map[string]any{}
 	questions := map[string]json.RawMessage{}
-	names := map[string]int{}
+	names := map[string][]int{}
+	groupName := map[string]string{}
+	// readPassage reads one cited block through the capture store, checked
+	// against the Ref's hash. ok is false when it cannot be read or changed.
+	readPassage := func(ref types.Ref) (passage, source string, ok bool) {
+		capture, have := byDoc[ref.Doc]
+		if !have {
+			if err, bad := unreadable[ref.Doc]; bad {
+				log.Printf("support judge: read the cited capture %s: %v", ref.Doc, err)
+				return "", "", false
+			}
+			var err error
+			if capture, err = captures.CaptureBlocks(ctx, owner, ref.Doc); err != nil {
+				unreadable[ref.Doc] = err
+				log.Printf("support judge: read the cited capture %s: %v", ref.Doc, err)
+				return "", "", false
+			}
+			byDoc[ref.Doc] = capture
+		}
+		for _, b := range capture.Blocks {
+			if b.ID == ref.CID {
+				passage = b.Text
+				break
+			}
+		}
+		if passage == "" || texturewrite.TextHash(passage) != ref.Hash {
+			log.Printf("support judge: the cited block %s of %s is gone or changed since it was cited", ref.CID, ref.Doc)
+			return "", "", false
+		}
+		return passage, firstNonEmpty(capture.Title, capture.URL), true
+	}
 	for i := range pending {
 		pair := pending[i].Pair
+		if len(pair.Group) > 1 {
+			// Side-by-side cites are one question: the sentence and every
+			// quote's passage as evidence (fix A of
+			// docs/problems/unsupported-cites-duplicates-and-churn-2026-11-10.md).
+			gid := texturewrite.GroupHash(pair.Text, pair.Group)
+			if name, asked := groupName[gid]; asked {
+				if name != "" {
+					names[name] = append(names[name], i)
+				}
+				continue
+			}
+			groupName[gid] = ""
+			budget := supportGroupEvidenceRunes / len(pair.Group)
+			sources := make([]map[string]string, 0, len(pair.Group))
+			complete := true
+			for _, ref := range pair.Group {
+				passage, source, ok := readPassage(ref)
+				if !ok {
+					complete = false
+					break
+				}
+				sources = append(sources, map[string]string{"source": source, "quote": ref.Quote, "cited_passage": boundPassage(passage, ref.Quote, budget)})
+			}
+			if !complete {
+				log.Printf("support judge: pair %s stays pending: a cite of its group cannot be read, so the group cannot be judged together", pair.Key)
+				continue
+			}
+			name := fmt.Sprintf("p%d", len(names)+1)
+			groupName[gid] = name
+			names[name] = []int{i}
+			entry := map[string]any{"sentence": pair.Text, "cited_passages": sources}
+			if pair.Context != "" {
+				entry["paragraph"] = pair.Context
+			}
+			pairs[name] = entry
+			question := map[string]any{"instructions": fmt.Sprintf("Group %s: taken together, do the cited_passages in state.pairs.%s support what state.pairs.%s.sentence says where it cites them? The sentence cites all of these sources side by side, so it is supported if the passages between them state or directly entail it; a passage that is irrelevant does not count against it, and no single passage has to carry every part. Judge support, not truth.", name, name, name)}
+			for k, v := range supportJudgeQuestion {
+				question[k] = v
+			}
+			raw, err := json.Marshal(question)
+			if err != nil {
+				return nil, err
+			}
+			questions[name] = raw
+			continue
+		}
 		if err, bad := unreadable[pair.Cited.Doc]; bad {
 			log.Printf("support judge: pair %s stays pending: read the cited capture %s: %v", pair.Key, pair.Cited.Doc, err)
 			continue
@@ -260,7 +336,7 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 			continue
 		}
 		name := fmt.Sprintf("p%d", len(names)+1)
-		names[name] = i
+		names[name] = []int{i}
 		entry := map[string]string{"sentence": pair.Text, "quote": pair.Cited.Quote, "cited_passage": passage, "source": firstNonEmpty(capture.Title, capture.URL)}
 		if pair.Context != "" {
 			entry["paragraph"] = pair.Context
@@ -305,13 +381,12 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 	for name := range names {
 		ordered = append(ordered, name)
 	}
-	sort.Slice(ordered, func(a, b int) bool { return names[ordered[a]] < names[ordered[b]] })
+	sort.Slice(ordered, func(a, b int) bool { return names[ordered[a]][0] < names[ordered[b]][0] })
 	var judged []types.SupportVerdict
 	for _, name := range ordered {
-		v := pending[names[name]]
 		answer, ok := distribution.Answers[name]
 		if !ok || (answer.Choice != "yes" && answer.Choice != "no") {
-			log.Printf("support judge: pair %s stays pending: Jev gave no answer for it", v.Key)
+			log.Printf("support judge: pair %s stays pending: Jev gave no answer for it", pending[names[name][0]].Key)
 			continue
 		}
 		yes, known := answer.Probabilities["yes"]
@@ -321,16 +396,50 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 				yes = 1
 			}
 		}
-		v.Judge, v.PSupportedBP = judge, int64(math.Round(yes*10000))
-		if answer.Choice == "yes" && yes >= 0.5 {
-			v.Verdict = types.SupportSupported
-		} else {
-			v.Verdict = types.SupportUnsupported
-			v.Why = fmt.Sprintf("Jev judged the cited passage does not support the sentence (p(supported)=%.2f)", yes)
+		// One answer, every member of its group: a group's cites share the
+		// verdict, and GroupSize on the record says it was a group's.
+		for _, idx := range names[name] {
+			v := pending[idx]
+			v.Judge, v.PSupportedBP = judge, int64(math.Round(yes*10000))
+			grouped := len(v.Pair.Group) > 1
+			if grouped {
+				v.GroupSize = len(v.Pair.Group)
+			}
+			if answer.Choice == "yes" && yes >= 0.5 {
+				v.Verdict = types.SupportSupported
+			} else {
+				v.Verdict = types.SupportUnsupported
+				if grouped {
+					v.Why = fmt.Sprintf("Jev judged the %d cited passages together do not support the sentence (p(supported)=%.2f)", len(v.Pair.Group), yes)
+				} else {
+					v.Why = fmt.Sprintf("Jev judged the cited passage does not support the sentence (p(supported)=%.2f)", yes)
+				}
+			}
+			judged = append(judged, v)
 		}
-		judged = append(judged, v)
 	}
 	return judged, nil
+}
+
+// supportGroupEvidenceRunes bounds the passages one grouped question carries,
+// shared between its cites. A lone cite's passage is not bounded here.
+const supportGroupEvidenceRunes = 12000
+
+// boundPassage keeps a passage within limit runes, as a window around the
+// quote when it is found, so the cited words stay in the evidence.
+func boundPassage(passage, quote string, limit int) string {
+	runes := []rune(passage)
+	if limit <= 0 || len(runes) <= limit {
+		return passage
+	}
+	start := 0
+	if at := strings.Index(passage, quote); quote != "" && at >= 0 {
+		center := len([]rune(passage[:at])) + len([]rune(quote))/2
+		start = max(0, center-limit/2)
+	}
+	end := min(len(runes), start+limit)
+	start = max(0, end-limit)
+	return string(runes[start:end])
 }
 
 // jevDistribution is the judge's answer as the transport returns it: the
