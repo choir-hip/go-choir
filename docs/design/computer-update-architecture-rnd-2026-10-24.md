@@ -29,7 +29,7 @@ Builds on, and does not repeat:
 [lu-guest-updates-design-2026-10-14](../reports/lu-guest-updates-design-2026-10-14.md)
 (pull, drain, rings),
 the S7 app-package definition and
-[app-package-carries-app-desk-2026-10-21](app-package-carries-app-desk-2026-10-21.md),
+[app-package-carries-app-desk-2026-10-21](../archive/design/app-package-carries-app-desk-2026-10-21.md),
 and the archived 6-model panel of 2026-09-08
 ([choir-platform-update-system-consensus](../archive/reports/choir-platform-update-system-consensus-2026-09-08.md)),
 whose "stratified rebase" this design sharpens.

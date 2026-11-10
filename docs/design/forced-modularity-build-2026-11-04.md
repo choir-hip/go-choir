@@ -4,7 +4,7 @@ Status: build design. Green (this document). The slices below are orange and
 red; each names its own class. Owner rulings of 2026-11-04 are settled and
 quoted; this design implements them and does not re-argue them. Read first:
 [S12](s12-runtime-install-build-2026-11-04.md),
-[S6](s6-package-lock-build-2026-11-04.md),
+[S6](../archive/design/s6-package-lock-build-2026-11-04.md),
 [the Library security intent](library-app-store-security-intent-2026-11-04.md),
 [the modularity check](modularity-check-build-2026-11-04.md), and the
 remat-serve problem record on branch `remat-serve`

@@ -78,7 +78,7 @@ finish:
     that holds every registered kind to exactly one writer and every writer to
     a known desk, and a write-gate refusal for a write whose declared writer
     is not the kind's writer, where the call site declares one. ARCH-03: a
-    design note, docs/design/app-package-carries-app-desk-2026-10-21.md.
+    design note, docs/archive/design/app-package-carries-app-desk-2026-10-21.md.
   acceptance:
     - action: >-
         Staging drill on a test computer (the orchestrator runs it): Cast two
@@ -478,7 +478,7 @@ receipts:
   - id: arch03-design
     boundary: define
     identity: 58f369309
-    proof_refs: [docs/design/app-package-carries-app-desk-2026-10-21.md]
+    proof_refs: [docs/archive/design/app-package-carries-app-desk-2026-10-21.md]
     rollback_ref: git revert of the docs commit
 ---
 

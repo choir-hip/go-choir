@@ -33,7 +33,7 @@ Two facts compose.
    build is not touched. S6 accepted that: "the served build does not change;
    approving the next candidate cast on this projection approves the
    re-materialization"
-   (docs/design/s6-package-lock-build-2026-11-04.md, The Cast gate).
+   (docs/archive/design/s6-package-lock-build-2026-11-04.md, The Cast gate).
 2. Everything that moves a served build off an old base is armed only at
    `stack_base_moved`:
    - `armRebaseNotice` (rebase_notice.go:116) arms the timer only for

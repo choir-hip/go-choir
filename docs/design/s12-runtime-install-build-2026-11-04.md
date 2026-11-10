@@ -6,7 +6,7 @@ route). Builds "### S12" of
 [the Library design](library-package-propagation-2026-10-26.md) and P5 of
 [the app packages replan](app-packages-replan-2026-10-24.md). It replaces the
 source-patch install of
-[package-install-2026-11-04](package-install-2026-11-04.md). Owner,
+[package-install-2026-11-04](../archive/design/package-install-2026-11-04.md). Owner,
 2026-11-04: "I thought apps were a layer already. Didn't we solve for this
 with app packages?" and "I want all this".
 

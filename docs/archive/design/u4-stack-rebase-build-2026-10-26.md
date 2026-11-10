@@ -994,7 +994,7 @@ conflict, a failed build, a second base move or a wedged decided attempt
 
 The rebase path also acts at `stack_rematerialized` when the served base
 is not the booted base (`rebaseStackBase`; problem
-[rematerialized-stack-never-served](../problems/rematerialized-stack-never-served-2026-11-04.md)):
+[rematerialized-stack-never-served](../../problems/rematerialized-stack-never-served-2026-11-04.md)):
 the timer arms, the clean rebase is tried first, and a patch that does not
 apply, a failed build or a package kept whole over the base's change
 (`package_behind_base`, conflict) mints the ordinary notice. The rebase Cast

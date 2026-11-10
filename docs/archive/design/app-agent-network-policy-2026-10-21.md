@@ -2,10 +2,10 @@
 
 Status 2026-10-30: `internal/deskmanifest` now exists, so the "does not exist" statements below are stale; the document is partly superseded by NET-10.
 
-Status: design, green (no code). Date: 2026-10-21. Superseded in part (2026-10-22): §2 field list and §7 order by [FP10 NET-10](../definitions/choir-launch-fp10-net10-2026-10-22.md). Checklist item: NET-10 in
-[security, density and architecture checklist](../security-density-architecture-checklist-2026-10-21.md).
+Status: design, green (no code). Date: 2026-10-21. Superseded in part (2026-10-22): §2 field list and §7 order by [FP10 NET-10](../../definitions/choir-launch-fp10-net10-2026-10-22.md). Checklist item: NET-10 in
+[security, density and architecture checklist](../../security-density-architecture-checklist-2026-10-21.md).
 Joins: S4 "Egress capability model", S7 "Appagent egress grants" and "App
-packages carry app-agent desks", the [email desk design](../reports/agentic-email-desk-2026-10-14.md)
+packages carry app-agent desks", the [email desk design](../../reports/agentic-email-desk-2026-10-14.md)
 (§2.5, §3.2), ARCH-02 (desk manifest) and ARCH-03 (app package carries its desk).
 
 This is the "plan update owed". S4 and S7 each get a short pointer to it;

@@ -6,7 +6,7 @@ Status: design, green; the record and its rules are built unwired in
 [no grant object for open egress](../problems/no-grant-object-for-open-egress-2026-10-21.md).
 Builds on: the [grants design](engineering-network-grants-2026-10-10.md) §4.0a
 (the L0 to L4 ladder), §4.2 (the grant object), §5 (phases); the
-[app-agent network policy](app-agent-network-policy-2026-10-21.md) (NET-10)
+[app-agent network policy](../archive/design/app-agent-network-policy-2026-10-21.md) (NET-10)
 §2.1 and §3; `internal/owneract` (owner-act receipts).
 
 ## 1. What this adds, and what it narrows from §4.2

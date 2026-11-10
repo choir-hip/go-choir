@@ -25,7 +25,7 @@ Station: [FP10 NET-10](../definitions/choir-launch-fp10-net10-2026-10-22.md).
   `lane/fp10-net01-host-fetch`, not on main) admits a computer by VM ID and
   carries no grant id, so it cannot tell an app desk's allowlisted call
   from research's open read.
-- The NET-10 design ([app-agent-network-policy-2026-10-21.md](../design/app-agent-network-policy-2026-10-21.md))
+- The NET-10 design ([app-agent-network-policy-2026-10-21.md](../archive/design/app-agent-network-policy-2026-10-21.md))
   was written before `internal/deskmanifest`, `internal/appdesk`,
   `internal/egressgrant` and the host fetch verb existed; it says
   "`internal/deskmanifest` does not exist yet", which is no longer true.

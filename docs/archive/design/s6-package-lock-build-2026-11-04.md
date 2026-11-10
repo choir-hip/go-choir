@@ -1,15 +1,15 @@
 # S6 build: the package lock and package-aware containment (2026-11-04)
 
 Status: superseded and deleted by forced modularity M2+M3
-([forced-modularity-build](forced-modularity-build-2026-11-04.md)): the
+([forced-modularity-build](../../design/forced-modularity-build-2026-11-04.md)): the
 source stack refuses package paths (`stack_package_path`), so no package
 root needs an entry; `internal/sourceproj/packages.go` is gone and the
 classifier lives in `internal/packagepath`. Kept as the record of what S6 was.
 Original status: build plan, red (the Cast gate's source and the projection).
 Builds "### S6" and failure L17 of
-[the Library design](library-package-propagation-2026-10-26.md) (10.3, 15.3),
+[the Library design](../../design/library-package-propagation-2026-10-26.md) (10.3, 15.3),
 reconciled with what landed since. Evidence that motivates it:
-[noop-rebase-never-clears-base-moved](../problems/noop-rebase-never-clears-base-moved-2026-11-04.md)
+[noop-rebase-never-clears-base-moved](../../problems/noop-rebase-never-clears-base-moved-2026-11-04.md)
 (8d78b7e78 exported `library-next`; three test computers with their own
 `library-next` went `stack_base_moved`, every ordinary Cast was refused for
 about 90 minutes, and an install was refused). Owner, 2026-11-04: apps are a

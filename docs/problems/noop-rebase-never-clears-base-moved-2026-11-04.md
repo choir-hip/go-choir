@@ -36,7 +36,7 @@ The U4 design does not contain this outcome. It names the neighbour as a
 residual: a conflict path the candidate leaves as the new base has it is
 refused `kept_base_unverifiable` ("content cannot tell resolved by keeping
 B''s version from dropped ... there is no escape in U4",
-docs/design/u4-stack-rebase-build-2026-10-26.md, question 7). A whole
+docs/archive/design/u4-stack-rebase-build-2026-10-26.md, question 7). A whole
 change superseded by the base is that residual on every path at once.
 
 ## Evidence

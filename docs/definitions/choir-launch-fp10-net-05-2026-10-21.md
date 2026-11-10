@@ -75,7 +75,7 @@ boundaries:
   authority_sources:
     - FP0's NET-05 brief, 2026-10-21
     - SDC NET-05 and NET-10; docs/design/engineering-network-grants-2026-10-10.md §4.0a, §4.2, §5
-    - docs/design/app-agent-network-policy-2026-10-21.md
+    - docs/archive/design/app-agent-network-policy-2026-10-21.md
     - docs/choir-doctrine.md and CLAUDE.md
   must_preserve:
     - No edits to vmctl, vmmanager, the VM image (FP8's lane), the capsule egress proxy (FP6) or the host proxy.
