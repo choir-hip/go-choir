@@ -232,6 +232,7 @@ Approval is the benchmark for the mission as a whole, not for pass 1.
 | Open mic or push-to-talk at launch | push-to-talk; open mic when echo cancellation is proved against podcast audio |
 | Which speech models, and the download size | Ruled (owner, 2026-11-09): models are not in the binary; they download at onboarding. Start with whatever Mike runs today and measure the size in lane V. The app pins each model by hash, resumes an interrupted download (Exact's `background-transfer` package), and says what works before the download finishes |
 | Where the page format spec lives | beside `internal/texturedoc`, with the golden documents |
+| Minimum iOS version | Ruled (owner, 2026-11-09: "not really expecting to have lagging users"): the current major version only, iOS 27 at launch. No fallback paths for older systems |
 | Sign in with Apple | not offered; App Review requires it only beside another third-party sign-in, and passkeys are first-party |
 | Whether Exact needs our pieces merged upstream first | carry them as Swift modules of ours on the pinned commit and offer them upstream in parallel |
 | The thin-client review risk (4.2.7(e)) | the app does voice, playback and rendering on the device; say so in the review notes |
