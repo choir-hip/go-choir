@@ -283,7 +283,7 @@ boundaries:
     objects from the publication's metadata and the block is adopted later.
 
 now:
-  status: working
+  status: superseded  # 2026-11-09 evening: merged into choir-autopaper-overnight-2026-11-09.md; only D13 landed; S2 to S5 deferred
   slice: "S1: the paper's measured defects first (stale queue D13, quota incidents), then the audit export."
   source_ref: origin/main 3bafcbf9e
   deploy_identity: paper daa7fcd10 at 2026-11-09T03:10Z

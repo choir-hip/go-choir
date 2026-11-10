@@ -30,7 +30,12 @@ items.
 bundles the remainder of the improvement goal above with the next Autopaper
 mission, whose inputs are
 [`design/autopaper-next-mission-handoff-2026-11-09.md`](design/autopaper-next-mission-handoff-2026-11-09.md).
-Goal file to be named here when authored.
+Goal:
+[`definitions/choir-autopaper-overnight-2026-11-09.md`](definitions/choir-autopaper-overnight-2026-11-09.md)
+(`readiness: executable`). Run it with
+`/goal docs/definitions/choir-autopaper-overnight-2026-11-09.md`. It
+supersedes the improvement goal above as the live station: its audit is
+this mission's wave 0 and its image stations are deferred.
 
 **Next:** Autoradio, from
 [`design/autoradio-mission-handoff-2026-11-09.md`](design/autoradio-mission-handoff-2026-11-09.md).
