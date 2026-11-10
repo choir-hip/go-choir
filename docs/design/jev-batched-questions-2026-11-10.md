@@ -505,3 +505,27 @@ What can go wrong, and the test or fact that answers each:
 8. **A stale deadline mid-run.** The run budget is checked before each call; a
    spent budget defers the rest of the batches (old rows kept), as before for
    stories.
+
+### Measurement before packing across stories
+
+The scorer's packing machinery stays, but `maxStoriesPerCall` is 1 (a tuning
+constant in `internal/frontimportance/scorer.go`, not a setting). Stories are
+separate contexts with no shared state, and the vendor's rule is one request per
+state. Packing three stories puts up to 36 questions and three unrelated
+stories in one state, where accuracy above 12 questions and cross-story
+anchoring of a comparative judgment (importance) are both unmeasured. Calls are
+serial either way.
+
+The evidence that would raise it (not built now): ask at least 100 real stories
+both ways, one story per call and packed (k = 2, 3, 4 stories), through the host
+door on d@e, then compare
+- importance agreement with the one-story call, exact and within one point;
+- the rank correlation (Spearman) of the resulting front order;
+- the yes-probability delta per section question (mean and 95th percentile
+  absolute difference);
+- the noise floor: the one-story arm asked twice.
+Pack across stories only if packed agreement is within the one-story arm's own
+run-to-run noise and the rank correlation is not lower than the noise floor's.
+Budget note: a front page is at most 100 stories (`frontMaxLimit`), so even a
+cold start asked one story a call is at most 100 serial calls, about 15 to 25 s
+against the 3-minute budget; packing is not needed for time.

@@ -24,6 +24,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -317,6 +318,14 @@ func run(ctx context.Context, cfg config, client *http.Client, jev decider, now 
 		}
 		asked = append(asked, ask)
 	}
+	// Stories with no row at all go first (front-list order within each
+	// group), so a run cut short by the budget or MaxCalls leaves the
+	// least-served stories scored and defers rescoring of rows that exist.
+	sort.SliceStable(asked, func(a, b int) bool {
+		_, hasA := previous.Scores[strings.TrimSpace(asked[a].story.PublicationID)]
+		_, hasB := previous.Scores[strings.TrimSpace(asked[b].story.PublicationID)]
+		return !hasA && hasB
+	})
 	// Pack the asked stories into calls, in front-list order, and issue them
 	// one after another: Jev is never called concurrently, one call carries
 	// many questions. Batches beyond MaxCalls are deferred.
@@ -667,35 +676,89 @@ type storyResult struct {
 	err   error
 }
 
-// packStories groups the asked stories, in order, into batches of indexes
-// whose requests each stay under bound bytes. A story larger than bound goes
-// alone; a story is never split.
+// maxStoriesPerCall bounds how many stories one call carries, in addition to
+// the byte bound. It is 1 until packing across stories is measured: stories
+// are separate contexts with no shared state, and the vendor's rule is one
+// request per state. Packing three stories puts up to 36 questions and three
+// unrelated stories in one state, where accuracy above 12 questions and
+// cross-story anchoring of a comparative judgment (importance) are both
+// unmeasured. The measurement that would raise it is "Measurement before
+// packing across stories" in docs/design/jev-batched-questions-2026-11-10.md,
+// section 7. A tuning constant, not a setting: tests override it, nothing
+// else does. Calls are always one after another, never concurrent.
+//
+// Budget arithmetic: a front page is at most 100 stories (frontMaxLimit,
+// internal/platform/publication_front.go), so a cold start or a judge-version
+// bump that re-asks every story is at most 100 calls (200 with pages=2), at
+// about 0.15 to 0.25 s each (the Jev latency table, design doc section 3):
+// 15 to 25 s serially against the 3-minute Budget, and MaxCalls (200) covers
+// two pages. Serial calls therefore finish a cold start with room to spare;
+// stories with no row at all are still asked first so a cut-short run leaves
+// the least-served stories scored.
+var maxStoriesPerCall = 1
+
+// maxHandles keeps handles s01..s99 two digits wide, so no handle is a
+// textual prefix of another.
+const maxHandles = 99
+
+// handleFor is the handle of the k-th (0-based) story in a call.
+func handleFor(k int) string { return fmt.Sprintf("s%02d", k+1) }
+
+// batchRequest is the whole request for the stories asked[idx...]: the state
+// (task string and story entries) and every story's questions, handles by
+// position. It also returns the handles and each question's decision id.
+func batchRequest(asked []storyAsk, idx []int) (req gateway.JudgmentRequest, handles []string, byQuestion map[string]string, err error) {
+	stories := map[string]map[string]string{}
+	questions := map[string]json.RawMessage{}
+	byQuestion = map[string]string{}
+	for k, i := range idx {
+		ask := asked[i]
+		h := handleFor(k)
+		handles = append(handles, h)
+		stories[h] = map[string]string{"title": clip(ask.story.Title, 300), "dek": clip(ask.story.Dek, 600)}
+		for name, q := range storyQuestions(ask, h) {
+			questions[name] = q
+			byQuestion[name] = fmt.Sprintf("%s@%d", strings.TrimSpace(ask.story.PublicationID), ask.story.LatestRevision)
+		}
+	}
+	state, err := json.Marshal(map[string]any{
+		"task":    "You are the front-page editor of a general news site. Judge how important each story in state.stories is for readers, and which sections of the paper it belongs in. Each question names its story.",
+		"stories": stories,
+	})
+	if err != nil {
+		return req, nil, nil, err
+	}
+	return gateway.JudgmentRequest{State: state, Questions: questions}, handles, byQuestion, nil
+}
+
+// packStories groups the asked stories, in order, into batches of indexes of
+// at most maxStoriesPerCall stories whose marshalled requests each stay under
+// bound bytes. A story larger than bound alone goes alone, whole: it is never
+// split, truncated or skipped.
 func packStories(asked []storyAsk, bound int) [][]int {
+	limit := min(max(maxStoriesPerCall, 1), maxHandles)
 	var batches [][]int
 	var cur []int
-	size := 0
-	for i, ask := range asked {
-		n := storyBytes(ask)
-		if len(cur) > 0 && size+n > bound {
-			batches, cur, size = append(batches, cur), nil, 0
+	for i := range asked {
+		if len(cur) > 0 {
+			trial := append(append([]int(nil), cur...), i)
+			over := len(cur) >= limit
+			if !over {
+				req, _, _, err := batchRequest(asked, trial)
+				if body, merr := json.Marshal(req); err != nil || merr != nil || len(body) > bound {
+					over = true
+				}
+			}
+			if over {
+				batches, cur = append(batches, cur), nil
+			}
 		}
-		cur, size = append(cur, i), size+n
+		cur = append(cur, i)
 	}
 	if len(cur) > 0 {
 		batches = append(batches, cur)
 	}
 	return batches
-}
-
-// storyBytes is the request bytes one story adds to a call: its state entry
-// and its questions, sized under a worst-case handle.
-func storyBytes(ask storyAsk) int {
-	n := 0
-	for name, q := range storyQuestions(ask, "s000") {
-		n += len(name) + len(q)
-	}
-	title, dek := clip(ask.story.Title, 300), clip(ask.story.Dek, 600)
-	return n + len(title) + len(dek) + 40
 }
 
 // storyQuestions is the questions one story needs, every name and every
@@ -736,26 +799,14 @@ func baseRow(ask storyAsk, old scoreRow) scoreRow {
 }
 
 // askBatch asks Jev, in one call, the questions of the stories asked[idx...],
-// handles s1, s2, ... by position. It returns each story's row and error in
+// handles s01, s02, ... by position. It returns each story's row and error in
 // idx order. A failed call fails exactly the stories in it; a story whose
 // answers are missing or unusable fails alone.
 func askBatch(ctx context.Context, jev decider, asked []storyAsk, idx []int, previous map[string]scoreRow) ([]scoreRow, []error) {
 	rows := make([]scoreRow, len(idx))
 	errs := make([]error, len(idx))
-	stories := map[string]map[string]string{}
-	questions := map[string]json.RawMessage{}
-	byQuestion := map[string]string{}
-	handles := make([]string, len(idx))
 	for k, i := range idx {
-		ask := asked[i]
-		id := strings.TrimSpace(ask.story.PublicationID)
-		handles[k] = fmt.Sprintf("s%d", k+1)
-		rows[k] = baseRow(ask, previous[id])
-		stories[handles[k]] = map[string]string{"title": clip(ask.story.Title, 300), "dek": clip(ask.story.Dek, 600)}
-		for name, q := range storyQuestions(ask, handles[k]) {
-			questions[name] = q
-			byQuestion[name] = fmt.Sprintf("%s@%d", id, ask.story.LatestRevision)
-		}
+		rows[k] = baseRow(asked[i], previous[strings.TrimSpace(asked[i].story.PublicationID)])
 	}
 	failAll := func(err error) ([]scoreRow, []error) {
 		for k, i := range idx {
@@ -763,17 +814,14 @@ func askBatch(ctx context.Context, jev decider, asked []storyAsk, idx []int, pre
 		}
 		return rows, errs
 	}
-	state, err := json.Marshal(map[string]any{
-		"task":    "You are the front-page editor of a general news site. Judge how important each story in state.stories is for readers, and which sections of the paper it belongs in. Each question names its story.",
-		"stories": stories,
-	})
+	request, handles, byQuestion, err := batchRequest(asked, idx)
 	if err != nil {
 		return failAll(err)
 	}
 	first := asked[idx[0]].story
 	ctx = context.WithValue(ctx, decisionKey{}, fmt.Sprintf("%s@%d", strings.TrimSpace(first.PublicationID), first.LatestRevision))
 	ctx = context.WithValue(ctx, questionDecisionsKey{}, byQuestion)
-	raw, err := jev.Decide(ctx, scorerComputerID, gateway.JudgmentRequest{State: state, Questions: questions})
+	raw, err := jev.Decide(ctx, scorerComputerID, request)
 	if err != nil {
 		return failAll(err)
 	}
