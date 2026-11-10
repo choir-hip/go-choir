@@ -2,6 +2,9 @@ use StatBar from "exact:content"
 use labState, labStages, labParams, labTrace, labTurns, labEvents, labConfigs from "@choir/autoradio"
 use labStart, labStop, labTalkDown, labTalkUp, labPlayPause, labNext, labPrevious from "@choir/autoradio"
 use labSelectStage, labSetParam, labSaveConfig, labLoadConfig, labLoadConfigURL, labReplay from "@choir/autoradio"
+use choirAuth, choirPlayer, choirStories from "@choir/autoradio"
+use choirSignIn, choirSignOut, choirOpenApproval, choirCancelSignIn, choirRefresh, choirPlayPause, choirTalkDown, choirTalkUp, choirPlay from "@choir/autoradio"
+use ChoirAuth, ChoirPlayer, StoryList from "@choir/autoradio"
 use LabState, StageList, ParamList, Trace, TurnList, Lines, Names from "@choir/autoradio"
 
 routes nav
@@ -22,6 +25,10 @@ component Autoradio
   state cfgUrl = ""
   resource trace = labTrace(turn=sel) as shape Trace else empty()
   resource other = labTrace(turn=cmp) as shape Trace else empty()
+  resource au = choirAuth() as shape ChoirAuth else empty()
+  resource pl = choirPlayer() as shape ChoirPlayer else empty()
+  resource sl = choirStories() as shape StoryList else empty()
+  mutation acct as shape LabState
   mutation ctl as shape LabState
   mutation down as shape LabState
   mutation up as shape LabState
@@ -30,6 +37,25 @@ component Autoradio
     nav = select(nav, name)
   action follow(url: string)
     nav = go(nav, url)
+
+  action signIn
+    send acct = choirSignIn()
+  action cancelSignIn
+    send acct = choirCancelSignIn()
+  action openApproval
+    send acct = choirOpenApproval()
+  action signOut
+    send acct = choirSignOut()
+  action refreshRadio
+    send acct = choirRefresh()
+  action radioPlay
+    send acct = choirPlayPause()
+  action radioDown
+    send down = choirTalkDown()
+  action radioUp
+    send up = choirTalkUp()
+  action playStory(route: string)
+    send acct = choirPlay(route=route)
 
   action start
     send ctl = labStart()
@@ -84,30 +110,61 @@ component Autoradio
                   text `${st.residentMB.toFixed(0)} MB · ${st.thermal}` testId="resources" color="-exact-secondary-label"
                 scroll id=`content-${e.id}` flex=1 min-height=0
                   if e.name == "player"
+                    if au.signedIn == false
+                      column padding=24 gap=16 align-items="center"
+                        text "Autoradio" font="-exact-large-title" role="heading" aria-level=2
+                        text "Sign in to hear the paper and talk to your computer." testId="signin-intro" text-align="center"
+                        if au.status == "pending"
+                          column gap=12 align-items="center"
+                            text "Your code" color="-exact-secondary-label"
+                            text au.userCode testId="signin-code" font="-exact-large-title"
+                            text "Approve this sign-in in your browser." color="-exact-secondary-label"
+                            button press=openApproval testId="signin-open" buttonStyle="filled"
+                              text "Open the approval page"
+                            button press=cancelSignIn testId="signin-cancel"
+                              text "Cancel"
+                        if au.status != "pending"
+                          button press=signIn testId="signin" buttonStyle="filled" padding=16
+                            text "Sign in"
+                        text au.message testId="signin-message" color="-exact-secondary-label"
+                    if au.signedIn
+                      column padding=16 gap=12
+                        text (pl.title == "" ? "Autoradio" : pl.title) testId="story-title" font="-exact-title2" role="heading" aria-level=2
+                        text (pl.loading ? "Loading the paper..." : pl.passage) testId="block" font="-exact-body"
+                        text pl.position testId="position" color="-exact-secondary-label"
+                        button press=radioPlay testId="playpause" appearance="none"
+                          width="100%" padding=28 background-color="AccentColor"
+                          text (pl.playing ? "Pause" : "Play") font="-exact-title2"
+                        row gap=12 align-items="center"
+                          button press=previous aria-label="Previous passage" testId="prev"
+                            image "symbol:sf/backward"
+                          button press=next aria-label="Next passage" testId="next"
+                            image "symbol:sf/forward"
+                        button pointerdown=radioDown pointerup=radioUp testId="talk" appearance="none"
+                          width="100%" padding=36 background-color="-exact-secondary-background"
+                          text (pl.talking ? "Listening..." : "Hold to talk")
+                        text (pl.heard == "" ? "" : pl.heard) testId="transcript"
+                        text pl.message testId="message" color="-exact-secondary-label"
+                        text "Stories" role="heading" aria-level=2
+                        for s in sl.rows key=s.route
+                          button press=playStory(s.route) testId=`story-${s.route}` appearance="none" padding=8
+                            column gap=2 align-items="flex-start"
+                              text `${s.current ? "▶ " : ""}${s.title}`
+                              text s.dek color="-exact-secondary-label" font="-exact-footnote"
+                  if e.name == "lab"
                     column padding=16 gap=12
-                      text st.blockText testId="block" font="-exact-title3"
-                      text `Block ${st.blockIndex + 1} of ${st.blockCount}` color="-exact-secondary-label"
-                      row gap=12 align-items="center"
-                        button press=previous aria-label="Previous" testId="prev"
-                          image "symbol:sf/backward"
-                        button press=playpause buttonStyle="filled" testId="playpause"
-                          text (st.paused ? "Play" : "Pause")
-                        button press=next aria-label="Next" testId="next"
-                          image "symbol:sf/forward"
+                      text "Account" role="heading" aria-level=2
+                      text (au.signedIn ? `Signed in to ${au.baseURL}` : "Not signed in") testId="account" color="-exact-secondary-label"
+                      if au.signedIn
+                        button press=signOut testId="signout"
+                          text "Sign out"
+                      button press=pickTab("trace") testId="open-trace"
+                        text "Open the trace of the last turn"
+                      row gap=8
                         button press=start testId="start"
                           text (st.running ? "Restart audio" : "Start audio")
                         button press=stop testId="stop"
                           text "Stop"
-                      text yieldLabel testId="yield"
-                      text modeLabel testId="mode" color="-exact-secondary-label"
-                      text (st.transcript == "" ? "(listening)" : st.transcript) testId="transcript"
-                      button pointerdown=talkDown pointerup=talkUp testId="talk" appearance="none"
-                        width="100%" padding=40 background-color="-exact-secondary-background"
-                        text (st.phase == "playing" ? "Hold to talk" : st.phase)
-                      text `Phase: ${st.phase} · mic ${st.micActive ? "on" : "off"} · config ${st.configName}` testId="phase" color="-exact-secondary-label"
-                      text st.message testId="message" color="-exact-secondary-label"
-                  if e.name == "lab"
-                    column padding=16 gap=12
                       text "Configuration" role="heading" aria-level=2
                       text `Current: ${st.configName}` testId="config"
                       row gap=8 align-items="center"
@@ -164,10 +221,7 @@ component Autoradio
       row role="tablist"
         button role="tab" aria-controls="panel-player" aria-selected=(nav.tab == "player") press=pickTab("player") testId="tab-player" flex=1
           image "symbol:play"
-          text "Player"
+          text "Radio"
         button role="tab" aria-controls="panel-lab" aria-selected=(nav.tab == "lab") press=pickTab("lab") testId="tab-lab" flex=1
           image "symbol:settings"
           text "Lab"
-        button role="tab" aria-controls="panel-trace" aria-selected=(nav.tab == "trace") press=pickTab("trace") testId="tab-trace" flex=1
-          image "symbol:chart"
-          text "Trace"

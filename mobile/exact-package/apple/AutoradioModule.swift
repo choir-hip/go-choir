@@ -38,13 +38,18 @@ public final class AutoradioModule: ExactPackage {
     private var dirty = Set<String>()
     private var scheduled = false
     private var turnArg: [String: Any] = [:]
+    private var choir: ChoirApp!
 
     public init(context: ExactPackageContext) {
         self.context = context
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
         owner = ExactSessionOwner(context: context) { [weak self] s in self?.context.log("AUTORADIO \(s)"); NSLog("AUTORADIO %@", s) }
         runtime = LabRuntime(supportDir: support, session: owner)
-        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["labState", "labEvents", "labTrace", "labTurns", "labStages", "labParams", "labConfigs"]) } }
+        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["labState", "labEvents", "labTrace", "labTurns", "labStages", "labParams", "labConfigs", "choirPlayer", "choirStories", "choirAuth"]) } }
+        // The listener path: sign-in (Keychain), the front page, the real stages.
+        choir = ChoirApp(runtime: runtime, keys: KeychainKeyStore(), openURL: { url in DispatchQueue.main.async { UIApplication.shared.open(url) } })
+        choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "labState"]) } }
+        Task { [choir] in await choir?.refresh() }
     }
 
     /// Coalesce change notifications to a few per second.
@@ -88,7 +93,10 @@ public final class AutoradioModule: ExactPackage {
         case "labNext": runtime.player.next(); reply(state())
         case "labPrevious": runtime.player.previous(); reply(state())
         case "labSelectStage":
-            if let k = StageKind(rawValue: args["kind"] as? String ?? ""), let id = args["id"] as? String { runtime.setStage(k, id: id) }
+            if let k = StageKind(rawValue: args["kind"] as? String ?? ""), let id = args["id"] as? String {
+                runtime.setStage(k, id: id)
+                if k == .programme { Task { [choir] in await choir?.loadProgramme() } }   // a programme picked in the Lab loads now
+            }
             reply(state())
         case "labSetParam":
             if let k = StageKind(rawValue: args["kind"] as? String ?? "") {
@@ -102,6 +110,20 @@ public final class AutoradioModule: ExactPackage {
         case "labReplay":
             let id = args["turn"] as? String ?? ""
             Task { _ = try? await runtime.replay(id: id); DispatchQueue.main.async { reply(state()) } }
+        case "choirAuth": reply(json(choir.authView()))
+        case "choirPlayer": reply(json(choir.playerView()))
+        case "choirStories": reply(["rows": choir.storyRows().map { json($0) }])
+        case "choirSignIn": Task { [choir] in _ = await choir?.signIn.begin() }; reply(state())
+        case "choirCancelSignIn": choir.signIn.cancel(); reply(state())
+        case "choirSignOut": Task { [choir] in await choir?.signOut() }; reply(state())
+        case "choirOpenApproval":
+            if let u = URL(string: choir.authView().verificationURL) { DispatchQueue.main.async { UIApplication.shared.open(u) } }
+            reply(state())
+        case "choirRefresh": Task { [choir] in await choir?.refresh() }; reply(state())
+        case "choirPlayPause": Task { [choir] in await choir?.playPause() }; reply(state())
+        case "choirTalkDown": Task { [choir] in await choir?.talkDown() }; reply(state())
+        case "choirTalkUp": runtime.talkUp(); reply(state())
+        case "choirPlay": let r = args["route"] as? String ?? ""; Task { [choir] in await choir?.play(route: r) }; reply(state())
         default: reply(["error": "NotSupportedError"])
         }
     }

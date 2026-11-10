@@ -113,6 +113,12 @@ public final class ChoirSignIn: @unchecked Sendable {
         }
     }
 
+    /// Stop waiting for an approval; keeps any key already stored.
+    public func cancel() {
+        lock.lock(); task?.cancel(); task = nil; lock.unlock()
+        update { $0.status = "idle"; $0.userCode = ""; $0.verificationURL = ""; $0.message = "" }
+    }
+
     /// Delete the local key at once; revoke on the server if it can be reached (best effort).
     public func signOut() async {
         lock.lock(); task?.cancel(); task = nil; lock.unlock()

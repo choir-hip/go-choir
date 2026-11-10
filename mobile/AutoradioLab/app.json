@@ -1,13 +1,13 @@
 {
   "$schema": "../.exact-src/scripts/app.schema.json",
-  "name": "Autoradio Lab",
-  "short_name": "Autoradio Lab",
+  "name": "Autoradio",
+  "short_name": "Autoradio",
   "id": "news.choir.autoradio.lab",
   "start_url": "/",
   "display": "standalone",
   "app": {
     "id": "news.choir.autoradio.lab",
-    "name": "Autoradio Lab"
+    "name": "Autoradio"
   },
   "host": {
     "ios": {

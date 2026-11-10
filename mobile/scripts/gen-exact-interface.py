@@ -19,6 +19,12 @@ shapes = {
     "TurnList": {"rows": "TurnRow[]"},
     "Lines": {"lines": "string[]"},
     "Names": {"names": "string[]"},
+    # Listener path (Choir client)
+    "ChoirAuth": {"signedIn": B, "baseURL": S, "status": S, "userCode": S, "verificationURL": S, "message": S},
+    "ChoirPlayer": {"signedIn": B, "loading": B, "title": S, "passage": S, "position": S, "playing": B, "talking": B,
+                    "heard": S, "message": S},
+    "StoryRow": {"title": S, "dek": S, "route": S, "section": S, "current": B},
+    "StoryList": {"rows": "StoryRow[]"},
 }
 
 def src(n, ans, opts=None, default=None):
@@ -52,6 +58,13 @@ names = [
     snd("labLoadConfig", {"name": S}),
     snd("labLoadConfigURL", {"url": S}),
     snd("labReplay", {"turn": S}),
+    src("choirAuth", "ChoirAuth", default={"signedIn": False, "baseURL": "", "status": "idle", "userCode": "", "verificationURL": "", "message": ""}),
+    src("choirPlayer", "ChoirPlayer", default={"signedIn": False, "loading": False, "title": "", "passage": "", "position": "",
+        "playing": False, "talking": False, "heard": "", "message": ""}),
+    src("choirStories", "StoryList", default={"rows": []}),
+    snd("choirSignIn"), snd("choirSignOut"), snd("choirOpenApproval"), snd("choirCancelSignIn"), snd("choirRefresh"),
+    snd("choirPlayPause"), snd("choirTalkDown"), snd("choirTalkUp"),
+    snd("choirPlay", {"route": S}),
 ]
 json.dump({"kind": "interface", "name": "@choir/autoradio", "version": "1.0.0", "substitute": "implementation",
            "shapes": shapes, "names": names}, open(os.path.join(HERE, "exact.json"), "w"), indent=2)

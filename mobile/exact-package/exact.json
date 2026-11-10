@@ -77,6 +77,35 @@
     },
     "Names": {
       "names": "string[]"
+    },
+    "ChoirAuth": {
+      "signedIn": "bool",
+      "baseURL": "string",
+      "status": "string",
+      "userCode": "string",
+      "verificationURL": "string",
+      "message": "string"
+    },
+    "ChoirPlayer": {
+      "signedIn": "bool",
+      "loading": "bool",
+      "title": "string",
+      "passage": "string",
+      "position": "string",
+      "playing": "bool",
+      "talking": "bool",
+      "heard": "string",
+      "message": "string"
+    },
+    "StoryRow": {
+      "title": "string",
+      "dek": "string",
+      "route": "string",
+      "section": "string",
+      "current": "bool"
+    },
+    "StoryList": {
+      "rows": "StoryRow[]"
     }
   },
   "names": [
@@ -245,6 +274,88 @@
       "send": "labReplay",
       "options": {
         "turn": "string"
+      },
+      "answers": "LabState"
+    },
+    {
+      "source": "choirAuth",
+      "live": true,
+      "answers": "ChoirAuth",
+      "substitute": {
+        "default": {
+          "signedIn": false,
+          "baseURL": "",
+          "status": "idle",
+          "userCode": "",
+          "verificationURL": "",
+          "message": ""
+        }
+      }
+    },
+    {
+      "source": "choirPlayer",
+      "live": true,
+      "answers": "ChoirPlayer",
+      "substitute": {
+        "default": {
+          "signedIn": false,
+          "loading": false,
+          "title": "",
+          "passage": "",
+          "position": "",
+          "playing": false,
+          "talking": false,
+          "heard": "",
+          "message": ""
+        }
+      }
+    },
+    {
+      "source": "choirStories",
+      "live": true,
+      "answers": "StoryList",
+      "substitute": {
+        "default": {
+          "rows": []
+        }
+      }
+    },
+    {
+      "send": "choirSignIn",
+      "answers": "LabState"
+    },
+    {
+      "send": "choirSignOut",
+      "answers": "LabState"
+    },
+    {
+      "send": "choirOpenApproval",
+      "answers": "LabState"
+    },
+    {
+      "send": "choirCancelSignIn",
+      "answers": "LabState"
+    },
+    {
+      "send": "choirRefresh",
+      "answers": "LabState"
+    },
+    {
+      "send": "choirPlayPause",
+      "answers": "LabState"
+    },
+    {
+      "send": "choirTalkDown",
+      "answers": "LabState"
+    },
+    {
+      "send": "choirTalkUp",
+      "answers": "LabState"
+    },
+    {
+      "send": "choirPlay",
+      "options": {
+        "route": "string"
       },
       "answers": "LabState"
     }
