@@ -32,7 +32,7 @@ const (
 	serverVersion  = "1"
 )
 
-var supportedProtocols = map[string]bool{"2024-11-05": true, "2025-03-26": true, "2025-06-18": true, "2025-11-25": true}
+var supportedProtocols = map[string]bool{"2024-11-05": true, "2025-03-26": true, "2025-06-18": true}
 
 // Server is a stdio MCP server over a constant tool set.
 type Server struct {
@@ -42,6 +42,8 @@ type Server struct {
 	Log io.Writer
 	// ProgressEvery overrides ProgressInterval (tests).
 	ProgressEvery time.Duration
+	// DefaultForward overrides the bound of a tool that has none (tests).
+	DefaultForward time.Duration
 }
 
 type request struct {
@@ -248,7 +250,7 @@ func (ss *session) call(ctx context.Context, req request) {
 		ss.fail(req.ID, -32602, "unknown tool "+p.Name)
 		return
 	}
-	cctx, cancel := context.WithTimeout(ctx, forwardTimeout(p.Arguments))
+	cctx, cancel := context.WithTimeout(ctx, ss.s.forwardTimeout(*tool, p.Arguments))
 	key := string(req.ID)
 	ss.mu.Lock()
 	ss.cancels[key] = cancel
@@ -297,8 +299,16 @@ func (ss *session) call(ctx context.Context, req request) {
 	}
 }
 
-// forwardTimeout is a blocking call's own timeout plus slack, or the default.
-func forwardTimeout(args json.RawMessage) time.Duration {
+// forwardTimeout is the tool's own bound, else a blocking call's timeout plus
+// slack, else the default.
+func (s *Server) forwardTimeout(t Tool, args json.RawMessage) time.Duration {
+	if t.Forward > 0 {
+		return t.Forward
+	}
+	def := defaultForward
+	if s.DefaultForward > 0 {
+		def = s.DefaultForward
+	}
 	var a struct {
 		TimeoutS json.Number `json:"timeout_s"`
 	}
@@ -307,5 +317,5 @@ func forwardTimeout(args json.RawMessage) time.Duration {
 			return time.Duration(n)*time.Second + forwardSlack
 		}
 	}
-	return defaultForward
+	return def
 }

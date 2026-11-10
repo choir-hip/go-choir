@@ -218,6 +218,18 @@ func TestATruncatedReadCannotCarrySuffice(t *testing.T) {
 	}
 }
 
+// A bare choice with no probabilities is not decisive: "suffice" escalates.
+func TestABareChoiceIsNotDecisive(t *testing.T) {
+	j := &fakeJudge{raw: `{"model":"m","answers":{"suffice":{"choice":"suffice"}}}`}
+	if a := Admit(context.Background(), j, completion()); a.Verdict != Escalated || !strings.Contains(a.Reason, "no judgment ran") {
+		t.Errorf("%+v", a)
+	}
+	r := &fakeJudge{raw: `{"answers":{"route":{"choice":"wake_model"}}}`}
+	if d := DecideRoute(context.Background(), r, Update{ReportID: "r", Claim: "c"}); d.Judged || d.Route != RoutePass {
+		t.Errorf("%+v", d)
+	}
+}
+
 // The agent's refs ride along after the runtime's, de-duplicated.
 func TestAgentRefsAreAdvisoryAndDeduplicated(t *testing.T) {
 	in := completion()

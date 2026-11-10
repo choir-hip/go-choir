@@ -55,7 +55,13 @@ crash drill, and M1-M2 are open.
    `Host`. `NewRecords` reads the cursor shown records. `PrepareCompletion` runs
    the assignment's `checks` as one capsule job the host starts and builds the
    change (diff plus context) to `deskjudge.ReadBoundTokens`. `Escalate` writes
-   a non-final record to the admitter with the gate's reason. Add the
+   a non-final record to the admitter with the gate's reason. Two review
+   findings land here: the reducer must scope `desk_restate.target` and
+   `desk_reply.target_ref` to the bound assignment (the tool only bounds their
+   length, it cannot know whose record a ref names), and the Backend must pin
+   the capsule diff between `PrepareCompletion` and the staged Complete (the
+   checks and Jev's read must be of the bytes that Complete freezes, so a write
+   after the gate cannot ride in). Add the
    `ActingWorker` field next to `ActingTask` (`types/commitment.go:198-202`)
    and stamp it from `Call.Acting`. Any new body must pass the vocabulary guard:
    no JSON keys named role, profile, agent_profile, agent_role,

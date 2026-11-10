@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -442,4 +443,58 @@ func TestEndToEndCompleteThroughTheServerAndSocket(t *testing.T) {
 		t.Errorf("%v %s", m, text)
 	}
 	var _ deskjudge.Judge = scriptedJudge{}
+}
+
+// B1: a desk_complete runs the assignment's checks and Jev's read inside one
+// call, so its forward bound is the tool's own, not the default.
+func TestSlowCompleteReturnsItsRealOutcome(t *testing.T) {
+	fwd := fwdFunc(func(ctx context.Context, _ string, _ json.RawMessage) (Result, error) {
+		select {
+		case <-time.After(250 * time.Millisecond):
+			return Result{Text: "the real outcome"}, nil
+		case <-ctx.Done():
+			return Result{}, ctx.Err()
+		}
+	})
+	c := startServer(t, &Server{Tools: Exposed(), Fwd: fwd, DefaultForward: 50 * time.Millisecond})
+	c.send(initialize)
+	c.next()
+	for i, name := range []string{"desk_complete", "desk_freeze"} {
+		args := completeArgs
+		if name == "desk_freeze" {
+			args = `{"build_recipe_ref":"b","test_receipts":["t"],"dependency_toolchain_refs":["d"]}`
+		}
+		c.send(fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":%q,"arguments":%s}}`, 10+i, name, args))
+		m := c.next()["result"].(map[string]any)
+		if got := m["content"].([]any)[0].(map[string]any)["text"]; got != "the real outcome" || m["isError"] != false {
+			t.Errorf("%s: %v", name, m)
+		}
+	}
+	// A tool with no bound of its own still ends at the default.
+	c.send(`{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"desk_context","arguments":{}}}`)
+	m := c.next()["result"].(map[string]any)
+	if m["isError"] != true {
+		t.Errorf("the default bound did not apply: %v", m)
+	}
+}
+
+// A protocol version this server does not implement is answered with the
+// latest it does.
+func TestUnimplementedProtocolVersionIsNotEchoed(t *testing.T) {
+	c := startServer(t, &Server{Tools: Exposed(), Fwd: echoFwd()})
+	c.send(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}`)
+	if v := c.next()["result"].(map[string]any)["protocolVersion"]; v != latestProtocol {
+		t.Errorf("version %v", v)
+	}
+}
+
+func TestCompleteBoundCoversChecksAndTheJevRead(t *testing.T) {
+	c, _ := Lookup("desk_complete")
+	if c.Forward < 30*time.Minute {
+		t.Errorf("desk_complete bound %v", c.Forward)
+	}
+	f, _ := Lookup("desk_freeze")
+	if f.Forward < 10*time.Minute {
+		t.Errorf("desk_freeze bound %v", f.Forward)
+	}
 }

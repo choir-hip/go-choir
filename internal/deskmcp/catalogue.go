@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -36,6 +37,14 @@ const (
 	// 30 minutes, so a progress notification goes out far more often (F7).
 	MaxWaitSeconds = 1500
 	MaxCheckSecs   = 3600
+)
+
+// Per-tool forward bounds. CompleteForward covers the assignment's checks (up
+// to MaxCheckSecs of them), Jev's read (five minutes) and the staging, with
+// margin.
+const (
+	CompleteForward = 75 * time.Minute
+	FreezeForward   = 20 * time.Minute
 )
 
 type kind int
@@ -75,7 +84,12 @@ type Tool struct {
 	// assignment (F5); observations never take the lock, so desk_wait cannot
 	// stall a report.
 	Writes bool
-	Fields []field
+	// Forward is the longest the call may take end to end, when it is not the
+	// default: desk_complete runs the assignment's checks and Jev's read in one
+	// call, desk_freeze walks a large tree. Progress notifications flow while
+	// it blocks.
+	Forward time.Duration
+	Fields  []field
 }
 
 var evidenceRefs = field{Name: "evidence_refs", Doc: "References to evidence, one per item.", Kind: kStrings, Max: MaxRefs, ItemMax: MaxShortText}
@@ -98,11 +112,11 @@ var tools = []Tool{
 		Fields: []field{{Name: "argv", Doc: "The command and its arguments.", Kind: kStrings, Required: true, Max: MaxArgv, ItemMax: MaxArgvItem}, {Name: "timeout_s", Kind: kInt, Required: true, Min: 1, Max: MaxCheckSecs}}},
 	{Name: "desk_wait", Verb: "", Description: "Wait for new records, up to timeout_s seconds. No model call is spent while waiting.",
 		Fields: []field{{Name: "timeout_s", Kind: kInt, Required: true, Min: 1, Max: MaxWaitSeconds}}},
-	{Name: "desk_freeze", Verb: "Freeze", Writes: true, Description: "Freeze the capsule diff as the candidate. Changes outside the cast's paths are refused.",
+	{Name: "desk_freeze", Verb: "Freeze", Writes: true, Forward: FreezeForward, Description: "Freeze the capsule diff as the candidate. Changes outside the cast's paths are refused.",
 		Fields: []field{{Name: "build_recipe_ref", Kind: kString, Required: true, Max: MaxShortText},
 			{Name: "test_receipts", Doc: "Executor receipts of test jobs.", Kind: kStrings, Required: true, Max: MaxRefs, ItemMax: MaxShortText},
 			{Name: "dependency_toolchain_refs", Kind: kStrings, Required: true, Max: MaxRefs, ItemMax: MaxShortText}}},
-	{Name: "desk_complete", Verb: "Complete", Writes: true, Description: "End the assignment. For result completed the runtime runs the assignment's own checks and a second reader reads the change; you cannot report your own pass. A refusal or an escalation comes back as this tool's result and the assignment stays open.",
+	{Name: "desk_complete", Verb: "Complete", Writes: true, Forward: CompleteForward, Description: "End the assignment. For result completed the runtime runs the assignment's own checks and a second reader reads the change; you cannot report your own pass. A refusal or an escalation comes back as this tool's result and the assignment stays open.",
 		Fields: []field{{Name: "result", Kind: kEnum, Required: true, Enum: []string{"completed", "failed", "blocked", "partial"}},
 			{Name: "summary", Kind: kString, Required: true, Max: MaxText}, evidenceRefs,
 			{Name: "execution_refs", Doc: "Executor receipts you ran; advisory.", Kind: kStrings, Max: MaxRefs, ItemMax: MaxShortText}}},

@@ -103,7 +103,10 @@ func askChoice(ctx context.Context, j Judge, timeout time.Duration, task, qid, i
 	if !known {
 		return Answer{}, fmt.Errorf("the judge's choice %q is outside the closed set", choice)
 	}
-	if len(given.Probabilities) > 0 {
+	if len(given.Probabilities) == 0 {
+		return Answer{}, fmt.Errorf("the judge gave %q with no probabilities, so it is not decisive", choice)
+	}
+	{
 		sum := 0.0
 		for _, p := range given.Probabilities {
 			sum += p

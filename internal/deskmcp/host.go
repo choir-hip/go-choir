@@ -204,7 +204,8 @@ func toAny(in []string) []any {
 // route judges an interim Report after it committed, outside the reduction
 // (R2), and records the decision. It never blocks the agent's call.
 func (h *Host) route(b Binding, res Result) {
-	if h.Judge == nil || res.Ref == "" {
+	// With no judge the decision still lands, Judged false (R1, R5).
+	if res.Ref == "" {
 		return
 	}
 	h.wg.Add(1)

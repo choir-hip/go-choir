@@ -436,6 +436,17 @@ func TestCompleteChecksThatCouldNotRunAreARefusal(t *testing.T) {
 	}
 }
 
+// With no judge the decision still lands, pass-through and not judged.
+func TestReportWithNoJudgeStillRecordsADecision(t *testing.T) {
+	be := newBackend()
+	h := NewHost(be, nil)
+	h.Handle(context.Background(), bind, "desk_report", args(`{"claim":"c"}`))
+	h.Wait()
+	if len(be.decisions) != 1 || be.decisions[0].Judged || be.decisions[0].Route != deskjudge.RoutePass {
+		t.Fatalf("%+v", be.decisions)
+	}
+}
+
 // C7: a failed result claims no pass and is staged without the gate.
 func TestAFailedResultIsStagedWithoutTheGate(t *testing.T) {
 	be := newBackend()
