@@ -134,6 +134,7 @@ public actor TurnEngine {
 
     public init(env: EngineEnvironment, configuration: LabConfiguration, limits: EngineLimits = EngineLimits()) {
         self.env = env; self.config = configuration; self.limits = limits
+        ChoirEnvironment.shared.log = env.log   // the Choir stages record request timings on this turn's log
     }
 
     // MARK: Public API

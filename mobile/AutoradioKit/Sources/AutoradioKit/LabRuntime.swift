@@ -79,7 +79,7 @@ public final class LabRuntime: @unchecked Sendable {
         let log = EventLog(clock: clock)
         self.log = log
         self.session = LoggedSessionOwner(inner: session, log: log)
-        let cfg = StageRegistry.defaultConfiguration()
+        let cfg = StageRegistry.listenerConfiguration()
         self.config = cfg
         store = KeptTurnStore(root: supportDir.appendingPathComponent("turns"))
         configs = ConfigStore(dir: supportDir.appendingPathComponent("configs"))

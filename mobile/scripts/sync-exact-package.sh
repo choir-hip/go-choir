@@ -6,7 +6,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 KIT="$HERE/AutoradioKit/Sources/AutoradioKit"
 OUT="$HERE/exact-package/apple"
 rm -rf "$OUT/Kit"; mkdir -p "$OUT/Kit"
-cp "$KIT"/*.swift "$OUT/Kit/"
+find "$KIT" -name '*.swift' -exec cp {} "$OUT/Kit/" \;   # flat: Choir/ and other sub-directories are copied in; names are unique
 /usr/bin/python3 -I - "$OUT" <<'EOF'
 import json, os, sys
 out = sys.argv[1]

@@ -373,6 +373,7 @@ extension StageRegistry {
         r.register(.programme, FixtureProgramme.self) { _ in FixtureProgramme() }
         r.register(.programme, RemoteProgramme.self) { RemoteProgramme($0) }
         registerAppleStages(r)
+        registerChoirStages(r)
         return r
     }
 

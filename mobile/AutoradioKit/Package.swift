@@ -10,6 +10,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "AutoradioKit", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(name: "AutoradioKitTests", dependencies: ["AutoradioKit"], swiftSettings: [.swiftLanguageMode(.v5)]),
         .executableTarget(
             name: "autoradio-replay",
             dependencies: ["AutoradioKit"],
