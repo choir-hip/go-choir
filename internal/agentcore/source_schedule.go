@@ -114,6 +114,14 @@ func (rt *Runtime) startSourceSchedule(ctx context.Context, ownerID, computerID,
 	if !ok {
 		return store.SourceSchedule{}, fmt.Errorf("unknown source %q", sourceID)
 	}
+	return rt.startScheduleFor(ctx, ownerID, computerID, source, nil, interval, maxItems, fixtureRun, ownerAct)
+}
+
+// startScheduleFor writes and arms the schedule for a resolved source. feed is
+// the owner-added feed definition to record on the schedule, nil for a
+// registry source.
+func (rt *Runtime) startScheduleFor(ctx context.Context, ownerID, computerID string, source sources.Source, feed *store.SourceSchedule, interval time.Duration, maxItems int, fixtureRun bool, ownerAct string) (store.SourceSchedule, error) {
+	sourceID := source.ID
 	isFixture := strings.TrimSpace(source.TOSClass) == sources.TOSClassTestFixture
 	if isFixture && !fixtureRun {
 		return store.SourceSchedule{}, fmt.Errorf("source %q is a %s; a schedule on it starts only when the request is marked as a fixture run (fixture_run)", sourceID, sources.TOSClassTestFixture)
@@ -140,6 +148,9 @@ func (rt *Runtime) startSourceSchedule(ctx context.Context, ownerID, computerID,
 	sched.Generation++
 	sched.NextDue, sched.ConsecutiveFailures, sched.UpdatedAt = now, 0, now
 	sched.CrashesWithPollInFlight = 0
+	if feed != nil {
+		sched.FeedURL, sched.FeedKind, sched.FeedName = feed.FeedURL, feed.FeedKind, feed.FeedName
+	}
 	if ownerAct != "" && sched.CreatedByOwnerAct == "" {
 		sched.CreatedByOwnerAct, sched.CreatedByOwnerActAt = ownerAct, now
 	}
@@ -233,7 +244,13 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 	if rt.researchDeps == nil {
 		usage.Status, usage.Error = "error", "research dependencies are not configured"
 	} else {
-		report, pollErr := researchtools.PollSourceOnce(ctx, *rt.researchDeps, ownerID, computerID, sched.SourceID, sched.MaxItems)
+		var report researchtools.PollReport
+		var pollErr error
+		if sched.FeedURL != "" {
+			report, pollErr = researchtools.PollSourceDefinition(ctx, *rt.researchDeps, ownerID, computerID, feedSource(sched), sched.MaxItems)
+		} else {
+			report, pollErr = researchtools.PollSourceOnce(ctx, *rt.researchDeps, ownerID, computerID, sched.SourceID, sched.MaxItems)
+		}
 		usage = store.SourcePollUsage{
 			At: started, Status: report.Status, StatusCode: report.StatusCode, Fetched: report.Fetched,
 			NotModified: report.NotModified, ItemBytes: report.ItemBytes, New: report.New,
@@ -667,6 +684,10 @@ type sourceScheduleRequest struct {
 	Reason          string `json:"reason,omitempty"`
 	// FixtureRun marks a schedule on a test_fixture source (L2a R2-7).
 	FixtureRun bool `json:"fixture_run,omitempty"`
+	// FeedURL adds a feed the registry does not list (Lane F): validated
+	// first, refused with a named code, an owner act. Exclusive with
+	// SourceID.
+	FeedURL string `json:"feed_url,omitempty"`
 }
 
 // HandleSourceSchedules serves /api/autopaper/sources/schedules: GET lists
@@ -695,6 +716,23 @@ func (h *APIHandler) HandleSourceSchedules(w http.ResponseWriter, r *http.Reques
 		var req sourceScheduleRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid JSON body"})
+			return
+		}
+		if strings.TrimSpace(req.FeedURL) != "" {
+			if strings.TrimSpace(req.SourceID) != "" {
+				writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "send feed_url or source_id, not both"})
+				return
+			}
+			sched, ref, err := rt.AddFeedSchedule(r.Context(), ownerID, rt.TextureComputerID(), req.FeedURL,
+				time.Duration(req.IntervalMinutes)*time.Minute, req.MaxItems, ownerActID(r))
+			switch {
+			case ref != nil:
+				writeAPIJSON(w, ref.Status, map[string]any{"error": ref.Error(), "code": ref.Code, "reason": ref.Message})
+			case err != nil:
+				writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+			default:
+				writeAPIJSON(w, http.StatusOK, map[string]any{"schedule": sched})
+			}
 			return
 		}
 		sched, err := rt.startSourceSchedule(r.Context(), ownerID, rt.TextureComputerID(), req.SourceID,

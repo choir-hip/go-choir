@@ -151,6 +151,27 @@ func PollSourceOnce(ctx context.Context, deps Dependencies, ownerID, computerID,
 	if !ok {
 		return PollReport{}, fmt.Errorf("poll_source: unknown source %q; known ids include %s", sourceID, strings.Join(nearbySourceIDs(reg, sourceID, 10), ", "))
 	}
+	return pollDefinedSource(ctx, deps, reg, ownerID, computerID, source, maxItems)
+}
+
+// PollSourceDefinition polls a source the caller holds the definition of: an
+// owner's own feed (Lane F), which lives on its schedule and in no registry.
+// It is PollSourceOnce after the lookup.
+func PollSourceDefinition(ctx context.Context, deps Dependencies, ownerID, computerID string, source sources.Source, maxItems int) (PollReport, error) {
+	if strings.TrimSpace(ownerID) == "" {
+		return PollReport{}, fmt.Errorf("poll_source missing owner context")
+	}
+	if deps.Captures == nil {
+		return PollReport{}, fmt.Errorf("poll_source: the shared capture store is not configured")
+	}
+	reg, err := deps.sourceRegistry()
+	if err != nil {
+		return PollReport{}, err
+	}
+	return pollDefinedSource(ctx, deps, reg, ownerID, computerID, source, maxItems)
+}
+
+func pollDefinedSource(ctx context.Context, deps Dependencies, reg sources.Registry, ownerID, computerID string, source sources.Source, maxItems int) (PollReport, error) {
 	// limit bounds the poll's new captures, counted after the repeat check;
 	// the poller parses up to the hard cap (L2a A5, defect 1).
 	limit := EffectivePollMaxItems(maxItems)

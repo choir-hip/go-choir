@@ -79,7 +79,14 @@ type SourceSchedule struct {
 	MaxItems        int    `json:"max_items"`
 	// FixtureRun marks a schedule on a test_fixture source, started by a
 	// request marked as a fixture run (L2a R2-7).
-	FixtureRun          bool              `json:"fixture_run,omitempty"`
+	FixtureRun bool `json:"fixture_run,omitempty"`
+	// FeedURL, FeedKind and FeedName define a source the owner added by
+	// asking (Lane F): one the embedded registry does not list. The
+	// definition rides on the schedule, so boot recovery, the sweep and the
+	// poll need no other state. Empty for a registry source.
+	FeedURL             string            `json:"feed_url,omitempty"`
+	FeedKind            string            `json:"feed_kind,omitempty"`
+	FeedName            string            `json:"feed_name,omitempty"`
 	State               string            `json:"state"`
 	Generation          int64             `json:"generation"`
 	NextDue             time.Time         `json:"next_due,omitempty"`
