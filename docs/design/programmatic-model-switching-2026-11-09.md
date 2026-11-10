@@ -1,6 +1,7 @@
 # Switching models without a deploy (2026-11-09)
 
-Status: design, not built. Class of the design: green. It is a build order
+Status: design r2, not built (r1 reviewed by Devin and a Sonnet seat, both
+"build with changes"; owner rulings of 2026-11-09 folded in; section 8). Class of the design: green. It is a build order
 for section 3 of
 [provider-vault-and-model-policy-design-2026-10-22.md](../provider-vault-and-model-policy-design-2026-10-22.md)
 (the host model policy), which was designed and never built. It does not
@@ -45,118 +46,192 @@ Three things are mixed in one Go file and change at different rates:
 So the work is to move pool membership out of the binary, at two scopes:
 one computer, and the fleet.
 
-## 3. The design
+## 3. The design (r2)
 
-### 3.1 A computer can define a pool (slice M1)
+### 3.1 One pool schema, one resolver
 
-The policy file gains pool sections:
+A pool is the same object wherever it is written, with the fields
+`modelcatalog.PoolMember` has today:
 
     [pools.default]
-    members = ["devin/swe-2-flash", "opencode-go/iceman-contributor-free",
-               "bedrock/claude-haiku-5-5"]
+    members = [
+      { model = "devin/swe-2-flash", weight = 1 },
+      { model = "opencode-go/iceman-contributor-free", fallback_only = true },
+      { model = "bedrock/claude-haiku-5-5", fallback_only = true },
+    ]
+    failover = true
 
-The first member leads and takes every thread; the rest are fallbacks in
-order. Weights are a later key (`weights = [...]`); one lead and ordered
-fallbacks is what every pool is today. A pool the file defines shadows the
-platform's pool of the same name on that computer; a new name defines a new
-pool. Validation refuses a member the catalog does not list, an empty pool,
-and a duplicate. `choir policy set` and its revisions and rollback work
-unchanged. One short verb covers the common case:
+A plain list of strings is shorthand for "the first member leads with
+weight 1, the rest are fallbacks in order". Shadowing a platform pool that
+is weighted or has `failover = false` with the shorthand is refused: the
+section must say what it means.
+
+One resolver answers "what are pool X's members" for every reader, in this
+order: the computer's own file, then the fleet document (if the computer
+follows the fleet, 3.3), then the compiled pools. Every reader goes through
+it: `Assign`, `Selections`, `ContinuationChain`, `RoleChain`, `unknownPool`
+and the overlay parser all read `catalogPools` today
+(`model_policy.go:230,258,374,482,794`), and a reader left on the compiled
+map would split the answer. The resolver is synchronous and reads a cache;
+the fetch (3.2) refreshes the cache beside it and never blocks a run start.
+
+A member the local catalog does not list is refused at write time, and at
+resolve time it is dropped from the pool with a diagnostic in the run
+metadata. It does not invalidate the file. (r1 said today's
+retired-model path does this. It does not: that path covers pinned models
+only, and an uncatalogued pool member is called as it is today.)
+
+### 3.2 A computer can define a pool (slice M1)
+
+The policy file accepts pool sections. `choir policy set`, its revisions and
+rollback work unchanged. A file with a pool section counts as owner-edited:
+the CLI writes the mark, and the platform never rewrites such a file whether
+or not the mark is there. One verb covers the common case:
 
     choir policy lead devin/swe-2-flash [--pool default]
 
-It reads the file, moves or inserts that member at the front of the pool
-(writing the platform's current members into the file first if the file did
-not define the pool), and writes it back through the validated path.
+It writes the pool as currently resolved into the file if the file does not
+define it, makes that member the weight 1 lead and every other member a
+fallback in its existing order, and writes through the validated path. It
+refuses a pool with `failover = false` or more than one weighted member
+unless `--single-lead` is given, and it refuses a paid lead without
+`--allow-paid` (3.5). `choir policy get` shows, for each pool, where its
+definition came from: the file, the fleet document and its version, or the
+release.
 
-### 3.2 The fleet has one pool document (slice M2)
+### 3.3 The fleet document (slice M2)
 
-The 10-22 design's host document, cut down to `version`, `parent`,
-`sha256`, `pools`, `default_effort`, `made_by` and `reason`. No stages, no
-per-class admission, no overrides yet. The gateway keeps it under
-`/var/lib/go-choir/model-policy/` as content-addressed files with a
-`current` pointer, serves it with the model list, and refuses a member the
-compiled catalog does not list. The compiled `Pools()` is version 1 and the
-fallback when the directory is empty or unreadable.
+The 10-22 design's host document, cut to: `version`, `parent`, `sha256`,
+`pools` (the schema above), `default_effort`, `made_by`, `reason`. The
+gateway keeps it under `/var/lib/go-choir/model-policy/` as
+content-addressed files with a `current` and a `candidate` pointer, and
+serves it with the model list. The compiled `Pools()` is version 1 and the
+floor when the directory is empty or unreadable.
 
-A computer resolves a pool in this order: its own file's `[pools.x]`, then
-the host document (fetched at run start, cached about a minute, last good
-copy kept on disk), then the compiled pools. Run metadata records the
-document version that chose the model. The host document never writes a
-guest file.
+**Who follows it.** A computer follows the fleet unless its file says
+otherwise:
 
-### 3.3 The commands (slice M3)
+    [fleet]
+    follow = false
 
-    choir fleet policy get
-    choir fleet policy set --local f --reason "..."
-    choir fleet policy lead <provider/model> [--pool default] --reason "..."
-    choir fleet policy rollback [--to version]
-    choir fleet policy verify [--pool default]
+Owner, 2026-11-09: "paper model selection should be independent of fleet,
+with an option to follow it." So the paper's file carries `follow = false`
+and its own pool sections, written once by an operator act before the
+first fleet change (`choir paper policy pin`: copy the pools as resolved
+now into the file). From then on the paper's models change only by a
+command aimed at the paper. `choir paper policy follow` removes the
+sections and the line. Any other computer can do the same with `choir
+policy pin` and `follow`.
 
-Admitted by the platform operator gate (in build:
-[paper-control-cli-2026-11-09.md](paper-control-cli-2026-11-09.md)). `set`
-validates, runs one real call through the new lead (the existing verify),
-and only then moves the pointer; a lead that cannot answer is refused. A
-rollback is a new version that copies an older one. Each change is one line
-in the directory's hash-chained log: who, when, the diff, the reason.
+**Effort.** Owner, 2026-11-09: "have reasoning effort set in fleet doc, not
+silent overwrite." Effort resolves: the role's value in the computer's
+file, then the file's `[defaults]`, then the document's `default_effort`,
+then the release's. The platform stops writing effort into files it
+creates. The overwrite at a `platform-policy-version` bump is deleted
+(`ensureDefaultPolicyFile`): an unmarked file whose text is one of the
+platform's own past defaults is read as "no file" and follows the document;
+any other file is left as it is and read as the owner's.
 
-Because the paper's file names `pool:default`, one fleet command moves the
-paper too, with no key minted from a saved session.
+**Staging a change.** `set` and `lead` write a candidate. Computers of the
+test tier (d@e) read the candidate; everyone else reads `current`.
+`promote` moves `current` after the candidate has served a real tool-call
+turn on d@e (the existing guest verify with an explicit provider and model,
+run through the operator gate; a gateway-side ping is not enough, as the
+inkling gate showed). `rollback` is a new version that copies an older one.
+A set that removes a pool name some file may reference is refused without
+`--drop-pool`: a file naming a missing pool fails to parse today
+(`model_policy.go:763-772`).
 
-### 3.4 What is deleted
+### 3.4 The commands
 
-After M2: the silent overwrite at a `platform-policy-version` bump goes
-(fleet effort moves to `default_effort` in the document; a guest file is
-only ever written by its owner). After a soak: pool edits in `Pools()` stop;
-the literal stays only as version 1.
+    choir policy lead | pin | follow            one computer (owner key)
+    choir paper policy lead | pin | follow      a platform computer (operator)
+    choir fleet policy get | set | lead | promote | rollback   (operator)
+
+The fleet verbs ship with M2, the smallest set that makes its proof
+possible. They are admitted by the platform operator gate and each leaves
+one line in the directory's hash-chained log: who, when, the diff, the
+reason. Run metadata gains `llm_policy_version` and the pool's source.
+
+### 3.5 Paid members
+
+The catalog marks each member free or metered (it has the prices). Any
+command that would make a metered member a weighted lead prints the price
+and the pool's last-hour call count and needs `--allow-paid`. This is a
+confirmation on an act that spends money, not a setting. Receipt: the
+8,315 Synthetic calls of 2026-11-09 that followed a pool edit.
+
+### 3.6 What is deleted
+
+The version-bump overwrite of guest files; effort lines in
+platform-written files; pool edits as code changes (the literal stays as
+version 1 and the floor).
 
 ## 4. Is this a switch?
 
-The contract forbids runtime switches that gate a feature. This is not one:
-no code path is turned on or off, and every computer runs the same code.
+No code path is turned on or off, and every computer runs the same code.
 Which model serves a call is an operating choice, like which key is in the
-vault, and each change is a recorded act with a named author. Computers
-still diverge only by what each one adopts (its own file).
+vault, and each change is a recorded act with an author. The rule's intent
+is that what the owner thinks is running is what runs; so the source and
+version of every pool is shown by `policy get` and stamped on each run,
+and nobody has to read `catalog.go` to know.
 
 ## 5. Ways it could fail
 
-1. A bad fleet document breaks every computer at once. Guard: validation
-   against the catalog; a real call through the new lead before the pointer
-   moves; the last good copy on each computer; one-command rollback; the
-   compiled pools as the floor.
-2. The gateway is down. Computers use the last good copy, then the compiled
-   pools. Model calls already need the gateway, so no new fate is shared.
-3. A computer on an older release meets a member its catalog lacks. It
-   treats the member as unknown and skips to the next (today's
-   `retired_remapped` path); the gateway is the backstop.
-4. A lead change moves every thread to a new model and each loses its cache
-   once. The command says so and prints the pool's last-hour call count.
-5. A file-defined pool goes stale when the platform retires a member. The
-   member is skipped with the visible note the retired-model path writes
-   today; the pool does not fail.
-6. Two operators write at once. The pointer move is compare-and-swap on the
-   parent version; the loser is told to re-read.
-7. A member that needs a credential the gateway lacks. Verify fails and the
-   set is refused.
+1. A bad fleet document breaks many computers at once, with no ring and no
+   automatic rollback. Guards: the candidate serves d@e first and must
+   complete a tool-call turn; the paper does not follow; each computer
+   keeps its last good copy; rollback is one command; the compiled pools
+   are the floor. Not built in this slice: automatic revert on a health
+   signal (residual; the 10-22 design's auto-demotion).
+2. A paid lead routes a fleet's traffic silently. Guard: 3.5.
+3. A pool name is dropped and files that name it stop parsing. Guard:
+   `--drop-pool`.
+4. A reader left on the compiled map gives a second answer. Guard: one
+   resolver; a test that greps for other readers of the compiled pools.
+5. A file pool goes stale when a member is retired. The member is dropped
+   at resolve time with a diagnostic.
+6. A shorthand section silently flattens a weighted or no-failover pool.
+   Refused (3.1).
+7. The gateway is down or slow at a run start. The resolver reads the
+   cache; the fetch has a short timeout and never blocks.
+8. A lead change moves every thread, and every Texture document, to a new
+   model once, and each loses its cache. The command says so.
+9. Two operators write at once. Compare-and-swap on the parent version.
+10. A computer on an older release meets a member its catalog lacks: it
+    drops the member (5); the gateway refuses an uncatalogued call anyway.
 
 ## 6. Build order and proof
 
-- **M1** (orange; one review seat): pool sections, validation, `policy
-  lead`. Proof on d@e: define a pool, `verify` shows the new lead served the
-  call, rollback restores the old lead.
-- **M2** (red, gateway and model routing; two seats): the document, the
-  gateway route, guest resolution, the version in run metadata. Proof on
-  staging: move the default lead with one command, see d@e's next run use
-  it without a release, roll back.
-- **M3** (red; rides the operator gate): the fleet verbs and the log.
-- Later, from the 10-22 design and not needed for the switch: stages and
-  admission per computer class, expiring overrides, the catalog as data
-  with a probe suite, the vault, the admin page.
+- **M1** (orange; one seat): the schema, the resolver over file and
+  compiled pools, pool sections, `policy lead | pin`, provenance in `policy
+  get`. Proof on d@e: lead a different member, the verify call is served by
+  it, rollback restores the old lead.
+- **M2** (red, gateway and routing; two seats): the document with candidate
+  and current, the fetch and cache, `[fleet] follow`, effort resolution and
+  the overwrite's deletion, the fleet verbs, the paid guard, the log. Proof
+  on staging: pin the paper; set a candidate lead; d@e's next run uses it
+  and the paper's does not; promote; an ordinary computer's next run uses
+  it; rollback.
+- Later, from the 10-22 design: stages and admission by computer class,
+  expiring overrides, automatic demotion, the catalog as data with a probe
+  suite, the vault, the admin page.
 
 ## 7. Open questions
 
-- Whether the paper should follow the fleet lead at once or after a soak on
-  d@e (the 10-22 design's admission rule). This slice has no stages, so it
-  follows at once; an operator can hold the paper by defining
-  `[pools.default]` in the paper's own file.
-- Whether effort belongs in the fleet document or stays per file only.
+None blocking. Whether d@e alone is enough of a soak before `promote`, or
+the owner's computers should read the candidate too.
+
+## 8. Review record (r1)
+
+Devin and a Sonnet seat, both "build with changes". Adopted: one schema and
+one resolver for both scopes; weights, fallback flags and failover carried;
+a file with pools is never overwritten; the quota chain and every other
+reader go through the resolver; the unknown-member claim corrected and a
+drop path specified; staged candidate before the fleet; the paid guard;
+dropped pool names guarded; a tool-call verify on a real computer; pool
+provenance shown; the fleet verbs moved into M2; the example model is one
+the catalog lists once the Devin provider lands. Not adopted: cutting
+`default_effort` (both seats), overruled by the owner's ruling, with the
+file migration it needs now specified in 3.3; automatic revert on a health
+signal (Sonnet), deferred and named as a residual in 5.1.
