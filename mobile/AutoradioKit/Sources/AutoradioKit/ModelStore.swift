@@ -12,10 +12,32 @@ public struct ModelSpec: Codable, Sendable {
     }
 }
 
+/// A model a library fetches and caches itself (FluidAudio's Core ML bundles): listed, measured and unloaded here.
+public struct ManagedModelSpec: Codable, Sendable {
+    public var id: String
+    public var label: String
+    public var source: String          // e.g. a Hugging Face repo
+    public var approxBytes: Int64      // from the model card; the measured size is in the load report
+    public var license: String
+    public var cachePath: URL?         // where the library caches it, to measure bytes fetched
+    public init(id: String, label: String, source: String, approxBytes: Int64, license: String, cachePath: URL? = nil) {
+        self.id = id; self.label = label; self.source = source; self.approxBytes = approxBytes; self.license = license; self.cachePath = cachePath
+    }
+}
+public struct ModelLoadReport: Codable, Sendable {
+    public var id: String
+    public var loadMs: Double
+    public var fetchedBytes: Int64
+    public var cacheBytes: Int64
+    public var residentBeforeMB: Double
+    public var residentAfterMB: Double
+    public var residentAfterUnloadMB: Double?
+}
+
 /// Models are fetched on demand to Application Support, pinned by SHA-256, resumable (HTTP Range on a .part file),
 /// and unloaded when the current configuration no longer needs them. Lane K ships it with no models registered.
 public actor ModelStore {
-    public let root: URL
+    public nonisolated let root: URL
     private var specs: [String: ModelSpec] = [:]
     private var unloaders: [String: @Sendable () -> Void] = [:]
     private var loaded: Set<String> = []
@@ -61,6 +83,51 @@ public actor ModelStore {
         var h = SHA256()
         while let d = try f.read(upToCount: 1 << 20), !d.isEmpty { h.update(data: d) }
         return h.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    // MARK: Library-managed models
+    // Some libraries (FluidAudio) fetch and cache their own Core ML bundles. Those are registered here so the lab lists
+    // them, measures them (bytes fetched, load time, resident memory before/after, unload) and unloads the others first.
+
+    private var managed: [String: ManagedModelSpec] = [:]
+    private var reports: [String: ModelLoadReport] = [:]
+    public func register(managed s: ManagedModelSpec) { managed[s.id] = s }
+    public var managedSpecs: [ManagedModelSpec] { managed.values.sorted { $0.id < $1.id } }
+    public var loadReports: [ModelLoadReport] { reports.values.sorted { $0.id < $1.id } }
+    public var loadedIDs: Set<String> { loaded }
+
+    /// Run `load` (which fetches if needed and loads, and returns what unloads it) and record what it cost.
+    public func measuredLoad(_ id: String, _ load: () async throws -> (@Sendable () -> Void)) async throws -> ModelLoadReport {
+        let spec = managed[id]
+        let before = residentBytes(), cacheBefore = spec?.cachePath.map(Self.directoryBytes) ?? 0
+        let t0 = DispatchTime.now().uptimeNanoseconds
+        let unload = try await load()
+        let ms = Double(DispatchTime.now().uptimeNanoseconds - t0) / 1e6
+        let after = residentBytes(), cacheAfter = spec?.cachePath.map(Self.directoryBytes) ?? 0
+        let r = ModelLoadReport(id: id, loadMs: ms, fetchedBytes: max(0, cacheAfter - cacheBefore), cacheBytes: cacheAfter,
+                                residentBeforeMB: Double(before) / 1_048_576, residentAfterMB: Double(after) / 1_048_576)
+        reports[id] = r
+        didLoad(id, ms: ms, unload: unload)
+        return r
+    }
+    /// Unload one model and record the resident memory afterwards.
+    public func unload(_ id: String) {
+        guard loaded.contains(id) else { return }
+        unloaders[id]?(); unloaders[id] = nil; loaded.remove(id)
+        if var r = reports[id] { r.residentAfterUnloadMB = Double(residentBytes()) / 1_048_576; reports[id] = r }
+        log?.emit(.note("model \(id) unloaded, \(Int(Double(residentBytes()) / 1_048_576)) MB resident"))
+    }
+    /// Unload everything except `keep` (used before a model that needs the whole budget loads).
+    public func unloadAll(except keep: Set<String>) { for id in loaded.subtracting(keep) { unload(id) } }
+
+    static func directoryBytes(_ url: URL) -> Int64 {
+        guard let e = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.totalFileAllocatedSizeKey, .isRegularFileKey]) else { return 0 }
+        var n: Int64 = 0
+        for case let u as URL in e {
+            let v = try? u.resourceValues(forKeys: [.totalFileAllocatedSizeKey, .isRegularFileKey])
+            if v?.isRegularFile == true { n += Int64(v?.totalFileAllocatedSize ?? 0) }
+        }
+        return n
     }
 
     /// A stage that loads a model reports it so the trace shows load time and memory.

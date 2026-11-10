@@ -374,6 +374,7 @@ extension StageRegistry {
         r.register(.programme, RemoteProgramme.self) { RemoteProgramme($0) }
         registerAppleStages(r)
         registerChoirStages(r)
+        registerExternalModels(r)
         return r
     }
 

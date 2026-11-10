@@ -24,6 +24,7 @@
       "Kit/ChoirSystem1.swift",
       "Kit/Core.swift",
       "Kit/Events.swift",
+      "Kit/ExternalModels.swift",
       "Kit/FixtureClip.swift",
       "Kit/KeptTurns.swift",
       "Kit/LabRuntime.swift",

@@ -121,6 +121,43 @@ No Go code was changed. Each line is a route, the missing piece and what the app
 6. **System 1 deadline**: the engine gives System 1 2 s (`EngineLimits.system1Deadline`) while the route's own deadline is 4 s and a Jev call is usually 300 ms to a few seconds. A slow call is cancelled by the engine and the turn acknowledges without answers. The client default timeout is 5 s; raising the engine limit is the audio/engine lane's call.
 7. **429 Retry-After** is always `1`; the client reports the failure for the turn and does not wait (owner rule).
 8. **Sign-out revocation** needs `DELETE /auth/api-keys/{id}` with `manage:keys` or `admin` (a device key has both); the id comes from the token response (`key_id`). If the call fails the key is still deleted locally and the Lab tab says it was not revoked.
+## On-device models: failure lists (written before the code)
+
+Applies to every model stage in `AutoradioModels`. Per stage, then what the code does about it.
+
+- Download interrupted or no network: FluidAudio's downloader and `ModelStore.ensure` resume or retry on the next ask; a stage whose model is missing throws, the engine records `error`, the turn still ends and the radio resumes (engine rule 3). `ensure` pins the llama GGUF by SHA-256 and refuses a mismatch.
+- Model too big for 6 GB: nothing is bundled, loads are measured (`ModelLoadReport`: bytes fetched, load ms, resident MB before/after, MB after unload) and `ModelStore.unloadAll(except:)` runs before LFM3-Audio loads. If the load throws or the process is killed for memory, the stage stays registered and the error is the record.
+- First-load Core ML compile time (LFM3 builds a multi-GB cache; Parakeet and Kokoro compile on first use): the first load is reported separately from the warm one; stage `begin()`/`speak()` are not on the hot path until the model is loaded (`ModelSlot` loads once and shares it).
+- Memory pressure and thermal throttling: `labState` already carries resident MB and thermal state; the proof prints MB after unload to show whether Core ML actually gave memory back.
+- Wrong sample rate: every model reads 16 kHz mono; `samples16k` resamples frames that are not, voices emit 24 kHz frames labelled as such.
+- Two stages want the same model (EOU 160/320/1280 chunk sizes): one `ModelSlot` per manager, shared across stage instances.
+- Silero hop is 256 ms: bounds events are quantised to it; documented, not hidden.
+- llama.cpp: the option letter must be one token (checked); context is cleared per question (no cross-question leakage); the logits are read at the final prompt position only.
+- LFM3-Audio does not fit beside other models: a stage that cannot load reports the exact error; the next step is recorded in the table.
+
+## Third-party dependencies in the Exact app (settled by reading the pinned Exact source and proving it)
+
+Question: how does a third-party Swift/Core ML library get into the Exact app, given an Exact package cannot depend on a local SwiftPM library?
+
+Findings, from `mobile/.exact-src` at `76cd50f9e`:
+
+- An Exact package (`exact.json` `sources.swift`) is compiled by `swiftc` alone (`host/apple/build.mjs` `swiftModuleArgs`): only its listed files, with `-I <packages dir>`. It has no `-F`, no `-I` for a library, no SwiftPM. So a package cannot `import` a third-party module. (A package may declare `native.library` for a Rust-linked dynamic library; that is not a Swift route.)
+- The app's own module (`AutoradioLab/modules/apple/*.swift`) is compiled with every `modules/apple/*.xcframework` linked in (`frameworkSlice`): a static library slice gives `-I Headers -L dir -l<name>`, a framework slice gives `-F -framework`. `import FluidAudio` works there. The app module imports the package modules (`-I`), so it can use the kit.
+- Exact never embeds a dynamic framework into the app: only static slices are usable (the code says so: "a dynamic library is not linked into the module"). The official llama.cpp release is a dynamic framework with no simulator slice, so it cannot be used as is.
+- No SwiftPM dependency, CocoaPod or remote URL is read for an app or package. So: **third-party Swift code reaches the app as a static `.xcframework` in `AutoradioLab/modules/apple/`**, built by `scripts/build-xcframeworks.sh` from a pinned tag (`mobile/.deps`, gitignored), with the Swift modules placed in the slice's `Headers` directory.
+
+How it is wired here:
+
+1. `AutoradioKit` stays dependency-free (it is copied into the package). The models are a second SwiftPM target, `AutoradioModels`, which depends on `AutoradioKit` and on FluidAudio (`exact: 0.18.3`, trait `TTS`) and on the llama.cpp release binary (macOS only). The Mac commands use it through SwiftPM.
+2. `scripts/sync-exact-package.sh` copies `Sources/AutoradioModels/*.swift` to `AutoradioLab/modules/apple/Models_*.swift` with `import AutoradioKit` rewritten to `import ExactPkg_autoradio`, copies the xcframeworks beside them, and `ModelsEntry.swift` (tracked) gives the app module its `ExactModule`.
+3. The package module cannot import the app module, so `ModelHub.register` is reached by name: the app module defines `@objc(AutoradioModelsRegistrar)`, and `StageRegistry.builtIn()` looks it up with `NSClassFromString` (`ExternalModels.swift`). No registrar class, no models; the app still builds and runs without them.
+4. Built with: FluidAudio v0.18.3 by `swift build --triple arm64-apple-ios18.0[-simulator] --sdk <iphone sdk> --disable-default-traits --traits TTS` (about 10 minutes per slice on a loaded Mac) giving `libFluidAudio.a` (14 MB) and `FluidAudio.swiftmodule`; llama.cpp b12259 by its own `build-xcframework.sh ios-sim ios-device`, static libraries merged with `libtool`. `xcodebuild -create-xcframework -headers` refuses a `.swiftmodule` without a `.swiftinterface`, so the module directories are copied into each slice's `Headers` afterwards.
+
+Proof: see "Proof: models" below (simulator build with FluidAudio linked, registrar found, stages listed in the app).
+
+### For EXACT.md (`docs/reference/exact/native-modules.md`, "Packaging our Swift package")
+
+Replace the sentence "whether a package may list files from outside its own directory, or depend on a SwiftPM library, is not established" with: a package may not depend on a SwiftPM library or import any third-party module (it is compiled by `swiftc` with only its own files and `-I`); third-party Swift/Core ML code goes in the app's own module: static `*.xcframework` files in `modules/apple/` are linked into `libexact_modules.dylib` (`host/apple/build.mjs` `frameworkSlice`: static `lib*.a` slice with `-I HeadersPath -L -l`, or a static framework with `-F -framework`; dynamic frameworks are not embedded by the build; that they would then fail to load at launch is inferred, unrun). The app module can import package modules (`-I` of the packages directory); a package reaches app-module code only by runtime lookup (`NSClassFromString`). A `.swiftmodule` placed in a slice's `Headers` is found by `-I`.
 
 ## The kit in one page
 

@@ -1,9 +1,10 @@
 import Foundation
 import AutoradioKit
+import AutoradioModels
 
 func usage() -> Never {
     FileHandle.standardError.write(Data("""
-    usage: autoradio-replay --turn <folder> --config <file.json> [--out record.json] [--realtime] [--api-key-file <path>] [--base-url <url>]
+    usage: autoradio-replay --turn <folder> --config <file.json> [--set kind=id[,param=v]]... [--out record.json] [--realtime] [--api-key-file <path>] [--base-url <url>]
            autoradio-replay --list-stages
 
     """.utf8))
@@ -17,6 +18,21 @@ func take(_ flag: String) -> String? {
 }
 
 let registry = StageRegistry.builtIn()
+ModelHub.register(into: registry)   // the on-device models; each downloads on first use
+
+/// `--set kind=id` or `--set kind=id,param=value,...` replaces one stage of the configuration (repeatable).
+var overrides: [(StageKind, StageSetting)] = []
+while let o = take("--set") {
+    let parts = o.split(separator: ",").map(String.init)
+    guard let head = parts.first, let eq = head.firstIndex(of: "="), let kind = StageKind(rawValue: String(head[..<eq])) else { usage() }
+    var params: [String: JSONValue] = [:]
+    for p in parts.dropFirst() {
+        guard let e = p.firstIndex(of: "=") else { usage() }
+        let k = String(p[..<e]), v = String(p[p.index(after: e)...])
+        params[k] = Double(v).map { .number($0) } ?? (v == "true" ? .bool(true) : v == "false" ? .bool(false) : .string(v))
+    }
+    overrides.append((kind, StageSetting(id: String(head[head.index(after: eq)...]), params: params)))
+}
 
 if args.contains("--list-stages") {
     let e = JSONEncoder(); e.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -51,6 +67,7 @@ Task {
                 var s = cfg.setting(k)!; s.params["baseURL"] = .string(b); cfg.set(k, s)
             }
         }
+        for (k, st) in overrides { cfg.set(k, st) }
         let rec = try await Replayer.run(turn: KeptTurn(folder: URL(fileURLWithPath: turnPath)), configuration: cfg,
                                          registry: registry, options: ReplayOptions(realTime: realtime))
         let data = try rec.encoded()
