@@ -1,6 +1,6 @@
 # A rematerialized stack is never served: a computer with applied changes stops getting platform updates (2026-11-04)
 
-Status: problem record. No fix in this commit.
+Status: problem record. Fix A landed 2026-11-04 (751471387 and its series); tonight's shot-review failure re-strands the same way (see Investigation 2026-11-09 evening).
 Class: red (self-development apply authority; the fix touches the rebase path
 that opens a platform-accepted operation).
 Evidence file: `pool-obs.json` (a `/health` read of the test computer "pool",
@@ -134,3 +134,83 @@ C. Leave it and wait for an approved candidate (the S6 plan). Rejected by the
   offered at a package conflict as the preferred path.
 
 Residual R1 (Devin, round 2): the open-operation hold covers only the first mint. A notice already on the tape can still be claimed while an operation is open, the package-conflict path mints without the hold, and re-mints of attempts 2 and 3 proceed while an operation is open. Each ends with the Freeze refused and the claim standing; the owner retry recovers it. Pre-existing in kind at stack_base_moved.
+
+
+## Investigation 2026-11-09 evening
+
+Read-only: code at origin/main 0ebab72a7; d@e's `/api/runtime/observability`
+(build 03300ad5f, about 01:30Z); the tonight record
+[shot-review-repeats-on-every-rebase-2026-11-09.md](shot-review-repeats-on-every-rebase-2026-11-09.md)
+and its design
+[shot-verdict-reuse-2026-11-09.md](../design/shot-verdict-reuse-2026-11-09.md)
+(a builder is implementing it; not redesigned here).
+
+### (e) Fix A landed
+
+The candidate fix chosen above (arm and run the rebase path also at
+`stack_rematerialized` when the served base is not the booted base) is on
+main: 751471387 (2026-11-04) and its series. `armRebaseNotice`
+(`internal/agentcore/rebase_notice.go:117-127`) now handles
+`sourceproj.StateRematerialized`, and `clean_rebase.go:163` carries the
+open-operation hold. d@e shows it working: after the 00:38:50Z deploy the
+boot logged the moved base, a clean rebase started at 00:43:51 and was
+accepted at 00:46:23. The original silence ("none minted: the stack is
+stack_rematerialized") no longer occurs.
+
+### (a) The stranding is still visible, by another road
+
+d@e's `effective_release` at about 01:30Z: `layered: true`, `base_commit`
+d6d91f1a6, `build_commit` 03300ad5f, `diverged: true`. The computer is
+behind the fleet exactly as this record described, now because the gate
+refused: "operation clean-rebase-e68c31dc ... shot review: both shots show
+the identical Loading... state ... the candidate failed to apply" (00:50:14Z),
+then "rebase notice minted ... (attempt 1)" at 00:53:54, then
+"none minted: an assignment claimed the pair" at 01:08:59. The model-route
+round is the only path that serves it, and it costs an engineering round.
+
+### What stranding remains after verdict reuse
+
+The design's ladder is B (equal frontend digest: reuse, liveness check), C
+(shoot, compare hashes to the accepted AFTER shots), D (today's full review).
+Reuse removes the failure for the common case (a Go-only or docs deploy).
+What it leaves, by construction:
+
+1. Rung D on a changed frontend. A deploy that moves the frontend bytes under
+   the layer (the launcher change was one) still reaches a judge, and a judge
+   can fail it. `recordMaterializationFailed` ("the computer keeps its current
+   release", `self_development_materializer.go:727`) is unchanged: the
+   computer stays on the old base, and the only recovery is the rebase notice
+   to the model route. One clean-rebase attempt per (operation, booted base)
+   pair stays as it is, so the stranding lasts until the model round finishes
+   or the next deploy gives a new pair.
+2. The first rebase after the build has no `attested` prior (the design's
+   failure 8): it shoots once, so one more exposure to rung D.
+3. A driver change (`driver_id`) forces C or D on the deploy that changes it.
+4. A liveness-check failure (backend-only break) goes to D by design; correct,
+   but it is a stranding when the failure is the sandbox's, not the build's.
+5. The 45-minute shots deadline (`desk_shots.go:60`) still blocks engineering
+   admission while an accepted operation waits.
+
+Unchanged, and the root of 1: a failed *review* of a rebase and a failed
+*apply* of a candidate are the same gate outcome. A rebase differs: the layer
+was already approved, so a failure says something about the sandbox, the
+judge or the platform change, not the layer. The design's S0 makes a not-ready
+page a failed job with a cause (not a verdict). One further step, not in the
+design, would remove most of what is left: for a clean-rebase operation, a
+failed *job* (not-ready, sandbox fault) releases the pair for exactly one
+re-attempt after the next shoot, while a judge *fail* verdict goes to the
+notice as today. That is a gate change (red, tier 2), small (the pair claim in
+`rebase_notice.go`/`clean_rebase.go`, the materializer's failure branch), about
+3 hours, and it should wait for the S0 to S3 builder to land. Suggested, not
+required.
+
+### Belief
+
+Confirmed: fix A is on main and fires; d@e is currently stranded by the
+Loading verdict, and the notice route is working it (an assignment claimed the
+pair). Hypothesis: the second road (gate failure) will recur on every deploy
+that moves frontend bytes until S0 lands. Class of this record's remaining
+work: red; owner: the verdict-reuse builder. Cluster: not a member (no
+obligation is lost here; a pair claim stands), though the stranded pair and
+the stranded Wait share one symptom (an owner-visible computer that stopped
+moving, with a notice as the only wake).

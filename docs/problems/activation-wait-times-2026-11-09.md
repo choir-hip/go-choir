@@ -310,3 +310,71 @@ machinery; 5 the serial-fence coupling and the lane special case.
    let unrelated assignments run.
 7. Do the judges' waits (support_judge 2 min queue) ever hold a shared slot
    while a desk activation is due?
+
+
+## Investigation 2026-11-09 evening
+
+Read-only: dispatcher code at origin/main 0ebab72a7 (`internal/actor/dispatcher.go`
+last changed 2026-10-26, ce0b41d93, so nothing here is fixed or instrumented
+since this record), and d@e's `recent_log` at about 01:30Z (build 03300ad5f).
+
+### Is there an action? Yes: one, small, and it is option 1
+
+New evidence for H1, from d@e tonight. The log shows four activation waits for
+one agent, `management:c061de6f`:
+
+| time (Z) | waited | updates | slots | due_agents |
+|---|---|---|---|---|
+| 00:50:38 | 3m15s | 29 | 1/8 | 1 |
+| 01:04:16 | 8m16s | 33 | 2/8 | 2 |
+| 01:21:52 | 54s | 42 | 2/8 | 2 |
+| 01:26:15 | 2m23s | 80 | 2/8 | 2 |
+
+Slots in use never exceed 2 of 8, so D6 (no free slot) is excluded. The
+retry hold (D3) is for failing handlers and nothing in the log shows a failure
+for this agent. What is left is the serial fence, D5: management is inside one
+long synchronous activation (a delegated engineering assignment was running
+at tool-loop iteration 91-104 in the same window; the log does not show which
+activation held management's fence) and its occurrences queue behind it, 80 of them by 01:26. That is H1 at
+a magnitude that is no longer one provider call. It remains a hypothesis
+(the dispatcher records no cause), but it is the leading one, and the point
+that matters is that the record still cannot say. An unexplained number gets
+a read-only record when seen (CLAUDE.md), and this is the number.
+
+Do the 80 queued updates delay real work? Unknown, for the same reason. The
+records-inbox contract says a wake carries no work (the turn reads its inbox
+itself), which suggests the held-back occurrences are bookkeeping; but 8m16s
+for management is long enough that a real directive could sit behind it.
+Open question 4 of this record is therefore the next read: what kinds the
+queued updates were.
+
+### The smallest correct fix
+
+Option 1 of section 5, nothing more: in `dispatchPending`
+(`dispatcher.go:355-377`) record why a due agent was skipped (busy fence, hold,
+no room) and, for the busy case, the holder's start time; carry
+`cause=busy|held|noroom holder_started=...` and the queued kinds into the
+`activation wait` line (`logActivationWait`, :694-724). One file plus a test
+on the log line. Class orange (a log field; no scheduling change). About 1.5
+to 2 hours for a Sonnet builder. No restart-rule implication (process memory,
+no resumer). Not built.
+
+### What not to do
+
+Options 2 to 5 stay unbuilt until the cause field has run for a day. The data
+already says options 2 (event-driven deferrals A1/A2) and 4 (the outbox hop)
+are not what the 8m16s was: no dispatcher deferral or hold line appears in the 512-line log window (00:49 to 01:31Z). Option 5 (fence
+by work, not by turn) is the only one that would remove an 8-minute fence, and
+it changes the delivered-equals-incorporated invariant; it needs the cause
+field and the queued kinds first. This is also the same substrate shape as
+the cluster below in one respect: an obligation (the queued update) is held
+by a unit of exclusion longer than its own work, with nothing visible.
+Cross-reference:
+[unsettled-obligations-cluster-2026-11-09.md](unsettled-obligations-cluster-2026-11-09.md)
+(this record is a sibling, not a member: the updates here do run, late).
+
+### (b) to (e)
+
+Cause: H1 leading, unconfirmed; what would confirm it is the cause field
+(fix above) on the next wait. Substrate (the synchronous-turn fence), but the
+action tonight is observation. Fixed on main: no.

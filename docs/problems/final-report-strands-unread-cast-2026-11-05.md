@@ -1,6 +1,6 @@
 # A second Cast into an open round is stranded by the round's final Report (2026-11-05)
 
-Status: open. Mutation class of this doc: green. Evidence: the trace bundle of
+Status: Cast-over-final race FIXED by 020276dde (2026-11-04, see Investigation 2026-11-09 evening); the Wait-with-no-wake residue is open. Mutation class of this doc: green. Evidence: the trace bundle of
 trajectory 5c725f71-360f-5d20-a779-df8e879c6a07 (doc
 ccf8c833-a796-58cd-ac85-cb413453a7e3) on d@e
 (computer-59c902c5d46caecc0a180a8557164e72), read-only, and code at
@@ -141,3 +141,37 @@ revert the check.
 
 The stuck trajectory 5c725f71 needs an owner act (revise the doc, which opens a
 new Texture activation); nothing in the system will wake it on its own.
+
+
+## Investigation 2026-11-09 evening
+
+Read-only: code at origin/main 0ebab72a7.
+
+### (e) Already fixed: the race
+
+020276dde (2026-11-04 22:13 -0500, which is 03:13Z on 11-05, about an hour
+after the trace this record reads): "a final Report cannot close a round over
+an unread Cast; a Cast in a closed round wakes its caster". This is smallest
+fix 1 and part of fix 2 of this record, built as proposed.
+`refuseFinalOverUnreadCast` (`internal/store/inbox.go:665`, called at :527)
+refuses a recipient's final Report while the unread range of its inbox holds a
+Cast of the same conversation and round; system closures, engineering and
+management-task inboxes are exempt. Tests: `internal/store/inbox_unread_cast_test.go`,
+`internal/agentcore/inbox_unread_cast_test.go`. The race cannot recur as
+described; I did not reproduce it.
+
+### (a) Current truth of the rest
+
+The stuck trajectory 5c725f71 was an owner-act residual, not touched here. The
+substrate fact the record named in its point 3 is unchanged and is now the
+live defect: Texture's `Wait` is free text (`turnNamesNextActor`,
+`internal/textureowner/texture_next_actor.go:52`), the runtime holds no timer
+or wake for it, and a Wait with nothing behind it is accepted. Tonight's
+b@c theme rounds are six trajectories ending that way
+([theme-rounds-stuck-2026-11-09.md](theme-rounds-stuck-2026-11-09.md), B and
+C). So the Cast-over-final race is the same defect class reached by another
+road: the cluster doc
+[unsettled-obligations-cluster-2026-11-09.md](unsettled-obligations-cluster-2026-11-09.md)
+carries the open part, with fix 1 (a Wait with nothing serving the request
+closes the work item and wakes management). Substrate for the open part;
+the closed part was a store state-machine bug.

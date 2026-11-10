@@ -1,6 +1,6 @@
 # A trajectory whose last Texture run passivates never settles (2026-11-05)
 
-Status: open; documented first, the fix follows in the same commit (mission
+Status: FIXED by f58ba6707 (2026-11-05; see Investigation 2026-11-09 evening). Was: open; documented first, the fix follows in the same commit (mission
 tempo rule 6). Class: red (lifecycle settlement).
 
 ## Evidence
@@ -48,3 +48,27 @@ settles its work item while a Cast to research is still unanswered now
 settles the trajectory at its passivation, so the late reply lands in a
 settled trajectory (before, the next completed run settled it after the
 reply). The stuck trajectory f62bea6c is not rescued (no run end follows).
+
+
+## Investigation 2026-11-09 evening
+
+(e) Fixed on main by f58ba6707 (2026-11-05, "a work-bound run's passivation
+after its last work settles the trajectory", red), as the section above
+describes: `lifecycleRunEndsActivation` (`internal/store/lifecycle.go:3088`) is
+used at `store.go:359` and `lifecycle.go:3347`. Tests are named above.
+Evidence the fix works: on b@c, Chrome Pastel (9263779a) ended with
+`work_settled` then `trajectory_settled` one minute later, on a Texture turn
+whose Done passivated.
+
+The fix covers one road only: the turn that settles the last work item. It
+does not cover a trajectory whose last Texture turn *waits*. There the work
+item stays open, so `lifecycleSettlementReady` is false at the passivation
+and nothing runs again. Six live b@c trajectories are in that state
+([theme-rounds-stuck-2026-11-09.md](theme-rounds-stuck-2026-11-09.md)). This
+is the same hole the original mechanism section named ("nothing wakes another
+run, nothing ever settles"), moved from the settle step to the wait step. The
+class is carried by
+[unsettled-obligations-cluster-2026-11-09.md](unsettled-obligations-cluster-2026-11-09.md).
+The residual in this record's Fix paragraph (a late reply landing in a settled
+trajectory) was not observed. Not re-checked: the rescue of f62bea6c (no run
+end follows it; still unrescued by design).

@@ -58,3 +58,31 @@ counts: `objectgraph_reader_gate.sites`, keyed
 keys with the rest counted under `overflow`. After a research-brief
 trajectory on d@e, the `choir.texture_document|undeclared_reader|...` and
 `choir.texture_revision|undeclared_reader|...` keys name the real callers.
+
+
+## Investigation 2026-11-09 evening
+
+(a) Not reproduced; (e) fixed by 0d97fe9d7 (2026-11-05, "the activation-end
+idle answer and the frame's owner revision read Texture kinds as their
+custodian", orange). The two sites named above use `withKindReader`
+(`internal/agentcore/texture_frame.go:80` and :296; the idle answer lives in
+the same fix). d@e's `objectgraph_reader_gate` at about 01:30Z on build
+03300ad5f reads `{"mode":"enforce","counts":{}}`: the gate is in enforce
+mode, not observe, and it has recorded no violation since boot, across
+the activity of that boot (a running engineering assignment, shot rounds,
+texture evidence writes). That is runtime evidence that the sites are
+declared, but it is a single boot's window, not a drill.
+
+(b) The record's attribution (two sites matched on counts) is now backed by
+the fix plus the zero count; it was never confirmed from a trace. (c) Symptom
+(undeclared reader at two call sites), not substrate; the substrate part
+(the gate and its site observer) exists and is what makes a recurrence
+visible: `objectgraph_reader_gate.sites` names the caller. (d) Nothing to
+build. The listed residuals (`story_analysis.go` research reads of a Texture
+kind, `api_trajectory.go:425`, rebase paths, `rlm_reduce.go`) are unchanged
+and would show in `sites` if reached; the enforce mode means a reach now
+refuses rather than counts, which is worth one drill on d@e before the
+paper's rings (research reading a story). Not part of the settlement cluster:
+this record belongs to the custody gate, and its original trigger (a
+passivated final turn that settles) was f58ba6707's side effect, not a
+settlement defect.

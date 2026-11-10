@@ -51,7 +51,7 @@ crash closes the open work as interrupted (restart rule).
 
 ## State
 
-Documented; not fixed. Option 1 needs a public fork repository under the org,
+Superseded: FIXED by the fork pin 1278a1afc (2026-11-06; see Investigation 2026-11-09 evening). Was: documented; not fixed. Option 1 needs a public fork repository under the org,
 an outward step the owner is asked about. Until then the race shard can fail
 on `TestSessionWidenedStdlib`; a failure there is this defect, not a flake.
 
@@ -74,3 +74,28 @@ Pre-existing upstream residuals Devin named, unchanged by the fork:
 the interpreter (the deferred call runs under `f.mutex` and the closure's
 restore takes it again); and a cell can reassign non-constant process
 globals such as `io.EOF` or `time.Local` inside its own worker process.
+
+
+## Investigation 2026-11-09 evening
+
+(e) Fixed on main by 1278a1afc (2026-11-06, "pin yaegi to the choir-hip fork
+(v0.16.3 + the goroutine closure race fix, upstream #1752, and the select race
+fix, #1739)", orange). `go.mod` carries
+`replace github.com/traefik/yaegi => github.com/choir-hip/yaegi
+v0.16.4-0.20261106162235-3805d15424cc`. The "State" paragraph above ("Until
+then the race shard can fail on `TestSessionWidenedStdlib`") is stale.
+
+(a) Not re-run: I did not run the race shard or the standalone repro; the
+claim "96/100 on stock, 0/100 on the fork" is the earlier record's. No CI
+read was made. Upstream today (`gh pr view`, read-only): PR #1752 is OPEN and
+no longer a draft, not merged; PR #1739 is OPEN, not merged. So the `replace`
+stays until both release; the go.mod comment says to remove it then.
+
+(b) to (d) Root cause confirmed in the earlier text, in yaegi, not Choir.
+Substrate (the interpreter), fixed in the dependency. Remaining, unchanged
+and named by Devin: `defer g()` where `g` holds an interpreted function
+literal can deadlock under `f.mutex`; a cell can reassign non-constant
+process globals such as `io.EOF` inside its own worker. Both are bounded to
+one worker process under gVisor, and a crash closes the open work as
+interrupted. No action tonight. One housekeeping action for later: when #1752
+and #1739 release, delete the `replace`.

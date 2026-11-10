@@ -98,3 +98,48 @@ go to the vault (docs/design/secrets-vault-design-2026-10-28.md, accepted,
 not built). The kind filter that remains is custody (Texture bodies, the
 mailbox), not secrecy. The deliverables channel drops its secret scan; a
 false positive would only refuse a legitimate report.
+
+
+## Investigation 2026-11-09 evening
+
+Read-only: code at origin/main 0ebab72a7; d@e `/api/runtime/observability`
+(build 03300ad5f, read about 01:30Z).
+
+### Current truth
+
+Both defects are fixed on main. The L7 acceptance was not re-run in this
+investigation, so staging is unproven.
+
+1. The capsule start under the store snapshot: 8719bc698 (2026-11-09, "a
+   capsule spawn takes no store copy, mounts a shared content-addressed
+   source lower, and the launch gets a fresh deadline"). That is the owner's
+   redirected fix (no copy by default, the launch with its own deadline); the
+   comment at `internal/capsule/executor.go:~543` says so. d@e's log at 01:31Z
+   shows an engineering assignment (run:assignment-abbe7a59...) at tool-loop
+   iteration 104 inside a live capsule, so capsules do start there now. I did
+   not confirm that this is the L7 prompt.
+2. No path to Files: e3dab98a9 with reviews 891658342, 10774b3a1 and e8bd4e9df
+   (all 2026-11-09). `internal/capsule/deliverables.go` and
+   `internal/agentcore/engineering_deliverables.go` stage the regular files in
+   `capsule.DeliverablesDir` when the capsule is frozen for its terminal
+   report and file them at `Reports/<assignment>/<name>` through ownerfiles;
+   the report's summary lists the paths. This is the "artifacts channel beside
+   screens" option the record chose, with no secret scan, per the owner's
+   late ruling.
+
+### Remaining
+
+- "Open it in Reader": a quick search found no desk verb that opens a Files
+  path in Reader. The L8 embed tokens may be the intended route (the
+  definition lists L8 separately). Unconfirmed.
+- A launcher timeout is still cancelled outright with no retry
+  (`engineering_assignment_runtime.go:866`). Not touched, and no longer the
+  common cause.
+
+### (b) to (e)
+
+Cause of (1): confirmed (`spawn phase=computer_store took=1m28s` lines and
+the code). Substrate (the launch charged the whole store copy to one
+deadline); the fix is at the substrate (no copy). Cause of (2): confirmed, by
+design. Fixed on main: yes, both. Next action: run the L7 acceptance on d@e
+(the prompt in this record) and read the PDF in Files. No code.

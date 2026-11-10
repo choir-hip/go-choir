@@ -149,3 +149,28 @@ as on the candidate.
    operation and a failure chance for each platform deploy, whatever the deploy touched.
 2. A failed review strands the computer on the old base.
 3. The Loading finding may mean shot passes are unreliable as a gate in general.
+
+
+## Investigation 2026-11-09 evening
+
+Read-only: d@e at about 01:30Z (build 03300ad5f, `effective_release`
+unchanged from the section above: `layered`, base d6d91f1a6, `diverged:
+true`). Status: the design is being built by another builder; nothing here
+re-opens it.
+
+Confirmed again: the failed round's log lines stand as written (verdict 00:50:14,
+notice 00:53:54), and d@e is still on the old base 40 minutes later. The
+notice's pair was claimed by an engineering assignment at 01:08:59, and an
+engineering run is live in a capsule on d@e at 01:31Z (iteration 104). So the
+recovery route is working; its cost is the point of the record.
+
+The one thing to add for the build: what stranding remains after verdict reuse
+is written into
+[rematerialized-stack-never-served-2026-11-04.md](rematerialized-stack-never-served-2026-11-04.md)
+(Investigation 2026-11-09 evening): rung D failures, the first rebase after
+the build (no attested prior), driver changes, and a failed *job* treated as a
+failed *verdict*. For the builder: S0 should make "not ready" a failed job
+with a named cause, and the rebase branch of the gate should not turn a failed
+job into `recordMaterializationFailed` on the same path as a judged fail.
+The "Loading..." question (H1 sandbox readiness versus H2 both builds really
+unrendered) is still open; neither the images nor the plan were read.
