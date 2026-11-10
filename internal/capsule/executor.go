@@ -2361,16 +2361,16 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 	}
 	// Screens: the engineer's own screenshots, beside release/.
 	screenChanges := dropRestoredToBase(changes, caps.MergedDir, pinnedSourceLowerRoot(caps.MergedDir))
-	screens, err := e.stageScreens(ctx, rootFD, screenChanges, temporary, plan != nil)
-	if err != nil {
-		return nil, err
-	}
-	// A change to the UI needs at least one screen (screens_required.go).
 	lowerRoot := pinnedSourceLowerRoot(caps.MergedDir)
 	baseHasDir := func(rel string) bool {
 		_, isDir, err := readSourceBeneath(lowerRoot, platformSourcePrefix+"/"+rel)
 		return err == nil && isDir
 	}
+	screens, err := e.stageScreens(ctx, rootFD, screenChanges, temporary, plan != nil, needsBeforeAfterPair(screenChanges, baseHasDir))
+	if err != nil {
+		return nil, err
+	}
+	// A change to the UI needs at least one screen (screens_required.go).
 	if err := requireScreensOrPlan(screenChanges, screens, baseHasDir, plan); err != nil {
 		return nil, err
 	}

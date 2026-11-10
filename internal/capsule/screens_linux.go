@@ -13,7 +13,7 @@ import (
 // stageScreens copies the capsule's screens into <temporary>/evidence/screens/
 // (stageScreenFiles). Files are opened beneath the capsule root without
 // following symlinks, as release files are. nil when there are none.
-func (e *Executor) stageScreens(ctx context.Context, rootFD int, changes []FileChange, temporary string, planned bool) ([]ScreenFile, error) {
+func (e *Executor) stageScreens(ctx context.Context, rootFD int, changes []FileChange, temporary string, planned, pairRequired bool) ([]ScreenFile, error) {
 	names, err := screenNames(changes)
 	if err != nil || len(names) == 0 {
 		return nil, err
@@ -37,8 +37,9 @@ func (e *Executor) stageScreens(ctx context.Context, rootFD int, changes []FileC
 	}
 	// A plan bundle's before shots come from the running build on the
 	// platform, not from this capsule, so the late-before rule has nothing
-	// to judge (design 3.3, Freeze rule).
-	if !planned {
+	// to judge (design 3.3, Freeze rule). A diff that needs no before and
+	// after pair (a new package) has no before shot to be late.
+	if !planned && pairRequired {
 		if err := refuseLateBeforeShots(names, oldest, func(name string) (time.Time, error) { return statTime(ScreensPrefix + name) }); err != nil {
 			return nil, err
 		}

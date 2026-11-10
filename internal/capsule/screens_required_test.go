@@ -222,3 +222,40 @@ func TestSourceChangeTimesIgnoreExemptEdits(t *testing.T) {
 		t.Fatalf("oldest %v newest %v err %v, want both %v", oldest, newest, err, t0)
 	}
 }
+
+// docs/problems/theme-rounds-stuck-2026-11-09.md A: Tide Pool (a new package)
+// failed its Freeze twice on "before-shot order", though a new package needs
+// no before shot. stageScreens runs the late-before check only where the
+// diff needs a pair (needsBeforeAfterPair), the same predicate requireScreens
+// asks. Ways it can fail, written before it: a new-package diff is still
+// judged late; a diff that modifies or deletes an existing file, adds to an
+// existing package, or mixes a new package with such a change, is no longer
+// judged; the two rules drift apart.
+func TestNeedsBeforeAfterPairIsTheLateCheckGate(t *testing.T) {
+	has := func(rel string) bool { return rel == "frontend/src/packages/reader" }
+	newPkg := diffOf(ChangeAdded, "frontend/src/packages/tide/App.svelte", "frontend/src/packages/tide/pool.js")
+	for _, tc := range []struct {
+		name    string
+		changes []FileChange
+		want    bool
+	}{
+		{"a new package alone", newPkg, false},
+		{"a modified file", diffOf(ChangeModified, "frontend/src/App.svelte"), true},
+		{"a deleted file", diffOf(ChangeDeleted, "frontend/src/Old.svelte"), true},
+		{"a file added to an existing package", diffOf(ChangeAdded, "frontend/src/packages/reader/Extra.svelte"), true},
+		{"a new package and a changed existing surface", append(append([]FileChange(nil), newPkg...), diffOf(ChangeModified, "frontend/src/main.js")...), true},
+		{"a new package and a file added to an existing one", append(append([]FileChange(nil), newPkg...), diffOf(ChangeAdded, "frontend/src/packages/reader/Extra.svelte")...), true},
+		{"only exempt paths", diffOf(ChangeModified, "docs/design/x.md"), false},
+		{"no changes", nil, false},
+	} {
+		if got := needsBeforeAfterPair(tc.changes, has); got != tc.want {
+			t.Errorf("%s: needsBeforeAfterPair = %v, want %v", tc.name, got, tc.want)
+		}
+		// One predicate: requireScreens asks for the pair exactly when it
+		// holds (given screens but no pair).
+		err := requireScreens(tc.changes, []ScreenFile{{Name: "home.png"}}, has)
+		if asked := err != nil && strings.Contains(err.Error(), BeforeAfterRequiredReason); asked != tc.want {
+			t.Errorf("%s: requireScreens asked for a pair = %v, want %v (%v)", tc.name, asked, tc.want, err)
+		}
+	}
+}
