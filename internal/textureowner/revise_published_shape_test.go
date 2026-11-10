@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
@@ -40,6 +41,11 @@ func TestTakeAndVerbatimForkOfAStructuredVersionAfterCutover(t *testing.T) {
 		t.Fatalf("cutover: %v", err)
 	}
 	start := startObservationLifecycle(t, core.Store())
+	// Staging enforces the writer registry; this package's fixtures run in
+	// observe (TestMain), which is why a take that wrote choir.source_entity
+	// as "owner" passed here and was refused on a real computer. The fixture
+	// is seeded; the requests run under enforce.
+	t.Cleanup(objectgraph.SetModeForTest(objectgraph.WriterGateEnforce))
 	v := publishedShapeVersion("pub-shape-v3")
 	handler.PublicationVersions = &fakeVersions{versions: map[string]PublicationVersion{v.PublicationVersionID: v}}
 
@@ -48,7 +54,7 @@ func TestTakeAndVerbatimForkOfAStructuredVersionAfterCutover(t *testing.T) {
 		t.Fatalf("take status=%d body=%s", w.Code, w.Body.String())
 	}
 	// The published text is the body's projection; read it back from the take.
-	taken, err := core.Store().GetLifecycleRevision(t.Context(), start.OwnerID, start.ComputerID, decodeReceipt(t, w).RevisionID)
+	taken, err := core.Store().GetLifecycleRevision(objectgraph.WithReaderIfAbsent(t.Context(), objectgraph.WriterOwner), start.OwnerID, start.ComputerID, decodeReceipt(t, w).RevisionID)
 	if err != nil || taken.Content == "" {
 		t.Fatalf("taken revision=%+v err=%v", taken, err)
 	}

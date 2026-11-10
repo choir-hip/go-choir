@@ -174,7 +174,14 @@ func (h *Handler) commitOwnerBodyEdit(ctx context.Context, doc types.Document, o
 			return ReviseReceipt{}, refuseOwnerRevision(http.StatusBadRequest, "invalid lifecycle revision payload")
 		}
 		command.CommandDigest = commandDigest
-		result, commitErr := h.Store.CommitLifecycleArtifactHeadWithSourceGraph(asOwner(ctx), command, graph)
+		// The owner writes the revision, but the source entities and refs it
+		// copies in are Texture-custodian kinds with no owner edits: the batch
+		// is committed by the kind's registered writer, as a desk revision is.
+		commitCtx := asOwner(ctx)
+		if len(graph.SourceEntities) > 0 || len(graph.SourceRefs) > 0 {
+			commitCtx = asTextureCustodian(ctx)
+		}
+		result, commitErr := h.Store.CommitLifecycleArtifactHeadWithSourceGraph(commitCtx, command, graph)
 		if commitErr != nil {
 			if errors.Is(commitErr, store.ErrConcurrentStateChange) || errors.Is(commitErr, store.ErrLifecycleCommandConflict) || errors.Is(commitErr, store.ErrLifecycleInvalidTransition) {
 				return ReviseReceipt{}, refuseOwnerRevision(http.StatusConflict, commitErr.Error())
