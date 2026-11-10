@@ -121,8 +121,8 @@ func (rt *Runtime) EnsurePlatformPolls(ctx context.Context, owner, computer stri
 // recoverPlatformPollsAtBoot carries every poll across this boot. A poll in
 // flight at the boot is closed (it is not resumed) and counted; at two in a
 // row the poll is closed with that cause. With start, each active poll's loop
-// starts, one interval after boot. A computer with a known owner also makes
-// its own polls exist.
+// starts, one interval after boot. Only polls that already exist start: a poll is
+// created by use (a story publish, a fork), so only publishers poll for op-eds.
 func (rt *Runtime) recoverPlatformPollsAtBoot(ctx context.Context, start bool) {
 	if rt == nil || rt.store == nil {
 		return
@@ -154,9 +154,6 @@ func (rt *Runtime) recoverPlatformPollsAtBoot(ctx context.Context, start bool) {
 		if start && poll.State == store.PlatformPollActive {
 			rt.startPlatformPollLoop(poll)
 		}
-	}
-	if start && strings.TrimSpace(rt.selfdevRouteOwnerID) != "" {
-		rt.EnsurePlatformPolls(ctx, rt.selfdevRouteOwnerID, rt.cfg.ComputerID)
 	}
 }
 

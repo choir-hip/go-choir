@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -325,5 +326,46 @@ func TestOpedVerdictCourierIsRetried(t *testing.T) {
 	poll, _ = s.GetPlatformPoll(ctx, owner, store.PlatformPollOpedIntake)
 	if len(feed.posted) != 1 || len(poll.CourierPending) != 0 {
 		t.Fatalf("posted %v pending %v", feed.posted, poll.CourierPending)
+	}
+}
+
+// Review B1: the paper's computer bounds the Jev calls one publisher can cost
+// in a day. Over the bound the arrival gets a visible verdict (unavailable,
+// with the reason) and costs no call.
+func TestOpedGateIsBoundedPerPublisher(t *testing.T) {
+	rt, s, feed, judge, owner, computer := gateFixture(t, map[string]float64{})
+	ctx := context.Background()
+	var items []OpedFeedItemWire
+	for i := 0; i < opedGatePerPublisherPerDay+3; i++ {
+		v := fmt.Sprintf("pub-b%d-v1", i)
+		it := opedItem(v)
+		feed.versions[v] = PublicationVersionWire{PublicationVersionID: v, Title: "t", Content: "A view.", ManifestHash: it.ManifestHash}
+		items = append(items, it)
+	}
+	feed.opeds = []OpedFeedWire{{Items: items, NextCursor: "2026-11-10T00:00:00Z"}}
+	for i := 0; i < 4; i++ {
+		if err := rt.runPlatformPollOnce(ctx, owner, store.PlatformPollOpedIntake); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if judge.calls != opedGatePerPublisherPerDay {
+		t.Fatalf("judge calls = %d, want the bound %d", judge.calls, opedGatePerPublisherPerDay)
+	}
+	verdicts := tapeByKind(t, s, owner, computer, "doc-story", types.OpedRecordVerdict)
+	if len(verdicts) != len(items) {
+		t.Fatalf("verdict records = %d, want one per arrival (%d)", len(verdicts), len(items))
+	}
+	over := 0
+	for _, v := range verdicts {
+		if v.Oped.Verdict.Verdict == types.OpedUnavailable && v.Oped.Verdict.Reason != "" {
+			over++
+		}
+	}
+	if over != 3 {
+		t.Fatalf("over-the-bound verdicts = %d, want 3", over)
+	}
+	// Accepted wakes of the story keep their gap: five accepted op-eds, one wake.
+	if wakes := docWakes(t, s, owner, computer, "doc-story"); len(wakes) != opedGatePerPublisherPerDay {
+		t.Fatalf("wakes = %d, want the %d accepted op-eds carried together in one decision", len(wakes), opedGatePerPublisherPerDay)
 	}
 }

@@ -43,6 +43,10 @@ const (
 	opedGateCallTimeout        = 90 * time.Second
 	opedGatePerTick            = 5
 	opedGateMaxFailures        = 3
+	// Bounds on what one publisher or one story can cost in Jev calls a day.
+	// Over a bound the arrival gets a visible verdict and costs no call.
+	opedGatePerPublisherPerDay = 5
+	opedGatePerStoryPerDay     = 20
 	opedGateStoryChars         = 6000
 	opedGateOpedChars          = 8000
 )
@@ -140,8 +144,22 @@ func (rt *Runtime) runOpedGates(ctx context.Context, feed PlatformFeed, poll *st
 		if item.Failures > 0 && time.Since(item.LastAt) < opedGateBackoff[item.Failures] {
 			continue
 		}
+		var run int
+		var err error
+		if why := gateOverBound(poll, item); why != "" {
+			if run, err = rt.concludeGateOverBound(ctx, owner, computer, item, why); err != nil {
+				continue
+			}
+			delete(poll.GateQueue, v)
+			if poll.CourierPending == nil {
+				poll.CourierPending = map[string]int{}
+			}
+			poll.CourierPending[v] = run
+			continue
+		}
 		ran++
-		run, err := rt.gateOne(ctx, feed, owner, computer, item)
+		poll.GateLog = append(poll.GateLog, store.PollGateCall{Publisher: item.AuthorLabel, Story: item.StoryDocID, At: time.Now().UTC()})
+		run, err = rt.gateOne(ctx, feed, owner, computer, item)
 		if err != nil {
 			item.Failures, item.LastAt, item.Cause = item.Failures+1, time.Now().UTC(), clipChars(err.Error(), types.OpedTextMaxRunes)
 			log.Printf("oped gate: %s failed (%d of %d): %v", v, item.Failures, opedGateMaxFailures, err)
@@ -310,4 +328,48 @@ func (rt *Runtime) retryOpedCouriers(ctx context.Context, feed PlatformFeed, pol
 		}
 		delete(poll.CourierPending, v)
 	}
+}
+
+// gateOverBound is the reason an op-ed may not cost another Jev call today,
+// or "". It prunes the log to the last 24 hours.
+func gateOverBound(poll *store.PlatformPoll, item gateItem) string {
+	cutoff := time.Now().UTC().Add(-24 * time.Hour)
+	kept := poll.GateLog[:0]
+	publisher, story := 0, 0
+	for _, c := range poll.GateLog {
+		if c.At.Before(cutoff) {
+			continue
+		}
+		kept = append(kept, c)
+		if c.Publisher == item.AuthorLabel {
+			publisher++
+		}
+		if c.Story == item.StoryDocID {
+			story++
+		}
+	}
+	poll.GateLog = kept
+	switch {
+	case publisher >= opedGatePerPublisherPerDay:
+		return "This publisher has used the day's judgments of op-eds; this one is listed without a judgment."
+	case story >= opedGatePerStoryPerDay:
+		return "This story has used the day's judgments of op-eds; this one is listed without a judgment."
+	}
+	return ""
+}
+
+// concludeGateOverBound records an arrival over a daily bound: a verdict
+// "unavailable" with the reason, on the tape and by the courier, and no call.
+func (rt *Runtime) concludeGateOverBound(ctx context.Context, owner, computer string, item gateItem, why string) (int, error) {
+	verdict := types.OpedVerdict{
+		VersionID: item.VersionID, Run: 1, Verdict: types.OpedUnavailable,
+		CriteriaRevisionID: opedGateCriteriaRevisionID, CriteriaHash: opedGateCriteriaHash(),
+		RespondsTo: gateRespondsTo(item), Reason: why, ReasonUntrusted: true,
+	}
+	subject := map[string]string{"oped_version_id": item.VersionID, "responds_to": item.RespondsToID, "story_doc_id": item.StoryDocID}
+	if err := rt.emitOpedWithSubject(ctx, owner, computer, types.CommitmentOped{Kind: types.OpedRecordVerdict, Verdict: &verdict}, subject); err != nil &&
+		!rt.opedRecordExists(ctx, owner, computer, types.OpedVerdictRecordID(item.VersionID, 1)) {
+		return 0, err
+	}
+	return 1, nil
 }

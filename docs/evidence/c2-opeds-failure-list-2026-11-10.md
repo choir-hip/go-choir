@@ -28,3 +28,21 @@ test that is written first.
 | X18 | A notice carries content or an email | the schema has no body field | `TestNoticeHasNoEmail` |
 | X19 | A notice poll replay mints twice, or a reader reads another owner's notices | deterministic record id; route scoped to the binding | `TestNoticeIntakeReplay`, `TestNoticesRouteScopedToBoundOwner` |
 | X20 | Calibration counts a rejected op-ed the desk used as nothing | a rejected op-ed whose version appears in a later desk revision's links is a false reject; an accepted op-ed whose desk turn changed nothing is a false accept; both are records | `TestCalibrationFromDeskReading` |
+
+## Review repairs (Sonnet seat, REPAIR, 2026-11-10)
+
+| # | Way it fails | Rule | Test |
+|---|---|---|---|
+| R1 | A republished fork re-notifies, re-gates and re-wakes | the notice id is keyed on (child publication, parent publication); a later version updates it | `TestRepublishUpdatesTheNoticeAndNeverRenotifies` |
+| R2 | One publisher spams strangers with notices | D11: 20 new notices a day per publisher, counted from notice objects | `TestSpamLinkOneNoticePerChild` |
+| R3 | One publisher or story drives unbounded Jev calls | 5 gate calls per publisher and 20 per story per day; over the bound the arrival gets verdict unavailable with the reason and costs no call | `TestOpedGateIsBoundedPerPublisher` |
+| R4 | Accepted op-eds wake the desk without a floor | 30 minutes between accepted wakes of a story; arrivals inside it join the next | `TestAcceptedWakeKeepsAMinimumGap` |
+| R5 | A prompt carries every op-ed at full size | at most 5 shown, 40000 characters, "N more not shown" | `TestDeskFrameBoundsWhatItShows` |
+| R6 | A gate-rejected op-ed becomes a public source link | only accepted op-eds are stamped; backoff rejects are read only; corpusd refuses a parent the publishing owner's gate rejected | `TestBackoffWakeRejectIsShownReadOnlyAndNeverCited`, `TestPaperResponseNeverCitesARejectedOped` |
+
+Named residuals:
+- The feeds filter on `created_at`; the index is `(object_kind, owner_id)`. The read is bounded by owner and kind, so it is cheap now; add `(object_kind, owner_id, created_at)` if notices per owner grow.
+- A page of more than 100 notices inside the 10 second overlap stalls the cursor (it stops when the cursor does not move). Not reachable under the D11 cap of 20 a day per publisher with fewer than five publishers in one window; fix with a (time, id) cursor.
+- `false_reject` calibration has no source now that a reject is never stamped; it fires only if a desk revision cites a rejected op-ed by other means. A reject the desk uses needs a way for the desk to say so (not built).
+- An unread `oped_wake` surviving a crash relies on the actor runtime's generic crash-boot gate ("pre-boot work is interrupted_by_restart", `internal/actorruntime/handler.go`); no test of mine drives that.
+- `oped_intake` starts only for a computer that has published a story (the poll row is created by the first story publish) and then on every later boot; `notice_intake` only after a fork, take or merge.
