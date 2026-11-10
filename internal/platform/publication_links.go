@@ -49,6 +49,9 @@ type versionLink struct {
 	OwnerID              string `json:"owner_id,omitempty"`
 	PublishMode          string `json:"publish_mode,omitempty"`
 	AuthorLabel          string `json:"author_label,omitempty"`
+	// SourceDocID is the document the version was published from. It is read
+	// from the graph; the feed shows it only to the owner of that document.
+	SourceDocID string `json:"source_doc_id,omitempty"`
 }
 
 // resolveVersionLink reads one referenced version and checks it: it exists,
@@ -92,7 +95,7 @@ func (s *Service) resolveVersionLink(ctx context.Context, og *ObjectGraphStore, 
 	return versionLink{
 		Role: types.ParentLinkSource, PublicationVersionID: meta.PublicationVersionID, PublicationID: meta.PublicationID,
 		RoutePath: firstNonEmptyString(meta.PermalinkPath, meta.RoutePath), ManifestHash: meta.ManifestHash,
-		OwnerID: obj.OwnerID, PublishMode: pub.PublishMode, AuthorLabel: pub.AuthorLabel,
+		OwnerID: obj.OwnerID, PublishMode: pub.PublishMode, AuthorLabel: pub.AuthorLabel, SourceDocID: meta.SourceDocID,
 	}, nil
 }
 

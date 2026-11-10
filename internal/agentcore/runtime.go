@@ -377,6 +377,9 @@ type Runtime struct {
 	// stories publishes publish-auto story revisions and their support
 	// verdicts to the platform, off the commit's path (Cut 2 2b).
 	stories storyPublishing
+	// polls holds the computer's polls of its corpusd feeds (oped_intake,
+	// notice_intake): platform_poll.go.
+	polls platformPolls
 	// textureCells records what each running Texture activation's cells
 	// staged; the activation's end answers an unanswered trigger from it
 	// (answerIdleTextureTrigger).
@@ -1324,6 +1327,7 @@ func (rt *Runtime) Start(ctx context.Context) {
 	})
 	bootPhase("selfdev_close_after_crash", func() { rt.closeSelfDevelopmentOperationsAfterCrash(ctx) })
 	bootPhase("source_schedules_after_restart", func() { rt.recoverSourceSchedulesAtBoot(ctx) })
+	bootPhase("platform_polls_after_restart", func() { rt.recoverPlatformPollsAtBoot(ctx, true) })
 	// The sweep repairs a wake lost while the computer stays up (an outage that
 	// poisons wakes); its first pass is one interval after boot.
 	rt.startSourceScheduleSweep(ctx)
@@ -1398,6 +1402,7 @@ func (rt *Runtime) Stop() {
 	rt.stopSnapshotProducer()
 	rt.stopProjector()
 	rt.stopSourceScheduleSweep()
+	rt.stopPlatformPolls()
 	rt.stopEventLayer()
 	rt.bgStopOnce.Do(func() { close(rt.backgroundStop()) })
 	// The sub-call settler ends before the store can: its context is

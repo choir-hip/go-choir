@@ -54,7 +54,31 @@ type PlatformPoll struct {
 	// counts the crash.
 	PollInFlightSince       time.Time `json:"poll_in_flight_since,omitempty"`
 	CrashesWithPollInFlight int       `json:"crashes_with_poll_in_flight,omitempty"`
-	UpdatedAt               time.Time `json:"updated_at"`
+	// The paper's oped_intake keeps its working lists here; the tape is the
+	// authority and these only say what is still to do. GateQueue holds the
+	// op-eds adopted and not yet judged, with their failed attempts (after the
+	// third the verdict is "unavailable"); OpenStories the stories with an
+	// op-ed not yet carried to the desk; CourierPending the verdict runs
+	// corpusd has not acknowledged, version -> run.
+	GateQueue      map[string]PollGateItem `json:"gate_queue,omitempty"`
+	OpenStories    map[string]time.Time    `json:"open_stories,omitempty"`
+	CourierPending map[string]int          `json:"courier_pending,omitempty"`
+	UpdatedAt      time.Time               `json:"updated_at"`
+}
+
+// PollGateItem is one op-ed waiting for its verdict.
+type PollGateItem struct {
+	VersionID       string    `json:"version_id"`
+	RoutePath       string    `json:"route_path,omitempty"`
+	AuthorLabel     string    `json:"author_label,omitempty"`
+	ManifestHash    string    `json:"manifest_hash"`
+	StoryDocID      string    `json:"story_doc_id"`
+	RespondsToID    string    `json:"responds_to_version_id"`
+	RespondsToRoute string    `json:"responds_to_route,omitempty"`
+	RespondsToPub   string    `json:"responds_to_publication_id,omitempty"`
+	Failures        int       `json:"failures,omitempty"`
+	LastAt          time.Time `json:"last_at,omitempty"`
+	Cause           string    `json:"cause,omitempty"`
 }
 
 const platformPollErrorLimit = 512
