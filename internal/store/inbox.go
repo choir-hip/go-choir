@@ -1407,3 +1407,67 @@ func (s *Store) VerifyInboxHeads(ctx context.Context, ownerID, computerID string
 	sort.Strings(problems)
 	return problems, nil
 }
+
+// OutstandingDispatches returns the Asks and Escalates sender has sent that
+// are still being worked, oldest first. They open no round (stepConversation
+// opens one only for a Cast), so this is the durable fact that something was
+// woken holding the sender's question:
+//   - an Ask is a staked request (a precommit with a Resolver); it is
+//     outstanding until a Report in the sender's inbox relates to it (the
+//     Reply) or the sender retracts it;
+//   - an Escalate carries no reply, so it is outstanding until its recipient
+//     has read it.
+//
+// The read is the sender's own sent records and inbox, a desk's worth.
+func (s *Store) OutstandingDispatches(ctx context.Context, ownerID, computerID, senderInbox string) ([]types.CommitmentRecord, error) {
+	ownerID, computerID, senderInbox = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(senderInbox)
+	sent, err := s.listInboxRecordsBy(ctx, ownerID, computerID, "sender_inbox", senderInbox)
+	if err != nil {
+		return nil, err
+	}
+	var candidates []types.CommitmentRecord
+	ended := map[string]bool{}
+	for _, rec := range sent {
+		switch {
+		case rec.Kind == types.CommitmentKindPrecommit && rec.Precommit != nil && strings.TrimSpace(rec.Precommit.Resolver) != "" && rec.Inbox != senderInbox:
+			candidates = append(candidates, rec)
+		case rec.Directive != nil && rec.Directive.Subtype == types.CommitmentDirectiveEscalate:
+			candidates = append(candidates, rec)
+		case rec.Directive != nil && rec.Directive.Subtype == types.CommitmentDirectiveRetract && strings.TrimSpace(rec.Directive.TargetRef) != "":
+			ended[strings.TrimSpace(rec.Directive.TargetRef)] = true
+		}
+	}
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	own, err := s.listInboxRecordsBy(ctx, ownerID, computerID, "inbox", senderInbox)
+	if err != nil {
+		return nil, err
+	}
+	for _, rec := range own {
+		if rec.Kind != types.CommitmentKindReport {
+			continue
+		}
+		for _, id := range rec.RelatedIDs {
+			ended[strings.TrimSpace(id)] = true
+		}
+	}
+	var out []types.CommitmentRecord
+	for _, rec := range candidates {
+		if ended[rec.RecordID] {
+			continue
+		}
+		if rec.Kind != types.CommitmentKindPrecommit {
+			cursor, err := s.ReaderCursor(ctx, ownerID, computerID, rec.Inbox, rec.Inbox)
+			if err != nil {
+				return nil, err
+			}
+			if cursor >= rec.InboxSeq {
+				continue
+			}
+		}
+		out = append(out, rec)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].InboxSeq < out[j].InboxSeq })
+	return out, nil
+}

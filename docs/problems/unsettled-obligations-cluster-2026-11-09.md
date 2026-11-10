@@ -181,6 +181,15 @@ What can legitimately serve a waiting Texture request, read from the code:
 6. new here: another live activation of the same Texture agent (a wake already
    dispatched), and an owner revision that moved the head after the turn (it
    opened new work and wakes the desk);
+6b. an Ask or Escalate this desk sent that is still being worked. They open
+   no round (a round opens only for a Cast), and foldTextureDispatch turns an
+   Ask-only cell into a Wait, so this is the common case (Devin's review).
+   Durable fact: an Ask is a precommit with a Resolver, outstanding until a
+   Report in the desk's inbox relates to it or the desk retracts it; an
+   Escalate has no reply, so it is outstanding until its recipient has read it
+   (`Store.OutstandingDispatches`). At a crash boot an unanswered Ask is NOT
+   counted: the asked desk's run was closed and its wake interrupted, so
+   nothing serves it.
 7. not served, by design: a Wait on the owner. The product has no owner-ask
    path for Texture other than the document itself; the owner's next revise is
    the wake. Closing it with the visible fate and a management notice is the
