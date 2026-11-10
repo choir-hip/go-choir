@@ -4,6 +4,8 @@
 # and CHOIR_API_KEY_FILE (a file holding the key; never echoed). Prints the
 # answers and timings; exits non-zero unless both answers are among the offered
 # choices and total_ms is present. `--dry-run` only checks the inputs.
+# An owner-wide key names no computer, so set CHOIR_COMPUTER_ID (sent as
+# X-Choir-Computer); a key bound to one computer needs no such variable.
 set -euo pipefail
 : "${CHOIR_HOST:?set CHOIR_HOST}"
 : "${CHOIR_API_KEY_FILE:?set CHOIR_API_KEY_FILE}"
@@ -13,9 +15,11 @@ body='{"label":"proof","state":{"context":"A listener asks for something calm to
 out=$(mktemp)
 trap 'rm -f "$out"' EXIT
 # The key goes through a curl config on stdin, so it is never in argv.
+computer_header=()
+if [ -n "${CHOIR_COMPUTER_ID:-}" ]; then computer_header=(-H "X-Choir-Computer: ${CHOIR_COMPUTER_ID}"); fi
 code=$(printf 'header = "Authorization: Bearer %s"\n' "$(tr -d '\n\r ' < "$CHOIR_API_KEY_FILE")" |
   curl -sS -m 10 -K - -o "$out" -w '%{http_code}' -X POST \
-    -H 'Content-Type: application/json' --data "$body" \
+    -H 'Content-Type: application/json' ${computer_header[@]+"${computer_header[@]}"} --data "$body" \
     "https://${CHOIR_HOST}/api/system1/judgments")
 echo "http $code"
 cat "$out"

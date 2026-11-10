@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -199,7 +200,7 @@ func (t *JevTransport) call(ctx context.Context, computerID string, request Judg
 		case code >= 500 || code == http.StatusRequestTimeout:
 			t.hold.fail(t.clock(), false)
 		}
-		return nil, response.StatusCode, fmt.Errorf("OpenRouter returned %s", response.Status)
+		return nil, response.StatusCode, fmt.Errorf("OpenRouter returned %s%s", response.Status, upstreamErrorMessage(body))
 	}
 	t.hold.succeed()
 	if !json.Valid(body) {
@@ -453,4 +454,37 @@ func (t *JevTransport) upstreamURL() string {
 		return t.url
 	}
 	return openRouterDecisionsURL
+}
+
+const jevUpstreamMessageMax = 300
+
+// upstreamErrorMessage names the provider's own error message (never the
+// body whole, never a header) for the log line, so a 400 explains itself:
+// ": <message>", or "" when the body has none. Control characters and
+// newlines become spaces and the text is cut to jevUpstreamMessageMax bytes
+// on a rune boundary, so upstream content cannot forge a log line.
+func upstreamErrorMessage(body []byte) string {
+	var shape struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &shape) != nil {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range shape.Error.Message {
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) || r == '\u2028' || r == '\u2029' || r == utf8.RuneError {
+			r = ' '
+		}
+		if b.Len()+utf8.RuneLen(r) > jevUpstreamMessageMax {
+			break
+		}
+		b.WriteRune(r)
+	}
+	msg := strings.TrimSpace(b.String())
+	if msg == "" {
+		return ""
+	}
+	return ": " + msg
 }

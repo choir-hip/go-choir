@@ -4,6 +4,11 @@ Mutation class: orange (a new product API on the computer runtime). Rollback: re
 
 A native client signed in with a bearer API key (`choir_sk_...`) asks Jev a few
 fixed-option questions through its own computer: `POST /api/system1/judgments`.
+An owner-wide API key names no computer, so the proxy refuses it with
+`400 owner-wide api key requires a named computer (computer_id)`
+(`internal/proxy/api_key_computer_authority.go`): a client with such a key
+names its target with the `X-Choir-Computer: <computer id>` header (or a
+`computer_id` query parameter). A key bound to one computer needs neither.
 The proxy forwards `/api/...` to the computer unchanged (generic
 `HandleProtectedAPI`); no proxy-to-gateway edge and no new gateway caller. The
 computer runtime calls the one in-guest path every Jev site uses, `judgeCall`,
@@ -46,10 +51,39 @@ not free). Unknown fields are rejected. Overall deadline 4 s.
 ## Wire shape
 
 Request: `{"state": {...}, "questions": {"<name>": {"type":"choice","instructions":"...","criteria"?:...,"choices":["a","b"]}}, "label"?: "..."}`.
-The question objects go to the gateway as given (the same wire as
-`JudgmentRequest`). `label` (1 to 40 characters of `[a-z0-9_.-]`) is recorded as
+The question objects go to the gateway in the shape the in-guest verb sends:
+`type`, `instructions`, `criteria`, `choices`. `criteria` is optional on the
+route: when absent the route adds the in-guest default description per choice;
+when present it must be a map of string descriptions whose keys are exactly the
+choices, else the route answers 400 itself. `label` (1 to 40 characters of `[a-z0-9_.-]`) is recorded as
 the record's site: `client` by default, `client:<label>` when given.
 
 Response: `{"answers": {"<name>": {"choice": "a", "confidence": 0.93, "probabilities": {...}}}, "upstream_ms": n, "total_ms": n, "record_id": "<decision id>"}`.
 `confidence` is the probability the judge gave the chosen option. `record_id` is
 the Jev record's `decision_id` for the call.
+
+## Defects found on staging
+
+2026-11-10 22:46Z, staging at 79bd88f8b, on the test computer d@e.
+
+1. Problem: every request failed `502 {"error":"gateway client: judge judgment
+   provider unavailable"}` in about 130 ms, with the proof script's own body.
+   Evidence: gateway log `jev call ... class=interactive questions=2
+   upstream_ms=21 status=400 failed`, then `OpenRouter returned 400 Bad
+   Request`, while the paper's in-guest calls returned 200 in the same minute.
+   Cause: the route forwarded each question as `{type, instructions, choices}`.
+   The vendor reads a choice question through its `criteria` map (choice name to
+   description; `docs/reference/system1/jev-vendor.md` section 3) and rejects a
+   question without one. Every in-guest site adds `criteria`
+   (`system1Request`, the op-ed gate); the route, whose clients send only
+   `choices`, did not. Confirmed on staging with 2 requests to d@e: the same
+   question with `criteria` returned 200 (`upstream_ms` 104), without it 502
+   and an upstream 400 in the gateway log. Fix: the route adds the default
+   criteria when absent and refuses, with its own 400, criteria that do not
+   match the choices; the gateway log now carries the provider's error message
+   (at most 300 bytes, control characters stripped).
+2. Problem: with an owner-wide key and no computer named, the proof got `400
+   owner-wide api key requires a named computer`. Cause: correct proxy
+   behaviour that the proof script and this document did not state. Fix: the
+   rule is written above and `scripts/proofs/system1-route.sh` sends
+   `CHOIR_COMPUTER_ID` as `X-Choir-Computer`.
