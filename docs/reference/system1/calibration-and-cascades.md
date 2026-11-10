@@ -2,7 +2,7 @@
 
 Reference subpage (convention: [../README.md](../README.md)). Siblings:
 [model-space.md](model-space.md), [dual-process.md](dual-process.md),
-[evaluation.md](evaluation.md). Related: [../JEV.md](../JEV.md). Fetched
+[evaluation.md](evaluation.md). Related: [../SYSTEM1.md](../SYSTEM1.md). Fetched
 2026-11-10. Tags: `[V]` vendor; `[T]` third party; `[P]` paper (peer-reviewed or
 arXiv); `[R]` relayed, unverified. Worked examples use **made-up numbers**
 (labelled "illustrative") computed with small scripts; the method is sourced,
@@ -43,7 +43,7 @@ the data is not.
    cascading `[P]`; the paper gives optimal strategies but the gains depend on
    how well confidence ranks correctness.
 8. **A model alias that moves breaks thresholds silently.** `~typesafe/jev-latest`
-   resolved to `jev-1.14-20261014` on 2026-11-10 (JEV.md, measured by us).
+   resolved to `jev-1.14-20261014` on 2026-11-10 (SYSTEM1.md, measured by us).
    Thresholds, bias priors and calibration maps are per served version.
 9. **Option bias is a calibration problem.** The prior over option IDs
    ("A" favoured) can be removed with a label-free estimate from about 5% of
@@ -53,7 +53,7 @@ the data is not.
 ## 1. What "calibrated" means and how to check it
 
 A decision of type `noul` returns P(yes); `choice` returns a probability per
-choice (JEV.md). Define the confidence of a decision as the probability of the
+choice (SYSTEM1.md). Define the confidence of a decision as the probability of the
 chosen answer. The model is calibrated if, among decisions with confidence
 about c, a fraction about c are right.
 
@@ -165,7 +165,7 @@ instructions, add a feature, or never auto-act on it. Cost rule: if a wrong
 act costs $0.01 and escalating costs $0.0035, act when p_correct >= 0.65; with
 temperature-scaled probabilities the 0.85 bin (p' = 0.72) passes and the
 0.65 bin (p' = 0.585) does not. Vendor starting points (about 0.7 for yes and
-0.3 for no) are in JEV.md `[R]`; tune on our data.
+0.3 for no) are in SYSTEM1.md `[R]`; tune on our data.
 
 Two traps: (a) **stratify by question family**, because the same model is
 calibrated on tool-calling and over-confident on knowledge `[T]`; (b) **guard
@@ -266,7 +266,7 @@ System 1, let System 2 revise; see [dual-process.md](dual-process.md)).
 
 - Track, per question family and served model version, a rolling Brier and ECE
   on the audited slice; alarm on a step change in either, and on any change of
-  `model` in the response (the alias moved once already, JEV.md).
+  `model` in the response (the alias moved once already, SYSTEM1.md).
 - Rabanser et al. compared shift detectors: two-sample tests on features of a
   pretrained classifier, used for dimensionality reduction, performed best
   across the shifts they tried `[P]`. Practical form: compare the
@@ -313,4 +313,4 @@ System 1, let System 2 revise; see [dual-process.md](dual-process.md)).
 10. MindStudio Jev vs BERT, https://www.mindstudio.ai/blog/jev-vs-classic-classifiers-benchmark `[T]`
 11. Liquid Open d1, https://www.liquid.ai/blog/d1-open `[V]`
 12. DataCamp, https://www.datacamp.com/blog/top-ai-decision-models `[R]`; AICoder d1-ultra, https://aicoder.com/news/news-20261017-liquid-ai-d1-ultra-decision-model-aa-index-1 `[R]`
-13. Our measurements and alias: [../JEV.md](../JEV.md) (M, 2026-11-10)
+13. Our measurements and alias: [../SYSTEM1.md](../SYSTEM1.md) (M, 2026-11-10)

@@ -2,10 +2,10 @@
 
 Reference subpage (convention: [../README.md](../README.md)). Siblings:
 [model-space.md](model-space.md), [calibration-and-cascades.md](calibration-and-cascades.md),
-[dual-process.md](dual-process.md). Related: [../JEV.md](../JEV.md) section 10
+[dual-process.md](dual-process.md). Related: [../SYSTEM1.md](../SYSTEM1.md) section 5.6
 (the record), [../ON-DEVICE-MODELS.md](../ON-DEVICE-MODELS.md) section 6
 (measurement plan). Fetched 2026-11-10. Tags: `[V]` vendor; `[T]` third party;
-`[P]` paper; `[R]` relayed, unverified; `M` measured by us (JEV.md); "ours" is
+`[P]` paper; `[R]` relayed, unverified; `M` measured by us (SYSTEM1.md); "ours" is
 arithmetic I ran on stated assumptions.
 
 ## Surprises
@@ -141,7 +141,7 @@ the gold within the humans' kappa to each other is as good as the labels allow.
 | Verbosity and repetition | repeat a list in the answer | "repetitive list" attack: Claude-v1 and GPT-3.5 failed 91.3%, GPT-4 8.7% `[P]` |
 | Master-key and blank answers | empty, punctuation, "Thought process:" | false positives up to 80 to 90% `[R]` |
 | Batch contamination | put an injected instruction in one of N batched items | an attack benchmark exists for batch prompting `[R]` |
-| Question count | 1, 3, 6, 12, 20 questions in one call | Jev up to 12 "unmeasured above 12" (JEV.md); LLM multi-problem: classification 75.5% single vs 72.3% batched `[P]` |
+| Question count | 1, 3, 6, 12, 20 questions in one call | Jev up to 12 "unmeasured above 12" (SYSTEM1.md); LLM multi-problem: classification 75.5% single vs 72.3% batched `[P]` |
 
 For Jev, questions are answered independently; the realistic risk is the
 shared `state`. Add a test where a story's text contains a command.
@@ -154,7 +154,7 @@ tokens each (instruction plus criteria), so 1,160 input tokens per call. A
 
 | Approach | Price used (source) | Input tokens billed per decision | $ per 1,000 decisions | $ per 1M decisions |
 |---|---|---|---|---|
-| Jev, one call of 6 | $0.042/M input, output free (JEV.md `[V]`) | 193 | **0.0081** | 8.1 |
+| Jev, one call of 6 | $0.042/M input, output free (SYSTEM1.md `[V]`) | 193 | **0.0081** | 8.1 |
 | d1-ultra, state billed per question | $0.042/M (`[R]`; per-question billing `[R]`) | 860 | 0.0361 | 36.1 |
 | Perplexity Decider hosted, one call | $0.02/M (`[R]`; another source says $0.04) | 193 | 0.0039 (0.0077 at $0.04) | 3.9 |
 | OpenAI Decisions (gpt-6-luna), one call | $0.10/M, output and cache free (`[R]`) | 193 | 0.0193 | 19.3 |
@@ -185,7 +185,7 @@ Cross-check with AA's per-task costs, which include larger tasks `[T]`:
 
 Break-even for building a phone model (ours): at $0.0081 per 1,000 Jev
 decisions, a fleet doing 1M decisions a day pays about $8 a day (about $3,000 a
-year; JEV.md's own estimate for the fleet is of the order of $1 a day). A
+year; the old JEV.md estimated the fleet at about $1 a day; measured spend is $7.47 a day, see SYSTEM1.md section 7). A
 distilled phone model does not pay for itself in dollars at this volume. Its
 case is latency, offline use and privacy (no text leaves the phone), as the
 turns note says.
@@ -237,4 +237,4 @@ nothing on the cloud side because Jev is already called.
 10. Pinggy, https://pinggy.io/amp/blog/best_ai_decision_models/ `[R]`; AICoder, https://aicoder.com/news/news-20261017-liquid-ai-d1-ultra-decision-model-aa-index-1 `[R]`; AI Weekly (Perplexity), https://aiweekly.co/alerts/perplexity-open-sources-27b-decider-edges-jev-on-11-test-panel `[R]`
 11. Batch prompting attack benchmark, https://arxiv.org/abs/2503.15551 `[R]`
 12. Distillation search results (COLING 2025 BERT distillation paper; tinydistill README) `[R]`
-13. Our measurements: [../JEV.md](../JEV.md) (M, 2026-11-10); [../../design/autoradio-turns-2026-11-10.md](../../design/autoradio-turns-2026-11-10.md)
+13. Our measurements: [../SYSTEM1.md](../SYSTEM1.md) (M, 2026-11-10); [../../design/autoradio-turns-2026-11-10.md](../../design/autoradio-turns-2026-11-10.md)

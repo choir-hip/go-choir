@@ -57,7 +57,7 @@ Tags: `[V]` vendor; `[T]` third party; `[P]` paper (arXiv or peer-reviewed);
 | P2 | Fast by default, slow when stuck | SWIFT: small encoder-decoder LM, behaviour-cloned | SAGE: LLM planning and grounding | a heuristic switches to SAGE when SWIFT is unreliable | `[P]` SwiftSage |
 | P3 | Speculative prefix, verified | duplex speech-to-speech model drafts a short prefix, keeps listening for barge-in | cascaded ASR to LLM writes the continuation conditioned on the committed prefix | learned verifier commits or falls back; "relay margin" = prefix audio minus slow time to first chunk | `[P]` RelayS2S |
 | P4 | Predict and prefetch | background LLM predicts follow-up topics | foreground fast agent reads a semantic cache | cache hit or fall through to the vector store | `[P]` VoiceAgentRAG |
-| P5 | Decision model as gate | typed questions answered in one pass (Jev, d1) | the agent that acts | the answers pick the path: ack, route, which desk | Autoradio turns note; JEV.md |
+| P5 | Decision model as gate | typed questions answered in one pass (Jev, d1) | the agent that acts | the answers pick the path: ack, route, which desk | Autoradio turns note; SYSTEM1.md |
 | P6 | Endpointing as System 1 | Smart Turn: 8M parameters, Whisper-Tiny encoder plus a linear head on raw waveform; 8 MB int8 or 32 MB ONNX; BSD-2 | everything downstream | "has the speaker finished" boolean | `[V]` Pipecat model card |
 | P7 | Cascade with async escalation | cheap decision first | stronger model only when confidence is low | acknowledge now, revise when the strong answer lands | calibration page section 7 |
 
@@ -116,8 +116,8 @@ Other published numbers:
 | The slow path ignores what the fast path already said | the listener hears a contradiction | RelayS2S conditions the continuation on the committed prefix `[P]`; Talker-Reasoner's Talker may speak from stale beliefs `[P]` | make what S1 said part of S2's input (our rule: the phone's lines go into the document as blocks) |
 | Two voices | a prefix and a continuation rendered by different voices or sessions | RelayS2S streams both through the same TTS session `[P]` | one voice, one session |
 | Asking S1 something it cannot know | knowledge is where decision models are weakest (d1-3B knowledge 23.8; AA overconfidence) | `[V]` `[T]` | route knowledge questions to S2 |
-| One call per question | pays the state N times and queues | JEV.md; Jev benchmark 12.2x cheaper one-call `[V]` | many questions, one call |
-| Treating confidence as truth across versions | the served model changed under the alias | JEV.md | re-calibrate per version |
+| One call per question | pays the state N times and queues | SYSTEM1.md; Jev benchmark 12.2x cheaper one-call `[V]` | many questions, one call |
+| Treating confidence as truth across versions | the served model changed under the alias | SYSTEM1.md | re-calibrate per version |
 | Letting a shared state carry instructions | one injected instruction in a batch can steer every answer; a batch-prompting attack benchmark exists | arXiv 2503.15551 `[R]` | the state is data; questions carry the instructions; sanitise story text |
 | Evaluating latency only at the median | the tail sets the experience | Hamming p90 3.3 to 3.8 s `[T]` | measure p90 and the stall rate |
 
@@ -193,4 +193,4 @@ Design rules read straight from the evidence:
 6. Hamming, Voice AI Latency, https://hamming.ai/resources/voice-ai-latency-whats-fast-whats-slow-how-to-fix-it `[T]`
 7. Efficient but Vulnerable: Benchmarking and Defending LLM Batch Prompting Attack, https://arxiv.org/abs/2503.15551 `[R]` (search summary only)
 8. Qwen3Guard Stream design, https://arxiv.org/abs/2510.14276 `[P]` (per-token guard heads; shown as a P6-like fast monitor)
-9. Our design note: [autoradio-turns-2026-11-10.md](../../design/autoradio-turns-2026-11-10.md); JEV.md measurements (M)
+9. Our design note: [autoradio-turns-2026-11-10.md](../../design/autoradio-turns-2026-11-10.md); SYSTEM1.md measurements (M)

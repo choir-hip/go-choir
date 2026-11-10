@@ -1,6 +1,6 @@
 # System 1 (Jev) as it runs here
 
-Measurement page, a subpage of [JEV.md](../JEV.md) (what Jev is, price, rules). This page is what our own
+Measurement page, a subpage of [SYSTEM1.md](../SYSTEM1.md) (what Jev is, price, rules). This page is what our own
 system does with it. Code lines are at `origin/main` dc637a84f (2026-11-10). Marks: **M** measured by us
 (window and method given), **C** read from code, **U** unexplained (stated; no cause invented).
 
@@ -157,7 +157,7 @@ traffic is **bursty and concurrent**. Maximum in one second: paper 39, front imp
 - Paper: intake chunks in parallel (`intakeLabelConcurrency = 2`, `intake_labels.go:79`), event-layer
   prefetch, support judge 8 at once (`support_judge.go:60`), sub-call judge 4.
 - Front importance: a timer every 10 min (`nix/node-b.nix:1249`), 12 stories at once (`scorerConcurrency =
-  12`, `scorer.go:177`). J: 91 runs, 992 calls, most runs done within 0 to 2 s. JEV.md and the 2026-11-10
+  12`, `scorer.go:177`). J: 91 runs, 992 calls, most runs done within 0 to 2 s. the old JEV.md and the 2026-11-10
   evidence page call the scorer serial; at origin/main it is not (C, plus 28 calls in a second M).
 - Latency by burst size (p50 / p90 ms): alone 106/173; 2 calls 127/244; 3-4 157/258; 5-8 158/222; 9+
   157/217 (n = 7,167). A burst costs about 50 ms at the median and does not grow from 5 to 39; the "alone"
@@ -187,9 +187,9 @@ ms and status. Tokens and dollars come from R (receipts exist for every success)
 ### 3.1 Billing checked against R
 
 - Receipt cost / input tokens is 0.042 per million at p1, p50 and p99: **input tokens only, output billed
-  at 0**, as JEV.md section 6 says.
+  at 0**, as the old JEV.md section 6 said (now SYSTEM1.md section 7).
 - J window: 130.8M input and 21.6M output tokens in 16,137 calls: **$5.49 in 17.7 h = $0.311/h =
-  $7.47/day** at $0.042 per M input. JEV.md's "order of $1 a day" is 7.5x lower (not edited here).
+  $7.47/day** at $0.042 per M input. the old JEV.md's "order of $1 a day" was 7.5x lower (corrected in SYSTEM1.md).
 - By computer: paper $5.37, front importance $0.09, others $0.03. Paper 2-question calls alone are $4.20
   of $5.49.
 
@@ -209,7 +209,7 @@ vendor's 32,000-byte long-context line cannot be told from tokens. **U**
 | 15:10-21:47 (after) | 6.62 | 894 | 3,912 | 6.05M | 0.254 | 6.10 |
 | J window | 17.66 | 914 | 3,224 | 7.41M | 0.311 | 7.47 |
 
-Assumptions: the JEV.md price holds; R is complete for its span; no caching discount (the cost ratio is
+Assumptions: the SYSTEM1.md price holds; R is complete for its span; no caching discount (the cost ratio is
 constant, so none is visible).
 
 ### 3.4 What one call with many questions saves (intake, measured)
@@ -302,7 +302,7 @@ of 2,048 drops and counts).
 
 ## 6. Surprises and anomalies
 
-1. **Cost is 7.5x JEV.md's assumption** ($7.47 a day against about $1), and input tokens an hour rose
+1. **Cost is 7.5x the old JEV.md's assumption** ($7.47 a day against about $1), and input tokens an hour rose
    about 6x between 00-04Z and 05Z with three deploys in the window (section 2.2). Attribution is **U**.
 2. **Calls with 13 to 38 questions**: 81 calls (70 paper, 11 vm-70070cf7, 2 candidate fleet). By code only
    the support judge (uncapped per revision) and the sub-call and desk-cast judges (up to 140) can exceed
@@ -320,7 +320,7 @@ of 2,048 drops and counts).
    latency that scales with questions.
 10. **Hour summaries almost never print**: 3 in 17.6 h, because the counter resets at each gateway
     restart. The `jev call` line is the only complete gateway record.
-11. The line cannot name its site; adding `site` to the guest request (never sent upstream) is JEV.md's
+11. The line cannot name its site; adding `site` to the guest request (never sent upstream) is the old JEV.md's
     design step 0 and would settle items 2.
 
 Not measurable from the host: per-call tokens against latency (no shared id); which site made a call; the

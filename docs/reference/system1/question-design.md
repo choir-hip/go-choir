@@ -142,7 +142,7 @@ primitives].
   one direct question on 9 of 10 benchmarks (median -0.137 AUROC) [T alignbench].
 - Repeatability: byte-identical requests gave 13 distinct answers out of 30;
   TVD between repeats 0.034 to 0.122 on flat 254-option menus [T jevresearch];
-  a noul read 0.42 then 0.44 (ours, JEV.md); vendor-measured least-stable flip
+  a noul read 0.42 then 0.44 (ours, SYSTEM1.md); vendor-measured least-stable flip
   4.0% on the average moderation post [V cookbook-consist-c]. Use bands.
 
 ## 4. Calibration procedure and threshold starting points
@@ -258,7 +258,7 @@ and routing in code in a fixed order: injection above 0.70 excludes first,
 then contradiction above 0.70, relevance below 0.45, evidence above 0.55
 [V cookbook-rag].
 
-**10. Boilerplate criteria.** Bad (ours, JEV.md): per-candidate criteria repeated
+**10. Boilerplate criteria.** Bad (ours, SYSTEM1.md): per-candidate criteria repeated
 80 times, a 1.14 intake call of about 9,000 tokens, past the long-context line.
 Good [C]: candidates once in state, each question naming its handle, short
 parallel criteria. Whether criteria can be shortened or dropped is untested.

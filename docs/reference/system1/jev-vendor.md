@@ -3,7 +3,7 @@
 Subpage of the System 1 reference (to be folded into SYSTEM1.md by the
 synthesiser). Siblings: [question-design.md](question-design.md),
 [field-reports.md](field-reports.md). Fetched 2026-11-10 (today), all pages
-this session. Our own usage is in [JEV.md](../JEV.md); this page is only what
+this session. Our own usage is in [SYSTEM1.md](../SYSTEM1.md); this page is only what
 is knowable from outside.
 
 Tags: **[V]** vendor (TypeSafe docs/blog, or OpenRouter docs about its own
@@ -14,9 +14,9 @@ Method caveat: the fetch tool summarises pages with a small model, so figures
 come from summaries, not raw HTML. Two PDFs (arXiv 2609.29429, a UCLA preprint)
 were read as raw text locally: the most reliable numbers here.
 
-## 1. What changed since JEV.md was written: a direct vendor API exists
+## 1. What changed since the old JEV.md was written: a direct vendor API exists
 
-JEV.md says "no direct TypeSafe endpoint in this repo". The vendor documents one:
+The old JEV.md said "no direct TypeSafe endpoint in this repo". The vendor documents one:
 
 | Item | Value | Tag |
 |---|---|---|
@@ -31,7 +31,7 @@ JEV.md says "no direct TypeSafe endpoint in this repo". The vendor documents one
 
 Model naming differs by door: vendor `jev-1.14.0`, `jev-latest`, `jev-preview`;
 OpenRouter `typesafe/jev-1.14`; served build in our receipts
-`typesafe/jev-1.14-20261014` (M, JEV.md). OpenRouter's own example response
+`typesafe/jev-1.14-20261014` (M, SYSTEM1.md). OpenRouter's own example response
 shows a dated build string `typesafe/jev-1.13-20260917` [V or-sysone].
 
 ## 2. What Jev is, as far as published

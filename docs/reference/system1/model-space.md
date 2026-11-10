@@ -3,7 +3,7 @@
 Reference subpage (convention: [../README.md](../README.md)). Sibling pages:
 [calibration-and-cascades.md](calibration-and-cascades.md),
 [dual-process.md](dual-process.md), [evaluation.md](evaluation.md). Context:
-[../JEV.md](../JEV.md) (the cloud System 1 we use today),
+[../SYSTEM1.md](../SYSTEM1.md) (the cloud System 1 we use today),
 [../ON-DEVICE-MODELS.md](../ON-DEVICE-MODELS.md) (the phone candidates).
 Researched and fetched 2026-11-10. All dates below are 2025 to 2026.
 
@@ -119,7 +119,7 @@ Notable properties:
 
 | Model | Size, licence | Price and shape | Evidence | Tag |
 |---|---|---|---|---|
-| Jev 1.13/1.14 | closed, hosted | $0.042/M input, state billed once; `POST /v1/systemone` | see JEV.md | `[V]` |
+| Jev 1.13/1.14 | closed, hosted | $0.042/M input, state billed once; `POST /v1/systemone` | see SYSTEM1.md | `[V]` |
 | Liquid d1-ultra | closed, hosted; text and image; 44 languages; 32K context | $0.042/M; `POST /decisions/v1/systemone`; each question billed separately | AA v1.0: 65, first, 85% non-hallucination rate on AA-Omniscience-Decision; says trained so "90% is right at least 90%" | `[R]` aggregator of vendor |
 | Liquid d1-3B | 3.12B, LFM Open License v1.0 (commercial use only under $10M revenue) | open; GGUF Q4_K_M 1.67 GB, Q8_0 2.87 GB, BF16 5.4 GB | Decision Index v0.2.1 48.57; knowledge 23.8 weakest; 83.3 vs Decider 4B 76.0 on SQuAD 2.0 | `[V]` |
 | Liquid d1-omni-600M | 587M, same licence | text plus image or audio; encoder base (LFM2.5-Encoder-350M) | 15.95; mean 78.4 vs d1-3B 82.9 on seven public sets; best on Civil Comments (95.8) and PAWS-X (79.5) | `[V]` |
@@ -201,7 +201,7 @@ Observations that change the plan:
 | Constrained or JSON-mode decoding | hurts reasoning (stricter formats degrade it more) but on classification tasks JSON-mode is competitive and sometimes best (Gemini 1.5 Flash on DDXPlus) `[P]` |
 | Verbalised confidence vs logit confidence | for RLHF-tuned models verbalised confidences are typically better calibrated than conditional probabilities, often cutting ECE by a relative 50% (TriviaQA, SciQ, TruthfulQA) `[P]`; raw probabilities were "consistently over-confident" for gpt-3.5-turbo `[P]`. Result is for chat models; decision models are trained for calibrated readouts instead |
 | Prefix (KV) caching | Prompt Cache: time-to-first-token 8x lower on GPU and 60x on CPU, on long document prompts, with no accuracy change `[P]`. Anthropic: cache reads cost $0.01/M against $0.10/M input on Haiku 5.5 `[V]` |
-| Batching questions into one prompt | batch prompting: token and time cost fell roughly inversely with batch size `[P]`; zero-shot multi-problem prompts: classification accuracy 75.5% single vs 72.3% batched across 13 LLMs and 6 classification sets (a small drop, but consistent declines when the task is turned into "choose an index") `[P]`; 50 questions per prompt on transcripts: GPT-4o about 0.95 at group sizes 5 and 10, and fine-tuned 7 to 8B models can beat it `[P]`. Decision models differ: Jev answers are independent by construction (JEV.md) |
+| Batching questions into one prompt | batch prompting: token and time cost fell roughly inversely with batch size `[P]`; zero-shot multi-problem prompts: classification accuracy 75.5% single vs 72.3% batched across 13 LLMs and 6 classification sets (a small drop, but consistent declines when the task is turned into "choose an index") `[P]`; 50 questions per prompt on transcripts: GPT-4o about 0.95 at group sizes 5 and 10, and fine-tuned 7 to 8B models can beat it `[P]`. Decision models differ: Jev answers are independent by construction (SYSTEM1.md) |
 | Position and option-ID bias | Llama-30B picks A/B/C/D 34.6/27.3/22.3/15.8% of the time on 1,000 balanced MMLU items; gpt-3.5-turbo 22.5/25.6/... `[P]`. PriDe estimates the prior with permutations on about 5% of samples and removes it `[P]`. Calibrating with content-free inputs ("N/A") lifted GPT-3 and GPT-2 accuracy by up to 30 points absolute `[P]` |
 | Apple Foundation Models | typed (`@Generable`) output; **no token probabilities exposed** `[R]`; independent benchmark answered 60% of questions and ran 70 to 86 tokens/s (ON-DEVICE-MODELS.md, relayed) |
 | Phone numbers (iPhone 17 Pro, A19 Pro) | Qwen3-0.6B Core AI prefill 5,807 tokens/s, decode 115 tok/s, 0.22 GB (synthetic 512/1024 protocol); Gemma 4 E2B LiteRT-LM decode 61 tok/s, prefill 3,513 tok/s at p=1024, 497 MB; same 0.6B model in a later beta re-export fell to 1,519 prefill tok/s `[T]`. **No A16 data exists in that benchmark** (it asks for older devices) |
@@ -218,7 +218,7 @@ Latency is the best figure found with its hardware; none is for the A16.
 
 | Family | Latency (hardware) | Marginal $ per 1,000 decisions (our 6-question, 800-token-state example) | Accuracy evidence | Calibration | Data needed | Runs where |
 |---|---|---|---|---|---|---|
-| A Jev | 93 ms median (AA, hosted); 83 to 150 ms upstream in our log | $0.0081 (state billed once) | AA v2 67.0 | over-confident on hard knowledge; thresholds to tune (JEV.md) | none | cloud |
+| A Jev | 93 ms median (AA, hosted); 83 to 150 ms upstream in our log | $0.0081 (state billed once) | AA v2 67.0 | over-confident on hard knowledge; thresholds to tune (SYSTEM1.md) | none | cloud |
 | A d1-ultra | 295 ms (AA v2) | $0.0361 if the state is billed per question | AA v2 70.4 | trained for calibration (vendor) | none | cloud |
 | B d1-3B | 30 ms (M5 Pro), 8 ms (RTX 4090); 640 ms with a 3.4K state | $0 plus device | 48.57 own index; weak on knowledge | not stated | none to fine-tune | Mac, GPU, maybe phone (1.67 GB) |
 | B d1-omni-600M | no figure | $0 | 15.95 | not stated | fine-tune | phone-sized |
@@ -242,7 +242,7 @@ Cost arithmetic is in [evaluation.md](evaluation.md) section 4.
 | Needs world knowledge or a long state | A on the server; escalate to F | knowledge is where small decision models fail (d1-3B knowledge 23.8; AA overconfidence) |
 | Needs a probability we can threshold | A, B, D | F needs verbalised confidence; Apple's model gives none |
 | Offline on the phone, mid-quality | E (Qwen3-0.6B, Gemma 4 E2B) with a cached prefix, or D | no decision model of the right size is proven on an iPhone |
-| Answer depends on another answer | two requests, code in between | questions are blind to each other (JEV.md) |
+| Answer depends on another answer | two requests, code in between | questions are blind to each other (SYSTEM1.md) |
 
 Proposed phone interface (ours; keep the cloud wire shape so one record format
 scores every System 1):
