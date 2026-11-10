@@ -152,9 +152,10 @@ public actor TurnEngine {
         await prepareIdle()
         await route(.buttonDown, now: now)
     }
-    public func buttonUp() async {
+    /// `held` overrides the measured hold (replay passes the recorded one: compute time must not count as holding).
+    public func buttonUp(held explicit: Double? = nil) async {
         let now = env.log.clock.now
-        let held = now - (buttonDownAt ?? now)
+        let held = explicit ?? (now - (buttonDownAt ?? now))
         buttonDownAt = nil
         await route(.buttonUp(heldSeconds: held), now: now)
     }

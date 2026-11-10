@@ -1,0 +1,7 @@
+/target/
+/dist/
+/dist.*
+/node_modules/
+/app.contract.d.ts
+/.exact/
+/.env.local

@@ -1,0 +1,173 @@
+use StatBar from "exact:content"
+use labState, labStages, labParams, labTrace, labTurns, labEvents, labConfigs from "@choir/autoradio"
+use labStart, labStop, labTalkDown, labTalkUp, labPlayPause, labNext, labPrevious from "@choir/autoradio"
+use labSelectStage, labSetParam, labSaveConfig, labLoadConfig, labLoadConfigURL, labReplay from "@choir/autoradio"
+use LabState, StageList, ParamList, Trace, TurnList, Lines, Names from "@choir/autoradio"
+
+routes nav
+  tab player "/"
+  tab lab "/lab"
+  tab trace "/trace"
+
+component Autoradio
+  resource st = labState() as shape LabState else empty()
+  resource stages = labStages() as shape StageList else empty()
+  resource params = labParams() as shape ParamList else empty()
+  resource turns = labTurns() as shape TurnList else empty()
+  resource events = labEvents() as shape Lines else empty()
+  resource configs = labConfigs() as shape Names else empty()
+  state sel = ""
+  state cmp = ""
+  state cfgName = ""
+  state cfgUrl = ""
+  resource trace = labTrace(turn=sel) as shape Trace else empty()
+  resource other = labTrace(turn=cmp) as shape Trace else empty()
+  mutation ctl as shape LabState
+  mutation down as shape LabState
+  mutation up as shape LabState
+
+  action pickTab(name: string)
+    nav = select(nav, name)
+  action follow(url: string)
+    nav = go(nav, url)
+
+  action start
+    send ctl = labStart()
+  action stop
+    send ctl = labStop()
+  action playpause
+    send ctl = labPlayPause()
+  action next
+    send ctl = labNext()
+  action previous
+    send ctl = labPrevious()
+  action talkDown
+    send down = labTalkDown()
+  action talkUp
+    send up = labTalkUp()
+
+  action pick(kind: string, id: string)
+    send ctl = labSelectStage(kind=kind, id=id)
+  action setParam(kind: string, name: string, v: string)
+    send ctl = labSetParam(kind=kind, name=name, value=v)
+  action editCfgName(v: string)
+    cfgName = v
+  action saveCfg
+    send ctl = labSaveConfig(name=cfgName)
+  action loadCfg(n: string)
+    send ctl = labLoadConfig(name=n)
+  action editCfgUrl(v: string)
+    cfgUrl = v
+  action loadUrl
+    send ctl = labLoadConfigURL(url=cfgUrl)
+
+  action choose(id: string)
+    sel = id
+  action compare(id: string)
+    cmp = id
+  action replay(id: string)
+    send ctl = labReplay(turn=id)
+
+  derive modeLabel = st.addressing == "button" ? "Button: hold or tap to talk" : st.addressing == "open" ? "Open: just speak" : st.addressing == "hybrid" ? "Hybrid: button, then open for a window" : st.addressing
+  derive yieldLabel = st.level == "dip" ? "Dipped: you are speaking" : st.level == "pause" ? "Paused" : "Playing"
+
+  view
+    main navigationKey=`${top(nav).id}` navigationBack="back" navigate=follow
+      width="100%" height="100%" display="flex" flex-direction="column"
+      column flex=1 min-height=0 position="relative"
+        for t in nav.tabs key=t.name
+          column role="tabpanel" id=`panel-${t.name}` position="absolute" inset=0
+            for e in t.stack key=e.id
+              column navigationKey=`${e.id}` navigationScroll=`content-${e.id}` position="absolute" inset=0
+                header padding="8px 16px" display="flex" align-items="center"
+                  text (e.name == "player" ? "Autoradio" : e.name == "lab" ? "Lab" : "Trace") role="heading" aria-level=1 flex=1
+                  text `${st.residentMB.toFixed(0)} MB · ${st.thermal}` testId="resources" color="-exact-secondary-label"
+                scroll id=`content-${e.id}` flex=1 min-height=0
+                  if e.name == "player"
+                    column padding=16 gap=12
+                      text st.blockText testId="block" font="-exact-title3"
+                      text `Block ${st.blockIndex + 1} of ${st.blockCount}` color="-exact-secondary-label"
+                      row gap=12 align-items="center"
+                        button press=previous aria-label="Previous" testId="prev"
+                          image "symbol:sf/backward"
+                        button press=playpause buttonStyle="filled" testId="playpause"
+                          text (st.paused ? "Play" : "Pause")
+                        button press=next aria-label="Next" testId="next"
+                          image "symbol:sf/forward"
+                        button press=start testId="start"
+                          text (st.running ? "Restart audio" : "Start audio")
+                        button press=stop testId="stop"
+                          text "Stop"
+                      text yieldLabel testId="yield"
+                      text modeLabel testId="mode" color="-exact-secondary-label"
+                      text (st.transcript == "" ? "(listening)" : st.transcript) testId="transcript"
+                      button pointerdown=talkDown pointerup=talkUp testId="talk" appearance="none"
+                        width="100%" padding=40 background="-exact-secondary-background"
+                        text (st.phase == "playing" ? "Hold to talk" : st.phase)
+                      text `Phase: ${st.phase} · mic ${st.micActive ? "on" : "off"} · config ${st.configName}` testId="phase" color="-exact-secondary-label"
+                      text st.message testId="message" color="-exact-secondary-label"
+                  if e.name == "lab"
+                    column padding=16 gap=12
+                      text "Configuration" role="heading" aria-level=2
+                      text `Current: ${st.configName}` testId="config"
+                      row gap=8 align-items="center"
+                        input value=cfgName input=editCfgName placeholder="Name to save as" aria-label="Configuration name" testId="cfg-name" flex=1 min-width=0
+                        button press=saveCfg testId="cfg-save"
+                          text "Save"
+                      for n in configs.names key=n
+                        button press=loadCfg(n) testId=`cfg-${n}`
+                          text `Load ${n}`
+                      row gap=8 align-items="center"
+                        input value=cfgUrl input=editCfgUrl placeholder="Load from URL" aria-label="Configuration URL" testId="cfg-url" flex=1 min-width=0
+                        button press=loadUrl testId="cfg-url-load"
+                          text "Fetch"
+                      text "Stages" role="heading" aria-level=2
+                      for r in stages.rows key=`${r.kind}.${r.id}`
+                        button press=pick(r.kind, r.id) role="radio" aria-checked=r.selected testId=`stage-${r.kind}-${r.id}`
+                          text `${r.selected ? "● " : "○ "}${r.kindLabel}: ${r.name}${r.network ? " (network)" : ""}`
+                      text "Parameters" role="heading" aria-level=2
+                      for p, i in params.rows key=i
+                        column gap=2
+                          text `${p.stage} · ${p.label}` color="-exact-secondary-label"
+                          input value=p.value input=setParam(p.kind, p.name) aria-label=p.label testId=`param-${p.kind}-${p.name}`
+                          text p.hint color="-exact-secondary-label"
+                      text "Events" role="heading" aria-level=2
+                      for l, i in events.lines key=i
+                        text l font="-exact-footnote"
+                  if e.name == "trace"
+                    column padding=16 gap=12
+                      text "Last turn" role="heading" aria-level=2
+                      text `"${trace.transcript}"` testId="trace-transcript"
+                      text `${trace.configName} · addressed by ${trace.addressedBy} · outcome ${trace.outcome}` color="-exact-secondary-label"
+                      text `Acknowledgement ${trace.ackMs.toFixed(0)} ms · revision ${trace.revisionMs.toFixed(0)} ms after the turn ended` testId="trace-times"
+                      for t2, j in trace.timings key=j
+                        StatBar(label=`${t2.stage} (+${t2.startMs.toFixed(0)} ms)`, value=`${t2.durMs.toFixed(0)} ms`, fraction=(trace.totalMs > 0 ? t2.durMs / trace.totalMs : 0), tint=none)
+                      text "Events" role="heading" aria-level=2
+                      for l2, k in trace.lines key=k
+                        text l2 font="-exact-footnote"
+                      if cmp != ""
+                        text "Compared with" role="heading" aria-level=2
+                        text `${other.configName}: ack ${other.ackMs.toFixed(0)} ms, revision ${other.revisionMs.toFixed(0)} ms` testId="compare-times"
+                        for t3, m in other.timings key=m
+                          StatBar(label=t3.stage, value=`${t3.durMs.toFixed(0)} ms`, fraction=(other.totalMs > 0 ? t3.durMs / other.totalMs : 0), tint=none)
+                      text "Kept turns" role="heading" aria-level=2
+                      for r2 in turns.rows key=r2.id
+                        column gap=4
+                          text `${r2.transcript} (${r2.configName}, ${r2.outcome})`
+                          row gap=8
+                            button press=choose(r2.id) testId=`show-${r2.id}`
+                              text "Show"
+                            button press=compare(r2.id) testId=`cmp-${r2.id}`
+                              text "Compare"
+                            button press=replay(r2.id) testId=`replay-${r2.id}`
+                              text "Replay with current configuration"
+      row role="tablist"
+        button role="tab" aria-controls="panel-player" aria-selected=(nav.tab == "player") press=pickTab("player") testId="tab-player" flex=1
+          image "symbol:play"
+          text "Player"
+        button role="tab" aria-controls="panel-lab" aria-selected=(nav.tab == "lab") press=pickTab("lab") testId="tab-lab" flex=1
+          image "symbol:settings"
+          text "Lab"
+        button role="tab" aria-controls="panel-trace" aria-selected=(nav.tab == "trace") press=pickTab("trace") testId="tab-trace" flex=1
+          image "symbol:chart"
+          text "Trace"

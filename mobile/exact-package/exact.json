@@ -1,0 +1,252 @@
+{
+  "kind": "interface",
+  "name": "@choir/autoradio",
+  "version": "1.0.0",
+  "substitute": "implementation",
+  "shapes": {
+    "LabState": {
+      "running": "bool",
+      "paused": "bool",
+      "phase": "string",
+      "level": "string",
+      "addressing": "string",
+      "transcript": "string",
+      "configName": "string",
+      "blockIndex": "number",
+      "blockCount": "number",
+      "blockText": "string",
+      "residentMB": "number",
+      "thermal": "string",
+      "message": "string",
+      "micActive": "bool"
+    },
+    "StageRow": {
+      "kind": "string",
+      "kindLabel": "string",
+      "id": "string",
+      "name": "string",
+      "summary": "string",
+      "selected": "bool",
+      "network": "bool",
+      "models": "string"
+    },
+    "StageList": {
+      "rows": "StageRow[]"
+    },
+    "ParamRow": {
+      "kind": "string",
+      "stage": "string",
+      "name": "string",
+      "label": "string",
+      "value": "string",
+      "hint": "string"
+    },
+    "ParamList": {
+      "rows": "ParamRow[]"
+    },
+    "TimingRow": {
+      "stage": "string",
+      "startMs": "number",
+      "durMs": "number"
+    },
+    "Trace": {
+      "id": "string",
+      "transcript": "string",
+      "configName": "string",
+      "outcome": "string",
+      "addressedBy": "string",
+      "totalMs": "number",
+      "ackMs": "number",
+      "revisionMs": "number",
+      "timings": "TimingRow[]",
+      "lines": "string[]"
+    },
+    "TurnRow": {
+      "id": "string",
+      "transcript": "string",
+      "configName": "string",
+      "outcome": "string",
+      "ackMs": "number",
+      "revisionMs": "number"
+    },
+    "TurnList": {
+      "rows": "TurnRow[]"
+    },
+    "Lines": {
+      "lines": "string[]"
+    },
+    "Names": {
+      "names": "string[]"
+    }
+  },
+  "names": [
+    {
+      "source": "labState",
+      "live": true,
+      "answers": "LabState",
+      "substitute": {
+        "default": {
+          "running": false,
+          "paused": true,
+          "phase": "playing",
+          "level": "play",
+          "addressing": "",
+          "transcript": "",
+          "configName": "",
+          "blockIndex": 0,
+          "blockCount": 0,
+          "blockText": "",
+          "residentMB": 0,
+          "thermal": "nominal",
+          "message": "",
+          "micActive": false
+        }
+      }
+    },
+    {
+      "source": "labStages",
+      "live": true,
+      "answers": "StageList",
+      "substitute": {
+        "default": {
+          "rows": []
+        }
+      }
+    },
+    {
+      "source": "labParams",
+      "live": true,
+      "answers": "ParamList",
+      "substitute": {
+        "default": {
+          "rows": []
+        }
+      }
+    },
+    {
+      "source": "labTrace",
+      "live": true,
+      "answers": "Trace",
+      "options": {
+        "turn": "string"
+      },
+      "substitute": {
+        "default": {
+          "id": "",
+          "transcript": "",
+          "configName": "",
+          "outcome": "",
+          "addressedBy": "",
+          "totalMs": 0,
+          "ackMs": 0,
+          "revisionMs": 0,
+          "timings": [],
+          "lines": []
+        }
+      }
+    },
+    {
+      "source": "labTurns",
+      "live": true,
+      "answers": "TurnList",
+      "substitute": {
+        "default": {
+          "rows": []
+        }
+      }
+    },
+    {
+      "source": "labEvents",
+      "live": true,
+      "answers": "Lines",
+      "substitute": {
+        "default": {
+          "lines": []
+        }
+      }
+    },
+    {
+      "source": "labConfigs",
+      "live": true,
+      "answers": "Names",
+      "substitute": {
+        "default": {
+          "names": []
+        }
+      }
+    },
+    {
+      "send": "labStart",
+      "answers": "LabState"
+    },
+    {
+      "send": "labStop",
+      "answers": "LabState"
+    },
+    {
+      "send": "labTalkDown",
+      "answers": "LabState"
+    },
+    {
+      "send": "labTalkUp",
+      "answers": "LabState"
+    },
+    {
+      "send": "labPlayPause",
+      "answers": "LabState"
+    },
+    {
+      "send": "labNext",
+      "answers": "LabState"
+    },
+    {
+      "send": "labPrevious",
+      "answers": "LabState"
+    },
+    {
+      "send": "labSelectStage",
+      "options": {
+        "kind": "string",
+        "id": "string"
+      },
+      "answers": "LabState"
+    },
+    {
+      "send": "labSetParam",
+      "options": {
+        "kind": "string",
+        "name": "string",
+        "value": "string"
+      },
+      "answers": "LabState"
+    },
+    {
+      "send": "labSaveConfig",
+      "options": {
+        "name": "string"
+      },
+      "answers": "LabState"
+    },
+    {
+      "send": "labLoadConfig",
+      "options": {
+        "name": "string"
+      },
+      "answers": "LabState"
+    },
+    {
+      "send": "labLoadConfigURL",
+      "options": {
+        "url": "string"
+      },
+      "answers": "LabState"
+    },
+    {
+      "send": "labReplay",
+      "options": {
+        "turn": "string"
+      },
+      "answers": "LabState"
+    }
+  ]
+}

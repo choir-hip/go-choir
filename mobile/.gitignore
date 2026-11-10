@@ -2,3 +2,6 @@
 *.xcodeproj/
 DerivedData/
 .swiftpm/
+.exact-src/
+.exact-build/
+exact-package/apple/Kit/

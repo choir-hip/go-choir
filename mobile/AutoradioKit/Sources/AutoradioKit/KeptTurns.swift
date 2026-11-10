@@ -120,8 +120,12 @@ public enum Replayer {
         let bus = AudioBus()
         bus.syncMic = { f in await engine.ingest(f) }
         let src = FileAudioSource(mic: mic, reference: ref, inputs: inputs, realTime: options.realTime)
+        let downs = Box()
         src.onInput = { i in
-            switch i.kind { case .buttonDown: await engine.buttonDown(); case .buttonUp: await engine.buttonUp() }
+            switch i.kind {
+            case .buttonDown: downs.t = i.t; await engine.buttonDown()
+            case .buttonUp: await engine.buttonUp(held: i.t - downs.t)
+            }
         }
         log.emit(.note("replay of \(turn.name) with configuration \(configuration.name)"))
         try await src.start(into: bus, clock: clock)
@@ -144,3 +148,5 @@ public enum Replayer {
         return levels.firstIndex { $0 > thr }.map { Double($0) * 0.032 }
     }
 }
+
+final class Box: @unchecked Sendable { var t = 0.0 }

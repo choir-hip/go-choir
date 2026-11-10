@@ -1,0 +1,31 @@
+{
+  "kind": "implementation",
+  "implements": "@choir/autoradio@^1.0",
+  "platform": "apple",
+  "targets": [
+    "ios"
+  ],
+  "shapes": {},
+  "options": {},
+  "names": [],
+  "views": [],
+  "hatches": [],
+  "sources": {
+    "swift": [
+      "AutoradioModule.swift",
+      "Kit/AppleStages.swift",
+      "Kit/Audio.swift",
+      "Kit/BasicStages.swift",
+      "Kit/Core.swift",
+      "Kit/Events.swift",
+      "Kit/FixtureClip.swift",
+      "Kit/KeptTurns.swift",
+      "Kit/LabRuntime.swift",
+      "Kit/LiveAudio.swift",
+      "Kit/Stages.swift",
+      "Kit/TurnEngine.swift"
+    ]
+  },
+  "artifacts": [],
+  "class": "AutoradioModule"
+}
