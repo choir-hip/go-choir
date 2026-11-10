@@ -198,3 +198,32 @@ func TestNoTextKeepsNeitherExcerptNorOptions(t *testing.T) {
 		t.Fatalf("question = %+v", q)
 	}
 }
+
+// A question with no choices field (the vendor's shape) keeps its options as
+// the keys of its criteria, in the order sent.
+func TestOptionsAreTheCriteriaKeysWhenThereIsNoChoicesField(t *testing.T) {
+	qs := map[string]json.RawMessage{"q": json.RawMessage(`{"type":"choice","instructions":"x","criteria":{"c2":null,"c1":null,"new":"none fit"}}`)}
+	r := Build(Meta{Site: "intake_labels"}, json.RawMessage(`{}`), qs, json.RawMessage(distribution), nil, time.Now(), time.Millisecond)
+	if got := strings.Join(r.Questions[0].Options, ","); got != "c2,c1,new" {
+		t.Fatalf("options = %q; want the criteria keys in order", got)
+	}
+}
+
+// A batched call carries the questions of several decisions: each question
+// joins to its own, and a question with none joins the record's.
+func TestQuestionDecisionsJoinABatchedCallPerQuestion(t *testing.T) {
+	qs := map[string]json.RawMessage{
+		"event_n1": json.RawMessage(`{"type":"choice","choices":["c1","new"]}`),
+		"event_n2": json.RawMessage(`{"type":"choice","choices":["c1","new"]}`),
+		"plain":    json.RawMessage(`{"type":"choice","choices":["a"]}`),
+	}
+	r := Build(Meta{Site: "intake_labels", DecisionID: "cap-1", QuestionDecisions: map[string]string{"event_n1": "cap-1", "event_n2": "cap-2"}},
+		json.RawMessage(`{}`), qs, json.RawMessage(distribution), nil, time.Now(), time.Millisecond)
+	got := map[string]string{}
+	for _, q := range r.Questions {
+		got[q.Name] = q.DecisionID
+	}
+	if got["event_n1"] != "cap-1" || got["event_n2"] != "cap-2" || got["plain"] != "" || r.DecisionID != "cap-1" {
+		t.Fatalf("decisions = %v, record %q", got, r.DecisionID)
+	}
+}

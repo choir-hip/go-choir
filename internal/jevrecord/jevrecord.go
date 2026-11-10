@@ -65,6 +65,12 @@ type Meta struct {
 	// and name only): for a site whose questions are authored by an agent,
 	// which may quote private text.
 	NoText bool
+	// QuestionDecisions maps a question's name to the decision it feeds,
+	// for a call that carries the questions of several decisions (intake
+	// labels put the questions of up to four captures in one call, so one
+	// DecisionID cannot join them all). A question absent here feeds
+	// DecisionID.
+	QuestionDecisions map[string]string
 }
 
 // Question is one question as asked: its options, and a digest plus a
@@ -77,6 +83,9 @@ type Question struct {
 	MoreOptions int    `json:"more_options,omitempty"`
 	Digest      string `json:"digest"`
 	Excerpt     string `json:"excerpt,omitempty"`
+	// DecisionID is the decision this question feeds when it differs from
+	// the record's (a batched call); empty means the record's.
+	DecisionID string `json:"decision_id,omitempty"`
 }
 
 // Answer is one question's answer: the chosen option and the top of its
@@ -290,7 +299,7 @@ func Build(meta Meta, state json.RawMessage, questions map[string]json.RawMessag
 	rec := Record{
 		Schema: Schema, CallID: uuid.New().String(), At: started.UTC().Format(time.RFC3339Nano),
 		Site: meta.Site, DecisionID: meta.DecisionID, RunID: meta.RunID, Scope: meta.Scope, Threshold: meta.Threshold,
-		Questions: describeQuestions(questions, meta.NoText), StateDigest: digest(state), StateBytes: len(state),
+		Questions: describeQuestions(questions, meta.NoText, meta.QuestionDecisions), StateDigest: digest(state), StateBytes: len(state),
 		Requested: requestedName, LatencyMS: latency.Milliseconds(), OK: callErr == nil,
 	}
 	if callErr != nil {
@@ -331,7 +340,7 @@ func Build(meta Meta, state json.RawMessage, questions map[string]json.RawMessag
 	return rec
 }
 
-func describeQuestions(questions map[string]json.RawMessage, noText bool) []Question {
+func describeQuestions(questions map[string]json.RawMessage, noText bool, decisions map[string]string) []Question {
 	names := make([]string, 0, len(questions))
 	for name := range questions {
 		names = append(names, name)
@@ -345,9 +354,14 @@ func describeQuestions(questions map[string]json.RawMessage, noText bool) []Ques
 			Instructions string   `json:"instructions"`
 			Text         string   `json:"text"`
 			Choices      []string `json:"choices"`
+			// Criteria is the vendor's option set: its keys are the options.
+			Criteria json.RawMessage `json:"criteria"`
 		}
 		_ = json.Unmarshal(raw, &shape)
-		q := Question{Name: name, Type: shape.Type, Digest: digest(raw), Excerpt: clip(strings.Join(strings.Fields(firstNonEmpty(shape.Instructions, shape.Text)), " "), excerptRunes)}
+		if len(shape.Choices) == 0 {
+			shape.Choices = objectKeys(shape.Criteria)
+		}
+		q := Question{Name: name, Type: shape.Type, DecisionID: decisions[name], Digest: digest(raw), Excerpt: clip(strings.Join(strings.Fields(firstNonEmpty(shape.Instructions, shape.Text)), " "), excerptRunes)}
 		if noText {
 			q.Excerpt = ""
 			q.MoreOptions = len(shape.Choices)
@@ -362,6 +376,31 @@ func describeQuestions(questions map[string]json.RawMessage, noText bool) []Ques
 		out = append(out, q)
 	}
 	return out
+}
+
+// objectKeys are a JSON object's keys in the order written, or nil.
+func objectKeys(raw json.RawMessage) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	dec := json.NewDecoder(strings.NewReader(string(raw)))
+	if tok, err := dec.Token(); err != nil || tok != json.Delim('{') {
+		return nil
+	}
+	var keys []string
+	for dec.More() {
+		k, err := dec.Token()
+		if err != nil {
+			return keys
+		}
+		name, _ := k.(string)
+		keys = append(keys, name)
+		var skip json.RawMessage
+		if dec.Decode(&skip) != nil {
+			return keys
+		}
+	}
+	return keys
 }
 
 func topP(p map[string]float64, chosen string) map[string]float64 {

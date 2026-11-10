@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"log"
+	"math"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -52,12 +53,30 @@ type ScopedCandidateJudge interface {
 
 // Budgets. Vars so a test can shorten them.
 var (
-	intakeLabelConcurrency = 12
 	intakeLabelPollBudget  = 15 * time.Second
 	intakeLabelCallTimeout = 5 * time.Second
 )
 
 const (
+	// intakeBatchCaptures is the most captures whose questions share one
+	// call (two questions each, so 8): the owner's ruling is to run many
+	// questions against the same context, not many calls
+	// (docs/design/jev-batched-questions-2026-11-10.md, step 1; vendor
+	// guidance in docs/evidence/jev-usage-best-practices-2026-11-10.md,
+	// "4 items per call for intake, then 8"). It is a start, not a measured
+	// value: accuracy at 8 questions is unmeasured, so it is a compiled
+	// constant to raise once the shadow comparison has run.
+	intakeBatchCaptures = 4
+	// intakeRequestMaxBytes is the most a call's state and questions may
+	// carry: under OpenRouter's ~32,000-byte line past which Jev runs a
+	// slower, less accurate long-context mode. A group of captures that
+	// would cross it is split, never trimmed.
+	intakeRequestMaxBytes = 30000
+	// intakeLabelConcurrency is the calls in flight at once for a poll. The
+	// batched shape needs one call per chunk and group (a poll of three
+	// captures against 80 stories is one call), so the pool only covers a
+	// large window's chunks; the fan-out of one call per capture is gone.
+	intakeLabelConcurrency    = 2
 	intakeShortlistOverlap    = 10
 	intakeShortlistHorizon    = 72 * time.Hour
 	intakeOverrideExamples    = 12
@@ -78,10 +97,14 @@ type intakeLibrary struct {
 	mu       sync.Mutex
 	summary  map[string]store.StorySummary
 	examples []store.CaptureLabelOverride
-	// slots bounds the calls in flight across the poll's captures and chunks.
-	slotsOnce sync.Once
-	slots     chan struct{}
+	// stats are the poll's call counts, set by labelPoll for the poll's one
+	// log line.
+	stats intakePollStats
 }
+
+// intakePollStats are counts only: the calls a poll's labels made, their
+// questions and the largest request.
+type intakePollStats struct{ calls, questions, maxBytes int }
 
 func (lib *intakeLibrary) summaryOf(ctx context.Context, doc types.Document) store.StorySummary {
 	lib.mu.Lock()
@@ -214,14 +237,13 @@ func (rt *Runtime) labelCaptures(ctx context.Context, ownerID, computerID, sourc
 		lib.examples = examples
 	}
 
-	results := fanout.Do(budget, intakeLabelConcurrency, len(items), func(callCtx context.Context, i int) (struct{}, error) {
-		label, err := rt.labelOneCapture(callCtx, lib, ownerID, computerID, sourceID, items, i)
-		if err == nil {
-			_, err = rt.store.AppendCaptureLabel(withKindCustodian(ctx, "choir.capture_label"), label)
-		}
-		return struct{}{}, err
-	})
+	results := rt.labelPoll(budget, lib, ownerID, computerID, sourceID, items, intakeBatchCaptures)
 	for i, r := range results {
+		if r.Err == nil {
+			// In the poll's order; a label that cannot be written is
+			// unlabelled like one Jev did not answer.
+			_, r.Err = rt.store.AppendCaptureLabel(withKindCustodian(ctx, "choir.capture_label"), r.Value)
+		}
 		if r.Err != nil {
 			// A capture the budget ended before it started is left
 			// unlabelled without a line, as before.
@@ -232,6 +254,10 @@ func (rt *Runtime) labelCaptures(ctx context.Context, ownerID, computerID, sourc
 		}
 		labelled++
 	}
+	// One line per poll, counts only: the per-capture lines above stop when
+	// the budget ends, and a slow Jev would otherwise leave no trace.
+	log.Printf("intake labels: %s: poll captures=%d calls=%d questions=%d bytes_max=%d unlabelled=%d budget_expired=%t",
+		sourceID, len(items), lib.stats.calls, lib.stats.questions, lib.stats.maxBytes, len(items)-labelled, budget.Err() != nil)
 	return labelled, len(items) - labelled
 }
 
@@ -246,109 +272,576 @@ func intakeCaptureState(c sourcegraph.CapturedItem, summaryRunes int) map[string
 	return state
 }
 
-// labelOneCapture asks Jev about items[i] and returns its label.
-func (rt *Runtime) labelOneCapture(ctx context.Context, lib *intakeLibrary, ownerID, computerID, sourceID string, items []sourcegraph.CapturedItem, i int) (store.CaptureLabel, error) {
-	capture := items[i]
-	label := store.CaptureLabel{OwnerID: ownerID, ComputerID: computerID, CaptureID: capture.CaptureID, SourceID: sourceID,
-		Title: strings.TrimSpace(capture.Title), Outlet: capture.Outlet, Language: capture.Language, Script: capture.Script}
+// intakePoll is the poll's captures against the poll's candidate stories:
+// the stories listed once, under stable handles (c1, c2, … newest first), and
+// the captures under stable handles (n1, n2, … in poll order), so a question
+// names its capture and its choices by handle and the story list lives in the
+// call's state, not in every question.
+type intakePoll struct {
+	items []sourcegraph.CapturedItem
+	// handles[i] is items[i]'s handle (n<i+1>).
+	handles []string
+	// stories lists every candidate of the poll in handle order: the stories
+	// updated within the window, then the title-overlap picks of the poll's
+	// captures that are not already in the window.
+	stories []intakeStory
+	// views[i] is what items[i] is compared with.
+	views []intakeView
+}
 
-	// Candidates: the stories updated within the window, then the rest by
-	// title overlap. A list over intakeChunkCandidates is asked in chunks,
-	// one call each, concurrently; no candidate is dropped to fit a call.
-	candidates := append([]types.Document(nil), lib.recent...)
-	candidates = append(candidates, intakeOverlapPicks(lib.rest, capture.Title, intakeShortlistOverlap)...)
-	storyAlias := map[string]store.StorySummary{}
-	var chunks []intakeChunk
-	for n, doc := range candidates {
-		if ctx.Err() != nil {
-			return label, ctx.Err()
+type intakeStory struct {
+	handle string
+	sum    store.StorySummary
+	entry  string
+}
+
+// intakeView is one capture's candidates and siblings.
+type intakeView struct {
+	// candidate marks the story handles this capture is compared with: the
+	// window, plus its own overlap picks.
+	candidate map[string]bool
+	// order lists those handles in the capture's own order: the window
+	// newest first, then its own overlap picks in its own score order. The
+	// first option is the one Jev leans toward, so each question offers its
+	// capture's options in this order, whatever order the shared state lists
+	// the poll's union of stories in.
+	order []string
+	// siblings are the handles of the poll's other captures.
+	siblings []string
+}
+
+// newIntakePoll builds the poll's handles and each capture's candidates: the
+// stories updated within the window, then the rest by title overlap, as the
+// per-capture path chose them.
+func newIntakePoll(ctx context.Context, lib *intakeLibrary, items []sourcegraph.CapturedItem) (*intakePoll, error) {
+	p := &intakePoll{items: items, handles: make([]string, len(items)), views: make([]intakeView, len(items))}
+	byDoc := map[string]string{}
+	addStory := func(doc types.Document) (string, error) {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		if h, ok := byDoc[doc.DocID]; ok {
+			return h, nil
 		}
 		sum := lib.summaryOf(ctx, doc)
-		alias := fmt.Sprintf("c%d", n+1)
-		storyAlias[alias] = sum
-		entry := map[string]any{"headline": sum.Headline, "updated_at": sum.UpdatedAt.UTC().Format(time.RFC3339)}
+		n := len(p.stories)
+		h := fmt.Sprintf("c%d", n+1)
+		// The entry starts with exactly its handle, the option name Jev is
+		// offered: one hop from the option to its story.
+		entry := h + ": " + sum.Headline + " (" + sum.UpdatedAt.UTC().Format(time.RFC3339) + ")"
 		if sum.Lede != "" && n < intakeLedeCandidates {
-			entry["lede"] = sum.Lede
+			entry += " — " + sum.Lede
 		}
-		if n%intakeChunkCandidates == 0 {
-			chunks = append(chunks, intakeChunk{stories: map[string]any{}})
-		}
-		c := &chunks[len(chunks)-1]
-		c.stories[alias] = entry
-		c.choices = append(c.choices, alias)
-		label.CandidateDocIDs = append(label.CandidateDocIDs, sum.DocID)
+		byDoc[doc.DocID] = h
+		p.stories = append(p.stories, intakeStory{handle: h, sum: sum, entry: entry})
+		return h, nil
 	}
-	siblingAlias := map[string]string{}
-	siblings := map[string]any{}
-	var siblingChoices []string
-	for j, other := range items {
-		if j == i {
+	recent := make([]string, 0, len(lib.recent))
+	for _, doc := range lib.recent {
+		h, err := addStory(doc)
+		if err != nil {
+			return nil, err
+		}
+		recent = append(recent, h)
+	}
+	for i, item := range items {
+		p.handles[i] = fmt.Sprintf("n%d", i+1)
+		v := intakeView{candidate: map[string]bool{}}
+		for _, h := range recent {
+			v.candidate[h] = true
+			v.order = append(v.order, h)
+		}
+		for _, doc := range intakeOverlapPicks(lib.rest, item.Title, intakeShortlistOverlap) {
+			h, err := addStory(doc)
+			if err != nil {
+				return nil, err
+			}
+			if !v.candidate[h] {
+				v.candidate[h] = true
+				v.order = append(v.order, h)
+			}
+		}
+		p.views[i] = v
+	}
+	for i := range items {
+		for j := range items {
+			if j != i {
+				p.views[i].siblings = append(p.views[i].siblings, p.handles[j])
+			}
+		}
+	}
+	return p, nil
+}
+
+// candidatesOf lists a capture's candidate stories in its own order.
+func (p *intakePoll) candidatesOf(i int) []intakeStory {
+	var out []intakeStory
+	for _, h := range p.views[i].order {
+		out = append(out, p.stories[storyIndex(h)])
+	}
+	return out
+}
+
+// storyIndex is the position of a story handle (c<n>) in intakePoll.stories.
+func storyIndex(handle string) int {
+	var n int
+	_, _ = fmt.Sscanf(handle, "c%d", &n)
+	return n - 1
+}
+
+// chunkCount is how many chunks of at most intakeChunkCandidates stories the
+// poll's candidates make (one, even with none: the siblings' call).
+func (p *intakePoll) chunkCount() int {
+	return max(1, (len(p.stories)+intakeChunkCandidates-1)/intakeChunkCandidates)
+}
+
+func (p *intakePoll) chunk(k int) []intakeStory {
+	lo, hi := k*intakeChunkCandidates, min((k+1)*intakeChunkCandidates, len(p.stories))
+	if lo >= hi {
+		return nil
+	}
+	return p.stories[lo:hi]
+}
+
+// intakeAsk is one capture's questions in one call: the choices offered and
+// the questions' names.
+type intakeAsk struct {
+	capture      int
+	eventName    string
+	topicName    string
+	eventChoices []string
+	storyChoices []string
+}
+
+// intakeCall is one Jev call: a chunk's stories (the state, sent once) and
+// the event and topic questions of a group of captures.
+type intakeCall struct {
+	chunk int
+	// first is the first capture's id, the record's DecisionID; each
+	// question joins to its own capture through decisions.
+	first     string
+	asks      []intakeAsk
+	state     json.RawMessage
+	questions map[string]json.RawMessage
+	decisions map[string]string
+}
+
+func (c intakeCall) bytes() int {
+	n := len(c.state)
+	for _, q := range c.questions {
+		n += len(q)
+	}
+	return n
+}
+
+// buildCall builds chunk k's call for the captures in members.
+func (rt *Runtime) buildIntakeCall(lib *intakeLibrary, p *intakePoll, k int, members []int) (intakeCall, error) {
+	stories := p.chunk(k)
+	var storyState []string
+	for _, s := range stories {
+		storyState = append(storyState, s.entry)
+	}
+	captures := map[string]any{}
+	if k == 0 {
+		// The siblings ride the first chunk's calls only.
+		for j, other := range p.items {
+			captures[p.handles[j]] = intakeCaptureState(sourcegraph.CapturedItem{Title: other.Title, Summary: other.Summary, Outlet: other.Outlet, Language: other.Language}, intakeSiblingSummaryRunes)
+		}
+	}
+	state := map[string]any{
+		"task":     "News captures have arrived (state.captures). Each question is about one of them: which story in state.stories or other new capture reports the same real-world event, and which story shares its topic. Titles and summaries may be in any language; read them all.",
+		"captures": captures,
+	}
+	if len(storyState) > 0 {
+		state["stories"] = storyState
+	}
+	if len(lib.examples) > 0 {
+		var corrections []map[string]string
+		for _, o := range lib.examples {
+			corrections = append(corrections, map[string]string{"capture": o.CaptureTitle, "label_said": o.JevSaid, "editor_did": overrideDisposition(o), "reason": o.Reason})
+		}
+		state["corrections"] = corrections
+	}
+	call := intakeCall{chunk: k, first: p.items[members[0]].CaptureID, questions: map[string]json.RawMessage{}, decisions: map[string]string{}}
+	for _, i := range members {
+		captures[p.handles[i]] = intakeCaptureState(p.items[i], intakeSummaryRunes)
+		ask := intakeAsk{capture: i, eventName: "event_" + p.handles[i]}
+		inChunk := map[string]bool{}
+		for _, s := range stories {
+			inChunk[s.handle] = true
+		}
+		for _, h := range p.views[i].order {
+			if inChunk[h] {
+				ask.storyChoices = append(ask.storyChoices, h)
+			}
+		}
+		var siblingChoices []string
+		if k == 0 {
+			siblingChoices = p.views[i].siblings
+		}
+		// Choice order is as it was: the stories newest first, then the other
+		// captures, then new (and none last for the topic). The first option
+		// is what Jev leans toward, so the order is not changed here.
+		ask.eventChoices = append(append(append([]string(nil), ask.storyChoices...), siblingChoices...), store.CaptureLabelEventNew)
+		// The option set is the keys of criteria (the vendor's schema has no
+		// choices field): a handle has a null description, read by name
+		// alone, and the state entry carries what it means.
+		event, err := json.Marshal(map[string]any{
+			"type":         "choice",
+			"instructions": intakeEventInstructions(p.handles[i], len(ask.storyChoices) > 0, len(siblingChoices) > 0, len(lib.examples) > 0),
+			"criteria":     intakeCriteria(ask.eventChoices, map[string]string{store.CaptureLabelEventNew: "No story and no other new capture reports this event; a shared topic or shared actors alone do not count."}),
+		})
+		if err != nil {
+			return intakeCall{}, err
+		}
+		call.questions[ask.eventName] = event
+		call.decisions[ask.eventName] = p.items[i].CaptureID
+		if len(ask.storyChoices) > 0 {
+			ask.topicName = "topic_" + p.handles[i]
+			topic, err := json.Marshal(map[string]any{
+				"type":         "choice",
+				"instructions": "Which story in state.stories shares state.captures." + p.handles[i] + "'s topic: the same ongoing subject (a war, an election, a company, a trial), even when it is a different event? The options are the story handles (c1, c2, … each at the start of its entry in state.stories) and none; answer none when no story does.",
+				"criteria":     intakeCriteria(append(append([]string(nil), ask.storyChoices...), "none"), map[string]string{"none": "No story shares the capture's topic."}),
+			})
+			if err != nil {
+				return intakeCall{}, err
+			}
+			call.questions[ask.topicName] = topic
+			call.decisions[ask.topicName] = p.items[i].CaptureID
+		}
+		call.asks = append(call.asks, ask)
+	}
+	raw, err := json.Marshal(state)
+	if err != nil {
+		return intakeCall{}, err
+	}
+	call.state = raw
+	return call, nil
+}
+
+// intakeCriteria is a choice question's criteria: the options in the order
+// given, each a key, with its description or null (a choice without one is
+// read by its name alone). The vendor reads the option set from these keys,
+// and the first option is the one Jev leans toward, so the order is written
+// out here and not left to a Go map's sorted keys.
+func intakeCriteria(options []string, described map[string]string) json.RawMessage {
+	var b strings.Builder
+	b.WriteByte('{')
+	for n, option := range options {
+		if n > 0 {
+			b.WriteByte(',')
+		}
+		name, _ := json.Marshal(option)
+		b.Write(name)
+		b.WriteByte(':')
+		if text, ok := described[option]; ok {
+			desc, _ := json.Marshal(text)
+			b.Write(desc)
+		} else {
+			b.WriteString("null")
+		}
+	}
+	b.WriteByte('}')
+	return json.RawMessage(b.String())
+}
+
+// intakeEventInstructions is the event question's text. It names the capture
+// by handle and the candidates by their kinds; the candidates themselves are
+// in state.stories and state.captures, once for the call.
+func intakeEventInstructions(handle string, stories, siblings, corrections bool) string {
+	var entries []string
+	if stories {
+		entries = append(entries, "a story (c1, c2, … in state.stories)")
+	}
+	if siblings {
+		entries = append(entries, "another new capture (n1, n2, … in state.captures, never "+handle+" itself)")
+	}
+	text := "Which entry reports the same real-world event as state.captures." + handle + "?"
+	if len(entries) > 0 {
+		text += " The entries are " + strings.Join(entries, " and ") + "; an entry reports the same event when it covers the same occurrence or its direct development (a later announcement, reaction or outcome of that occurrence), in any language."
+	}
+	if stories && siblings {
+		text += " Prefer a story over a new capture when both match."
+	}
+	text += " The options are handles: each story's handle (c1, c2, …) is at the start of its entry in state.stories, each other capture's handle (n1, n2, …) is its key in state.captures, and new. The same topic or the same actors in a different event is new: answer new when no entry reports this event."
+	if corrections {
+		text += " state.corrections are earlier labels the editor corrected, with the reason."
+	}
+	return text
+}
+
+// planIntakeCalls lists the poll's calls, chunk by chunk: a chunk's captures
+// (those with a candidate in it, and in the first chunk those with siblings)
+// in groups of at most batch captures, and a group is closed early when
+// adding a capture would take the request over intakeRequestMaxBytes, so a
+// capture is never dropped, only moved to the next group of the same chunk.
+func (rt *Runtime) planIntakeCalls(lib *intakeLibrary, p *intakePoll, batch int, live []int) ([]intakeCall, error) {
+	var calls []intakeCall
+	for k := 0; k < p.chunkCount(); k++ {
+		inChunk := map[string]bool{}
+		for _, s := range p.chunk(k) {
+			inChunk[s.handle] = true
+		}
+		var needs []int
+		for _, i := range live {
+			asked := k == 0 && len(p.views[i].siblings) > 0
+			for h := range p.views[i].candidate {
+				if inChunk[h] {
+					asked = true
+					break
+				}
+			}
+			if asked {
+				needs = append(needs, i)
+			}
+		}
+		var group []int
+		var built intakeCall
+		flush := func() {
+			if len(group) > 0 {
+				calls = append(calls, built)
+			}
+			group, built = nil, intakeCall{}
+		}
+		for _, i := range needs {
+			trial := append(append([]int(nil), group...), i)
+			next, err := rt.buildIntakeCall(lib, p, k, trial)
+			if err != nil {
+				return nil, err
+			}
+			if len(group) > 0 && (len(trial) > max(batch, 1) || next.bytes() > intakeRequestMaxBytes) {
+				flush()
+				if next, err = rt.buildIntakeCall(lib, p, k, []int{i}); err != nil {
+					return nil, err
+				}
+				trial = []int{i}
+			}
+			group, built = trial, next
+		}
+		flush()
+	}
+	return calls, nil
+}
+
+// intakeCallAnswer is one capture's answer to one call, or why it has none.
+type intakeCallAnswer struct {
+	answer intakeAnswer
+	err    error
+}
+
+// labelPoll labels items against lib and returns each capture's label or why
+// it has none, in the poll's order. It asks one call per candidate chunk and
+// group of at most batch captures (the questions of a group share the chunk's
+// stories, sent once); a capture's answer is read from its own questions, so
+// one capture's bad answer, or one failed call, leaves the others' labels.
+func (rt *Runtime) labelPoll(ctx context.Context, lib *intakeLibrary, ownerID, computerID, sourceID string, items []sourcegraph.CapturedItem, batch int) []fanout.Result[store.CaptureLabel] {
+	out := make([]fanout.Result[store.CaptureLabel], len(items))
+	p, err := newIntakePoll(ctx, lib, items)
+	if err != nil {
+		for i := range out {
+			out[i].Err = err
+		}
+		return out
+	}
+	var live []int
+	for i, capture := range items {
+		label := store.CaptureLabel{OwnerID: ownerID, ComputerID: computerID, CaptureID: capture.CaptureID, SourceID: sourceID,
+			Title: strings.TrimSpace(capture.Title), Outlet: capture.Outlet, Language: capture.Language, Script: capture.Script}
+		for _, s := range p.candidatesOf(i) {
+			label.CandidateDocIDs = append(label.CandidateDocIDs, s.sum.DocID)
+		}
+		for _, h := range p.views[i].siblings {
+			label.SiblingCaptureIDs = append(label.SiblingCaptureIDs, p.items[siblingIndex(h)].CaptureID)
+		}
+		out[i].Value = label
+		if len(label.CandidateDocIDs) == 0 && len(p.views[i].siblings) == 0 {
+			// Nothing to compare the capture with.
+			out[i].Value.Event, out[i].Value.EventP, out[i].Value.Model = store.CaptureLabelEventNew, 1, intakeNoCandidatesModel
 			continue
 		}
-		alias := fmt.Sprintf("n%d", len(siblingChoices)+1)
-		siblingAlias[alias] = other.CaptureID
-		siblings[alias] = intakeCaptureState(sourcegraph.CapturedItem{Title: other.Title, Summary: other.Summary, Outlet: other.Outlet, Language: other.Language}, intakeSiblingSummaryRunes)
-		siblingChoices = append(siblingChoices, alias)
-		label.SiblingCaptureIDs = append(label.SiblingCaptureIDs, other.CaptureID)
+		live = append(live, i)
 	}
-	if len(candidates) == 0 && len(siblingChoices) == 0 {
-		label.Event, label.EventP, label.Model = store.CaptureLabelEventNew, 1, intakeNoCandidatesModel
-		return label, nil
+	calls, err := rt.planIntakeCalls(lib, p, batch, live)
+	if err != nil {
+		for _, i := range live {
+			out[i].Err = err
+		}
+		return out
 	}
-	if len(chunks) == 0 {
-		chunks = []intakeChunk{{}} // siblings only
+	lib.stats = intakePollStats{calls: len(calls)}
+	for _, c := range calls {
+		lib.stats.questions += len(c.questions)
+		lib.stats.maxBytes = max(lib.stats.maxBytes, c.bytes())
 	}
-	// The siblings ride the first chunk's call only.
-	chunks[0].siblings, chunks[0].siblingChoices = siblings, siblingChoices
-
-	results := fanout.Do(ctx, len(chunks), len(chunks), func(callCtx context.Context, k int) (intakeAnswer, error) {
-		return rt.askIntakeChunk(callCtx, lib, capture, chunks[k])
+	// answers[i][k] is capture i's answer to chunk k's call.
+	answers := make([][]intakeCallAnswer, len(items))
+	for _, i := range live {
+		answers[i] = make([]intakeCallAnswer, p.chunkCount())
+		for k := range answers[i] {
+			answers[i][k].err = errIntakeNotAsked
+		}
+	}
+	results := fanout.Do(ctx, intakeLabelConcurrency, len(calls), func(callCtx context.Context, n int) ([]intakeCallAnswer, error) {
+		return rt.askIntakeCall(callCtx, lib, calls[n])
 	})
+	for n, r := range results {
+		for a, ask := range calls[n].asks {
+			switch {
+			case r.Err != nil:
+				answers[ask.capture][calls[n].chunk] = intakeCallAnswer{err: r.Err}
+			default:
+				answers[ask.capture][calls[n].chunk] = r.Value[a]
+			}
+		}
+	}
+	for _, i := range live {
+		out[i] = rt.mergeIntakeAnswers(p, i, out[i].Value, answers[i])
+	}
+	return out
+}
+
+var errIntakeNotAsked = fmt.Errorf("intake: the capture was not asked")
+
+func siblingIndex(handle string) int {
+	var n int
+	_, _ = fmt.Sscanf(handle, "n%d", &n)
+	return n - 1
+}
+
+// mergeIntakeAnswers merges a capture's chunk answers, in chunk order, into
+// its label: the story with the highest event probability wins, a sibling
+// only when no story matched, and new only when no chunk named anything.
+func (rt *Runtime) mergeIntakeAnswers(p *intakePoll, i int, label store.CaptureLabel, answers []intakeCallAnswer) fanout.Result[store.CaptureLabel] {
+	storyOf := map[string]store.StorySummary{}
+	for _, s := range p.stories {
+		storyOf[s.handle] = s.sum
+	}
+	siblingOf := map[string]string{}
+	for _, h := range p.views[i].siblings {
+		siblingOf[h] = p.items[siblingIndex(h)].CaptureID
+	}
 	var event, topic intakeAnswer
 	newP, haveNew := 1.0, false
-	for _, r := range results {
-		if r.Err != nil {
+	for _, r := range answers {
+		if r.err == errIntakeNotAsked {
+			continue // no candidate of the capture is in this chunk
+		}
+		if r.err != nil {
 			// A capture that missed part of the window is unlabelled, not
 			// labelled "new" on part of the evidence.
-			return label, r.Err
+			return fanout.Result[store.CaptureLabel]{Value: label, Err: r.err}
 		}
-		a := r.Value
+		a := r.answer
 		label.Model = firstNonEmpty(label.Model, a.model)
 		label.InputTokens, label.OutputTokens, label.CostUSD = label.InputTokens+a.inputTokens, label.OutputTokens+a.outputTokens, label.CostUSD+a.cost
 		switch {
 		case a.event == store.CaptureLabelEventNew:
 			haveNew = true
 			newP = min(newP, a.eventP)
-		case storyAlias[a.event].DocID != "":
-			if event.event == "" || storyAlias[event.event].DocID == "" || a.eventP > event.eventP {
+		case storyOf[a.event].DocID != "":
+			if event.event == "" || storyOf[event.event].DocID == "" || a.eventP > event.eventP {
 				event = a
 			}
-		case siblingAlias[a.event] != "":
-			if event.event == "" || (storyAlias[event.event].DocID == "" && a.eventP > event.eventP) {
+		case siblingOf[a.event] != "":
+			if event.event == "" || (storyOf[event.event].DocID == "" && a.eventP > event.eventP) {
 				event = a
 			}
 		default:
-			return label, fmt.Errorf("Jev chose %q, which is not a choice", a.event)
+			return fanout.Result[store.CaptureLabel]{Value: label, Err: fmt.Errorf("Jev chose %q, which is not a choice", a.event)}
 		}
-		if storyAlias[a.topic].DocID != "" && (topic.topic == "" || a.topicP > topic.topicP) {
+		if storyOf[a.topic].DocID != "" && (topic.topic == "" || a.topicP > topic.topicP) {
 			topic = a
 		}
 	}
 	switch choice := event.event; {
 	case choice == "" && haveNew:
 		label.Event, label.EventP = store.CaptureLabelEventNew, newP
-	case storyAlias[choice].DocID != "":
-		label.Event, label.EventDocID, label.EventHeadline, label.EventP = store.CaptureLabelEventStory, storyAlias[choice].DocID, storyAlias[choice].Headline, event.eventP
-	case siblingAlias[choice] != "":
-		label.Event, label.EventCaptureID, label.EventP = store.CaptureLabelEventSibling, siblingAlias[choice], event.eventP
+	case storyOf[choice].DocID != "":
+		label.Event, label.EventDocID, label.EventHeadline, label.EventP = store.CaptureLabelEventStory, storyOf[choice].DocID, storyOf[choice].Headline, event.eventP
+	case siblingOf[choice] != "":
+		label.Event, label.EventCaptureID, label.EventP = store.CaptureLabelEventSibling, siblingOf[choice], event.eventP
 	default:
-		return label, fmt.Errorf("Jev gave no event answer")
+		return fanout.Result[store.CaptureLabel]{Value: label, Err: fmt.Errorf("Jev gave no event answer")}
 	}
-	if sum := storyAlias[topic.topic]; sum.DocID != "" {
+	if sum := storyOf[topic.topic]; sum.DocID != "" {
 		label.TopicDocID, label.TopicHeadline, label.TopicP = sum.DocID, sum.Headline, topic.topicP
 	}
 	label.Model = firstNonEmpty(label.Model, candidateJudgmentModel)
-	return label, nil
+	return fanout.Result[store.CaptureLabel]{Value: label}
+}
+
+// askIntakeCall makes one call and reads each of its captures' answers from
+// that capture's own questions. The slice is in call.asks order. A capture
+// whose answer is missing or off the menu carries its own error; the call's
+// usage is split among the captures by question count.
+func (rt *Runtime) askIntakeCall(ctx context.Context, lib *intakeLibrary, call intakeCall) ([]intakeCallAnswer, error) {
+	meta := jevrecord.Meta{Site: "intake_labels", DecisionID: call.first, Scope: judgmentScopeIntakeLabels, QuestionDecisions: call.decisions}
+	raw, err := rt.judgeCall(ctx, meta, intakeLabelCallTimeout, call.state, call.questions)
+	if err != nil {
+		return nil, err
+	}
+	var distribution struct {
+		Model   string `json:"model"`
+		Answers map[string]struct {
+			Choice        string             `json:"choice"`
+			Probabilities map[string]float64 `json:"probabilities"`
+		} `json:"answers"`
+		Usage struct {
+			InputTokens  int     `json:"input_tokens"`
+			OutputTokens int     `json:"output_tokens"`
+			Cost         float64 `json:"cost"`
+		} `json:"usage"`
+	}
+	if err := json.Unmarshal(raw, &distribution); err != nil {
+		return nil, fmt.Errorf("decode Jev's answer: %w", err)
+	}
+	total := len(call.questions)
+	out := make([]intakeCallAnswer, len(call.asks))
+	for a, ask := range call.asks {
+		share := 1.0
+		if total > 0 {
+			share = float64(1+btoi(ask.topicName != "")) / float64(total)
+		}
+		event, ok := distribution.Answers[ask.eventName]
+		if !ok {
+			out[a].err = fmt.Errorf("Jev gave no event answer")
+			continue
+		}
+		choice := strings.TrimSpace(event.Choice)
+		if !intakeHas(ask.eventChoices, choice) {
+			out[a].err = fmt.Errorf("Jev chose %q, which is not a choice", choice)
+			continue
+		}
+		res := intakeAnswer{event: choice, eventP: event.Probabilities[choice], model: distribution.Model,
+			inputTokens:  int(math.Round(float64(distribution.Usage.InputTokens) * share)),
+			outputTokens: int(math.Round(float64(distribution.Usage.OutputTokens) * share)),
+			cost:         distribution.Usage.Cost * share}
+		if ask.topicName != "" {
+			if topic, ok := distribution.Answers[ask.topicName]; ok {
+				if t := strings.TrimSpace(topic.Choice); t != "" && t != "none" && intakeHas(ask.storyChoices, t) {
+					res.topic, res.topicP = t, topic.Probabilities[t]
+				}
+			}
+		}
+		out[a].answer = res
+	}
+	return out, nil
+}
+
+func btoi(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+func intakeHas(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 // Intake candidate windows (docs/problems/unsupported-cites-duplicates-and-
@@ -370,20 +863,15 @@ const (
 	intakeShortlistFloor = 30
 	// intakeChunkCandidates is the most stories one call lists. Entries in a
 	// chunk are a headline and a time (a lede only on the newest
-	// intakeLedeCandidates), so a chunk stays near 12 KB, under the 24 KB
-	// a Jev call is kept to (eventStateMaxBytes).
+	// intakeLedeCandidates), so a chunk's state stays near 12 KB. The
+	// questions of up to intakeBatchCaptures captures ride the same call, so
+	// the request is the chunk plus about 2.5 KB a capture, under
+	// intakeRequestMaxBytes; a chunk of 80 leaves room for four captures, and
+	// when ledes or long summaries do not, the capture batch splits (the
+	// chunk size is not shrunk).
 	intakeChunkCandidates = 80
 	intakeLedeCandidates  = 30
 )
-
-// intakeChunk is the part of the candidate list one call carries, with the
-// capture's new siblings in the first chunk only.
-type intakeChunk struct {
-	stories        map[string]any
-	choices        []string
-	siblings       map[string]any
-	siblingChoices []string
-}
 
 // intakeAnswer is one chunk call's answer: the event choice and the topic
 // choice with their probabilities, and the call's usage.
@@ -393,113 +881,6 @@ type intakeAnswer struct {
 	model                     string
 	inputTokens, outputTokens int
 	cost                      float64
-}
-
-// intakeSlots bounds the intake label calls in flight to
-// intakeLabelConcurrency across every capture and chunk of a poll.
-func (lib *intakeLibrary) intakeSlots() chan struct{} {
-	lib.slotsOnce.Do(func() { lib.slots = make(chan struct{}, intakeLabelConcurrency) })
-	return lib.slots
-}
-
-// askIntakeChunk asks Jev the event and topic questions of one chunk of
-// candidates.
-func (rt *Runtime) askIntakeChunk(ctx context.Context, lib *intakeLibrary, capture sourcegraph.CapturedItem, chunk intakeChunk) (intakeAnswer, error) {
-	state := map[string]any{
-		"task":    "A news capture has arrived. Decide which story or other new capture, if any, reports the same real-world event, and which story, if any, shares its topic. Titles and summaries may be in any language; read them all.",
-		"capture": intakeCaptureState(capture, intakeSummaryRunes),
-	}
-	if len(chunk.stories) > 0 {
-		state["stories"] = chunk.stories
-	}
-	if len(chunk.siblings) > 0 {
-		state["new_captures"] = chunk.siblings
-	}
-	if len(lib.examples) > 0 {
-		var corrections []map[string]string
-		for _, o := range lib.examples {
-			corrections = append(corrections, map[string]string{"capture": o.CaptureTitle, "label_said": o.JevSaid, "editor_did": overrideDisposition(o), "reason": o.Reason})
-		}
-		state["corrections"] = corrections
-	}
-	storyChoices, siblingChoices := chunk.choices, chunk.siblingChoices
-	eventChoices := append(append(append([]string(nil), storyChoices...), siblingChoices...), store.CaptureLabelEventNew)
-	eventCriteria := map[string]string{store.CaptureLabelEventNew: "No story and no other new capture reports this event; a shared topic or shared actors alone do not count."}
-	for _, a := range storyChoices {
-		eventCriteria[a] = "state.stories." + a + " reports the same event as the capture, or its direct development."
-	}
-	for _, a := range siblingChoices {
-		eventCriteria[a] = "state.new_captures." + a + " reports the same event, and no story does."
-	}
-	questions := map[string]any{
-		"event": map[string]any{
-			"type":         "choice",
-			"instructions": "Which entry reports the same real-world event as state.capture? A story (c1, c2, … in state.stories) or another new capture (n1, n2, … in state.new_captures) reports the same event when it covers the same occurrence or its direct development (a later announcement, reaction or outcome of that occurrence), in any language. Prefer a story over a new capture when both match. The same topic or the same actors in a different event is new. state.corrections, when present, are earlier labels the editor corrected, with the reason.",
-			"criteria":     eventCriteria,
-			"choices":      eventChoices,
-		},
-	}
-	if len(storyChoices) > 0 {
-		topicCriteria := map[string]string{"none": "No story shares the capture's topic."}
-		for _, a := range storyChoices {
-			topicCriteria[a] = "state.stories." + a + " covers the same ongoing subject as the capture."
-		}
-		questions["topic"] = map[string]any{
-			"type":         "choice",
-			"instructions": "Which story in state.stories shares state.capture's topic: the same ongoing subject (a war, an election, a company, a trial), even when it is a different event? Answer none when no story does.",
-			"criteria":     topicCriteria,
-			"choices":      append(append([]string(nil), storyChoices...), "none"),
-		}
-	}
-	stateRaw, err := json.Marshal(state)
-	if err != nil {
-		return intakeAnswer{}, err
-	}
-	rawQuestions := make(map[string]json.RawMessage, len(questions))
-	for name, q := range questions {
-		if rawQuestions[name], err = json.Marshal(q); err != nil {
-			return intakeAnswer{}, err
-		}
-	}
-	slots := lib.intakeSlots()
-	select {
-	case slots <- struct{}{}:
-		defer func() { <-slots }()
-	case <-ctx.Done():
-		return intakeAnswer{}, ctx.Err()
-	}
-	raw, err := rt.judgeCall(ctx, jevrecord.Meta{Site: "intake_labels", DecisionID: capture.CaptureID, Scope: judgmentScopeIntakeLabels}, intakeLabelCallTimeout, stateRaw, rawQuestions)
-	if err != nil {
-		return intakeAnswer{}, err
-	}
-	var distribution struct {
-		Model   string `json:"model"`
-		Answers map[string]struct {
-			Choice        string             `json:"choice"`
-			Probabilities map[string]float64 `json:"probabilities"`
-		} `json:"answers"`
-		Usage struct {
-			InputTokens  int     `json:"input_tokens"`
-			OutputTokens int     `json:"output_tokens"`
-			Cost         float64 `json:"cost"`
-		} `json:"usage"`
-	}
-	if err := json.Unmarshal(raw, &distribution); err != nil {
-		return intakeAnswer{}, fmt.Errorf("decode Jev's answer: %w", err)
-	}
-	event, ok := distribution.Answers["event"]
-	if !ok {
-		return intakeAnswer{}, fmt.Errorf("Jev gave no event answer")
-	}
-	choice := strings.TrimSpace(event.Choice)
-	out := intakeAnswer{event: choice, eventP: event.Probabilities[choice], model: distribution.Model,
-		inputTokens: distribution.Usage.InputTokens, outputTokens: distribution.Usage.OutputTokens, cost: distribution.Usage.Cost}
-	if topic, ok := distribution.Answers["topic"]; ok {
-		if t := strings.TrimSpace(topic.Choice); t != "" && t != "none" {
-			out.topic, out.topicP = t, topic.Probabilities[t]
-		}
-	}
-	return out, nil
 }
 
 // judgeCall is the one way a call site asks Jev: the call, timed and bounded
