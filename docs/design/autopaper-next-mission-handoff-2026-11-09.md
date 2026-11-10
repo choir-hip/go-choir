@@ -504,19 +504,19 @@ Not built in this mission. The mission itself is drafted in
   second. Each module is a reviewed first-party desk surface compiled in;
   nothing is installed at runtime. Themes are Textures (data, not code).
   Later products, such as a video app, ship as separate store apps.
-- **Built on nsh** (`longbridge/nsh`, Apache-2.0):
-  - Embed it in our own Xcode and Gradle projects (`NshAppView` / `NshView`
-    embedding, with the host `AudioBackend`/`SpeechBackend` hooks and
-    native components). This avoids `nsh package`'s Android limits.
-  - Use upstream at a pinned version and fork only when we must (owner: "we
-    don't need to fork it until we need to fork it").
-  - Send general pieces upstream as small PRs: background session,
-    Now Playing, PCM mic capture, `Speech.speak`, Android speech. Coordinate
-    with issues #1059, #1060, #1064 and #1194.
-  - Version 1 ships with no over-the-air code updates; every change goes
+- **Built on Exact** (`expo/exact`, MIT), with nsh (`longbridge/nsh`) as
+  the fallback. Both were read at source on 2026-11-09; the reasons and the
+  spike are in
+  [the Autoradio mission](autoradio-mission-handoff-2026-11-09.md), step
+  0.3, which supersedes the earlier nsh plan here.
+  - Pin an Exact commit and move the pin deliberately; do not fork.
+  - App logic is TypeScript; voice is a Swift module of ours.
+  - Offer general pieces upstream, such as remote notification
+    registration.
+  - Version 1 ships with no over-the-air updates; every change goes
     through store review (owner, 2026-11-09: approval should be "as likely
-    and quick and easy as possible").
-  - nsh renders native UI from TSX, not Svelte. So the app's Texture
+    and quick and easy as possible"). Exact's update channel is off.
+  - Exact renders native UI from Contract, not Svelte. So the app's Texture
     renderer is a second renderer of one shared page format; the server
     decides what is on the page and each renderer only draws it.
 - **Voice is local on both ends:** recognition, turn-taking, echo
