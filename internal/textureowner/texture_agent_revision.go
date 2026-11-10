@@ -60,6 +60,14 @@ func (h *Handler) HandleTextureAgentRevision(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// An in-process caller is a desk (server.GuestHostCaller marks it with an
+	// empty RemoteAddr): only the Texture desk writes a Texture, and an
+	// owner-authored revision must not be a door for another desk (contract 1, R11).
+	if strings.TrimSpace(r.RemoteAddr) == "" {
+		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "a revise is an owner act; only the Texture desk writes a Texture, so address the Texture desk"})
+		return
+	}
+
 	docID := extractDocID(r.URL.Path)
 	if docID == "" {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "document ID is required"})
