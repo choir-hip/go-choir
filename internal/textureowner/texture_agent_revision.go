@@ -292,7 +292,7 @@ func (h *Handler) commitLifecycleOwnerRevisionOpening(ctx context.Context, doc t
 		return textureOwnerRevisionResponse{}, refuseOwnerRevision(http.StatusBadRequest, "invalid lifecycle revision payload")
 	}
 	command.CommandDigest = commandDigest
-	result, commitErr := h.Store.CommitLifecycleArtifactHeadWithSourceGraph(ctx, command, store.TextureSourceGraphWriteSet{})
+	result, commitErr := h.Store.CommitLifecycleArtifactHeadWithSourceGraph(ownerCommitContext(ctx, store.TextureSourceGraphWriteSet{}), command, store.TextureSourceGraphWriteSet{})
 	if commitErr != nil {
 		if errors.Is(commitErr, store.ErrConcurrentStateChange) || errors.Is(commitErr, store.ErrLifecycleCommandConflict) || errors.Is(commitErr, store.ErrLifecycleInvalidTransition) {
 			return textureOwnerRevisionResponse{}, refuseOwnerRevision(http.StatusConflict, commitErr.Error())

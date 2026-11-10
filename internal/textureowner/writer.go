@@ -8,6 +8,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
 // The writer gate (MA3.2): every write that reaches the object graph declares
@@ -19,6 +20,33 @@ import (
 // revise, continue, the prompt bar) write Texture's kinds as the owner.
 func asOwner(ctx context.Context) context.Context {
 	return objectgraph.WithWriter(ctx, objectgraph.WriterOwner)
+}
+
+// ownerCommitContext is the one place an owner-route lifecycle commit picks the
+// writer it declares. The owner writes the revision and the document, which
+// admit owner edits; the source entities and refs a take or a fork copies in do
+// not, and they are written by their own kinds' registered writer. So a commit
+// whose write set carries any is made under that custodian (read from the
+// registry for the kinds in the set, not assumed from another kind), and a
+// commit with none is the owner's. Every owner-route commit that can carry a
+// source graph takes its context from here (TestOwnerRouteCommitsPickTheirWriterInOnePlace).
+func ownerCommitContext(ctx context.Context, graph store.TextureSourceGraphWriteSet) context.Context {
+	var kinds []objectgraph.ObjectKind
+	if len(graph.SourceEntities) > 0 {
+		kinds = append(kinds, store.TextureSourceEntityObjectKind)
+	}
+	if len(graph.SourceRefs) > 0 {
+		kinds = append(kinds, store.TextureSourceRefObjectKind)
+	}
+	for _, kind := range kinds {
+		if w, ok := objectgraph.CustodianOf(kind); ok {
+			return objectgraph.WithWriter(ctx, w)
+		}
+	}
+	if len(kinds) > 0 {
+		return asTextureCustodian(ctx)
+	}
+	return asOwner(ctx)
 }
 
 // asTextureCustodian declares the custodian of Texture's documents as the
