@@ -267,6 +267,24 @@ knowledge and is a spike question. The phone's own several microphones can
 be used together, which is what the close-to-microphone research relies
 on.
 
+### The phone may be far from the listener (owner, 2026-11-10)
+
+With wireless headphones the listener can be in another room. The phone's
+microphone then hears them faintly or not at all, and spontaneous speech
+is missed.
+
+- **The button always works.** A press on the headphones reaches the app,
+  which switches the input to the headphone microphone for that turn. The
+  programme is paused or lowered while the listener talks, so call-quality
+  audio during the turn costs nothing. The cost is the route switch, which
+  the spike times.
+- **Notice the distance.** If the listener's voice arrives weak on the
+  phone's microphone (the voice check passes at a low level, or turns
+  begin only by button for a while), the app says the phone is too far
+  and offers the headphone microphone as the standing source, with its
+  playback cost stated.
+- **Do not guess silently.** The app shows which microphone is in use.
+
 ## What the spike must answer
 
 On the owner's iPhone, with a podcast playing, on the loudspeaker and on
