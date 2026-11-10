@@ -567,6 +567,7 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 		})),
 		AccessPolicy: sourceMetadata.AccessPolicy,
 		ExportPolicy: sourceMetadata.ExportPolicy,
+		OwnHost:      publicBaseHost(s.publicBase()),
 		Now:          now,
 	}
 	for _, se := range sourceMetadata.SourceEntities {

@@ -339,6 +339,10 @@ func DefaultRegistry() *Registry {
 		// export of the computer's story.relation tape records, read by the
 		// related-stories walk behind CORPUSD_RELATED_STORY.
 		{Kind: "related_story", Owner: OwnerCorpusd},
+		// corpusd: a published story to an earlier published story of the
+		// paper whose capture it cites (reliance.go). Data only: it ranks
+		// nothing and no desk sees it.
+		{Kind: EdgeReliesOn, Owner: OwnerCorpusd},
 		// corpusd: a publication's entity, with its role (central or
 		// incidental); the export of story.entities, read by the
 		// related-stories walk (central only).

@@ -594,6 +594,9 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 	// version's own batch (a version exists with all its capture edges or
 	// not at all). Built from the anchors publish already resolved. ---
 	batch.Edges = append(batch.Edges, citesCaptureEdges(versionID, params.Transclusions, now)...)
+	// The same visit notes a cited capture of the paper's own earlier story
+	// (publication_reliance.go); the link is data and ranks nothing.
+	batch.Edges = append(batch.Edges, p.reliesOnEdges(ctx, params, now)...)
 
 	// --- Citation edges ---
 	for _, cite := range params.Citations {
@@ -686,6 +689,9 @@ type PublishGraphParams struct {
 	ExtraObjects []objectgraph.Object
 	// Citations
 	Citations []GraphCitation
+	// OwnHost is the host of the paper's own public pages; a cited capture
+	// fetched from it names one of the paper's stories.
+	OwnHost string
 
 	Now time.Time
 }

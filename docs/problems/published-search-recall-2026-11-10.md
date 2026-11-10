@@ -105,3 +105,42 @@ capture in the research packet. Also the corpusd boot log line
 time. Hypothesis AL-H4 in
 [the pre-registration](../precommitments/autopaper-materiality-hypotheses-2026-11-10.md)
 settles the recall question.
+
+## Part 2: the reliance link (wave 3, item 2)
+
+Mutation class red-adjacent (it adds an edge to the publish batch of every
+story; additive, one-act rollback by revert). The edge is data only.
+
+`relies_on` (`objectgraph.EdgeReliesOn`, owner corpusd) runs from a published
+publication to an earlier published publication of the same owner, written in
+the citing version's batch beside `cites_capture`, where the cited captures
+are already visited (`publication_reliance.go`). A cited capture names a story
+when its URL is on the paper's own host (the public base URL) and is either
+the plain-text export (`/api/platform/publications/export?route=...`) or a
+public page (`/pub/texture/<slug>[/v<n>]`); the route resolves through the
+`choir.public_route` object to the publication, which must be active and
+published and not the citing publication. The edge metadata is the fixed
+`{"relation":"relies_on"}`, so its id is deterministic: a republish rewrites
+the same edge (idempotent), and a republish that drops the citation keeps it
+(the link records that the story relied on the other at some version; its
+edge time is the first write).
+
+Failure list, tests in `internal/platform/publication_reliance_test.go` and
+`internal/store/vocab_write_guard_reliance_test.go`:
+
+- R1. A story that cites a capture of an earlier own story gets no link.
+- R2. A capture of another host's page whose path names a route gets a link.
+- R3. An unknown route or a withdrawn story gets a link, or fails the publish.
+- R4. A republish writes a second link or drops the first.
+- R5. A story gets a link to itself.
+- R6. Something reads the link: no source outside its writer and its
+  registration may name it, and no prompt mentions it (a source scan test).
+- R7. The kind is unregistered, so the write gate refuses every publish that
+  cites an earlier story.
+- R8. The metadata carries a key the vocabulary write guard refuses on a
+  computer (the Autopaper graph is adopted onto computers' stores). The metadata
+  has the one key `relation`; the store test commits it with the cutover on.
+
+Not built: the independent-sources comparison (pre-registration rule 4 computes
+it at settlement from the two stories' cited captures), a correction path that
+marks dependents of a corrected story, and any read of the link.
