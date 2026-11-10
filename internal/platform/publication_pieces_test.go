@@ -116,17 +116,6 @@ func TestSearchPublishedPiecesBoundedResults(t *testing.T) {
 	if len(big.Pieces) > 25 {
 		t.Fatalf("got %d pieces, the limit is clamped to 25", len(big.Pieces))
 	}
-	// A scan that stops at its cap says so.
-	old := publishedPieceScanMax
-	publishedPieceScanMax = 2
-	t.Cleanup(func() { publishedPieceScanMax = old })
-	capped, err := f.svc.SearchPublishedPieces(context.Background(), "zzz-no-such-word", 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !capped.Capped {
-		t.Fatalf("a scan cut by its cap must report capped")
-	}
 }
 
 func TestSearchPublishedPiecesReadURLIsPlainText(t *testing.T) {

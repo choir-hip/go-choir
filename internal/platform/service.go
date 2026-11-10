@@ -107,6 +107,9 @@ type Service struct {
 	lexicons entityLexicons
 	// growth caches the entity growth read (publication_entity_learning.go).
 	growth growthCache
+	// pieces is the derived BM25 index over the published archive
+	// (publication_pieces_index.go).
+	pieces pieceIndex
 }
 
 type citationInput struct {

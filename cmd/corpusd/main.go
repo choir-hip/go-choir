@@ -71,6 +71,9 @@ func main() {
 	// CORPUSD_AUTOPAPER_OWNERS is set; every owner's when unset.
 	svc.SetAutopaperOwners(platform.ParseAutopaperOwners(cfg.AutopaperOwnersRaw))
 	svc.SetPublicBaseURL(cfg.PublicBaseURL)
+	// The published-piece search index is derived from Store B; build it
+	// beside the listener (a search before it is whole says capped).
+	go svc.WarmPublishedPieceIndex(context.Background())
 	// Front rows carry importance scores when the host scorer's file is
 	// present; absent or unreadable, the front list is unchanged.
 	svc.SetFrontImportancePath(cfg.FrontImportancePath)

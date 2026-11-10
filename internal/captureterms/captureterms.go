@@ -87,26 +87,35 @@ func clip(runes []rune) string {
 	return string(runes)
 }
 
+// Tokens returns every term of text in order, repeats kept: the same terms
+// Terms returns, before they are made distinct.
+func Tokens(text string) []string {
+	var out []string
+	for _, sp := range spans(strings.ToLower(text)) {
+		if !sp.anywhere {
+			if t := clip(sp.runes); t != "" {
+				out = append(out, t)
+			}
+			continue
+		}
+		for i := range sp.runes {
+			out = append(out, string(sp.runes[i]))
+			if i+1 < len(sp.runes) {
+				out = append(out, string(sp.runes[i:i+2]))
+			}
+		}
+	}
+	return out
+}
+
 // Terms returns the distinct terms text is found by.
 func Terms(text string) []string {
 	seen := map[string]bool{}
 	var out []string
-	add := func(t string) {
-		if t != "" && !seen[t] {
+	for _, t := range Tokens(text) {
+		if !seen[t] {
 			seen[t] = true
 			out = append(out, t)
-		}
-	}
-	for _, sp := range spans(strings.ToLower(text)) {
-		if !sp.anywhere {
-			add(clip(sp.runes))
-			continue
-		}
-		for i := range sp.runes {
-			add(string(sp.runes[i]))
-			if i+1 < len(sp.runes) {
-				add(string(sp.runes[i : i+2]))
-			}
 		}
 	}
 	return out

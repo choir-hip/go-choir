@@ -8,10 +8,9 @@ package platform
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"math"
 	"net/url"
-	"sort"
 	"strings"
 )
 
@@ -41,10 +40,10 @@ type PublishedPiece struct {
 	Title         string `json:"title"`
 	Snippet       string `json:"snippet"`
 	// Kind is "story" (an Autopaper story) or "opinion".
-	Kind    string `json:"kind"`
-	Author  string `json:"author,omitempty"`
-	ReadURL string `json:"read_url"`
-	Score   int    `json:"score"`
+	Kind    string  `json:"kind"`
+	Author  string  `json:"author,omitempty"`
+	ReadURL string  `json:"read_url"`
+	Score   float64 `json:"score"`
 }
 
 // PublishedPieceSearch is the answer: at most the limit, strongest first.
@@ -121,28 +120,13 @@ func (s *Service) pieceKind(meta frontPublicationMeta) string {
 	return ""
 }
 
-func searchTerms(query string) []string {
-	var out []string
-	seen := map[string]bool{}
-	for _, w := range strings.Fields(strings.ToLower(query)) {
-		w = strings.Trim(w, ".,;:!?\"'()[]")
-		if w == "" || seen[w] {
-			continue
-		}
-		seen[w] = true
-		out = append(out, w)
-		if len(out) == publishedPieceMaxTerms {
-			break
-		}
-	}
-	return out
-}
-
 // SearchPublishedPieces finds published Autopaper stories and opinion pieces
-// whose title or text holds every word of query (all pieces when query is
-// empty), by their latest published version only. It walks every publication
-// up to publishedPieceScanMax, newest first, and returns the limit strongest
-// (default 10, at most 25).
+// for query, BM25-ranked over the whole archive by their latest published
+// version (publication_pieces_index.go): a piece that holds some of the
+// query's words ranks below one that holds more of them, and rarer words
+// count more. An empty query lists the newest pieces. It returns the limit
+// strongest (default 10, at most 25). Capped says the index is still being
+// built, so the answer is from the newest part of the archive.
 func (s *Service) SearchPublishedPieces(ctx context.Context, query string, limit int) (*PublishedPieceSearch, error) {
 	if s == nil || s.store == nil {
 		return nil, fmt.Errorf("platform service unavailable")
@@ -158,81 +142,63 @@ func (s *Service) SearchPublishedPieces(ctx context.Context, query string, limit
 		limit = publishedPieceMaxLimit
 	}
 	query = strings.TrimSpace(query)
-	terms := searchTerms(query)
-	rows, capped, err := s.scanPublicationRows(ctx, publishedPieceScanMax)
+	complete, err := s.refreshPieceIndex(ctx, publishedPieceSliceBudget, false)
 	if err != nil {
 		return nil, fmt.Errorf("platform pieces: %w", err)
 	}
-	out := &PublishedPieceSearch{Query: query, Pieces: []PublishedPiece{}, Capped: capped}
-	var hits []PublishedPiece
-	for _, row := range rows {
-		var meta frontPublicationMeta
-		if err := json.Unmarshal(row.Metadata, &meta); err != nil {
-			continue
-		}
-		if meta.State != "published" || strings.TrimSpace(meta.RoutePath) == "" {
-			continue
-		}
-		kind := s.pieceKind(meta)
-		if kind == "" {
-			continue
-		}
-		versions, err := publishedVersions(ctx, og, row.CanonicalID)
-		if err != nil || len(versions) == 0 {
-			continue
-		}
-		versionObj, err := og.GetObject(ctx, versions[len(versions)-1].CanonicalID)
-		if err != nil {
-			continue
-		}
-		manifest, err := s.frontManifest(ctx, og, versionObj.CanonicalID)
-		if err != nil || !publicationAccessPolicyAllowsPublicRoute(manifest.AccessPolicy) || manifest.StorageRef == "" {
-			continue
-		}
-		contentBytes, err := s.readBlob(manifest.StorageRef)
-		if err != nil {
-			continue
-		}
-		content := string(contentBytes)
-		title := strings.TrimSpace(firstNonEmpty(meta.Title, manifest.Title))
-		score := 1
-		if len(terms) > 0 {
-			lowerContent, lowerTitle := strings.ToLower(content), strings.ToLower(title)
-			score = 0
-			for _, term := range terms {
-				n := strings.Count(lowerContent, term)
-				if strings.Contains(lowerTitle, term) {
-					n += 3
-				}
-				if n == 0 {
-					score = 0
-					break
-				}
-				score += n
-			}
-			if score == 0 {
-				continue
-			}
-		}
-		route := normalizePublicationRoutePath(meta.RoutePath)
-		hits = append(hits, PublishedPiece{
-			PublicationID: meta.PublicationID,
-			RoutePath:     route,
-			Title:         title,
-			Snippet:       snippet(content, firstNonEmpty(strings.Join(terms, " "), query)),
-			Kind:          kind,
-			Author:        meta.AuthorLabel,
-			ReadURL:       s.publicationExportReadURL(route),
-			Score:         score,
-		})
+	out := &PublishedPieceSearch{Query: query, Pieces: []PublishedPiece{}, Capped: !complete}
+	terms := distinctQueryTerms(query)
+	var cands []pieceCandidate
+	var idf map[string]float64
+	if len(terms) == 0 {
+		cands = s.pieces.recent(limit * 3)
+	} else {
+		// Extra candidates: a hit is verified against the store below, and a
+		// withdrawn or unreadable one is replaced by the next.
+		cands, idf = s.pieces.rank(terms, limit*3)
 	}
-	// Newest first is the scan order; a stable sort keeps it within a score.
-	sort.SliceStable(hits, func(i, j int) bool { return hits[i].Score > hits[j].Score })
-	if len(hits) > limit {
-		hits = hits[:limit]
+	var hits []PublishedPiece
+	for _, c := range cands {
+		if len(hits) == limit {
+			break
+		}
+		obj, err := og.GetObject(ctx, c.id)
+		if err != nil || obj.Tombstone {
+			continue
+		}
+		load, ok := s.loadPiece(ctx, og, frontPublicationRow{CanonicalID: c.id, Metadata: obj.Metadata, UpdatedAt: obj.UpdatedAt})
+		if !ok {
+			continue
+		}
+		hits = append(hits, PublishedPiece{
+			PublicationID: load.meta.PublicationID,
+			RoutePath:     load.route,
+			Title:         load.title,
+			Snippet:       snippet(load.content, snippetTerm(load.content, terms, idf, query)),
+			Kind:          load.kind,
+			Author:        load.meta.AuthorLabel,
+			ReadURL:       s.publicationExportReadURL(load.route),
+			Score:         math.Round(c.score*1000) / 1000,
+		})
 	}
 	if hits != nil {
 		out.Pieces = hits
 	}
 	return out, nil
+}
+
+// snippetTerm is the query word to centre the snippet on: the rarest one the
+// text holds, else the query itself.
+func snippetTerm(content string, terms []string, idf map[string]float64, query string) string {
+	lower := strings.ToLower(content)
+	best, bestW := "", -1.0
+	for _, t := range terms {
+		if w := idf[t]; w > bestW && strings.Contains(lower, t) {
+			best, bestW = t, w
+		}
+	}
+	if best == "" {
+		return query
+	}
+	return best
 }

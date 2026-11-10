@@ -73,7 +73,7 @@ func searchPublished(ctx context.Context, deps Dependencies, query string, limit
 	}
 	note := ""
 	if answer.Capped {
-		note = "published search capped: it read the newest publications only, not every one; narrow the query if a piece you expect is missing"
+		note = "published search capped: the archive index is still being built, so older pieces may be missing; search again later if a piece you expect is absent"
 	}
 	return answer.Pieces, note
 }
