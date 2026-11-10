@@ -275,3 +275,53 @@ order for one release; it does not skip safety.
   above). The history file is the artifact.
 - Rollback of this change: revert the commits; deploys return to
   refresh-all; the state files are ignored by the old vmctl.
+
+## Amendment, 2026-11-10: the time floors are zero before launch
+
+Owner, 2026-11-10: "can we get the soak timing gone? As long as it's there I
+want to expedite... at least while we are pre-launch." The floors in
+`internal/vmctl/ring_walk.go` (`ringSoaks`) are now zero for every ring; the
+field and the check stay, so launch restores them with a commit (they were
+10m, 15m, 4h, 4h, 2h, 1h for R0 to R5). This is a constant, not a switch.
+
+- **Clean means healthy.** A ring is clean once its required members were
+  seen healthy on the target release (the exposure counts are unchanged: 1, 3,
+  1, 2, 1, 1, each capped at the members that can be refreshed). The next ring
+  opens in the same step. The readiness guard's 5-minute initial delay gates
+  only its failure strikes, never exposure: a first 200 from the guest counts.
+- **Bounded wait.** The retry sweep runs right after each walk tick (every
+  minute). A member off the release is enrolled at its ring's opening tick,
+  the sweep refreshes it, and the next tick reads its `/health`. A ring with a
+  member to refresh therefore takes at least one tick, about 60 seconds, and
+  never closes in the tick that opened it; a slow guest boot adds ticks.
+- **No stall on absent members.** A ring's requirement is capped at its
+  refreshable members: down, held and divergent members never counted (a ring
+  with none of them running closes `skipped_no_exposure` at once); now a
+  member whose refresh to this target failed (the walk never retries it) and a
+  member the sweep asked and the guest deferred busy (the sweep keeps asking)
+  do not hold R1 to R4 either. A refreshed member is never dropped: it must
+  be seen healthy. R0 (d@e) and R5 (the paper) stay watched: R0 holds until
+  d@e runs the release and is seen healthy (the walk wakes it; held,
+  divergent or six failed wakes leave it holding until the next release or an
+  expedite), and R5 holds while the paper's refresh is deferred, because a ring
+  that closes stops guarding.
+- **Guards watch every opened ring.** With a floor in place a ring stayed
+  open for hours, so guards covered the open ring only (decision after review
+  2). With zero floors a ring closes within a tick, so that left a closed
+  ring's members unwatched almost at once. The guards now run over every
+  opened ring until the walk ends, and a breach in a closed ring rolls the
+  release back (the ring is re-closed `breached`, later rings stop, and every
+  computer of the opened rings on the release is returned). The readiness
+  guard needs 5 minutes plus 3 ticks on the release, longer than a walk of
+  healthy members takes, so before launch it fires only on a walk that is
+  already holding on an unhealthy member. That is the cost of dropping the
+  soak; the wedge, boot and crash guards still fire inside a walk.
+- **Estimate, all members healthy.** d@e refreshed by CI at the deploy, every
+  other member refreshed by one sweep: R0 closes at the first tick that sees
+  the release (0 to 1 minute after the walk starts), then one tick per ring,
+  so the paper's ring opens about 5 minutes after the walk start and the walk
+  completes about 6 minutes after. Slow guest boots stretch it by a tick each;
+  expect 6 to 12 minutes. If CI did not refresh d@e, R0 waits the 7-minute
+  enroll grace first.
+- **Unchanged.** Expedite (opens every ring, 10-minute watch), rollback,
+  the pins and the gate.

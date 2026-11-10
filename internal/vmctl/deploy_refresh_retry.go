@@ -261,6 +261,17 @@ func (t *deployRefreshTracker) pendingAndFailed(userID, desktopID string) (bool,
 	return pending, t.failed[key]
 }
 
+// deferredBusy reports whether the computer's pending entry was asked by the
+// sweep or a deploy and the guest deferred it (attempts reset on a new
+// target, so a freshly enrolled entry is not deferred).
+func (t *deployRefreshTracker) deferredBusy(userID, desktopID string) bool {
+	key := ownershipKey(userID, normalizeDesktopID(desktopID))
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	e, ok := t.pending[key]
+	return ok && e.Attempts > 0
+}
+
 // beginRestartInPlace atomically checks the operator restart's bound for the
 // computer and reserves it: one lock holds the check, the other restart in
 // progress and the stamp, so two concurrent calls cannot both pass. A second

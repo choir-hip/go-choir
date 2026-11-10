@@ -29,8 +29,9 @@ type ringReleaseReader interface {
 // ringR0EnrollGrace: the CI deploy refreshes R0 itself right after the link
 // moves; the walk enrolls an R0 computer the deploy did not reach only after
 // this long, so d@e is not refreshed twice for one deploy.
-// Strictly below R0's 10-minute floor, so CI's refresh lands before the walk
-// would enroll d@e itself.
+// R0's time floor is zero before launch (ring_walk.go), so this grace is the
+// only wait in R0 when CI did not refresh d@e: CI's refresh normally lands
+// well inside it.
 const ringR0EnrollGrace = 7 * time.Minute
 
 func (h *Handler) ringWalkRunner() *ringWalkRunner {
@@ -146,6 +147,7 @@ func (h *Handler) ringObservations(ctx context.Context, sample bool) []ringMembe
 			o.Release = byVM[own.VMID].GuestRelease
 		}
 		o.Pending, o.FailedTarget = h.deployRefreshState().pendingAndFailed(own.UserID, own.DesktopID)
+		o.Deferred = h.deployRefreshState().deferredBusy(own.UserID, own.DesktopID)
 		o.Epoch = own.Epoch
 		if sample && walking && sampleRing(o.Ring) && o.Active && o.Release != "" && o.Release == to.releaseFor(o.Layered) {
 			probes = append(probes, len(obs))

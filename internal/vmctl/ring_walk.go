@@ -87,12 +87,21 @@ var ringSoaks = map[ringID]ringSoak{
 	// R0 and R1 in minutes (owner, 2026-11-03: "for stuff related to an
 	// optimization loop it's important to speed up the cycle time"); a test
 	// computer gets a platform fix about 25 to 40 minutes after a deploy.
-	ringR0: {10 * time.Minute, 1},
-	ringR1: {15 * time.Minute, 3},
-	ringR2: {4 * time.Hour, 1},
-	ringR3: {4 * time.Hour, 2},
-	ringR4: {2 * time.Hour, 1},
-	ringR5: {1 * time.Hour, 1},
+	//
+	// The time floors are zero before launch (owner, 2026-11-10: "can we
+	// get the soak timing gone? As long as it's there I want to expedite...
+	// at least while we are pre-launch."). A ring closes as soon as its
+	// required members were seen healthy on the release, so the d@e-first
+	// order costs minutes, not hours, and no release needs an expedite just
+	// to avoid the wait. The floors come back at launch: they were
+	// 10m, 15m, 4h, 4h, 2h, 1h for R0 to R5. This is a constant, not a
+	// switch: restoring them is a commit.
+	ringR0: {0, 1},
+	ringR1: {0, 3},
+	ringR2: {0, 1},
+	ringR3: {0, 2},
+	ringR4: {0, 1},
+	ringR5: {0, 1},
 }
 
 // Guards (design 5.3 and 9.2; each has a known-bad fixture in
@@ -229,6 +238,9 @@ type ringMemberObs struct {
 	// FailedTarget: the target of its last failed deploy refresh, if any.
 	Pending      bool
 	FailedTarget string
+	// Deferred: the pending entry was asked by the retry sweep and the guest
+	// deferred it (busy); a freshly enrolled entry is Pending, not Deferred.
+	Deferred bool
 	// Epoch is the computer's realization: a new one is a new boot.
 	Epoch int64
 }
@@ -556,6 +568,16 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 	}
 	var events []ringEvent
 	var actions []ringAction
+	// The guards watch every ring that has opened until the walk ends, not
+	// only the open one: with zero time floors a ring closes within a tick,
+	// so a member that crashes or wedges after the next ring opened is still
+	// a breach and rolls every opened ring back.
+	for _, q := range w.Rings[:min(w.Current, len(w.Rings))] {
+		if breach := w.guardClosedRing(now, q, ringMembersOf(obs, q.Ring)); breach != nil {
+			events = append(events, w.rollback(now, q, breach, obs, &actions)...)
+			return events, actions
+		}
+	}
 	for w.Status == ringWalkWalking {
 		p := w.open()
 		if p == nil {
@@ -591,7 +613,12 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 		// non-divergent member plus any member seen healthy that has since
 		// gone idle. A busy member that has not refreshed yet does not hold
 		// the ring: its pending entry still refreshes it once its ring is open.
-		required, exposed, eligible, missing := ringExposure(p, members, false)
+		// A member that cannot be refreshed now (its refresh to this target
+		// failed and the walk never retries it, or it was asked and deferred
+		// busy, which the retry sweep keeps asking) does not hold the ring.
+		// R0 and R5 are watched: d@e and the paper are never passed unseen.
+		counted := ringRefreshableMembers(p, members, w.To, p.Ring == ringR0 || p.Ring == ringR5)
+		required, exposed, eligible, missing := ringExposure(p, counted, false)
 		if required == 0 && exposed > 0 {
 			// Every member was seen healthy on the release and has since
 			// gone idle (hibernated): that is exposure.
@@ -601,7 +628,7 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 				p.Waiting = "no active member: the proof ring holds until d@e runs the release and is seen healthy" + ringWakeNote(p)
 				return events, actions
 			}
-			events = append(events, w.closeRing(now, p, ringOutcomeSkippedNoExposure, "every member was down for the whole time floor"))
+			events = append(events, w.closeRing(now, p, ringOutcomeSkippedNoExposure, "no member of this ring is refreshable now (down, held, divergent, deferred busy or failed): nothing to see healthy"))
 		} else {
 			need := min(soak.MinExposure, eligible)
 			if exposed < need {
@@ -652,6 +679,51 @@ func ringExposure(p *ringProgress, members []ringMemberObs, skipPending bool) (r
 		}
 	}
 	return required, exposed, eligible, missing
+}
+
+// ringRefreshableMembers drops, from the members an exposure count waits on,
+// those that cannot be refreshed now and were never seen healthy on the
+// release: a refresh to this target failed (the walk does not retry it, no
+// kill loop), or, outside the watched rings, the retry sweep asked and the
+// guest deferred (busy). The deferred one is still refreshed later by the
+// sweep. A member that was refreshed is never dropped: it must be seen
+// healthy.
+func ringRefreshableMembers(p *ringProgress, members []ringMemberObs, to ringReleasePair, watched bool) []ringMemberObs {
+	out := make([]ringMemberObs, 0, len(members))
+	for _, o := range members {
+		if m := p.Members[o.ComputerID]; m == nil || m.ExposedAt.IsZero() {
+			failed := o.FailedTarget != "" && o.FailedTarget == to.commitFor(o.Layered)
+			if failed || (!watched && o.Deferred) {
+				continue
+			}
+		}
+		out = append(out, o)
+	}
+	return out
+}
+
+// guardClosedRing runs the guards over the members of a ring that already
+// closed (no enroll, no exposure count). A breach is returned.
+func (w *ringWalk) guardClosedRing(now time.Time, p *ringProgress, members []ringMemberObs) *ringBreach {
+	for _, o := range members {
+		m := p.Members[o.ComputerID]
+		if m == nil {
+			m = &ringMember{ComputerID: o.ComputerID}
+			p.Members[o.ComputerID] = m
+		}
+		m.LastRelease = o.Release
+		onTarget := o.Active && o.Release != "" && o.Release == w.To.releaseFor(o.Layered)
+		if !onTarget {
+			m.LastOffTarget = now
+		}
+		if onTarget && m.FirstOnTarget.IsZero() {
+			m.FirstOnTarget = now
+		}
+		if breach := m.evaluate(now, o, onTarget, p.OpenedAt, p.Ring); breach != nil {
+			return breach
+		}
+	}
+	return nil
 }
 
 // observeRing records one tick of a ring's members: the enrolls, the R0
@@ -1202,8 +1274,8 @@ func (r *ringWalkRunner) stepWith(now time.Time, obs []ringMemberObs) []ringActi
 	return actions
 }
 
-// sampleTargets reports which rings a tick reads health for (the open
-// ring; every unclosed ring of an expedited walk) and the target. ok is false
+// sampleTargets reports which rings a tick reads health for (every opened
+// ring of a walk; only the unclosed ones of an expedited walk) and the target. ok is false
 // when nothing walks.
 func (r *ringWalkRunner) sampleTargets() (sample func(ringID) bool, to ringReleasePair, ok bool) {
 	r.mu.Lock()
@@ -1213,14 +1285,17 @@ func (r *ringWalkRunner) sampleTargets() (sample func(ringID) bool, to ringRelea
 		return func(ringID) bool { return false }, ringReleasePair{}, false
 	}
 	open := map[ringID]bool{}
-	if w.Expedited {
+	if !w.Expedited {
+		// Guards watch every opened ring until the walk ends.
+		for _, p := range w.Rings {
+			open[p.Ring] = true
+		}
+	} else {
 		for _, p := range w.Rings {
 			if p.ClosedAt.IsZero() {
 				open[p.Ring] = true
 			}
 		}
-	} else if p := w.open(); p != nil {
-		open[p.Ring] = true
 	}
 	return func(r ringID) bool { return open[r] }, w.To, true
 }

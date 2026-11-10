@@ -16,7 +16,10 @@ minutes, 4 hours, 4 hours, 2 hours and 1 hour (`internal/vmctl/ring_walk.go:86-9
 so a good change took most of a day to reach every computer. The owner put
 every release on expedite. An expedite opens every ring at once, so a bad
 change now reaches the paper as fast as a good one. On 2026-11-10 a change
-meant to reach d@e first was on the paper within two minutes.
+meant to reach d@e first was on the paper within two minutes. The time
+floors are now zero (owner, 2026-11-10; amendment in
+`ring-ordered-deploys-2026-11-03.md`), so rings advance on health alone and a
+release walks d@e first in about 6 to 12 minutes without an expedite.
 
 Two different things were being bought with one mechanism:
 
