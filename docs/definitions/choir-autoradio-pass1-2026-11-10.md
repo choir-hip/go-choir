@@ -1,7 +1,7 @@
 ---
 definition_version: 4
 
-readiness: drafted
+readiness: executable
 
 review:
   reviewer: none
@@ -141,7 +141,7 @@ boundaries:
 
 now:
   status: working
-  slice: step 0 (reconcile, page format, frozen API, runtime spike)
+  slice: wave A (lab core on the owner's iPhone, app API, Exact spike)
   source_ref: origin/main 87f0d495cd1a479a40aa62c2abbc719e1a8a6cce
   deploy_identity: choir.news d68d6f1a1c3a
   candidate:
@@ -280,23 +280,52 @@ configuration comes after the experiments and deletes the losers.
 
 ## Order of work
 
-**Step 0** (three agents, in parallel):
+Owner, 2026-11-10: "I want the full texture and autopaper and autoradio
+experience. Not just micro experiments, but the big picture e2e experiment
+too. And the integration experiments of subcomponents ... I want to give
+you latitude to make it work and make it nice. Then I'll do QA late
+tonight or tomorrow." This is the authority for `readiness: executable`;
+the file was not sent to a review seat first, and the lanes that touch
+protected surfaces (S1, S2, D, U) keep their own review.
 
-| Item | Output | Where |
+Three sizes of experiment, all in one app:
+
+- **End to end.** Sign in, hear the edition, speak, get a revision from
+  the desk, see the same documents as Texture pages.
+- **Integration.** Two or three stages together (addressing with
+  yielding over real programme audio; transcription into System 1 into
+  holding).
+- **Component.** One stage, by replay over kept turns.
+
+**Wave A** (now, in parallel):
+
+| Lane | Output | Where |
 | --- | --- | --- |
-| Reconcile | which Autopaper items of handoff section 5 are on staging | read-only |
-| 0.1 Page format | a written spec beside `internal/texturedoc`, with golden documents and the audio timeline | build VM |
-| 0.2 Frozen API | the list of endpoints the app calls, versioned, with the rule for a newer server | build VM |
-| 0.3 Runtime spike | the five checks of the handoff on a real iPhone at a pinned Exact commit; decides AR-C1 | the Mac |
+| K. Lab core | `mobile/`: the stage interfaces, registry, configuration, turn record, turn engine, replay (also as a command on the Mac), a lab host app with the trace view and lab panel, installed on the owner's iPhone, with Apple-framework implementations of each stage | the Mac |
+| A. App API | what the app calls today (device sign-in, the edition and its documents, the prompt bar and how a revision is observed, Jev, commitment records) and what is missing; this is step 0.2 | read-only |
+| E. Exact spike | the handoff's checks at a pinned Exact commit on the owner's iPhone; decides whether the lab host moves onto Exact now or after QA | the Mac |
 
-**Wave 1** (parallel after step 0): N native shell, V voice, P playback on
-the Mac; S1 sign-in and S2 audio in Texture on the build VM.
+**Wave B** (after K's interfaces exist; each adds implementations of
+stages and measures them by replay):
 
-**Wave 2:** R native renderer, D the Autoradio desk, U voice as input, X the
-push relay. M (subscription) waits for the paid account, because store
-purchases need it.
+| Lane | Output |
+| --- | --- |
+| M1. Audio models | FluidAudio: Parakeet, Silero VAD, Smart Turn, speaker check, LFM3-Audio (transcription, voice, and speech out) |
+| M2. Text models | llama.cpp framework: Qwen3-0.6B as a one-token scorer, LFM2.5-1.2B, LFM3-1.7B, Gemma small, under a grammar |
+| M3. Voices and words | Phonon, Kokoro; the text-defined and trained word spotters; the word test bench |
+| P. Playback | one seekable timeline of speech and clips, Now Playing, lock-screen controls, the two audio states |
+| S. Server | what lane A finds missing: the edition as a document for the ear, a turn as a prompt at a place in it, revisions streamed to the phone, Jev for the phone, turn records and their settlement |
+| R. Pages | the documents drawn natively |
 
-**Wave 3:** the review notes and privacy labels.
+**Wave C:** the owner's QA; then narrowing.
+
+The lab host is SwiftUI for the first QA so that the phone has something
+to judge tonight; the kit under it does not depend on the host. Exact
+stays the decided shell (lane N): lane E says when the kit moves onto it.
+This is recorded as a deferral, not a change of decision.
+
+Work integrates on the branch `lane/autoradio-lab` and lands on main at
+milestones, so app commits do not ride or disturb platform deploys.
 
 ## How the work runs
 
@@ -327,7 +356,7 @@ Each runs on its default until answered.
 | Question | Default |
 | --- | --- |
 | Which voice mode is the default | decided by the owner's QA session; button, wake word, open and the hybrid are all built (owner, 2026-11-10) |
-| Wake phrase | "Hey Choir", with "Okay Choir" and bare "Choir" in the test |
+| The word | no "hey" or "okay" (owner, 2026-11-10); "tetra" is the default candidate, else a word the listener chooses, graded at onboarding; "radio", "choir" and "DJ" are in the test |
 | Hybrid window length | five minutes once the voice is learned, 30 seconds before |
 | Is subscription (lane M) in pass 1? | no; it needs the paid account |
 | A branch build on d@e before main | built alongside wave 1, for the server lanes |
