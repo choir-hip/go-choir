@@ -108,7 +108,7 @@ func digestFrontRows(now time.Time) []FrontRow {
 		mk("s1", 30, 9, "world"),
 		mk("s2", 60, 8, "business"),
 		mk("s3", 90, 7, "tech_ai"),
-		mk("s4", 120, 6, "us_politics"),
+		mk("s4", 120, 6, "politics"),
 	}
 }
 

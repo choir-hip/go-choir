@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/yusefmosiah/go-choir/internal/sectionlist"
 )
 
 // The digest message (design section 4.4): a fixed template over the selected
@@ -21,14 +23,16 @@ const (
 	digestDisclosure      = "Written by AI agents from cited sources. Open any story to see them."
 )
 
-// digestSectionLabels mirrors AUTOPAPER_SECTIONS in autopaper.ts (the front
-// page entry omitted), in the paper's order.
-var digestSectionLabels = []struct{ ID, Label string }{
-	{"world", "World"},
-	{"us_politics", "U.S. Politics"},
-	{"business", "Business & Finance"},
-	{"tech_ai", "Tech & AI"},
-}
+// digestSectionLabels is the house section list (internal/sectionlist, the
+// one list the scorer, corpusd and the front page read), the front page
+// entry omitted, in the paper's order.
+var digestSectionLabels = func() []struct{ ID, Label string } {
+	var out []struct{ ID, Label string }
+	for _, s := range sectionlist.House().Sections {
+		out = append(out, struct{ ID, Label string }{s.ID, strings.TrimSpace(s.Label)})
+	}
+	return out
+}()
 
 var urlSchemeRe = regexp.MustCompile(`(?i)\bhttps?://`)
 
