@@ -462,7 +462,7 @@ func (rt *Runtime) researchChildSelection(ctx context.Context, lineage researchL
 		policy, _ = rt.modelPolicy.Load(ctx, lineage.ownerID)
 	}
 	assign := func(selection provideriface.LLMSelection) (provideriface.LLMSelection, []provideriface.LLMSelection, error) {
-		chosen, fallbacks, assignment := modelpolicy.Assign(selection, childKey)
+		chosen, fallbacks, assignment := policy.Assign(selection, childKey)
 		if assignment == modelpolicy.AssignmentUnknownPool {
 			return inherited, lineage.fallbacks, fmt.Errorf("research: model policy names unknown pool %q", strings.TrimPrefix(selection.Model, modelcatalog.PoolSpecPrefix))
 		}
@@ -473,7 +473,7 @@ func (rt *Runtime) researchChildSelection(ctx context.Context, lineage researchL
 		return assign(policy.Resolve(model))
 	}
 	if strings.HasPrefix(model, modelcatalog.PoolSpecPrefix) {
-		if _, ok := modelcatalog.Pools()[strings.TrimPrefix(model, modelcatalog.PoolSpecPrefix)]; ok {
+		if policy.HasPool(strings.TrimPrefix(model, modelcatalog.PoolSpecPrefix)) {
 			return assign(provideriface.LLMSelection{Model: model, ReasoningEffort: inherited.ReasoningEffort})
 		}
 	}

@@ -40,6 +40,22 @@ var revisionName = regexp.MustCompile(`^[0-9]{8}T[0-9]{6}\.[0-9]{6}Z(-[0-9]+)?\.
 type policyGetResult struct {
 	File  string            `json:"file"`
 	Roles []json.RawMessage `json:"roles"`
+	Pools []policyPool      `json:"pools"`
+}
+
+// policyPool is a pool as the resolve endpoint reports it: its name, where
+// the definition came from ("file" or "release"), failover, and its members.
+type policyPool struct {
+	Name     string             `json:"name"`
+	Source   string             `json:"source"`
+	Failover bool               `json:"failover"`
+	Members  []policyPoolMember `json:"members"`
+}
+
+type policyPoolMember struct {
+	Model        string `json:"model"` // provider/model
+	Weight       int    `json:"weight"`
+	FallbackOnly bool   `json:"fallback_only,omitempty"`
 }
 
 type policyWriteResult struct {
@@ -49,6 +65,7 @@ type policyWriteResult struct {
 	Restored string            `json:"restored,omitempty"` // rollback: the revision the file now matches
 	Bytes    int               `json:"bytes"`
 	Roles    []json.RawMessage `json:"roles"`
+	Pools    []policyPool      `json:"pools"`
 }
 
 func hasOwnerEditedLine(raw []byte) bool {
@@ -62,16 +79,29 @@ func hasOwnerEditedLine(raw []byte) bool {
 	return false
 }
 
-func policyResolves(x *call) ([]json.RawMessage, error) {
+// policyResolves resolves each role and reads the pool table once: every
+// resolve carries the same pools, so they are lifted out of the role entries.
+func policyResolves(x *call) ([]json.RawMessage, []policyPool, error) {
 	var out []json.RawMessage
-	for _, role := range policyRoles {
+	var pools []policyPool
+	for i, role := range policyRoles {
 		var raw json.RawMessage
 		if err := x.c.do(http.MethodGet, "/api/model-policy/resolve?role="+url.QueryEscape(role), nil, &raw); err != nil {
-			return nil, fmt.Errorf("resolve %s: %w", role, err)
+			return nil, nil, fmt.Errorf("resolve %s: %w", role, err)
+		}
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(raw, &fields) == nil {
+			if i == 0 {
+				if err := json.Unmarshal(fields["pools"], &pools); err != nil && fields["pools"] != nil {
+					return nil, nil, fmt.Errorf("resolve %s: pools: %w", role, err)
+				}
+			}
+			delete(fields, "pools")
+			raw, _ = json.Marshal(fields)
 		}
 		out = append(out, raw)
 	}
-	return out, nil
+	return out, pools, nil
 }
 
 func policyGet(x *call) (any, error) {
@@ -79,11 +109,11 @@ func policyGet(x *call) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	roles, err := policyResolves(x)
+	roles, pools, err := policyResolves(x)
 	if err != nil {
 		return nil, err
 	}
-	return policyGetResult{File: string(raw), Roles: roles}, nil
+	return policyGetResult{File: string(raw), Roles: roles, Pools: pools}, nil
 }
 
 // policyPut writes raw through the files route, reads it back, and requires
@@ -103,11 +133,11 @@ func policyPut(x *call, raw []byte) (policyWriteResult, error) {
 	if !bytes.Equal(back, raw) {
 		return policyWriteResult{}, errors.New("read-back differs from what was written; the saved file is not the one sent (revision " + resp.Revision + " holds the previous file)")
 	}
-	roles, err := policyResolves(x)
+	roles, pools, err := policyResolves(x)
 	if err != nil {
 		return policyWriteResult{}, err
 	}
-	return policyWriteResult{Status: "saved", Revision: resp.Revision, Receipt: resp.Receipt, Bytes: len(raw), Roles: roles}, nil
+	return policyWriteResult{Status: "saved", Revision: resp.Revision, Receipt: resp.Receipt, Bytes: len(raw), Roles: roles, Pools: pools}, nil
 }
 
 func policySet(x *call) (any, error) {
@@ -205,6 +235,22 @@ func policyVerify(x *call) (any, error) {
 
 func policyCommands() []*command {
 	return []*command{
+		{
+			path: []string{"policy", "lead"}, summary: "Make one model the lead of a pool on this computer: the pool is written into the policy file, the lead takes weight 1, every other member becomes a fallback",
+			params: []param{
+				pStr("model", "The new lead, written provider/model (it must be in the catalog)").req().one().orSay("a model is required: choir policy lead <provider/model>"),
+				pStr("pool", "Pool to change").dflt("default"),
+				pBool("single_lead", "Allow a pool with several weighted members or with failover off: the named model becomes the only weighted member"),
+				pBool("allow_paid", "Allow a metered model to lead (it prints the price; a free model needs no flag)"),
+			},
+			scopes: writeRuntime, destructive: true, idempotent: true,
+			handler: policyLead,
+		},
+		{
+			path: []string{"policy", "pin"}, summary: "Write every pool, as it resolves now, into the policy file, so a later release does not move this computer's pools",
+			scopes: writeRuntime, destructive: true, idempotent: true,
+			handler: policyPin,
+		},
 		{
 			path: []string{"policy", "get"}, summary: "Show the model policy file and the resolved model for each role",
 			scopes: readRuntime, readOnly: true,

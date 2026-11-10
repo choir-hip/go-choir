@@ -51,10 +51,6 @@ const (
 	ownerEditedLine   = "# owner-edited"
 )
 
-// catalogPools is the pool table Assign and the parser read: modelcatalog.Pools
-// in production, a seam for tests that need a default pool of several members.
-var catalogPools = modelcatalog.Pools
-
 // defaultPoolSpec is the spec every role uses by default.
 var defaultPoolSpec = modelcatalog.PoolSpecPrefix + modelcatalog.DefaultPool
 
@@ -114,6 +110,10 @@ type Policy struct {
 	Defaults provideriface.LLMSelection
 	Roles    map[string]provideriface.LLMSelection
 	Source   string
+	// Pools holds the pools the file defines ([pools.<name>] sections), after
+	// stale members were dropped. It is never written after parse. A name it
+	// lacks resolves to the release's pool (pools.go).
+	Pools map[string]Pool
 	// Diagnostics lists non-fatal problems found while reading the policy
 	// (an unknown reasoning effort, for example); EnrichMetadata reports
 	// them in MetadataPolicyError.
@@ -227,7 +227,7 @@ func (m *Manager) ContinuationChain(ctx context.Context, ownerID string) []provi
 	for _, selection := range policy.Selections() {
 		add(selection)
 	}
-	for _, selection := range poolSelections(catalogPools()[modelcatalog.DefaultPool], provideriface.LLMSelection{}) {
+	for _, selection := range poolSelections(policy.poolMembersOf(modelcatalog.DefaultPool), provideriface.LLMSelection{}) {
 		add(selection)
 	}
 	return out
@@ -255,7 +255,7 @@ func (m *Manager) RoleChain(ctx context.Context, ownerID, role string) []provide
 	policy, _ := m.Load(ctx, ownerID)
 	selection := policy.Resolve(role)
 	if strings.HasPrefix(selection.Model, modelcatalog.PoolSpecPrefix) {
-		for _, member := range poolSelections(catalogPools()[strings.TrimPrefix(selection.Model, modelcatalog.PoolSpecPrefix)], selection) {
+		for _, member := range poolSelections(policy.poolMembersOf(strings.TrimPrefix(selection.Model, modelcatalog.PoolSpecPrefix)), selection) {
 			add(member)
 		}
 	} else {
@@ -278,7 +278,7 @@ func (m *Manager) stampResolved(policy Policy, role string, metadata map[string]
 	thread := ThreadKey(metadata)
 	spec := SpecOf(selection)
 	named := selection
-	selection, fallbacks, assignment := Assign(selection, thread)
+	selection, fallbacks, assignment := policy.Assign(selection, thread)
 	if assignment == "retired_remapped" {
 		// A policy that names a model the catalog no longer lists (a retired
 		// one, such as stealth/crouton-alpha on 2026-11-09) runs on the
@@ -352,6 +352,12 @@ func SpecOf(selection provideriface.LLMSelection) string {
 // A pool the catalog does not name is not remapped: it returns the selection
 // unresolved with AssignmentUnknownPool.
 func Assign(selection provideriface.LLMSelection, thread string) (provideriface.LLMSelection, []provideriface.LLMSelection, string) {
+	return Policy{}.Assign(selection, thread)
+}
+
+// Assign is the package-level Assign over this policy's pools: the file's
+// definition of a pool first, then the release's.
+func (p Policy) Assign(selection provideriface.LLMSelection, thread string) (provideriface.LLMSelection, []provideriface.LLMSelection, string) {
 	model := strings.TrimSpace(selection.Model)
 	assignment := "explicit"
 	pool := ""
@@ -371,7 +377,8 @@ func Assign(selection provideriface.LLMSelection, thread string) (provideriface.
 		// continuation chain (ContinuationChain; owner 2026-11-04).
 		return selection, nil, assignment
 	}
-	members, ok := catalogPools()[pool]
+	resolved, ok := p.pool(pool)
+	members := resolved.Members
 	if !ok || len(members) == 0 {
 		// An unknown pool is not the default pool. The selection comes back
 		// unresolved (still "pool:<name>", no provider, no fallbacks) so a
@@ -380,7 +387,7 @@ func Assign(selection provideriface.LLMSelection, thread string) (provideriface.
 	}
 	index := weightedIndex(members, fnv32(thread))
 	ordered := poolSelections(rotate(members, index), selection)
-	if modelcatalog.NoFailover(pool) {
+	if !resolved.Failover {
 		// A failing member has no pool fallbacks, not even the default
 		// pool's (owner 2026-10-23); a quota still moves it along the
 		// continuation chain (owner 2026-11-04).
@@ -479,7 +486,7 @@ func (p Policy) Selections() []provideriface.LLMSelection {
 	seen := make(map[string]bool, len(roles)+1)
 	add := func(selection provideriface.LLMSelection) {
 		if strings.HasPrefix(selection.Model, modelcatalog.PoolSpecPrefix) {
-			members := catalogPools()[strings.TrimPrefix(selection.Model, modelcatalog.PoolSpecPrefix)]
+			members := p.poolMembersOf(strings.TrimPrefix(selection.Model, modelcatalog.PoolSpecPrefix))
 			for _, member := range poolSelections(members, selection) {
 				if !seen[member.Model] {
 					seen[member.Model] = true
@@ -559,7 +566,7 @@ func (m *Manager) loadWithOverlay(ctx context.Context, ownerID, overlayID string
 	if overlayID == "" {
 		return policy, err
 	}
-	overlay, overlayErr := m.loadOverlay(overlayID)
+	overlay, overlayErr := m.loadOverlay(overlayID, policy.Pools)
 	if overlayErr != nil {
 		if err != nil {
 			return policy, fmt.Errorf("%v; model policy overlay %q ignored: %w", err, overlayID, overlayErr)
@@ -573,7 +580,7 @@ func (m *Manager) loadWithOverlay(ctx context.Context, ownerID, overlayID string
 	return merged, nil
 }
 
-func (m *Manager) loadOverlay(overlayID string) (policyOverlay, error) {
+func (m *Manager) loadOverlay(overlayID string, filePools map[string]Pool) (policyOverlay, error) {
 	overlayID = strings.TrimSpace(overlayID)
 	if overlayID == "" {
 		return policyOverlay{}, fmt.Errorf("overlay id is required")
@@ -593,7 +600,7 @@ func (m *Manager) loadOverlay(overlayID string) (policyOverlay, error) {
 	if err != nil {
 		return policyOverlay{}, fmt.Errorf("read overlay: %w", err)
 	}
-	overlay, err := parseOverlay(overlayID, string(raw), path)
+	overlay, err := parseOverlay(overlayID, string(raw), path, filePools)
 	if err != nil {
 		return policyOverlay{}, err
 	}
@@ -691,7 +698,9 @@ func ensureDefaultPolicyFile(path string, cfg provideriface.Config) error {
 	raw, err := os.ReadFile(path)
 	if err == nil {
 		text := string(raw)
-		if strings.Contains(text, policyVersionLine) || strings.Contains(text, ownerEditedLine) {
+		// A file with a pool section is the owner's whether or not it is
+		// marked: rewriting it would lose the pools.
+		if strings.Contains(text, policyVersionLine) || strings.Contains(text, ownerEditedLine) || hasPoolSection(text) {
 			return nil
 		}
 		// An older platform default (it named retired models): replace it.
@@ -705,12 +714,35 @@ func ensureDefaultPolicyFile(path string, cfg provideriface.Config) error {
 	return ownerfiles.WriteFile(path, []byte(defaultPolicyText(cfg)), 0o644)
 }
 
+// sectionHeader reads a comment-stripped, trimmed line as a section header:
+// the one reading the parsers, the validator and hasPoolSection share, so
+// "[ pools.x ]" is a pool section to all of them.
+func sectionHeader(line string) (string, bool) {
+	if !strings.HasPrefix(line, "[") || !strings.HasSuffix(line, "]") {
+		return "", false
+	}
+	return strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(line, "["), "]")), true
+}
+
+// hasPoolSection reports whether text carries a [pools.<name>] section.
+func hasPoolSection(text string) bool {
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(stripTOMLComment(line))
+		if name, isHeader := sectionHeader(line); isHeader && strings.HasPrefix(name, poolSectionPrefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func parsePolicy(raw, source string) (Policy, error) {
 	policy := fallbackPolicy(provideriface.Config{})
 	policy.Source = source
 	policy.Defaults.Source = source
 	policy.Roles = map[string]provideriface.LLMSelection{}
 	section := ""
+	var drafts []*poolDraft
+	var draft *poolDraft
 	scanner := bufio.NewScanner(strings.NewReader(raw))
 	lineNo := 0
 	for scanner.Scan() {
@@ -719,8 +751,21 @@ func parsePolicy(raw, source string) (Policy, error) {
 		if line == "" {
 			continue
 		}
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			section = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(line, "["), "]"))
+		if name, isHeader := sectionHeader(line); isHeader {
+			section = name
+			draft = nil
+			if name, isPool := strings.CutPrefix(section, poolSectionPrefix); isPool {
+				if !poolName(name) {
+					return Policy{}, fmt.Errorf("line %d: invalid pool name %q", lineNo, name)
+				}
+				for _, other := range drafts {
+					if other.name == name {
+						return Policy{}, fmt.Errorf("line %d: pool %q is defined twice", lineNo, name)
+					}
+				}
+				draft = &poolDraft{name: name, line: lineNo}
+				drafts = append(drafts, draft)
+			}
 			continue
 		}
 		key, value, ok := parseAssignment(line)
@@ -728,6 +773,18 @@ func parsePolicy(raw, source string) (Policy, error) {
 			return Policy{}, fmt.Errorf("line %d: expected key = value", lineNo)
 		}
 		switch {
+		case draft != nil:
+			// A members list may span lines: read until its brackets close.
+			for strings.TrimSpace(key) == "members" && strings.HasPrefix(value, "[") && !arrayComplete(value) {
+				if !scanner.Scan() {
+					return Policy{}, fmt.Errorf("line %d: members list is not closed", lineNo)
+				}
+				lineNo++
+				value += " " + strings.TrimSpace(stripTOMLComment(scanner.Text()))
+			}
+			if err := draft.applyKey(key, value); err != nil {
+				return Policy{}, fmt.Errorf("line %d: %w", lineNo, err)
+			}
 		case section == "defaults":
 			applyValue(&policy.Defaults, key, value)
 			policy.Defaults.Source = source
@@ -747,6 +804,11 @@ func parsePolicy(raw, source string) (Policy, error) {
 	if err := scanner.Err(); err != nil {
 		return Policy{}, err
 	}
+	pools, err := buildFilePools(drafts, &policy.Diagnostics)
+	if err != nil {
+		return Policy{}, err
+	}
+	policy.Pools = pools
 	nDiag := len(policy.Diagnostics)
 	sanitizeEffort("defaults", &policy.Defaults, &policy.Diagnostics)
 	if len(policy.Diagnostics) > nDiag {
@@ -760,14 +822,14 @@ func parsePolicy(raw, source string) (Policy, error) {
 	if !validSelection(policy.Defaults) {
 		return Policy{}, fmt.Errorf("defaults require a pool spec or a provider and model")
 	}
-	if pool := unknownPool(policy.Defaults); pool != "" {
+	if pool := unknownPool(policy.Pools, policy.Defaults); pool != "" {
 		return Policy{}, fmt.Errorf("defaults name unknown pool %q", pool)
 	}
 	for role, selection := range policy.Roles {
 		if !validSelection(selection) {
 			return Policy{}, fmt.Errorf("role %q requires a pool spec or a provider and model", role)
 		}
-		if pool := unknownPool(selection); pool != "" {
+		if pool := unknownPool(policy.Pools, selection); pool != "" {
 			return Policy{}, fmt.Errorf("role %q names unknown pool %q", role, pool)
 		}
 	}
@@ -785,19 +847,19 @@ func validSelection(selection provideriface.LLMSelection) bool {
 
 // unknownPool returns the pool a selection names when the catalog has no such
 // pool, else "". A file that names one is invalid, not remapped.
-func unknownPool(selection provideriface.LLMSelection) string {
+func unknownPool(file map[string]Pool, selection provideriface.LLMSelection) string {
 	model := strings.TrimSpace(selection.Model)
 	if !strings.HasPrefix(model, modelcatalog.PoolSpecPrefix) {
 		return ""
 	}
 	name := strings.TrimPrefix(model, modelcatalog.PoolSpecPrefix)
-	if len(catalogPools()[name]) == 0 {
+	if _, ok := resolvePool(file, name); !ok {
 		return name
 	}
 	return ""
 }
 
-func parseOverlay(id, raw, source string) (policyOverlay, error) {
+func parseOverlay(id, raw, source string, filePools map[string]Pool) (policyOverlay, error) {
 	overlay := policyOverlay{ID: strings.TrimSpace(id), Roles: map[string]provideriface.LLMSelection{}, Source: source}
 	section := ""
 	scanner := bufio.NewScanner(strings.NewReader(raw))
@@ -808,8 +870,8 @@ func parseOverlay(id, raw, source string) (policyOverlay, error) {
 		if line == "" {
 			continue
 		}
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			section = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(line, "["), "]"))
+		if name, isHeader := sectionHeader(line); isHeader {
+			section = name
 			continue
 		}
 		key, value, ok := parseAssignment(line)
@@ -856,7 +918,7 @@ func parseOverlay(id, raw, source string) (policyOverlay, error) {
 		sanitizeEffort("overlay role "+role, &selection, &overlay.Diagnostics)
 		overlay.Roles[role] = selection
 	}
-	if pool := unknownPool(overlay.Defaults); pool != "" {
+	if pool := unknownPool(filePools, overlay.Defaults); pool != "" {
 		return policyOverlay{}, fmt.Errorf("overlay defaults name unknown pool %q", pool)
 	}
 	if strings.TrimSpace(overlay.Defaults.Provider) == "" && strings.TrimSpace(overlay.Defaults.Model) != "" {
@@ -869,7 +931,7 @@ func parseOverlay(id, raw, source string) (policyOverlay, error) {
 		if !validSelection(selection) {
 			return policyOverlay{}, fmt.Errorf("overlay role %q requires a pool spec or a provider and model", role)
 		}
-		if pool := unknownPool(selection); pool != "" {
+		if pool := unknownPool(filePools, selection); pool != "" {
 			return policyOverlay{}, fmt.Errorf("overlay role %q names unknown pool %q", role, pool)
 		}
 	}
@@ -880,7 +942,7 @@ func parseOverlay(id, raw, source string) (policyOverlay, error) {
 }
 
 func applyOverlay(base Policy, overlay policyOverlay) Policy {
-	merged := Policy{Defaults: base.Defaults, Roles: make(map[string]provideriface.LLMSelection, len(base.Roles)+len(overlay.Roles)), Source: base.Source, Diagnostics: append(append([]string(nil), base.Diagnostics...), overlay.Diagnostics...)}
+	merged := Policy{Defaults: base.Defaults, Pools: base.Pools, Roles: make(map[string]provideriface.LLMSelection, len(base.Roles)+len(overlay.Roles)), Source: base.Source, Diagnostics: append(append([]string(nil), base.Diagnostics...), overlay.Diagnostics...)}
 	for role, selection := range base.Roles {
 		merged.Roles[role] = selection
 	}

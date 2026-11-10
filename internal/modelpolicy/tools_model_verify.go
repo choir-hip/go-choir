@@ -251,7 +251,7 @@ func (m *Manager) resolveToolModelSelection(ctx context.Context, ownerID, role s
 		// problems/models-configured-text-only-2026-10-15.md): a text-only
 		// pool member is skipped, not sent an image.
 		var fallbacks []provideriface.LLMSelection
-		selection, fallbacks, _ = Assign(selection, fmt.Sprintf("verify:%d", time.Now().UnixNano()))
+		selection, fallbacks, _ = policy.Assign(selection, fmt.Sprintf("verify:%d", time.Now().UnixNano()))
 		poolFallbacks = fallbacks
 		if needsImage && verifyImageRefusal(selection.Model) != "" {
 			for i, fallback := range fallbacks {

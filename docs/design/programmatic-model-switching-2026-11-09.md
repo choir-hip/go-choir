@@ -275,7 +275,37 @@ Written before the code. Each row names the test that covers it
 | 29 | `policy lead` run twice writes a different file the second time (not idempotent) or grows the file with duplicate sections. | `TestPolicyLeadIdempotent` |
 | 30 | `policy lead` or `pin` leaves the file without the owner-edited mark, or wipes comments and role sections of an owner file. | `TestPolicyLeadKeepsRolesAndMark` |
 | 31 | `policy pin` misses a pool, or writes a pool in a form the parser reads differently from the resolved one (round trip). | `TestPolicyPinRoundTrip`, `TestRenderedPoolParsesToSameMembers` |
-| 32 | `policy get` does not show where each pool came from, or shows `file` for a pool the file does not define. | `TestPolicyGetShowsPoolSources`, `TestResolvedPoolsSource` |
-| 33 | The resolve endpoint's `pools` field breaks callers that read the existing fields, or the CLI prints the pool table once per role. | `TestPolicyGetShowsPoolSources` |
+| 32 | `policy get` does not show where each pool came from, or shows `file` for a pool the file does not define. | `TestPolicyLeadThenRollbackRestoresRelease` (get after each step), `TestResolvedPoolsSource` |
+| 33 | The resolve endpoint's `pools` field breaks callers that read the existing fields, or the CLI prints the pool table once per role. | `TestPolicyLeadThenRollbackRestoresRelease` (get parses with the pools lifted out of the role entries), `TestEveryToolMatchesItsCLICommand` (MCP parity) |
 | 34 | "Metered" is read from a table the CLI cannot import without heavy dependencies. | checked at build: `internal/llmcost` imports only `deskmanifest` and `types`; used directly |
 | 35 | A pool name or model string in the CLI-written TOML carries characters that break out of the string (injection through `--pool` or the model). | `TestPolicyLeadRefusesBadNames` |
+
+### Review round (Devin, fc4ee0a1f): repaired and residual
+
+Repaired in the follow-up commit: the paid guard now treats a model as free
+only when positively known free (an id ending `-free` or `:free`, or an
+explicit zero price), so an unpriced catalogued model needs `--allow-paid`
+(`TestModelCostTable`, `TestPolicyLeadUnpricedNeedsAllowPaid`); one section
+header reader shared by the parser, the validator and `hasPoolSection`, so
+`[ pools.x ]` is never overwritten (`TestHasPoolSectionMatchesParser`,
+`TestEnsureDefaultPolicyFileKeepsSpacedPoolHeader`); `policy pin` drops a pool
+with no usable member, with a note (`TestPolicyPinDropsEmptyPoolWithNote`);
+tabs in member tables and duplicate keys (`TestPoolTabsAroundTokens`,
+`TestPoolDuplicateKeysRefused`).
+
+Named residuals, not fixed in M1:
+
+- A stale-member diagnostic makes `ValidateText` refuse every write, including
+  an unrelated role edit, until the stale member is removed. Runs are not
+  affected (the member is dropped with a note).
+- `policy pin` cannot rescue a file the parser already refuses.
+- The fetch then PUT of `lead` and `pin` has no compare-and-swap; two writers
+  can lose an update (the revisions keep the lost text). Same shape as
+  `policy set`.
+- `TestNoDirectCompiledPoolReaders` is a tripwire, not proof: a `//` inside a
+  string literal, the function taken as a value, or a reader outside the
+  package directory evades it.
+- Pricing for the paid guard is the hardcoded table; a model it cannot price
+  is treated as metered, so a truly free model with no `-free` id and no zero
+  entry needs `--allow-paid` until the table lists it.
+

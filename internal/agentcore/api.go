@@ -52,6 +52,9 @@ type modelPolicyResolveResponse struct {
 	Source          string `json:"source,omitempty"`
 	Fallbacks       string `json:"fallbacks,omitempty"` // provider/model, comma-separated; empty for a pin or a pool with no failover
 	PolicyError     string `json:"policy_error,omitempty"`
+	// Pools is every pool this computer's policy can name, with the source of
+	// its definition (file or release) and its members.
+	Pools []modelpolicy.PoolView `json:"pools,omitempty"`
 }
 
 type runAcceptanceSynthesizeRequest struct {
@@ -257,6 +260,7 @@ func (h *APIHandler) HandleModelPolicyResolve(w http.ResponseWriter, r *http.Req
 		Source:          metadataStringValue(metadata, modelpolicy.MetadataPolicySource),
 		Fallbacks:       metadataStringValue(metadata, modelpolicy.MetadataFallbacks),
 		PolicyError:     metadataStringValue(metadata, modelpolicy.MetadataPolicyError),
+		Pools:           h.rt.modelPolicy.PoolViews(r.Context(), ownerID),
 	})
 }
 

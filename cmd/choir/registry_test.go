@@ -65,7 +65,7 @@ var wantCLIOnly = []string{
 	// The platform operator's acts on a platform computer (O2, O3): they run
 	// on the operator's own login, and a hosted MCP server must not hold
 	// platform authority.
-	"paper policy get", "paper policy revisions", "paper policy rollback", "paper policy set", "paper policy verify", "paper status",
+	"paper policy get", "paper policy lead", "paper policy pin", "paper policy revisions", "paper policy rollback", "paper policy set", "paper policy verify", "paper status",
 	// The platform operator's break-glass yank (F1): host only.
 	"platform yank",
 	"precommit import-ledger",
@@ -498,15 +498,22 @@ func TestEveryToolMatchesItsCLICommand(t *testing.T) {
 		"search": {cli: []string{"search", "jailer", "launch"}, mcp: `{"query":"jailer launch"}`},
 		"run_start": {cli: []string{"run", "start", "--idempotency-key", "k1", "fix", "the", "deploy"}, mcp: `{"text":"fix the deploy","idempotency_key":"k1"}`,
 			reply: `{"schema":"choir.durable_work.v1","command_id":"k1","start_request_digest":"d","trajectory_id":"t","doc_id":"doc","revision_id":"r","subject_id":"s","obligation_ids":["o"],"reducer_seq":1,"snapshot_cursor":1}`},
-		"run_status":                       {cli: []string{"run", "status", "run-1"}, mcp: `{"run_id":"run-1"}`},
-		"run_list":                         {cli: []string{"run", "list", "--limit", "7"}, mcp: `{"limit":7}`},
-		"run_cancel":                       {cli: []string{"run", "cancel", "run-1"}, mcp: `{"run_id":"run-1"}`},
-		"files_mkdir":                      {cli: []string{"files", "mkdir", "System/overlays"}, mcp: `{"path":"System/overlays"}`},
-		"files_put":                        {cli: []string{"files", "put", "a b/x.toml"}, stdin: "[roles]\n", mcp: `{"path":"a b/x.toml","content":"[roles]\n"}`},
-		"policy_get":                       {cli: []string{"policy", "get"}, mcp: `{}`},
-		"policy_set":                       {cli: []string{"policy", "set", "--allow-unmarked"}, stdin: `{"revision":"r"}`, mcp: `{"content":"{\"revision\":\"r\"}","allow_unmarked":true}`, reply: `{"revision":"r"}`},
-		"policy_revisions":                 {cli: []string{"policy", "revisions"}, mcp: `{}`, reply: `[{"name":"20260101T000000.000000Z.toml","type":"file"}]`},
-		"policy_rollback":                  {cli: []string{"policy", "rollback", "--to", "20260101T000000.000000Z.toml"}, mcp: `{"to":"20260101T000000.000000Z.toml"}`, reply: `{"revision":"r"}`},
+		"run_status":       {cli: []string{"run", "status", "run-1"}, mcp: `{"run_id":"run-1"}`},
+		"run_list":         {cli: []string{"run", "list", "--limit", "7"}, mcp: `{"limit":7}`},
+		"run_cancel":       {cli: []string{"run", "cancel", "run-1"}, mcp: `{"run_id":"run-1"}`},
+		"files_mkdir":      {cli: []string{"files", "mkdir", "System/overlays"}, mcp: `{"path":"System/overlays"}`},
+		"files_put":        {cli: []string{"files", "put", "a b/x.toml"}, stdin: "[roles]\n", mcp: `{"path":"a b/x.toml","content":"[roles]\n"}`},
+		"policy_get":       {cli: []string{"policy", "get"}, mcp: `{}`},
+		"policy_set":       {cli: []string{"policy", "set", "--allow-unmarked"}, stdin: `{"revision":"r"}`, mcp: `{"content":"{\"revision\":\"r\"}","allow_unmarked":true}`, reply: `{"revision":"r"}`},
+		"policy_revisions": {cli: []string{"policy", "revisions"}, mcp: `{}`, reply: `[{"name":"20260101T000000.000000Z.toml","type":"file"}]`},
+		"policy_rollback":  {cli: []string{"policy", "rollback", "--to", "20260101T000000.000000Z.toml"}, mcp: `{"to":"20260101T000000.000000Z.toml"}`, reply: `{"revision":"r"}`},
+		// The canned reply is the file, the resolve and the PUT answer at once,
+		// so the read-back differs and both surfaces fail the same way; what is
+		// compared is the request sequence, PUT body included.
+		"policy_lead": {cli: []string{"policy", "lead", "opencode-go/iceman-contributor-free", "--pool", "default"}, mcp: `{"model":"opencode-go/iceman-contributor-free","pool":"default"}`, fails: true,
+			reply: `{"pools":[{"name":"default","source":"release","failover":true,"members":[{"model":"devin/swe-2-flash","weight":1},{"model":"opencode-go/iceman-contributor-free","weight":0,"fallback_only":true}]}]}`},
+		"policy_pin": {cli: []string{"policy", "pin"}, mcp: `{}`, fails: true,
+			reply: `{"pools":[{"name":"default","source":"release","failover":true,"members":[{"model":"devin/swe-2-flash","weight":1}]}]}`},
 		"policy_verify":                    {cli: []string{"policy", "verify", "--role", "research"}, mcp: `{"role":"research"}`},
 		"files_get":                        {cli: []string{"files", "get", "a/b.txt"}, mcp: `{"path":"a/b.txt"}`, reply: "plain bytes"},
 		"computer_status":                  {cli: []string{"computer", "status", "--computer", "c1"}, mcp: `{"computer":"c1"}`},

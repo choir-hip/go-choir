@@ -30,6 +30,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/autoputer"
+	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 )
 
 const cliPolicy = "# owner-edited\n[defaults]\nmodel = \"pool:default\"\nreasoning = \"low\"\n\n[roles.texture]\nmodel = \"pool:default\"\nreasoning = \"medium\"\n"
@@ -55,7 +56,22 @@ func policyServer(t *testing.T) (root string, requests *[]string) {
 	})
 	mux.HandleFunc("/api/model-policy/resolve", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"role": r.URL.Query().Get("role"), "model": "pool:default"})
+		// The real policy manager over the same files, so the pools a test
+		// sees are the ones the file defines.
+		// A copy of the file: the manager rewrites an unmarked file it loads,
+		// and the server under test must keep what the test wrote.
+		role := r.URL.Query().Get("role")
+		copyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
+		_ = os.MkdirAll(filepath.Dir(copyPath), 0o755)
+		if raw, err := os.ReadFile(filepath.Join(root, "System", "model-policy.toml")); err == nil {
+			_ = os.WriteFile(copyPath, raw, 0o644)
+		}
+		manager := modelpolicy.NewManager(modelpolicy.ManagerConfig{PolicyPath: copyPath})
+		md := manager.EnrichMetadata(r.Context(), "owner", role, map[string]any{"trajectory_id": "t"})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"role": role, "model": md[modelpolicy.MetadataModel], "policy_error": md[modelpolicy.MetadataPolicyError],
+			"pools": manager.PoolViews(r.Context(), "owner"),
+		})
 	})
 	mux.HandleFunc("/api/model-policy/verify", func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
@@ -257,7 +273,7 @@ func TestPolicyVerifyPostsRole(t *testing.T) {
 }
 
 func TestPolicyCommandsAreMCPToolsAndSetTakesContent(t *testing.T) {
-	want := map[string]bool{"policy get": false, "policy set": false, "policy revisions": false, "policy rollback": false, "policy verify": false}
+	want := map[string]bool{"policy lead": false, "policy pin": false, "policy get": false, "policy set": false, "policy revisions": false, "policy rollback": false, "policy verify": false}
 	for _, cmd := range commands() {
 		if _, ok := want[cmd.name()]; ok {
 			want[cmd.name()] = true

@@ -19,7 +19,8 @@ var policyKeys = map[string]bool{
 }
 
 // ValidateText checks policy text before it is saved: the loader's own parse
-// (syntax, known roles, known pools), then what the loader would only
+// (syntax, known roles, known pools, pool sections with a member
+// the catalog does not list), then what the loader would only
 // downgrade or ignore at run start (an unknown key, an unknown effort, a
 // model the catalog does not list for a catalogued provider). The loader
 // falls back silently to the last valid policy; a writer is told instead.
@@ -37,8 +38,13 @@ func ValidateText(raw string) error {
 		if line == "" {
 			continue
 		}
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			section = strings.TrimSpace(strings.Trim(line, "[]"))
+		if name, isHeader := sectionHeader(line); isHeader {
+			section = name
+			continue
+		}
+		if strings.HasPrefix(section, poolSectionPrefix) {
+			// parsePolicy read the pool sections whole (a members list spans
+			// lines) and refused unknown pool keys.
 			continue
 		}
 		if key, _, ok := parseAssignment(line); ok && !policyKeys[key] {
