@@ -158,6 +158,54 @@ d1 if an iPhone build appears. For the holding conversation: a small text
 model streaming into an on-device voice. A speech-in, speech-out model on
 the phone is a later experiment, not a plan.
 
+**LFM3-Audio-2B on iOS (owner, 2026-11-10: "definitely get
+lfm3-audio-2b on ios").** Second research pass, same day.
+
+- The documented Swift route is FluidAudio's Core ML build
+  (`LFM3AudioManager`, iOS 18 and later): offline transcription, live
+  English transcription in chunks of about a second, and streaming speech
+  synthesis in two voices. It does not document speech-to-speech chat, and
+  its authors have not measured it on an iPhone. On an M5 Pro Mac they
+  report live transcription at about 10 times real time, synthesis at
+  about 4.4 times, 37 ms to first audio, a 1.9 GB peak and a 5.3 GB
+  first-load cache.
+- llama.cpp merged support on 2026-10-27 and its iOS framework carries the
+  multimodal library. Audio in should work. Whether speech out is
+  reachable from the framework's public interface is not confirmed. A
+  Swift wrapper is one to two weeks.
+- MLX Swift has a port of the previous model only (LFM2.5-Audio, with
+  speech-to-speech). A port to LFM3 is several weeks.
+- The model's voice chat is turn-based and English only. It takes a system
+  prompt, so the passage being played can be given to it; the Core ML
+  build limits context to 4,096 positions.
+
+Order of work in the spike: run the FluidAudio demo on the iPhone and
+measure memory, heat and speed; if it holds, compose the holding
+conversation from its live transcription, a small text model and its
+voice; try true speech-to-speech only if that composition is not good
+enough. The same model would supply the on-device live transcription the
+voice design needs.
+
+**Beyond Liquid (second pass).** No new phone-sized decision model from
+October or November 2026 was found; that is a limit of the search, not
+proof. What changes the plan is a pattern, not a release:
+
+- **A small encoder with answer heads.** One forward pass, no generated
+  text, tens of megabytes to a few hundred. An existing example, a
+  prompt router built on mmBERT-small, answers seven questions in about
+  14 ms on four server cores (its own figure). Ours would be trained on
+  Jev's recorded answers to our own questions, which the Jev record
+  already collects. This is the likely long-run form of the phone's
+  System 1: Jev teaches it.
+- **A small generative model used as a scorer.** Constrain the output to
+  one token from a fixed answer set, so the time to the first token is
+  the whole latency. Qwen3-0.6B (about 456 MB) prefills about 5,800
+  tokens a second on an iPhone 17 Pro in a community Core AI export;
+  Gemma 4 E2B measures 0.3 s to first token on the same phone (Google's
+  figure).
+- **Smart Turn v3.2**, an 8M end-of-turn detector with a Core ML port
+  (3.5 ms per window on a Mac), is already in the voice design.
+
 **Rules for a phone model, whichever it is.**
 
 - It holds; it does not answer. It works only from the listener's words,
@@ -174,7 +222,9 @@ the phone is a later experiment, not a plan.
 
 **To measure on the owner's iPhone, in the voice spike:** time to the
 first token at about 2K tokens of context for Apple's model, LFM2.5-1.2B
-and LFM3-1.7B; agreement with Jev on a fixed set of our own questions;
+and LFM3-1.7B, and for Qwen3-0.6B as a one-token scorer; the FluidAudio
+LFM3-Audio demo (memory, speed, heat); agreement with Jev on a fixed set
+of our own questions;
 time to first audio for the text model plus Phonon; heat and battery over
 ten minutes of holding conversation.
 
