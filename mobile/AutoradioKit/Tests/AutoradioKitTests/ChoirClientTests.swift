@@ -260,6 +260,76 @@ final class ChoirClientTests: XCTestCase {
         catch { XCTAssertEqual(error as? ChoirError, .server(status: 502, message: "bad gateway")) }
     }
 
+    /// The mixed turn that "did not finish within 90 s": the document's stream never reports a terminal state
+    /// (the trajectory stays live), so the stage used to poll until its timeout. It must end `settleSeconds` after the revision.
+    func testDeskTurnEndsAfterQuietWhenStreamNeverSettles() async throws {
+        env.setPlaying(PlayingProgramme(programmeID: "live", title: "T", route: "/r", publicationVersionID: "", manifestHash: "", blocks: ["a", "b"], docID: "doc-1"))
+        StubProtocol.handler = { req in
+            switch req.path {
+            case "/api/prompt-bar": return .init(status: 202, json: ["doc_id": "doc-1", "revision_id": "r1"])
+            case "/api/texture/revisions/r1": return .init(json: ["author_kind": "user", "version_number": 1])
+            case "/api/texture/revisions/r2": return .init(json: ["author_kind": "appagent", "version_number": 2, "content": "a\n\nb changed"])
+            default: return .init(json: ["events": [["event_type": "version", "revision_id": "r2", "work_state": "working"]], "next_cursor": 5])
+            }
+        }
+        let desk = ChoirDeskStage(StageParams(["pollSeconds": .number(0.02), "settleSeconds": .number(0.3), "timeoutSeconds": .number(60)]))
+        let t0 = Date()
+        var n = 0
+        for try await _ in desk.submit(DeskTurn(turnID: "t", programmeID: "live", blockIndex: 0, listenerWords: "change b")) { n += 1 }
+        XCTAssertEqual(n, 1)
+        XCTAssertLessThan(Date().timeIntervalSince(t0), 5, "the turn must end shortly after the revision, not at the timeout")
+    }
+
+    func testRevisionThatChangesNothingStillEndsTheTurn() async throws {
+        env.setPlaying(PlayingProgramme(programmeID: "same", title: "T", route: "/r", publicationVersionID: "", manifestHash: "", blocks: ["T.", "a"], docID: "doc-1"))
+        StubProtocol.handler = { req in
+            switch req.path {
+            case "/api/prompt-bar": return .init(status: 202, json: ["doc_id": "doc-1", "revision_id": "r1"])
+            case "/api/texture/revisions/r1": return .init(json: ["author_kind": "user", "version_number": 1])
+            case "/api/texture/revisions/r2": return .init(json: ["author_kind": "appagent", "version_number": 2, "content": "a"])
+            default: return .init(json: ["events": [["event_type": "version", "revision_id": "r2", "work_state": "working"]], "next_cursor": 5])
+            }
+        }
+        let desk = ChoirDeskStage(StageParams(["pollSeconds": .number(0.02), "settleSeconds": .number(0.2), "timeoutSeconds": .number(60)]))
+        let t0 = Date()
+        for try await _ in desk.submit(DeskTurn(turnID: "t", programmeID: "same", blockIndex: 0, listenerWords: "x")) {}
+        XCTAssertLessThan(Date().timeIntervalSince(t0), 5)
+    }
+
+    func testCriteriaNameExactlyTheChoices() throws {
+        let (body, _) = try ChoirSystem1.body(for: System1Input(context: "c", listenerWords: "w", questions: Question.defaults + [Question(id: "x", text: "t", options: ["a", "b", "c"])]), label: "autoradio")
+        let qs = body["questions"] as! [String: [String: Any]]
+        for (_, q) in qs {
+            XCTAssertEqual(Set((q["criteria"] as! [String: String]).keys), Set(q["choices"] as! [String]))
+            XCTAssertTrue((q["criteria"] as! [String: String]).values.allSatisfy { !$0.isEmpty })
+        }
+        XCTAssertTrue(((qs["carry_on"]!["criteria"] as! [String: String])["yes"]!).contains("keep playing"))
+    }
+
+    func testTwoStagesStartingTogetherMakeOneDiscoveryCall() async throws {
+        keys.delete(KeyAccount.computerID)
+        StubProtocol.handler = { req in
+            if req.path == "/api/compute/status" { Thread.sleep(forTimeInterval: 0.2); return .init(json: ["computers": [["computer_id": "comp-5", "kind": "interactive"]]]) }
+            return .init(json: ["answers": [:]])
+        }
+        let c = env.client()
+        async let a = c.send("GET", "/api/a"); async let b = c.send("GET", "/api/b")
+        _ = try await (a, b)
+        XCTAssertEqual(StubProtocol.seen.filter { $0.path == "/api/compute/status" }.count, 1)
+    }
+
+    func testWarmThenTurnPathMakesNoDiscoveryCall() async throws {
+        keys.delete(KeyAccount.computerID)
+        StubProtocol.handler = { req in
+            req.path == "/api/compute/status" ? .init(json: ["computers": [["computer_id": "comp-6", "kind": "interactive"]]])
+                : .init(json: ["answers": ["asks_for_something": ["choice": "yes", "confidence": 0.9], "answer_in_prepared": ["choice": "no", "confidence": 0.7], "carry_on": ["choice": "yes", "confidence": 0.6]]])
+        }
+        await env.warm()
+        StubProtocol.seen = []
+        _ = try await ChoirSystem1(StageParams()).answer(System1Input(context: "", listenerWords: "x", questions: Question.defaults))
+        XCTAssertEqual(StubProtocol.seen.map(\.path), ["/api/system1/judgments"], "exactly one request on the turn path")
+    }
+
     func testTextSplitting() {
         XCTAssertEqual(ChoirText.paragraphs("## Head\n\n- one\n- two\n\n[link](http://x) and [3] text"), ["Head", "one two", "link and text"])
         let long = (0..<30).map { "This is sentence number \($0)." }.joined(separator: " ")

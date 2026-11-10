@@ -15,13 +15,15 @@ public final class ChoirDeskStage: Desk, @unchecked Sendable {
                         params: [.text("baseURL", "Base URL", ChoirEnvironment.defaultBaseURL),
                                  .number("pollSeconds", "Poll every (s)", 1.5, 0.05, 10),
                                  .number("timeoutSeconds", "Give up after (s)", 110, 5, 600),
+                                 .number("settleSeconds", "Turn is over after quiet (s)", 4, 0, 60, note: "after the last revision, with no newer one"),
                                  .flag("placeInPrompt", "Say where in the story you were", true)],
                         needsNetwork: true)
     }
     static let textureDesk = "texture"
 
-    let baseURL: String, poll: Double, timeout: Double, placeInPrompt: Bool
+    let baseURL: String, poll: Double, timeout: Double, placeInPrompt: Bool, settle: Double
     public init(_ p: StageParams) {
+        settle = p.double("settleSeconds", 4)
         baseURL = p.string("baseURL", ChoirEnvironment.defaultBaseURL); poll = p.double("pollSeconds", 1.5)
         timeout = p.double("timeoutSeconds", 110); placeInPrompt = p.bool("placeInPrompt", true)
     }
@@ -35,11 +37,11 @@ public final class ChoirDeskStage: Desk, @unchecked Sendable {
     }
 
     public func submit(_ turn: DeskTurn) -> AsyncThrowingStream<Revision, Error> {
-        let (baseURL, poll, timeout, include) = (self.baseURL, self.poll, self.timeout, self.placeInPrompt)
+        let (baseURL, poll, timeout, include, settle) = (self.baseURL, self.poll, self.timeout, self.placeInPrompt, self.settle)
         return AsyncThrowingStream { c in
             let task = Task {
                 do {
-                    try await Self.run(turn, baseURL: baseURL, poll: poll, timeout: timeout, include: include) { c.yield($0) }
+                    try await Self.run(turn, baseURL: baseURL, poll: poll, timeout: timeout, include: include, settle: settle) { c.yield($0) }
                     c.finish()
                 } catch is CancellationError { c.finish() }
                 catch { c.finish(throwing: error) }
@@ -50,7 +52,7 @@ public final class ChoirDeskStage: Desk, @unchecked Sendable {
 
     static func enc(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? s }
 
-    static func run(_ turn: DeskTurn, baseURL: String, poll: Double, timeout: Double, include: Bool, deliver: (Revision) -> Void) async throws {
+    static func run(_ turn: DeskTurn, baseURL: String, poll: Double, timeout: Double, include: Bool, settle: Double, deliver: (Revision) -> Void) async throws {
         let env = ChoirEnvironment.shared
         let client = env.client(baseURL: baseURL, timeout: 20)
         let started = ProcessInfo.processInfo.systemUptime
@@ -103,8 +105,15 @@ public final class ChoirDeskStage: Desk, @unchecked Sendable {
         var cursor: Int64 = 0
         var seen = Set<String>()
         var delivered = 0, failures = 0, terminalPolls = 0
+        var lastDelivery = 0.0
+        // The turn is over when: the document's trajectory settles after a delivered revision; or `settle`
+        // seconds pass after the last delivered revision with no newer one (the stream of a live
+        // document never closes); or `timeout` passes (an error if nothing was delivered).
         while ProcessInfo.processInfo.systemUptime - started < timeout {
             try Task.checkCancellation()
+            if delivered > 0, ProcessInfo.processInfo.systemUptime - lastDelivery >= settle {
+                env.log?.emit(.note("choir desk: turn over, \(delivered) revision(s), quiet for \(Int(settle)) s")); return
+            }
             do {
                 let r = try await client.send("GET", "/api/texture/documents/\(enc(docID))/stream",
                                               query: ["format": "json", "after": String(cursor), "limit": "100"],
@@ -120,7 +129,9 @@ public final class ChoirDeskStage: Desk, @unchecked Sendable {
                         seen.insert(rid)
                         let rev = try await client.send("GET", "/api/texture/revisions/\(enc(rid))", route: "/api/texture/revisions/{id}").object()
                         guard (rev["author_kind"] as? String) == "appagent", (rev["version_number"] as? Int ?? 0) > userVersion else { continue }
-                        if let r = revision(id: rid, content: rev["content"] as? String ?? "", turn: turn, programmeID: turn.programmeID, env: env) { deliver(r); delivered += 1 }
+                        // The desk answered (even when its text changes nothing to speak): that starts the quiet window.
+                        if let r = revision(id: rid, content: rev["content"] as? String ?? "", turn: turn, programmeID: turn.programmeID, env: env) { deliver(r) }
+                        delivered += 1; lastDelivery = ProcessInfo.processInfo.systemUptime
                     }
                     if let n = page["next_cursor"] as? Double { cursor = max(cursor, Int64(n)) }
                     if terminal {

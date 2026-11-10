@@ -33,9 +33,15 @@ public struct ProgramPosition: Codable, Sendable, Equatable {
 extension Question {
     /// Early structure lives in questions, not types (turns note). These are examples the desk package will own.
     public static let defaults = [
-        Question(id: "asks_for_something", text: "Does the listener ask for something to be done or looked up?", options: ["yes", "no"]),
-        Question(id: "answer_in_prepared", text: "Is the answer in the prepared material for this passage?", options: ["yes", "no"]),
-        Question(id: "carry_on", text: "Should the programme carry on meanwhile?", options: ["yes", "no"]),
+        Question(id: "asks_for_something", text: "Does the listener ask for something to be done or looked up?", options: ["yes", "no"],
+                 criteria: ["yes": "The listener asks for something to be done, looked up, changed or explained.",
+                            "no": "The listener only comments, reacts or asks nothing that needs doing."]),
+        Question(id: "answer_in_prepared", text: "Is the answer in the prepared material for this passage?", options: ["yes", "no"],
+                 criteria: ["yes": "The context already contains what the listener asks about.",
+                            "no": "The context does not contain what the listener asks about."]),
+        Question(id: "carry_on", text: "Should the programme carry on meanwhile?", options: ["yes", "no"],
+                 criteria: ["yes": "The programme can keep playing while the request is handled.",
+                            "no": "The programme should stay paused until the request is handled."]),
     ]
 }
 
@@ -382,13 +388,14 @@ public actor TurnEngine {
 
         // System 1, with a deadline: a slow answer must not hold the acknowledgement.
         var answers: [System1Answer] = []
+        let system1Threw = Flag()
         if let system1 {
             let input = System1Input(context: pos.context, listenerWords: transcript, questions: pos.questions)
             let got: [System1Answer]? = await withDeadline(limits.system1Deadline) {
                 do { return try await log.timed("system1") { try await system1.answer(input) } }
-                catch { log.emit(.error(stage: "system1", message: "\(error)")); return nil }
+                catch { system1Threw.set(); log.emit(.error(stage: "system1", message: "\(error)")); return nil }
             } ?? nil
-            if got == nil { log.emit(.error(stage: "system1", message: "no answer within \(limits.system1Deadline)s; acknowledging without it")) }
+            if got == nil, !system1Threw.isSet { log.emit(.error(stage: "system1", message: "no answer within \(limits.system1Deadline)s; acknowledging without it")) }
             answers = got ?? []
             for a in answers { log.emit(.system1Answer(questionID: a.questionID, option: a.option, score: a.score, ms: a.ms)) }
         }

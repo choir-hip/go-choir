@@ -49,7 +49,10 @@ public final class ChoirSystem1: System1, @unchecked Sendable {
             guard choices.count >= 2, !name.isEmpty, qs[name] == nil else { continue }
             var ins = "The state holds what the radio is playing (context) and what the listener just said (listener_words). " + q.text
             if ins.utf8.count > maxInstructions { ins = String(decoding: Array(ins.utf8.prefix(maxInstructions)), as: UTF8.self) }
-            qs[name] = ["type": "choice", "instructions": ins, "choices": choices]
+            // The route requires `criteria` to name exactly the choices (choice -> one line on when it is right).
+            var crit: [String: String] = [:]
+            for c in choices { crit[c] = String((q.criteria?[c] ?? "The answer to the question is \"\(c)\".").prefix(300)) }
+            qs[name] = ["type": "choice", "instructions": ins, "choices": choices, "criteria": crit]
             names.append(name)
         }
         if names.isEmpty { throw LabError.badInput("no usable System 1 question (a question needs an id and 2 to \(maxChoices) options)") }

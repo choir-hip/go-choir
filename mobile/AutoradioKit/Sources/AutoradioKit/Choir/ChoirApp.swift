@@ -86,6 +86,7 @@ public final class ChoirApp: @unchecked Sendable {
     /// First run after launch or sign-in: load the story list and the programme.
     public func refresh() async {
         guard signIn.current.signedIn else { onChange?(); return }
+        await ChoirEnvironment.shared.warm(baseURL: signIn.baseURL)
         await loadStories()
         await loadProgramme()
     }

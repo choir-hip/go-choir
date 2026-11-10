@@ -43,6 +43,8 @@ guard let turnPath, let configPath else { usage() }
 
 Task {
     do {
+        // Learn the listener's computer before the turn so the turn path makes no discovery call.
+        await ChoirEnvironment.shared.warm(baseURL: baseURLOverride)
         var cfg = try LabConfiguration.load(from: URL(fileURLWithPath: configPath))
         if let b = baseURLOverride {
             for k in [StageKind.system1, .desk, .programme] where cfg.setting(k)?.id.hasPrefix("choir-") == true {

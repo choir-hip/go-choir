@@ -60,7 +60,11 @@ public struct Question: Codable, Sendable, Equatable {
     public var id: String
     public var text: String
     public var options: [String]
-    public init(id: String, text: String, options: [String]) { self.id = id; self.text = text; self.options = options }
+    /// One line per option saying when it is the right answer (Jev `criteria`). Nil: the client writes a plain default.
+    public var criteria: [String: String]?
+    public init(id: String, text: String, options: [String], criteria: [String: String]? = nil) {
+        self.id = id; self.text = text; self.options = options; self.criteria = criteria
+    }
 }
 public struct System1Input: Codable, Sendable {
     public var context: String

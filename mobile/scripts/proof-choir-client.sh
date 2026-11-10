@@ -18,7 +18,12 @@ while [ $# -gt 0 ]; do
 done
 
 echo "== unit checks against a local URLProtocol stub (System 1, sign-in, front page, desk) =="
-"$HERE/scripts/xe.sh" /usr/bin/swift test --package-path "$HERE/AutoradioKit" --filter ChoirClientTests 2>&1 | grep -E "Executed|error:" | tail -3
+LOG="$(mktemp)"
+if "$HERE/scripts/xe.sh" /usr/bin/swift test --package-path "$HERE/AutoradioKit" --filter ChoirClientTests >"$LOG" 2>&1; then
+  grep -E "Executed .* tests" "$LOG" | tail -1
+else
+  grep -E "error:|failed" "$LOG" | head -20; echo "STUB CHECKS FAILED (full log: $LOG)"; exit 1
+fi
 
 if [ -z "$KEYFILE" ]; then
   echo "STAGING RUN NOT DONE: no --api-key-file given. Only the stub checks above ran."
@@ -26,7 +31,8 @@ if [ -z "$KEYFILE" ]; then
 fi
 [ -r "$KEYFILE" ] || { echo "cannot read the key file" >&2; exit 2; }
 
-"$HERE/scripts/xe.sh" /usr/bin/swift build --package-path "$HERE/AutoradioKit" -c release >/dev/null
+BLOG="$(mktemp)"
+"$HERE/scripts/xe.sh" /usr/bin/swift build --package-path "$HERE/AutoradioKit" -c release >"$BLOG" 2>&1 || { grep -E "error:" "$BLOG" | head; echo "BUILD FAILED (log: $BLOG)"; exit 1; }
 BIN="$HERE/AutoradioKit/.build/release/autoradio-replay"
 OUT="${PROOF_OUT:-$(mktemp -d)}"
 EXTRA=""

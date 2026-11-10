@@ -152,6 +152,12 @@ public final class ChoirEnvironment: @unchecked Sendable {
     /// Tests inject a URLSession whose configuration carries a stub URLProtocol.
     public var session: URLSession { get { lock.lock(); defer { lock.unlock() }; return _session } set { lock.lock(); _session = newValue; lock.unlock() } }
 
+    /// Learn the listener's computer now (at sign-in, app start, before a replay) so a turn makes no discovery call.
+    public func warm(baseURL: String? = nil) async {
+        let c = client(baseURL: baseURL)
+        if c.hasKey { _ = try? await c.computerID() }
+    }
+
     public func client(baseURL: String? = nil, timeout: Double = 15) -> ChoirClient {
         ChoirClient(baseURL: (baseURL?.isEmpty == false ? baseURL! : Self.defaultBaseURL), keys: keys, session: session, log: log, timeout: timeout)
     }
@@ -268,6 +274,19 @@ public final class ChoirClient: @unchecked Sendable {
     /// (an owner-wide key may read it without naming a computer; `computers[]` lists the owner's).
     public func computerID() async throws -> String {
         if let c = keys.get(KeyAccount.computerID), !c.isEmpty { return c }
+        // One discovery at a time: stages that start together share a single status call.
+        let id = ObjectIdentifier(keys)
+        Self.flightLock.lock()
+        let t: Task<String, Error>
+        if let f = Self.flights[id] { t = f } else { t = Task { [self] in try await discoverComputer() }; Self.flights[id] = t }
+        Self.flightLock.unlock()
+        defer { Self.flightLock.lock(); Self.flights[id] = nil; Self.flightLock.unlock() }
+        return try await t.value
+    }
+    nonisolated(unsafe) private static var flights: [ObjectIdentifier: Task<String, Error>] = [:]
+    private static let flightLock = NSLock()
+
+    func discoverComputer() async throws -> String {
         let o = try await send("GET", Self.statusPath, route: Self.statusPath).object()
         let list = (o["computers"] as? [[String: Any]] ?? []).filter { ($0["kind"] as? String ?? "interactive") == "interactive" && !(($0["computer_id"] as? String) ?? "").isEmpty }
         guard let pick = list.first(where: { ($0["current"] as? Bool) == true }) ?? list.first, let id = pick["computer_id"] as? String else {
