@@ -27,6 +27,10 @@ type ownerBodyEdit struct {
 	Links            []types.ParentLink
 	Metadata         map[string]any
 	NoWake           bool
+	// Verbatim commits Body.Content exactly: the editor's markdown stabilizer
+	// repairs text the owner typed, and a take's text is a pinned published
+	// body, which the stabilizer must never rewrite.
+	Verbatim bool
 }
 
 // commitOwnerBodyEdit is the canonical write of an owner-authored body
@@ -74,7 +78,9 @@ func (h *Handler) commitOwnerBodyEdit(ctx context.Context, doc types.Document, o
 			parentRev = rev
 			hasParentRev = true
 			var stabilized bool
-			content, stabilized = stabilizeTextureUserMarkdownStructures(parentRev.Content, content)
+			if !in.Verbatim {
+				content, stabilized = stabilizeTextureUserMarkdownStructures(parentRev.Content, content)
+			}
 			if stabilized {
 				metadata = mergeTextureRevisionMetadata(metadata, map[string]any{
 					"texture_structure_stabilized":        true,

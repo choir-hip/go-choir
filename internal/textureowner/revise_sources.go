@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -153,6 +154,7 @@ func (h *Handler) reviseTake(ctx context.Context, doc types.Document, ownerID st
 	}
 	v := resolved[0].Version
 	body := ReviseBody{Content: v.Content, BodyDoc: v.BodyDoc, SourceEntities: v.SourceEntities}
+	continuedWorkID := ""
 	if strings.TrimSpace(doc.TrajectoryID) != "" {
 		snapshot, err := h.Store.GetLifecycleSnapshot(ctx, ownerID, doc.ComputerID, doc.TrajectoryID)
 		if err != nil {
@@ -165,6 +167,7 @@ func (h *Handler) reviseTake(ctx context.Context, doc types.Document, ownerID st
 				return ReviseReceipt{}, refuseOwnerRevision(http.StatusConflict, "durable lifecycle state is unavailable or terminal")
 			}
 			doc, snapshot = continued, continuedSnapshot
+			_, continuedWorkID, _ = ownerRevisionTarget(snapshot, doc.DocID)
 		}
 		if snapshot.Document.CurrentRevisionID != head {
 			return ReviseReceipt{}, refuseOwnerRevision(http.StatusConflict, "document head changed; the head is "+snapshot.Document.CurrentRevisionID+"; reload it before taking a version")
@@ -181,9 +184,34 @@ func (h *Handler) reviseTake(ctx context.Context, doc types.Document, ownerID st
 	}
 	receipt, err := h.commitOwnerBodyEdit(ctx, doc, ownerID, ownerBodyEdit{
 		Body: body, ParentRevisionID: head, IdempotencyKey: strings.TrimSpace(req.ClientRequestID),
-		Links: links, NoWake: true,
+		Links: links, NoWake: true, Verbatim: true,
 		Metadata: metadata,
 	})
 	receipt.Case = ReviseTake
+	if err == nil && continuedWorkID != "" {
+		// The continue opened desk work that no desk will serve (a take wakes
+		// nobody): the take that answers it closes it, as a fork's does.
+		if serr := h.settleUnservedWork(ctx, ownerID, doc, continuedWorkID, receipt.RevisionID); serr != nil {
+			return ReviseReceipt{}, serr
+		}
+	}
 	return receipt, err
+}
+
+// settleUnservedWork completes a work item of the document's desk that a
+// no-model commit answered. The command id is the item's, so a retry settles once.
+func (h *Handler) settleUnservedWork(ctx context.Context, ownerID string, doc types.Document, workItemID, resultRef string) error {
+	settle := types.SettleLifecycleWorkRequest{
+		OwnerID: ownerID, ComputerID: doc.ComputerID, CommandID: "revise-settle:" + workItemID,
+		TrajectoryID: doc.TrajectoryID, WorkItemID: workItemID, ActingAgentID: currentTextureAgentID(doc.DocID), ResultRef: resultRef,
+	}
+	var err error
+	if settle.CommandDigest, err = store.ComputeSettleLifecycleWorkDigest(settle); err != nil {
+		return refuseOwnerRevision(http.StatusInternalServerError, "failed to close the unserved work")
+	}
+	if _, err := h.Store.SettleLifecycleWork(asOwner(ctx), settle); err != nil {
+		log.Printf("texture api: close unserved work %s: %v", workItemID, err)
+		return refuseOwnerRevision(http.StatusInternalServerError, "failed to close the unserved work")
+	}
+	return nil
 }
