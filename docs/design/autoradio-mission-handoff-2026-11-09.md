@@ -51,7 +51,7 @@ Verified in code unless marked as a doc's claim.
 | Push notifications | None. No APNs or FCM code |
 | Radio program engine | Designed (`docs/archive/reports/autoradio-programming-engine-2026-10-14.md`), not built. The October browser prototype is no longer in the tree |
 
-What the earlier docs still contribute, now that nsh replaces the Swift
+What the earlier docs still contribute, now that a cross-platform runtime replaces the Swift
 plan:
 - web-view audio dies in the background, so playback is native
   (`autoradio-native-stack-comparison-2026-10-20.md`);
@@ -72,45 +72,68 @@ function." Each server lane extends the mechanism named in section 3.
 **Step 0, before any lane (contracts, one agent, a day):**
 
 - 0.1 **The page format.** One written spec of what the server sends for a
-  Texture page, which both the Svelte and the nsh renderer draw. Golden
+  Texture page, which both the Svelte and the native renderer draw. Golden
   documents are its test. It includes the audio timeline.
 - 0.2 **The frozen API.** The app cannot change after review, so the
   endpoints it calls are listed, versioned and frozen, with a rule for what
   the app does when the server is newer.
-- 0.3 **The runtime spike: nsh and Exact, side by side.** The same blank
-  app is built on each, embedded in our own Xcode project, on a real
-  iPhone. Each must:
+- 0.3 **The runtime spike, on Exact.** Both codebases were read at source
+  on 2026-11-09 (`expo/exact` at `94b8671`, `longbridge/nsh` at `506b539`).
+  Exact is the lead; nsh is the fallback.
+
+  What Exact already has in its tree:
+  - one owner of the audio session, which composes playback, microphone
+    capture, speech and calls (`host/apple/Sources/ExactKit/AudioSession.swift`);
+  - an `audio` element with `MediaMetadata`, Now Playing and remote
+    commands (`host/apple/videoarm/NowPlaying.swift`);
+  - microphone capture with a voice-processing option
+    (`packages/media-capture`), speech recognition on the device
+    (`packages/speech-recognition`) and speech synthesis that can keep
+    speaking in the background (`packages/speech-synthesis`);
+  - store purchases, passkeys, sign-in, OAuth and Keychain packages;
+  - a test driver that works on a physical iPhone and simulates heard and
+    spoken words on a clock, so agents can test voice flows.
+
+  What nsh says of itself (`docs/dev/audio-design.md`): background
+  playback, Now Playing, remote commands, recording and text to speech are
+  non-goals for now; players pause when the app leaves the foreground; the
+  iOS audio path is "built, not run". We would write all of lanes V and P
+  ourselves on it.
+
+  Exact's costs:
+  - it is pre-alpha and changes daily, with no releases and no packaged
+    CLI. Pin a commit and move the pin deliberately;
+  - remote notification registration is refused today
+    (`docs/contract-grammar.md`). Push needs a Swift module of ours or an
+    upstream change;
+  - installed apps fetch signed UI and asset bundles by default. Version 1
+    must ship with that off; the spike finds how;
+  - TypeScript data logic ships as Hermes bytecode. A Rust data module
+    carries no interpreter, which is the simpler App Review story;
+  - Android is early. That is acceptable for an iOS-first launch.
+
+  The spike, on a real iPhone, at a pinned commit:
   - play long audio with the screen locked, with Now Playing and remote
     commands;
-  - run a Swift module of ours that captures the microphone with voice
-    processing while that audio plays as the echo reference;
-  - render a 20,000-word page with cites and images, scroll it, and read it
-    with VoiceOver.
+  - capture the microphone with voice processing while that audio plays,
+    and measure whether the played audio is cancelled. No test in Exact
+    covers this; it is the highest risk;
+  - recognise speech while the app is not in front. Exact's recogniser
+    stops on leaving the foreground today;
+  - render a 20,000-word page with cites and images, scroll it, and read
+    it with VoiceOver;
+  - produce a release build that fetches no update bundle.
 
-  `expo/exact` was announced on 2026-11-09 (owner: "maybe even better than
-  nsh"). As read that day, from its README and reference docs:
-  - it documents background playback, Now Playing and a Swift module
-    recipe, where nsh has open requests for audio basics (#1059, #1060,
-    #1194);
-  - it is pre-alpha, with no releases and "no API stability... by design",
-    and iOS push, in-app purchase and passkeys are not documented;
-  - its UI is not JavaScript, but TypeScript data modules ship as Hermes
-    bytecode. A build with Rust-only data would carry no interpreter; the
-    spike confirms whether that holds, since it bears on App Review;
-  - it is not React Native and documents no use of Expo modules.
-
-  Neither documents microphone and playback together with echo
-  cancellation, which is the highest risk. The spike picks the runtime; the
-  lanes below read "nsh" but do not otherwise depend on which wins. If
-  neither passes, stop and write the finding; do not fall back silently to
-  a third stack.
+  If Exact fails a check that a Swift module of ours cannot repair, run the
+  same checks on nsh. If both fail, stop and write the finding; do not fall
+  back silently to a third stack.
 
 **Wave 1 (parallel):**
 
 | Lane | Scope | Depends on | Extends |
 |---|---|---|---|
-| N. Native shell | Xcode project embedding nsh at a pinned version; navigation; the build and TestFlight path; the Apple account, bundle id and signing | 0.3 | new tree `mobile/` |
-| V. Voice | Port Mike's recognition, turn-taking, echo cancellation and AI voice behind nsh's `SpeechBackend` and `AudioBackend`; push-to-talk first, open mic after (launch checklist OD-05) | 0.3 | Mike's code, relicensed |
+| N. Native shell | Exact app at a pinned commit; navigation; the build and TestFlight path; the Apple account, bundle id and signing | 0.3 | new tree `mobile/` |
+| V. Voice | Turn-taking and the AI voice on Exact's capture, recognition and synthesis packages, with Mike's code for what they lack; push-to-talk first, open mic after (launch checklist OD-05) | 0.3 | Mike's code, relicensed |
 | P. Playback | Long-form background playback, Now Playing and lock-screen controls, clip start and end anchored to transcripts, the podcast as the echo reference | 0.3 | new, in `mobile/` |
 | S1. Sign-in | A named, revocable device with a refreshable token, approved by passkey; account deletion from the app | 0.2 | the device authorization flow (`internal/auth/device_login.go`); no second sign-in system |
 | S2. Audio in Texture | The audio timeline on a revision; audio bytes served by the asset endpoint; published stories may carry audio and images | 0.1 | `internal/texturedoc/embed*.go`, `api_assets.go`, the publish gate |
@@ -204,7 +227,7 @@ Approval is the benchmark for the mission as a whole, not for pass 1.
 | Which speech models ship, and the download size | whatever Mike runs today; measure the size in lane V |
 | Where the page format spec lives | beside `internal/texturedoc`, with the golden documents |
 | Sign in with Apple | not offered; App Review requires it only beside another third-party sign-in, and passkeys are first-party |
-| Whether nsh needs the upstream pieces merged first | carry them as patches on the pinned version and send them upstream in parallel |
+| Whether Exact needs our pieces merged upstream first | carry them as Swift modules of ours on the pinned commit and offer them upstream in parallel |
 | The thin-client review risk (4.2.7(e)) | the app does voice, playback and rendering on the device; say so in the review notes |
 | Where podcast and voice costs land | voice is on the device and free; podcast transcripts are a server cost, measured in lane D before pricing is fixed |
 | Platform order after iOS, CarPlay | decide after approval |
