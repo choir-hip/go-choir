@@ -249,6 +249,23 @@ playing (power), and the seconds the programme talks over the listener
 before the utterance is judged. The voice check runs first so recognition
 runs only on the listener's voice.
 
+## Which microphone (owner, 2026-11-10)
+
+The microphone source is a listener setting, with a default per route.
+
+| Route | Microphone | Playback | Hears |
+| --- | --- | --- | --- |
+| Loudspeaker | phone | full quality | the programme and the room |
+| Wired or USB-C headset | headset | full quality | mostly the listener |
+| Bluetooth headphones | phone (default) | full quality (unconfirmed) | the room, not the programme |
+| Bluetooth headphones | headphones | call quality, or the iOS 26 high-quality mode (not in the EU, more latency) | mostly the listener |
+
+Two microphones at once (phone and Bluetooth): believed not possible. An
+iOS audio session has one input route at a time; this is from general
+knowledge and is a spike question. The phone's own several microphones can
+be used together, which is what the close-to-microphone research relies
+on.
+
 ## What the spike must answer
 
 On the owner's iPhone, with a podcast playing, on the loudspeaker and on
@@ -263,6 +280,8 @@ AirPods, screen locked:
 4. Does Mike's speaker check hold on a real microphone over programme
    audio? (Its accuracy is measured only on simulated audio.)
 5. Battery per hour in each mode.
+6. Each row of the microphone table: what the route really is, what
+   playback sounds like, and whether a second input can be opened.
 
 ## The QA session
 
