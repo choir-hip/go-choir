@@ -131,3 +131,40 @@ func TestTestComputerAccessor(t *testing.T) {
 		t.Fatal("an unlisted computer reads as a test computer")
 	}
 }
+
+// The operator's proof computer (X5 follow-up): d@e is reachable by the
+// platform operator's verbs without becoming a platform computer, because the
+// platform tier switches off self-development and changes warmness. Ways it
+// could fail: d@e is listed as platform to get at it; an id is both; the
+// accessor admits a test computer that is not named; the paper's default
+// roster (PlatformComputerIDs) grows a second member.
+func TestOperatorProofComputerIsNotAPlatformComputer(t *testing.T) {
+	const de = "computer-59c902c5d46caecc0a180a8557164e72"
+	tiers, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tiers.OperatorProofComputer(de) {
+		t.Fatal("d@e is not named as the operator's proof computer")
+	}
+	if tiers.PlatformComputer(de) {
+		t.Fatal("d@e must not be on the platform tier: that switches off its self-development")
+	}
+	if got := tiers.PlatformComputerIDs(); len(got) != 1 {
+		t.Fatalf("the platform roster (the default target of `choir paper`) = %v", got)
+	}
+	if !tiers.OperatorActComputer(de) || !tiers.OperatorActComputer("computer-1355b83bced1613eb048ee28d66688a8") {
+		t.Fatal("the operator acts on the paper and the proof computer")
+	}
+	if tiers.OperatorActComputer("computer-a875023a6379c41f6ddb438f02e76a02") || tiers.OperatorProofComputer(" "+de+"x") {
+		t.Fatal("a test computer or a near match is admitted")
+	}
+	both := `{"schema":"choir.computer_tiers.v1","paid_accounts":[],"platform_computers":[{"computer_id":"` + de + `","note":"a"}],"operator_proof_computers":[{"computer_id":"` + de + `","note":"b"}]}`
+	if _, err := Parse([]byte(both)); err == nil {
+		t.Fatal("an id on both the platform and the proof list parsed")
+	}
+	noNote := `{"schema":"choir.computer_tiers.v1","paid_accounts":[],"platform_computers":[],"operator_proof_computers":[{"computer_id":"` + de + `"}]}`
+	if _, err := Parse([]byte(noNote)); err == nil {
+		t.Fatal("a proof computer with no note parsed")
+	}
+}

@@ -50,11 +50,24 @@ type testComputer struct {
 	Note       string `json:"note"`
 }
 
+// operatorProofComputer is a computer the platform operator's verbs may act on
+// (schedules, policy, restart) without it joining the platform tier. The
+// platform tier switches off a computer's self-development and makes it
+// always-on; the proof computer (d@e) must keep both as they are, so it has its
+// own list.
+type operatorProofComputer struct {
+	ComputerID string `json:"computer_id"`
+	Note       string `json:"note"`
+}
+
 type file struct {
 	Schema            string             `json:"schema"`
 	PaidAccounts      []paidAccount      `json:"paid_accounts"`
 	PlatformComputers []platformComputer `json:"platform_computers"`
 	TestComputers     []testComputer     `json:"test_computers,omitempty"`
+	// OperatorProofComputers are reachable by the operator's verbs and are not
+	// platform computers. Optional.
+	OperatorProofComputers []operatorProofComputer `json:"operator_proof_computers,omitempty"`
 }
 
 // Tiers is a parsed, validated tier file.
@@ -62,6 +75,7 @@ type Tiers struct {
 	paid     map[string]bool
 	platform map[string]bool
 	test     map[string]bool
+	proof    map[string]bool
 }
 
 // Load parses the embedded tier file.
@@ -79,7 +93,7 @@ func Parse(body []byte) (Tiers, error) {
 	if f.Schema != Schema {
 		return Tiers{}, fmt.Errorf("computer tiers: schema %q, want %q", f.Schema, Schema)
 	}
-	t := Tiers{paid: map[string]bool{}, platform: map[string]bool{}, test: map[string]bool{}}
+	t := Tiers{paid: map[string]bool{}, platform: map[string]bool{}, test: map[string]bool{}, proof: map[string]bool{}}
 	for _, a := range f.PaidAccounts {
 		id := strings.TrimSpace(a.UserID)
 		if !userIDRE.MatchString(id) {
@@ -122,7 +136,35 @@ func Parse(body []byte) (Tiers, error) {
 		}
 		t.test[id] = true
 	}
+	for _, c := range f.OperatorProofComputers {
+		id := strings.TrimSpace(c.ComputerID)
+		if !computerIDRE.MatchString(id) {
+			return Tiers{}, fmt.Errorf("computer tiers: operator proof computer %q is not a computer id", c.ComputerID)
+		}
+		if strings.TrimSpace(c.Note) == "" {
+			return Tiers{}, fmt.Errorf("computer tiers: operator proof computer %s has no note", id)
+		}
+		if t.proof[id] {
+			return Tiers{}, fmt.Errorf("computer tiers: operator proof computer %s listed twice", id)
+		}
+		if t.platform[id] {
+			return Tiers{}, fmt.Errorf("computer tiers: %s is listed as both platform and operator proof", id)
+		}
+		t.proof[id] = true
+	}
 	return t, nil
+}
+
+// OperatorProofComputer reports whether the operator's verbs may act on a
+// computer that is not on the platform tier (d@e).
+func (t Tiers) OperatorProofComputer(computerID string) bool {
+	return t.proof[strings.TrimSpace(computerID)]
+}
+
+// OperatorActComputer reports whether the platform operator may act on a
+// computer: a platform computer, or the named proof computer.
+func (t Tiers) OperatorActComputer(computerID string) bool {
+	return t.PlatformComputer(computerID) || t.OperatorProofComputer(computerID)
 }
 
 // Paid reports whether an account is on the paid tier.
