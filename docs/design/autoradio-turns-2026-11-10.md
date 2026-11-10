@@ -68,6 +68,46 @@ What a revision must contain is decided by the page format, not by this
 note: a block that is speech, a block that is a clip with its source
 reference and time span, and the listener's own passages.
 
+## The edition is a document
+
+Owner, 2026-11-10: "Per-account editions! Editions should be determined by
+a document, right? And the document can be created per user in onboarding.
+We can do the onboarding with handsfree voice chat, after we do voice
+onboarding. Ask the user about their interests. Iteratively. That creates
+their edition texture, which they can then edit (or prompt to change)."
+
+There is no per-account edition on the server today, only the paper's
+front page and the documents on a listener's own computer
+([app API map](autoradio-app-api-2026-11-10.md)). The ruling fills that
+gap with no new mechanism:
+
+- **The edition Texture** is a document on the listener's computer that
+  says, in prose, what their edition is: what they follow, what they want
+  more and less of, how long, what voice and pace, which shows they like.
+  It is an ordinary Texture document. They can read it, edit it, or prompt
+  it, by voice or on the web.
+- **Each day's programme** is a document the desk builds by reading the
+  edition Texture against the paper's stories and the prepared audio. It
+  is the document that is played, and the one a turn prompts.
+- **Onboarding is the first programme.** After voice onboarding (the
+  microphone, the listener's voice, their word), the radio asks about
+  interests, one question at a time, hands-free. Each answer is a turn,
+  and the desk's revision is the edition Texture taking shape. It can
+  read back what it has so far and ask what is missing. Onboarding needs
+  no separate system: it is the same loop, with a document whose blocks
+  are questions.
+- **It keeps changing the same way.** "Less sport, more on the chip
+  export rules" during any programme is a prompt the desk applies to the
+  edition Texture as well as to what plays next.
+- **Learning writes proposals, not silent changes.** What the scored
+  record shows (skipped three clips from one show) reaches the edition
+  Texture as a revision by the desk that the listener can see and undo,
+  like any agent revision.
+
+Open: whether a turn during a programme that changes standing taste is
+applied to the edition Texture at once or offered back first ("shall I
+remember that?"). Start by saying it aloud and applying it.
+
 ## Two fixed behaviours
 
 Only these are structure, because the experience fails without them.
