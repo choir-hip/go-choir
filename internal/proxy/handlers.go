@@ -1810,6 +1810,9 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	// Research's read-only search over published stories and opinion pieces
 	// (guest_authority.go carves out this one GET path).
 	s.HandleFunc("/internal/platform/published/search", h.HandlePlatformObjectGraph)
+	// One published version by id, for Texture's take, merge and fork
+	// (guest_authority.go carves out this one GET path shape).
+	s.HandleFunc("/internal/platform/publications/versions/", h.HandlePlatformObjectGraph)
 	// Living stories (Cut 2 2b): a guest publishes its own story revisions
 	// through the owner's publish path, and writes its stories' support
 	// verdicts to Store B, both bound to the guest's owner and computer.
