@@ -385,6 +385,18 @@ to be launching to real users and stability will become more important").
 Until the owner says Autoradio is solid, every landing commit carries
 `Ring-Expedite`, with the expedite's guards unchanged.
 
+**Review follows the landing; it does not gate it** (owner, 2026-11-10:
+"we shouldn't let ourselves be bottlenecked by code review. Code review
+works for us. We don't work for code review. So we can totally pipeline
+stuff. We can run code review even after we push something to main...
+we're still pre-release"). Until launch, a change whose checks pass lands
+at once and its review runs behind it; a finding is fixed forward or
+reverted. A review trailer names only a review that has happened: a commit
+that lands ahead of its review says so, and never carries a Reviewed-By it
+has not earned. Where the security epoch gate requires a Reviewed-By, that
+one commit waits for its seat. When this laptop runs out of cores, builds
+and builders move to the agents VM on Node A (`ssh choir-agents`).
+
 **Agent models** (owner, 2026-11-09: "You can orchestrate sonnet subagents
 well. Just use fable for stuff that requires design. (Fable instead of opus;
 update Claude/agents.md)"): Fable for open-ended design and for orchestration.
