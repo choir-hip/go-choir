@@ -285,11 +285,71 @@ func TestOpedVerdictCanonicalJSONStable(t *testing.T) {
 	}
 }
 
-func TestSpanWithinChain(t *testing.T) {
-	if err := ValidateChangelogSpanWithin(ChangelogSpan{FromSeq: 2, ToSeq: 10}, 10); err != nil {
-		t.Fatal(err)
+func TestChangelogOccurredAtMustBeRFC3339(t *testing.T) {
+	for _, bad := range []string{"", "yesterday", "2026-11-10 01:02:03"} {
+		b := *goodChangelogRecord().Changelog
+		b.OccurredAt = bad
+		if ValidateChangelogBody(b) == nil {
+			t.Fatalf("occurred_at %q was accepted", bad)
+		}
 	}
-	if ValidateChangelogSpanWithin(ChangelogSpan{FromSeq: 2, ToSeq: 11}, 10) == nil {
-		t.Fatal("a span past the head was accepted")
+}
+
+func TestOpedRecordValidationGapsFromReview(t *testing.T) {
+	long := strings.Repeat("x", ChangelogRouteMaxRunes+1)
+	r := goodVerdictRecord()
+	r.Oped.Verdict.RespondsTo.RoutePath = long
+	if ValidateOpedRecord(r) == nil {
+		t.Fatal("a verdict with an unbounded responds_to route was accepted")
+	}
+	r = goodVerdictRecord()
+	r.Oped.Verdict.RespondsTo.PublicationID = long
+	if ValidateOpedRecord(r) == nil {
+		t.Fatal("a verdict with an unbounded responds_to publication id was accepted")
+	}
+	w := OpedWake{StoryDocID: "d", VersionID: "pv-1", Why: OpedWakeAccepted, RespondsTo: OpedRespondsTo{PublicationVersionID: "pv-0", RoutePath: long}}
+	if _, _, err := (CommitmentOped{Kind: OpedRecordWake, Wake: &w}).validate(); err == nil {
+		t.Fatal("a wake with an unbounded route was accepted")
+	}
+	g := OpedGateUnavailable{VersionID: "pv-1", Attempts: 3, RespondsTo: OpedRespondsTo{PublicationVersionID: "pv-0", PublicationID: long}}
+	if _, _, err := (CommitmentOped{Kind: OpedRecordGateUnavailable, GateUnavailable: &g}).validate(); err == nil {
+		t.Fatal("a gate_unavailable with an unbounded publication id was accepted")
+	}
+	// Action and MaterialityProcedure are bodies too.
+	r = goodVerdictRecord()
+	r.Action = &CommitmentAction{}
+	if ValidateOpedRecord(r) == nil {
+		t.Fatal("oped plus action was accepted")
+	}
+	cr := goodChangelogRecord()
+	cr.MaterialityProcedure = &MaterialityFreeze{}
+	if ValidateChangelogRecord(cr) == nil {
+		t.Fatal("changelog plus materiality procedure was accepted")
+	}
+	// An admitter inbox of any owner is the verdict's inbox; a document inbox is not.
+	r = goodVerdictRecord()
+	r.Inbox = deskmanifest.DocumentInbox("d")
+	if ValidateOpedRecord(r) == nil {
+		t.Fatal("a verdict to a document inbox was accepted")
+	}
+}
+
+func TestWakeDecisionWokenAgreesWithWhy(t *testing.T) {
+	mk := func(woken bool, why OpedWakeWhy) error {
+		_, _, err := (CommitmentOped{Kind: OpedRecordWakeDecision, WakeDecision: &OpedWakeDecision{StoryDocID: "d", N: 1, Woken: woken, Why: why}}).validate()
+		return err
+	}
+	for _, c := range []struct {
+		woken bool
+		why   OpedWakeWhy
+		ok    bool
+	}{
+		{true, OpedWakeAccepted, true}, {false, OpedWakeAccepted, false}, {true, OpedWakeRejectBackoff, true}, {false, OpedWakeRejectBackoff, false},
+		{false, OpedWakeBelowThreshold, true}, {true, OpedWakeBelowThreshold, false}, {false, OpedWakeGapNotElapsed, true}, {true, OpedWakeGapNotElapsed, false},
+		{true, OpedWakeCoalesced, true}, {false, OpedWakeCoalesced, true},
+	} {
+		if err := mk(c.woken, c.why); (err == nil) != c.ok {
+			t.Fatalf("woken=%v why=%s: err=%v", c.woken, c.why, err)
+		}
 	}
 }

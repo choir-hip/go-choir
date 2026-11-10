@@ -153,31 +153,80 @@ func (rt *Runtime) EmitOpedWakeDecision(ctx context.Context, ownerID, computerID
 	return rt.commitSilentRecord(ctx, req)
 }
 
+// UpdateEventsWindow bounds the records one EmitUpdateEvents call examines in
+// each inbox, and UpdateEventsMaxCasters the caster inboxes it follows.
+const (
+	UpdateEventsWindow     = 200
+	UpdateEventsMaxCasters = 8
+)
+
+// UpdateEventsOption adjusts one EmitUpdateEvents call.
+type UpdateEventsOption func(*updateEventsConfig)
+
+type updateEventsConfig struct{ since int64 }
+
+// UpdateEventsSince reads the document inbox from after the given inbox
+// sequence (at most UpdateEventsWindow records) instead of its newest window.
+// Sequences are per inbox, so the caster inboxes always read their newest
+// window.
+func UpdateEventsSince(seq int64) UpdateEventsOption {
+	return func(c *updateEventsConfig) { c.since = seq }
+}
+
+// updateEventsRead reads at most UpdateEventsWindow records of an inbox: the
+// newest window, or the window after since.
+func (rt *Runtime) updateEventsRead(ctx context.Context, ownerID, computerID, inbox string, since int64) ([]types.CommitmentRecord, error) {
+	if since > 0 {
+		return rt.store.ListInboxRecords(ctx, ownerID, computerID, inbox, since, since+UpdateEventsWindow)
+	}
+	head, err := rt.store.InboxHead(ctx, ownerID, computerID, inbox)
+	if err != nil {
+		return nil, err
+	}
+	after := head - UpdateEventsWindow
+	if after < 0 {
+		after = 0
+	}
+	return rt.store.ListInboxRecords(ctx, ownerID, computerID, inbox, after, 0)
+}
+
 // EmitUpdateEvents derives the update_* events of a document's rounds from
-// the records the computer already has (the document inbox's Casts and final
-// Reports) and commits each as a changelog event. It is a read-side
+// the records the computer already has (the document inbox's Casts and the
+// closing Reports) and commits each as a changelog event. It is a read-side
 // derivation: it closes nothing and is safe to call at any closure point or
 // on a timer, because ids are deterministic and a repeat mints nothing. A
 // round still open yields only update_started; a round closed by a restart
 // yields update_interrupted and never update_finished.
-func (rt *Runtime) EmitUpdateEvents(ctx context.Context, ownerID, computerID, docID string) error {
+//
+// The read is bounded: the newest UpdateEventsWindow records of the document
+// inbox (or the window after UpdateEventsSince) and of each of at most
+// UpdateEventsMaxCasters caster inboxes. A round whose cast is older than the window
+// is not examined. The signature is the original one plus options.
+func (rt *Runtime) EmitUpdateEvents(ctx context.Context, ownerID, computerID, docID string, opts ...UpdateEventsOption) error {
 	if rt == nil || rt.store == nil {
 		return fmt.Errorf("update events: runtime has no store")
 	}
+	var cfg updateEventsConfig
+	for _, o := range opts {
+		o(&cfg)
+	}
 	doc := deskmanifest.DocumentInbox(docID)
-	records, err := rt.store.ListInboxRecords(ctx, ownerID, computerID, doc, 0, 0)
+	records, err := rt.updateEventsRead(ctx, ownerID, computerID, doc, cfg.since)
 	if err != nil {
 		return err
 	}
 	// A round's final Report lands in the caster's inbox: read those too.
-	casters := map[string]bool{}
-	for _, rec := range records {
-		if rec.IsCast() && rec.SenderInbox != "" && rec.SenderInbox != doc {
-			casters[rec.SenderInbox] = true
+	var casters []string
+	seen := map[string]bool{}
+	for i := len(records) - 1; i >= 0; i-- { // newest first
+		rec := records[i]
+		if rec.IsCast() && rec.SenderInbox != "" && rec.SenderInbox != doc && !seen[rec.SenderInbox] && len(casters) < UpdateEventsMaxCasters {
+			seen[rec.SenderInbox] = true
+			casters = append(casters, rec.SenderInbox)
 		}
 	}
-	for caster := range casters {
-		more, err := rt.store.ListInboxRecords(ctx, ownerID, computerID, caster, 0, 0)
+	for _, caster := range casters {
+		more, err := rt.updateEventsRead(ctx, ownerID, computerID, caster, 0)
 		if err != nil {
 			return err
 		}
