@@ -165,7 +165,7 @@ func TestLatestTwelveOverridesAreWorkedExamplesInJevsState(t *testing.T) {
 	}
 	judge := &fakeIntakeJudge{}
 	rt.SetCandidateJudge(judge)
-	if labelled, _ := rt.labelCaptures(ctx, owner, computer, "rss:examples", []sourcegraph.CapturedItem{{CaptureID: "cap-new", Title: "Papst operiert", URL: "https://e.example/1"}}); labelled != 1 {
+	if labelled, _ := labelNow(rt, ctx, owner, computer, "rss:examples", []sourcegraph.CapturedItem{{CaptureID: "cap-new", Title: "Papst operiert", URL: "https://e.example/1"}}); labelled != 1 {
 		t.Fatal("capture not labelled")
 	}
 	corrections, _ := judge.calls[0].state["corrections"].([]any)

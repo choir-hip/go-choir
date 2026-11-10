@@ -260,7 +260,7 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 		if pollErr != nil {
 			usage.Status, usage.Error = "error", pollErr.Error()
 		}
-		// With intake.labels on, Jev labels the new captures before the
+		// With intake.labels on, Jev labels the new captures after the poll (held up to 30 s for a shared flush), not before the
 		// arrival names them (L2a A1). Labels are their own objects and
 		// never gate the arrival. Under event wakes they retire: management
 		// reads captures on event records, which name the stories that
@@ -269,7 +269,9 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 		eventWakes := rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEvents) &&
 			rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEventWakes)
 		if len(report.Captured) > 0 && !eventWakes && rt.intakeLabelsEnabled(ctx, ownerID, computerID) {
-			usage.Labelled, usage.Unlabelled = rt.labelCaptures(ctx, ownerID, computerID, sched.SourceID, report.Captured)
+			// Held for the computer's next flush (intake_labels.go); the
+			// poll's usage does not count labels that do not exist yet.
+			rt.enqueueIntakeLabels(ownerID, computerID, sched.SourceID, report.Captured)
 		}
 		// With intake.events on, the new captures queue for the event
 		// layer, which resolves every source's captures together onto

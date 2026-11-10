@@ -449,3 +449,48 @@ for the 32,000 byte long-context line and "slower and less accurate"; OpenRouter
 in parallel and cannot see each other's answers", and run-to-run variation.
 In-repo: `docs/evidence/jev-measurement-2026-11-10.md`,
 `docs/evidence/token-efficiency-2026-11-09/intake-and-jev.md`.
+
+## Intake flush: ways it can fail (2026-11-10, orange; rollback: revert)
+
+Owner rule (2026-11-10): never call Jev concurrently; put many questions in
+single calls. Intake labels are one sequential stream of calls per computer.
+Captures from any poll are held in a per-computer in-memory queue and
+flushed when 30 s have passed since the first held capture or 12 are held
+(`intakeFlushWait`, `intakeFlushCaptures`; compiled constants). A call packs
+captures and candidate stories to the 30,000-byte guard, not to a count
+(`intakeChunkStateBytes` cuts story chunks by bytes). Failure list, written
+before the code:
+
+- F1. A flush starts while another runs (two concurrent Jev streams). Bound:
+  `inFlight` per queue; the timer and the enqueue only start a flush when it
+  is false.
+- F2. A capture is enqueued during a flush and is lost, double-labelled, or
+  waits past its own 30 s. Bound: the drain takes only a due batch; later
+  captures keep their own arrival time and the timer is re-armed at flush end.
+- F3. A call fails mid-flush and voids other calls' captures or labels a
+  capture on part of the evidence. Bound: unchanged merge rule; a capture
+  with any failed chunk is unlabelled, others keep their labels.
+- F4. The byte guard splits one capture's questions across calls, or a call
+  goes over the guard. Bound: a capture's two questions are built together; a
+  group closes before a capture that would cross the guard.
+- F5. Shutdown with captures held. They are dropped and stay unlabelled, the
+  same fate as a capture whose label call failed (see below); nothing
+  resumes them at boot. A running flush is cancelled with the runtime.
+- F6. One capture larger than the guard. It goes alone, over the guard, as
+  before; never dropped.
+- F7. Timer misuse: a timer that fires after Stop, after the queue emptied, or
+  twice. Bound: the callback re-evaluates under the lock and only schedules.
+- F8. A poll with zero captures (or captures without ids) enqueues nothing
+  and arms no timer.
+- F9. Concurrency returns through chunks: no `fanout`, no pool, no goroutine
+  per chunk; the only goroutine is the one flush per computer.
+
+Fate of a capture whose label is missing (found in the code): a label call
+that fails, a capture the budget cut off, or a label that cannot be written
+leaves the capture unlabelled with a log line (`labelHeld`); nothing retries
+it, because the next poll sees the capture as already captured and does not
+return it as new. A capture still queued at a crash behaves the same. The
+consumers read whatever labels exist: corpus search takes label hints from
+`RecentCaptureLabels` and ranks without one when missing, and the override
+recorder skips a capture with no label (`intake_overrides.go`). Neither
+waits, so 30 s more delay changes nothing for them.
