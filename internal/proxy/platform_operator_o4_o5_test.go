@@ -328,10 +328,10 @@ func TestOperatorReachesTheProofComputerAndNoOrdinaryComputer(t *testing.T) {
 // refusal is flattened or loses its code.
 func TestOperatorRestartAsksForRestartInPlaceAndReportsRestarted(t *testing.T) {
 	w := newOperatorWorld(t, opAccount)
-	w.refreshBody = `{"outcome":"restarted","target":"abc123","planned_restart":true}`
+	w.refreshBody = `{"outcome":"restarted","target":"abc123","planned_restart":true,"work":"resumed"}`
 	rec := w.do(http.MethodPost, restartURL(paperComputer), `{"reason":"wedged"}`, w.session(opAccount))
 	var out map[string]any
-	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &out) != nil || out["outcome"] != "restarted" || out["receipt"] != "evt-restart-1" {
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &out) != nil || out["outcome"] != "restarted" || out["work"] != "resumed" || out["receipt"] != "evt-restart-1" {
 		t.Fatalf("restart = %d %s", rec.Code, rec.Body)
 	}
 	w.mu.Lock()

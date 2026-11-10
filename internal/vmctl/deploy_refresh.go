@@ -202,6 +202,10 @@ type deployRefreshResponse struct {
 	ReasonCode     string          `json:"reason_code,omitempty"`
 	Refusal        json.RawMessage `json:"refusal,omitempty"`
 	PlannedRestart bool            `json:"planned_restart"`
+	// Work, on an operator restart, says what the restart did to open work:
+	// "resumed" (marker written, one resume at boot) or "closed" (markerless
+	// crash boot, open work closed as interrupted by a restart).
+	Work string `json:"work,omitempty"`
 	// BusyAllowed: vmctl asked the guest with allow_busy (an always-on
 	// platform computer), so running runs did not defer the refresh.
 	BusyAllowed bool `json:"busy_allowed,omitempty"`
@@ -508,7 +512,15 @@ func (h *Handler) deployRefreshWith(ctx context.Context, req deployRefreshReques
 		return reply(deployRefreshDeferred, errHostStopping.Error(), http.StatusConflict)
 	}
 	marker := h.plannedRestartMarker()
-	outcome, detail := marker.mark(ctx, own, req.Target, allowBusy)
+	markCtx := ctx
+	if req.RestartInPlace {
+		// A wedged guest must not hold the operator's restart on the 20 s
+		// client timeout.
+		var cancelMark context.CancelFunc
+		markCtx, cancelMark = context.WithTimeout(ctx, restartMarkTimeout)
+		defer cancelMark()
+	}
+	outcome, detail := marker.mark(markCtx, own, req.Target, allowBusy)
 	planned := false
 	switch outcome {
 	case guestMarkWritten:
@@ -529,11 +541,18 @@ func (h *Handler) deployRefreshWith(ctx context.Context, req deployRefreshReques
 		// deploy that ships the endpoint must still reach it. Refresh it only
 		// when its /health reports no work (the idle sweep's test); the boot
 		// is then a crash boot, as an idle stop and wake would be.
-		if h.registry.guestBusy()(&own) {
+		// The operator's restart skips that test: it exists to reach a computer
+		// whose /health does not answer, and the restart is markerless.
+		if !req.RestartInPlace && h.registry.guestBusy()(&own) {
 			return reply(deployRefreshDeferred, "busy (guest predates planned-restart; /health reports work or did not answer)", http.StatusConflict)
 		}
 	default:
-		return reply(deployRefreshDeferred, "guest did not answer the planned-restart request: "+detail, http.StatusConflict)
+		// The operator's restart of a computer that cannot take the marker (a
+		// wedged guest) still happens, markerless: a crash boot that closes
+		// open work. When the guest does answer, its refusals above hold.
+		if !req.RestartInPlace {
+			return reply(deployRefreshDeferred, "guest did not answer the planned-restart request: "+detail, http.StatusConflict)
+		}
 	}
 
 	var refreshed *VMOwnership

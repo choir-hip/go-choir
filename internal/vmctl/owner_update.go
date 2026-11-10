@@ -92,18 +92,18 @@ func (h *Handler) ownerUpdate(ctx context.Context, req deployRefreshRequest) (de
 		return deployRefreshResponse{Outcome: deployRefreshSkipped, Reason: "not active (state=" + string(own.State) + ")", ReasonCode: ownerReasonNotActive,
 			Target: commit, VMID: own.VMID, ComputerID: own.ComputerID, UserID: own.UserID, DesktopID: own.DesktopID, State: string(own.State)}, http.StatusConflict
 	}
-	if own.State == VMStateActive {
-		// Before the gate, the marker or any pending entry: a computer already
-		// on the release is a no-op. A served commit that cannot be read is
-		// not "current".
-		if served := h.servedCommit(ctx, *own); served != "" && served == commit && !req.RestartInPlace {
-			h.deployRefreshState().forget(own.UserID, own.DesktopID)
-			return deployRefreshResponse{Outcome: deployRefreshCurrent, Target: commit, VMID: own.VMID, ComputerID: own.ComputerID,
-				UserID: own.UserID, DesktopID: own.DesktopID, ComputerURL: own.ComputerURL, State: string(own.State)}, http.StatusOK
-		}
-	}
 	if req.RestartInPlace {
+		// Before any probe of the guest: a wedged guest must not make the
+		// operator wait on /health, and a refused call asks nothing of it.
 		return h.operatorRestartInPlace(ctx, req, own, commit)
+	}
+	// Before the gate, the marker or any pending entry: a computer already
+	// on the release is a no-op. A served commit that cannot be read is
+	// not "current".
+	if served := h.servedCommit(ctx, *own); served != "" && served == commit {
+		h.deployRefreshState().forget(own.UserID, own.DesktopID)
+		return deployRefreshResponse{Outcome: deployRefreshCurrent, Target: commit, VMID: own.VMID, ComputerID: own.ComputerID,
+			UserID: own.UserID, DesktopID: own.DesktopID, ComputerURL: own.ComputerURL, State: string(own.State)}, http.StatusOK
 	}
 	resp, status := h.trackedDeployRefresh(ctx, req, "owner-update")
 	resp.Target = commit
@@ -111,30 +111,56 @@ func (h *Handler) ownerUpdate(ctx context.Context, req deployRefreshRequest) (de
 	return resp, status
 }
 
+// restartProbeTimeout bounds the one served-commit probe of an operator
+// restart; restartMarkTimeout bounds its planned-restart marker call. A
+// guest that answers neither is wedged, which is what the verb is for. Vars so
+// tests can shorten them.
+var (
+	restartProbeTimeout = 3 * time.Second
+	restartMarkTimeout  = 10 * time.Second
+)
+
 // operatorRestartInPlace is the platform operator's restart: the same
 // trackedDeployRefresh as an update (ring gate, held and divergent rules, one
 // in flight, the guest's planned-restart marker and its busy refusals), onto
-// the release the computer already serves. It adds only the rate bound and
-// the outcome name: restarted when the computer was on its release, refreshed
-// when an update was pending and this applied it.
+// the release the computer already serves. It adds the atomic rate bound and
+// the outcome name: refreshed when the probe shows an update was pending and
+// this applied it, restarted otherwise (including a probe that got no
+// answer). The reservation is taken first, so a refused call asks nothing of
+// the guest; the probe is bounded and made once. When the guest answers the
+// marker call, its refusals (apply, live capsule, pending decision) hold and
+// the restart resumes work (work=resumed). When it cannot answer, the restart
+// is markerless, a crash boot that closes open work (work=closed), the safe
+// outcome for a wedged computer (deployRefreshWith).
 func (h *Handler) operatorRestartInPlace(ctx context.Context, req deployRefreshRequest, own *VMOwnership, commit string) (deployRefreshResponse, int) {
 	_, clock := h.behindGate()
 	tracker := h.deployRefreshState()
-	if !tracker.restartAllowed(own.UserID, own.DesktopID, clock(), restartInPlaceMinGap) {
+	finish, refusal := tracker.beginRestartInPlace(own.UserID, own.DesktopID, clock(), restartInPlaceMinGap)
+	if refusal != "" {
 		return deployRefreshResponse{Outcome: deployRefreshSkipped, ReasonCode: ownerReasonRestartRate, Target: commit,
-			Reason: "this computer was restarted by an operator less than " + restartInPlaceMinGap.String() + " ago; nothing was restarted",
+			Reason: "an operator restart of this computer is running or was less than " + restartInPlaceMinGap.String() + " ago; nothing was restarted",
 			VMID:   own.VMID, ComputerID: own.ComputerID, UserID: own.UserID, DesktopID: own.DesktopID, State: string(own.State)}, http.StatusConflict
 	}
-	served := h.servedCommit(ctx, *own)
-	sameVersion := served != "" && served == commit
+	charged := false
+	defer func() { finish(charged) }()
+	probeCtx, cancel := context.WithTimeout(ctx, restartProbeTimeout)
+	served := h.servedCommit(probeCtx, *own)
+	cancel()
+	behind := served != "" && served != commit
 	resp, status := h.trackedDeployRefresh(ctx, req, "operator-restart")
 	resp.Target = commit
 	resp.ReasonCode = ownerReasonCode(resp)
 	if resp.Outcome == deployRefreshRefreshed || resp.Outcome == deployRefreshFailed {
-		tracker.noteRestart(own.UserID, own.DesktopID, clock())
+		charged = true
 	}
-	if resp.Outcome == deployRefreshRefreshed && sameVersion {
-		resp.Outcome = deployRefreshRestarted
+	if resp.Outcome == deployRefreshRefreshed {
+		if !behind {
+			resp.Outcome = deployRefreshRestarted
+		}
+		resp.Work = "closed"
+		if resp.PlannedRestart {
+			resp.Work = "resumed"
+		}
 	}
 	return resp, status
 }

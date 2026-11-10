@@ -243,6 +243,8 @@ type deployRefreshTracker struct {
 	// restartedAt is when each computer's last operator restart in place
 	// reached the guest and ended (restarted or failed), in memory like failed.
 	restartedAt map[string]time.Time
+	// restarting holds the computers with an operator restart in progress.
+	restarting map[string]struct{}
 }
 
 func newDeployRefreshTracker() *deployRefreshTracker {
@@ -259,24 +261,47 @@ func (t *deployRefreshTracker) pendingAndFailed(userID, desktopID string) (bool,
 	return pending, t.failed[key]
 }
 
-// restartAllowed reports whether an operator restart in place of the computer
-// is outside minGap of its last one (a clock that went back allows it).
-func (t *deployRefreshTracker) restartAllowed(userID, desktopID string, now time.Time, minGap time.Duration) bool {
-	key := ownershipKey(userID, normalizeDesktopID(desktopID))
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	last, ok := t.restartedAt[key]
-	return !ok || now.Sub(last) >= minGap || now.Before(last)
-}
-
-func (t *deployRefreshTracker) noteRestart(userID, desktopID string, now time.Time) {
+// beginRestartInPlace atomically checks the operator restart's bound for the
+// computer and reserves it: one lock holds the check, the other restart in
+// progress and the stamp, so two concurrent calls cannot both pass. A second
+// call while the first is running, or within minGap of the last restart, gets
+// a non-empty refusal (restart_rate_bound for both; the concurrent case is
+// the same bound, the first restart not yet over). finish(true) keeps the
+// stamp (the guest was restarted or the restart failed); finish(false) gives
+// the reservation back (nothing was restarted). A clock that went back allows
+// the call.
+func (t *deployRefreshTracker) beginRestartInPlace(userID, desktopID string, now time.Time, minGap time.Duration) (finish func(charged bool), refusal string) {
 	key := ownershipKey(userID, normalizeDesktopID(desktopID))
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.restartedAt == nil {
 		t.restartedAt = map[string]time.Time{}
 	}
+	if t.restarting == nil {
+		t.restarting = map[string]struct{}{}
+	}
+	if _, running := t.restarting[key]; running {
+		return nil, ownerReasonRestartRate
+	}
+	prev, had := t.restartedAt[key]
+	if had && now.Sub(prev) < minGap && !now.Before(prev) {
+		return nil, ownerReasonRestartRate
+	}
+	t.restarting[key] = struct{}{}
 	t.restartedAt[key] = now
+	return func(charged bool) {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		delete(t.restarting, key)
+		if charged {
+			return
+		}
+		if had {
+			t.restartedAt[key] = prev
+		} else {
+			delete(t.restartedAt, key)
+		}
+	}, ""
 }
 
 func (h *Handler) deployRefreshState() *deployRefreshTracker {
