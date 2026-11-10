@@ -436,8 +436,18 @@ func (h *Handler) HandleDeviceToken(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// StartDeviceSweeper deletes device authorizations older than 24 hours every
-// interval until ctx ends.
+// sweepChallenges deletes expired WebAuthn challenge rows, which nothing else
+// removes (every begin writes one).
+func (h *Handler) sweepChallenges() {
+	if n, err := h.store.CleanExpiredChallenges(); err != nil {
+		log.Printf("[auth] operation=challenge_sweep result=error error=%q", err)
+	} else if n > 0 {
+		log.Printf("[auth] operation=challenge_sweep deleted=%d", n)
+	}
+}
+
+// StartDeviceSweeper deletes device authorizations older than 24 hours, expired
+// challenges and stale account sets every interval until ctx ends.
 func (h *Handler) StartDeviceSweeper(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		interval = 15 * time.Minute
@@ -451,6 +461,7 @@ func (h *Handler) StartDeviceSweeper(ctx context.Context, interval time.Duration
 				return
 			case <-t.C:
 				h.sweepAccountSets()
+				h.sweepChallenges()
 				if n, err := h.store.SweepDeviceAuthorizations(ctx, time.Now().UTC().Add(-DeviceAuthorizationRetention)); err != nil {
 					log.Printf("[auth] operation=device_sweep result=error error=%q", err)
 				} else if n > 0 {

@@ -47,7 +47,7 @@ func TestRegisterRoutesAppliesGlobalAuthRateLimit(t *testing.T) {
 	handler := auth.NewHandler(store, wa, cfg, priv)
 	s := server.NewServer("auth", "0")
 	registerRoutes(s, handler, auth.NewRateLimitersWithLimits(map[auth.RateClass]int{
-		auth.RateClassRead: 2, auth.RateClassAct: 2, auth.RateClassCeremony: 2,
+		auth.RateClassRead: 2, auth.RateClassAct: 2, auth.RateClassBegin: 2, auth.RateClassCeremony: 2,
 		auth.RateClassSensitive: 2, auth.RateClassDeviceToken: 2,
 	}))
 

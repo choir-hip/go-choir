@@ -33,10 +33,18 @@ const (
 	// is 4 requests, so 60 a minute is about 15 acts.
 	AuthActRateLimit = 60
 
-	// AuthCeremonyRateLimit covers unauthenticated ceremony begin and finish
-	// (register, login, desktop redeem, device begin and lookup). The passkey
-	// challenge is the brute-force defense; this only bounds the volume. A
-	// sign-in is 4 to 5 requests, so 30 a minute is about 6 attempts.
+	// AuthBeginRateLimit covers /auth/login/begin and /auth/register/begin
+	// only. They answer differently for a known and an unknown email (an
+	// account-existence oracle) and register/begin for a new email writes
+	// permanent rows, so they keep the original 10 a minute. A sign-in costs
+	// 2 ceremony requests (begin, finish; session reads are in the read
+	// class), so 10 a minute still allows about 5 sign-ins.
+	AuthBeginRateLimit = 10
+
+	// AuthCeremonyRateLimit covers the other unauthenticated ceremony routes
+	// (login and register finish, desktop exchange-redirect and redeem, device
+	// begin and lookup). The passkey challenge is the brute-force defense;
+	// this only bounds the volume.
 	AuthCeremonyRateLimit = 30
 )
 
@@ -51,7 +59,10 @@ const (
 	RateClassRead
 	// RateClassAct is an authenticated session act.
 	RateClassAct
-	// RateClassCeremony is an unauthenticated ceremony begin or finish.
+	// RateClassBegin is login/begin and register/begin: account-existence
+	// oracles, 10 a minute.
+	RateClassBegin
+	// RateClassCeremony is the other unauthenticated ceremony routes.
 	RateClassCeremony
 	// RateClassSensitive is the recovery and email routes: the original
 	// 10-a-minute limiter, unchanged.
@@ -66,6 +77,8 @@ func (c RateClass) String() string {
 		return "read"
 	case RateClassAct:
 		return "act"
+	case RateClassBegin:
+		return "begin"
 	case RateClassCeremony:
 		return "ceremony"
 	case RateClassSensitive:
@@ -86,6 +99,7 @@ func NewRateLimiters() *RateLimiters {
 	return NewRateLimitersWithLimits(map[RateClass]int{
 		RateClassRead:        AuthReadRateLimit,
 		RateClassAct:         AuthActRateLimit,
+		RateClassBegin:       AuthBeginRateLimit,
 		RateClassCeremony:    AuthCeremonyRateLimit,
 		RateClassSensitive:   AuthEndpointRateLimit,
 		RateClassDeviceToken: DeviceTokenRateLimit,
@@ -96,7 +110,7 @@ func NewRateLimiters() *RateLimiters {
 // limits (tests use small ones). Every class must be present.
 func NewRateLimitersWithLimits(limits map[RateClass]int) *RateLimiters {
 	rl := &RateLimiters{byClass: make(map[RateClass]*IPRateLimiter)}
-	for _, c := range []RateClass{RateClassRead, RateClassAct, RateClassCeremony, RateClassSensitive, RateClassDeviceToken} {
+	for _, c := range []RateClass{RateClassRead, RateClassAct, RateClassBegin, RateClassCeremony, RateClassSensitive, RateClassDeviceToken} {
 		n, ok := limits[c]
 		if !ok {
 			panic("auth: no rate limit for class " + c.String())

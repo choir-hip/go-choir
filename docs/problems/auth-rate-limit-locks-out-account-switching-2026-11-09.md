@@ -240,6 +240,27 @@ The server-side half (10 per minute per address, shared by all `/auth`
 routes) can also be a Go test on `registerRoutes` with 11 mixed calls from
 one `X-Forwarded-For`.
 
+## Rate classes as built, and the begin correction (review, 2026-11-10)
+
+Classes (fixed windows, per address, constants in `internal/auth/rate_limit.go`):
+read 300, act 60, begin 10, ceremony 30, sensitive (recovery and email) 10,
+device token 60. Review found that `/auth/login/begin` and
+`/auth/register/begin` answer differently for a known and an unknown email
+(account-existence oracles) and `register/begin` for a new email writes
+permanent rows (user and challenge), so the first build's move from 10 to 30
+a minute tripled both. They are now their own `begin` class at 10 a minute;
+their finish routes stay in ceremony at 30. A sign-in costs 2 ceremony
+requests (session reads are in the read class), so 10 still allows about 5
+sign-ins a minute.
+
+Challenge rows: `CleanExpiredChallenges` was never called outside tests, so
+`challenge_state` grew without bound. The device sweeper now calls it each
+tick (15 minutes), with a test.
+
+Client: after a passkey or email sign-in succeeds, a refused (429) or slow
+session read no longer strands the sheet; the sign-in waits the stated delay
+(up to 3 tries) and still runs the computer-surface handoff.
+
 ## Logging (owner, 2026-11-10: "definitely got to log everything related to auth")
 
 What was missing: the auth service logged only some mutations

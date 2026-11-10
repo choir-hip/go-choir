@@ -74,20 +74,22 @@ type authRoute struct {
 }
 
 // authRoutes is the route table. Classes (internal/auth/rate_limit.go):
+// begin = login/register begin (account-existence oracles, 10 a minute),
 // read = own-session reads, act = authenticated session acts, ceremony =
-// unauthenticated begin/finish, sensitive = recovery and email routes (the
+// unauthenticated finish and device routes, sensitive = recovery and email routes (the
 // original 10 a minute), device_token = token polls.
 func authRoutes(handler *auth.Handler) []authRoute {
 	const (
 		read      = auth.RateClassRead
 		act       = auth.RateClassAct
+		begin     = auth.RateClassBegin
 		ceremony  = auth.RateClassCeremony
 		sensitive = auth.RateClassSensitive
 	)
 	return []authRoute{
-		{"/auth/register/begin", ceremony, handler.HandleRegisterBegin},
+		{"/auth/register/begin", begin, handler.HandleRegisterBegin},
 		{"/auth/register/finish", ceremony, handler.HandleRegisterFinish},
-		{"/auth/login/begin", ceremony, handler.HandleLoginBegin},
+		{"/auth/login/begin", begin, handler.HandleLoginBegin},
 		{"/auth/login/finish", ceremony, handler.HandleLoginFinish},
 		{"/auth/session", read, handler.HandleSession},
 		{"/auth/logout", act, handler.HandleLogout},

@@ -53,7 +53,7 @@ func serve(s *server.Server, method, path, addr string) *httptest.ResponseRecord
 
 func smallLimits(n int) map[auth.RateClass]int {
 	return map[auth.RateClass]int{
-		auth.RateClassRead: n, auth.RateClassAct: n, auth.RateClassCeremony: n,
+		auth.RateClassRead: n, auth.RateClassAct: n, auth.RateClassBegin: n, auth.RateClassCeremony: n,
 		auth.RateClassSensitive: n, auth.RateClassDeviceToken: n,
 	}
 }
@@ -86,7 +86,7 @@ func TestRateClassesAreIsolated(t *testing.T) {
 	// Exhausting ceremonies never blocks reads.
 	const addr2 = "203.0.113.22"
 	for i := 0; i < 4; i++ {
-		serve(s, http.MethodPost, "/auth/login/begin", addr2)
+		serve(s, http.MethodPost, "/auth/login/finish", addr2)
 	}
 	if rec := serve(s, http.MethodPost, "/auth/login/finish", addr2); rec.Code != http.StatusTooManyRequests {
 		t.Fatalf("ceremony not limited: %d", rec.Code)
@@ -95,6 +95,42 @@ func TestRateClassesAreIsolated(t *testing.T) {
 		if rec := serve(s, http.MethodGet, p, addr2); rec.Code == http.StatusTooManyRequests {
 			t.Fatalf("%s refused after only ceremonies were exhausted", p)
 		}
+	}
+}
+
+// Exhausting the begin class (the account-existence oracles) blocks neither
+// reads nor the finish routes, and vice versa.
+func TestBeginClassIsIsolatedAndKeepsTenPerMinute(t *testing.T) {
+	if auth.AuthBeginRateLimit != 10 {
+		t.Fatalf("begin limit %d, want 10", auth.AuthBeginRateLimit)
+	}
+	const addr = "203.0.113.24"
+	s := server.NewServer("auth", "0")
+	registerRoutes(s, newRateTestHandler(t), auth.NewRateLimiters())
+	for i := 0; i < 10; i++ {
+		p := []string{"/auth/login/begin", "/auth/register/begin"}[i%2]
+		if rec := serve(s, http.MethodPost, p, addr); rec.Code == http.StatusTooManyRequests {
+			t.Fatalf("begin %d refused", i+1)
+		}
+	}
+	for _, p := range []string{"/auth/login/begin", "/auth/register/begin"} {
+		rec := serve(s, http.MethodPost, p, addr)
+		if rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") == "" {
+			t.Fatalf("%s begin 11: %d", p, rec.Code)
+		}
+	}
+	for _, p := range []string{"/auth/login/finish", "/auth/register/finish", "/auth/session", "/auth/accounts"} {
+		if rec := serve(s, http.MethodPost, p, addr); rec.Code == http.StatusTooManyRequests {
+			t.Fatalf("%s refused after only begins were exhausted", p)
+		}
+	}
+	// And exhausting finishes never blocks begin.
+	const addr2 = "203.0.113.25"
+	for i := 0; i <= auth.AuthCeremonyRateLimit; i++ {
+		serve(s, http.MethodPost, "/auth/login/finish", addr2)
+	}
+	if rec := serve(s, http.MethodPost, "/auth/login/begin", addr2); rec.Code == http.StatusTooManyRequests {
+		t.Fatal("login/begin refused after only finishes were exhausted")
 	}
 }
 
@@ -112,11 +148,11 @@ func TestProductionLimitsReadsGenerousCeremonyBounded(t *testing.T) {
 	}
 	// Several sign-ins' worth of ceremony fits comfortably.
 	for i := 0; i < auth.AuthCeremonyRateLimit; i++ {
-		if rec := serve(s, http.MethodPost, "/auth/login/begin", addr); rec.Code == http.StatusTooManyRequests {
+		if rec := serve(s, http.MethodPost, "/auth/login/finish", addr); rec.Code == http.StatusTooManyRequests {
 			t.Fatalf("ceremony %d refused", i+1)
 		}
 	}
-	if rec := serve(s, http.MethodPost, "/auth/login/begin", addr); rec.Code != http.StatusTooManyRequests {
+	if rec := serve(s, http.MethodPost, "/auth/login/finish", addr); rec.Code != http.StatusTooManyRequests {
 		t.Fatalf("ceremony over limit: %d", rec.Code)
 	}
 }
@@ -173,12 +209,28 @@ func TestEveryAuthRouteHasARateClass(t *testing.T) {
 			t.Errorf("registered route %q is not in the table", p)
 		}
 	}
-	src, err := os.ReadFile("main.go")
+	// registerRoutes is the only registration site: no file of package main
+	// may call HandleFunc or Handle on a server, mux or registrar except it.
+	files, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := strings.Count(string(src), ".HandleFunc("); n != 1 {
-		t.Errorf("main.go registers routes with HandleFunc %d times; add routes to authRoutes with a class", n)
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		n := strings.Count(string(src), ".HandleFunc(") + strings.Count(string(src), ".Handle(")
+		want := 0
+		if f == "main.go" {
+			want = 1
+		}
+		if n != want {
+			t.Errorf("%s registers routes %d times (want %d); add routes to authRoutes with a class", f, n, want)
+		}
 	}
 }
 

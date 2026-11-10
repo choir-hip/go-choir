@@ -125,7 +125,7 @@
         setTimeout(() => {
           if (seq === sessionCheckSeq) checkSession();
         }, retryMs);
-        return { authenticated: authState === 'signed_in', transient: true };
+        return { authenticated: authState === 'signed_in', transient: true, retryAfterMs: retryMs };
       }
       // Permanent error (401/403) — server says not authenticated.
       authState = 'signed_out';
@@ -247,6 +247,22 @@
     window.history.replaceState(window.history.state, '', next || '/');
   }
 
+  /**
+   * After a ceremony succeeded, the session read can be refused (429) or slow
+   * (a restart). Wait out the stated delay and read again, so the sign-in
+   * still reaches the computer-surface handoff; the sheet says why it waits.
+   */
+  async function settleSessionAfterSignIn(session) {
+    let current = session;
+    for (let attempt = 0; current?.transient && attempt < 3; attempt++) {
+      passkeyError = 'Signed in. Choir is confirming your session; this will finish in a moment.';
+      await new Promise((resolve) => setTimeout(resolve, Math.min(current.retryAfterMs || 3000, 65000) + 250));
+      current = await checkSession();
+    }
+    if (!current?.transient) passkeyError = '';
+    return current;
+  }
+
   async function handleAuthBegin(event) {
     const { email, type } = event.detail;
     passkeyError = '';
@@ -263,7 +279,7 @@
 
       // Ceremony succeeded — re-check session to transition to
       // the authenticated state.
-      const session = await checkSession();
+      const session = await settleSessionAfterSignIn(await checkSession());
       if (session?.authenticated) {
         markReturning(session.user?.id);
         authOverlayOpen = false;
@@ -280,9 +296,7 @@
         return;
       }
       if (session?.transient) {
-        // The passkey was accepted but the session read was refused or slow
-        // (a 429 or a restart). checkSession retries on its own timer.
-        passkeyError = 'Signed in. Choir is confirming your session; this will finish in a moment.';
+        passkeyError = 'Signed in, but Choir could not confirm your session yet. Reload in a minute.';
       }
     } catch (err) {
       // Ceremony failed or was cancelled — stay in signed-out
@@ -299,13 +313,15 @@
   async function handleEmailSignedIn() {
     passkeyError = '';
     startAuthenticatedPrewarm();
-    const session = await checkSession();
+    const session = await settleSessionAfterSignIn(await checkSession());
     if (session?.authenticated) {
       markReturning(session.user?.id);
       authOverlayOpen = false;
       pendingAuthIntent = null;
       await prewarmAuthenticatedComputer().catch(() => {});
       window.location.replace(window.location.href);
+    } else if (session?.transient) {
+      passkeyError = 'Signed in, but Choir could not confirm your session yet. Reload in a minute.';
     }
   }
 

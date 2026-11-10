@@ -43,6 +43,7 @@ test.describe('auth rate limit is a wait', () => {
     await page.waitForTimeout(500);
     // Still signed in: no sign-in overlay, the desktop is up, the Desk menu still lists Sign out, not Sign in.
     await expect(page.locator('[data-desktop]')).toBeVisible();
+    await expect(page.locator('.app-root')).toHaveAttribute('data-auth-state', 'signed_in');
     await expect(page.locator('[data-auth-overlay]')).toHaveCount(0);
 
     // The window frees: the retry (after at least Retry-After) reads the session again.
@@ -50,6 +51,7 @@ test.describe('auth rate limit is a wait', () => {
     const before = state.calls;
     await expect.poll(() => state.calls, { timeout: 15000 }).toBeGreaterThan(before);
     await expect(page.locator('[data-desktop][data-desktop-ready="true"]')).toBeVisible();
+    await expect(page.locator('.app-root')).toHaveAttribute('data-auth-state', 'signed_in');
     await expect(page.locator('[data-auth-overlay]')).toHaveCount(0);
   });
 
