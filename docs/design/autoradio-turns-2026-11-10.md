@@ -115,7 +115,68 @@ questions later. A question that never changes what plays is deleted.
 
 Only the turn's text and context go to Jev. No audio leaves the phone.
 When the phone is offline or Jev is slow, the acknowledgement is produced
-on the phone and the programme carries on until the desk answers.
+on the phone (next section).
+
+## A model on the phone
+
+Owner, 2026-11-10: "We actually may be able to run a decision model
+locally on our device ... we may want to be using that specifically for
+the immediate acknowledgments, or the immediate acknowledgement may need
+to last like up to a minute or two before we get the response from the
+desk."
+
+So the acknowledgement is not always one line. When the desk needs a
+minute or two, the phone holds a short conversation: it reflects back what
+was said, asks what it needs to ask, and says what is being fetched. That
+makes two jobs for a phone model, and they may be two models.
+
+**Job 1: decisions.** The same questions Jev answers, answered on the
+phone, offline and without the network round trip.
+
+**Job 2: the holding conversation.** Text out, spoken by a voice on the
+phone, for up to a couple of minutes.
+
+What was found (research on 2026-11-10; nothing here is measured by us):
+
+| Candidate | Job | Known | Not known |
+| --- | --- | --- | --- |
+| Apple's on-device model (Foundation Models framework, iOS 26) | 1, perhaps 2 | no download; typed output; about 70 to 86 tokens a second on an iPhone 17 Pro (independent benchmark, estimated) | answered only 60% of that benchmark's questions; context reported as 4K tokens, unconfirmed |
+| Liquid LFM2.5-1.2B | 2, 1 | 45.5 tokens a second on an iPhone 17 Pro and 88% on an instruction-following test (the only independent iPhone figures for a Liquid model) | conversational quality |
+| Liquid LFM3-1.7B (2026-10-27) | 2, 1 | about 1 GB at 4-bit; vendor says 1.8 to 2.8 times faster than its comparators on an iPhone 17 Pro | absolute speed on any iPhone; reasoning is on by default and turning it off "can be inconsistent" |
+| Liquid d1 decision models (opened 2026-10-07) | 1 | answer yes/no and multiple choice in one forward pass with no tokens; vendor: 30 ms on an M5 Pro Mac | any iPhone build or figure; no independent evaluation |
+| Liquid LFM3-Audio-2B | 2, speech in and out | turn-based voice chat in English; vendor: first token "as low as 50 ms" | any phone figure; no documented iOS path; interruption would be ours to handle |
+| Phonon (Gradium, 2026-10-21), 31M, Apache 2.0 | voice for job 2 | 64 MB; Swift and CoreML; vendor: 28 ms to first audio on Arm CPUs; English only | measured on an iPhone |
+
+Integration: Liquid's own phone SDK (LEAP) is deprecated; their documented
+route is llama.cpp's `llama.xcframework` with a grammar to constrain
+output. Licence: Liquid's open licence allows commercial use only under
+$10M of annual revenue.
+
+**Provisional order to try.** For decisions: Apple's model first (free,
+already on the phone), then LFM3-1.7B or LFM2.5-1.2B under a grammar, and
+d1 if an iPhone build appears. For the holding conversation: a small text
+model streaming into an on-device voice. A speech-in, speech-out model on
+the phone is a later experiment, not a plan.
+
+**Rules for a phone model, whichever it is.**
+
+- It holds; it does not answer. It works only from the listener's words,
+  the passage being played and the prepared material. Where it does not
+  know, it says it is finding out. It must not state something the desk
+  may then contradict.
+- What it said goes into the document as blocks, so the desk reads the
+  holding conversation before it revises and the listener hears one
+  continuous radio, not two voices in turn.
+- Its decisions are recorded like Jev's and scored the same way, so the
+  phone model and Jev can be compared on the same questions.
+- Jev stays the reference. The phone model earns a question only when its
+  record on that question matches Jev's.
+
+**To measure on the owner's iPhone, in the voice spike:** time to the
+first token at about 2K tokens of context for Apple's model, LFM2.5-1.2B
+and LFM3-1.7B; agreement with Jev on a fixed set of our own questions;
+time to first audio for the text model plus Phonon; heat and battery over
+ten minutes of holding conversation.
 
 ## Latency
 
