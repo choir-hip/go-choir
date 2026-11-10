@@ -547,7 +547,10 @@ func shortOperatorErr(err error) string {
 
 // handlePlatformOperatorRestart is O5: POST .../computers/<id>/restart with a
 // reason. The restart is vmctl's owner update (a planned, marker-backed
-// refresh, owner_update.go) and nothing else: the guest refuses it mid
+// refresh, owner_update.go) and nothing else; on a computer already on its
+// release it is the same planned refresh onto the same version, outcome
+// "restarted", bounded by vmctl to one per computer per five minutes
+// (restart_rate_bound). Only this route asks for that; the owner's click does not: the guest refuses it mid
 // self-development apply or while an engineering capsule is live, and vmctl
 // defers a held or in-flight computer. This handler never calls vmctl's plain
 // stop, start, restart or refresh, so it cannot end work the way a crash
@@ -600,7 +603,7 @@ func (h *Handler) handlePlatformOperatorRestart(w http.ResponseWriter, r *http.R
 	}
 	opCtx, cancel := h.vmctlOpContext(vmctl.WithLifecycleCaller(r.Context(), "proxy.operator.restart"))
 	defer cancel()
-	updated, err := h.vmctlClient.OwnerUpdateContext(opCtx, pa.Target.UserID, pa.Target.DesktopID)
+	updated, err := h.vmctlClient.OperatorRestartContext(opCtx, pa.Target.UserID, pa.Target.DesktopID)
 	if err != nil {
 		log.Printf("proxy: platform operator restart of %s: %v", computerID, err)
 		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "the planned restart could not be asked of vmctl", "receipt": receipt.Receipt})
@@ -611,7 +614,7 @@ func (h *Handler) handlePlatformOperatorRestart(w http.ResponseWriter, r *http.R
 		out["target"] = updated.Target
 	}
 	switch updated.Outcome {
-	case "refreshed", "current":
+	case "refreshed", "restarted", "current":
 		writeJSON(w, http.StatusOK, out)
 		return
 	}

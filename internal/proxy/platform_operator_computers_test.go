@@ -77,6 +77,7 @@ type operatorWorld struct {
 	vmctlPaths     []string
 	refreshCode    int
 	refreshBody    string
+	refreshSent    []string // the bodies deploy-refresh was asked with
 	extraComputers map[string]bool // computers the fake vmctl knows besides the two defaults
 	receiptCode    int             // what the guest's restart-receipt route answers
 }
@@ -151,6 +152,8 @@ func newOperatorWorld(t *testing.T, roster string) *operatorWorld {
 		w.vmctlPaths = append(w.vmctlPaths, r.URL.Path)
 		if r.URL.Path == vmctl.DeployRefreshEndpoint("") {
 			code, body := w.refreshCode, w.refreshBody
+			sent, _ := io.ReadAll(r.Body)
+			w.refreshSent = append(w.refreshSent, string(sent))
 			w.mu.Unlock()
 			rw.Header().Set("Content-Type", "application/json")
 			rw.WriteHeader(code)

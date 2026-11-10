@@ -240,10 +240,13 @@ type deployRefreshTracker struct {
 	// (in memory): the ring walk never re-enrolls a computer onto a target
 	// whose refresh failed (no kill loop).
 	failed map[string]string
+	// restartedAt is when each computer's last operator restart in place
+	// reached the guest and ended (restarted or failed), in memory like failed.
+	restartedAt map[string]time.Time
 }
 
 func newDeployRefreshTracker() *deployRefreshTracker {
-	return &deployRefreshTracker{pending: map[string]deployRefreshPendingEntry{}, inFlight: map[string]struct{}{}, failed: map[string]string{}}
+	return &deployRefreshTracker{pending: map[string]deployRefreshPendingEntry{}, inFlight: map[string]struct{}{}, failed: map[string]string{}, restartedAt: map[string]time.Time{}}
 }
 
 // pendingAndFailed reports whether the computer has a pending entry, and the
@@ -254,6 +257,26 @@ func (t *deployRefreshTracker) pendingAndFailed(userID, desktopID string) (bool,
 	defer t.mu.Unlock()
 	_, pending := t.pending[key]
 	return pending, t.failed[key]
+}
+
+// restartAllowed reports whether an operator restart in place of the computer
+// is outside minGap of its last one (a clock that went back allows it).
+func (t *deployRefreshTracker) restartAllowed(userID, desktopID string, now time.Time, minGap time.Duration) bool {
+	key := ownershipKey(userID, normalizeDesktopID(desktopID))
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	last, ok := t.restartedAt[key]
+	return !ok || now.Sub(last) >= minGap || now.Before(last)
+}
+
+func (t *deployRefreshTracker) noteRestart(userID, desktopID string, now time.Time) {
+	key := ownershipKey(userID, normalizeDesktopID(desktopID))
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.restartedAt == nil {
+		t.restartedAt = map[string]time.Time{}
+	}
+	t.restartedAt[key] = now
 }
 
 func (h *Handler) deployRefreshState() *deployRefreshTracker {

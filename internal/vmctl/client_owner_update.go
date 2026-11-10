@@ -37,10 +37,21 @@ type OwnerUpdateResult struct {
 // deploy refresh with owner_busy). A 409 deferral or skip is a structured
 // answer, not an error; only transport failures and unstructured statuses are.
 func (c *Client) OwnerUpdateContext(ctx context.Context, userID, desktopID string) (*OwnerUpdateResult, error) {
+	return c.ownerUpdate(ctx, userID, desktopID, false)
+}
+
+// OperatorRestartContext is the platform operator's restart: the owner update,
+// and on a computer already on its release a planned, marker-backed restart to
+// the same version (outcome "restarted"). Only the operator route calls it.
+func (c *Client) OperatorRestartContext(ctx context.Context, userID, desktopID string) (*OwnerUpdateResult, error) {
+	return c.ownerUpdate(ctx, userID, desktopID, true)
+}
+
+func (c *Client) ownerUpdate(ctx context.Context, userID, desktopID string, restartInPlace bool) (*OwnerUpdateResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	data, err := json.Marshal(deployRefreshRequest{UserID: userID, DesktopID: normalizeDesktopID(desktopID), OwnerBusy: true})
+	data, err := json.Marshal(deployRefreshRequest{UserID: userID, DesktopID: normalizeDesktopID(desktopID), OwnerBusy: true, RestartInPlace: restartInPlace})
 	if err != nil {
 		return nil, fmt.Errorf("vmctl client: marshal owner update request: %w", err)
 	}

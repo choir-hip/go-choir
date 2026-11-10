@@ -319,3 +319,39 @@ func TestOperatorReachesTheProofComputerAndNoOrdinaryComputer(t *testing.T) {
 		t.Fatalf("status lists the proof computer: %d %s", rec.Code, rec.Body)
 	}
 }
+
+// The restart in place (docs/problems/operator-cannot-restart-a-current-computer-2026-11-10.md):
+// the operator's call asks vmctl for the restart-in-place form of the owner
+// update (and the owner's click, tested in computer_update_test.go, does not).
+// Failure modes: the flag is not sent, so a current paper answers current and
+// nothing restarts; "restarted" is treated as a refusal; the rate bound's
+// refusal is flattened or loses its code.
+func TestOperatorRestartAsksForRestartInPlaceAndReportsRestarted(t *testing.T) {
+	w := newOperatorWorld(t, opAccount)
+	w.refreshBody = `{"outcome":"restarted","target":"abc123","planned_restart":true}`
+	rec := w.do(http.MethodPost, restartURL(paperComputer), `{"reason":"wedged"}`, w.session(opAccount))
+	var out map[string]any
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &out) != nil || out["outcome"] != "restarted" || out["receipt"] != "evt-restart-1" {
+		t.Fatalf("restart = %d %s", rec.Code, rec.Body)
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.refreshSent) != 1 {
+		t.Fatalf("deploy-refresh bodies = %v", w.refreshSent)
+	}
+	var sent map[string]any
+	if err := json.Unmarshal([]byte(w.refreshSent[0]), &sent); err != nil || sent["owner_busy"] != true || sent["restart_in_place"] != true || sent["target"] != nil && sent["target"] != "" {
+		t.Fatalf("deploy-refresh asked with %s, want owner_busy and restart_in_place and no caller-chosen target", w.refreshSent[0])
+	}
+}
+
+func TestOperatorRestartRateBoundRefusalKeepsItsCode(t *testing.T) {
+	w := newOperatorWorld(t, opAccount)
+	w.refreshCode = 409
+	w.refreshBody = `{"outcome":"skipped","reason":"restarted by an operator less than 5m0s ago","reason_code":"restart_rate_bound"}`
+	rec := w.do(http.MethodPost, restartURL(paperComputer), `{"reason":"again"}`, w.session(opAccount))
+	var out map[string]any
+	if rec.Code != http.StatusConflict || json.Unmarshal(rec.Body.Bytes(), &out) != nil || out["reason_code"] != "restart_rate_bound" || out["receipt"] != "evt-restart-1" {
+		t.Fatalf("restart = %d %s", rec.Code, rec.Body)
+	}
+}
