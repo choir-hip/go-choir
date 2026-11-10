@@ -103,8 +103,7 @@ func TestChangelogAndOpedRecordsWakeNoReader(t *testing.T) {
 		{Kind: types.OpedRecordWakeDecision, WakeDecision: &types.OpedWakeDecision{StoryDocID: "d", N: 1, Woken: true, Why: types.OpedWakeAccepted}},
 		{Kind: types.OpedRecordGateUnavailable, GateUnavailable: &types.OpedGateUnavailable{VersionID: "v", Attempts: 3}},
 		{Kind: types.OpedRecordVerdict, Verdict: &types.OpedVerdict{VersionID: "v", Run: 3, Verdict: types.OpedUnavailable}},
-		// The one exception: oped_wake is not tested for silence. Amendment A2
-		// makes it a waking record, and lane C2 adds it to RecordWakesReader.
+		// oped_wake is the one waking op-ed record (oped_wake_test.go).
 	} {
 		body := body
 		rec := types.CommitmentRecord{EmitterKind: types.CommitmentEmitterSystem, Inbox: "management:o", SenderInbox: "oped:v", Oped: &body}

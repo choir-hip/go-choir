@@ -65,6 +65,8 @@ const (
 //   - a stack rebase notice (the runtime's live timer asking the root
 //     Texture RLM for a rebase; U4);
 //   - a support failure;
+//   - an oped_wake record (the paper's gate accepted an op-ed on a story, or
+//     rejects passed the backoff; minted by the live gate, never at a boot);
 //   - a capture arrival that is not held for its events (event layer §15)
 //     and started no task (the host starts the intake task in the arrival's
 //     own commit, enforce flip 13.5);
@@ -118,6 +120,14 @@ func RecordWakesReader(rec types.CommitmentRecord) bool {
 	// commits the record once and the notices from its live continuation,
 	// never at a boot.
 	if types.IsInstallReviewOwedRecord(rec) {
+		return true
+	}
+	// An oped_wake record tells a story's desk that the paper's gate
+	// accepted an op-ed on its story, or that rejects passed the backoff
+	// threshold (autopaper contract amendment A2). The paper's computer
+	// commits it once per op-ed from its live gate, never at a boot, and it
+	// carries the op-ed's reference in its own body, never in Captures.
+	if rec.Oped != nil && rec.Oped.Kind == types.OpedRecordWake && rec.Oped.Wake != nil {
 		return true
 	}
 	if rec.Support != nil && len(rec.Support.Failures) > 0 {
