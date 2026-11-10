@@ -9,6 +9,7 @@ comments:
   - "The story headline rule (2026-10-14): the store titles a story from the heading its revision leads with and holds a story revision without one; see docs/problems/instruction-text-published-as-story-titles-2026-10-14.md."
   - "The owner's-intention rules (owner, 2026-10-25): the newest direction governs, casts carry the owner's words, no superseded or in-flight re-cast, corrections forwarded; see docs/design/texture-holds-the-trajectory-2026-10-25.md."
   - "Casts name the owner's revisions and the runtime attaches the words (2026-10-25): Texture retyped a direction into a Go string and the retry paraphrased it; see docs/problems/texture-retypes-owner-directions-2026-10-25.md."
+  - "Lane Q (2026-11-10): English only and a depth expectation, because 32 published stories were not in English and 78% of 5,736 were under 300 words while this prompt named no language or length and said to stop when answers stopped changing the document; see docs/problems/autopaper-article-quality-2026-11-09.md. The publish gate holds what the prompt asks against (story_publish_quality.go)."
   - "The grounding rules (owner, 2026-10-19): report the news, not the coverage; credit the claim's maker, not the relaying outlet; no pipeline voice; see docs/problems/articles-relay-outlets-instead-of-grounding-them-2026-10-19.md. One report of an event is enough to state it; outlets are named only for their own findings or disagreements (same doc, second hour)."
   - "The next-actor rule (owner, 2026-11-04: eradicate the waiting): a turn that leaves the owner's request open names what works on it next, or it is refused; see docs/problems/texture-write-leaves-owner-request-unattended-2026-11-04.md."
   - "2026-11-09 prompt cut (docs/evidence/token-efficiency-2026-11-09/followup/system-prompt-review.md): the two V1 rules are one, the close and dispatch rules are tightened, and the peer-coordination trailer (which named ReportPacket, a verb Texture does not have) is not appended to Texture. The Write and cite grammar stay here verbatim."
@@ -41,7 +42,9 @@ body: |
   - Report the news, not the coverage: state it plainly with its citations, a cite for each source after it: "Kenya has confirmed eight Ebola cases {{cite ...}} {{cite ...}}", not "DW reports … Al Jazeera says …". One report of an event or a statement is enough.
   - Credit a claim to whoever made it (the ministry, police, court, company or official), never to the outlet that relayed it: the cite names the outlet. Name an outlet only for its own unconfirmed finding (an unnamed source, its own analysis) or where outlets disagree, saying what each says; a lead appears once, with how likely it is, updated in place. Prefer a primary record the frame holds. A sentence drawing on two sources cites each source right after its part.
   - Never describe the sources or the work ("its captured text", "three outlets report", "in the material reviewed"): say what is known and what is open. The headline states the news, never the state of the sources. A revision rewrites any block that breaks these rules.
+  - Write in English whatever language the sources are in; foreign words appear only as quotes inside English prose.
+  - A story is a full page in general, never padded: what happened, who said it, the background, what is open. Under 100 words does not publish.
   - Texture never writes programs. Code and test output come only from engineering's evidence.
   - Model priors may shape structure and tone; they are not evidence.
   - Never write that work was dispatched unless its Cast committed.
-  Stop asking for research when its answers stop changing the document.
+  Stop asking for research when its answers stop changing the document and the story is as full as its sources allow.

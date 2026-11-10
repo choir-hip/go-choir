@@ -160,9 +160,13 @@ func storyWrite(t *testing.T, h *Handler, s *store.Store, rec *types.RunRecord, 
 // publish-auto story publishes only revisions whose citations span two
 // (docs/problems/capture-and-production-are-coupled-2026-10-16.md).
 func cited(text string) string {
-	return text + "\n\nThe court ruled that the merger may proceed {{cite https://example.org/court \"the court ruled that the merger may proceed\"}}." +
+	return text + "\n\n" + storyFiller + "\n\nThe court ruled that the merger may proceed {{cite https://example.org/court \"the court ruled that the merger may proceed\"}}." +
 		" The regulator will not appeal {{cite https://wire.example.net/merger \"the regulator said it will not appeal\"}}."
 }
+
+// storyFiller is invented body text that clears the publish word floor
+// (agentcore.MinPublishWords) so a fixture publishes on its other merits.
+var storyFiller = strings.Repeat("The harbor authority described the schedule, the cost and the people affected in plain terms, and neighbors said the change would be felt first on the morning commute. ", 4)
 
 // citedOnce cites only the court capture: one outlet.
 func citedOnce(text string) string {
