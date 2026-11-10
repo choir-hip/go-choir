@@ -65,7 +65,7 @@ var managementTaskCallTimeout = 3 * time.Minute
 // cells on the same Records and Stories reads every time
 // (docs/evidence/token-efficiency-2026-11-09/followup/system-prompt-review.md,
 // L5).
-const managementTaskPrompt = "Management delegated captures to you. Your records and the newest page of the story library come with this message, as choir.Records() and choir.Stories(50, \"\") return them; a note says so when one did not fit. The Cast from management names your objective and the captures you lease (r.Cast.Captures); each captures record shows them (r.Captures.Items) with Jev's label (r.Labels). Open, feed or decline every one of them, then end with choir.Done(note)."
+const managementTaskPrompt = "Management delegated captures to you. Your records and the newest page of the story library come with this message, as choir.Records() and choir.Stories(50, \"\") return them, with the last 8 hours in full; a note says so when one did not fit. The Cast from management names your objective and the captures you lease (r.Cast.Captures); each captures record shows them (r.Captures.Items) with Jev's label (r.Labels). Open, feed or decline every one of them, then end with choir.Done(note)."
 
 // managementTaskOpeningSectionTokens bounds each handed section (the records,
 // the story page): prompts stay within 100,000 tokens, and a section over the
@@ -133,7 +133,7 @@ func (rt *Runtime) managementTaskOpening(ctx context.Context, rec *types.RunReco
 	exec := toolregistry.ExecutionContext{OwnerID: rec.OwnerID, ComputerID: rec.ComputerID}
 	storiesIn := false
 	if head, headErr := rt.store.StoryLibraryHeadOf(ctx, rec.OwnerID, rec.ComputerID); headErr == nil {
-		if page, err := rt.storiesEgress(ctx, deskmanifest.TaskRoleName(), exec, nil); err == nil && estimateTextTokens(string(page)) <= managementTaskOpeningSectionTokens {
+		if page, err := rt.storiesOpeningPage(ctx, exec); err == nil {
 			o.storyHd, o.storyOut, storiesIn = head, page, true
 			b.WriteString("\n\nThe newest stories:\n")
 			b.WriteString(frameOpeningSection(openingStoryLabels, string(page)))
@@ -144,6 +144,29 @@ func (rt *Runtime) managementTaskOpening(ctx context.Context, rec *types.RunReco
 	}
 	o.text = b.String()
 	return o
+}
+
+// storiesWindow is how far back the story page handed to a management task
+// reaches: the stories updated in the last 8 hours (at least the newest 50),
+// not the newest 50 alone, which a busy hour pushes a story out of
+// (docs/problems/unsupported-cites-duplicates-and-churn-2026-11-10.md, D2).
+const storiesWindow = 8 * time.Hour
+
+// storiesOpeningPage is the story page of a task's opening: the window's
+// stories, or the newest 50 when those do not fit the section bound.
+func (rt *Runtime) storiesOpeningPage(ctx context.Context, exec toolregistry.ExecutionContext) (json.RawMessage, error) {
+	page, err := rt.storiesEgressWithin(ctx, deskmanifest.TaskRoleName(), exec, nil, storiesWindow)
+	if err == nil && estimateTextTokens(string(page)) <= managementTaskOpeningSectionTokens {
+		return page, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	page, err = rt.storiesEgress(ctx, deskmanifest.TaskRoleName(), exec, nil)
+	if err == nil && estimateTextTokens(string(page)) > managementTaskOpeningSectionTokens {
+		return nil, fmt.Errorf("the story page is too large to hand over")
+	}
+	return page, err
 }
 
 // frameOpeningSection frames a handed section by its labels, with the data

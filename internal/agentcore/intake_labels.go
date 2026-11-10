@@ -55,7 +55,6 @@ var (
 )
 
 const (
-	intakeShortlistRecent     = 30
 	intakeShortlistOverlap    = 10
 	intakeShortlistHorizon    = 72 * time.Hour
 	intakeOverrideExamples    = 12
@@ -76,6 +75,9 @@ type intakeLibrary struct {
 	mu       sync.Mutex
 	summary  map[string]store.StorySummary
 	examples []store.CaptureLabelOverride
+	// slots bounds the calls in flight across the poll's captures and chunks.
+	slotsOnce sync.Once
+	slots     chan struct{}
 }
 
 func (lib *intakeLibrary) summaryOf(ctx context.Context, doc types.Document) store.StorySummary {
@@ -90,8 +92,9 @@ func (lib *intakeLibrary) summaryOf(ctx context.Context, doc types.Document) sto
 	return store.StorySummary{DocID: doc.DocID, TrajectoryID: doc.TrajectoryID, Headline: doc.Title, UpdatedAt: doc.UpdatedAt, RevisionID: doc.CurrentRevisionID}
 }
 
-// intakeShortlistSplit splits stories (any order) into the newest within
-// the horizon and the rest within it.
+// intakeShortlistSplit splits stories (any order) into those updated within
+// the shortlist window (newest first, at most intakeShortlistCeiling) and the
+// rest within the overlap horizon.
 func intakeShortlistSplit(docs []types.Document, now time.Time) (recent, rest []types.Document) {
 	live := make([]types.Document, 0, len(docs))
 	for _, d := range docs {
@@ -100,10 +103,11 @@ func intakeShortlistSplit(docs []types.Document, now time.Time) (recent, rest []
 		}
 	}
 	sort.SliceStable(live, func(i, j int) bool { return live[i].UpdatedAt.After(live[j].UpdatedAt) })
-	if len(live) <= intakeShortlistRecent {
-		return live, nil
+	in := 0
+	for in < len(live) && in < intakeShortlistCeiling && now.Sub(live[in].UpdatedAt) <= intakeShortlistWindow {
+		in++
 	}
-	return live[:intakeShortlistRecent], live[intakeShortlistRecent:]
+	return live[:in], live[in:]
 }
 
 var intakeStopwords = map[string]bool{
@@ -245,12 +249,13 @@ func (rt *Runtime) labelOneCapture(ctx context.Context, lib *intakeLibrary, owne
 	label := store.CaptureLabel{OwnerID: ownerID, ComputerID: computerID, CaptureID: capture.CaptureID, SourceID: sourceID,
 		Title: strings.TrimSpace(capture.Title), Outlet: capture.Outlet, Language: capture.Language, Script: capture.Script}
 
-	// Candidates: the newest stories, then the rest by title overlap.
+	// Candidates: the stories updated within the window, then the rest by
+	// title overlap. A list over intakeChunkCandidates is asked in chunks,
+	// one call each, concurrently; no candidate is dropped to fit a call.
 	candidates := append([]types.Document(nil), lib.recent...)
 	candidates = append(candidates, intakeOverlapPicks(lib.rest, capture.Title, intakeShortlistOverlap)...)
 	storyAlias := map[string]store.StorySummary{}
-	stories := map[string]any{}
-	var storyChoices []string
+	var chunks []intakeChunk
 	for n, doc := range candidates {
 		if ctx.Err() != nil {
 			return label, ctx.Err()
@@ -259,11 +264,15 @@ func (rt *Runtime) labelOneCapture(ctx context.Context, lib *intakeLibrary, owne
 		alias := fmt.Sprintf("c%d", n+1)
 		storyAlias[alias] = sum
 		entry := map[string]any{"headline": sum.Headline, "updated_at": sum.UpdatedAt.UTC().Format(time.RFC3339)}
-		if sum.Lede != "" {
+		if sum.Lede != "" && n < intakeLedeCandidates {
 			entry["lede"] = sum.Lede
 		}
-		stories[alias] = entry
-		storyChoices = append(storyChoices, alias)
+		if n%intakeChunkCandidates == 0 {
+			chunks = append(chunks, intakeChunk{stories: map[string]any{}})
+		}
+		c := &chunks[len(chunks)-1]
+		c.stories[alias] = entry
+		c.choices = append(c.choices, alias)
 		label.CandidateDocIDs = append(label.CandidateDocIDs, sum.DocID)
 	}
 	siblingAlias := map[string]string{}
@@ -279,20 +288,125 @@ func (rt *Runtime) labelOneCapture(ctx context.Context, lib *intakeLibrary, owne
 		siblingChoices = append(siblingChoices, alias)
 		label.SiblingCaptureIDs = append(label.SiblingCaptureIDs, other.CaptureID)
 	}
-	if len(storyChoices) == 0 && len(siblingChoices) == 0 {
+	if len(candidates) == 0 && len(siblingChoices) == 0 {
 		label.Event, label.EventP, label.Model = store.CaptureLabelEventNew, 1, intakeNoCandidatesModel
 		return label, nil
 	}
+	if len(chunks) == 0 {
+		chunks = []intakeChunk{{}} // siblings only
+	}
+	// The siblings ride the first chunk's call only.
+	chunks[0].siblings, chunks[0].siblingChoices = siblings, siblingChoices
 
+	results := fanout.Do(ctx, len(chunks), len(chunks), func(callCtx context.Context, k int) (intakeAnswer, error) {
+		return rt.askIntakeChunk(callCtx, lib, capture, chunks[k])
+	})
+	var event, topic intakeAnswer
+	newP, haveNew := 1.0, false
+	for _, r := range results {
+		if r.Err != nil {
+			// A capture that missed part of the window is unlabelled, not
+			// labelled "new" on part of the evidence.
+			return label, r.Err
+		}
+		a := r.Value
+		label.Model = firstNonEmpty(label.Model, a.model)
+		label.InputTokens, label.OutputTokens, label.CostUSD = label.InputTokens+a.inputTokens, label.OutputTokens+a.outputTokens, label.CostUSD+a.cost
+		switch {
+		case a.event == store.CaptureLabelEventNew:
+			haveNew = true
+			newP = min(newP, a.eventP)
+		case storyAlias[a.event].DocID != "":
+			if event.event == "" || storyAlias[event.event].DocID == "" || a.eventP > event.eventP {
+				event = a
+			}
+		case siblingAlias[a.event] != "":
+			if event.event == "" || (storyAlias[event.event].DocID == "" && a.eventP > event.eventP) {
+				event = a
+			}
+		default:
+			return label, fmt.Errorf("Jev chose %q, which is not a choice", a.event)
+		}
+		if storyAlias[a.topic].DocID != "" && (topic.topic == "" || a.topicP > topic.topicP) {
+			topic = a
+		}
+	}
+	switch choice := event.event; {
+	case choice == "" && haveNew:
+		label.Event, label.EventP = store.CaptureLabelEventNew, newP
+	case storyAlias[choice].DocID != "":
+		label.Event, label.EventDocID, label.EventHeadline, label.EventP = store.CaptureLabelEventStory, storyAlias[choice].DocID, storyAlias[choice].Headline, event.eventP
+	case siblingAlias[choice] != "":
+		label.Event, label.EventCaptureID, label.EventP = store.CaptureLabelEventSibling, siblingAlias[choice], event.eventP
+	default:
+		return label, fmt.Errorf("Jev gave no event answer")
+	}
+	if sum := storyAlias[topic.topic]; sum.DocID != "" {
+		label.TopicDocID, label.TopicHeadline, label.TopicP = sum.DocID, sum.Headline, topic.topicP
+	}
+	label.Model = firstNonEmpty(label.Model, candidateJudgmentModel)
+	return label, nil
+}
+
+// Intake candidate windows (docs/problems/unsupported-cites-duplicates-and-
+// churn-2026-11-10.md, D2): the shortlist is the stories updated within a
+// window of time, not the newest N, because a busy hour pushed a story out
+// of a count in under an hour and its later report opened a duplicate (the
+// pairs opened 40 minutes to 6.5 hours after the first). A window longer than
+// one call should carry is asked in chunks, never truncated.
+const (
+	// intakeShortlistWindow is how far back a story is a candidate. The
+	// duplicates read opened 40 minutes to 6.5 hours after their first.
+	intakeShortlistWindow = 8 * time.Hour
+	// intakeShortlistCeiling backstops the window: past this many stories
+	// (six chunks) the oldest fall out.
+	intakeShortlistCeiling = 480
+	// intakeChunkCandidates is the most stories one call lists. Entries in a
+	// chunk are a headline and a time (a lede only on the newest
+	// intakeLedeCandidates), so a chunk stays near 12 KB, under the 24 KB
+	// a Jev call is kept to (eventStateMaxBytes).
+	intakeChunkCandidates = 80
+	intakeLedeCandidates  = 30
+)
+
+// intakeChunk is the part of the candidate list one call carries, with the
+// capture's new siblings in the first chunk only.
+type intakeChunk struct {
+	stories        map[string]any
+	choices        []string
+	siblings       map[string]any
+	siblingChoices []string
+}
+
+// intakeAnswer is one chunk call's answer: the event choice and the topic
+// choice with their probabilities, and the call's usage.
+type intakeAnswer struct {
+	event, topic              string
+	eventP, topicP            float64
+	model                     string
+	inputTokens, outputTokens int
+	cost                      float64
+}
+
+// intakeSlots bounds the intake label calls in flight to
+// intakeLabelConcurrency across every capture and chunk of a poll.
+func (lib *intakeLibrary) intakeSlots() chan struct{} {
+	lib.slotsOnce.Do(func() { lib.slots = make(chan struct{}, intakeLabelConcurrency) })
+	return lib.slots
+}
+
+// askIntakeChunk asks Jev the event and topic questions of one chunk of
+// candidates.
+func (rt *Runtime) askIntakeChunk(ctx context.Context, lib *intakeLibrary, capture sourcegraph.CapturedItem, chunk intakeChunk) (intakeAnswer, error) {
 	state := map[string]any{
 		"task":    "A news capture has arrived. Decide which story or other new capture, if any, reports the same real-world event, and which story, if any, shares its topic. Titles and summaries may be in any language; read them all.",
 		"capture": intakeCaptureState(capture, intakeSummaryRunes),
 	}
-	if len(stories) > 0 {
-		state["stories"] = stories
+	if len(chunk.stories) > 0 {
+		state["stories"] = chunk.stories
 	}
-	if len(siblings) > 0 {
-		state["new_captures"] = siblings
+	if len(chunk.siblings) > 0 {
+		state["new_captures"] = chunk.siblings
 	}
 	if len(lib.examples) > 0 {
 		var corrections []map[string]string
@@ -301,6 +415,7 @@ func (rt *Runtime) labelOneCapture(ctx context.Context, lib *intakeLibrary, owne
 		}
 		state["corrections"] = corrections
 	}
+	storyChoices, siblingChoices := chunk.choices, chunk.siblingChoices
 	eventChoices := append(append(append([]string(nil), storyChoices...), siblingChoices...), store.CaptureLabelEventNew)
 	eventCriteria := map[string]string{store.CaptureLabelEventNew: "No story and no other new capture reports this event; a shared topic or shared actors alone do not count."}
 	for _, a := range storyChoices {
@@ -331,17 +446,24 @@ func (rt *Runtime) labelOneCapture(ctx context.Context, lib *intakeLibrary, owne
 	}
 	stateRaw, err := json.Marshal(state)
 	if err != nil {
-		return label, err
+		return intakeAnswer{}, err
 	}
 	rawQuestions := make(map[string]json.RawMessage, len(questions))
 	for name, q := range questions {
 		if rawQuestions[name], err = json.Marshal(q); err != nil {
-			return label, err
+			return intakeAnswer{}, err
 		}
+	}
+	slots := lib.intakeSlots()
+	select {
+	case slots <- struct{}{}:
+		defer func() { <-slots }()
+	case <-ctx.Done():
+		return intakeAnswer{}, ctx.Err()
 	}
 	raw, err := rt.judgeCall(ctx, jevrecord.Meta{Site: "intake_labels", DecisionID: capture.CaptureID, Scope: judgmentScopeIntakeLabels}, intakeLabelCallTimeout, stateRaw, rawQuestions)
 	if err != nil {
-		return label, err
+		return intakeAnswer{}, err
 	}
 	var distribution struct {
 		Model   string `json:"model"`
@@ -356,32 +478,21 @@ func (rt *Runtime) labelOneCapture(ctx context.Context, lib *intakeLibrary, owne
 		} `json:"usage"`
 	}
 	if err := json.Unmarshal(raw, &distribution); err != nil {
-		return label, fmt.Errorf("decode Jev's answer: %w", err)
+		return intakeAnswer{}, fmt.Errorf("decode Jev's answer: %w", err)
 	}
 	event, ok := distribution.Answers["event"]
 	if !ok {
-		return label, fmt.Errorf("Jev gave no event answer")
+		return intakeAnswer{}, fmt.Errorf("Jev gave no event answer")
 	}
 	choice := strings.TrimSpace(event.Choice)
-	switch {
-	case choice == store.CaptureLabelEventNew:
-		label.Event = store.CaptureLabelEventNew
-	case storyAlias[choice].DocID != "":
-		label.Event, label.EventDocID, label.EventHeadline = store.CaptureLabelEventStory, storyAlias[choice].DocID, storyAlias[choice].Headline
-	case siblingAlias[choice] != "":
-		label.Event, label.EventCaptureID = store.CaptureLabelEventSibling, siblingAlias[choice]
-	default:
-		return label, fmt.Errorf("Jev chose %q, which is not a choice", choice)
-	}
-	label.EventP = event.Probabilities[choice]
+	out := intakeAnswer{event: choice, eventP: event.Probabilities[choice], model: distribution.Model,
+		inputTokens: distribution.Usage.InputTokens, outputTokens: distribution.Usage.OutputTokens, cost: distribution.Usage.Cost}
 	if topic, ok := distribution.Answers["topic"]; ok {
-		if sum := storyAlias[strings.TrimSpace(topic.Choice)]; sum.DocID != "" {
-			label.TopicDocID, label.TopicHeadline, label.TopicP = sum.DocID, sum.Headline, topic.Probabilities[strings.TrimSpace(topic.Choice)]
+		if t := strings.TrimSpace(topic.Choice); t != "" && t != "none" {
+			out.topic, out.topicP = t, topic.Probabilities[t]
 		}
 	}
-	label.Model = firstNonEmpty(distribution.Model, candidateJudgmentModel)
-	label.InputTokens, label.OutputTokens, label.CostUSD = distribution.Usage.InputTokens, distribution.Usage.OutputTokens, distribution.Usage.Cost
-	return label, nil
+	return out, nil
 }
 
 // judgeCall is the one way a call site asks Jev: the call, timed and bounded
