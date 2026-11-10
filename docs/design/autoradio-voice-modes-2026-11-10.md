@@ -216,6 +216,18 @@ listen" as the main path:
 - **Soft acknowledgement.** At the first second of the listener's speech
   the programme lowers its volume a little; it returns if the utterance
   does not count. Mike's hold-and-resume becomes duck-and-return.
+- **Sustained speech pauses the programme** (owner, 2026-11-10: "if the
+  user keeps talking for more than like 10 seconds straight, then it
+  should pause ... one of the key usage patterns is the user giving
+  relatively long dictations"). Three stages: the dip at about one second;
+  a pause as soon as the utterance is judged to count; and a pause in any
+  case after a set stretch of continuous speech in the listener's voice,
+  starting at 10 seconds and tuned in QA. Once paused, nothing is playing,
+  so recognition is at its best and there is no echo. Dictation has no
+  length cut (Mike cuts a turn at 60 seconds; that limit goes) and a
+  patient end-of-turn, since people pause to think. When the turn is
+  handed off, the programme resumes a few seconds before the point where
+  the dip began.
 - **The app knows what it is saying.** It has the text of the story being
   read and of the clip being played. Words that match the programme are
   the programme. An utterance about the current content, or a command, is
