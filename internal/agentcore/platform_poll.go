@@ -44,10 +44,8 @@ type platformPolls struct {
 	loops   map[string]context.CancelFunc
 	locks   map[string]*sync.Mutex
 	wg      sync.WaitGroup
-	// stopped is set by Stop: no loop starts after it. bootCancel ends the
-	// boot arm's goroutine.
-	stopped    bool
-	bootCancel context.CancelFunc
+	// stopped is set by Stop: no loop starts after it.
+	stopped bool
 	// docLookup replaces the store lookup of a story document (tests).
 	docLookup func(ctx context.Context, owner, computer, doc string) error
 }
@@ -107,7 +105,12 @@ func (rt *Runtime) ensurePlatformPollRows(ctx context.Context, owner, computer s
 }
 
 // EnsurePlatformPolls makes the owner's polls exist and run. It is idempotent
-// and cheap: callers (a story publish, a fork) may call it on every use.
+// and cheap: callers (the proxy's published notice, a story publish, a fork or
+// take) may call it on every use. Polls are armed only by those uses; existing
+// rows restart at boot. Residual: a computer that published before the
+// published notice existed and has no poll row stays unarmed until its next
+// publish (there is no boot-time probe: it was deleted after three review
+// rounds, and a standing intent is made by use, not rediscovered at boot).
 func (rt *Runtime) EnsurePlatformPolls(ctx context.Context, owner, computer string) {
 	rt.ensurePlatformPollsNamed(ctx, owner, computer, platformPollNames()...)
 }
@@ -145,23 +148,6 @@ func (rt *Runtime) recoverPlatformPollsAtBoot(ctx context.Context, start bool) {
 	if err != nil {
 		log.Printf("platform poll: list at boot: %v", err)
 		return
-	}
-	// A computer that published before publishing armed the polls has no row.
-	// Once, off the boot path, it reads its notice feed; if the platform holds
-	// anything for its owner, it arms. That is a read, not resumed work.
-	if start && len(polls) == 0 && strings.TrimSpace(rt.selfdevRouteOwnerID) != "" {
-		rt.polls.mu.Lock()
-		if !rt.polls.stopped {
-			armCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
-			rt.polls.bootCancel = cancel
-			rt.polls.wg.Add(1)
-			go func() {
-				defer rt.polls.wg.Done()
-				defer cancel()
-				rt.armPollsIfNoticesWaiting(armCtx)
-			}()
-		}
-		rt.polls.mu.Unlock()
 	}
 	for _, poll := range polls {
 		if poll.State != store.PlatformPollActive {
@@ -243,9 +229,6 @@ func (rt *Runtime) stopPlatformPolls() {
 	}
 	rt.polls.mu.Lock()
 	rt.polls.stopped = true
-	if rt.polls.bootCancel != nil {
-		rt.polls.bootCancel()
-	}
 	for key, cancel := range rt.polls.loops {
 		cancel()
 		delete(rt.polls.loops, key)
@@ -302,6 +285,8 @@ func (rt *Runtime) runPlatformPollOnce(ctx context.Context, owner, name string) 
 
 // pollNotices adopts the owner's changelog notices.
 func (rt *Runtime) pollNotices(ctx context.Context, feed PlatformFeed, poll *store.PlatformPoll, owner, computer string) error {
+	// A page is bounded by notice rows on the server and its items are filtered
+	// after, so a short page is not the last: drain while the cursor advances.
 	for page := 0; page < pollMaxPages; page++ {
 		got, err := feed.Notices(ctx, poll.Cursor, pollPageLimit)
 		if err != nil {
@@ -331,7 +316,7 @@ func (rt *Runtime) pollNotices(ctx context.Context, feed PlatformFeed, poll *sto
 				return err
 			}
 		}
-		if len(got.Items) < pollPageLimit || !advanced {
+		if !advanced || ctx.Err() != nil {
 			return nil
 		}
 	}
@@ -342,6 +327,8 @@ func (rt *Runtime) pollNotices(ctx context.Context, feed PlatformFeed, poll *sto
 // over the ones without a verdict and decides the desks' wakes.
 func (rt *Runtime) pollOpeds(ctx context.Context, feed PlatformFeed, poll *store.PlatformPoll, owner, computer string) error {
 	var feedErr error
+	// A page is bounded by notice rows on the server and its items are filtered
+	// after, so a short page is not the last: drain while the cursor advances.
 	for page := 0; page < pollMaxPages; page++ {
 		got, err := feed.Opeds(ctx, poll.Cursor, pollPageLimit)
 		if err != nil {
@@ -361,6 +348,11 @@ func (rt *Runtime) pollOpeds(ctx context.Context, feed PlatformFeed, poll *store
 			// are adopted and gated (a document is local when its lifecycle
 			// document is in this computer's store).
 			local, lerr := rt.storyDocLocality(ctx, owner, computer, item.StoryDocID)
+			if lerr != nil && (errors.Is(lerr, context.Canceled) || errors.Is(lerr, context.DeadlineExceeded)) {
+				// The tick ran out of time; that says nothing about the item.
+				feedErr = fmt.Errorf("locate story %s: %w", item.StoryDocID, lerr)
+				break
+			}
 			if lerr != nil {
 				// Unknown is not "not local": do not lose the op-ed. The cursor
 				// stays before this item and the tick stops; the next tick tries
@@ -400,7 +392,7 @@ func (rt *Runtime) pollOpeds(ctx context.Context, feed PlatformFeed, poll *store
 				return err
 			}
 		}
-		if len(got.Items) < pollPageLimit || !advanced {
+		if !advanced || ctx.Err() != nil {
 			break
 		}
 	}
@@ -503,74 +495,27 @@ func (rt *Runtime) storyDocLocality(ctx context.Context, owner, computer, doc st
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return false, err
 	}
-	if _, err := rt.store.GetDocument(ctx, doc, owner); err == nil || errors.Is(err, store.ErrLifecycleAuthorityRequired) {
+	plain, err := rt.store.GetDocument(ctx, doc, owner)
+	switch {
+	case err == nil:
+		// GetDocument checks the owner only (store/graph_store.go GetTextureDocumentOG),
+		// so scope is compared here. An empty scope is a legacy row
+		// (types.Document.ComputerID is omitempty, types/texture.go:66): each
+		// computer has a store of its own, so a row with no scope in it is this
+		// computer's.
+		if c := strings.TrimSpace(plain.ComputerID); c != "" && c != computer {
+			return false, nil
+		}
 		return true, nil
-	} else if !errors.Is(err, store.ErrNotFound) {
+	case errors.Is(err, store.ErrLifecycleAuthorityRequired):
+		// A document that names a trajectory is a lifecycle document, and the
+		// lifecycle lookup scoped to this computer did not find it: it is
+		// another computer's.
+		return false, nil
+	case !errors.Is(err, store.ErrNotFound):
 		return false, err
 	}
 	return false, nil
-}
-
-// bootArmPageLimit and bootArmMaxPages bound the boot arm's walk of the op-ed
-// feed (the one-minute context bounds it in time as well).
-const (
-	bootArmPageLimit = 50
-	bootArmMaxPages  = 40
-)
-
-// armPollsIfNoticesWaiting arms this computer's polls from what the platform
-// holds for its owner: one read of each feed from the start, no cursor kept,
-// nothing consumed, nothing resumed. A notice waiting arms notice_intake (a
-// publisher or forker has them; sibling computers each keep a copy by design).
-// An op-ed on a story this computer holds arms oped_intake too. A quiet
-// computer, or one whose op-eds are all on its siblings' stories, arms nothing
-// for them. It is idempotent, and a fault in it ends in a log line, never a
-// crash: it runs in its own goroutine at boot.
-func (rt *Runtime) armPollsIfNoticesWaiting(ctx context.Context) {
-	if rt == nil {
-		return
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("platform poll: boot arm: recovered: %v", r)
-		}
-	}()
-	owner := strings.TrimSpace(rt.selfdevRouteOwnerID)
-	if rt.store == nil || owner == "" {
-		return
-	}
-	feed := rt.platformFeed()
-	if feed == nil {
-		return
-	}
-	computer := rt.cfg.ComputerID
-	notices, err := feed.Notices(ctx, "", 1)
-	switch {
-	case err != nil:
-		log.Printf("platform poll: boot arm: the first notice read failed (this computer will not hear notices until it publishes or forks): %v", err)
-	case len(notices.Items) > 0:
-		rt.ensurePlatformPollsNamed(ctx, owner, computer, store.PlatformPollNoticeIntake)
-	case len(notices.Skipped) > 0:
-		log.Printf("platform poll: boot arm: the first notice read returned only skipped rows (%d, first %q: %s)", len(notices.Skipped), notices.Skipped[0].ID, notices.Skipped[0].Reason)
-	}
-	cursor := ""
-	for page := 0; page < bootArmMaxPages && ctx.Err() == nil; page++ {
-		opeds, err := feed.Opeds(ctx, cursor, bootArmPageLimit)
-		if err != nil {
-			log.Printf("platform poll: boot arm: the op-ed read failed: %v", err)
-			return
-		}
-		for _, item := range opeds.Items {
-			if local, _ := rt.storyDocLocality(ctx, owner, computer, item.StoryDocID); local {
-				rt.ensurePlatformPollsNamed(ctx, owner, computer, store.PlatformPollOpedIntake, store.PlatformPollNoticeIntake)
-				return
-			}
-		}
-		if len(opeds.Items) < bootArmPageLimit || opeds.NextCursor == "" || opeds.NextCursor == cursor {
-			return
-		}
-		cursor = opeds.NextCursor
-	}
 }
 
 // RunPlatformPollNow runs one tick of a poll immediately: the same work its

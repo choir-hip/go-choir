@@ -68,7 +68,7 @@ func TestLocalityLookupPoisonedItemIsSkippedAfterTheBound(t *testing.T) {
 	rt, s, feed, owner, _ := localityFixture(t)
 	ctx := context.Background()
 	rt.polls.docLookup = func(context.Context, string, string, string) error { return errors.New("undecodable row") }
-	feed.opeds = []OpedFeedWire{{Items: []OpedFeedItemWire{opedItem("pub-p-v1")}, NextCursor: "9"}}
+	rt.SetPlatformFeed(&cursorFeed{fakeFeed: feed, item: opedItem("pub-p-v1"), cursor: "9"})
 	for i := 0; i < opedLocalityMaxFailures; i++ {
 		_ = rt.runPlatformPollOnce(ctx, owner, store.PlatformPollOpedIntake)
 	}
@@ -117,28 +117,82 @@ func TestOpedOnAPlainDocumentStoryIsGatedNotSkipped(t *testing.T) {
 	}
 }
 
-// The boot arm pages the op-ed feed until it finds an op-ed on a local story
-// or the feed ends: 50 foreign op-eds in front do not hide a local one.
-func TestBootArmPagesPastForeignOpeds(t *testing.T) {
-	rt, s := testRuntime(t)
-	feed := &fakeFeed{versions: map[string]PublicationVersionWire{}}
-	rt.SetPlatformFeed(feed)
-	owner, computer := "owner-paged", rt.cfg.ComputerID
-	rt.selfdevRouteOwnerID = owner
-	seedBootTextureWork(t, s, owner, computer, "doc-here", currentTextureAgentID("doc-here"), "texture")
-	var first []OpedFeedItemWire
-	for i := 0; i < bootArmPageLimit; i++ {
-		it := opedItem("pub-far-" + string(rune('a'+i%26)) + string(rune('a'+i/26)))
-		it.StoryDocID = "doc-elsewhere"
-		first = append(first, it)
+// A plain document scoped to another computer of the same owner is not local;
+// one with no computer scope (a legacy row in this computer's own store) is.
+func TestPlainDocumentIsLocalOnlyForThisComputer(t *testing.T) {
+	rt, s, _, owner, computer := localityFixture(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	for doc, scope := range map[string]string{"doc-other-computer": "some-other-computer", "doc-legacy": "", "doc-this": computer} {
+		if err := s.CreateDocument(ctx, types.Document{DocID: doc, OwnerID: owner, ComputerID: scope, Title: doc, CreatedAt: now, UpdatedAt: now}); err != nil {
+			t.Fatal(err)
+		}
 	}
-	here := opedItem("pub-here-v1")
-	here.StoryDocID = "doc-here"
-	feed.opeds = []OpedFeedWire{{Items: first, NextCursor: "50"}, {Items: []OpedFeedItemWire{here}, NextCursor: "51"}}
-	rt.armPollsIfNoticesWaiting(context.Background())
-	polls, _ := s.ListPlatformPolls(withPollReaderCtx(context.Background()), owner)
-	if len(polls) != 2 {
-		t.Fatalf("polls = %+v, want both intakes (the local op-ed is on page two)", polls)
+	for doc, want := range map[string]bool{"doc-other-computer": false, "doc-legacy": true, "doc-this": true, "doc-nowhere": false} {
+		got, err := rt.storyDocLocality(ctx, owner, computer, doc)
+		if err != nil || got != want {
+			t.Fatalf("%s: local=%v err=%v, want %v", doc, got, err, want)
+		}
 	}
-	rt.stopPlatformPolls()
+}
+
+// A cancelled or timed-out lookup is the tick's fault, not the item's: it does not count toward the bound.
+func TestCancelledLookupDoesNotCountAgainstTheItem(t *testing.T) {
+	rt, s, feed, owner, _ := localityFixture(t)
+	ctx := context.Background()
+	rt.polls.docLookup = func(context.Context, string, string, string) error { return context.DeadlineExceeded }
+	feed.opeds = []OpedFeedWire{{Items: []OpedFeedItemWire{opedItem("pub-c-v1")}, NextCursor: "4"}}
+	for i := 0; i < opedLocalityMaxFailures+2; i++ {
+		_ = rt.runPlatformPollOnce(ctx, owner, store.PlatformPollOpedIntake)
+	}
+	p, _ := s.GetPlatformPoll(withPollReaderCtx(ctx), owner, store.PlatformPollOpedIntake)
+	if len(p.ItemFailures) != 0 || len(p.Skipped) != 0 || p.Cursor != "" {
+		t.Fatalf("deadline errors counted: failures %v skipped %+v cursor %q", p.ItemFailures, p.Skipped, p.Cursor)
+	}
+}
+
+// The server bounds a page by notice rows and filters items after, so a page
+// may hold fewer items than the limit and still not be the last: a tick drains
+// while the cursor advances.
+func TestIntakeDrainsMixedPages(t *testing.T) {
+	rt, s, feed, owner, computer := newPollFixture(t)
+	ctx := context.Background()
+	feed.opeds = []OpedFeedWire{
+		{Items: []OpedFeedItemWire{opedItem("pub-m1-v1")}, NextCursor: "10"},
+		{Items: []OpedFeedItemWire{opedItem("pub-m2-v1")}, NextCursor: "20"},
+	}
+	if err := rt.runPlatformPollOnce(ctx, owner, store.PlatformPollOpedIntake); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(arrivalRecords(t, s, owner, computer)); n != 2 {
+		t.Fatalf("one tick adopted %d of 2 op-eds across a mixed page", n)
+	}
+	n1 := types.CommitmentChangelog{EventID: "e1", Kind: types.ChangelogParentUsed, Relation: types.ChangelogRelationTakenInto, OccurredAt: "2026-11-10T00:00:00Z", Summary: "x", Origin: types.ChangelogOriginCorpusd}
+	n2 := n1
+	n2.EventID = "e2"
+	feed.notices = []NoticeFeedWire{
+		{Items: []NoticeItemWire{{ID: "n1", Notice: n1}}, NextCursor: "5"},
+		{Items: []NoticeItemWire{{ID: "n2", Notice: n2}}, NextCursor: "9"},
+	}
+	if err := rt.runPlatformPollOnce(ctx, owner, store.PlatformPollNoticeIntake); err != nil {
+		t.Fatal(err)
+	}
+	recs, _ := s.ListInboxRecords(ctx, owner, computer, types.ChangelogInbox(owner), 0, 0)
+	if len(recs) != 2 {
+		t.Fatalf("one tick adopted %d of 2 notices across a mixed page", len(recs))
+	}
+}
+
+// cursorFeed serves one op-ed from the start of the feed and nothing after its cursor, as a server does.
+type cursorFeed struct {
+	*fakeFeed
+	item   OpedFeedItemWire
+	cursor string
+}
+
+func (f *cursorFeed) Opeds(_ context.Context, after string, _ int) (OpedFeedWire, error) {
+	if after == f.cursor {
+		return OpedFeedWire{NextCursor: f.cursor}, nil
+	}
+	return OpedFeedWire{Items: []OpedFeedItemWire{f.item}, NextCursor: f.cursor}, nil
 }
