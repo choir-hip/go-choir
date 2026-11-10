@@ -83,6 +83,8 @@ type ProviderRequest struct {
 	// metadata, not a trust input; providers that route cache lookups by a
 	// client key send it.
 	CacheKey string `json:"cache_key,omitempty"`
+	// NoShed: the caller has no next pool member (see provider.LLMRequest).
+	NoShed bool `json:"no_shed,omitempty"`
 
 	// Messages is the conversation history in Anthropic Messages format.
 	Messages []provider.Message `json:"messages"`
@@ -153,6 +155,10 @@ type ErrorResponse struct {
 	Reason           string `json:"reason,omitempty"`
 	RetryAt          string `json:"retry_at,omitempty"`
 	RetryAtEstimated bool   `json:"retry_at_estimated,omitempty"`
+	// Shed marks a pacing refusal: the quota is not spent, this thread is
+	// sent to the next pool member for the clock hour, and the guest must
+	// not hold the model for other threads.
+	Shed bool `json:"shed,omitempty"`
 }
 
 // ErrorKindProviderQuota is the kind of a provider quota answer.
@@ -171,7 +177,7 @@ func writeProviderQuota(w http.ResponseWriter, q *provider.QuotaExhaustedError, 
 	body := ErrorResponse{
 		Error: sanitizeError(q), Kind: ErrorKindProviderQuota, Provider: q.Provider,
 		Model: quotaModel(q.Model, model), Reason: "provider quota exhausted (" + q.Provider + ")",
-		RetryAtEstimated: q.RetryAtEstimated,
+		RetryAtEstimated: q.RetryAtEstimated, Shed: q.Shed,
 	}
 	if !q.RetryAt.IsZero() {
 		body.RetryAt = q.RetryAt.UTC().Format(time.RFC3339)
@@ -503,6 +509,7 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		ReasoningEffort: req.ReasoningEffort,
 		ConversationID:  req.ConversationID,
 		CacheKey:        req.CacheKey,
+		NoShed:          req.NoShed,
 	}
 
 	// Images are logged by count, size and short sha256, never by data

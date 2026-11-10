@@ -39,11 +39,16 @@ type QuotaExhaustedError struct {
 	// CircuitOpen says the gateway refused the call: the model's quota
 	// circuit is open until RetryAt.
 	CircuitOpen bool
+	// Shed says the gateway's hourly pacing (internal/gateway/devin_pacing.go)
+	// sent this thread to the next pool member for the rest of the clock
+	// hour. The quota is not spent: RetryAt is a short estimate, and other
+	// threads still use the model.
+	Shed bool
 }
 
 func (e *QuotaExhaustedError) Error() string {
 	var b strings.Builder
-	if e.CircuitOpen {
+	if e.CircuitOpen || e.Shed {
 		fmt.Fprintf(&b, "provider %s model %s: provider quota exhausted (%s)", e.Provider, firstNonEmptyQuota(e.Model, "(default)"), e.Provider)
 	} else {
 		// The status text stays: the breaker and older guests read it.
@@ -55,7 +60,9 @@ func (e *QuotaExhaustedError) Error() string {
 			b.WriteString(" (estimated)")
 		}
 	}
-	if e.CircuitOpen {
+	if e.Shed {
+		b.WriteString(" (paced: this thread uses the next pool member this hour; circuit open)")
+	} else if e.CircuitOpen {
 		// No status code in this text: a guest that reads "429" waits it
 		// out as a rate limit; "circuit open" moves a pool to its next
 		// member at once.

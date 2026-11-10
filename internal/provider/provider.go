@@ -49,6 +49,9 @@ type LLMRequest struct {
 	// (docs/problems/prompt-cache-breaks-across-turns-2026-10-14.md): chatgpt sends it as
 	// prompt_cache_key, OpenCode as x-opencode-session. Others ignore it.
 	CacheKey string `json:"cache_key,omitempty"`
+	// NoShed says the caller has no further pool member: the gateway's Devin
+	// pacing counts the call but never sheds it.
+	NoShed bool `json:"no_shed,omitempty"`
 
 	// Model is the model identifier (provider-specific).
 	Model string `json:"model"`
