@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/fanout"
 	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"github.com/yusefmosiah/go-choir/internal/outlet"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
@@ -37,7 +36,6 @@ import (
 // Bounds. Vars so a test can shorten them.
 var (
 	eventFlushInterval = 60 * time.Second
-	eventFlushBudget   = 2 * time.Minute
 	eventCallTimeout   = 30 * time.Second
 )
 
@@ -351,11 +349,15 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 		chunks = append(chunks, pending[:n])
 		pending = pending[n:]
 	}
-	// The questions of every chunk are asked concurrently up front; the
-	// commits below still run in chunk order.
-	prefetched := rt.prefetchEventCalls(ctx, idx, chunks)
-	for i, chunk := range chunks {
-		rt.resolveEventChunk(ctx, idx, ownerID, computerID, chunk, &report, prefetched[i])
+	// One call at a time (owner, 2026-11-10): each chunk is asked after the
+	// previous chunk committed, so it sees the events that chunk minted.
+	// Each chunk has its own deadline, so a long flush never starves the
+	// chunks behind it; a chunk whose call fails leaves its captures in
+	// report.Left (an "unresolved" wake record, not retried).
+	for _, chunk := range chunks {
+		chunkCtx, cancel := context.WithTimeout(ctx, 2*eventCallTimeout)
+		rt.resolveEventChunk(chunkCtx, idx, ownerID, computerID, chunk, &report)
+		cancel()
 	}
 	for _, in := range inputs {
 		id := strings.TrimSpace(in.Item.CaptureID)
@@ -364,22 +366,6 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 		}
 	}
 	return report, nil
-}
-
-// eventPrefetch is the answer to a chunk's question, asked before the chunks
-// ahead of it committed. key is the question it answered.
-type eventPrefetch struct {
-	key string
-	raw json.RawMessage
-	err error
-}
-
-// eventCallKey identifies one call's content. Questions marshal with sorted
-// keys, so equal content gives an equal key.
-func eventCallKey(state json.RawMessage, questions map[string]json.RawMessage) string {
-	qs, _ := json.Marshal(questions)
-	sum := sha256.Sum256(append(append([]byte(nil), state...), qs...))
-	return hex.EncodeToString(sum[:])
 }
 
 // eventPrepareChunk builds the call for chunk against the index as it stands.
@@ -415,42 +401,6 @@ func eventPrepareChunk(idx *eventIndex, chunk []eventInput, now time.Time) (stat
 	return state, questions, alias, false
 }
 
-// eventCallConcurrency is how many chunk questions are in flight at once.
-const eventCallConcurrency = 4
-
-// prefetchEventCalls asks every chunk's question concurrently, each against
-// the index before any of this flush's commits. A chunk that must be split
-// is not prefetched. resolveEventChunk uses an answer only if the question
-// it would ask after the earlier chunks committed is the same one; otherwise
-// (an earlier chunk minted an event this chunk should be offered) it asks
-// again, so the result is what the serial order gave. The caller holds
-// idx.mu and the goroutines never touch the index.
-func (rt *Runtime) prefetchEventCalls(ctx context.Context, idx *eventIndex, chunks [][]eventInput) []*eventPrefetch {
-	out := make([]*eventPrefetch, len(chunks))
-	if len(chunks) < 2 {
-		return out
-	}
-	type prepared struct {
-		slot      int
-		state     json.RawMessage
-		questions map[string]json.RawMessage
-	}
-	var todo []prepared
-	now := time.Now().UTC()
-	for i, chunk := range chunks {
-		if state, questions, _, split := eventPrepareChunk(idx, chunk, now); !split {
-			todo = append(todo, prepared{slot: i, state: state, questions: questions})
-		}
-	}
-	results := fanout.Do(ctx, eventCallConcurrency, len(todo), func(ctx context.Context, i int) (json.RawMessage, error) {
-		return rt.askEventChunk(ctx, chunks[todo[i].slot], todo[i].state, todo[i].questions)
-	})
-	for i, p := range todo {
-		out[p.slot] = &eventPrefetch{key: eventCallKey(p.state, p.questions), raw: results[i].Value, err: results[i].Err}
-	}
-	return out
-}
-
 func (rt *Runtime) askEventChunk(ctx context.Context, chunk []eventInput, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
 	meta := jevrecord.Meta{Site: "event_layer", Scope: judgmentScopeIntakeLabels,
 		Threshold: fmt.Sprintf("join=%.2f tentative=%.2f", eventJoinP, eventTentativeP)}
@@ -460,25 +410,18 @@ func (rt *Runtime) askEventChunk(ctx context.Context, chunk []eventInput, state 
 	return rt.judgeCall(ctx, meta, eventCallTimeout, state, questions)
 }
 
-// resolveEventChunk asks Jev once about chunk (or uses the answer already
-// fetched for the same question) and writes the result. The caller holds
-// idx.mu.
-func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, ownerID, computerID string, chunk []eventInput, report *eventResolveReport, pre *eventPrefetch) {
+// resolveEventChunk asks Jev once about chunk and writes the result. The
+// caller holds idx.mu.
+func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, ownerID, computerID string, chunk []eventInput, report *eventResolveReport) {
 	now := time.Now().UTC()
 	stateRaw, questions, alias, split := eventPrepareChunk(idx, chunk, now)
 	if split {
 		half := len(chunk) / 2
-		rt.resolveEventChunk(ctx, idx, ownerID, computerID, chunk[:half], report, nil)
-		rt.resolveEventChunk(ctx, idx, ownerID, computerID, chunk[half:], report, nil)
+		rt.resolveEventChunk(ctx, idx, ownerID, computerID, chunk[:half], report)
+		rt.resolveEventChunk(ctx, idx, ownerID, computerID, chunk[half:], report)
 		return
 	}
-	var raw json.RawMessage
-	var err error
-	if pre != nil && pre.key == eventCallKey(stateRaw, questions) {
-		raw, err = pre.raw, pre.err
-	} else {
-		raw, err = rt.askEventChunk(ctx, chunk, stateRaw, questions)
-	}
+	raw, err := rt.askEventChunk(ctx, chunk, stateRaw, questions)
 	report.Calls++
 	if err != nil {
 		report.Unresolved += len(chunk)
@@ -980,9 +923,8 @@ func (rt *Runtime) drainEventQueue(layerCtx context.Context, ownerID, computerID
 		items := q.items
 		q.items = nil
 		rt.events.mu.Unlock()
-		ctx, cancel := context.WithTimeout(layerCtx, eventFlushBudget)
-		report, err := rt.resolveEvents(ctx, ownerID, computerID, items)
-		cancel()
+		// No deadline across the flush: each chunk has its own (resolveEvents).
+		report, err := rt.resolveEvents(layerCtx, ownerID, computerID, items)
 		if layerCtx.Err() == nil {
 			rt.mintEventWakes(layerCtx, ownerID, computerID, items, report, err)
 		}
