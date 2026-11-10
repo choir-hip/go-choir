@@ -137,7 +137,7 @@ function." Each server lane extends the mechanism named in section 3.
 |---|---|---|---|
 | N. Native shell | Exact app at a pinned commit; navigation; the build and TestFlight path; the Apple account, bundle id and signing | 0.3 | new tree `mobile/` |
 | V. Voice | Port Mike's recognition, turn-taking, echo cancellation and AI voice as a Swift module that takes the audio session through Exact's claims; Exact's own speech packages are the fallback and the agent-test double; push-to-talk first, open mic after (launch checklist OD-05) | 0.3 | Mike's code, relicensed |
-| P. Playback | Long-form background playback, Now Playing and lock-screen controls, clip start and end anchored to transcripts, the podcast as the echo reference | 0.3 | new, in `mobile/` |
+| P. Playback | Long-form background playback, Now Playing and lock-screen controls, clip start and end anchored to transcripts, the podcast as the echo reference; a spoken response is one seekable timeline however many segments it was synthesised in (Mike seeks within 10-second clips today) | 0.3 | new, in `mobile/` |
 | S1. Sign-in | A named, revocable device with a refreshable token, approved by passkey; account deletion from the app | 0.2 | the device authorization flow (`internal/auth/device_login.go`); no second sign-in system |
 | S2. Audio in Texture | The audio timeline on a revision; audio bytes served by the asset endpoint; published stories may carry audio and images | 0.1 | `internal/texturedoc/embed*.go`, `api_assets.go`, the publish gate |
 
