@@ -252,7 +252,9 @@ discovery alone as repair.
 **Code review is risk-tiered, Devin by default** (suspended for the data
 system cutover; see Operating Tempo) (owner, 2026-10-23: "we
 should be more judicious, allocating code review to hard stuff and trusting
-that we can handle the easy stuff cold"; "make devin the go-to reviewer").
+that we can handle the easy stuff cold"; "make devin the go-to reviewer"; 2026-11-10: any second agent may be the
+review seat, and Gemini 3.8 flash through `agy` is the default while Devin
+serves the paper).
 Cheap checks run before any review, every time: the repo gates
 (`check-v1-writer-purity`, `check-decode-roots`, `check-test-hang-guards`,
 `selftest-guest-token`, `check-switch-registry`, which refuses any new switch), a nix eval of both systems when `nix/` or the flake

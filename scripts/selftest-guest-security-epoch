@@ -141,8 +141,12 @@ touch_surface "$r"; commit "$r" "$(msg 'surface change, both trailers' "$OK_EFFE
 expect "the same with both trailers passes" 0 "$r" "$base" "$(rev "$r")"
 
 r=$tmp/r3; new_repo "$r"; base=$(rev "$r")
-touch_surface "$r"; commit "$r" "$(msg 'unknown seat' "$OK_EFFECT" 'Security-Effect-Reviewed-By: sol; review 313')"
-expect "a trailer with an unknown seat fails" 1 "$r" "$base" "$(rev "$r")"
+touch_surface "$r"; commit "$r" "$(msg 'refused seat' "$OK_EFFECT" 'Security-Effect-Reviewed-By: sol; review 313')"
+expect "a trailer naming a seat that does not run review fails" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/r3b; new_repo "$r"; base=$(rev "$r")
+touch_surface "$r"; commit "$r" "$(msg 'second agent' "$OK_EFFECT" 'Security-Effect-Reviewed-By: gemini; review 1')"
+expect "a trailer naming any other second agent passes" 0 "$r" "$base" "$(rev "$r")"
 
 r=$tmp/r4; new_repo "$r"; base=$(rev "$r")
 touch_surface "$r"; commit "$r" "$(msg 'malformed ref' "$OK_EFFECT" 'Security-Effect-Reviewed-By: devin; looked fine')"

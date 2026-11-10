@@ -7,7 +7,7 @@
 # nix/guest-release-policy.json or carries the reviewed trailers
 #
 #   Security-Effect: none; <why, at least 20 characters>
-#   Security-Effect-Reviewed-By: <devin|deepseek|owner>; <review N | owner YYYY-MM-DD>
+#   Security-Effect-Reviewed-By: <reviewing agent|owner>; <review N | owner YYYY-MM-DD>
 #
 # Excluded from matching everywhere: *_test.go, */testdata/*, *.md. A new guest
 # package with an authority, credential, egress or mutation role is added here
