@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // ForkRequest makes a new document from one published version. Text, when
@@ -35,6 +36,13 @@ func (h *Handler) HandleTextureFork(w http.ResponseWriter, r *http.Request) {
 	r = asOwnerRoute(r)
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	// An in-process caller is a desk (server.GuestHostCaller marks it with an
+	// empty RemoteAddr): only the Texture desk writes a Texture, and an
+	// owner-authored revision must not be a door for another desk (contract 1, R11).
+	if strings.TrimSpace(r.RemoteAddr) == "" {
+		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "a revise is an owner act; only the Texture desk writes a Texture, so address the Texture desk"})
 		return
 	}
 	ownerID, err := authenticateUser(r)
@@ -101,5 +109,25 @@ func (h *Handler) forkDocument(ctx context.Context, req ForkRequest) (ReviseRece
 		return ReviseReceipt{}, refuseOwnerRevision(http.StatusBadRequest, "fork rejected")
 	}
 	revise.DocID = created.DocID
-	return h.reviseDocument(ctx, revise)
+	receipt, err := h.reviseDocument(ctx, revise)
+	if err != nil || strings.TrimSpace(req.Text) != "" {
+		return receipt, err
+	}
+	// A verbatim fork wakes no desk, so nobody will serve the new document's
+	// initial work item: the take that answers it closes it. A fork with text
+	// leaves it open for the desk. The command id is the work item's, so a
+	// retry settles once.
+	settle := types.SettleLifecycleWorkRequest{
+		OwnerID: ownerID, ComputerID: strings.TrimSpace(h.Core.TextureComputerID()),
+		CommandID: "fork-settle:" + created.TargetWorkItemID, TrajectoryID: created.TrajectoryID,
+		WorkItemID: created.TargetWorkItemID, ActingAgentID: created.TargetAgentID, ResultRef: receipt.RevisionID,
+	}
+	if settle.CommandDigest, err = store.ComputeSettleLifecycleWorkDigest(settle); err != nil {
+		return ReviseReceipt{}, refuseOwnerRevision(http.StatusInternalServerError, "failed to close the fork's initial work")
+	}
+	if _, err := h.Store.SettleLifecycleWork(asOwner(ctx), settle); err != nil {
+		log.Printf("texture api: close fork work %s: %v", created.TargetWorkItemID, err)
+		return ReviseReceipt{}, refuseOwnerRevision(http.StatusInternalServerError, "failed to close the fork's initial work")
+	}
+	return receipt, nil
 }
