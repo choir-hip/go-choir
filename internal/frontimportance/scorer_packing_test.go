@@ -31,6 +31,15 @@ func packingStories(n int) ([]frontStory, map[string]string) {
 	return stories, answers
 }
 
+// packAcross raises maxStoriesPerCall for one test (packing across stories
+// is off in production until measured).
+func packAcross(t *testing.T, n int) {
+	t.Helper()
+	old := maxStoriesPerCall
+	maxStoriesPerCall = n
+	t.Cleanup(func() { maxStoriesPerCall = old })
+}
+
 func runPacked(t *testing.T, stories []frontStory, jev *fakeJev, mutate func(*config)) (runStats, string) {
 	t.Helper()
 	srv := frontServer(t, http.StatusOK, stories)
@@ -51,6 +60,7 @@ func runPacked(t *testing.T, stories []frontStory, jev *fakeJev, mutate func(*co
 // One call carries every small story, never two calls at once, and each
 // story gets its own importance (handle attribution).
 func TestScorerPacksSmallStoriesIntoOneCall(t *testing.T) {
+	packAcross(t, 4)
 	stories, answers := packingStories(3)
 	jev := &fakeJev{answers: answers, delay: 5 * time.Millisecond}
 	stats, path := runPacked(t, stories, jev, nil)
@@ -71,6 +81,7 @@ func TestScorerPacksSmallStoriesIntoOneCall(t *testing.T) {
 // Twelve stories (handles s1..s12, where s1 is a prefix of s10) in calls one
 // after another: never two at once, and no story takes another's answer.
 func TestScorerCallsAreSerialAndHandlesDoNotCross(t *testing.T) {
+	packAcross(t, 99)
 	stories, answers := packingStories(12)
 	jev := &fakeJev{answers: answers, delay: 5 * time.Millisecond}
 	stats, path := runPacked(t, stories, jev, func(c *config) { c.RequestBytes = 1 << 30 })
@@ -94,6 +105,7 @@ func TestScorerCallsAreSerialAndHandlesDoNotCross(t *testing.T) {
 // The byte bound splits a run: no request is over the bound (every story is
 // well under it alone), and the split uses more than one call.
 func TestScorerSplitsAtTheByteBound(t *testing.T) {
+	packAcross(t, 99)
 	stories, answers := packingStories(10)
 	jev := &fakeJev{answers: answers}
 	stats, _ := runPacked(t, stories, jev, nil)
@@ -116,6 +128,7 @@ func TestScorerSplitsAtTheByteBound(t *testing.T) {
 // A partial answer set fails only the story it misses; a failed call fails
 // only the stories in it and keeps their previous rows.
 func TestScorerPartialAnswerAndFailedCall(t *testing.T) {
+	packAcross(t, 4)
 	stories, answers := packingStories(3)
 	jev := &fakeJev{answers: answers, omit: map[string]bool{"T01": true}}
 	stats, path := runPacked(t, stories, jev, nil)
@@ -165,7 +178,7 @@ func TestScorerQuestionNamesAreUniquePerStory(t *testing.T) {
 	}
 	seen := map[string]bool{}
 	for k, a := range asked {
-		h := fmt.Sprintf("s%d", k+1)
+		h := handleFor(k)
 		for name, q := range storyQuestions(a, h) {
 			if seen[name] || !strings.HasPrefix(name, h+"_") || !strings.Contains(string(q), "state.stories."+h+" ") || strings.Contains(string(q), "state.story ") {
 				t.Fatalf("question %q duplicated or does not name %s", name, h)
@@ -175,6 +188,94 @@ func TestScorerQuestionNamesAreUniquePerStory(t *testing.T) {
 	}
 	if len(seen) != 4*12 {
 		t.Fatalf("questions = %d, want 48", len(seen))
+	}
+}
+
+// By default a call carries one story, and calls never overlap.
+func TestScorerDefaultsToOneStoryACallSerially(t *testing.T) {
+	stories, answers := packingStories(10)
+	jev := &fakeJev{answers: answers, delay: 3 * time.Millisecond}
+	stats, _ := runPacked(t, stories, jev, nil)
+	if jev.nCalls != 10 || jev.peak.Load() != 1 || stats.Scored != 10 {
+		t.Fatalf("calls = %d peak = %d stats = %+v, want 10 serial calls", jev.nCalls, jev.peak.Load(), stats)
+	}
+}
+
+// A pack of up to 4 with MaxCalls = 1: the first batch is asked, the rest are
+// deferred and keep their old rows.
+func TestScorerDeferredBatchKeepsOldRows(t *testing.T) {
+	packAcross(t, 4)
+	stories, answers := packingStories(8)
+	srv := frontServer(t, http.StatusOK, stories)
+	path := filepath.Join(t.TempDir(), "scores.json")
+	prev := scoresFile{Version: 1, Scores: map[string]scoreRow{}}
+	for _, st := range stories {
+		prev.Scores[st.PublicationID] = scoreRow{Revision: 0, Importance: 9} // revised since: rescored
+	}
+	if err := writeScores(path, prev); err != nil {
+		t.Fatal(err)
+	}
+	cfg := testConfig(srv.URL, path)
+	cfg.MaxCalls, cfg.RequestBytes = 1, 1<<30
+	jev := &fakeJev{answers: answers}
+	stats, err := run(context.Background(), cfg, srv.Client(), jev, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if jev.nCalls != 1 || jev.perCall[0] != 4 || stats.Scored != 4 || stats.Deferred != 4 {
+		t.Fatalf("calls = %d (%v) stats = %+v", jev.nCalls, jev.perCall, stats)
+	}
+	scores := readScores(path).Scores
+	deferred := 0
+	for _, st := range stories {
+		if scores[st.PublicationID].Importance == 9 {
+			deferred++
+		}
+	}
+	if deferred != 4 || len(scores) != 8 {
+		t.Fatalf("%d rows kept their old score of %d rows, want 4 of 8", deferred, len(scores))
+	}
+}
+
+// A story whose request is over the bound alone is sent alone and whole.
+func TestScorerStoryOverTheBoundIsSentAlone(t *testing.T) {
+	packAcross(t, 4)
+	stories, answers := packingStories(3)
+	jev := &fakeJev{answers: answers}
+	stats, path := runPacked(t, stories, jev, func(c *config) { c.RequestBytes = 100 })
+	if jev.nCalls != 3 || stats.Scored != 3 {
+		t.Fatalf("calls = %d (%v) stats = %+v, want each story sent alone and scored", jev.nCalls, jev.perCall, stats)
+	}
+	for _, n := range jev.perCall {
+		if n != 1 {
+			t.Fatalf("stories per call = %v", jev.perCall)
+		}
+	}
+	for i, b := range jev.reqBytes {
+		if b < 7000 {
+			t.Fatalf("call %d is %d bytes: the story was truncated", i, b)
+		}
+	}
+	if len(readScores(path).Scores) != 3 {
+		t.Fatal("a story was skipped")
+	}
+}
+
+// Stories with no row are asked before rows that exist.
+func TestScorerAsksStoriesWithNoRowFirst(t *testing.T) {
+	stories, answers := packingStories(4)
+	srv := frontServer(t, http.StatusOK, stories)
+	path := filepath.Join(t.TempDir(), "scores.json")
+	prev := scoresFile{Version: 1, Scores: map[string]scoreRow{"pub-T00": {Revision: 0, Importance: 9}, "pub-T01": {Revision: 0, Importance: 9}}}
+	if err := writeScores(path, prev); err != nil {
+		t.Fatal(err)
+	}
+	jev := &fakeJev{answers: answers}
+	if _, err := run(context.Background(), testConfig(srv.URL, path), srv.Client(), jev, time.Now); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(jev.calls, ","); got != "T02,T03,T00,T01" {
+		t.Fatalf("order = %s, want the unscored first", got)
 	}
 }
 
@@ -196,8 +297,8 @@ func TestScorerRecordsEveryCallFailuresIncluded(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(raw)
-	if got := strings.Count(text, "\n"); got != 1 {
-		t.Fatalf("records = %d, want 1 (one packed call):\n%s", got, text)
+	if got := strings.Count(text, "\n"); got != 2 {
+		t.Fatalf("records = %d, want 2 (one call a story):\n%s", got, text)
 	}
 	for _, want := range []string{`pub-ok@3`, `pub-bad@1`, `"ok":true`, `"site":"front_importance"`} {
 		if !strings.Contains(text, want) {
