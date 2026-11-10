@@ -373,6 +373,13 @@ type ProviderConfig struct {
 	// uses the key on its own).
 	OpenRouterModels []string
 
+	// DevinModels lists Devin (SWE) model IDs served through the Codeium
+	// Connect-RPC backend ("swe-2", "swe-2-flash", effort variants like
+	// "swe-2-high"). The first entry seeds the provider instance; request.Model
+	// controls per-call selection. If empty, Devin is not initialized even if
+	// DEVIN_API_KEY is set.
+	DevinModels []string
+
 	// SelectedProvider is the explicitly selected provider for direct autoputer
 	// runtime calls. Empty means no direct provider is selected.
 	SelectedProvider string
@@ -3892,6 +3899,14 @@ func ResolveAll(cfg ProviderConfig) *MultiProvider {
 		if p, err := NewOpenRouterProviderFromEnv(cfg.OpenRouterModels[0]); err == nil {
 			mp.Register("openrouter", p)
 			log.Printf("provider: resolved openrouter (seed_model=%s)", p.modelID)
+		}
+	}
+
+	// Try Devin. Register one provider; req.Model selects the model.
+	if os.Getenv("DEVIN_API_KEY") != "" && len(cfg.DevinModels) > 0 {
+		if p, err := NewDevinProviderFromEnv(cfg.DevinModels[0]); err == nil {
+			mp.Register("devin", p)
+			log.Printf("provider: resolved devin (seed_model=%s)", p.modelID)
 		}
 	}
 

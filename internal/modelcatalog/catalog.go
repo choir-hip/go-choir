@@ -77,6 +77,7 @@ func TextOnlyModels() map[string]string {
 		"iceman-contributor-free":         unverified,
 		"beam-free":                       unverified,
 		"recursive/flint-v1.0:free":       "text-only: the OpenRouter listing gives text input only (2026-11-05)",
+		"swe-2-flash":                     "text-only: the Devin model catalog lists text input only for swe-2-flash (2026-11-09)",
 	}
 }
 
@@ -296,6 +297,31 @@ func SupportedModels() []ModelInfo {
 			ContextWindowTokens: 524288,
 		},
 
+		// Devin SWE-2 (Cognition) through the Codeium Connect-RPC backend
+		// (internal/provider/devin.go). Both models are free to us until
+		// their promotional ends: swe-2-flash through 2026-12-04, swe-2
+		// through 2026-11-30 (internal/llmcost/pricing.go prices them at
+		// zero with the same dates; revisit both on those days).
+		// swe-2-flash is text only (TextOnlyModels) and does not support
+		// parallel tool calls: the provider asks for one call per turn.
+		// Reasoning effort selects the model UID suffix: low and medium map
+		// to swe-2-flash-medium, high to -high, max/xhigh to -max, so a role
+		// whose policy says reasoning = "low" still gets -medium on purpose;
+		// there is no -low UID. A bare "swe-2" is refused on some plans.
+		{
+			ID:                  "swe-2-flash",
+			DisplayName:         "SWE-2 Flash (Devin)",
+			Provider:            "devin",
+			MaxOutputTokens:     131072,
+			ContextWindowTokens: 262144,
+		},
+		{
+			ID:                  "swe-2",
+			DisplayName:         "SWE-2 (Devin)",
+			Provider:            "devin",
+			MaxOutputTokens:     128000,
+			ContextWindowTokens: 262000,
+		},
 		// OpenRouter's thinkingmachines/inkling-2-small:free: the owner's
 		// intended default model (owner 2026-11-09). Listing that day:
 		// 1048576-token window, 131072 max completion tokens, text and image
@@ -459,10 +485,25 @@ func (m PoolMember) SlotWeight() int {
 // agentic harnesses"); a dead lead is the bug being fixed. When the gate opens
 // it becomes the lead of the default and selfdev pools by a one-line change
 // (docs/problems/crouton-retired-inkling-gated-2026-11-09.md).
+//
+// Owner 2026-11-09 (later): Devin's swe-2-flash leads the default pool, ahead
+// of iceman, because the free pool capacity is exhausted and the
+// paper runs on the paid tail. Every previous member stays, in order, as
+// fallback-only: a Devin refusal (quota, revoked session) holds the member
+// and the loop moves to iceman and on. Devin authenticates with one person's
+// Devin CLI session, an unofficial client of a private API; the pool must
+// degrade to the other members the moment it refuses.
 func Pools() map[string][]PoolMember {
 	return map[string][]PoolMember{
 		DefaultPool: {
-			{Provider: "opencode-go", Model: "iceman-contributor-free", Weight: 1},
+			// Owner 2026-11-09: swe-2-flash leads (Devin, free until
+			// 2026-12-04); every previous member follows in order. A role at
+			// reasoning "low" still runs swe-2-flash-medium: the provider
+			// maps low to the -medium UID (devin.go devinModelUID), by
+			// design. Image turns skip it (text only) and land on the first
+			// vision-capable member.
+			{Provider: "devin", Model: "swe-2-flash", Weight: 1},
+			{Provider: "opencode-go", Model: "iceman-contributor-free", FallbackOnly: true},
 			{Provider: "opencode-go", Model: "beam-free", FallbackOnly: true},
 			{Provider: "openrouter", Model: "recursive/flint-v1.0:free", FallbackOnly: true},
 			{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free", FallbackOnly: true},
@@ -478,11 +519,12 @@ func Pools() map[string][]PoolMember {
 			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
 		},
 		SelfDevPool: {
-			{Provider: "opencode-go", Model: "iceman-contributor-free", Weight: 1},
-			{Provider: "opencode-go", Model: "beam-free", FallbackOnly: true},
-			{Provider: "openrouter", Model: "recursive/flint-v1.0:free", FallbackOnly: true},
-			{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free", FallbackOnly: true},
-			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
+			// Owner 2026-11-09: "use deepseek via Synthetic and River for
+			// self-dev". Synthetic's DeepSeek leads and takes the threads;
+			// River's DeepSeek is the fallback. No free members and no Devin
+			// here (this replaces the earlier free-first selfdev pool). River
+			// carries a $1 a day budget ruling (the gateway's paid budget).
+			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", Weight: 1},
 			{Provider: "river", Model: "deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
 		},
 	}

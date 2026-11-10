@@ -186,6 +186,7 @@ func loadProviderConfig() provider.ProviderConfig {
 		SyntheticModels:   []string{"hf:deepseek-ai/DeepSeek-V4.1-Flash-1017"},
 		RiverModels:       []string{"deepseek-ai/DeepSeek-V4.1-Flash-1017"},
 		OpenRouterModels:  []string{"recursive/flint-v1.0:free", "nvidia/nemotron-3.5-super-vl:free", "thinkingmachines/inkling-2-small:free"},
+		DevinModels:       []string{"swe-2-flash", "swe-2"},
 	}
 
 	// Allow overrides for non-default setups.
@@ -215,6 +216,9 @@ func loadProviderConfig() provider.ProviderConfig {
 	}
 	if v := os.Getenv("GATEWAY_OPENROUTER_MODELS"); v != "" {
 		cfg.OpenRouterModels = strings.Split(v, ",")
+	}
+	if v := os.Getenv("GATEWAY_DEVIN_MODELS"); v != "" {
+		cfg.DevinModels = strings.Split(v, ",")
 	}
 
 	return cfg

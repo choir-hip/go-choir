@@ -30,11 +30,13 @@ import (
 // out moves to the other.
 func TestDefaultPoolMembers(t *testing.T) {
 	pool := Pools()[DefaultPool]
-	// Owner 2026-11-09: crouton-alpha was retired that day; iceman leads
-	// and takes every thread, the rest are fallback-only behind it; no
-	// Synthetic member; inkling is in no pool while OpenRouter gates it.
+	// Owner 2026-11-09: swe-2-flash (Devin) leads and takes every thread;
+	// iceman, beam, flint, nemotron, luna and Haiku follow as fallback-only
+	// members in their earlier order; no Synthetic member; inkling is in no
+	// pool while OpenRouter gates it.
 	want := []PoolMember{
-		{Provider: "opencode-go", Model: "iceman-contributor-free", Weight: 1},
+		{Provider: "devin", Model: "swe-2-flash", Weight: 1},
+		{Provider: "opencode-go", Model: "iceman-contributor-free", FallbackOnly: true},
 		{Provider: "opencode-go", Model: "beam-free", FallbackOnly: true},
 		{Provider: "openrouter", Model: "recursive/flint-v1.0:free", FallbackOnly: true},
 		{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free", FallbackOnly: true},
@@ -64,7 +66,7 @@ func TestDefaultPoolMembers(t *testing.T) {
 		for _, m := range members {
 			// The OpenCode members are the free iceman and beam in the
 			// default pool (owner 2026-11-05); OpenCode's paid models stay out.
-			if (m.Provider == "opencode-go" || m.Provider == "opencode-zen") && ((name != DefaultPool && name != SelfDevPool) || (m.Model != "iceman-contributor-free" && m.Model != "beam-free")) {
+			if (m.Provider == "opencode-go" || m.Provider == "opencode-zen") && (name != DefaultPool || (m.Model != "iceman-contributor-free" && m.Model != "beam-free")) {
 				t.Fatalf("pool %s carries OpenCode member %v", name, m)
 			}
 		}
@@ -147,7 +149,7 @@ func TestLunaSyntheticPool(t *testing.T) {
 		t.Fatal("only synthetic-luna is a no-failover pool")
 	}
 	// The other pools are unchanged.
-	if d := Pools()[DefaultPool]; len(d) != 6 || d[4] != (PoolMember{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true}) {
+	if d := Pools()[DefaultPool]; len(d) != 7 || d[5] != (PoolMember{Provider: "chatgpt", Model: "gpt-6-luna", FallbackOnly: true}) {
 		t.Fatalf("default pool = %v", d)
 	}
 	if s := Pools()[SyntheticLunaPool]; len(s) != 2 || s[0].SlotWeight() != 1 || s[1].SlotWeight() != 1 || s[0].Provider != "synthetic" {
@@ -180,7 +182,7 @@ func TestOpenRouterInklingCataloguedAndCroutonGone(t *testing.T) {
 				t.Fatalf("pool %s carries %v", name, m)
 			}
 			free := m.Model == "recursive/flint-v1.0:free" || m.Model == "nvidia/nemotron-3.5-super-vl:free"
-			if m.Provider == "openrouter" && !(free && (name == DefaultPool || name == SelfDevPool)) {
+			if m.Provider == "openrouter" && !(free && name == DefaultPool) {
 				t.Fatalf("pool %s carries openrouter member %v", name, m)
 			}
 		}
@@ -190,19 +192,16 @@ func TestOpenRouterInklingCataloguedAndCroutonGone(t *testing.T) {
 	}
 }
 
-// The self-development pool (owner 2026-11-09). Ways it could fail: crouton is
-// not the only weighted member; Synthetic or River is missing, out of order or
+// The self-development pool (owner 2026-11-09: "use deepseek via Synthetic
+// and River for self-dev"). Ways it could fail: Devin or a free member leaks
+// in; Synthetic is not the only weighted member; Synthetic or River is missing, out of order or
 // weighted; Haiku leaks in; a member is not in the catalog.
 func TestSelfDevPool(t *testing.T) {
 	if SelfDevPool != "selfdev" {
 		t.Fatalf("SelfDevPool = %q", SelfDevPool)
 	}
 	want := []PoolMember{
-		{Provider: "opencode-go", Model: "iceman-contributor-free", Weight: 1},
-		{Provider: "opencode-go", Model: "beam-free", FallbackOnly: true},
-		{Provider: "openrouter", Model: "recursive/flint-v1.0:free", FallbackOnly: true},
-		{Provider: "openrouter", Model: "nvidia/nemotron-3.5-super-vl:free", FallbackOnly: true},
-		{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
+		{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", Weight: 1},
 		{Provider: "river", Model: "deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
 	}
 	pool := Pools()[SelfDevPool]
@@ -216,8 +215,8 @@ func TestSelfDevPool(t *testing.T) {
 		if _, ok := Lookup(want[i].Provider, want[i].Model); !ok {
 			t.Fatalf("selfdev member %v missing from SupportedModels", want[i])
 		}
-		if pool[i].Provider == "bedrock" {
-			t.Fatal("selfdev pool holds Haiku")
+		if p := pool[i].Provider; p == "bedrock" || p == "devin" || p == "opencode-go" || p == "openrouter" {
+			t.Fatalf("selfdev pool holds %s", p)
 		}
 	}
 	if NoFailover(SelfDevPool) {
@@ -228,5 +227,34 @@ func TestSelfDevPool(t *testing.T) {
 func TestHaiku55Catalogued(t *testing.T) {
 	if _, ok := Lookup("bedrock", "us.anthropic.claude-haiku-5-5"); !ok {
 		t.Fatal("Haiku 5.5 missing from SupportedModels")
+	}
+}
+
+// swe-2-flash (Devin) leads the default pool but reads text only: an image
+// turn skips it (toolloop needsImage, desk_shots, verifier multimodal) and
+// lands on the first vision-capable member behind it, as the text-only free
+// models are skipped today.
+func TestDevinFlashIsTextOnlyAndImageTurnsSkipIt(t *testing.T) {
+	if SupportsImage("swe-2-flash") || ImageRefusal("swe-2-flash") == "" {
+		t.Fatal("swe-2-flash must be opted out of image input")
+	}
+	first := ""
+	for _, m := range Pools()[DefaultPool] {
+		if SupportsImage(m.Model) {
+			first = m.Provider + "/" + m.Model
+			break
+		}
+	}
+	if first != "openrouter/nvidia/nemotron-3.5-super-vl:free" {
+		t.Fatalf("first vision-capable default member = %q", first)
+	}
+	for _, id := range []string{"swe-2-flash", "swe-2"} {
+		info, ok := Lookup("devin", id)
+		if !ok || info.ContextWindowTokens < 262000 || info.MaxOutputTokens < 128000 {
+			t.Fatalf("%s = %+v ok=%v", id, info, ok)
+		}
+	}
+	if _, ok := Lookup("devin", "swe-2-fast"); ok {
+		t.Fatal("swe-2-fast must not be catalogued")
 	}
 }

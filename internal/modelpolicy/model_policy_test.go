@@ -140,8 +140,9 @@ func TestManagerEnrichesMetadataAndPreservesExplicitSelection(t *testing.T) {
 	manager := NewManager(ManagerConfig{})
 	metadata := manager.EnrichMetadata(context.Background(), "owner", agentprofile.Management, map[string]any{"trajectory_id": "traj-1"})
 	member := metadata[MetadataProvider].(string) + "/" + metadata[MetadataModel].(string)
-	// The default pool is iceman, beam, flint, nemotron and
-	// gpt-6-luna with Synthetic DeepSeek 1017 fallback-only (owner 2026-11-05); a
+	// The default pool is swe-2-flash, then iceman, beam, flint, nemotron,
+	// gpt-6-luna and Haiku, all fallback-only behind the lead (owner
+	// 2026-11-09); a
 	// thread's fallbacks are the other members in pool order after the
 	// assigned one, wrapping.
 	pool := modelcatalog.Pools()[modelcatalog.DefaultPool]
@@ -237,13 +238,13 @@ func TestAssignSyntheticLunaSplitsOneToOneAndNeverFailsOver(t *testing.T) {
 	if syn < 1800 || syn > 2200 || syn+luna != 4000 {
 		t.Fatalf("split = %v, want about 2000 each of 4000", seen)
 	}
-	// The default pool (owner 2026-11-09; crouton-alpha was retired that day)
-	// leads with iceman, which takes every thread; the other five members
-	// are fallback-only, in pool order, so no thread starts on a member that
-	// is not the first and each has the other five as fallbacks.
-	for i := 0; i < 600; i++ {
+	// The default pool (owner 2026-11-09) leads with Devin's swe-2-flash,
+	// which takes every thread; the other six members are fallback-only, in
+	// pool order, so no thread starts on a member that is not the first and
+	// each has the other six as fallbacks, iceman first.
+	for i := range 600 {
 		chosen, fallbacks, _ := Assign(provideriface.LLMSelection{Model: "pool:default"}, fmt.Sprintf("thread-%d", i))
-		if chosen.Model != "iceman-contributor-free" || len(fallbacks) != 5 || fallbacks[0].Model != "beam-free" || fallbacks[3].Provider != "chatgpt" {
+		if chosen.Model != "swe-2-flash" || chosen.Provider != "devin" || len(fallbacks) != 6 || fallbacks[0].Model != "iceman-contributor-free" || fallbacks[1].Model != "beam-free" || fallbacks[4].Provider != "chatgpt" || fallbacks[5].Provider != "bedrock" {
 			t.Fatalf("default pool thread-%d: %+v with fallbacks %+v", i, chosen, fallbacks)
 		}
 	}
@@ -431,7 +432,7 @@ func TestAssignLunaSyntheticGivesLunaEveryThreadAndSyntheticAsFallback(t *testin
 	if _, fb, _ := Assign(provideriface.LLMSelection{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017"}, "t"); len(fb) != 0 {
 		t.Fatalf("explicit synthetic pin has fallbacks %+v", fb)
 	}
-	if chosen, fb, _ := Assign(provideriface.LLMSelection{Model: "pool:default"}, "t"); len(fb) != 5 || fb[0].Model == chosen.Model {
+	if chosen, fb, _ := Assign(provideriface.LLMSelection{Model: "pool:default"}, "t"); len(fb) != 6 || fb[0].Model == chosen.Model {
 		t.Fatalf("default pool changed: %+v %+v", chosen, fb)
 	}
 	seen := map[string]int{}
@@ -480,5 +481,18 @@ func TestPolicyAcceptsLunaSyntheticPool(t *testing.T) {
 	meta := NewManager(ManagerConfig{PolicyPath: path}).EnrichMetadata(context.Background(), "owner", agentprofile.ManagementTask, map[string]any{"trajectory_id": "t1"})
 	if meta[MetadataModel] != "gpt-6-luna" || meta[MetadataFallbacks] != "synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017" {
 		t.Fatalf("management task = %v with fallbacks %v", meta[MetadataModel], meta[MetadataFallbacks])
+	}
+}
+
+// A role at reasoning "low" (the platform policy, owner 2026-11-09, to cut
+// paid spend) keeps "low" in the selection; the Devin provider maps low to
+// swe-2-flash-medium (TestDevinModelUIDMapsEffort), so swe-2-flash runs at
+// medium, by design. An explicit high stays high.
+func TestDefaultPoolLeadKeepsTheRolesEffort(t *testing.T) {
+	for _, effort := range []string{"low", "high"} {
+		chosen, _, _ := Assign(provideriface.LLMSelection{Model: "pool:default", ReasoningEffort: effort}, "t")
+		if chosen.Provider != "devin" || chosen.Model != "swe-2-flash" || chosen.ReasoningEffort != effort {
+			t.Fatalf("effort %s: %+v", effort, chosen)
+		}
 	}
 }

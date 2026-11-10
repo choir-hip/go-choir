@@ -280,6 +280,8 @@ func ProviderDisplayName(provider string) string {
 		return "OpenRouter"
 	case "river":
 		return "River"
+	case "devin":
+		return "Devin"
 	case "opencode-go", "opencode":
 		return "OpenCode"
 	case "zai":

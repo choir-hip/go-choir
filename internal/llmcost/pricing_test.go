@@ -119,3 +119,14 @@ func TestLookupPricingInklingIsFree(t *testing.T) {
 		}
 	}
 }
+
+// Devin SWE models are free to us until the promotions end (swe-2-flash
+// 2026-12-04, swe-2 2026-11-30): found at zero, effort variants included.
+func TestDevinSweModelsPriceAtZero(t *testing.T) {
+	for _, m := range []string{"swe-2-flash", "swe-2-flash-medium", "swe-2-flash-high", "swe-2", "swe-2-high"} {
+		p, ok := LookupProviderPricing("devin", m)
+		if !ok || p.InputPerMillion != 0 || p.OutputPerMillion != 0 {
+			t.Fatalf("%s = %+v ok=%v", m, p, ok)
+		}
+	}
+}
