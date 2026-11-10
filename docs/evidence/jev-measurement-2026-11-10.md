@@ -375,3 +375,78 @@ Runner-up: the sub-call, cast and inert judges (8-10) are held to 1 call per
 - Whether Node A runs a second gateway sharing the key.
 - Whether the guest-door 429 path has ever fired for Jev: no such line in 6 h,
   and the older logs were not searched.
+
+## Build: failure list (lane A, steps 1-3)
+
+Mutation classes: step 1 red (gateway), steps 2 and 3 orange. Rollback for
+each: revert the commit. Written before the code; each line names its test.
+Step 1 = the shared limiter in `JevTransport.Decide`; step 2 = one bounded
+fan-out helper at every call site; step 3 = one recorder behind every call.
+
+### Limiter and transport (step 1)
+
+| Failure | Test |
+|---|---|
+| A scorer burst (host door, 80 calls at once) fills the rate and in-flight budget and the prompt router or disclosure gate waits behind it. The interactive class owns 8 of the 32 in-flight slots and 5 of the 30 burst tokens that bulk callers cannot take. | `TestJevLimiterInteractiveNotStarvedByBulk` |
+| Upstream 429 with `Retry-After`: today it opens a 1-minute doubling hold for every computer. A rate answer is not an outage. It now sets one shared backoff until `Retry-After` (default 2 s, cap 60 s) that every waiter honours; 5xx and timeouts keep the hold. | `TestJevLimiterSharedBackoffHonoursRetryAfter`, `TestJevTransport429SetsBackoffNotHold` |
+| A waiter outlives its caller (context cancel, client gone): it must leave the queue and release nothing it did not take. | `TestJevLimiterCancelledWaiterLeavesNoSlot` |
+| In-flight slot leak on any return path of `Decide` (error, bad JSON, receipt failure). | `TestJevLimiterReleasesOnEveryPath` |
+| One computer takes the whole organization share. Per-computer in-flight cap 24 and a per-computer rate of 10/s burst 30 replace the 60-a-minute bucket. | `TestJevLimiterPerComputerCap` |
+| Waiting forever behind a stuck upstream: the queue wait is bounded at 20 s, then the caller gets 429 with `Retry-After`. | `TestJevLimiterQueueWaitBounded` |
+| Many computers together exceed the organization rate: the limiter is process-wide, in the one gateway that holds the key, so the sum is bounded by construction (15/s sustained). Unverified: whether a second gateway process shares the key. | `TestJevLimiterRateIsProcessWide` (many computer ids, one budget) |
+| Receipt `Sync` under the one mutex serialises completions behind fsyncs. The write stays under the mutex, the `Sync` moves out of it; durability before the answer returns is kept. | `TestJevReceiptWriterConcurrentWrites` (race; every line complete and valid) |
+| Two idle connections per host: 12+ concurrent calls open fresh TLS. Transport with `MaxIdleConnsPerHost` 64. | `TestJevTransportIdleConnsPerHost` |
+| Latency log missing or the hourly summary racing: counters under a mutex; the summary is emitted by the first call after the hour, so there is no goroutine to leak. | `TestJevStatsSummary` |
+| No-switch rule: no env flag turns the limiter off; rate, burst and caps are constants in code. | `scripts/check-switch-registry` plus a source assertion in `TestJevLimiterHasNoSwitch` |
+
+### Fan-out (step 2)
+
+| Failure | Test |
+|---|---|
+| Results arrive out of order where order matters (event layer commits: an event minted in one chunk is a candidate in the next). The helper returns results indexed by input, never by arrival; the event layer asks its questions concurrently and commits strictly in chunk order. | `TestFanOutKeepsInputOrder`, `TestEventLayerCommitsInChunkOrder` |
+| Partial failure: one task errors. Every other answer is kept and returned with its own error; the caller treats an errored slot exactly as it treated a failed call before (unlabelled, unresolved, pair pending). The helper never cancels siblings on a sibling's error. | `TestFanOutPartialFailureKeepsOthers` |
+| Goroutine leak on context cancel or restart: tasks not yet started never start; the helper returns only after started tasks return, and each call is already bounded by `callJudgeWithin`'s timeout. A crash closes work and nothing resumes. | `TestFanOutCancelStartsNoMore`, `TestFanOutNoGoroutineLeak` |
+| A panic in a task kills the process: recovered into that slot's error. | `TestFanOutPanicIsAnError` |
+| Duplicate judgments on retry: a fan-out never retries a slot; the existing per-site retry (sub-call 429 backoff) is the only retry and it re-asks one batch. Verdict writes stay idempotent by their existing keys. | `TestFanOutNeverRetries` |
+| Pool size 0 or negative, more workers than tasks. | `TestFanOutBounds` |
+| Concurrency exceeds the bound. | `TestFanOutRespectsLimit` (race) |
+| The 2 s serial gate removed, a burst of settlements then 429s from the gateway. The gateway limiter now queues rather than refusing; the sub-call 429 backoff stays as the fallback. | `TestSubCallJudgeRunsConcurrently` |
+
+### Recording (step 3)
+
+| Failure | Test |
+|---|---|
+| The record write fails or is slow and holds the hot path. The recorder hands the record to a bounded channel with a non-blocking send (a full channel drops and counts the drop) and one writer goroutine appends; a call never waits on the disk. | `TestJevRecorderNeverBlocksCaller` |
+| The writer goroutine leaks at restart. It stops on `Close` and when the runtime's context ends; a crash loses the unwritten tail, which is acceptable for observation. | `TestJevRecorderCloseDrains` |
+| A failed call records nothing (front scorer today). Every call, success or failure, writes one record; failure carries the error text, clipped. | `TestJevCallRecordedOnFailure` |
+| Large questions or states make a record huge. Digest plus a 512-rune excerpt; a record is capped at 8 KiB and sheds the excerpt, then trailing answers. | `TestJevRecordBounded` |
+| File growth. Rotation at 32 MiB, 4 files kept. | `TestJevRecorderRotates` |
+| Secrets or the owner's addresses in records. The state is never stored, only a digest and the excerpt of question text the site built; the excerpt is the site's own question instructions, not the capture body. | review of `jevRecordQuestions` |
+| No-switch rule: no env flag disables recording. | `scripts/check-switch-registry` |
+
+### Where the record lives, and its volume
+
+Bytes per judgment, from the fields kept (ids, question names and options,
+a 512-rune excerpt, the top six probabilities per question, model, tokens,
+cost, latency, decision id): about 1.5 KB for the median call (2 questions),
+8 KiB hard cap.
+
+Calls per hour for the paper: 500 to 5,000.
+
+- 500 an hour: 0.75 MB an hour, 18 MB a day.
+- 5,000 an hour: 7.5 MB an hour, 180 MB a day.
+
+On the semantic tape, 180 MB a day is more than the tape's whole current
+growth, and every byte is replicated and replayed. A batched telemetry kind
+would still be tape. The gateway already keeps every successful distribution
+(212 MB in four days) outside the tape.
+
+Chosen: a guest-local append-only JSONL file `jev-calls/calls.jsonl` in the
+data directory beside the store, rotated at 32 MiB with 4 files kept (at most
+128 MiB; at 5,000 an hour about 17 hours, at 500 an hour about 7 days). This
+is observation like the source-projection fact log: not authority, not
+replayed, and a crash may lose the tail. The tape keeps what it keeps today
+(the cost lines, `model.served`, the System 1 request and answer events, the
+decision rows). The decision id in each record is the join key to those. Read
+path: none exists for similar guest-local logs; a reader and a shipper off
+the computer are follow-ups.
