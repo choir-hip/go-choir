@@ -216,7 +216,9 @@ order for one release; it does not skip safety.
 
 ## Decisions after review 2 (Devin accept, DeepSeek no blocking)
 
-- **Guards cover the open ring only (deliberate).** A ring that closed clean
+- **Guards cover the open ring only (deliberate).** *Superseded 2026-11-10:
+  see the amendment at the end (zero floors; closed rings are guarded for 15
+  minutes after they close).* A ring that closed clean
   is not sampled again in this walk: its exposure was the evidence, and the
   outer rings carry their own guards. A late regression on an inner ring is
   caught by the crash-loop bound for the computer and by the next walk; a
@@ -305,7 +307,13 @@ field and the check stay, so launch restores them with a commit (they were
   divergent or six failed wakes leave it holding until the next release or an
   expedite), and R5 holds while the paper's refresh is deferred, because a ring
   that closes stops guarding.
-- **Guards watch every opened ring.** With a floor in place a ring stayed
+- **Guards watch every opened ring, for 15 minutes after it closes.**
+  The bound is `ringClosedGuardWindow`: the walk has no timeout, and a ring
+  that waits (a deferred paper in R5, exposure in R2 or R3) would otherwise
+  keep every earlier ring under the zero-tolerance crash guard for hours, so
+  one unrelated crash on a user's computer would return the fleet. The open
+  ring is always guarded; `closed_at` is persisted, so a vmctl restart keeps
+  the window. With a floor in place a ring stayed
   open for hours, so guards covered the open ring only (decision after review
   2). With zero floors a ring closes within a tick, so that left a closed
   ring's members unwatched almost at once. The guards now run over every
