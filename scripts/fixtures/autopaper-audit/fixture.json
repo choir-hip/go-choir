@@ -1,0 +1,153 @@
+{
+ "front": {
+  "stories": [
+   {
+    "publication_id": "pub-aaaaaaaaaa0000000000000000000000",
+    "title": "Lorem harbour opens new ferry line",
+    "dek": "The board said the line opens.",
+    "updated_at": "2026-11-09T10:00:00.123456789Z",
+    "latest_revision": 2,
+    "section": "world",
+    "source_count": 2,
+    "words": 310,
+    "route": {
+     "permalink": "/pub/texture/lorem-harbour-opens-new-ferry-line-pubaaaaaaaaa/v2"
+    }
+   },
+   {
+    "publication_id": "pub-bbbbbbbbbb0000000000000000000000",
+    "title": "Un nouveau pont ouvre pour la ville",
+    "dek": "Le pont est ouvert pour les habitants.",
+    "updated_at": "2026-11-09T11:00:00Z",
+    "latest_revision": 1,
+    "source_count": 1,
+    "words": 40,
+    "route": {
+     "permalink": "/pub/texture/un-nouveau-pont-ouvre-pour-la-ville-pubbbbbbbbbb/v1"
+    }
+   }
+  ],
+  "next_cursor": ""
+ },
+ "resolve_a": {
+  "publication": {
+   "id": "pub-aaaaaaaaaa0000000000000000000000",
+   "title": "Lorem harbour opens new ferry line"
+  },
+  "version": {
+   "revision": 2,
+   "published_at": "2026-11-09T10:00:00.123456789Z"
+  },
+  "artifact": {
+   "content": "# Lorem harbour opens new ferry line\n\nThe harbour board said the ferry line opens on Monday [1] [1]. Officials said the plan is for the city and the region [2]."
+  },
+  "source_entities": [
+   {
+    "source_entity_id": "s1",
+    "entity": {
+     "source_entity_id": "s1",
+     "target": {
+      "kind": "web_url",
+      "uri": "https://www.example-one.com/2026/11/09/ferry-line"
+     },
+     "display": {
+      "title": "Harbour board opens a ferry line for the city"
+     }
+    }
+   },
+   {
+    "source_entity_id": "s2",
+    "entity": {
+     "source_entity_id": "s2",
+     "target": {
+      "kind": "web_url",
+      "uri": "https://news.example-two.co.uk/story/1"
+     },
+     "display": {
+      "title": "Ferry line to open, the board says"
+     }
+    }
+   }
+  ],
+  "payload": {
+   "manifest": {
+    "anchors": [
+     {
+      "anchor_id": "a0",
+      "source_entity_id": "s1"
+     },
+     {
+      "anchor_id": "a1",
+      "source_entity_id": "s1"
+     },
+     {
+      "anchor_id": "a2",
+      "source_entity_id": "s2"
+     }
+    ]
+   }
+  },
+  "checks": {
+   "citations": [
+    {
+     "anchor_id": "a0",
+     "judgement": "supported"
+    },
+    {
+     "anchor_id": "a1",
+     "judgement": "failed"
+    },
+    {
+     "anchor_id": "a2",
+     "judgement": "supported"
+    }
+   ]
+  }
+ },
+ "resolve_b": {
+  "publication": {
+   "id": "pub-bbbbbbbbbb0000000000000000000000",
+   "title": "Un nouveau pont ouvre pour la ville"
+  },
+  "version": {
+   "revision": 1,
+   "published_at": "2026-11-09T10:00:00.123456789Z"
+  },
+  "artifact": {
+   "content": "# Un nouveau pont ouvre pour la ville\n\nLe pont est ouvert pour les habitants de la ville et de la r\u00e9gion. Il est situ\u00e9 dans le nord et les travaux sont termin\u00e9s [1]."
+  },
+  "source_entities": [
+   {
+    "source_entity_id": "s9",
+    "entity": {
+     "source_entity_id": "s9",
+     "target": {
+      "kind": "web_url",
+      "uri": "https://example-three.fr/actu/pont-20261109"
+     },
+     "display": {
+      "title": "Le pont ouvre pour la ville et les habitants"
+     }
+    }
+   }
+  ],
+  "payload": {
+   "manifest": {
+    "anchors": [
+     {
+      "anchor_id": "a0",
+      "source_entity_id": "s9"
+     }
+    ]
+   }
+  },
+  "checks": {
+   "citations": [
+    {
+     "anchor_id": "a0",
+     "judgement": "supported"
+    }
+   ]
+  }
+ }
+}
