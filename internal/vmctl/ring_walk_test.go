@@ -48,28 +48,12 @@ import (
 //   - a vmctl restart mid-walk loses the walk or its progress;
 //   - the full walk with every member healthy takes longer than a handful of
 //     ticks (the estimate in the design doc), or no tick at all (a ring that
-//     closes in the tick that opened it with a member still off the release).
-//
-// Zero time floors (owner, 2026-11-10; rings advance on health alone before
-// launch). Failure modes, written first:
-//   - a ring with zero running members (down, held, divergent) stalls the
-//     walk, or passes the proof ring (R0) or the paper's ring (R5) unseen;
-//   - a ring below its minimum count (R1 has 1 of 3, R3 has 1 of 2) waits
-//     for members that do not exist;
-//   - a member whose refresh failed, or that the sweep deferred busy, holds
-//     its ring forever;
-//   - a member that WAS refreshed is skipped: the ring closes before it was
-//     seen healthy on the release (the whole point of the order);
-//   - a member refreshed, then crashing or wedging after the next ring
-//     opened, is no longer watched, so the release is not rolled back;
-//   - a rollback after later rings opened leaves a closed ring's computer on
-//     the bad release, or leaves a later ring unpinned;
-//   - an expedite stops working or stops guarding with zero floors;
-//   - a second release arriving mid-walk leaves pins on an unproven release;
-//   - a vmctl restart mid-walk loses the walk or its progress;
-//   - the full walk with every member healthy takes longer than a handful of
-//     ticks (the estimate in the design doc), or no tick at all (a ring that
-//     closes in the tick that opened it with a member still off the release).
+//     closes in the tick that opened it with a member still off the release);
+//   - a closed ring stays under the zero-tolerance guards for the whole walk,
+//     so one unrelated crash hours later (R5 holding on a deferred paper)
+//     returns the fleet: the guard window must end 15 minutes after the close,
+//     and must not apply to the open ring, and must survive a vmctl restart
+//     (ClosedAt is persisted in the ring state, json closed_at).
 
 var (
 	rwT0   = time.Date(2026, 11, 3, 3, 0, 0, 0, time.UTC)
@@ -1530,5 +1514,71 @@ func TestRingZeroFloorVmctlRestartMidWalk(t *testing.T) {
 	r2.stepWith(rwT0.Add(2*time.Minute), []ringMemberObs{de, slow})
 	if r2.state.Walk == nil || r2.state.Walk.Status != ringWalkComplete {
 		t.Fatalf("walk did not finish after the restart: %+v", r2.state.Walk)
+	}
+}
+
+// The closed-ring guard window: a breach in a closed ring 14 minutes after it
+// closed rolls back; 16 minutes after, it does not; the open ring is not
+// bounded; a restart keeps the close time.
+func closedRingFleet(t *testing.T) (*rwFleet, *ringMemberObs) {
+	f := newRwFleet(t)
+	f.add(ringProofComputer, ringR0, true)
+	t1 := f.add(rwTest1, ringR1, false)
+	slow := f.add(rwOther1, ringR3, false)
+	slow.Health = &ringHealth{Answered: false} // R3 stays open
+	f.tick()
+	f.tick() // R1 closed, R2 empty closed, R3 open
+	if f.s.Walk.Current != 3 {
+		t.Fatalf("setup: R3 not open: %d", f.s.Walk.Current)
+	}
+	return f, t1
+}
+
+func TestRingClosedGuardWindow(t *testing.T) {
+	for _, c := range []struct {
+		after    time.Duration
+		rollback bool
+	}{{14 * time.Minute, true}, {16 * time.Minute, false}} {
+		f, t1 := closedRingFleet(t)
+		closedAt := f.s.Walk.Rings[1].ClosedAt
+		f.now = closedAt.Add(c.after - time.Minute)
+		t1.Crashes = []CrashRecord{{At: closedAt.Add(c.after - 30*time.Second).Format(time.RFC3339Nano), Kind: "unhealthy_restart", Cause: "x"}}
+		f.tick()
+		if got := f.s.Walk.Status == ringWalkRolledBack; got != c.rollback {
+			t.Fatalf("breach %s after the close: rolled back = %v, want %v", c.after, got, c.rollback)
+		}
+	}
+}
+
+func TestRingClosedGuardWindowOpenRingUnbounded(t *testing.T) {
+	f := newRwFleet(t)
+	de := f.add(ringProofComputer, ringR0, true)
+	slow := f.add(rwTest1, ringR1, false)
+	slow.Health = &ringHealth{Answered: false}
+	f.tick() // R1 open, R0 closed
+	f.now = f.now.Add(3 * time.Hour)
+	slow.Crashes = []CrashRecord{{At: f.now.Format(time.RFC3339Nano), Kind: "unhealthy_restart", Cause: "x"}}
+	f.tick()
+	_ = de
+	if f.s.Walk.Status != ringWalkRolledBack || f.s.Walk.Rings[1].Breach == nil {
+		t.Fatalf("the open ring must be guarded however long it waits: %s", f.s.Walk.Status)
+	}
+}
+
+func TestRingClosedGuardWindowSurvivesRestart(t *testing.T) {
+	f, _ := closedRingFleet(t)
+	raw, err := json.Marshal(f.s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var back ringWalkState
+	if err := json.Unmarshal(raw, &back); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := back.Walk.Rings[1].ClosedAt, f.s.Walk.Rings[1].ClosedAt; got.IsZero() || !got.Equal(want) {
+		t.Fatalf("closed_at not persisted: %v vs %v", got, want)
+	}
+	if !ringClosedGuarded(back.Walk.Rings[1], back.Walk.Rings[1].ClosedAt.Add(14*time.Minute)) || ringClosedGuarded(back.Walk.Rings[1], back.Walk.Rings[1].ClosedAt.Add(16*time.Minute)) {
+		t.Fatalf("window wrong after a reload")
 	}
 }

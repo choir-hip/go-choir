@@ -568,11 +568,14 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 	}
 	var events []ringEvent
 	var actions []ringAction
-	// The guards watch every ring that has opened until the walk ends, not
-	// only the open one: with zero time floors a ring closes within a tick,
-	// so a member that crashes or wedges after the next ring opened is still
-	// a breach and rolls every opened ring back.
+	// The guards watch a ring that closed for ringClosedGuardWindow after it
+	// closed, not only the open one: with zero time floors a ring closes
+	// within a tick, so a member that crashes or wedges after the next ring
+	// opened is still a breach and rolls every opened ring back.
 	for _, q := range w.Rings[:min(w.Current, len(w.Rings))] {
+		if !ringClosedGuarded(q, now) {
+			continue
+		}
 		if breach := w.guardClosedRing(now, q, ringMembersOf(obs, q.Ring)); breach != nil {
 			events = append(events, w.rollback(now, q, breach, obs, &actions)...)
 			return events, actions
@@ -772,6 +775,23 @@ func (w *ringWalk) observeRing(now time.Time, p *ringProgress, members []ringMem
 		}
 	}
 	return nil
+}
+
+// ringClosedGuardWindow bounds how long a closed ring stays under the guards.
+// The walk has no timeout: a ring that waits (the paper's refresh deferred in
+// R5, exposure in R2 or R3) can leave earlier rings closed for hours, and the
+// crash guard has zero tolerance, so without a bound one unrelated crash on a
+// user's computer would return the fleet, the paper included. 15 minutes is
+// long enough for the readiness guard (5-minute delay plus 3 one-minute
+// strikes) to fire on a member refreshed just before its ring closed, and
+// short enough that the release's evidence no longer outweighs unrelated
+// crashes. The open ring is always guarded.
+const ringClosedGuardWindow = 15 * time.Minute
+
+// ringClosedGuarded reports whether a closed ring is still inside its guard
+// window (ClosedAt is persisted in the ring state, so a vmctl restart keeps it).
+func ringClosedGuarded(p *ringProgress, now time.Time) bool {
+	return p.ClosedAt.IsZero() || now.Sub(p.ClosedAt) <= ringClosedGuardWindow
 }
 
 // ringExpediteWatch: an expedited ring closes no sooner than this after the
@@ -1286,9 +1306,13 @@ func (r *ringWalkRunner) sampleTargets() (sample func(ringID) bool, to ringRelea
 	}
 	open := map[ringID]bool{}
 	if !w.Expedited {
-		// Guards watch every opened ring until the walk ends.
+		// Guards watch the open ring and the rings closed within
+		// ringClosedGuardWindow.
+		now := time.Now().UTC()
 		for _, p := range w.Rings {
-			open[p.Ring] = true
+			if ringClosedGuarded(p, now) {
+				open[p.Ring] = true
+			}
 		}
 	} else {
 		for _, p := range w.Rings {
