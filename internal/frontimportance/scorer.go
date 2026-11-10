@@ -12,6 +12,7 @@
 package frontimportance
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -28,7 +29,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/yusefmosiah/go-choir/internal/fanout"
 	"github.com/yusefmosiah/go-choir/internal/gateway"
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/jevrecord"
@@ -118,8 +118,11 @@ type config struct {
 	FrontURL   string
 	ScoresPath string
 	MaxCalls   int
-	Budget     time.Duration
-	CallTime   time.Duration
+	// RequestBytes is the packing bound for one call; zero means
+	// requestByteBound.
+	RequestBytes int
+	Budget       time.Duration
+	CallTime     time.Duration
 	// Retention is how long a score row for a story that has left the
 	// scored window is carried forward, measured from its scored_at, so a
 	// story keeps its section and importance after it leaves the newest
@@ -172,12 +175,11 @@ func Main(args []string) int {
 	return 0
 }
 
-// scorerConcurrency is how many stories are asked at once: one story a call
-// at about 110 ms, so 80 calls take about 1 s instead of 9 s.
-const scorerConcurrency = 12
-
-// decisionKey carries the id of the score a call feeds to the recorder.
+// decisionKey carries the id of the score a call feeds to the recorder;
+// questionDecisionsKey carries, for a call that packs several stories, the
+// decision each question feeds.
 type decisionKey struct{}
+type questionDecisionsKey struct{}
 
 // recordingDecider records each call of the wrapped decider.
 type recordingDecider struct {
@@ -188,7 +190,8 @@ type recordingDecider struct {
 
 func (d recordingDecider) Decide(ctx context.Context, computerID string, request gateway.JudgmentRequest) ([]byte, error) {
 	id, _ := ctx.Value(decisionKey{}).(string)
-	meta := jevrecord.Meta{Site: "front_importance", DecisionID: id, Threshold: d.threshold}
+	byQuestion, _ := ctx.Value(questionDecisionsKey{}).(map[string]string)
+	meta := jevrecord.Meta{Site: "front_importance", DecisionID: id, Threshold: d.threshold, QuestionDecisions: byQuestion}
 	raw, err := jevrecord.Observe(d.rec, meta, request.State, request.Questions, func() (json.RawMessage, error) {
 		return d.inner.Decide(ctx, computerID, request)
 	})
@@ -244,12 +247,11 @@ func (a storyAsk) questions() int {
 	return n
 }
 
-// maxQuestionsPerCall is the host door's per-call question cap
-// (System1MaxQuestions); the house list is sized so a story is one call.
-const maxQuestionsPerCall = 12
-
-// callsFor is how many calls n questions take at the per-call cap.
-func callsFor(n int) int { return (n + maxQuestionsPerCall - 1) / maxQuestionsPerCall }
+// requestByteBound is the packing target for one call: the questions of as
+// many stories as fit under it go in one request. It sits under Jev's
+// 32,000-byte long-context line (docs/design/jev-batched-questions-2026-11-10.md,
+// section 1). The host door's own cap is 1 MiB and it caps no question count.
+const requestByteBound = 30000
 
 // plan decides what a story needs given its previous row. The cache key is
 // (story version, question text hash, judge version): a row at another
@@ -298,10 +300,9 @@ func run(ctx context.Context, cfg config, client *http.Client, jev decider, now 
 	// Plan first: which stories keep their row, which are asked (and which
 	// of their questions), which wait for a later run. Stories are planned
 	// in front-list order, so the visible page is asked first and a bounded
-	// run defers the archive. Then ask the asked ones scorerConcurrency at
-	// a time; every answer lands in its story's slot.
+	// run defers the archive. Then pack them into calls, one after another;
+	// every answer lands in its story's slot.
 	var asked []storyAsk
-	calls := 0
 	for _, story := range stories {
 		id := strings.TrimSpace(story.PublicationID)
 		if id == "" {
@@ -314,34 +315,56 @@ func run(ctx context.Context, cfg config, client *http.Client, jev decider, now 
 			stats.Kept++
 			continue
 		}
-		need := callsFor(ask.questions())
-		if calls+need > cfg.MaxCalls {
-			// Out of budget: a newer revision keeps its old score until a
-			// later run rescores it.
-			if had {
-				next.Scores[id] = old
-			}
-			stats.Deferred++
-			continue
-		}
-		calls += need
 		asked = append(asked, ask)
 	}
-	results := fanout.Do(ctx, scorerConcurrency, len(asked), func(ctx context.Context, i int) (scoreRow, error) {
+	// Pack the asked stories into calls, in front-list order, and issue them
+	// one after another: Jev is never called concurrently, one call carries
+	// many questions. Batches beyond MaxCalls are deferred.
+	bound := cfg.RequestBytes
+	if bound <= 0 {
+		bound = requestByteBound
+	}
+	batches := packStories(asked, bound)
+	if len(batches) > cfg.MaxCalls {
+		for _, b := range batches[cfg.MaxCalls:] {
+			for _, i := range b {
+				id := strings.TrimSpace(asked[i].story.PublicationID)
+				if old, had := previous.Scores[id]; had {
+					// Out of budget: a newer revision keeps its old score
+					// until a later run rescores it.
+					next.Scores[id] = old
+				}
+				stats.Deferred++
+			}
+		}
+		batches = batches[:cfg.MaxCalls]
+	}
+	results := make([]storyResult, len(asked))
+	spent := map[int]bool{}
+	for _, b := range batches {
+		for _, i := range b {
+			spent[i] = true
+		}
 		if !now().Before(deadline) {
-			return scoreRow{}, errScoreDeferred
+			for _, i := range b {
+				results[i] = storyResult{err: errScoreDeferred}
+			}
+			continue
 		}
 		callCtx, cancel := context.WithTimeout(ctx, cfg.CallTime)
-		defer cancel()
-		story := asked[i].story
-		id := strings.TrimSpace(story.PublicationID)
-		callCtx = context.WithValue(callCtx, decisionKey{}, fmt.Sprintf("%s@%d", id, story.LatestRevision))
-		return askStory(callCtx, jev, asked[i], previous.Scores[id])
-	})
+		rows, errs := askBatch(callCtx, jev, asked, b, previous.Scores)
+		cancel()
+		for k, i := range b {
+			results[i] = storyResult{value: rows[k], err: errs[k]}
+		}
+	}
 	for i, ask := range asked {
+		if !spent[i] {
+			continue // deferred above with its old row
+		}
 		id := strings.TrimSpace(ask.story.PublicationID)
 		old, had := previous.Scores[id]
-		row, err := results[i].Value, results[i].Err
+		row, err := results[i].value, results[i].err
 		if err != nil {
 			if row.Revision == ask.story.LatestRevision && row.Importance >= 1 {
 				// Part of the story's questions were answered before the
@@ -638,27 +661,68 @@ type answer struct {
 	Probabilities map[string]float64 `json:"probabilities"`
 }
 
-// askStory asks Jev the questions one story needs, in calls of at most
-// maxQuestionsPerCall: the first call carries importance and promo when
-// they are needed, then as many section questions as fit. It merges the
-// answers into the story's previous row (when that row is at the same
-// revision) so cached answers stay. On a failed call it returns the row
-// built so far with the error; the caller keeps that row only when the
-// importance of the new revision is already in it.
-func askStory(ctx context.Context, jev decider, ask storyAsk, old scoreRow) (scoreRow, error) {
-	story := ask.story
-	state, err := json.Marshal(map[string]any{
-		"task": "You are the front-page editor of a general news site. Judge how important this story is for readers, and which sections of the paper it belongs in.",
-		"story": map[string]string{
-			"title": clip(story.Title, 300),
-			"dek":   clip(story.Dek, 600),
-		},
-	})
-	if err != nil {
-		return scoreRow{}, err
+// storyResult is one story's outcome from the run's calls.
+type storyResult struct {
+	value scoreRow
+	err   error
+}
+
+// packStories groups the asked stories, in order, into batches of indexes
+// whose requests each stay under bound bytes. A story larger than bound goes
+// alone; a story is never split.
+func packStories(asked []storyAsk, bound int) [][]int {
+	var batches [][]int
+	var cur []int
+	size := 0
+	for i, ask := range asked {
+		n := storyBytes(ask)
+		if len(cur) > 0 && size+n > bound {
+			batches, cur, size = append(batches, cur), nil, 0
+		}
+		cur, size = append(cur, i), size+n
 	}
-	row := scoreRow{Revision: story.LatestRevision, Criteria: scoringCriteria, Judge: sectionJudgeVersion, SectionP: map[string]float64{}}
-	if old.Revision == story.LatestRevision {
+	if len(cur) > 0 {
+		batches = append(batches, cur)
+	}
+	return batches
+}
+
+// storyBytes is the request bytes one story adds to a call: its state entry
+// and its questions, sized under a worst-case handle.
+func storyBytes(ask storyAsk) int {
+	n := 0
+	for name, q := range storyQuestions(ask, "s000") {
+		n += len(name) + len(q)
+	}
+	title, dek := clip(ask.story.Title, 300), clip(ask.story.Dek, 600)
+	return n + len(title) + len(dek) + 40
+}
+
+// storyQuestions is the questions one story needs, every name and every
+// reference to the story carrying its handle: `<handle>_importance`,
+// `<handle>_promo`, `<handle>_sec_<hash>`, about state.stories.<handle>.
+func storyQuestions(ask storyAsk, handle string) map[string]json.RawMessage {
+	questions := map[string]json.RawMessage{}
+	if ask.importance {
+		imp, promo := importanceQuestions()
+		questions[handle+"_importance"], questions[handle+"_promo"] = forHandle(imp, handle), forHandle(promo, handle)
+	}
+	for _, s := range ask.sections {
+		questions[handle+"_"+sectionQuestionName(s)] = forHandle(sectionQuestion(s), handle)
+	}
+	return questions
+}
+
+// forHandle points a question's "state.story" at its story's handle.
+func forHandle(q json.RawMessage, handle string) json.RawMessage {
+	return bytes.ReplaceAll(q, []byte("state.story"), []byte("state.stories."+handle))
+}
+
+// baseRow is the row a story's answers merge into: its previous row when at
+// the same revision (cached answers stay), else an empty one.
+func baseRow(ask storyAsk, old scoreRow) scoreRow {
+	row := scoreRow{Revision: ask.story.LatestRevision, Criteria: scoringCriteria, Judge: sectionJudgeVersion, SectionP: map[string]float64{}}
+	if old.Revision == ask.story.LatestRevision {
 		row = old
 		row.Judge = sectionJudgeVersion
 		row.SectionP = map[string]float64{}
@@ -668,38 +732,69 @@ func askStory(ctx context.Context, jev decider, ask storyAsk, old scoreRow) (sco
 			}
 		}
 	}
-	pending := append([]sectionlist.Section(nil), ask.sections...)
-	needImportance := ask.importance
-	for needImportance || len(pending) > 0 {
-		questions := map[string]json.RawMessage{}
-		room := maxQuestionsPerCall
-		if needImportance {
-			questions["importance"], questions["promo"] = importanceQuestions()
-			room -= 2
+	return row
+}
+
+// askBatch asks Jev, in one call, the questions of the stories asked[idx...],
+// handles s1, s2, ... by position. It returns each story's row and error in
+// idx order. A failed call fails exactly the stories in it; a story whose
+// answers are missing or unusable fails alone.
+func askBatch(ctx context.Context, jev decider, asked []storyAsk, idx []int, previous map[string]scoreRow) ([]scoreRow, []error) {
+	rows := make([]scoreRow, len(idx))
+	errs := make([]error, len(idx))
+	stories := map[string]map[string]string{}
+	questions := map[string]json.RawMessage{}
+	byQuestion := map[string]string{}
+	handles := make([]string, len(idx))
+	for k, i := range idx {
+		ask := asked[i]
+		id := strings.TrimSpace(ask.story.PublicationID)
+		handles[k] = fmt.Sprintf("s%d", k+1)
+		rows[k] = baseRow(ask, previous[id])
+		stories[handles[k]] = map[string]string{"title": clip(ask.story.Title, 300), "dek": clip(ask.story.Dek, 600)}
+		for name, q := range storyQuestions(ask, handles[k]) {
+			questions[name] = q
+			byQuestion[name] = fmt.Sprintf("%s@%d", id, ask.story.LatestRevision)
 		}
-		var chunk []sectionlist.Section
-		for len(pending) > 0 && room > 0 {
-			chunk = append(chunk, pending[0])
-			questions[sectionQuestionName(pending[0])] = sectionQuestion(pending[0])
-			pending, room = pending[1:], room-1
+	}
+	failAll := func(err error) ([]scoreRow, []error) {
+		for k, i := range idx {
+			rows[k], errs[k] = failedRow(rows[k], asked[i].importance), err
 		}
-		raw, err := jev.Decide(ctx, scorerComputerID, gateway.JudgmentRequest{State: state, Questions: questions})
-		if err != nil {
-			return failedRow(row, needImportance), err
-		}
-		var decision struct {
-			Answers map[string]answer `json:"answers"`
-		}
-		if err := json.Unmarshal(raw, &decision); err != nil {
-			return failedRow(row, needImportance), fmt.Errorf("decode Jev answer: %w", err)
-		}
-		if needImportance {
-			n, err := strconv.Atoi(strings.TrimSpace(decision.Answers["importance"].Choice))
+		return rows, errs
+	}
+	state, err := json.Marshal(map[string]any{
+		"task":    "You are the front-page editor of a general news site. Judge how important each story in state.stories is for readers, and which sections of the paper it belongs in. Each question names its story.",
+		"stories": stories,
+	})
+	if err != nil {
+		return failAll(err)
+	}
+	first := asked[idx[0]].story
+	ctx = context.WithValue(ctx, decisionKey{}, fmt.Sprintf("%s@%d", strings.TrimSpace(first.PublicationID), first.LatestRevision))
+	ctx = context.WithValue(ctx, questionDecisionsKey{}, byQuestion)
+	raw, err := jev.Decide(ctx, scorerComputerID, gateway.JudgmentRequest{State: state, Questions: questions})
+	if err != nil {
+		return failAll(err)
+	}
+	var decision struct {
+		Answers map[string]answer `json:"answers"`
+	}
+	if err := json.Unmarshal(raw, &decision); err != nil {
+		return failAll(fmt.Errorf("decode Jev answer: %w", err))
+	}
+	for k, i := range idx {
+		ask, h := asked[i], handles[k]
+		row := rows[k]
+		if ask.importance {
+			imp := decision.Answers[h+"_importance"]
+			n, err := strconv.Atoi(strings.TrimSpace(imp.Choice))
 			if err != nil || n < 1 || n > 10 {
-				return failedRow(row, true), fmt.Errorf("Jev importance %q is not 1..10", decision.Answers["importance"].Choice)
+				rows[k], errs[k] = failedRow(row, true), fmt.Errorf("Jev importance %q is not 1..10", imp.Choice)
+				continue
 			}
 			row.Importance, row.Criteria = n, scoringCriteria
-			switch strings.TrimSpace(decision.Answers["promo"].Choice) {
+			switch strings.TrimSpace(decision.Answers[h+"_promo"].Choice) {
 			case "yes":
 				row.Promo = true
 			case "no":
@@ -707,17 +802,17 @@ func askStory(ctx context.Context, jev decider, ask storyAsk, old scoreRow) (sco
 			default:
 				row.Promo = n <= 2
 			}
-			needImportance = false
 		}
-		for _, s := range chunk {
+		for _, s := range ask.sections {
 			// A section question that comes back unusable is left unasked;
 			// it is asked again next run and fails nothing else.
-			if p, ok := probabilityYes(decision.Answers[sectionQuestionName(s)]); ok {
+			if p, ok := probabilityYes(decision.Answers[h+"_"+sectionQuestionName(s)]); ok {
 				row.SectionP[sectionlist.Hash(s.Question)] = p
 			}
 		}
+		rows[k] = row
 	}
-	return row, nil
+	return rows, errs
 }
 
 // failedRow is the row after a failed call: a revision's importance that was

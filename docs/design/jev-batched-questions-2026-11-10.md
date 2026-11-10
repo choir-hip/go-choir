@@ -449,3 +449,59 @@ for the 32,000 byte long-context line and "slower and less accurate"; OpenRouter
 in parallel and cannot see each other's answers", and run-to-run variation.
 In-repo: `docs/evidence/jev-measurement-2026-11-10.md`,
 `docs/evidence/token-efficiency-2026-11-09/intake-and-jev.md`.
+
+## 7. Scorer packing: ways it can fail (written before the change, 2026-11-10)
+
+Owner rule (2026-11-10): "It's important that we don't call Jev concurrently,
+but ask single Jev calls many questions in parallel." The front importance
+scorer (`internal/frontimportance/scorer.go`) asked one call a story through a
+pool of 12. It now packs the questions of as many stories as fit under a
+30,000-byte request bound into one call, stories keyed by handle in `state`
+(`stories.s1`, `stories.s2`, ...), overflow as further calls one after another.
+Mutation class orange; rollback: revert.
+
+What can go wrong, and the test or fact that answers each:
+
+1. **A handle mismatch attributes one story's answers to another.** The answer
+   map is read only by exact key `<handle>_importance`, `<handle>_promo`,
+   `<handle>_sec_<hash>`, never by prefix scan (`s1` is a prefix of `s10`; the
+   underscore separator and exact lookup keep them apart). Handles are assigned
+   from the batch position at build time and the same slice maps back. Test:
+   answers returned in a different order than asked still land on the right
+   story, and 12 stories in one call (`s1`..`s12`) do not cross.
+2. **A story larger than the bound alone.** A story is title (clipped 300) and
+   dek (clipped 600) plus at most a dozen questions, about 8 KB, so it cannot
+   exceed 30 KB; if it ever did it goes alone in its own call (the bound is a
+   packing target, never a refusal). Test: bound of 1 byte gives one story a
+   call.
+3. **Duplicate question names.** Every name carries its handle prefix, so two
+   stories asking the same section cannot collide; handles are unique in a
+   call. Test: a call of several stories has as many distinct names as
+   questions.
+4. **A partial answer set from the judge.** A story whose answers are missing
+   or unusable fails only that story, with today's handling (importance
+   unusable fails the row, the old row is kept; a section answer unusable is
+   left unasked and tried next run). The other stories in the call are
+   unaffected. A failed whole call fails exactly the stories in it. Tests for
+   both.
+5. **Cache keys change and everything is re-asked.** The cache is the score row
+   (revision, criteria version, judge version, section question hash); none of
+   it involves a wire question name or the state shape, so the change re-asks
+   nothing. The existing cache tests (kept row asks nothing; edited question
+   asks only that question) must pass unchanged in meaning.
+6. **Ordering.** Stories are planned and packed in front-list order so the
+   visible page goes first and a bounded run defers the archive; batches run
+   one after another in that order. `MaxCalls` now counts packed calls; stories
+   in batches beyond it are deferred with their old rows kept, as before.
+7. **The host door's own validation.** `HandleHostJudgment` (`host_judgment.go`)
+   applies the 1 MiB body cap (`bodyRouteJudgment`, `body_caps.go:109`,
+   `jevTransportMaxBodySize` `jev.go:24`) and `validateJudgmentRequest`
+   (`jev.go:235`), which checks the state is an object, at least one question,
+   each question a named object of type noul, choice or score. It has no cap on
+   question count. The scorer's old `maxQuestionsPerCall = 12` was the scorer's
+   own constant (its comment cited `System1MaxQuestions`, which binds the System
+   1 verb, not this door); it is deleted. The real binding limit is the 32,000
+   byte long-context line (section 1), hence 30,000.
+8. **A stale deadline mid-run.** The run budget is checked before each call; a
+   spent budget defers the rest of the batches (old rows kept), as before for
+   stories.
