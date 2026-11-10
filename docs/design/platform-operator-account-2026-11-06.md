@@ -458,3 +458,58 @@ Edges from the policy landing
 - E1 a delete then a move cannot land an unvalidated policy (G `TestPolicyCannotBeLandedUnvalidatedByMoveOrAlias`).
 - E2 a write through an in-root symlink alias of the policy is validated like a PUT (G same).
 - E3 left open: a DELETE of the policy file, which falls the computer back to the platform default (the owner path only; the operator path does not reach DELETE); no serialization of two concurrent PUTs.
+
+## 9. Failure list (build) (2026-11-10, slices O4 and O5)
+
+Written before the build of the operator's schedule verbs (O4) and restart
+(O5), behind the gate of section 8. Both reuse `authorizePlatformComputerAct`
+unchanged; nothing here widens admission. Test names are the planned ones:
+proxy `internal/proxy/platform_operator_computers_test.go` (P), guest
+`internal/agentcore` source-schedule tests (G), `internal/autoputer` (A), CLI
+`cmd/choir/paper_test.go` (L).
+
+**Where the build departs from the design above.** 5.1 names one receipt
+kind per act; the build adds two event kinds on the target's tape,
+`platform.computer.schedule` and `platform.computer.restart`, beside
+`platform.computer.model_policy`, for the reason section 8 gave (a computer's
+own tape, not corpusd's receipt table). The restart does not invent a new
+actuation: it is the owner update (`vmctl.OwnerUpdateContext`, `ownerUpdate`
+in `internal/vmctl/owner_update.go`), which is already a marker-backed planned
+refresh through `trackedDeployRefresh` and which the guest refuses mid
+self-development apply, with a live capsule, or while a decision is awaited.
+CLAUDE.md "Restarts End Work (Crash) Or Resume It (Planned Update)" governs and
+the design agrees with it: an operator restart that cannot be a planned,
+marker-backed refresh is refused, never degraded into the owner's plain
+`restart` (stop then start), which is a crash-shaped restart that closes work.
+`choir paper key` (O6) is not built here.
+
+Schedules (O4)
+
+- S1 only three schedule requests are forwarded: the list (GET, no query), a start (POST, a body of source_id, interval_minutes, max_items, reason) and a stop (DELETE with only source_id and reason). A body with `feed_url` or `fixture_run` or any other field is refused at the proxy and again at the guest: adding a feed the registry does not list is the owner's own act, and a fixture schedule is test-only (P `TestOperatorScheduleForwardsOnlyTheThreeActs`, G `TestOperatorScheduleRefusesFeedURLAndFixture`).
+- S2 the proxy rebuilds the forwarded body from the parsed allowed fields, so a duplicate key or trailing bytes cannot smuggle a second reading (P same).
+- S3 the receipt is recorded on the tape before the schedule changes; a receipt that cannot be recorded refuses the start or stop and the schedule is untouched (G `TestOperatorScheduleActIsRecordedBeforeItLands`, `...NeedsItsReceipt`).
+- S4 a list grows no receipt, and an ordinary owner start or stop grows none (G `TestOperatorScheduleListAndOwnerActsGrowNoReceipt`).
+- S5 the marker is believed only from the host peer, never in-process, never with a second value; a desk's in-process schedule call cannot carry it (G `TestOperatorScheduleMarkerIsNotBelievedInProcess`).
+- S6 a guest from before this build ignores the marker and would change a schedule with no receipt; the guest says in `X-Choir-Operator-Receipts` that it records them and the proxy writes only to a guest that does (P `TestOperatorScheduleWriteRefusedOnAGuestThatDoesNotRecordReceipts`).
+- S7 the receipt names the account id, the act, the source id, the interval, the reason; never an email, and none of the out-of-vocabulary keys the store's write guard refuses (G `...NamesTheAccountNotAnEmail`; the event kind is accepted by the store: agentcore `TestPlatformOperatorScheduleReceiptEventIsAppended`).
+- S8 a stop of a source with no schedule answers 404 and records the receipt only when the stop was attempted; the receipt says what was asked, the read-back says what happened. A start with an unknown source answers 400 and the receipt exists (the intent). Not hidden: the CLI prints both (G `TestOperatorScheduleStopOfUnknownSource`).
+- S9 the crash rule: a schedule start is a standing intent, not an in-flight run; the operator's start does not poll at once and does not resume anything at boot (no new boot code; recorded here so it stays so).
+
+Restart (O5)
+
+- X1 admission is the one gate: a non-operator, a computer-bound key, an email session, a non-platform computer, an unknown computer are all refused before any vmctl call (P `TestOperatorRestartAdmissionIsTheGate`). The route takes POST only and a body of `{"reason": "..."}` that is required, at most 280 bytes, no other field (P `TestOperatorRestartNeedsAReason`).
+- X2 the actuation is `OwnerUpdateContext` only. The proxy never calls vmctl's plain stop, restart, start or `RefreshDesktopContext` for an operator (P `TestOperatorRestartIsThePlannedOwnerUpdate`, which fails the test if any other vmctl endpoint is hit).
+- X3 an outcome that is not `refreshed` restarts nothing and is returned as it came: `current` (200, nothing to do), `skipped` (held, divergent, not active, ring waits, no release), `deferred` (retry later, refresh in flight), and the guest's busy refusal for self-development apply, a live engineering capsule, a snapshot in flight or a pending decision, each with its reason code and the guest's refusal body (P `TestOperatorRestartRefusalsAreReturnedWithTheirCodes`). No retry, no force, no "restart anyway" parameter.
+- X4 the always-busy classes (critical_protected, public_platform) take the same planned, marker-backed refresh while busy and resume their work; that is vmctl's existing policy (`deployRefreshAllowsBusy`), and the operator does not choose it. Not testable at the proxy; it needs the d@e proof below.
+- X5 the receipt is recorded on the target's tape before vmctl is asked, through a guest route that believes only the operator marker from the host peer; if the receipt cannot be recorded, or the guest does not say it records receipts, nothing is restarted (P `TestOperatorRestartNeedsItsReceiptFirst`, `...RefusedOnAGuestThatDoesNotRecordReceipts`; A `TestRestartReceiptRouteBelievesOnlyTheHostMarker`). A receipt followed by a refusal reads as "asked, refused", and the answer carries the receipt id, so the two are joined by the operator, not guessed.
+- X6 a stopped or starting computer is not woken to be restarted: the receipt call uses no wake, and a computer vmctl does not report active answers `not_active` (P `TestOperatorRestartDoesNotWakeAStoppedComputer`).
+- X7 a held computer (crash-loop hold) is not cleared by the operator's restart: the owner update skips held computers and the operator path does not set the owner-start mark (P same as X2).
+- X8 the restart marker is vmctl's, written by `trackedDeployRefresh` and consumed once at the next boot; this slice adds no marker code and no boot-time resumer (no test; a diff that touched `planned_restart.go` or boot code would be a defect of this slice).
+- X9 two operator restarts at once: vmctl's one-in-flight rule defers the second with `refresh_in_flight`; the second still left a receipt, which is the truth (it was asked).
+
+CLI
+
+- L3 `choir paper schedule list|start|stop` and `choir paper restart --reason` use the operator route, are CLI-only, and are not MCP tools; `restart` without `--reason` is a usage error; `schedule start` takes `--source`, `--interval-minutes`, `--max-items`, `--reason` and no feed URL (L `TestPaperScheduleAndRestartVerbs`, `TestPaperVerbsAreNotMCPTools`).
+- L4 a non-2xx answer is printed with the server's reason code and exits non-zero, so a refused restart is never read as done (L same).
+
+Left open: a restart's outcome is not on the tape after the boot (the receipt records the ask; the next boot's own planned-restart record shows the rest); a second `restart` receipt kind with the outcome is a follow-up. d@e is the only computer these were exercised on; the paper has not been touched.
