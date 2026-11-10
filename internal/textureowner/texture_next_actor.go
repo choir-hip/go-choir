@@ -84,6 +84,16 @@ func liveEngineeringAssignment(snapshot types.LifecycleSnapshot) string {
 // nothing works on, or false when there is none or something works on it.
 // It does not look at the turn.
 func (h *Handler) unattendedTextureRequest(ctx context.Context, rec *types.RunRecord, doc types.Document) (types.WorkItemRecord, bool, error) {
+	return h.unattendedTextureRequestAt(ctx, rec, doc, false)
+}
+
+// unattendedTextureRequestAt is unattendedTextureRequest for a live desk
+// (atBoot false) or the crash boot's leg (atBoot true). An Ask or Escalate
+// the desk sent opens no round but its resolver holds the question, so it
+// serves the request in every live check (the guard, the Idle backstop and
+// the Wait leg); at a crash boot the asked desk's run was closed and its wake
+// interrupted, so it serves nothing there.
+func (h *Handler) unattendedTextureRequestAt(ctx context.Context, rec *types.RunRecord, doc types.Document, atBoot bool) (types.WorkItemRecord, bool, error) {
 	if h == nil || h.Store == nil || rec == nil || strings.TrimSpace(doc.TrajectoryID) == "" {
 		return types.WorkItemRecord{}, false, nil
 	}
@@ -109,6 +119,15 @@ func (h *Handler) unattendedTextureRequest(ctx context.Context, rec *types.RunRe
 	}
 	if textureRequestServer(snapshot, len(rounds), operationID) != "" {
 		return types.WorkItemRecord{}, false, nil
+	}
+	if !atBoot {
+		outstanding, err := h.Store.OutstandingDispatches(ctx, rec.OwnerID, doc.ComputerID, textureInbox)
+		if err != nil {
+			return types.WorkItemRecord{}, false, fmt.Errorf("read the Texture desk's outstanding asks: %w", err)
+		}
+		if len(outstanding) > 0 {
+			return types.WorkItemRecord{}, false, nil
+		}
 	}
 	return work, true, nil
 }
@@ -156,7 +175,7 @@ func (h *Handler) closeUnattendedRequest(ctx context.Context, rec *types.RunReco
 		return nil
 	}
 	cause := fmt.Sprintf("Texture's turn (run %s) ended without a Cast, a Wait naming what it waits on, or Done, and no round, engineering assignment or self-development operation is working on it; revise again to continue", strings.TrimSpace(rec.RunID))
-	return h.closeUnattendedWith(ctx, rec, docID, strings.TrimSpace(turn.BaseRevisionID), cause, nil)
+	return h.closeUnattendedWith(ctx, rec, docID, strings.TrimSpace(turn.BaseRevisionID), cause, false, nil)
 }
 
 // closeUnservedWait is the Wait leg of the same backstop. A Wait is accepted
@@ -174,7 +193,7 @@ func (h *Handler) closeUnservedWait(ctx context.Context, rec *types.RunRecord, d
 		waited = string(r[:240]) + "..."
 	}
 	cause := fmt.Sprintf("Texture's turn (run %s) waits (%q), but no round, engineering assignment, self-development operation or unread record is working on it, and nothing wakes it; revise again to continue", strings.TrimSpace(rec.RunID), waited)
-	return h.closeUnattendedWith(ctx, rec, docID, "", cause, func(ctx context.Context, doc types.Document) (bool, error) {
+	return h.closeUnattendedWith(ctx, rec, docID, "", cause, false, func(ctx context.Context, doc types.Document) (bool, error) {
 		return h.waitServedByWake(ctx, rec, doc, turn)
 	})
 }
@@ -183,7 +202,7 @@ func (h *Handler) closeUnservedWait(ctx context.Context, rec *types.RunRecord, d
 // after a committed Wait turn, beyond what unattendedTextureRequest reads: a
 // later head (the owner revised, which opened work and woke the desk), another
 // live activation of the same desk, a pending lifecycle update packet not yet
-// bound to a run, an Ask or Escalate still being worked, or an unread waking record in the desk's own inbox (the
+// bound to a run, or an unread waking record in the desk's own inbox (the
 // run-end records re-check wakes it).
 func (h *Handler) waitServedByWake(ctx context.Context, rec *types.RunRecord, doc types.Document, turn yaegikernel.TextureTurn) (bool, error) {
 	head, err := h.Store.GetLifecycleRevision(ctx, rec.OwnerID, doc.ComputerID, doc.CurrentRevisionID)
@@ -206,15 +225,6 @@ func (h *Handler) waitServedByWake(ctx context.Context, rec *types.RunRecord, do
 	}
 	agentID := strings.TrimSpace(rec.AgentID)
 	if pendingTextureUpdate(snapshot, agentID) {
-		return true, nil
-	}
-	// An Ask or Escalate opens no round, but its resolver was woken holding
-	// the question and its Reply will wake this desk.
-	outstanding, err := h.Store.OutstandingDispatches(ctx, rec.OwnerID, doc.ComputerID, agentID)
-	if err != nil {
-		return false, fmt.Errorf("read the Texture desk's outstanding asks: %w", err)
-	}
-	if len(outstanding) > 0 {
 		return true, nil
 	}
 	cursor, err := h.Store.ReaderCursor(ctx, rec.OwnerID, doc.ComputerID, agentID, agentID)
@@ -266,7 +276,7 @@ func (h *Handler) closeUnservedAtBoot(ctx context.Context, work types.WorkItemRe
 		return nil
 	}
 	rec := &types.RunRecord{RunID: "crash-boot", OwnerID: work.OwnerID, ComputerID: work.ComputerID, AgentID: agentID, ChannelID: docID, TrajectoryID: work.TrajectoryID}
-	return h.closeUnattendedWith(ctx, rec, docID, "", "Texture's run ended with a restart (interrupted by a restart), and no round, engineering assignment or self-development operation is working on it; revise again to continue",
+	return h.closeUnattendedWith(ctx, rec, docID, "", "Texture's run ended with a restart (interrupted by a restart), and no round, engineering assignment or self-development operation is working on it; revise again to continue", true,
 		// A pending update packet is input the owner's recovery still
 		// delivers after a boot, so its work is served.
 		func(ctx context.Context, doc types.Document) (bool, error) {
@@ -283,7 +293,7 @@ func (h *Handler) closeUnservedAtBoot(ctx context.Context, work types.WorkItemRe
 // when set, is the head the closing turn answered: a moved head means an
 // owner revision opened work this turn never saw. served, when set, is asked
 // last and keeps the request open when it says something will wake the desk.
-func (h *Handler) closeUnattendedWith(ctx context.Context, rec *types.RunRecord, docID, baseRevisionID, cause string, served func(context.Context, types.Document) (bool, error)) error {
+func (h *Handler) closeUnattendedWith(ctx context.Context, rec *types.RunRecord, docID, baseRevisionID, cause string, atBoot bool, served func(context.Context, types.Document) (bool, error)) error {
 	ctx = asTextureReader(ctx)
 	if h == nil || h.Store == nil || rec == nil || strings.TrimSpace(docID) == "" {
 		return nil
@@ -300,7 +310,7 @@ func (h *Handler) closeUnattendedWith(ctx context.Context, rec *types.RunRecord,
 	if base := baseRevisionID; base != "" && base != strings.TrimSpace(doc.CurrentRevisionID) {
 		return nil
 	}
-	work, unattended, err := h.unattendedTextureRequest(ctx, rec, doc)
+	work, unattended, err := h.unattendedTextureRequestAt(ctx, rec, doc, atBoot)
 	if err != nil || !unattended {
 		return err
 	}

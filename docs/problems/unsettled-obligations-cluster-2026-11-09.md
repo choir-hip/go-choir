@@ -241,3 +241,41 @@ or deleted to see this; the proof is on d@e.
 |---|---|
 | the cause line changes behaviour | the cause is computed from values the skip already holds; the tests assert a busy, held or roomless agent is still not activated: `TestWaitLineNamesTheSerialFenceAndLeavesTheDecisionAlone`, `TestWaitLineNamesARetryHoldAndAFullSlotTable` |
 | log volume | no new line: the fields ride the existing wait line, which prints once per activation whose oldest due update waited 30 s or more (not per skipped tick); the kinds are capped at four plus a count; `TestWaitLineIsQuietForAShortWaitAndCapsKinds` |
+
+### Deferrals and named residuals (reviews of the A build, 2026-11-10)
+
+Deferred, with the reason:
+
+- **Boot-leg ordering (round 1, finding 2).** The leg runs before
+  `reconcileEngineeringAssignmentCapsulesAfterRestart` and
+  `closeSelfDevelopmentOperationsAfterCrash`, so a Texture item served by a
+  pre-crash assignment or operation reads as served and is skipped; those
+  phases then end the server and the item stays open until the next crash boot
+  or its own next Wait. Moving the leg after them would close work that their
+  own reports to Texture may legitimately re-serve, and a refused item rejects
+  Texture's next turn. The safe direction stays; it is self-healing and logged.
+- **A Report lands between the unread-inbox read and the refuse (round 1,
+  finding 3).** The refuse commits while the Report's wake is armed; the desk
+  activates, finds the item refused and idles. Owner-visible and recoverable by
+  the owner's revise. Not fixed.
+
+Named residuals (not built):
+
+- **A never-answered Ask stays outstanding forever (round 2, F2).** The
+  `OutstandingDispatches` fact ends on a Reply or a retraction only. An Ask the
+  resolver read and never answered keeps the request open on a live computer
+  (a crash boot closes it). Needs a resolver-side unanswered-Ask notice or a
+  bounded window.
+- **`OutstandingDispatches` scans the desk's whole sent and received history
+  (round 2, F4).** One metadata-indexed read of each, a desk's worth, run on
+  each Wait, Idle and guard check. A head-style aggregate later, as the
+  conversation heads do for rounds.
+- **An Escalate staged after the Wait (round 2, F3).** An Escalate is a
+  standalone intent committed in staged order (`rlm_reduce.go` intent loop), not
+  folded into the turn like a Cast or Ask. If the cell stages the Wait before
+  the Escalate, the turn commits and the Wait leg runs before the Escalate is
+  in management's inbox, and the request is closed over. Escalate before the
+  Wait is served (`TestWaitAfterAStandaloneEscalateStaysOpen`). The repair is to
+  commit the Texture turn last in the intent loop; not done here.
+- **The Idle leg and the guard now count outstanding dispatches** (round 2,
+  F1): `unattendedTextureRequestAt`, with the crash boot exempt.
