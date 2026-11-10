@@ -868,3 +868,55 @@ touches proxy, gateway, nix and vmctl; build it in parallel with 2-5.
   5dc98bcf5, not re-run here. Costs in sections 3.1 and 3.2 marked [I] are
   estimates until step 1 and step 6b run.
 - Which computers have `engineering.progress_to_texture` on.
+
+## 11. Owner rulings (2026-11-09 evening)
+
+Asked one at a time. These override sections 3, 5, 7 and 9 where they
+differ; the build follows them.
+
+1. **Order (Q1): straight to shape (b).** The coding agent is the standing
+   engineering desk. Shape (a) is not built as a step. Build order section 7
+   is re-cut: the MCP server and the desk tools, then the standing desk, with
+   the bridge and the desk proved together on d@e.
+2. **Fallback (Q2): the Go-driven engineer stays, indefinitely**, on every
+   computer without a grant.
+3. **Interim updates to Texture stay (Q3), and Jev routes them.** Owner:
+   "What's supposed to happen here is that Jev the System 1 model is
+   supposed to determine whether to pass through the relay or to call
+   management. The desk language model agent. It's definitely essential
+   that we send interim updates to Texture. Texture is the supervision
+   service." So the relay is not deleted. What goes is its setting: for
+   each progress record Jev judges one of two outcomes, pass it through to
+   Texture, or wake the management desk's model. No switch selects the
+   behaviour. Section 5 and step 9's deletion of the relay are withdrawn;
+   the judgment, its prompt, its cost record and its failure mode (Jev
+   unavailable: pass through and record that no judgment ran) are to be
+   designed in the build's failure list.
+4. **Completion (Q4): the checks are management's, and Jev decides whether
+   they are enough.** The acceptance commands come from the assignment, not
+   from the agent. Owner: "I don't think it helps to just run the commands
+   that the coding agent tells you to run. I think it makes more sense to
+   have Jev get 50K tokens or whatever of code into its context and then it
+   can answer: should we just run the commands, or should we escalate to the
+   management desk language model agent?" So `desk_complete` does two
+   things: the runtime runs the assignment's checks itself in the capsule
+   (section 3.5 item 4 stands; the agent cannot report its own pass), and
+   Jev reads the change (about 50,000 tokens of the diff and its context)
+   and answers "the checks suffice" or "escalate to management". A pass
+   needs both. The later gates are unchanged: management verifies the
+   bundle, the shots are judged, the owner approves the apply.
+5. **Billing (Q6): the owner's Claude login**, not a Console key. SEC-08
+   stays the named residual.
+6. **Limits (Q9): no spending cap; track only.** Progress reports are not
+   rate-limited by the clock. Owner: "more progress reports are better ...
+   the frequency of progress reports can scale with the duration of work,
+   but they really shouldn't be done on clock time, but on semantic
+   progression." The desk tool's guidance asks for a report at each real
+   step (a finding, a decision, a file set done, a check passing or
+   failing); Jev's routing in ruling 3 is what keeps management from being
+   woken by each one.
+7. **Not asked; the recommendations stand until ruled otherwise:** Q5 (the
+   author of a delegate-origin record is the engineering inbox, with
+   acting-worker provenance and an untrusted label), Q7 (probe the pinned
+   Claude Code before bumping it), Q8 (wake by tool-result suffix first),
+   Q10 (engineering only).
