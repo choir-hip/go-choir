@@ -230,9 +230,10 @@ otherwise follows it.
      chunks. Lane P builds a native player with one seekable timeline.
    - The voice stack needs iOS 18 or later. The target stays iOS 27.
    - Most models download after install. Onboarding says so.
-5. **Mike's licence.** The repo is AGPL-3.0. The handoff says "relicensed".
-   The owner confirms ownership of the speech plugin before lane V copies it.
-   Until then lane V works from Exact's speech packages.
+5. **Mike's licence.** The repo is AGPL-3.0, but the speech plugin is the
+   owner's own code (owner, 2026-11-10: "Mike speech code is mine"). Lane V
+   ports it. The third-party models it loads keep their own licences, which
+   lane V lists.
 
 ## Order of work
 
@@ -282,7 +283,6 @@ Each runs on its default until answered.
 
 | Question | Default |
 | --- | --- |
-| Is Mike's speech plugin yours to relicense? | lane V uses Exact's speech packages until you say yes |
 | Open mic or push-to-talk | push-to-talk |
 | Is subscription (lane M) in pass 1? | no; it needs the paid account |
 | A branch build on d@e before main | built alongside wave 1, for the server lanes |
