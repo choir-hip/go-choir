@@ -681,15 +681,7 @@ func (h *Handler) HandleSourceAPI(w http.ResponseWriter, r *http.Request) {
 		writeAuthFailure(w, err)
 		return
 	}
-	if h.rateLimiter != nil {
-		bucketKey := rateLimitBucketKey(computerID, "source_api")
-		if !h.rateLimiter.Record(bucketKey) {
-			_, _, resetIn := h.rateLimiter.Status(bucketKey)
-			w.Header().Set("Retry-After", strconv.Itoa(max(1, int(resetIn.Seconds()))))
-			writeGatewayJSON(w, http.StatusTooManyRequests, ErrorResponse{Error: "rate limit exceeded for autoputer " + computerID})
-			return
-		}
-	}
+	h.calls.Call(computerID, "source_api")
 	var req SourceAPIRequest
 	if err := h.decodeBody(w, r, bodyRouteSourceAPI, computerID, &req, true); err != nil {
 		if status, ok := bodyRefusal(w, err); ok {

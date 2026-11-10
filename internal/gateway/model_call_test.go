@@ -78,34 +78,3 @@ func inferAs(h *Handler, raw string, stream bool) *httptest.ResponseRecorder {
 	h.HandleInference(w, req)
 	return w
 }
-
-func TestFixedWindowLimiterRejectsTheSecondModelCall(t *testing.T) {
-	gp := &gateProvider{name: "bedrock", gate: make(chan struct{})}
-	close(gp.gate)
-	h, reg := modelCallHandler(t, gp, NewPerAutoputerRateLimiter(1, time.Minute))
-	a, _ := reg.IssueCredential("computer-a")
-	if w := inferAs(h, a.RawToken, false); w.Code != http.StatusOK {
-		t.Fatalf("first call: %d", w.Code)
-	}
-	if w := inferAs(h, a.RawToken, false); w.Code != http.StatusTooManyRequests {
-		t.Fatalf("the fixed window must reject the second call: %d", w.Code)
-	}
-}
-
-func TestFixedWindowLimiterCoversSearch(t *testing.T) {
-	gp := &gateProvider{name: "bedrock", gate: make(chan struct{})}
-	close(gp.gate)
-	h, reg := modelCallHandler(t, gp, NewPerAutoputerRateLimiter(1, time.Minute))
-	a, _ := reg.IssueCredential("computer-a")
-	search := func() int {
-		req := httptest.NewRequest(http.MethodPost, "/provider/v1/search", strings.NewReader(`{}`))
-		req.Header.Set("Authorization", "Bearer "+a.RawToken)
-		w := httptest.NewRecorder()
-		h.HandleSearch(w, req)
-		return w.Code
-	}
-	_ = search()
-	if code := search(); code != http.StatusTooManyRequests {
-		t.Fatalf("search lost its rate bucket: %d", code)
-	}
-}
