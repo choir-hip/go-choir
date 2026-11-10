@@ -37,6 +37,10 @@ type sourceOnlyLayout struct {
 	// was shot after the first source edit.
 	shots     map[string]time.Duration
 	sourceRef string
+	// baseDirs are platform-relative directories that exist on the pinned
+	// base (the source lower root), so adding to one is a change to an
+	// existing surface that needs a before and after pair.
+	baseDirs []string
 }
 
 func stageSourceOnly(t *testing.T, l sourceOnlyLayout) (*StagedRelease, error) {
@@ -82,6 +86,11 @@ func stageSourceOnly(t *testing.T, l sourceOnlyLayout) (*StagedRelease, error) {
 	}
 	if l.plan != "" {
 		write("var/lib/artifact/shot-plan.json", l.plan, 0o644)
+	}
+	for _, dir := range l.baseDirs {
+		if err := os.MkdirAll(filepath.Join(filepath.Dir(merged), "source-lower", platformSourcePrefix, dir), 0o700); err != nil {
+			t.Fatal(err)
+		}
 	}
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -197,23 +206,32 @@ func TestStageGrantedReleaseRefusesAPlanOnAPackageCandidate(t *testing.T) {
 	}
 }
 
-// The late-before rule judges screens the capsule shot; a plan bundle's
-// before shots come from the running build on the platform, so the rule is
-// not applied to a plan bundle (design 3.3, Freeze rule). Without a plan
-// the same late before shot is still refused.
-func TestStageGrantedReleaseSkipsLateBeforeShotsForAPlanBundle(t *testing.T) {
+// The late-before rule judges screens the capsule shot, and only where the
+// diff needs a before and after pair (needsBeforeAfterPair): a late before
+// shot on a change to an existing surface is refused; the same shots on a
+// diff that needs no pair (a new Go file, a new package) are not. A plan
+// bundle's before shots come from the running build on the platform, so the
+// rule is never applied to one (design 3.3, Freeze rule); the plan arm is the
+// `!planned` term in stageScreens, which a package candidate cannot exercise
+// here (a plan on a package candidate is refused).
+func TestStageGrantedReleaseJudgesLateBeforeShotsOnlyWhereAPairIsRequired(t *testing.T) {
 	pinned := "capsule-source-git:" + strings.Repeat("a", 40) + ":sha256:" + strings.Repeat("d", 64)
+	existing := map[string]string{"frontend/src/packages/notes/Extra.svelte": "<p>x</p>\n"}
+	baseDirs := []string{"frontend/src/packages/notes"}
+	newPackage := map[string]string{"frontend/src/packages/fresh/App.svelte": "<p>x</p>\n"}
 	goChange := map[string]string{"internal/agentcore/x.go": "package agentcore\n"}
 	shots := map[string]time.Duration{"01-before-home.png": -2 * time.Hour, "01-after-home.png": -time.Minute}
 	late := map[string]time.Duration{"01-before-home.png": -30 * time.Minute, "01-after-home.png": -time.Minute}
-	if _, err := stageSourceOnly(t, sourceOnlyLayout{source: goChange, shots: shots, sourceRef: pinned}); err != nil {
+	if _, err := stageSourceOnly(t, sourceOnlyLayout{source: existing, baseDirs: baseDirs, shots: shots, sourceRef: pinned}); err != nil {
 		t.Fatalf("control: a timely before shot was refused: %v", err)
 	}
-	_, err := stageSourceOnly(t, sourceOnlyLayout{source: goChange, shots: late, sourceRef: pinned})
+	_, err := stageSourceOnly(t, sourceOnlyLayout{source: existing, baseDirs: baseDirs, shots: late, sourceRef: pinned})
 	if err == nil || !strings.Contains(err.Error(), BeforeAfterRequiredReason) {
-		t.Fatalf("without a plan a late before shot = %v, want before_after_required", err)
+		t.Fatalf("an add to an existing package with a late before shot = %v, want before_after_required", err)
 	}
-	if _, err := stageSourceOnly(t, sourceOnlyLayout{source: goChange, shots: late, plan: soPlan, sourceRef: pinned}); err != nil {
-		t.Fatalf("a plan bundle must not be refused for a late before shot: %v", err)
+	for name, source := range map[string]map[string]string{"a new package": newPackage, "a new Go file": goChange} {
+		if _, err := stageSourceOnly(t, sourceOnlyLayout{source: source, shots: late, sourceRef: pinned}); err != nil {
+			t.Errorf("%s needs no pair, so a late before shot must not refuse it: %v", name, err)
+		}
 	}
 }
