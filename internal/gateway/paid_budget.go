@@ -61,7 +61,9 @@ const (
 
 	// defaultBedrockDailyUSD: about $200 of credits that must last through
 	// Thursday and keep the paper running through the owner's meetings.
-	defaultBedrockDailyUSD = 20.0
+	// Owner, 2026-11-10: "we can increase our haiku limit to $40/day", while
+	// the Devin free allowance runs out minutes into each hour.
+	defaultBedrockDailyUSD = 40.0
 	// defaultRiverDailyUSD: owner 2026-11-10: "$1/day cap can be lifted. Yes,
 	// this would use river and synthetic faster than ideal, but it's only for
 	// swe-2-flash's downtime." The orchestrator's conservative reading is $10
