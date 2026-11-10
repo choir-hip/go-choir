@@ -2,6 +2,8 @@ package frontimportance
 
 import (
 	"context"
+	"os"
+	"strings"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -48,5 +50,35 @@ func TestScorerAsksStoriesConcurrently(t *testing.T) {
 	}
 	if peak := jev.peak.Load(); peak < 4 || peak > scorerConcurrency {
 		t.Fatalf("peak concurrency = %d, want 4..%d", peak, scorerConcurrency)
+	}
+}
+
+// Failure mode: a failed call at the scorer left no record, so a calibration
+// read saw only the calls that worked. Every call is recorded, with the
+// score it fed, beside the scores file.
+func TestScorerRecordsEveryCallFailuresIncluded(t *testing.T) {
+	stories := []frontStory{
+		{PublicationID: "pub-ok", Title: "Fine", LatestRevision: 3},
+		{PublicationID: "pub-bad", Title: "Bad", LatestRevision: 1},
+	}
+	srv := frontServer(t, http.StatusOK, stories)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "scores.json")
+	jev := &fakeJev{answers: map[string]string{"Fine": "7", "Bad": ""}}
+	if _, err := run(context.Background(), testConfig(srv.URL, path), http.DefaultClient, jev, time.Now); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "jev-calls.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	if got := strings.Count(text, "\n"); got != 2 {
+		t.Fatalf("records = %d, want 2:\n%s", got, text)
+	}
+	for _, want := range []string{`"decision_id":"pub-ok@3"`, `"decision_id":"pub-bad@1"`, `"ok":false`, `"ok":true`, `"site":"front_importance"`} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("records lack %s:\n%s", want, text)
+		}
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/yusefmosiah/go-choir/internal/fanout"
+	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"log"
 	"strconv"
 	"strings"
@@ -489,7 +490,7 @@ func (rt *Runtime) askDeskCastBatch(ctx context.Context, items []deskItem) deskC
 	if err != nil {
 		return deskCastAsk{failure: err.Error()}
 	}
-	raw, err := rt.callSubCallJudge(ctx, state, rawQuestions)
+	raw, err := rt.callSubCallJudge(ctx, jevrecord.Meta{Site: "desk_cast_judge", DecisionID: items[0].cast.RecordID}, state, rawQuestions)
 	if err != nil {
 		return deskCastAsk{failure: system1Message(err)}
 	}

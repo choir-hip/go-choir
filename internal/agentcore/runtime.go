@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"log"
 	"net/http"
 	"os"
@@ -305,6 +306,8 @@ type Runtime struct {
 	subCallCtx          context.Context
 	subCallCancel       context.CancelFunc
 	subCallGate         chan struct{}
+	jevRecOnce          sync.Once
+	jevRec              *jevrecord.Recorder
 
 	// dispatchActor is the function hook that the actor runtime adapter
 	// sets. When the business logic needs to start a run or wake an agent,
@@ -1396,6 +1399,7 @@ func (rt *Runtime) Stop() {
 	// The sub-call settler ends before the store can: its context is
 	// cancelled and Stop waits for it, bounded.
 	rt.stopSubCallJudge()
+	rt.jevRecorder().Close()
 	rt.runningMu.Lock()
 	for runID, cancel := range rt.running {
 		cancel()
