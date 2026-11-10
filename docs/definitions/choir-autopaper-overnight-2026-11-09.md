@@ -235,6 +235,16 @@ improvement goal:
 - into Q: the language field fix (`rss.go` still stamps the source's first
   language on every item), the two failing feeds (venturebeat, cisa), and the
   S1 report's fix list;
+- into A: **Jev parallelism applies to every Jev call site, not only the
+  section questions** (owner, 2026-11-09 evening: "the Jev parallelism
+  should apply for every time we're calling Jev. We should be making many
+  calls at once. And I think it's probably the more we call Jev, the better,
+  because that's going to be a key part of our learning loop that we're
+  going to be calibrating how to call it better and how to calibrate our
+  thresholds for how to use it"). Wave 0's measurement lists every call
+  site; lane A makes each one issue its questions concurrently within the
+  measured limits, and every Jev call records its question, answer, model,
+  cost and latency on the tape so thresholds can be calibrated from it.
 - into A: search demand. Find which research step issues the paper's
   searches, dedupe and cache them, and give the one live provider a daily
   budget so the month's allowance lasts

@@ -19,3 +19,10 @@ Append-only. One terse entry per pass.
   thread is widening the set; that thread lands X1 and X2 and records the
   result here. A new thread running this goal does not start X1 or X2; it
   reads this ledger for their state.
+- 2026-11-10T02:05Z owner. The mission runs in the previous thread, which
+  continues as its orchestrator (owner: "I was thinking we could just
+  continue from this thread"). Jev parallelism widened to every Jev call
+  site, with every call recorded for calibration. Management between
+  engineering and Texture is a hypothesis to be tested from the routing
+  record. Paper at 01:57Z: 69% swe-2-flash, 31% Haiku, about 1,350 calls an
+  hour, Bedrock $0.60 an hour (projected $14 of $20), Devin no errors.

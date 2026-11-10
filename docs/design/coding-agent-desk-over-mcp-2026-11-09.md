@@ -920,3 +920,14 @@ differ; the build follows them.
    acting-worker provenance and an untrusted label), Q7 (probe the pinned
    Claude Code before bumping it), Q8 (wake by tool-result suffix first),
    Q10 (engineering only).
+8. **Management between engineering and Texture is a hypothesis, held
+   loosely.** Owner, later the same evening: "the reason why management may
+   sometimes be between engineering and texture, the idea that I had is that
+   sometimes engineering could be too technical, and we don't want texture
+   to be in too technical of a register. But this is a hypothesis. We may
+   want to just get rid of that intermediary eventually." So ruling 3's
+   routing is built so the intermediary can be removed: Jev's two outcomes
+   are data on the tape (which updates went straight through, which went by
+   management, and what management changed), and that record is what decides
+   later whether management stays in the path.
+
