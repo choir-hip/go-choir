@@ -370,3 +370,221 @@ Audit numbers to move, and the run that shows it: stories with a failed
 check 19% (24 h); duplicate groups 8; mean latest revision 4.4 and the share
 of steps preceded by a failed version (50% in the sample). Rerun
 `scripts/autopaper_source_audit.py` six hours after the deploy.
+
+## Build: decisions and failure list (2026-11-10)
+
+Mutation classes: item 1 red (support verdicts, a store failure record),
+items 2, 3 and 4 orange. Built on lane A's Jev branch (`lane-a-jev`), whose
+concurrency (`internal/fanout`, `judgeCall`, the Jev record) is used and not
+touched. Rollback for each: revert its commit. Fixes B and D3 are designed
+below and not built.
+
+### 1. Side-by-side cites are judged together (fix A)
+
+Decisions.
+- `texturewrite.Checks` groups the cites that close one span (the same
+  `citingSpans` rule, now with a group number). A pair whose group holds
+  more than one distinct quote carries `CitationPair.Group` (every quote of
+  the group, its own included). Its `BlockHash` is then
+  `texturewrite.GroupHash(span, group)`, so `Key` (derived from `BlockHash`
+  by the store's `validSupportPair`) names the span and the whole group: a
+  group with a cite added, dropped or swapped is a new question, an unchanged
+  group stays memoized, and a lone cite keeps its old span key and its old
+  memo.
+- The same quote cited twice side by side is one piece of evidence and one
+  pair (the audit's "[1] [1]" costs one question, not two).
+- A group is chunked at 6 quotes (`maxGroupCites`), in order; each chunk is
+  its own group.
+- The support judge asks one question per group: the sentence and the
+  group's passages as `cited_passages` (source, quote, passage), with the
+  instruction that the passages between them must state or entail the
+  sentence, that an irrelevant passage does not count against it and that no
+  single passage has to carry every part. One Jev call per revision as
+  before; fewer questions (about 8,150 a day instead of 8,750 at the 24 h
+  window's rate). The passages of one question share 12,000 runes
+  (`supportGroupEvidenceRunes`), each cut to a window around its quote when
+  longer; a lone cite's passage is unbounded as before.
+- Records. Every member pair of a group gets its own verdict memo, so the
+  platform overlay, which reads per pair and per anchor, needs no change. The
+  verdict records `GroupSize` (the number of quotes judged together; absent
+  for a lone pair), so a "supported" with `group_size: 3` is
+  supported-as-group, and an "unsupported" says in `why` that the N passages
+  together do not support the sentence. The send-back is one failure per
+  group (store `planSupportVerdicts` keeps the first failing member of a
+  group), and the Texture frame renders it as the span followed by "cites
+  together" and every quote of the group, with the header telling the writer
+  that cites listed together are judged together.
+
+Failure list and tests (`internal/texturewrite/group_checks_test.go`,
+`internal/agentcore/support_group_test.go`).
+- G1 a group of 2, 3, 4 or 5 cites is not one group on every member
+  (`TestChecksGroupSideBySideCites`) or costs more than one question
+  (`TestGroupedCitesAreOneQuestionAndTakeTheGroupsVerdict`: one call, one
+  question).
+- G2 a lone cite gets a group, or loses its old key
+  (`TestChecksLoneCiteStaysSpanKeyedAndSeparatedCitesAreNotGrouped`).
+- G3 cites separated by words are grouped (same test).
+- G4 the same quote twice counts twice
+  (`TestChecksTheSameQuoteTwiceSideBySideIsOnePair`); a group's verdict is
+  not on every member or does not say it was a group's.
+- G5 a changed group keeps its old keys; G6 an edit to another sentence
+  re-keys an unchanged group
+  (`TestChecksGroupKeyChangesWithTheGroupNotWithOtherSentences`).
+- G7 more than six cites in one question
+  (`TestChecksLargeGroupsAreChunked`); a lone pair beside a group is lost or
+  judged as a group (`TestLonePairBesideAGroupIsStillItsOwnQuestion`).
+- GJ2 one cite carries the claim and the irrelevant ones fail it (the
+  "good" plus "other" case); GJ3 none supports it and the group passes (the
+  "a, b" and four-cite cases).
+- GJ5 a group with one unreadable or changed member is judged on partial
+  evidence (`TestAGroupWithAnUnreadableMemberStaysPending`: it stays pending).
+- GJ6 a failed group sends the writer one failure per cite
+  (`TestAFailedGroupSendsTheWriterOneFailureNamingTheSpan`).
+- GJ8 the evidence of a heavily cited span is unbounded
+  (`TestAGroupsEvidenceIsBounded`, `TestBoundPassageKeepsTheQuote`).
+- Not covered by a test, stated: a judge that says "yes" to a group a careful
+  reader would split (a group lets a weak cite ride on a strong one; that is
+  the rule, and the single-cite floor of 1.6% is the number to watch after the
+  deploy); pairs listed before this change keep their keys and are judged
+  alone.
+
+### 2. A Write that changes nothing is refused (churn)
+
+Decision. `commitTextureWrite` already refused a Write whose body bytes
+equalled the head's; the audit's identical-text steps got past it because the
+bytes differ (ids, offsets, spacing) while the text and cites do not. The
+refusal now compares what a reader sees: the projected text with whitespace
+collapsed, every citation's check (outcome and pair key, so a cite moved,
+added, dropped or re-quoted is a change), and the embedded assets. It lives in
+the desk-write commit function only (`writeChangesNothing`); a merge request
+revision that carries the head forward with new parent links, an owner edit
+and every other commit path do not pass through it. The refusal names its
+reason ("the Write changes nothing (its text and citations equal the head's);
+use choir.Wait or choir.Done"), commits no revision, publishes nothing and
+spends no judge call. The loop bound is the turn budget, as the problem doc
+said.
+
+Failure list and test (`internal/textureowner/noop_write_test.go`).
+- N1 the same text with different bytes (a repeated Write, extra spaces, a
+  trailing newline) commits. N2 a Write that changes only a cite is refused
+  (it commits). N3 a real text change is refused (it commits). N4 the refusal
+  does not name its reason. N5 a refused Write leaves a revision behind.
+- Residual: a text projection that renumbers citation markers differs from
+  its base even when nothing else changed; that Write commits (the safe side).
+
+### 3. Corroborated events may enter the overlap slots (fix D1)
+
+Decision. `eventShortlist` keeps its 30 recent and 10 uncorroborated overlap
+slots, and adds a budget of 10 overlap slots for corroborated events within
+the 72 hour recency horizon (a corroborated event past 72 hours is not
+offered: a later development is a new linked event by definition). Zero extra
+calls; at most 10 more candidates, inside the existing byte bound, which drops
+the last candidates first. The 0.92 join threshold is unchanged.
+
+Failure list and test (`TestEventShortlistOffersCorroboratedEventsByOverlap`).
+- E1 a corroborated event past the recency slots is not offered. E2
+  corroborated events crowd out the uncorroborated overlap budget. E3 a
+  corroborated event past the horizon is offered. E4 the extra budget is
+  unbounded.
+- Not built: carrying the event's story link into the feed decision (the
+  arrival record already names the event). A topic merge at the marginal join
+  is the history in `event-layer-false-merges-at-marginal-p-2026-10-16.md`;
+  the threshold stays.
+
+### 4. Candidate windows are time, not counts (fix D2)
+
+Decisions.
+- Intake shortlist: the stories updated in the last 8 hours (the pairs
+  opened 40 minutes to 6.5 hours after their first), then up to 10 older ones
+  by title overlap as before; a ceiling of 480 stories backstops the window
+  (six chunks). The list is asked in chunks of 80 stories
+  (`intakeChunkCandidates`), one call per chunk, concurrently through
+  `fanout.Do`, with the whole poll's calls bounded by
+  `intakeLabelConcurrency`. A chunk entry is a headline and a time (a lede on
+  the newest 30 only), about 12 KB per call, under the 24 KB a Jev call is
+  kept to. Aliases are numbered across chunks; the capture's new siblings ride
+  the first chunk. Merging: a story answer beats a sibling beats "new"; among
+  stories the highest p; "new" only if every chunk said new, at the lowest p;
+  the topic is the highest-p story over chunks; usage is summed. A chunk that
+  fails leaves the capture unlabelled (labelling "new" on part of the window
+  would be the wrong answer).
+- Management's story read: the page handed to a management task is the
+  stories updated in the last 8 hours, never fewer than the newest 50, at most
+  200 (`storiesEgressWithin`, `storiesWindow`); when it exceeds the section
+  bound the task gets the newest 50 as before. `choir.Stories(limit, before)`
+  with an explicit limit is unchanged.
+- Cost. Questions per capture, event plus topic per call: before, 2 questions
+  in 1 call over at most 40 candidates (30 newest, about 55 minutes at 33
+  updates an hour, and 10); after, at the audit's 31 stories an hour, about
+  250 stories in the window plus 10, so 4 calls and 8 questions over about 260
+  candidates (6 calls, 12 questions at the ceiling). The Jev question limit
+  measured in `docs/evidence/jev-measurement-2026-11-10.md` is not reached (2
+  questions a call); what grows is calls and input tokens, about 4x. A poll of
+  20 captures goes from 20 calls to about 80 against the 12 at once bound and
+  the 15 s poll budget: a poll may leave its slowest captures unlabelled where
+  it labelled them before. Unmeasured: Jev recall at 80 choices a question
+  (73% at 40 today) and call latency at that size.
+
+Failure list and tests (`TestIntakeShortlistTakesTheWindowThenTenByTitleOverlap`,
+`TestIntakeLabelsAskALongWindowInChunksAndKeepEveryCandidate`,
+`TestStoriesWindowPageHoldsEveryStoryOfTheWindow`).
+- C1 the list is cut to one call's worth. C2 aliases collide across chunks.
+  C3 chunks asked one after another, or past the concurrency bound. C4 a
+  failed chunk gives "new". C5 a story in a later chunk loses to the other
+  chunks' "new".
+- W1 the window page is shorter than the page it replaces. W2 a busy window
+  shows only 50. W3 the window is unbounded (200). W4 a limit read changes.
+- Residual: a poll over the 15 s budget; recall at 80 choices. Lane A's Jev
+  record measures both after the deploy.
+
+### 5. Designed, not built
+
+**B. Hold a version whose own verdicts failed.** Built after
+`internal/agentcore/story_publish_quality.go` lands (another builder is
+editing it); it touches that file and `internal/agentcore/story_publish.go`
+(`AutoPublishRevision`'s enqueued job).
+- Where: the publish job already runs off the commit. Before it publishes
+  revision R it waits up to 45 s for R's judge job (a per-revision done
+  channel kept by the judging state, closed when `judgePendingSupport`
+  returns for R's pairs), then reads R's verdicts (`SupportVerdict` for each
+  pair of R). The judge wins the race by 4 to 25 s in the cases read, so the
+  wait is normally short.
+- Rule: if any of R's own pairs has an unsupported verdict, the job does not
+  publish R; the older public version stays up; the send-back already minted
+  by `store/support.go` produces the next revision. Pending (no verdict by 45
+  s) publishes as today. A memoized failed verdict counts (it is a real
+  failure of this text).
+- Bound (a guard, not a wall): a hold for failed support applies at most
+  twice in a row per story. The third consecutive revision with failed
+  verdicts publishes, and the exhausted hold is a visible record (a
+  commitment record on the story's trajectory, "support hold exhausted after
+  two holds; published with N failed checks", its refs naming the two held
+  revisions), counted in the next audit. The counter is derived from the tape
+  (the story's last revisions and their verdicts), not memory, so a restart
+  neither loses nor resumes it; no resumer, no switch.
+- Failure list: the judge job times out or has no slot (publish after 45 s);
+  the writer never clears (the third round publishes); a crash between commit
+  and publish (a gap, as today); a story about an absence (its sentences fail
+  by design; the hold exhausts after two rounds); a held revision superseded
+  before the hold ends (the newer one is judged on its own); reader-visible
+  updates delayed by the send-back time (median 5 minutes).
+
+**D3. Platform publish-time backstop.** Designed in D3 above, unchanged, and
+built after D1 and D2 show their effect in the audit: a first version
+compared with the 48 hour published set (shared cited URL, or title-word
+similarity of 0.5 with a shared named entity or number), one refusal per
+story (then publish), a lock per 48 hour title bucket for concurrent firsts.
+It touches the platform publication path and the computer's handling of a
+refusal (`story_publish.go:440-452`); neither is touched by this build.
+
+### Audit numbers expected to move
+
+- Failed-check share of checks 3.5% (24 h) toward 1.5% to 2% (the
+  single-cite floor, 122 of 8,751, is 1.4%, plus group failures); stories
+  with a failed check 19% toward 11%; judge questions down about 7%.
+- Share of revision steps that republish identical text, 8% toward 0, and
+  fewer send-back rounds (50% of steps) as fewer cites fail.
+- Duplicate groups 8 per 24 h toward 3 or fewer, from D1 and D2 together; D3
+  would take the rest.
+- Cost: intake label calls per capture about 4x (see item 4); the support
+  judge makes the same one call per revision with fewer questions.
