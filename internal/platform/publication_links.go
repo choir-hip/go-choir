@@ -32,6 +32,11 @@ var (
 // maxPublishParents bounds the parents one version names.
 const maxPublishParents = 8
 
+// noticesPerPublisherPerDay caps the new notices one publisher causes in 24
+// hours (contract 8.1 D11). A notice is one per (child publication, parent
+// publication): a later version of the child updates it and does not count.
+const noticesPerPublisherPerDay = 20
+
 // PublishParentRef names a published version and pins it by manifest hash.
 type PublishParentRef struct {
 	PublicationVersionID string `json:"publication_version_id"`
@@ -140,6 +145,13 @@ func (s *Service) verifyPublishLinks(ctx context.Context, og *ObjectGraphStore, 
 		if err != nil {
 			return nil, nil, err
 		}
+		// A story's owner never cites an op-ed its own gate rejected.
+		if link.PublishMode == PublishModeOpinion {
+			if st, serr := s.opedStateLocked(ctx, og, link.OwnerID, link.PublicationVersionID); serr == nil &&
+				st.StoryOwnerID == req.OwnerID && strings.HasPrefix(st.Verdict, "rejected_") {
+				return nil, nil, fmt.Errorf("%w: the gate rejected op-ed %s, so it cannot be cited as a source", ErrInvalidParent, link.PublicationVersionID)
+			}
+		}
 		parents = append(parents, link)
 	}
 	// An opinion piece that was forked from a story answers it: with no
@@ -162,9 +174,12 @@ func (s *Service) verifyPublishLinks(ctx context.Context, og *ObjectGraphStore, 
 // recipient's tape will hold, plus the references a feed item needs. It has
 // no field for content: a recipient reads a child through its public route.
 type changelogNoticeObject struct {
-	Notice     types.CommitmentChangelog `json:"notice"`
-	Child      noticeChildRef            `json:"child"`
-	RespondsTo *versionLink              `json:"responds_to,omitempty"`
+	// PublisherOwnerID is who caused the notice, for the daily cap. Internal;
+	// the feeds do not show it.
+	PublisherOwnerID string                    `json:"publisher_owner_id,omitempty"`
+	Notice           types.CommitmentChangelog `json:"notice"`
+	Child            noticeChildRef            `json:"child"`
+	RespondsTo       *versionLink              `json:"responds_to,omitempty"`
 }
 
 type noticeChildRef struct {
@@ -236,7 +251,9 @@ func publishNotices(req PublishTextureRequest, mode, authorLabel, versionID, rou
 		}
 		relation := noticeRelation(mode, respondsTo, parent)
 		body := types.CommitmentChangelog{
-			EventID:    types.ChangelogEventID(types.ChangelogParentUsed, parent.OwnerID, versionID, parent.PublicationVersionID),
+			// Keyed on the two publications, not their versions: a republish
+			// updates this notice and tells no one again.
+			EventID:    types.ChangelogEventID(types.ChangelogParentUsed, parent.OwnerID, publicationID, parent.PublicationID),
 			Kind:       types.ChangelogParentUsed,
 			Level:      types.ChangelogMajor,
 			Relation:   relation,
@@ -251,7 +268,58 @@ func publishNotices(req PublishTextureRequest, mode, authorLabel, versionID, rou
 		if err != nil {
 			return nil, err
 		}
+		var wrapped changelogNoticeObject
+		if json.Unmarshal(obj.Metadata, &wrapped) == nil {
+			wrapped.PublisherOwnerID = req.OwnerID
+			obj.Metadata = mustJSONRaw(wrapped)
+		}
 		out = append(out, obj)
 	}
 	return out, nil
+}
+
+// admitNotices applies the publisher's daily cap: an existing notice is
+// updated (a republish), a new one is written while the publisher is under
+// the cap, and the rest are dropped.
+func (s *Service) admitNotices(ctx context.Context, og *ObjectGraphStore, publisher string, objs []objectgraph.Object) []objectgraph.Object {
+	if len(objs) == 0 {
+		return objs
+	}
+	used, err := s.countRecentNoticesBy(ctx, publisher, time.Now().UTC().Add(-24*time.Hour))
+	if err != nil {
+		used = noticesPerPublisherPerDay // fail closed: no new notice without a count
+	}
+	var out []objectgraph.Object
+	for _, o := range objs {
+		if _, err := og.GetObject(ctx, o.CanonicalID); err == nil {
+			out = append(out, o)
+			continue
+		}
+		if used < noticesPerPublisherPerDay {
+			used++
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+func (s *Service) countRecentNoticesBy(ctx context.Context, publisher string, since time.Time) (int, error) {
+	rows, err := s.store.corpus().QueryContext(ctx,
+		`SELECT metadata FROM og_objects WHERE object_kind = 'choir.changelog_notice' AND tombstone = FALSE AND created_at >= ?`, since)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	n := 0
+	for rows.Next() {
+		var metadata string
+		if err := rows.Scan(&metadata); err != nil {
+			return 0, err
+		}
+		var o changelogNoticeObject
+		if json.Unmarshal([]byte(metadata), &o) == nil && o.PublisherOwnerID == publisher {
+			n++
+		}
+	}
+	return n, rows.Err()
 }

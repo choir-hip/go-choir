@@ -190,6 +190,8 @@ type OpedState struct {
 	Run         int    `json:"run"`
 	Verdict     string `json:"verdict"`
 	VerdictHash string `json:"verdict_hash"`
+	// StoryOwnerID is the owner who judged it.
+	StoryOwnerID string `json:"-"`
 }
 
 func opedVerdictCanonicalID(authorOwner, versionID string, run int) (string, error) {
@@ -335,5 +337,5 @@ func (s *Service) opedStateLocked(ctx context.Context, og *ObjectGraphStore, aut
 	if best == nil {
 		return nil, ErrOpedUnjudged
 	}
-	return &OpedState{VersionID: versionID, Run: best.Run, Verdict: best.Verdict, VerdictHash: best.VerdictHash}, nil
+	return &OpedState{VersionID: versionID, Run: best.Run, Verdict: best.Verdict, VerdictHash: best.VerdictHash, StoryOwnerID: best.StoryOwnerID}, nil
 }
