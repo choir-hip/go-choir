@@ -126,6 +126,9 @@ func (rt *Runtime) managementTaskOpening(ctx context.Context, rec *types.RunReco
 	// The story page goes through the same egress the verb does, with no run
 	// id, so the read marks nothing; the library head is read first and
 	// marked on commit, so a story opened meanwhile is never hidden.
+	// The read declares the task's desk as its reader, as the run's own
+	// context does once it starts.
+	ctx = withDeskReader(ctx, rec.AgentProfile)
 	exec := toolregistry.ExecutionContext{OwnerID: rec.OwnerID, ComputerID: rec.ComputerID}
 	storiesIn := false
 	if head, headErr := rt.store.StoryLibraryHeadOf(ctx, rec.OwnerID, rec.ComputerID); headErr == nil {
