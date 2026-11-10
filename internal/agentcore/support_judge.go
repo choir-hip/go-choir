@@ -56,7 +56,7 @@ const candidateJudgmentModel = "~typesafe/jev-latest"
 
 // Budgets. Vars so a test can shorten them.
 var (
-	supportJudgeConcurrency = 2
+	supportJudgeConcurrency = 8
 	supportJudgeQueueWait   = 2 * time.Minute
 	supportJudgeCallTimeout = 90 * time.Second
 )

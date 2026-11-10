@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/fanout"
 	"github.com/yusefmosiah/go-choir/internal/outlet"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -41,8 +42,8 @@ var (
 
 const (
 	// eventChunkSize is the most captures one Jev call resolves; chunks of
-	// a flush run in order, so an event minted in one chunk is a candidate
-	// in the next.
+	// a flush commit in order, so an event minted in one chunk is a
+	// candidate in the next.
 	eventChunkSize        = 12
 	eventShortlistRecent  = 30
 	eventShortlistOverlap = 10
@@ -334,14 +335,20 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 		}
 		pending = append(pending, in)
 	}
+	var chunks [][]eventInput
 	for len(pending) > 0 {
 		n := eventChunkSize
 		if n > len(pending) {
 			n = len(pending)
 		}
-		chunk := pending[:n]
+		chunks = append(chunks, pending[:n])
 		pending = pending[n:]
-		rt.resolveEventChunk(ctx, idx, ownerID, computerID, chunk, &report)
+	}
+	// The questions of every chunk are asked concurrently up front; the
+	// commits below still run in chunk order.
+	prefetched := rt.prefetchEventCalls(ctx, idx, chunks)
+	for i, chunk := range chunks {
+		rt.resolveEventChunk(ctx, idx, ownerID, computerID, chunk, &report, prefetched[i])
 	}
 	for _, in := range inputs {
 		id := strings.TrimSpace(in.Item.CaptureID)
@@ -352,10 +359,27 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 	return report, nil
 }
 
-// resolveEventChunk asks Jev once about chunk and writes the result. The
-// caller holds idx.mu.
-func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, ownerID, computerID string, chunk []eventInput, report *eventResolveReport) {
-	now := time.Now().UTC()
+// eventPrefetch is the answer to a chunk's question, asked before the chunks
+// ahead of it committed. key is the question it answered.
+type eventPrefetch struct {
+	key string
+	raw json.RawMessage
+	err error
+}
+
+// eventCallKey identifies one call's content. Questions marshal with sorted
+// keys, so equal content gives an equal key.
+func eventCallKey(state json.RawMessage, questions map[string]json.RawMessage) string {
+	qs, _ := json.Marshal(questions)
+	sum := sha256.Sum256(append(append([]byte(nil), state...), qs...))
+	return hex.EncodeToString(sum[:])
+}
+
+// eventPrepareChunk builds the call for chunk against the index as it stands.
+// split is true when the request is over the byte bound and the chunk must be
+// halved first (the halves are prepared one after the other, each seeing the
+// previous half's events).
+func eventPrepareChunk(idx *eventIndex, chunk []eventInput, now time.Time) (state json.RawMessage, questions map[string]json.RawMessage, alias eventAliases, split bool) {
 	tokens := map[string]bool{}
 	for _, in := range chunk {
 		for w := range titleTokens(in.Item.Title) {
@@ -363,18 +387,15 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 		}
 	}
 	candidates := eventShortlist(idx, tokens, now)
-	stateRaw, questions, alias := eventQuestion(chunk, candidates, eventSummaryRunes)
+	state, questions, alias = eventQuestion(chunk, candidates, eventSummaryRunes)
 	// The bound counts the questions too: each repeats every candidate's
 	// criteria, so they grow with chunk x candidates (code review, Devin
 	// B2). Split the chunk first; a single capture over the bound drops its
 	// summary, then its weakest candidates.
-	if eventRequestBytes(stateRaw, questions) > eventStateMaxBytes && len(chunk) > 1 {
-		half := len(chunk) / 2
-		rt.resolveEventChunk(ctx, idx, ownerID, computerID, chunk[:half], report)
-		rt.resolveEventChunk(ctx, idx, ownerID, computerID, chunk[half:], report)
-		return
+	if eventRequestBytes(state, questions) > eventStateMaxBytes && len(chunk) > 1 {
+		return nil, nil, alias, true
 	}
-	for summary := eventSummaryRunes; eventRequestBytes(stateRaw, questions) > eventStateMaxBytes; {
+	for summary := eventSummaryRunes; eventRequestBytes(state, questions) > eventStateMaxBytes; {
 		if summary > 0 {
 			summary = 0
 		} else if len(candidates) > 0 {
@@ -382,9 +403,70 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 		} else {
 			break
 		}
-		stateRaw, questions, alias = eventQuestion(chunk, candidates, summary)
+		state, questions, alias = eventQuestion(chunk, candidates, summary)
 	}
-	raw, err := callJudgeWithin(ctx, rt.candidateJudge, judgmentScopeIntakeLabels, eventCallTimeout, stateRaw, questions)
+	return state, questions, alias, false
+}
+
+// eventCallConcurrency is how many chunk questions are in flight at once.
+const eventCallConcurrency = 4
+
+// prefetchEventCalls asks every chunk's question concurrently, each against
+// the index before any of this flush's commits. A chunk that must be split
+// is not prefetched. resolveEventChunk uses an answer only if the question
+// it would ask after the earlier chunks committed is the same one; otherwise
+// (an earlier chunk minted an event this chunk should be offered) it asks
+// again, so the result is what the serial order gave. The caller holds
+// idx.mu and the goroutines never touch the index.
+func (rt *Runtime) prefetchEventCalls(ctx context.Context, idx *eventIndex, chunks [][]eventInput) []*eventPrefetch {
+	out := make([]*eventPrefetch, len(chunks))
+	if len(chunks) < 2 {
+		return out
+	}
+	type prepared struct {
+		slot      int
+		state     json.RawMessage
+		questions map[string]json.RawMessage
+	}
+	var todo []prepared
+	now := time.Now().UTC()
+	for i, chunk := range chunks {
+		if state, questions, _, split := eventPrepareChunk(idx, chunk, now); !split {
+			todo = append(todo, prepared{slot: i, state: state, questions: questions})
+		}
+	}
+	results := fanout.Do(ctx, eventCallConcurrency, len(todo), func(ctx context.Context, i int) (json.RawMessage, error) {
+		return rt.askEventChunk(ctx, todo[i].state, todo[i].questions)
+	})
+	for i, p := range todo {
+		out[p.slot] = &eventPrefetch{key: eventCallKey(p.state, p.questions), raw: results[i].Value, err: results[i].Err}
+	}
+	return out
+}
+
+func (rt *Runtime) askEventChunk(ctx context.Context, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
+	return callJudgeWithin(ctx, rt.candidateJudge, judgmentScopeIntakeLabels, eventCallTimeout, state, questions)
+}
+
+// resolveEventChunk asks Jev once about chunk (or uses the answer already
+// fetched for the same question) and writes the result. The caller holds
+// idx.mu.
+func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, ownerID, computerID string, chunk []eventInput, report *eventResolveReport, pre *eventPrefetch) {
+	now := time.Now().UTC()
+	stateRaw, questions, alias, split := eventPrepareChunk(idx, chunk, now)
+	if split {
+		half := len(chunk) / 2
+		rt.resolveEventChunk(ctx, idx, ownerID, computerID, chunk[:half], report, nil)
+		rt.resolveEventChunk(ctx, idx, ownerID, computerID, chunk[half:], report, nil)
+		return
+	}
+	var raw json.RawMessage
+	var err error
+	if pre != nil && pre.key == eventCallKey(stateRaw, questions) {
+		raw, err = pre.raw, pre.err
+	} else {
+		raw, err = rt.askEventChunk(ctx, stateRaw, questions)
+	}
 	report.Calls++
 	if err != nil {
 		report.Unresolved += len(chunk)

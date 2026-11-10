@@ -15,6 +15,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/entitytext"
+	"github.com/yusefmosiah/go-choir/internal/fanout"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -264,6 +265,9 @@ func (rt *Runtime) buildStoryAnalysis(ctx context.Context, exec toolregistry.Exe
 	return a
 }
 
+// analysisCallConcurrency is how many chunks of an analysis are asked at once.
+const analysisCallConcurrency = 4
+
 // analysisSlot ties a question to the candidate answer it fills.
 type analysisSlot struct {
 	question yaegikernel.System1Question
@@ -320,6 +324,14 @@ func (rt *Runtime) askAnalysisQuestions(ctx context.Context, exec toolregistry.E
 		s.Kind = analysisSubjectRole
 		slots = append(slots, analysisSlot{question: yaegikernel.System1Question{ID: fmt.Sprintf("role-%d", n), Text: roleQuestion(c.EntityCandidate), Choices: analysisRoleChoices, ContextRefs: story}, subject: s, fill: &c.Role})
 	}
+	// Build and validate every chunk, ask them together, then read the
+	// answers in chunk order.
+	type chunk struct {
+		batch    []analysisSlot
+		ask      system1Ask
+		validErr error
+	}
+	var chunks []chunk
 	for start := 0; start < len(slots); start += yaegikernel.System1MaxQuestions {
 		end := min(start+yaegikernel.System1MaxQuestions, len(slots))
 		batch := slots[start:end]
@@ -330,12 +342,26 @@ func (rt *Runtime) askAnalysisQuestions(ctx context.Context, exec toolregistry.E
 			subjects[s.question.ID] = s.subject
 		}
 		valid, err := yaegikernel.ValidateSystem1HostQuestions(qs)
+		chunks = append(chunks, chunk{batch: batch, validErr: err,
+			ask: system1Ask{questions: valid, background: true, crossRun: true, subjects: subjects, story: a.Story.PublicationID, hostText: storyText}})
 		if err != nil {
-			log.Printf("story analysis: %s on run %s: a host question is malformed: %v", a.Story.DocID, runID, err)
-			a.Error = "the analysis questions could not be asked: " + err.Error()
+			break
+		}
+	}
+	called := fanout.Do(ctx, analysisCallConcurrency, len(chunks), func(ctx context.Context, i int) (json.RawMessage, error) {
+		if chunks[i].validErr != nil {
+			return nil, chunks[i].validErr
+		}
+		return rt.system1Call(ctx, exec, owner, computer, runID, chunks[i].ask)
+	})
+	for i, ch := range chunks {
+		batch := ch.batch
+		if ch.validErr != nil {
+			log.Printf("story analysis: %s on run %s: a host question is malformed: %v", a.Story.DocID, runID, ch.validErr)
+			a.Error = "the analysis questions could not be asked: " + ch.validErr.Error()
 			return
 		}
-		raw, err := rt.system1Call(ctx, exec, owner, computer, runID, system1Ask{questions: valid, crossRun: true, subjects: subjects, story: a.Story.PublicationID, hostText: storyText})
+		raw, err := called[i].Value, called[i].Err
 		if err != nil {
 			log.Printf("story analysis: %s on run %s: System 1: %v", a.Story.DocID, runID, err)
 			a.Error = "System 1 did not answer every analysis question: " + err.Error()

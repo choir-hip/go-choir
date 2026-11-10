@@ -41,8 +41,18 @@ func NewJudgmentClient(gatewayURL, token string) *JudgmentClient {
 	return &JudgmentClient{
 		gatewayURL: strings.TrimRight(strings.TrimSpace(gatewayURL), "/"),
 		token:      strings.TrimSpace(token),
-		httpClient: &http.Client{Timeout: gatewayClientTimeout},
+		httpClient: &http.Client{Timeout: gatewayClientTimeout, Transport: judgmentTransport()},
 	}
+}
+
+// judgmentTransport keeps connections to the gateway warm for a fan-out: the
+// default transport keeps 2 idle connections per host, so a dozen concurrent
+// judgments would each open a fresh one.
+func judgmentTransport() *http.Transport {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConns = 64
+	transport.MaxIdleConnsPerHost = 32
+	return transport
 }
 
 func (c *JudgmentClient) Decide(ctx context.Context, request JudgmentRequest) (*JudgmentResponse, error) {
