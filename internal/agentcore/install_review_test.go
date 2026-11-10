@@ -429,13 +429,13 @@ func TestInstallReviewDedupeAnswersTheSame202AndHeals(t *testing.T) {
 	if code, _, _ := f.post(t); code != http.StatusAccepted {
 		t.Fatal("first request")
 	}
-	builds := e.rt.packageBuilder.(*manifestBuilder).builds
+	builds := e.rt.packageBuilder.(*manifestBuilder).builds.Load()
 	// A second request for the same subject answers the same 202, with no build.
 	code, _, reason := f.post(t)
 	if code != http.StatusAccepted || reason != reasonInstallReviewOwed {
 		t.Fatalf("second request = %d %s", code, reason)
 	}
-	if got := e.rt.packageBuilder.(*manifestBuilder).builds; got != builds {
+	if got := e.rt.packageBuilder.(*manifestBuilder).builds.Load(); got != builds {
 		t.Fatalf("the dedupe built the release again (%d -> %d)", builds, got)
 	}
 	if n := len(f.dueWakes(t)); n != 2 {

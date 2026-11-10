@@ -233,11 +233,11 @@ func TestOperationPassDoesNotRebuildWhileTheReviewIsOwed(t *testing.T) {
 	w.waitOwed(t, release)
 	w.pass()
 	builder := w.fx.rt.packageBuilder.(*manifestBuilder)
-	before := builder.builds
+	before := builder.builds.Load()
 	for i := 0; i < 5; i++ {
 		w.pass()
 	}
-	if after := builder.builds; after != before {
+	if after := builder.builds.Load(); after != before {
 		t.Fatalf("5 pending passes built the release %d more time(s)", after-before)
 	}
 	// Once the verdict is sealed the pass builds and gates as usual.
