@@ -78,6 +78,11 @@ const (
 	// are causal events: they move no head.
 	EventCandidateShot EventKind = "candidate_shot"
 	EventShotVerdict   EventKind = "shot_verdict"
+	// EventShotReuse records that a clean rebase reused the shot pass of the
+	// operation it re-applies, after a platform-run liveness check, in place
+	// of a new judged round (shot_reuse.go). It is a causal event: it moves no
+	// head.
+	EventShotReuse EventKind = "shot_reuse"
 )
 
 var validEventKinds = map[EventKind]struct{}{
@@ -91,6 +96,7 @@ var validEventKinds = map[EventKind]struct{}{
 	EventKeyRevoked: {}, EventRecoveryRecorded: {}, EventRestoreRequested: {},
 	EventProjectionBatchRecorded: {}, EventFileRootCommitted: {}, EventSnapshotRecorded: {},
 	EventPackageApplied: {}, EventPackageReverted: {}, EventCandidateShot: {}, EventShotVerdict: {},
+	EventShotReuse: {},
 }
 
 // Event is the complete V1 semantic event envelope. Event bodies contain no

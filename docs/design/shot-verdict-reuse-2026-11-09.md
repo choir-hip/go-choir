@@ -1,6 +1,6 @@
 # Reuse a shot verdict when the judged content is unchanged (2026-11-09)
 
-Status: design, not built. Class of this document: green. Class of the build: red
+Status: design; the tonight cut (section 12) is built. Class of this document: green. Class of the build: red
 (slices S1 to S4 loosen or add to an apply gate; S0 and S5 are orange).
 Problem record: [shot-review-repeats-on-every-rebase-2026-11-09](../problems/shot-review-repeats-on-every-rebase-2026-11-09.md).
 Owner, 2026-11-09: "I don't think we should need to have to do the same check on
@@ -339,7 +339,7 @@ non-empty, or the gate does what it does today:
 3. The origin is a judged pass: the prior is a `shot_verdict`, or a `shot_reuse` whose
    recorded origin key still reads back as a `shot_verdict` pass with the recorded digest.
 4. Source ids are equal across the judged base, the receipt's stack base and the booted
-   base (`frontend/`, `nix/`, `internal/shot/`, `internal/shotsandbox/` trees;
+   base (the fifteen `ShotInputPaths`, 12.7;
    `flake.nix`, `flake.lock` blobs).
 5. The driver environment is non-empty (browser, fontconfig; ffmpeg when the plan has
    video) and equal to the prior reuse's recorded one when there is one.
@@ -364,7 +364,7 @@ ends it: the next rebase takes the judged round, and its pass is a new origin.
 One candidate pass in the shot sandbox over a private state copy, no before pass, no
 model: navigate `/`, `wait_for` `.app-root[data-auth-state="signed_in"]`, a 2 s settle.
 The stage's frontend proxy counts the page's `/api` responses (requests carrying the
-driver header `X-Choir-Driver`, the desktop reset, are not the page's and are not
+stage header `X-Choir-Stage-Reset`, the desktop reset, are not the page's and are not
 counted). Pass requires: no stage error, at least one counted request (a page that never
 reaches the backend proves nothing), and zero counted responses with status 400 or above.
 A proxy failure answers 502 and counts. A 101 (WebSocket upgrade) and 3xx are not
@@ -385,16 +385,58 @@ under a mutex); the gate returns pending while it runs, as it does for the host 
 | # | Way it fails | Defence | Test |
 |---|---|---|---|
 | F1 | Stale or foreign prior verdict (another op, bundle or plan; a fail). | Bound to `RebaseOf`, `PriorBundleDigest`, plan digest and verdict pass; the latest event on the prefix. | `TestShotReuseDecisionRefusals` rows prior_other_op, prior_other_bundle, prior_other_plan, prior_fail |
-| F2 | A replayed or foreign `shot_reuse` unlocks another job. | The key names op and job; the reader re-checks op, job, bundle, plan, reason, prior and liveness fields; the reducer binds `DecisionRef` to the live pending decision. | `TestReadShotReuseEventBindings`, `TestShotReuseReducerBindsThePendingDecision` |
+| F2 | A replayed or foreign `shot_reuse` unlocks another job. | The key names op and job; the reader re-checks op, job, bundle, plan, reason, prior and liveness fields; the reducer binds `DecisionRef` to the live pending decision. | `TestReadShotReuseEventBindings`, `TestReducerCandidateShotBindsThePendingDecisionAndMovesNoHead` (extended to shot_reuse), `TestShotReuseEventUnlocksTheSwapAndIsIdempotent` (the real chain), `TestShotReuseForeignJobDoesNotUnlockTheSwap` |
 | F3 | Empty digests or ids match each other. | Every compared value is checked non-empty and well formed first. | `TestShotReuseDecisionRefusals` rows empty_*; `TestInputIDsMissingPathIsAnError` |
 | F4 | The wrong base commits are compared (the receipt's pair vs. the booted base vs. the build's). | The receipt's booted base must equal the build's and the runtime's; ids are read at the receipt's stack base and booted base and must equal the judged ids the origin recorded. | `TestShotReuseDecisionRefusals` rows booted_mismatch, judged_mismatch |
-| F5 | Crash between the liveness pass and the event. | Nothing is persisted before the event; the next gate pass re-runs the pass. The event is idempotent on its key. | `TestShotReuseEventIsIdempotent` |
+| F5 | Crash between the liveness pass and the event. | Nothing is persisted before the event; the next gate pass re-runs the pass. The event is idempotent on its key. | `TestShotReuseEventUnlocksTheSwapAndIsIdempotent`, `TestShotReuseGateAnswersFromTheRunsState` |
 | F6 | Liveness passes on a login page, a blank page or an error page. | The marker requires `signed_in`; a page that never mounts the app times out as a stage error; at least one counted `/api` request is required. | `TestLivenessVerdict` |
-| F7 | The counter counts an expected non-2xx (a 101 upgrade) or the driver's own reset. | 101 and 3xx do not count; requests with `X-Choir-Driver` are excluded; 4xx, 5xx and proxy 502 count. | `TestAPICounter` |
-| F8 | Concurrent materializer passes start two liveness runs or commit two events. | A single-flight per (op, job); the event key is the idempotency key. | `TestShotReuseSingleFlight` |
+| F7 | The counter counts an expected non-2xx (a 101 upgrade) or the driver's own reset. | 101 and 3xx do not count; requests with `X-Choir-Stage-Reset` (the stage's own reset) are excluded; 4xx, 5xx and proxy 502 count. | `TestAPICounter` |
+| F8 | Concurrent materializer passes start two liveness runs or commit two events. | A single-flight per (op, job); the event key is the idempotency key. | `TestShotReuseGateAnswersFromTheRunsState` (a running run answers pending), `TestShotReuseSingleFlight` |
 | F9 | A rebase of a rebase reuses a reuse whose origin is gone or changed, or chains forever. | 12.3: origin re-read, judged ids pinned, depth bound. | `TestShotReuseDecisionRefusals` rows origin_*, chain_too_deep; `TestShotReuseChains` |
 | F10 | A restart mid-liveness resumes it. | Nothing is persisted and a boot starts nothing; the accepted operation reaches the gate through the materializer as it does today and runs one fresh pass, which is a new check, not a resumed one. | `TestShotReuseSingleFlight` (a new runtime has no run) |
-| F11 | A frontend-only layer (no host build). | `built == nil` leaves the branch unentered; today's refusal stands. | the branch is skipped; existing `TestCandidateShot...` plus row no_built |
+| F11 | A frontend-only layer (no host build). | `built == nil` leaves the branch unentered; today's refusal stands. | the branch is skipped; existing `TestCandidateShot...` |
 | F12 | Non-rebase operations or computers with no prior pass change behaviour. | The branch returns "not applicable" for a non-clean-rebase authority and for no prior event; the rest of the gate is untouched. | `TestShotReuseNotApplicable` |
 | F13 | The frontend source changed. | Tree id inequality refuses, and the judged round runs. | `TestShotReuseDecisionRefusals` row frontend_changed; `TestInputIDsRealGit` |
 | F14 | The driver environment differs or is unset. | Browser and fontconfig must be non-empty; equal to the prior reuse's record when there is one; the driver source trees are compared. | `TestShotReuseDecisionRefusals` rows env_empty, env_changed, driver_source_changed |
+
+### 12.6 As built
+
+- Where the two bases and the ids come from. The receipt (read from the tape by its
+  digest, re-verified) names `stack_base` and `booted_base`; the guest's release
+  repository (`rt.releaseRepo()`) already holds both commits, because the clean rebase
+  that produced the operation ran `sourceproj.Reapply` on that repository in the same
+  boot. `sourceproj.ObjectIDs` runs `git rev-parse <commit>:<path>` there. If either
+  commit or path is missing the read is an error and the gate keeps its judged path.
+- The shot job's staging is repeated for one side in `livenessPass` (about 80 lines);
+  it was not factored out of `shootCandidate` to keep this change additive.
+- The release witness and `choir` screens listings read `shot_verdict` only, so a
+  reused operation shows no verdict there (residual, not blocking the swap).
+- A frontend-only layer, or a computer with no image-capable judge, behaves as before
+  (the first has no host build; the second now gets the reuse when it qualifies).
+- Test for F11 is the unchanged `built == nil` early return; there is no separate row.
+
+### 12.7 Review round 2 (Sonnet: accept with a path-set finding; Devin: repair)
+
+Devin's blocking finding falsified the "unchanged source" claim of 12.1 row 5 and 12.2
+item 4: inputs the shot pass runs lie outside the six compared paths. The compared set
+is now `ShotInputPaths` (`internal/computerevent/shot_reuse.go`), fifteen entries:
+the original six plus `go.mod` and `go.sum` (the chromedp and cdproto pins linked into
+the running binary), `internal/capsule` (sandbox ids, `BuildShotFilesLayer`, state-copy
+floors, `ScreenRelevantPaths`, plan bounds), `internal/lease` and `internal/objectgraph`
+(`CapsuleStoreKinds` and the kind registry: which state enters the copy),
+`internal/pkgruntime` (the package bundler and `css-fetch-functions.json`),
+`internal/appdesk/firstparty.json` and `required.json`, and `styles/`. Every path was
+checked to exist (`TestShotInputPathsExist`). Backend handlers are not compared; liveness
+covers them.
+
+| # | Finding | Adjudication | Test |
+|---|---|---|---|
+| N1 | Path set too narrow (Devin 1, Sonnet). | Adopted: the fifteen paths; the record carries every id; an event recorded with the six-id set lacks the rest, is incomplete, fails `Validate` and so cannot be a hop. | `TestShotReuseEveryInputPathIsCompared`, `TestShotInputPathsExist` |
+| N2 | `appendShotReuse` returned success for any event on the key (Devin 2). | Adopted: an occupied key is read through the verdict or reuse reader. | `TestAppendShotReuseDoesNotTrustAnOccupiedKey` |
+| N3 | Runs map never shrinks (Devin 8); a panic in the goroutine leaves a run "running". | Adopted: a committed run is deleted (the event is then the record); a panic becomes a failed run. | `TestShotReuseGateAnswersFromTheRunsState`, `TestShotLivenessPanicBecomesAFailedRun` |
+| N4 | A transient git or tape read error was cached as a refusal. | Adopted: only definitive refusals are cached (receipt not the one its digest names, no prior, decision refusal, liveness failure); unread facts take the judged path for that pass and are read again on the next. | `TestShotReuseUnreadFactsAreNotCached` (tape read; the git read shares the path) |
+| N5 | A benign 4xx would disable reuse (Devin 3). | Deferred, by design: fail-safe direction; the d@e proof reads the logged histogram. | none |
+| N6 | `shot_verdict`-only readers omit a reused operation (Devin 4). | Deferred: documented residual; the swap does not depend on it. | none |
+| N7 | Hop-1 driver environment not comparable (Devin 5). | Deferred: the driver source trees now include `internal/capsule`, `go.mod` and `go.sum` too; exact paths are compared from hop 2. | none |
+| N8 | Prose says `X-Choir-Driver` requests are excluded (Devin 6). | Fixed in the prose: only the stage's own reset, marked `X-Choir-Stage-Reset`, is excluded; the page's own calls, whatever header they carry, are counted (12.4 and F7 now say so). | `TestAPICounter` |
+| N9 | `receipt.PriorDecisionEvent` is unchecked at the gate (Devin 7). | Not a defect: the prior pass is bound to `RebaseOf`, the prior bundle digest and the plan, and corpusd verifies the prior decision at admission (`internal/platform/clean_rebase.go`). | none |

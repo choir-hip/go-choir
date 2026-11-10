@@ -253,7 +253,12 @@ func (rt *Runtime) shotsOwedFor(ctx context.Context, computerID, operationID str
 // needed only when a record arrives, not in every management prompt
 // (docs/evidence/token-efficiency-2026-11-09/followup/system-prompt-review.md).
 func shotsOwedLine(operationID string) string {
-	return shotsOwedShortLine(operationID) + " " + shotsOwedProcedure
+	line := shotsOwedShortLine(operationID) + " " + shotsOwedProcedure
+	if isCleanRebaseOperation(operationID) {
+		// Text only: the operation's authority is not read from its id.
+		line += shotsOwedRebaseNote
+	}
+	return line
 }
 
 // shotsOwedShortLine is the one-sentence form, for a wait's detail.

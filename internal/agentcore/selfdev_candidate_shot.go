@@ -46,6 +46,10 @@ import (
 //     caller never runs the gate for it.
 //   - A package operation: its candidate is shot in its capsule (S4 moves
 //     that later), so the gate does not apply.
+//   - A clean rebase of a change already judged re-runs the whole round for
+//     nothing: the gate accepts a shot_reuse event on the same key, written
+//     only after the judged source is proved unchanged and a platform liveness
+//     pass is clean (selfdev_shot_reuse.go). Any miss leaves the rules above.
 
 // errCandidateShotPending keeps an accepted operation accepted while
 // management judges the shots (the pending pattern of errHostBuildPending).
@@ -98,7 +102,19 @@ func (rt *Runtime) candidateShotGate(ctx context.Context, operation selfdev.Oper
 		return err
 	}
 	if found {
+		if event.EventKind == computerevent.EventShotReuse {
+			return rt.readShotReuseEvent(ctx, operation, built.Job.JobID, planDigest, key, event)
+		}
 		return rt.readShotVerdictEvent(ctx, operation, built.Job.JobID, planDigest, key, event)
+	}
+	// A clean rebase of a change already judged, whose judged source is
+	// unchanged and whose candidate is live, reuses the pass instead of owing
+	// shots (selfdev_shot_reuse.go). Before the image check: a computer with
+	// no image-capable judge still gets the liveness-checked reuse.
+	if handled, err := rt.shotReuseGate(ctx, operation, bundle, built, planDigest); handled {
+		return err
+	} else if err != nil {
+		return err
 	}
 	if ok, why := rt.managementCanSeeImages(ctx); !ok {
 		return candidateShotFailure{Cause: why}

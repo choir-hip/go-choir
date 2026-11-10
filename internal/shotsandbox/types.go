@@ -95,6 +95,10 @@ type Result struct {
 	ElapsedMS int64  `json:"elapsed_ms"`
 	// Probe is the answer to a test probe.
 	Probe string `json:"probe,omitempty"`
+	// API is the page's /api responses as the stage's frontend proxy counted
+	// them, set whenever the servers ran (the liveness evidence of the shot
+	// verdict reuse).
+	API *APIStats `json:"api,omitempty"`
 }
 
 func (s Spec) timeouts() shot.Timeouts {

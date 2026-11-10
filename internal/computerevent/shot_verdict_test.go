@@ -10,7 +10,7 @@ import (
 // head; a payload with an unknown verdict, a pass with no shots, or a fail
 // with no cause is accepted (FM8).
 func TestReducerCandidateShotBindsThePendingDecisionAndMovesNoHead(t *testing.T) {
-	for _, kind := range []EventKind{EventCandidateShot, EventShotVerdict} {
+	for _, kind := range []EventKind{EventCandidateShot, EventShotVerdict, EventShotReuse} {
 		t.Run(string(kind), func(t *testing.T) { reducerShotKindBindsThePendingDecision(t, kind) })
 	}
 }

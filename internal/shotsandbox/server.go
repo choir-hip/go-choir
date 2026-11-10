@@ -51,10 +51,75 @@ func typeOf(name string) string {
 	return "application/octet-stream"
 }
 
+// stageResetHeader marks the stage's own desktop reset, which the API counter
+// leaves out: only the page's calls say whether the candidate serves it.
+const stageResetHeader = "X-Choir-Stage-Reset"
+
+// APIStats is what the frontend proxy saw of the page's /api calls: how many
+// responses, how many with a status of 400 or more (a proxy failure answers
+// 502 and counts), the status histogram and the first few failures. It is the
+// liveness evidence of a shot pass (docs/design/shot-verdict-reuse-2026-11-09.md
+// 12.4). A 101 (a WebSocket upgrade) and a 3xx are responses, not failures.
+type APIStats struct {
+	Requests  int            `json:"requests"`
+	Failures  int            `json:"failures"`
+	ByStatus  map[string]int `json:"by_status,omitempty"`
+	Offenders []string       `json:"offenders,omitempty"`
+}
+
+// maxAPIOffenders bounds the failures kept by name.
+const maxAPIOffenders = 8
+
+// APICounter counts the proxy's /api responses.
+type APICounter struct {
+	mu    sync.Mutex
+	stats APIStats
+}
+
+func (c *APICounter) record(r *http.Request, status int) {
+	if c == nil || r.Header.Get(stageResetHeader) != "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.stats.Requests++
+	if c.stats.ByStatus == nil {
+		c.stats.ByStatus = map[string]int{}
+	}
+	c.stats.ByStatus[strconv.Itoa(status)]++
+	if status >= 400 {
+		c.stats.Failures++
+		if len(c.stats.Offenders) < maxAPIOffenders {
+			c.stats.Offenders = append(c.stats.Offenders, fmt.Sprintf("%s %s %d", r.Method, r.URL.Path, status))
+		}
+	}
+}
+
+// Stats is a copy of what was counted so far.
+func (c *APICounter) Stats() APIStats {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := c.stats
+	out.ByStatus = map[string]int{}
+	for k, v := range c.stats.ByStatus {
+		out.ByStatus[k] = v
+	}
+	out.Offenders = append([]string(nil), c.stats.Offenders...)
+	return out
+}
+
 // NewFrontendHandler serves dist (an SPA: an unknown path without an
 // extension answers index.html, an unknown asset 404s), proxies /api to the
 // autoputer on 127.0.0.1:autoputerPort as user, and answers /auth/session.
 func NewFrontendHandler(dist string, autoputerPort int, user string) http.Handler {
+	h, _ := NewCountingFrontendHandler(dist, autoputerPort, user)
+	return h
+}
+
+// NewCountingFrontendHandler is NewFrontendHandler with the counter of the
+// /api responses it proxied.
+func NewCountingFrontendHandler(dist string, autoputerPort int, user string) (http.Handler, *APICounter) {
+	counter := &APICounter{}
 	target := &url.URL{Scheme: "http", Host: "127.0.0.1:" + strconv.Itoa(autoputerPort)}
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
@@ -64,7 +129,12 @@ func NewFrontendHandler(dist string, autoputerPort int, user string) http.Handle
 			r.Out.Header.Del("X-Authenticated-User")
 			r.Out.Header.Set("X-Authenticated-User", user)
 		},
-		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
+		ModifyResponse: func(res *http.Response) error {
+			counter.record(res.Request, res.StatusCode)
+			return nil
+		},
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			counter.record(r, http.StatusBadGateway)
 			w.Header().Set("Content-Type", "text/plain")
 			w.WriteHeader(http.StatusBadGateway)
 			fmt.Fprintf(w, "autoputer: %v", err)
@@ -107,7 +177,7 @@ func NewFrontendHandler(dist string, autoputerPort int, user string) http.Handle
 		defer f.Close()
 		w.Header().Set("Content-Type", typeOf(file))
 		_, _ = io.Copy(w, f)
-	})
+	}), counter
 }
 
 // resetDesktop empties the owner's persisted desktop (PUT /api/desktop/state
@@ -122,6 +192,7 @@ func resetDesktop(ctx context.Context, client *http.Client, base string) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Choir-Driver", "true")
+	req.Header.Set(stageResetHeader, "1")
 	res, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("desktop reset: %w", err)

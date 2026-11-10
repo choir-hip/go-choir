@@ -139,3 +139,53 @@ func TestTailBufferKeepsTheLastBytes(t *testing.T) {
 		t.Fatalf("tail = %q", got)
 	}
 }
+
+// The API counter (design section 12.4, F7). Ways it can fail: a 404 or 500
+// the page got is not counted; a 101 upgrade or the stage's own reset is
+// counted as a failure; a dead autoputer (502) is not counted.
+func TestAPICounter(t *testing.T) {
+	statusOf := map[string]int{"/api/ok": 200, "/api/none": 204, "/api/ws": 101, "/api/moved": 302, "/api/missing": 404, "/api/boom": 500}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		code := statusOf[r.URL.Path]
+		if code == 101 {
+			// A plain server cannot complete an upgrade; the counter sees the
+			// status a proxy would see from one, so stand in with 200 here and
+			// cover 101 below through record directly.
+			code = 200
+		}
+		w.WriteHeader(code)
+	}))
+	defer upstream.Close()
+	port, _ := strconv.Atoi(upstream.URL[strings.LastIndex(upstream.URL, ":")+1:])
+	h, counter := NewCountingFrontendHandler(fixtureDist(t), port, "owner")
+	for _, p := range []string{"/api/ok", "/api/none", "/api/moved", "/api/missing", "/api/boom"} {
+		get(t, h, "GET", p, nil)
+	}
+	// The stage's own reset is not the page's.
+	get(t, h, "PUT", "/api/boom", map[string]string{stageResetHeader: "1"})
+	// Static files and the auth stub are not /api.
+	get(t, h, "GET", "/", nil)
+	get(t, h, "GET", "/auth/session", nil)
+	stats := counter.Stats()
+	if stats.Requests != 5 || stats.Failures != 2 {
+		t.Fatalf("stats = %+v, want 5 requests and 2 failures (404, 500)", stats)
+	}
+	if stats.ByStatus["200"] != 1 || stats.ByStatus["204"] != 1 || stats.ByStatus["302"] != 1 || stats.ByStatus["404"] != 1 || stats.ByStatus["500"] != 1 {
+		t.Fatalf("histogram = %v", stats.ByStatus)
+	}
+	if len(stats.Offenders) != 2 || stats.Offenders[0] != "GET /api/missing 404" {
+		t.Fatalf("offenders = %v", stats.Offenders)
+	}
+	// A 101 is a response, not a failure.
+	c := &APICounter{}
+	c.record(httptest.NewRequest("GET", "/api/ws", nil), http.StatusSwitchingProtocols)
+	if s := c.Stats(); s.Requests != 1 || s.Failures != 0 {
+		t.Fatalf("a 101 upgrade counted as %+v", s)
+	}
+	// A dead autoputer answers 502 and counts.
+	dead, deadCounter := NewCountingFrontendHandler(fixtureDist(t), 1, "owner")
+	get(t, dead, "GET", "/api/x", nil)
+	if s := deadCounter.Stats(); s.Requests != 1 || s.Failures != 1 || s.ByStatus["502"] != 1 {
+		t.Fatalf("a dead autoputer counted as %+v", s)
+	}
+}

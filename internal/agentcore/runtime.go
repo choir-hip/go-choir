@@ -43,6 +43,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/receiptsigner"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/shotsandbox"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/workitem"
 
@@ -275,6 +276,15 @@ type Runtime struct {
 	// queue of images a ShotWait owes a run (desk_shots.go).
 	candidateShotDeps *candidateShotDeps
 	shotSweepOnce     sync.Once
+	// The shot verdict reuse (selfdev_shot_reuse.go): the liveness runs this
+	// process drives, and the test seams (how a run starts, how a base
+	// commit's source ids are read).
+	shotReuseMu     sync.Mutex
+	shotReuseRuns   map[string]*shotReuseRun
+	shotReuseStart  func(run func())
+	// shotLivenessPass replaces the sandbox pass in tests; nil runs it.
+	shotLivenessPass func(ctx context.Context, operation selfdev.Operation, built hostBuiltRelease, env shotEnv) (shotsandbox.Result, error)
+	shotReuseSource func(ctx context.Context, commit string) (computerevent.ShotInputIDs, error)
 	shotJobsMu        sync.Mutex
 	shotJobsLive      map[string]chan struct{}
 	shotImageQueue    map[string][]json.RawMessage

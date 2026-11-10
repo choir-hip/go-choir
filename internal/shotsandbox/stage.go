@@ -79,7 +79,12 @@ func RunStage(ctx context.Context, spec Spec, run runFunc) (result Result) {
 	if err != nil {
 		return fail(tail, "frontend server: %v", err)
 	}
-	server := &http.Server{Handler: NewFrontendHandler(spec.Frontend, port, OwnerUser), ReadHeaderTimeout: 30 * time.Second}
+	handler, counter := NewCountingFrontendHandler(spec.Frontend, port, OwnerUser)
+	defer func() {
+		stats := counter.Stats()
+		result.API = &stats
+	}()
+	server := &http.Server{Handler: handler, ReadHeaderTimeout: 30 * time.Second}
 	go func() { _ = server.Serve(listener) }()
 	defer func() { _ = server.Close() }()
 	base := "http://" + listener.Addr().String()
