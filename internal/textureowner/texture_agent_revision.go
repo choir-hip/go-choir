@@ -127,6 +127,19 @@ func writeOwnerRevisionRefusal(w http.ResponseWriter, err error) {
 // content forward unchanged; the directive lives in revision metadata
 // (input_origin=user_prompt, owner_prompt).
 func (h *Handler) commitLifecycleOwnerRevision(ctx context.Context, doc types.Document, ownerID string, req textureAgentRevisionRequest, extra ownerRevisionExtra) (textureOwnerRevisionResponse, error) {
+	var opened openedWork
+	resp, err := h.commitLifecycleOwnerRevisionOpening(ctx, doc, ownerID, req, extra, &opened)
+	if err != nil {
+		// Work this call opened for the revision (a reopen of settled desk
+		// work, or the continue of a settled document) must not outlive a
+		// revise that wrote nothing: an open item with no revision and no
+		// request behind it is an obligation nobody holds.
+		h.closeOpenedWork(ctx, ownerID, opened, err)
+	}
+	return resp, err
+}
+
+func (h *Handler) commitLifecycleOwnerRevisionOpening(ctx context.Context, doc types.Document, ownerID string, req textureAgentRevisionRequest, extra ownerRevisionExtra, opened *openedWork) (textureOwnerRevisionResponse, error) {
 	snapshot, snapshotErr := h.Store.GetLifecycleSnapshot(ctx, ownerID, doc.ComputerID, doc.TrajectoryID)
 	if snapshotErr == nil && snapshot.Trajectory.Status == types.TrajectorySettled && strings.TrimSpace(firstNonEmpty(req.Prompt, req.Intent)) != "" {
 		// The document's episode of work settled; the owner's next ask is the
@@ -138,6 +151,9 @@ func (h *Handler) commitLifecycleOwnerRevision(ctx context.Context, doc types.Do
 		if expected := strings.TrimSpace(req.ExpectedHeadRevisionID); expected == "" || expected == snapshot.Document.CurrentRevisionID {
 			if continued, continuedSnapshot, continueErr := h.continueSettledDocumentForOwner(ctx, ownerID, doc, snapshot); continueErr == nil {
 				doc, snapshot = continued, continuedSnapshot
+				if _, id, multi := ownerRevisionTarget(snapshot, doc.DocID); id != "" && !multi {
+					*opened = openedWork{Doc: doc, WorkItemID: id}
+				}
 			} else {
 				log.Printf("texture api: continue settled document %s for owner revise: %v", doc.DocID, continueErr)
 			}
@@ -173,8 +189,10 @@ func (h *Handler) commitLifecycleOwnerRevision(ctx context.Context, doc types.Do
 		// desk; owner input is new work (texture-settled-work-refuses-owner-revise-2026-10-09).
 		// A lost race to another reopen is fine: the re-read below joins
 		// whichever single open item won.
-		if _, reopenErr := h.reopenTextureWorkForOwner(ctx, ownerID, doc, clientRequestID); reopenErr != nil {
+		if reopened, reopenErr := h.reopenTextureWorkForOwner(ctx, ownerID, doc, clientRequestID); reopenErr != nil {
 			log.Printf("texture api: reopen Texture work for owner revise: %v", reopenErr)
+		} else if reopened.WorkItem != nil && !reopened.Replay {
+			*opened = openedWork{Doc: doc, WorkItemID: reopened.WorkItem.WorkItemID}
 		}
 		if reloaded, reloadErr := h.Store.GetLifecycleSnapshot(ctx, ownerID, doc.ComputerID, doc.TrajectoryID); reloadErr == nil && reloaded.Trajectory.Status == types.TrajectoryLive {
 			snapshot = reloaded

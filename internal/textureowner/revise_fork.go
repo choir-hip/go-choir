@@ -108,10 +108,21 @@ func (h *Handler) forkDocument(ctx context.Context, req ForkRequest) (ReviseRece
 		log.Printf("texture api: fork document: %v", err)
 		return ReviseReceipt{}, refuseOwnerRevision(http.StatusBadRequest, "fork rejected")
 	}
+	if created.Replay {
+		if doc, derr := h.Store.GetLifecycleDocument(asOwner(ctx), ownerID, strings.TrimSpace(h.Core.TextureComputerID()), created.DocID); derr == nil && doc.ArchivedAt != nil {
+			return ReviseReceipt{}, refuseOwnerRevision(http.StatusConflict, "this fork request failed and was closed; send a new client_request_id")
+		}
+	}
 	revise.DocID = created.DocID
 	receipt, err := h.reviseDocument(ctx, revise)
-	if err != nil || strings.TrimSpace(req.Text) != "" {
+	if err != nil {
+		// A fork whose first revision did not commit must not leave an empty
+		// document with an open work item behind.
+		h.abandonFork(ctx, ownerID, created, err)
 		return receipt, err
+	}
+	if strings.TrimSpace(req.Text) != "" {
+		return receipt, nil
 	}
 	// A verbatim fork wakes no desk, so nobody will serve the new document's
 	// initial work item: the take that answers it closes it. A fork with text
@@ -130,4 +141,43 @@ func (h *Handler) forkDocument(ctx context.Context, req ForkRequest) (ReviseRece
 		return ReviseReceipt{}, refuseOwnerRevision(http.StatusInternalServerError, "failed to close the fork's initial work")
 	}
 	return receipt, nil
+}
+
+// abandonFork closes a fork document whose first revision did not commit: its
+// initial work item is refused with the cause, the trajectory settles, and the
+// document is archived. Only a document still at its initial revision is
+// touched, so a retry of a fork that already committed is never undone. The
+// request id is spent: the same id answers 409 afterwards, and the caller
+// sends a new one.
+func (h *Handler) abandonFork(ctx context.Context, ownerID string, created textureLifecycleCreateResponse, cause error) {
+	computerID := strings.TrimSpace(h.Core.TextureComputerID())
+	doc, err := h.Store.GetLifecycleDocument(asOwner(ctx), ownerID, computerID, created.DocID)
+	if err != nil || doc.CurrentRevisionID != created.RevisionID {
+		return
+	}
+	reason := UnattendedRequestReason + ": the fork failed before its first revision committed (" + shortCause(cause) + "); fork again with a new request id"
+	if err := h.refuseWork(ctx, ownerID, doc, created.TargetWorkItemID, "fork-failed", reason); err != nil {
+		log.Printf("texture api: close the failed fork's work %s: %v", created.TargetWorkItemID, err)
+		return
+	}
+	snapshot, err := h.Store.GetLifecycleSnapshot(asOwner(ctx), ownerID, computerID, doc.TrajectoryID)
+	if err != nil {
+		log.Printf("texture api: read the failed fork %s: %v", created.DocID, err)
+		return
+	}
+	settle := types.SettleLifecycleTrajectoryRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "fork-settle-trajectory:" + doc.TrajectoryID,
+		TrajectoryID: doc.TrajectoryID, ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
+		ExpectedHeadRevisionID: snapshot.Document.CurrentRevisionID,
+	}
+	if settle.CommandDigest, err = store.ComputeSettleLifecycleTrajectoryDigest(settle); err == nil {
+		_, err = h.Store.SettleLifecycleTrajectory(asOwner(context.WithoutCancel(ctx)), settle)
+	}
+	if err != nil {
+		log.Printf("texture api: settle the failed fork %s: %v", created.DocID, err)
+		return
+	}
+	if _, err := h.Store.ArchiveTextureDocumentAuthority(asOwner(context.WithoutCancel(ctx)), created.DocID, ownerID, computerID); err != nil {
+		log.Printf("texture api: archive the failed fork %s: %v", created.DocID, err)
+	}
 }
