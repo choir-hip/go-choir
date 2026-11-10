@@ -40,6 +40,16 @@ var notOutlets = map[string]bool{
 	"ycombinator.com": true, "google.com": true, "reddit.com": true, "lobste.rs": true,
 	"yahoo.com": true, "aol.com": true, "aol.co.uk": true, "msn.com": true,
 	"bing.com": true, "duckduckgo.com": true, "flipboard.com": true, "newsbreak.com": true,
+	// europesays.com republishes other outlets' stories in translation (79%
+	// of its cited titles were not English, audit 2026-11-10): lane Q.
+	"europesays.com": true,
+}
+
+// sameOutlet folds the registrable hosts of one publisher into one key, so
+// the two-outlet floor cannot be met by a publisher's own domains (bbc.com
+// and bbc.co.uk were two outlets, audit 2026-11-10).
+var sameOutlet = map[string]string{
+	"bbc.co.uk": "bbc.com", "bbci.co.uk": "bbc.com",
 }
 
 // Of returns the outlet key of a URL, or "" when it names no outlet.
@@ -76,6 +86,9 @@ func Of(raw string) string {
 	key := strings.Join(labels[len(labels)-keep:], ".")
 	if notOutlets[key] {
 		return ""
+	}
+	if folded, ok := sameOutlet[key]; ok {
+		return folded
 	}
 	return key
 }

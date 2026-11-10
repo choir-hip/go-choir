@@ -27,6 +27,7 @@ func TestOf(t *testing.T) {
 		{"https://www.bbc.co.uk/news/world-1", "https://BBC.co.uk:443/sport"},
 		{"https://www.theguardian.com/a", "https://amp.theguardian.com/b"},
 		{"https://t.me/s/rybar/123", "https://t.me/rybar/456"},
+		{"https://www.bbc.com/news/a", "https://www.bbc.co.uk/news/b"}, // lane Q: one publisher, two domains
 		{"https://x.com/AP/status/1", "https://twitter.com/ap/status/2"},
 	}
 	for _, p := range same {
@@ -67,7 +68,7 @@ func TestOf(t *testing.T) {
 	}
 	for raw, want := range map[string]string{ // O6
 		"https://r.jina.ai/https://openai.com/index/introducing-gpt-rosalind/":          "openai.com",
-		"https://web.archive.org/web/20261015000000/https://www.bbc.co.uk/news/world-1": "bbc.co.uk",
+		"https://web.archive.org/web/20261015000000/https://www.bbc.co.uk/news/world-1": "bbc.com",
 		"https://r.jina.ai/https://news.ycombinator.com/item?id=1":                      "",
 	} {
 		if got := Of(raw); got != want {
@@ -109,5 +110,13 @@ func TestSocialPostsNameNoOutlet(t *testing.T) {
 		if got := Of(raw); got != want {
 			t.Errorf("Of(%q) = %q, want %q", raw, got, want)
 		}
+	}
+}
+
+// europesays.com republishes other outlets in translation and names no
+// outlet (lane Q).
+func TestTranslationAggregatorNamesNoOutlet(t *testing.T) {
+	if got := Of("https://europesays.com/123456/some-story/"); got != "" {
+		t.Errorf("Of(europesays.com) = %q, want none", got)
 	}
 }
