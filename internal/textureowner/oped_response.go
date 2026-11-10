@@ -110,7 +110,7 @@ func renderOpedSection(ctx context.Context, view agentcore.OpedWakeView, reader 
 				b.WriteString("\nThe gate's note (untrusted text): " + agentcore.FrameWorldUntrusted(ref.Reason))
 			}
 			if cited {
-				links = append(links, types.ParentLink{Role: types.ParentLinkSource, PublicationVersionID: ref.VersionID,
+				links = append(links, types.ParentLink{Kind: types.ParentLinkSource, PublicationVersionID: ref.VersionID,
 					ManifestHash: v.ManifestHash, RoutePath: firstNonEmpty(v.RoutePath, ref.RoutePath), AuthorLabel: firstNonEmpty(v.AuthorLabel, ref.AuthorLabel)})
 			}
 		}
@@ -149,15 +149,15 @@ func stampOpedLinks(provenance json.RawMessage, rec *types.RunRecord) json.RawMe
 	}
 	have := map[string]bool{}
 	for _, l := range prov.ParentLinks {
-		have[l.Role+"\x00"+l.PublicationVersionID] = true
+		have[l.Kind+"\x00"+l.PublicationVersionID] = true
 	}
 	added := false
 	for _, l := range wanted {
-		if l.Role != types.ParentLinkSource || strings.TrimSpace(l.PublicationVersionID) == "" || strings.TrimSpace(l.ManifestHash) == "" || have[l.Role+"\x00"+l.PublicationVersionID] {
+		if l.Kind != types.ParentLinkSource || strings.TrimSpace(l.PublicationVersionID) == "" || strings.TrimSpace(l.ManifestHash) == "" || have[l.Kind+"\x00"+l.PublicationVersionID] {
 			continue
 		}
-		have[l.Role+"\x00"+l.PublicationVersionID] = true
-		prov.ParentLinks = append(prov.ParentLinks, types.ParentLink{Role: l.Role, PublicationVersionID: l.PublicationVersionID,
+		have[l.Kind+"\x00"+l.PublicationVersionID] = true
+		prov.ParentLinks = append(prov.ParentLinks, types.ParentLink{Kind: l.Kind, PublicationVersionID: l.PublicationVersionID,
 			ManifestHash: l.ManifestHash, RoutePath: l.RoutePath, AuthorLabel: l.AuthorLabel})
 		added = true
 	}

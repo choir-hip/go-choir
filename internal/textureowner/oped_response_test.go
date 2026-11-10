@@ -49,7 +49,7 @@ func TestDeskFrameCarriesOpedAndRejects(t *testing.T) {
 		t.Fatalf("the host's instruction does not precede the data:\n%s", section)
 	}
 	// Only the op-ed the wake named is cited; the rejected one the desk was shown alongside is not.
-	if len(links) != 1 || links[0].PublicationVersionID != "pub-ok-v1" || links[0].Role != types.ParentLinkSource || links[0].ManifestHash != ok.ManifestHash {
+	if len(links) != 1 || links[0].PublicationVersionID != "pub-ok-v1" || links[0].Kind != types.ParentLinkSource || links[0].ManifestHash != ok.ManifestHash {
 		t.Fatalf("links = %+v", links)
 	}
 }
@@ -70,7 +70,7 @@ func TestDeskFrameWithholdsATextThatIsNotItsPin(t *testing.T) {
 }
 
 func TestDeskRevisionInheritsOpedLink(t *testing.T) {
-	links := []types.ParentLink{{Role: types.ParentLinkSource, PublicationVersionID: "pub-ok-v1", ManifestHash: "manifest-pub-ok-v1", RoutePath: "/pub/texture/ok/v1", AuthorLabel: "writer-aa11bb"}}
+	links := []types.ParentLink{{Kind: types.ParentLinkSource, PublicationVersionID: "pub-ok-v1", ManifestHash: "manifest-pub-ok-v1", RoutePath: "/pub/texture/ok/v1", AuthorLabel: "writer-aa11bb"}}
 	raw, _ := json.Marshal(links)
 	rec := &types.RunRecord{Metadata: map[string]any{opedLinksMetadataKey: string(raw)}}
 	deskProv, _ := types.Provenance{SchemaVersion: 1}.CanonicalJSON()
@@ -84,7 +84,7 @@ func TestDeskRevisionInheritsOpedLink(t *testing.T) {
 		t.Fatalf("a run with no op-ed changed its provenance: %s", same)
 	}
 	// Only source links are taken, with a pin; a base link or an unpinned one is dropped.
-	forged, _ := json.Marshal([]types.ParentLink{{Role: types.ParentLinkBase, RevisionID: "r1"}, {Role: types.ParentLinkSource, PublicationVersionID: "pub-x"}})
+	forged, _ := json.Marshal([]types.ParentLink{{Kind: types.ParentLinkBase, RevisionID: "r1"}, {Kind: types.ParentLinkSource, PublicationVersionID: "pub-x"}})
 	if same := stampOpedLinks(deskProv, &types.RunRecord{Metadata: map[string]any{opedLinksMetadataKey: string(forged)}}); string(same) != string(deskProv) {
 		t.Fatalf("forged links were stamped: %s", same)
 	}

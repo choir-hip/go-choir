@@ -41,7 +41,7 @@ func revisionSourceIDs(rev types.Revision) map[string]bool {
 		return out
 	}
 	for _, l := range prov.ParentLinks {
-		if l.Role == types.ParentLinkSource && l.PublicationVersionID != "" {
+		if l.Kind == types.ParentLinkSource && l.PublicationVersionID != "" {
 			out[l.PublicationVersionID] = true
 		}
 	}
