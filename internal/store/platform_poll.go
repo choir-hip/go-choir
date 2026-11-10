@@ -63,7 +63,9 @@ type PlatformPoll struct {
 	GateQueue      map[string]PollGateItem `json:"gate_queue,omitempty"`
 	OpenStories    map[string]time.Time    `json:"open_stories,omitempty"`
 	CourierPending map[string]int          `json:"courier_pending,omitempty"`
-	UpdatedAt      time.Time               `json:"updated_at"`
+	// GateLog is the last 24 hours of gate calls, for the daily bounds.
+	GateLog   []PollGateCall `json:"gate_log,omitempty"`
+	UpdatedAt time.Time      `json:"updated_at"`
 }
 
 // PollGateItem is one op-ed waiting for its verdict.
@@ -145,4 +147,11 @@ func (s *Store) ListPlatformPolls(ctx context.Context, ownerID string) ([]Platfo
 		out = append(out, poll)
 	}
 	return out, nil
+}
+
+// PollGateCall is one Jev call the gate made for a publisher's op-ed.
+type PollGateCall struct {
+	Publisher string    `json:"publisher"`
+	Story     string    `json:"story"`
+	At        time.Time `json:"at"`
 }

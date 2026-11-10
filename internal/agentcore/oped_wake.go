@@ -39,6 +39,8 @@ type opedStoryState struct {
 	Meta      map[string]*opedMeta
 	Decisions []types.CommitmentRecord // by n ascending
 	LastN     int
+	// LastAccepted is when an accepted op-ed last woke the desk.
+	LastAccepted time.Time
 	Prior     []opedPriorWake // reject-backoff wakes, oldest first (Changed not yet set)
 }
 
@@ -86,6 +88,9 @@ func (rt *Runtime) storyOpedState(ctx context.Context, owner, computer, doc stri
 			if d.Woken {
 				for _, v := range d.VersionIDs {
 					woken[v] = true
+				}
+				if d.Why == types.OpedWakeAccepted && opedRecordTime(r).After(st.LastAccepted) {
+					st.LastAccepted = opedRecordTime(r)
 				}
 				if d.Why == types.OpedWakeRejectBackoff {
 					st.Prior = append(st.Prior, opedPriorWake{At: opedRecordTime(r)})
@@ -162,7 +167,7 @@ func (rt *Runtime) evaluateOpedWake(ctx context.Context, owner, computer, doc st
 	for i := range st.Prior {
 		st.Prior[i].Changed = rt.docChangedSince(ctx, owner, computer, doc, st.Prior[i].At)
 	}
-	out := foldOpedWake(opedWakeInput{Now: time.Now().UTC(), Busy: rt.storyDeskBusy(ctx, owner, computer, doc), Items: st.Items, PriorRejectWakes: st.Prior})
+	out := foldOpedWake(opedWakeInput{Now: time.Now().UTC(), Busy: rt.storyDeskBusy(ctx, owner, computer, doc), Items: st.Items, PriorRejectWakes: st.Prior, LastAcceptedWake: st.LastAccepted})
 	if out.Hold {
 		return true, nil
 	}

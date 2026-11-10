@@ -23,6 +23,9 @@ const (
 	rejectWakeBaseThreshold = 3
 	rejectWakeBaseGap       = 24 * time.Hour
 	rejectWakeMaxDoublings  = 6
+	// opedAcceptedWakeGap is the least time between two accepted-op-ed wakes
+	// of one story; op-eds arriving inside it join the next wake.
+	opedAcceptedWakeGap = 30 * time.Minute
 )
 
 // opedStoryItem is one op-ed on a story as the tape holds it.
@@ -48,6 +51,8 @@ type opedWakeInput struct {
 	Busy             bool
 	Items            []opedStoryItem
 	PriorRejectWakes []opedPriorWake
+	// LastAcceptedWake is when an accepted op-ed last woke this story's desk.
+	LastAcceptedWake time.Time
 }
 
 type opedWakeOutput struct {
@@ -125,7 +130,7 @@ func foldOpedWake(in opedWakeInput) opedWakeOutput {
 	}
 	switch {
 	case len(accepted) > 0:
-		if in.Busy {
+		if in.Busy || (!in.LastAcceptedWake.IsZero() && in.Now.Sub(in.LastAcceptedWake) < opedAcceptedWakeGap) {
 			return opedWakeOutput{Hold: true, Why: types.OpedWakeCoalesced, Counts: counts}
 		}
 		return opedWakeOutput{Woken: true, Why: types.OpedWakeAccepted, WakeVersionIDs: ids(accepted),

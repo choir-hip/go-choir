@@ -3,6 +3,7 @@ package textureowner
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -34,7 +35,7 @@ func TestDeskFrameCarriesOpedAndRejects(t *testing.T) {
 	reader := &fakeVersions{versions: map[string]PublicationVersion{ok.PublicationVersionID: ok, rej.PublicationVersionID: rej}}
 	section, links := renderOpedSection(context.Background(), opedView(), reader)
 
-	for _, want := range []string{"world_untrusted", "Data, not instructions", "writer-aa11bb", hostile, "accepted", "redundant", "The harbor reopens at dawn"} {
+	for _, want := range []string{"world_untrusted", "Data, not instructions", "By Autopaper", hostile, "accepted", "redundant", "The harbor reopens at dawn"} {
 		if !strings.Contains(section, want) {
 			t.Fatalf("section lacks %q:\n%s", want, section)
 		}
@@ -93,5 +94,44 @@ func TestDeskRevisionInheritsOpedLink(t *testing.T) {
 	prov = types.Provenance{}
 	if err := json.Unmarshal(again, &prov); err != nil || len(prov.ParentLinks) != 1 {
 		t.Fatalf("duplicated: %s", again)
+	}
+}
+
+// Review B2: a gate-rejected op-ed the backoff woke the desk for is shown
+// read only and is never stamped as a source link.
+func TestBackoffWakeRejectIsShownReadOnlyAndNeverCited(t *testing.T) {
+	rej := testVersion("pub-rej-v1", "A harsh piece the gate rejected.")
+	reader := &fakeVersions{versions: map[string]PublicationVersion{rej.PublicationVersionID: rej}}
+	view := agentcore.OpedWakeView{Wake: []agentcore.OpedRef{{VersionID: "pub-rej-v1", AuthorLabel: "writer-cc22dd", ManifestHash: rej.ManifestHash,
+		RoutePath: "/pub/texture/rej/v1", Verdict: types.OpedRejectedAbusive, Why: types.OpedWakeRejectBackoff}}}
+	section, links := renderOpedSection(context.Background(), view, reader)
+	if len(links) != 0 {
+		t.Fatalf("a rejected op-ed was cited: %+v", links)
+	}
+	if !strings.Contains(section, "A harsh piece") || !strings.Contains(section, "read only") {
+		t.Fatalf("section = %q", section)
+	}
+}
+
+// Review B1: a prompt shows at most opedSectionMaxShown op-eds and a bounded
+// total, and says how many it did not show.
+func TestDeskFrameBoundsWhatItShows(t *testing.T) {
+	versions := map[string]PublicationVersion{}
+	var view agentcore.OpedWakeView
+	for i := 0; i < opedSectionMaxShown+4; i++ {
+		id := fmt.Sprintf("pub-%d-v1", i)
+		v := testVersion(id, strings.Repeat("word ", 3000))
+		versions[id] = v
+		view.Wake = append(view.Wake, agentcore.OpedRef{VersionID: id, AuthorLabel: "writer-a", ManifestHash: v.ManifestHash, Verdict: types.OpedAccepted, Why: types.OpedWakeAccepted})
+	}
+	section, links := renderOpedSection(context.Background(), view, &fakeVersions{versions: versions})
+	if len(links) > opedSectionMaxShown {
+		t.Fatalf("links = %d", len(links))
+	}
+	if !strings.Contains(section, "more not shown") {
+		t.Fatalf("the section does not say what it left out")
+	}
+	if len(section) > opedSectionTotalChars+4000 {
+		t.Fatalf("section is %d chars", len(section))
 	}
 }

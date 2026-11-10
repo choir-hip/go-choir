@@ -120,3 +120,18 @@ func TestRejectBackoffFold(t *testing.T) {
 		t.Fatalf("busy reject wake: %+v", out)
 	}
 }
+
+// Review B1: accepted-op-ed wakes of one story keep a minimum gap; what
+// arrives inside it coalesces into the next wake.
+func TestAcceptedWakeKeepsAMinimumGap(t *testing.T) {
+	items := []opedStoryItem{item("v1", "writer-a", types.OpedAccepted)}
+	in := opedWakeInput{Now: foldNow, Items: items, LastAcceptedWake: foldNow.Add(-opedAcceptedWakeGap / 2)}
+	if out := foldOpedWake(in); out.Woken || !out.Hold {
+		t.Fatalf("inside the gap: %+v", out)
+	}
+	in.Items = append(in.Items, item("v2", "writer-b", types.OpedAccepted))
+	in.LastAcceptedWake = foldNow.Add(-opedAcceptedWakeGap - time.Second)
+	if out := foldOpedWake(in); !out.Woken || len(out.WakeVersionIDs) != 2 {
+		t.Fatalf("past the gap: %+v", out)
+	}
+}
