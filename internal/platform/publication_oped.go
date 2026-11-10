@@ -35,6 +35,17 @@ type NoticeItem struct {
 type NoticeFeed struct {
 	Items      []NoticeItem `json:"items"`
 	NextCursor string       `json:"next_cursor"`
+	// CursorReset says the cursor sent was not one of ours, so the page is
+	// from the start of the feed.
+	CursorReset bool `json:"cursor_reset,omitempty"`
+	// Skipped names the rows that could not be read, by id and why.
+	Skipped []FeedSkipped `json:"skipped,omitempty"`
+}
+
+// FeedSkipped is a feed row passed over: named, never silently dropped.
+type FeedSkipped struct {
+	ID     string `json:"id"`
+	Reason string `json:"reason"`
 }
 
 // OpedFeedItem is one op-ed on a story of the bound owner.
@@ -48,12 +59,17 @@ type OpedFeedItem struct {
 	NoticeID     string               `json:"notice_id"`
 	// StoryDocID is the paper's own document the op-ed answers.
 	StoryDocID string `json:"story_doc_id"`
+	// PublisherID is the publishing owner, from the graph: the key of the
+	// paper's per-publisher bounds (a byline is free to pick).
+	PublisherID string `json:"publisher_id"`
 }
 
 // OpedFeed is one page of op-eds.
 type OpedFeed struct {
-	Items      []OpedFeedItem `json:"items"`
-	NextCursor string         `json:"next_cursor"`
+	Items       []OpedFeedItem `json:"items"`
+	NextCursor  string         `json:"next_cursor"`
+	CursorReset bool           `json:"cursor_reset,omitempty"`
+	Skipped     []FeedSkipped  `json:"skipped,omitempty"`
 }
 
 func normalizeFeedLimit(n int) int {
@@ -76,40 +92,45 @@ type seqNotice struct {
 // cursor is the opaque sequence of the last row a page returned: it moves on
 // every page however many rows share a second, and a row written later is
 // always after it.
-func (s *Service) noticeRows(ctx context.Context, ownerID, cursor string, limit int) ([]seqNotice, error) {
+func (s *Service) noticeRows(ctx context.Context, ownerID, cursor string, limit int) (rows []seqNotice, reset bool, err error) {
 	ownerID = strings.TrimSpace(ownerID)
 	if ownerID == "" {
-		return nil, fmt.Errorf("a notice read needs an owner")
+		return nil, false, fmt.Errorf("a notice read needs an owner")
+	}
+	if err := s.ensureNoticeSeq(ctx); err != nil {
+		return nil, false, err
 	}
 	after := int64(0)
 	if c := strings.TrimSpace(cursor); c != "" {
-		n, err := strconv.ParseInt(c, 10, 64)
-		if err != nil || n < 0 {
-			return nil, fmt.Errorf("cursor is not a feed cursor")
+		n, perr := strconv.ParseInt(c, 10, 64)
+		if perr != nil || n < 0 {
+			// Not one of ours (an older cursor format): start over, and say so.
+			reset = true
+		} else {
+			after = n
 		}
-		after = n
 	}
 	const seqExpr = `COALESCE(((metadata::jsonb) ->> 'seq')::bigint, 0)`
-	rows, err := s.store.corpus().QueryContext(ctx,
+	dbRows, err := s.store.corpus().QueryContext(ctx,
 		`SELECT canonical_id, metadata, created_at, `+seqExpr+` FROM og_objects
 		 WHERE object_kind = 'choir.changelog_notice' AND owner_id = ? AND tombstone = FALSE AND `+seqExpr+` > ?
 		 ORDER BY `+seqExpr+`, canonical_id LIMIT ?`, ownerID, after, normalizeFeedLimit(limit))
 	if err != nil {
-		return nil, fmt.Errorf("platform notices: %w", err)
+		return nil, false, fmt.Errorf("platform notices: %w", err)
 	}
-	defer rows.Close()
+	defer dbRows.Close()
 	var out []seqNotice
-	for rows.Next() {
+	for dbRows.Next() {
 		var obj objectgraph.Object
 		var metadata string
 		var seq int64
-		if err := rows.Scan(&obj.CanonicalID, &metadata, &obj.CreatedAt, &seq); err != nil {
-			return nil, fmt.Errorf("platform notices: scan: %w", err)
+		if err := dbRows.Scan(&obj.CanonicalID, &metadata, &obj.CreatedAt, &seq); err != nil {
+			return nil, false, fmt.Errorf("platform notices: scan: %w", err)
 		}
 		obj.OwnerID, obj.Metadata = ownerID, json.RawMessage(metadata)
 		out = append(out, seqNotice{obj: obj, seq: seq})
 	}
-	return out, rows.Err()
+	return out, reset, dbRows.Err()
 }
 
 func decodeNoticeObject(obj objectgraph.Object) (changelogNoticeObject, bool) {
@@ -120,17 +141,25 @@ func decodeNoticeObject(obj objectgraph.Object) (changelogNoticeObject, bool) {
 	return n, true
 }
 
+func undecodable(obj objectgraph.Object) FeedSkipped {
+	return FeedSkipped{ID: obj.CanonicalID, Reason: "the notice row could not be decoded"}
+}
+
 // ListNoticesForOwner is the recipient's notice feed.
 func (s *Service) ListNoticesForOwner(ctx context.Context, ownerID, cursor string, limit int) (NoticeFeed, error) {
-	rows, err := s.noticeRows(ctx, ownerID, cursor, limit)
+	rows, reset, err := s.noticeRows(ctx, ownerID, cursor, limit)
 	if err != nil {
 		return NoticeFeed{}, err
 	}
-	feed := NoticeFeed{Items: []NoticeItem{}, NextCursor: strings.TrimSpace(cursor)}
+	feed := NoticeFeed{Items: []NoticeItem{}, NextCursor: strings.TrimSpace(cursor), CursorReset: reset}
+	if reset {
+		feed.NextCursor = ""
+	}
 	for _, row := range rows {
 		feed.NextCursor = strconv.FormatInt(row.seq, 10)
 		n, ok := decodeNoticeObject(row.obj)
 		if !ok {
+			feed.Skipped = append(feed.Skipped, undecodable(row.obj))
 			continue
 		}
 		feed.Items = append(feed.Items, NoticeItem{ID: row.obj.CanonicalID, CreatedAt: row.obj.CreatedAt.UTC().Format(time.RFC3339), Notice: n.Notice})
@@ -141,21 +170,28 @@ func (s *Service) ListNoticesForOwner(ctx context.Context, ownerID, cursor strin
 // ListOpedsForOwner is the op-ed feed of the owner's stories: the oped on
 // your story notices, each with the references the paper's computer adopts.
 func (s *Service) ListOpedsForOwner(ctx context.Context, ownerID, cursor string, limit int) (OpedFeed, error) {
-	rows, err := s.noticeRows(ctx, ownerID, cursor, limit)
+	rows, reset, err := s.noticeRows(ctx, ownerID, cursor, limit)
 	if err != nil {
 		return OpedFeed{}, err
 	}
-	feed := OpedFeed{Items: []OpedFeedItem{}, NextCursor: strings.TrimSpace(cursor)}
+	feed := OpedFeed{Items: []OpedFeedItem{}, NextCursor: strings.TrimSpace(cursor), CursorReset: reset}
+	if reset {
+		feed.NextCursor = ""
+	}
 	for _, row := range rows {
 		obj := row.obj
 		feed.NextCursor = strconv.FormatInt(row.seq, 10)
 		n, ok := decodeNoticeObject(obj)
-		if !ok || n.Notice.Relation != types.ChangelogRelationOpedOnYourStory || n.RespondsTo == nil {
+		if !ok {
+			feed.Skipped = append(feed.Skipped, undecodable(obj))
+			continue
+		}
+		if n.Notice.Relation != types.ChangelogRelationOpedOnYourStory || n.RespondsTo == nil {
 			continue
 		}
 		feed.Items = append(feed.Items, OpedFeedItem{
 			VersionID: n.Child.PublicationVersionID, RoutePath: n.Child.RoutePath, AuthorLabel: n.Child.AuthorLabel,
-			ManifestHash: n.Child.ManifestHash, PublishedAt: n.Child.PublishedAt, NoticeID: obj.CanonicalID, StoryDocID: n.RespondsTo.SourceDocID,
+			ManifestHash: n.Child.ManifestHash, PublishedAt: n.Child.PublishedAt, NoticeID: obj.CanonicalID, StoryDocID: n.RespondsTo.SourceDocID, PublisherID: n.PublisherOwnerID,
 			RespondsTo: types.OpedRespondsTo{PublicationVersionID: n.RespondsTo.PublicationVersionID,
 				RoutePath: n.RespondsTo.RoutePath, PublicationID: n.RespondsTo.PublicationID},
 		})

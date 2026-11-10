@@ -12,8 +12,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -332,22 +332,77 @@ func (s *Service) countRecentNoticesBy(ctx context.Context, publisher string, si
 	return n, rows.Err()
 }
 
-var noticeSeqLast atomic.Int64
-
 // nextNoticeSeq is a strictly increasing sequence for notices: the clock in
-// nanoseconds, never repeated or going back within the process. Callers hold
-// writeMu, so write order is sequence order.
+// nanoseconds, but never repeated and never below a sequence already stored,
+// even after a restart with the clock behind (it is seeded from storage first).
+// Callers hold writeMu, so write order is sequence order.
 func (s *Service) nextNoticeSeq() int64 {
+	if err := s.ensureNoticeSeq(context.Background()); err != nil {
+		log.Printf("platform notices: seed the sequence: %v", err)
+	}
+	return s.nextNoticeSeqRaw()
+}
+
+func (s *Service) nextNoticeSeqRaw() int64 {
 	for {
-		last := noticeSeqLast.Load()
-		next := time.Now().UnixNano()
+		last := s.noticeSeqLast.Load()
+		now := time.Now().UnixNano()
+		if s.noticeClock != nil {
+			now = s.noticeClock()
+		}
+		next := now
 		if next <= last {
 			next = last + 1
 		}
-		if noticeSeqLast.CompareAndSwap(last, next) {
+		if s.noticeSeqLast.CompareAndSwap(last, next) {
 			return next
 		}
 	}
+}
+
+// ensureNoticeSeq seeds the sequence from the largest one stored, and gives a
+// sequence to every notice that has none (older writers), once per process.
+func (s *Service) ensureNoticeSeq(ctx context.Context) error {
+	s.seedMu.Lock()
+	defer s.seedMu.Unlock()
+	if s.noticeSeeded {
+		return nil
+	}
+	var max int64
+	if err := s.store.corpus().QueryRowContext(ctx,
+		`SELECT COALESCE(MAX(((metadata::jsonb) ->> 'seq')::bigint), 0) FROM og_objects WHERE object_kind = 'choir.changelog_notice'`).Scan(&max); err != nil {
+		return err
+	}
+	if max > s.noticeSeqLast.Load() {
+		s.noticeSeqLast.Store(max)
+	}
+	rows, err := s.store.corpus().QueryContext(ctx,
+		`SELECT canonical_id FROM og_objects WHERE object_kind = 'choir.changelog_notice' AND tombstone = FALSE AND ((metadata::jsonb) ->> 'seq') IS NULL ORDER BY created_at, canonical_id`)
+	if err != nil {
+		return err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	og := s.ogStore()
+	for _, id := range ids {
+		obj, err := og.GetObject(ctx, id)
+		if err != nil {
+			return err
+		}
+		if err := og.PutObject(ctx, withNoticeSeq(obj, s.nextNoticeSeqRaw())); err != nil {
+			return err
+		}
+	}
+	s.noticeSeeded = true
+	return nil
 }
 
 // withNoticeSeq sets the notice's sequence.
