@@ -160,6 +160,17 @@ func requireScreens(changes []FileChange, screens []ScreenFile, baseHasDir func(
 	if len(screens) == 0 {
 		return fmt.Errorf("capsule freeze: %s: this change touches %s and every candidate needs a screenshot (UI changes to show the look, backend changes to prove continuity); take at least one with node /workspace/platform/scripts/choir-shot.mjs (it writes PNGs to %s) after your last source write, then Freeze again", ScreensRequiredReason, summarizePaths(screenChangePaths(relevant)), ScreensDir)
 	}
+	existing := existingSurfaceChanges(relevant, baseHasDir)
+	if len(existing) > 0 && !HasBeforeAfterPair(screens) {
+		return fmt.Errorf("capsule freeze: %s: this change modifies existing files (%s); shoot the same view on the base build (before) and the candidate (after), named NN-before-<view>.png and NN-after-<view>.png in %s; shoot the before view before your first edit", BeforeAfterRequiredReason, summarizePaths(screenChangePaths(existing)), ScreensDir)
+	}
+	return nil
+}
+
+// existingSurfaceChanges are the relevant changes that touch a surface which
+// exists on the base: a modified or deleted file, or a file added to an app
+// package that exists on the base. Only they need a before and after pair.
+func existingSurfaceChanges(relevant []FileChange, baseHasDir func(rel string) bool) []FileChange {
 	var existing []FileChange
 	for _, c := range relevant {
 		if c.Kind == ChangeModified || c.Kind == ChangeDeleted {
@@ -170,10 +181,16 @@ func requireScreens(changes []FileChange, screens []ScreenFile, baseHasDir func(
 			existing = append(existing, c)
 		}
 	}
-	if len(existing) > 0 && !HasBeforeAfterPair(screens) {
-		return fmt.Errorf("capsule freeze: %s: this change modifies existing files (%s); shoot the same view on the base build (before) and the candidate (after), named NN-before-<view>.png and NN-after-<view>.png in %s; shoot the before view before your first edit", BeforeAfterRequiredReason, summarizePaths(screenChangePaths(existing)), ScreensDir)
-	}
-	return nil
+	return existing
+}
+
+// needsBeforeAfterPair says the diff needs a before and after pair: the one
+// predicate behind both the pair requirement (requireScreens) and the
+// late-before-shots check (stageScreens), so the two cannot disagree. A new
+// package needs no before shot, so nothing can be late; a diff that mixes a
+// new package with a changed existing surface does need the pair.
+func needsBeforeAfterPair(changes []FileChange, baseHasDir func(rel string) bool) bool {
+	return len(existingSurfaceChanges(screenRelevantChanges(changes), baseHasDir)) > 0
 }
 
 // packageRootOf is the app package directory (frontend/src/packages/<name>)
