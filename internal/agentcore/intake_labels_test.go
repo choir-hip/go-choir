@@ -615,9 +615,9 @@ func TestIntakeLabelsFailingOrSlowJevLeavesCapturesUnlabelledWithinBudget(t *tes
 	}
 }
 
-// B7: twelve captures against no stories are one call, and the site never
+// B7: twelve captures against no stories are two calls of six, and the site never
 // has more than one in flight.
-func TestIntakeLabelsBatchTwelveCapturesIntoOneCall(t *testing.T) {
+func TestIntakeLabelsBatchTwelveCapturesIntoTwoCalls(t *testing.T) {
 	f := newIntakeFixture(t, "owner-labels-parallel")
 	f.enable(t)
 	judge := &fakeIntakeJudge{delay: 40 * time.Millisecond}
@@ -627,8 +627,8 @@ func TestIntakeLabelsBatchTwelveCapturesIntoOneCall(t *testing.T) {
 	}
 	f.poll(t)
 	labelCalls := judge.labelCalls()
-	if got := len(labelCalls); got != 1 {
-		t.Fatalf("B7: %d label calls for 12 captures; want 1", got)
+	if got := len(labelCalls); got != 2 {
+		t.Fatalf("B7: %d label calls for 12 captures; want 2 of 6", got)
 	}
 	if max := judge.maxSeen.Load(); max != 1 {
 		t.Fatalf("B7: %d calls ran at once; want 1", max)
@@ -639,8 +639,8 @@ func TestIntakeLabelsBatchTwelveCapturesIntoOneCall(t *testing.T) {
 				t.Fatal("a topic question was asked with no candidate stories")
 			}
 		}
-		if len(call.questions) != 12 {
-			t.Fatalf("B2: a call has %d questions; want 12 (one per capture)", len(call.questions))
+		if len(call.questions) != 6 {
+			t.Fatalf("B2: a call has %d questions; want 6 (one per capture, 6 captures)", len(call.questions))
 		}
 	}
 }

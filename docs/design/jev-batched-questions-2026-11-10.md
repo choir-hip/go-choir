@@ -482,6 +482,27 @@ before the code:
   twice. Bound: the callback re-evaluates under the lock and only schedules.
 - F8. A poll with zero captures (or captures without ids) enqueues nothing
   and arms no timer.
+- F10. A judge or merge panics inside the flush goroutine. Main's chunk calls
+  ran inside `fanout.Do`, which recovers; the flush goroutine has no such net,
+  so a panic would kill the process, or leave `inFlight` true and the queue
+  never flushing again. Bound: `labelHeld` and the goroutine recover, log,
+  leave that flush's captures unlabelled and clear `inFlight` under the lock.
+- F11. A graceful stop (deploy, planned refresh) drops everything held, so
+  captures are lost that only a failed label used to lose. Bound: `Stop`
+  refuses new enqueues, lets a running flush finish, flushes once what is
+  held, all bounded by the runtime's drain deadline, then cancels. Nothing is
+  persisted and nothing runs at boot, so a crash still drops held captures
+  exactly as a failed label. A judge slower than the bound is abandoned at
+  the bound and its captures stay unlabelled.
+- F12. A call carries more questions than the measured 8 (accuracy above 12
+  is unmeasured). Bound: a flush holds 12 captures but one call carries at
+  most `intakeCallCaptures` = 6 (12 questions); further calls follow in
+  sequence. Raise it only after the shadow comparison measures accuracy.
+- F13. A stale fired timer callback clears a newer `q.timer`, so two timers
+  or none are armed. Bound: the callback clears `q.timer` only if it is still
+  its own.
+- F14. A flush whose budget expires says nothing about the captures it did
+  not ask. Bound: one log line names how many were not asked.
 - F9. Concurrency returns through chunks: no `fanout`, no pool, no goroutine
   per chunk; the only goroutine is the one flush per computer.
 

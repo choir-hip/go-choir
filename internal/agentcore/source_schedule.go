@@ -270,7 +270,8 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 			rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEventWakes)
 		if len(report.Captured) > 0 && !eventWakes && rt.intakeLabelsEnabled(ctx, ownerID, computerID) {
 			// Held for the computer's next flush (intake_labels.go); the
-			// poll's usage does not count labels that do not exist yet.
+			// poll's usage does not count labels that do not exist yet:
+			// labels are counted on the flush log line, not the poll.
 			rt.enqueueIntakeLabels(ownerID, computerID, sched.SourceID, report.Captured)
 		}
 		// With intake.events on, the new captures queue for the event

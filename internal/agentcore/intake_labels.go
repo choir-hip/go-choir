@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"log"
@@ -66,9 +67,15 @@ const (
 	// answers all of a request's questions in parallel, so more questions in
 	// one call is the cheap direction; 12 matches the event layer's chunk.
 	intakeFlushCaptures = 12
-	// intakeBatchCaptures is the count handed to labelPoll's grouping; it
-	// equals the flush size so a count never binds before the bytes do.
-	intakeBatchCaptures = intakeFlushCaptures
+	// intakeCallCaptures is the most captures one call carries (two
+	// questions each, so 12). The flush holds 12 captures, but accuracy
+	// above 12 questions a call is unmeasured and the old code carried at
+	// most 8; further calls follow in sequence. Raise it only after the
+	// shadow comparison of docs/design/jev-batched-questions-2026-11-10.md
+	// measures accuracy at the larger size.
+	intakeCallCaptures = 6
+	// intakeBatchCaptures is the count handed to labelPoll's grouping.
+	intakeBatchCaptures = intakeCallCaptures
 	// intakeFlushWait is how long the first held capture waits for company
 	// before its flush (a flush also runs at intakeFlushCaptures held). Owner rule 2026-11-10: never
 	// call Jev concurrently, put many questions in a single call. A poll
@@ -232,6 +239,9 @@ type intakeLabelLayer struct {
 	stopped bool
 	ctx     context.Context
 	cancel  context.CancelFunc
+	// flushes counts the running flush goroutines, so a graceful stop can
+	// wait for them (bounded).
+	flushes sync.WaitGroup
 }
 
 // enqueueIntakeLabels holds a poll's new captures for the computer's next
@@ -284,20 +294,36 @@ func (rt *Runtime) scheduleIntakeFlushLocked(ownerID, computerID string, q *inta
 		}
 		q.inFlight = true
 		layerCtx := l.ctx
-		rt.wg.Add(1)
+		l.flushes.Add(1)
 		go func() {
-			defer rt.wg.Done()
+			defer l.flushes.Done()
+			defer func() {
+				// A panic must not kill the process or leave the queue
+				// marked in flight: its flush's captures stay unlabelled
+				// and the next enqueue flushes normally.
+				if r := recover(); r != nil {
+					log.Printf("intake labels: flush panicked: %v; its captures stay unlabelled", r)
+					l.mu.Lock()
+					q.inFlight = false
+					rt.scheduleIntakeFlushLocked(ownerID, computerID, q)
+					l.mu.Unlock()
+				}
+			}()
 			rt.drainIntakeLabels(layerCtx, ownerID, computerID, q)
 		}()
 		return
 	}
 	if q.timer == nil {
-		q.timer = time.AfterFunc(wait, func() {
+		var timer *time.Timer
+		timer = time.AfterFunc(wait, func() {
 			l.mu.Lock()
 			defer l.mu.Unlock()
-			q.timer = nil
+			if q.timer == timer { // a stale callback never clears a newer timer
+				q.timer = nil
+			}
 			rt.scheduleIntakeFlushLocked(ownerID, computerID, q)
 		})
+		q.timer = timer
 	}
 }
 
@@ -333,23 +359,60 @@ func (rt *Runtime) drainIntakeLabels(layerCtx context.Context, ownerID, computer
 	}
 }
 
-// stopIntakeLabels stops the timers, cancels a running flush and refuses new
-// captures. Held captures are dropped and stay unlabelled.
+// stopIntakeLabels is the graceful stop: it refuses new captures, lets a
+// running flush finish, flushes once what is held, all bounded by the
+// runtime's drain deadline, then cancels what is left. Nothing is persisted
+// and nothing runs at boot, so a crash still drops held captures exactly as
+// a failed label does. Called from Stop before the store closes.
 func (rt *Runtime) stopIntakeLabels() {
 	l := &rt.intakeLabels
 	l.mu.Lock()
-	defer l.mu.Unlock()
+	already := l.stopped
 	l.stopped = true
-	for _, q := range l.queues {
+	type heldQueue struct {
+		owner, computer string
+		items           []intakeHeld
+	}
+	var rest []heldQueue
+	for key, q := range l.queues {
 		if q.timer != nil {
 			q.timer.Stop()
 			q.timer = nil
 		}
+		if len(q.items) > 0 && !already {
+			owner, computer, _ := strings.Cut(key, "\x00")
+			rest = append(rest, heldQueue{owner, computer, q.items})
+		}
 		q.items = nil
 	}
-	if l.cancel != nil {
-		l.cancel()
+	if l.ctx == nil {
+		l.ctx, l.cancel = context.WithCancel(context.Background())
 	}
+	l.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), rt.drainDeadline())
+	defer cancel()
+	// At the bound, whatever still runs is cancelled.
+	stop := context.AfterFunc(ctx, l.cancel)
+	defer stop()
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		l.flushes.Wait()
+		for _, h := range rest {
+			for len(h.items) > 0 && ctx.Err() == nil {
+				n := min(len(h.items), intakeFlushCaptures)
+				rt.labelHeld(ctx, h.owner, h.computer, h.items[:n])
+				h.items = h.items[n:]
+			}
+		}
+	}()
+	select {
+	case <-finished:
+	case <-ctx.Done():
+		log.Printf("intake labels: stop: drain deadline reached; held captures stay unlabelled")
+	}
+	l.cancel()
 }
 
 // labelHeld is the flush: it labels the held captures, in the order held, and
@@ -360,6 +423,12 @@ func (rt *Runtime) labelHeld(ctx context.Context, ownerID, computerID string, he
 	if len(held) == 0 {
 		return 0, 0
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("intake labels: flush of %d captures panicked: %v; they stay unlabelled", len(held), r)
+			labelled, unlabelled = 0, len(held)
+		}
+	}()
 	items := make([]sourcegraph.CapturedItem, len(held))
 	for i, h := range held {
 		items[i] = h.item
@@ -411,6 +480,15 @@ func (rt *Runtime) labelHeld(ctx context.Context, ownerID, computerID string, he
 			continue
 		}
 		labelled++
+	}
+	if budget.Err() != nil {
+		notAsked := 0
+		for _, r := range results {
+			if r.Err != nil && (errors.Is(r.Err, context.DeadlineExceeded) || errors.Is(r.Err, context.Canceled)) {
+				notAsked++
+			}
+		}
+		log.Printf("intake labels: budget expired during the flush: %d of %d captures not asked or unanswered", notAsked, len(items))
 	}
 	// One line per flush, counts only: the per-capture lines above stop when
 	// the budget ends, and a slow Jev would otherwise leave no trace.
@@ -1105,6 +1183,13 @@ func callJudgeWithin(ctx context.Context, judge CandidateJudge, scope string, ti
 	done := make(chan result, 1)
 	go func() {
 		var r result
+		defer func() {
+			// A judge that panics fails its call, never the process.
+			if p := recover(); p != nil {
+				r = result{err: fmt.Errorf("judge panicked: %v", p)}
+				done <- r
+			}
+		}()
 		if scoped, ok := judge.(ScopedCandidateJudge); ok && scope != "" {
 			r.raw, r.err = scoped.JudgeScoped(callCtx, scope, state, questions)
 		} else {
