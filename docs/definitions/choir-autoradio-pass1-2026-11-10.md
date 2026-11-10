@@ -301,9 +301,9 @@ Three sizes of experiment, all in one app:
 
 | Lane | Output | Where |
 | --- | --- | --- |
-| K. Lab core | `mobile/`: the stage interfaces, registry, configuration, turn record, turn engine, replay (also as a command on the Mac), a lab host app with the trace view and lab panel, installed on the owner's iPhone, with Apple-framework implementations of each stage | the Mac |
+| K. Lab core | `mobile/`: the stage interfaces, registry, configuration, turn record, turn engine, replay (also as a command on the Mac), an Exact lab host app with the trace view and lab panel, installed on the owner's iPhone, with Apple-framework implementations of each stage | the Mac |
 | A. App API | what the app calls today (device sign-in, the edition and its documents, the prompt bar and how a revision is observed, Jev, commitment records) and what is missing; this is step 0.2 | read-only |
-| E. Exact spike | the handoff's checks at a pinned Exact commit on the owner's iPhone; decides whether the lab host moves onto Exact now or after QA | the Mac |
+| E. Exact spike | the handoff's checks at a pinned Exact commit on the owner's iPhone; how the kit attaches to Exact, and the gaps the lab will hit | the Mac |
 
 **Wave B** (after K's interfaces exist; each adds implementations of
 stages and measures them by replay):
@@ -319,10 +319,11 @@ stages and measures them by replay):
 
 **Wave C:** the owner's QA; then narrowing.
 
-The lab host is SwiftUI for the first QA so that the phone has something
-to judge tonight; the kit under it does not depend on the host. Exact
-stays the decided shell (lane N): lane E says when the kit moves onto it.
-This is recorded as a deferral, not a change of decision.
+The lab host is an Exact app from the start (owner, 2026-11-10: "no
+swiftui please. lets do all exact. good to get more reps in with it").
+The kit attaches as Exact native modules and takes the audio session only
+through Exact's owner. A gap in Exact is reported and fixed in a module of
+ours or upstream, not worked around with a second UI stack.
 
 Work integrates on the branch `lane/autoradio-lab` and lands on main at
 milestones, so app commits do not ride or disturb platform deploys.

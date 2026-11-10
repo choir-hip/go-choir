@@ -26,6 +26,8 @@ desk. What varies is which part does each job.
 
 Three properties make it a lab.
 
+0. **The host is Exact** (owner, 2026-11-10: "no swiftui please. lets do
+   all exact"). The kit below is Swift modules attached to an Exact app.
 1. **Stages with one interface each.** Every job in the path has one
    Swift protocol and several implementations behind it.
 2. **A configuration is data.** A named set of choices, one per stage,
