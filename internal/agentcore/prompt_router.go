@@ -226,7 +226,7 @@ func (rt *Runtime) askRouter(ctx context.Context, ownerID, runID, text string, c
 		}()
 		var model string
 		raw, err := promptRouterAsk(rt, askCtx, exec, ownerID, rt.cfg.ComputerID, system1Ask{
-			questions: questions, labels: types.NewLabelSet(routerLabel), model: &model,
+			questions: questions, labels: types.NewLabelSet(routerLabel), model: &model, site: "prompt_router",
 			hostText: map[string]string{
 				routerHostInputRef:        "The owner's input to the prompt bar: " + routerBound(text),
 				routerHostDestinationsRef: promptroute.Destinations(candidates),

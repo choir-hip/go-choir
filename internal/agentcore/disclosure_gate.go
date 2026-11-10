@@ -581,7 +581,7 @@ func (rt *Runtime) disclosureJudge(ctx context.Context, call disclosureCall, own
 		return nil, "", err
 	}
 	raw, err := rt.System1().Ask(ctx, call.exec, owner, computer, system1Ask{
-		questions: valid, labels: labels,
+		questions: valid, labels: labels, site: "disclosure_gate",
 		hostText: map[string]string{
 			disclosureHostRequestRef: "The owner's request: " + disclosureBound(request, disclosureRequestRunes),
 			disclosureHostSinkRef:    text,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -45,7 +46,7 @@ func TestSubCallJudgeRunsConcurrentlyWithinItsBound(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if _, err := rt.callSubCallJudge(context.Background(), json.RawMessage(`{}`), map[string]json.RawMessage{"q": json.RawMessage(`{}`)}); err != nil {
+			if _, err := rt.callSubCallJudge(context.Background(), jevrecord.Meta{Site: "test"}, json.RawMessage(`{}`), map[string]json.RawMessage{"q": json.RawMessage(`{}`)}); err != nil {
 				t.Error(err)
 			}
 		}()

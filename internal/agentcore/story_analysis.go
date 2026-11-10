@@ -343,7 +343,7 @@ func (rt *Runtime) askAnalysisQuestions(ctx context.Context, exec toolregistry.E
 		}
 		valid, err := yaegikernel.ValidateSystem1HostQuestions(qs)
 		chunks = append(chunks, chunk{batch: batch, validErr: err,
-			ask: system1Ask{questions: valid, background: true, crossRun: true, subjects: subjects, story: a.Story.PublicationID, hostText: storyText}})
+			ask: system1Ask{questions: valid, background: true, site: "story_analysis", crossRun: true, subjects: subjects, story: a.Story.PublicationID, hostText: storyText}})
 		if err != nil {
 			break
 		}

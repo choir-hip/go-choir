@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/fanout"
+	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
@@ -569,7 +570,7 @@ func (rt *Runtime) judgeSubCallBatch(ctx context.Context, owner, computer, fanOu
 		closeAll(types.SubCallPhaseFailed, err.Error(), "", 0, 0, 0)
 		return err
 	}
-	raw, err := rt.callSubCallJudge(ctx, state, rawQuestions)
+	raw, err := rt.callSubCallJudge(ctx, jevrecord.Meta{Site: "subcall_judge", DecisionID: fanOut}, state, rawQuestions)
 	if err != nil {
 		closeAll(types.SubCallPhaseFailed, system1Message(err), "", 0, 0, 0)
 		return err
@@ -608,7 +609,7 @@ func (rt *Runtime) judgeSubCallBatch(ctx context.Context, owner, computer, fanOu
 // callSubCallJudge makes the one judge call of a batch, with at most
 // subCallJudgeConcurrency in flight on the computer. A rate-limited answer
 // waits and retries inside subCallJudgeTimeout instead of failing the work.
-func (rt *Runtime) callSubCallJudge(ctx context.Context, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
+func (rt *Runtime) callSubCallJudge(ctx context.Context, meta jevrecord.Meta, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
 	rt.subCallJudgeMu.Lock()
 	if rt.subCallGate == nil {
 		rt.subCallGate = make(chan struct{}, subCallJudgeConcurrency)
@@ -625,7 +626,7 @@ func (rt *Runtime) callSubCallJudge(ctx context.Context, state json.RawMessage, 
 	}
 	backoff := subCallJudgeBackoff
 	for {
-		raw, err := callJudgeWithin(callCtx, rt.candidateJudge, "", subCallJudgeTimeout, state, questions)
+		raw, err := rt.judgeCall(callCtx, meta, subCallJudgeTimeout, state, questions)
 		if err == nil || !subCallRateLimited(err) {
 			return raw, err
 		}

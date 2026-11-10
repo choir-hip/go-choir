@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/yusefmosiah/go-choir/internal/fanout"
+	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"log"
 	"strings"
 	"time"
@@ -177,7 +178,7 @@ func (rt *Runtime) judgeInertChunk(ctx context.Context, owner, computer string, 
 	}
 	callCtx, cancel := context.WithTimeout(ctx, inertJudgeTimeout)
 	defer cancel()
-	raw, err := rt.callSubCallJudge(callCtx, state, rawQuestions)
+	raw, err := rt.callSubCallJudge(callCtx, jevrecord.Meta{Site: "inert_judge", DecisionID: types.InertJudgementRecordID(todo[0].RecordID)}, state, rawQuestions)
 	if err != nil {
 		return err
 	}
