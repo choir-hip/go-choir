@@ -38,6 +38,50 @@ Design: `docs/design/autoradio-lab-2026-11-10.md`. This directory holds `Autorad
 6. A replay mutates the kept turn: it never writes into the turn folder; `--out` is separate.
 7. Apple recognition needs authorization on the Mac: the command embeds usage strings; a missing authorization is an `error` event and a non-zero exit in the proof.
 
+### Choir client stages (`choir-system1`, `choir-front`, `choir-desk`, sign-in)
+
+Written before the code. Base URL defaults to `https://choir.news`; the key is a `choir_sk_` bearer from a `KeyStore`. The key is never put in an event, a turn record, a log line, an error message or the UI.
+
+**Client and sign-in**
+1. No key stored: every authenticated call throws `ChoirError.notSignedIn` before any request; the stage fails for the turn, the engine falls back.
+2. 401 (key revoked or wrong): `ChoirError.unauthorized`; the key is kept (a retry may be a transient proxy answer) but the UI shows "sign in again" after the first 401, and Sign out clears it.
+3. 403 (key lacks a scope): `ChoirError.forbidden`, reported with the path; nothing retried.
+4. Timeout / no network / TLS failure: `ChoirError.transport`; every request has a deadline (`timeoutSeconds`), none waits forever.
+5. 5xx: `ChoirError.server(status, message)`; message is the server's `error` string only.
+6. Body is not the expected JSON: `ChoirError.decode`.
+7. Device flow: `authorization_pending` keeps polling at `interval`; `slow_down` adds 5 s; `access_denied`, `expired_token`, `invalid_grant` end the flow with that cause; the whole flow gives up at `expires_in`. A second Sign in while one is pending cancels the first. The browser cannot be opened: the code and URL stay visible in the UI so the listener can type them. The key arrives once; if storing it fails the flow reports failure and the key is dropped from memory.
+8. Sign out with no network: the local key is deleted regardless; the server revoke is best effort and says so.
+
+**System 1 (`choir-system1`)**
+1. 429 with Retry-After: `ChoirError.rateLimited(retryAfter)`; the stage fails for this turn. No retry, no client-side limiter (owner rule).
+2. Slow answer: the route cuts at 4 s with 502; the engine's own `system1Deadline` (2 s) usually fires first and the turn acknowledges without answers. Both are recorded as errors, never as silence.
+3. 503 "no decision model bound": surfaced as `server(503, ...)`.
+4. 400 from the route's limits (more than 12 questions, 8 choices, state over 48 KiB, instruction over 2000 bytes): the stage clips the state and the question list before sending, so a 400 means a client bug and is reported verbatim.
+5. A question comes back with `error`, or with a choice not offered: that question is left out of the answers (the holder treats a missing answer as "no"), the others stand. All questions errored: the stage throws.
+6. Two calls at once: refused client-side with `ChoirError.busy` (one call per turn; never concurrent).
+7. Cancelled mid-flight (the engine deadline): the URLSession task is cancelled; no half-recorded answers.
+
+**Programme (`choir-front`)**
+1. Empty front page (no stories): throws `ChoirError.empty("front page")`; the player keeps the fixture programme.
+2. Story with no text (projected-text publication with an empty body): skipped for auto-pick; an explicit pick of such a story fails with a message.
+3. `resolve` 404 (story unpublished since the list): the next story is tried when auto-picking; an explicit pick fails.
+4. Very long story: blocks are split at sentence ends to at most ~600 characters, and the story is cut at `maxBlocks` (default 80) with a note.
+5. A story with only citations, headings or lists: markdown marks are stripped; a block that is empty after stripping is dropped.
+6. Front page paging cursor invalid: the list stops at the page already read.
+7. Cached copy: none. Every load asks the server (the paper changes).
+
+**Desk (`choir-desk`)**
+1. No key / 401 / 403: the stream throws at once; the engine records the error and the radio resumes.
+2. The programme being played is a published story, not the listener's document: the first turn forks it (`POST /api/texture/fork` with the listener's raw words as `text`); later turns use the prompt bar with that document in `focus`. The fork's `client_request_id` is the turn id, so a retry replays rather than forking twice.
+3. The programme is not a Choir story (fixture) or has no known document: the unfocused prompt bar routes the words; if the answer carries no `doc_id` the stage ends with an error naming that (server gap).
+4. 409 command conflict / stale head: reported; no automatic retry with another id.
+5. The stream (`GET .../stream?format=json&after=`) drops, 5xx, or returns garbage: polled with a doubling pause; three consecutive failures end the stream with the error. A 409 `cursor_expired` restarts from 0 and de-duplicates by revision id.
+6. A revision that is not the desk's (the listener's own revision, or a version number at or below the listener's) is ignored; only `author_kind == appagent` above the listener's version is delivered.
+7. Trajectory terminal with no agent revision: the stream ends with a note, no revision (the engine's hold timeout also bounds this).
+8. The document changed underneath (someone edited between the listener's words and the revision): the revision is whatever head the desk produced; the stage delivers its text from the first paragraph that differs from what was playing, but never earlier than the block after the listener's position.
+9. Revision text identical to what is playing: nothing delivered.
+10. Engine cancels (hold timeout, new speech): the polling task ends on cancellation; no request is left running.
+
 ## The kit in one page
 
 Everything a stage concludes is a `LabEvent` on one `EventLog` (monotonic host-clock stamps; audio frames are not events). A turn is kept as a `TurnRecord`: the folded events, the `LabConfiguration` that ran, device model, OS, app build, and the outcome (`heardThrough`, `spokeAgain`, `skipped`, `corrected`, `unknown`).
