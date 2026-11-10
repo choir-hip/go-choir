@@ -133,6 +133,13 @@ A commit subject ends with its class and rollback, for example
 
 ## Proof
 
+- **Precommit, then score** (owner, 2026-11-10). Before a landing, an
+  experiment or a diagnosis is settled by evidence, enter the claim with a
+  probability, its test and a settle-by time in
+  [docs/calibration/claude-ledger.md](docs/calibration/claude-ledger.md).
+  Settle it when the evidence arrives, true or false, and read the
+  scorecard before stating confidence in the next claim of that kind.
+
 - Staging (`https://choir.news`) is the acceptance environment. Local proof
   does not count for vmctl, live computers, gateway credentials, model calls,
   auth, checkpoints, rollback or Choir-in-Choir.
