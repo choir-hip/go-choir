@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"log"
 	"math"
 	"sort"
@@ -285,7 +286,11 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 	if err != nil {
 		return nil, err
 	}
-	raw, err := callJudgeWithin(ctx, rt.candidateJudge, "", supportJudgeCallTimeout, state, questions)
+	decision := ""
+	if len(pending) > 0 {
+		decision = pending[0].Key
+	}
+	raw, err := rt.judgeCall(ctx, jevrecord.Meta{Site: "support_judge", DecisionID: decision, RunID: runID}, supportJudgeCallTimeout, state, questions)
 	if err != nil {
 		return nil, fmt.Errorf("Jev: %w", err)
 	}

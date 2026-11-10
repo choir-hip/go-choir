@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"log"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -337,7 +339,7 @@ func (rt *Runtime) labelOneCapture(ctx context.Context, judge CandidateJudge, li
 			return label, err
 		}
 	}
-	raw, err := callIntakeJudge(ctx, judge, stateRaw, rawQuestions)
+	raw, err := rt.judgeCall(ctx, jevrecord.Meta{Site: "intake_labels", DecisionID: capture.CaptureID, Scope: judgmentScopeIntakeLabels}, intakeLabelCallTimeout, stateRaw, rawQuestions)
 	if err != nil {
 		return label, err
 	}
@@ -382,10 +384,27 @@ func (rt *Runtime) labelOneCapture(ctx context.Context, judge CandidateJudge, li
 	return label, nil
 }
 
-// callIntakeJudge calls Jev on the intake rate scope within the per-call
-// timeout. It returns at the deadline even when the judge ignores it.
-func callIntakeJudge(ctx context.Context, judge CandidateJudge, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
-	return callJudgeWithin(ctx, judge, judgmentScopeIntakeLabels, intakeLabelCallTimeout, state, questions)
+// judgeCall is the one way a call site asks Jev: the call, timed and bounded
+// by callJudgeWithin, and its record, success or failure, through
+// jevrecord.Observe. meta names the site and the decision the answer feeds;
+// meta.Scope is the gateway scope.
+func (rt *Runtime) judgeCall(ctx context.Context, meta jevrecord.Meta, timeout time.Duration, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
+	return jevrecord.Observe(rt.jevRecorder(), meta, state, questions, func() (json.RawMessage, error) {
+		return callJudgeWithin(ctx, rt.candidateJudge, meta.Scope, timeout, state, questions)
+	})
+}
+
+// jevRecorder is the runtime's record of Jev calls: a rotated log beside the
+// store, not the tape (a judgment is observation, and at thousands an hour
+// it would outweigh the tape). Nil, and a no-op, when the store has no path.
+func (rt *Runtime) jevRecorder() *jevrecord.Recorder {
+	rt.jevRecOnce.Do(func() {
+		if rt.store == nil || strings.TrimSpace(rt.store.StatePath()) == "" {
+			return
+		}
+		rt.jevRec = jevrecord.NewRecorder(filepath.Join(filepath.Dir(rt.store.StatePath()), "jev-calls", "calls.jsonl"))
+	})
+	return rt.jevRec
 }
 
 // callJudgeWithin calls Jev on a rate scope ("" for the judge's default

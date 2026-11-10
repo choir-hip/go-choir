@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -194,6 +195,9 @@ type system1Ask struct {
 	// draws on the gateway's bulk share. Every other call, the desk's own
 	// question, the prompt router and the disclosure gate, is interactive.
 	background bool
+	// site names the caller in the record of the call (prompt_router,
+	// disclosure_gate, story_analysis); empty is the desk's own verb.
+	site string
 }
 
 // system1Subject is what a host-built question asks about.
@@ -279,7 +283,7 @@ func (rt *Runtime) system1Call(ctx context.Context, exec toolregistry.ExecutionC
 	if ask.background {
 		scope = ""
 	}
-	raw, err := callJudgeWithin(ctx, rt.candidateJudge, scope, system1CallTimeout, state, rawQuestions)
+	raw, err := rt.judgeCall(ctx, jevrecord.Meta{Site: firstNonEmpty(ask.site, "system1_verb"), DecisionID: requestID, RunID: runID, Scope: scope}, system1CallTimeout, state, rawQuestions)
 	if err != nil {
 		rt.recordSystem1Failure(ctx, exec, owner, computer, runID, digest, requestID, err)
 		return nil, fmt.Errorf("choir.System1: the judge call failed: %s", system1Message(err))

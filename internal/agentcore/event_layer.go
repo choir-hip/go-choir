@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/fanout"
+	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"github.com/yusefmosiah/go-choir/internal/outlet"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -436,7 +437,7 @@ func (rt *Runtime) prefetchEventCalls(ctx context.Context, idx *eventIndex, chun
 		}
 	}
 	results := fanout.Do(ctx, eventCallConcurrency, len(todo), func(ctx context.Context, i int) (json.RawMessage, error) {
-		return rt.askEventChunk(ctx, todo[i].state, todo[i].questions)
+		return rt.askEventChunk(ctx, chunks[todo[i].slot], todo[i].state, todo[i].questions)
 	})
 	for i, p := range todo {
 		out[p.slot] = &eventPrefetch{key: eventCallKey(p.state, p.questions), raw: results[i].Value, err: results[i].Err}
@@ -444,8 +445,13 @@ func (rt *Runtime) prefetchEventCalls(ctx context.Context, idx *eventIndex, chun
 	return out
 }
 
-func (rt *Runtime) askEventChunk(ctx context.Context, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
-	return callJudgeWithin(ctx, rt.candidateJudge, judgmentScopeIntakeLabels, eventCallTimeout, state, questions)
+func (rt *Runtime) askEventChunk(ctx context.Context, chunk []eventInput, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
+	meta := jevrecord.Meta{Site: "event_layer", Scope: judgmentScopeIntakeLabels,
+		Threshold: fmt.Sprintf("join=%.2f tentative=%.2f", eventJoinP, eventTentativeP)}
+	if len(chunk) > 0 {
+		meta.DecisionID = "event_chunk:" + strings.TrimSpace(chunk[0].Item.CaptureID)
+	}
+	return rt.judgeCall(ctx, meta, eventCallTimeout, state, questions)
 }
 
 // resolveEventChunk asks Jev once about chunk (or uses the answer already
@@ -465,7 +471,7 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 	if pre != nil && pre.key == eventCallKey(stateRaw, questions) {
 		raw, err = pre.raw, pre.err
 	} else {
-		raw, err = rt.askEventChunk(ctx, stateRaw, questions)
+		raw, err = rt.askEventChunk(ctx, chunk, stateRaw, questions)
 	}
 	report.Calls++
 	if err != nil {

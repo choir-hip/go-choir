@@ -31,6 +31,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/fanout"
 	"github.com/yusefmosiah/go-choir/internal/gateway"
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
+	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 )
 
 const (
@@ -140,6 +141,24 @@ func Main(args []string) int {
 // at about 110 ms, so 80 calls take about 1 s instead of 9 s.
 const scorerConcurrency = 12
 
+// decisionKey carries the id of the score a call feeds to the recorder.
+type decisionKey struct{}
+
+// recordingDecider records each call of the wrapped decider.
+type recordingDecider struct {
+	inner decider
+	rec   *jevrecord.Recorder
+}
+
+func (d recordingDecider) Decide(ctx context.Context, computerID string, request gateway.JudgmentRequest) ([]byte, error) {
+	id, _ := ctx.Value(decisionKey{}).(string)
+	meta := jevrecord.Meta{Site: "front_importance", DecisionID: id, Threshold: fmt.Sprintf("criteria=%v", scoringCriteria)}
+	raw, err := jevrecord.Observe(d.rec, meta, request.State, request.Questions, func() (json.RawMessage, error) {
+		return d.inner.Decide(ctx, computerID, request)
+	})
+	return raw, err
+}
+
 // errScoreDeferred marks a story the run's time budget ran out before.
 var errScoreDeferred = errors.New("front-importance: time budget spent")
 
@@ -161,6 +180,11 @@ func run(ctx context.Context, cfg config, client *http.Client, jev decider, now 
 	previous := readScores(cfg.ScoresPath)
 	next := scoresFile{Version: 1, Scores: map[string]scoreRow{}}
 	deadline := now().Add(cfg.Budget)
+	// Every call is recorded for calibration, failures included, beside the
+	// scores file (internal/jevrecord).
+	recorder := jevrecord.NewRecorder(filepath.Join(filepath.Dir(cfg.ScoresPath), "jev-calls.jsonl"))
+	defer recorder.Close()
+	jev = recordingDecider{inner: jev, rec: recorder}
 	// Plan first: which stories keep their row, which are asked, which wait
 	// for a later run. Then ask the asked ones scorerConcurrency at a time;
 	// every answer lands in its story's slot, so order is the front list's.
@@ -195,6 +219,7 @@ func run(ctx context.Context, cfg config, client *http.Client, jev decider, now 
 		}
 		callCtx, cancel := context.WithTimeout(ctx, cfg.CallTime)
 		defer cancel()
+		callCtx = context.WithValue(callCtx, decisionKey{}, fmt.Sprintf("%s@%d", strings.TrimSpace(asked[i].PublicationID), asked[i].LatestRevision))
 		return scoreStory(callCtx, jev, asked[i])
 	})
 	for i, story := range asked {
