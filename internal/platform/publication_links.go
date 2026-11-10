@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -176,10 +177,13 @@ func (s *Service) verifyPublishLinks(ctx context.Context, og *ObjectGraphStore, 
 type changelogNoticeObject struct {
 	// PublisherOwnerID is who caused the notice, for the daily cap. Internal;
 	// the feeds do not show it.
-	PublisherOwnerID string                    `json:"publisher_owner_id,omitempty"`
-	Notice           types.CommitmentChangelog `json:"notice"`
-	Child            noticeChildRef            `json:"child"`
-	RespondsTo       *versionLink              `json:"responds_to,omitempty"`
+	PublisherOwnerID string `json:"publisher_owner_id,omitempty"`
+	// Seq orders a recipient's notices strictly, in write order (the feed
+	// cursor). Object times are whole seconds and cannot.
+	Seq        int64                     `json:"seq,omitempty"`
+	Notice     types.CommitmentChangelog `json:"notice"`
+	Child      noticeChildRef            `json:"child"`
+	RespondsTo *versionLink              `json:"responds_to,omitempty"`
 }
 
 type noticeChildRef struct {
@@ -291,13 +295,17 @@ func (s *Service) admitNotices(ctx context.Context, og *ObjectGraphStore, publis
 	}
 	var out []objectgraph.Object
 	for _, o := range objs {
-		if _, err := og.GetObject(ctx, o.CanonicalID); err == nil {
-			out = append(out, o)
+		if old, err := og.GetObject(ctx, o.CanonicalID); err == nil {
+			// A republish updates the notice in place and keeps its place in
+			// the feed: no one is told again.
+			var prev changelogNoticeObject
+			_ = json.Unmarshal(old.Metadata, &prev)
+			out = append(out, withNoticeSeq(o, prev.Seq))
 			continue
 		}
 		if used < noticesPerPublisherPerDay {
 			used++
-			out = append(out, o)
+			out = append(out, withNoticeSeq(o, s.nextNoticeSeq()))
 		}
 	}
 	return out
@@ -322,4 +330,34 @@ func (s *Service) countRecentNoticesBy(ctx context.Context, publisher string, si
 		}
 	}
 	return n, rows.Err()
+}
+
+var noticeSeqLast atomic.Int64
+
+// nextNoticeSeq is a strictly increasing sequence for notices: the clock in
+// nanoseconds, never repeated or going back within the process. Callers hold
+// writeMu, so write order is sequence order.
+func (s *Service) nextNoticeSeq() int64 {
+	for {
+		last := noticeSeqLast.Load()
+		next := time.Now().UnixNano()
+		if next <= last {
+			next = last + 1
+		}
+		if noticeSeqLast.CompareAndSwap(last, next) {
+			return next
+		}
+	}
+}
+
+// withNoticeSeq sets the notice's sequence.
+func withNoticeSeq(obj objectgraph.Object, seq int64) objectgraph.Object {
+	var n changelogNoticeObject
+	if json.Unmarshal(obj.Metadata, &n) != nil {
+		return obj
+	}
+	n.Seq = seq
+	obj.Metadata = mustJSONRaw(n)
+	obj.ContentHash = objectgraph.ContentHash("choir.changelog_notice", nil, obj.Metadata)
+	return obj
 }

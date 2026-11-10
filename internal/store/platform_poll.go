@@ -63,6 +63,9 @@ type PlatformPoll struct {
 	GateQueue      map[string]PollGateItem `json:"gate_queue,omitempty"`
 	OpenStories    map[string]time.Time    `json:"open_stories,omitempty"`
 	CourierPending map[string]int          `json:"courier_pending,omitempty"`
+	// Skipped names the feed items the poll could not adopt (malformed): each
+	// with its id and why. The cursor moves past them. Newest last, bounded.
+	Skipped []PollSkipped `json:"skipped,omitempty"`
 	// GateLog is the last 24 hours of gate calls, for the daily bounds.
 	GateLog   []PollGateCall `json:"gate_log,omitempty"`
 	UpdatedAt time.Time      `json:"updated_at"`
@@ -154,4 +157,14 @@ type PollGateCall struct {
 	Publisher string    `json:"publisher"`
 	Story     string    `json:"story"`
 	At        time.Time `json:"at"`
+}
+
+// PollSkippedLimit bounds the skipped items a poll keeps.
+const PollSkippedLimit = 50
+
+// PollSkipped is one feed item the poll named and passed over.
+type PollSkipped struct {
+	ID     string    `json:"id"`
+	Reason string    `json:"reason"`
+	At     time.Time `json:"at"`
 }
