@@ -162,7 +162,8 @@ func (h *Handler) ringObservations(ctx context.Context, sample bool) []ringMembe
 // Health probes run in parallel, at most ringProbeParallel at once, under
 // one per-tick deadline, so a few hung guests cannot stall the tick and the
 // retry sweep after it. A probe cut off by the deadline answers "no answer",
-// which counts one readiness strike (three in a row breach).
+// which is unprobed: neither healthy nor a readiness strike. A probe that ran
+// and got no answer counts one strike (three in a row breach).
 const (
 	ringProbeParallel = 8
 	ringProbeDeadline = 25 * time.Second
@@ -185,10 +186,15 @@ func (h *Handler) probeRingHealthAll(ctx context.Context, obs []ringMemberObs, p
 			case sem <- struct{}{}:
 				defer func() { <-sem }()
 			case <-ctx.Done():
-				results[i] = ringHealth{Detail: "no probe slot before the tick deadline"}
+				results[i] = ringHealth{Unprobed: true, Detail: "no probe slot before the tick deadline"}
 				return
 			}
 			results[i] = h.probeRingHealth(ctx, own)
+			if !results[i].Answered && ctx.Err() != nil {
+				// The tick deadline cut the probe: the guest was not asked
+				// long enough to be judged.
+				results[i] = ringHealth{Unprobed: true, Detail: "probe cut off by the tick deadline"}
+			}
 		}(i, owners[idx])
 	}
 	wg.Wait()

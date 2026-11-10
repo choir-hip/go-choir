@@ -1582,3 +1582,166 @@ func TestRingClosedGuardWindowSurvivesRestart(t *testing.T) {
 		t.Fatalf("window wrong after a reload")
 	}
 }
+
+// ---- review round 1 (Gemini), each scenario written before its fix ----
+//
+// Failure modes:
+//   - F1: a refreshed member that is rebooting (not Active) on the next tick
+//     leaves its ring with required=0, exposed=0, and with a zero floor the
+//     ring closes skipped_no_exposure before any refreshed member was seen
+//     healthy;
+//   - F2: R5 closes skipped, and the walk completes with the paper never
+//     refreshed, when the paper is inactive, held, divergent, or its refresh
+//     failed;
+//   - F3: a member that crashes on the target while inactive has its crash
+//     suppressed forever (LastOffTarget moves to now on the inactive tick);
+//   - F4: a probe that never ran (no slot, tick deadline) counts as a
+//     readiness strike and rolls the fleet back;
+//   - F5: a breach in a closed ring writes a second ring_closed line for it,
+//     overwrites its ClosedAt, and leaves later closed rings reading clean.
+
+func TestRingReviewF1RefreshedMemberRebootingHoldsRing(t *testing.T) {
+	f := newRwFleet(t)
+	f.add(ringProofComputer, ringR0, true)
+	t1 := f.add(rwTest1, ringR1, false)
+	f.tick() // R0 closes, R1 opens, t1 enrolled and refreshed by the sweep
+	if f.s.Walk.Current != 1 || f.obs[rwTest1].Release != rwTo.Single {
+		t.Fatalf("setup: current %d release %s", f.s.Walk.Current, f.obs[rwTest1].Release)
+	}
+	t1.Active, t1.Health = false, nil // rebooting
+	f.tick()
+	if f.s.Walk.Current != 1 || f.closed(ringR1) != nil {
+		t.Fatalf("R1 closed %v with its refreshed member rebooting and never seen healthy", f.closed(ringR1))
+	}
+	// It comes back healthy: now the ring closes clean.
+	t1.Active, t1.Health = true, &ringHealth{Answered: true, Status: 200}
+	f.tick()
+	if cl := f.closed(ringR1); cl == nil || cl.Outcome != ringOutcomeClean {
+		t.Fatalf("R1 must close clean once the member is seen healthy: %+v", cl)
+	}
+}
+
+// The hold is bounded: a refreshed member that stays inactive past
+// ringInactiveHold with no boot failure stops holding its ring (treated as
+// down); a boot failure breaches at once.
+func TestRingReviewF1InactiveHoldIsBounded(t *testing.T) {
+	f := newRwFleet(t)
+	f.add(ringProofComputer, ringR0, true)
+	t1 := f.add(rwTest1, ringR1, false)
+	f.tick()
+	t1.Active, t1.Health = false, nil
+	for i := 0; i < int(ringInactiveHold/time.Minute)-1; i++ {
+		f.tick()
+	}
+	if f.s.Walk.Current != 1 {
+		t.Fatalf("hold ended early: current %d", f.s.Walk.Current)
+	}
+	f.tick()
+	f.tick()
+	if cl := f.closed(ringR1); cl == nil || cl.Outcome != ringOutcomeSkippedNoExposure {
+		t.Fatalf("the hold must end after %s: %+v", ringInactiveHold, cl)
+	}
+	g := newRwFleet(t)
+	g.add(ringProofComputer, ringR0, true)
+	u := g.add(rwTest1, ringR1, false)
+	g.tick()
+	u.Active, u.Health = false, nil
+	u.Crashes = []CrashRecord{{At: g.now.Add(10 * time.Second).Format(time.RFC3339Nano), Kind: crashKindBootFailed, Cause: "boot of to failed"}}
+	g.tick()
+	if g.s.Walk.Status != ringWalkRolledBack {
+		t.Fatalf("a boot failure of a refreshed inactive member must breach: %s", g.s.Walk.Status)
+	}
+}
+
+func TestRingReviewF2PaperNeverSkippedForTransientState(t *testing.T) {
+	cases := map[string]func(o *ringMemberObs){
+		"inactive":  func(o *ringMemberObs) { o.Active, o.Health = false, nil },
+		"held":      func(o *ringMemberObs) { o.Held, o.Health = true, nil },
+		"divergent": func(o *ringMemberObs) { o.Divergent, o.Health = true, nil },
+		"failed":    func(o *ringMemberObs) { o.FailedTarget = rwTo.SingleCommit },
+		"deferred":  func(o *ringMemberObs) { o.Pending, o.Deferred = true, true },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := newRwFleet(t)
+			f.add(ringProofComputer, ringR0, true)
+			paper := f.add(ringPaperComputer, ringR5, false)
+			mutate(paper)
+			for i := 0; i < 10; i++ {
+				f.tick()
+			}
+			if f.s.Walk.Status != ringWalkWalking || f.closed(ringR5) != nil {
+				t.Fatalf("R5 closed (%+v) or the walk ended (%s) with the paper %s and never refreshed", f.closed(ringR5), f.s.Walk.Status, name)
+			}
+		})
+	}
+	// A paper that is legitimately absent from the fleet closes R5 as empty.
+	f := newRwFleet(t)
+	f.add(ringProofComputer, ringR0, true)
+	for i := 0; i < 8; i++ {
+		f.tick()
+	}
+	if cl := f.closed(ringR5); cl == nil || cl.Outcome != ringOutcomeSkippedEmpty {
+		t.Fatalf("an absent paper closes R5 as empty: %+v", cl)
+	}
+}
+
+func TestRingReviewF3CrashWhileInactiveIsNotForgotten(t *testing.T) {
+	f := newRwFleet(t)
+	f.add(ringProofComputer, ringR0, true)
+	t1 := f.add(rwTest1, ringR1, false)
+	t1.Health = &ringHealth{Answered: false}
+	f.tick() // R1 opens, t1 refreshed
+	f.tick() // t1 seen on the target
+	t1.Active, t1.Health = false, nil
+	t1.Crashes = []CrashRecord{{At: f.now.Add(30 * time.Second).Format(time.RFC3339Nano), Kind: "unhealthy_restart", Cause: "guest exited"}}
+	f.tick() // inactive tick
+	t1.Active, t1.Health = true, &ringHealth{Answered: false}
+	f.tick() // back on the target, the crash still in its record
+	if f.s.Walk.Status != ringWalkRolledBack {
+		t.Fatalf("a crash on the target while inactive was suppressed: %s", f.s.Walk.Status)
+	}
+}
+
+func TestRingReviewF4UnprobedIsNeitherHealthyNorStrike(t *testing.T) {
+	f := newRwFleet(t)
+	f.add(ringProofComputer, ringR0, true)
+	t1 := f.add(rwTest1, ringR1, false)
+	t1.Health = &ringHealth{Answered: false}
+	f.tick()
+	for i := 0; i < 15; i++ {
+		t1.Health = &ringHealth{Answered: false, Unprobed: true, Detail: "no probe slot before the tick deadline"}
+		f.tick()
+	}
+	if f.s.Walk.Status != ringWalkWalking {
+		t.Fatalf("unprobed samples rolled the walk back: %+v", f.s.Walk.Rings[1].Breach)
+	}
+	if m := f.s.Walk.Rings[1].Members[rwTest1]; m.Healthy != 0 || m.ReadyStrikes != 0 || !m.ExposedAt.IsZero() {
+		t.Fatalf("unprobed must be neither healthy nor a strike: %+v", m)
+	}
+}
+
+func TestRingReviewF5ClosedRingBreachRecordsOnce(t *testing.T) {
+	f, t1 := closedRingFleet(t)
+	closedAt := f.s.Walk.Rings[1].ClosedAt
+	t1.Crashes = []CrashRecord{{At: f.now.Add(30 * time.Second).Format(time.RFC3339Nano), Kind: "unhealthy_restart", Cause: "x"}}
+	f.tick()
+	if f.s.Walk.Status != ringWalkRolledBack {
+		t.Fatalf("setup: no rollback")
+	}
+	n := 0
+	for _, e := range f.all {
+		if e.Event == ringEventRingClosed && e.Ring == ringR1 {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("R1 wrote %d ring_closed lines", n)
+	}
+	if !f.s.Walk.Rings[1].ClosedAt.Equal(closedAt) || f.s.Walk.Rings[1].Outcome != ringOutcomeBreached || f.s.Walk.Rings[1].Breach == nil {
+		t.Fatalf("R1 after the breach: %+v", f.s.Walk.Rings[1])
+	}
+	if o := f.s.Walk.Rings[2].Outcome; o != ringOutcomeStoppedByRollback {
+		t.Fatalf("a ring closed after the breached one must read stopped_by_rollback, got %s", o)
+	}
+}

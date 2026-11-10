@@ -195,7 +195,17 @@ type ringHealth struct {
 	Status   int    `json:"status,omitempty"`
 	Wedged   bool   `json:"wedged,omitempty"`
 	Detail   string `json:"detail,omitempty"`
+	// Unprobed: the probe never ran (no slot before the tick deadline, or the
+	// deadline cut it). It is neither healthy nor a readiness strike.
+	Unprobed bool `json:"unprobed,omitempty"`
 }
+
+// ringInactiveHold bounds how long a ring waits on a member that was asked
+// onto the release (enrolled, or seen on it) and is not running: it is
+// rebooting after its refresh. After this long without being seen active it
+// is treated as down. A failed boot breaches sooner (the boot-success guard,
+// and the crash-loop bound that holds the computer).
+const ringInactiveHold = 10 * time.Minute
 
 // parseRingHealth reads a guest /health answer: readiness is status 200; the
 // appender wedge is projection_repair_required in the body
@@ -254,6 +264,10 @@ type ringMember struct {
 	EnrolledAt    time.Time `json:"enrolled_at,omitempty"`
 	LastOffTarget time.Time `json:"last_off_target,omitempty"`
 	LastEpoch     int64     `json:"last_epoch,omitempty"`
+	// LastActiveAt: the last tick that saw the member running; an enrolled
+	// member that is rebooting after its refresh holds its ring for
+	// ringInactiveHold from it.
+	LastActiveAt  time.Time `json:"last_active_at,omitempty"`
 	BootSeenAt    time.Time `json:"boot_seen_at,omitempty"`
 	FirstOnTarget time.Time `json:"first_on_target,omitempty"`
 	ExposedAt     time.Time `json:"exposed_at,omitempty"`
@@ -621,7 +635,7 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 		// busy, which the retry sweep keeps asking) does not hold the ring.
 		// R0 and R5 are watched: d@e and the paper are never passed unseen.
 		counted := ringRefreshableMembers(p, members, w.To, p.Ring == ringR0 || p.Ring == ringR5)
-		required, exposed, eligible, missing := ringExposure(p, counted, false)
+		required, exposed, eligible, missing := ringExposure(p, counted, false, now)
 		if required == 0 && exposed > 0 {
 			// Every member was seen healthy on the release and has since
 			// gone idle (hibernated): that is exposure.
@@ -629,6 +643,14 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 		} else if required == 0 {
 			if p.Ring == ringR0 {
 				p.Waiting = "no active member: the proof ring holds until d@e runs the release and is seen healthy" + ringWakeNote(p)
+				return events, actions
+			}
+			if p.Ring == ringR5 {
+				// The paper is never passed unseen for a transient state
+				// (down, held, divergent, refresh failed): R5 holds until the
+				// paper runs the release and is seen healthy, the next release
+				// supersedes the walk, or an expedite is made.
+				p.Waiting = "the paper is not running the release: R5 holds until it is refreshed and seen healthy"
 				return events, actions
 			}
 			events = append(events, w.closeRing(now, p, ringOutcomeSkippedNoExposure, "no member of this ring is refreshable now (down, held, divergent, deferred busy or failed): nothing to see healthy"))
@@ -660,14 +682,25 @@ func ringMembersOf(obs []ringMemberObs, r ringID) []ringMemberObs {
 	return members
 }
 
+// ringOwedInactive: the member was asked onto the release, was never seen
+// healthy on it, and was running within ringInactiveHold.
+func ringOwedInactive(m *ringMember, now time.Time) bool {
+	return m != nil && m.ExposedAt.IsZero() && (m.Enrolled || !m.FirstOnTarget.IsZero()) &&
+		!m.LastActiveAt.IsZero() && now.Sub(m.LastActiveAt) < ringInactiveHold
+}
+
 // ringExposure counts a ring's members: required (active, not held, not
 // divergent; with skipPending, not still pending a refresh either), exposed
 // (seen healthy on the release), eligible (required or exposed), and the
 // required ones not yet exposed.
-func ringExposure(p *ringProgress, members []ringMemberObs, skipPending bool) (required, exposed, eligible int, missing []string) {
+func ringExposure(p *ringProgress, members []ringMemberObs, skipPending bool, now time.Time) (required, exposed, eligible int, missing []string) {
 	for _, o := range members {
 		m := p.Members[o.ComputerID]
-		isRequired := o.Active && !o.Held && !o.Divergent && !(skipPending && o.Pending)
+		// A member asked onto the release (enrolled, or seen on it) that is
+		// rebooting after its refresh is still owed: the ring holds for it
+		// until it is seen healthy, breached, or ringInactiveHold passes.
+		running := o.Active || ringOwedInactive(m, now)
+		isRequired := running && !o.Held && !o.Divergent && !(skipPending && o.Pending)
 		if isRequired {
 			required++
 		}
@@ -696,7 +729,7 @@ func ringRefreshableMembers(p *ringProgress, members []ringMemberObs, to ringRel
 	for _, o := range members {
 		if m := p.Members[o.ComputerID]; m == nil || m.ExposedAt.IsZero() {
 			failed := o.FailedTarget != "" && o.FailedTarget == to.commitFor(o.Layered)
-			if failed || (!watched && o.Deferred) {
+			if (failed || o.Deferred) && !watched {
 				continue
 			}
 		}
@@ -716,7 +749,13 @@ func (w *ringWalk) guardClosedRing(now time.Time, p *ringProgress, members []rin
 		}
 		m.LastRelease = o.Release
 		onTarget := o.Active && o.Release != "" && o.Release == w.To.releaseFor(o.Layered)
-		if !onTarget {
+		if o.Active {
+			m.LastActiveAt = now
+		}
+		// Only a running member on another release is off the target: a
+		// member that is merely not running (rebooting) must not move the
+		// mark past a crash it recorded on the target.
+		if o.Active && !onTarget {
 			m.LastOffTarget = now
 		}
 		if onTarget && m.FirstOnTarget.IsZero() {
@@ -745,7 +784,10 @@ func (w *ringWalk) observeRing(now time.Time, p *ringProgress, members []ringMem
 		// R0 computer the deploy did not reach only after the grace.
 		graced := withGrace && p.Ring == ringR0 && now.Sub(p.OpenedAt) < ringR0EnrollGrace
 		target := w.To.commitFor(o.Layered)
-		if !onTarget {
+		if o.Active {
+			m.LastActiveAt = now
+		}
+		if o.Active && !onTarget {
 			m.LastOffTarget = now
 		}
 		reenroll := m.Enrolled && !o.Pending && o.FailedTarget != target && now.Sub(m.EnrolledAt) >= ringReenrollGap
@@ -838,7 +880,7 @@ func (s *ringWalkState) stepExpedited(now time.Time, obs []ringMemberObs) ([]rin
 			events = append(events, w.closeRing(now, p, ringOutcomeSkippedEmpty, "no computer in this ring (expedited)"))
 			continue
 		}
-		required, exposed, _, missing := ringExposure(p, members, !watched)
+		required, exposed, _, missing := ringExposure(p, members, !watched, now)
 		// A member whose refresh to this target failed is not retried by the
 		// walk (no kill loop): it cannot hold the ring open.
 		missing = ringDropFailed(missing, members, w.To)
@@ -934,12 +976,16 @@ func (m *ringMember) evaluate(now time.Time, o ringMemberObs, onTarget bool, ope
 		if m.LastOffTarget.After(since) {
 			since = m.LastOffTarget
 		}
-		if c.Kind != crashKindBootFailed && onTarget && !m.FirstOnTarget.IsZero() && !at.Before(since) {
+		if c.Kind != crashKindBootFailed && (onTarget || !o.Active) && !m.FirstOnTarget.IsZero() && !at.Before(since) {
 			return &ringBreach{ComputerID: o.ComputerID, Guard: ringGuardCrash, Detail: c.Kind + ": " + c.Cause, At: now}
 		}
 	}
 	if !onTarget || o.Health == nil {
 		m.ReadyStrikes, m.WedgeStrikes = 0, 0
+		return nil
+	}
+	if o.Health.Unprobed {
+		// The probe never ran: neither healthy nor a strike.
 		return nil
 	}
 	// The readiness delay is armed at every boot seen on the release (a new
@@ -1024,7 +1070,19 @@ func (w *ringWalk) advance(now time.Time, s *ringWalkState) ([]ringEvent, bool) 
 // planned return refresh, and forward entries of the others are forgotten.
 func (w *ringWalk) rollback(now time.Time, p *ringProgress, breach *ringBreach, obs []ringMemberObs, actions *[]ringAction) []ringEvent {
 	p.Breach = breach
-	events := []ringEvent{w.closeRing(now, p, ringOutcomeBreached, "")}
+	var events []ringEvent
+	if p.ClosedAt.IsZero() {
+		events = append(events, w.closeRing(now, p, ringOutcomeBreached, ""))
+	} else {
+		// A breach in a ring that already closed: its single ring_closed line
+		// and ClosedAt stand; the rolled_back line carries the breach.
+		p.Outcome = ringOutcomeBreached
+		for _, q := range w.Rings[ringIndex(p.Ring)+1:] {
+			if !q.ClosedAt.IsZero() {
+				q.Outcome = ringOutcomeStoppedByRollback
+			}
+		}
+	}
 	// An expedited walk has every ring open: the breached ring becomes the
 	// current one, and every other unclosed ring is closed with a line.
 	w.Current = ringIndex(p.Ring)
