@@ -175,9 +175,9 @@ type subCallFixture struct {
 func newSubCallFixture(t *testing.T, findings map[string]string) *subCallFixture {
 	t.Helper()
 	deskTestWorkerBin(t)
-	oldSpacing, oldRetry := subCallJudgeSpacing, subCallRuleRetryWait
-	subCallJudgeSpacing, subCallRuleRetryWait = 0, time.Millisecond
-	t.Cleanup(func() { subCallJudgeSpacing, subCallRuleRetryWait = oldSpacing, oldRetry })
+	oldRetry := subCallRuleRetryWait
+	subCallRuleRetryWait = time.Millisecond
+	t.Cleanup(func() { subCallRuleRetryWait = oldRetry })
 	rt, s := testRuntime(t)
 	rt.provider = &subCallChildProvider{findings: findings}
 	judge := &subCallJudge{}
@@ -842,9 +842,6 @@ func TestSubCallDelegateTaskReportIsScoredEndToEnd(t *testing.T) {
 	f := newDelegationFixture(t, "owner-subcall")
 	judge := &subCallJudge{}
 	f.rt.SetCandidateJudge(judge)
-	oldSpacing := subCallJudgeSpacing
-	subCallJudgeSpacing = 0
-	t.Cleanup(func() { subCallJudgeSpacing = oldSpacing })
 	f.model.parentCell = `var ids []string
 for _, r := range choir.Records() { if r.Captures != nil { ids = append(ids, r.RecordID) } }
 choir.Delegate("intake", ids, "per_record")`
@@ -1021,17 +1018,6 @@ func TestSubCallRateLimitedJudgeIsRetried(t *testing.T) {
 	f.rt.waitSubCallJudge()
 	if !f.exists(types.SubCallSettlementRecordID(results[0].CastID, types.SubCallJudgeScorerID)) || f.judge.callCount() < 2 {
 		t.Fatalf("not retried: %d calls", f.judge.callCount())
-	}
-	// Spacing: two calls start at least the spacing apart.
-	subCallJudgeSpacing = 80 * time.Millisecond
-	start := time.Now()
-	for i := 0; i < 2; i++ {
-		if _, err := f.rt.callSubCallJudge(context.Background(), json.RawMessage(`{}`), map[string]json.RawMessage{"q": json.RawMessage(`{"choices":["a","b"]}`)}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if time.Since(start) < 70*time.Millisecond {
-		t.Fatalf("calls were not spaced: %s", time.Since(start))
 	}
 }
 

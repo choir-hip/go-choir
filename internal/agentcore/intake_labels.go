@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/yusefmosiah/go-choir/internal/fanout"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -33,6 +34,11 @@ import (
 // own bucket, so a busy poll never starves the support judge.
 const judgmentScopeIntakeLabels = "intake_labels"
 
+// judgmentScopeInteractive is the gateway scope of the latency-critical
+// judgments (a desk's question, the prompt router, the disclosure gate): the
+// share a bulk burst cannot take.
+const judgmentScopeInteractive = "interactive"
+
 // ScopedCandidateJudge is a CandidateJudge that can draw on a named gateway
 // rate bucket. A judge without it is called through Judge.
 type ScopedCandidateJudge interface {
@@ -41,7 +47,7 @@ type ScopedCandidateJudge interface {
 
 // Budgets. Vars so a test can shorten them.
 var (
-	intakeLabelConcurrency = 4
+	intakeLabelConcurrency = 12
 	intakeLabelPollBudget  = 15 * time.Second
 	intakeLabelCallTimeout = 5 * time.Second
 )
@@ -199,33 +205,24 @@ func (rt *Runtime) labelCaptures(ctx context.Context, ownerID, computerID, sourc
 		lib.examples = examples
 	}
 
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, intakeLabelConcurrency)
-	for i := range items {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			select {
-			case sem <- struct{}{}:
-			case <-budget.Done():
-				return
+	results := fanout.Do(budget, intakeLabelConcurrency, len(items), func(callCtx context.Context, i int) (struct{}, error) {
+		label, err := rt.labelOneCapture(callCtx, judge, lib, ownerID, computerID, sourceID, items, i)
+		if err == nil {
+			_, err = rt.store.AppendCaptureLabel(withKindCustodian(ctx, "choir.capture_label"), label)
+		}
+		return struct{}{}, err
+	})
+	for i, r := range results {
+		if r.Err != nil {
+			// A capture the budget ended before it started is left
+			// unlabelled without a line, as before.
+			if budget.Err() == nil {
+				log.Printf("intake labels: %s: %s unlabelled: %v", sourceID, items[i].CaptureID, r.Err)
 			}
-			defer func() { <-sem }()
-			label, err := rt.labelOneCapture(budget, judge, lib, ownerID, computerID, sourceID, items, i)
-			if err == nil {
-				_, err = rt.store.AppendCaptureLabel(withKindCustodian(ctx, "choir.capture_label"), label)
-			}
-			if err != nil {
-				log.Printf("intake labels: %s: %s unlabelled: %v", sourceID, items[i].CaptureID, err)
-				return
-			}
-			mu.Lock()
-			labelled++
-			mu.Unlock()
-		}(i)
+			continue
+		}
+		labelled++
 	}
-	wg.Wait()
 	return labelled, len(items) - labelled
 }
 

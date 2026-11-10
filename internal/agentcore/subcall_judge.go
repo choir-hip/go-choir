@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/fanout"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
@@ -96,12 +97,11 @@ var (
 	// its siblings, so the tasks of one Delegate that close together share a
 	// judge call.
 	subCallDelegateCoalesce = 3 * time.Second
-	// subCallJudgeSpacing keeps judge calls at least this far apart on the
-	// whole computer (one at a time), so fan-out bursts cannot exhaust the
-	// ~60 a minute the support judge and the labeller share. The gateway's
-	// judgment scopes are a closed list; a scope of its own would need a
-	// gateway release, so the pacing is host-side.
-	subCallJudgeSpacing = 2 * time.Second
+	// subCallJudgeConcurrency is how many judge calls this computer has in
+	// flight at once. It replaced a gate of one with a 2 s spacing that
+	// existed only because the gateway bucket was 60 a minute; the
+	// gateway's shared limiter now meters the rate for every computer.
+	subCallJudgeConcurrency = 4
 	// subCallJudgeBackoff is the first wait after a rate-limited call; it
 	// doubles, inside subCallJudgeTimeout.
 	subCallJudgeBackoff = 2 * time.Second
@@ -349,14 +349,20 @@ func (rt *Runtime) settleSubCalls(ctx context.Context, owner, computer, fanOut s
 			judged = append(judged, it)
 		}
 	}
-	var first error
-	for start := 0; start < len(judged); start += subCallJudgeBatchMax {
+	// The batches are independent (each Cast has its own settlement id), so
+	// they are judged together; the first error in batch order is returned.
+	batches := (len(judged) + subCallJudgeBatchMax - 1) / subCallJudgeBatchMax
+	results := fanout.Do(ctx, subCallJudgeConcurrency, batches, func(ctx context.Context, b int) (struct{}, error) {
+		start := b * subCallJudgeBatchMax
 		end := min(start+subCallJudgeBatchMax, len(judged))
-		if err := rt.judgeSubCallBatch(ctx, owner, computer, fanOut, judged[start:end], ruleRecs); err != nil && first == nil {
-			first = err
+		return struct{}{}, rt.judgeSubCallBatch(ctx, owner, computer, fanOut, judged[start:end], ruleRecs)
+	})
+	for _, r := range results {
+		if r.Err != nil {
+			return r.Err
 		}
 	}
-	return first
+	return nil
 }
 
 func subCallReportHasText(report types.CommitmentRecord) bool {
@@ -599,15 +605,13 @@ func (rt *Runtime) judgeSubCallBatch(ctx context.Context, owner, computer, fanOu
 	return nil
 }
 
-// callSubCallJudge makes the one judge call of a batch, paced: one call at a
-// time on the whole computer, subCallJudgeSpacing apart, so bursts of
-// fan-outs cannot exhaust the judge bucket the support judge and the
-// labeller share. A rate-limited answer waits and retries inside
-// subCallJudgeTimeout instead of failing the work.
+// callSubCallJudge makes the one judge call of a batch, with at most
+// subCallJudgeConcurrency in flight on the computer. A rate-limited answer
+// waits and retries inside subCallJudgeTimeout instead of failing the work.
 func (rt *Runtime) callSubCallJudge(ctx context.Context, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
 	rt.subCallJudgeMu.Lock()
 	if rt.subCallGate == nil {
-		rt.subCallGate = make(chan struct{}, 1)
+		rt.subCallGate = make(chan struct{}, subCallJudgeConcurrency)
 	}
 	gate := rt.subCallGate
 	rt.subCallJudgeMu.Unlock()
@@ -621,17 +625,6 @@ func (rt *Runtime) callSubCallJudge(ctx context.Context, state json.RawMessage, 
 	}
 	backoff := subCallJudgeBackoff
 	for {
-		rt.subCallJudgeMu.Lock()
-		wait := time.Until(rt.subCallNext)
-		rt.subCallNext = time.Now().Add(max(wait, 0) + subCallJudgeSpacing)
-		rt.subCallJudgeMu.Unlock()
-		if wait > 0 {
-			select {
-			case <-time.After(wait):
-			case <-callCtx.Done():
-				return nil, fmt.Errorf("Jev: %w", callCtx.Err())
-			}
-		}
 		raw, err := callJudgeWithin(callCtx, rt.candidateJudge, "", subCallJudgeTimeout, state, questions)
 		if err == nil || !subCallRateLimited(err) {
 			return raw, err
