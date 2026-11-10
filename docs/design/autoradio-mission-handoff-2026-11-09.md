@@ -108,8 +108,11 @@ function." Each server lane extends the mechanism named in section 3.
     upstream change;
   - installed apps fetch signed UI and asset bundles by default. Version 1
     must ship with that off; the spike finds how;
-  - TypeScript data logic ships as Hermes bytecode. A Rust data module
-    carries no interpreter, which is the simpler App Review story;
+  - app logic is TypeScript (owner, 2026-11-09: build time and agent
+    iteration speed outweigh a pure-native build); Rust only for a
+    measured hotspot. The bytecode is compiled into the reviewed binary,
+    as in any React Native app, and Exact does not deliver logic over the
+    air, so this raises no App Review question of its own;
   - Android is early. That is acceptable for an iOS-first launch.
 
   The spike, on a real iPhone, at a pinned commit:
