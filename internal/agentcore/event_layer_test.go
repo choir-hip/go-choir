@@ -469,3 +469,55 @@ func TestEventLayerMarginalMatchIsTentativeNotCorroboration(t *testing.T) {
 		t.Fatalf("p 0.92 report = %+v; want the event corroborated", r)
 	}
 }
+
+// D1: a corroborated event is reachable by title overlap after more than
+// eventShortlistRecent newer events have passed (every story's event is
+// corroborated, so before this no later report could rejoin one). Ways it
+// can fail: E1 a corroborated event past the recency slots is not offered;
+// E2 corroborated events crowd out the uncorroborated overlap budget; E3 a
+// corroborated event older than the recency horizon is offered; E4 the extra
+// budget is unbounded.
+func TestEventShortlistOffersCorroboratedEventsByOverlap(t *testing.T) {
+	now := time.Now().UTC()
+	view := func(id, headline string, age time.Duration, origins int) *eventView {
+		v := &eventView{ev: store.WorldEvent{EventID: id, Headline: headline}, outlets: map[string]bool{}, origins: map[string]bool{}, last: now.Add(-age), titles: []string{headline}}
+		for i := 0; i < origins; i++ {
+			v.origins[fmt.Sprintf("%s-o%d", id, i)] = true
+			v.outlets[fmt.Sprintf("%s-x%d", id, i)] = true
+		}
+		return v
+	}
+	idx := &eventIndex{events: map[string]*eventView{}}
+	for i := 0; i < eventShortlistRecent+5; i++ {
+		v := view(fmt.Sprintf("fill%d", i), fmt.Sprintf("Unrelated item %d", i), time.Duration(i+1)*time.Minute, 1)
+		idx.events[v.ev.EventID] = v
+	}
+	idx.events["story"] = view("story", "Harbour board approves dredging plan", 10*time.Hour, store.EventMinOrigins)
+	idx.events["stale"] = view("stale", "Harbour board dredging plan, old report", 5*24*time.Hour, store.EventMinOrigins)
+	idx.events["lone"] = view("lone", "Harbour dredging plan rumoured", 20*time.Hour, 1)
+	for i := 0; i < eventShortlistCorroborated+3; i++ {
+		v := view(fmt.Sprintf("many%d", i), "Harbour dredging plan item", time.Duration(8+i)*time.Hour, store.EventMinOrigins)
+		idx.events[v.ev.EventID] = v
+	}
+	got := eventShortlist(idx, titleTokens("Harbour board dredging plan approved"), now)
+	has := map[string]bool{}
+	corroborated := 0
+	for _, v := range got {
+		has[v.ev.EventID] = true
+		if v.corroborated() && (strings.HasPrefix(v.ev.EventID, "many") || v.ev.EventID == "story") {
+			corroborated++
+		}
+	}
+	if !has["story"] && !has["many0"] {
+		t.Error("E1: no corroborated event past the recency slots was offered")
+	}
+	if !has["lone"] {
+		t.Error("E2: the uncorroborated overlap candidate was crowded out")
+	}
+	if has["stale"] {
+		t.Error("E3: a corroborated event older than the recency horizon was offered")
+	}
+	if corroborated > eventShortlistCorroborated {
+		t.Errorf("E4: %d corroborated overlap picks; the budget is %d", corroborated, eventShortlistCorroborated)
+	}
+}

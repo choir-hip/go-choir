@@ -48,6 +48,12 @@ const (
 	eventChunkSize        = 12
 	eventShortlistRecent  = 30
 	eventShortlistOverlap = 10
+	// eventShortlistCorroborated is the overlap budget of corroborated
+	// events, which a later report of a developed story must still reach:
+	// every story's event is corroborated, so without it no report could
+	// rejoin an event once about 30 newer ones passed (docs/problems/
+	// unsupported-cites-duplicates-and-churn-2026-11-10.md, D1).
+	eventShortlistCorroborated = 10
 	// eventLinkChoices bounds the after_ choices one capture's question
 	// offers: the known events sharing the most words with the capture.
 	eventLinkChoices = 3
@@ -685,7 +691,8 @@ type eventAliases struct {
 
 // eventShortlist is the candidate events for a chunk: the newest within the
 // recency horizon, then uncorroborated ones within the overlap horizon that
-// share title words with the chunk.
+// share title words with the chunk, then corroborated ones within the recency
+// horizon that do, with a budget of their own.
 func eventShortlist(idx *eventIndex, tokens map[string]bool, now time.Time) []*eventView {
 	var live []*eventView
 	for _, v := range idx.events {
@@ -712,9 +719,13 @@ func eventShortlist(idx *eventIndex, tokens map[string]bool, now time.Time) []*e
 		v     *eventView
 		score int
 	}
-	var overlap []scored
+	var overlap, corroborated []scored
 	for _, v := range live {
-		if picked[v] || v.corroborated() {
+		if picked[v] {
+			continue
+		}
+		counted := v.corroborated()
+		if counted && now.Sub(v.last) > eventRecentHorizon {
 			continue
 		}
 		words := titleTokens(v.ev.Headline + " " + strings.Join(lastN(v.titles, eventRecentTitles), " "))
@@ -725,12 +736,20 @@ func eventShortlist(idx *eventIndex, tokens map[string]bool, now time.Time) []*e
 			}
 		}
 		if score > 0 {
-			overlap = append(overlap, scored{v, score})
+			if counted {
+				corroborated = append(corroborated, scored{v, score})
+			} else {
+				overlap = append(overlap, scored{v, score})
+			}
 		}
 	}
 	sort.SliceStable(overlap, func(i, j int) bool { return overlap[i].score > overlap[j].score })
 	for i := 0; i < len(overlap) && i < eventShortlistOverlap; i++ {
 		out = append(out, overlap[i].v)
+	}
+	sort.SliceStable(corroborated, func(i, j int) bool { return corroborated[i].score > corroborated[j].score })
+	for i := 0; i < len(corroborated) && i < eventShortlistCorroborated; i++ {
+		out = append(out, corroborated[i].v)
 	}
 	return out
 }
