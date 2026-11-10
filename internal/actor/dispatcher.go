@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/rand/v2"
 	"runtime/debug"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -132,7 +133,11 @@ type Dispatcher struct {
 	// the boot's restart rules decide what is delivered; the attempt count
 	// that bounds the retries is durable.
 	heldUntil map[string]time.Time
-	jitter    func() float64
+	// skips is why each due agent was last passed over, and since when, for
+	// the activation wait line (skipNote). Process memory only; observation,
+	// never read by a scheduling decision.
+	skips  map[string]skipNote
+	jitter func() float64
 	// slots is the shared cap now: opts.MaxConcurrent at start, changed live
 	// by SetSharedSlots. Guarded by mu.
 	slots int
@@ -256,6 +261,7 @@ func NewDispatcher(log KernelLog, handler Handler, opts DispatcherOptions) *Disp
 		slots:     opts.MaxConcurrent,
 		running:   make(map[string]time.Time),
 		heldUntil: make(map[string]time.Time),
+		skips:     make(map[string]skipNote),
 		jitter:    rand.Float64,
 		wake:      make(chan struct{}, 1),
 		stop:      make(chan struct{}),
@@ -353,7 +359,11 @@ func (d *Dispatcher) dispatchPending(ctx context.Context) {
 	d.mu.Unlock()
 	for _, agentID := range agents {
 		d.mu.Lock()
-		if _, busy := d.running[agentID]; busy || d.heldLocked(agentID) || !d.hasRoomLocked(agentID) {
+		if cause, holderStarted := d.skipCauseLocked(agentID); cause != "" {
+			// The first cause stands: it is the fence the agent met first.
+			if _, noted := d.skips[agentID]; !noted {
+				d.skips[agentID] = skipNote{cause: cause, since: time.Now(), holderStarted: holderStarted}
+			}
 			d.mu.Unlock()
 			continue
 		}
@@ -381,6 +391,37 @@ func (d *Dispatcher) dispatchPending(ctx context.Context) {
 			d.activate(ctx, id)
 		}(agentID)
 	}
+}
+
+// skipNote is why a due agent was passed over by a dispatch pass.
+type skipNote struct {
+	cause         string    // skipCauseBusy, skipCauseHeld or skipCauseNoRoom
+	since         time.Time // the first pass that skipped it
+	holderStarted time.Time // busy only: when its in-flight activation began
+}
+
+// The fences that skip a due agent: its own in-flight activation (the serial
+// fence), a retry backoff after a failed delivery, and no free slot in its
+// lane or the shared slots.
+const (
+	skipCauseBusy   = "busy"
+	skipCauseHeld   = "held"
+	skipCauseNoRoom = "noroom"
+)
+
+// skipCauseLocked names the fence that keeps agentID from activating now, or
+// "". For busy it also returns when the holder started. Callers hold d.mu.
+func (d *Dispatcher) skipCauseLocked(agentID string) (string, time.Time) {
+	if started, busy := d.running[agentID]; busy {
+		return skipCauseBusy, started
+	}
+	if d.heldLocked(agentID) {
+		return skipCauseHeld, time.Time{}
+	}
+	if !d.hasRoomLocked(agentID) {
+		return skipCauseNoRoom, time.Time{}
+	}
+	return "", time.Time{}
 }
 
 // holdAfterFailure keeps agentID's mailbox out of dispatch for the backoff
@@ -486,6 +527,9 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 		return
 	}
 	if len(pending) == 0 {
+		d.mu.Lock()
+		delete(d.skips, agentID)
+		d.mu.Unlock()
 		return
 	}
 	d.logActivationWait(agentID, pending)
@@ -694,8 +738,22 @@ func (d *Dispatcher) safeHandleUpdate(ctx context.Context, agentID string, u Upd
 // logActivationWait logs an activation whose oldest due update waited
 // activationWaitLogAfter or more since it was due, with the slots in use and
 // the due-agent count, so a slow wake shows whether slots or order held it.
+// It also names why the agent was skipped before this activation (cause,
+// how long, who held it) and which kinds were queued, so a serial-fence wait
+// is told from a full slot table or a retry backoff.
 func (d *Dispatcher) logActivationWait(agentID string, pending []Update) {
-	now := time.Now()
+	if line, ok := d.activationWaitLine(agentID, pending, time.Now()); ok {
+		log.Print(line)
+	}
+}
+
+// activationWaitLine is the wait line for an activation starting now, or
+// false when it did not wait long enough. It consumes the agent's skip note.
+func (d *Dispatcher) activationWaitLine(agentID string, pending []Update, now time.Time) (string, bool) {
+	d.mu.Lock()
+	note, skipped := d.skips[agentID]
+	delete(d.skips, agentID)
+	d.mu.Unlock()
 	var oldest time.Time
 	for _, u := range pending {
 		due := u.CreatedAt
@@ -710,7 +768,7 @@ func (d *Dispatcher) logActivationWait(agentID string, pending []Update) {
 		}
 	}
 	if oldest.IsZero() || now.Sub(oldest) < activationWaitLogAfter {
-		return
+		return "", false
 	}
 	lane := d.laneOf(agentID)
 	d.mu.Lock()
@@ -720,7 +778,47 @@ func (d *Dispatcher) logActivationWait(agentID string, pending []Update) {
 	}
 	slots, due := d.runningInLocked(lane), d.dueAgents
 	d.mu.Unlock()
-	log.Printf("dispatcher: activation wait agent=%s waited=%s updates=%d slots=%d/%d due_agents=%d", actorLogName(agentID), now.Sub(oldest).Round(time.Second), len(pending), slots, limit, due)
+	cause := "none"
+	if skipped {
+		cause = fmt.Sprintf("%s skipped_for=%s", note.cause, now.Sub(note.since).Round(time.Second))
+		if !note.holderStarted.IsZero() {
+			cause += fmt.Sprintf(" holder_for=%s", now.Sub(note.holderStarted).Round(time.Second))
+		}
+	}
+	return fmt.Sprintf("dispatcher: activation wait agent=%s waited=%s updates=%d slots=%d/%d due_agents=%d cause=%s kinds=%s",
+		actorLogName(agentID), now.Sub(oldest).Round(time.Second), len(pending), slots, limit, due, cause, queuedKinds(pending)), true
+}
+
+// queuedKinds counts the pending updates by kind, most first, at most four
+// kinds: "inbox_record:3,coagent_result:1".
+func queuedKinds(pending []Update) string {
+	counts := map[string]int{}
+	for _, u := range pending {
+		counts[u.Kind]++
+	}
+	kinds := make([]string, 0, len(counts))
+	for k := range counts {
+		kinds = append(kinds, k)
+	}
+	sort.Slice(kinds, func(i, j int) bool {
+		if counts[kinds[i]] != counts[kinds[j]] {
+			return counts[kinds[i]] > counts[kinds[j]]
+		}
+		return kinds[i] < kinds[j]
+	})
+	more := 0
+	if len(kinds) > 4 {
+		more = len(kinds) - 4
+		kinds = kinds[:4]
+	}
+	parts := make([]string, 0, len(kinds)+1)
+	for _, k := range kinds {
+		parts = append(parts, fmt.Sprintf("%s:%d", k, counts[k]))
+	}
+	if more > 0 {
+		parts = append(parts, fmt.Sprintf("+%d", more))
+	}
+	return strings.Join(parts, ",")
 }
 
 // actorLogName is a scoped actor id's last segment (owner and computer are

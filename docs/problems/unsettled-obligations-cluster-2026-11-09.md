@@ -230,5 +230,5 @@ or deleted to see this; the proof is on d@e.
 
 | failure | test |
 |---|---|
-| the cause line changes behaviour | the cause is computed from values the skip already holds; a test asserts the skip decision is unchanged |
-| log volume: a line per skipped tick | the wait line already prints once per wait (it is rate-limited by the existing wait-start edge); the added fields ride that line, no new line |
+| the cause line changes behaviour | the cause is computed from values the skip already holds; the tests assert a busy, held or roomless agent is still not activated: `TestWaitLineNamesTheSerialFenceAndLeavesTheDecisionAlone`, `TestWaitLineNamesARetryHoldAndAFullSlotTable` |
+| log volume | no new line: the fields ride the existing wait line, which prints once per activation whose oldest due update waited 30 s or more (not per skipped tick); the kinds are capped at four plus a count; `TestWaitLineIsQuietForAShortWaitAndCapsKinds` |
