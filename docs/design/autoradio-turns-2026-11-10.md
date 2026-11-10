@@ -79,6 +79,44 @@ Only these are structure, because the experience fails without them.
 2. **Never silence.** While a revision is being made, the radio says so
    and plays on, and the result comes in when ready.
 
+## Early structure lives in questions, not in types
+
+Owner, 2026-11-10: "some structure may be essential, especially early on,
+before we can have more of an end-to-end learning approach ... One of the
+key tools ... for when we need a low latency decision ... is using Jev,
+the System 1 model. So if we can provide ... the surrounding context of
+the situation and the user input and some kind of prompt, we can then
+pass that decision to the System 1 model."
+
+So a turn has two speeds.
+
+- **System 1, at once: Jev.** When the turn ends, the phone sends its text
+  with the surrounding context (the passage being played, the prepared
+  material for it, the last few turns) and a short set of questions. Jev's
+  answers choose the acknowledgement and the first thing to play, from
+  material already in hand. Measured on the paper's traffic on
+  2026-11-10: 110 to 260 ms mean upstream for a call of 1 to 12
+  questions, with a tail to a few seconds. The gateway already has an
+  interactive class for Jev calls.
+- **System 2, when ready: the desk.** The desk's revision of the document
+  follows. It may extend what Jev started or replace it.
+
+The structure this needs early (does the turn ask for something; is the
+answer in the prepared material, and which piece; should the programme
+carry on meanwhile) is held as **questions**: text the desk's package owns
+and can revise, not routes or categories in code or in the page format.
+The questions shown here are examples, not a list to implement.
+
+Each Jev judgment already leaves a record
+(`internal/jevrecord`). Joined to what the listener did next, those
+records say which questions earn their place and where their thresholds
+belong, and they are the training signal for whatever replaces the
+questions later. A question that never changes what plays is deleted.
+
+Only the turn's text and context go to Jev. No audio leaves the phone.
+When the phone is offline or Jev is slow, the acknowledgement is produced
+on the phone and the programme carries on until the desk answers.
+
 ## Latency
 
 A live search cannot serve a pivot: one podcast search through Exa took
@@ -115,7 +153,8 @@ reference on every passage.
 
 ## Open
 
-- What produces the acknowledgement within a second.
+- The whole path to the first acknowledgement, timed on a phone: end of
+  turn, text, Jev, speech. Jev's part is measured; the rest is not.
 - Whether the listener's recorded voice is kept with their passage, or
   only the transcript, before takes exist. Without the audio a passage
   cannot later become a take.
