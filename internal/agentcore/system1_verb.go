@@ -553,11 +553,7 @@ func system1Request(questions []yaegikernel.System1Question, contexts map[string
 			}
 			instructions += " Evidence: " + strings.Join(names, ", ") + "."
 		}
-		criteria := map[string]string{}
-		for _, c := range q.Choices {
-			criteria[c] = "The best answer to this question, on the evidence it names, is: " + c + "."
-		}
-		raw, err := json.Marshal(map[string]any{"type": "choice", "instructions": instructions, "criteria": criteria, "choices": q.Choices})
+		raw, err := json.Marshal(map[string]any{"type": "choice", "instructions": instructions, "criteria": system1DefaultCriteria(q.Choices), "choices": q.Choices})
 		if err != nil {
 			return nil, nil, err
 		}
@@ -568,4 +564,14 @@ func system1Request(questions []yaegikernel.System1Question, contexts map[string
 		return nil, nil, err
 	}
 	return stateRaw, rawQuestions, nil
+}
+
+// system1DefaultCriteria gives each choice the description the vendor needs:
+// a choice question without a criteria map is refused upstream with a 400.
+func system1DefaultCriteria(choices []string) map[string]string {
+	criteria := make(map[string]string, len(choices))
+	for _, c := range choices {
+		criteria[c] = "The best answer to this question, on the evidence it names, is: " + c + "."
+	}
+	return criteria
 }

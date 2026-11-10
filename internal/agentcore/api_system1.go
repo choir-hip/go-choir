@@ -34,10 +34,10 @@ const (
 var system1RouteLabel = regexp.MustCompile(`^[a-z0-9_.-]{1,40}$`)
 
 type system1RouteQuestion struct {
-	Type         string          `json:"type"`
-	Instructions string          `json:"instructions"`
-	Criteria     json.RawMessage `json:"criteria,omitempty"`
-	Choices      []string        `json:"choices"`
+	Type         string            `json:"type"`
+	Instructions string            `json:"instructions"`
+	Criteria     map[string]string `json:"criteria,omitempty"`
+	Choices      []string          `json:"choices"`
 }
 
 type system1RouteRequest struct {
@@ -174,6 +174,22 @@ func parseSystem1Route(body []byte) (system1RouteRequest, json.RawMessage, map[s
 				return req, nil, nil, fmt.Errorf("question %q: choices must be unique and non-empty", name)
 			}
 			seen[c] = true
+		}
+		// The vendor reads a choice question through its criteria map, one
+		// description per choice, and answers 400 without one. A client that
+		// sends none gets the in-guest default; one that sends its own must
+		// describe exactly the choices (the keys are the answers).
+		if q.Criteria == nil {
+			q.Criteria = system1DefaultCriteria(q.Choices)
+		} else {
+			if len(q.Criteria) != len(q.Choices) {
+				return req, nil, nil, fmt.Errorf("question %q: criteria must describe exactly the choices", name)
+			}
+			for _, c := range q.Choices {
+				if strings.TrimSpace(q.Criteria[c]) == "" {
+					return req, nil, nil, fmt.Errorf("question %q: criteria must describe exactly the choices", name)
+				}
+			}
 		}
 		raw, err := json.Marshal(q)
 		if err != nil {
