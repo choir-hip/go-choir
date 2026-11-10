@@ -187,3 +187,4 @@ Approval is the benchmark for the mission as a whole, not for pass 1.
 | The thin-client review risk (4.2.7(e)) | the app does voice, playback and rendering on the device; say so in the review notes |
 | Where podcast and voice costs land | voice is on the device and free; podcast transcripts are a server cost, measured in lane D before pricing is fixed |
 | Platform order after iOS, CarPlay | decide after approval |
+| The app as the second factor for sensitive acts (owner, 2026-11-09; [note](second-factor-for-sensitive-acts-2026-11-09.md)) | not in pass 1; lane S1's named device is what it builds on. Authenticator-style codes can ship server-side first, and a signed approval from the app follows once push exists |

@@ -24,7 +24,9 @@ mandatory for them."
    self-development approval, sign-in from a new device, key creation).
 3. **The Autoradio app is where it lives.** The mobile plan
    (docs/archive/reports/autoradio-mobile-app-plan-2026-10-14.md) already
-   makes approvals "one tap plus Face ID" on the phone.
+   makes approvals "one tap plus Face ID" on the phone. The Autoradio
+   mission (autoradio-mission-handoff-2026-11-09.md) builds the named,
+   revocable device (lane S1) and the push relay this needs.
 
 ## Options, cheapest first
 
