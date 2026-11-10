@@ -507,7 +507,12 @@ func TestChecksPairEachCitationWithTheSpanItCloses(t *testing.T) {
 		if p.Context != whole {
 			t.Errorf("pair %d context = %q; want the paragraph", i, p.Context)
 		}
-		if p.BlockHash != TextHash(p.Text) || p.Key != PairKey(p.BlockHash, p.Cited.Hash, p.Cited.Quote) {
+		hash := TextHash(p.Text)
+		if len(p.Group) > 1 {
+			// Side by side cites are one group: hashed by the span and every quote.
+			hash = GroupHash(p.Text, p.Group)
+		}
+		if p.BlockHash != hash || p.Key != PairKey(p.BlockHash, p.Cited.Hash, p.Cited.Quote) {
 			t.Errorf("pair %d is not keyed by its span: %+v", i, p)
 		}
 	}

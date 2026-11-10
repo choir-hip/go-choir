@@ -150,6 +150,7 @@ func (s *Store) planSupportVerdicts(ctx context.Context, ownerID, computerID, ju
 	var conditions []objectgraph.ObjectCondition
 	var recorded []types.SupportVerdict
 	failures := map[string][]types.SupportVerdict{}
+	failedGroups := map[string]bool{}
 	seen := map[string]bool{}
 	for _, v := range verdicts {
 		v.Key, v.Why, v.Judge = strings.TrimSpace(v.Key), strings.TrimSpace(v.Why), strings.TrimSpace(v.Judge)
@@ -179,7 +180,17 @@ func (s *Store) planSupportVerdicts(ctx context.Context, ownerID, computerID, ju
 		v.Pair, v.Memo, v.RecordID = &pair, false, ""
 		if v.Verdict == types.SupportUnsupported {
 			v.RecordID = commandID + ":support:" + pair.DocID
-			failures[pair.DocID] = append(failures[pair.DocID], v)
+			// A group of side-by-side cites fails once, not once per cite:
+			// the send-back names the span and lists the group's quotes, and
+			// every member's verdict is still recorded below.
+			groupKey := ""
+			if len(pair.Group) > 1 {
+				groupKey = pair.RevisionID + "\x00" + pair.BlockID + "\x00" + pair.BlockHash
+			}
+			if groupKey == "" || !failedGroups[groupKey] {
+				failedGroups[groupKey] = groupKey != ""
+				failures[pair.DocID] = append(failures[pair.DocID], v)
+			}
 		}
 		obj, err := lifecycleObject(ogKindSupportVerdict, ownerID, computerID, v.Key, v, map[string]any{
 			"pair_key": v.Key, "computer_id": computerID, "doc_id": pair.DocID, "revision_id": pair.RevisionID, "verdict": v.Verdict,

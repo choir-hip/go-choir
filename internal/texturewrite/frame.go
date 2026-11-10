@@ -205,7 +205,7 @@ func (f Frame) renderRecord(b *strings.Builder, r FrameRecord) {
 		for _, blk := range f.Blocks {
 			alias[blk.ID] = blk.Alias
 		}
-		b.WriteString("  unsupported citations (the cited passage does not support the words the citation closes; with choir.Write, make them say only what a cited passage says, cite a passage that says it, or cut the claim; naming the outlet does not make a claim supported):\n")
+		b.WriteString("  unsupported citations (the cited passage does not support the words the citation closes; with choir.Write, make them say only what a cited passage says, cite a passage that says it, or cut the claim; naming the outlet does not make a claim supported; cites listed together are judged together, so cut or reword the part of the sentence no listed passage says):\n")
 		for _, fail := range r.Failures {
 			where := alias[fail.BlockID]
 			if where == "" {
@@ -214,7 +214,19 @@ func (f Frame) renderRecord(b *strings.Builder, r FrameRecord) {
 			if fail.Text != "" {
 				where += " " + strconv.Quote(clip(fail.Text, 400))
 			}
-			fmt.Fprintf(b, "  - %s cites %s %s", where, fail.Doc, strconv.Quote(clip(fail.Quote, 300)))
+			if len(fail.Together) > 1 {
+				// Side-by-side cites fail as a group: the span, and every
+				// quote the sentence leans on.
+				fmt.Fprintf(b, "  - %s cites together", where)
+				for i, c := range fail.Together {
+					if i > 0 {
+						b.WriteString(";")
+					}
+					fmt.Fprintf(b, " %s %s", c.Doc, strconv.Quote(clip(c.Quote, 200)))
+				}
+			} else {
+				fmt.Fprintf(b, "  - %s cites %s %s", where, fail.Doc, strconv.Quote(clip(fail.Quote, 300)))
+			}
 			if fail.Why != "" {
 				b.WriteString(": " + fail.Why)
 			}
@@ -267,6 +279,9 @@ type FrameFailure struct {
 	Doc     string
 	Quote   string
 	Why     string
+	// Together lists every cited quote of a group of side-by-side cites
+	// judged as one (the failure names the span once).
+	Together []types.Ref
 }
 
 // FrameClaim is a claim with the handles of the sources it rests on.
@@ -327,8 +342,11 @@ func RecordsFrom(in []RecordInput) []FrameRecord {
 					continue
 				}
 				failure := FrameFailure{BlockID: v.Pair.BlockID, Doc: v.Pair.Cited.Doc, Quote: v.Pair.Cited.Quote, Why: v.Why}
-				if v.Pair.Context != "" {
+				if v.Pair.Context != "" || len(v.Pair.Group) > 1 {
 					failure.Text = v.Pair.Text
+				}
+				if len(v.Pair.Group) > 1 {
+					failure.Together = v.Pair.Group
 				}
 				fr.Failures = append(fr.Failures, failure)
 			}
