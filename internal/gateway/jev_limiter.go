@@ -31,9 +31,19 @@ const (
 	jevInteractiveTokenReserve = 5.0
 	// One computer cannot take the whole organization share. This replaces the
 	// 60-a-minute per-computer bucket, which capped the paper at 1 a second.
-	jevComputerInFlight = 24
+	// The in-flight cap is below the bulk ceiling (32 - 8 = 24), so one
+	// computer cannot hold every bulk slot through a latency spike.
+	jevComputerInFlight = 16
 	jevComputerRate     = 10.0
 	jevComputerBurst    = 30.0
+	// The scope is the guest's own claim, so the interactive class is a
+	// per-computer budget: past it a computer's call is bulk. A computer
+	// can then hold at most 2 of the 8 reserved slots and spend 2 of the
+	// reserved tokens a second; draining the reserve takes four
+	// authenticated computers, each of which the per-computer rate bounds.
+	jevInteractiveInFlight = 2
+	jevInteractiveRate     = 2.0
+	jevInteractiveBurst    = 4.0
 	jevQueueMaxWait     = 20 * time.Second
 	jevBackoffDefault   = 2 * time.Second
 	jevBackoffCap       = time.Minute
@@ -92,8 +102,10 @@ func (b *rateBucket) refill(now time.Time, rate, burst float64) {
 }
 
 type computerShare struct {
-	bucket   rateBucket
-	inFlight int
+	bucket      rateBucket
+	inFlight    int
+	interactive rateBucket // the budget for claiming the interactive class
+	interFlight int
 }
 
 // jevLimiter is the shared rate, in-flight cap, interactive reserve,
@@ -145,15 +157,22 @@ func (l *jevLimiter) acquire(ctx context.Context, computerID string, class jevCl
 			l.computers[computerID] = cs
 		}
 		cs.bucket.refill(now, jevComputerRate, jevComputerBurst)
+		cs.interactive.refill(now, jevInteractiveRate, jevInteractiveBurst)
+		// A claim of the interactive class beyond this computer's budget is
+		// treated as bulk.
+		eff := class
+		if eff == jevInteractive && (cs.interFlight >= jevInteractiveInFlight || cs.interactive.tokens < 1) {
+			eff = jevBulk
+		}
 		var wait time.Duration
 		switch {
 		case now.Before(l.backoffUntil):
 			wait = l.backoffUntil.Sub(now)
-		case l.inFlightFull(class) || cs.inFlight >= jevComputerInFlight:
+		case l.inFlightFull(eff) || cs.inFlight >= jevComputerInFlight:
 			wait = jevPollCeiling
 		default:
 			needed := 1.0
-			if class == jevBulk {
+			if eff == jevBulk {
 				needed += l.tokenReserve
 			}
 			if l.global.tokens < needed {
@@ -167,9 +186,13 @@ func (l *jevLimiter) acquire(ctx context.Context, computerID string, class jevCl
 			cs.bucket.tokens--
 			l.inFlight++
 			cs.inFlight++
+			if eff == jevInteractive {
+				cs.interFlight++
+				cs.interactive.tokens--
+			}
 			l.mu.Unlock()
 			var once sync.Once
-			return func() { once.Do(func() { l.release(computerID) }) }, now.Sub(start), nil
+			return func() { once.Do(func() { l.release(computerID, eff == jevInteractive) }) }, now.Sub(start), nil
 		}
 		wakeCh := l.wake
 		l.mu.Unlock()
@@ -196,11 +219,14 @@ func (l *jevLimiter) inFlightFull(class jevClass) bool {
 	return l.inFlight >= l.maxInFlight
 }
 
-func (l *jevLimiter) release(computerID string) {
+func (l *jevLimiter) release(computerID string, interactive bool) {
 	l.mu.Lock()
 	l.inFlight--
 	if cs := l.computers[computerID]; cs != nil {
 		cs.inFlight--
+		if interactive {
+			cs.interFlight--
+		}
 	}
 	close(l.wake)
 	l.wake = make(chan struct{})

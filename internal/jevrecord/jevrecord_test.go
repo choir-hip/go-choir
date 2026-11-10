@@ -189,3 +189,12 @@ func TestRecorderRotates(t *testing.T) {
 		t.Fatalf("no rotation happened: %v", err)
 	}
 }
+
+// A site whose questions an agent wrote keeps the digest, not the text.
+func TestNoTextKeepsNeitherExcerptNorOptions(t *testing.T) {
+	r := Build(Meta{Site: "system1_verb", NoText: true}, json.RawMessage(`{}`), questions(), json.RawMessage(distribution), nil, time.Now(), time.Millisecond)
+	q := r.Questions[0]
+	if q.Excerpt != "" || len(q.Options) != 0 || q.Digest == "" || q.Name != "event" {
+		t.Fatalf("question = %+v", q)
+	}
+}

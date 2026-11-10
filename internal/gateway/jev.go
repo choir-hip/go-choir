@@ -115,9 +115,25 @@ func (t *JevTransport) Decide(ctx context.Context, computerID string, request Ju
 	class, _ := judgmentRateScope(request.Scope)
 	release, queued, err := t.limit().acquire(ctx, computerID, class)
 	if err != nil {
+		// A refusal at the limiter is a call the logs and the hour summary
+		// must see.
+		status := 0
+		if _, limited := err.(*jevLimitedError); limited {
+			status = http.StatusTooManyRequests
+		}
+		logJevCall(computerID, class, len(request.Questions), queued, 0, status, err)
+		if line := t.stats.observe(time.Now(), 0, queued, status, false); line != "" {
+			log.Print(line)
+		}
 		return nil, err
 	}
 	defer release()
+	// The queue can hold a caller for seconds: an upstream that failed while
+	// it waited is not asked again (each queued failure would re-arm the
+	// hold and keep it rolling).
+	if until := t.hold.heldUntil(t.clock()); !until.IsZero() {
+		return nil, &upstreamHeldError{name: "Jev judgment provider", until: until}
+	}
 	started := time.Now()
 	response, status, err := t.call(ctx, computerID, request)
 	upstream := time.Since(started)
