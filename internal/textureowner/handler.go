@@ -51,6 +51,9 @@ type Handler struct {
 	Content     *contentowner.Service
 	ModelPolicy *modelpolicy.Manager
 	Provider    provideriface.Provider
+	// PublicationVersions reads the published versions the revise call takes,
+	// merges and forks; nil reads them from the platform (revise_sources.go).
+	PublicationVersions PublicationVersionReader
 
 	textureEditMu sync.Mutex
 	// rejectedRoundOf overrides the rejected-round read in tests
