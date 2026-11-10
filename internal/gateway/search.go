@@ -1,5 +1,5 @@
 // Package gateway implements web search across SearXNG (self-hosted, free),
-// Tavily, Brave, Parallel, Exa, Serper, SerpAPI, Keenable and ChatGPT/Codex
+// Tavily, Brave, Parallel, Serper, SerpAPI, Keenable and ChatGPT/Codex
 // hosted web search.
 //
 // A search starts the free providers, adds paid ones cheapest first only
@@ -101,7 +101,6 @@ func NewSearchClient() *SearchClient {
 		&TavilyProvider{},
 		&BraveProvider{},
 		&ParallelProvider{},
-		&ExaProvider{},
 		&SerperProvider{},
 		&SerpAPIProvider{},
 		&KeenableProvider{},
@@ -153,8 +152,6 @@ func searchProviderEndpoint(provider string) string {
 		return "https://api.search.brave.com/res/v1/web/search"
 	case "parallel":
 		return "https://api.parallel.ai/v1/search"
-	case "exa":
-		return "https://api.exa.ai/search"
 	case "serper":
 		return "https://google.serper.dev/search"
 	case "serpapi":
@@ -631,132 +628,6 @@ func parseBraveResults(data []byte) ([]SearchResult, error) {
 			URL:         r.URL,
 			Snippet:     r.Description,
 			PublishedAt: r.Age,
-		})
-	}
-
-	return results, nil
-}
-
-// --- Exa Provider ---
-
-type ExaProvider struct {
-	httpClient *http.Client
-	endpoint   string // test seam; empty means the Exa API
-}
-
-const (
-	// exaMaxTextCharacters bounds the page text Exa returns per result.
-	exaMaxTextCharacters = 4000
-	// exaMaxResponseBytes fits 40 results at exaMaxTextCharacters plus JSON
-	// escaping and metadata with wide margin.
-	exaMaxResponseBytes = 4 * 1024 * 1024
-)
-
-func (p *ExaProvider) Name() string { return "exa" }
-
-func (p *ExaProvider) IsAvailable() bool {
-	return os.Getenv("EXA_API_KEY") != ""
-}
-
-func (p *ExaProvider) http() *http.Client {
-	if p.httpClient != nil {
-		return p.httpClient
-	}
-	return &http.Client{Timeout: 30 * time.Second}
-}
-
-func (p *ExaProvider) Search(ctx context.Context, query string, maxResults int) ([]SearchResult, error) {
-	apiKey := os.Getenv("EXA_API_KEY")
-	if apiKey == "" {
-		return nil, fmt.Errorf("EXA_API_KEY not set")
-	}
-
-	body := map[string]any{
-		"query":      query,
-		"numResults": maxResults,
-		"type":       "auto",
-		"contents": map[string]any{
-			// Bounded text per result: "text": true returns whole pages
-			// and 40 of them overflowed the response read.
-			"text": map[string]any{"maxCharacters": exaMaxTextCharacters},
-		},
-	}
-
-	bodyBytes, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
-	}
-
-	endpoint := p.endpoint
-	if endpoint == "" {
-		endpoint = "https://api.exa.ai/search"
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(bodyBytes)))
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", apiKey)
-
-	resp, err := p.http().Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("http request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	// Read one byte past the limit so truncation is detected and reported
-	// as its own failure stage instead of surfacing as a JSON parse error.
-	bodyBytes, err = io.ReadAll(io.LimitReader(resp.Body, exaMaxResponseBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("status %s: %s", resp.Status, truncateError(bodyBytes))
-	}
-
-	if len(bodyBytes) > exaMaxResponseBytes {
-		return nil, fmt.Errorf("response truncated: body exceeds %d bytes (numResults=%d, maxCharacters=%d)", exaMaxResponseBytes, maxResults, exaMaxTextCharacters)
-	}
-
-	return parseExaResults(bodyBytes)
-}
-
-func parseExaResults(data []byte) ([]SearchResult, error) {
-	var result struct {
-		Results []struct {
-			Title         string   `json:"title"`
-			URL           string   `json:"url"`
-			Text          string   `json:"text"`
-			PublishedDate string   `json:"publishedDate"`
-			Score         float64  `json:"score"`
-			Highlights    []string `json:"highlights"`
-		} `json:"results"`
-	}
-
-	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
-	}
-
-	results := make([]SearchResult, 0, len(result.Results))
-	for _, r := range result.Results {
-		if r.URL == "" {
-			continue
-		}
-
-		// Use highlights if available, otherwise text.
-		snippet := r.Text
-		if len(r.Highlights) > 0 {
-			snippet = strings.Join(r.Highlights, " ")
-		}
-
-		results = append(results, SearchResult{
-			Title:       r.Title,
-			URL:         r.URL,
-			Snippet:     snippet,
-			PublishedAt: r.PublishedDate,
-			Score:       r.Score,
 		})
 	}
 

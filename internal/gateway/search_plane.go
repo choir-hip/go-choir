@@ -188,7 +188,7 @@ func (c *SearchClient) StreamFor(ctx context.Context, computerID string, req Sea
 		return nil, fmt.Errorf("query is required")
 	}
 	if len(c.providers) == 0 {
-		return nil, fmt.Errorf("no search providers available (set SEARXNG_URL, TAVILY_API_KEY, BRAVE_API_KEY, PARALLEL_API_KEY, EXA_API_KEY, SERPER_API_KEY, SERPAPI_API_KEY, KEENABLE_API_KEY, or CHATGPT_AUTH_PATH)")
+		return nil, fmt.Errorf("no search providers available (set SEARXNG_URL, TAVILY_API_KEY, BRAVE_API_KEY, PARALLEL_API_KEY, SERPER_API_KEY, SERPAPI_API_KEY, KEENABLE_API_KEY, or CHATGPT_AUTH_PATH)")
 	}
 	if err := c.ensurePlane(); err != nil {
 		return nil, fmt.Errorf("search plane: %w", err)
