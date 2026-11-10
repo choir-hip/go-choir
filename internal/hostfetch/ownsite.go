@@ -49,6 +49,18 @@ type OwnSite struct {
 	client *http.Client
 }
 
+// asciiLower lowercases A-Z only. Unicode case folding (U+017F folds to s,
+// U+212A to k) would match a host that is not the public host.
+func asciiLower(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if c >= 'A' && c <= 'Z' {
+			b[i] = c + 'a' - 'A'
+		}
+	}
+	return string(b)
+}
+
 // Host is the public host the exception is keyed on.
 func (o *OwnSite) Host() string { return o.host }
 
@@ -72,7 +84,7 @@ func NewOwnSite(publicBase, loopbackURL string) (*OwnSite, error) {
 	}
 	return &OwnSite{
 		scheme: base.Scheme,
-		host:   base.Host,
+		host:   asciiLower(base.Host),
 		loop:   loop,
 		client: &http.Client{
 			Timeout:       MaxTimeout,
@@ -125,7 +137,7 @@ func (o *OwnSite) build(ctx context.Context, method string, target *url.URL) (*h
 	if o == nil || method != http.MethodGet {
 		return nil, false
 	}
-	if target.Scheme != o.scheme || target.User != nil || !strings.EqualFold(target.Host, o.host) ||
+	if target.Scheme != o.scheme || target.User != nil || asciiLower(target.Host) != o.host ||
 		target.RawPath != "" || target.Fragment != "" || target.Opaque != "" {
 		return nil, false
 	}

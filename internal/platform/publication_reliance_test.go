@@ -107,7 +107,9 @@ func TestReliesOnIgnoresForeignHostsAndUnknownRoutes(t *testing.T) { // R2, R3
 	foreign := l.capture("https://evil.example/api/platform/publications/export?route="+earlier.RoutePath+"&format=txt&raw=1", "", "A page on another host")
 	unknown := l.capture(l.svc.publicationExportReadURL("/pub/texture/no-such-story"), "", "A route the paper never published")
 	plain := l.capture("https://wire.example/a", "", "An ordinary source")
-	l.publish("doc-later", 1, "Ferries resume", foreign, unknown, plain)
+	// Unicode case folding must not make another host the paper's host (U+017F folds to s).
+	folded := l.capture("https://choir.new\u017f/api/platform/publications/export?route="+earlier.RoutePath+"&format=txt&raw=1", "", "A folded host")
+	l.publish("doc-later", 1, "Ferries resume", foreign, unknown, plain, folded)
 	if edges := l.reliesOn(l.pubID("doc-later")); len(edges) != 0 {
 		t.Fatalf("relies_on edges = %+v, want none for a foreign host, an unknown route or an ordinary source", edges)
 	}

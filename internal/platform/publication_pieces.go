@@ -9,10 +9,11 @@ package platform
 import (
 	"context"
 	"fmt"
-	"github.com/yusefmosiah/go-choir/internal/publicsite"
 	"math"
 	"net/url"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/publicsite"
 )
 
 const (

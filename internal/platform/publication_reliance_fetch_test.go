@@ -47,7 +47,9 @@ func TestResearchReadOfAReadURLYieldsACaptureThatRecordsReliance(t *testing.T) {
 	const hostIP = "203.0.113.7"
 	exec := &hostfetch.Executor{
 		OwnSite: site,
-		Lookup:  func(context.Context, string) ([]net.IPAddr, error) { return []net.IPAddr{{IP: net.ParseIP(hostIP)}}, nil },
+		Lookup: func(context.Context, string) ([]net.IPAddr, error) {
+			return []net.IPAddr{{IP: net.ParseIP(hostIP)}}, nil
+		},
 		Dial: func(context.Context, string, string) (net.Conn, error) {
 			t.Error("the host dialled the public address")
 			return nil, io.ErrClosedPipe

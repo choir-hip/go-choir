@@ -28,7 +28,7 @@ const publicationExportPath = "/api/platform/publications/export"
 // "" when the URL is not a page of the paper's own stories.
 func ownRoute(rawURL, host string) string {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil || host == "" || !strings.EqualFold(u.Host, host) {
+	if err != nil || host == "" || asciiLowerHost(u.Host) != asciiLowerHost(host) {
 		return ""
 	}
 	route := u.Path
@@ -116,4 +116,16 @@ func publicBaseHost(base string) string {
 		return ""
 	}
 	return u.Host
+}
+
+// asciiLowerHost lowercases A-Z only: Unicode folding would match a host that
+// is not the paper's.
+func asciiLowerHost(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if c >= 'A' && c <= 'Z' {
+			b[i] = c + 'a' - 'A'
+		}
+	}
+	return string(b)
 }

@@ -138,6 +138,12 @@ func TestOwnSiteRefusesEverythingElseOnTheOwnHost(t *testing.T) { // F1, F2, F3,
 		{"export extra param", "GET", ownBase + "/api/platform/publications/export?format=txt&raw=1&route=/pub/texture/a&x=1"},
 		{"export repeated route", "GET", ownBase + "/api/platform/publications/export?format=txt&raw=1&route=/pub/texture/a&route=/auth/x"},
 		{"export trailing slash path", "GET", ownBase + "/api/platform/publications/export/?format=txt&raw=1&route=/pub/texture/a"},
+		{"unicode fold host", "GET", "https://choir.new\u017f/pub/texture/x"},
+		{"kelvin fold host", "GET", "https://\u212aoir.news/pub/texture/x"},
+		{"export repeated key", "GET", ownBase + "/api/platform/publications/export?format=txt&format=txt&raw=1&route=/pub/texture/a"},
+		{"export repeated raw", "GET", ownBase + "/api/platform/publications/export?format=txt&raw=1&raw=1&route=/pub/texture/a"},
+		{"export semicolon", "GET", ownBase + "/api/platform/publications/export?format=txt;raw=1&route=/pub/texture/a"},
+		{"export semicolon route", "GET", ownBase + "/api/platform/publications/export?format=txt&raw=1;route=/pub/texture/a"},
 		{"post export", "POST", exportURL},
 		{"post page", "POST", ownBase + "/pub/texture/a"},
 		{"head page", "HEAD", ownBase + "/pub/texture/a"},
@@ -230,5 +236,33 @@ func TestOwnSiteFromEnvUsesThePublicBaseConfiguration(t *testing.T) { // F11
 	delete(env, "GATEWAY_OWN_SITE_URL")
 	if site, err = OwnSiteFromEnv(func(k string) string { return env[k] }); site != nil || err != nil {
 		t.Fatalf("no loopback URL must mean no exception: %+v %v", site, err)
+	}
+}
+
+// The loopback answer is relayed without any cookie header: the guest has no
+// business holding a cookie the public surface set.
+func TestOwnSiteDoesNotRelayCookies(t *testing.T) {
+	f := newOwnFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Set-Cookie", "session=abc; Path=/")
+		w.Header().Add("Set-Cookie2", "old=1")
+		w.Header().Set("X-Kept", "yes")
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = io.WriteString(w, "Harbor reopens.\n")
+	})
+	w, _ := serveFetch(f.exec, Request{Method: "GET", URL: exportURL})
+	hdr, err := DecodeHeaders(w.Header().Get(HeadersHeader))
+	if err != nil || w.Header().Get(StatusHeader) != "200" {
+		t.Fatalf("status %q err %v", w.Header().Get(StatusHeader), err)
+	}
+	for k := range hdr {
+		if strings.Contains(strings.ToLower(k), "cookie") {
+			t.Errorf("cookie header %s relayed to the guest: %v", k, hdr[k])
+		}
+	}
+	if hdr.Get("X-Kept") != "yes" || hdr.Get("Content-Type") != "text/plain" {
+		t.Errorf("other headers lost: %v", hdr)
+	}
+	if strings.Contains(w.Header().Get("Set-Cookie"), "session") {
+		t.Errorf("the gateway answer itself set the cookie")
 	}
 }

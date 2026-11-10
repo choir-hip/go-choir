@@ -167,8 +167,9 @@ func (e *Executor) ServeTo(w http.ResponseWriter, r *http.Request, res *Result) 
 	}
 	up.Header = stripHop(req.Header)
 	client := e.httpClient()
+	ownSite := false
 	if own, ok := e.OwnSite.build(ctx, req.Method, target); ok {
-		up, client = own, e.OwnSite.client
+		up, client, ownSite = own, e.OwnSite.client, true
 	}
 
 	resp, err := client.Do(up)
@@ -201,7 +202,13 @@ func (e *Executor) ServeTo(w http.ResponseWriter, r *http.Request, res *Result) 
 	}
 	h := w.Header()
 	h.Set(StatusHeader, strconv.Itoa(resp.StatusCode))
-	h.Set(HeadersHeader, EncodeHeaders(stripHop(resp.Header)))
+	relayed := stripHop(resp.Header)
+	if ownSite {
+		// The guest never holds a cookie the public surface set.
+		relayed.Del("Set-Cookie")
+		relayed.Del("Set-Cookie2")
+	}
+	h.Set(HeadersHeader, EncodeHeaders(relayed))
 	h.Set("Content-Type", "application/octet-stream")
 	if resp.ContentLength >= 0 && req.Method != http.MethodHead {
 		h.Set("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
