@@ -264,5 +264,8 @@ func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunR
 		(result.Revision != nil || len(in.InboxRecords) > 0 || len(in.UpdateDispositions) > 0 || callerWorkDisposition != types.WorkItemOpen) {
 		h.NoteTextureRootChange(context.WithoutCancel(ctx), rec.OwnerID, doc.ComputerID, doc.DocID)
 	}
+	if err == nil && !result.Replay {
+		h.emitUpdateEvents(ctx, rec.OwnerID, doc.ComputerID, doc.DocID)
+	}
 	return result, err
 }
