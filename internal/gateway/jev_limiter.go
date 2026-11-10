@@ -335,11 +335,54 @@ func (s *jevStats) observe(now time.Time, latency, queued time.Duration, status 
 	return line
 }
 
-func logJevCall(computerID string, class jevClass, questions int, queued, upstream time.Duration, status int, err error) {
+func logJevCall(computerID string, class jevClass, site string, bytes, questions int, queued, upstream time.Duration, status int, err error) {
 	state := "ok"
 	if err != nil {
 		state = "failed"
 	}
-	log.Printf("gateway: jev call computer=%s class=%s questions=%d queue_ms=%d upstream_ms=%d status=%d %s",
-		computerID, class, questions, queued.Milliseconds(), upstream.Milliseconds(), status, state)
+	log.Printf("gateway: jev call computer=%s class=%s site=%s bytes=%d questions=%d queue_ms=%d upstream_ms=%d status=%d %s",
+		computerID, class, site, bytes, questions, queued.Milliseconds(), upstream.Milliseconds(), status, state)
+}
+
+// JevSiteHeader names the optional request header by which a caller says which
+// call site is asking. The gateway only logs it, sanitised; no decision reads it.
+const JevSiteHeader = "X-Choir-Jev-Site"
+
+type jevSiteKey struct{}
+
+// sanitizeJevSite keeps lowercase letters, digits and _:.- up to 48 bytes;
+// anything else (or empty) is "unknown".
+func sanitizeJevSite(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || len(raw) > 48 {
+		return "unknown"
+	}
+	for _, r := range raw {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_' || r == ':' || r == '.' || r == '-') {
+			return "unknown"
+		}
+	}
+	return raw
+}
+
+// withJevSite carries the request's site to the log line only.
+func withJevSite(ctx context.Context, r *http.Request) context.Context {
+	return context.WithValue(ctx, jevSiteKey{}, sanitizeJevSite(r.Header.Get(JevSiteHeader)))
+}
+
+func jevSiteFrom(ctx context.Context) string {
+	if site, ok := ctx.Value(jevSiteKey{}).(string); ok {
+		return site
+	}
+	return "unknown"
+}
+
+// jevRequestBytes is the size of the request's payload: state plus every
+// question's name and body.
+func jevRequestBytes(request JudgmentRequest) int {
+	n := len(request.State)
+	for name, q := range request.Questions {
+		n += len(name) + len(q)
+	}
+	return n
 }

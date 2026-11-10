@@ -50,6 +50,7 @@ func (d *gatewayDecider) Decide(ctx context.Context, _ string, request gateway.J
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-Choir-Host-Caller", hostCallerName)
+	req.Header.Set("X-Choir-Jev-Site", "front_importance")
 	hostauth.MarkInternal(req)
 	resp, err := d.client.Do(req)
 	if err != nil {

@@ -125,7 +125,7 @@ func (t *JevTransport) Decide(ctx context.Context, computerID string, request Ju
 		if _, limited := err.(*jevLimitedError); limited {
 			status = http.StatusTooManyRequests
 		}
-		logJevCall(computerID, class, len(request.Questions), queued, 0, status, err)
+		logJevCall(computerID, class, jevSiteFrom(ctx), jevRequestBytes(request), len(request.Questions), queued, 0, status, err)
 		if line := t.stats.observe(time.Now(), 0, queued, status, false); line != "" {
 			log.Print(line)
 		}
@@ -141,7 +141,7 @@ func (t *JevTransport) Decide(ctx context.Context, computerID string, request Ju
 	started := time.Now()
 	response, status, err := t.call(ctx, computerID, request)
 	upstream := time.Since(started)
-	logJevCall(computerID, class, len(request.Questions), queued, upstream, status, err)
+	logJevCall(computerID, class, jevSiteFrom(ctx), jevRequestBytes(request), len(request.Questions), queued, upstream, status, err)
 	if line := t.stats.observe(time.Now(), upstream, queued, status, err == nil); line != "" {
 		log.Print(line)
 	}
@@ -408,7 +408,7 @@ func (h *Handler) HandleJudgment(w http.ResponseWriter, r *http.Request) {
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), jevTransportTimeout)
+	ctx, cancel := context.WithTimeout(withJevSite(r.Context(), r), jevTransportTimeout)
 	defer cancel()
 	response, err := h.jevTransport.Decide(ctx, computerID, request)
 	if err != nil {
