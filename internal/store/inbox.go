@@ -189,6 +189,12 @@ func validateInboxRecordShape(rec types.CommitmentRecord) error {
 	if rec.Captures != nil && (rec.EmitterKind != types.CommitmentEmitterSystem || strings.TrimSpace(rec.Captures.SourceID) == "" || len(rec.Captures.Items) == 0) {
 		return inboxRefused("capture arrival %s must be a system record naming its source and at least one capture", rec.RecordID)
 	}
+	if err := types.ValidateChangelogRecord(rec); err != nil {
+		return inboxRefused("%v", err)
+	}
+	if err := types.ValidateOpedRecord(rec); err != nil {
+		return inboxRefused("%v", err)
+	}
 	if rec.Inbox == types.StoryOpenInbox() {
 		return inboxRefused("record %s is addressed to %s; only a management Cast committed through CommitInboxRecords opens a story", rec.RecordID, types.StoryOpenInbox())
 	}

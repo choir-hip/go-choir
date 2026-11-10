@@ -602,15 +602,37 @@ list for these types, each with its test:
 | H1-12 | Replay mints a second record | deterministic record ids; a second emit replays | `TestEmitChangelogReplayMintsOne` (store round trip) |
 | H1-13 | Registry hygiene | no object kind and no event kind is added; the semantic-kind count in `TestSemanticKindsNeverEnterTheQueue` is unchanged | the existing test |
 
+What lanes call. Emit: `(*agentcore.Runtime).EmitChangelog`,
+`EmitOpedArrival`, `EmitOpedVerdict`, `EmitOpedWakeDecision`,
+`EmitOpedGateUnavailable`, `EmitUpdateEvents(ctx, owner, computer, docID)`
+(read-side derivation; idempotent; closes nothing; call it at any closure
+point or on a timer). Pure: `types.DeriveUpdateEvents`,
+`types.UpdateRoundsFromRecords`, `types.ChangelogLevelOf`,
+`types.ChangelogEventID`. Read: `(*store.Store).ListChangelogEvents(ctx,
+owner, computer, types.ChangelogQuery{IncludeMinor, Since, Until, AfterSeq,
+Limit})`, the existing inbox read with a filter; no new route. A round's final
+Report lands in the caster's inbox, so `EmitUpdateEvents` also reads each
+caster's inbox from sequence 0 (a bound to add when it matters).
+
 Choices the contract left open. `gate_unavailable` is a changelog kind
 (major, told to the paper's owner), because a stuck gate is a fact the owner
 must see; it was in lane H1's brief but not in the 5.2 table. The `Changelog`
 body's `tape_ref.inbox_seq` is zero at emit (the store stamps it) and read
 back from the record. Every sender inbox is `changelog-source:<origin>` for a
 changelog record, `oped:<op-ed version id>` for arrival, verdict and gate
-records, and `oped-wake:<story doc>` for a wake decision. The Algorithm²
+records, and `oped-wake-decision:<story doc>` for a wake decision. The Algorithm²
 behavior ledger has no field-level definition in the handoff (4.H), so no
 type was defined for it.
+
+Amendments A2, A5, A6(c) applied. `oped_wake` is a fourth `Oped` body
+(`OpedWake`, id `oped-wake:<op-ed version id>`, sender `oped:<version id>`,
+inbox the story document's `texture:<doc>`), carrying the op-ed reference and
+never `Captures`; emitted by `EmitOpedWake`. H1 does not add it to
+`RecordWakesReader` (lane C2, wave 2), so the silence test covers every
+record H1 defines except `oped_wake`. The verdict enum gains `unavailable`.
+The wake decision's id moved to `oped-wake-decision:<doc>:<n>` so the two
+ids cannot collide. `update_interrupted` is derived on read from the crash
+boot's closure Report (`EmitUpdateEvents`); nothing is written at boot.
 
 ## 6. Mutation class and review for contract 3
 

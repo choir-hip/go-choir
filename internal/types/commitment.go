@@ -393,6 +393,13 @@ type CommitmentRecord struct {
 	// settlement of it (Kind resolve). Desk packs exclude these records in
 	// their query.
 	Calibration *CommitmentCalibration `json:"calibration,omitempty"`
+	// Changelog is the body of a changelog event (autopaper step 0 contract
+	// 3): a silent system record to changelog:<owner>. Oped is the body of an
+	// op-ed arrival, verdict, wake decision or gate_unavailable record on the
+	// paper's tape (contract 2). Each excludes every other body, and neither
+	// is on the waking list.
+	Changelog *CommitmentChangelog `json:"changelog,omitempty"`
+	Oped      *CommitmentOped      `json:"oped,omitempty"`
 }
 
 // CastHypothesis is one hypothesis a Cast opens. The store assigns ID
