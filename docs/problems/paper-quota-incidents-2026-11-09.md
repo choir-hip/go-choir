@@ -1,6 +1,6 @@
 # The paper's runs fail together when every model is out of quota (2026-11-09)
 
-Status: documented, fix pending. Mission: docs/definitions/choir-autopaper-improvement-2026-11-09.md (S1).
+Status: partly fixed (36534be53, 7334daf86); see the evening investigation below. Mission: docs/definitions/choir-autopaper-improvement-2026-11-09.md (S1).
 
 ## Evidence
 
@@ -58,3 +58,25 @@ incident by elapsed time with a wait floor at the earliest known reset, and do
 not count incident sleep against the progress deadline. Expose the ledger's
 holds in observability (5). Then a design for parking an incident run off its
 dispatcher slot (3) and keeping its loop state (2). Then calls per activation.
+
+## Investigation 2026-11-09 evening
+
+(a) Truth: the first fix-order item is on main. 36534be53 ("a quota incident
+is bounded by time, not retry rounds, waits for the earliest reset, and does
+not spend the progress deadline", orange); 7334daf86 persists availability
+across restarts. Not seen tonight: the paper's runtime log is not readable
+from the gateway, so I could not count "every model is out of quota" lines
+[unverified]. Indirect: the gateway shows failover pairs in 3 hours (for
+example 60 bedrock-then-openrouter, 46 devin-then-synthetic), so runs do move
+between providers.
+
+(b) The record's own order held. Remaining: parking an incident run off its
+dispatcher slot, keeping loop state across an incident, and the ledger holds
+visible in observability (whether they now are is unread).
+
+(c) Substrate (availability memory), partly fixed.
+
+(d) Remaining work is design, not tonight: parking runs. Orange, 150+ lines,
+about a day for a Sonnet builder.
+
+(e) Header "fix pending" is partly stale: 36534be53 and 7334daf86.

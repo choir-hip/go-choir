@@ -132,3 +132,14 @@ the 50-story cap; paging was added but the windows stayed small.
 Revise the mechanisms above; build no second system for any of them. The
 work is lane Q of
 [the next-mission handoff](../design/autopaper-next-mission-handoff-2026-11-09.md).
+
+## Investigation 2026-11-09 evening
+
+Read only, for clustering. Its defects (duplicates, length, language) belong
+to the mission lane. Relation to this cluster: tonight the paper's supply is
+thin on both sides. Search is answered by one provider (Keenable) and about
+half its request lines are paid Bedrock Haiku, so thin or duplicated articles
+can come from supply as well as from prompts. Under "understand before
+tuning", do not tune prompts for quality until search supply and model
+availability are measured stable. See
+[the cluster record](paper-model-and-search-plane-cluster-2026-11-09.md).

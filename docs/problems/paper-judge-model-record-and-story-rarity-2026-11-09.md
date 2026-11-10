@@ -105,3 +105,27 @@ Fix options:
    machinery for a host-side scalar; not the precedent in this file.
 3. Add research to the supplemental readers of Texture's kinds. Rejected:
    it widens every cell-reachable read, which the gate exists to show.
+
+## Investigation 2026-11-09 evening
+
+(a) Truth: fixed on main. 267364fa7 ("the judge's model.served line passes the
+vocab write guard, and the story analysis reads library frequencies as
+Texture's custodian", orange) is both fixes this record chose: the leaf walker
+excuses `payload.role` of a model.served event
+(internal/store/vocab_migrate_og.go:863) and the IDF read declares
+`WithCustodianReader(ctx, "choir.texture_document")`
+(internal/agentcore/story_analysis.go:239). Related: eb21f1df8 for the
+research child's search.served line. Not verified in the paper's log tonight
+(the VM log is not readable from the gateway); the proof is the absence of the
+two quoted log lines after the deploy.
+
+(b) Cause confirmed by code on both sides.
+
+(c) Symptom of a substrate rule (a write guard and a reader gate that the
+tests do not run under).
+
+(d) Residual: one test that runs the judge write and the research-desk IDF
+read under a cutover store and the research desk's context. Yellow, about 40
+lines, 1 hour.
+
+(e) Stale: fixed by 267364fa7.

@@ -146,3 +146,24 @@ model), derived from the run's cells.
 - The downloaded exports (`export_html.go` and the other formats) do not
   render the provenance yet; the version's manifest in the resolve bundle
   carries it.
+
+## Investigation 2026-11-09 evening
+
+(a) Truth: the build exists (dab4b7f8c, 2026-11-05) and the defect that
+silently emptied the judge's line is fixed (267364fa7; every Jev call from
+2026-11-05 on a post-cutover computer lost its model.served line, per the
+judge record). The Residuals above still stand. The provider mix now changes
+by the day (devin, openrouter, bedrock and synthetic all appear in tonight's
+log), which makes the switch list the part of provenance that matters. I did
+not read a published version's `model_provenance` tonight [unverified].
+
+(b) Remaining gaps are those under Residuals (management tasks, unindexed
+requested_by walks).
+
+(c) Feature gap, not substrate.
+
+(d) Smallest next fix: a staging check that a freshly published story has a
+`model_provenance` with a judge entry. Yellow, about 30 lines, 1 hour.
+
+(e) Mostly done; the header should say built, with the judge line fixed by
+267364fa7.

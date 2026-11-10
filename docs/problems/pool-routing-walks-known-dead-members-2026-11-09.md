@@ -1,6 +1,6 @@
 # Pool routing walks members already known to be dead (2026-11-09)
 
-Status: documented, fix lands in the next commit. Class: red (provider routing).
+Status: fixed (ead8873b6, 7334daf86); see the evening investigation below. Class: red (provider routing).
 
 ## Owner report (2026-11-09, verbatim)
 
@@ -109,3 +109,27 @@ One mechanism: the ledger is the computer's availability record.
 
 `modelpolicy/tools_model_verify.go` walks its own failover list; it does not
 use the loop's ledger and is unchanged.
+
+## Investigation 2026-11-09 evening
+
+(a) Truth: fixed. The header "fix lands in the next commit" is stale.
+ead8873b6 ("the computer's availability record skips pool members known to be
+down", red) landed it; 7334daf86 (the computer and gateway remember providers
+that are down and back off, across restarts, orange; doctrine 5ca86505a)
+extended it. Demote, Succeed and Holds are in internal/toolregistry/toolloop.go
+(:505, :533, :477) and DemoteHard/Persist in quota_ledger_state.go, so holds
+survive restarts.
+
+(b) The design's pool order is superseded: stealth/crouton-alpha was retired
+by OpenRouter on 2026-11-09 (2fb429d26); swe-2-flash (Devin) now leads the
+default pool (6718d44ea, 03300ad5f), the free members follow, Bedrock Haiku
+5.5 is last. Gateway log, last 3 hours, request-line provider counts [M]:
+bedrock 2,584 (request plus success lines), openrouter 1,501, devin 280,
+synthetic about 100. The paper still runs mostly on the paid tail: a capacity
+fact, not a routing bug.
+
+(c) Substrate, fixed.
+
+(d)/(e) Nothing to build. Residual: the gateway's own memory (search plane
+health store, circuits) is separate from the computer's ledger; see the
+cluster record. Mark fixed by ead8873b6 and 7334daf86.

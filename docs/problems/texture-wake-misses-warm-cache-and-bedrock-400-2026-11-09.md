@@ -44,3 +44,35 @@ low.
 is inferred. 3 is measured as a failure; its cause is a hypothesis. Other
 ranked items (threshold compaction, the 8,000-rune cell output cut, repeated
 wake prompt text, whole-document frames) are in the audit, section 6.
+
+## Investigation 2026-11-09 evening
+
+(a) Truth: all three items have fixes on main, and tonight's gateway agrees.
+- Item 1 (carry not append-only): 1f8dfe4a5 ("a carried wake keeps every
+  earlier message byte for byte", orange).
+- Item 2 (5 minute cache, 10 minute wake gap): d2adcb6ca (Bedrock cache
+  breakpoints use the one-hour TTL), c4d72a61a (mixed lifetimes priced into
+  spend and the $20 budget).
+- Item 3 (Bedrock 400): 18a654482 (foreign tool ids mapped, unsigned thinking
+  and empty text blocks dropped, input_schema always sent), 4b35bf051,
+  b430fad68 (a result for every tool call), d141afcb0 (thinking never off for
+  Haiku 5.5), 3ab5f1eef (4xx type and message now logged). The ledger entry
+  bb8c25b6f carries the adjudicated root cause; this record's hypothesis was
+  in the right family only.
+Tonight [M]: 0 Bedrock lines with a 4xx or 5xx status in 3 hours against 2,584
+request and success lines; success lines show `cached=25158
+cache_write_1h=653`, so the one-hour cache is read and written.
+
+(b) Still open: a Texture Bedrock request at 01:30Z (vm-70070cf7) says
+`reasoning=high`; the owner ruled low for everything except Sonnet.
+d141afcb0 floors "off" at the lowest thinking-on effort, so "high" is either
+policy resolving high or a path that ignores the ruling. Hypothesis; confirm
+by reading the policy resolve output for Texture on that computer.
+
+(c) Items 1-3 were provider-translation symptoms. The reasoning level is a
+policy-resolution question.
+
+(d) Residual fix: read what policy resolves for Texture; if low, find the
+path sending high. Orange, under 2 hours.
+
+(e) Items 1-3 are stale: fixed by the commits above.

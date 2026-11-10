@@ -58,3 +58,26 @@ d@e: one read, `$SCR/de.sh "/api/runs/5e3a8e8f-351f-4f70-a85a-05f479e35a92/event
 - No other guest->corpusd direct route is gated by `trustedInternalCaller` alone. Guest-called routes: captures (POST/GET/search/by-url/bodies), objects, support-verdicts, story-relations, story-entities, story-entities/candidates, texture/publications. These all use `requireInternalOrBoundGuest(Write)` or are routed via the proxy (grep of `/internal/platform/...` in agentcore/researchtools/types vs `trustedInternalCaller` sites in platform/*.go). `related`, `related-backfill`, `expansion-source`, `entity growth` are host-only and called from the proxy/host, not from a guest.
 - A separate silent failure seen in passing, NOT this bug: corpusd journal shows repeated `corpusd: story entities from computer-1355b83b...: obj:choir.publication:... is not a published Autopaper story of owner ...` (several per minute at 19:52-19:56Z, `ssh node-b "sudo journalctl -u go-choir-corpusd --since -3h"`). Research's story-entities export is refused by corpusd because the named publication object is not a published story. Worth its own read-only look (hypothesis: the entity export names a draft/unpublished publication or the wrong object id).
 - Same class of silence: the failure is returned as a string note inside a successful tool result, so the run never errors and no alarm fires. Consider (later) a gate that fails a research run proof when `published_note` is present.
+
+## Investigation 2026-11-09 evening
+
+(a) Truth: fixed on main by 244325257 ("published search admits a bound
+guest", red). `HandleInternalPublishedSearch`
+(internal/platform/handlers.go:348-358) now admits `trustedInternalCaller` or
+a tap-bound guest through `bindTapCaller`, the fix this record proposed,
+in-line. Not verified live: I read no research run's `published_note` tonight
+and the deployed commit is unconfirmed. The header should read "fixed
+244325257; live proof pending".
+
+(b) The diagnosis (the sink calls corpusd directly; the handler required
+host-internal) stands; the code confirms it.
+
+(c) Symptom (one route's admission rule). The shape, a failure returned as a
+note inside a successful tool result, recurs; see the cluster record.
+
+(d) Remaining: the d@e live proof (a cell printing the whole result, with
+`published_count` > 0 and no `published_note`), and renaming "capture index
+refused" in `CorpusdCaptureSink.do`. Orange/green, about 10 lines, under an
+hour.
+
+(e) Record is stale as to status: fixed by 244325257.
