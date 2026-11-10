@@ -1,0 +1,4 @@
+# Exact checkout, builds and installs never belong here.
+exact/
+**/node_modules/
+**/target/

@@ -1,0 +1,189 @@
+# Exact: the UI model
+
+Part of [EXACT.md](../EXACT.md). Pinned commit `76cd50f9e`. Marks: **[run]**
+verified by running (simulator), **[src]** read from source, **[doc]** from
+Exact's docs, **[unrun]** reasoned. Doc paths are in the Exact repo; the
+canonical references are `docs/contract-for-humans.md` (tutorial order),
+`docs/contract-grammar.md` (full grammar) and `docs/contract-for-agents.md`.
+
+## The model in five lines
+
+- A file `app.contract` holds `shape`s (record types), `routes`, and
+  `component`s. The first component is the root [doc: contract-for-humans.md:82-113].
+- A component has `state` (stored), `derive` (computed), `action` (state writes),
+  `resource` (reactive request to a source), `mutation` (explicit request),
+  `task` (scheduled action), and a `view` (the tree).
+- Layout is CSS: `display:flex`, `gap`, `padding`, `flex=1`, `min-height=0`,
+  `position="absolute" inset=0`. A bare node is `display:block`; names are CSS's,
+  and the compiler refuses aliases [doc: README.md "Write the web, ship the platform"].
+- Unsaid presentation is the platform's: text is the system label colour and
+  17 pt on iPhone, a `button` is the system's button, a pushed screen has the
+  system Back.
+- Events bind actions: `press=increment`, `input=edit`, `submit=add`.
+  `press=increment` binds, it does not call, while the view builds.
+
+## A complete component [run: this Contract built and rendered]
+
+From [`mobile/exact-spike/app/app.contract`](../../../mobile/exact-spike/app/app.contract):
+
+```contract
+use spikeStatus, spikeMode, SpikeStatus from "@choir/spike"
+
+routes nav
+  home "/"
+
+component Spikeapp
+  resource st = spikeStatus() as shape SpikeStatus else empty()
+  mutation moded as shape SpikeStatus
+  action listen
+    send moded = spikeMode(mode="listening")
+  view
+    main testId="root" navigationKey=`${top(nav).id}` navigationBack="back" width="100%" height="100%"
+      for e in stack(nav) key=e.id
+        column navigationKey=`${e.id}` navigationScroll="content" position="absolute" inset=0 display="flex" flex-direction="column"
+          header display="flex" align-items="center"
+            text "Exact spike" role="heading" aria-level=1 flex=1
+          scroll id="content" flex=1 min-height=0 padding=16
+            column gap=12
+              text `state: ${st.state}` testId="state"
+              button press=listen testId="listen"
+                text "Listening (tone + mic)"
+```
+
+Running `agent ios tree` printed this node tree (`View`, `Text`, `ScrollView`,
+`Control` with `(press)` and `testId`s), 16 nodes, which is what the driver
+and any agent test sees [run].
+
+## State and actions
+
+- `state count = 0`; `derive visible = items.filter(i => i.title.includes(query))`
+  [doc: contract-for-humans.md:260-324]. Prefer `derive` to a second mutable copy.
+- An action reads the state **as it was at its start**; its writes land
+  together. After `count = count + 1; let before = count`, `before` is the old
+  value (the compiler warns `analyze-read-after-assign`). Compute `let next =
+  count + 1` once and use it for both.
+- Actions have assignments, `let`, `send`, `refresh`, host commands, calls to
+  other actions, `if/else`, option `match`. **No loops, no `return`, no
+  `await`.** An action calling another action runs its statements right there,
+  in the same commit, and still sees the starting state.
+- `task ticker mount` schedules one action; `task hide when toast != ""
+  key=toastUntil` waits on state [doc: contract-for-humans.md:1423-1460].
+
+## Sources, resources and mutations
+
+A `resource` re-requests whenever its inputs change; a `mutation` reads as an
+`option<T>` (`none` until answered); `send` issues it; `refreshes items then
+afterSave` re-asks and then runs an action [doc: contract-for-humans.md:540-620].
+
+`else empty()` gives the placeholder before the first answer or on failure.
+`failure(x)`, `pending(x)` read the state of a resource.
+
+Answers are produced by the **data module** `app.ts`
+(`const sources: Sources = { name: async (args, store, storage, native) => ... }`),
+by a Rust crate, or by a package (our `later`). TypeScript on Hermes gets
+`fetch`, `structuredClone`, Streams, `crypto.subtle` (digests, ECDSA P-256),
+`TextDecoder`, `Intl.NumberFormat/DateTimeFormat/Collator`, timers inside an
+answer, `scheduler.yield()` [doc: reference.md:976-1010]. Storage is
+SQLite plus a file store under grants declared in `export const grants`
+(`fs.read app:/data`, `sqlite.open app:/data/x.db`, `net.fetch https://host`)
+[doc: reference.md:1190-1230]. Our spike's grants (microphone) live there:
+
+```ts
+export const grants = `device.microphone purpose.microphone\ndevice.microphone-background purpose.recordingInBackground`;
+```
+
+The `purpose.<key>` text comes from `strings/en.json`; the build wrote it into
+`NSMicrophoneUsageDescription` [run: `plutil -p Info.plist`].
+
+## Layout and styling
+
+- Flex column/row, `gap`, `padding`, `width="100%"`, `max-width="26.25rem"` for
+  a focal column, `env(safe-area-inset-top)`, `light-dark()` [doc: README.md].
+- Roles name colours: `color="-exact-secondary-label"`, `font="-exact-footnote"`;
+  a brand is an `app.tamber` file and `color="var(--ink)"`
+  [doc: docs/recipes/tamber.md, theme.md]. `bun scripts/no-tells.mjs .` lists
+  literal colours and sizes the platform would have chosen.
+- The browser is the layout oracle; native layout is checked against Chrome
+  for authored CSS [doc: README.md].
+
+## Lists, forms, navigation (patterns)
+
+List with rows, search, swipe-delete and long-press menu [doc:
+docs/recipes/list-rows.md]:
+
+```contract
+list id="notes-list" appearance="auto" listStyle="inset-grouped" flex=1 min-height=0
+  section
+    for n in shown key=n.id
+      row delete=remove(n.id) contextmenu=aim(n.id) contextPopover="menu"
+        text n.title
+```
+
+Rules the docs state: a list's children are rows; draw no separator and no
+press state; keyed `for` is required; a labelled form is a grouped list
+(`grouped-form`) [doc: docs/start-here.md:16-35].
+
+Navigation: a `routes` table (`tab home "/"`, nested `item "/item/:id"`),
+`nav = push(nav, path("item","42"))`, `back(nav)`, `go(nav, url)`. The stack is
+one row per `stack(nav)` entry keyed by entry id, so retained screens keep
+their state; `navigationKey` on the root names the top entry,
+`navigationBack` the back control's `id` [doc: contract-for-humans.md:1323-1380].
+A screen chosen by `if page == ...` has no URL, Back or deep link, and the
+build warns `lower-screen-by-state`. Tabs and a split list/detail need no code.
+Create/edit is a sheet; a row pushes its detail [doc: start-here.md].
+
+## Inputs
+
+`input value=query input=search placeholder="Search" type="search"` binds a
+text field; `type="range"` is a slider with `aria-valuenow` readable by
+accessibility; `select`, date/time and file pickers exist with native
+conventions [doc: contract-for-humans.md:1116-1195, contract-grammar.md:1165-1190].
+Haptics: `haptic("selection")`, `haptic("success")`. Keyboard handling is in
+docs/recipes/keyboard-and-focus.md.
+
+## Custom drawing (the timeline question for the lab)
+
+Three routes, cheapest first [doc unless marked]:
+
+1. **`svg` with `polyline`, `rect`, `path`, `text`** inside a component, with
+   CSS `@keyframes`, `pathLength`/`stroke-dashoffset` draw-ins
+   (apps/sparkline/app.contract). A trace timeline of a few hundred rects is
+   plausible; behaviour at thousands is **[unrun]**.
+2. **`canvas surface=ink(points)`** with pointer events (`pointerdown`,
+   `pointermove`, `offsetX/Y`) and Canvas 2D recording drawn through Core
+   Graphics on iOS (LLP 1056 in Exact's `llp/`; `docs/contract-grammar.md:1924-1945`).
+   A GPU canvas needs the Metal toolchain; without it the build says
+   "no Canvas 2D GPU module: canvases draw with Core Graphics" [run:
+   that notice appeared in our build log]. Install with
+   `xcodebuild -downloadComponent MetalToolchain` if needed.
+3. **A package-provided native view** (any `UIView`, even
+   `UIHostingController.view`): declare `"views": {"my-timeline": {...}}` in the
+   package interface and implement `view(_:id:props:events:)`; see
+   `packages/fixtures/swatch` and `native-modules.md` [src; **[unrun]** here].
+
+Exact itself embeds a SwiftUI `Text` for rolling numerals
+(`host/apple/Sources/ExactNumerals/Numerals.swift:69-72`) [src], so a
+`UIHostingController` inside a native view is an established move. We have not
+run it.
+
+Markdown: a Markdown reader/editor element exists (`markdown/`, apps/markdown).
+It is the nearest built-in analogue of a Texture page and is the first thing to
+evaluate in the renderer lane [doc: contract-grammar.md:1381-1430; **[unrun]**].
+
+## Theming and accessibility
+
+- Theming: `app.tamber` design file, role colours, dark mode via the platform;
+  `bun exact.mjs tamber gen swift .` writes typed names for native views
+  (`ExactTamber(view).color(.surfaceCard)`) [doc: reference.md around 2606].
+- Accessibility: roles and `aria-*` map to UIKit traits; `role="heading"
+  aria-level=1`, `aria-label`, `aria-checked`, `aria-valuenow`,
+  `aria-disabled`. `bun exact.mjs agent ios check` reports clipped text,
+  covered controls, small targets and low contrast [doc: ios-driving.md].
+
+## Open questions
+
+- How many `svg` nodes or canvas ops keep 60 fps on an iPhone 14 Pro Max for
+  the trace timeline?
+- Can `markdown` render Texture pages with our link and highlight needs?
+- Does a package `UIView` that hosts SwiftUI size correctly inside a Contract
+  list row (`intrinsicSize`, `events.intrinsicSize(...)`)?

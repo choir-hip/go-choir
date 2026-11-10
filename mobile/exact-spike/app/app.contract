@@ -1,0 +1,32 @@
+use spikeStatus, spikeMode, SpikeStatus from "@choir/spike"
+
+routes nav
+  home "/"
+
+component Spikeapp
+  resource st = spikeStatus() as shape SpikeStatus else empty()
+  mutation moded as shape SpikeStatus
+  action listen
+    send moded = spikeMode(mode="listening")
+  action talk
+    send moded = spikeMode(mode="talking")
+  action halt
+    send moded = spikeMode(mode="stopped")
+  view
+    main testId="root" navigationKey=`${top(nav).id}` navigationBack="back" width="100%" height="100%"
+      for e in stack(nav) key=e.id
+        column navigationKey=`${e.id}` navigationScroll="content" position="absolute" inset=0 display="flex" flex-direction="column"
+          header display="flex" align-items="center"
+            text "Exact spike" role="heading" aria-level=1 flex=1
+          scroll id="content" flex=1 min-height=0 padding=16
+            column gap=12
+              text `state: ${st.state}` testId="state"
+              text `rms: ${st.rms}` testId="rms"
+              text `frames: ${st.frames}` testId="frames"
+              button press=listen testId="listen"
+                text "Listening (tone + mic)"
+              button press=talk testId="talk"
+                text "Talking (voice processing)"
+              button press=halt testId="halt"
+                text "Stop"
+              text st.log testId="log"

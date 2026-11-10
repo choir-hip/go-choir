@@ -1,0 +1,31 @@
+{
+  "$schema": "../exact/scripts/app.schema.json",
+  "name": "Exact Spike",
+  "short_name": "Exact Spike",
+  "id": "news.choir.exactspike",
+  "start_url": "/",
+  "display": "standalone",
+  "app": {
+    "id": "news.choir.exactspike",
+    "name": "Exact Spike"
+  },
+  "host": {
+    "ios": {
+      "minimumOS": "17.0",
+      "deviceFamily": [
+        "iphone"
+      ],
+      "backgroundModes": [
+        "audio"
+      ]
+    },
+    "web": {}
+  },
+  "deploy": {
+    "store": {
+      "ios": "0",
+      "web": "0"
+    }
+  },
+  "audio_session": "playback"
+}

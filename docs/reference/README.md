@@ -24,4 +24,4 @@ Pages:
 - [JEV.md](JEV.md): the System 1 judgment model (TypeSafe, via OpenRouter).
 - [ON-DEVICE-MODELS.md](ON-DEVICE-MODELS.md): models and runtimes for the
   Autoradio phone app; all candidates untested as of 2026-11-10.
-- `EXACT.md`: to be added by the Exact spike.
+- [EXACT.md](EXACT.md): the Exact app-shell runtime (pinned commit, model, surprises, decision guide), with subpages in [exact/](exact/): ui-model, native-modules, audio, build-and-ship, testing-and-debugging, internals, gaps. The runnable example is [mobile/exact-spike/](../../mobile/exact-spike/README.md).

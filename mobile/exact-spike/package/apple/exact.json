@@ -1,0 +1,14 @@
+{
+  "kind": "implementation",
+  "implements": "@choir/spike@^1.0",
+  "platform": "apple",
+  "targets": ["ios"],
+  "shapes": {},
+  "options": {},
+  "names": [],
+  "views": [],
+  "hatches": [],
+  "sources": { "swift": ["Spike.swift"] },
+  "artifacts": [],
+  "class": "SpikeModule"
+}

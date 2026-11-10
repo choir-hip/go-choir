@@ -1,0 +1,6 @@
+{
+  "name": "@choir/spike",
+  "version": "1.0.0",
+  "private": true,
+  "exports": { ".": "./exact.json", "./apple": "./apple/exact.json" }
+}

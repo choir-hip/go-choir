@@ -1,0 +1,4 @@
+{
+  "purpose.microphone": "Listens for the tone test.",
+  "purpose.recordingInBackground": "Keeps listening with the screen locked."
+}

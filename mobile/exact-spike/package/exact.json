@@ -1,0 +1,22 @@
+{
+  "kind": "interface",
+  "name": "@choir/spike",
+  "version": "1.0.0",
+  "substitute": "implementation",
+  "shapes": {
+    "SpikeStatus": { "state": "string", "rms": "number", "frames": "number", "log": "string" }
+  },
+  "names": [
+    {
+      "source": "spikeStatus",
+      "live": true,
+      "answers": "SpikeStatus",
+      "substitute": { "default": { "state": "none", "rms": 0, "frames": 0, "log": "" } }
+    },
+    {
+      "send": "spikeMode",
+      "options": { "mode": "string" },
+      "answers": "SpikeStatus"
+    }
+  ]
+}
