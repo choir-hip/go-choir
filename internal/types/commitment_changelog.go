@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -186,7 +187,8 @@ func ChangelogEventID(kind ChangelogKind, parts ...string) string {
 func hasOtherBody(rec CommitmentRecord) bool {
 	return rec.Cast != nil || rec.Report != nil || rec.Support != nil || rec.Captures != nil || rec.Disposition != nil ||
 		rec.TaskOutcome != nil || rec.Job != nil || rec.Calibration != nil || rec.Directive != nil || rec.SubCall != nil ||
-		rec.Precommit != nil || rec.Resolve != nil || rec.Disagreement != nil
+		rec.Precommit != nil || rec.Resolve != nil || rec.Disagreement != nil ||
+		rec.Action != nil || rec.MaterialityProcedure != nil
 }
 
 func boundedText(field, v string, max int) error {
@@ -231,8 +233,8 @@ func ValidateChangelogBody(b CommitmentChangelog) error {
 	default:
 		return fmt.Errorf("changelog origin %q is not known", b.Origin)
 	}
-	if strings.TrimSpace(b.OccurredAt) == "" {
-		return fmt.Errorf("changelog event needs occurred_at")
+	if _, err := time.Parse(time.RFC3339Nano, b.OccurredAt); err != nil {
+		return fmt.Errorf("changelog occurred_at %q is not RFC 3339", b.OccurredAt)
 	}
 	if strings.TrimSpace(b.Summary) == "" {
 		return fmt.Errorf("changelog event needs a summary")
@@ -275,15 +277,6 @@ func ValidateChangelogBody(b CommitmentChangelog) error {
 	}
 	if b.Origin == ChangelogOriginCorpusd && strings.TrimSpace(b.RemoteRef) == "" {
 		return fmt.Errorf("a corpusd changelog event needs a remote_ref")
-	}
-	return nil
-}
-
-// ValidateChangelogSpanWithin refuses a span that points past the chain's
-// head (the highest sequence on the computer's event chain).
-func ValidateChangelogSpanWithin(span ChangelogSpan, headSeq int64) error {
-	if span.FromSeq < 0 || span.ToSeq < span.FromSeq || span.ToSeq > headSeq {
-		return fmt.Errorf("changelog span %d..%d is outside the chain, which ends at %d", span.FromSeq, span.ToSeq, headSeq)
 	}
 	return nil
 }

@@ -598,7 +598,7 @@ list for these types, each with its test:
 | H1-8 | Id or canonical JSON drift | ids come from one helper each; the event id is SHA-256 over length-prefixed parts; map fields are sorted by `encoding/json` | `TestChangelogIDsDeterministic`, `TestOpedVerdictCanonicalJSONStable` |
 | H1-9 | `reason` read as an instruction | `reason` requires `reason_untrusted: true`; refused otherwise | `TestChangelogReasonMustBeMarkedUntrusted` |
 | H1-10 | `update_finished` for an interrupted update, or no `update_interrupted` | the derivation reads the final Report's stop reason; `interrupted_by_restart` yields `update_interrupted` only (C8, C9) | `TestDeriveUpdateEvents*` |
-| H1-11 | Zoom span past the tape | `ValidateChangelogSpanWithin` against the chain head (C14) | `TestSpanWithinChain` |
+| H1-11 | Zoom span past the tape | not built: see "Review follow-up" below; a span is only range-checked (`from <= to`) on the body | `TestChangelogBoundsRefused` (backwards) |
 | H1-12 | Replay mints a second record | deterministic record ids; a second emit replays | `TestEmitChangelogReplayMintsOne` (store round trip) |
 | H1-13 | Registry hygiene | no object kind and no event kind is added; the semantic-kind count in `TestSemanticKindsNeverEnterTheQueue` is unchanged | the existing test |
 
@@ -623,6 +623,27 @@ changelog record, `oped:<op-ed version id>` for arrival, verdict and gate
 records, and `oped-wake-decision:<story doc>` for a wake decision. The Algorithm²
 behavior ledger has no field-level definition in the handoff (4.H), so no
 type was defined for it.
+
+Review follow-up. (1) Op-ed records to management use
+`deskmanifest.IsAdmitterInbox`. (2) `Action` and `MaterialityProcedure` count
+as other bodies. (3) `responds_to` route and publication id are bounded on the
+verdict, wake and gate records as on the arrival. (4) `EmitUpdateEvents` is
+bounded: the newest `UpdateEventsWindow` (200) records of the document inbox,
+or the window after `UpdateEventsSince(seq)`, and the newest window of each of
+at most 8 caster inboxes; a round whose cast is older than the window is not
+examined. The signature gained only variadic options, so existing calls
+compile. Test: `TestEmitUpdateEventsReadIsBoundedOnALongInbox`. (5) Spans and
+`revision_committed` are not reachable from the records a round is read from:
+the chain sequence and the revision ids are not on them, and the sources
+(the event chain, the Texture store) are the boot loop's and lane C1's. So
+the derivation no longer takes revisions or sequences, derived events carry no
+span, and `ValidateChangelogSpanWithin` is deleted. The `revision_committed`
+kind and the body's `span` field stay in the closed contract: lane C1, which
+knows the revision and the chain sequence at its commit point, emits them with
+`EmitChangelog`. (6) `occurred_at` must be RFC 3339 at commit; a wake decision
+with `woken` true and a why of `below_threshold` or `gap_not_elapsed`, or
+`woken` false with `accepted` or `reject_backoff`, is refused
+(`TestWakeDecisionWokenAgreesWithWhy`, `TestChangelogOccurredAtMustBeRFC3339`).
 
 Amendments A2, A5, A6(c) applied. `oped_wake` is a fourth `Oped` body
 (`OpedWake`, id `oped-wake:<op-ed version id>`, sender `oped:<version id>`,

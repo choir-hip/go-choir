@@ -3,31 +3,20 @@ package types
 import (
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 )
 
 // The local update_* derivation (contract 3, 5.2): a pure function from what
-// a computer already has (the open round, its revisions, the final Report or
+// a computer already has (the open round, the final Report or
 // the crash closure) to changelog events. It reads; it never closes a round.
-
-// UpdateRevision is one revision committed during a round.
-type UpdateRevision struct {
-	RevisionID  string
-	CommittedAt string
-	// Seq is the revision's sequence on the computer's event chain, 0 if
-	// unknown (the event then carries no span).
-	Seq int64
-}
 
 // UpdateClose is how a round ended: its final Report (or the crash closure).
 type UpdateClose struct {
 	RecordID   string
 	StopReason string
 	ClosedAt   string
-	Seq        int64
 }
 
 // UpdateRound is one document update: a round of the document's inbox.
@@ -36,60 +25,33 @@ type UpdateRound struct {
 	ConversationID string
 	Round          int
 	OpenedAt       string
-	OpenSeq        int64
-	Revisions      []UpdateRevision
 	Close          *UpdateClose
 }
 
-func updateSpan(from, to int64) *ChangelogSpan {
-	if from <= 0 || to < from {
-		return nil
-	}
-	return &ChangelogSpan{FromSeq: from, ToSeq: to}
-}
-
-// DeriveUpdateEvents derives the events of one round: update_started, one
-// revision_committed per revision, and, once the round has closed, exactly
-// one of update_finished or update_interrupted (a final Report whose stop
-// reason is interrupted_by_restart is interrupted, never finished). The ids
-// are deterministic in (kind, doc, conversation, round[, revision]).
+// DeriveUpdateEvents derives the events of one round: update_started and,
+// once the round has closed, exactly one of update_finished or
+// update_interrupted (a final Report whose stop reason is
+// interrupted_by_restart is interrupted, never finished). The ids are
+// deterministic in (kind, doc, conversation, round). Events carry no span and
+// there is no revision_committed here: the chain sequence and the revision
+// ids are not on the records a round is read from (5.5). An emitter that
+// knows them (lane C1 at its commit point) calls EmitChangelog directly.
 func DeriveUpdateEvents(r UpdateRound) []CommitmentChangelog {
 	round := strconv.Itoa(r.Round)
-	ref := func(revision string) *ChangelogTapeRef {
-		return &ChangelogTapeRef{DocID: r.DocID, RevisionID: revision, ConversationID: r.ConversationID, Round: r.Round}
-	}
-	event := func(kind ChangelogKind, at, summary, revision string, span *ChangelogSpan, parts ...string) CommitmentChangelog {
+	event := func(kind ChangelogKind, at, summary string) CommitmentChangelog {
 		level, _ := ChangelogLevelOf(kind)
 		return CommitmentChangelog{
-			EventID: ChangelogEventID(kind, append([]string{r.DocID, r.ConversationID, round}, parts...)...), Kind: kind, Level: level,
+			EventID: ChangelogEventID(kind, r.DocID, r.ConversationID, round), Kind: kind, Level: level,
 			OccurredAt: at, Subject: ChangelogSubject{DocID: r.DocID}, Summary: summary, Origin: ChangelogOriginTape,
-			TapeRef: ref(revision), Span: span,
+			TapeRef: &ChangelogTapeRef{DocID: r.DocID, ConversationID: r.ConversationID, Round: r.Round},
 		}
 	}
-	var out []CommitmentChangelog
-	out = append(out, event(ChangelogUpdateStarted, r.OpenedAt, "An update started.", "", updateSpan(r.OpenSeq, r.OpenSeq)))
-	revs := append([]UpdateRevision(nil), r.Revisions...)
-	sort.SliceStable(revs, func(i, j int) bool { return revs[i].CommittedAt < revs[j].CommittedAt })
-	last := r.OpenSeq
-	for _, rv := range revs {
-		if strings.TrimSpace(rv.RevisionID) == "" {
-			continue
-		}
-		out = append(out, event(ChangelogRevisionCommitted, rv.CommittedAt, "A revision was committed.", rv.RevisionID,
-			updateSpan(rv.Seq, rv.Seq), rv.RevisionID))
-		if rv.Seq > last {
-			last = rv.Seq
-		}
-	}
+	out := []CommitmentChangelog{event(ChangelogUpdateStarted, r.OpenedAt, "An update started.")}
 	if c := r.Close; c != nil {
-		to := c.Seq
-		if to < last {
-			to = last
-		}
 		if c.StopReason == ClosureReasonInterruptedByRestart {
-			out = append(out, event(ChangelogUpdateInterrupted, c.ClosedAt, "An update was interrupted by a restart.", "", updateSpan(r.OpenSeq, to)))
+			out = append(out, event(ChangelogUpdateInterrupted, c.ClosedAt, "An update was interrupted by a restart."))
 		} else {
-			out = append(out, event(ChangelogUpdateFinished, c.ClosedAt, "An update finished.", "", updateSpan(r.OpenSeq, to)))
+			out = append(out, event(ChangelogUpdateFinished, c.ClosedAt, "An update finished."))
 		}
 	}
 	return out

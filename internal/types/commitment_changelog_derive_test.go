@@ -15,33 +15,21 @@ func kindsOf(evs []CommitmentChangelog) []ChangelogKind {
 }
 
 func TestDeriveUpdateEventsFinished(t *testing.T) {
-	r := UpdateRound{DocID: "d", ConversationID: "c", Round: 2, OpenedAt: "2026-11-10T01:00:00Z", OpenSeq: 10,
-		Revisions: []UpdateRevision{{RevisionID: "r2", CommittedAt: "2026-11-10T01:02:00Z", Seq: 14}, {RevisionID: "r1", CommittedAt: "2026-11-10T01:01:00Z", Seq: 12}},
-		Close:     &UpdateClose{RecordID: "rep", StopReason: "done", ClosedAt: "2026-11-10T01:03:00Z", Seq: 15}}
+	r := UpdateRound{DocID: "d", ConversationID: "c", Round: 2, OpenedAt: "2026-11-10T01:00:00Z",
+		Close: &UpdateClose{RecordID: "rep", StopReason: "done", ClosedAt: "2026-11-10T01:03:00Z"}}
 	evs := DeriveUpdateEvents(r)
-	want := []ChangelogKind{ChangelogUpdateStarted, ChangelogRevisionCommitted, ChangelogRevisionCommitted, ChangelogUpdateFinished}
 	got := kindsOf(evs)
-	if len(got) != len(want) {
-		t.Fatalf("kinds %v; want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("kinds %v; want %v", got, want)
-		}
-	}
-	last := evs[len(evs)-1]
-	if last.Span == nil || last.Span.FromSeq != 10 || last.Span.ToSeq != 15 || last.Level != ChangelogMajor {
-		t.Fatalf("finished event span/level: %+v", last)
-	}
-	if evs[1].TapeRef.RevisionID != "r1" {
-		t.Fatalf("revisions are not in commit order: %+v", evs[1].TapeRef)
+	if len(got) != 2 || got[0] != ChangelogUpdateStarted || got[1] != ChangelogUpdateFinished || evs[1].Level != ChangelogMajor {
+		t.Fatalf("kinds %v", got)
 	}
 	for _, e := range evs {
 		if err := ValidateChangelogBody(e); err != nil {
 			t.Fatalf("%s: %v", e.Kind, err)
 		}
+		if e.Span != nil {
+			t.Fatal("a derived event carries no span: the chain sequence is not on the records")
+		}
 	}
-	// Deterministic: a second derivation yields the same ids.
 	again := DeriveUpdateEvents(r)
 	for i := range evs {
 		if evs[i].EventID != again[i].EventID {
@@ -51,8 +39,8 @@ func TestDeriveUpdateEventsFinished(t *testing.T) {
 }
 
 func TestDeriveUpdateEventsInterruptedIsNotFinished(t *testing.T) {
-	r := UpdateRound{DocID: "d", ConversationID: "c", Round: 1, OpenedAt: "2026-11-10T01:00:00Z", OpenSeq: 3,
-		Close: &UpdateClose{StopReason: ClosureReasonInterruptedByRestart, ClosedAt: "2026-11-10T01:05:00Z", Seq: 9}}
+	r := UpdateRound{DocID: "d", ConversationID: "c", Round: 1, OpenedAt: "2026-11-10T01:00:00Z",
+		Close: &UpdateClose{StopReason: ClosureReasonInterruptedByRestart, ClosedAt: "2026-11-10T01:05:00Z"}}
 	got := kindsOf(DeriveUpdateEvents(r))
 	if len(got) != 2 || got[1] != ChangelogUpdateInterrupted {
 		t.Fatalf("kinds %v; want started then interrupted", got)
@@ -68,9 +56,6 @@ func TestDeriveUpdateEventsOpenRoundIsStartedOnly(t *testing.T) {
 	got := kindsOf(DeriveUpdateEvents(UpdateRound{DocID: "d", ConversationID: "c", Round: 1, OpenedAt: "2026-11-10T01:00:00Z"}))
 	if len(got) != 1 || got[0] != ChangelogUpdateStarted {
 		t.Fatalf("kinds %v", got)
-	}
-	if ev := DeriveUpdateEvents(UpdateRound{DocID: "d", ConversationID: "c", Round: 1, OpenedAt: "2026-11-10T01:00:00Z"})[0]; ev.Span != nil {
-		t.Fatal("an unknown sequence must carry no span")
 	}
 }
 

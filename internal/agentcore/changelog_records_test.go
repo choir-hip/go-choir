@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
@@ -55,6 +56,92 @@ func TestEmitChangelogReplayMintsOne(t *testing.T) {
 	bad := testChangelogBody("update_exploded", "x")
 	if err := rt.EmitChangelog(ctx, owner, computer, bad); err == nil {
 		t.Fatal("an unknown kind was committed")
+	}
+}
+
+// EmitUpdateEvents reads a bounded window, not the whole inbox: an old round
+// beyond the window is not examined, a recent one is, and the call examines at
+// most UpdateEventsWindow records of each inbox however long the inbox is.
+func TestEmitUpdateEventsReadIsBoundedOnALongInbox(t *testing.T) {
+	rt, s := testRuntime(t)
+	owner, computer := "owner-long", rt.cfg.ComputerID
+	ctx := context.Background()
+	doc, mgmt := deskmanifest.DocumentInbox("doc-L"), deskmanifest.AdmitterInbox(owner)
+	n := 0
+	commit := func(recs ...types.CommitmentRecord) {
+		t.Helper()
+		n++
+		req := types.CommitInboxRecordsRequest{OwnerID: owner, ComputerID: computer, CommandID: fmt.Sprintf("cmd-%d", n), Records: recs}
+		digest, err := store.ComputeCommitInboxRecordsDigest(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.CommandDigest = digest
+		if _, err := s.CommitInboxRecords(ctx, req); err != nil {
+			t.Fatal(err)
+		}
+	}
+	base := func(id, from, to string) types.CommitmentRecord {
+		return types.CommitmentRecord{SchemaID: types.CommitmentRecordSchemaV1, RecordID: id, Discrepancy: types.DiscrepancyUnresolved,
+			Provenance:  types.CommitmentProvenance{AgentID: from, CommittedAt: "2026-11-10T01:00:00Z"},
+			EmitterKind: types.CommitmentEmitterAgent, Inbox: to, SenderInbox: from}
+	}
+	rn := 0
+	round := func(tag string) {
+		rn++
+		cast := base("cast-"+tag, mgmt, doc)
+		cast.Kind = types.CommitmentKindDirective
+		cast.Directive = &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "update " + tag}
+		cast.Cast = &types.CommitmentCast{Hypotheses: []types.CastHypothesis{{Statement: "h " + tag, Probability: 0.5, Stakes: "s", Crux: "c"}}}
+		commit(cast)
+		// The crash boot's closure Report: fate interrupted_by_restart.
+		commit(types.NewRoundClosureRecord(mgmt, doc, rn, types.ClosureReasonInterruptedByRestart, "2026-11-10T01:05:00Z"))
+	}
+	lead := base("lead-note", mgmt, doc)
+	lead.Kind = types.CommitmentKindDirective
+	lead.Directive = &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNotice, Body: "n"}
+	commit(lead)
+	round("old")
+	for batch := 0; batch < 6; batch++ { // 6 x 50 notes: the inbox is well past the window
+		var notes []types.CommitmentRecord
+		for i := 0; i < 50; i++ {
+			note := base(fmt.Sprintf("note-%d-%d", batch, i), mgmt, doc)
+			note.Kind = types.CommitmentKindDirective
+			note.Directive = &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNotice, Body: "n"}
+			notes = append(notes, note)
+		}
+		commit(notes...)
+	}
+	round("new")
+	head, err := s.InboxHead(ctx, owner, computer, doc)
+	if err != nil || head <= UpdateEventsWindow+1 {
+		t.Fatalf("inbox head %d (%v) is not past the window", head, err)
+	}
+	if err := rt.EmitUpdateEvents(ctx, owner, computer, "doc-L"); err != nil {
+		t.Fatal(err)
+	}
+	events, err := s.ListChangelogEvents(ctx, owner, computer, types.ChangelogQuery{IncludeMinor: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var started, finished, interrupted int
+	for _, ev := range events {
+		switch ev.Changelog.Kind {
+		case types.ChangelogUpdateStarted:
+			started++
+		case types.ChangelogUpdateInterrupted:
+			interrupted++
+		}
+	}
+	if started != 1 || interrupted != 1 || finished != 0 {
+		t.Fatalf("events for the newest round only: started=%d interrupted=%d finished=%d (all %d events)", started, interrupted, finished, len(events))
+	}
+	// A cursor from the start reads the old round's window.
+	if err := rt.EmitUpdateEvents(ctx, owner, computer, "doc-L", UpdateEventsSince(1)); err != nil {
+		t.Fatal(err)
+	}
+	if events, _ = s.ListChangelogEvents(ctx, owner, computer, types.ChangelogQuery{IncludeMinor: true}); len(events) < 4 {
+		t.Fatalf("since-cursor did not reach the old round: %d events", len(events))
 	}
 }
 

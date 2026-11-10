@@ -288,7 +288,8 @@ func (b CommitmentOped) validate() (wantID, wantSender string, err error) {
 		}
 		if err := opedBounds(boundedField{"reason", v.Reason, OpedReasonMaxRunes}, boundedField{"version_id", v.VersionID, 0},
 			boundedField{"criteria_revision_id", v.CriteriaRevisionID, 0}, boundedField{"criteria_hash", v.CriteriaHash, 0},
-			boundedField{"model", v.Model, 0}, boundedField{"responds_to", v.RespondsTo.PublicationVersionID, 0}); err != nil {
+			boundedField{"model", v.Model, 0}, boundedField{"responds_to", v.RespondsTo.PublicationVersionID, 0},
+			boundedField{"responds_to.route_path", v.RespondsTo.RoutePath, 0}, boundedField{"responds_to.publication_id", v.RespondsTo.PublicationID, 0}); err != nil {
 			return "", "", err
 		}
 		return OpedVerdictRecordID(v.VersionID, v.Run), OpedSenderInbox(v.VersionID), nil
@@ -296,6 +297,18 @@ func (b CommitmentOped) validate() (wantID, wantSender string, err error) {
 		w := b.WakeDecision
 		if w == nil || strings.TrimSpace(w.StoryDocID) == "" || w.N < 1 || !w.Why.IsValid() {
 			return "", "", fmt.Errorf("oped wake decision needs story_doc_id, n of 1 or more and a known why")
+		}
+		// Woken and Why agree: a wake follows from accepted, reject_backoff or
+		// coalesced; below_threshold and gap_not_elapsed are decisions not to.
+		switch w.Why {
+		case OpedWakeBelowThreshold, OpedWakeGapNotElapsed:
+			if w.Woken {
+				return "", "", fmt.Errorf("oped wake decision woken with why %q", w.Why)
+			}
+		case OpedWakeAccepted, OpedWakeRejectBackoff:
+			if !w.Woken {
+				return "", "", fmt.Errorf("oped wake decision not woken with why %q", w.Why)
+			}
 		}
 		c := w.Counts
 		if c.Arrivals < 0 || c.Accepted < 0 || c.Rejected < 0 || c.UnreadRejects < 0 || c.DistinctRejectAuthors < 0 ||
@@ -321,7 +334,8 @@ func (b CommitmentOped) validate() (wantID, wantSender string, err error) {
 			return "", "", fmt.Errorf("oped wake needs story_doc_id, version_id, a known why and responds_to")
 		}
 		if err := opedBounds(boundedField{"story_doc_id", w.StoryDocID, 0}, boundedField{"version_id", w.VersionID, 0},
-			boundedField{"responds_to", w.RespondsTo.PublicationVersionID, 0}, boundedField{"decision_id", w.DecisionID, 0}); err != nil {
+			boundedField{"responds_to", w.RespondsTo.PublicationVersionID, 0}, boundedField{"decision_id", w.DecisionID, 0},
+			boundedField{"responds_to.route_path", w.RespondsTo.RoutePath, 0}, boundedField{"responds_to.publication_id", w.RespondsTo.PublicationID, 0}); err != nil {
 			return "", "", err
 		}
 		return OpedWakeRecordID(w.VersionID), OpedSenderInbox(w.VersionID), nil
@@ -331,6 +345,7 @@ func (b CommitmentOped) validate() (wantID, wantSender string, err error) {
 			return "", "", fmt.Errorf("oped gate_unavailable needs version_id and attempts of 1 or more")
 		}
 		if err := opedBounds(boundedField{"version_id", g.VersionID, 0}, boundedField{"responds_to", g.RespondsTo.PublicationVersionID, 0},
+			boundedField{"responds_to.route_path", g.RespondsTo.RoutePath, 0}, boundedField{"responds_to.publication_id", g.RespondsTo.PublicationID, 0},
 			boundedField{"cause", g.Cause, OpedTextMaxRunes}); err != nil {
 			return "", "", err
 		}
@@ -353,7 +368,7 @@ func ValidateOpedRecord(rec CommitmentRecord) error {
 	if err != nil {
 		return fmt.Errorf("op-ed record %s: %w", rec.RecordID, err)
 	}
-	wantInbox := strings.HasPrefix(rec.Inbox, "management:")
+	wantInbox := deskmanifest.IsAdmitterInbox(rec.Inbox)
 	if rec.Oped.Kind == OpedRecordWake {
 		wantInbox = rec.Oped.Wake != nil && rec.Inbox == deskmanifest.DocumentInbox(rec.Oped.Wake.StoryDocID)
 	}
