@@ -48,6 +48,8 @@ type platformPolls struct {
 	// boot arm's goroutine.
 	stopped    bool
 	bootCancel context.CancelFunc
+	// docLookup replaces the store lookup of a story document (tests).
+	docLookup func(ctx context.Context, owner, computer, doc string) error
 }
 
 func (p *platformPolls) lockFor(key string) *sync.Mutex {
@@ -358,7 +360,27 @@ func (rt *Runtime) pollOpeds(ctx context.Context, feed PlatformFeed, poll *store
 			// op-eds on stories it does not hold. Only this computer's stories
 			// are adopted and gated (a document is local when its lifecycle
 			// document is in this computer's store).
-			if !rt.storyDocLocal(ctx, owner, computer, item.StoryDocID) {
+			local, lerr := rt.storyDocLocality(ctx, owner, computer, item.StoryDocID)
+			if lerr != nil {
+				// Unknown is not "not local": do not lose the op-ed. The cursor
+				// stays before this item and the tick stops; the next tick tries
+				// again, up to opedLocalityMaxFailures ticks on the same item, then
+				// it is skipped with the error class named.
+				if poll.ItemFailures == nil {
+					poll.ItemFailures = map[string]int{}
+				}
+				poll.ItemFailures[item.VersionID]++
+				if poll.ItemFailures[item.VersionID] < opedLocalityMaxFailures {
+					log.Printf("platform poll oped_intake: could not tell whether %s is on this computer (try %d of %d): %v", item.StoryDocID, poll.ItemFailures[item.VersionID], opedLocalityMaxFailures, lerr)
+					feedErr = fmt.Errorf("locate story %s: %w", item.StoryDocID, lerr)
+					break
+				}
+				delete(poll.ItemFailures, item.VersionID)
+				skipPollItem(poll, item.VersionID, fmt.Sprintf("the story document %s could not be located after %d ticks (%s: %v)", item.StoryDocID, opedLocalityMaxFailures, errorClass(lerr), lerr))
+				continue
+			}
+			delete(poll.ItemFailures, item.VersionID)
+			if !local {
 				skipPollItem(poll, item.VersionID, "the story document "+item.StoryDocID+" is not on this computer")
 				continue
 			}
@@ -415,6 +437,11 @@ func (rt *Runtime) opedRecordExists(ctx context.Context, owner, computer, record
 // skipPollItem records a feed item the poll cannot adopt, by its id and why,
 // so the cursor can move past it.
 func skipPollItem(poll *store.PlatformPoll, id, reason string) {
+	for _, have := range poll.Skipped {
+		if have.ID == clipChars(id, 200) && have.Reason == clipChars(reason, 300) {
+			return // a replayed page names the same item once
+		}
+	}
 	log.Printf("platform poll %s: skipped item %q: %s", poll.Name, id, reason)
 	poll.Skipped = append(poll.Skipped, store.PollSkipped{ID: clipChars(id, 200), Reason: clipChars(reason, 300), At: time.Now().UTC()})
 	if n := len(poll.Skipped); n > store.PollSkippedLimit {
@@ -436,16 +463,60 @@ func opedItemInvalid(owner, computer string, item OpedFeedItemWire) string {
 	return ""
 }
 
-// storyDocLocal reports whether the document is held by this computer: its
-// lifecycle document is in this computer's store. A computer that cannot tell
-// says no, so it gates nothing it cannot show it holds.
-func (rt *Runtime) storyDocLocal(ctx context.Context, owner, computer, doc string) bool {
-	if rt == nil || rt.store == nil || strings.TrimSpace(doc) == "" {
-		return false
+// opedLocalityMaxFailures is how many consecutive ticks may fail to locate one
+// item's story before the item is skipped. Ticks are a minute apart, so five
+// is about five minutes: a transient store fault clears well inside it, a
+// poisoned row does not, and a skip is a named record, not a silent loss.
+const opedLocalityMaxFailures = 5
+
+// errorClass names a failure by its innermost error's type, for a skip's reason.
+func errorClass(err error) string {
+	for {
+		inner := errors.Unwrap(err)
+		if inner == nil {
+			return fmt.Sprintf("%T", err)
+		}
+		err = inner
 	}
-	_, err := rt.store.GetLifecycleDocument(withKernelReader(ctx), owner, computer, doc)
-	return err == nil
 }
+
+// storyDocLocality is three-valued: (true, nil) the document is held by this
+// computer; (false, nil) it is not (store.ErrNotFound); (false, err) it could
+// not be told. A document is held when the Texture read path would find it:
+// its lifecycle document, else its plain document, read through the Texture
+// document custodian's reader. A plain document that names a trajectory the
+// lifecycle lookup did not find still exists here.
+func (rt *Runtime) storyDocLocality(ctx context.Context, owner, computer, doc string) (bool, error) {
+	if rt == nil || rt.store == nil || strings.TrimSpace(doc) == "" {
+		return false, nil
+	}
+	rt.polls.mu.Lock()
+	lookup := rt.polls.docLookup
+	rt.polls.mu.Unlock()
+	if lookup != nil {
+		err := lookup(ctx, owner, computer, doc)
+		return err == nil, err
+	}
+	ctx = objectgraph.WithCustodianReader(ctx, "choir.texture_document")
+	if _, err := rt.store.GetLifecycleDocument(ctx, owner, computer, doc); err == nil {
+		return true, nil
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return false, err
+	}
+	if _, err := rt.store.GetDocument(ctx, doc, owner); err == nil || errors.Is(err, store.ErrLifecycleAuthorityRequired) {
+		return true, nil
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return false, err
+	}
+	return false, nil
+}
+
+// bootArmPageLimit and bootArmMaxPages bound the boot arm's walk of the op-ed
+// feed (the one-minute context bounds it in time as well).
+const (
+	bootArmPageLimit = 50
+	bootArmMaxPages  = 40
+)
 
 // armPollsIfNoticesWaiting arms this computer's polls from what the platform
 // holds for its owner: one read of each feed from the start, no cursor kept,
@@ -482,16 +553,23 @@ func (rt *Runtime) armPollsIfNoticesWaiting(ctx context.Context) {
 	case len(notices.Skipped) > 0:
 		log.Printf("platform poll: boot arm: the first notice read returned only skipped rows (%d, first %q: %s)", len(notices.Skipped), notices.Skipped[0].ID, notices.Skipped[0].Reason)
 	}
-	opeds, err := feed.Opeds(ctx, "", 50)
-	if err != nil {
-		log.Printf("platform poll: boot arm: the first op-ed read failed: %v", err)
-		return
-	}
-	for _, item := range opeds.Items {
-		if rt.storyDocLocal(ctx, owner, computer, item.StoryDocID) {
-			rt.ensurePlatformPollsNamed(ctx, owner, computer, store.PlatformPollOpedIntake, store.PlatformPollNoticeIntake)
+	cursor := ""
+	for page := 0; page < bootArmMaxPages && ctx.Err() == nil; page++ {
+		opeds, err := feed.Opeds(ctx, cursor, bootArmPageLimit)
+		if err != nil {
+			log.Printf("platform poll: boot arm: the op-ed read failed: %v", err)
 			return
 		}
+		for _, item := range opeds.Items {
+			if local, _ := rt.storyDocLocality(ctx, owner, computer, item.StoryDocID); local {
+				rt.ensurePlatformPollsNamed(ctx, owner, computer, store.PlatformPollOpedIntake, store.PlatformPollNoticeIntake)
+				return
+			}
+		}
+		if len(opeds.Items) < bootArmPageLimit || opeds.NextCursor == "" || opeds.NextCursor == cursor {
+			return
+		}
+		cursor = opeds.NextCursor
 	}
 }
 

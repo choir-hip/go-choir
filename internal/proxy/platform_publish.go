@@ -375,7 +375,7 @@ func (h *Handler) publishTextureRevision(w http.ResponseWriter, r *http.Request,
 	// response, so it arms its polls of the notice and op-ed feeds. Best
 	// effort on its own bounded context; a publish is never delayed or failed
 	// by it, and the next publish tells it again.
-	h.tellComputerPublished(r.Context(), autoputerURL, authResult.UserID, req.DocID)
+	go h.tellComputerPublished(r.Context(), autoputerURL, authResult.UserID, req.DocID)
 }
 
 func validateOptionalJSONObject(raw json.RawMessage, label string) error {

@@ -66,6 +66,9 @@ type PlatformPoll struct {
 	// Skipped names the feed items the poll could not adopt (malformed): each
 	// with its id and why. The cursor moves past them. Newest last, bounded.
 	Skipped []PollSkipped `json:"skipped,omitempty"`
+	// ItemFailures counts consecutive ticks on which one feed item could not
+	// be resolved (a fault, not "not found"); past the bound it is skipped.
+	ItemFailures map[string]int `json:"item_failures,omitempty"`
 	// GateLog is the last 24 hours of gate calls, for the daily bounds.
 	GateLog   []PollGateCall `json:"gate_log,omitempty"`
 	UpdatedAt time.Time      `json:"updated_at"`
