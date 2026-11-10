@@ -92,19 +92,41 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			// Published Autopaper stories and opinion pieces, from every
 			// computer: citable once Read captures their read_url.
 			published, publishedNote := searchPublished(ctx, deps, query, limit)
-			body := map[string]any{"events": events, "event_count": len(events), "query": query, "captures": captures, "capture_count": len(captures),
-				"published": published, "published_count": len(published)}
-			if publishedNote != "" {
-				body["published_note"] = publishedNote
+			body := wireCorpusResult{
+				Query:     query,
+				Published: published, PublishedCount: len(published), PublishedNote: publishedNote,
+				Events: events, EventCount: len(events), EventsNote: eventsNote,
+				Captures: captures, CaptureCount: len(captures), CapturesNote: note,
 			}
-			if note != "" {
-				body["captures_note"] = note
-			}
-			if eventsNote != "" {
-				body["events_note"] = eventsNote
+			if len(published) > 0 {
+				body.PublishedFirstNote = publishedFirstNote
 			}
 			return toolregistry.ResultJSON(body)
 		}}
+}
+
+// publishedFirstNote leads a corpus answer that holds published pieces. The
+// paper's own earlier stories are the first thing research should read; the
+// captures listed after them are citable as they are, and in the staging runs
+// that listed captures first the research desk skipped the paper's story.
+const publishedFirstNote = "published lists the paper's own earlier stories and opinion pieces matching these words. Read the ones that bear on the subject at their read_url before the web, then cite the capture Read returns."
+
+// wireCorpusResult is the search_wire_corpus answer. A struct, not a map: JSON
+// keys must come out published first (a map sorts them alphabetically, which
+// put captures ahead of the paper's own stories). Field names and meanings are
+// unchanged; only the order and published_first_note are new.
+type wireCorpusResult struct {
+	PublishedFirstNote string           `json:"published_first_note,omitempty"`
+	Published          []PublishedPiece `json:"published"`
+	PublishedCount     int              `json:"published_count"`
+	PublishedNote      string           `json:"published_note,omitempty"`
+	Query              string           `json:"query"`
+	Events             []CorpusEvent    `json:"events"`
+	EventCount         int              `json:"event_count"`
+	EventsNote         string           `json:"events_note,omitempty"`
+	Captures           []CorpusCapture  `json:"captures"`
+	CaptureCount       int              `json:"capture_count"`
+	CapturesNote       string           `json:"captures_note,omitempty"`
 }
 
 func firstNonEmptyString(values ...string) string {
