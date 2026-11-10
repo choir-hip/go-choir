@@ -616,7 +616,7 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 	if err != nil {
 		return nil, fmt.Errorf("platform publish: notices: %w", err)
 	}
-	graphParams.ExtraObjects = notices
+	graphParams.ExtraObjects = s.admitNotices(ctx, og, req.OwnerID, notices)
 	for _, cite := range externalCitations {
 		toID, ok := publicCitationTarget(cite)
 		if !ok {
