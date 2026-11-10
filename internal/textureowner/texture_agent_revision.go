@@ -72,18 +72,21 @@ func (h *Handler) HandleTextureAgentRevision(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	var req textureAgentRevisionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var wire reviseWireRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, reviseMaxBodyBytes))
+	// An owner_id or computer_id in the body is an unknown field: identity
+	// comes from the session, never the request (contract 1, R13).
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&wire); err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
 		return
 	}
-	req.ClientRequestID = firstNonEmpty(req.ClientRequestID, r.Header.Get("Idempotency-Key"))
-	receipt, err := h.reviseOwnerDocument(r.Context(), ownerID, docID, req)
+	receipt, err := h.reviseDocument(r.Context(), wire.request(ownerID, docID, firstNonEmpty(wire.ClientRequestID, r.Header.Get("Idempotency-Key"))))
 	if err != nil {
 		writeOwnerRevisionRefusal(w, err)
 		return
 	}
-	writeAPIJSON(w, http.StatusAccepted, receipt)
+	writeAPIJSON(w, http.StatusAccepted, receipt.ownerRevisionResponse())
 }
 
 // ownerRevisionRefusal is an owner revise refused with the status and
@@ -110,32 +113,12 @@ func writeOwnerRevisionRefusal(w http.ResponseWriter, err error) {
 	writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to commit owner revision"})
 }
 
-// reviseOwnerDocument is the owner revise of one document: /revise and the
-// prompt bar's focused submit both reach the canonical write through it
-// (FE-02 step 1, docs/problems/prompt-bar-always-creates-a-new-document-2026-10-26.md).
-// The document is read owner-scoped, so another owner's document is the
-// same 404 as a missing one.
-func (h *Handler) reviseOwnerDocument(ctx context.Context, ownerID, docID string, req textureAgentRevisionRequest) (textureOwnerRevisionResponse, error) {
-	ctx = asOwner(ctx)
-	doc, err := h.getTextureDocument(ctx, ownerID, docID)
-	if err != nil {
-		return textureOwnerRevisionResponse{}, refuseOwnerRevision(http.StatusNotFound, "document not found")
-	}
-	if strings.TrimSpace(doc.TrajectoryID) == "" {
-		// Unbound documents have no lifecycle authority: there is no canonical
-		// revision event to carry owner input, and the legacy worker-mailbox
-		// path was deleted with the owner-instruction channel.
-		return textureOwnerRevisionResponse{}, refuseOwnerRevision(http.StatusConflict, "document is not lifecycle-bound; owner revisions require a lifecycle Texture document")
-	}
-	return h.commitLifecycleOwnerRevision(ctx, doc, ownerID, req)
-}
-
 // commitLifecycleOwnerRevision commits the owner's directive as a canonical
 // owner-authored revision on the document head and dispatches the revision
 // occurrence that activates the Texture desk. The revision carries the head
 // content forward unchanged; the directive lives in revision metadata
 // (input_origin=user_prompt, owner_prompt).
-func (h *Handler) commitLifecycleOwnerRevision(ctx context.Context, doc types.Document, ownerID string, req textureAgentRevisionRequest) (textureOwnerRevisionResponse, error) {
+func (h *Handler) commitLifecycleOwnerRevision(ctx context.Context, doc types.Document, ownerID string, req textureAgentRevisionRequest, extra ownerRevisionExtra) (textureOwnerRevisionResponse, error) {
 	snapshot, snapshotErr := h.Store.GetLifecycleSnapshot(ctx, ownerID, doc.ComputerID, doc.TrajectoryID)
 	if snapshotErr == nil && snapshot.Trajectory.Status == types.TrajectorySettled && strings.TrimSpace(firstNonEmpty(req.Prompt, req.Intent)) != "" {
 		// The document's episode of work settled; the owner's next ask is the
@@ -171,6 +154,7 @@ func (h *Handler) commitLifecycleOwnerRevision(ctx context.Context, doc types.Do
 	if head.RevisionID != expectedHead {
 		return textureOwnerRevisionResponse{}, refuseOwnerRevision(http.StatusConflict, "document head changed; reload the latest version before revising")
 	}
+	links := extra.parentLinks(head.RevisionID)
 	targetProfile, targetWorkItemID, multiple := ownerRevisionTarget(snapshot, doc.DocID)
 	if multiple {
 		return textureOwnerRevisionResponse{}, refuseOwnerRevision(http.StatusConflict, "lifecycle has multiple open desk target work items")
@@ -203,6 +187,9 @@ func (h *Handler) commitLifecycleOwnerRevision(ctx context.Context, doc types.Do
 		"owner_prompt":              content,
 		textureMetadataPromptUnixTS: time.Now().UTC().Unix(),
 	})
+	if extra.Fingerprint != "" {
+		metadata = mergeTextureRevisionMetadata(metadata, map[string]any{reviseFingerprintMetadataKey: extra.Fingerprint})
+	}
 	metadata = carryForwardTextureMetadataForRecord(metadata, head.Metadata, doc.TrajectoryID)
 	revisionID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{ownerID, doc.ComputerID, doc.TrajectoryID, clientRequestID}, "\x00"))).String()
 	rev := types.Revision{
@@ -218,6 +205,7 @@ func (h *Handler) commitLifecycleOwnerRevision(ctx context.Context, doc types.Do
 		SourceEntities:   head.SourceEntities,
 		Citations:        head.Citations,
 		Metadata:         metadata,
+		Provenance:       linksProvenance(links),
 		ParentRevisionID: expectedHead,
 	}
 	requestID, _ := textureOwnerOccurrenceIdentity(ownerID, doc.ComputerID, doc.DocID, clientRequestID)
