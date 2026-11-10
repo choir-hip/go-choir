@@ -76,6 +76,8 @@ func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 			h.HandleTextureRestoreRevision(w, r)
 		case strings.HasSuffix(rest, "/diagnosis"):
 			h.HandleTextureDiagnosis(w, r)
+		case strings.HasSuffix(rest, "/published"):
+			h.HandleTextureDocumentPublished(w, r)
 		case strings.HasSuffix(rest, "/models"):
 			h.HandleTextureModelProvenance(w, r)
 		case strings.HasSuffix(rest, "/export"):

@@ -7,9 +7,11 @@ package proxy
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -75,4 +77,27 @@ func (h *Handler) publishLinksFor(r *http.Request, autoputerURL, userID string, 
 		cursor = parent
 	}
 	return publishLinks{}
+}
+
+// tellComputerPublished posts the computer's /published notice for a document
+// that just published, so the computer arms its feed polls. Best effort.
+func (h *Handler) tellComputerPublished(r *http.Request, autoputerURL, userID, docID string) {
+	target, err := joinBasePath(autoputerURL, "/api/texture/documents/"+url.PathEscape(docID)+"/published")
+	if err != nil {
+		return
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, target, nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("X-Authenticated-User", userID)
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		log.Printf("proxy: platform publish: tell the computer %s was published: %v", docID, err)
+		return
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		log.Printf("proxy: platform publish: the computer answered %d to the published notice for %s", resp.StatusCode, docID)
+	}
 }

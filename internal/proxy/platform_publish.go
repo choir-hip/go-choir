@@ -368,6 +368,10 @@ func (h *Handler) publishTextureRevision(w http.ResponseWriter, r *http.Request,
 			resp.PermalinkURL = publicURLForRoute(r, resp.PermalinkPath)
 		}
 	}
+	// The computer that published hears what happens to it: tell it, so it
+	// arms its polls of the notice and op-ed feeds. Best effort; a publish is
+	// never failed by it, and the next publish tells it again.
+	h.tellComputerPublished(r, autoputerURL, authResult.UserID, req.DocID)
 	writeJSON(w, status, platformResp)
 	h.lifecycle.record("platform_publish.corpusd", lifecycleHTTPStatus(status), time.Since(started))
 	h.lifecycle.record("platform_publish.total", "published", time.Since(started))

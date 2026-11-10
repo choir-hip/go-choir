@@ -53,6 +53,10 @@ func TestOpinionPublishRequiresCookieSessionAndRefusesBodyPolicy(t *testing.T) {
 		case "/api/texture/documents/doc-1/models":
 			http.NotFound(w, r) // a computer that cannot answer publishes without provenance
 		default:
+			if strings.HasSuffix(r.URL.Path, "/published") { // the publisher is told it published
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 			t.Errorf("autoputer path %s", r.URL.Path)
 		}
 	}))

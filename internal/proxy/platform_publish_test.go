@@ -153,6 +153,10 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 		case "/api/texture/documents/doc-1/models":
 			_, _ = w.Write([]byte(`{"schema":"choir.model_provenance.v1","roles":[{"role":"research","models":[{"provider":"chatgpt","model":"gpt-6-luna","calls":3}]}]}`))
 		default:
+			if strings.HasSuffix(r.URL.Path, "/published") { // the publisher is told it published
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 			t.Fatalf("autoputer path: got %s", r.URL.Path)
 		}
 	}))
@@ -269,6 +273,10 @@ func TestHandleTexturePublicationRejectsSourceEntitiesWithoutBodyDocBeforeEnrich
 		case "/api/texture/documents/doc-detached/models":
 			http.NotFound(w, r) // a computer that cannot answer publishes without provenance
 		default:
+			if strings.HasSuffix(r.URL.Path, "/published") { // the publisher is told it published
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 			t.Fatalf("autoputer path: got %s", r.URL.Path)
 		}
 	}))
@@ -461,6 +469,10 @@ func TestHandleTexturePublicationPublishesPublicURLSourceSnapshots(t *testing.T)
 		case "/api/texture/documents/doc-url/models":
 			http.NotFound(w, r) // a computer that cannot answer publishes without provenance
 		default:
+			if strings.HasSuffix(r.URL.Path, "/published") { // the publisher is told it published
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 			t.Fatalf("autoputer path: got %s", r.URL.Path)
 		}
 	}))
@@ -567,6 +579,10 @@ func TestHandleTexturePublicationRecordsURLSnapshotImportFailureState(t *testing
 		case "/api/texture/documents/doc-url/models":
 			http.NotFound(w, r) // a computer that cannot answer publishes without provenance
 		default:
+			if strings.HasSuffix(r.URL.Path, "/published") { // the publisher is told it published
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 			t.Fatalf("autoputer path: got %s", r.URL.Path)
 		}
 	}))
@@ -658,6 +674,10 @@ func TestHandleTexturePublicationDoesNotPublishPrivateSourceSnapshots(t *testing
 		case "/api/texture/documents/doc-private/models":
 			http.NotFound(w, r) // a computer that cannot answer publishes without provenance
 		default:
+			if strings.HasSuffix(r.URL.Path, "/published") { // the publisher is told it published
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 			t.Fatalf("autoputer path: got %s", r.URL.Path)
 		}
 	}))

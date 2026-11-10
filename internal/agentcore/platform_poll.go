@@ -132,6 +132,16 @@ func (rt *Runtime) recoverPlatformPollsAtBoot(ctx context.Context, start bool) {
 		log.Printf("platform poll: list at boot: %v", err)
 		return
 	}
+	// A computer that published before publishing armed the polls has no row.
+	// Once, off the boot path, it reads its notice feed; if the platform holds
+	// anything for its owner, it arms. That is a read, not resumed work.
+	if start && len(polls) == 0 && strings.TrimSpace(rt.selfdevRouteOwnerID) != "" {
+		go func() {
+			armCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
+			rt.armPollsIfNoticesWaiting(armCtx)
+		}()
+	}
 	for _, poll := range polls {
 		if poll.State != store.PlatformPollActive {
 			continue
@@ -389,4 +399,28 @@ func opedItemInvalid(owner, computer string, item OpedFeedItemWire) string {
 		return err.Error()
 	}
 	return ""
+}
+
+// armPollsIfNoticesWaiting arms this computer's polls when the platform holds
+// a notice for its owner, which only a publisher or forker has: one read of
+// the notice feed from the start, no cursor kept, nothing consumed. A quiet
+// computer arms nothing. It is idempotent.
+func (rt *Runtime) armPollsIfNoticesWaiting(ctx context.Context) {
+	owner := strings.TrimSpace(rt.selfdevRouteOwnerID)
+	feed := rt.platformFeed()
+	if rt == nil || rt.store == nil || owner == "" || feed == nil {
+		return
+	}
+	got, err := feed.Notices(ctx, "", 1)
+	if err != nil || len(got.Items) == 0 {
+		return
+	}
+	rt.EnsurePlatformPolls(ctx, owner, rt.cfg.ComputerID)
+}
+
+// RunPlatformPollNow runs one tick of a poll immediately: the same work its
+// loop does each interval, for a caller that wants it now (a test that drives
+// two computers in one process). It resumes nothing.
+func (rt *Runtime) RunPlatformPollNow(ctx context.Context, owner, name string) error {
+	return rt.runPlatformPollOnce(ctx, owner, name)
 }
