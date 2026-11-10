@@ -2,9 +2,11 @@ package gateway
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // SEC-16: a host job that scores with Jev reaches it through the gateway, so
@@ -67,6 +69,16 @@ func (h *Handler) HandleHostJudgment(w http.ResponseWriter, r *http.Request) {
 		log.Printf("gateway: host judgment from %s failed (questions=%d): %v", label, len(request.Questions), err)
 		if _, disabled := err.(jevTransportDisabledError); disabled {
 			writeGatewayJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "Jev judgments are disabled"})
+			return
+		}
+		if limited, ok := err.(*jevLimitedError); ok {
+			w.Header().Set("Retry-After", fmt.Sprintf("%d", max(1, int(limited.retryAfter.Seconds()+0.999))))
+			writeGatewayJSON(w, http.StatusTooManyRequests, ErrorResponse{Error: "Jev judgment rate limit exceeded"})
+			return
+		}
+		if held, ok := err.(*upstreamHeldError); ok {
+			w.Header().Set("Retry-After", fmt.Sprintf("%d", held.retryAfterSeconds(time.Now())))
+			writeGatewayJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "Jev judgment provider unavailable (held after repeated failures)"})
 			return
 		}
 		writeGatewayJSON(w, http.StatusBadGateway, ErrorResponse{Error: "Jev judgment provider unavailable"})

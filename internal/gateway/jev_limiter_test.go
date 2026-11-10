@@ -267,3 +267,65 @@ func TestJevLimiterHasNoSwitch(t *testing.T) {
 		}
 	}
 }
+
+// The scope is a guest's own claim: a computer's interactive claims beyond its
+// small budget are bulk, so it cannot hold the reserve; another computer's
+// interactive call still gets through. A per-computer cap is enough because
+// the budget is keyed on the authenticated computer id, so a guest cannot
+// widen it by claiming harder, and the reserve (8 slots) outlasts any one
+// computer (2 slots).
+func TestJevLimiterInteractiveClaimIsBoundedPerComputer(t *testing.T) {
+	l := testLimiter(4, 2, 100)
+	for i := 0; i < jevInteractiveInFlight; i++ {
+		if _, _, err := l.acquire(context.Background(), "guest", jevInteractive); err != nil {
+			t.Fatalf("interactive claim %d: %v", i, err)
+		}
+	}
+	// The third claim is bulk, and bulk may not use the reserved slots.
+	if _, _, err := l.acquire(context.Background(), "guest", jevInteractive); err == nil {
+		t.Fatal("a computer's interactive claims past its budget took the reserve")
+	}
+	if _, _, err := l.acquire(context.Background(), "honest", jevInteractive); err != nil {
+		t.Fatalf("another computer's interactive call refused: %v", err)
+	}
+}
+
+// With production constants one computer cannot hold every bulk slot.
+func TestJevLimiterOneComputerCannotHoldTheBulkShare(t *testing.T) {
+	l := newJevLimiter()
+	l.maxWait = 60 * time.Millisecond
+	for i := 0; i < jevComputerInFlight; i++ {
+		if _, _, err := l.acquire(context.Background(), "paper", jevBulk); err != nil {
+			t.Fatalf("call %d: %v", i, err)
+		}
+	}
+	if _, _, err := l.acquire(context.Background(), "other", jevBulk); err != nil {
+		t.Fatalf("another computer's bulk call has no slot: %v", err)
+	}
+}
+
+// A call that waited in the queue while the provider failed is not sent.
+func TestJevTransportRechecksTheHoldAfterTheQueue(t *testing.T) {
+	upstream := &decisionsRoundTripper{}
+	tr := &JevTransport{enabled: true, apiKey: "k", httpClient: &http.Client{Transport: upstream},
+		receipts: newJevReceiptWriter(filepath.Join(t.TempDir(), "r.jsonl"))}
+	l := tr.limit()
+	l.maxInFlight, l.reserve, l.maxWait = 1, 0, 5*time.Second
+	release, _, err := l.acquire(context.Background(), "holder", jevInteractive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := JudgmentRequest{State: json.RawMessage(`{"a":1}`), Questions: map[string]json.RawMessage{"q": json.RawMessage(`{"type":"choice","choices":["a","b"]}`)}, Scope: JudgmentScopeInteractive}
+	done := make(chan error, 1)
+	go func() { _, err := tr.Decide(context.Background(), "waiter", req); done <- err }()
+	time.Sleep(40 * time.Millisecond)
+	tr.hold.fail(time.Now(), false)
+	release()
+	var held *upstreamHeldError
+	if err := <-done; !errors.As(err, &held) {
+		t.Fatalf("queued call after the provider failed = %v; want the hold", err)
+	}
+	if len(upstream.bodies) != 0 {
+		t.Fatalf("%d calls reached the provider through the hold", len(upstream.bodies))
+	}
+}

@@ -61,6 +61,10 @@ type Meta struct {
 	Scope      string
 	// Threshold is the threshold in force when the answer was read.
 	Threshold string
+	// NoText leaves the question text and options out of the record (digest
+	// and name only): for a site whose questions are authored by an agent,
+	// which may quote private text.
+	NoText bool
 }
 
 // Question is one question as asked: its options, and a digest plus a
@@ -286,7 +290,7 @@ func Build(meta Meta, state json.RawMessage, questions map[string]json.RawMessag
 	rec := Record{
 		Schema: Schema, CallID: uuid.New().String(), At: started.UTC().Format(time.RFC3339Nano),
 		Site: meta.Site, DecisionID: meta.DecisionID, RunID: meta.RunID, Scope: meta.Scope, Threshold: meta.Threshold,
-		Questions: describeQuestions(questions), StateDigest: digest(state), StateBytes: len(state),
+		Questions: describeQuestions(questions, meta.NoText), StateDigest: digest(state), StateBytes: len(state),
 		Requested: requestedName, LatencyMS: latency.Milliseconds(), OK: callErr == nil,
 	}
 	if callErr != nil {
@@ -327,7 +331,7 @@ func Build(meta Meta, state json.RawMessage, questions map[string]json.RawMessag
 	return rec
 }
 
-func describeQuestions(questions map[string]json.RawMessage) []Question {
+func describeQuestions(questions map[string]json.RawMessage, noText bool) []Question {
 	names := make([]string, 0, len(questions))
 	for name := range questions {
 		names = append(names, name)
@@ -344,6 +348,12 @@ func describeQuestions(questions map[string]json.RawMessage) []Question {
 		}
 		_ = json.Unmarshal(raw, &shape)
 		q := Question{Name: name, Type: shape.Type, Digest: digest(raw), Excerpt: clip(strings.Join(strings.Fields(firstNonEmpty(shape.Instructions, shape.Text)), " "), excerptRunes)}
+		if noText {
+			q.Excerpt = ""
+			q.MoreOptions = len(shape.Choices)
+			out = append(out, q)
+			continue
+		}
 		q.Options = shape.Choices
 		if len(q.Options) > optionsMax {
 			q.MoreOptions = len(q.Options) - optionsMax
