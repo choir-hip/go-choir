@@ -76,6 +76,13 @@ func (h *Handler) CommitCellTextureAuthor(ctx context.Context, rec *types.RunRec
 			return "", fmt.Errorf("texture cell author: %w", err)
 		}
 	}
+	// So does the Wait leg: a Wait is only as good as the thing that wakes
+	// it, and nothing arms a wake for free text.
+	if turn.Wait != "" {
+		if err := h.closeUnservedWait(ctx, rec, textureTurnDocID(rec), turn); err != nil {
+			return "", fmt.Errorf("texture cell author: %w", err)
+		}
+	}
 	return receipt, nil
 }
 

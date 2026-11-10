@@ -142,10 +142,14 @@ func (rh *rootHarness) write(h *Handler, run *types.RunRecord, identity, text, d
 	// A Write that leaves its request open says what it waits on
 	// (texture_next_actor.go); these documents wait on the next report.
 	wait := ""
+	var cast []types.CommitmentRecord
 	if done == "" {
+		// A Wait nothing serves closes the request, so the report it waits
+		// on is asked of research.
 		wait = "the next report"
+		cast = []types.CommitmentRecord{researchCast(*run, "texture-cell:cast:"+identity)}
 	}
-	turn := turnBody(rh.t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Done: done, Wait: wait, Write: &yaegikernel.TextureWrite{Edits: "@all\n# " + identity + "\n\n" + text, Why: "report " + identity}})
+	turn := turnBody(rh.t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Done: done, Wait: wait, InboxRecords: cast, Write: &yaegikernel.TextureWrite{Edits: "@all\n# " + identity + "\n\n" + text, Why: "report " + identity}})
 	if _, err := h.CommitCellTextureAuthor(rh.t.Context(), run, turn, identity); err != nil {
 		rh.t.Fatalf("Write %s: %v", identity, err)
 	}

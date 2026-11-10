@@ -103,7 +103,7 @@ func NewHandler(core *agentcore.Runtime) *Handler {
 	if core == nil {
 		return &Handler{}
 	}
-	return &Handler{
+	h := &Handler{
 		Core:        core,
 		Store:       core.Store(),
 		Bus:         core.EventBus(),
@@ -111,6 +111,10 @@ func NewHandler(core *agentcore.Runtime) *Handler {
 		ModelPolicy: core.TextureModelPolicy(),
 		Provider:    core.TextureProvider(),
 	}
+	// The crash boot asks this desk to close the open Texture work nothing
+	// serves (agentcore closeUnservedTextureWorkAfterCrash).
+	core.SetUnservedTextureCloser(h.closeUnservedAtBoot)
+	return h
 }
 
 func (h *Handler) getTextureDocument(ctx context.Context, ownerID, docID string) (types.Document, error) {

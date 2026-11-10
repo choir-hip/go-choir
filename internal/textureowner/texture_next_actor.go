@@ -95,7 +95,7 @@ func (h *Handler) unattendedTextureRequest(ctx context.Context, rec *types.RunRe
 		return types.WorkItemRecord{}, false, fmt.Errorf("load the Texture request's trajectory: %w", err)
 	}
 	work, open := openTextureRequest(snapshot, rec.AgentID)
-	if !open || liveEngineeringAssignment(snapshot) != "" {
+	if !open {
 		return types.WorkItemRecord{}, false, nil
 	}
 	textureInbox := strings.TrimSpace(rec.AgentID)
@@ -103,15 +103,30 @@ func (h *Handler) unattendedTextureRequest(ctx context.Context, rec *types.RunRe
 	if err != nil {
 		return types.WorkItemRecord{}, false, fmt.Errorf("read the Texture desk's open rounds: %w", err)
 	}
-	if len(rounds) > 0 {
+	operationID := ""
+	if h.Core != nil {
+		operationID, _ = h.Core.LiveSelfDevelopmentOperation(doc.ComputerID, doc.TrajectoryID)
+	}
+	if textureRequestServer(snapshot, len(rounds), operationID) != "" {
 		return types.WorkItemRecord{}, false, nil
 	}
-	if h.Core != nil {
-		if operationID, _ := h.Core.LiveSelfDevelopmentOperation(doc.ComputerID, doc.TrajectoryID); operationID != "" {
-			return types.WorkItemRecord{}, false, nil
-		}
-	}
 	return work, true, nil
+}
+
+// textureRequestServer names what works on an open Texture request, or "":
+// a live engineering assignment (which carries a running capsule job), an
+// open round the Texture desk cast (a Cast, Ask or Escalate to research or
+// management, its child runs included), or a live self-development operation.
+func textureRequestServer(snapshot types.LifecycleSnapshot, openRounds int, operationID string) string {
+	switch {
+	case liveEngineeringAssignment(snapshot) != "":
+		return "engineering assignment"
+	case openRounds > 0:
+		return "open round"
+	case strings.TrimSpace(operationID) != "":
+		return "self-development operation"
+	}
+	return ""
 }
 
 // refuseUnattendedTurn is the guard: a desk turn that names no next actor
@@ -137,8 +152,131 @@ func (h *Handler) refuseUnattendedTurn(ctx context.Context, rec *types.RunRecord
 // UnattendedRequestReason and management gets a notice. Both commits are
 // idempotent in the work item and the run.
 func (h *Handler) closeUnattendedRequest(ctx context.Context, rec *types.RunRecord, docID string, turn yaegikernel.TextureTurn) error {
+	if h == nil || rec == nil || strings.TrimSpace(turn.Idle) != agentcore.TextureIdleNoActReason {
+		return nil
+	}
+	cause := fmt.Sprintf("Texture's turn (run %s) ended without a Cast, a Wait naming what it waits on, or Done, and no round, engineering assignment or self-development operation is working on it; revise again to continue", strings.TrimSpace(rec.RunID))
+	return h.closeUnattendedWith(ctx, rec, docID, strings.TrimSpace(turn.BaseRevisionID), cause, nil)
+}
+
+// closeUnservedWait is the Wait leg of the same backstop. A Wait is accepted
+// as a next actor for any text (turnNamesNextActor) but nothing arms a wake
+// for it, so once the turn has committed the request is asked again and, when
+// nothing serves it, closed with the Wait's text on the fate. It never
+// re-dispatches or arms anything. A Cast in the same turn commits with the
+// turn, so its round is already visible here.
+func (h *Handler) closeUnservedWait(ctx context.Context, rec *types.RunRecord, docID string, turn yaegikernel.TextureTurn) error {
+	if h == nil || rec == nil || strings.TrimSpace(turn.Wait) == "" || strings.TrimSpace(turn.Done) != "" || turn.Idle != "" {
+		return nil
+	}
+	waited := strings.Join(strings.Fields(turn.Wait), " ")
+	if len(waited) > 240 {
+		waited = waited[:240] + "..."
+	}
+	cause := fmt.Sprintf("Texture's turn (run %s) waits (%q), but no round, engineering assignment, self-development operation or unread record is working on it, and nothing wakes it; revise again to continue", strings.TrimSpace(rec.RunID), waited)
+	return h.closeUnattendedWith(ctx, rec, docID, "", cause, func(ctx context.Context, doc types.Document) (bool, error) {
+		return h.waitServedByWake(ctx, rec, doc, turn)
+	})
+}
+
+// waitServedByWake reports whether something will wake the Texture desk
+// after a committed Wait turn, beyond what unattendedTextureRequest reads: a
+// later head (the owner revised, which opened work and woke the desk), another
+// live activation of the same desk, a pending lifecycle update packet not yet
+// bound to a run, or an unread waking record in the desk's own inbox (the
+// run-end records re-check wakes it).
+func (h *Handler) waitServedByWake(ctx context.Context, rec *types.RunRecord, doc types.Document, turn yaegikernel.TextureTurn) (bool, error) {
+	head, err := h.Store.GetLifecycleRevision(ctx, rec.OwnerID, doc.ComputerID, doc.CurrentRevisionID)
+	if err != nil {
+		return false, fmt.Errorf("load the Texture head: %w", err)
+	}
+	if turn.Write == nil {
+		if base := strings.TrimSpace(turn.BaseRevisionID); base != "" && base != head.RevisionID {
+			return true, nil
+		}
+	} else if head.AuthorKind != types.AuthorAppAgent {
+		return true, nil
+	}
+	snapshot, err := h.Store.GetLifecycleSnapshot(ctx, rec.OwnerID, doc.ComputerID, doc.TrajectoryID)
+	if err != nil {
+		return false, fmt.Errorf("load the Texture request's trajectory: %w", err)
+	}
+	if a := snapshot.Activation; a.RunID != "" && a.RunID != rec.RunID && (a.State == types.RunPending || a.State == types.RunRunning) {
+		return true, nil
+	}
+	agentID := strings.TrimSpace(rec.AgentID)
+	if pendingTextureUpdate(snapshot, agentID) {
+		return true, nil
+	}
+	cursor, err := h.Store.ReaderCursor(ctx, rec.OwnerID, doc.ComputerID, agentID, agentID)
+	if err != nil {
+		return false, fmt.Errorf("read the Texture inbox cursor: %w", err)
+	}
+	inboxHead, err := h.Store.InboxHead(ctx, rec.OwnerID, doc.ComputerID, agentID)
+	if err != nil {
+		return false, fmt.Errorf("read the Texture inbox head: %w", err)
+	}
+	if inboxHead <= cursor {
+		return false, nil
+	}
+	unread, err := h.Store.ListInboxRecords(ctx, rec.OwnerID, doc.ComputerID, agentID, cursor, inboxHead)
+	if err != nil {
+		return false, fmt.Errorf("read the Texture inbox: %w", err)
+	}
+	for _, r := range unread {
+		if store.RecordWakesReader(r) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// pendingTextureUpdate reports whether a lifecycle update packet addressed
+// to agentID is pending and not yet bound to a run: durable input the owner's
+// recovery delivers to the desk, at a boot too.
+func pendingTextureUpdate(snapshot types.LifecycleSnapshot, agentID string) bool {
+	for _, u := range snapshot.Updates {
+		pending := u.Disposition == "" || u.Disposition == types.UpdatePending
+		if pending && strings.TrimSpace(u.TargetAgentID) == agentID && strings.TrimSpace(u.DeliveredToRunID) == "" && u.DeliveredAt == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// closeUnservedAtBoot is the crash boot's leg: work is an open Texture work
+// item whose run the boot cancelled. The fate is "interrupted by a restart";
+// nothing is resumed, re-dispatched or armed.
+func (h *Handler) closeUnservedAtBoot(ctx context.Context, work types.WorkItemRecord) error {
+	if h == nil || h.Store == nil {
+		return nil
+	}
+	agentID := strings.TrimSpace(work.AssignedAgentID)
+	docID := strings.TrimPrefix(agentID, deskmanifest.DocumentCustodianName()+":")
+	if docID == agentID || docID == "" || strings.TrimSpace(work.AuthorityProfile) != deskmanifest.DocumentCustodianName() {
+		return nil
+	}
+	rec := &types.RunRecord{RunID: "crash-boot", OwnerID: work.OwnerID, ComputerID: work.ComputerID, AgentID: agentID, ChannelID: docID, TrajectoryID: work.TrajectoryID}
+	return h.closeUnattendedWith(ctx, rec, docID, "", "Texture's run ended with a restart (interrupted by a restart), and no round, engineering assignment or self-development operation is working on it; revise again to continue",
+		// A pending update packet is input the owner's recovery still
+		// delivers after a boot, so its work is served.
+		func(ctx context.Context, doc types.Document) (bool, error) {
+			snapshot, err := h.Store.GetLifecycleSnapshot(ctx, work.OwnerID, doc.ComputerID, doc.TrajectoryID)
+			if err != nil {
+				return false, fmt.Errorf("load the Texture request's trajectory: %w", err)
+			}
+			return pendingTextureUpdate(snapshot, agentID), nil
+		})
+}
+
+// closeUnattendedWith refuses the owner's open request on docID with
+// UnattendedRequestReason and cause, and notifies management. baseRevisionID,
+// when set, is the head the closing turn answered: a moved head means an
+// owner revision opened work this turn never saw. served, when set, is asked
+// last and keeps the request open when it says something will wake the desk.
+func (h *Handler) closeUnattendedWith(ctx context.Context, rec *types.RunRecord, docID, baseRevisionID, cause string, served func(context.Context, types.Document) (bool, error)) error {
 	ctx = asTextureReader(ctx)
-	if h == nil || h.Store == nil || rec == nil || strings.TrimSpace(docID) == "" || strings.TrimSpace(turn.Idle) != agentcore.TextureIdleNoActReason {
+	if h == nil || h.Store == nil || rec == nil || strings.TrimSpace(docID) == "" {
 		return nil
 	}
 	doc, err := h.Store.GetLifecycleDocument(ctx, rec.OwnerID, strings.TrimSpace(rec.ComputerID), docID)
@@ -148,17 +286,22 @@ func (h *Handler) closeUnattendedRequest(ctx context.Context, rec *types.RunReco
 	if err != nil {
 		return fmt.Errorf("load the Texture document: %w", err)
 	}
-	// Only the request the Idle turn answered: an owner revision since then
-	// moved the head and opened work this activation never saw.
-	if base := strings.TrimSpace(turn.BaseRevisionID); base != "" && base != strings.TrimSpace(doc.CurrentRevisionID) {
+	// Only the request the turn answered: an owner revision since then moved
+	// the head and opened work this activation never saw.
+	if base := baseRevisionID; base != "" && base != strings.TrimSpace(doc.CurrentRevisionID) {
 		return nil
 	}
 	work, unattended, err := h.unattendedTextureRequest(ctx, rec, doc)
 	if err != nil || !unattended {
 		return err
 	}
+	if served != nil {
+		if ok, err := served(ctx, doc); err != nil || ok {
+			return err
+		}
+	}
 	runID := strings.TrimSpace(rec.RunID)
-	reason := fmt.Sprintf("%s: Texture's turn (run %s) ended without a Cast, a Wait naming what it waits on, or Done, and no round, engineering assignment or self-development operation is working on it; revise again to continue", UnattendedRequestReason, runID)
+	reason := UnattendedRequestReason + ": " + cause
 	sum := sha256.Sum256([]byte(strings.Join([]string{rec.OwnerID, doc.ComputerID, doc.TrajectoryID, work.WorkItemID, runID}, "\x00")))
 	key := hex.EncodeToString(sum[:16])
 	refuse := types.RefuseLifecycleWorkRequest{
