@@ -158,14 +158,14 @@ func (h *Handler) authorizePlatformOperator(w http.ResponseWriter, r *http.Reque
 	return authResult, true
 }
 
-// platformComputerOwnership is step 3: the computer is on the platform tier
+// platformComputerOwnership is step 3: the computer is on the platform tier (or is the named proof computer)
 // and vmctl knows it. computerID must be exactly the roster's spelling.
 func (h *Handler) platformComputerOwnership(ctx context.Context, computerID string) (*resolvedComputerTarget, int, string) {
 	if computerID == "" || computerID != strings.TrimSpace(computerID) {
 		return nil, http.StatusForbidden, "not a platform computer"
 	}
 	tiers, err := platformRoster()
-	if err != nil || !tiers.PlatformComputer(computerID) {
+	if err != nil || !tiers.OperatorActComputer(computerID) {
 		return nil, http.StatusForbidden, "not a platform computer"
 	}
 	if h.vmctlClient == nil {

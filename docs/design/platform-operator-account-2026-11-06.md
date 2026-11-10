@@ -513,3 +513,21 @@ CLI
 - L4 a non-2xx answer is printed with the server's reason code and exits non-zero, so a refused restart is never read as done (L same).
 
 Left open: a restart's outcome is not on the tape after the boot (the receipt records the ask; the next boot's own planned-restart record shows the rest); a second `restart` receipt kind with the outcome is a follow-up. d@e is the only computer these were exercised on; the paper has not been touched.
+
+## 10. The proof computer (2026-11-10)
+
+O4 and O5 were deployed with no way to prove them off the paper: the gate's third
+step admits only `platform_computers` in `internal/computertiers/computer-tiers.json`,
+and the rules allow adversarial drills on d@e alone. d@e is not put on the
+platform tier, because that tier switches off self-development
+(`internal/platform/standing_consensus.go`, `freeze_candidate.go`) and makes the
+computer always-on. The roster gains a separate list, `operator_proof_computers`,
+holding d@e; the gate admits a platform computer or a proof computer
+(`Tiers.OperatorActComputer`). Everything else is unchanged: the operator roster
+(who), the per-act receipts on the target's tape, the allowlist, the planned
+restart through the owner update. `choir paper` with no `--computer` still means
+the paper (the status roster lists platform computers only); d@e is named with
+`--computer`. Standing effect: the platform operator can set d@e's model policy,
+start and stop its schedules and ask for its planned restart, each with a receipt.
+d@e belongs to a test account, so this widens the operator's reach by one test
+computer and no user's. Removing the entry reverses it.

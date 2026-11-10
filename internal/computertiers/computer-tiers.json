@@ -33,5 +33,11 @@
       "computer_id": "computer-848b21d55df1dd1a953ae798b8edc696",
       "note": "selfdev-arm-crouton, made by scripts/test-computer-create: test tier, so ring R1"
     }
+  ],
+  "operator_proof_computers": [
+    {
+      "computer_id": "computer-59c902c5d46caecc0a180a8557164e72",
+      "note": "d@e, the proof computer (ring R0): the platform operator's verbs (schedules, policy, restart) may be proved here before they act on the paper; not a platform computer, so its self-development and warmness are unchanged (X5 follow-up, 2026-11-10)"
+    }
   ]
 }

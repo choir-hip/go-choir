@@ -74,10 +74,11 @@ type operatorWorld struct {
 	corpusdBad string // when set, the check route answers this body with 200
 	oldGuest   bool   // a guest build from before operator receipts: it ignores the marker
 	// vmctl's other endpoints, for the restart (docs section 9, X1 to X9).
-	vmctlPaths  []string
-	refreshCode int
-	refreshBody string
-	receiptCode int // what the guest's restart-receipt route answers
+	vmctlPaths     []string
+	refreshCode    int
+	refreshBody    string
+	extraComputers map[string]bool // computers the fake vmctl knows besides the two defaults
+	receiptCode    int             // what the guest's restart-receipt route answers
 }
 
 // R7: a guest that does not record operator receipts is never written to.
@@ -160,7 +161,7 @@ func newOperatorWorld(t *testing.T, roster string) *operatorWorld {
 		state := w.state
 		w.mu.Unlock()
 		id := r.URL.Query().Get("computer_id")
-		if id != paperComputer && id != testTierID {
+		if id != paperComputer && id != testTierID && !w.extraComputers[id] {
 			rw.WriteHeader(http.StatusNotFound)
 			return
 		}

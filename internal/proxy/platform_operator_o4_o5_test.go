@@ -11,7 +11,6 @@ import (
 // (docs/design/platform-operator-account-2026-11-06.md section 9: S1, S2, S6,
 // X1 to X7, X9). The world is the one in platform_operator_computers_test.go.
 
-
 func scheduleURL(id, query string) string {
 	u := operatorPrefix + id + "/guest" + schedulesGuest
 	if query != "" {
@@ -294,5 +293,29 @@ func TestOperatorRestartDoesNotWakeAStoppedComputer(t *testing.T) {
 	}
 	if w.vmctlSaw("/internal/vmctl/deploy-refresh") != 0 || w.guestCount() != 0 {
 		t.Fatal("a stopped computer was woken or refreshed")
+	}
+}
+
+// The proof computer: the operator reaches d@e (the roster's operator_proof_computers
+// entry) with the same gate and receipts, and still nothing else.
+func TestOperatorReachesTheProofComputerAndNoOrdinaryComputer(t *testing.T) {
+	const proof = "computer-59c902c5d46caecc0a180a8557164e72"
+	w := newOperatorWorld(t, opAccount)
+	w.extraComputers = map[string]bool{proof: true}
+	s := w.session(opAccount)
+	if rec := w.do(http.MethodGet, scheduleURL(proof, ""), "", s); rec.Code != http.StatusOK {
+		t.Fatalf("list on the proof computer = %d %s", rec.Code, rec.Body)
+	}
+	if rec := w.do(http.MethodPost, restartURL(proof), `{"reason":"operator verb proof"}`, s); rec.Code != http.StatusOK {
+		t.Fatalf("restart on the proof computer = %d %s", rec.Code, rec.Body)
+	}
+	w.extraComputers[userComputer] = true
+	if rec := w.do(http.MethodGet, scheduleURL(userComputer, ""), "", s); rec.Code != http.StatusForbidden {
+		t.Fatalf("an ordinary computer = %d %s", rec.Code, rec.Body)
+	}
+	// The default `status` roster stays the paper alone.
+	rec := w.do(http.MethodGet, platformOperatorComputersPath, "", s)
+	if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), proof) {
+		t.Fatalf("status lists the proof computer: %d %s", rec.Code, rec.Body)
 	}
 }
