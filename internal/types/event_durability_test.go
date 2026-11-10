@@ -138,8 +138,10 @@ func TestDurabilityTableIsTheDesignedTen(t *testing.T) {
 	// changed, so the owner's other windows follow it; like theme.updated.
 	// And trust.breaker (acknowledged, 2026-11-05, MA7.8): a breaker trip is
 	// the authority a class stays gated on across a restart.
-	if n := len(eventDurability); n != 52 {
-		t.Fatalf("eventDurability has %d entries, want 52 (the 42 designed kinds, system1.judgment, story.relation, story.entities, calibration.read, disclosure.decision, texture.search.queried, model.served, search.served, setting.updated and trust.breaker)", n)
+	// And platform.computer.model_policy (acknowledged, 2026-11-09): the
+	// platform operator's receipt for a policy write on a platform computer.
+	if n := len(eventDurability); n != 53 {
+		t.Fatalf("eventDurability has %d entries, want 53 (the 42 designed kinds, system1.judgment, story.relation, story.entities, calibration.read, disclosure.decision, texture.search.queried, model.served, search.served, setting.updated, trust.breaker and platform.computer.model_policy)", n)
 	}
 }
 

@@ -394,6 +394,13 @@ const (
 	// EventFileChanged is emitted when the authenticated Files surface creates,
 	// updates, or deletes a file-system entry.
 	EventFileChanged EventKind = "file.changed"
+
+	// EventPlatformComputerModelPolicy is the operator receipt on a platform
+	// computer's tape: a platform operator account wrote the computer's model
+	// policy (docs/design/platform-operator-account-2026-11-06.md section 5).
+	// The payload names the operator account id (never an email), the act,
+	// the revision kept, and digests of the old and new file.
+	EventPlatformComputerModelPolicy EventKind = "platform.computer.model_policy"
 )
 
 // EventRecord represents a single runtime event emitted during run execution

@@ -671,6 +671,9 @@ func Run() {
 		}
 	})
 	fileHandler.SetMoveGate(fileObjectRecorder.MoveAllowed)
+	fileHandler.SetPolicyActRecorder(func(r *http.Request, act *PolicyAct) error {
+		return recordPlatformPolicyAct(r, rt.Runtime, act)
+	})
 	RegisterFileRoutes(s, fileHandler)
 	RegisterAppPackageObjectRoutes(s, db, cfg.ComputerID)
 	RegisterFileObjectRoutes(s, fileObjectRecorder)

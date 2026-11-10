@@ -61,6 +61,9 @@ var clientIdentityHeaders = []string{
 	"X-Internal-Updater",
 	"X-Choir-Operator",
 	"X-Choir-Operator-Token",
+	// The platform operator marker: only the proxy's own operator gate writes
+	// it (platform_operator_computers.go), and it builds its request from nothing.
+	"X-Choir-Platform-Operator",
 	"X-Choir-Lifecycle-Caller",
 	"X-Choir-Capsule",
 }
@@ -989,6 +992,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	case path == platformOperatorYankPath:
 		h.HandlePlatformOperatorYank(w, r)
+		return
+	case isPlatformOperatorComputersPath(path):
+		h.HandlePlatformOperatorComputers(w, r)
 		return
 	case strings.HasPrefix(path, "/api/platform/publications/") && strings.HasSuffix(path, "/proposals"):
 		h.HandlePublicationProposal(w, r)

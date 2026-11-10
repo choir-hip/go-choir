@@ -1,7 +1,10 @@
 package autoputer
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -10,6 +13,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/ownerfiles"
+	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
 // policyRevisionName is the shape keepPolicyRevision writes.
@@ -25,9 +29,88 @@ const (
 	policyRevisionsKept = 20
 )
 
-// isPolicyFile reports whether absPath is the model policy file.
+// isPolicyFile reports whether absPath is the model policy file, or a symlink
+// inside the root that resolves to it (a write through the link is a write of
+// the policy and takes the same validated path).
 func (fh *FilesHandler) isPolicyFile(absPath string) bool {
-	return absPath == filepath.Join(fh.rootDir, filepath.FromSlash(PolicyFilePath))
+	policy := filepath.Join(fh.rootDir, filepath.FromSlash(PolicyFilePath))
+	if absPath == policy {
+		return true
+	}
+	info, err := os.Lstat(absPath)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		return false
+	}
+	resolved, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		return false
+	}
+	root, err := filepath.EvalSymlinks(fh.rootDir)
+	if err != nil {
+		return false
+	}
+	return resolved == filepath.Join(root, filepath.FromSlash(PolicyFilePath))
+}
+
+// PolicyAct is the operator receipt for one write of the model policy: who
+// (an account id, never an email), what, which revision kept, and digests of
+// the file before and after. Digests are SHA-256 hex of the file bytes; the
+// old digest is empty when there was no file.
+type PolicyAct struct {
+	OperatorAccountID string
+	Act               string
+	Path              string
+	Revision          string
+	OldSHA256         string
+	NewSHA256         string
+	Bytes             int
+	// ReceiptID is set by the recorder: the id of the tape event, which the
+	// write's answer returns so the operator can find the receipt.
+	ReceiptID string
+}
+
+// PolicyActRecorder writes a PolicyAct to the computer's tape. It returns an
+// error when the record is not durable; the write it precedes is then refused.
+type PolicyActRecorder func(r *http.Request, act *PolicyAct) error
+
+// SetPolicyActRecorder sets the recorder for platform operator acts. With
+// none set, an operator write is refused: an operator act with no receipt
+// must not exist.
+func (fh *FilesHandler) SetPolicyActRecorder(rec PolicyActRecorder) { fh.policyRecorder = rec }
+
+// operatorFilesGuard admits a request that carries the platform operator
+// marker only for the policy surface: reads of the policy file and its kept
+// revisions, and the policy file's validated write. Anything else with the
+// marker is refused (the proxy admits no other path, so this is the guest's
+// own check). It returns false after writing the refusal.
+func (fh *FilesHandler) operatorFilesGuard(w http.ResponseWriter, r *http.Request, absPath string) (operator string, ok bool) {
+	id, present, err := server.PlatformOperator(r)
+	if !present {
+		return "", true
+	}
+	if err != nil {
+		writeFileError(w, http.StatusForbidden, "access denied")
+		return "", false
+	}
+	// Tell the proxy this build records operator acts. A guest from before
+	// this change ignores the marker and says nothing, and the proxy then
+	// writes nothing to it.
+	if fh.policyRecorder != nil {
+		w.Header().Set("X-Choir-Operator-Receipts", "1")
+	}
+	revisions := filepath.Join(fh.rootDir, filepath.FromSlash(PolicyRevisionsDir))
+	switch r.Method {
+	case http.MethodGet:
+		if fh.isPolicyFile(absPath) || absPath == revisions || filepath.Dir(absPath) == revisions {
+			return id, true
+		}
+	case http.MethodPut:
+		if absPath == filepath.Join(fh.rootDir, filepath.FromSlash(PolicyFilePath)) {
+			return id, true
+		}
+	}
+	writeFileError(w, http.StatusForbidden, "access denied")
+	return "", false
 }
 
 // keepPolicyRevision copies the current policy file into PolicyRevisionsDir
@@ -89,6 +172,11 @@ func (fh *FilesHandler) keepPolicyRevision(absPath string, next []byte) (string,
 		names = names[1:]
 	}
 	return name, nil
+}
+
+func sha256Hex(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }
 
 // checkPolicyWrite is the gate on a write to the policy file: the body must

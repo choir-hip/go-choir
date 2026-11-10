@@ -49,6 +49,11 @@ import (
 
 const (
 	platformOperatorYankRoute = "/internal/platform/operator/packages/yank"
+	// PlatformOperatorCheckRoute answers whether one account holds the
+	// operator role. It is the single reader of the roster for the proxy's
+	// platform-computer gate (authorizePlatformComputerAct), so the proxy
+	// holds no second copy of CHOIR_PLATFORM_OPERATOR_USERS.
+	PlatformOperatorCheckRoute = "/internal/platform/operator/check"
 	// PackageForceRequestKind is a publisher's request that the platform
 	// force an update: a note for the platform operator, nothing more.
 	PackageForceRequestKind objectgraph.ObjectKind = "choir.package_force_request"

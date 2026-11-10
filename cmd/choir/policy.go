@@ -45,6 +45,7 @@ type policyGetResult struct {
 type policyWriteResult struct {
 	Status   string            `json:"status"`
 	Revision string            `json:"revision,omitempty"` // empty: nothing was replaced or the file is unchanged
+	Receipt  string            `json:"receipt,omitempty"`  // a platform operator act: the id of the receipt on the computer's tape
 	Restored string            `json:"restored,omitempty"` // rollback: the revision the file now matches
 	Bytes    int               `json:"bytes"`
 	Roles    []json.RawMessage `json:"roles"`
@@ -90,6 +91,7 @@ func policyGet(x *call) (any, error) {
 func policyPut(x *call, raw []byte) (policyWriteResult, error) {
 	var resp struct {
 		Revision string `json:"revision"`
+		Receipt  string `json:"receipt"`
 	}
 	if err := x.c.doRaw(http.MethodPut, "/api/files/"+policyFile, raw, &resp); err != nil {
 		return policyWriteResult{}, err
@@ -105,7 +107,7 @@ func policyPut(x *call, raw []byte) (policyWriteResult, error) {
 	if err != nil {
 		return policyWriteResult{}, err
 	}
-	return policyWriteResult{Status: "saved", Revision: resp.Revision, Bytes: len(raw), Roles: roles}, nil
+	return policyWriteResult{Status: "saved", Revision: resp.Revision, Receipt: resp.Receipt, Bytes: len(raw), Roles: roles}, nil
 }
 
 func policySet(x *call) (any, error) {

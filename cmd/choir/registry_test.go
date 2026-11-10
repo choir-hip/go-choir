@@ -62,6 +62,10 @@ var wantCLIOnly = []string{
 	// Owner act (F1): a publisher's force request, a note to the platform.
 	"package request-force",
 	"package share", "package uninstall", "package withdraw",
+	// The platform operator's acts on a platform computer (O2, O3): they run
+	// on the operator's own login, and a hosted MCP server must not hold
+	// platform authority.
+	"paper policy get", "paper policy revisions", "paper policy rollback", "paper policy set", "paper policy verify", "paper status",
 	// The platform operator's break-glass yank (F1): host only.
 	"platform yank",
 	"precommit import-ledger",

@@ -70,6 +70,9 @@ type client struct {
 	host       string
 	apiKey     string
 	computerID string
+	// prefix is put before every path: the platform operator path reaches a
+	// platform computer's routes under /api/platform/operator/computers/<id>/guest.
+	prefix string
 	http       *http.Client
 	stdout     io.Writer
 	stderr     io.Writer
@@ -153,7 +156,7 @@ func envOr(key, def string) string {
 // out. If body is non-nil it is JSON-encoded and sent as the request body.
 // On non-2xx it returns an error with the response body.
 func (c *client) do(method, path string, body any, out any) error {
-	url := c.host + path
+	url := c.host + c.prefix + path
 	var reqBody io.Reader
 	if body != nil {
 		raw, err := json.Marshal(body)
@@ -202,7 +205,7 @@ func (c *client) doRawBytes(method, path string, body []byte) ([]byte, error) {
 	if body != nil {
 		reqBody = bytes.NewReader(body)
 	}
-	req, err := http.NewRequest(method, c.host+path, reqBody)
+	req, err := http.NewRequest(method, c.host+c.prefix+path, reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}

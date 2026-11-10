@@ -64,6 +64,9 @@ type FilesHandler struct {
 	// moveGate admits the move verb (PATCH). Nil or false answers 405, as
 	// before the verb existed (the file object's switch, files.object).
 	moveGate func(*http.Request) bool
+	// policyRecorder writes the platform operator's receipt for a policy
+	// write, before the write (policy_write.go).
+	policyRecorder PolicyActRecorder
 }
 
 // SetMoveGate sets the function that admits PATCH moves.
@@ -218,6 +221,12 @@ func (fh *FilesHandler) HandleFileByPath(w http.ResponseWriter, r *http.Request)
 	absPath, err := fh.resolvePath(suffix)
 	if err != nil {
 		writeFileError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	// A request marked as a platform operator's act reaches only the policy
+	// surface (policy_write.go).
+	if _, ok := fh.operatorFilesGuard(w, r, absPath); !ok {
 		return
 	}
 
@@ -449,7 +458,7 @@ func (fh *FilesHandler) handleUpdateFile(w http.ResponseWriter, r *http.Request,
 
 	// The model policy is validated before it replaces the working file, and
 	// the file it replaces is kept as a revision. Every other path is a plain write.
-	revision := ""
+	revision, receiptID := "", ""
 	if fh.isPolicyFile(absPath) {
 		if msg := checkPolicyWrite(body); msg != "" {
 			writeFileError(w, http.StatusUnprocessableEntity, msg)
@@ -458,6 +467,31 @@ func (fh *FilesHandler) handleUpdateFile(w http.ResponseWriter, r *http.Request,
 		if revision, err = fh.keepPolicyRevision(absPath, body); err != nil {
 			writeFileError(w, http.StatusInternalServerError, "failed to keep the previous policy revision")
 			return
+		}
+		// A platform operator's write is recorded on the tape BEFORE it
+		// lands: a policy change by an operator that has no receipt cannot
+		// exist. A crash between the record and the write leaves a receipt
+		// for a write that did not happen (the read-back shows it), never a
+		// write with no receipt. The kept revision is only a copy.
+		if operator, present, opErr := server.PlatformOperator(r); present {
+			if opErr != nil || fh.policyRecorder == nil {
+				writeFileError(w, http.StatusForbidden, "access denied")
+				return
+			}
+			var oldSum string
+			if current, rerr := os.ReadFile(absPath); rerr == nil {
+				oldSum = sha256Hex(current)
+			}
+			act := &PolicyAct{
+				OperatorAccountID: operator, Act: "model_policy.write", Path: PolicyFilePath,
+				Revision: revision, OldSHA256: oldSum, NewSHA256: sha256Hex(body), Bytes: len(body),
+			}
+			if rerr := fh.policyRecorder(r, act); rerr != nil {
+				log.Printf("autoputer: operator policy receipt not recorded; the write is refused: %v", rerr)
+				writeFileError(w, http.StatusInternalServerError, "the operator receipt could not be recorded; nothing was written")
+				return
+			}
+			receiptID = act.ReceiptID
 		}
 	}
 
@@ -486,6 +520,9 @@ func (fh *FilesHandler) handleUpdateFile(w http.ResponseWriter, r *http.Request,
 	}
 	if revision != "" {
 		resp["revision"] = revision
+	}
+	if receiptID != "" {
+		resp["receipt"] = receiptID
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -595,6 +632,20 @@ func (fh *FilesHandler) handleMove(w http.ResponseWriter, r *http.Request, absPa
 	if parent, err := os.Stat(filepath.Dir(destPath)); err != nil || !parent.IsDir() {
 		writeFileError(w, http.StatusNotFound, "parent directory not found")
 		return
+	}
+	// A move into the policy path is a write of the policy: the file must
+	// pass the same validation as a PUT, or a delete then a move would land
+	// an unvalidated policy (docs/design/paper-control-cli-2026-11-09.md).
+	if fh.isPolicyFile(destPath) {
+		moved, err := os.ReadFile(absPath)
+		if err != nil {
+			writeFileError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		if msg := checkPolicyWrite(moved); msg != "" {
+			writeFileError(w, http.StatusUnprocessableEntity, msg)
+			return
+		}
 	}
 	if fh.beforeMoveRename != nil {
 		fh.beforeMoveRename(destPath)

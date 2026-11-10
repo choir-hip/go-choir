@@ -640,6 +640,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc(packagesRoute+"/", h.HandlePackages)
 	s.HandleFunc(listingsRoute+"/", h.HandleListings)
 	s.HandleFunc(platformOperatorYankRoute, h.HandlePlatformYank)
+	s.HandleFunc(PlatformOperatorCheckRoute, h.HandlePlatformOperatorCheck)
 	s.HandleFunc("/internal/computers/keys/escrow-public-key", h.HandleKeyEscrowPublicKey)
 	s.HandleFunc("/internal/computers/keys/escrow", h.HandleKeyEscrow)
 	s.HandleFunc("/internal/computers/keys/escrow/status", h.HandleKeyEscrowStatus)

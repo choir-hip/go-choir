@@ -9,6 +9,43 @@ section 5 (slices O2 to O5, not built); the CLI layer for it is in
 
 Acting on the paper needs the owner's word for that act. Reading does not.
 
+## The operator path (from the owner's own login)
+
+Built 2026-11-09 (slices O2 and O3 of the operator design). After the owner
+names their account as platform operator (once, below), none of the saved
+session, the 7-day key or `qa_renew_key.mjs` is needed for the policy:
+
+```
+choir login                       # the owner's own account
+choir paper status                # build, state, schedules, resolved policy per role
+choir paper policy get
+choir paper policy set --local f  # validated, old file kept, a receipt on the paper's tape
+choir paper policy revisions
+choir paper policy rollback [--to n]
+choir paper policy verify [--role r]
+```
+
+`--computer <id>` names another platform computer; with one in the roster it
+is implied. Each write prints `revision` (the file kept) and `receipt` (the
+event id of the `platform.computer.model_policy` record on the paper's tape,
+naming the operator's account id). A paper still on a build from before the
+receipt answers 409 and nothing is written; it takes the write after its next
+update.
+
+**The one-time step.** The roster is the GitHub Actions secret
+`CHOIR_PLATFORM_OPERATOR_USERS` (value: the owner's account id, lower-case
+UUID, comma-separated up to eight, or `none` to revoke). Read the id from
+`https://choir.news/auth/session` (`user.id`) while signed in. The next
+deploy writes `/var/lib/go-choir/unit-env/corpusd-operators.env` on Node B;
+corpusd logs `platform operator accounts: 1`. The proxy holds no copy. Details:
+[the operator design](../design/platform-operator-account-2026-11-06.md) 4.1.
+A key bound to one computer, or lacking `read:runtime` or `write:runtime`,
+is refused for the matching act; a browser session must be a passkey session.
+(`choir login` approves a full-access key; whether it is unbound on staging
+is unverified.)
+
+The sections below are the fallback: the old key path.
+
 ## The key
 
 The paper is owned by a test account with no person behind it (a virtual
