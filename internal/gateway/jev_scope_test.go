@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// Intake labels have their own rate scope (L2a R2-3,
+// Scopes name priority classes (intake labels were L2a R2-3,
 // docs/archive/reports/l2a-synthesis-intake-design-2026-10-14.md). Ways it can fail,
 // written before the code:
 //   - labels draw on the shared judgments bucket, so a poll of many new
@@ -35,7 +35,9 @@ func (rt *decisionsRoundTripper) RoundTrip(r *http.Request) (*http.Response, err
 		Request: r}, nil
 }
 
-func TestIntakeLabelJudgmentsHaveTheirOwnRateScope(t *testing.T) {
+func TestJudgmentScopesAreClassesNotBuckets(t *testing.T) {
+	// The handler's own per-computer bucket is one request a minute; Jev no
+	// longer draws on it (the shared limiter replaced it).
 	h, reg, _ := setupHandlerWithRateLimit(t, 1, time.Minute)
 	upstream := &decisionsRoundTripper{}
 	h.SetJevTransport(&JevTransport{enabled: true, apiKey: "test-key", httpClient: &http.Client{Transport: upstream},
@@ -57,35 +59,18 @@ func TestIntakeLabelJudgmentsHaveTheirOwnRateScope(t *testing.T) {
 		h.HandleJudgment(rec, req)
 		return rec.Code
 	}
-	// The limit is one request per bucket per minute.
-	if code := judge(""); code != http.StatusOK {
-		t.Fatalf("first support judgment = %d", code)
-	}
-	if code := judge(JudgmentScopeIntakeLabels); code != http.StatusOK {
-		t.Fatalf("an intake label after a support judgment = %d; the support bucket starved labels", code)
-	}
-	if code := judge(JudgmentScopeIntakeLabels); code != http.StatusTooManyRequests {
-		t.Fatalf("second intake label = %d; want the labels bucket limited", code)
-	}
-	if code := judge(""); code != http.StatusTooManyRequests {
-		t.Fatalf("second support judgment = %d; want the support bucket limited", code)
+	for i := 0; i < 5; i++ {
+		for _, scope := range []string{"", JudgmentScopeIntakeLabels, JudgmentScopeInteractive} {
+			if code := judge(scope); code != http.StatusOK {
+				t.Fatalf("judgment %d scope %q = %d; the old per-computer bucket still applies", i, scope, code)
+			}
+		}
 	}
 	if code := judge("bulk"); code != http.StatusBadRequest {
 		t.Fatalf("unknown scope = %d; want refused", code)
 	}
-
-	// Labels exhausting their bucket never starve a support judgment.
-	h2, reg2, _ := setupHandlerWithRateLimit(t, 1, time.Minute)
-	h2.SetJevTransport(h.jevTransport)
-	cred2, _ := reg2.IssueCredential("autoputer-labels-2")
-	h, cred = h2, cred2
-	_ = judge(JudgmentScopeIntakeLabels)
-	_ = judge(JudgmentScopeIntakeLabels)
-	if code := judge(""); code != http.StatusOK {
-		t.Fatalf("support judgment after labels used their bucket = %d", code)
-	}
 	for _, body := range upstream.bodies {
-		if strings.Contains(body, "scope") || strings.Contains(body, JudgmentScopeIntakeLabels) {
+		if strings.Contains(body, "scope") || strings.Contains(body, JudgmentScopeIntakeLabels) || strings.Contains(body, JudgmentScopeInteractive) {
 			t.Fatalf("the scope rode upstream: %s", body)
 		}
 	}
