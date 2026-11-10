@@ -5652,6 +5652,53 @@ func (s *Store) reactivateRunOnce(ctx context.Context, req types.ReactivateRunRe
 		{CanonicalID: receiptObj.CanonicalID},
 	}
 	objects := []objectgraph.Object{runUpdated, trajectoryUpdated, eventObj, receiptObj}
+	// A pending or running run owns its agent's activation slot, as
+	// projectLifecycleRun sets it. Parking the run (a planned restart's boot
+	// passivation, a durable transition) cleared the slot, so the reactivation
+	// restores it; without that a work-bound Research run is refused at
+	// provider admission ("does not own the exact live run") on its one resume
+	// and its round stays open
+	// (docs/problems/research-round-stranded-by-restart-2026-11-10.md).
+	if lifecycleRunOwnsActivation(run.State) {
+		agentObj, agentErr := s.lifecycleGetObject(ctx, ogKindAgent, ownerID, computerID, req.AgentID)
+		if agentErr != nil && !errors.Is(agentErr, ErrNotFound) {
+			return types.LifecycleResult{}, agentErr
+		}
+		if agentErr == nil {
+			agent, decodeErr := decodeLifecycleObject[types.AgentRecord](agentObj)
+			if decodeErr != nil {
+				return types.LifecycleResult{}, decodeErr
+			}
+			if previous := strings.TrimSpace(agent.ActiveRunID); previous != run.RunID {
+				if previous != "" {
+					// One live activation per agent: the slot's holder must have ended.
+					previousObj, previousErr := s.lifecycleGetObject(ctx, ogKindRun, ownerID, computerID, previous)
+					if previousErr != nil && !errors.Is(previousErr, ErrNotFound) {
+						return types.LifecycleResult{}, previousErr
+					}
+					if previousErr == nil {
+						previousRun, previousDecodeErr := decodeLifecycleObject[types.RunRecord](previousObj)
+						if previousDecodeErr != nil {
+							return types.LifecycleResult{}, previousDecodeErr
+						}
+						if lifecycleRunOwnsActivation(previousRun.State) {
+							return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+						}
+					}
+				}
+				agent.ActiveRunID = run.RunID
+				agent.UpdatedAt = now
+				agentMeta := lifecycleMetadata("agent_id", agent.AgentID, computerID, req.TrajectoryID, agent.LastReducerSeq)
+				agentMeta["channel_id"] = agent.ChannelID
+				updatedAgentObj, objErr := lifecycleObject(ogKindAgent, ownerID, computerID, agent.AgentID, agent, agentMeta, agentObj.CreatedAt, now)
+				if objErr != nil {
+					return types.LifecycleResult{}, objErr
+				}
+				objects = append(objects, updatedAgentObj)
+				conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: agentObj.CanonicalID, Exists: true, ExpectedContentHash: agentObj.ContentHash})
+			}
+		}
+	}
 	return s.commitLifecycleTransition(ctx, ownerID, computerID, req.CommandID, req.CommandDigest, conditions, objects, types.LifecycleResult{
 		Receipt: receipt, Trajectory: trajectory, Events: []types.LifecycleEvent{event},
 	})
