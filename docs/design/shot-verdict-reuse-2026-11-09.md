@@ -297,3 +297,104 @@ computers) x (deploys that change frontend bytes or the driver).
    new judged content.
 6. `driver_id` definition. Default: the digest of the sandbox browser binary identity and
    the viewport table; confirm what `internal/shotsandbox` already records.
+
+## 12. Tonight-cut: review record and failure list
+
+Status: build spec. Class: red (loosens an apply gate), additive, one-act rollback by
+revert. Devin reviewed sections 1 to 11 (VERDICT: BUILD WITH CHANGES); its "Findings by
+class" and "Recommended tonight-cut" override sections 4 to 8 where they differ. This
+section is what the build follows. No runtime switch.
+
+### 12.1 Review record
+
+| # | Devin finding | Adjudication |
+|---|---|---|
+| 1 | The digest of build output never matches across a rebase: the host build bakes the synthetic rev and base date into the bundle (`builder/util.go:124`, `flake.nix:279`, `vite.config.js:23`). | Adopted. The comparison is of SOURCE ids at the commits: git tree ids of `frontend/` and `nix/`, and blob ids of `flake.nix` and `flake.lock`, read from the guest's release repository (`rt.releaseRepo()`, the repository `sourceproj.Reapply` already needs both commits in). Build output is never hashed. The flake's frontend derivation takes `./frontend` as its only source, so that tree id is the whole input. |
+| 2 | `"" == ""` matches. | Adopted. Every id and digest must be non-empty and well formed; an empty or unreadable value is an explicit refusal before any comparison. |
+| 3 | Reuse without a page-level check is weaker than today. | Adopted. The liveness pass is in the same commit as the gate branch; a reuse cannot be committed without it. |
+| 4 | No console/request instrumentation exists. | Adopted, minimal. A counter in `NewFrontendHandler`'s proxy, reported in the stage `Result`; the existing marker `.app-root[data-auth-state="signed_in"]`. Console errors deferred. |
+| 5 | `driver_id` omits fontconfig and ffmpeg. | Adopted with a limit. The browser, fontconfig and ffmpeg paths (nix store paths as the guest sees them) are recorded on every `shot_reuse` and compared with the prior reuse's. A verdict written before this build carries no environment on the tape, so the first reuse in a chain compares the driver's SOURCE instead (`nix/`, `internal/shot/`, `internal/shotsandbox/` tree ids): a deploy that changes the driver or the browser pin changes a tree id and takes the judged round. |
+| 6 | Bind the prior event to the rebased operation. | Adopted. `prior.OperationID == receipt.RebaseOf`, `prior.BundleDigest == receipt.PriorBundleDigest`, same plan digest, a pass. |
+| 7 | Branch before `managementCanSeeImages`. | Adopted. |
+| 8 | Register the kind and the reducer binding; the writer-purity worry is a misread. | Adopted (`validEventKinds`, the reducer's `DecisionRef`/`ProposedEffectRef` binding). `TestSemanticKindsNeverEnterTheQueue` counts `types.EventKinds()` (telemetry kinds), not `computerevent` kinds, so its count does not change. |
+| 9 | A frontend-only layer has no host build and fails the gate today. | Noted, unchanged. Reuse needs a host build (`built != nil`); with none the branch is not entered and today's refusal stands. |
+| - | Defer `attested`, `PriorShotEvent` and the corpusd check, the AFTER-hash comparison, injected readiness (S0). | Deferred as Devin recommends; the gate reads the prior event off the same tape it already trusts. |
+| - | Make a failed judged round advisory after a passed liveness. | Not built. An owner decision. |
+| - | S5, the rebase framing text. | Built (a few lines): for a clean-rebase operation the shots-owed text says BEFORE already contains the change. |
+
+### 12.2 The rule
+
+The branch runs only for an operation whose finalized decision's authority is a
+`platform-clean-rebase:<receipt digest>`
+(`selfdevprotocol.CleanRebaseReceiptDigestFromAuthority` on the transition
+`FinalizedDecisionForOperation` returns), never by operation id prefix. It runs after the
+verdict-key miss and before `managementCanSeeImages`. All of these must hold, each
+non-empty, or the gate does what it does today:
+
+1. The receipt (read from the tape by its digest, digest re-verified) names this
+   operation, bundle and host build job, and its patch SHA equals the bundle's. Its
+   booted base equals the build's base commit and the runtime's booted base.
+2. The prior event is the latest on `shot-verdict:<RebaseOf>:`; it is a pass bound to
+   `RebaseOf`, `PriorBundleDigest` and this plan digest. Either kind may be the prior.
+3. The origin is a judged pass: the prior is a `shot_verdict`, or a `shot_reuse` whose
+   recorded origin key still reads back as a `shot_verdict` pass with the recorded digest.
+4. Source ids are equal across the judged base, the receipt's stack base and the booted
+   base (`frontend/`, `nix/`, `internal/shot/`, `internal/shotsandbox/` trees;
+   `flake.nix`, `flake.lock` blobs).
+5. The driver environment is non-empty (browser, fontconfig; ffmpeg when the plan has
+   video) and equal to the prior reuse's recorded one when there is one.
+6. The liveness pass is clean (12.4).
+
+Then the gate commits `shot_reuse` under `shot-verdict:<op>:<job>` and proceeds to the swap.
+
+### 12.3 Chaining decision
+
+A reuse may chain (a rebase of a rebase is the normal case: after one reused rebase the
+layer's operation is itself a clean rebase whose prior event is a `shot_reuse`). The chain
+is bounded three ways. It names its origin: every `shot_reuse` records the origin event
+digest and key, and the next hop re-reads the origin from the tape and requires a
+`shot_verdict` pass with that digest. It is pinned to the judged content: the judged
+source ids are copied unchanged from hop to hop, and every hop requires the booted base's
+ids to equal the judged ones, not merely the previous hop's. And it is at most 32 hops
+long (the platform's own `cleanRebaseMaxChain`). A frontend change anywhere in the chain
+ends it: the next rebase takes the judged round, and its pass is a new origin.
+
+### 12.4 The liveness pass
+
+One candidate pass in the shot sandbox over a private state copy, no before pass, no
+model: navigate `/`, `wait_for` `.app-root[data-auth-state="signed_in"]`, a 2 s settle.
+The stage's frontend proxy counts the page's `/api` responses (requests carrying the
+driver header `X-Choir-Driver`, the desktop reset, are not the page's and are not
+counted). Pass requires: no stage error, at least one counted request (a page that never
+reaches the backend proves nothing), and zero counted responses with status 400 or above.
+A proxy failure answers 502 and counts. A 101 (WebSocket upgrade) and 3xx are not
+failures: the rule is "no status of 400 or more", the honest reading of "non-2xx" for a
+proxy that carries upgrades. The sandbox auth stub makes the owner signed in, so a 401 or
+403 on a healthy boot is a defect (the owner header was lost). Whether a healthy signed-in
+boot is entirely 2xx is NOT established by anything in the repo (no recorded status
+histogram exists); the Result therefore reports the status histogram and the first
+offenders, the gate logs them, and the d@e proof reads them before the rule is trusted.
+A false failure costs only today's judged round. Any failure falls to the judged round,
+once per (operation, job) per process.
+
+The pass runs in a goroutine the gate starts (one per operation and job, single-flight
+under a mutex); the gate returns pending while it runs, as it does for the host build.
+
+### 12.5 Failure list, each with its test
+
+| # | Way it fails | Defence | Test |
+|---|---|---|---|
+| F1 | Stale or foreign prior verdict (another op, bundle or plan; a fail). | Bound to `RebaseOf`, `PriorBundleDigest`, plan digest and verdict pass; the latest event on the prefix. | `TestShotReuseDecisionRefusals` rows prior_other_op, prior_other_bundle, prior_other_plan, prior_fail |
+| F2 | A replayed or foreign `shot_reuse` unlocks another job. | The key names op and job; the reader re-checks op, job, bundle, plan, reason, prior and liveness fields; the reducer binds `DecisionRef` to the live pending decision. | `TestReadShotReuseEventBindings`, `TestShotReuseReducerBindsThePendingDecision` |
+| F3 | Empty digests or ids match each other. | Every compared value is checked non-empty and well formed first. | `TestShotReuseDecisionRefusals` rows empty_*; `TestInputIDsMissingPathIsAnError` |
+| F4 | The wrong base commits are compared (the receipt's pair vs. the booted base vs. the build's). | The receipt's booted base must equal the build's and the runtime's; ids are read at the receipt's stack base and booted base and must equal the judged ids the origin recorded. | `TestShotReuseDecisionRefusals` rows booted_mismatch, judged_mismatch |
+| F5 | Crash between the liveness pass and the event. | Nothing is persisted before the event; the next gate pass re-runs the pass. The event is idempotent on its key. | `TestShotReuseEventIsIdempotent` |
+| F6 | Liveness passes on a login page, a blank page or an error page. | The marker requires `signed_in`; a page that never mounts the app times out as a stage error; at least one counted `/api` request is required. | `TestLivenessVerdict` |
+| F7 | The counter counts an expected non-2xx (a 101 upgrade) or the driver's own reset. | 101 and 3xx do not count; requests with `X-Choir-Driver` are excluded; 4xx, 5xx and proxy 502 count. | `TestAPICounter` |
+| F8 | Concurrent materializer passes start two liveness runs or commit two events. | A single-flight per (op, job); the event key is the idempotency key. | `TestShotReuseSingleFlight` |
+| F9 | A rebase of a rebase reuses a reuse whose origin is gone or changed, or chains forever. | 12.3: origin re-read, judged ids pinned, depth bound. | `TestShotReuseDecisionRefusals` rows origin_*, chain_too_deep; `TestShotReuseChains` |
+| F10 | A restart mid-liveness resumes it. | Nothing is persisted and a boot starts nothing; the accepted operation reaches the gate through the materializer as it does today and runs one fresh pass, which is a new check, not a resumed one. | `TestShotReuseSingleFlight` (a new runtime has no run) |
+| F11 | A frontend-only layer (no host build). | `built == nil` leaves the branch unentered; today's refusal stands. | the branch is skipped; existing `TestCandidateShot...` plus row no_built |
+| F12 | Non-rebase operations or computers with no prior pass change behaviour. | The branch returns "not applicable" for a non-clean-rebase authority and for no prior event; the rest of the gate is untouched. | `TestShotReuseNotApplicable` |
+| F13 | The frontend source changed. | Tree id inequality refuses, and the judged round runs. | `TestShotReuseDecisionRefusals` row frontend_changed; `TestInputIDsRealGit` |
+| F14 | The driver environment differs or is unset. | Browser and fontconfig must be non-empty; equal to the prior reuse's record when there is one; the driver source trees are compared. | `TestShotReuseDecisionRefusals` rows env_empty, env_changed, driver_source_changed |
