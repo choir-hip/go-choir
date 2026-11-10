@@ -1,0 +1,26 @@
+{
+ "version": 1,
+ "id": "house",
+ "sections": [
+  {"id": "world", "label": "World", "threshold": 0.5,
+   "question": "Is this story mainly about events, governments, conflict or society outside the United States, or about relations among several countries?"},
+  {"id": "us", "label": "U.S.", "threshold": 0.5,
+   "question": "Is this story mainly about the United States: its people, states, courts, institutions, communities or domestic affairs?"},
+  {"id": "politics", "label": "Politics", "threshold": 0.5,
+   "question": "Is this story mainly about politics: elections, parties, legislatures, government policy, officials or political conflict, in any country?"},
+  {"id": "business", "label": "Business", "threshold": 0.5,
+   "question": "Is this story mainly about business or the economy: markets, companies, banks, trade, jobs, prices or finance?"},
+  {"id": "tech_ai", "label": "Technology", "threshold": 0.5,
+   "question": "Is this story mainly about technology: computing, the internet, AI, software, devices, security, or the companies and policy around them?"},
+  {"id": "science", "label": "Science", "threshold": 0.5,
+   "question": "Is this story mainly about science: research findings, discoveries, space, physics, biology, or the natural world studied as science?"},
+  {"id": "health", "label": "Health", "threshold": 0.5,
+   "question": "Is this story mainly about health: medicine, disease, public health, health care, drugs or the health of a population or person?"},
+  {"id": "climate", "label": "Climate", "threshold": 0.5,
+   "question": "Is this story mainly about climate or the environment: climate change, energy transition, emissions, extreme weather, nature or conservation?"},
+  {"id": "culture", "label": "Culture", "threshold": 0.5,
+   "question": "Is this story mainly about culture: arts, film, music, books, media, food, religion, ideas, or the way people live and what they make?"},
+  {"id": "sports", "label": "Sports", "threshold": 0.5,
+   "question": "Is this story mainly about sports: a game, a match, a team, an athlete, a league or a competition?"}
+ ]
+}

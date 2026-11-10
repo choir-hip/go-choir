@@ -26,7 +26,7 @@ func TestScorerCarriesForwardRowsOutsideTheWindow(t *testing.T) {
 		"pub-aging":  {Revision: 1, Importance: 5, Section: "world", Criteria: scoringCriteria, ScoredAt: ts(13 * 24 * time.Hour)},
 		"pub-stale":  {Revision: 1, Importance: 9, Section: "world", Criteria: scoringCriteria, ScoredAt: ts(15 * 24 * time.Hour)},
 		"pub-nodate": {Revision: 1, Importance: 9, Section: "world", Criteria: scoringCriteria},
-		"pub-in":     {Revision: 1, Importance: 7, Section: "business", Criteria: scoringCriteria, ScoredAt: ts(time.Hour)},
+		"pub-in":     withScoredAt(fullRow(1, 7), ts(time.Hour)),
 	}}); err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestScorerCarriesForwardRowsOutsideTheWindow(t *testing.T) {
 			t.Fatalf("%s past retention or unbounded was carried", id)
 		}
 	}
-	if r := got["pub-in"]; r.Section != "business" || r.ScoredAt != ts(time.Hour) {
+	if r := got["pub-in"]; r.Section != "world" || r.ScoredAt != ts(time.Hour) {
 		t.Fatalf("pub-in (in the window, kept) changed: %+v", r)
 	}
 	if _, ok := got["pub-new"]; !ok || len(got) != 4 {
@@ -79,3 +79,5 @@ func TestScorerCarriesForwardRowsOutsideTheWindow(t *testing.T) {
 		t.Fatalf("pub-fresh (2h) dropped under a 24h retention")
 	}
 }
+
+func withScoredAt(r scoreRow, at string) scoreRow { r.ScoredAt = at; return r }

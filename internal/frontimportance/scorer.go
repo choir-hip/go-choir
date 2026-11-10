@@ -32,6 +32,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/gateway"
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/jevrecord"
+	"github.com/yusefmosiah/go-choir/internal/sectionlist"
 )
 
 const (
@@ -48,16 +49,30 @@ type scoresFile struct {
 	Version  int                 `json:"version"`
 	ScoredAt string              `json:"scored_at"`
 	Scores   map[string]scoreRow `json:"scores"`
+	// SectionList is the section list the rows' probabilities answer: the
+	// questions' hashes, ids, labels and thresholds. Only this job writes
+	// it; corpusd applies the thresholds at read time.
+	SectionList *sectionlist.Published `json:"section_list,omitempty"`
 }
 
 type scoreRow struct {
 	Revision   int  `json:"revision"`
 	Importance int  `json:"importance"`
 	Promo      bool `json:"promo"`
-	// Section is the front-page section (one of sectionChoices); absent in
-	// rows scored before sections existed, which the next runs rescore.
+	// Section is the story's primary section under the thresholds in force
+	// when the row was written. It is kept for readers that predate
+	// SectionP; corpusd recomputes it (and every other membership) from
+	// SectionP and the list's thresholds.
 	Section  string `json:"section,omitempty"`
 	ScoredAt string `json:"scored_at"`
+	// Judge is the sectionJudgeVersion SectionP was judged under; a row
+	// under another version is asked its section questions again.
+	Judge int `json:"judge,omitempty"`
+	// SectionP is P(yes) for each section question, keyed by the SHA-256
+	// of the normalized question text (sectionlist.Hash). With Revision
+	// and Judge it is the cache: (story version, question text, judge
+	// version).
+	SectionP map[string]float64 `json:"section_p,omitempty"`
 	// Criteria is the scoringCriteria version the row was judged under;
 	// absent in rows judged before versions existed. A row under older
 	// criteria is rescored. corpusd does not read it.
@@ -69,6 +84,19 @@ type scoreRow struct {
 // the per-run call bound). 2: general editorial criteria for seriousness
 // and promotion (docs/archive/problems/front-importance-underrates-major-stories-2026-10-14.md).
 const scoringCriteria = 2
+
+// sectionJudgeVersion versions the framing around the section questions
+// (the instructions wrapper and the yes/no criteria). Bump it to ask every
+// section question again.
+const sectionJudgeVersion = 1
+
+// A section answered yes by at least sectionBroadShare of at least
+// sectionBroadMin stories is logged as too broad (a question that matches
+// everything).
+const (
+	sectionBroadMin   = 20
+	sectionBroadShare = 0.95
+)
 
 // frontStory is the part of a front row the scorer reads.
 type frontStory struct {
@@ -100,6 +128,8 @@ type config struct {
 	// Pages is how many front-list pages to read, following next_cursor;
 	// 0 or 1 reads only the first.
 	Pages int
+	// Sections is the section list; the zero value is the house list.
+	Sections sectionlist.List
 }
 
 // Main runs one scoring pass with the subcommand's flags and returns the
@@ -132,6 +162,11 @@ func Main(args []string) int {
 		return 1
 	}
 	log.Printf("front-importance: %d stories, %d kept, %d scored, %d failed, %d deferred", stats.Stories, stats.Kept, stats.Scored, stats.Failed, stats.Deferred)
+	var shares []string
+	for _, c := range stats.SectionCounts {
+		shares = append(shares, fmt.Sprintf("%s %d", c.ID, c.Count))
+	}
+	log.Printf("front-importance: sections (members, a story may be in several): %s; %d placed by top section below threshold; broad: %v", strings.Join(shares, ", "), stats.Fallback, stats.Broad)
 	log.Printf("front-importance: depth: %d important (>= %d, not promo) with known depth, %d cite >= %d sources, median %.1f sources; thin: %v",
 		stats.Depth.Important, depthImportantAt, stats.Depth.Deep, depthDeepSources, stats.Depth.MedianSources, stats.Depth.Thin)
 	return 0
@@ -146,17 +181,29 @@ type decisionKey struct{}
 
 // recordingDecider records each call of the wrapped decider.
 type recordingDecider struct {
-	inner decider
-	rec   *jevrecord.Recorder
+	inner     decider
+	rec       *jevrecord.Recorder
+	threshold string
 }
 
 func (d recordingDecider) Decide(ctx context.Context, computerID string, request gateway.JudgmentRequest) ([]byte, error) {
 	id, _ := ctx.Value(decisionKey{}).(string)
-	meta := jevrecord.Meta{Site: "front_importance", DecisionID: id, Threshold: fmt.Sprintf("criteria=%v", scoringCriteria)}
+	meta := jevrecord.Meta{Site: "front_importance", DecisionID: id, Threshold: d.threshold}
 	raw, err := jevrecord.Observe(d.rec, meta, request.State, request.Questions, func() (json.RawMessage, error) {
 		return d.inner.Decide(ctx, computerID, request)
 	})
 	return raw, err
+}
+
+// thresholdNote is the threshold in force when an answer is read, for the
+// calibration record: the criteria version and each section's threshold.
+func thresholdNote(list sectionlist.List) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "criteria=%d judge=%d list=%s@%d", scoringCriteria, sectionJudgeVersion, list.ID, list.Version)
+	for _, s := range list.Sections {
+		fmt.Fprintf(&b, " %s>=%.2f", s.ID, s.Threshold)
+	}
+	return b.String()
 }
 
 // errScoreDeferred marks a story the run's time budget ran out before.
@@ -165,30 +212,95 @@ var errScoreDeferred = errors.New("front-importance: time budget spent")
 type runStats struct {
 	Stories, Kept, Scored, Failed, Deferred int
 	Depth                                   depthStats
+	// SectionCounts is, per section in list order, how many stories in the
+	// window are members; Fallback counts the stories placed by their top
+	// section because none reached its threshold; Broad names sections
+	// answered yes for nearly every story.
+	SectionCounts []sectionCount
+	Fallback      int
+	Broad         []string
 }
 
-// run scores the front list's unscored stories and rewrites the scores
-// file. It returns an error, writing nothing, when the front list cannot
-// be read.
+type sectionCount struct {
+	ID    string
+	Count int
+}
+
+// storyAsk is what one story needs asked: the importance and promo
+// questions (new revision or older criteria) and the section questions
+// whose answers are not cached.
+type storyAsk struct {
+	story      frontStory
+	importance bool
+	sections   []sectionlist.Section
+}
+
+// questions is how many questions the story's calls carry.
+func (a storyAsk) questions() int {
+	n := len(a.sections)
+	if a.importance {
+		n += 2
+	}
+	return n
+}
+
+// maxQuestionsPerCall is the host door's per-call question cap
+// (System1MaxQuestions); the house list is sized so a story is one call.
+const maxQuestionsPerCall = 12
+
+// callsFor is how many calls n questions take at the per-call cap.
+func callsFor(n int) int { return (n + maxQuestionsPerCall - 1) / maxQuestionsPerCall }
+
+// plan decides what a story needs given its previous row. The cache key is
+// (story version, question text hash, judge version): a row at another
+// revision or judge version hits for nothing; otherwise each section whose
+// hash is stored is a hit.
+func plan(story frontStory, old scoreRow, had bool, list sectionlist.List) storyAsk {
+	a := storyAsk{story: story}
+	a.importance = !had || old.Revision != story.LatestRevision || old.Criteria != scoringCriteria
+	live := had && old.Revision == story.LatestRevision && old.Judge == sectionJudgeVersion
+	for _, s := range list.Sections {
+		if live {
+			if _, ok := old.SectionP[sectionlist.Hash(s.Question)]; ok {
+				continue
+			}
+		}
+		a.sections = append(a.sections, s)
+	}
+	return a
+}
+
+// run scores the front list's stories and rewrites the scores file. It
+// returns an error, writing nothing, when the front list cannot be read.
 func run(ctx context.Context, cfg config, client *http.Client, jev decider, now func() time.Time) (runStats, error) {
 	var stats runStats
+	list := cfg.Sections
+	if len(list.Sections) == 0 {
+		list = sectionlist.House()
+	}
+	if err := list.Validate(); err != nil {
+		return stats, fmt.Errorf("section list: %w", err)
+	}
+	pub := list.Published()
 	stories, err := fetchFrontPages(ctx, client, cfg.FrontURL, cfg.Pages)
 	if err != nil {
 		return stats, err
 	}
 	stats.Stories = len(stories)
 	previous := readScores(cfg.ScoresPath)
-	next := scoresFile{Version: 1, Scores: map[string]scoreRow{}}
+	next := scoresFile{Version: 1, Scores: map[string]scoreRow{}, SectionList: &pub}
 	deadline := now().Add(cfg.Budget)
 	// Every call is recorded for calibration, failures included, beside the
 	// scores file (internal/jevrecord).
 	recorder := jevrecord.NewRecorder(filepath.Join(filepath.Dir(cfg.ScoresPath), "jev-calls.jsonl"))
 	defer recorder.Close()
-	jev = recordingDecider{inner: jev, rec: recorder}
-	// Plan first: which stories keep their row, which are asked, which wait
-	// for a later run. Then ask the asked ones scorerConcurrency at a time;
-	// every answer lands in its story's slot, so order is the front list's.
-	var asked []frontStory
+	jev = recordingDecider{inner: jev, rec: recorder, threshold: thresholdNote(list)}
+	// Plan first: which stories keep their row, which are asked (and which
+	// of their questions), which wait for a later run. Stories are planned
+	// in front-list order, so the visible page is asked first and a bounded
+	// run defers the archive. Then ask the asked ones scorerConcurrency at
+	// a time; every answer lands in its story's slot.
+	var asked []storyAsk
 	calls := 0
 	for _, story := range stories {
 		id := strings.TrimSpace(story.PublicationID)
@@ -196,12 +308,14 @@ func run(ctx context.Context, cfg config, client *http.Client, jev decider, now 
 			continue
 		}
 		old, had := previous.Scores[id]
-		if had && old.Revision == story.LatestRevision && old.Section != "" && old.Criteria == scoringCriteria {
+		ask := plan(story, old, had, list)
+		if ask.questions() == 0 {
 			next.Scores[id] = old
 			stats.Kept++
 			continue
 		}
-		if calls >= cfg.MaxCalls {
+		need := callsFor(ask.questions())
+		if calls+need > cfg.MaxCalls {
 			// Out of budget: a newer revision keeps its old score until a
 			// later run rescores it.
 			if had {
@@ -210,8 +324,8 @@ func run(ctx context.Context, cfg config, client *http.Client, jev decider, now 
 			stats.Deferred++
 			continue
 		}
-		calls++
-		asked = append(asked, story)
+		calls += need
+		asked = append(asked, ask)
 	}
 	results := fanout.Do(ctx, scorerConcurrency, len(asked), func(ctx context.Context, i int) (scoreRow, error) {
 		if !now().Before(deadline) {
@@ -219,15 +333,22 @@ func run(ctx context.Context, cfg config, client *http.Client, jev decider, now 
 		}
 		callCtx, cancel := context.WithTimeout(ctx, cfg.CallTime)
 		defer cancel()
-		callCtx = context.WithValue(callCtx, decisionKey{}, fmt.Sprintf("%s@%d", strings.TrimSpace(asked[i].PublicationID), asked[i].LatestRevision))
-		return scoreStory(callCtx, jev, asked[i])
-	})
-	for i, story := range asked {
+		story := asked[i].story
 		id := strings.TrimSpace(story.PublicationID)
+		callCtx = context.WithValue(callCtx, decisionKey{}, fmt.Sprintf("%s@%d", id, story.LatestRevision))
+		return askStory(callCtx, jev, asked[i], previous.Scores[id])
+	})
+	for i, ask := range asked {
+		id := strings.TrimSpace(ask.story.PublicationID)
 		old, had := previous.Scores[id]
 		row, err := results[i].Value, results[i].Err
 		if err != nil {
-			if had {
+			if row.Revision == ask.story.LatestRevision && row.Importance >= 1 {
+				// Part of the story's questions were answered before the
+				// failure: keep that progress, it is cached.
+				row.ScoredAt = now().UTC().Format(time.RFC3339)
+				next.Scores[id] = row
+			} else if had {
 				next.Scores[id] = old
 			}
 			if errors.Is(err, errScoreDeferred) {
@@ -244,12 +365,73 @@ func run(ctx context.Context, cfg config, client *http.Client, jev decider, now 
 	}
 	carried := carryForward(previous.Scores, next.Scores, now(), cfg.Retention)
 	log.Printf("front-importance: %d rows carried forward for stories outside the window", carried)
+	// Rows in the window carry only the current list's answers and the
+	// primary section under today's thresholds.
+	keep := map[string]bool{}
+	for _, e := range pub.Entries {
+		keep[e.Hash] = true
+	}
+	for id, row := range next.Scores {
+		if len(row.SectionP) == 0 {
+			continue
+		}
+		pruned := make(map[string]float64, len(row.SectionP))
+		for h, v := range row.SectionP {
+			if keep[h] {
+				pruned[h] = v
+			}
+		}
+		row.SectionP = pruned
+		row.Section = pub.Place(pruned).Primary
+		next.Scores[id] = row
+	}
 	next.ScoredAt = now().UTC().Format(time.RFC3339)
 	if err := writeScores(cfg.ScoresPath, next); err != nil {
 		return stats, err
 	}
 	stats.Depth = summarizeDepth(stories, next.Scores)
+	stats.SectionCounts, stats.Fallback, stats.Broad = sectionCoverage(pub, stories, next.Scores)
+	for _, id := range stats.Broad {
+		log.Printf("front-importance: section %s is answered yes for %.0f%% or more of the stories; its question matches almost everything", id, sectionBroadShare*100)
+	}
 	return stats, nil
+}
+
+// sectionCoverage counts, over the window's stories that have section
+// answers, each section's members and the fallback placements, and names
+// the sections nearly every such story is a member of by its own answer.
+func sectionCoverage(pub sectionlist.Published, stories []frontStory, rows map[string]scoreRow) (counts []sectionCount, fallback int, broad []string) {
+	members, yes := map[string]int{}, map[string]int{}
+	placed := 0
+	for _, st := range stories {
+		row, ok := rows[strings.TrimSpace(st.PublicationID)]
+		if !ok || len(row.SectionP) == 0 {
+			continue
+		}
+		p := pub.Place(row.SectionP)
+		if len(p.Sections) == 0 {
+			continue
+		}
+		placed++
+		if p.Fallback {
+			fallback++
+		}
+		for _, id := range p.Sections {
+			members[id]++
+		}
+		for _, e := range pub.Entries {
+			if v, ok := row.SectionP[e.Hash]; ok && v >= e.Threshold {
+				yes[e.ID]++
+			}
+		}
+	}
+	for _, e := range pub.Entries {
+		counts = append(counts, sectionCount{ID: e.ID, Count: members[e.ID]})
+		if placed >= sectionBroadMin && float64(yes[e.ID]) >= sectionBroadShare*float64(placed) {
+			broad = append(broad, e.ID)
+		}
+	}
+	return counts, fallback, broad
 }
 
 // carryForward copies previous rows for stories absent from the current
@@ -388,24 +570,29 @@ func writeScores(path string, file scoresFile) error {
 
 var importanceChoices = []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}
 
-// sectionChoices are the Autopaper front-page sections (owner, 2026-10-14,
-// LF1): world news, U.S. politics, business and finance, tech and AI.
-var sectionChoices = []string{"world", "us_politics", "business", "tech_ai"}
+// sectionQuestionName names a section question on the wire: the hash is the
+// question's identity, so a renamed section is the same wire question.
+func sectionQuestionName(s sectionlist.Section) string {
+	return "sec_" + sectionlist.Hash(s.Question)[:16]
+}
 
-// scoreStory asks Jev for one story's importance (1..10) and whether it is
-// promotional.
-func scoreStory(ctx context.Context, jev decider, story frontStory) (scoreRow, error) {
-	state, err := json.Marshal(map[string]any{
-		"task": "You are the front-page editor of a general news site. Judge how important this story is for readers.",
-		"story": map[string]string{
-			"title": clip(story.Title, 300),
-			"dek":   clip(story.Dek, 600),
+// sectionQuestion is one section as a yes/no question about state.story.
+func sectionQuestion(s sectionlist.Section) json.RawMessage {
+	q, _ := json.Marshal(map[string]any{
+		"type": "choice",
+		"instructions": "state.story is a news story. " + sectionlist.Normalize(s.Question) +
+			" Answer about the story itself, not about how it is told. A story can belong to several sections; do not hold back because another section also fits.",
+		"criteria": map[string]string{
+			"yes": "The story belongs in this section.",
+			"no":  "The story does not belong in this section.",
 		},
+		"choices": []string{"yes", "no"},
 	})
-	if err != nil {
-		return scoreRow{}, err
-	}
-	importance, _ := json.Marshal(map[string]any{
+	return q
+}
+
+func importanceQuestions() (importance, promo json.RawMessage) {
+	importance, _ = json.Marshal(map[string]any{
 		"type": "choice",
 		"instructions": "How important is state.story as news, from 1 (not news) to 10 (major news)? Judge as the editor of a serious " +
 			"newspaper's front page would. Weigh: consequence for many people; public interest and how widely it will be talked about; " +
@@ -430,7 +617,7 @@ func scoreStory(ctx context.Context, jev decider, story frontStory) (scoreRow, e
 		},
 		"choices": importanceChoices,
 	})
-	promo, _ := json.Marshal(map[string]any{
+	promo, _ = json.Marshal(map[string]any{
 		"type": "choice",
 		"instructions": "Is state.story promotional rather than news? Promotional means it is written from a company's own announcement to " +
 			"promote it: marketing copy, a product or feature launch, a customer case study, or an advocacy post; or the title is an internal " +
@@ -442,63 +629,123 @@ func scoreStory(ctx context.Context, jev decider, story frontStory) (scoreRow, e
 		},
 		"choices": []string{"yes", "no"},
 	})
-	section, _ := json.Marshal(map[string]any{
-		"type": "choice",
-		"instructions": "Which one section of the paper does state.story belong in? Pick exactly one. A story about a technology or AI " +
-			"company, product, research or policy is tech_ai, even when it is business news about that company. Markets, companies " +
-			"outside technology, trade and the economy are business. The U.S. federal or state government, U.S. elections and parties, " +
-			"and U.S. courts ruling on political questions are us_politics. Everything else, including politics, conflict and " +
-			"society outside the United States, is world.",
-		"criteria": map[string]string{
-			"world":       "World news: politics, conflict, disasters, society and culture outside the U.S., and anything not in another section.",
-			"us_politics": "U.S. politics: the U.S. government, Congress, the White House, U.S. elections and parties, U.S. courts on political questions.",
-			"business":    "Business and finance: markets, companies outside tech, banks, trade, jobs and the economy.",
-			"tech_ai":     "Tech and AI: technology and AI companies, products, research, security, and tech or AI policy, including their business news.",
+	return importance, promo
+}
+
+// answer is one question's answer on the wire.
+type answer struct {
+	Choice        string             `json:"choice"`
+	Probabilities map[string]float64 `json:"probabilities"`
+}
+
+// askStory asks Jev the questions one story needs, in calls of at most
+// maxQuestionsPerCall: the first call carries importance and promo when
+// they are needed, then as many section questions as fit. It merges the
+// answers into the story's previous row (when that row is at the same
+// revision) so cached answers stay. On a failed call it returns the row
+// built so far with the error; the caller keeps that row only when the
+// importance of the new revision is already in it.
+func askStory(ctx context.Context, jev decider, ask storyAsk, old scoreRow) (scoreRow, error) {
+	story := ask.story
+	state, err := json.Marshal(map[string]any{
+		"task": "You are the front-page editor of a general news site. Judge how important this story is for readers, and which sections of the paper it belongs in.",
+		"story": map[string]string{
+			"title": clip(story.Title, 300),
+			"dek":   clip(story.Dek, 600),
 		},
-		"choices": sectionChoices,
-	})
-	raw, err := jev.Decide(ctx, scorerComputerID, gateway.JudgmentRequest{
-		State:     state,
-		Questions: map[string]json.RawMessage{"importance": importance, "promo": promo, "section": section},
 	})
 	if err != nil {
 		return scoreRow{}, err
 	}
-	var decision struct {
-		Answers map[string]struct {
-			Choice string `json:"choice"`
-		} `json:"answers"`
+	row := scoreRow{Revision: story.LatestRevision, Criteria: scoringCriteria, Judge: sectionJudgeVersion, SectionP: map[string]float64{}}
+	if old.Revision == story.LatestRevision {
+		row = old
+		row.Judge = sectionJudgeVersion
+		row.SectionP = map[string]float64{}
+		if old.Judge == sectionJudgeVersion {
+			for h, v := range old.SectionP {
+				row.SectionP[h] = v
+			}
+		}
 	}
-	if err := json.Unmarshal(raw, &decision); err != nil {
-		return scoreRow{}, fmt.Errorf("decode Jev answer: %w", err)
-	}
-	n, err := strconv.Atoi(strings.TrimSpace(decision.Answers["importance"].Choice))
-	if err != nil || n < 1 || n > 10 {
-		return scoreRow{}, fmt.Errorf("Jev importance %q is not 1..10", decision.Answers["importance"].Choice)
-	}
-	row := scoreRow{Revision: story.LatestRevision, Importance: n, Criteria: scoringCriteria}
-	switch strings.TrimSpace(decision.Answers["promo"].Choice) {
-	case "yes":
-		row.Promo = true
-	case "no":
-	default:
-		row.Promo = n <= 2
-	}
-	// A section outside the four is left unset (the story shows only on the
-	// front page) rather than failing the importance score.
-	if choice := strings.TrimSpace(decision.Answers["section"].Choice); validSection(choice) {
-		row.Section = choice
+	pending := append([]sectionlist.Section(nil), ask.sections...)
+	needImportance := ask.importance
+	for needImportance || len(pending) > 0 {
+		questions := map[string]json.RawMessage{}
+		room := maxQuestionsPerCall
+		if needImportance {
+			questions["importance"], questions["promo"] = importanceQuestions()
+			room -= 2
+		}
+		var chunk []sectionlist.Section
+		for len(pending) > 0 && room > 0 {
+			chunk = append(chunk, pending[0])
+			questions[sectionQuestionName(pending[0])] = sectionQuestion(pending[0])
+			pending, room = pending[1:], room-1
+		}
+		raw, err := jev.Decide(ctx, scorerComputerID, gateway.JudgmentRequest{State: state, Questions: questions})
+		if err != nil {
+			return failedRow(row, needImportance), err
+		}
+		var decision struct {
+			Answers map[string]answer `json:"answers"`
+		}
+		if err := json.Unmarshal(raw, &decision); err != nil {
+			return failedRow(row, needImportance), fmt.Errorf("decode Jev answer: %w", err)
+		}
+		if needImportance {
+			n, err := strconv.Atoi(strings.TrimSpace(decision.Answers["importance"].Choice))
+			if err != nil || n < 1 || n > 10 {
+				return failedRow(row, true), fmt.Errorf("Jev importance %q is not 1..10", decision.Answers["importance"].Choice)
+			}
+			row.Importance, row.Criteria = n, scoringCriteria
+			switch strings.TrimSpace(decision.Answers["promo"].Choice) {
+			case "yes":
+				row.Promo = true
+			case "no":
+				row.Promo = false
+			default:
+				row.Promo = n <= 2
+			}
+			needImportance = false
+		}
+		for _, s := range chunk {
+			// A section question that comes back unusable is left unasked;
+			// it is asked again next run and fails nothing else.
+			if p, ok := probabilityYes(decision.Answers[sectionQuestionName(s)]); ok {
+				row.SectionP[sectionlist.Hash(s.Question)] = p
+			}
+		}
 	}
 	return row, nil
 }
 
-func validSection(s string) bool {
-	for _, c := range sectionChoices {
-		if s == c {
-			return true
-		}
+// failedRow is the row after a failed call: a revision's importance that was
+// never answered leaves it unusable (zero revision), so the caller keeps the
+// previous row instead.
+func failedRow(row scoreRow, importancePending bool) scoreRow {
+	if importancePending && row.Importance == 0 {
+		return scoreRow{}
 	}
-	return false
+	return row
+}
+
+// probabilityYes reads a yes/no answer as P(yes), refusing anything that is
+// not a probability. Without a distribution the choice stands as 1 or 0.
+func probabilityYes(a answer) (float64, bool) {
+	if p, ok := a.Probabilities["yes"]; ok {
+		if p != p || p < 0 || p > 1 {
+			return 0, false
+		}
+		return p, true
+	}
+	switch strings.TrimSpace(a.Choice) {
+	case "yes":
+		return 1, true
+	case "no":
+		return 0, true
+	}
+	return 0, false
 }
 
 func clip(s string, n int) string {

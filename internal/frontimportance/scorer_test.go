@@ -13,10 +13,10 @@ package frontimportance
 //  5. The call bound is not honoured.
 //  6. The request is not the gateway's Jev shape (choice questions with
 //     the importance choices "1".."10").
-//  7. Sections (LF1): the section question's choices are not exactly the
-//     four sections; an answer outside them is written; rows scored before
-//     sections existed are never rescored (the section switcher stays
-//     hidden forever), or are rescored past the per-run call bound.
+//  7. Sections (lane B, docs/design/sections-as-questions-2026-11-10.md):
+//     rows without the current list's answers are never asked, or are
+//     asked past the per-run call bound; the call carries more than the
+//     host cap of questions. More in scorer_sections_test.go.
 //  8. Criteria versions (LF, 2026-10-14): a row judged under older
 //     criteria is never rescored (the old, miscalibrated score stays
 //     forever), a row at the current criteria is rescored every run, or a
@@ -36,14 +36,22 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/gateway"
+	"github.com/yusefmosiah/go-choir/internal/sectionlist"
 )
 
 type fakeJev struct {
 	mu      sync.Mutex
 	calls   []string
+	asked   [][]string        // per call, the section question texts asked
 	answers map[string]string // title -> importance choice ("" = fail)
 	promo   map[string]string
-	section map[string]string // title -> section choice (default "world")
+	// sectionsDown makes a call with only section questions fail.
+	sectionsDown bool
+	// yes maps a title to the section ids it answers yes (P 0.9) to; a
+	// title not in the map answers yes to world only. Others answer P 0.1.
+	yes map[string][]string
+	// prob overrides P(yes) for (title, section id).
+	prob map[string]map[string]float64
 }
 
 func (f *fakeJev) Decide(_ context.Context, _ string, req gateway.JudgmentRequest) ([]byte, error) {
@@ -53,45 +61,99 @@ func (f *fakeJev) Decide(_ context.Context, _ string, req gateway.JudgmentReques
 		} `json:"story"`
 	}
 	_ = json.Unmarshal(req.State, &state)
-	var q struct {
-		Type    string   `json:"type"`
-		Choices []string `json:"choices"`
+	if len(req.Questions) > maxQuestionsPerCall {
+		return nil, errors.New("too many questions in one call")
 	}
-	_ = json.Unmarshal(req.Questions["importance"], &q)
-	if q.Type != "choice" || len(q.Choices) != 10 || q.Choices[0] != "1" || q.Choices[9] != "10" {
-		return nil, errors.New("bad importance question shape")
+	_, hasImportance := req.Questions["importance"]
+	if hasImportance {
+		var q struct {
+			Type    string   `json:"type"`
+			Choices []string `json:"choices"`
+		}
+		_ = json.Unmarshal(req.Questions["importance"], &q)
+		if q.Type != "choice" || len(q.Choices) != 10 || q.Choices[0] != "1" || q.Choices[9] != "10" {
+			return nil, errors.New("bad importance question shape")
+		}
+		if _, ok := req.Questions["promo"]; !ok {
+			return nil, errors.New("missing promo question")
+		}
 	}
-	if _, ok := req.Questions["promo"]; !ok {
-		return nil, errors.New("missing promo question")
-	}
-	var sq struct {
-		Type    string   `json:"type"`
-		Choices []string `json:"choices"`
-	}
-	_ = json.Unmarshal(req.Questions["section"], &sq)
-	if sq.Type != "choice" || strings.Join(sq.Choices, ",") != "world,us_politics,business,tech_ai" {
-		return nil, errors.New("bad section question shape")
+	house := sectionlist.House()
+	answers := map[string]any{}
+	var texts []string
+	for name, raw := range req.Questions {
+		if !strings.HasPrefix(name, "sec_") {
+			continue
+		}
+		var sq struct {
+			Type         string   `json:"type"`
+			Choices      []string `json:"choices"`
+			Instructions string   `json:"instructions"`
+		}
+		_ = json.Unmarshal(raw, &sq)
+		if sq.Type != "choice" || strings.Join(sq.Choices, ",") != "yes,no" {
+			return nil, errors.New("bad section question shape")
+		}
+		id := ""
+		for _, sec := range house.Sections {
+			if strings.Contains(sq.Instructions, sectionlist.Normalize(sec.Question)) {
+				id = sec.ID
+			}
+		}
+		if id == "" {
+			id = "custom:" + sq.Instructions
+		}
+		texts = append(texts, id)
+		p := 0.1
+		yes, ok := f.yes[state.Story.Title]
+		if !ok {
+			yes = []string{"world"}
+		}
+		for _, y := range yes {
+			if y == id {
+				p = 0.9
+			}
+		}
+		if v, ok := f.prob[state.Story.Title][id]; ok {
+			p = v
+		}
+		choice := "no"
+		if p >= 0.5 {
+			choice = "yes"
+		}
+		answers[name] = map[string]any{"choice": choice, "probabilities": map[string]float64{"yes": p, "no": 1 - p}}
 	}
 	f.mu.Lock()
 	f.calls = append(f.calls, state.Story.Title)
+	f.asked = append(f.asked, texts)
 	f.mu.Unlock()
-	choice := f.answers[state.Story.Title]
-	if choice == "" {
+	if hasImportance {
+		choice := f.answers[state.Story.Title]
+		if choice == "" {
+			return nil, errors.New("jev unavailable")
+		}
+		answers["importance"] = map[string]any{"choice": choice}
+		answers["promo"] = map[string]any{"choice": f.promo[state.Story.Title]}
+	} else if f.sectionsDown {
 		return nil, errors.New("jev unavailable")
 	}
-	section, ok := f.section[state.Story.Title]
-	if !ok {
-		section = "world"
-	}
-	body, _ := json.Marshal(map[string]any{
-		"model": "typesafe/jev-1.13",
-		"answers": map[string]any{
-			"importance": map[string]any{"choice": choice},
-			"promo":      map[string]any{"choice": f.promo[state.Story.Title]},
-			"section":    map[string]any{"choice": section},
-		},
-	})
+	body, _ := json.Marshal(map[string]any{"model": "typesafe/jev-1.13", "answers": answers})
 	return body, nil
+}
+
+// fullRow is a row current for the house list: every question answered, so
+// a run asks it nothing (world yes).
+func fullRow(rev, importance int) scoreRow {
+	r := scoreRow{Revision: rev, Importance: importance, Criteria: scoringCriteria, Judge: sectionJudgeVersion, SectionP: map[string]float64{}}
+	for _, s := range sectionlist.House().Sections {
+		p := 0.1
+		if s.ID == "world" {
+			p = 0.9
+		}
+		r.SectionP[sectionlist.Hash(s.Question)] = p
+	}
+	r.Section = "world"
+	return r
 }
 
 func frontServer(t *testing.T, status int, stories []frontStory) *httptest.Server {
@@ -116,10 +178,10 @@ func TestScorerScoresKeepsAndPrunes(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "scores.json")
 	writePrev := scoresFile{Version: 1, Scores: map[string]scoreRow{
-		"pub-a":    {Revision: 2, Importance: 7, Section: "world", Criteria: scoringCriteria}, // current: kept, no call
-		"pub-b":    {Revision: 1, Importance: 6},                                              // revised: rescored
-		"pub-c":    {Revision: 1, Importance: 5},                                              // revised, Jev fails: old kept
-		"pub-gone": {Revision: 1, Importance: 9, ScoredAt: "2000-01-01T00:00:00Z"},            // off the window, past retention: pruned
+		"pub-a":    fullRow(2, 7),                                                  // current: kept, no call
+		"pub-b":    {Revision: 1, Importance: 6},                                   // revised: rescored
+		"pub-c":    {Revision: 1, Importance: 5},                                   // revised, Jev fails: old kept
+		"pub-gone": {Revision: 1, Importance: 9, ScoredAt: "2000-01-01T00:00:00Z"}, // off the window, past retention: pruned
 	}}
 	if err := writeScores(path, writePrev); err != nil {
 		t.Fatal(err)
@@ -240,7 +302,7 @@ func TestScorerFillsSectionsWithinTheCallBound(t *testing.T) {
 	if err := writeScores(path, prev); err != nil {
 		t.Fatal(err)
 	}
-	jev := &fakeJev{answers: answers, section: map[string]string{"a": "tech_ai", "b": "sports"}}
+	jev := &fakeJev{answers: answers, yes: map[string][]string{"a": {"tech_ai"}, "b": {"sports", "science"}}}
 	srv := frontServer(t, http.StatusOK, stories)
 	cfg := testConfig(srv.URL, path)
 	cfg.MaxCalls = 3
@@ -252,11 +314,12 @@ func TestScorerFillsSectionsWithinTheCallBound(t *testing.T) {
 		t.Fatalf("first run: calls = %d, stats = %+v", len(jev.calls), stats)
 	}
 	got := readScores(path).Scores
-	if got["pub-a"].Section != "tech_ai" || got["pub-a"].Importance != 6 {
-		t.Fatalf("pub-a = %+v, want rescored with section tech_ai", got["pub-a"])
+	if got["pub-a"].Section != "tech_ai" || got["pub-a"].Importance != 6 || len(got["pub-a"].SectionP) != 10 {
+		t.Fatalf("pub-a = %+v, want rescored with section tech_ai and ten answers", got["pub-a"])
 	}
-	if got["pub-b"].Section != "" {
-		t.Fatalf("pub-b section = %q, want unset for an answer outside the four", got["pub-b"].Section)
+	pub := sectionlist.House().Published()
+	if pl := pub.Place(got["pub-b"].SectionP); strings.Join(pl.Sections, ",") != "science,sports" {
+		t.Fatalf("pub-b placement = %+v, want both science and sports (a story can be in several)", pl)
 	}
 	if got["pub-d"].Importance != 3 || got["pub-d"].Section != "" {
 		t.Fatalf("deferred pub-d = %+v, want its old score kept", got["pub-d"])
@@ -278,11 +341,11 @@ func TestScorerRescoresRowsUnderOlderCriteria(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "scores.json")
 	prev := scoresFile{Version: 1, Scores: map[string]scoreRow{
 		// Current revision and section, judged before criteria versions.
-		"pub-a": {Revision: 1, Importance: 5, Section: "tech_ai"},
+		"pub-a": withCriteria(fullRow(1, 5), 0),
 		// The same, but Jev fails: the old score is kept.
-		"pub-b": {Revision: 1, Importance: 6, Section: "world"},
+		"pub-b": withCriteria(fullRow(1, 6), 0),
 		// Already under the current criteria: kept without a call.
-		"pub-c": {Revision: 1, Importance: 8, Section: "world", Criteria: scoringCriteria},
+		"pub-c": fullRow(1, 8),
 	}}
 	if err := writeScores(path, prev); err != nil {
 		t.Fatal(err)
@@ -292,7 +355,7 @@ func TestScorerRescoresRowsUnderOlderCriteria(t *testing.T) {
 		{PublicationID: "pub-b", Title: "B", LatestRevision: 1},
 		{PublicationID: "pub-c", Title: "C", LatestRevision: 1},
 	}
-	jev := &fakeJev{answers: map[string]string{"A": "7", "C": "2"}, section: map[string]string{"A": "tech_ai"}}
+	jev := &fakeJev{answers: map[string]string{"A": "7", "C": "2"}, yes: map[string][]string{"A": {"tech_ai"}}}
 	srv := frontServer(t, http.StatusOK, stories)
 	cfg := testConfig(srv.URL, path)
 	stats, err := run(context.Background(), cfg, srv.Client(), jev, time.Now)
@@ -300,7 +363,7 @@ func TestScorerRescoresRowsUnderOlderCriteria(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := readScores(path).Scores
-	if a := got["pub-a"]; a.Importance != 7 || a.Criteria != scoringCriteria || a.Section != "tech_ai" {
+	if a := got["pub-a"]; a.Importance != 7 || a.Criteria != scoringCriteria {
 		t.Fatalf("pub-a = %+v, want rescored to 7 under the current criteria", a)
 	}
 	if b := got["pub-b"]; b.Importance != 6 || b.Criteria != 0 {
@@ -330,3 +393,5 @@ func TestScorerRescoresRowsUnderOlderCriteria(t *testing.T) {
 		t.Fatalf("pub-b after retry = %+v", b)
 	}
 }
+
+func withCriteria(r scoreRow, c int) scoreRow { r.Criteria = c; return r }
