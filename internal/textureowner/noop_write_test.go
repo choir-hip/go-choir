@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -23,7 +24,7 @@ func TestWriteThatChangesNothingIsRefusedAndCommitsNothing(t *testing.T) {
 	const first = "@replace b2\nThe court ruled that the merger may proceed {{cite https://example.org/court \"the court ruled that the merger may proceed\"}}."
 	write := func(edits, commandID string) (string, error) {
 		head := headOf(t, s, rec)
-		body := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: head.RevisionID, Wait: "the next filing", Write: &yaegikernel.TextureWrite{Edits: edits, Why: "state the ruling"}})
+		body := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: head.RevisionID, Done: "states the ruling", Write: &yaegikernel.TextureWrite{Edits: edits, Why: "state the ruling"}})
 		return h.CommitCellTextureAuthor(ctx, &rec, body, commandID)
 	}
 	if _, err := write(first, "noop-1"); err != nil {
@@ -45,19 +46,29 @@ func TestWriteThatChangesNothingIsRefusedAndCommitsNothing(t *testing.T) {
 		}
 	}
 
-	// N2: the same words citing another quote of the source is a change.
-	if _, err := write("@replace b2\nThe court ruled that the merger may proceed {{cite https://example.org/court \"The appeal was filed on Monday by the regulator\"}}.", "noop-recite"); err != nil {
-		t.Fatalf("N2: a Write that changes only its citation was refused: %v", err)
+	// N2 and N3 are decided by the comparison itself, not by a second commit:
+	// after the first Write's Done the request is closed, so a second real
+	// commit would meet the concurrency check (X3, as in the C1 tests).
+	baseDoc, baseEntities, err := texturewrite.Base(head)
+	if err != nil {
+		t.Fatal(err)
 	}
-	head2 := headOf(t, s, rec)
-	if head2.RevisionID == head.RevisionID {
-		t.Fatal("N2: the re-cited Write committed no revision")
+	same := func(edits string) bool {
+		t.Helper()
+		res, err := texturewrite.Apply(ctx, texturewrite.Input{OwnerID: rec.OwnerID, DocID: head.DocID, Seed: head.RevisionID,
+			Base: baseDoc, Entities: baseEntities, Script: edits, Resolver: h.textureCaptures(), Media: h.textureMedia()})
+		if err != nil {
+			t.Fatalf("apply %q: %v", edits, err)
+		}
+		return writeChangesNothing(baseDoc, baseEntities, res.Doc, res.Entities, head.DocID)
 	}
-	// N3: a changed text commits.
-	if _, err := write("@replace b2\nThe court ruled that the merger may proceed on Monday {{cite https://example.org/court \"The appeal was filed on Monday by the regulator\"}}.", "noop-text"); err != nil {
-		t.Fatalf("N3: a Write that changes its text was refused: %v", err)
+	if !same(first) {
+		t.Fatal("the same Write is not seen as no change")
 	}
-	if headOf(t, s, rec).RevisionID == head2.RevisionID {
-		t.Fatal("N3: the changed Write committed no revision")
+	if same("@replace b2\nThe court ruled that the merger may proceed {{cite https://example.org/court \"The appeal was filed on Monday by the regulator\"}}.") {
+		t.Fatal("N2: a Write that changes only its citation is seen as no change")
+	}
+	if same("@replace b2\nThe court ruled that the merger may proceed on Monday {{cite https://example.org/court \"the court ruled that the merger may proceed\"}}.") {
+		t.Fatal("N3: a Write that changes its text is seen as no change")
 	}
 }
