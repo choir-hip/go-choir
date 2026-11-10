@@ -115,7 +115,7 @@ func (h *Handler) unattendedTextureRequest(ctx context.Context, rec *types.RunRe
 
 // textureRequestServer names what works on an open Texture request, or "":
 // a live engineering assignment (which carries a running capsule job), an
-// open round the Texture desk cast (a Cast, Ask or Escalate to research or
+// open round the Texture desk cast (a Cast to research or
 // management, its child runs included), or a live self-development operation.
 func textureRequestServer(snapshot types.LifecycleSnapshot, openRounds int, operationID string) string {
 	switch {
@@ -170,8 +170,8 @@ func (h *Handler) closeUnservedWait(ctx context.Context, rec *types.RunRecord, d
 		return nil
 	}
 	waited := strings.Join(strings.Fields(turn.Wait), " ")
-	if len(waited) > 240 {
-		waited = waited[:240] + "..."
+	if r := []rune(waited); len(r) > 240 {
+		waited = string(r[:240]) + "..."
 	}
 	cause := fmt.Sprintf("Texture's turn (run %s) waits (%q), but no round, engineering assignment, self-development operation or unread record is working on it, and nothing wakes it; revise again to continue", strings.TrimSpace(rec.RunID), waited)
 	return h.closeUnattendedWith(ctx, rec, docID, "", cause, func(ctx context.Context, doc types.Document) (bool, error) {
@@ -183,7 +183,7 @@ func (h *Handler) closeUnservedWait(ctx context.Context, rec *types.RunRecord, d
 // after a committed Wait turn, beyond what unattendedTextureRequest reads: a
 // later head (the owner revised, which opened work and woke the desk), another
 // live activation of the same desk, a pending lifecycle update packet not yet
-// bound to a run, or an unread waking record in the desk's own inbox (the
+// bound to a run, an Ask or Escalate still being worked, or an unread waking record in the desk's own inbox (the
 // run-end records re-check wakes it).
 func (h *Handler) waitServedByWake(ctx context.Context, rec *types.RunRecord, doc types.Document, turn yaegikernel.TextureTurn) (bool, error) {
 	head, err := h.Store.GetLifecycleRevision(ctx, rec.OwnerID, doc.ComputerID, doc.CurrentRevisionID)
@@ -206,6 +206,15 @@ func (h *Handler) waitServedByWake(ctx context.Context, rec *types.RunRecord, do
 	}
 	agentID := strings.TrimSpace(rec.AgentID)
 	if pendingTextureUpdate(snapshot, agentID) {
+		return true, nil
+	}
+	// An Ask or Escalate opens no round, but its resolver was woken holding
+	// the question and its Reply will wake this desk.
+	outstanding, err := h.Store.OutstandingDispatches(ctx, rec.OwnerID, doc.ComputerID, agentID)
+	if err != nil {
+		return false, fmt.Errorf("read the Texture desk's outstanding asks: %w", err)
+	}
+	if len(outstanding) > 0 {
 		return true, nil
 	}
 	cursor, err := h.Store.ReaderCursor(ctx, rec.OwnerID, doc.ComputerID, agentID, agentID)

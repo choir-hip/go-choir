@@ -274,3 +274,165 @@ func TestCrashBootLeavesServedAndForeignWorkAlone(t *testing.T) {
 		t.Fatalf("management notices = %d, want none", n)
 	}
 }
+
+// Review of x3-unserved-work, finding 1: an Ask is a staked request (a
+// precommit with a Resolver) and an Escalate a directive; neither opens a
+// round, yet the desk they wake holds the question and the Reply wakes this
+// desk. foldTextureDispatch turns a cell that only Asks into a Wait, so a
+// Wait served by an Ask must stay open. Ways it can fail, written first:
+//   - an Ask or Escalate in the same turn as the Wait is closed over;
+//   - an answered Ask, a retracted one or a read Escalate keeps the request
+//     open forever (the control).
+
+func researchAsk(rec types.RunRecord, id string) types.CommitmentRecord {
+	texture, research := rec.AgentID, agentprofile.Research+":"+rec.ChannelID
+	return types.CommitmentRecord{
+		SchemaID: types.CommitmentRecordSchemaV1, RecordID: id, Kind: types.CommitmentKindPrecommit,
+		Precommit: &types.CommitmentPrecommit{Question: "who funded the merger?", Resolver: research},
+		Inbox:     research, SenderInbox: texture, Addressee: research, ComputerID: rec.ComputerID,
+		EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: texture},
+	}
+}
+
+func managementEscalate(rec types.RunRecord, id string) types.CommitmentRecord {
+	texture, management := rec.AgentID, agentprofile.Management+":"+rec.OwnerID
+	return types.CommitmentRecord{
+		SchemaID: types.CommitmentRecordSchemaV1, RecordID: id, Kind: types.CommitmentKindDirective,
+		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveEscalate, Body: "the request needs a decision"},
+		Inbox:     management, SenderInbox: texture, Addressee: management, ComputerID: rec.ComputerID,
+		EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: texture},
+	}
+}
+
+func commitRecords(t *testing.T, s *store.Store, rec types.RunRecord, command string, cursor *types.InboxCursorAdvance, records ...types.CommitmentRecord) {
+	t.Helper()
+	req := types.CommitInboxRecordsRequest{OwnerID: rec.OwnerID, ComputerID: rec.ComputerID, CommandID: command, Records: records, Cursor: cursor}
+	req.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(req)
+	if _, err := s.CommitInboxRecords(context.Background(), req); err != nil {
+		t.Fatalf("%s: %v", command, err)
+	}
+}
+
+func TestWaitStaysOpenWhileAnAskOrEscalateIsBeingWorked(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		make func(types.RunRecord) types.CommitmentRecord
+	}{
+		{"an Ask", func(rec types.RunRecord) types.CommitmentRecord { return researchAsk(rec, "texture-cell:ask:fold") }},
+		{"an Escalate", func(rec types.RunRecord) types.CommitmentRecord {
+			return managementEscalate(rec, "texture-cell:escalate:fold")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, s, rec := cellAuthorSetup(t, "unserved-ask-"+strings.ReplaceAll(strings.ToLower(tc.name), " ", "-"))
+			ctx := context.Background()
+			base := headOf(t, s, rec)
+			// The folded shape: the dispatch and the implicit Wait in one turn.
+			turn := yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "dispatched: who funded the merger?", InboxRecords: []types.CommitmentRecord{tc.make(rec)}}
+			if _, err := h.CommitCellTextureAuthor(ctx, &rec, turnBody(t, turn), "ask-fold"); err != nil {
+				t.Fatalf("dispatch with a Wait: %v", err)
+			}
+			if rounds, _ := s.OpenRoundsCastBy(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID); len(rounds) != 0 {
+				t.Fatalf("open rounds = %d; the premise is that %s opens none", len(rounds), tc.name)
+			}
+			if w := textureWork(t, s, rec); w.Status != types.WorkItemOpen {
+				t.Fatalf("work = %s %q, want open while %s is being worked", w.Status, w.Reason, tc.name)
+			}
+			if n := len(unattendedNotices(t, s, rec)); n != 0 {
+				t.Fatalf("management notices = %d, want none", n)
+			}
+		})
+	}
+}
+
+func TestWaitClosesOnceTheAskIsAnsweredRetractedOrTheEscalateRead(t *testing.T) {
+	t.Run("a Reply that was read", func(t *testing.T) {
+		h, s, rec := cellAuthorSetup(t, "unserved-ask-reply")
+		ctx := context.Background()
+		texture, research := rec.AgentID, agentprofile.Research+":"+rec.ChannelID
+		base := headOf(t, s, rec)
+		ask := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "asked research", InboxRecords: []types.CommitmentRecord{researchAsk(rec, "texture-cell:ask:reply")}})
+		if _, err := h.CommitCellTextureAuthor(ctx, &rec, ask, "reply-1"); err != nil {
+			t.Fatal(err)
+		}
+		commitRecords(t, s, rec, "seed-reply", nil, types.CommitmentRecord{
+			SchemaID: types.CommitmentRecordSchemaV1, RecordID: "research-cell:reply:1", Kind: types.CommitmentKindReport,
+			Report:     &types.CommitmentReport{Claims: []types.ReportClaim{{Text: "the fund"}}},
+			RelatedIDs: []string{"texture-cell:ask:reply"}, Inbox: texture, SenderInbox: research, Addressee: texture,
+			ComputerID: rec.ComputerID, EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: research},
+		})
+		if out, err := s.OutstandingDispatches(ctx, rec.OwnerID, rec.ComputerID, texture); err != nil || len(out) != 0 {
+			t.Fatalf("outstanding after the Reply = %d, %v; want none", len(out), err)
+		}
+		// The turn that reads the Reply and only waits has nothing behind it.
+		read := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "the reply was not enough",
+			InboxCursor: &types.InboxCursorAdvance{ReaderAgentID: texture, Inbox: texture, ExpectedSeq: 0, Seq: 1}})
+		if _, err := h.CommitCellTextureAuthor(ctx, &rec, read, "reply-2"); err != nil {
+			t.Fatal(err)
+		}
+		if w := textureWork(t, s, rec); w.Status != types.WorkItemRefused || !strings.HasPrefix(w.Reason, UnattendedRequestReason) {
+			t.Fatalf("work = %s %q, want refused once the Ask is answered and read", w.Status, w.Reason)
+		}
+	})
+	t.Run("a retracted Ask", func(t *testing.T) {
+		h, s, rec := cellAuthorSetup(t, "unserved-ask-retract")
+		ctx := context.Background()
+		texture := rec.AgentID
+		base := headOf(t, s, rec)
+		ask := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "asked research", InboxRecords: []types.CommitmentRecord{researchAsk(rec, "texture-cell:ask:retract")}})
+		if _, err := h.CommitCellTextureAuthor(ctx, &rec, ask, "retract-1"); err != nil {
+			t.Fatal(err)
+		}
+		research := agentprofile.Research + ":" + rec.ChannelID
+		commitRecords(t, s, rec, "seed-retract", nil, types.CommitmentRecord{
+			SchemaID: types.CommitmentRecordSchemaV1, RecordID: "texture-cell:cancel:1", Kind: types.CommitmentKindDirective,
+			Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveRetract, TargetRef: "texture-cell:ask:retract"},
+			Inbox:     research, SenderInbox: texture, Addressee: research, ComputerID: rec.ComputerID,
+			EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: texture},
+		})
+		if out, err := s.OutstandingDispatches(ctx, rec.OwnerID, rec.ComputerID, texture); err != nil || len(out) != 0 {
+			t.Fatalf("outstanding after the retraction = %d, %v; want none", len(out), err)
+		}
+	})
+	t.Run("an Escalate its recipient read", func(t *testing.T) {
+		h, s, rec := cellAuthorSetup(t, "unserved-escalate-read")
+		ctx := context.Background()
+		texture, management := rec.AgentID, agentprofile.Management+":"+rec.OwnerID
+		base := headOf(t, s, rec)
+		esc := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "escalated", InboxRecords: []types.CommitmentRecord{managementEscalate(rec, "texture-cell:escalate:read")}})
+		if _, err := h.CommitCellTextureAuthor(ctx, &rec, esc, "escalate-1"); err != nil {
+			t.Fatal(err)
+		}
+		if out, err := s.OutstandingDispatches(ctx, rec.OwnerID, rec.ComputerID, texture); err != nil || len(out) != 1 {
+			t.Fatalf("outstanding before management reads = %d, %v; want the Escalate", len(out), err)
+		}
+		// Management reads its inbox (an empty commit that only advances the cursor).
+		commitRecords(t, s, rec, "management-reads", &types.InboxCursorAdvance{ReaderAgentID: management, Inbox: management, ExpectedSeq: 0, Seq: 1})
+		if out, err := s.OutstandingDispatches(ctx, rec.OwnerID, rec.ComputerID, texture); err != nil || len(out) != 0 {
+			t.Fatalf("outstanding after management read it = %d, %v; want none", len(out), err)
+		}
+	})
+}
+
+// At a crash boot the asked desk's run is closed and its wake interrupted, so
+// an unanswered Ask serves nothing: the boot leg does not count it, and the
+// request closes as interrupted by a restart.
+func TestCrashBootClosesTextureWorkWhoseAskWasNeverAnswered(t *testing.T) {
+	h, s, rec := cellAuthorSetup(t, "unserved-boot-ask")
+	ctx := context.Background()
+	base := headOf(t, s, rec)
+	ask := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "asked research", InboxRecords: []types.CommitmentRecord{researchAsk(rec, "texture-cell:ask:boot")}})
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, ask, "boot-ask-1"); err != nil {
+		t.Fatal(err)
+	}
+	work := textureWork(t, s, rec)
+	if work.Status != types.WorkItemOpen {
+		t.Fatalf("work = %s, want open while the Ask is live", work.Status)
+	}
+	if err := h.closeUnservedAtBoot(ctx, work); err != nil {
+		t.Fatal(err)
+	}
+	if w := textureWork(t, s, rec); w.Status != types.WorkItemRefused || !strings.Contains(w.Reason, "interrupted by a restart") {
+		t.Fatalf("work = %s %q, want refused, interrupted by a restart", w.Status, w.Reason)
+	}
+}
