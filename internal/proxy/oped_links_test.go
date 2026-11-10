@@ -23,8 +23,8 @@ import (
 func provenanceWithSource(t *testing.T, versionID, hash string) json.RawMessage {
 	t.Helper()
 	raw, err := types.Provenance{SchemaVersion: types.ProvenanceSchemaVersion, ParentLinks: []types.ParentLink{
-		{Role: types.ParentLinkBase, RevisionID: "rev-0"},
-		{Role: types.ParentLinkSource, PublicationVersionID: versionID, ManifestHash: hash, RoutePath: "/pub/texture/story/v1"},
+		{Kind: types.ParentLinkBase, RevisionID: "rev-0"},
+		{Kind: types.ParentLinkSource, PublicationVersionID: versionID, ManifestHash: hash, RoutePath: "/pub/texture/story/v1"},
 	}}.CanonicalJSON()
 	if err != nil {
 		t.Fatal(err)

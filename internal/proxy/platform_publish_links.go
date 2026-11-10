@@ -42,7 +42,7 @@ func derivePublishLinks(provenance json.RawMessage, _ string) publishLinks {
 	seen := map[string]bool{}
 	for _, l := range prov.ParentLinks {
 		id, pin := strings.TrimSpace(l.PublicationVersionID), strings.TrimSpace(l.ManifestHash)
-		if l.Role != types.ParentLinkSource || id == "" || pin == "" || seen[id] || len(out.Parents) >= maxPublishParents {
+		if l.Kind != types.ParentLinkSource || id == "" || pin == "" || seen[id] || len(out.Parents) >= maxPublishParents {
 			continue
 		}
 		seen[id] = true

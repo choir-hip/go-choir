@@ -69,7 +69,7 @@ func TestPublishOpedRecordsVerifiedLinks(t *testing.T) {
 	if meta.RespondsTo == nil || meta.RespondsTo.PublicationVersionID != f.story.PublicationVersionID || meta.RespondsTo.OwnerID != "paper-owner" {
 		t.Fatalf("responds_to = %+v", meta.RespondsTo)
 	}
-	if len(meta.Parents) != 1 || meta.Parents[0].Role != "source" || meta.Parents[0].PublicationVersionID != f.story.PublicationVersionID {
+	if len(meta.Parents) != 1 || meta.Parents[0].Kind != "source" || meta.Parents[0].PublicationVersionID != f.story.PublicationVersionID {
 		t.Fatalf("parents = %+v", meta.Parents)
 	}
 }

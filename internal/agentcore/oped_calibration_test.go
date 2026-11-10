@@ -16,7 +16,7 @@ func provWithSources(t *testing.T, ids ...string) json.RawMessage {
 	t.Helper()
 	var links []types.ParentLink
 	for _, id := range ids {
-		links = append(links, types.ParentLink{Role: types.ParentLinkSource, PublicationVersionID: id, ManifestHash: "m-" + id})
+		links = append(links, types.ParentLink{Kind: types.ParentLinkSource, PublicationVersionID: id, ManifestHash: "m-" + id})
 	}
 	raw, err := types.Provenance{SchemaVersion: 1, ParentLinks: links}.CanonicalJSON()
 	if err != nil {

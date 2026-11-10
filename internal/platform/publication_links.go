@@ -47,7 +47,7 @@ type PublishParentRef struct {
 // versionLink is a verified link stored in a version's metadata. Everything
 // but the two request fields is read from the graph, never from the request.
 type versionLink struct {
-	Role                 string `json:"role,omitempty"`
+	Kind                 string `json:"kind,omitempty"`
 	PublicationVersionID string `json:"publication_version_id"`
 	PublicationID        string `json:"publication_id,omitempty"`
 	RoutePath            string `json:"route_path,omitempty"`
@@ -99,7 +99,7 @@ func (s *Service) resolveVersionLink(ctx context.Context, og *ObjectGraphStore, 
 		return versionLink{}, fmt.Errorf("%w: version %s is not published", ErrInvalidParent, id)
 	}
 	return versionLink{
-		Role: types.ParentLinkSource, PublicationVersionID: meta.PublicationVersionID, PublicationID: meta.PublicationID,
+		Kind: types.ParentLinkSource, PublicationVersionID: meta.PublicationVersionID, PublicationID: meta.PublicationID,
 		RoutePath: firstNonEmptyString(meta.PermalinkPath, meta.RoutePath), ManifestHash: meta.ManifestHash,
 		OwnerID: obj.OwnerID, PublishMode: pub.PublishMode, AuthorLabel: pub.AuthorLabel, SourceDocID: meta.SourceDocID,
 	}, nil
