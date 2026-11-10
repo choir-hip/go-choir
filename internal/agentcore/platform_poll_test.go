@@ -91,7 +91,7 @@ func (f *fakeFeed) PostOpedVerdict(_ context.Context, post OpedVerdictWire) erro
 func opedItem(version string) OpedFeedItemWire {
 	return OpedFeedItemWire{
 		VersionID: version, RoutePath: "/pub/texture/my-view/v1", AuthorLabel: "writer-aa11bb", ManifestHash: "mh-" + version,
-		PublishedAt: "2026-11-10T00:00:00Z", NoticeID: "obj:notice:" + version, StoryDocID: "doc-story",
+		PublishedAt: "2026-11-10T00:00:00Z", NoticeID: "obj:notice:" + version, StoryDocID: "doc-story", PublisherID: "owner-reader-1",
 		RespondsTo: types.OpedRespondsTo{PublicationVersionID: "pub-story-v1", RoutePath: "/pub/texture/story/v1", PublicationID: "pub-story"},
 	}
 }

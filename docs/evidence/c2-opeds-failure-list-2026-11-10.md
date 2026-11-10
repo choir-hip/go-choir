@@ -61,3 +61,19 @@ More named residuals:
 - N3: nothing re-gates an `unavailable` op-ed, so no run 2 is ever produced. A later successful run would supersede it (corpusd and the fold already take the highest run); the trigger is not built.
 - N4: a wake interrupted by a crash on a quiet story is not re-minted: crash restarts never resume work. The op-ed stays judged and the decision is on the tape; the next op-ed or reject threshold wakes the desk.
 - The notice rows are read with the sequence in metadata, filtered by (kind, owner) and not indexed on the sequence; cheap while an owner has few notices.
+
+## Third review round (Devin round 2)
+
+| # | Way it fails | Rule | Test |
+|---|---|---|---|
+| T1 (B4) | After a restart with the clock behind, new notices get sequences below every consumer's cursor and are never delivered | the sequence is seeded from the largest stored one before the first is issued or read | `TestNoticeSequenceIsSeededFromStorageAtRestart` |
+| T2 (N7) | A cursor that is not ours wedges the poll | treated as the start; the response says `cursor_reset` | `TestMalformedCursorMeansFromTheStartAndSaysSo` |
+| T3 (N8) | A notice with no sequence is skipped for ever | the seed gives every sequence-less notice one | `TestNoticeWithoutASequenceIsGivenOneAndDelivered` |
+| T4 (N9) | A fresh byline per publish evades the per-publisher gate bound, or burns another's budget | the feed item carries the publisher's owner id from the graph; the bound keys on it | `TestOpedGateBoundKeysOnThePublisherNotTheByline`, `TestOpedGateIsBoundedPerPublisher` |
+| T5 (N11) | A feed-read failure or a missing judge spends the daily bound | a call counts when it is issued to Jev | `TestOpedGateBoundCountsOnlyIssuedCalls` |
+| T6 (N13) | An undecodable notice row is dropped silently | the feed names it in `skipped`; the poll records it in `Skipped` | `TestUndecodableNoticeRowIsANamedSkip`, `TestFeedSkipsAreRecordedOnThePoll` |
+
+Named residuals:
+- N10: the per-story 20 a day can be exhausted by a flood so that honest op-eds get `unavailable`. The cure is the run 2 re-gate (not built; see N3).
+- N12: `countRecentNoticesBy` scans every publisher's notices of the last day on each publish that notifies. Fine at today's volume; index the publisher or keep a counter if it grows.
+- N14: a republished, already-consumed notice is not re-gated: the paper judges the first version of an op-ed it was told of, and later versions of the same fork are not seen.

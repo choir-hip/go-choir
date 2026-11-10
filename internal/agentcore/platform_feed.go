@@ -30,12 +30,22 @@ type OpedFeedItemWire struct {
 	RespondsTo   types.OpedRespondsTo `json:"responds_to"`
 	NoticeID     string               `json:"notice_id"`
 	StoryDocID   string               `json:"story_doc_id"`
+	// PublisherID is the publishing owner (from corpusd's graph); the paper's
+	// per-publisher bounds key on it, never on the byline.
+	PublisherID string `json:"publisher_id"`
+}
+
+// FeedSkippedWire is a row corpusd named and passed over.
+type FeedSkippedWire struct {
+	ID     string `json:"id"`
+	Reason string `json:"reason"`
 }
 
 // OpedFeedWire is a page of the op-ed feed.
 type OpedFeedWire struct {
 	Items      []OpedFeedItemWire `json:"items"`
 	NextCursor string             `json:"next_cursor"`
+	Skipped    []FeedSkippedWire  `json:"skipped,omitempty"`
 }
 
 // NoticeItemWire is one notice for this computer's owner.
@@ -47,8 +57,9 @@ type NoticeItemWire struct {
 
 // NoticeFeedWire is a page of the notice feed.
 type NoticeFeedWire struct {
-	Items      []NoticeItemWire `json:"items"`
-	NextCursor string           `json:"next_cursor"`
+	Items      []NoticeItemWire  `json:"items"`
+	NextCursor string            `json:"next_cursor"`
+	Skipped    []FeedSkippedWire `json:"skipped,omitempty"`
 }
 
 // OpedVerdictWire is the courier copy of a gate verdict.

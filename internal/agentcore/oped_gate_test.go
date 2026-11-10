@@ -348,6 +348,7 @@ func TestOpedGateIsBoundedPerPublisher(t *testing.T) {
 	for i := 0; i < opedGatePerPublisherPerDay+3; i++ {
 		v := fmt.Sprintf("pub-b%d-v1", i)
 		it := opedItem(v)
+		it.AuthorLabel = fmt.Sprintf("fresh-label-%d", i) // a fresh byline each time does not evade the bound
 		feed.versions[v] = PublicationVersionWire{PublicationVersionID: v, Title: "t", Content: "A view.", ManifestHash: it.ManifestHash}
 		items = append(items, it)
 	}
@@ -399,7 +400,8 @@ func TestOpedGateIsBoundedPerStory(t *testing.T) {
 	for i := 0; i < opedGatePerStoryPerDay+3; i++ {
 		v := fmt.Sprintf("pub-st%d-v1", i)
 		it := opedItem(v)
-		it.AuthorLabel = fmt.Sprintf("writer-%02d", i) // distinct publishers: only the story bound applies
+		it.AuthorLabel = fmt.Sprintf("writer-%02d", i)
+		it.PublisherID = fmt.Sprintf("owner-%02d", i) // distinct publishers: only the story bound applies
 		feed.versions[v] = PublicationVersionWire{PublicationVersionID: v, Title: "t", Content: "A view.", ManifestHash: it.ManifestHash}
 		items = append(items, it)
 	}
@@ -420,5 +422,68 @@ func TestOpedGateIsBoundedPerStory(t *testing.T) {
 	}
 	if over != 3 {
 		t.Fatalf("over-the-bound verdicts = %d, want 3", over)
+	}
+}
+
+// Review N9: the bound keys on the publisher's owner id from the feed, not on
+// the byline: naming someone else's handle does not burn their budget.
+func TestOpedGateBoundKeysOnThePublisherNotTheByline(t *testing.T) {
+	rt, _, feed, judge, owner, _ := gateFixture(t, map[string]float64{})
+	ctx := context.Background()
+	var items []OpedFeedItemWire
+	for i := 0; i < opedGatePerPublisherPerDay; i++ { // an attacker, all under the victim's handle
+		v := fmt.Sprintf("pub-atk%d-v1", i)
+		it := opedItem(v)
+		it.AuthorLabel, it.PublisherID = "writer-victim", "owner-attacker"
+		feed.versions[v] = PublicationVersionWire{PublicationVersionID: v, Title: "t", Content: "A view.", ManifestHash: it.ManifestHash}
+		items = append(items, it)
+	}
+	honest := opedItem("pub-honest-v1")
+	honest.AuthorLabel, honest.PublisherID = "writer-victim", "owner-victim"
+	feed.versions["pub-honest-v1"] = PublicationVersionWire{PublicationVersionID: "pub-honest-v1", Title: "t", Content: "A view.", ManifestHash: honest.ManifestHash}
+	items = append(items, honest)
+	feed.opeds = []OpedFeedWire{{Items: items, NextCursor: "1"}}
+	for i := 0; i < 3; i++ {
+		if err := rt.runPlatformPollOnce(ctx, owner, store.PlatformPollOpedIntake); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if judge.calls != opedGatePerPublisherPerDay+1 {
+		t.Fatalf("judge calls = %d: the honest publisher's op-ed shared the attacker's bound", judge.calls)
+	}
+}
+
+// Review N11: the bound counts calls actually issued to Jev. A feed-read
+// failure or a missing judge spends nothing.
+func TestOpedGateBoundCountsOnlyIssuedCalls(t *testing.T) {
+	rt, s, feed, _, owner, _ := gateFixture(t, map[string]float64{})
+	ctx := context.Background()
+	item := opedItem("pub-nf-v1") // no version on the platform: the read fails
+	feed.opeds = []OpedFeedWire{{Items: []OpedFeedItemWire{item}, NextCursor: "1"}}
+	if err := rt.runPlatformPollOnce(ctx, owner, store.PlatformPollOpedIntake); err != nil {
+		t.Fatal(err)
+	}
+	rt.candidateJudge = nil
+	addOped(feed, "pub-nj-v1", "A view.")
+	if err := rt.runPlatformPollOnce(ctx, owner, store.PlatformPollOpedIntake); err != nil {
+		t.Fatal(err)
+	}
+	poll, _ := s.GetPlatformPoll(ctx, owner, store.PlatformPollOpedIntake)
+	if len(poll.GateLog) != 0 {
+		t.Fatalf("calls never issued were counted: %+v", poll.GateLog)
+	}
+}
+
+// Review N13: a feed's named skips land in the poll's Skipped list.
+func TestFeedSkipsAreRecordedOnThePoll(t *testing.T) {
+	rt, s, feed, owner, _ := newPollFixture(t)
+	ctx := context.Background()
+	feed.opeds = []OpedFeedWire{{NextCursor: "3", Skipped: []FeedSkippedWire{{ID: "obj:bad", Reason: "the notice row could not be decoded"}}}}
+	if err := rt.runPlatformPollOnce(ctx, owner, store.PlatformPollOpedIntake); err != nil {
+		t.Fatal(err)
+	}
+	poll, _ := s.GetPlatformPoll(ctx, owner, store.PlatformPollOpedIntake)
+	if len(poll.Skipped) != 1 || poll.Skipped[0].ID != "obj:bad" {
+		t.Fatalf("skipped = %+v", poll.Skipped)
 	}
 }
