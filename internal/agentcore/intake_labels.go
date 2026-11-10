@@ -208,7 +208,7 @@ func (rt *Runtime) labelCaptures(ctx context.Context, ownerID, computerID, sourc
 	}
 
 	results := fanout.Do(budget, intakeLabelConcurrency, len(items), func(callCtx context.Context, i int) (struct{}, error) {
-		label, err := rt.labelOneCapture(callCtx, judge, lib, ownerID, computerID, sourceID, items, i)
+		label, err := rt.labelOneCapture(callCtx, lib, ownerID, computerID, sourceID, items, i)
 		if err == nil {
 			_, err = rt.store.AppendCaptureLabel(withKindCustodian(ctx, "choir.capture_label"), label)
 		}
@@ -240,7 +240,7 @@ func intakeCaptureState(c sourcegraph.CapturedItem, summaryRunes int) map[string
 }
 
 // labelOneCapture asks Jev about items[i] and returns its label.
-func (rt *Runtime) labelOneCapture(ctx context.Context, judge CandidateJudge, lib *intakeLibrary, ownerID, computerID, sourceID string, items []sourcegraph.CapturedItem, i int) (store.CaptureLabel, error) {
+func (rt *Runtime) labelOneCapture(ctx context.Context, lib *intakeLibrary, ownerID, computerID, sourceID string, items []sourcegraph.CapturedItem, i int) (store.CaptureLabel, error) {
 	capture := items[i]
 	label := store.CaptureLabel{OwnerID: ownerID, ComputerID: computerID, CaptureID: capture.CaptureID, SourceID: sourceID,
 		Title: strings.TrimSpace(capture.Title), Outlet: capture.Outlet, Language: capture.Language, Script: capture.Script}
@@ -389,6 +389,12 @@ func (rt *Runtime) labelOneCapture(ctx context.Context, judge CandidateJudge, li
 // jevrecord.Observe. meta names the site and the decision the answer feeds;
 // meta.Scope is the gateway scope.
 func (rt *Runtime) judgeCall(ctx context.Context, meta jevrecord.Meta, timeout time.Duration, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
+	switch meta.Site {
+	case "system1_verb", "subcall_judge", "desk_cast_judge", "inert_judge":
+		// Their question text is an agent's, so the record keeps its digest
+		// only.
+		meta.NoText = true
+	}
 	return jevrecord.Observe(rt.jevRecorder(), meta, state, questions, func() (json.RawMessage, error) {
 		return callJudgeWithin(ctx, rt.candidateJudge, meta.Scope, timeout, state, questions)
 	})
