@@ -371,6 +371,11 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 	if publishMode == PublishModeOpinion && authorLabel == "" {
 		authorLabel = req.AuthorLabel
 	}
+	// Every link is verified before anything is written.
+	respondsTo, parents, err := s.verifyPublishLinks(ctx, og, req, previous)
+	if err != nil {
+		return nil, err
+	}
 	versionID := publicationVersionID(ident.PublicationID, revision)
 	versionCanonicalID, err := publicationVersionCanonicalID(req.OwnerID, versionID)
 	if err != nil {
@@ -530,6 +535,8 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 			PermalinkPath:        permalink,
 			PublishedAt:          now.Format(time.RFC3339Nano),
 			Signatures:           signatures,
+			RespondsTo:           respondsTo,
+			Parents:              parents,
 		},
 		ResolvedBlocksJSON:   resolvedBlocksJSON,
 		ResolvedBlocksHash:   resolvedBlocksHash,
@@ -595,6 +602,21 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 			ContentHash:        blockTextHash(text),
 		})
 	}
+	// A parent is cited by a references edge to its version object, and its
+	// owner is told once (contract 3).
+	for _, parent := range parents {
+		if parentObj, err := publicationVersionCanonicalID(parent.OwnerID, parent.PublicationVersionID); err == nil {
+			graphParams.Citations = append(graphParams.Citations, GraphCitation{
+				ToID: parentObj, RelationType: "references", FromSelector: wholeSelector, ToSelector: wholeSelector,
+				State: "accepted", EvidenceRef: "parent:" + parent.PublicationVersionID, Confidence: 1.0,
+			})
+		}
+	}
+	notices, err := publishNotices(req, publishMode, authorLabel, versionID, permalink, manifestHash, ident.PublicationID, respondsTo, parents, now)
+	if err != nil {
+		return nil, fmt.Errorf("platform publish: notices: %w", err)
+	}
+	graphParams.ExtraObjects = notices
 	for _, cite := range externalCitations {
 		toID, ok := publicCitationTarget(cite)
 		if !ok {

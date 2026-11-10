@@ -345,6 +345,9 @@ func (h *Handler) publishTextureRevision(w http.ResponseWriter, r *http.Request,
 		AuthorLabel:     req.AuthorLabel,
 		ModelProvenance: modelProvenance,
 	}
+	// The revision's own links, never a body's; corpusd verifies them.
+	links := h.publishLinksFor(r, autoputerURL, authResult.UserID, rev, publishMode)
+	platformReq.Parents, platformReq.RespondsTo = links.Parents, links.RespondsTo
 	platformResp, status, err := h.postPlatformPublication(r, platformReq)
 	if err != nil {
 		log.Printf("proxy: platform publish post corpusd: %v", err)

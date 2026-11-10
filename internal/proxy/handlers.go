@@ -1742,10 +1742,18 @@ func (h *Handler) HandlePlatformObjectGraph(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build corpusd URL"})
 		return
 	}
-	if r.URL.RawQuery != "" {
-		target += "?" + r.URL.RawQuery
+	rawQuery, relayBody := r.URL.RawQuery, io.Reader(r.Body)
+	if isGuestFeedPath(r.URL.Path) && !trustedInternalProxyTransport(r) {
+		var scopeErr error
+		if rawQuery, relayBody, scopeErr = h.scopeGuestFeedRequest(r); scopeErr != nil {
+			writeJSON(w, http.StatusForbidden, errorResponse{Error: scopeErr.Error()})
+			return
+		}
 	}
-	httpReq, err := http.NewRequestWithContext(r.Context(), r.Method, target, r.Body)
+	if rawQuery != "" {
+		target += "?" + rawQuery
+	}
+	httpReq, err := http.NewRequestWithContext(r.Context(), r.Method, target, relayBody)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build corpusd request"})
 		return
@@ -1810,6 +1818,11 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	// Research's read-only search over published stories and opinion pieces
 	// (guest_authority.go carves out this one GET path).
 	s.HandleFunc("/internal/platform/published/search", h.HandlePlatformObjectGraph)
+	// A computer's polls of its op-ed and notice feeds, and the paper's
+	// verdict post (the proxy scopes each to the owner it bound).
+	s.HandleFunc("/internal/platform/opeds", h.HandlePlatformObjectGraph)
+	s.HandleFunc("/internal/platform/notices", h.HandlePlatformObjectGraph)
+	s.HandleFunc(opedVerdictsPathProxy, h.HandlePlatformObjectGraph)
 	// One published version by id, for Texture's take, merge and fork
 	// (guest_authority.go carves out this one GET path shape).
 	s.HandleFunc("/internal/platform/publications/versions/", h.HandlePlatformObjectGraph)

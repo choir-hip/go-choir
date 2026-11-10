@@ -608,6 +608,7 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 		batch.Edges = append(batch.Edges, citeEdge)
 	}
 
+	batch.Objects = append(batch.Objects, params.ExtraObjects...)
 	return p.store.PutBatch(ctx, batch)
 }
 
@@ -680,6 +681,9 @@ type PublishGraphParams struct {
 	// Transclusions
 	Transclusions []GraphTransclusion
 
+	// ExtraObjects are written in the same batch (the changelog notices a
+	// publish derives).
+	ExtraObjects []objectgraph.Object
 	// Citations
 	Citations []GraphCitation
 

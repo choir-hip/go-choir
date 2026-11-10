@@ -181,7 +181,7 @@ func (h *Handler) HandleInternalPublishTexture(w http.ResponseWriter, r *http.Re
 		switch {
 		case errors.Is(err, ErrOpinionDailyLimit):
 			status = http.StatusTooManyRequests
-		case errors.Is(err, ErrOpinionModeConflict):
+		case errors.Is(err, ErrOpinionModeConflict), errors.Is(err, ErrInvalidParent):
 			status = http.StatusConflict
 		}
 		writeJSON(w, status, apiError{Error: err.Error()})
@@ -671,6 +671,9 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/platform/publications/related-backfill", h.HandleInternalRelatedBackfill)
 	s.HandleFunc("/internal/platform/retrieval/search", h.HandleInternalRetrievalSearch)
 	s.HandleFunc("/internal/platform/published/search", h.HandleInternalPublishedSearch)
+	s.HandleFunc(opedFeedPath, h.HandleInternalOpeds)
+	s.HandleFunc(noticeFeedPath, h.HandleInternalNotices)
+	s.HandleFunc(opedVerdictsPath, h.HandleInternalOpedVerdicts)
 	s.HandleFunc("/internal/platform/proposal-deliveries/state", h.HandleInternalProposalDeliveryState)
 	s.HandleFunc("/internal/platform/publications/", h.HandleInternalPublicationProposal)
 	s.HandleFunc("/internal/platform/texture/sync", h.HandleInternalSyncTextureDocument)
