@@ -1,590 +1,190 @@
 # Choir Agent Operating Contract
 
-This file is the repo-level contract for coding agents working on Choir, loaded
-every session. It inherits [Choir Doctrine](docs/choir-doctrine.md) and must not
-become a competing doctrine source. When they conflict, follow Choir Doctrine
-unless this file is carrying a newer explicitly promoted operating update.
-
-Product direction: the vision is the automatic computer — a persistent computer
-for supervised self-development first, the World Wire downstream
-([docs/choir-vision.md](docs/choir-vision.md), argued in
-[docs/signal-is-sparse-not-the-learner-2026-08-01.md](docs/signal-is-sparse-not-the-learner-2026-08-01.md)).
-Product names are never camel case: Autopaper (or autopaper),
-Autoputer, Autoradio (owner, 2026-10-09). "World Wire", "Universal Wire"
-and "sourcecycled" are retired names for Autopaper; the code rename is a
-TODO in [docs/autopaper-sw-design-2026-10-09.md](docs/autopaper-sw-design-2026-10-09.md) §9.
-The shared graph of published objects that computers adopt onto their own
-tapes is **the Autopaper object graph** (owner, 2026-10-14), never "the
-World Wire object graph".
-The README is the open-source front door; this file is the operating contract,
-and [docs/choir-doctrine.md](docs/choir-doctrine.md) is the normative
-architecture. Do not let this file drift into doctrine.
-
-## Operating Tempo: The Data System Cutover (owner, 2026-10-30)
-
-Owner, 2026-10-30: "Remember, we are working at agentic speed. We can't let
-code review slow us down. We reviewed the plan a bunch of times for a
-reason. So we can do the migration in bulk, and let runtime checks be the
-verifier, not code review." And: "with our current (old) data architecture,
-we are hopeless. So getting the new system up and running is essential.
-Better to rapidly get it 85% there, and iterate for the last mile, than move
-slowly thinking that will improve safety. Thats false. We do our best with
-planning then execute with pace and overwhelming force."
-
-The data system build
-([docs/definitions/choir-data-system-build-2026-10-30.md](docs/definitions/choir-data-system-build-2026-10-30.md))
-runs under these rules. Where this section conflicts with the rest of this
-file, it wins for that work.
-
-1. **Runtime checks are the verifier, not code review.** There is no
-   code-review gate, and the tiers under Mutation Classes are suspended for
-   this work. The proof is:
-   - the static repo gates;
-   - CI and the deploy;
-   - the drills, the hard gates and the differential (migrated state
-     answers like the old state);
-   - the keep-set checks;
-   - deployed acceptance on staging.
-
-   A check that has not run proves nothing.
-2. **85% fast, then iterate.** Get the whole new system running the fleet
-   first, then finish the last mile on it. A mechanism the cutover does not
-   need waits for phase 2.
-3. **Overwhelming force.** Fan out parallel Sonnet builders, each in its own
-   worktree, split by package boundary. Fable orchestrates, integrates and
-   adjudicates. Never wait idle on CI or a deploy; build the next piece
-   while it runs.
-
-   The agents VM is extra capacity: `ssh choir-agents` (user `agent`,
-   reached through node-a over vsock), with 8 cores, 9 GB of RAM and 27 GB
-   free on /home at 2026-10-30. It runs about five agents, with `claude`
-   and `go` installed, but not all of them compiling at once. Use it for
-   builds, test shards, the CI mirror (`~/ci-mirror.sh`) and parallel
-   builders. Stagger the compiles, and keep heavy measurement off Node B.
-4. **Downtime is acceptable.** Stop, drain, migrate, switch. Build no
-   zero-downtime machinery, no dual writes, and no compatibility shims
-   beyond what running d@e first needs. Old code paths are deleted at the
-   cutover, not kept beside the new ones.
-5. **Do not patch the old data system** (the Dolt stores, projection bases,
-   legacy pins) unless it blocks the cutover. Note the failure in the
-   mission ledger and move on.
-6. **Light ceremony.**
-   - A commit names its mutation class and its rollback in one line.
-   - The mission's own defects need no separate doc-first commit: a
-     one-line ledger entry (problem and evidence) lands with the fix.
-7. **Authority is granted.** The owner authorized:
-   - the fleet cutover;
-   - deleting the old data once the differential and keep-set checks are
-     green;
-   - downtime;
-   - skipping the nightly backup.
-
-   No blocking asks remain for this mission.
-8. **What still holds:**
-   - the keep set (newspaper content, the Autopaper object graph, the
-     owner's emails, Textures, precommitment records, the agent record);
-   - the restart rules below;
-   - no secrets or the owner's email addresses in the repo;
-   - adversarial drills on d@e, never on the paper or the owner's live
-     computers;
-   - "Escalate on dead ends", except that the first response is a shift
-     of approach, not a pause.
-
-## Desk Ontology
-
-There are no special desks or apps (doctrine I26, amended by the owner,
-2026-11-04, per
-[the modular architecture plan](docs/design/modular-architecture-plan-2026-11-04.md)).
-Every desk, **management**, **engineering**, **research**, **Texture**, Mail
-and the rest, is a package desk registered the same way; "system" or "app"
-says only who publishes it. Each data kind has one custodian desk with sole
-read and write (Texture for document revisions, the Mail agent for email).
-Desks talk only through precommitment records, and grants flow through
-custodian leases. Roles that remain: management owns computer-wide coherence
-and admits engineering through delegated casts; engineering performs
-capsule-bound mutation; research has read-only world-evidence authority. The
-commitment ledger is the durable substrate: semantic acts record commitments
-and evidence on the tape, while Texture renders that ledger into the
-owner-facing supervision surface. Use the desk-specific in-cell module surface
-rather than legacy tool-call channels.
-
-Before authoring or executing any mission Definition, read
-[docs/standing-questions.md](docs/standing-questions.md) — the pre-flight
-question set (decision provenance, settled-decision conformance, deletion
-citers, single state authority, artifact-verified success, fate-sharing,
-restart durability, no-SSH operability, registry hygiene). Each question is
-backed by a dated failure receipt; a mission that cannot answer them is not
-ready to execute.
-
-Product architecture rules live in [docs/agent-product-doctrine.md](docs/agent-product-doctrine.md)
-(authority boundaries, harness minimalism, Texture control plane, runtime
-configuration, product-path verification, run acceptance). Long-running mission
-rules live in [skills/throughline/SKILL.md](skills/throughline/SKILL.md)
-(throughline: the current executable `/goal <doc>.md` mission format — goal
-file, value criterion, realism axis, typed conjecture, current-state card).
-[skills/throughline/SKILL.md](skills/throughline/SKILL.md) is the only
-authoring discipline for new `/goal` files and the goal-file contract the
-existing corpus is written in. The earlier generations of the lineage
-(mission-gradient → parallax → definition → throughline) are deprecated and
-kept for reference only under `docs/archive/skills/` (mirrored in the
-`choir-hip/skills` repo under `archived/`) — do not author new `/goal` files
-with them; existing goal files remain valid. The
-roadmap to launch is [docs/roadmap-2026-10-31.md](docs/roadmap-2026-10-31.md)
-(owner, 2026-10-31), and the live station is in [docs/ACTIVE.md](docs/ACTIVE.md);
-the product mechanism is precommitment records
-(`docs/precommitment-records.md`). For multi-agent review
-panels used at definition or phase gates (code review is risk-tiered; see
-Mutation Classes below), see
-[skills/agentic-consensus/SKILL.md](skills/agentic-consensus/SKILL.md). Load those on demand.
-
-## No Blocking Asks
-
-When autonomous work hits a decision that lacks an obvious single correct
-answer, do NOT pause the goal to ask the owner. Prefer, in order: run the
-relevant cognitive transforms (`skills/cognitive-transform-portfolio`), run
-the agentic-consensus panel (`skills/agentic-consensus`), take the most
-conservative/standard option and state the choice, land a temporary or
-partial solution with a documented deferral in the goal's `now` card, or
-record the open decision as a named residual and continue. Reserve a blocking
-ask for a genuinely irreversible or destructive step with no safe default —
-a deploy-shape tradeoff or a credential/authority question, not a design
-branch. This rule is standing: it survives session compaction.
-
-## Restarts End Work (Crash) Or Resume It (Planned Update)
-
-Owner rule (2026-10-09; generalizes the earlier Texture-only rule): a
-computer stays on while it is working. **A crash restart never resumes
-work**: at boot, every open obligation (run, wake, control, directive,
-assignment, work item) is closed with the visible fate "interrupted by a
-restart", never re-dispatched. Auto-resume after a crash is how
-crash-restart loops happen.
-
-**Standing owner intents survive a crash; their occurrences do not**
-(owner, 2026-10-14: "we need paper publishing 24/7, even after
-crashes"). An Autopaper source schedule is a standing intent: a crash
-closes only the poll in flight, and the schedule's next tick is new work
-on a computer that booted under the restart bounds. A schedule whose tick
-crashes the computer twice is closed with that cause; the owner act
-restarts it (`recoverSourceSchedulesAtBoot`, station L1).
-
-**A planned restart for an update may resume work.** The distinction is a
-durable planned-restart marker (reason, target version) written by the
-host before the restart and consumed once at the next boot. Marker
-present: resume. Marker absent: it was a crash; close the work. Because the
-marker is consumed before resuming, a resume that crashes the computer
-leads to a markerless boot that closes the work: one resume per planned
-restart, so no loop.
-
-Deploys update idle computers and retry busy ones at their next idle
-moment (vmctl's deferred-refresh sweep). Always-busy computers are the
-exception (owner, 2026-10-15: "we need to update the autopaper computer
-even when it is busy, because it's always going to be busy"):
-`critical_protected` and `public_platform` computers take a planned,
-marker-backed refresh while busy and resume their work. Even these are
-never restarted mid self-development apply or while an engineering capsule
-is live (docs/problems/always-busy-computer-never-updates-2026-10-15.md).
-The persistent computer tier
-exists so computers stay on. Later: real hibernate and wake (a computer
-with a pending update boots fresh instead of resuming memory), then a
-deliberate management-owned resume subsystem. Do not add boot-time
-resumers that run without a planned-restart marker.
-
-## Default Environment
-
-Staging is the acceptance environment: `https://choir.news`. Use local
-development only for fast frontend visual iteration, focused unit shaping, or
-reproducing a staging failure after staging evidence identifies the failed
-transition. Do not claim local proof for vmctl, live user computers,
-gateway credentials, model/search calls, auth/session renewal, checkpoint/route
-projection, rollback, or Choir-in-Choir behavior.
-
-The repo dev shell (Nix flake, loaded automatically via direnv +
-nix-direnv) provides Go, pkg-config and PostgreSQL 17 (for
-`dbxtest.Postgres`). No cgo dependencies remain: the store uses pure-Go
-SQLite (`modernc.org/sqlite`), and Dolt and its ICU dependency were removed
-on 2026-10-30, so no `CGO_*FLAGS` or `LD_LIBRARY_PATH` setup is needed. Run
-`go test ...` directly.
-`internal/agentcore` and `internal/textureowner` are broad and CI shards them; for
-local coverage prefer `scripts/go-test-runtime-shards` or a focused
-`go test ./internal/agentcore -run TestName` / `go test ./internal/textureowner -run TestName`.
-If a build complains about missing tools in a fresh or changed worktree, run
-`direnv status` and `direnv allow`, then re-enter the directory.
-
-Per-developer secrets (API keys, provider tokens) live in a gitignored
-`.envrc.local` file that is sourced by `.envrc` if it exists. Create it with
-`dotenv .env` to auto-load your `.env` file. The tracked `.envrc` never
-references `.env` directly, so a fresh clone won't load any secrets.
-
-Browser proof is specialized; do not assume every worker VM should carry
-Playwright/Chromium. For source-opening doctrine, default durable web-derived
-reading to Source Viewer/reader artifacts and use Web Lens only for explicit
-live/original inspection.
-
-Read [docs/computer-ontology.md](docs/computer-ontology.md) before changing VM,
-autoputer, candidate-world, promotion, package, or persistent-state behavior. The
-product object is a persistent user computer; `autoputer` is an implementation
-service name, not the product ontology.
-
-## Mutation Classes
-
-Classify every mission/change by mutation class before editing:
-
-- `green`: docs, comments, labels, and prompt/default text with no runtime
-  behavior change;
-- `yellow`: tests, detector manifests, or prompt framing that change future
-  optimization pressure but not product behavior directly;
-- `orange`: runtime behavior, product APIs, app state, database queries, or
-  provider/model routing;
-- `red`: protected surfaces such as Texture canonical writes, Trace/evidence,
-  checkpoint/route projection, auth/session renewal, vmctl,
-  gateway/provider calls, run acceptance, and deployment routing;
-- `black`: irreversible or production-destructive work.
-
-**Ceremony by class:**
-
-- **Green/yellow:** name the class, proceed.
-- **Orange:** name the class and the rollback path. Full ceremony optional
-  unless touching provider routing or VM lifecycle.
-- **Red/black:** full ceremony required — conjecture delta, protected surfaces,
-  admissible evidence class, rollback path, and heresy delta (`discovered`,
-  `introduced`, `repaired`).
-
-Do not count newly discovered heresies as regressions, and do not count
-discovery alone as repair.
-
-**Code review is risk-tiered, Devin by default** (suspended for the data
-system cutover; see Operating Tempo) (owner, 2026-10-23: "we
-should be more judicious, allocating code review to hard stuff and trusting
-that we can handle the easy stuff cold"; "make devin the go-to reviewer"; 2026-11-10: any second agent may be the
-review seat, and Gemini 3.8 flash through `agy` is the default while Devin
-serves the paper).
-Cheap checks run before any review, every time: the repo gates
-(`check-v1-writer-purity`, `check-decode-roots`, `check-test-hang-guards`,
-`selftest-guest-token`, `check-switch-registry`, which refuses any new switch), a nix eval of both systems when `nix/` or the flake
-changed, a dry run of every touched proof script, the CI mirror, and a rebase
-onto the current deploy tree. The tiers are a default and FP0 judges by
-context. Tier 0, no model review: green and yellow changes by default (an
-architectural design, meaning a new mechanism, a doctrine change or a design
-a build will follow, is reviewed like the change it designs), proof tooling, mechanical rebases, and fixes that answer an earlier
-finding with only doc, nit or test-only items; the checks are the review.
-Proof, rollback and procedure text for a red deploy is not tier 0: it gets
-the deploy's own review. Tier 1, one seat, Devin: orange changes, and red
-changes that are additive, with a one-act
-rollback that shows on staging within minutes. Tier 2, two seats (Devin and
-DeepSeek v4.1 flash): red where a defect would be silent or irreversible —
-deletes, tape/evidence, Texture canonical writes, auth/session, store schema,
-boot path, new concurrency. A red delta is re-reviewed, one seat (Devin),
-whenever the previous round found a blocking-real defect; not when it found
-only doc, nit or test-only items. After three rounds on one mechanism, stop
-adding rounds and look at the substrate ("Escalate on dead ends" below). Sol
-does not run code review. The allocation follows the measured review yield
-([docs/evidence/review-yield-2026-10-23.md](docs/evidence/review-yield-2026-10-23.md),
-confidence medium). Panels for decisions (`skills/agentic-consensus`) are a
-separate use and unchanged.
-
-## Convergence Before Patching
-
-Most bug churn in this repo shares one cause: patching a symptom instead of
-fixing the substrate. Before you add code, run this check in order.
-
-
-**Review the traces before attributing behavior.** When debugging why an agent
-or desk did or didn't do something — chose `apply` over `open_researcher`,
-dropped a dispatch, ignored an instruction — read the run's actual ledger
-first: turn-commit reasons, emitted `controls[]`, bound `delivered_to_loop_id`,
-work items, and event order. Do not infer a model "chose not to" or "missed"
-an instruction from the absence of a downstream effect; latency, a starved
-mutex, a closed probe window, or a lost context surface all imitate
-disobedience. An instruction that *was* followed but committed late looks
-identical to one that was never heeded — only the trace distinguishes them.
-A behavior claim made without trace evidence is a hypothesis, not a finding;
-write it as a hypothesis in the problem doc until the ledger confirms it.
-**Classify substrate vs symptom.** A *substrate* problem lives in a foundational
-layer (concurrency model, message delivery, data persistence, runtime engine,
-provider interface, VM lifecycle, event bus). A *symptom* problem lives in code
-that runs on top of a substrate.
-
-**Check for an existing replacement.** Before debugging subsystem X, search for
-a replacement or alternative implementation of X. If one exists and is not
-wired in, connecting it is preferred over patching the old code — the bug you
-are chasing may be a symptom of the superseded implementation. Document the
-connection opportunity before patching.
-
-**Prefer deletion over addition.** Ask what can be removed instead of added.
-Would deleting the patched code and connecting the replacement be safer than
-patching? Patching superseded code extends the life of code that should be
-removed.
-
-**Apply Root Cause Clustering.** When you document 3+ bugs in the same subsystem
-within one week, stop patching. Write a clustering assessment before the next
-fix: do these bugs share a common cause? Is there existing code that addresses
-the root cause but isn't wired in? If 3+ symptoms trace to the same substrate,
-the next action is substrate-level, not symptom-level.
-
-**Understand before tuning; panels for uncertainty** (owner, 2026-10-11).
-Do not hill-climb a prompt or a parameter until the failure is understood
-from traces and code: root-cause first, then change. Use agentic-consensus
-panels where the answer is genuinely uncertain, not as ceremony on settled
-or low-risk slices.
-
-**Investigate eagerly; act deliberately** (owner, 2026-10-22: "always
-investigate these things. we can decide when to act on it, but we should
-investigate eagerly, as that provides more information, and sometimes leads
-to bigger discoveries"). An unexplained number (a wait, a size, a rate) gets
-a read-only investigation and a record when it is seen, not when it hurts.
-Whether and when to act on the finding is a separate decision.
-
-**Resource use ahead of short-term uptime** (owner, 2026-10-22: "Anything
-which improves resource utilization on a forward and ongoing basis should be
-prioritized over stability, availability, or uptime in the short term"). A
-change that durably cuts disk, memory, CPU or write volume may take a
-planned restart, a cold boot or a slow window on any computer, the paper
-included, as long as it has its proof and its rollback.
-
-**No switches; deploys roll out by ring** (owner, 2026-11-03, superseding
-the 2026-10-28 "on, never off everywhere" rule: "i hate the pattern of all
-these switches"; "what i dont want is the current situation, where we have a
-bunch of code that i asked for and thought was running actually not
-running"). New behaviour ships on, with no runtime switch, ever: no
-off-by-default setting, no `*_ONLY` selector, no allowlist that gates a
-feature. Rollout is the deploy itself: a release refreshes d@e, then test
-computers, then the owner's computers, then every other computer, then the
-paper last (automatic, planned, marker-backed, after the soak), each ring
-after its soak, with automatic code rollback when a health check breaks
-(docs/design/progressive-delivery-2026-10-26.md, owner rulings 2026-11-03).
-One-way migrations and security enforcement are proved on d@e before merge
-and then ship like everything else. A correctness refusal (crash,
-self-development apply, live capsule, release skew) is not a switch and
-stays. A bug is fixed, not hidden behind a flag. Too many model calls is a
-code problem to fix, not a limit to impose (owner: "we want to scale agents
-up not down"). Computers may diverge indefinitely, but by what each
-one runs and adopts (its own self-development, its packages), never by a
-platform flag (owner: "rather than switches there can be indefinite
-divergence of computers. thats the point of this architecture"). A grant
-that spends the owner's money (the Claude delegate) is an owner act on the
-tape, not a switch.
-
-**Blocking fixes are expedited** (owner, 2026-11-03: "For these blocking
-fixes we should use expedited delivery so changes propagate not blocking on
-wait. Not just now but as policy"; earlier: "for stuff related to an
-optimization loop it's important to speed up the cycle time"). A fix that
-unblocks a loop (a self-development round refused or failing on a platform
-defect, the paper not publishing, a deploy or CI path that cannot land)
-carries the trailer `Ring-Expedite: <the defect it unblocks>` on its commit,
-so the release reaches every computer at once instead of after the ring
-soaks (docs/design/ring-ordered-deploys-2026-11-03.md, Expedite). The deploy
-also expedites, with no trailer, any release that changes the paths listed in
-`.github/scripts/node-b-ci-deploy` (owner policy 2026-11-04; `internal/agentcore/`
-among them), so leaving the trailer off such a change does not make it walk
-the rings. An
-expedite keeps everything else: planned, marker-backed refreshes; the live
-capsule, apply and skew refusals; the health guards and automatic rollback;
-R0 and the paper held until each is seen healthy. Ordinary releases walk
-the rings. Name every expedite in the next report.
-
-**Expedite everything until Autoradio is solid** (owner, 2026-11-09: "we're
-going to be on expedite mode for everything until we do the auto paper
-improvements mission. And then ... the initial auto radio mission ... once
-we get auto radio really solid, only then do we really start slowing down
-with the progressive delivery, because that's the point where we're going
-to be launching to real users and stability will become more important").
-Until the owner says Autoradio is solid, every landing commit carries
-`Ring-Expedite`, with the expedite's guards unchanged.
-
-**Review follows the landing; it does not gate it** (owner, 2026-11-10:
-"we shouldn't let ourselves be bottlenecked by code review. Code review
-works for us. We don't work for code review. So we can totally pipeline
-stuff. We can run code review even after we push something to main...
-we're still pre-release"). Until launch, a change whose checks pass lands
-at once and its review runs behind it; a finding is fixed forward or
-reverted. A review trailer names only a review that has happened: a commit
-that lands ahead of its review says so, and never carries a Reviewed-By it
-has not earned. Where the security epoch gate requires a Reviewed-By, that
-one commit waits for its seat. When this laptop runs out of cores, builds
-and builders move to the agents VM on Node A (`ssh choir-agents`).
-
-**Agent models** (owner, 2026-11-09: "You can orchestrate sonnet subagents
-well. Just use fable for stuff that requires design. (Fable instead of opus;
-update Claude/agents.md)"): Fable for open-ended design and for orchestration.
-Sonnet for everything else: investigations, linear implementation (builders),
-optimizing a metric, and code review. A Claude review seat is always Sonnet,
-never Fable and never Opus; when DeepSeek cannot serve a tier 2 review, the
-second seat is a Sonnet subagent beside Devin. History: owner, 2026-10-22,
-widened 2026-11-06: "don't use opus for review. Opus for open ended design
-only, and sonnet for investigations, linear implementation, optimizing
-metrics, code review, etc". The 2026-11-09 ruling replaces Opus with Fable in
-that rule.
-
-**Hard problems: change the frame before the patch** (owner, 2026-10-31:
-"when having a recurring problem, ask foundational questions, redefine it, go
-to the physics... we should be calling this more"). When a problem recurs,
-resists two attempts, or is a design question with no settled answer, run
-the cognitive transforms ([skills/cognitive-transform-portfolio](skills/cognitive-transform-portfolio/SKILL.md))
-before writing code. At least:
-- **Ask the foundational question.** What is this thing, really? What job
-  does it do, and what is the record of truth it serves?
-- **Redefine the problem.** Is it a symptom of a frame that is wrong? Take
-  "when should compaction run?" (2026-10-31). It became "the working store is
-  derived, so compaction is a restore from a compact snapshot".
-- **Go to the physics.** Work out bytes per event, write amplification, the
-  time budgets (boot envelope, recovery bound), link bandwidth and the
-  information-theoretic floor. A design that ignores a bound fails at that
-  bound; the paper's boot did, at the 15-minute credential envelope.
-- **Map the design space.** List the options from cheapest physics to
-  dearest, before choosing one.
-- **Check the unification.** Can one mechanism do the work of several?
-  Backup, recovery and sync became one computer bundle.
-
-**Review while blocked** (owner, 2026-10-31). When the work waits on CI, a
-deploy or another long process, use that time to run an agentic-consensus
-panel (Devin and DeepSeek) plus a Sonnet seat on the design and the recent
-code. Its brief is big-picture alignment: architecture against
-implementation, and the physical and information-theoretic bounds. Do not
-use the panel for style. Adjudicate each finding in the design doc or the
-mission ledger.
-
-**Escalate on dead ends.** If you've been working on the same problem for 3+
-iterations or 2+ days without convergence, stop patching. Write a structural
-assessment — dependency graph, whether a substrate-level fix would eliminate the
-problem class, whether a replacement exists unwired — and escalate to the human.
-Do not attempt another incremental patch without explicit direction; continuing
-after non-convergence is a known failure mode, not persistence.
-
-## Problem Documentation First
-
-Every platform behavior-changing mission must observe the following invariant:
-
-> **Documenting a problem is the first priority. Fixing it is second.**
-
-During the data system cutover, a ledger entry that lands with the fix is
-enough for the mission's own defects (Operating Tempo, rule 6).
-
-When staging evidence (or any reliable evidence) reveals a new problem, the
-first commit that follows must be a checkpoint or mission doc update that names
-the problem, records the evidence, and updates the belief state and remaining
-error field — without any code fix. The fix commit(s) come second, referencing
-the prior documentation.
-
-This ensures that problems can be reviewed independently of any particular
-solution, alternative solutions can be considered before committing to an
-approach, and other agents and humans can examine the problem record to form
-their own judgment.
-
-Exceptions require explicit justification in the commit message, naming why the
-problem could not be documented before being fixed.
-
-See [docs/memo-problem-documentation-first.md](docs/memo-problem-documentation-first.md)
-for the finding that motivated this invariant.
-
-## Landing Loop
-
-Every platform behavior-changing mission includes:
-
-```text
-commit -> push origin main -> monitor CI -> monitor staging deploy
--> verify staging commit identity -> run deployed acceptance proof
-```
-
-Do not stop at local tests or an unpushed commit when platform behavior changed.
-
-**Product restore vs platform deploy (pre-flight for the self-development
-gate):** once a computer can acceptance-fence restore to a prior event
-head, **platform deploy SHA and computer effective identity can diverge on
-purpose**. Do not treat a successful product restore as a failed deploy, and do
-not "fix" it by pushing `main` forward. Git revert of mission commits remains
-the repo rollback path; product restore is a separate forward transaction on the
-computer's event chain. Health/identity reporting must eventually join event
-head + CodeRef + content witness + route — not SHA alone — before restore is
-routine; that tooling cutover is a completion obligation of the
-self-development gate, not a reason to skip the Landing Loop for platform
-source changes. When a goal file's `finish.completion_cutover` includes
-runtime-bearing items (survivor/detector replace, owner-reachable restore
-surface, ops identity), those items re-enter this Landing Loop before
-`goal.complete` — docs-only cutover items do not.
-
-Docs-only commits are different. The full CI/deploy workflow intentionally
-ignores `docs/**` and top-level `*.md`; do not weaken those filters to force a
-full CI or staging deploy path for docs-only changes. Docs-only pushes and pull
-requests should run the report-only docs truth checker workflow instead.
-
-## Worktree Hygiene
-
-Before handing off or stopping a mission, run `git status --short` and classify
-every dirty path as intentional source, durable documentation/evidence,
-temporary proof output, generated artifact, or unrelated WIP.
-
-Do not leave untracked scratch files in the repo. Temporary Playwright probes
-may use `*.tmp.spec.js` while investigating, but before stopping they must be
-deleted, moved outside the repo, or promoted to a normal tracked `*.spec.js`
-with a clear regression purpose.
-
-If unrelated WIP is already present, preserve it explicitly instead of mixing it
-into the current mission commit. Use a named stash or a separate branch/commit,
-and report the recovery handle.
-
-## Git And Staging
-
-GitHub `origin/main` is the source of truth for tracked deployed files. Do not
-edit tracked files directly on Node B as a source/config shortcut.
-
-If a behavior-changing commit is pushed:
-
-1. Monitor the GitHub Actions run for that SHA.
-2. Confirm Node B deploy/health reports that SHA or deployed commit.
-3. Run the relevant deployed Playwright/API acceptance proof against `choir.news`.
-4. Record evidence in the final report.
-
-## Testing
-
-- Never write unit tests after you write code.
-- Highly prefer E2E tests as the sole testing mechanism. Use them to verify
-  complex features work. At the end of E2E tests, produce a verifiable and
-  repeatable artifact.
-- If you must test a system in isolation, first write down all the ways it
-  could fail, then write the code.
-
-## Goal-Station Handoff
-
-The `/goal` string goes stale the moment a station closes. After every
-mission terminal receipt — land, close, or supersedure — **drop the landed
-goal and set the next mission's goal** before stopping: update
-`docs/ACTIVE.md`, repoint `docs/mission-graph.yaml`, and author the next
-station's throughline `/goal` file. Delete superseded draft `/goal` files
-outright (a stale draft is not a receipt — keep landed receipts and
-in-flight candidates only). Never leave `docs/ACTIVE.md` /
-`docs/mission-graph.yaml` / `docs/definitions/` pointing at a `blocked`
-draft whose `start.source` anchors a pre-landing ref.
-
-## Safety
-
-Assume the worktree may contain user or other-agent changes. Do not revert
-unrelated changes. Avoid destructive commands unless the user explicitly asked
-for them.
-
-Use disposable guest-local capsules inside the stable computer for risky
-mutation. Failed capsules should leave diagnostics, retained events, rollback
-refs, and next safe probes. Never use a candidate/worker VM as a
-self-development candidate of its parent; self-development candidates are
-capsules. A **forked computer** (owner-ratified 2026-10-01) is different: a new
-sibling computer with its own ComputerID, event chain, and freshly minted
-identity material, linked to a parent checkpoint by lineage. Forks may serve
-experiments and fleets, but only once fork re-keying and isolation have landed.
-Their results return to any other computer only through publication and
-adoption, never by direct merge.
-
-## Final Evidence
-
-A final report for behavior-changing missions should name:
-
-- pushed commit SHA;
-- CI run and deploy status;
-- staging health/build identity;
-- deployed acceptance command and result;
-- accepted trajectory/run/acceptance ids;
-- acceptance level reached;
-- verifier contracts and evidence refs;
-- rollback refs;
-- mutation class and protected surfaces touched;
-- heresy delta: `discovered`, `introduced`, `repaired`;
-- conjecture delta and human-learning digest;
-- residual risks and the next realism axis.
+The rules in force, loaded every session. The reasons, owner quotes and dates
+are in [docs/operating-contract-rationale.md](docs/operating-contract-rationale.md).
+Architecture is normative in [docs/choir-doctrine.md](docs/choir-doctrine.md);
+this file must not become a second doctrine. Where the two conflict, doctrine
+wins unless this file carries a newer, explicitly promoted update.
+
+## Product
+
+- The product is the automatic computer: a persistent computer for supervised
+  self-development ([docs/choir-vision.md](docs/choir-vision.md)). Read
+  [docs/computer-ontology.md](docs/computer-ontology.md) before changing VM,
+  candidate, promotion, package or persistent-state behavior.
+- Names are never camel case: Autopaper, Autoputer, Autoradio. "World Wire",
+  "Universal Wire" and "sourcecycled" are retired names for Autopaper. The
+  shared graph of published objects is **the Autopaper object graph**.
+- The roadmap is [docs/roadmap-2026-10-31.md](docs/roadmap-2026-10-31.md); the
+  live station is [docs/ACTIVE.md](docs/ACTIVE.md).
+
+## Desks
+
+Every desk (management, engineering, research, Texture, Mail and the rest) is
+a package desk registered the same way. Each data kind has one custodian desk
+with sole read and write. Desks talk only through precommitment records
+([docs/precommitment-records.md](docs/precommitment-records.md)); grants flow
+through custodian leases. Management owns computer-wide coherence and admits
+engineering; engineering mutates only inside capsules; research has read-only
+world-evidence authority. Use the in-cell module surface, not legacy tool
+calls. Product rules:
+[docs/agent-product-doctrine.md](docs/agent-product-doctrine.md).
+
+## Before you change anything
+
+1. **Read the traces first.** A claim about why an agent or desk did
+   something is a hypothesis until the run's ledger confirms it (turn-commit
+   reasons, controls, work items, event order).
+2. **Substrate or symptom?** If the problem lives in a foundational layer,
+   fix it there. Search for an existing, unwired replacement before patching
+   the old code, and prefer deleting to adding.
+3. **Three bugs in one subsystem in a week:** stop and write a clustering
+   assessment before the next fix.
+4. **Understand before tuning.** No prompt or parameter hill-climbing until
+   the failure is understood from traces and code.
+5. **Investigate eagerly, act deliberately.** An unexplained number gets a
+   read-only investigation and a record when it is seen.
+6. **A hard or recurring problem:** change the frame before the patch
+   ([skills/cognitive-transform-portfolio](skills/cognitive-transform-portfolio/SKILL.md)):
+   ask what the thing is, redefine the problem, work out the physical bounds,
+   map the options, check whether one mechanism can do several jobs.
+7. **Three rounds without convergence:** stop patching. Write a structural
+   assessment and change the approach; escalate to the owner if that fails.
+8. **Durable resource savings beat short-term uptime**, given a proof and a
+   rollback.
+
+## Mutation classes
+
+Classify every change before editing.
+
+| Class | What | Ceremony |
+| --- | --- | --- |
+| green | docs, comments, labels, prompt text with no behavior change | name it |
+| yellow | tests, detectors, gates, scripts | name it |
+| orange | runtime behavior, APIs, queries, routing | name it and the rollback |
+| red | Texture canonical writes, tape and evidence, checkpoint and route projection, auth and session, vmctl, gateway and provider calls, run acceptance, deploy routing | conjecture delta, protected surfaces, evidence class, rollback, heresy delta |
+| black | irreversible or destructive in production | the same, plus the owner |
+
+A commit subject ends with its class and rollback, for example
+`(orange; rollback: revert)`.
+
+## Review
+
+- Cheap checks run before every landing: `scripts/land` (when present) or, by
+  hand, the build, the repo gates, the **whole** uncached suite of every
+  touched package and of every package that imports it, a nix eval of both
+  systems when `nix/` changed, and a rebase onto main.
+- **Read the diff against every outside contract it touches** (a vendor API,
+  a file read at boot, a tool result another package parses). Use the primary
+  source.
+- Green and yellow: no model review. Orange: one seat. Red where a defect
+  would be silent or irreversible: two seats. Re-review a red change after a
+  blocking finding.
+- Any second agent may be the seat; the author may not. The default seat is
+  Gemini 3.8 flash (high) through `agy`. Sonnet is the second seat. Opus, Sol
+  and Luna do not run code review.
+- Guest-security paths need the `Security-Effect` and
+  `Security-Effect-Reviewed-By` trailers (`scripts/check-guest-security-epoch`).
+  Never write a review trailer that no review backs.
+- Models: Opus for open-ended design only; Sonnet for investigation, building
+  and review. Builders work in their own worktrees and compile on the build
+  VM (`ssh choir-agents`). Never `pkill`; kill only your own PIDs.
+- Panels for decisions:
+  [skills/agentic-consensus](skills/agentic-consensus/SKILL.md). While
+  blocked on CI or a deploy, use the time for a big-picture review.
+
+## Delivery
+
+- **No switches.** New behavior ships on: no off-by-default setting, no
+  selector, no allowlist that gates a feature. A bug is fixed, not hidden. A
+  correctness refusal is not a switch. Too many model calls is a code problem.
+  A grant that spends the owner's money is an owner act on the tape.
+- **Expedite everything until the owner says Autoradio is solid.** Every
+  landing commit that is not docs-only carries `Ring-Expedite: <the defect it
+  unblocks>`. The deploy also expedites, without a trailer, any release that
+  touches the paths listed in `.github/scripts/node-b-ci-deploy`
+  (`internal/agentcore/` among them). An expedite keeps the planned,
+  marker-backed refresh, the capsule, apply and skew refusals, the health
+  guards and automatic rollback. Name every expedite in the next report.
+- **Landing loop** for any behavior change: commit, push `origin main`, watch
+  CI, watch the staging deploy, verify the deployed commit, run the deployed
+  proof. Local tests are not proof. `origin/main` is the source of truth;
+  never edit tracked files on Node B.
+- Docs-only commits skip CI and deploy by design. Do not weaken those filters.
+- Platform deploy SHA and a computer's effective identity may differ on
+  purpose after a product restore. Do not "fix" that by pushing main.
+
+## Proof
+
+- Staging (`https://choir.news`) is the acceptance environment. Local proof
+  does not count for vmctl, live computers, gateway credentials, model calls,
+  auth, checkpoints, rollback or Choir-in-Choir.
+- Prefer end-to-end tests that leave a rerunnable artifact. Never write unit
+  tests after the code: write the failure list first, then tests, then code.
+- A check that has not run proves nothing. Do not report a test as passing
+  unless you saw it pass.
+- Adversarial drills run on d@e only, never on the paper or the owner's
+  computers.
+- Browser proof is specialized; not every worker VM carries Playwright. For
+  web-derived reading, default to Source Viewer artifacts; use Web Lens only
+  for explicit live inspection.
+
+## Problems come first
+
+When evidence shows a new problem, record it (problem, evidence, belief,
+remaining error) before or with the fix. If the fix is not yet known, the
+record lands alone first. See
+[docs/memo-problem-documentation-first.md](docs/memo-problem-documentation-first.md).
+
+## Restarts
+
+- **A crash restart never resumes work.** At boot every open obligation is
+  closed as "interrupted by a restart". Standing owner intents (an Autopaper
+  source schedule) survive; their in-flight occurrence does not. A schedule
+  whose tick crashes the computer twice is closed.
+- **A planned restart may resume once.** The host writes a durable marker
+  before the restart; the boot consumes it before resuming. No marker means a
+  crash. Do not add a boot-time resumer that runs without a marker.
+- Deploys refresh idle computers and retry busy ones. `critical_protected`
+  and `public_platform` computers take a planned refresh while busy, but never
+  mid self-development apply or while an engineering capsule is live.
+
+## Missions
+
+- Read [docs/standing-questions.md](docs/standing-questions.md) before
+  authoring or running a goal file. The format is
+  [skills/throughline](skills/throughline/SKILL.md); earlier formats are
+  archived.
+- **No blocking asks.** When a decision has no obvious answer, run the
+  transforms or a panel, take the conservative option and say so, or record a
+  named residual and continue. Ask only before something irreversible with no
+  safe default, or a credential or authority question.
+- After a mission lands, closes or is superseded: update `docs/ACTIVE.md` and
+  `docs/mission-graph.yaml`, author the next goal file, delete superseded
+  drafts.
+- The data system cutover runs under its own tempo rules, kept in the
+  rationale file under "Operating Tempo".
+
+## Safety and hygiene
+
+- Assume the worktree holds other people's changes. Never commit in the
+  primary checkout; use a worktree. Never use a bare `git stash`. Do not
+  revert or destroy work that is not yours.
+- No secrets, tokens or the owner's email addresses in the repo or in output.
+  Per-developer secrets live in the gitignored `.envrc.local`.
+- Risky mutation happens in disposable capsules inside the stable computer.
+  A candidate VM is never a self-development candidate of its parent. A
+  forked computer is a sibling with its own identity; its results return only
+  through publication and adoption.
+- Before stopping, run `git status --short` and account for every dirty
+  path. Leave no scratch files in the repo.
+- The dev shell (Nix flake via direnv) provides Go and PostgreSQL 17; there
+  is no cgo. `internal/agentcore` and `internal/textureowner` are large; use
+  `scripts/go-test-runtime-shards` or the build VM.
+
+## Final report
+
+For a behavior change, name: the pushed SHA; the CI run and deploy status;
+the staging commit; the proof command and its result; ids of accepted runs;
+the rollback; the mutation class and protected surfaces; every expedite; what
+was discovered, introduced and repaired; residual risks and the next step.
