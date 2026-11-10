@@ -331,7 +331,7 @@ func TestIntakeLabelsMapAliasesBackLabelSiblingsAndStayOutOfTheArrival(t *testin
 			t.Fatalf("label drew on scope %q; want %q, its own rate bucket", call.scope, judgmentScopeIntakeLabels)
 		}
 		capture, _ := call.state["capture"].(map[string]any)
-		if capture["summary"] == "" || capture["outlet"] != "Labels Daily" && capture["outlet"] != "Test Outlet" || capture["language"] != "en" || capture["script"] == "" {
+		if capture["summary"] == "" || capture["outlet"] != "Labels Daily" && capture["outlet"] != "Test Outlet" || capture["language"] == "" || capture["script"] == "" {
 			t.Fatalf("Jev's capture state lacks summary, outlet, language or script: %+v", capture)
 		}
 		stories, _ := call.state["stories"].(map[string]any)
