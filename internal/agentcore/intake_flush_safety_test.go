@@ -26,8 +26,9 @@ func TestIntakeFlushPanicInsideLabelHeldIsRecovered(t *testing.T) {
 	}
 }
 
-// F10: a panic in the flusher goroutine outside labelHeld is recovered there,
-// the layer is not left running, and a later enqueue flushes.
+// F10/F15: a panic in the flusher goroutine outside labelHeld is recovered
+// there, the layer is not left running, the poll's handle closes, and a later
+// enqueue flushes.
 func TestIntakeFlushPanicInTheFlusherGoroutineIsRecovered(t *testing.T) {
 	f := newIntakeFixture(t, "owner-flush-panic-flusher")
 	f.enable(t)
@@ -40,44 +41,39 @@ func TestIntakeFlushPanicInTheFlusherGoroutineIsRecovered(t *testing.T) {
 	}
 	t.Cleanup(func() { intakeFlushTestHook = nil })
 	t.Cleanup(f.rt.Stop)
-	items := flushTestItems(24, "s")
-	f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", items[:12])
-	waitFlush(t, "the flusher to panic and clear", func() bool {
+	items := flushTestItems(2, "s")
+	waitClosed(t, "the panicked flush's handle", f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", items[:1]))
+	if labelCount(t, f, items[0].CaptureID) != 0 {
+		t.Fatal("F10: the panicked flush's capture is labelled")
+	}
+	waitFlush(t, "the flusher to clear", func() bool {
 		l := &f.rt.intakeLabels
 		l.mu.Lock()
 		defer l.mu.Unlock()
-		return fired.Load() && !l.running
+		return !l.running
 	})
-	f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", items[12:24])
-	waitFlush(t, "a later flush to label", func() bool {
-		for i := 12; i < 24; i++ {
-			if l, _ := f.s.CaptureLabels(context.Background(), f.owner, f.computer, items[i].CaptureID); len(l) != 1 {
-				return false
-			}
-		}
-		return true
-	})
+	waitClosed(t, "a later flush", f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", items[1:2]))
+	if labelCount(t, f, items[1].CaptureID) != 1 {
+		t.Fatal("F10: the flusher did not flush again after the panic")
+	}
 }
 
-// F13: a stale fired timer callback does not clobber a newer q.timer.
-func TestIntakeFlushStaleTimerDoesNotClobberANewerOne(t *testing.T) {
-	f := newIntakeFixture(t, "owner-flush-timer")
+// F10/F15: a panic inside labelHeld closes the poll's handle too.
+func TestIntakeFlushPanicInsideLabelHeldClosesTheHandle(t *testing.T) {
+	f := newIntakeFixture(t, "owner-flush-panic-held-handle")
 	f.enable(t)
 	f.rt.SetCandidateJudge(&fakeIntakeJudge{})
+	intakeFlushTestHook = func(stage string) {
+		if stage == "labelHeld" {
+			panic("labelHeld panic")
+		}
+	}
+	t.Cleanup(func() { intakeFlushTestHook = nil })
 	t.Cleanup(f.rt.Stop)
-	f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", flushTestItems(1, "s"))
-	l := &f.rt.intakeLabels
-	l.mu.Lock()
-	q := l.queues[eventKey(f.owner, f.computer)]
-	stale := q.timer
-	newer := time.AfterFunc(time.Hour, func() {})
-	q.timer = newer
-	f.rt.intakeTimerFiredLocked(q, stale)
-	kept := q.timer == newer
-	l.mu.Unlock()
-	newer.Stop()
-	if !kept {
-		t.Fatal("F13: a stale callback replaced or cleared a newer timer")
+	items := flushTestItems(1, "s")
+	waitClosed(t, "the handle after a labelHeld panic", f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", items))
+	if labelCount(t, f, items[0].CaptureID) != 0 {
+		t.Fatal("F10: a capture is labelled after the panic")
 	}
 }
 

@@ -453,94 +453,99 @@ In-repo: `docs/evidence/jev-measurement-2026-11-10.md`,
 ## Intake flush: ways it can fail (2026-11-10, orange; rollback: revert)
 
 Owner rule (2026-11-10): never call Jev concurrently; put many questions in
-single calls. Intake labels are one sequential stream of calls per computer.
-Captures from any poll are held in a per-computer in-memory queue and
-flushed when 30 s have passed since the first held capture or 12 are held
-(`intakeFlushWait`, `intakeFlushCaptures`; compiled constants). A call packs
-captures and candidate stories to the 30,000-byte guard, not to a count
-(`intakeChunkStateBytes` cuts story chunks by bytes). Failure list, written
-before the code:
+single calls. Intake labels are one sequential stream of calls per runtime,
+a **group commit with no timer**:
 
-- F1. A flush starts while another runs (two concurrent Jev streams). Bound:
-  `inFlight` per queue; the timer and the enqueue only start a flush when it
-  is false.
-- F2. A capture is enqueued during a flush and is lost, double-labelled, or
-  waits past its own 30 s. Bound: the drain takes only a due batch; later
-  captures keep their own arrival time and the timer is re-armed at flush end.
-- F3. A call fails mid-flush and voids other calls' captures or labels a
-  capture on part of the evidence. Bound: unchanged merge rule; a capture
-  with any failed chunk is unlabelled, others keep their labels.
+- `enqueueIntakeLabels` holds a poll's captures in a per-computer in-memory
+  queue and returns a wait handle (a channel closed when every capture of
+  that enqueue is resolved: labelled, failed, panicked and recovered, or
+  abandoned at stop).
+- One flusher goroutine per runtime runs whenever anything is held and no call
+  is in flight, draining the computers' queues in turn. The first capture is
+  asked at once; captures that arrive while a call is in flight accumulate and
+  go out together in the next flush (at most `intakeFlushCaptures` = 12
+  captures, and at most `intakeCallCaptures` = 6 to a call, further calls in
+  sequence). Under a burst the batches form by themselves; when quiet, the
+  latency is one call.
+- The poll enqueues, waits on the handle (or its ctx), then calls
+  `announceCaptures` exactly as before, so labels exist before the wake again,
+  the durable `PendingArrivals` retry machinery is untouched, and a capture
+  whose label failed is still announced, unlabelled.
+- A call packs captures and candidate stories to the 30,000-byte guard
+  (`intakeChunkStateBytes` cuts story chunks by bytes).
+
+**Locks and scheduling at the wait.** `HandleSourcePollDue` releases
+`sourceScheduleMu` after writing the in-flight mark
+(`source_schedule.go` ~:229) and takes it again only after the arrival
+(~:307); nothing else is held across the wait, so the poll waits holding no
+lock. The wait is bounded by each call's own 5 s timeout, a stop, or the
+poll's ctx. Source polls are not strictly one at a time: each schedule has its
+own actor mailbox (`sourcePollMailbox`) and the dispatcher runs up to 4 source
+polls at once in the `source:` lane (`internal/actorruntime/adapter.go:53,
+:170`). Batches therefore form across those concurrent polls and within one
+poll; no concurrency is added to enlarge them. A poll waiting on the handle
+holds its lane slot meanwhile, which is the cost of announcing after labels.
+
+**Restart rule.** The queues are in memory. A label call that fails, a capture
+a stop abandons, and a capture lost to a crash all end the same way: the
+capture is on the tape, unlabelled, and nothing retries it (the next poll
+sees it as already captured). The poll of a crashed process is closed by the
+restart rule; a poll that is waiting at a graceful stop is released (its
+handle closes) and announces its captures unlabelled. If the stop's drain bound
+expires, the captures it did not reach are unlabelled, as after a crash. No
+boot step resumes anything.
+
+Failure list:
+
+- F1. A flush starts while another runs. Bound: one flusher goroutine per
+  runtime (`l.running`), also across computers (a runtime may be handed
+  polls for more than one computer: `HandleSourcePollDue` takes the computer
+  as an argument and does not check it against `cfg.ComputerID`).
+- F2. A capture is enqueued during a flush and is lost or labelled twice.
+  Bound: the flusher takes a batch under the lock and re-reads the queue for
+  the next.
+- F3. A call fails mid-flush and voids other calls' captures or labels one on
+  part of the evidence. Bound: a capture with any failed chunk is unlabelled,
+  others keep their labels.
 - F4. The byte guard splits one capture's questions across calls, or a call
-  goes over the guard. Bound: a capture's two questions are built together; a
-  group closes before a capture that would cross the guard.
-- F5. Shutdown with captures held. They are dropped and stay unlabelled, the
-  same fate as a capture whose label call failed (see below); nothing
-  resumes them at boot. A running flush is cancelled with the runtime.
-- F6. One capture larger than the guard. It goes alone, over the guard, as
-  before; never dropped.
-- F7. Timer misuse: a timer that fires after Stop, after the queue emptied, or
-  twice. Bound: the callback re-evaluates under the lock and only schedules.
-- F8. A poll with zero captures (or captures without ids) enqueues nothing
-  and arms no timer.
-- F10. A judge or merge panics inside the flush goroutine. Main's chunk calls
-  ran inside `fanout.Do`, which recovers; the flush goroutine has no such net,
-  so a panic would kill the process, or leave `inFlight` true and the queue
-  never flushing again. Bound: `labelHeld` and the goroutine recover, log,
-  leave that flush's captures unlabelled and clear `inFlight` under the lock.
-- F11. A graceful stop (deploy, planned refresh) drops everything held, so
-  captures are lost that only a failed label used to lose. Bound: `Stop`
-  refuses new enqueues, lets a running flush finish, flushes once what is
-  held, all bounded by the runtime's drain deadline, then cancels. Nothing is
-  persisted and nothing runs at boot, so a crash still drops held captures
-  exactly as a failed label. A judge slower than the bound is abandoned at
-  the bound and its captures stay unlabelled.
-- F12. A call carries more questions than the measured 8 (accuracy above 12
-  is unmeasured). Bound: a flush holds 12 captures but one call carries at
-  most `intakeCallCaptures` = 6 (12 questions); further calls follow in
-  sequence. Raise it only after the shadow comparison measures accuracy.
-- F13. A stale fired timer callback clears a newer `q.timer`, so two timers
-  or none are armed. Bound: the callback clears `q.timer` only if it is still
-  its own.
-- F14. A flush whose budget expires says nothing about the captures it did
-  not ask. Bound: one log line names how many were not asked.
+  goes over the guard. Bound: a capture's questions are built together; a group
+  closes before a capture that would cross the guard; a single capture over
+  the guard goes alone, never dropped.
+- F5. Shutdown with captures held. `Stop` refuses new enqueues (a refused
+  enqueue returns a closed handle), lets a running flush finish, flushes once
+  what is held, all bounded by the runtime's drain deadline, then cancels and
+  waits up to `intakeStopGrace` (2 s) for the cancelled calls to return before
+  the store may close.
+- F8. A poll with zero captures, or captures without ids: a closed handle, no
+  flusher started.
 - F9. Concurrency returns through chunks: no `fanout`, no pool, no goroutine
-  per chunk; the only goroutine is the one flush per computer.
+  per chunk.
+- F10. A panic in the judge (recovered in `callJudgeWithin`), in `labelHeld`
+  (recovered there), or in the flusher goroutine outside it (recovered
+  there, `l.running` cleared, flusher restarted if anything is held). Each
+  leaves that flush's captures unlabelled.
+- F12. A call carries more questions than the measured 8 (accuracy above 12 is
+  unmeasured). Bound: at most `intakeCallCaptures` = 6 captures (12
+  questions) to a call. Raise it only after the shadow comparison measures
+  accuracy at the larger size.
+- F15. A handle that never closes strands a poll. Every exit path closes it:
+  the flush's own defer (normal, failed and panicked), the stop drain
+  (labelled or abandoned at the bound), and the refused enqueue. A test per
+  path.
+- F16. A shared deadline across the sequential calls drops the later calls.
+  Bound: no deadline across calls; each has its own `intakeLabelCallTimeout`
+  (5 s) started when it is sent; the story-index reads have their own
+  `intakeLabelPrepBudget`; only a stop cancels. Our measured latency is flat
+  in question count (docs/reference/system1/our-usage.md), so 5 s is not
+  expected to bite at 12 questions; the shadow comparison is where that is
+  checked.
 
-Fate of a capture whose label is missing (found in the code): a label call
-that fails, a capture the budget cut off, or a label that cannot be written
-leaves the capture unlabelled with a log line (`labelHeld`); nothing retries
-it, because the next poll sees the capture as already captured and does not
-return it as new. A capture still queued at a crash behaves the same. The
-consumers read whatever labels exist: corpus search takes label hints from
-`RecentCaptureLabels` and ranks without one when missing, and the override
-recorder skips a capture with no label (`intake_overrides.go`). Neither
-waits, so 30 s more delay changes nothing for them.
+Consumers of labels while one is pending (the wait makes this moot for the
+wake; the rest never waited): corpus search ranks without a hint when the
+label is missing (`researchtools/corpus_search.go:160`), and the override
+recorder skips a capture with no label (`intake_overrides.go`).
 
-### Intake flush: delta review changes (2026-11-10)
-
-- **One flusher per runtime.** `HandleSourcePollDue(ctx, ownerID, computerID,
-  ...)` takes the computer as an argument and does not check it against the
-  runtime's configured `cfg.ComputerID`, and the queues are keyed by owner and
-  computer; so code does not show that one runtime serves one computer. The
-  flusher is therefore one goroutine per runtime that drains the computers'
-  queues in turn (`runIntakeFlusher`), so Jev is never called concurrently
-  even across computers.
-- **No shared deadline across calls.** The old 60 s flush budget dropped the
-  calls not yet asked when it expired. Each call now has its own
-  `intakeLabelCallTimeout` (5 s) started when it is about to be sent; the
-  story-index reads have their own `intakeLabelPrepBudget`; only a stop
-  cancels. Our measured latency is flat in question count
-  (docs/reference/system1/our-usage.md), so 5 s is not expected to bite at 12
-  questions per call; the shadow comparison is where that is checked.
-- **Stop waits after cancelling.** When the drain deadline fires and the
-  context is cancelled, `Stop` waits up to `intakeStopGrace` (2 s) for the
-  cancelled calls to return before the store may close, and logs if they do
-  not.
-- **Label counts.** `SourcePollUsage.Labelled` and `.Unlabelled` were never
-  set after the flush moved off the poll and nothing else read them, so they
-  are deleted. Counts live on the flush log line
-  (`intake labels: flush captures= calls= questions= bytes_max= waited_ms=
-  unlabelled= cancelled=`).
-- **Open: the arrival is still announced at the poll.** See the report to the
-  coordinator; moving it to the flush changes the pending-arrival retry,
-  which belongs to the schedule record.
+Label counts live on the flush log line (`intake labels: flush captures=
+calls= questions= bytes_max= waited_ms= unlabelled= cancelled=`);
+`SourcePollUsage.Labelled` and `.Unlabelled` were deleted because the poll
+no longer knows them.

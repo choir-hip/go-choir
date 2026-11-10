@@ -10,12 +10,16 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // Intake flush (docs/design/jev-batched-questions-2026-11-10.md, "Intake
-// flush: ways it can fail"). F1 two flushes at once, F2 a capture enqueued
-// meanwhile, F3 a failed call, F4 the byte guard, F5 shutdown with captures
-// held, F8 a poll with no captures.
+// flush: ways it can fail"). A group commit with no timer: the first capture
+// is asked at once, captures arriving during a call go out together in the
+// next; the poll waits on a handle that every exit path closes.
+// F1 two flushes at once, F2 a capture enqueued meanwhile, F3 a failed call,
+// F4 the byte guard, F5 shutdown with captures held, F8 a poll with no
+// captures, F10 panics, F15 a handle that never closes.
 
 func flushTestItems(n int, summary string) []sourcegraph.CapturedItem {
 	var items []sourcegraph.CapturedItem
@@ -25,7 +29,7 @@ func flushTestItems(n int, summary string) []sourcegraph.CapturedItem {
 	return items
 }
 
-// waitFor polls cond for up to five seconds.
+// waitFlush polls cond for up to five seconds.
 func waitFlush(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -37,67 +41,105 @@ func waitFlush(t *testing.T, what string, cond func() bool) {
 	}
 }
 
-func TestIntakeFlushTenSingleCapturePollsMakeOneFlush(t *testing.T) {
-	f := newIntakeFixture(t, "owner-flush-ten")
-	f.enable(t)
-	t.Cleanup(f.rt.Stop)
-	openTestStory(t, f.s, f.owner, f.computer, "Pope has lung surgery")
-	judge := &fakeIntakeJudge{}
-	f.rt.SetCandidateJudge(judge)
-	items := flushTestItems(10, "s")
-	for i := 0; i < 10; i++ {
-		f.rt.enqueueIntakeLabels(f.owner, f.computer, fmt.Sprintf("src-%d", i), items[i:i+1])
-	}
-	if got := judge.callCount(); got != 0 {
-		t.Fatalf("F2: %d calls before the flush is due; captures must be held", got)
-	}
-	l := &f.rt.intakeLabels
-	l.mu.Lock()
-	q := l.queues[eventKey(f.owner, f.computer)]
-	held, armed := len(q.items), q.timer != nil
-	l.mu.Unlock()
-	if held != 10 || !armed {
-		t.Fatalf("held=%d timer armed=%t; want 10 held under one timer", held, armed)
-	}
-	f.rt.drainIntakeLabelsNow(f.owner, f.computer)
-	if got := len(judge.labelCalls()); got != 2 {
-		t.Fatalf("%d label calls for one flush of 10 captures against one story; want 2 (6 + 4)", got)
-	}
-	if judge.maxSeen.Load() != 1 {
-		t.Fatalf("max in flight = %d; want 1", judge.maxSeen.Load())
-	}
-	for i := 0; i < 10; i++ {
-		labels, _ := f.s.CaptureLabels(context.Background(), f.owner, f.computer, fmt.Sprintf("flush-%02d", i))
-		if len(labels) != 1 || labels[0].SourceID != fmt.Sprintf("src-%d", i) {
-			t.Fatalf("capture %d labels = %+v; want one, from its own source", i, labels)
-		}
+// waitClosed fails unless ch closes within five seconds.
+func waitClosed(t *testing.T, what string, ch <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("F15: the wait handle did not close: %s", what)
 	}
 }
 
-func TestIntakeFlushRunsAtTwelveHeldAndNeverTwoAtOnce(t *testing.T) {
-	f := newIntakeFixture(t, "owner-flush-twelve")
+func labelCount(t *testing.T, f *intakeFixture, id string) int {
+	t.Helper()
+	l, _ := f.s.CaptureLabels(context.Background(), f.owner, f.computer, id)
+	return len(l)
+}
+
+// gatedJudge blocks its first call until the test releases it, and says when
+// that call has arrived. The wait is bounded so a failing test cannot hang.
+type gatedJudge struct {
+	fakeIntakeJudge
+	first   atomic.Bool
+	entered chan struct{}
+	gate    chan struct{}
+}
+
+func newGatedJudge() *gatedJudge {
+	return &gatedJudge{entered: make(chan struct{}), gate: make(chan struct{})}
+}
+
+func (j *gatedJudge) JudgeScoped(ctx context.Context, scope string, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
+	if j.first.CompareAndSwap(false, true) {
+		close(j.entered)
+		select {
+		case <-j.gate:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(10 * time.Second):
+		}
+	}
+	return j.fakeIntakeJudge.JudgeScoped(ctx, scope, state, questions)
+}
+
+func (j *gatedJudge) Judge(ctx context.Context, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
+	return j.JudgeScoped(ctx, "", state, questions)
+}
+
+func TestIntakeFlushFirstCaptureIsAskedAtOnce(t *testing.T) {
+	f := newIntakeFixture(t, "owner-flush-first")
 	f.enable(t)
-	judge := &fakeIntakeJudge{delay: 30 * time.Millisecond}
+	openTestStory(t, f.s, f.owner, f.computer, "Pope has lung surgery")
+	judge := &fakeIntakeJudge{}
 	f.rt.SetCandidateJudge(judge)
 	t.Cleanup(f.rt.Stop)
-	items := flushTestItems(30, "s")
-	f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", items[:12])
-	// F2: more arrive while the flush runs; they are not a second stream.
-	waitFlush(t, "the first flush's call", func() bool { return judge.callCount() >= 1 })
-	f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", items[12:24])
-	waitFlush(t, "all 24 labelled", func() bool {
-		for i := 0; i < 24; i++ {
-			if l, _ := f.s.CaptureLabels(context.Background(), f.owner, f.computer, items[i].CaptureID); len(l) != 1 {
-				return false
-			}
-		}
-		return true
-	})
+	items := flushTestItems(1, "s")
+	waitClosed(t, "one capture", f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", items))
+	if labelCount(t, f, items[0].CaptureID) != 1 {
+		t.Fatal("the first capture was not labelled before its handle closed")
+	}
+	if got := len(judge.labelCalls()); got != 1 {
+		t.Fatalf("%d calls for one capture; want 1", got)
+	}
+}
+
+// Burst: N enqueues made while a call is in flight go out together in the
+// next flush, at most 6 captures a call, one call at a time.
+func TestIntakeFlushBurstDuringACallBatchesIntoCeilNOverSix(t *testing.T) {
+	f := newIntakeFixture(t, "owner-flush-burst")
+	f.enable(t)
+	openTestStory(t, f.s, f.owner, f.computer, "Pope has lung surgery")
+	judge := newGatedJudge()
+	f.rt.SetCandidateJudge(judge)
+	t.Cleanup(f.rt.Stop)
+	all := flushTestItems(15, "s")
+	first := f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", all[:1])
+	waitClosed(t, "the first call to arrive", judge.entered)
+	var handles []<-chan struct{}
+	for i := 1; i < 15; i++ { // 14 single-capture polls while the call is held
+		handles = append(handles, f.rt.enqueueIntakeLabels(f.owner, f.computer, fmt.Sprintf("src-%d", i), all[i:i+1]))
+	}
+	// The held call is not recorded until it is released; no second call may
+	// have been made meanwhile.
+	if got := len(judge.labelCalls()); got != 0 {
+		t.Fatalf("%d calls recorded while the first is held; want none", got)
+	}
+	close(judge.gate)
+	waitClosed(t, "the first capture", first)
+	for i, h := range handles {
+		waitClosed(t, fmt.Sprintf("capture %d", i+1), h)
+	}
+	if got, want := len(judge.labelCalls()), 1+(14+intakeCallCaptures-1)/intakeCallCaptures; got != want {
+		t.Fatalf("%d calls; want %d (the held one, then ceil(14/6) for the burst)", got, want)
+	}
 	if got := judge.maxSeen.Load(); got != 1 {
 		t.Fatalf("F1: %d Jev calls in flight at once; want 1", got)
 	}
-	if got := len(judge.labelCalls()); got != 4 {
-		t.Fatalf("%d calls for two full flushes of no-story captures; want 4 (6 captures a call)", got)
+	for i := 0; i < 15; i++ {
+		if labelCount(t, f, all[i].CaptureID) != 1 {
+			t.Fatalf("capture %d not labelled", i)
+		}
 	}
 }
 
@@ -134,16 +176,62 @@ func TestIntakeFlushPacksToTheByteGuardNotACount(t *testing.T) {
 	}
 }
 
+// The poll announces after the labels exist, and still announces when the
+// label call fails.
+func TestIntakeFlushPollAnnouncesAfterLabelsAndEvenWhenTheCallFails(t *testing.T) {
+	for _, c := range []struct {
+		name       string
+		judge      CandidateJudge
+		wantLabels int
+	}{
+		{"labels", &fakeIntakeJudge{}, 3},
+		{"failed call", &fakeIntakeJudge{fail: fmt.Errorf("gateway: 429")}, 0},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newIntakeFixture(t, "owner-flush-order-"+strings.ReplaceAll(c.name, " ", "-"))
+			f.enable(t)
+			openTestStory(t, f.s, f.owner, f.computer, "Pope has lung surgery")
+			f.rt.SetCandidateJudge(c.judge)
+			t.Cleanup(f.rt.Stop)
+			var labelsAtCommit atomic.Int32
+			commits := atomic.Int32{}
+			f.rt.commitCaptureArrival = func(ctx context.Context, req types.CommitInboxRecordsRequest) error {
+				commits.Add(1)
+				n := 0
+				for i := 0; i < 3; i++ {
+					if labelCount(t, f, f.captureID(i)) > 0 {
+						n++
+					}
+				}
+				labelsAtCommit.Store(int32(n))
+				_, err := f.rt.store.CommitInboxRecords(ctx, req)
+				return err
+			}
+			for i := 0; i < 3; i++ {
+				*f.items = append(*f.items, labelFeedItem{fmt.Sprintf("Order item %d", i), "Summary"})
+			}
+			f.poll(t)
+			if commits.Load() != 1 {
+				t.Fatalf("%d arrivals committed; want 1 (a failed label still announces)", commits.Load())
+			}
+			if got := int(labelsAtCommit.Load()); got != c.wantLabels {
+				t.Fatalf("%d labels existed when the arrival was committed; want %d", got, c.wantLabels)
+			}
+		})
+	}
+}
+
 func TestIntakeFlushFailedCallLeavesCapturesUnlabelledAndNothingRetries(t *testing.T) {
 	f := newIntakeFixture(t, "owner-flush-fail")
 	f.enable(t)
+	openTestStory(t, f.s, f.owner, f.computer, "Pope has lung surgery")
 	judge := &fakeIntakeJudge{fail: fmt.Errorf("gateway: 429")}
 	f.rt.SetCandidateJudge(judge)
-	f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", flushTestItems(3, "s"))
-	f.rt.drainIntakeLabelsNow(f.owner, f.computer)
-	f.rt.drainIntakeLabelsNow(f.owner, f.computer)
-	for i := 0; i < 3; i++ {
-		if l, _ := f.s.CaptureLabels(context.Background(), f.owner, f.computer, fmt.Sprintf("flush-%02d", i)); len(l) != 0 {
+	t.Cleanup(f.rt.Stop)
+	items := flushTestItems(3, "s")
+	waitClosed(t, "a failed flush", f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", items))
+	for i := range items {
+		if labelCount(t, f, items[i].CaptureID) != 0 {
 			t.Fatalf("F3: capture %d labelled by a failing Jev", i)
 		}
 	}
@@ -152,99 +240,77 @@ func TestIntakeFlushFailedCallLeavesCapturesUnlabelledAndNothingRetries(t *testi
 	}
 }
 
-func TestIntakeFlushStopLabelsWhatIsHeldAndRefusesNew(t *testing.T) {
+// Stop: what is held is labelled by the drain, and the handles close.
+func TestIntakeFlushStopLabelsWhatIsHeldAndClosesHandles(t *testing.T) {
 	f := newIntakeFixture(t, "owner-flush-stop")
 	f.enable(t)
-	judge := &fakeIntakeJudge{}
+	openTestStory(t, f.s, f.owner, f.computer, "Pope has lung surgery")
+	judge := newGatedJudge()
 	f.rt.SetCandidateJudge(judge)
-	f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", flushTestItems(2, "s"))
-	f.rt.Stop()
-	for i := 0; i < 2; i++ {
-		if l, _ := f.s.CaptureLabels(context.Background(), f.owner, f.computer, fmt.Sprintf("flush-%02d", i)); len(l) != 1 {
-			t.Fatalf("F11: held capture %d not labelled by the drain on stop", i)
+	items := flushTestItems(2, "s")
+	a := f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", items[:1])
+	waitClosed(t, "the first call to arrive", judge.entered)
+	b := f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", items[1:2]) // held behind the call
+	stopped := make(chan struct{})
+	go func() { f.rt.Stop(); close(stopped) }()
+	waitFlush(t, "stop to begin", func() bool {
+		f.rt.intakeLabels.mu.Lock()
+		defer f.rt.intakeLabels.mu.Unlock()
+		return f.rt.intakeLabels.stopped
+	})
+	close(judge.gate)
+	waitClosed(t, "Stop", stopped)
+	waitClosed(t, "the in-flight capture", a)
+	waitClosed(t, "the held capture", b)
+	for i := range items {
+		if labelCount(t, f, items[i].CaptureID) != 1 {
+			t.Fatalf("F5: capture %d not labelled by the drain on stop", i)
 		}
 	}
 	before := judge.callCount()
-	f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", flushTestItems(14, "s"))
-	f.rt.Stop() // idempotent
+	waitClosed(t, "a refused enqueue", f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", flushTestItems(14, "s")))
 	if got := judge.callCount(); got != before {
-		t.Fatalf("F11: %d calls after stop began; no enqueue is accepted", got-before)
+		t.Fatalf("F5: %d calls after stop began; no enqueue is accepted", got-before)
 	}
 }
 
+// Stop with a judge slower than the bound returns at the bound, leaves the
+// captures unlabelled and closes their handles.
 func TestIntakeFlushStopReturnsAtTheBoundWithASlowJudge(t *testing.T) {
 	f := newIntakeFixture(t, "owner-flush-stop-slow")
 	f.enable(t)
+	openTestStory(t, f.s, f.owner, f.computer, "Pope has lung surgery")
 	f.rt.telemetryDrainDeadline = 300 * time.Millisecond
-	judge := &fakeIntakeJudge{delay: 3 * time.Second}
+	judge := newGatedJudge() // never released: only the cancellation ends the call
 	f.rt.SetCandidateJudge(judge)
-	f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", flushTestItems(2, "s"))
+	items := flushTestItems(2, "s")
+	a := f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", items[:1])
+	waitClosed(t, "the call to arrive", judge.entered)
+	b := f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", items[1:2])
 	start := time.Now()
 	f.rt.Stop()
 	if took := time.Since(start); took > 2*time.Second {
-		t.Fatalf("F11: Stop took %v with a 300ms bound", took)
+		t.Fatalf("F5: Stop took %v with a 300ms bound", took)
 	}
-	if l, _ := f.s.CaptureLabels(context.Background(), f.owner, f.computer, "flush-00"); len(l) != 0 {
-		t.Fatalf("F11: a capture the judge did not answer in time is labelled: %+v", l)
-	}
-}
-
-type panicOnceJudge struct {
-	fakeIntakeJudge
-	panicked atomic.Bool
-}
-
-func (j *panicOnceJudge) JudgeScoped(ctx context.Context, scope string, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
-	if j.panicked.CompareAndSwap(false, true) {
-		panic("judge panic")
-	}
-	return j.fakeIntakeJudge.JudgeScoped(ctx, scope, state, questions)
-}
-
-func (j *panicOnceJudge) Judge(ctx context.Context, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
-	return j.JudgeScoped(ctx, "", state, questions)
-}
-
-func TestIntakeFlushSurvivesAPanicAndFlushesAgain(t *testing.T) {
-	f := newIntakeFixture(t, "owner-flush-panic")
-	f.enable(t)
-	judge := &panicOnceJudge{}
-	f.rt.SetCandidateJudge(judge)
-	t.Cleanup(f.rt.Stop)
-	items := flushTestItems(24, "s")
-	f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", items[:12])
-	waitFlush(t, "the panicking flush to end", func() bool {
-		l := &f.rt.intakeLabels
-		l.mu.Lock()
-		defer l.mu.Unlock()
-		return judge.panicked.Load() && !l.running
-	})
-	for i := 0; i < intakeCallCaptures; i++ {
-		if l, _ := f.s.CaptureLabels(context.Background(), f.owner, f.computer, items[i].CaptureID); len(l) != 0 {
-			t.Fatalf("F10: capture %d of the panicked call is labelled", i)
+	waitClosed(t, "the in-flight capture", a)
+	waitClosed(t, "the abandoned capture", b)
+	for i := range items {
+		if labelCount(t, f, items[i].CaptureID) != 0 {
+			t.Fatalf("F5: capture %d labelled although the judge never answered in time", i)
 		}
 	}
-	f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", items[12:24])
-	waitFlush(t, "a later flush to label", func() bool {
-		for i := 12; i < 24; i++ {
-			if l, _ := f.s.CaptureLabels(context.Background(), f.owner, f.computer, items[i].CaptureID); len(l) != 1 {
-				return false
-			}
-		}
-		return true
-	})
 }
 
-func TestIntakeFlushZeroCapturesArmsNothing(t *testing.T) {
+func TestIntakeFlushZeroCapturesCloseTheHandleAtOnce(t *testing.T) {
 	f := newIntakeFixture(t, "owner-flush-zero")
 	f.enable(t)
 	f.rt.SetCandidateJudge(&fakeIntakeJudge{})
-	f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", nil)
-	f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", []sourcegraph.CapturedItem{{Title: "no id"}})
+	waitClosed(t, "no captures", f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", nil))
+	waitClosed(t, "a capture with no id", f.rt.enqueueIntakeLabels(f.owner, f.computer, "src", []sourcegraph.CapturedItem{{Title: "no id"}}))
 	l := &f.rt.intakeLabels
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if q := l.queues[eventKey(f.owner, f.computer)]; q != nil && (q.timer != nil || len(q.items) != 0) {
-		t.Fatalf("F8: queue = %+v; want nothing held and no timer", q)
+	if l.running || l.anyHeldLocked() {
+		t.Fatalf("F8: running=%t held=%t; want nothing started", l.running, l.anyHeldLocked())
 	}
 }

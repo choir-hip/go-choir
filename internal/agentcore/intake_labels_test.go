@@ -383,7 +383,6 @@ func (f *intakeFixture) poll(t *testing.T) store.SourceSchedule {
 	if err := f.rt.HandleSourcePollDue(ctx, f.owner, f.computer, (*f.wakes)[len(*f.wakes)-1].content); err != nil {
 		t.Fatal(err)
 	}
-	f.rt.drainIntakeLabelsNow(f.owner, f.computer)
 	sched, err := f.s.GetSourceSchedule(ctx, f.owner, f.sourceID)
 	if err != nil {
 		t.Fatal(err)
@@ -400,30 +399,6 @@ func labelNow(rt *Runtime, ctx context.Context, owner, computer, sourceID string
 		}
 	}
 	return rt.labelHeld(ctx, owner, computer, held)
-}
-
-// drainIntakeLabelsNow flushes everything the computer holds, now and in the
-// caller's goroutine, in flushes of at most intakeFlushCaptures.
-func (rt *Runtime) drainIntakeLabelsNow(owner, computer string) {
-	l := &rt.intakeLabels
-	l.mu.Lock()
-	q := l.queues[eventKey(owner, computer)]
-	if q == nil {
-		l.mu.Unlock()
-		return
-	}
-	if q.timer != nil {
-		q.timer.Stop()
-		q.timer = nil
-	}
-	items := q.items
-	q.items = nil
-	l.mu.Unlock()
-	for len(items) > 0 {
-		n := min(len(items), intakeFlushCaptures)
-		rt.labelHeld(context.Background(), owner, computer, items[:n])
-		items = items[n:]
-	}
 }
 
 func (f *intakeFixture) arrivals(t *testing.T) []types.CommitmentRecord {
