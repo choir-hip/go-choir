@@ -410,7 +410,7 @@ func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, 
 		SourceEntities:   entities,
 		Citations:        json.RawMessage("[]"),
 		Metadata:         sanitizeTextureToolRevisionMetadata(rawMeta),
-		Provenance:       inheritParentLinks(buildStructuredAppagentRevisionProvenance(rec, entities, now), baseRev),
+		Provenance:       stampOpedLinks(inheritParentLinks(buildStructuredAppagentRevisionProvenance(rec, entities, now), baseRev), rec),
 		ParentRevisionID: baseRev.RevisionID,
 		CreatedAt:        now,
 	}

@@ -197,6 +197,11 @@ func (h *Handler) reviseDocument(ctx context.Context, req ReviseRequest) (Revise
 	if err != nil {
 		return ReviseReceipt{}, refuseOwnerRevision(http.StatusNotFound, "document not found")
 	}
+	if len(req.Sources) > 0 {
+		// A document built from published versions may be published, and its
+		// parents' authors told: this computer polls for the notices.
+		h.ensurePlatformPolls(ctx, ownerID)
+	}
 	if kase == ReviseEdit {
 		receipt, err := h.commitOwnerBodyEdit(ctx, doc, ownerID, ownerBodyEdit{
 			Body: *req.Body, ParentRevisionID: strings.TrimSpace(req.BaseRevisionID), IdempotencyKey: strings.TrimSpace(req.ClientRequestID),

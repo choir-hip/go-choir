@@ -98,6 +98,7 @@ func (h *Handler) forkDocument(ctx context.Context, req ForkRequest) (ReviseRece
 	if h.Core == nil || strings.TrimSpace(h.Core.TextureComputerID()) == "" {
 		return ReviseReceipt{}, refuseOwnerRevision(http.StatusServiceUnavailable, "computer identity unavailable")
 	}
+	h.ensurePlatformPolls(ctx, ownerID)
 	v := resolved[0].Version
 	title := firstNonEmpty(strings.TrimSpace(v.Title), "Fork")
 	created, err := h.startLifecycleTextureDocument(asOwner(ctx), ownerID, strings.TrimSpace(h.Core.TextureComputerID()), clientRequestID, title, strings.TrimSpace(v.Content))

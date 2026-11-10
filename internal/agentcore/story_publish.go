@@ -203,6 +203,9 @@ func (rt *Runtime) AutoPublishRevision(ctx context.Context, rec types.RunRecord,
 		log.Printf("story publish: %s revision %s not published: trajectory %s is kind %q with publish %q, not a publish-auto story", doc.DocID, rev.RevisionID, doc.TrajectoryID, trajectory.Kind, trajectory.SubjectRefs[types.StoryRefPublish])
 		return ""
 	}
+	// A computer that publishes stories is polled for the op-eds on them
+	// (idempotent; the loops start once).
+	rt.EnsurePlatformPolls(context.WithoutCancel(ctx), ownerID, doc.ComputerID)
 	if revisionRole(rev) == types.StorySeedRole {
 		log.Printf("story publish: %s revision %s not published: it is the story's seed", doc.DocID, rev.RevisionID)
 		return ""
