@@ -353,7 +353,7 @@ test.describe('front-page rank', () => {
     expect(storiesInSection(list, 'front')).toEqual(list);
     expect(storiesInSection(list, 'tech_ai')).toEqual([tech]);
     expect(storiesInSection(list, 'nonsense')).toEqual(list);
-    // Habit: all visits to Tech & AI lift it by 1.25 (5 x 1.25 = 6.25 > 6).
+    // Habit: all visits to Technology lift it by 1.25 (5 x 1.25 = 6.25 > 6).
     expect(rankFrontStories(list).map((s) => s.title)[0]).toBe('World story');
     const shares = sectionShares({ tech_ai: 4 });
     expect(rankFrontStories(list, { sectionShares: shares }).map((s) => s.title)).toEqual([
@@ -420,11 +420,11 @@ const SECTION_OF = {
   'ja-rice': 'business',
   'ko-chip': 'tech_ai',
   'ar-water': 'world',
-  court: 'us_politics',
-  vaccine: 'us_politics',
+  court: 'politics',
+  vaccine: 'politics',
   library: 'world',
   longword: 'tech_ai',
-  election: 'us_politics',
+  election: 'politics',
   rail: 'business',
   museum: 'world',
 };
@@ -448,7 +448,7 @@ test.describe('Autopaper sections', () => {
     await openFront(page, { width: 1440, height: 900 }, fx);
     const nav = page.locator('[data-autopaper-sections]');
     await expect(nav).toBeVisible();
-    await expect(nav.locator('button')).toHaveText(['Front page', 'World', 'U.S. Politics', 'Business & Finance', 'Tech & AI']);
+    await expect(nav.locator('button')).toHaveText(['Front page', 'World', 'U.S.', 'Politics', 'Business', 'Technology', 'Science', 'Health', 'Climate', 'Culture', 'Sports']);
     await expect(nav.locator('[aria-current="page"]')).toHaveText('Front page');
     // Under the edition line, inside the masthead.
     const editionBox = await page.locator('[data-autopaper-edition]').boundingBox();
@@ -458,9 +458,9 @@ test.describe('Autopaper sections', () => {
     await expect(page.locator('[data-autopaper-headline]')).toHaveText(rankFrontStories(fx.first).map((s) => s.title));
     await shoot(page, testInfo, 'autopaper-sections-1440-front');
 
-    await nav.locator('[data-autopaper-section="us_politics"]').click();
-    await expect(nav.locator('[aria-current="page"]')).toHaveText('U.S. Politics');
-    const politics = rankFrontStories(storiesInSection(fx.first, 'us_politics'));
+    await nav.locator('[data-autopaper-section="politics"]').click();
+    await expect(nav.locator('[aria-current="page"]')).toHaveText('Politics');
+    const politics = rankFrontStories(storiesInSection(fx.first, 'politics'));
     expect(politics.length).toBe(3);
     await expect(page.locator('[data-autopaper-headline]')).toHaveText(politics.map((s) => s.title));
     await expect(page.locator('h2')).toHaveCount(1);
@@ -479,12 +479,12 @@ test.describe('Autopaper sections', () => {
     );
     const stored = await page.evaluate(([a, b]) => [localStorage.getItem(a), localStorage.getItem(b)], [SECTION_STORAGE_KEY, SECTION_VISITS_STORAGE_KEY]);
     expect(stored[0]).toBe('tech_ai');
-    expect(JSON.parse(stored[1])).toEqual({ us_politics: 1, tech_ai: 1 });
+    expect(JSON.parse(stored[1])).toEqual({ politics: 1, tech_ai: 1 });
 
     // Reopen: the last section is restored.
     await page.reload();
     await expect(page.locator('[data-autopaper-grid]')).toBeVisible({ timeout: 20_000 });
-    await expect(page.locator('[data-autopaper-sections] [aria-current="page"]')).toHaveText('Tech & AI');
+    await expect(page.locator('[data-autopaper-sections] [aria-current="page"]')).toHaveText('Technology');
     await expect(page.locator('[data-autopaper-headline]')).toHaveText(
       rankFrontStories(storiesInSection(fx.first, 'tech_ai')).map((s) => s.title),
     );
@@ -521,16 +521,16 @@ test.describe('Autopaper sections', () => {
     const fx = sectionedFixture();
     // Politics rows on the front page (court, vaccine, election) are dropped,
     // as when the section has been quiet for more than the newest 60 stories.
-    const front = { first: fx.first.filter((s) => s.section !== 'us_politics'), second: fx.second };
-    const old = { ...fx.first[0], publication_id: 'pub-old-politics', title: 'Senate passes the budget after an overnight session', section: 'us_politics', importance: 6 };
+    const front = { first: fx.first.filter((s) => s.section !== 'politics'), second: fx.second };
+    const old = { ...fx.first[0], publication_id: 'pub-old-politics', title: 'Senate passes the budget after an overnight session', section: 'politics', importance: 6 };
     const requests = [];
-    const sectionBody = (section) => (section === 'us_politics' ? { stories: [old] } : { stories: [] });
+    const sectionBody = (section) => (section === 'politics' ? { stories: [old] } : { stories: [] });
     await openFront(page, { width: 1280, height: 900 }, front, '', { sectionBody, requests });
     await expect(page.locator('[data-autopaper-sections]')).toBeVisible();
-    await page.locator('[data-autopaper-section="us_politics"]').click();
+    await page.locator('[data-autopaper-section="politics"]').click();
     await expect(page.locator('[data-autopaper-headline]')).toHaveText([old.title]);
     await expect(page.locator('[data-autopaper-section-empty]')).toHaveCount(0);
-    expect(requests.some((q) => /section=us_politics/.test(q) && /limit=60/.test(q))).toBe(true);
+    expect(requests.some((q) => /section=politics/.test(q) && /limit=60/.test(q))).toBe(true);
   });
 
   test('"No stories in this section yet." shows only when the server returns no story for the section', async ({ page }) => {
@@ -586,7 +586,7 @@ test.describe('Autopaper sections', () => {
     expect(firstLeft).toBeGreaterThanOrEqual(16);
     await shoot(page, testInfo, 'autopaper-sections-375-front');
     await page.locator('[data-autopaper-section="tech_ai"]').click();
-    await expect(page.locator('[data-autopaper-sections] [aria-current="page"]')).toHaveText('Tech & AI');
+    await expect(page.locator('[data-autopaper-sections] [aria-current="page"]')).toHaveText('Technology');
     await expectNoHorizontalOverflow(page, '375px tech');
     await shoot(page, testInfo, 'autopaper-sections-375-tech');
   });

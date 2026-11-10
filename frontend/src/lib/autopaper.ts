@@ -34,15 +34,24 @@ export type FrontStory = {
   source_count?: number;
   /** Words in the latest version's body; absent when unknown. */
   words?: number;
-  /** The front-page section the scorer filed the story under; absent when unscored. */
+  /** The story's primary section id (the scorer's top section among those it belongs to); absent when unscored. */
   section?: string;
+  /** Every section the story belongs to (a story can be in several). */
+  sections?: string[];
+  /** The story was placed in its top section because no section's threshold admitted it. */
+  section_fallback?: boolean;
   /** "opinion" for a row of the Opinion section; absent for an Autopaper story. */
   kind?: string;
   /** An opinion piece's byline (a handle, never an email); absent for a story. */
   author?: string;
 };
 
-export type FrontPage = { stories: FrontStory[]; next_cursor?: string };
+export type FrontPage = {
+  stories: FrontStory[];
+  next_cursor?: string;
+  /** The paper's section list, in order; absent when the server has none (the default list applies). */
+  sections?: { id: string; label: string }[];
+};
 
 // ---- routes ----
 
@@ -138,7 +147,14 @@ export async function fetchFrontPage(cursor = '', limit = 20, section = ''): Pro
   });
   if (!res.ok) throw new Error(`front list returned ${res.status}`);
   const page = await res.json();
-  return { stories: Array.isArray(page?.stories) ? page.stories : [], next_cursor: page?.next_cursor || '' };
+  const sections = Array.isArray(page?.sections)
+    ? page.sections.filter((s: any) => isSectionId(s?.id) && s.id !== FRONT_SECTION_ID && typeof s?.label === 'string' && s.label)
+    : [];
+  return {
+    stories: Array.isArray(page?.stories) ? page.stories : [],
+    next_cursor: page?.next_cursor || '',
+    ...(sections.length ? { sections } : {}),
+  };
 }
 
 /** The section id the server lists opinion pieces under. */
@@ -342,17 +358,27 @@ export const FRONT_SECTION_ID = 'front';
 export const AUTOPAPER_SECTIONS: { id: string; label: string }[] = [
   { id: FRONT_SECTION_ID, label: 'Front page' },
   { id: 'world', label: 'World' },
-  { id: 'us_politics', label: 'U.S. Politics' },
-  { id: 'business', label: 'Business & Finance' },
-  { id: 'tech_ai', label: 'Tech & AI' },
+  { id: 'us', label: 'U.S.' },
+  { id: 'politics', label: 'Politics' },
+  { id: 'business', label: 'Business' },
+  { id: 'tech_ai', label: 'Technology' },
+  { id: 'science', label: 'Science' },
+  { id: 'health', label: 'Health' },
+  { id: 'climate', label: 'Climate' },
+  { id: 'culture', label: 'Culture' },
+  { id: 'sports', label: 'Sports' },
 ];
 
-const SECTION_IDS = new Set(AUTOPAPER_SECTIONS.map((s) => s.id));
+// The server's section list is the source of truth (the front page carries
+// it as `sections`); AUTOPAPER_SECTIONS is the default until a page arrives
+// and the label source for the Texture related-stories line. Any id of the
+// list's shape is a section id; the server refuses what is not one.
+const SECTION_ID_PATTERN = /^[a-z0-9_]{1,32}$/;
 export const SECTION_STORAGE_KEY = 'choir.autopaper.section.v1';
 export const SECTION_VISITS_STORAGE_KEY = 'choir.autopaper.section-visits.v1';
 
 export function isSectionId(id: unknown): id is string {
-  return typeof id === 'string' && SECTION_IDS.has(id);
+  return typeof id === 'string' && (id === FRONT_SECTION_ID || SECTION_ID_PATTERN.test(id));
 }
 
 /** Whether enough stories carry a section for the switcher to show. */
@@ -367,7 +393,7 @@ export function usesSections(stories: FrontStory[]): boolean {
 export function storiesInSection(stories: FrontStory[], section: string): FrontStory[] {
   const list = Array.isArray(stories) ? stories : [];
   if (!isSectionId(section) || section === FRONT_SECTION_ID) return list;
-  return list.filter((story) => story?.section === section);
+  return list.filter((story) => story?.section === section || (Array.isArray(story?.sections) && story.sections.includes(section)));
 }
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
