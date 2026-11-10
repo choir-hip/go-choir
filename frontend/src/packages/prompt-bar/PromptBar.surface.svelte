@@ -6,10 +6,14 @@
   Slot ABI, props: authenticated, placement ('top' | 'bottom'), promptDisabled,
   promptPlaceholder, promptStatus, promptRouting, liveStatus, launcherOpen,
   launcherRestoreFocus, target (the focused window's prompt target:
-  { windowId, appId, appName, label, focus } where focus is
-  { app_agent_id, object_ref, selection? } or null) and route (where the last
-  text went: { state: 'routing' | 'routed', label }). Events: promptsubmit
-  ({ text, focus, windowId }; focus null sends the text to the conductor),
+  { windowId, appId, appName, label, focus, aim? } where focus is
+  { app_agent_id, object_ref, selection? } or null and aim, when the window
+  states what the bar is aimed at, is { state: 'owned' | 'foreign', verb, chip,
+  revisionLabel, baseRevisionId, source }) and route (where the last text went:
+  { state: 'routing' | 'routed', label, class?, alternatives? }; a class is
+  edit, comment or request, and each alternative is one tap to send the same
+  text under it). Events: promptsubmit ({ text, focus, windowId, aim,
+  baseRevisionId } or { resendClass }; focus null sends the text to the agent),
   windowaction ({ windowId, action }), launcher ({ open, restoreFocus }).
   Everything else is an SDK call. Cmd+K is the host's (core.toggleDesk).
 
@@ -17,9 +21,8 @@
   with single-line text they share one centre line. The window buttons focus,
   minimise and restore (a click on the focused window minimises it); on a
   phone one windows button opens the same window list popover that the
-  desktop +N button opens. The target pill names only the destination desk
-  ("To Texture", "To Conductor"); one tap sends to the conductor instead and a
-  second restores it. Enter is a newline; the submit button and Cmd/Ctrl+Enter
+  desktop +N button opens. The target pill names only the destination
+  ("To Texture", "To Agent"; with an aim, an icon and a verb placeholder); one tap sends to the agent instead and a second restores it. Enter is a newline; the submit button and Cmd/Ctrl+Enter
   send (owner, 2026-11-09). A pasted link is text like any other: it goes to
   the focused object (owner, 2026-11-06).
 -->
@@ -40,8 +43,17 @@
     type PromptFocus,
   } from '../../lib/app-sdk';
 
-  type PromptTarget = { windowId: string; appId: string; appName: string; label: string; focus: PromptFocus | null };
-  type PromptRoute = { state: 'routing' | 'routed'; label: string };
+  type PromptAim = {
+    state: 'owned' | 'foreign';
+    title: string;
+    verb: string;
+    chip: string;
+    revisionLabel: string;
+    baseRevisionId: string;
+    source: { publication_version_id: string; manifest_hash: string } | null;
+  };
+  type PromptTarget = { windowId: string; appId: string; appName: string; label: string; focus: PromptFocus | null; aim?: PromptAim | null };
+  type PromptRoute = { state: 'routing' | 'routed'; label: string; class?: string; alternatives?: string[] };
 
   export let authenticated = false;
   export let promptDisabled = false;
@@ -115,28 +127,31 @@
     choiceRouting = false;
     choice = '';
   }
-  // What the text goes to: 'focus' (the focused app agent), 'hint' (the
-  // focused app has no desk to take it: the conductor routes) or 'conductor'.
+  // What the text goes to: 'focus' (the focused app agent, or the document
+  // the window states as the aim), 'hint' (the focused app has no desk to take
+  // it: the agent routes) or 'conductor' (the agent; the value is a hook).
   $: mode = !target
     ? 'conductor'
     : choice === 'conductor'
       ? 'conductor'
-      : target.focus
+      : target.focus || target.aim
         ? 'focus'
         : 'hint';
+  $: aim = mode === 'focus' && target?.aim ? target.aim : null;
+  $: aimKind = aim ? (aim.state === 'owned' ? 'edit' : 'reply') : mode === 'conductor' ? 'agent' : '';
   // The pill names the destination desk and nothing else. Only a focus the
   // owner can clear to the conductor, or restore, is interactive.
-  $: chipName = mode === 'focus' ? target?.appName || '' : 'Conductor';
+  $: chipName = mode === 'focus' ? target?.appName || '' : 'Agent';
   $: chipText = isPhone ? chipName : `To ${chipName}`;
   $: chipLabel = target?.label || '';
   $: chipInteractive = !!target && (mode === 'focus' || mode === 'conductor');
   $: chipAria = mode === 'focus'
-    ? `To ${target?.appName}${chipLabel ? `: ${chipLabel}` : ''}. Activate to send to the conductor instead.`
+    ? `${aim ? `${aim.verb.replace(/…$/, '')}${aim.revisionLabel ? `, responding to ${aim.revisionLabel}` : ''}` : `To ${target?.appName}${chipLabel ? `: ${chipLabel}` : ''}`}. Activate to send to the agent instead.`
     : mode === 'hint'
-      ? `To the conductor, which routes the text. ${target?.appName} has no desk for it.`
+      ? `To the agent, which routes the text. ${target?.appName} has no desk for it.`
       : target
-        ? `To the conductor. Activate to send to ${target.appName}${chipLabel ? `: ${chipLabel}` : ''}.`
-        : 'To the conductor, which routes the text.';
+        ? `To the agent. Activate to send to ${target.appName}${chipLabel ? `: ${chipLabel}` : ''}.`
+        : 'To the agent, which routes the text.';
 
   // ── Window buttons ────────────────────────────────────────────────────
   function windowState(win: any): 'focused' | 'open' | 'minimized' {
@@ -348,7 +363,13 @@
     }
     if (promptRouting && target) return;
     const focus = mode === 'focus' && target?.focus ? target.focus : null;
-    dispatch('promptsubmit', { text: promptValue.trim(), focus, windowId: focus ? target?.windowId || '' : '' });
+    // An aim is the document in view: Jev classifies the text and the shell
+    // sends it as an edit, a comment (a fork on a document the owner does not
+    // own) or a request; the revision it answers rides along.
+    dispatch('promptsubmit', {
+      text: promptValue.trim(), focus, windowId: focus || aim ? target?.windowId || '' : '',
+      aim, baseRevisionId: aim?.baseRevisionId || '',
+    });
     promptValue = '';
     tick().then(resizePromptInput);
   }
@@ -363,7 +384,7 @@
     }
   }
 
-  // One tap clears the focus to the conductor, a second restores it; the
+  // One tap clears the focus to the agent, a second restores it; the
   // focus goes back to the prompt, so the owner keeps typing.
   function toggleTarget() {
     if (!target || !chipInteractive) return;
@@ -464,7 +485,15 @@
     && !route;
   $: placeholder = chyronVisible
     ? ''
-    : promptPlaceholder || (isPhone ? 'Message' : `Enter for a new line · ${isMac ? '⌘Enter' : 'Ctrl+Enter'} to send`);
+    : promptPlaceholder
+      || (aim?.verb ? aim.verb : '')
+      || (isPhone ? 'Message' : `Enter for a new line · ${isMac ? '⌘Enter' : 'Ctrl+Enter'} to send`);
+
+  // One tap sends the last text again under another class.
+  function resendAs(cls: string) {
+    if (promptDisabled || promptRouting) return;
+    dispatch('promptsubmit', { resendClass: cls });
+  }
 
   onMount(() => {
     if (surfaceEl) surfaceWidth = surfaceEl.clientWidth;
@@ -614,8 +643,15 @@
     {#if route}
       <div class="prompt-status" data-prompt-route data-prompt-route-state={route.state} aria-live="polite">
         {route.state === 'routing' ? `${route.label}…` : `→ ${route.label}`}
+        {#if route.state === 'routed' && route.class}
+          <span data-prompt-class={route.class}>Sent as {route.class}.</span>
+          {#each route.alternatives || [] as alt (alt)}
+            <button type="button" class="prompt-resend" data-prompt-resend={alt} on:click={() => resendAs(alt)}>Send as {alt}</button>
+          {/each}
+        {/if}
       </div>
     {/if}
+
     <button
       class="prompt-target"
       class:is-focus={mode === 'focus'}
@@ -633,7 +669,21 @@
       on:click={toggleTarget}
     >
       <span class="prompt-target-pill">
+        {#if aimKind}
+          <svg class="prompt-aim-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" data-prompt-aim-icon={aimKind}>
+            {#if aimKind === 'edit'}
+              <path d="M4 20h4L19 9l-4-4L4 16z" /><path d="M13.5 6.5l4 4" />
+            {:else if aimKind === 'reply'}
+              <path d="M10 6 4 12l6 6" /><path d="M4 12h10a6 6 0 0 1 6 6" />
+            {:else}
+              <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18" />
+            {/if}
+          </svg>
+        {/if}
         <span class="prompt-target-label">{chipText}</span>
+        {#if aim?.revisionLabel}
+          <span class="prompt-aim-revision" data-prompt-aim-revision data-prompt-aim-state={aim.state} title={`Responding to ${aim.revisionLabel}${aim.title ? ` · ${aim.title}` : ''}`}>{aim.revisionLabel}</span>
+        {/if}
         {#if chipInteractive && !isPhone}<span class="prompt-target-swap" aria-hidden="true">⇄</span>{/if}
       </span>
     </button>
@@ -1059,6 +1109,43 @@
 
   .prompt-target:not(:disabled):hover .prompt-target-pill {
     box-shadow: var(--choir-control-shadow), var(--choir-shadow-glow);
+  }
+
+  .prompt-aim-icon {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .prompt-aim-revision {
+    flex: 0 0 auto;
+    margin-left: 6px;
+    color: var(--choir-muted);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .prompt-resend {
+    margin-left: 8px;
+    padding: 0 8px;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: var(--choir-radius-control-sm);
+    background: transparent;
+    color: var(--choir-fg);
+    font: inherit;
+    font-size: 12px;
+    line-height: 18px;
+    cursor: pointer;
+  }
+
+  .prompt-resend:hover {
+    background: var(--choir-selected);
   }
 
   .prompt-target-label {

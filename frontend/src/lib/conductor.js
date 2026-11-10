@@ -23,6 +23,8 @@ export async function submitConductorPrompt(text, options = {}) {
   if (agent && ref) {
     body.focus = { app_agent_id: agent, object_ref: ref };
     if (focus.selection) body.focus.selection = String(focus.selection);
+    // The revision the text answers, when the window reads an older one.
+    if (options.baseRevisionId) body.base_revision_id = String(options.baseRevisionId);
   }
   const res = await fetchWithRenewal('/api/prompt-bar', {
     method: 'POST',
@@ -35,6 +37,46 @@ export async function submitConductorPrompt(text, options = {}) {
     throw new Error(err.error || `Conductor submission failed (${res.status})`);
   }
 
+  return res.json();
+}
+
+// classifyPromptInput asks Jev what the text is: an edit, a comment or a
+// request (lane D). docState is owned, foreign or none. A failure of any kind
+// is null: the caller takes the default class and the text is still sent.
+export async function classifyPromptInput(text, docState, options = {}) {
+  try {
+    const res = await fetchWithRenewal('/api/prompt-bar/classify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: trimText(text), doc_state: docState, command_id: options.commandId || crypto.randomUUID() }),
+    });
+    if (!res.ok) return null;
+    const got = await res.json();
+    return got && typeof got.class === 'string' ? got : null;
+  } catch {
+    return null;
+  }
+}
+
+// forkPublishedVersion makes the reader's own document from a published
+// version, with the reader's comment as the merge text (the one revise call
+// behind POST /api/texture/fork). The receipt has doc_id, trajectory_id and
+// revision_id.
+export async function forkPublishedVersion(source, text, options = {}) {
+  // The fork is Texture's route, so the call names Texture (MA3.10).
+  const res = await fetchWithRenewal('/api/texture/fork', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Choir-App': 'texture' },
+    body: JSON.stringify({
+      text: trimText(text),
+      source: { publication_version_id: source.publication_version_id, manifest_hash: source.manifest_hash },
+      client_request_id: options.commandId || crypto.randomUUID(),
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Reply failed (${res.status})`);
+  }
   return res.json();
 }
 

@@ -39,6 +39,7 @@
   import TextureSourcePanel from './TextureSourcePanel.svelte';
   import TextureToolbar from './TextureToolbar.svelte';
   import { sourceEntityLaunchPayload } from './texture-source-launcher';
+  import { promptAimFor } from './texture-prompt-aim';
   import {
     parseTextureRelatedRef,
     sourceEntityID,
@@ -1953,6 +1954,30 @@
     : currentRevision ? versionLabelForRevision(currentRevision, activeRevisionIndex) : `v${documentCurrentVersionNumber()}`;
   $: promptLabel = submitting ? 'Submitting…' : agentPending ? 'Revising…' : 'Revise';
   $: isPublishedMode = !!publishedBundle || !!appContext?.publishedRoutePath;
+  // What the prompt bar is aimed at while this window is in view (lane D). The
+  // window states it; the shell classifies and routes by it.
+  $: promptAim = promptAimFor({
+    authenticated,
+    loading,
+    docId: currentDoc?.doc_id || '',
+    title: isPublishedReadOnly ? titleForPublishedBundle(publishedBundle) : currentDoc?.title || '',
+    readOnlyPublished: isPublishedReadOnly,
+    revisions,
+    activeIndex: activeRevisionIndex,
+    versionNumber: (index) => Number(String(versionLabelForRevision(revisions[index], index)).replace(/^v/, '')) || index + 1,
+    publishedRevision: publishedNav.revision,
+    publishedLatest: publishedNav.latest,
+    publishedVersionId: publishedBundle?.version?.id || '',
+    publishedManifestHash: publishedBundle?.payload?.manifest_hash || publishedBundle?.version?.manifest_hash || '',
+  });
+  let promptAimKey = '';
+  $: publishPromptAim(promptAim, windowId);
+  function publishPromptAim(aim, id) {
+    const key = JSON.stringify(aim);
+    if (!id || key === promptAimKey) return;
+    promptAimKey = key;
+    publishWindowContext({ promptAim: aim }, appContext?.windowTitle || '');
+  }
   $: isPublishedReadOnly = isPublishedMode && !publishedDerivativeActive;
   // The story a "More research" ask is about: the bare route of a published
   // story this window reads. Empty for a private document and for the

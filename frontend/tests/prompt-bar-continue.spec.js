@@ -202,7 +202,7 @@ test('C4 H3: one tap clears the focus to the conductor, and the override does no
   await expect(chip).toHaveAttribute('data-prompt-target-mode', 'focus', { timeout: 10_000 });
   await chip.click();
   await expect(chip).toHaveAttribute('data-prompt-target-mode', 'conductor');
-  await expect(chip).toContainText('Conductor');
+  await expect(chip).toContainText('Agent');
   await expect(chip).toHaveAttribute('aria-pressed', 'false');
   // A second tap restores the focus; a third clears it again.
   await chip.click();
@@ -227,7 +227,7 @@ test('C5 H3: with nothing focused the chip says the conductor routes, and no foc
   await openDesktop(page);
   const chip = page.locator('[data-command-field] [data-prompt-target]');
   await expect(chip).toHaveAttribute('data-prompt-target-mode', 'conductor', { timeout: 10_000 });
-  await expect(chip).toContainText('Conductor');
+  await expect(chip).toContainText('Agent');
   await expect(chip).toBeDisabled();
   await send(page, 'Write about currents');
   await expect.poll(() => submits.length).toBe(1);
@@ -280,7 +280,7 @@ for (const [name, focus] of [
     await openDesktop(page);
     const chip = page.locator('[data-command-field] [data-prompt-target]');
     await expect(chip).toHaveAttribute('data-prompt-target-mode', 'hint', { timeout: 10_000 });
-    await expect(chip).toContainText('Conductor');
+    await expect(chip).toContainText('Agent');
     await expect(chip).toBeDisabled();
     await send(page, 'list what changed this week');
     await expect.poll(() => submits.length).toBe(1);

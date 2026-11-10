@@ -235,7 +235,7 @@ for (const vp of VIEWPORTS) {
       await openDesktop(page);
       const pill = page.locator('[data-command-field] [data-prompt-target]');
       const pillLabel = pill.locator('.prompt-target-label');
-      await expect(pillLabel).toHaveText(label('Conductor'));
+      await expect(pillLabel).toHaveText(label('Agent'));
       await expect(pill).toBeDisabled();
       await expect(pill).toHaveAttribute('data-prompt-target-mode', 'hint');
       const texts = await page.locator('[data-command-field]').evaluate((root) => {
@@ -262,7 +262,7 @@ for (const vp of VIEWPORTS) {
       await expect(pill.locator('.prompt-target-pill')).not.toContainText("What's latest in ai");
       await expect(pill).toHaveAttribute('title', /What's latest in ai/);
       await pill.click();
-      await expect(pillLabel).toHaveText(label('Conductor'));
+      await expect(pillLabel).toHaveText(label('Agent'));
       await expect(pill).toHaveAttribute('aria-pressed', 'false');
       await pill.click();
       await expect(pillLabel).toHaveText(label('Texture'));
@@ -270,7 +270,7 @@ for (const vp of VIEWPORTS) {
       const empty = await browserFreshPage(page);
       await mockComputer(empty, FIXTURES.w0);
       await openDesktop(empty);
-      await expect(empty.locator('[data-prompt-target] .prompt-target-label')).toHaveText(label('Conductor'));
+      await expect(empty.locator('[data-prompt-target] .prompt-target-label')).toHaveText(label('Agent'));
       await expect(empty.locator('[data-prompt-target]')).toBeDisabled();
     });
 
