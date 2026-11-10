@@ -27,7 +27,18 @@ const (
 	ownerReasonRetryLater   = "retry_later"
 	ownerReasonFailed       = "failed"
 	ownerReasonNoRelease    = "no_release"
+	ownerReasonRestartRate  = "restart_rate_bound"
 )
+
+// restartInPlaceMinGap bounds the operator's restart in place: a second one of
+// the same computer within it is refused. Five minutes is longer than a boot
+// plus the guest's first settling (the wedge detector and health windows run
+// in minutes), so a restart that did not cure the wedge is looked at, not
+// repeated; and well inside the guest's 15 minute marker age, so an operator
+// can try again in the same sitting. A correctness refusal like the
+// one-in-flight rule, not a switch. In memory, as the tracker's failed-target
+// map is.
+const restartInPlaceMinGap = 5 * time.Minute
 
 // ownerReasonCode names why an owner update that did not refresh or find the
 // computer current restarted nothing. A guest refusal already carries its code.
@@ -85,15 +96,46 @@ func (h *Handler) ownerUpdate(ctx context.Context, req deployRefreshRequest) (de
 		// Before the gate, the marker or any pending entry: a computer already
 		// on the release is a no-op. A served commit that cannot be read is
 		// not "current".
-		if served := h.servedCommit(ctx, *own); served != "" && served == commit {
+		if served := h.servedCommit(ctx, *own); served != "" && served == commit && !req.RestartInPlace {
 			h.deployRefreshState().forget(own.UserID, own.DesktopID)
 			return deployRefreshResponse{Outcome: deployRefreshCurrent, Target: commit, VMID: own.VMID, ComputerID: own.ComputerID,
 				UserID: own.UserID, DesktopID: own.DesktopID, ComputerURL: own.ComputerURL, State: string(own.State)}, http.StatusOK
 		}
 	}
+	if req.RestartInPlace {
+		return h.operatorRestartInPlace(ctx, req, own, commit)
+	}
 	resp, status := h.trackedDeployRefresh(ctx, req, "owner-update")
 	resp.Target = commit
 	resp.ReasonCode = ownerReasonCode(resp)
+	return resp, status
+}
+
+// operatorRestartInPlace is the platform operator's restart: the same
+// trackedDeployRefresh as an update (ring gate, held and divergent rules, one
+// in flight, the guest's planned-restart marker and its busy refusals), onto
+// the release the computer already serves. It adds only the rate bound and
+// the outcome name: restarted when the computer was on its release, refreshed
+// when an update was pending and this applied it.
+func (h *Handler) operatorRestartInPlace(ctx context.Context, req deployRefreshRequest, own *VMOwnership, commit string) (deployRefreshResponse, int) {
+	_, clock := h.behindGate()
+	tracker := h.deployRefreshState()
+	if !tracker.restartAllowed(own.UserID, own.DesktopID, clock(), restartInPlaceMinGap) {
+		return deployRefreshResponse{Outcome: deployRefreshSkipped, ReasonCode: ownerReasonRestartRate, Target: commit,
+			Reason: "this computer was restarted by an operator less than " + restartInPlaceMinGap.String() + " ago; nothing was restarted",
+			VMID:   own.VMID, ComputerID: own.ComputerID, UserID: own.UserID, DesktopID: own.DesktopID, State: string(own.State)}, http.StatusConflict
+	}
+	served := h.servedCommit(ctx, *own)
+	sameVersion := served != "" && served == commit
+	resp, status := h.trackedDeployRefresh(ctx, req, "operator-restart")
+	resp.Target = commit
+	resp.ReasonCode = ownerReasonCode(resp)
+	if resp.Outcome == deployRefreshRefreshed || resp.Outcome == deployRefreshFailed {
+		tracker.noteRestart(own.UserID, own.DesktopID, clock())
+	}
+	if resp.Outcome == deployRefreshRefreshed && sameVersion {
+		resp.Outcome = deployRefreshRestarted
+	}
 	return resp, status
 }
 

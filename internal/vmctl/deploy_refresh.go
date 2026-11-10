@@ -168,7 +168,10 @@ const (
 	// deployRefreshCurrent: the owner update found the computer already on the
 	// release it would boot (owner_update.go); nothing was marked or restarted.
 	deployRefreshCurrent = "current"
-	deployRefreshFailed  = "failed"
+	// deployRefreshRestarted: the operator's restart in place restarted a
+	// computer that was already on its release (owner_update.go).
+	deployRefreshRestarted = "restarted"
+	deployRefreshFailed    = "failed"
 )
 
 type deployRefreshRequest struct {
@@ -182,6 +185,11 @@ type deployRefreshRequest struct {
 	// (guestReleaseFor), ignoring Target. A convention on an internal-caller
 	// endpoint, not an enforcement boundary (docs/design/update-now-2026-11-09.md).
 	OwnerBusy bool `json:"owner_busy,omitempty"`
+	// RestartInPlace, with OwnerBusy, asks for a planned restart to the SAME
+	// version when the computer already serves its release. Only the platform
+	// operator's route sends it (internal/proxy/platform_operator_computers.go);
+	// the owner's click does not, and then a current computer stays current.
+	RestartInPlace bool `json:"restart_in_place,omitempty"`
 }
 
 type deployRefreshResponse struct {

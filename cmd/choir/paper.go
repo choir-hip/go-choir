@@ -116,7 +116,7 @@ func paperScheduleStop(x *call) (any, error) {
 }
 
 // paperRestart is `choir paper restart --reason`: the operator route asks for
-// vmctl's planned, marker-backed refresh. A refusal (a live capsule, a
+// vmctl's planned, marker-backed refresh; the answer's outcome is refreshed (an update applied) or restarted (same version). A refusal (a live capsule, a
 // self-development apply, a held or in-flight computer) is an error with the
 // server's reason code, and the command exits non-zero; there is no force.
 func paperRestart(x *call) (any, error) {
@@ -165,7 +165,7 @@ func paperCommands() []*command {
 			handler: paperWrap(paperScheduleStop),
 		},
 		&command{
-			path: []string{"paper", "restart"}, summary: "Paper: ask for a planned, marker-backed restart; refused mid self-development apply or with a live capsule (operator only)",
+			path: []string{"paper", "restart"}, summary: "Paper: ask for a planned, marker-backed restart (outcome refreshed if an update was pending, restarted if it was already current; one per five minutes); refused mid self-development apply or with a live capsule (operator only)",
 			params: []param{
 				pStr("reason", "Why, kept in the receipt (at most 280 bytes)").req().orSay("choir paper restart --reason <text>"),
 			},

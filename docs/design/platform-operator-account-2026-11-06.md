@@ -531,3 +531,18 @@ the paper (the status roster lists platform computers only); d@e is named with
 start and stop its schedules and ask for its planned restart, each with a receipt.
 d@e belongs to a test account, so this widens the operator's reach by one test
 computer and no user's. Removing the entry reverses it.
+
+## 11. Amendment: restart in place (2026-11-10)
+
+O5's restart answered `current` and did nothing on a computer already on its
+release, which left a wedged paper with no operator act
+(docs/problems/operator-cannot-restart-a-current-computer-2026-11-10.md). The
+operator route now asks vmctl for the same owner update with `restart_in_place`:
+on a current computer it runs the same planned, marker-backed refresh onto the
+same version and answers `restarted` (`refreshed` stays for an applied update).
+X2 holds (still `OwnerUpdate`'s deploy-refresh endpoint, one call); X3 gains the
+outcome `restarted` and the code `restart_rate_bound` (a second restart of one
+computer within five minutes; in memory in vmctl); X8 holds (no marker code). The
+guest's refusals for an apply, a live capsule and a pending decision are
+unchanged. The owner's click does not send the field. Who may call it is
+unchanged.
