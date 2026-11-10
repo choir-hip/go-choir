@@ -39,6 +39,12 @@ type Service struct {
 	artifactsRoot string
 	signingKey    *SigningKey
 	writeMu       sync.Mutex
+	// The notice sequence (publication_links.go): seeded from storage before
+	// the first one is issued or read.
+	seedMu        sync.Mutex
+	noticeSeeded  bool
+	noticeSeqLast atomic.Int64
+	noticeClock   func() int64
 	// artifactGCMu serializes artifact GC live-set capture and deletion. It
 	// must never be writeMu: a sweep
 	// lasts minutes and would block credential issuance and VM boots.
