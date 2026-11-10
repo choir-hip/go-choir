@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/yusefmosiah/go-choir/internal/fanout"
 	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"log"
 	"strings"
@@ -151,21 +150,16 @@ func (rt *Runtime) judgeInertness(ctx context.Context, owner, computer string, r
 		return nil
 	}
 	// One call per chunk, at the same bound as the sub-call judge so a
-	// large tray never makes one oversized request; the chunks are asked
-	// together, within the sub-call judge's concurrency.
-	chunks := (len(todo) + subCallJudgeBatchMax - 1) / subCallJudgeBatchMax
-	results := fanout.Do(ctx, subCallJudgeConcurrency, chunks, func(ctx context.Context, c int) (struct{}, error) {
-		start := c * subCallJudgeBatchMax
-		end := min(start+subCallJudgeBatchMax, len(todo))
-		return struct{}{}, rt.judgeInertChunk(ctx, owner, computer, todo[start:end])
-	})
+	// large tray never makes one oversized request; over the bound the
+	// chunks are asked one after another (owner, 2026-11-10).
 	var firstErr error
-	for _, r := range results {
-		if r.Err != nil {
+	for start := 0; start < len(todo); start += subCallJudgeBatchMax {
+		end := min(start+subCallJudgeBatchMax, len(todo))
+		if err := rt.judgeInertChunk(ctx, owner, computer, todo[start:end]); err != nil {
 			if ctx.Err() != nil {
-				return r.Err
+				return err
 			}
-			firstErr = errors.Join(firstErr, r.Err)
+			firstErr = errors.Join(firstErr, err)
 		}
 	}
 	return firstErr
