@@ -15,7 +15,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/entitytext"
-	"github.com/yusefmosiah/go-choir/internal/fanout"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -265,9 +264,6 @@ func (rt *Runtime) buildStoryAnalysis(ctx context.Context, exec toolregistry.Exe
 	return a
 }
 
-// analysisCallConcurrency is how many chunks of an analysis are asked at once.
-const analysisCallConcurrency = 4
-
 // analysisSlot ties a question to the candidate answer it fills.
 type analysisSlot struct {
 	question yaegikernel.System1Question
@@ -324,8 +320,10 @@ func (rt *Runtime) askAnalysisQuestions(ctx context.Context, exec toolregistry.E
 		s.Kind = analysisSubjectRole
 		slots = append(slots, analysisSlot{question: yaegikernel.System1Question{ID: fmt.Sprintf("role-%d", n), Text: roleQuestion(c.EntityCandidate), Choices: analysisRoleChoices, ContextRefs: story}, subject: s, fill: &c.Role})
 	}
-	// Build and validate every chunk, ask them together, then read the
-	// answers in chunk order.
+	// Build and validate every chunk. The System 1 verb takes at most
+	// yaegikernel.System1MaxQuestions (12) questions a call, so an analysis of
+	// up to analysisMaxQuestions (24) is at most two calls, asked one after
+	// the other (owner, 2026-11-10); the cap is not lifted here.
 	type chunk struct {
 		batch    []analysisSlot
 		ask      system1Ask
@@ -348,20 +346,14 @@ func (rt *Runtime) askAnalysisQuestions(ctx context.Context, exec toolregistry.E
 			break
 		}
 	}
-	called := fanout.Do(ctx, analysisCallConcurrency, len(chunks), func(ctx context.Context, i int) (json.RawMessage, error) {
-		if chunks[i].validErr != nil {
-			return nil, chunks[i].validErr
-		}
-		return rt.system1Call(ctx, exec, owner, computer, runID, chunks[i].ask)
-	})
-	for i, ch := range chunks {
+	for _, ch := range chunks {
 		batch := ch.batch
 		if ch.validErr != nil {
 			log.Printf("story analysis: %s on run %s: a host question is malformed: %v", a.Story.DocID, runID, ch.validErr)
 			a.Error = "the analysis questions could not be asked: " + ch.validErr.Error()
 			return
 		}
-		raw, err := called[i].Value, called[i].Err
+		raw, err := rt.system1Call(ctx, exec, owner, computer, runID, ch.ask)
 		if err != nil {
 			log.Printf("story analysis: %s on run %s: System 1: %v", a.Story.DocID, runID, err)
 			a.Error = "System 1 did not answer every analysis question: " + err.Error()

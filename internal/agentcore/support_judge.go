@@ -42,7 +42,7 @@ const candidateJudgmentModel = "~typesafe/jev-latest"
 // revision commit lists its new citation pairs by their check memos
 // (store.planSupportPairs) and, once the commit has returned, hands the
 // revision's pairs to JudgeRevisionSupport. A background job, bounded by
-// one runtime-wide semaphore like intake labels, judges every pair that is
+// one runtime-wide slot (one revision judged at a time), judges every pair that is
 // listed and not yet judged: Jev reads the committed sentence (from the
 // check memo) and the captured block (re-read and checked against the
 // Ref's hash), never text a desk supplied. The verdicts are recorded as a
@@ -57,8 +57,11 @@ const candidateJudgmentModel = "~typesafe/jev-latest"
 
 // Budgets. Vars so a test can shorten them.
 var (
-	supportJudgeConcurrency = 8
-	supportJudgeQueueWait   = 2 * time.Minute
+	// supportJudgeConcurrency is the revisions judged at once on this
+	// computer: one. Revisions are separate contexts, the one case the owner
+	// allows concurrent Jev calls for, but not as plan A (2026-11-10); the
+	// waiting revisions queue and are judged in the order they arrived.
+	supportJudgeConcurrency = 1
 	supportJudgeCallTimeout = 90 * time.Second
 )
 
@@ -126,12 +129,13 @@ func (rt *Runtime) WaitSupportJudgements() {
 
 func (rt *Runtime) judgeSupportJob(ownerID, computerID, runID, revisionID string, keys []string) {
 	slots := rt.support.slots()
-	wait := time.NewTimer(supportJudgeQueueWait)
+	// Wait for the slot as long as it takes: a queued revision is judged in
+	// its turn. Only the runtime stopping ends the wait, and then the pairs
+	// stay pending (restarts end work; nothing resumes it).
 	select {
 	case slots <- struct{}{}:
-		wait.Stop()
-	case <-wait.C:
-		log.Printf("support judge: %s: no slot within %s; %d pairs stay pending for the next commit that cites them", revisionID, supportJudgeQueueWait, len(keys))
+	case <-rt.backgroundStop():
+		log.Printf("support judge: %s: the runtime is stopping; %d pairs stay pending for the next commit that cites them", revisionID, len(keys))
 		return
 	}
 	defer func() { <-slots }()
@@ -149,7 +153,7 @@ func (rt *Runtime) judgeSupportJob(ownerID, computerID, runID, revisionID string
 	if len(claimed) == 0 {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), supportJudgeCallTimeout+30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*supportJudgeCallTimeout+30*time.Second)
 	defer cancel()
 	if err := rt.judgePendingSupport(ctx, ownerID, computerID, runID, revisionID, claimed); err != nil {
 		log.Printf("support judge: %s: %v; its pairs stay pending for the next commit that cites them", revisionID, err)
@@ -355,6 +359,71 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 	if len(questions) == 0 {
 		return nil, nil
 	}
+	// One call per revision, or, when the pairs are over the byte bound,
+	// several calls one after another (never at once; owner, 2026-11-10).
+	ordered := make([]string, 0, len(names))
+	for name := range names {
+		ordered = append(ordered, name)
+	}
+	sort.Slice(ordered, func(a, b int) bool { return names[ordered[a]][0] < names[ordered[b]][0] })
+	sizes := make(map[string]int, len(ordered))
+	for _, name := range ordered {
+		pj, _ := json.Marshal(pairs[name])
+		sizes[name] = len(pj) + len(questions[name]) + len(name) + 8
+	}
+	var judged []types.SupportVerdict
+	var firstErr error
+	for _, batch := range splitSupportBatches(ordered, sizes) {
+		got, err := rt.askJevForSupportBatch(ctx, owner, runID, pending, names, batch, pairs, questions)
+		if err != nil {
+			// A failed call leaves its own pairs pending; the batches before
+			// and after it still settle.
+			log.Printf("support judge: a call of %d pairs failed; those pairs stay pending: %v", len(batch), err)
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		judged = append(judged, got...)
+	}
+	if len(judged) == 0 && firstErr != nil {
+		return nil, firstErr
+	}
+	return judged, nil
+}
+
+// supportRequestMaxBytes is the most one support call's state and questions
+// may hold: the same line intake uses (Jev's long-context mode starts above
+// about 32,000 bytes and is slower and less accurate).
+const supportRequestMaxBytes = 30000
+
+// splitSupportBatches packs names, in order, into batches of at most
+// supportRequestMaxBytes (a lone over-size pair is its own batch).
+func splitSupportBatches(ordered []string, sizes map[string]int) [][]string {
+	var batches [][]string
+	var cur []string
+	total := 1000 // the task text and the envelope
+	for _, name := range ordered {
+		if len(cur) > 0 && total+sizes[name] > supportRequestMaxBytes {
+			batches = append(batches, cur)
+			cur, total = nil, 1000
+		}
+		cur = append(cur, name)
+		total += sizes[name]
+	}
+	if len(cur) > 0 {
+		batches = append(batches, cur)
+	}
+	return batches
+}
+
+func (rt *Runtime) askJevForSupportBatch(ctx context.Context, owner, runID string, pending []types.SupportVerdict, names map[string][]int, batch []string, allPairs map[string]any, allQuestions map[string]json.RawMessage) ([]types.SupportVerdict, error) {
+	pairs := make(map[string]any, len(batch))
+	questions := make(map[string]json.RawMessage, len(batch))
+	for _, name := range batch {
+		pairs[name] = allPairs[name]
+		questions[name] = allQuestions[name]
+	}
 	state, err := json.Marshal(map[string]any{
 		"task":  "Each pair is a sentence from a news story and the source passage it cites (quote is the cited words). Judge whether the passage supports the sentence as cited. A pair's paragraph, when given, is the sentence's surroundings, there only to resolve names and references: judge only the sentence, not the rest of the paragraph, which cites other sources.",
 		"pairs": pairs,
@@ -363,8 +432,8 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 		return nil, err
 	}
 	decision := ""
-	if len(pending) > 0 {
-		decision = pending[0].Key
+	if len(batch) > 0 {
+		decision = pending[names[batch[0]][0]].Key
 	}
 	raw, err := rt.judgeCall(ctx, jevrecord.Meta{Site: "support_judge", DecisionID: decision, RunID: runID}, supportJudgeCallTimeout, state, questions)
 	if err != nil {
@@ -377,13 +446,8 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 	model := firstNonEmpty(distribution.Model, candidateJudgmentModel)
 	rt.recordJevCost(ctx, owner, runID, model, distribution.Provider, distribution.Usage, len(questions))
 	judge := "jev:" + model
-	ordered := make([]string, 0, len(names))
-	for name := range names {
-		ordered = append(ordered, name)
-	}
-	sort.Slice(ordered, func(a, b int) bool { return names[ordered[a]][0] < names[ordered[b]][0] })
 	var judged []types.SupportVerdict
-	for _, name := range ordered {
+	for _, name := range batch {
 		answer, ok := distribution.Answers[name]
 		if !ok || (answer.Choice != "yes" && answer.Choice != "no") {
 			log.Printf("support judge: pair %s stays pending: Jev gave no answer for it", pending[names[name][0]].Key)

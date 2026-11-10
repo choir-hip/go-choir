@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/yusefmosiah/go-choir/internal/fanout"
 	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"log"
 	"strconv"
@@ -218,20 +217,17 @@ func (rt *Runtime) settleDeskCastRounds(ctx context.Context, owner, computer str
 		}
 		items = append(items, roundItems...)
 	}
-	// Ask every batch together; a round can span batches and its counters
-	// are plain fields, so the answers are applied one batch at a time, in
-	// order.
-	batches := (len(items) + deskCastJudgeBatchMax - 1) / deskCastJudgeBatchMax
-	asked := fanout.Do(ctx, subCallJudgeConcurrency, batches, func(ctx context.Context, b int) (deskCastAsk, error) {
-		start := b * deskCastJudgeBatchMax
-		return rt.askDeskCastBatch(ctx, items[start:min(start+deskCastJudgeBatchMax, len(items))]), nil
-	})
-	for b := range asked {
-		start := b * deskCastJudgeBatchMax
+	// One call per batch of deskCastJudgeBatchMax, one after another (owner,
+	// 2026-11-10: never call Jev concurrently when one call with more
+	// questions would do). A round can span batches and its counters are
+	// plain fields; each batch's answers are applied before the next is asked.
+	for start := 0; start < len(items); start += deskCastJudgeBatchMax {
 		end := min(start+deskCastJudgeBatchMax, len(items))
-		ask := asked[b].Value
-		if asked[b].Err != nil { // the context ended before this batch started
-			ask = deskCastAsk{failure: system1Message(asked[b].Err)}
+		var ask deskCastAsk
+		if err := ctx.Err(); err != nil { // the context ended before this batch started
+			ask = deskCastAsk{failure: system1Message(err)}
+		} else {
+			ask = rt.askDeskCastBatch(ctx, items[start:end])
 		}
 		rt.judgeDeskCastBatch(ctx, owner, computer, items[start:end], ask)
 	}
