@@ -94,6 +94,12 @@ func (h *Handler) requirePlatformObjectGraphCaller(r *http.Request) error {
 		if r.URL.Path == "/internal/platform/published/search" {
 			return nil
 		}
+		// One published version by its id: a take, merge or fork reads the
+		// version it names (Texture's revise call). Public, immutable, and
+		// the id names one object, so the carve-out is a single segment.
+		if rest, ok := strings.CutPrefix(r.URL.Path, "/internal/platform/publications/versions/"); ok && rest != "" && !strings.Contains(rest, "/") {
+			return nil
+		}
 		// An object list is scoped to the guest's own owner and computer;
 		// corpusd sees this request as the proxy's, so the proxy enforces it
 		// (auth-boundary-gaps F5). No guest lists edges.
