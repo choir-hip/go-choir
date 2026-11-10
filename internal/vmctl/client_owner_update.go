@@ -31,6 +31,8 @@ type OwnerUpdateResult struct {
 	ReasonCode string          `json:"reason_code,omitempty"`
 	Refusal    json.RawMessage `json:"refusal,omitempty"`
 	Target     string          `json:"target,omitempty"`
+	// Work is "resumed" or "closed" for an operator restart (see deployRefreshResponse).
+	Work string `json:"work,omitempty"`
 }
 
 // OwnerUpdateContext asks vmctl for the owner update of one computer (a

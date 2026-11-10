@@ -613,6 +613,9 @@ func (h *Handler) handlePlatformOperatorRestart(w http.ResponseWriter, r *http.R
 	if updated.Target != "" {
 		out["target"] = updated.Target
 	}
+	if updated.Work != "" {
+		out["work"] = updated.Work
+	}
 	switch updated.Outcome {
 	case "refreshed", "restarted", "current":
 		writeJSON(w, http.StatusOK, out)

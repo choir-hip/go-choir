@@ -47,6 +47,18 @@ import (
 //   - the owner's click gaining the new power: without restart_in_place a
 //     current computer is still current and untouched
 //     (TestOwnerUpdateOnACurrentComputerStillDoesNothing);
+//   - two operator calls at once (check-then-act): the reservation is taken
+//     atomically before the guest is asked, so the second is refused
+//     restart_rate_bound while the first is still running and the guest sees
+//     one marker and one restart (TestRestartInPlaceConcurrentCallsRestartOnce);
+//     a reservation that restarted nothing is given back
+//     (TestRestartInPlaceMeetsAnInFlightRefresh, ...GuestCorrectnessRefusals);
+//   - a wedged guest (health and marker both time out): the probe and the
+//     marker call are bounded, a refused call never probes, and the restart
+//     still happens, markerless, answered work=closed; a healthy guest still
+//     refuses (TestRestartInPlaceOfAWedgedGuestIsMarkerlessAndSaysSo,
+//     TestRestartInPlaceRateRefusalNeverProbesTheGuest,
+//     TestRestartInPlaceKeepsTheGuestCorrectnessRefusals);
 //   - an update pending: the verb applies it and says refreshed, not
 //     restarted (TestRestartInPlaceOnAComputerBehindIsAnUpdate).
 
@@ -83,6 +95,9 @@ func TestRestartInPlaceRestartsACurrentComputerWithItsMarker(t *testing.T) {
 	if len(fake.marks) != 1 || !strings.HasSuffix(fake.marks[0], "@commit-r1") || len(fake.allowBusy) != 1 || !fake.allowBusy[0] {
 		t.Fatalf("marks=%v allow_busy=%v, want one marker for the same version, allow_busy", fake.marks, fake.allowBusy)
 	}
+	if resp.Work != "resumed" {
+		t.Fatalf("work = %q, want resumed", resp.Work)
+	}
 	if len(mgr.refreshes) != 1 || fake.refreshesAtMark[0] != 0 {
 		t.Fatalf("refreshes=%v at-mark=%v, want the marker written before the one restart", mgr.refreshes, fake.refreshesAtMark)
 	}
@@ -116,7 +131,7 @@ func TestRestartInPlaceMarkerWrittenButRestartFails(t *testing.T) {
 	// A failed restart counts toward the bound: the verb cannot loop a failing boot.
 	// (The registry also marks the computer failed, so a second call would
 	// answer not_active first; the bound itself is what is asserted.)
-	if h.deployRefreshState().restartAllowed("owner-up", "primary", now.Add(time.Minute), restartInPlaceMinGap) {
+	if _, refusal := h.deployRefreshState().beginRestartInPlace("owner-up", "primary", now.Add(time.Minute), restartInPlaceMinGap); refusal == "" {
 		t.Fatal("a failed restart was not charged to the bound")
 	}
 }
@@ -210,10 +225,107 @@ func TestRestartInPlaceRateBoundIsPerComputer(t *testing.T) {
 		t.Fatalf("first: %+v", resp)
 	}
 	tr := h.deployRefreshState()
-	if tr.restartAllowed("owner-up", "primary", *now, restartInPlaceMinGap) {
+	if _, refusal := tr.beginRestartInPlace("owner-up", "primary", *now, restartInPlaceMinGap); refusal == "" {
 		t.Fatal("the restarted computer is not bounded")
 	}
-	if !tr.restartAllowed("someone-else", "primary", *now, restartInPlaceMinGap) {
+	finish, refusal := tr.beginRestartInPlace("someone-else", "primary", *now, restartInPlaceMinGap)
+	if refusal != "" {
 		t.Fatal("the bound is shared across computers")
+	}
+	finish(false)
+}
+
+// The coordinator's review: the reservation is atomic. The first call is held
+// inside the restart; the second must be refused, not restart again.
+func TestRestartInPlaceConcurrentCallsRestartOnce(t *testing.T) {
+	h, mgr, fake, _ := currentFixture(t)
+	mgr.refreshStarted = make(chan struct{})
+	mgr.refreshRelease = make(chan struct{})
+	type result struct {
+		code int
+		resp deployRefreshResponse
+	}
+	first := make(chan result, 1)
+	go func() {
+		code, resp := postRestartInPlace(t, h, "owner-up")
+		first <- result{code, resp}
+	}()
+	<-mgr.refreshStarted
+	code, resp := postRestartInPlace(t, h, "owner-up")
+	if code != http.StatusConflict || resp.Outcome != deployRefreshSkipped || resp.ReasonCode != ownerReasonRestartRate {
+		t.Fatalf("second concurrent call: %d %+v, want restart_rate_bound", code, resp)
+	}
+	close(mgr.refreshRelease)
+	r := <-first
+	if r.code != http.StatusOK || r.resp.Outcome != deployRefreshRestarted {
+		t.Fatalf("first call: %d %+v", r.code, r.resp)
+	}
+	if len(fake.marks) != 1 || len(mgr.refreshes) != 1 {
+		t.Fatalf("marks=%v refreshes=%v, want exactly one of each", fake.marks, mgr.refreshes)
+	}
+}
+
+// deadlineMarker records whether the marker call was bounded.
+type deadlineMarker struct {
+	*fakeGuestMarker
+	bounded bool
+}
+
+func (d *deadlineMarker) mark(ctx context.Context, own VMOwnership, target string, allowBusy bool) (guestMarkOutcome, string) {
+	_, d.bounded = ctx.Deadline()
+	return d.fakeGuestMarker.mark(ctx, own, target, allowBusy)
+}
+
+// A wedged guest: /health never answers and the marker call times out. The
+// restart still happens, as a crash boot (no marker), and says so.
+func TestRestartInPlaceOfAWedgedGuestIsMarkerlessAndSaysSo(t *testing.T) {
+	oldProbe, oldMark := restartProbeTimeout, restartMarkTimeout
+	restartProbeTimeout, restartMarkTimeout = 10*time.Millisecond, 10*time.Millisecond
+	t.Cleanup(func() { restartProbeTimeout, restartMarkTimeout = oldProbe, oldMark })
+	h, mgr, fake, _ := currentFixture(t)
+	probes := 0
+	h.guestServedCommit = func(ctx context.Context, _ VMOwnership) string {
+		probes++
+		<-ctx.Done() // a wedged guest answers nothing; only the bound ends the probe
+		return ""
+	}
+	fake.outcome, fake.detail = guestMarkUnavailable, "context deadline exceeded"
+	dm := &deadlineMarker{fakeGuestMarker: fake}
+	h.guestMarker = dm
+	code, resp := postRestartInPlace(t, h, "owner-up")
+	if code != http.StatusOK || (resp.Outcome != deployRefreshRefreshed && resp.Outcome != deployRefreshRestarted) {
+		t.Fatalf("%d %+v, want the restart to happen", code, resp)
+	}
+	if resp.PlannedRestart || resp.Work != "closed" || len(mgr.refreshes) != 1 {
+		t.Fatalf("%+v refreshes=%v, want markerless, work=closed, one restart", resp, mgr.refreshes)
+	}
+	if probes != 1 {
+		t.Fatalf("served commit probed %d times, want once", probes)
+	}
+	if !dm.bounded {
+		t.Fatal("the marker call had no deadline")
+	}
+	// A guest that predates the marker endpoint is the same: no /health
+	// busy check, a markerless restart.
+	h2, mgr2, fake2, _ := currentFixture(t)
+	fake2.outcome = guestMarkUnsupported
+	if code, resp = postRestartInPlace(t, h2, "owner-up"); code != http.StatusOK || resp.Work != "closed" || len(mgr2.refreshes) != 1 {
+		t.Fatalf("old guest: %d %+v", code, resp)
+	}
+}
+
+// A refused call asks nothing of the guest: no probe, no marker.
+func TestRestartInPlaceRateRefusalNeverProbesTheGuest(t *testing.T) {
+	h, _, fake, _ := currentFixture(t)
+	if _, resp := postRestartInPlace(t, h, "owner-up"); resp.Outcome != deployRefreshRestarted {
+		t.Fatalf("first: %+v", resp)
+	}
+	probes, marks := 0, len(fake.marks)
+	h.guestServedCommit = func(context.Context, VMOwnership) string { probes++; return "commit-r1" }
+	if _, resp := postRestartInPlace(t, h, "owner-up"); resp.ReasonCode != ownerReasonRestartRate {
+		t.Fatalf("second: %+v", resp)
+	}
+	if probes != 0 || len(fake.marks) != marks {
+		t.Fatalf("a refused call reached the guest: probes=%d marks=%v", probes, fake.marks)
 	}
 }

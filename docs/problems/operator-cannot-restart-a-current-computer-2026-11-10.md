@@ -32,9 +32,19 @@ decision. No marker code and no boot-time resumer is added. The answer is
 `restarted` when the computer was on its release, `refreshed` when an update was
 pending and this applied it.
 
-Rate bound: a second operator restart of one computer within five minutes
-(`restartInPlaceMinGap`) is refused `restart_rate_bound` (409, nothing asked of
-the guest). A restart that failed counts; a refusal or deferral does not. In
+A wedged guest (review, 2026-11-10): the operator path takes the rate reservation
+first, probes the served commit once (3 s bound, `restartProbeTimeout`) and bounds
+the marker call (10 s, `restartMarkTimeout`). When the guest answers the marker
+call, its refusals (apply, live capsule, pending decision) hold and the restart
+resumes work (`work: resumed`). When it cannot answer (marker call unavailable, or
+a guest that predates the endpoint), the restart is markerless: a crash boot that
+closes open work as interrupted by a restart (`work: closed`), the safe outcome for
+a wedged computer. A refused call asks nothing of the guest.
+
+Rate bound: the check and the reservation are one atomic step in the tracker
+(`beginRestartInPlace`). A second operator restart of one computer while the first
+runs, or within five minutes (`restartInPlaceMinGap`), is refused
+`restart_rate_bound` (409, nothing asked of the guest). A restart that failed counts; a refusal or deferral does not. In
 memory in the deploy-refresh tracker, like the failed-target map beside it; a
 vmctl restart forgets it. A correctness refusal, not a switch.
 
