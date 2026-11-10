@@ -32,6 +32,13 @@ calls. Product rules:
 
 ## Before you change anything
 
+- **Read the reference page before touching a new dependency** (owner,
+  2026-11-10). A dependency newer than your training data (Jev, Exact, the
+  on-device models) has a page in [docs/reference](docs/reference/README.md).
+  Read it first, do not answer about the dependency from memory, and update
+  the page in the same change that changes how we use it. A new such
+  dependency gets a page.
+
 1. **Read the traces first.** A claim about why an agent or desk did
    something is a hypothesis until the run's ledger confirms it (turn-commit
    reasons, controls, work items, event order).
