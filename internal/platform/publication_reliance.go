@@ -15,7 +15,9 @@ package platform
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,30 +38,45 @@ func ownRoute(rawURL, host string) string {
 		route = u.Query().Get("route")
 	}
 	bare, _, ok := parsePublicationRoute(route)
-	if !ok {
+	if !ok || !strings.HasPrefix(bare, publicTexturePrefix) {
 		return ""
 	}
 	return bare
 }
 
+// relianceLogMax bounds the skipped candidates one log line names.
+const relianceLogMax = 5
+
 // reliesOnEdges are the publish batch's reliance links: one per distinct
 // earlier published publication of the same owner that a cited capture
 // names. A capture that cannot be read, names no route, names a route that
 // is not an active published publication, or names the publication itself,
-// writes nothing; none of them fails the publish.
+// writes nothing; none of them fails the publish. When a cited capture is on
+// the paper's own host the step logs one line (relianceLog).
 func (p *PublicationGraphStore) reliesOnEdges(ctx context.Context, params PublishGraphParams, now time.Time) []objectgraph.Edge {
 	if p == nil || p.store == nil || params.OwnHost == "" {
 		return nil
 	}
 	var edges []objectgraph.Edge
 	seen := map[string]bool{}
+	var skipped []string
+	captures, ownHost := 0, 0
+	skip := func(code, route string) {
+		if route != "" {
+			code += ":" + route
+		}
+		skipped = append(skipped, code)
+	}
 	for _, captureID := range citedCaptureIDs(params.Transclusions) {
+		captures++
 		capture, err := p.store.GetObject(ctx, captureID)
 		if err != nil || capture.Tombstone {
+			skip("capture_unreadable", "")
 			continue
 		}
 		meta, err := objectgraph.WebCaptureMetadataFromObject(capture)
 		if err != nil {
+			skip("capture_unreadable", "")
 			continue
 		}
 		route := ownRoute(meta.URL, params.OwnHost)
@@ -67,28 +84,65 @@ func (p *PublicationGraphStore) reliesOnEdges(ctx context.Context, params Publis
 			route = ownRoute(meta.CanonicalURL, params.OwnHost)
 		}
 		if route == "" {
+			skip("not_own_host", "")
 			continue
 		}
+		ownHost++
 		routeID, err := objectgraph.BuildCanonicalID("choir.public_route", params.OwnerID, objectgraph.StableSuffixFromKey(route))
 		if err != nil {
+			skip("route_not_found", route)
 			continue
 		}
 		routeObj, err := p.store.GetObject(ctx, routeID)
 		if err != nil || routeObj.Tombstone {
+			if other, oerr := p.store.GetObjectByMetadata(ctx, "choir.public_route", "$.route_path", route); oerr == nil && !other.Tombstone && other.OwnerID != params.OwnerID {
+				skip("different_owner", route)
+			} else {
+				skip("route_not_found", route)
+			}
 			continue
 		}
 		target := routeTarget(routeObj.Metadata)
-		if target == "" || target == params.PublicationCanonicalID || seen[target] {
+		if target == "" {
+			skip("route_not_found", route)
+			continue
+		}
+		if target == params.PublicationCanonicalID {
+			skip("self", route)
+			continue
+		}
+		if seen[target] {
+			skip("duplicate", route)
 			continue
 		}
 		pub, err := p.store.GetObject(ctx, target)
 		if err != nil || pub.Tombstone || !publicationIsPublished(pub.Metadata) {
+			skip("not_published", route)
 			continue
 		}
 		seen[target] = true
 		edges = append(edges, makeEdge(params.PublicationCanonicalID, target, objectgraph.EdgeReliesOn, now, []byte(objectgraph.ReliesOnMetadata)))
 	}
+	if ownHost > 0 {
+		relianceLog(params, captures, ownHost, len(edges), skipped)
+	}
 	return edges
+}
+
+// relianceLog is the step's one log line: the citing publication's id, counts
+// and the first few reason codes with route paths. It carries no story text and
+// no URL. The link is data only, so staging cannot show it by any read; this
+// line is how a deploy proof sees that the step ran. It is not a reader of the
+// link: nothing ranks, lists or prompts by it.
+func relianceLog(params PublishGraphParams, captures, ownHost, edges int, skipped []string) {
+	shown := skipped
+	more := ""
+	if len(shown) > relianceLogMax {
+		more = " more=" + strconv.Itoa(len(shown)-relianceLogMax)
+		shown = shown[:relianceLogMax]
+	}
+	log.Printf("corpusd: reliance: publication=%s captures=%d own_host=%d edges=%d skipped=[%s]%s",
+		params.PublicationID, captures, ownHost, edges, strings.Join(shown, " "), more)
 }
 
 func routeTarget(metadata []byte) string {
