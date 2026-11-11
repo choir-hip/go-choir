@@ -686,10 +686,12 @@ synthesis clusters, lateral synthesis collects reframes):
 
 ## Code Review Allocation
 
-Code review is risk-tiered, with Devin the go-to reviewer (owner, 2026-10-23:
-"allocating code review to hard stuff and trusting that we can handle the
-easy stuff cold"; "make devin the go-to reviewer"). The repo contract
-(`CLAUDE.md`, Mutation Classes) is the authority; the runner shapes are:
+Code review is risk-tiered (owner, 2026-10-23: "allocating code review to
+hard stuff and trusting that we can handle the easy stuff cold"). The review
+seat is Gemini, not Devin (owner, 2026-11-11: "we shouldn't use devin for
+review since we are using it for autopaper. use gemini instead"); Devin's
+quota serves the paper. Sonnet is the second seat. The repo contract
+(`CLAUDE.md`, Review) is the authority; the runner shapes are:
 
 - Cheap checks before any review, every time: the repo gates
   (`check-v1-writer-purity`, `check-decode-roots`, `check-test-hang-guards`,
@@ -705,17 +707,18 @@ easy stuff cold"; "make devin the go-to reviewer"). The repo contract
   is not tier 0; it gets the deploy's own review.
 - Tier 1, one seat: orange changes, and red changes that are additive, behind
   a data/config switch, with a one-act rollback that shows on staging within
-  minutes. `--include devin`.
+  minutes. `--include omp-gemini38` (or Gemini through `agy`).
 - Tier 2, two seats: red where a defect would be silent or irreversible
   (deletes, tape/evidence, Texture canonical writes, auth/session, store
   schema, boot path, new concurrency).
-  `--include devin,omp-deepseek-v41-flash`. Gemini (`omp-gemini38`) is
-  added only on an explicit ask; it found nothing unique after bunch 28.
-- Re-review a red delta, one seat (Devin), whenever the previous round found
+  `--include omp-gemini38` plus a Sonnet subagent as the second seat.
+  Do not include `devin` in a review or a panel while the paper runs on it
+  (`--exclude devin` on a default panel).
+- Re-review a red delta, one seat (Gemini), whenever the previous round found
   a blocking-real defect; not when it found only doc, nit or test-only items.
   After three rounds on one mechanism, stop adding rounds and look at the
   substrate (CLAUDE.md "Escalate on dead ends").
-- `gpt-6.1-sol` does not run code review.
+- `gpt-6.1-sol`, Luna, Opus and Fable do not run code review.
 
 The allocation follows the measured review yield
 (`docs/evidence/review-yield-2026-10-23.md`, confidence medium). The full default panel below is for decisions and

@@ -89,7 +89,8 @@ A commit subject ends with its class and rollback, for example
   blocking finding.
 - Any second agent may be the seat; the author may not. The default seat is
   Gemini 3.8 flash (high) through `agy`. Sonnet is the second seat. Opus, Sol
-  and Luna do not run code review.
+  and Luna do not run code review. Devin does not run review or sit on a
+  panel while the paper runs on its quota (owner, 2026-11-11).
 - Guest-security paths need the `Security-Effect` and
   `Security-Effect-Reviewed-By` trailers (`scripts/check-guest-security-epoch`).
   Never write a review trailer that no review backs.
