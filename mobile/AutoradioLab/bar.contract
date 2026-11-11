@@ -118,7 +118,7 @@ component BarShell
               text bi.text font-family=th.fontUi font-size=15 font-weight=600 color=th.fg
         if st == "error"
           row gap=6 align-items="center" animation=enter
-            image "symbol:warning" color=th.danger
+            image "symbol:alert" color=th.danger
             text bi.text testId="bar-text" font-family=th.fontUi font-size=14 color=th.fg line-clamp=3 flex=1
       if typing
         button testId="bar-send" press=sendAsk appearance="none" width=44 height=44 aria-label="Send"
