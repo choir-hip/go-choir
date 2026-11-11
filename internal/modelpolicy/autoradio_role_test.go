@@ -9,10 +9,10 @@ package modelpolicy
 //     app:autoradio cannot head a section), so an owner cannot override it;
 //  2. a computer whose policy file predates the role (no section) resolves it
 //     to the default pool, so a voice turn runs the slow free members first;
-//  3. the chain has Bedrock in it, or the continuation chain behind it, so a
-//     refused voice turn walks the computer's slow models;
+//  3. the chain has devin, beam or Synthetic in it (owner 2026-11-11), or the
+//     continuation chain behind it, so a refused voice turn walks slow models;
 //  4. a computer's policy section does not override the compiled pool;
-//  5. the chain's order is not River, devin, beam, Synthetic.
+//  5. the chain's order is not River then Bedrock Haiku.
 
 import (
 	"context"
@@ -51,13 +51,13 @@ func TestAutoradioRoleResolvesToItsPoolWithNoPolicySection(t *testing.T) {
 	// (2) a current policy file with no autoradio section.
 	m := autoradioManager(t, defaultPolicyText(provideriface.Config{}))
 	got := chainOf(m, AutoradioRole)
-	want := []string{memRiver, "devin/swe-2-flash", "opencode-go/beam-free", memSynthetic}
+	want := []string{memRiver, "bedrock/us.anthropic.claude-haiku-5-5"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("(2)(3)(5) chain = %v, want %v", got, want)
 	}
 	for _, g := range got {
-		if strings.HasPrefix(g, "bedrock/") {
-			t.Fatalf("(3) Bedrock in the chain: %v", got)
+		if strings.HasPrefix(g, "devin/") || strings.HasPrefix(g, "opencode-go/") || strings.HasPrefix(g, "synthetic/") {
+			t.Fatalf("(3) a member the owner ruled out is in the chain: %v", got)
 		}
 	}
 }

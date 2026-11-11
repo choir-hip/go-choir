@@ -12,6 +12,7 @@
 package speechsplit
 
 import (
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -60,9 +61,15 @@ func (s *Splitter) drain(final bool) []string {
 var titles = map[string]bool{
 	"mr": true, "mrs": true, "ms": true, "dr": true, "prof": true, "sr": true, "jr": true, "st": true, "mt": true,
 	"gen": true, "sen": true, "rep": true, "gov": true, "lt": true, "col": true, "capt": true, "sgt": true, "rev": true, "hon": true,
-	"vs": true, "no": true, "fig": true, "approx": true, "inc": true, "ltd": true, "co": true, "corp": true, "dept": true,
-	"jan": true, "feb": true, "mar": true, "apr": true, "jun": true, "jul": true, "aug": true, "sep": true, "sept": true, "oct": true, "nov": true, "dec": true,
+	"vs": true, "approx": true, "inc": true, "ltd": true, "co": true, "corp": true, "dept": true,
 	"e.g": true, "i.e": true, "u.s": true, "u.k": true, "u.n": true, "d.c": true, "u.s.a": true,
+}
+
+// beforeNumber abbreviations are one only when a number follows ("No. 5",
+// "Jan. 5"); otherwise the word ends the sentence ("The answer is no.").
+var beforeNumber = map[string]bool{
+	"no": true, "fig": true,
+	"jan": true, "feb": true, "mar": true, "apr": true, "jun": true, "jul": true, "aug": true, "sep": true, "sept": true, "oct": true, "nov": true, "dec": true,
 }
 
 // softAbbreviations end a sentence only when an uppercase word follows.
@@ -149,6 +156,9 @@ func periodEnds(before string, next rune) bool {
 	if utf8.RuneCountInString(word) == 1 && unicode.IsLetter([]rune(word)[0]) {
 		return false
 	}
+	if beforeNumber[word] {
+		return !unicode.IsDigit(next)
+	}
 	if softAbbreviations[word] {
 		return unicode.IsUpper(next)
 	}
@@ -172,17 +182,16 @@ func forcedCut(buf string, limit int) (end, rest int, ok bool) {
 	return limit, limit, true
 }
 
-// clean makes a sentence plain for the ear: whitespace collapsed, markdown
-// marks dropped.
+// structure is a leading heading, bullet or quote mark.
+var structure = regexp.MustCompile(`^(?:(?:#{1,6}|[-\x{2022}>])\s+)+`)
+
+// clean makes a sentence plain for the ear without changing what it says:
+// whitespace collapsed, emphasis marks and backticks dropped, and a leading
+// heading, bullet or quote mark (always followed by a space) removed. A sign,
+// a hash or a tilde inside the text is the text: "-5 degrees", "#1 story",
+// "about ~3 million", "C#".
 func clean(s string) string {
-	s = strings.Map(func(r rune) rune {
-		switch r {
-		case '*', '`', '_', '#', '~', '|':
-			return -1
-		}
-		return r
-	}, s)
+	s = strings.NewReplacer("*", "", "`", "").Replace(s)
 	s = strings.Join(strings.Fields(s), " ")
-	s = strings.TrimLeft(s, "-> ")
-	return strings.TrimSpace(s)
+	return strings.TrimSpace(structure.ReplaceAllString(s, ""))
 }

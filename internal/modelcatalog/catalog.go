@@ -537,19 +537,20 @@ func Pools() map[string][]PoolMember {
 		},
 		// Owner 2026-11-11: "Voice prompts should go to autoradio desk which
 		// should have a fast model that responds quickly", then "We should
-		// actually use River DeepSeek rather than Bedrock Haiku for this."
-		// River is a different provider from Synthetic that serves the same
-		// DeepSeek V4.1 Flash 1017 snapshot (one River model, so there is no
-		// faster variant to pick). The order is not the default pool's: a
-		// refusal here is audible silence, so a member is tried the moment the
-		// one before it refuses, and the pool has no Bedrock member. Devin's
-		// swe-2-flash and OpenCode's beam-free are free but refuse often
+		// actually use River DeepSeek rather than Bedrock Haiku for this",
+		// then "we should have Bedrock as the fallback after River DeepSeek. I
+		// don't want to use Devin Flash for this because it's already
+		// overloaded with AutoPaper." So the pool is exactly River, then
+		// Bedrock Haiku 5.5. Synthetic is reserved for self-development and
+		// beam is often parked. A refusal here is audible silence, so a member
+		// is tried the moment the one before it refuses. Bedrock does not
+		// stream (provider.BedrockProvider.Stream makes one whole call), so as
+		// the fallback it delivers its answer at once. Thinking is never turned
+		// off on either member (owner 2026-11-09), so the caller budgets for it
 		// (docs/design/autoradio-desk-fast-turns-2026-11-11.md section 5).
 		AutoradioPool: {
 			{Provider: "river", Model: "deepseek-ai/DeepSeek-V4.1-Flash-1017", Weight: 1},
-			{Provider: "devin", Model: "swe-2-flash", FallbackOnly: true},
-			{Provider: "opencode-go", Model: "beam-free", FallbackOnly: true},
-			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
+			{Provider: "bedrock", Model: "us.anthropic.claude-haiku-5-5", FallbackOnly: true},
 		},
 		SyntheticLunaPool: {
 			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", Weight: 1},
@@ -573,7 +574,7 @@ func Pools() map[string][]PoolMember {
 }
 
 // AutoradioPool names the pool of the Autoradio desk's spoken answers: River's
-// DeepSeek V4.1 Flash 1017 leads; devin, opencode-go and Synthetic follow.
+// DeepSeek V4.1 Flash 1017 leads and Bedrock Haiku 5.5 is the only fallback.
 const AutoradioPool = "autoradio"
 
 // LunaSyntheticPool names the pool that runs every thread on gpt-6-luna and

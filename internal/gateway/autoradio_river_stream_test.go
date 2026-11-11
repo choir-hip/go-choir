@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -128,5 +129,87 @@ func TestRiverFailureAfterTheFirstChunkIsAnError(t *testing.T) {
 	_, err := river.StreamText(context.Background(), provideriface.TextStreamRequest{Provider: "river", Model: riverStreamModel, User: "u"}, func(d string) { deltas = append(deltas, d) })
 	if err == nil {
 		t.Fatalf("(4) a River stream cut after %q ended clean", deltas)
+	}
+}
+
+// Bedrock Haiku 5.5 is the autoradio pool's fallback (owner 2026-11-11).
+// Bedrock does not stream (BedrockProvider.Stream makes one whole call and
+// emits the text as one chunk), so ways it could fail, written before the
+// test:
+//
+//  5. the call carries tools, or loses max_tokens, or runs with thinking off
+//     (owner 2026-11-09: never off) or a budget_tokens shape Bedrock refuses;
+//  6. the model's thinking block is spoken;
+//  7. a Bedrock refusal before any chunk reaches the guest as a stream with no
+//     delta rather than an error before any delta.
+const bedrockStreamModel = "us.anthropic.claude-haiku-5-5"
+
+func bedrockStreamRig(t *testing.T, bedrock http.HandlerFunc) *gatewayruntime.Provider {
+	t.Helper()
+	upstream := httptest.NewServer(bedrock)
+	t.Cleanup(upstream.Close)
+	bp, err := provider.NewBedrockProvider(provider.BedrockConfig{Region: "us-east-1", ModelID: bedrockStreamModel, AuthToken: "bd-test-token", BaseURL: upstream.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mp := provider.NewMultiProvider()
+	mp.Register("bedrock", bp)
+	reg := NewIdentityRegistry(time.Hour)
+	h := NewMultiHandlerWithRateLimit(reg, mp, nil)
+	cred, _ := reg.IssueCredential("autoputer-bedrock-stream")
+	mux := http.NewServeMux()
+	mux.HandleFunc("/provider/v1/inference", h.HandleInference)
+	gw := httptest.NewServer(mux)
+	t.Cleanup(gw.Close)
+	return gatewayruntime.New(gw.URL, cred.RawToken)
+}
+
+func TestBedrockHaikuAnswersTheAutoradioCallWithNoToolsAndASpendableBudget(t *testing.T) {
+	var path string
+	var body map[string]any
+	bedrock := bedrockStreamRig(t, func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"id":"msg_1","model":"`+bedrockStreamModel+`","stop_reason":"end_turn","content":[{"type":"thinking","thinking":"private reasoning","signature":"sig"},{"type":"text","text":"The top story is a strike. Talks resume Monday."}],"usage":{"input_tokens":90,"output_tokens":40}}`)
+	})
+	var deltas []string
+	resp, err := bedrock.StreamText(context.Background(), provideriface.TextStreamRequest{
+		Provider: "bedrock", Model: bedrockStreamModel, ReasoningEffort: "low", System: "s", User: "u", MaxTokens: 1200,
+	}, func(d string) { deltas = append(deltas, d) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != "/model/"+bedrockStreamModel+"/invoke" {
+		t.Fatalf("path %q", path)
+	}
+	if _, has := body["tools"]; has {
+		t.Fatalf("(5) the call carries tools: %v", body["tools"])
+	}
+	if body["max_tokens"] != float64(1200) {
+		t.Fatalf("(5) max_tokens %v", body["max_tokens"])
+	}
+	raw, _ := json.Marshal(body)
+	if !strings.Contains(string(raw), `"thinking":{"type":"adaptive"}`) || !strings.Contains(string(raw), `"effort":"low"`) || strings.Contains(string(raw), "budget_tokens") {
+		t.Fatalf("(5) thinking shape: %s", raw)
+	}
+	spoken := strings.Join(deltas, "")
+	if spoken != "The top story is a strike. Talks resume Monday." || strings.Contains(spoken, "private") || resp.Text != spoken {
+		t.Fatalf("(6) deltas %q text %q", deltas, resp.Text)
+	}
+	if resp.Usage.InputTokens != 90 || resp.Usage.OutputTokens != 40 {
+		t.Fatalf("usage %+v", resp.Usage)
+	}
+}
+
+func TestBedrockRefusalBeforeAnyChunkIsAnErrorBeforeAnyDelta(t *testing.T) {
+	bedrock := bedrockStreamRig(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		fmt.Fprint(w, `{"message":"Too many requests"}`)
+	})
+	called := false
+	_, err := bedrock.StreamText(context.Background(), provideriface.TextStreamRequest{Provider: "bedrock", Model: bedrockStreamModel, User: "u"}, func(string) { called = true })
+	if err == nil || called {
+		t.Fatalf("(7) err %v, delta called %v", err, called)
 	}
 }

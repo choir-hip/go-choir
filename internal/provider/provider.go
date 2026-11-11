@@ -400,6 +400,9 @@ type BedrockProvider struct {
 	authToken  string // loaded at init time, never logged
 	httpClient *http.Client
 	anthropicV string // anthropic version header
+	// baseURL replaces the regional Bedrock runtime endpoint; empty is AWS's.
+	// Only a test sets it (a fake Bedrock behind the real gateway handler).
+	baseURL string
 }
 
 // defaultBedrockRegion is used when AWS_REGION is unset.
@@ -410,6 +413,7 @@ type BedrockConfig struct {
 	Region    string
 	ModelID   string
 	AuthToken string
+	BaseURL   string // empty is the regional AWS endpoint
 }
 
 // NewBedrockProvider creates a Bedrock provider from the given config.
@@ -431,6 +435,7 @@ func NewBedrockProvider(cfg BedrockConfig) (*BedrockProvider, error) {
 		authToken:  cfg.AuthToken,
 		httpClient: &http.Client{Timeout: defaultProviderHTTPTimeout},
 		anthropicV: "bedrock-2023-05-31",
+		baseURL:    strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/"),
 	}, nil
 }
 
@@ -503,6 +508,9 @@ func (p *BedrockProvider) Call(ctx context.Context, req LLMRequest) (*LLMRespons
 		"https://bedrock-runtime.%s.amazonaws.com/model/%s/invoke",
 		p.region, pathEscape(modelID),
 	)
+	if p.baseURL != "" {
+		endpoint = fmt.Sprintf("%s/model/%s/invoke", p.baseURL, pathEscape(modelID))
+	}
 
 	// Build Anthropic Messages API request body.
 	body := p.buildRequestBody(req)
