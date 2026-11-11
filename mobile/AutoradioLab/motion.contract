@@ -59,8 +59,13 @@ component MotionPage
   view
     PageScroll(id="motion")
       text "Motion" role="heading" aria-level=1 font-size=28 font-weight=700 testId="page-title"
-      text `The brand TetraMark, 36 pt (bar), 44 and 120 pt (hero). Each blade point has a depth; every frame turns, tips and perspective-projects them. The reduced row is the flat brand drawing.` font-family=th.fontUi font-size=13 color=th.muted
-      text "Top row: the flat brand mark (still), then the same mark thinking at hero, bar and 44 pt size." font-family=th.fontUi font-size=13 color=th.muted
+      text `The brand TetraMark, 36 pt (bar), 44 and 120 pt (hero). Three independent blades breathe between the flat symbol and a sharp tetrahedron. The reduced row is the flat brand drawing.` font-family=th.fontUi font-size=13 color=th.muted
+      text "Pole A (the flat brand symbol), the midpoint, pole B (a sharp tetrahedron in perspective):" font-family=th.fontUi font-size=13 color=th.muted
+      row gap=10 align-items="center" testId="mark-poles"
+        MarkAt(state="pose:0", size=104, since=galSince, level=0, step=-1, still=false, testId="mark-pole-a")
+        MarkAt(state="pose:0.5", size=104, since=galSince, level=0, step=-1, still=false, testId="mark-pole-mid")
+        MarkAt(state="pose:1", size=104, since=galSince, level=0, step=-1, still=false, testId="mark-pole-b")
+      text "Thinking at hero, bar (36 pt) and 44 pt, and the brand mark held still:" font-family=th.fontUi font-size=13 color=th.muted
       row gap=14 align-items="center" testId="mark-top"
         MarkAt(state="idle", size=120, since=galSince, level=0, step=-1, still=true, testId="mark-rest-120")
         MarkAt(state="thinking", size=120, since=galSince, level=0, step=-1, still=false, testId="mark-live-120")
