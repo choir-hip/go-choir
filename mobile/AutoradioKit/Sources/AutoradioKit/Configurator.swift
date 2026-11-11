@@ -381,7 +381,7 @@ public final class ConfigRunner: @unchecked Sendable {
             if c.isFloor {
                 let better = CandidateTable.candidates(r, in: table).contains { !$0.isFloor && $0.minTier <= rec.device.tier }
                 let why = !rec.device.supported ? "this phone is below the 6 GB floor" : (better ? (rec.attempts.last?.reasons.first ?? "the larger ones did not fit beside the rest") : "nothing larger applies")
-                out[r.rawValue] = "\(c.label): built in (\(why))"
+                out[r.rawValue] = c.source == "your computer" ? "\(c.label): over the network (\(why))" : "\(c.label): built in (\(why))"
                 continue
             }
             let name = c.quant.isEmpty ? c.label : "\(c.label), \(c.quant)"

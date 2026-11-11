@@ -316,3 +316,63 @@ whole Mac process resident after the load (all earlier models still loaded), so 
 
 Ladder order follows: Qwen3-0.6B Q8_0 (its file is the one the decision role loads, so no extra weights), Qwen3.5-0.8B, Qwen3-0.6B Q4_K_M,
 Qwen3-1.7B, then LFM3 last before the soft cue only because of its licence; the owner can move it up after reading section 5 of the licence.
+
+## The configurator (round 3, 2026-11-11)
+
+Owner: "I want all the models downloadable. None ship with the app. The point is to build a configurator that selects the best models for the
+user's specific device in the onboarding." Code: `mobile/AutoradioKit/Sources/AutoradioKit/ModelCandidates.swift` (the table),
+`Configurator.swift` (device probe, thresholds, planner, runner, record), `LiveConfigBackend.swift`, `VoiceSetup.swift` (rows),
+`HubModelProvider.swift` (measurement). Tests: `ConfiguratorTests.swift`.
+
+**Procedure.** Probe the device (model id, chip, physical memory, `os_proc_available_memory()`, free disk, thermal state, OS). Below about 6 GB
+the result is a plain "not supported" with every role on its built-in floor. Otherwise plan configurations (one candidate per role: voice
+activity, listener, voice, decision, responder), the WHOLE pipeline resident together: memory is estimated from file sizes and measured
+overheads, two roles on one file count its weights once, and configurations that could fit are ordered best quality first (score = sum of role
+weight times the candidate's quality rank; the responder weighs 10, the voice and listener 2, the decision and the voice-activity model 1).
+Then try them in order: download only what that configuration needs (resuming, SHA-256 or the library's own check), load everything at once,
+measure, and accept the first that leaves headroom and meets the speeds; otherwise unload it, delete what it fetched that the next does not need,
+and step down. At most six attempts (a count), then the built-in voice. Weights of every candidate not in the accepted configuration are
+deleted. The whole record (probe, plan, every attempt's downloads and measurements, reasons, the thresholds in force, the chosen configuration
+and one plain line per role) is saved and goes in the trace export (`configuration`).
+
+**Thresholds** (`ConfigThresholds.standard`, one place, each with its source in the code comment):
+
+| Threshold | Value | Where it came from |
+|---|---|---|
+| planning headroom | 600 MB | the Mac runs: a process grows 0.1 to 0.25 GB while generating; a guess to tune |
+| app base | 300 MB | unmeasured on a phone |
+| headroom after load | 500 MB | forum: iOS ends a process at its limit (2.2 to 2.3 GB on a 4 GB phone); a guess to tune |
+| responder writes | 15 tok/s | speech is about 4 tokens a second; 3 times ahead |
+| responder reads | 150 tok/s | a 400-token page cold in about 3 s (warm: only the question) |
+| first sound of the voice | 1,500 ms | hand-over from the phone's voice; Mac Kokoro 243 ms, Pocket 98 ms |
+| listener speed | 0.5 of real time | must keep up using half the compute; Mac 0.04 to 0.18 |
+| a decision | 1,500 ms | Mac 58 ms |
+| thermal after the run | nominal or fair | serious and critical mean throttling |
+| sustained run | 3 rounds of the same work | a fixed amount of work, not a duration |
+| available memory (assumed where the device cannot say) | 60% of physical | forum: 6.1 GB of an 8 GB phone with the increased-memory entitlement |
+
+**Candidate table.** Responder (quality rank is data, from our Mac sample runs of 2026-11-11; `*` = a quant we have not run ourselves, ranked within its family
+by the vendor's bit-depth ordering; sizes and digests are the Hugging Face API listings):
+
+| Id | Size | Rank | Min tier | Measured |
+|---|---|---|---|---|
+| lfm3-1.7b-q8_0 | 1,846 MB | 98 | 8 GB | no * |
+| lfm3-1.7b-q6_k | 1,428 MB | 96 | 8 GB | no * |
+| lfm3-1.7b-q5_k_m | 1,259 MB | 94 | 6 GB | no * |
+| lfm3-1.7b-qad-q4_0 | 1,050 MB | 93 | 6 GB | yes |
+| lfm3-1.7b-q4_k_m | 1,100 MB | 91 | 6 GB | no * |
+| lfm3-1.7b-nvfp4 | 1,280 MB | 90 | 8 GB | no (whether llama.cpp b12259 runs NVFP4 on iOS is unknown) |
+| qwen3.5-2b-q8_0 / q4_k_m | 2,012 / 1,281 MB | 66 / 64 | 12 GB / 8 GB | no (never run) |
+| qwen3-0.6b-q8_0 / q4_k_m | 639 / 397 MB | 62 / 52 | 6 GB | yes |
+| qwen3.5-0.8b-q8_0 / q4_k_m | 812 / 533 MB | 58 / 56 | 6 GB | q4 yes |
+| qwen3-1.7b-q8_0 / q6_k / q4_k_m | 1,834 / 1,418 / 1,107 MB | 50 / 49 / 47 | 8 / 8 / 6 GB | q4 yes |
+| cue-only | 0 | 0 | the floor | |
+
+LFM3-1.7B's repository (`LiquidAI/LFM3-1.7B-GGUF`) lists BF16, F16, NVFP4, Q4_K_M, Q5_K_M, Q6_K, Q8_0 and QAD-Q4_0; there is no plain Q4_0 and nothing under
+about 1.05 GB. BF16 and F16 (3.5 GB) are not in the table. Other roles: voice activity (Silero, level detector floor), listener (Parakeet TDT, Parakeet EOU, Apple
+floor), voice (Kokoro, Pocket, system voice floor), decision (Qwen3-0.6B Q8_0, the computer floor). LFM3's licence limit (commercial use at or above US$10M annual
+revenue needs a separate licence from Liquid AI) is recorded in the table; it does not lower its rank: that is the owner's call.
+
+**Mac proof** (`CONFIGURE=1 mobile/scripts/proof-models.sh`, simulated 6, 8 and 12 GB profiles; the planner enforces the memory budget, speeds are the Mac's):
+6 GB chose LFM3 QAD Q4_0 with Parakeet TDT, Pocket voice and Silero (decision through the computer); 8 GB chose LFM3 Q8_0 with Parakeet TDT, Kokoro and Silero; 12 GB
+chose LFM3 Q8_0 with the on-phone Qwen3-0.6B decision as well.
