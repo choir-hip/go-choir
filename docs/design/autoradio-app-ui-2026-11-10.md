@@ -122,6 +122,12 @@ from stock phrases.
 24. **The real voice models must load.** A build where only the fallbacks
 run is a defect ("model … not registered").
 
+19a. **The stack is a deck (owner, 2026-11-11, after ruling 19).** One page is on top, full screen. A sideways swipe, either
+way, sends the top page to the bottom of the deck and brings the next up; nothing is closed by a swipe. Opening a page puts it
+on top (no duplicates). The launcher (the mark) opens the key pages (Paper, Textures, Files, Mail, Settings) and lists the pages
+in the deck, with a remove control on opened ones. This replaces ruling 19's "swipe to the neighbouring page" and any position
+indicator ("3 of 7"); the bar shows a quiet count of pages in the deck.
+
 Also from the walk: a page title is never a raw address, a section name is
 never a raw id, nothing is clipped off a screen edge, and the bar speaks
 about the page in front.
