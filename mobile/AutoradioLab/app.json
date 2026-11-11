@@ -10,7 +10,7 @@
     "name": "Autoradio"
   },
   "icons": [
-    { "src": "modules/apple/Assets.xcassets/AppIcon.appiconset/icon-default.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }
+    { "src": "appicon/default.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }
   ],
   "host": {
     "ios": {
