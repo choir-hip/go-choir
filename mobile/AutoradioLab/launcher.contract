@@ -5,7 +5,7 @@
 // The panel is placed by the bar (bar.contract); the scrim behind the page is the root's.
 // testIds: launcher-layer, launcher-search, launcher-open-<address>, launcher-close-<address>, search-hit-<address>,
 // place-<slug> (paper, textures, files, mail, settings, activity, told, components), launcher-nohits.
-use Theme, PageList, LauncherData from "@choir/autoradio"
+use Theme, PageList, LauncherData, DemoInfo from "@choir/autoradio"
 use Layer, Btn, stackName, kindOf, kindWord, isFixed, pageName from "./ui.contract"
 
 component PlaceRow
@@ -78,6 +78,8 @@ component Launcher
     stackAddrs: string[]
     editLq: action
     openPage: action
+    setLensStyle: action
+    dm: DemoInfo
   view
     Layer(testId="launcher-layer")
       scroll testId="launcher-scroll" flex=1 min-height=0 width="100%"
@@ -109,3 +111,12 @@ component Launcher
             PlaceRow(slug="activity", name="Activity", address="activity:", line="What your computer has been doing")
             PlaceRow(slug="told", name="What I've told the paper", address="texture:what-i-told-the-paper", line="")
             PlaceRow(slug="components", name="Components", address="lab:components", line="Voice models and tools")
+            if dm.on
+              text "Lens (demo)" font-family=th.fontUi font-size=13 color=th.muted margin-top=8
+              row gap=8
+                button press=setLensStyle("A") testId="lens-a" appearance="none"
+                  Btn(label="Lens A", primary=false, wide=false)
+                button press=setLensStyle("B") testId="lens-b" appearance="none"
+                  Btn(label="Lens B", primary=false, wide=false)
+                button press=setLensStyle("C") testId="lens-c" appearance="none"
+                  Btn(label="Lens C", primary=false, wide=false)
