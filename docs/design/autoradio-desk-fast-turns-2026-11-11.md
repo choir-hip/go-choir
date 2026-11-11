@@ -536,3 +536,15 @@ the desk's main work and get their own design note.
 than Bedrock Haiku for this." The `autoradio` pool is led by River's DeepSeek
 model; Bedrock Haiku is not in the pool. This settles open question 1 and
 replaces the order in section 5.
+
+**Pool and timers (owner, 2026-11-11, later):** the `autoradio` pool is River
+DeepSeek, then Bedrock Haiku 5.5, and nothing else ("I don't want to use
+Devin Flash for this because it's already overloaded with AutoPaper"). And
+the turn path carries no timers of its own: "We should make the system work
+fast, but we shouldn't have these deterministic timers in the way. That's
+just going to create bugs and weirdness." No first-chunk walk timer, no
+stall timer, no whole-turn deadline. A turn ends or moves to the next model
+on real signals only: a provider's refusal or error, the end of the stream,
+or the listener interrupting or leaving. Speed is measured and fixed, not
+enforced. This is narrower than the operating contract's general allowance
+for deadlines and wins for this path.
