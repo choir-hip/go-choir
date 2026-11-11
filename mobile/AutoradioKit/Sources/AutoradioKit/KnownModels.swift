@@ -38,6 +38,13 @@ public enum KnownModels {
         url: URL(string: "https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf")!,
         sha256: "ac2d97712095a558e31573f62f466a3f9d93990898b0ec79d7c974c1780d524a",
         bytes: 396_705_472, fileName: "Qwen3-0.6B-Q4_K_M.gguf")
+    /// Qwen3-1.7B Q4_K_M: the next size up from 0.6B, same family and template (non-thinking). Apache-2.0. unsloth's GGUF of the official
+    /// weights; the digest is the Hugging Face API listing's LFS object id, fetched 2026-11-11.
+    public static let qwen317 = ModelSpec(
+        id: "qwen3-1.7b-q4_k_m",
+        url: URL(string: "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf")!,
+        sha256: "b139949c5bd74937ad8ed8c8cf3d9ffb1e99c866c823204dc42c0d91fa181897",
+        bytes: 1_107_409_472, fileName: "Qwen3-1.7B-Q4_K_M.gguf")
     /// Qwen3.5-0.8B Q4_K_M, a trial responder (non-thinking by default). Apache-2.0. Whether llama.cpp b12259 runs its architecture is
     /// what the check on the device says.
     public static let qwen35 = ModelSpec(
@@ -55,7 +62,7 @@ public enum KnownModels {
         bytes: 1_049_615_680, fileName: "LFM3-1.7B-QAD-Q4_0.gguf")
 
     /// Models fetched by us over HTTP, pinned by SHA-256.
-    public static var pinned: [ModelSpec] { [qwen3, qwen3Q4, qwen35, lfm3Text] }
+    public static var pinned: [ModelSpec] { [qwen3, qwen3Q4, qwen317, qwen35, lfm3Text] }
 
     /// Every model the app can load, with the facts from the model cards (sizes are the cards' figures, not measurements).
     /// Library-managed ones are fetched, checksummed (Hugging Face LFS object ids) and compiled by FluidAudio itself.
@@ -78,6 +85,8 @@ public enum KnownModels {
                              approxBytes: qwen3.bytes, license: "Apache-2.0 (model); llama.cpp MIT", cachePath: storeRoot),
             ManagedModelSpec(id: qwen3Q4.id, label: "Qwen3-0.6B Q4_K_M (llama.cpp GGUF)", source: "hf:unsloth/Qwen3-0.6B-GGUF",
                              approxBytes: qwen3Q4.bytes, license: "Apache-2.0 (model); llama.cpp MIT", cachePath: storeRoot),
+            ManagedModelSpec(id: qwen317.id, label: "Qwen3-1.7B Q4_K_M (llama.cpp GGUF)", source: "hf:unsloth/Qwen3-1.7B-GGUF",
+                             approxBytes: qwen317.bytes, license: "Apache-2.0 (model); llama.cpp MIT", cachePath: storeRoot),
             ManagedModelSpec(id: qwen35.id, label: "Qwen3.5-0.8B Q4_K_M (llama.cpp GGUF)", source: "hf:unsloth/Qwen3.5-0.8B-GGUF",
                              approxBytes: qwen35.bytes, license: "Apache-2.0 (model); llama.cpp MIT", cachePath: storeRoot),
             ManagedModelSpec(id: lfm3Text.id, label: "LFM3-1.7B QAD-Q4_0 (llama.cpp GGUF)", source: "hf:LiquidAI/LFM3-1.7B-GGUF",

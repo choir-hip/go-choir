@@ -14,18 +14,17 @@ public final class ChoirDeskStage: Desk, @unchecked Sendable {
                         summary: "Sends what you said to your computer and speaks the revision it writes.",
                         params: [.text("baseURL", "Base URL", ChoirEnvironment.defaultBaseURL),
                                  .number("pollSeconds", "Poll every (s)", 1.5, 0.05, 10),
-                                 .number("timeoutSeconds", "Give up after (s)", 110, 5, 600),
                                  .number("settleSeconds", "Turn is over after quiet (s)", 4, 0, 60, note: "after the last revision, with no newer one"),
                                  .flag("placeInPrompt", "Say where in the story you were", true)],
                         needsNetwork: true)
     }
     static let textureDesk = "texture"
 
-    let baseURL: String, poll: Double, timeout: Double, placeInPrompt: Bool, settle: Double
+    let baseURL: String, poll: Double, placeInPrompt: Bool, settle: Double
     public init(_ p: StageParams) {
         settle = p.double("settleSeconds", 4)
         baseURL = p.string("baseURL", ChoirEnvironment.defaultBaseURL); poll = p.double("pollSeconds", 1.5)
-        timeout = p.double("timeoutSeconds", 110); placeInPrompt = p.bool("placeInPrompt", true)
+        placeInPrompt = p.bool("placeInPrompt", true)
     }
 
     /// The listener's words exactly as spoken, then (optionally) one plain line saying where they were.
@@ -39,11 +38,11 @@ public final class ChoirDeskStage: Desk, @unchecked Sendable {
     }
 
     public func submit(_ turn: DeskTurn) -> AsyncThrowingStream<Revision, Error> {
-        let (baseURL, poll, timeout, include, settle) = (self.baseURL, self.poll, self.timeout, self.placeInPrompt, self.settle)
+        let (baseURL, poll, include, settle) = (self.baseURL, self.poll, self.placeInPrompt, self.settle)
         return AsyncThrowingStream { c in
             let task = Task {
                 do {
-                    try await Self.run(turn, baseURL: baseURL, poll: poll, timeout: timeout, include: include, settle: settle) { c.yield($0) }
+                    try await Self.run(turn, baseURL: baseURL, poll: poll, include: include, settle: settle) { c.yield($0) }
                     c.finish()
                 } catch is CancellationError { c.finish() }
                 catch { c.finish(throwing: error) }
@@ -54,10 +53,9 @@ public final class ChoirDeskStage: Desk, @unchecked Sendable {
 
     static func enc(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? s }
 
-    static func run(_ turn: DeskTurn, baseURL: String, poll: Double, timeout: Double, include: Bool, settle: Double, deliver: (Revision) -> Void) async throws {
+    static func run(_ turn: DeskTurn, baseURL: String, poll: Double, include: Bool, settle: Double, deliver: (Revision) -> Void) async throws {
         let env = ChoirEnvironment.shared
-        let client = env.client(baseURL: baseURL, timeout: 20)
-        let started = ProcessInfo.processInfo.systemUptime
+        let client = env.client(baseURL: baseURL)
         let playing = env.playing(turn.programmeID)
         let text = prompt(turn, playing: playing, include: include)
 
@@ -82,7 +80,7 @@ public final class ChoirDeskStage: Desk, @unchecked Sendable {
             docID = o["doc_id"] as? String ?? ""; userRevision = o["revision_id"] as? String ?? ""
             if docID.isEmpty, let status = o["status_url"] as? String, status.hasPrefix("/api/prompt-bar/submissions/") {
                 // The routed submit did not name a document yet: ask the submission, briefly.
-                for _ in 0..<12 {
+                while true {            // until the submission names the document, errors, or the listener cancels
                     try await Task.sleep(nanoseconds: UInt64(max(poll, 0.05) * 1e9))
                     let s = try await client.send("GET", status, route: "/api/prompt-bar/submissions/{id}").object()
                     if let d = (s["decision"] as? [String: Any])?["doc_id"] as? String, !d.isEmpty {
@@ -110,8 +108,8 @@ public final class ChoirDeskStage: Desk, @unchecked Sendable {
         var lastDelivery = 0.0
         // The turn is over when: the document's trajectory settles after a delivered revision; or `settle`
         // seconds pass after the last delivered revision with no newer one (the stream of a live
-        // document never closes); or `timeout` passes (an error if nothing was delivered).
-        while ProcessInfo.processInfo.systemUptime - started < timeout {
+        // document never closes); or a real error ends it (three failures in a row); or the listener cancels. There is no whole-turn timeout.
+        while true {
             try Task.checkCancellation()
             if delivered > 0, ProcessInfo.processInfo.systemUptime - lastDelivery >= settle {
                 env.log?.emit(.note("choir desk: turn over, \(delivered) revision(s), quiet for \(Int(settle)) s")); return
@@ -154,7 +152,6 @@ public final class ChoirDeskStage: Desk, @unchecked Sendable {
             }
             try await Task.sleep(nanoseconds: UInt64(max(poll, 0.01) * 1e9))
         }
-        if delivered == 0 { throw ChoirError.timeout("the desk wrote no revision in \(Int(timeout)) s") }
     }
 
     /// Turn a revision body into a Revision from the first paragraph that differs, never before the block after the listener's.

@@ -129,6 +129,8 @@ public enum SetupCatalog {
                                    kitStageID: "local-ack", role: "responder", needsMB: 600, minDecodeTokensPerSecond: 12),
                     SetupCandidate(id: "qwen3-0.6b-q8_0", label: "A small language model, fuller", bytes: 639_446_688, minMemoryGB: 4,
                                    kitStageID: "local-ack", role: "responder", needsMB: 1000, minDecodeTokensPerSecond: 12),
+                    SetupCandidate(id: "qwen3-1.7b-q4_k_m", label: "A larger small language model", bytes: 1_107_409_472, minMemoryGB: 6,
+                                   kitStageID: "local-ack", role: "responder", needsMB: 1400, minDecodeTokensPerSecond: 20),
                     SetupCandidate(id: "qwen3.5-0.8b-q4_k_m", label: "A newer small language model", bytes: 532_517_120, minMemoryGB: 4,
                                    kitStageID: "local-ack", role: "responder", needsMB: 800, minDecodeTokensPerSecond: 12),
                     SetupCandidate(id: "lfm3-1.7b-qad-q4_0", label: "A larger language model", bytes: 1_049_615_680, minMemoryGB: 6,

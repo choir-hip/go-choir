@@ -119,6 +119,7 @@ final class LocalAckTests: XCTestCase {
         XCTAssertTrue(s.contains("Each later sentence adds something less important"))
         XCTAssertTrue(s.contains("make sense on its own"), "any sentence may be the last one heard")
         XCTAssertTrue(s.contains("Say only what the page in front and the listener's words support"))
+        XCTAssertTrue(s.contains("If the page has nothing about what they asked, say so plainly in one sentence instead of guessing or inventing"))
         XCTAssertTrue(s.contains("never present a guess as the answer"))
         XCTAssertTrue(s.contains("never claim the desk has found something"))
         XCTAssertTrue(s.contains("Do not repeat what you have just said"))
@@ -266,6 +267,19 @@ final class LocalAckTests: XCTestCase {
         XCTAssertTrue(m.asked[1].user.contains("Looking into the harbor park vote."), "the second ask carries what was said before, in the prompt")
         XCTAssertEqual(m.asked[0].prefix, m.asked[1].prefix, "and the stable prefix did not change")
         XCTAssertTrue(m.asked[1].user.contains("Checking who proposed it."))
+    }
+
+    func testOnlyLinesSaidAboutTheSamePageGoIntoThePrompt() async {
+        let history = AckHistory()
+        let m = FakeLocalModel(pieces: ["The strike ended in Nancy today."])
+        _ = await collect(holder(m, history: history).lines(for: HolderInput(listenerWords: "what happened", answers: [], pageTitle: "Front", pageKind: "paper", pageAddress: "pub:front")))
+        let m2 = FakeLocalModel(pieces: ["The battery stores solar power."])
+        _ = await collect(holder(m2, history: history).lines(for: HolderInput(listenerWords: "tell me more", answers: [], pageTitle: "Grid", pageKind: "texture", pageAddress: "texture:grid")))
+        XCTAssertFalse(m2.asked[0].user.contains("The strike ended in Nancy today."), "another page's line is not context for this page")
+        let m3 = FakeLocalModel(pieces: ["Something else about the front page."])
+        _ = await collect(holder(m3, history: history).lines(for: HolderInput(listenerWords: "and then", answers: [], pageTitle: "Front", pageKind: "paper", pageAddress: "pub:front")))
+        XCTAssertTrue(m3.asked[0].user.contains("The strike ended in Nancy today."), "the same page's earlier line is")
+        XCTAssertFalse(m3.asked[0].user.contains("The battery stores solar power."))
     }
 
     func testNoModelOrNotLoadedMeansNoWordsNotAStockPhrase() async {

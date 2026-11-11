@@ -194,6 +194,16 @@ public final class LabRuntime: @unchecked Sendable {
     /// Set by the host: the text of the page at an address, as far as the phone has it (the local stream may say something from it).
     public var pageTextProvider: (@Sendable (String) async -> String)?
     private var warmTask: Task<Void, Never>?
+    private let warmKeys = Locked<(done: String, running: String)>(("", ""))
+    static func warmKey(_ address: String, _ text: String) -> String { "\(address)|\(text.utf8.count)|\(text.hashValue)" }
+    /// A page's text has arrived (or changed) while the page may already be in front: read it into the responder's cache unless that
+    /// exact page and text has been read or is being read now.
+    public func pageTextReady(address: String, text: String) {
+        guard let front = frontPageResolver?(nil), front.address == address else { return }
+        let key = Self.warmKey(address, text)
+        let skip = warmKeys.read { $0.done == key || $0.running == key }
+        if !skip { warmResponder(address: address) }
+    }
     /// Read the page that is (or is about to be) in front into the responder's cache, in the background, so that at end of speech only
     /// the listener's words remain to be read. Cancels the reading of the previous page; what was read of it stays in the model's cache
     /// only as far as it is a prefix of the next prompt. No timer: it runs as long as the reading takes, and a turn preempts it.
@@ -207,8 +217,11 @@ public final class LabRuntime: @unchecked Sendable {
             if Task.isCancelled { return }
             let prefix = AckPrompt.userPrefix(pageTitle: front.title, pageKind: front.kind, pageText: text)
             guard !prefix.isEmpty else { return }
+            let key = Self.warmKey(front.address, text)
+            self.warmKeys.write { $0.running = key }
             await model.prefill(system: AckPrompt.system(), userPrefix: prefix)
             if let r = model.lastPrefill() {
+                if r.promptTokens >= r.prefixTokens { self.warmKeys.write { $0.done = key; $0.running = "" } } else { self.warmKeys.write { $0.running = "" } }
                 self.log.emit(.localWarm(address: front.address, tokens: r.prefixTokens, ms: r.prefillMs, complete: r.promptTokens >= r.prefixTokens))
             }
         }
@@ -496,6 +509,8 @@ public final class LabRuntime: @unchecked Sendable {
         case .localCut(let n, let r, let ms): return String(format: "local stream cut after %d sentences, %.0f ms after turn end: ", n, ms) + r
         case .localPrefill(let n, let pre, let re, let ms): return String(format: "local prompt %d tokens (stable prefix %d, already cached %d), read in %.0f ms: ", n, pre, re, ms) + (pre > 0 && re >= pre ? "WARM cache" : "cold cache")
         case .localWarm(let a, let n, let ms, let done): return String(format: "page read into the responder ahead of time: %@, %d tokens, %.0f ms", a, n, ms) + (done ? "" : " (preempted)")
+        case .deskSentenceStarted(let t, let ms): return String(format: "desk sentence heard %.0f ms after turn end: ", ms) + t
+        case .deskDone(let st, let n, let a, let b): return "desk stream \(st), \(n) sentences, server first sentence \(a.map { String(format: "%.0f ms", $0) } ?? "-"), server done \(b.map { String(format: "%.0f ms", $0) } ?? "-")"
         case .transitionPlayed(let ms): return String(format: "hand-over sound %.0f ms after turn end", ms)
         case .cueStarted(let ms): return String(format: "non-verbal cue %.0f ms after turn end", ms)
         case .deskFirstToken(let ms): return String(format: "desk first token %.0f ms after turn end", ms)

@@ -5,6 +5,7 @@ extension StageRegistry {
         r.register(.system1, ChoirSystem1.self) { ChoirSystem1($0) }
         r.register(.programme, ChoirFrontProgramme.self) { ChoirFrontProgramme($0) }
         r.register(.desk, ChoirDeskStage.self) { ChoirDeskStage($0) }
+        r.register(.desk, AutoradioDeskStage.self) { AutoradioDeskStage($0) }
     }
 
     /// What the listener's app runs: the real programme, System 1 and desk on the listener's computer, and
@@ -14,7 +15,7 @@ extension StageRegistry {
             .micSource: .init(id: "builtin"), .addressing: .init(id: "button"), .speechBounds: .init(id: "energy-vad"),
             .speakerCheck: .init(id: "none"), .transcriber: .init(id: "apple-speech"), .yieldPolicy: .init(id: "dip-then-pause"),
             .system1: .init(id: ChoirSystem1.stageID), .holder: .init(id: "local-ack"), .voice: .init(id: "avspeech"),
-            .desk: .init(id: ChoirDeskStage.stageID), .programme: .init(id: ChoirFrontProgramme.stageID),
+            .desk: .init(id: AutoradioDeskStage.stageID), .programme: .init(id: ChoirFrontProgramme.stageID),
         ])
     }
 }

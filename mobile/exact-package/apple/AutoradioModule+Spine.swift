@@ -27,6 +27,7 @@ extension AutoradioModule {
             if address.isEmpty { return reply(json(PageModel(address: "", kind: "", title: "", status: "loading"))) }
             Task { [pageSources, weak self] in
                 let m = await pageSources.model(for: address)
+                if m.status == "ready", !m.lines.isEmpty { self?.runtime.pageTextReady(address: address, text: m.lines.joined(separator: " ")) }   // the text may arrive after the page is in front
                 DispatchQueue.main.async { reply(self?.json(m) ?? [:]) }
             }
         }

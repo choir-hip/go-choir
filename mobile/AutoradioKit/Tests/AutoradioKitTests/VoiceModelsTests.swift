@@ -158,7 +158,7 @@ final class VoiceModelsTests: XCTestCase {
 
     func testTheResponderIsItsOwnStageWithQ4First() {
         let ids = SetupCatalog.plan(for: device(8))[.responder]!.map(\.id)
-        XCTAssertEqual(ids, ["qwen3-0.6b-q4_k_m", "qwen3-0.6b-q8_0", "qwen3.5-0.8b-q4_k_m", "lfm3-1.7b-qad-q4_0", "cue-only"])
+        XCTAssertEqual(ids, ["qwen3-0.6b-q4_k_m", "qwen3-0.6b-q8_0", "qwen3-1.7b-q4_k_m", "qwen3.5-0.8b-q4_k_m", "lfm3-1.7b-qad-q4_0", "cue-only"])
         XCTAssertEqual(SetupStage.responder.kind, .holder)
         XCTAssertTrue(SetupCatalog.ladder(.responder).filter { !$0.isFloor }.allSatisfy { $0.role == "responder" })
         XCTAssertTrue(SetupCatalog.ladder(.decision).filter { !$0.isFloor }.allSatisfy { $0.role == "decision" }, "setup can pick the two independently")
@@ -201,7 +201,7 @@ final class VoiceModelsTests: XCTestCase {
     }
 
     func testResponderCandidatesAreRegisteredWithPinnedSources() {
-        for id in ["qwen3-0.6b-q4_k_m", "qwen3.5-0.8b-q4_k_m", "lfm3-1.7b-qad-q4_0"] {
+        for id in ["qwen3-0.6b-q4_k_m", "qwen3-1.7b-q4_k_m", "qwen3.5-0.8b-q4_k_m", "lfm3-1.7b-qad-q4_0"] {
             let spec = KnownModels.pinned.first { $0.id == id }
             XCTAssertNotNil(spec, id)
             XCTAssertEqual(spec?.sha256.count, 64)

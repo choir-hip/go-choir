@@ -178,7 +178,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
         var out: [String] = ["== responder \(modelID)"]
         let m = LlamaLocalModel(modelID: modelID)
         guard let e = try? await LlamaLocalModel.engine(modelID, download: false) else { return out + ["  not loaded"] }
-        var said: [String] = []
+        var said: [String: [String]] = [:]          // lines said per page: only the same page's lines are context, as in the app
         for p in samplePages {
             for warm in [false, true] {
                 e.resetCache()
@@ -192,11 +192,11 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
                 func show(_ raw: String) {
                     guard let l = AckPrompt.speakable(raw) else { return }
                     n += 1
-                    if !warm { said.append(l) }
+                    if !warm { said[p.title, default: []].append(l) }
                     out.append(String(format: "  %6.0f ms  ", nowMs() - t0) + l)
                 }
                 do {
-                    for try await piece in m.stream(system: system, userPrefix: prefix, userSuffix: AckPrompt.userSuffix(listener: p.ask, previous: Array(said.suffix(6))), temperature: 0.7) {
+                    for try await piece in m.stream(system: system, userPrefix: prefix, userSuffix: AckPrompt.userSuffix(listener: p.ask, previous: Array((said[p.title] ?? []).suffix(6))), temperature: 0.7) {
                         for s in splitter.push(piece) { show(s) }
                     }
                     for s in splitter.finish() { show(s) }
