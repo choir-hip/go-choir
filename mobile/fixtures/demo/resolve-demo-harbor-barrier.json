@@ -1,0 +1,13 @@
+{
+ "publication": {
+  "title": "The harbor council approves a tide barrier"
+ },
+ "payload": {
+  "text": "The harbor council voted on Tuesday to fund a movable tide barrier across the mouth of the harbor, ending a debate that has run for more than a year.\n\nSupporters said the barrier would protect the old town from the storm surges that have flooded its lowest streets three times in five years. Opponents said the cost, estimated at four hundred million, would crowd out repairs to the water mains.\n\nWork is expected to start in the spring. The council also asked the engineers to report every quarter on cost and on what the barrier does to the fishing channel.",
+  "manifest_hash": "demo-0"
+ },
+ "version": {
+  "id": "demo-v0",
+  "manifest_hash": "demo-0"
+ }
+}

@@ -1,0 +1,33 @@
+{
+  "schema_version": 3,
+  "id": "signal",
+  "name": "Signal",
+  "schemes": ["light", "dark"],
+  "colors": {
+    "paper":  { "light": "#FFFFFF", "dark": "#000000" },
+    "paper2": { "light": "#F0F0F0", "dark": "#141414" },
+    "fg":     { "light": "#000000", "dark": "#FFFFFF" },
+    "muted":  { "light": "#3A3A3A", "dark": "#D0D0D0" },
+    "accent": { "light": "#0033CC", "dark": "#FFD60A" },
+    "accent2":{ "light": "#001F7A", "dark": "#FFE866" },
+    "success":{ "light": "#005A24", "dark": "#5CFF9A" },
+    "danger": { "light": "#A00018", "dark": "#FF8A8A" },
+    "onAccent": { "light": "#FFFFFF", "dark": "#000000" },
+    "rule":   { "light": "#000000", "dark": "#FFFFFF" },
+    "scrim":  { "light": "rgba(24,14,30,.84)", "dark": "rgba(0,0,0,.86)" },
+    "onScrim": { "light": "#FFFFFF", "dark": "#F3F3F3" }
+  },
+  "type": { "read": "system-ui", "ui": "system-ui", "mono": "ui-monospace", "scale": "large" },
+  "radii": { "card": "6px", "control": "6px", "pill": "6px", "rules": "0px" },
+  "elevation": {
+    "1": { "shadow": "none", "edge": "0 0 0 2px rule", "press": 0.99, "pressTint": true },
+    "2": { "backing": 0.94, "material": "solid", "shadow": "none", "edge": "0 0 0 2px rule" },
+    "3": { "backing": 0.86, "material": "solid", "shadow": "none", "edge": "0 0 0 3px rule", "behind": { "scale": 1.0, "dim": 0.35 } }
+  },
+  "motion": {
+    "fast": "80ms linear", "enter": "140ms ease-out", "sheet": "160ms ease-out", "stagger": "0ms",
+    "spring": { "stiffness": 420, "damping": 44, "mass": 1 },
+    "reduced": { "enter": "0ms", "spring": "none" }
+  },
+  "mark": { "drift": "none", "tumble": ["5s", "9s"], "flip": { "stiffness": 360, "damping": 34 }, "listenScale": 1.1, "reduced": "static" }
+}

@@ -1,0 +1,357 @@
+// The Autoradio root: a full-bleed page, the bar floating over it, and the layers that rise from the bar.
+// Everything else lives in other files. SHARED FILE: lanes edit this file in exactly two places, each a band of
+// their own, one line each: the `members` line (already present for every lane) and their `provide` band.
+// Nothing else here is a lane's to change (the spine owns the view).
+use PageHost from "./pages.contract"
+use BarShell from "./bar.contract"
+use PlayerLayer from "./player.contract"
+use Pile from "./cards.contract"
+use Launcher from "./launcher.contract"
+use SignInScreen from "./onboarding.contract"
+
+component Autoradio
+  members "./spine.contract"
+  members "./lab.contract"
+  // ---- one members file per lane (already wired; the lane fills its own) ----
+  members "./members-bar.contract"
+  members "./members-paper.contract"
+  members "./members-reader.contract"
+  members "./members-cards.contract"
+  members "./members-files.contract"
+  members "./members-mail.contract"
+  members "./members-settings.contract"
+  members "./members-onboarding.contract"
+  members "./members-mark.contract"
+  // ---- end of members ----
+
+  // What child components may `inject`. Bare names of this component's states, derives, resources and actions.
+  // A lane adds the names it needs inside its own band, one name per line, and touches nothing outside it.
+  provide
+    // ---- spine ----
+    th
+    pg
+    pmod
+    bi
+    thl
+    dm
+    layer
+    ask
+    openPage
+    closePage
+    focusPage
+    pinPage
+    reopenPage
+    showLayer
+    hideLayer
+    togglePile
+    pullBar
+    pullEnd
+    setTheme
+    setMode
+    setDemo
+    record
+    editAsk
+    sendAsk
+    voiceDown
+    voiceUp
+    // ---- integrator (engine, Lab, Choir sign-in, player) ----
+    au
+    pl
+    sl
+    st
+    aud
+    stages
+    params
+    turns
+    events
+    configs
+    trace
+    other
+    cfgName
+    cfgUrl
+    expPath
+    expName
+    cmp
+    modeLabel
+    yieldLabel
+    signIn
+    cancelSignIn
+    openApproval
+    signOut
+    refreshRadio
+    radioPlay
+    playStory
+    start
+    stop
+    next
+    previous
+    talkDown
+    talkUp
+    pick
+    setParam
+    editCfgName
+    saveCfg
+    loadCfg
+    editCfgUrl
+    loadUrl
+    setPolicy
+    setAckTiming
+    inject
+    exportTurn
+    shareExport
+    choose
+    compare
+    replay
+    // ---- lane 1: bar, radio, talk ----
+    ri
+    typing
+    barFocus
+    barBlur
+    jumpTo
+    setSpeed
+    sheetMove
+    sheetEnd
+    sheetPull
+    // ---- lane 2: paper layout ----
+    pfront
+    paperLoading
+    paperSection
+    paperReload
+    paperFit
+    pickEdition
+    // ---- lane 3: texture reader ----
+    rdoc
+    tlist
+    rfollow
+    raim
+    openCites
+    sheet
+    sheetFor
+    sheetAnchor
+    sideNotes
+    mdMode
+    toggleCite
+    showSheet
+    showSource
+    hideSheet
+    jumpSources
+    toggleSideNotes
+    toggleMdMode
+    mdPress
+    aimAt
+    clearAim
+    stopRevision
+    restoreVersion
+    reloadDoc
+    openLink
+    shareDoc
+    demoFollow
+    // ---- lane 4: cards, launcher, signals ----
+    cst
+    stk
+    told
+    und
+    shade
+    lq
+    lnc
+    pileMode
+    dragAddr
+    dragX
+    dragY
+    dragging
+    leaving
+    menuFor
+    sx
+    sy
+    sdragging
+    sFly
+    openStack
+    setPileMode
+    cardDrag
+    cardRelease
+    closeCard
+    undoClose
+    openMenu
+    closeMenu
+    menuPin
+    menuLess
+    menuMore
+    menuClose
+    stackDrag
+    stackRelease
+    stackAside
+    stackMore
+    stackUndoAct
+    stackRestart
+    editLq
+    leftNext
+    rightNext
+    resetTold
+    forgetTold
+    openTold
+    // ---- lane 5: files and viewers ----
+    fsList
+    fsMode
+    fsSort
+    fsDesc
+    fsGrid
+    fsDraft
+    fsNewing
+    fsNewName
+    fsNoteOn
+    fsNote
+    fsSel
+    fsRenameText
+    fsBrowse
+    fsSetMode
+    fsSortBy
+    fsFlip
+    fsSetGrid
+    fsEditQuery
+    fsSearch
+    fsClear
+    fsNewToggle
+    fsEditNew
+    fsMakeFolder
+    fsUpload
+    fsPicked
+    fsSelect
+    fsEditName
+    fsRename
+    fsDelete
+    fvInfo
+    fvChapter
+    fvPages
+    fvZoom
+    fvPanX
+    fvPanY
+    fvHold
+    fvPos
+    fvDur
+    fvSeek
+    fvPage
+    fvFindDraft
+    fvChap
+    fvToc
+    fvMediaTitle
+    fvZoomTo
+    fvCenter
+    fvGeometry
+    fvRelease
+    fvShare
+    fvPlayed
+    fvPausedEv
+    fvEnded
+    fvTick
+    fvMeasured
+    fvNudge
+    fvRestart
+    fvSkip
+    fvSeekAt
+    fvGo
+    fvEditFind
+    fvSearch
+    fvClearFind
+    fvChapGo
+    fvTocToggle
+    // ---- lane 6: mail ----
+    mbx
+    mmsg
+    mcmp
+    mailCurTo
+    mailCurSubject
+    mailCurBody
+    mailDraftStatus
+    mailDraftId
+    mailDraftNote
+    mailDraftUrl
+    mailDraftFrom
+    mailQuoted
+    mailOriginal
+    mailNote
+    editMailTo
+    editMailSubject
+    editMailBody
+    saveMailDraft
+    approveMail
+    openMailReview
+    toggleMailQuoted
+    toggleMailOriginal
+    readMail
+    unreadMail
+    askMail
+    retryMail
+    // ---- lane 7: settings, themes, accounts ----
+    tc
+    tx
+    acctInfo
+    cmpt
+    talkRows
+    gestureRows
+    learnt
+    act
+    about
+    themeDoc
+    editThemeDoc
+    loadThemeDoc
+    loadDemoTheme
+    removeTheme
+    refreshAccount
+    refreshComputer
+    wakeComputer
+    updateComputer
+    setSetting
+    resetLearned
+    refreshActivity
+    devDetails
+    toggleDevDetails
+    // ---- lane 8: onboarding and the interview ----
+    ob
+    obBegin
+    obBeginMobile
+    obRetry
+    obFallback
+    obMic
+    obMicNext
+    obHearingYes
+    obHearingNo
+    obInterview
+    obContinue
+    obDemoNext
+    obEditionRetry
+    obSkip
+    obReset
+    obOpenEdition
+    obFinish
+    // ---- lane 9: motion and the mark ----
+    mkT
+    mkFrames
+    mkSince
+    galSince
+    waitSince
+    galReplay
+    waitReplay
+
+  view
+    main testId="app" width="100%" height="100%" position="relative" overflow="hidden" box-sizing="border-box"
+      viewport-fit="cover" interactive-widget="resizes-content"
+      background-color=th.paper color=th.fg font-family=th.fontRead
+      // elevation 0: the page, full bleed; it steps back when a layer is up
+      column position="absolute" inset=0
+        scale=(layer != "" ? th.behindScale3 : 1)
+        transition=`scale -exact-spring(${th.springStiffness}, ${th.springDamping}, ${th.springMass})`
+        PageHost(address=pg.top, kind=pg.topKind, title=pg.topTitle)
+      // elevation 3: the layers that rise from the bar
+      if layer == "pile"
+        Pile()
+      if layer == "launcher"
+        Launcher()
+      if layer == "player"
+        PlayerLayer()
+      // elevation 2: the bar, always on top
+      BarShell()
+      // Signed out the paper still reads and plays. Signing in is asked for when an action needs it (Sign in on the paper,
+      // Settings, Account): the code screen then covers the app until it is approved or cancelled.
+      if au.status == "pending"
+        column position="absolute" inset=0 background-color=th.paper z-index=50
+          SignInScreen()

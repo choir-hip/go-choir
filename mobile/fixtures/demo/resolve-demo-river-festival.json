@@ -1,0 +1,13 @@
+{
+ "publication": {
+  "title": "The river festival returns with a quieter schedule"
+ },
+ "payload": {
+  "text": "The river festival returns this weekend with a quieter programme than in past years. The fireworks are gone, and a morning of boat tours takes their place.\n\nOrganisers said residents along the water had asked for fewer late-night crowds. The market and the music stage stay where they were.\n\nVisitors are asked to use the shuttle from the east station, as the riverside road will be closed to cars from Friday evening.",
+  "manifest_hash": "demo-3"
+ },
+ "version": {
+  "id": "demo-v3",
+  "manifest_hash": "demo-3"
+ }
+}

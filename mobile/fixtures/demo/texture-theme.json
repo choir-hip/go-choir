@@ -1,0 +1,24 @@
+{
+  "doc_id": "demo-theme",
+  "revision_id": "demo-theme-r3",
+  "theme": {
+    "schema_version": 3,
+    "id": "ember",
+    "name": "Ember",
+    "schemes": ["dark"],
+    "colors": {
+      "paper": "#14100E", "paper2": "#211A16", "fg": "#F4EBE3", "muted": "#C2B1A2",
+      "accent": "#FF7A45", "accent2": "#FFB48F", "success": "#7ED6A0", "danger": "#FF8A80",
+      "onAccent": "#14100E", "rule": "rgba(244,235,227,.18)"
+    },
+    "type": { "read": "ui-serif", "ui": "system-ui", "mono": "ui-monospace", "scale": "compact" },
+    "radii": { "card": "10px", "control": "8px", "pill": "999px", "rules": "0px" },
+    "elevation": {
+      "1": { "shadow": "0 1px 0 rgba(255,122,69,.10), 0 8px 20px rgba(0,0,0,.45)", "edge": "inset 0 1px 0 rgba(255,235,220,.10)", "press": 0.98 },
+      "2": { "material": "glass", "shadow": "0 10px 28px rgba(0,0,0,.55)", "edge": "inset 0 1px 0 rgba(255,235,220,.14)" },
+      "3": { "material": "glass", "shadow": "0 24px 60px rgba(0,0,0,.65)", "behind": { "scale": 0.95, "dim": 0.18 } }
+    },
+    "motion": { "fast": "110ms ease", "enter": "300ms ease-out", "sheet": "240ms ease-out", "spring": { "stiffness": 260, "damping": 24, "mass": 1 }, "stagger": "35ms", "reduced": { "enter": "0ms", "spring": "none" } },
+    "mark": { "drift": "75s", "tumble": ["3.7s", "6.1s"], "flip": { "stiffness": 320, "damping": 21 }, "listenScale": 1.18, "reduced": "static" }
+  }
+}

@@ -1,0 +1,18 @@
+{
+ "related": [
+  {
+   "title": "A city rewires its kerbs for electric cars",
+   "dek": "Marlow bolted four hundred sockets to lamp posts in three years. The surprise is who uses them, and when.",
+   "route": {
+    "bare": "demo-ev-charging"
+   }
+  },
+  {
+   "title": "The harbor council approves a tide barrier",
+   "dek": "After a year of hearings, the council voted seven to two.",
+   "route": {
+    "bare": "demo-harbor-barrier"
+   }
+  }
+ ]
+}

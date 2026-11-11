@@ -1,0 +1,74 @@
+{
+ "stories": [
+  {
+   "title": "City libraries extend their evening hours",
+   "dek": "Branches in six neighbourhoods will stay open until ten on weekdays.",
+   "route": {
+    "bare": "demo-library-hours"
+   },
+   "section": "Culture",
+   "importance": 5,
+   "source_count": 4,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-09T18:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "The river festival returns with a quieter schedule",
+   "dek": "Organisers cut the fireworks and added a morning of boat tours.",
+   "route": {
+    "bare": "demo-river-festival"
+   },
+   "section": "Local",
+   "importance": 5,
+   "source_count": 4,
+   "version_count": 2,
+   "words": 300,
+   "updated_at": "2026-11-09T17:30:00Z",
+   "entities": []
+  },
+  {
+   "title": "A regional grid adds its largest battery yet",
+   "dek": "The new installation can hold enough power for a small city through an evening peak.",
+   "route": {
+    "bare": "demo-grid-storage"
+   },
+   "section": "Tech and AI",
+   "importance": 5,
+   "source_count": 3,
+   "version_count": 2,
+   "words": 300,
+   "updated_at": "2026-11-09T16:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Allotment waiting list falls below a hundred",
+   "dek": "",
+   "route": {
+    "bare": "demo-thin-1"
+   },
+   "section": "Local",
+   "importance": 4,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-09T14:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Tide tables for the week are published",
+   "dek": "",
+   "route": {
+    "bare": "demo-thin-2"
+   },
+   "section": "Local",
+   "importance": 4,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-09T13:00:00Z",
+   "entities": []
+  }
+ ]
+}

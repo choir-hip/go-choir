@@ -1,0 +1,22 @@
+{
+ "message": {
+  "id": "q1",
+  "direction": "inbound",
+  "from_address": "prizes@example.com",
+  "subject": "You have been selected",
+  "snippet": "Claim your reward now by following the instructions in the attachment.",
+  "trust_status": "quarantined",
+  "created_at": "2026-11-07T03:10:00Z",
+  "received_at": "2026-11-07T03:10:00Z",
+  "read_at": "2026-11-07T03:10:00Z"
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com",
+    "display": "You"
+   }
+  ]
+ },
+ "text_body": "Claim your reward now by following the instructions in the attachment."
+}

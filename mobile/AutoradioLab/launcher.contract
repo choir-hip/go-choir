@@ -1,0 +1,106 @@
+// The launcher: places with what is new there, the open pages and the recent ones as chips, search, "your paper" (what the swipes
+// taught it), and the story stack. A layer reaching about 70% of the screen; pull the bar up, or tap Places in the pile.
+// Lane 4 owns this file. Words and live content, never a grid of icons (plan section 1).
+// Search covers open pages, places, recent pages and today's stories; file names and mail subjects join when those lanes list them.
+// testIds: launcher, launcher-layer, launcher-scrim, launcher-search, launcher-open-<address>, launcher-recent-<address>,
+// search-hit-<address>, place-<slug>, place-line-<slug>, launcher-stack, gesture-left, gesture-right, told-open, told-reset, told-count.
+use Theme, PageList, Told, LauncherData from "@choir/autoradio"
+use Layer, Btn from "./ui.contract"
+
+keyframes sheetIn
+  from opacity=0 translate="0px 24px"
+
+component PlaceRow
+  inject
+    th: Theme
+    openPage: action
+  props
+    slug: string
+    name: string
+    address: string
+    line: string
+  view
+    button press=openPage(address, name) testId=`place-${slug}` appearance="none" width="100%"
+      row padding="12px 0" align-items="center" width="100%" gap=8
+        column flex=1 gap=2 align-items="flex-start"
+          text name font-family=th.fontUi font-size=17 font-weight=600 color=th.fg text-align="left"
+          if line != ""
+            text line testId=`place-line-${slug}` font-family=th.fontUi font-size=13 color=th.muted text-align="left" line-clamp=1
+        image "symbol:forward-chevron" color=th.muted
+
+component Launcher
+  inject
+    th: Theme
+    pg: PageList
+    lnc: LauncherData
+    told: Told
+    lq: string
+    editLq: action
+    openPage: action
+    focusPage: action
+    hideLayer: action
+    openStack: action
+    leftNext: action
+    rightNext: action
+    resetTold: action
+    openTold: action
+  view
+    column testId="launcher" position="absolute" top=0 left=0 right=0 bottom=0
+      box testId="launcher-scrim" position="absolute" top=0 left=0 right=0 bottom=0 background-color=th.fg opacity=th.behindDim3 press=hideLayer transition=`opacity ${th.motionFastMs}ms ease`
+      column position="absolute" left=0 right=0 bottom=0 height="72%"
+        animation=(th.reducedMotion ? "none" : `sheetIn ${th.motionEnterMs}ms ease both`)
+        Layer(testId="launcher-layer")
+          // the scroll frame ends above the bar (not under it): the last place is reachable and nothing reads through the glass
+          scroll flex=1 min-height=0 margin-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 8px)"
+            column padding=20 gap=8 padding-bottom=24
+              input type="search" value=lq input=editLq placeholder="Search pages, files, mail" aria-label="Search" testId="launcher-search"
+                font-family=th.fontUi padding="10px 4px"
+              if lnc.hasQuery
+                for h in lnc.hits key=h.address
+                  button press=openPage(h.address, h.title) testId=`search-hit-${h.address}` appearance="none" width="100%"
+                    column padding="8px 0" gap=2 align-items="flex-start" width="100%"
+                      text h.title font-family=th.fontUi font-size=17 font-weight=600 color=th.fg text-align="left" line-clamp=2
+                      row gap=6
+                        text h.kind font-family=th.fontUi font-size=12 font-weight=700 color=th.accent
+                        text h.detail font-family=th.fontUi font-size=13 color=th.muted text-align="left" line-clamp=1
+                if lnc.hits.length == 0
+                  text "Nothing found." testId="launcher-nohits" font-family=th.fontUi font-size=15 color=th.muted
+              if lnc.hasQuery == false
+                text "Open" font-family=th.fontUi font-size=13 color=th.muted
+                scroll overflow-x="scroll" overflow-y="hidden" display="flex" flex-direction="row" gap=8
+                  for p in pg.rows key=p.address
+                    button press=focusPage(p.address) testId=`launcher-open-${p.address}` appearance="none"
+                      Btn(label=(p.pinned ? `${p.title} (pinned)` : p.title), primary=false, wide=false)
+                if lnc.recent.length > 0
+                  text "Recent" font-family=th.fontUi font-size=13 color=th.muted
+                  scroll overflow-x="scroll" overflow-y="hidden" display="flex" flex-direction="row" gap=8
+                    for r in lnc.recent key=r.address
+                      button press=openPage(r.address, r.title) testId=`launcher-recent-${r.address}` appearance="none"
+                        Btn(label=r.title, primary=false, wide=false)
+                text "Places" font-family=th.fontUi font-size=13 color=th.muted
+                for pr in lnc.places key=pr.slug
+                  PlaceRow(slug=pr.slug, name=pr.name, address=pr.address, line=pr.line)
+                text "Your paper" font-family=th.fontUi font-size=13 color=th.muted
+                button press=openStack testId="launcher-stack" appearance="none" width="100%"
+                  row padding="12px 0" align-items="center" width="100%" gap=8
+                    column flex=1 gap=2 align-items="flex-start"
+                      text "Go through today's stories" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg text-align="left"
+                      text `${lnc.stories} stories, one by one. Swipe right for more like it.` font-family=th.fontUi font-size=13 color=th.muted text-align="left"
+                    image "symbol:forward-chevron" color=th.muted
+                text (told.count == 0 ? "You have not told the paper anything yet." : `You have told the paper ${told.count} ${told.count == 1 ? "thing" : "things"}.`) testId="told-count" font-family=th.fontUi font-size=13 color=th.muted
+                for t, i in told.rows key=i
+                  row gap=8 align-items="baseline" width="100%"
+                    text (t.kind == "more" ? "More" : "Less") font-family=th.fontUi font-size=12 font-weight=700 color=th.accent
+                    text `${t.title} (${t.entities})` font-family=th.fontUi font-size=13 color=th.fg flex=1 text-align="left" line-clamp=2
+                row gap=8 width="100%"
+                  button press=leftNext testId="gesture-left" appearance="none"
+                    Btn(label=`Swipe left: ${told.leftLabel}`, primary=false, wide=false)
+                  button press=rightNext testId="gesture-right" appearance="none"
+                    Btn(label=`Swipe right: ${told.rightLabel}`, primary=false, wide=false)
+                row gap=8 width="100%"
+                  button press=openTold testId="told-open" appearance="none"
+                    Btn(label="What I've told the paper", primary=false, wide=false)
+                  button press=resetTold testId="told-reset" appearance="none"
+                    Btn(label="Reset", primary=false, wide=false)
+                text "Developer" font-family=th.fontUi font-size=13 color=th.muted
+                PlaceRow(slug="components", name="Components", address="lab:components", line="")

@@ -1,0 +1,13 @@
+{
+ "publication": {
+  "title": "City libraries extend their evening hours"
+ },
+ "payload": {
+  "text": "The city's libraries will stay open until ten on weekday evenings at six branches, starting next month, officials announced.\n\nThe change follows a pilot at two branches where evening visits doubled. Staff said many of the new visitors were students without a quiet place to study at home.\n\nThe extra hours are paid for by moving two part-time posts from weekend mornings, which saw the fewest visitors in the pilot.",
+  "manifest_hash": "demo-2"
+ },
+ "version": {
+  "id": "demo-v2",
+  "manifest_hash": "demo-2"
+ }
+}

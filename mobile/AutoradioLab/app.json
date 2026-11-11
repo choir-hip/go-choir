@@ -1,0 +1,27 @@
+{
+  "$schema": "../.exact-src/scripts/app.schema.json",
+  "name": "Autoradio",
+  "short_name": "Autoradio",
+  "id": "news.choir.autoradio.lab",
+  "start_url": "/",
+  "display": "standalone",
+  "app": {
+    "id": "news.choir.autoradio.lab",
+    "name": "Autoradio"
+  },
+  "host": {
+    "ios": {
+      "minimumOS": "18.0",
+      "deviceFamily": ["iphone"],
+      "backgroundModes": ["audio"]
+    },
+    "web": {}
+  },
+  "deploy": {
+    "store": {
+      "ios": "0",
+      "web": "0"
+    }
+  },
+  "audio_session": "playback"
+}

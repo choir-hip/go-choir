@@ -1,0 +1,226 @@
+{
+ "shapes": {
+  "MailRow": {
+   "id": "string",
+   "address": "string",
+   "sender": "string",
+   "subject": "string",
+   "snippet": "string",
+   "stamp": "string",
+   "trust": "string",
+   "direction": "string",
+   "unread": "bool",
+   "hasAttachments": "bool",
+   "count": "number"
+  },
+  "MailFolderRow": {
+   "name": "string",
+   "label": "string",
+   "address": "string",
+   "badge": "string",
+   "current": "bool"
+  },
+  "MailBoxView": {
+   "status": "string",
+   "message": "string",
+   "folder": "string",
+   "title": "string",
+   "unread": "number",
+   "total": "number",
+   "cached": "bool",
+   "rows": "MailRow[]",
+   "folders": "MailFolderRow[]"
+  },
+  "MailBlock": {
+   "kind": "string",
+   "text": "string"
+  },
+  "MailAttachmentRow": {
+   "id": "string",
+   "filename": "string",
+   "size": "string",
+   "kind": "string",
+   "address": "string",
+   "note": "string",
+   "available": "bool"
+  },
+  "MailThreadRow": {
+   "id": "string",
+   "address": "string",
+   "sender": "string",
+   "stamp": "string",
+   "snippet": "string",
+   "current": "bool"
+  },
+  "MailMessageView": {
+   "status": "string",
+   "message": "string",
+   "id": "string",
+   "address": "string",
+   "subject": "string",
+   "sender": "string",
+   "fromAddress": "string",
+   "toLine": "string",
+   "ccLine": "string",
+   "date": "string",
+   "trust": "string",
+   "trustNote": "string",
+   "unread": "bool",
+   "htmlOnly": "bool",
+   "hasOriginal": "bool",
+   "hasQuoted": "bool",
+   "canReply": "bool",
+   "cut": "bool",
+   "originalPath": "string",
+   "blocks": "MailBlock[]",
+   "attachments": "MailAttachmentRow[]",
+   "thread": "MailThreadRow[]",
+   "replyLabel": "string",
+   "spoken": "string"
+  },
+  "MailComposeView": {
+   "status": "string",
+   "forAddress": "string",
+   "sendAs": "string",
+   "toLine": "string",
+   "subject": "string",
+   "body": "string",
+   "draftId": "string",
+   "note": "string",
+   "reviewURL": "string",
+   "replyTo": "string"
+  },
+  "MailAck": {
+   "status": "string",
+   "message": "string"
+  }
+ },
+ "names": [
+  {
+   "source": "mailBox",
+   "live": true,
+   "answers": "MailBoxView",
+   "options": {
+    "address": "string"
+   },
+   "substitute": {
+    "default": {
+     "status": "",
+     "message": "",
+     "folder": "",
+     "title": "",
+     "unread": 0,
+     "total": 0,
+     "cached": false,
+     "rows": [],
+     "folders": []
+    }
+   }
+  },
+  {
+   "source": "mailMessage",
+   "live": true,
+   "answers": "MailMessageView",
+   "options": {
+    "address": "string"
+   },
+   "substitute": {
+    "default": {
+     "status": "",
+     "message": "",
+     "id": "",
+     "address": "",
+     "subject": "",
+     "sender": "",
+     "fromAddress": "",
+     "toLine": "",
+     "ccLine": "",
+     "date": "",
+     "trust": "",
+     "trustNote": "",
+     "unread": false,
+     "htmlOnly": false,
+     "hasOriginal": false,
+     "hasQuoted": false,
+     "canReply": false,
+     "cut": false,
+     "originalPath": "",
+     "blocks": [],
+     "attachments": [],
+     "thread": [],
+     "replyLabel": "",
+     "spoken": ""
+    }
+   }
+  },
+  {
+   "source": "mailCompose",
+   "live": true,
+   "answers": "MailComposeView",
+   "options": {
+    "address": "string"
+   },
+   "substitute": {
+    "default": {
+     "status": "",
+     "forAddress": "",
+     "sendAs": "",
+     "toLine": "",
+     "subject": "",
+     "body": "",
+     "draftId": "",
+     "note": "",
+     "reviewURL": "",
+     "replyTo": ""
+    }
+   }
+  },
+  {
+   "send": "mailSaveDraft",
+   "options": {
+    "address": "string",
+    "recipients": "string",
+    "subject": "string",
+    "body": "string"
+   },
+   "answers": "MailComposeView"
+  },
+  {
+   "send": "mailApprovalEmail",
+   "options": {
+    "address": "string",
+    "draft": "string"
+   },
+   "answers": "MailComposeView"
+  },
+  {
+   "send": "mailOpenReview",
+   "options": {
+    "url": "string"
+   },
+   "answers": "MailAck"
+  },
+  {
+   "send": "mailRead",
+   "options": {
+    "address": "string"
+   },
+   "answers": "MailAck"
+  },
+  {
+   "send": "mailAsk",
+   "options": {
+    "address": "string",
+    "question": "string"
+   },
+   "answers": "MailAck"
+  },
+  {
+   "send": "mailMarkUnread",
+   "options": {
+    "address": "string"
+   },
+   "answers": "MailAck"
+  }
+ ]
+}

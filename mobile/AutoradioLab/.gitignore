@@ -1,0 +1,10 @@
+/target/
+/dist/
+/dist.*
+/node_modules/
+/app.contract.d.ts
+/.exact/
+/.env.local
+# Copied in by scripts/sync-exact-package.sh (the model stages) and built by scripts/build-xcframeworks.sh (the libraries).
+/modules/apple/Models_*.swift
+/modules/apple/*.xcframework

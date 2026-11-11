@@ -1,0 +1,313 @@
+{
+ "shapes": {
+  "Page": {
+   "address": "string",
+   "kind": "string",
+   "title": "string",
+   "opener": "string",
+   "pinned": "bool"
+  },
+  "PageList": {
+   "rows": "Page[]",
+   "top": "string",
+   "topKind": "string",
+   "topTitle": "string",
+   "count": "number"
+  },
+  "PageModel": {
+   "address": "string",
+   "kind": "string",
+   "title": "string",
+   "status": "string",
+   "lines": "string[]",
+   "message": "string"
+  },
+  "Theme": {
+   "id": "string",
+   "name": "string",
+   "scheme": "string",
+   "schemes": "string",
+   "paper": "string",
+   "paper2": "string",
+   "fg": "string",
+   "muted": "string",
+   "accent": "string",
+   "accent2": "string",
+   "success": "string",
+   "danger": "string",
+   "onAccent": "string",
+   "rule": "string",
+   "scrim": "string",
+   "onScrim": "string",
+   "fontRead": "string",
+   "fontUi": "string",
+   "fontMono": "string",
+   "scale": "string",
+   "radiusCard": "number",
+   "radiusControl": "number",
+   "radiusPill": "number",
+   "radiusRules": "number",
+   "shadow1": "string",
+   "shadow2": "string",
+   "shadow3": "string",
+   "edge1": "string",
+   "edge2": "string",
+   "edge3": "string",
+   "material1": "string",
+   "material2": "string",
+   "material3": "string",
+   "press1": "number",
+   "behindScale3": "number",
+   "behindDim3": "number",
+   "barBacking": "number",
+   "layerBacking": "number",
+   "motionFastMs": "number",
+   "motionEnterMs": "number",
+   "motionSheetMs": "number",
+   "staggerMs": "number",
+   "springStiffness": "number",
+   "springDamping": "number",
+   "springMass": "number",
+   "reducedMotion": "bool",
+   "markDriftS": "number",
+   "markListenScale": "number",
+   "markTumble": "string"
+  },
+  "ThemeInfo": {
+   "id": "string",
+   "name": "string",
+   "current": "bool"
+  },
+  "ThemeList": {
+   "rows": "ThemeInfo[]",
+   "mode": "string",
+   "themeID": "string",
+   "scheme": "string",
+   "problems": "string[]"
+  },
+  "BarInfo": {
+   "state": "string",
+   "text": "string",
+   "playing": "bool",
+   "talking": "bool",
+   "signedIn": "bool",
+   "progress": "number"
+  },
+  "DemoInfo": {
+   "on": "bool"
+  },
+  "SignalRow": {
+   "at": "number",
+   "kind": "string",
+   "subject": "string",
+   "detail": "string"
+  },
+  "SignalList": {
+   "rows": "SignalRow[]"
+  }
+ },
+ "names": [
+  {
+   "source": "openPages",
+   "live": true,
+   "answers": "PageList",
+   "substitute": {
+    "default": {
+     "rows": [],
+     "top": "",
+     "topKind": "",
+     "topTitle": "",
+     "count": 0
+    }
+   }
+  },
+  {
+   "source": "pageModel",
+   "live": true,
+   "answers": "PageModel",
+   "options": {
+    "address": "string"
+   },
+   "substitute": {
+    "default": {
+     "address": "",
+     "kind": "",
+     "title": "",
+     "status": "loading",
+     "lines": [],
+     "message": ""
+    }
+   }
+  },
+  {
+   "source": "theme",
+   "live": true,
+   "answers": "Theme",
+   "substitute": {
+    "default": {
+     "id": "",
+     "name": "",
+     "scheme": "light",
+     "schemes": "light,dark",
+     "paper": "#FFFFFF",
+     "paper2": "#FFFFFF",
+     "fg": "#000000",
+     "muted": "#555555",
+     "accent": "#0066CC",
+     "accent2": "#004499",
+     "success": "#0C6644",
+     "danger": "#A3142F",
+     "onAccent": "#FFFFFF",
+     "rule": "#999999",
+     "scrim": "rgba(0,0,0,.7)",
+     "onScrim": "#FFFFFF",
+     "fontRead": "ui-serif",
+     "fontUi": "system-ui",
+     "fontMono": "ui-monospace",
+     "scale": "editorial",
+     "radiusCard": 14,
+     "radiusControl": 12,
+     "radiusPill": 999,
+     "radiusRules": 0,
+     "shadow1": "none",
+     "shadow2": "none",
+     "shadow3": "none",
+     "edge1": "none",
+     "edge2": "none",
+     "edge3": "none",
+     "material1": "solid",
+     "material2": "solid",
+     "material3": "solid",
+     "press1": 1,
+     "behindScale3": 1,
+     "behindDim3": 0,
+     "barBacking": 0.94,
+     "layerBacking": 0.86,
+     "motionFastMs": 120,
+     "motionEnterMs": 320,
+     "motionSheetMs": 260,
+     "staggerMs": 40,
+     "springStiffness": 240,
+     "springDamping": 26,
+     "springMass": 1,
+     "reducedMotion": false,
+     "markDriftS": 60,
+     "markListenScale": 1.15,
+     "markTumble": "3.3s,5.9s"
+    }
+   }
+  },
+  {
+   "source": "themeList",
+   "live": true,
+   "answers": "ThemeList",
+   "substitute": {
+    "default": {
+     "rows": [],
+     "mode": "system",
+     "themeID": "",
+     "scheme": "light",
+     "problems": []
+    }
+   }
+  },
+  {
+   "source": "barState",
+   "live": true,
+   "answers": "BarInfo",
+   "substitute": {
+    "default": {
+     "state": "idle",
+     "text": "",
+     "playing": false,
+     "talking": false,
+     "signedIn": false,
+     "progress": 0
+    }
+   }
+  },
+  {
+   "source": "demoInfo",
+   "live": true,
+   "answers": "DemoInfo",
+   "substitute": {
+    "default": {
+     "on": false
+    }
+   }
+  },
+  {
+   "source": "signalList",
+   "live": true,
+   "answers": "SignalList",
+   "substitute": {
+    "default": {
+     "rows": []
+    }
+   }
+  },
+  {
+   "send": "pageOpen",
+   "options": {
+    "address": "string",
+    "title": "string"
+   },
+   "answers": "PageList"
+  },
+  {
+   "send": "pageClose",
+   "options": {
+    "address": "string"
+   },
+   "answers": "PageList"
+  },
+  {
+   "send": "pageFocus",
+   "options": {
+    "address": "string"
+   },
+   "answers": "PageList"
+  },
+  {
+   "send": "pagePin",
+   "options": {
+    "address": "string"
+   },
+   "answers": "PageList"
+  },
+  {
+   "send": "pageReopen",
+   "answers": "PageList"
+  },
+  {
+   "send": "themeSet",
+   "options": {
+    "id": "string"
+   },
+   "answers": "PageList"
+  },
+  {
+   "send": "schemeSet",
+   "options": {
+    "mode": "string"
+   },
+   "answers": "PageList"
+  },
+  {
+   "send": "signalRecord",
+   "options": {
+    "kind": "string",
+    "subject": "string",
+    "detail": "string"
+   },
+   "answers": "PageList"
+  },
+  {
+   "send": "demoSet",
+   "options": {
+    "on": "string"
+   },
+   "answers": "PageList"
+  }
+ ]
+}

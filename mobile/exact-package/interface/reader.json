@@ -1,0 +1,251 @@
+{
+ "shapes": {
+  "ReaderRun": {
+   "id": "string",
+   "text": "string",
+   "kind": "string",
+   "weight": "number",
+   "slant": "string",
+   "anchor": "string",
+   "label": "string",
+   "sent": "number",
+   "href": "string"
+  },
+  "ReaderCell": {
+   "runs": "ReaderRun[]",
+   "header": "bool"
+  },
+  "ReaderRow": {
+   "id": "string",
+   "cells": "ReaderCell[]"
+  },
+  "ReaderBlock": {
+   "id": "string",
+   "kind": "string",
+   "level": "number",
+   "depth": "number",
+   "marker": "string",
+   "runs": "ReaderRun[]",
+   "rows": "ReaderRow[]",
+   "text": "string",
+   "ordinal": "number",
+   "cites": "string[]",
+   "sentences": "number"
+  },
+  "ReaderCite": {
+   "anchor": "string",
+   "number": "number",
+   "blockId": "string",
+   "entityId": "string",
+   "title": "string",
+   "host": "string",
+   "url": "string",
+   "kind": "string",
+   "target": "string",
+   "quote": "string",
+   "before": "string",
+   "hit": "string",
+   "after": "string",
+   "check": "string",
+   "checkLabel": "string"
+  },
+  "ReaderSource": {
+   "number": "number",
+   "entityId": "string",
+   "title": "string",
+   "host": "string",
+   "url": "string",
+   "kind": "string",
+   "target": "string",
+   "quotes": "string[]",
+   "anchor": "string"
+  },
+  "ReaderVersion": {
+   "address": "string",
+   "number": "number",
+   "label": "string",
+   "when": "string",
+   "author": "string",
+   "current": "bool"
+  },
+  "ReaderRelated": {
+   "address": "string",
+   "title": "string",
+   "dek": "string"
+  },
+  "ReaderDoc": {
+   "address": "string",
+   "status": "string",
+   "message": "string",
+   "title": "string",
+   "kicker": "string",
+   "dek": "string",
+   "byline": "string",
+   "meta": "string",
+   "kind": "string",
+   "disclosure": "string",
+   "blocks": "ReaderBlock[]",
+   "cites": "ReaderCite[]",
+   "sources": "ReaderSource[]",
+   "versions": "ReaderVersion[]",
+   "related": "ReaderRelated[]",
+   "revision": "number",
+   "latest": "number",
+   "newer": "bool",
+   "historical": "bool",
+   "revising": "bool",
+   "revisingNote": "string",
+   "trajectory": "string",
+   "permalink": "string",
+   "plain": "string",
+   "textBlocks": "number",
+   "markdown": "string"
+  },
+  "TextureRow": {
+   "address": "string",
+   "title": "string",
+   "updated": "string",
+   "meta": "string",
+   "edition": "bool",
+   "revising": "bool"
+  },
+  "TextureList": {
+   "status": "string",
+   "message": "string",
+   "rows": "TextureRow[]",
+   "hasEdition": "bool"
+  },
+  "ReaderFollowInfo": {
+   "address": "string",
+   "blockId": "string",
+   "sentence": "number"
+  },
+  "ReaderAimInfo": {
+   "address": "string",
+   "blockId": "string",
+   "label": "string"
+  },
+  "ReaderAck": {
+   "ok": "bool"
+  }
+ },
+ "names": [
+  {
+   "source": "readerDoc",
+   "live": true,
+   "answers": "ReaderDoc",
+   "options": {
+    "address": "string"
+   },
+   "substitute": {
+    "default": {
+     "address": "",
+     "status": "loading",
+     "message": "",
+     "title": "",
+     "kicker": "",
+     "dek": "",
+     "byline": "",
+     "meta": "",
+     "kind": "document",
+     "disclosure": "",
+     "blocks": [],
+     "cites": [],
+     "sources": [],
+     "versions": [],
+     "related": [],
+     "revision": 0,
+     "latest": 0,
+     "newer": false,
+     "historical": false,
+     "revising": false,
+     "revisingNote": "",
+     "trajectory": "",
+     "permalink": "",
+     "plain": "",
+     "textBlocks": 0,
+     "markdown": ""
+    }
+   }
+  },
+  {
+   "source": "texturesList",
+   "live": true,
+   "answers": "TextureList",
+   "options": {
+    "at": "string"
+   },
+   "substitute": {
+    "default": {
+     "status": "loading",
+     "message": "",
+     "rows": [],
+     "hasEdition": false
+    }
+   }
+  },
+  {
+   "source": "readerFollow",
+   "live": true,
+   "answers": "ReaderFollowInfo",
+   "substitute": {
+    "default": {
+     "address": "",
+     "blockId": "",
+     "sentence": -1
+    }
+   }
+  },
+  {
+   "source": "readerAim",
+   "live": true,
+   "answers": "ReaderAimInfo",
+   "substitute": {
+    "default": {
+     "address": "",
+     "blockId": "",
+     "label": ""
+    }
+   }
+  },
+  {
+   "send": "readerAimSet",
+   "options": {
+    "address": "string",
+    "blockId": "string",
+    "label": "string"
+   },
+   "answers": "ReaderAimInfo"
+  },
+  {
+   "send": "readerStop",
+   "options": {
+    "address": "string"
+   },
+   "answers": "ReaderAck"
+  },
+  {
+   "send": "readerRestore",
+   "options": {
+    "address": "string",
+    "version": "string"
+   },
+   "answers": "ReaderAck"
+  },
+  {
+   "send": "readerReload",
+   "options": {
+    "address": "string"
+   },
+   "answers": "ReaderAck"
+  },
+  {
+   "send": "readerFollowSet",
+   "options": {
+    "address": "string",
+    "spoken": "string"
+   },
+   "answers": "ReaderFollowInfo"
+  }
+ ]
+}

@@ -1,0 +1,10 @@
+{
+  "events": [
+    { "inbox_seq": 41, "level": "major", "changelog": { "event_id": "ev-41", "kind": "revision_committed", "level": "major", "occurred_at": "2026-11-10T18:42:00Z", "actor_label": "Texture desk", "subject": { "doc_id": "demo-doc-edition" }, "summary": "Your edition was revised: two new stories on the harbor barrier and the grid storage vote.", "origin": "texture", "tape_ref": { "doc_id": "demo-doc-edition", "revision_id": "demo-rev-12" } } },
+    { "inbox_seq": 40, "level": "major", "changelog": { "event_id": "ev-40", "kind": "update_finished", "level": "major", "occurred_at": "2026-11-10T16:05:00Z", "actor_label": "Your computer", "subject": {}, "summary": "Your computer finished updating and restarted.", "origin": "computer" } },
+    { "inbox_seq": 39, "level": "minor", "changelog": { "event_id": "ev-39", "kind": "wake_decision", "level": "minor", "occurred_at": "2026-11-10T14:20:00Z", "actor_label": "Research desk", "subject": {}, "summary": "The research desk read 14 sources about the library hours story and decided no revision was needed.", "origin": "research" } },
+    { "inbox_seq": 38, "level": "major", "changelog": { "event_id": "ev-38", "kind": "parent_used", "level": "major", "occurred_at": "2026-11-09T21:12:00Z", "actor_label": "The paper", "subject": { "route_path": "/demo-river-festival" }, "summary": "The river festival story used your note as a source.", "origin": "paper" } },
+    { "inbox_seq": 37, "level": "minor", "changelog": { "event_id": "ev-37", "kind": "update_started", "level": "minor", "occurred_at": "2026-11-10T15:58:00Z", "actor_label": "Your computer", "subject": {}, "summary": "Update to demo-build-1 started.", "origin": "computer" } }
+  ],
+  "next_before": 0, "head": 41, "seen_seq": 38, "unseen_major": 2, "unseen_more": false
+}

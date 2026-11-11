@@ -1,0 +1,32 @@
+{
+  "expectedWords": [
+    "tell",
+    "more",
+    "park"
+  ],
+  "inputs": [],
+  "position": {
+    "blockIndex": 2,
+    "context": "Residents said the quiet was strange at first, and then they stopped noticing it.",
+    "programmeID": "fixture-1",
+    "questions": [
+      {
+        "id": "asks_for_something",
+        "options": [
+          "yes",
+          "no"
+        ],
+        "text": "Does the listener ask for something to be done or looked up?"
+      },
+      {
+        "id": "carry_on",
+        "options": [
+          "yes",
+          "no"
+        ],
+        "text": "Should the programme carry on meanwhile?"
+      }
+    ]
+  },
+  "preparedMaterial": "Fixture prepared material: the harbour park opened after the cranes moved."
+}

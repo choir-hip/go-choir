@@ -1,0 +1,209 @@
+{
+  "shapes": {
+    "FileCrumb": {
+      "name": "string",
+      "path": "string"
+    },
+    "FileRow": {
+      "name": "string",
+      "path": "string",
+      "address": "string",
+      "kind": "string",
+      "kindLabel": "string",
+      "symbol": "string",
+      "isDir": "bool",
+      "size": "number",
+      "sizeLabel": "string",
+      "modifiedLabel": "string",
+      "detail": "string",
+      "place": "string"
+    },
+    "FileListing": {
+      "path": "string",
+      "title": "string",
+      "crumbs": "FileCrumb[]",
+      "rows": "FileRow[]",
+      "count": "number",
+      "status": "string",
+      "message": "string",
+      "mode": "string",
+      "sort": "string",
+      "desc": "bool",
+      "query": "string"
+    },
+    "CsvRow": {
+      "cells": "string[]"
+    },
+    "FileChapterRef": {
+      "index": "number",
+      "title": "string"
+    },
+    "FileInfo": {
+      "address": "string",
+      "path": "string",
+      "folder": "string",
+      "name": "string",
+      "kind": "string",
+      "kindLabel": "string",
+      "size": "number",
+      "sizeLabel": "string",
+      "modifiedLabel": "string",
+      "mime": "string",
+      "status": "string",
+      "message": "string",
+      "src": "string",
+      "local": "string",
+      "text": "string",
+      "truncated": "bool",
+      "rows": "CsvRow[]",
+      "pages": "number",
+      "width": "number",
+      "height": "number",
+      "title": "string",
+      "author": "string",
+      "chapters": "FileChapterRef[]"
+    },
+    "FileChapter": {
+      "index": "number",
+      "count": "number",
+      "title": "string",
+      "markdown": "string",
+      "status": "string"
+    },
+    "FilePages": {
+      "query": "string",
+      "pages": "number[]",
+      "message": "string"
+    }
+  },
+  "names": [
+    {
+      "source": "fileList",
+      "live": true,
+      "answers": "FileListing",
+      "options": {
+        "path": "string",
+        "mode": "string",
+        "sort": "string",
+        "desc": "string",
+        "query": "string"
+      },
+      "substitute": {
+        "default": {
+          "path": "/",
+          "title": "Files",
+          "crumbs": [],
+          "rows": [],
+          "count": 0,
+          "status": "loading",
+          "message": "",
+          "mode": "browse",
+          "sort": "name",
+          "desc": false,
+          "query": ""
+        }
+      }
+    },
+    {
+      "source": "fileOpen",
+      "live": true,
+      "answers": "FileInfo",
+      "options": {
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "address": "",
+          "path": "",
+          "folder": "/",
+          "name": "",
+          "kind": "other",
+          "kindLabel": "File",
+          "size": 0,
+          "sizeLabel": "",
+          "modifiedLabel": "",
+          "mime": "",
+          "status": "loading",
+          "message": "",
+          "src": "",
+          "local": "",
+          "text": "",
+          "truncated": false,
+          "rows": [],
+          "pages": 0,
+          "width": 0,
+          "height": 0,
+          "title": "",
+          "author": "",
+          "chapters": []
+        }
+      }
+    },
+    {
+      "source": "fileChapter",
+      "live": true,
+      "answers": "FileChapter",
+      "options": {
+        "address": "string",
+        "index": "number"
+      },
+      "substitute": {
+        "default": {
+          "index": 0,
+          "count": 0,
+          "title": "",
+          "markdown": "",
+          "status": "loading"
+        }
+      }
+    },
+    {
+      "source": "filePages",
+      "live": true,
+      "answers": "FilePages",
+      "options": {
+        "address": "string",
+        "query": "string"
+      },
+      "substitute": {
+        "default": {
+          "query": "",
+          "pages": [],
+          "message": ""
+        }
+      }
+    },
+    {
+      "send": "fileMkdir",
+      "options": {
+        "dir": "string",
+        "name": "string"
+      },
+      "answers": "FileListing"
+    },
+    {
+      "send": "fileDelete",
+      "options": {
+        "path": "string"
+      },
+      "answers": "FileListing"
+    },
+    {
+      "send": "fileRename",
+      "options": {
+        "path": "string",
+        "name": "string"
+      },
+      "answers": "FileListing"
+    },
+    {
+      "send": "fileUpload",
+      "options": {
+        "from": "string",
+        "name": "string",
+        "dir": "string"
+      },
+      "answers": "FileListing"
+    }
+  ]
+}

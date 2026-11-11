@@ -1,0 +1,226 @@
+// Lane members file (files): the Files place and the viewers' states, resources, mutations and actions, as if written in the root.
+// Owned by the files lane. Shapes and source names live in exact-package/interface/files.json; the module answering them is
+// exact-package/apple/AutoradioModule+Files.swift (Kit/ChoirFiles.swift, Kit/Epub.swift). Every name a child component
+// injects is in the lane-5 band of the `provide` list in app.contract. Prefixes: fs = the Files place, fv = the viewers.
+use fileList, fileOpen, fileChapter, filePages from "@choir/autoradio"
+use fileMkdir, fileDelete, fileRename, fileUpload from "@choir/autoradio"
+use FileListing, FileInfo, FileChapter, FilePages from "@choir/autoradio"
+
+// Pinch-and-pan geometry for the image viewer (Exact's transform handle, as its interaction-gallery photo viewer does):
+// the picture is `contain`-fitted in its frame, so its on-screen size is natural * fit * zoom, and a pan may not leave the frame.
+fn fvFit(bw: number, bh: number, nw: number, nh: number): number = bw > 0 and bh > 0 and nw > 0 and nh > 0 ? min(bw / nw, bh / nh) : 0
+fn fvZoomOf(scale: number): number = min(max(scale, 1), 4)
+fn fvClamp(value: number, natural: number, fit: number, zoom: number, port: number): number = min(max(value, -max(0, (natural * fit * zoom - port) / 2)), max(0, (natural * fit * zoom - port) / 2))
+
+members Autoradio
+  // ------------------------------------------------------------------ the Files place (file:/ and file:/folder/)
+  state fsPath = "/"
+  // browse | recent
+  state fsMode = "browse"
+  // name | modified | size | kind
+  state fsSort = "name"
+  state fsDesc = false
+  state fsGrid = false
+  // The search field's text, and the query sent when the person submits it.
+  state fsDraft = ""
+  state fsQuery = ""
+  // The path whose action row (rename, delete) is open, and the rename field.
+  state fsSel = ""
+  state fsRenameText = ""
+  state fsNewing = false
+  state fsNewName = ""
+  // The banner shows the last change's answer ("Deleted ..."), until the person navigates.
+  state fsNoteOn = false
+
+  resource fsList = fileList(path=fsPath, mode=fsMode, sort=fsSort, desc=(fsDesc ? "true" : "false"), query=fsQuery) as shape FileListing else empty()
+  mutation fsM as shape FileListing
+  derive fsNote = match fsM { case some(l) => l.message, case none => "" }
+
+  action fsBrowse(path: string)
+    fsPath = path
+    fsMode = "browse"
+    fsQuery = ""
+    fsDraft = ""
+    fsSel = ""
+    fsNewing = false
+    fsNoteOn = false
+  action fsSetMode(mode: string)
+    fsMode = mode
+    fsQuery = ""
+    fsDraft = ""
+    fsSel = ""
+    fsNoteOn = false
+  action fsSortBy(key: string)
+    if fsSort == key
+      fsDesc = not fsDesc
+    else
+      fsSort = key
+      fsDesc = key == "modified"
+  action fsFlip
+    fsDesc = not fsDesc
+  action fsSetGrid(on: bool)
+    fsGrid = on
+  action fsEditQuery(v: string)
+    fsDraft = v
+  action fsSearch
+    fsQuery = fsDraft.trim()
+    fsSel = ""
+    fsNoteOn = false
+  action fsClear
+    fsDraft = ""
+    fsQuery = ""
+  action fsSelect(path: string, name: string)
+    fsSel = fsSel == path ? "" : path
+    fsRenameText = name
+  action fsEditName(v: string)
+    fsRenameText = v
+  action fsRename
+    send fsM = fileRename(path=fsSel, name=fsRenameText)
+    fsSel = ""
+    fsNoteOn = true
+  action fsDelete(path: string)
+    send fsM = fileDelete(path=path)
+    fsSel = ""
+    fsNoteOn = true
+  action fsNewToggle
+    fsNewing = not fsNewing
+    fsNewName = ""
+  action fsEditNew(v: string)
+    fsNewName = v
+  action fsMakeFolder
+    send fsM = fileMkdir(dir=fsPath, name=fsNewName)
+    fsNewing = false
+    fsNewName = ""
+    fsNoteOn = true
+  // Demo mode and the agent have no picker: the module adds an invented note. Otherwise the system file picker opens.
+  action fsUpload
+    if dm.on
+      send fsM = fileUpload(from="", name="", dir=fsPath)
+      fsNoteOn = true
+    else
+      showPicker("files-pick")
+  action fsPicked(ps: Picked[])
+    if ps.length > 0
+      send fsM = fileUpload(from=(match ps.at(0) { case some(p) => p.path, case none => "" }), name=(match ps.at(0) { case some(p) => p.name, case none => "" }), dir=fsPath)
+      fsNoteOn = true
+
+  // ------------------------------------------------------------------ the open file (file:/path/name.ext)
+  // Asked for every page; the module answers an empty "loading" record for any address that is not a file.
+  resource fvInfo = fileOpen(address=pg.top) as shape FileInfo else empty()
+  // A book's chapter and a PDF's search are asked only for those kinds, so no other file is touched twice.
+  resource fvChapter = fileChapter(address=(fvInfo.kind == "epub" ? pg.top : ""), index=fvChap) as shape FileChapter else empty()
+  resource fvPages = filePages(address=(fvInfo.kind == "pdf" ? pg.top : ""), query=fvFind) as shape FilePages else empty()
+
+  // A different file resets every viewer.
+  state fvSeen = ""
+  task fvSeenTask when fvInfo.address != fvSeen
+    after(10, fvReset)
+  action fvReset
+    fvSeen = fvInfo.address
+    fvZoom = 1
+    fvPanX = 0
+    fvPanY = 0
+    fvPage = 1
+    fvFindDraft = ""
+    fvFind = ""
+    fvChap = 0
+    fvToc = false
+    fvPaused = true
+    fvPos = 0
+    fvDur = 0
+    fvSeek = 0
+
+  action fvShare(name: string, src: string)
+    share(title=name, files=[src])
+
+  // ---- image: zoom, pan, pinch
+  state fvZoom = 1
+  state fvPanX = 0
+  state fvPanY = 0
+  state fvBoxW = 0
+  state fvBoxH = 0
+  state fvPortW = 0
+  state fvPortH = 0
+  derive fvGeom = fvBoxW > 0 and fvBoxH > 0 and fvPortW > 0 and fvPortH > 0
+  derive fvImgFit = fvFit(fvBoxW, fvBoxH, fvInfo.width, fvInfo.height)
+  action fvZoomTo(value: number)
+    if value == 1 or value == 2 or value == 4
+      fvZoom = value
+      fvPanX = fvGeom ? fvClamp(fvPanX, fvInfo.width, fvImgFit, value, fvPortW) : 0
+      fvPanY = fvGeom ? fvClamp(fvPanY, fvInfo.height, fvImgFit, value, fvPortH) : 0
+  action fvCenter
+    fvZoom = 1
+    fvPanX = 0
+    fvPanY = 0
+  action fvGeometry(bw: number, bh: number, pw: number, ph: number)
+    if bw != fvBoxW or bh != fvBoxH or pw != fvPortW or ph != fvPortH
+      fvBoxW = bw
+      fvBoxH = bh
+      fvPortW = pw
+      fvPortH = ph
+      if bw > 0 and bh > 0 and pw > 0 and ph > 0
+        fvPanX = fvClamp(fvPanX, fvInfo.width, fvFit(bw, bh, fvInfo.width, fvInfo.height), fvZoom, pw)
+        fvPanY = fvClamp(fvPanY, fvInfo.height, fvFit(bw, bh, fvInfo.width, fvInfo.height), fvZoom, ph)
+      else
+        fvPanX = 0
+        fvPanY = 0
+  // A pinch's scale is adopted between Fit and 4x; a drag moves the picture inside the frame.
+  action fvRelease(x: number, y: number, scale: number, vx: number, vy: number, vscale: number)
+    fvZoom = fvZoomOf(scale)
+    fvPanX = fvGeom ? fvClamp(x, fvInfo.width, fvImgFit, fvZoomOf(scale), fvPortW) : 0
+    fvPanY = fvGeom ? fvClamp(y, fvInfo.height, fvImgFit, fvZoomOf(scale), fvPortH) : 0
+
+  // ---- PDF: the page view is PDFKit's, shown by an iframe; Contract keeps the page number and the search.
+  state fvPage = 1
+  state fvFindDraft = ""
+  state fvFind = ""
+  action fvGo(n: number)
+    fvPage = max(1, min(n, max(1, fvInfo.pages)))
+  action fvEditFind(v: string)
+    fvFindDraft = v
+  action fvSearch
+    fvFind = fvFindDraft.trim()
+  action fvClearFind
+    fvFindDraft = ""
+    fvFind = ""
+
+  // ---- e-book: a chapter at a time
+  state fvChap = 0
+  state fvToc = false
+  action fvChapGo(n: number)
+    fvChap = max(0, min(n, max(0, fvInfo.chapters.length - 1)))
+    fvToc = false
+  action fvTocToggle
+    fvToc = not fvToc
+
+  // ---- audio and video beside the radio: one voice at a time (plan section 4). Starting media pauses the radio; the radio
+  // starting pauses the media (the element's paused is bound to fvHold). Neither grabs the audio session: both are
+  // Exact audio holds, and Exact arbitrates.
+  state fvPaused = true
+  state fvPos = 0
+  state fvDur = 0
+  state fvSeek = 0
+  derive fvHold = fvPaused or pl.playing
+  // For the bar (lane 1): what the media is, while it plays, so the bar can show it and offer "Resume the radio".
+  derive fvMediaTitle = (fvInfo.kind == "audio" or fvInfo.kind == "video") and not fvPaused ? fvInfo.name : ""
+  action fvPlayed
+    fvPaused = false
+    if pl.playing
+      send acct = choirPlayPause()
+  action fvPausedEv
+    fvPaused = true
+  action fvEnded
+    fvPaused = true
+  action fvTick(t: number)
+    fvPos = t
+  action fvMeasured(d: number)
+    fvDur = d
+  // A seek is a change of fvSeek; to the same time it is nudged by a millisecond so it still is one.
+  action fvNudge(sign: number)
+    fvSeek = fvSeek == max(0, fvPos + sign * 15) ? max(0, fvPos + sign * 15) + 0.001 : max(0, fvPos + sign * 15)
+  action fvSkip(sign: number, d: MediaSessionActionDetails)
+    fvSeek = max(0, fvPos + sign * d.seekOffset)
+  action fvSeekAt(d: MediaSessionActionDetails)
+    fvSeek = d.seekTime
+  action fvRestart
+    fvSeek = fvSeek == 0 ? 0.001 : 0

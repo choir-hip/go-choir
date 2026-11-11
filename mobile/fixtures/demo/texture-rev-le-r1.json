@@ -1,0 +1,9 @@
+{
+ "revision_id": "le-r1",
+ "doc_id": "demo-letter",
+ "version_number": 0,
+ "author_label": "you",
+ "author_kind": "user",
+ "content": "# Letter to the library board\n\nDear board,\n\nI am writing to ask that the evening hours at the central branch be extended to ten on weekdays. Students and shift workers have nowhere else quiet to read after six.\n\nThank you for considering it.",
+ "created_at": "2026-10-30T09:00:00Z"
+}

@@ -1,0 +1,9 @@
+{
+ "doc_id": "demo-draft",
+ "title": "Notes on the council meeting",
+ "current_revision_id": "dr-r2",
+ "current_version_number": 1,
+ "revision_count": 2,
+ "trajectory_id": "traj-demo",
+ "agent_revision_pending": true
+}

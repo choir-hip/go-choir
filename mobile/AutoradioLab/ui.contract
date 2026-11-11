@@ -1,0 +1,131 @@
+// Card and Layer: the depth primitives, driven by theme tokens (plan section 5, "Elevation"). Owned by the spine.
+// A page is elevation 0, a Card is 1, the bar 2, a Layer 3. No component names a colour, a font or a radius.
+// Elevation 2 and 3 use the theme's material ("glass" is UIGlassEffect on iOS 26, a blur before; "solid" is a fill).
+use Theme from "@choir/autoradio"
+
+// Card (elevation 1, or 2 when `level` says) and Layer (elevation 3): the theme's material, fill, radius and shadow are on
+// the node itself (a separate glass node under the content would sit above a text field and swallow its taps: found on
+// the bar's input). `backgroundMaterial` takes literal arms only, so the material is a ternary of "glass" and "none".
+component Card
+  inject
+    th: Theme
+  props
+    level: number
+    testId: string
+    minHeight: number
+  slot
+  derive glass = (level >= 3 ? th.material3 : level == 2 ? th.material2 : th.material1) == "glass"
+  view
+    column testId=testId position="relative" min-height=minHeight border-radius=th.radiusCard
+      backgroundMaterial=(glass ? "glass" : "none")
+      background-color=(glass ? "transparent" : (level >= 2 ? th.paper : th.paper2))
+      box-shadow=(level >= 3 ? th.shadow3 : level == 2 ? th.shadow2 : th.shadow1)
+      children
+
+component Layer
+  inject
+    th: Theme
+  props
+    testId: string
+  slot
+  view
+    column testId=testId width="100%" height="100%" position="relative"
+      border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
+      backgroundMaterial=(th.material3 == "glass" ? "glass" : "none")
+      background-color=(th.material3 == "glass" ? "transparent" : th.paper2)
+      box-shadow=th.shadow3
+      // a backing in the page colour under the glass: the page behind no longer ghosts through the layer's text
+      box position="absolute" inset=0 pointer-events="none" z-index=-1 background-color=th.paper opacity=th.layerBacking
+        border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
+      children
+
+// An opaque card: the theme's surface colour with no material, so nothing behind it reads through (the pile's cards, the
+// interview's question). The shadow and a hairline keep the depth.
+component PaperCard
+  inject
+    th: Theme
+  props
+    testId: string
+    minHeight: number
+  slot
+  view
+    column testId=testId position="relative" min-height=minHeight border-radius=th.radiusCard background-color=th.paper2
+      border-width=1 border-style="solid" border-color=th.rule box-shadow=th.shadow3
+      children
+
+// The one button face (primary: the accent; otherwise a quiet paper button with a hairline), in theme tokens only. It is the
+// content of a `button ... appearance="none"` that keeps its own press and testId, so no button draws the system's blue.
+component Btn
+  inject
+    th: Theme
+  props
+    label: string
+    primary: bool
+    wide: bool
+  view
+    row align-items="center" justify-content="center" min-height=44 padding="10px 14px" box-sizing="border-box"
+      width=(wide ? "100%" : "auto") border-radius=th.radiusControl
+      background-color=(primary ? th.accent : th.paper2)
+      border-width=1 border-style="solid" border-color=(primary ? th.accent : th.rule)
+      text label font-family=th.fontUi font-size=15 font-weight=600 color=(primary ? th.onAccent : th.fg) text-align="center"
+
+// The room a scrolling page leaves at its end so nothing important sits under the bar: the bar's 56, its 8 above the home
+// indicator, the indicator, and a gap. The one place the number is written; every scroll body ends with it.
+component BarClear
+  view
+    box width="100%" height="calc(56px + 8px + env(safe-area-inset-bottom) + 24px)"
+
+// For tool pages (Components, Trace): the scroll frame ends above the bar instead of running under it, so every control
+// stays tappable by a driver that scrolls an element to the frame's bottom edge.
+component ToolScroll
+  inject
+    th: Theme
+  props
+    id: string
+  slot
+  view
+    scroll id=id flex=1 min-height=0 width="100%" margin-bottom="calc(56px + 16px + env(safe-area-inset-bottom))"
+      column padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20 padding-bottom=24 gap=12
+        font-family=th.fontRead color=th.fg
+        children
+
+// A full-bleed scrolling page body: starts under the status bar, ends clear of the bar
+// (56 + 8 + the home indicator + 16, plan section 1, "Insets"), reads in the theme's body face.
+component PageScroll
+  inject
+    th: Theme
+  props
+    id: string
+  slot
+  view
+    scroll id=id testId=`${id}-scroll` flex=1 min-height=0 width="100%"
+      column padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20
+        gap=12 font-family=th.fontRead color=th.fg
+        children
+        BarClear()
+
+// A page with a heading, the page's text, and nothing else. `lines` are paragraphs.
+component PlainPage
+  inject
+    th: Theme
+  props
+    title: string
+    lines: string[]
+  view
+    PageScroll(id="plain")
+      text title role="heading" aria-level=1 font-size=28 font-weight=700 testId="page-title"
+      for l, i in lines key=i
+        text l font-size=17 line-height=1.5
+
+// The page behind an address nothing has built yet, or that could not be opened: one plain sentence.
+component NotYetPage
+  inject
+    th: Theme
+  props
+    address: string
+    title: string
+  view
+    PageScroll(id="notyet")
+      text title role="heading" aria-level=1 font-size=28 font-weight=700 testId="page-title"
+      text `${title} is not built yet.` testId="notyet" font-family=th.fontUi color=th.muted
+      text address font-family=th.fontMono font-size=13 color=th.muted

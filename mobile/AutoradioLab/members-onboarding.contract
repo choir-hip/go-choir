@@ -1,0 +1,50 @@
+// Lane members file (onboarding): first run. Owned by the onboarding lane. The state is the controller's in the module
+// (AutoradioModule+Onboarding.swift): setup rows, microphone and hearing checks, the interview, the edition. The page reads
+// it as one resource, `ob`; every button is a send that answers the same shape.
+use onboardingState, onboardingBegin, onboardingRetry, onboardingFallback, onboardingMic, onboardingMicNext, onboardingHearing from "@choir/autoradio"
+use onboardingInterview, onboardingContinue, onboardingDemoNext, onboardingEditionRetry, onboardingSkip, onboardingReset from "@choir/autoradio"
+use pageOpen, pageClose, choirStartRadio from "@choir/autoradio"
+use Onboarding from "@choir/autoradio"
+
+members Autoradio
+  resource ob = onboardingState() as shape Onboarding else empty()
+  mutation obm as shape Onboarding
+
+  action obBegin
+    send obm = onboardingBegin(mobile="false")
+  action obBeginMobile
+    send obm = onboardingBegin(mobile="true")
+  action obRetry(stage: string)
+    send obm = onboardingRetry(stage=stage)
+  action obFallback(stage: string)
+    send obm = onboardingFallback(stage=stage)
+  action obMic
+    send obm = onboardingMic()
+  action obMicNext
+    send obm = onboardingMicNext()
+  action obHearingYes
+    send obm = onboardingHearing(ok="true")
+  action obHearingNo
+    send obm = onboardingHearing(ok="false")
+  action obInterview
+    send obm = onboardingInterview()
+  action obContinue
+    send obm = onboardingContinue()
+  action obDemoNext
+    send obm = onboardingDemoNext()
+  action obEditionRetry
+    send obm = onboardingEditionRetry()
+  action obSkip
+    send obm = onboardingSkip()
+    send pm = pageClose(address="onboarding:setup")
+  action obReset
+    send obm = onboardingReset()
+  // The edition is a Texture page: open it (the reader draws it).
+  action obOpenEdition
+    send pm = pageOpen(address="texture:my-edition", title="My edition")
+    layer = ""
+  // Then the front page, and the first story playing.
+  action obFinish
+    send pm = pageOpen(address="paper:front", title="Paper")
+    send acct = choirStartRadio()
+    layer = ""

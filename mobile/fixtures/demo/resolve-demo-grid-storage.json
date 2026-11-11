@@ -1,0 +1,13 @@
+{
+ "publication": {
+  "title": "A regional grid adds its largest battery yet"
+ },
+ "payload": {
+  "text": "A regional grid operator switched on its largest battery installation yet on Monday, a field of containers that can feed forty thousand homes through the evening peak.\n\nOperators said the battery charges when wind and sun are plentiful and sells power back when prices rise. In its first week it earned more from the evening peak than from any other hour.\n\nEngineers noted that the battery will not replace the gas plants on the grid but should let two of them run less often.",
+  "manifest_hash": "demo-1"
+ },
+ "version": {
+  "id": "demo-v1",
+  "manifest_hash": "demo-1"
+ }
+}

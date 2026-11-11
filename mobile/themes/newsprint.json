@@ -1,0 +1,33 @@
+{
+  "schema_version": 3,
+  "id": "newsprint",
+  "name": "Newsprint",
+  "schemes": ["light", "dark"],
+  "colors": {
+    "paper":  { "light": "#F7F5F0", "dark": "#0E0E0E" },
+    "paper2": { "light": "#EDEAE2", "dark": "#1A1A1A" },
+    "fg":     { "light": "#111111", "dark": "#EDEDED" },
+    "muted":  { "light": "#555555", "dark": "#A3A3A3" },
+    "accent": { "light": "#B3261E", "dark": "#FF6E5E" },
+    "accent2":{ "light": "#7F1A15", "dark": "#FFA095" },
+    "success":{ "light": "#1E5E3A", "dark": "#5CC48A" },
+    "danger": { "light": "#B3261E", "dark": "#FF6E5E" },
+    "onAccent": { "light": "#FFFFFF", "dark": "#0E0E0E" },
+    "rule":   { "light": "#111111", "dark": "#EDEDED" },
+    "scrim":  { "light": "rgba(24,14,30,.84)", "dark": "rgba(0,0,0,.86)" },
+    "onScrim": { "light": "#FFFFFF", "dark": "#F3F3F3" }
+  },
+  "type": { "read": "ui-serif, Georgia, serif", "ui": "ui-serif, Georgia, serif", "mono": "ui-monospace, monospace", "scale": "editorial" },
+  "radii": { "card": "0px", "control": "0px", "pill": "0px", "rules": "0px" },
+  "elevation": {
+    "1": { "shadow": "none", "edge": "0 1px 0 rule", "press": 1.0, "pressTint": true },
+    "2": { "backing": 0.94, "material": "solid", "shadow": "none", "edge": "0 -1px 0 rule" },
+    "3": { "backing": 0.86, "material": "solid", "shadow": "none", "behind": { "scale": 1.0, "dim": 0.12 } }
+  },
+  "motion": {
+    "fast": "0ms", "enter": "160ms ease", "sheet": "200ms ease", "stagger": "0ms",
+    "spring": { "stiffness": 420, "damping": 48, "mass": 1 },
+    "reduced": { "enter": "0ms", "spring": "none" }
+  },
+  "mark": { "drift": "none", "tumble": ["6s", "11s"], "flip": { "stiffness": 200, "damping": 30 }, "listenScale": 1.0, "reduced": "static" }
+}

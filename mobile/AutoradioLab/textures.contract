@@ -1,0 +1,73 @@
+// Textures: the listener's documents (a place in the launcher). Lane 3 owns this file.
+// The edition is pinned first; "Make your edition" is a card when there is none; the rest are recent, newest first, and a
+// search field filters them. A document opens in the reader (`texture:<doc>`). "New document" is a prompt, not an empty editor.
+// testIds: page-title, textures-search, textures-edition, textures-make-edition, textures-new, textures-doc-<address>.
+use Theme, TextureList, TextureRow, Onboarding from "@choir/autoradio"
+use PageScroll, Card, Btn from "./ui.contract"
+use FirstRunCard from "./onboarding.contract"
+
+component TextureRowView
+  inject
+    th: Theme
+    openPage: action
+  props
+    r: TextureRow
+    pinned: bool
+  view
+    button press=openPage(r.address, r.title) testId=`textures-doc-${r.address}` appearance="none" width="100%" margin-bottom=10
+      Card(level=(pinned ? 2 : 1), testId=`textures-card-${r.address}`, minHeight=0)
+        column padding=16 gap=6 align-items="flex-start" width="100%"
+          if pinned
+            text "YOUR EDITION" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing="0.08em" color=th.accent
+          text r.title font-family=th.fontRead font-size=21 font-weight=700 line-height=1.2 color=th.fg text-align="left"
+          row align-items="center" gap=8
+            if r.revising
+              progress aria-label="Being revised" width=16 height=16 color=th.accent
+            text r.meta font-family=th.fontUi font-size=13 color=th.muted text-align="left"
+
+component TexturesPage
+  inject
+    th: Theme
+    tlist: TextureList
+    ob: Onboarding
+    openPage: action
+    editAsk: action
+  props
+    address: string
+    title: string
+  state q = ""
+  derive shown = tlist.rows.filter(r => q == "" or r.title.toLowerCase().includes(q.toLowerCase()))
+  derive edition = shown.filter(r => r.edition)
+  derive others = shown.filter(r => r.edition == false)
+  action editQ(v: string)
+    q = v
+  view
+    PageScroll(id="textures")
+      text "Textures" role="heading" aria-level=1 font-family=th.fontRead font-size=30 font-weight=700 testId="page-title" color=th.fg
+      input type="search" value=q input=editQ placeholder="Search your documents" aria-label="Search your documents" testId="textures-search"
+        font-family=th.fontUi padding="10px 4px"
+      // The generic "Make your edition" card is this page's own card below (found with real data: both showed, one under the other).
+      if ob.card != "Make your edition"
+        FirstRunCard()
+      if tlist.status == "loading"
+        progress aria-label="Loading" width=24 height=24 color=th.accent
+      if tlist.status == "error"
+        text tlist.message testId="textures-message" font-family=th.fontUi color=th.muted
+      if tlist.status == "ready" and tlist.hasEdition == false and q == ""
+        Card(level=2, testId="textures-make-edition-card", minHeight=0)
+          column padding=18 gap=8 align-items="flex-start" width="100%" box-sizing="border-box"
+            text "YOUR EDITION" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing="0.08em" color=th.accent
+            text "Make your edition" font-family=th.fontRead font-size=22 font-weight=700 color=th.fg
+            text "A front page written for you each morning from the sources you follow. Say what you want in it." font-family=th.fontRead font-size=16 line-height=1.45 color=th.muted width="100%"
+            button press=editAsk("Make my edition: ") testId="textures-make-edition" appearance="none"
+              Btn(label="Make your edition", primary=true, wide=false)
+      for r in edition key=r.address
+        TextureRowView(r=r, pinned=true)
+      if others.length > 0
+        text "Recent" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted margin-top=6
+      for r in others key=r.address
+        TextureRowView(r=r, pinned=false)
+      if tlist.status == "ready" and shown.length == 0 and q != ""
+        text "No documents match." font-family=th.fontUi color=th.muted testId="textures-none"
+      button press=editAsk("New document: ") testId="textures-new" appearance="none"
+        Btn(label="New document", primary=false, wide=false)

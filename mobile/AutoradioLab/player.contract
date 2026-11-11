@@ -1,0 +1,144 @@
+// The expanded player: a layer (elevation 3) that rises from the bar while the page behind steps back (plan section 1,
+// "The expanded player"). Lane 1 owns this file. It shows what the radio plays and what it is saying right now:
+//   - the document's title, the position, the passage being read with the current sentence lit (the sentence is an
+//     estimate from the play clock, BarState.swift), the next passage dimmed;
+//   - the programme as segments (tap one to jump) and as rows (tap one to jump);
+//   - transport: previous, play and pause, next, and the reading speed;
+//   - the talk status: the listener's words, the holding line, and when the programme yields to the listener ("Radio
+//     lowered/paused while you speak");
+//   - the talk mode as the engine has it (hold / just speak / hold or speak). The prompt is the bar's, not the player's.
+// Pull the header down to put it away. Everything is declarative motion (keyframes and transitions), off under Reduce Motion.
+// testIds: player, player-scrim, player-layer, player-title, player-position, player-status, player-yield, player-passage,
+// player-sentence-<k>, player-next-passage, player-segments, player-seg-<i>, player-item-<i>, player-prev, player-play,
+// player-next, player-speed-<v>, player-mode, player-close.
+use Theme, BarInfo, RadioInfo from "@choir/autoradio"
+use Layer, Card from "./ui.contract"
+
+keyframes playerRise
+  from opacity=0 translate="0px 56px"
+keyframes playerLeave
+  to opacity=0 translate="0px 56px" animation-timing-function="ease-in"
+keyframes playerFade
+  from opacity=0
+keyframes playerIn
+  from opacity=0 translate="0px 6px"
+keyframes playerBlink
+  50% opacity=0.25
+
+component SpeedChip
+  inject
+    th: Theme
+    ri: RadioInfo
+    setSpeed: action
+  props
+    v: string
+  view
+    button press=setSpeed(v) testId=`player-speed-${v}` appearance="none" aria-label=`Speed ${v} times`
+      row padding="6px 12px" border-radius=th.radiusPill align-items="center" justify-content="center"
+        background-color=(v == ri.speed ? th.accent : "transparent")
+        transition=`background-color ${th.motionFastMs}ms ease`
+        text `${v}×` font-family=th.fontUi font-size=13 font-weight=600 color=(v == ri.speed ? th.onAccent : th.muted)
+
+component PlayerLayer
+  inject
+    th: Theme
+    bi: BarInfo
+    ri: RadioInfo
+    hideLayer: action
+    radioPlay: action
+    previous: action
+    next: action
+    jumpTo: action
+    setSpeed: action
+    sheetMove: action
+    sheetEnd: action
+  derive still = th.reducedMotion
+  derive calm = still ? 0 : 1
+  derive listener = bi.state == "listening" or bi.state == "talking" or bi.state == "heard"
+  derive statusLine = listener ? (ri.heard == "" ? "Listening…" : `You: ${ri.heard}`) : (bi.state == "holding" ? bi.text : (bi.state == "revised" ? "Revised. Reading the new passage" : ""))
+  derive yieldNote = ri.level == "dip" ? "Radio lowered while you speak" : (ri.level == "pause" ? "Radio paused while you speak" : "")
+  view
+    column testId="player" position="absolute" inset=0
+      box testId="player-scrim" position="absolute" inset=0 background-color=th.fg opacity=th.behindDim3 press=hideLayer
+        animation=(still ? "none" : "playerFade 240ms ease-out both")
+      column position="absolute" left=0 right=0 bottom=0 height="80%"
+        animation=(still ? "none" : "playerRise 300ms ease-out both")
+        -exact-exit-animation=(still ? "none" : "playerLeave 200ms ease-in both")
+        Layer(testId="player-layer")
+          column flex=1 min-height=0 width="100%"
+            // header: pull it down to put the player away
+            column pan=sheetMove panrelease=sheetEnd padding="8px 20px 4px" gap=6
+              row justify-content="center"
+                box width=36 height=4 border-radius=2 background-color=th.rule
+              row align-items="center" gap=8
+                column flex=1 min-width=0 gap=2
+                  text "NOW PLAYING" font-family=th.fontUi font-size=11 font-weight=600 color=th.muted
+                  text (ri.title == "" ? "Autoradio" : ri.title) testId="player-title" role="heading" aria-level=2 line-clamp=2
+                    font-size=22 font-weight=700 font-family=th.fontRead color=th.fg
+                button press=hideLayer testId="player-close" aria-label="Close the player" appearance="none" width=44 height=44
+                  image "symbol:close" color=th.muted
+            scroll flex=1 min-height=0 width="100%"
+              column padding="4px 20px 12px" gap=14
+                // what is happening now: the listener's words, the holding line, the yield
+                if statusLine != "" or yieldNote != ""
+                  column testId="player-status" gap=6 justify-content="center" min-height=40
+                    if statusLine != ""
+                      text statusLine font-family=th.fontUi font-size=14 color=(listener ? th.fg : th.muted) font-style=(listener ? "italic" : "normal") line-clamp=3
+                        animation=(still ? "none" : "playerIn 200ms ease-out both")
+                    if yieldNote != ""
+                      row gap=6 align-items="center" testId="player-yield"
+                        box width=7 height=7 border-radius=4 background-color=th.accent animation=(still ? "none" : "playerBlink 1.1s ease-in-out infinite")
+                        text yieldNote font-family=th.fontUi font-size=12 font-weight=600 color=th.accent
+                // the passage being read, the current sentence lit
+                Card(level=2, testId="player-card", minHeight=140)
+                  column padding=18 gap=10
+                    text ri.position testId="player-position" font-size=12 font-family=th.fontUi color=th.muted
+                    column testId="player-passage" gap=6
+                      for s, k in ri.sentences key=k
+                        text s testId=`player-sentence-${k}` font-family=th.fontRead font-size=19 line-height=1.5
+                          color=(k == ri.sentenceIndex ? th.fg : th.muted) font-weight=(k == ri.sentenceIndex ? 600 : 400)
+                          transition=`color ${th.motionFastMs * calm}ms ease`
+                if ri.next != ""
+                  column gap=4 testId="player-next-passage"
+                    text "NEXT" font-family=th.fontUi font-size=11 font-weight=600 color=th.muted
+                    text ri.next font-family=th.fontRead font-size=16 line-height=1.4 color=th.muted line-clamp=3 opacity=0.7
+                // the programme: tap a segment or a row to jump
+                row gap=3 testId="player-segments"
+                  for it in ri.items key=it.i
+                    column flex=1 min-width=0
+                      button press=jumpTo(it.i) testId=`player-seg-${it.i}` appearance="none" width="100%" height=28 aria-label=`Go to passage ${it.i + 1}`
+                        column height=28 justify-content="center" width="100%"
+                          box width="100%" height=(it.current ? 6 : 4) border-radius=3
+                            background-color=(it.current ? th.accent : (it.done ? th.accent2 : th.rule))
+                            transition=`height ${th.motionFastMs * calm}ms ease, background-color ${th.motionFastMs * calm}ms ease`
+                text "PROGRAMME" font-family=th.fontUi font-size=11 font-weight=600 color=th.muted
+                column gap=0
+                  for it in ri.items key=it.i
+                    button press=jumpTo(it.i) testId=`player-item-${it.i}` appearance="none" width="100%"
+                      row gap=10 align-items="flex-start" padding="8px 0" width="100%"
+                        text `${it.i + 1}` font-family=th.fontMono font-size=12 color=th.muted width=22
+                        text it.text flex=1 min-width=0 line-clamp=2 text-align="left" font-family=th.fontRead font-size=15
+                          color=(it.current ? th.fg : th.muted) font-weight=(it.current ? 600 : 400)
+                        if it.kind == "you"
+                          text "You" font-family=th.fontUi font-size=11 font-weight=600 color=th.accent
+            // transport
+            column gap=8 padding="6px 20px 4px" align-items="center"
+              row gap=28 justify-content="center" align-items="center"
+                button press=previous testId="player-prev" aria-label="Previous passage" appearance="none" width=44 height=44
+                  image "symbol:skip-back-15" color=th.fg
+                button press=radioPlay testId="player-play" aria-label=(ri.playing ? "Pause" : "Play") appearance="none" width=60 height=60
+                  row width=56 height=56 border-radius=28 align-items="center" justify-content="center" background-color=th.accent
+                    box-shadow=th.shadow2
+                    if ri.playing
+                      image "symbol:pause-fill" color=th.onAccent
+                    else
+                      image "symbol:play-fill" color=th.onAccent
+                button press=next testId="player-next" aria-label="Next passage" appearance="none" width=44 height=44
+                  image "symbol:skip-forward-15" color=th.fg
+              row gap=4 justify-content="center"
+                for v in ri.speedChoices key=v
+                  SpeedChip(v=v)
+              text ri.modeLabel testId="player-mode" font-family=th.fontUi font-size=12 color=th.muted
+            // the prompt is the bar's (one field, not two), so the player has none
+            // clear of the bar
+            box height="calc(56px + 8px + env(safe-area-inset-bottom) + 12px)"

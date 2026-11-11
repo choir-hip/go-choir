@@ -1,0 +1,18 @@
+{
+ "related": [
+  {
+   "title": "A regional grid adds its largest battery yet",
+   "dek": "The new installation can hold enough power for a small city through an evening peak.",
+   "route": {
+    "bare": "demo-grid-storage"
+   }
+  },
+  {
+   "title": "The harbor council approves a tide barrier",
+   "dek": "After a year of hearings, the council voted seven to two.",
+   "route": {
+    "bare": "demo-harbor-barrier"
+   }
+  }
+ ]
+}

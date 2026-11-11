@@ -1,0 +1,41 @@
+{
+ "documents": [
+  {
+   "doc_id": "demo-edition",
+   "title": "My edition",
+   "created_at": "2026-11-09T08:00:00Z",
+   "updated_at": "2026-11-10T06:30:00Z",
+   "revision_count": 4,
+   "current_revision_id": "ed-r4",
+   "metadata": {
+    "role": "edition"
+   }
+  },
+  {
+   "doc_id": "demo-draft",
+   "title": "Notes on the council meeting",
+   "created_at": "2026-11-10T09:00:00Z",
+   "updated_at": "2026-11-10T09:20:00Z",
+   "revision_count": 2,
+   "current_revision_id": "dr-r2",
+   "trajectory_id": "traj-demo",
+   "agent_revision_pending": true
+  },
+  {
+   "doc_id": "demo-notes",
+   "title": "Charging pilot: working notes",
+   "created_at": "2026-11-05T09:00:00Z",
+   "updated_at": "2026-11-08T16:10:00Z",
+   "revision_count": 3,
+   "current_revision_id": "no-r3"
+  },
+  {
+   "doc_id": "demo-letter",
+   "title": "Letter to the library board",
+   "created_at": "2026-10-30T09:00:00Z",
+   "updated_at": "2026-11-02T11:00:00Z",
+   "revision_count": 1,
+   "current_revision_id": "le-r1"
+  }
+ ]
+}
