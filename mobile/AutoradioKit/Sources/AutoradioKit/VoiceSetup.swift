@@ -163,7 +163,10 @@ public enum SetupCatalog {
 
     /// What the page promises before anything downloads: the first model of every ladder.
     public static func totalBytes(_ plan: [SetupStage: [SetupCandidate]]) -> Int64 {
-        plan.values.reduce(0) { $0 + ($1.first?.bytes ?? 0) }
+        // One download per file: two roles on the same model (the decision and the responder) count once.
+        var seen = Set<String>(), total: Int64 = 0
+        for l in plan.values { if let f = l.first, seen.insert(f.id).inserted { total += f.bytes } }
+        return total
     }
 
     public static func sizeLabel(_ bytes: Int64) -> String {

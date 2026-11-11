@@ -26,8 +26,8 @@ final class VoiceSetupTests: XCTestCase {
 
     func testTotalIsSaidPlainly() {
         let big = SetupCatalog.plan(for: device(8))
-        XCTAssertEqual(SetupCatalog.totalBytes(big), 2_000_000 + 480_000_000 + 350_000_000 + 639_446_688 + 396_705_472)
-        XCTAssertEqual(SetupCatalog.totalLabel(bytes: SetupCatalog.totalBytes(big), onWiFi: true), "About 1.9 GB. On Wi-Fi this takes a few minutes.")
+        XCTAssertEqual(SetupCatalog.totalBytes(big), 2_000_000 + 480_000_000 + 350_000_000 + 639_446_688, "the decision and the responder share one file: counted once")
+        XCTAssertEqual(SetupCatalog.totalLabel(bytes: SetupCatalog.totalBytes(big), onWiFi: true), "About 1.5 GB. On Wi-Fi this takes a few minutes.")
         XCTAssertTrue(SetupCatalog.totalLabel(bytes: 1_400_000_000, onWiFi: false).contains("1.4 GB"))
         XCTAssertTrue(SetupCatalog.totalLabel(bytes: 1_400_000_000, onWiFi: false).contains("mobile data"), "failure 7")
         XCTAssertTrue(SetupCatalog.totalLabel(bytes: 0, onWiFi: true).hasPrefix("Nothing to download"))
