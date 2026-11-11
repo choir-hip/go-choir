@@ -155,6 +155,7 @@ entered below as lapsed, not scored.
 | C50 | 2026-11-11T14:51Z | true | `scripts/land land/autoradio-desk` exit 0 on its first complete run, main at 6f0c773ed (an earlier start was stopped by me within a minute to remove a tool timeout, before any suite ran) | 0.16 |
 | C51 | 2026-11-11T16:20Z | true | `scripts/prove-autoradio-turns` on staging (f7a55285e) against d@e, 10 asks: first speech median 1.37 s, p90 1.63 s; every ask answered by the Bedrock fallback | 0.20 |
 | C52 | 2026-11-11T16:20Z | false | same run exit 1: River never answered (gateway: `unsupported provider: river`; RIVER_API_KEY is in the local .env but not in Node B's gateway-provider.env, so River was never registered); reasoning off, no tape errors | 0.20 |
+| C54 | 2026-11-11T20:25Z | false | `scripts/land origin/lane/golden-web` exit 1 twice (19:56Z, 20:14Z): agentcore hit go test's 10-minute default in both runtime shards, unrelated to the frontend change; the landing script is the defect (docs/problems/land-runtime-shards-time-out-2026-11-11.md) | 0.42 |
 
 ### Scorecard
 
