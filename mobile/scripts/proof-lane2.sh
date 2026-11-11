@@ -45,16 +45,16 @@ for MODE in light dark; do
   while :; do
     "$HERE/exact.sh" agent ios --touch platform \
       "clock data" "clock +1500 real" "clock data" tree "screenshot $SHOTS/$MODE-01-default.png" \
-      "tap paper-edition-big" "clock +900 real" "clock data" tree "screenshot $SHOTS/$MODE-02-big-top.png" \
+      "clock settle" "tap paper-edition-big" "clock +900 real" "clock data" tree "screenshot $SHOTS/$MODE-02-big-top.png" \
       "tap paper-scroll drag 0 -560" "clock +700 real" "clock data" tree "screenshot $SHOTS/$MODE-03-big-mid.png" \
       "tap paper-scroll drag 0 -560" "clock +700 real" "clock data" tree "screenshot $SHOTS/$MODE-04-big-low.png" \
       "tap paper-scroll drag 0 -560" "clock +700 real" "clock data" tree "screenshot $SHOTS/$MODE-05-big-end.png" \
       "tap paper-scroll drag 0 1500" "clock +700 real" "clock data" \
-      "tap paper-edition-even" "clock +900 real" "clock data" tree "screenshot $SHOTS/$MODE-06-even-top.png" \
+      "clock settle" "tap paper-edition-even" "clock +900 real" "clock data" tree "screenshot $SHOTS/$MODE-06-even-top.png" \
       "tap paper-scroll drag 0 -560" "clock +700 real" "clock data" tree "screenshot $SHOTS/$MODE-07-even-mid.png" \
       "tap paper-scroll drag 0 1500" "clock +700 real" "clock data" \
-      "tap paper-edition-thin" "clock +900 real" "clock data" tree "screenshot $SHOTS/$MODE-08-thin.png" \
-      "tap paper-edition-big" "clock +900 real" "clock data" \
+      "clock settle" "tap paper-edition-thin" "clock +900 real" "clock data" tree "screenshot $SHOTS/$MODE-08-thin.png" \
+      "clock settle" "tap paper-edition-big" "clock +900 real" "clock data" \
       "tap paper-play-demo-harbor-barrier" "clock +1500 real" "clock data" tree "screenshot $SHOTS/$MODE-09-play-from-here.png" \
       "tap paper-section-culture" "clock +900 real" "clock data" tree "screenshot $SHOTS/$MODE-10-section.png" \
       "tap paper-section-front" "clock +900 real" "clock data" \
