@@ -144,6 +144,8 @@ entered below as lapsed, not scored.
 | 19 | 2026-11-10T22:10Z | lapsed | same | n/a |
 | C46 | 2026-11-11T10:40Z | true | four review outputs, verdict repair on each; the repair builder judged the key import, sanitizer, host check, audio continuations, shared state and stray tasks real | 0.16 |
 | C47 | 2026-11-11T10:48Z | true | `scripts/land land/ar-app` exit 0 on its first run, main at 29e01354f (the staging deploy was then refused for disk headroom, which the claim did not cover) | 0.16 |
+| C48 | 2026-11-11T12:12Z | false | two passes (`-musage=30,limit=12`, `-musage=40,limit=8`) took metadata from 25.1 to 9.5 GiB allocated and `df` free from 55.4 to 79.8 GiB, short of 85; no service failure, load peaked 11. I counted the DUP saving against a starting figure that was a gigabyte high and stopped at two passes | 0.56 |
+| C49 | 2026-11-11T12:40Z | true | re-run of the deploy job in run 43006686777 passed on its first attempt; staging `/health` reports commit 07a0b6874 | 0.09 |
 
 ### Scorecard
 
