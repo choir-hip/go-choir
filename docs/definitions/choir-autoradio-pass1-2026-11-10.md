@@ -141,16 +141,16 @@ boundaries:
 
 now:
   status: working
-  slice: the product UI (Paper, Radio, Texture) on the working plumbing; integration of the audio lane; on-device models
-  source_ref: origin/main 17e67897fe879fd317ebb8b1e92532e27ad12a5c; app on origin/lane/autoradio-lab 3ebf121c2
-  deploy_identity: choir.news 79bd88f8bd68
+  slice: round 3 after the owner's first phone walk (rulings 19 to 32), the Autoradio desk, the on-device configurator; first install of round 3 tonight
+  source_ref: origin/main f7a55285e (desk slice 6f0c773ed, web default themes 42d54ab43, CI apt fixes ebe9c3145 and f7a55285e); app on origin/lane/ar3-app-repair 617bc3a65
+  deploy_identity: choir.news f7a55285e (deployed 2026-11-11T16:17Z)
   candidate:
-    id: none
-    state: none
-    ref: none
-    base: none
-    digest: none
-    scope: []
+    id: ar3-app
+    state: reviewed (Gemini accept after repair, two rounds); proof exit 1 only at the deck cycle step
+    ref: origin/lane/ar3-app-repair
+    base: origin/main ce678d41c
+    digest: 617bc3a656595ff641fccee63dd12b82dceb8aa3
+    scope: [mobile/, docs/reference/ON-DEVICE-MODELS.md, docs/design/autoradio-app-ui-2026-11-10.md]
   conjecture:
     id: AR-C1
     claim: >
@@ -178,31 +178,33 @@ now:
     owner_ratification_ref: owner, 2026-11-09 and 2026-11-10 ("built on Exact")
   belief:
     believed_state: >
-      The plumbing works against staging from the app's own code (2026-11-10:
-      device sign-in built, front page as programme, System 1 through the
-      listener's computer in one call, a desk revision in about 15 s, shown
-      by replay of kept turns as the test computer). The app the owner ran
-      was a skeleton with a lab console and no product. What is missing is
-      the product itself: the look and feel of Paper, Radio and Texture.
+      The page deck, glass lens, launcher, TetraMark, default themes, the
+      configurator (every model downloaded, the whole pipeline measured on
+      the device) and a streaming Autoradio desk turn exist and pass in the
+      simulator. On staging the desk answers a spoken turn with a first
+      sentence in a median 1.37 s (10 asks, d@e), all from the Bedrock
+      fallback because River was never registered on the gateway.
     main_uncertainty: >
-      whether Exact can carry the look and feel (long documents, live
-      revisions, a following transcript, a mini-player) without a second UI
-      stack; AR-C1 is still untested on the phone; whether any voice mode
-      clears the owner's threshold
+      what the configurator chooses and measures on the owner's iPhone 14
+      Pro Max (memory left with LFM3 and the pipeline resident, A16 speeds,
+      heat); whether the Textures deck swipe stall is real or a simulator
+      artifact; AR-C1 is still untested on the phone
     next_observation: >
-      simulator screenshots of every screen from the UI lane, then the
-      owner's first session with the real app on the phone
+      the owner's walk of the round-3 install tonight and the trace export
+      from the phone (configuration record, turn timelines)
   blocker_or_risk: >
-    Builders must not install on the owner's phone while the owner is using
-    it (it reloaded under them on 2026-11-10); installs happen at agreed
-    points. The free provisioning profile expires after seven days. Nothing
-    about audio has been measured on the phone yet.
+    Owner acts pending: a go for the install (owner is away from the Mac
+    until tonight); running nix/deploy-provider-creds.sh to register River
+    on the gateway (it rewrites the whole gateway credential file). Known
+    defect: a sideways swipe on Textures does not cycle the deck
+    (docs/problems/autoradio-deck-swipe-stalls-on-textures-2026-11-11.md on
+    lane/ar3-app-deck). The free provisioning profile expires after seven days.
   next_action: >
-    UI lane: design note, then Paper, Radio, Texture and first run in Exact
-    with simulator screenshots. Integrator: merge the audio lane, make the
-    acknowledgement start before System 1 answers, Components as a settings
-    screen. Models lane continues. Then one install on the phone for the
-    owner's QA.
+    On the owner's go: install origin/lane/ar3-app-repair on the phone; the
+    owner walks setup, the radio and a voice turn; read the trace export.
+    Then land the app, fix what the walk finds, and decide River. Priority
+    for the week (owner, 2026-11-11): the iOS app good enough to share on
+    TestFlight.
 
 receipts: []
 
