@@ -228,17 +228,20 @@ type PublicationProvenanceSummary struct {
 }
 
 type PublicationBundle struct {
-	Route          PublicationRoute              `json:"route"`
-	Publication    PublicationSummary            `json:"publication"`
-	Version        PublicationVersionSummary     `json:"version"`
-	Artifact       PublicationArtifact           `json:"artifact"`
-	Retrieval      RetrievalBundle               `json:"retrieval"`
-	Citations      []CitationEdge                `json:"citations"`
-	SourceEntities []PublicationSourceEntity     `json:"source_entities"`
-	Transclusions  []PublicationTransclusion     `json:"transclusions"`
-	Policy         PublicationPolicy             `json:"policy"`
-	Proposals      PublicationProposalCapability `json:"proposals"`
-	Provenance     PublicationProvenanceSummary  `json:"provenance"`
+	Route          PublicationRoute          `json:"route"`
+	Publication    PublicationSummary        `json:"publication"`
+	Version        PublicationVersionSummary `json:"version"`
+	Artifact       PublicationArtifact       `json:"artifact"`
+	Retrieval      RetrievalBundle           `json:"retrieval"`
+	Citations      []CitationEdge            `json:"citations"`
+	SourceEntities []PublicationSourceEntity `json:"source_entities"`
+	// Entities are the story's central subjects (live, not part of the
+	// immutable payload); absent when it has none.
+	Entities      []StoryEntityRef              `json:"entities,omitempty"`
+	Transclusions []PublicationTransclusion     `json:"transclusions"`
+	Policy        PublicationPolicy             `json:"policy"`
+	Proposals     PublicationProposalCapability `json:"proposals"`
+	Provenance    PublicationProvenanceSummary  `json:"provenance"`
 	// Payload is the version's immutable payload: fixed forever once
 	// published. Nav and Checks are live and served beside it.
 	Payload PublicationVersionPayload `json:"payload"`

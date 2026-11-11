@@ -269,6 +269,7 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 		},
 		Citations:      citations,
 		SourceEntities: sourceEntities,
+		Entities:       storyCentralEntities(ctx, h.og, h.routeMeta.TargetID),
 		Transclusions:  transclusions,
 		Policy:         policy,
 		Proposals: PublicationProposalCapability{
