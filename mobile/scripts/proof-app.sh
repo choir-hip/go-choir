@@ -54,6 +54,20 @@ if [ -z "${NOBUILD:-}" ]; then
 fi
 SIM privacy "$EXACT_SIM" grant all $APP >/dev/null 2>&1
 
+# `proof-app.sh deckdiag`: only where a deck swipe starts matters (a diagnostic of the Textures page, which did not cycle): no tour.
+if [ "${1:-}" = deckdiag ]; then
+  step "clock data"; wait_ 1500
+  for y in 150 300 462 600 760; do
+    place textures 900; step tree; shot diag-textures-$y-before
+    step "tap page-deck drag 180 0 from 201 $y"; wait_ 1500; step tree; shot diag-textures-$y-after
+  done
+  step logs
+  run_drive deckdiag light "" --touch platform
+  grep -o '\[page-indicator\] "[^"]*"' "$SHOTS/drive-deckdiag.txt"
+  echo "PROOF OK (deckdiag only)"; exit 0
+fi
+
+
 # ---- 4a. LIGHT tour (touch platform: drags and pinches)
 step "clock data"; wait_ 1500
 ensure_light
