@@ -299,3 +299,20 @@ audio; `os_proc_available_memory()` at idle and after each load.
   too slow or leaving too little memory fails its check and setup moves on. The numbers are shown in plain words on the result row.
 - Proof on the Mac: `SETUP=1 mobile/scripts/proof-models.sh` (setup's own path, every model); the phone-only facts are
   listed in the round 3 report.
+
+### Responder sample runs on the Mac (2026-11-11, `SETUP=1 mobile/scripts/proof-models.sh`; Mac numbers, not phone)
+
+Four asks on invented demo pages, cold and warm cache, the same prompt for every model (`AckPrompt.system()`, the page as the stable prefix,
+recent lines of the same page in the suffix). Reading speed is prompt tokens per second, writing is decode tokens per second, memory is the
+whole Mac process resident after the load (all earlier models still loaded), so compare the models with each other, not with a phone.
+
+| Model | Read | Write | First sentence, warm | What it said |
+|---|---|---|---|---|
+| Qwen3-0.6B Q8_0 | 2,690 | 52 | 0.3 to 0.5 s | grounded on pages that have text; echoes the instructions at times ("Show that I understood what the listener asked."); invents on an empty page ("The park closed because it was not in the mail.") |
+| Qwen3.5-0.8B Q4_K_M | 1,671 | 51 | 0.3 to 0.9 s | relevant but wanders ("Today's paper is a newspaper rather than a magazine"), adds off-topic lines and questions to the listener |
+| Qwen3-0.6B Q4_K_M | 2,429 | 59 | 0.15 to 0.4 s | generic filler ("I understand your question, and the front page includes the top stories you mentioned."); little page content |
+| Qwen3-1.7B Q4_K_M | 892 | 30 | 0.4 to 0.5 s | echoes the prompt ("The most useful thing I can truthfully say right now is that ..."), fabricates on an empty page ("the park closed because of maintenance") |
+| LFM3-1.7B QAD-Q4_0 (non-thinking: the prompt ends `<think></think>` per its card) | 897 | 34 | 0.5 to 1.0 s | the most faithful to the page and the only one that says plainly when the page has nothing ("I do not have any information about a park"); but it repeats itself and does not stop (11 to 15 sentences) |
+
+Ladder order follows: Qwen3-0.6B Q8_0 (its file is the one the decision role loads, so no extra weights), Qwen3.5-0.8B, Qwen3-0.6B Q4_K_M,
+Qwen3-1.7B, then LFM3 last before the soft cue only because of its licence; the owner can move it up after reading section 5 of the licence.
