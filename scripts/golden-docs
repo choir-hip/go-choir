@@ -1,0 +1,50 @@
+#!/bin/sh
+# The golden documents through both renderers, compared (Autoradio pass-1 acceptance).
+#
+#   scripts/golden-docs                       run the web spec, run the native test, compare
+#   GOLDEN_NATIVE_DIR=<dir> scripts/golden-docs   compare against native projections already written
+#                                              (on the shared Mac: shared-proof.sh <branch> proof-golden.sh,
+#                                              then point this at the proof's directory)
+#   GOLDEN_SKIP_WEB_BUILD=1                    reuse frontend/dist
+#   GOLDEN_WEB_ONLY=1                          no native run: compare the web projections with the committed
+#                                              internal/texturedoc/golden/expected/ (the native reader's projections,
+#                                              written by the native proof; the web side must match them)
+#
+# Web: pnpm build, vite preview on port 4174, one Playwright spec (frontend/tests/golden-documents.spec.js).
+# Native: mobile/scripts/proof-golden.sh (swift test, AutoradioKit GoldenDocumentsTests; no Exact app build).
+# Compare: scripts/golden-docs-compare.mjs, with internal/texturedoc/golden/known-differences.json.
+# Exit 0 only when the comparison is OK. Details: internal/texturedoc/golden/README.md.
+set -u
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+OUT="${GOLDEN_OUT:-$(mktemp -d "${TMPDIR:-/tmp}/golden-docs.XXXXXX")}"
+export GOLDEN_OUT="$OUT"
+mkdir -p "$OUT"
+echo "golden-docs: output in $OUT"
+PREVIEW_PID=""
+trap '[ -n "$PREVIEW_PID" ] && kill "$PREVIEW_PID" 2>/dev/null' EXIT
+
+cd "$ROOT/frontend" || exit 2
+if [ -z "${GOLDEN_SKIP_WEB_BUILD:-}" ]; then
+  echo "golden-docs: pnpm build"
+  pnpm build > "$OUT/web-build.log" 2>&1 || { tail -20 "$OUT/web-build.log"; echo "GOLDEN FAILED at web build"; exit 1; }
+fi
+pnpm exec vite preview --port 4174 --strictPort > "$OUT/preview.log" 2>&1 &
+PREVIEW_PID=$!
+i=0; until curl -fs http://localhost:4174/ > /dev/null 2>&1; do i=$((i+1)); [ $i -ge 30 ] && { echo "GOLDEN FAILED at preview"; exit 1; }; sleep 1; done
+echo "golden-docs: web spec"
+PLAYWRIGHT_BASE_URL=http://localhost:4174 pnpm exec playwright test tests/golden-documents.spec.js > "$OUT/web-spec.log" 2>&1 \
+  || { tail -30 "$OUT/web-spec.log"; echo "GOLDEN FAILED at web spec"; exit 1; }
+tail -3 "$OUT/web-spec.log"
+
+cd "$ROOT" || exit 2
+NATIVE="${GOLDEN_NATIVE_DIR:-}"
+if [ -n "${GOLDEN_WEB_ONLY:-}" ]; then
+  mkdir -p "$OUT/native" && cp internal/texturedoc/golden/expected/*.json "$OUT/native/" || { echo "GOLDEN FAILED: no expected projections"; exit 1; }
+elif [ -z "$NATIVE" ]; then
+  echo "golden-docs: native test"
+  mobile/scripts/proof-golden.sh > "$OUT/native.log" 2>&1 || { tail -20 "$OUT/native.log"; echo "GOLDEN FAILED at native test"; exit 1; }
+  tail -3 "$OUT/native.log"
+else
+  mkdir -p "$OUT/native" && cp "$NATIVE"/native/*.json "$OUT/native/" || { echo "GOLDEN FAILED: no native projections in $NATIVE/native"; exit 1; }
+fi
+node scripts/golden-docs-compare.mjs "$OUT"

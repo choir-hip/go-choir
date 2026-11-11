@@ -1,0 +1,98 @@
+{
+  "blocks" : [
+    {
+      "kind" : "heading",
+      "level" : 1,
+      "text" : "Plain notes"
+    },
+    {
+      "kind" : "paragraph",
+      "spans" : [
+        {
+          "style" : "strong",
+          "text" : "bold"
+        },
+        {
+          "style" : "emphasis",
+          "text" : "slanted"
+        },
+        {
+          "style" : "code",
+          "text" : "code"
+        }
+      ],
+      "text" : "A paragraph with bold, slanted and code words."
+    },
+    {
+      "kind" : "heading",
+      "level" : 2,
+      "text" : "A list and a table"
+    },
+    {
+      "depth" : 1,
+      "kind" : "list_item",
+      "marker" : "bullet",
+      "text" : "first item"
+    },
+    {
+      "depth" : 1,
+      "kind" : "list_item",
+      "marker" : "bullet",
+      "text" : "second item"
+    },
+    {
+      "depth" : 2,
+      "kind" : "list_item",
+      "marker" : "bullet",
+      "text" : "nested item"
+    },
+    {
+      "depth" : 1,
+      "kind" : "list_item",
+      "marker" : "1.",
+      "text" : "one"
+    },
+    {
+      "depth" : 1,
+      "kind" : "list_item",
+      "marker" : "2.",
+      "text" : "two"
+    },
+    {
+      "depth" : 1,
+      "kind" : "quote",
+      "text" : "A short quotation."
+    },
+    {
+      "kind" : "table",
+      "rows" : [
+        [
+          "Port",
+          "Berths"
+        ],
+        [
+          "North",
+          "12"
+        ],
+        [
+          "South",
+          "8"
+        ]
+      ],
+      "text" : ""
+    },
+    {
+      "kind" : "code",
+      "text" : "fenced code\n  keeps indent"
+    },
+    {
+      "kind" : "rule",
+      "text" : ""
+    },
+    {
+      "kind" : "paragraph",
+      "text" : "The last paragraph."
+    }
+  ],
+  "name" : "markdown-fallback"
+}
