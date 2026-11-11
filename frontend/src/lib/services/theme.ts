@@ -16,7 +16,7 @@
 //  T1 a contributed theme missing a token, with an unsafe value, or below the
 //     contrast gate: refused at registration, the pack's other entries apply;
 //  T2 a theme id equal to a built-in or another pack's: refused, never shadows;
-//  T3 the selected contributed theme is uninstalled: the default is applied
+//  T3 the selected contributed theme is uninstalled: the system default is applied
 //     without persisting, and the choice returns if the pack does;
 //  T4 a theme file the package does not carry: that entry is skipped;
 //  T5 setTheme with an unknown id or an invalid config: { ok: false, errors },
@@ -121,7 +121,7 @@ registerContributionPoint('themes', (pkg, entries, scope) => {
         // The selected theme leaves with its pack: the default shows, the choice is kept (T3).
         if (get(current).id === id) {
           wanted = get(current);
-          host?.apply(DEFAULT_THEME, false);
+          host?.apply(null, false); // no choice: the default for the system colour scheme
         }
       });
       if (wanted && (wanted as any).id === id) {

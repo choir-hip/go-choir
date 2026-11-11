@@ -331,8 +331,131 @@ export const AERO_CHROME_HEART: ChoirTheme = {
   },
 };
 
-export const DEFAULT_THEME = AERO_CHROME_HEART;
-export const THEME_PRESETS = [FUTURISTIC_NOIR, CARBON_FIBER_KINTSUGI, LONDON_SALMON, FRUTIGER_AERO, VECTOR_HEART, LIQUID_METAL, AERO_CHROME_HEART];
+// Chrome Pastel: the light default, vendored from the Library package
+// `chrome-pastel` so a signed-out first paint does not depend on an install.
+// Pinned to package release
+// 417d865607f61f38e3bac7e3464ac1649a03114c965850993e91d9cd009a0670 (manifest
+// 1.0.0, seq 1, published 2026-11-09T20:48:40Z by computer
+// computer-6c50d6e566143ae32cdb660faa60e24d, source tree 97045019c1f7). The
+// values are that release's theme.json verbatim, kept as
+// tests/fixtures/chrome-pastel.theme.json, which theme-default.spec.js compares.
+// The id is the pack's own (chrome-pastel.hybrid) on purpose: the registry
+// refuses a contributed theme whose id a preset holds, so an installed copy of
+// the pack adds no second entry to Settings. To adopt a later release, replace
+// the fixture and these values together and move the pin above.
+export const CHROME_PASTEL: ChoirTheme = {
+  schema_version: THEME_SCHEMA_VERSION,
+  id: 'chrome-pastel.hybrid',
+  name: 'Chrome Pastel',
+  colors: {
+    bg: '#DDEBF5',
+    bg2: '#EAF4FA',
+    panel: '#F7FBFE',
+    panelStrong: '#E3EEF6',
+    panelSoft: 'rgba(250, 253, 255, 0.9)',
+    fg: '#16232E',
+    muted: '#41596B',
+    subtle: '#647A8A',
+    accent: '#1F6E8C',
+    accent2: '#2F6F8F',
+    success: '#146B4A',
+    warning: '#7A4A00',
+    danger: '#9C2440',
+    onDanger: '#FFFFFF',
+    border: 'rgba(31, 110, 140, 0.18)',
+    borderStrong: 'rgba(31, 110, 140, 0.42)',
+    inputBg: 'rgba(255, 255, 255, 0.92)',
+    selected: 'rgba(31, 110, 140, 0.16)',
+    onAccent: '#FFFFFF',
+    promptSurfaceBg: 'linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(214, 236, 248, 0.88) 52%, rgba(196, 224, 240, 0.92))',
+    sheetBg: 'linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(228, 242, 250, 0.96) 46%, rgba(206, 231, 244, 0.97))',
+    controlBg: 'rgba(255, 255, 255, 0.9)',
+    tetramarkColor: '#14495E',
+    fieldEdge: 'rgba(31, 110, 140, 0.2)',
+    fieldNodeFar: 'rgba(100, 122, 138, 0.5)',
+    fieldNodeMid: 'rgba(31, 110, 140, 0.62)',
+    fieldNodeNear: 'rgba(20, 73, 94, 0.88)',
+    fieldHalo: 'rgba(31, 110, 140, 0.06)',
+    deskTexture: '#1F6E8C',
+    deskManagement: '#2F6F8F',
+    deskEngineering: '#146B4A',
+    deskResearch: '#7A4A00',
+    chart1: '#1F6E8C',
+    chart2: '#2F6F8F',
+    chart3: '#146B4A',
+    chart4: '#7A4A00',
+    chart5: '#9C2440',
+  },
+  radii: {
+    controlSm: '13px',
+    control: '19px',
+    panel: '25px',
+    sheet: '31px',
+    pill: '28px',
+  },
+  motion: {
+    fast: '120ms ease',
+    sheet: '260ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+    durationFast: '120ms',
+    durationSheet: '260ms',
+    durationEntrance: '1000ms',
+    durationExit: '700ms',
+    durationWindowOpen: '340ms',
+    durationWindowClose: '200ms',
+    ease: 'cubic-bezier(0.16, 1, 0.3, 1)',
+    easeIn: 'cubic-bezier(0.7, 0, 0.84, 0)',
+    easeSpring: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+    easeDrift: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)',
+  },
+  layout: {
+    promptSurfacePlacement: 'bottom',
+    promptSurfaceMinHeight: '56px',
+    deskSheetHeight: '56dvh',
+  },
+  fonts: {
+    ui: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    display: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    mono: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+  },
+  effects: {
+    blur: '18px',
+    texture: 'aero-metal',
+    shadowSoft: '0 14px 34px rgba(18, 52, 74, 0.16), 0 0 0 1px rgba(255, 255, 255, 0.55) inset',
+    shadowFloating: '0 24px 64px rgba(18, 52, 74, 0.22), 0 0 34px rgba(47, 111, 143, 0.16)',
+    shadowGlow: '0 0 32px rgba(63, 143, 176, 0.22)',
+    controlShadow: '0 8px 20px rgba(18, 52, 74, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.9)',
+  },
+};
+
+// The defaults follow the system colour scheme for an owner who has not chosen
+// a theme: light shows Chrome Pastel, dark shows Liquid Metal. An owner's saved
+// choice always wins and is never rewritten by this rule.
+export const DEFAULT_LIGHT_THEME = CHROME_PASTEL;
+export const DEFAULT_DARK_THEME = LIQUID_METAL;
+/** The static fallback: the light default. Where the scheme is known, use systemDefaultTheme(). */
+export const DEFAULT_THEME = DEFAULT_LIGHT_THEME;
+export const THEME_PRESETS = [FUTURISTIC_NOIR, CARBON_FIBER_KINTSUGI, LONDON_SALMON, FRUTIGER_AERO, VECTOR_HEART, LIQUID_METAL, AERO_CHROME_HEART, CHROME_PASTEL];
+
+export type ColorScheme = 'light' | 'dark';
+
+/** The default theme for a colour scheme. */
+export function defaultThemeForScheme(scheme: ColorScheme): ChoirTheme {
+  return scheme === 'dark' ? DEFAULT_DARK_THEME : DEFAULT_LIGHT_THEME;
+}
+
+/** The system colour scheme; light where it cannot be read (no window, no matchMedia), so the answer is deterministic. */
+export function systemColorScheme(env: { matchMedia?: (query: string) => { matches: boolean } } = globalThis as any): ColorScheme {
+  try {
+    return env.matchMedia?.('(prefers-color-scheme: dark)')?.matches ? 'dark' : 'light';
+  } catch {
+    return 'light';
+  }
+}
+
+/** The theme an owner who has not chosen one sees now. */
+export function systemDefaultTheme(env?: Parameters<typeof systemColorScheme>[0]): ChoirTheme {
+  return defaultThemeForScheme(systemColorScheme(env));
+}
 
 // The theme registry (slice S5): the built-in presets above, plus the themes
 // packs contribute (contributes.themes; services/theme.ts registers them).
@@ -400,7 +523,7 @@ function mergeStringGroup(baseGroup: Record<string, string>, candidate: unknown)
 
 export function normalizeThemeConfig(theme: unknown = DEFAULT_THEME): ChoirTheme {
   if (!isTheme(theme) || theme.schema_version !== THEME_SCHEMA_VERSION || !theme.id || !isKnownThemeId(theme.id)) {
-    return DEFAULT_THEME;
+    return systemDefaultTheme();
   }
   const preset = presetFor(theme.id) || DEFAULT_THEME;
   const placement = theme.layout?.promptSurfacePlacement === 'top' ? 'top' : preset.layout.promptSurfacePlacement;
