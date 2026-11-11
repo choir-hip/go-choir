@@ -384,7 +384,7 @@ stages and measures them by replay):
 | M3. Voices and words | Phonon, Kokoro; the text-defined and trained word spotters; the word test bench |
 | P. Playback | one seekable timeline of speech and clips, Now Playing, lock-screen controls, the two audio states |
 | S. Server | what lane A finds missing: the edition as a document for the ear, a turn as a prompt at a place in it, revisions streamed to the phone, Jev for the phone, turn records and their settlement |
-| O. Onboarding and the edition | voice onboarding, then a hands-free conversation about interests that writes the listener's edition Texture; the desk builds each programme from it (owner, 2026-11-10; [turns note](../design/autoradio-turns-2026-11-10.md), "The edition is a document") |
+| O. Onboarding and the edition | voice onboarding (download and configure the voice and audio models, verify on the device, fall back; owner, 2026-11-11), then a fully hands-free, interruptible conversation on the existing turn engine about interests that writes the listener's edition Texture; the desk builds each programme from it (owner, 2026-11-10; [turns note](../design/autoradio-turns-2026-11-10.md), "The edition is a document") |
 | R. Pages | the documents drawn natively |
 
 **Wave C:** the owner's QA; then narrowing.

@@ -38,9 +38,11 @@ Autoradio is the listener's paper, radio and computer in one phone app.
   are where pages are found.
 - **Paper is a composed front page**, laid out from data by the edition's
   weights, headline lengths and clusters, not one fixed template.
-- **First run is a conversation.** Sign in, a short voice onboarding, then a
-  hands-free interview about the listener's interests that writes their
-  edition as a Texture they can read and change; then the front page and
+- **First run is setup, then a conversation.** Sign in; voice setup
+  (download the audio models, check them on this phone, fall back where
+  needed); then a fully hands-free, interruptible interview about the
+  listener's interests, with how Choir works said in passing, that writes
+  their edition as a Texture they can read and change; then the front page and
   the first story playing.
 - **Themes are data.** One theme format for the web and the phone, depth
   and motion included; a theme can be a Texture.
@@ -78,9 +80,11 @@ modular data, one format for web and phone, a theme can be a Texture.
 entities, with no conversation; whether swipe left shades away is open
 (question 6). 15. The front page stays a composed page of many stories, and
 layout should get more dynamic; a one-at-a-time stack is an extra mode.
-16. Onboarding is in this build: voice onboarding, then a hands-free voice
-interview (text in grey) that creates the edition and explains how Choir
-works. 17. Visual pop and motion: the TetraMark spins in 3D, grows and
+16. Onboarding is in this build: voice onboarding (meaning: download and
+configure the voice and audio models, verify them on the device, fall
+back), then a fully hands-free, interruptible voice interview (text in
+grey) on the existing turn engine that creates the edition and explains
+how Choir works in passing. 17. Visual pop and motion: the TetraMark spins in 3D, grows and
 shrinks; waiting for AI should feel alive. 18. Build the whole thing at
 once with parallel builders, about 85%, then review and iterate.
 
@@ -443,7 +447,14 @@ exist.
 the pile, the player and the source panel are authored layers rather than
 UIKit sheets, because the bar must stay above them.
 
-## 2. First run: sign in, voice onboarding, the interview, the edition
+## 2. First run: sign in, voice setup, the interview, the edition
+
+Owner correction, 2026-11-11: "By voice onboarding I mean configure all of
+the voice and audio models": download them, make sure they work on this
+device, and fall back where they do not. Introducing the app by voice is
+not a separate step; it belongs inside the interview. "Nobody wants a
+lecture ... if we make it interactive, then we can intersperse the
+explanation in the interview."
 
 ### The path
 
@@ -451,9 +462,10 @@ UIKit sheets, because the bar must stay above them.
  Paper front page (signed out, real stories, playable)
    └─ "Make it yours" on the bar, or any act that needs the computer
        → Sign in (device flow, browser approval)            ~30 s
-       → Voice onboarding: microphone, hear and be heard,
-         how to talk, how to interrupt                       ~60 s
-       → The interview: hands-free, about interests          3 to 6 min
+       → Voice setup: download the models for this phone,
+         check each one works here, fall back where not      minutes, mostly waiting
+       → The interview: hands-free, about interests, with
+         how the radio and Choir work taught along the way   3 to 6 min
        → The edition is written (the desk; the alive wait)   ~15 s
        → The edition shown as a Texture; then the front page,
          re-ranked, and the first story playing
@@ -466,42 +478,100 @@ every step and leaves the listener on the front page with the default
 edition (all sections); the Textures place then shows a card "Make your
 edition" (the entry lane O asked for).
 
-### Voice onboarding (about a minute)
+### Voice setup (configuring the voice and audio models)
 
-Spoken by the on-device voice, the same words on screen as a page of large
-type, the TetraMark in the bar showing each state. "Type instead" sits in
-grey at the bar's trailing edge throughout.
+The job: end with a working set of on-device models for this phone, one
+per stage (speech bounds, transcription, the fast decision, the voice,
+later the word spotter and speaker check), each checked on this device,
+and written as the listener's configuration (the same data Components
+shows). Nothing here explains the product.
 
-1. **Hello.** "I'm your radio. I read you the news and you can talk back.
-   I'll show you how in a minute."
-2. **Microphone, asked in context.** "To hear you I need the microphone.
-   What you say stays on this phone as sound; only the words go to your
-   computer." Then the system prompt. Refused: "That's fine. You can type
-   to me, and turn the microphone on later in Settings." The rest runs in
-   text.
-3. **It hears you.** "Say anything: your name, or what you had for
-   breakfast." The mark grows with the input level and the words appear as
-   they are recognised. Words heard: "Got it: '…'." Eight seconds of
-   silence: "I didn't hear anything. Hold the button and speak, or type."
-   Level without words (noise): "It's noisy where you are. Hold the button
-   while you talk."
-4. **You hear it.** "Can you hear me all right?" with the output route
-   named ("Playing on AirPods"). A yes or a tap goes on; no or silence
-   shows the volume and route controls.
-5. **How to talk.** In the talk mode in force (button by default): "When
-   you want to say something, hold this," and the mark pulses. "Try it: hold
-   and say hello."
-6. **How to interrupt.** "I'll read you a few lines. Cut in any time by
-   holding the button." It reads the lead story's first paragraph; the
-   listener interrupts; "That's how you cut in. Now, about you."
+1. **Pick the set for this phone.** From the model table
+   (`ModelStore`), by chip and memory: the recommended implementation of
+   each stage, its download size and its fallback. The page says the total
+   plainly before anything downloads ("About 1.4 GB. On Wi-Fi this takes a
+   few minutes.") and asks before using mobile data.
+2. **Download with honest progress.** One row per model: name in plain
+   words ("Hearing you", "The voice"), size, a real progress bar, done or
+   failed. Downloads resume, continue in the background, and survive the
+   app closing. The models lane found the library's downloader can stall
+   silently for many minutes; a row that makes no progress says so and
+   offers retry or the fallback. The TetraMark carries the wait.
+3. **The listener is not held here.** The paper is readable and playable
+   during setup with what is already on the phone (the system voice,
+   Apple's recogniser where the phone has it). Setup runs as a card that
+   can be left and returned to; the bar shows its progress.
+4. **Check each model on this device.** After a model loads, a self-test
+   with a bundled clip and a fixed phrase: does it load within its memory
+   budget, how fast is it (real-time factor or milliseconds per decision),
+   is its output right (the transcriber returns the known sentence; the
+   voice produces audio of the expected length; the decision model answers
+   two fixed questions as the reference does). First load compiles the
+   model and can take tens of seconds; the row says "Preparing" rather than
+   looking hung. The numbers are kept as a record on the listener's
+   computer: they are the per-device measurements the project lacks.
+5. **Fall back, per stage, without asking.** A model that fails to
+   download, load or pass its check is replaced by the next in its ladder,
+   ending in something that always exists:
+   - transcription: the larger on-device model, then the smaller, then
+     Apple's recogniser;
+   - the voice: the chosen on-device voice, then a lighter one, then the
+     system voice;
+   - the fast decision: the on-device model, then System 1 through the
+     listener's computer (the default until an on-device one is proven);
+   - speech bounds: the model, then the energy detector.
+   The page states the result in one line per stage and marks any fallback,
+   with "Try again" beside it.
+6. **The microphone, asked here, in context.** The hearing check needs it:
+   "To check I can hear you I need the microphone. What you say stays on
+   this phone as sound; only the words go to your computer." Then one live
+   check: "Say anything." The level moves, the words appear. Refused or
+   silent: setup finishes with the bundled clip alone, talk falls back to
+   typing, and Settings can turn the microphone on later. A hearing check
+   through the current output route ("Playing on AirPods"; "Can you hear
+   this?") closes the step.
+7. **Later changes are the same screen.** A new model, a changed phone or a
+   failed model reopens this card from Settings → Components; nothing about
+   setup is first-run only.
+
+How to talk and how to interrupt are not taught here. The interview
+teaches them by doing: its first exchange is the listener's first turn, and
+the first time the radio reads something back it invites the listener to
+cut in.
 
 ### The interview (three to six minutes)
 
-Hands-free: after each question the radio opens a listening window (the
-hybrid mode's window, voice modes note) so the listener just answers; end
-of turn is detected, no button needed. The grey "Type instead" stays. The
-interviewer keeps each line short and spends one sentence, in passing, on
-how Choir works.
+Owner, 2026-11-11: "We need to do the full hands-free audio ... we have to
+enable interruptions from the get-go. The user can always interrupt the
+agent, and that's important because then the agent will reframe their
+question based off the user's interruption." And: no special agent loop for
+onboarding; "we should just reuse what we already have."
+
+So the interview is the radio's own conversation, fully open:
+
+- **The microphone is open for the whole interview.** No listening window
+  after each question and no button. Speech bounds and end of turn are
+  detected; the talk-mode setting (button, word, open) is chosen after
+  onboarding and does not apply here.
+- **The listener can interrupt at any moment**, mid-question included. The
+  voice stops, the turn is taken, and the next line answers what was said:
+  the question is reframed, dropped or replaced. This is the same
+  interruption design as Mike's (the owner's reference) and the same
+  yielding rule the radio uses during a programme.
+- **It is the existing turn engine, not a new one.** The interview is a
+  programme whose document is the interview Texture and whose "script" is
+  the question bank. The session coordinator, the System 1 questions, the
+  holding voice and the desk are the ones the radio already uses. Nothing
+  interview-specific is built below the bank and its questions.
+- The grey "Type instead" stays. Each line is short, and one sentence here
+  and there, in passing, says how Choir works. It is an interview about
+  the listener, never a lecture.
+
+Open interruption needs the phone not to hear itself: echo cancellation
+(voice processing) on the speaker, or headphones. Voice setup has already
+measured which this phone and route can do; where the speaker route cannot
+hold it, the interview says so and asks for headphones or offers typing,
+rather than falling back to a button.
 
 | # | Question (the bank's default wording) | Branches (System 1 decides) | How Choir works, in passing |
 |---|---|---|---|
@@ -549,7 +619,7 @@ re-ranks by it and the first story plays.
 | Case | What happens |
 |---|---|
 | Silence after a question | reprompt once ("Take your time; or say skip"); then "Type instead" grows from grey to full; then the question is skipped |
-| Noise | "It's noisy here. Hold the button while you answer." The window closes; the button works |
+| Noise, or the radio hearing itself | "It's noisy here. Headphones will help, or type instead." The microphone stays open on headphones; typing otherwise |
 | Microphone refused | the whole interview runs in the bar as text with the same questions |
 | "Skip for now" | default edition; the card "Make your edition" in the Textures place |
 | The desk fails to write | the interview document is kept; "I couldn't write your edition just now. I'll keep what you said." and a Retry; the default edition meanwhile |
@@ -1103,7 +1173,7 @@ theme switches light, dark and Newsprint, and demo mode serves a fixture.
 | **5. Files and viewers** | `files.contract`, `viewers.contract`, `members-files.contract`, `Kit/ChoirFiles.swift`, `Kit/Epub.swift`, package views `PDFPage.swift`, `QuickLookPage.swift` | page host, `PageSource` | browse folders, open text in the reader, image, video, audio and PDF pages, an EPUB as blocks, Quick Look for the rest; upload, rename, delete | must: browse and open every type / rough: PDF search, EPUB tables and images, image zoom | none |
 | **6. Mail** | `mail.contract`, `members-mail.contract`, `Kit/ChoirMail.swift`, package view `MailOriginal.swift` | page host, `PageSource` | inbox and folders, a message as a page, reply and compose as drafts, attachments, the approval link | must: read, draft, attach / rough: original HTML view, threading | send and digest accepted from a key |
 | **7. Settings, themes, accounts** | `settings.contract`, `members-settings.contract`, `Kit/ThemeLoader.swift`, `mobile/themes/*.json`, `Kit/Accounts.swift`; restyles the integrator's Components and Trace (their files stay theirs) | theme loader, page host | themes listed and switched (and loaded from a Texture in demo mode); accounts and devices; talk mode; Computer (status, Wake, Restart to update); What the paper has learned; gesture meanings as components | must: themes, account, sign out, Computer / rough: theme from a Texture on staging | bearer "who am I"; `GET /api/texture/theme` |
-| **8. Onboarding and the interview** | `onboarding.contract`, `members-onboarding.contract`, `Kit/Interview.swift`, `mobile/interview/questions.md` (the default bank) | bar, page host, the integrator's engine, lane 3's reader for the edition page | sign-in presented; the voice onboarding; the interview by voice and by text in demo mode; the edition written (demo) and shown; then the front page and a story playing | must: the whole path and its recoveries / rough: question wording, read-back phrasing | edition marker; the bank as a desk package document (later) |
+| **8. Onboarding and the interview** | `onboarding.contract`, `members-onboarding.contract`, `Kit/Interview.swift`, `mobile/interview/questions.md` (the default bank) | bar, page host, the integrator's engine, lane 3's reader for the edition page | sign-in presented; voice setup (model download, per-device checks, fallbacks; with lane M's `ModelStore`); the open-microphone, interruptible interview on the integrator's turn engine, by voice and by text in demo mode; the edition written (demo) and shown; then the front page and a story playing | must: the whole path and its recoveries / rough: question wording, read-back phrasing | edition marker; the bank as a desk package document (later) |
 | **9. Motion and the mark** | `mark.contract`, the canvas `draw` in `app.ts` (its own module `mark.ts`), motion tokens in the themes | bar shell (the voice button), theme loader | the 3D mark in every state; the alive wait with real lifecycle lines in demo mode; card physics tuned; the front page composing; Reduce Motion | must: the mark in all states, the wait / rough: syllable sync, GPU path | lifecycle progress detail (if missing) |
 | **S. Server** (Go, its own branch, ring rules, Ring-Expedite per CLAUDE.md) | `internal/platform` (entities on front and bundle), `internal/textureowner` (theme route, edition marker, block-addressed prompt, `request_id` on version events), `internal/auth` (bearer "who am I"), `internal/proxy/email.go` (owner act from a key) | none | each route deployed on staging with its own acceptance check | must: entities, who-am-I, theme route / later: mail owner act (red: auth) | itself |
 
@@ -1142,10 +1212,11 @@ deck and the front page; then a second, smaller fan-out for what is rough.
    (a) and (b) can be tried and compared from the gesture events
    (section 1). The learned preferences live in a Texture beside the
    edition ("What I've told the paper") either way.
-7. **Hands-free during the interview.** Recommend opening a listening window
-   after each interview question even when the talk mode is the button, so
-   the interview needs no hands; the talk mode in force applies from the end
-   of the interview.
+7. **Hands-free during the interview.** Settled by the owner, 2026-11-11:
+   the microphone is open for the whole interview and the listener can
+   interrupt at any time; the talk mode is chosen after onboarding. What
+   stays open is the speaker route: whether echo cancellation on this phone
+   is good enough for open interruption without headphones (to measure).
 
 Settled in this note unless the owner objects: the front page is composed
 on the client from a layout document, with ranking on the server and the
