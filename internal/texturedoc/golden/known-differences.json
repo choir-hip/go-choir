@@ -1,0 +1,23 @@
+{
+ "about": "Every known difference between the web and native renderers on the golden documents. key: web#i is the i-th web block, native#j the j-th native block, .field the differing field. side: which renderer departs from the format or the other renderer (web, native) or by-design. A difference not listed here fails scripts/golden-docs; an entry that stops matching also fails, so the list cannot rot.",
+ "differences": [
+  {
+   "doc": "edge-shapes",
+   "key": "web#0",
+   "side": "by-design",
+   "reason": "native drops a first heading equal to the page title because the native page draws the headline itself (TextureDoc.swift failure item 13); web draws it. The title is page chrome, so this is an agreed difference unless web also drops it"
+  },
+  {
+   "doc": "edge-shapes",
+   "key": "web#1",
+   "side": "by-design",
+   "reason": "an empty or whitespace-only paragraph is valid in the schema. The web draws an empty <p>, which has no height in the reader and which the editor needs (an owner's blank line must hold the cursor and round-trip); native drops it from the reading model. Both read the same page, so this is left as a difference of model, not of look"
+  },
+  {
+   "doc": "edge-shapes",
+   "key": "web#2",
+   "side": "by-design",
+   "reason": "an empty or whitespace-only paragraph is valid in the schema. The web draws an empty <p>, which has no height in the reader and which the editor needs (an owner's blank line must hold the cursor and round-trip); native drops it from the reading model. Both read the same page, so this is left as a difference of model, not of look"
+  }
+ ]
+}

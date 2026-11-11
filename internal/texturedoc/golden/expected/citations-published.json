@@ -1,0 +1,35 @@
+{
+  "blocks" : [
+    {
+      "cites" : [
+        {
+          "check" : "exact",
+          "n" : 1,
+          "quote" : "The council approved the budget on Tuesday.",
+          "title" : "Budget statement"
+        }
+      ],
+      "kind" : "paragraph",
+      "text" : "The council approved the budget[1]."
+    },
+    {
+      "cites" : [
+        {
+          "check" : "failed",
+          "n" : 2,
+          "quote" : "Ridership rose four percent in the quarter.",
+          "title" : "Ridership figures"
+        },
+        {
+          "check" : "pending",
+          "n" : 1,
+          "quote" : "The council approved the budget.",
+          "title" : "Budget statement"
+        }
+      ],
+      "kind" : "paragraph",
+      "text" : "Ridership rose[2] while the budget passed[1]."
+    }
+  ],
+  "name" : "citations-published"
+}

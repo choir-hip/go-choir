@@ -1,0 +1,186 @@
+{
+ "golden": {
+  "name": "non-latin",
+  "note": "",
+  "covers": [
+   "text:non-latin",
+   "text:rtl",
+   "text:combining",
+   "text:emoji-zwj",
+   "text:cjk-no-spaces",
+   "inline:source_ref-after-non-latin"
+  ],
+  "checks": false,
+  "validate": "texture"
+ },
+ "route": {
+  "path": "/pub/texture/golden-non-latin",
+  "bare": "golden-non-latin",
+  "permalink": "golden-non-latin/v1"
+ },
+ "publication": {
+  "title": "Many scripts",
+  "kind": "document"
+ },
+ "version": {
+  "id": "pubver-non-latin",
+  "number": 1,
+  "published_at": "2026-11-10T06:00:00Z"
+ },
+ "nav": {
+  "revision": 1,
+  "latest": 1,
+  "current": 1,
+  "prev": 0,
+  "next": 0
+ },
+ "artifact": {
+  "content": "",
+  "body_doc": {
+   "schema": "choir.texture_doc.v1",
+   "doc": {
+    "type": "doc",
+    "attrs": {
+     "id": "g-scripts"
+    },
+    "content": [
+     {
+      "type": "heading",
+      "attrs": {
+       "id": "h1",
+       "level": 2
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Заголовок на русском языке"
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p1"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "潮の満ち引きは月の引力によって起こります。港の朝はいつも静かです。"
+       },
+       {
+        "type": "text",
+        "text": "漁師たちは網を確かめ",
+        "marks": [
+         {
+          "type": "strong"
+         }
+        ]
+       },
+       {
+        "type": "text",
+        "text": "、海に出ます。"
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p2"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "المد والجزر يحدثان بسبب جاذبية القمر. يستيقظ الميناء مبكراً."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p3"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "समुद्र का ज्वार चंद्रमा के खिंचाव से आता है। बंदरगाह सुबह शांत रहता है।"
+       },
+       {
+        "type": "source_ref",
+        "attrs": {
+         "id": "r1",
+         "source_entity_id": "src_a",
+         "display_mode": "numbered_ref"
+        }
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p4"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Combining marks: é (e + acute), ñ (n + tilde), and precomposed é ñ. Zero-width joiner family: 👩‍👩‍👧. Flag: 🇯🇵."
+       }
+      ]
+     },
+     {
+      "type": "blockquote",
+      "attrs": {
+       "id": "q1"
+      },
+      "content": [
+       {
+        "type": "paragraph",
+        "attrs": {
+         "id": "q1a"
+        },
+        "content": [
+         {
+          "type": "text",
+          "text": "한국어 인용문은 공백으로 단어를 나눕니다. Mixed English and 日本語 together."
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ "payload": {},
+ "checks": {
+  "citations": []
+ },
+ "source_entities": [
+  {
+   "source_entity_id": "src_a",
+   "entity": {
+    "source_entity_id": "src_a",
+    "target": {
+     "kind": "web_url",
+     "uri": "https://example.com/潮"
+    },
+    "selectors": [
+     {
+      "kind": "whole_resource"
+     }
+    ],
+    "display": {
+     "mode": "numbered_ref",
+     "title": "潮の資料"
+    },
+    "evidence": {
+     "state": "available",
+     "open_surface": "source"
+    },
+    "provenance": {
+     "created_by": "golden"
+    }
+   }
+  }
+ ],
+ "transclusions": []
+}

@@ -1,0 +1,44 @@
+{
+  "blocks" : [
+    {
+      "kind" : "heading",
+      "level" : 2,
+      "text" : "Заголовок на русском языке"
+    },
+    {
+      "kind" : "paragraph",
+      "spans" : [
+        {
+          "style" : "strong",
+          "text" : "漁師たちは網を確かめ"
+        }
+      ],
+      "text" : "潮の満ち引きは月の引力によって起こります。港の朝はいつも静かです。漁師たちは網を確かめ、海に出ます。"
+    },
+    {
+      "kind" : "paragraph",
+      "text" : "المد والجزر يحدثان بسبب جاذبية القمر. يستيقظ الميناء مبكراً."
+    },
+    {
+      "cites" : [
+        {
+          "n" : 1,
+          "quote" : "",
+          "title" : "潮の資料"
+        }
+      ],
+      "kind" : "paragraph",
+      "text" : "समुद्र का ज्वार चंद्रमा के खिंचाव से आता है। बंदरगाह सुबह शांत रहता है।[1]"
+    },
+    {
+      "kind" : "paragraph",
+      "text" : "Combining marks: é (e + acute), ñ (n + tilde), and precomposed é ñ. Zero-width joiner family: 👩‍👩‍👧. Flag: 🇯🇵."
+    },
+    {
+      "depth" : 1,
+      "kind" : "quote",
+      "text" : "한국어 인용문은 공백으로 단어를 나눕니다. Mixed English and 日本語 together."
+    }
+  ],
+  "name" : "non-latin"
+}

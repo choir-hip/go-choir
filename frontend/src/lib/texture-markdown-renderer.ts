@@ -54,8 +54,8 @@ export function renderMarkdownBlocks(value: unknown, sourceEntities: any[] = [],
   const lines = normalized.split(/\r?\n/);
   const blocks: string[] = [];
   let paragraph: string[] = [];
-  let unordered: string[] = [];
-  let ordered: string[] = [];
+  // List lines in reading order, each with its nesting depth (1 + indent / 2, as the native reader reads them) and kind.
+  let listItems: { depth: number; ordered: boolean; text: string }[] = [];
   let quote: string[] = [];
   let table: string[] = [];
   let code: string[] = [];
@@ -71,15 +71,30 @@ export function renderMarkdownBlocks(value: unknown, sourceEntities: any[] = [],
     paragraph = [];
   }
 
+  // A deeper line opens a list inside the open item; a shallower one closes lists; a change of kind at one depth starts a new list.
   function flushLists() {
-    if (unordered.length > 0) {
-      blocks.push(`<ul>${unordered.map((item) => `<li>${inline(item)}</li>`).join('')}</ul>`);
-      unordered = [];
+    if (listItems.length === 0) return;
+    let html = '';
+    const open: { depth: number; ordered: boolean }[] = [];
+    const tag = (ordered: boolean) => (ordered ? 'ol' : 'ul');
+    const close = () => {
+      const top = open.pop()!;
+      html += `</li></${tag(top.ordered)}>`;
+    };
+    for (const item of listItems) {
+      while (open.length > 0 && open[open.length - 1].depth > item.depth) close();
+      const top = open[open.length - 1];
+      if (top && top.depth === item.depth && top.ordered === item.ordered) {
+        html += `</li><li>${inline(item.text)}`;
+        continue;
+      }
+      if (top && top.depth === item.depth) close(); // the same depth, the other kind: a new list
+      open.push({ depth: item.depth, ordered: item.ordered });
+      html += `<${tag(item.ordered)}><li>${inline(item.text)}`;
     }
-    if (ordered.length > 0) {
-      blocks.push(`<ol>${ordered.map((item) => `<li>${inline(item)}</li>`).join('')}</ol>`);
-      ordered = [];
-    }
+    while (open.length > 0) close();
+    blocks.push(html);
+    listItems = [];
   }
 
   function flushQuote() {
@@ -138,6 +153,13 @@ export function renderMarkdownBlocks(value: unknown, sourceEntities: any[] = [],
       continue;
     }
 
+    // A thematic break: three or more of -, * or _ alone on a line (the native reader's rule).
+    if (/^([-*_])(\s*\1){2,}$/.test(trimmed)) {
+      flushAll();
+      blocks.push('<hr>');
+      continue;
+    }
+
     const heading = trimmed.match(/^(#{1,4})\s+(.+)$/);
     if (heading) {
       flushAll();
@@ -154,23 +176,15 @@ export function renderMarkdownBlocks(value: unknown, sourceEntities: any[] = [],
       continue;
     }
 
+    const indent = line.match(/^[ \t]*/)![0].replace(/\t/g, '    ').length;
+    const depth = 1 + Math.floor(indent / 2);
     const bullet = trimmed.match(/^[-*]\s+(.+)$/);
-    if (bullet) {
+    const numbered = bullet ? null : trimmed.match(/^\d+\.\s+(.+)$/);
+    if (bullet || numbered) {
       flushParagraph();
       flushQuote();
       flushTable();
-      ordered = [];
-      unordered.push(bullet[1]);
-      continue;
-    }
-
-    const numbered = trimmed.match(/^\d+\.\s+(.+)$/);
-    if (numbered) {
-      flushParagraph();
-      flushQuote();
-      flushTable();
-      unordered = [];
-      ordered.push(numbered[1]);
+      listItems.push({ depth, ordered: !bullet, text: (bullet || numbered)![1] });
       continue;
     }
 
