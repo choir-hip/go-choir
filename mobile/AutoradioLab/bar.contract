@@ -1,25 +1,24 @@
-// The bar: one glass capsule floating over the bottom of every page (plan section 1). Lane 1 owns this file.
-// Three zones: pages button (leading), the centre that changes with the bar's state (BarInfo.state), the voice button
-// (trailing: tap plays or pauses, hold 350 ms talks). It floats: bottom 8 pt above the home indicator, 12 pt in from
-// the sides, no border, no strip beneath it; the page runs full-bleed under it and shows through the glass.
+// The bar (round 3, owner rulings 21 and 22): a glass lens at the bottom of the screen, always visible and usable on every page, in
+// onboarding and with the launcher or the player open. It is not a floating capsule: it spans the full width, overlaps the page
+// (which scrolls full bleed underneath and shows through the glass), covers the bottom safe area and runs off the bottom edge;
+// only its top corners are rounded. With the keyboard up it rides on top of the keyboard (`interactive-widget` on the root).
 //
-// States (BarInfo.state, from BarState.swift) and what the centre shows:
-//   idle       the aim ("Ask about this page…", "Reply to <sender>…", "Edit <title>…") as the Ask field; on the setup page the
-//              state of setup or of the interview (listening / speaking / paused) instead of a field (bar-setup)
-//   playing    NOW PLAYING and the title; hairline progress rule; swipe left/right: next/previous; tap: the player
-//   paused     PAUSED and the title; tap: the player
-//   listening  the mic is open (open mode heard something): "Listening…", a pulsing ring on the voice button
-//   talking    the listener's words as heard (italic, up to three lines, the bar grows upward); and, when the
-//              programme yields, "Radio lowered/paused while you speak"
-//   heard      the words set in roman
-//   holding    the holding line, a dashed ring turning on the voice button
-//   revised    "Revised · Show" for 6 s, tap: the player
-//   error      one plain sentence for 4 s, danger ring
-//   typing     (the field has the keyboard) the aim line above the field, Send in place of the voice button
-// Motion is declarative: height, tint and content enter with transitions and keyframes, all off under Reduce Motion.
-// testIds: bar, bar-pages, bar-pages-count, bar-field, bar-aim, bar-text, bar-yield, bar-voice, bar-send, bar-progress.
+// Explicit controls, no hidden gestures (no hold, no drag):
+//   the mark       tap opens and closes the launcher (the web's button). One job.
+//   the field      "Ask about this page...", aimed at the page in front (its address goes with the turn).
+//   the microphone tap to start talking, tap again to send (the lens says "Listening" plainly while it is open).
+//   play / pause   the radio; when nothing is loaded it starts the edition.
+// A line above the controls says what is going on: what is loaded when something plays or is paused (tap: the player), the
+// words as heard, the holding line, a revision, an error, the setup state, or the aim while typing. A quiet count
+// ("Story · 7 in the deck") sits just above the lens. The launcher and the player rise from the lens, as sheets
+// above it, so the bar stays visible and usable under them.
+// testIds: bar-stack, bar, bar-mark, bar-field, bar-mic, bar-send, bar-play, bar-text, bar-aim, bar-setup, bar-yield, bar-progress,
+// page-indicator.
 use Theme, PageList, BarInfo, RadioInfo, ReaderAimInfo, Onboarding, MailMessageView from "@choir/autoradio"
 use Mark from "./mark.contract"
+use Launcher from "./launcher.contract"
+use PlayerLayer from "./player.contract"
+use StackVp from "./ui.contract"
 
 keyframes barRise
   from opacity=0 translate="0px 6px"
@@ -30,6 +29,32 @@ keyframes barSpin
   to rotate="360deg"
 keyframes barBlink
   50% opacity=0.25
+keyframes sheetUp
+  from opacity=0 translate="0px 40px"
+
+// A control of the row: a glyph above a one-word caption, so each says what it will do.
+component BarGlyph
+  inject
+    th: Theme
+  props
+    glyph: string
+    caption: string
+    on: bool
+  view
+    column align-items="center" justify-content="center" gap=1 width=52 height=48
+      row width=34 height=28 border-radius=14 align-items="center" justify-content="center"
+        background-color=(on ? th.accent : "transparent")
+        if glyph == "mic"
+          image "symbol:microphone" color=(on ? th.onAccent : th.fg)
+        if glyph == "stop"
+          image "symbol:stop-fill" color=(on ? th.onAccent : th.fg)
+        if glyph == "play"
+          image "symbol:play-fill" color=(on ? th.onAccent : th.fg)
+        if glyph == "pause"
+          image "symbol:pause-fill" color=(on ? th.onAccent : th.fg)
+        if glyph == "send"
+          image "symbol:send" color=(on ? th.onAccent : th.fg)
+      text caption font-family=th.fontUi font-size=10 font-weight=600 color=(on ? th.accent : th.muted)
 
 component BarShell
   inject
@@ -40,122 +65,141 @@ component BarShell
     raim: ReaderAimInfo
     ob: Onboarding
     mmsg: MailMessageView
+    vp: StackVp
+    layer: string
     typing: bool
     ask: string
+    micOn: bool
+    onbd: bool
+    stackCount: number
+    frontName: string
+    frontKind: string
     editAsk: action
     sendAsk: action
-    togglePile: action
-    pullBar: action
-    pullEnd: action
-    voiceDown: action
-    voiceUp: action
-    showLayer: action
+    micTap: action
+    radioPlay: action
+    toggleLauncher: action
+    hideLayer: action
     barFocus: action
     barBlur: action
-    next: action
-    previous: action
   derive st = bi.state
-  derive aimOwn = `Edit ${pg.topTitle}…`
-  derive aimReply = `Reply to ${pg.topTitle}…`
-  // The prompt's aim: one block of the open document when the reader has aimed it there; before voice setup is done (and off the
-  // reader) the invitation to set up; otherwise the page.
-  // On a mail message the aim is the reply ("Reply to <sender>…", from the message itself).
+  derive aimOwn = `Edit ${frontName}…`
+  derive aimReply = `Reply to ${frontName}…`
   derive aimMail = (pg.topKind == "mail" and mmsg.replyLabel != "") ? `${mmsg.replyLabel}…` : ""
   derive aimPage = pg.topKind == "reader" ? (pg.top.startsWith("texture:") ? aimOwn : aimReply) : (aimMail != "" ? aimMail : (ob.aim != "" and pg.topKind != "onboarding" ? ob.aim : "Ask about this page…"))
-  // While the setup page is in front the bar says where setup is, not an aim: voice setup's step, then the interview's own state.
-  derive onSetup = pg.top == "onboarding:setup"
-  derive bi2 = bi.state == "listening" or bi.state == "talking" or bi.state == "heard"
-  derive setupLine = ob.step == "interview" ? (ob.paused ? "Interview paused" : (bi2 ? "Interview: listening…" : "Interview: speaking…")) : (ob.step == "setup" ? "Setting up the voice…" : (ob.step == "mic" ? "Check the microphone" : (ob.step == "hearing" ? "Check that you can hear me" : (ob.step == "ready" ? "Voice is set up" : (ob.step == "writing" ? "Writing your edition…" : (ob.step == "done" ? "Your edition is ready" : "Voice setup"))))))
   derive aim = (raim.address == pg.top and raim.blockId != "") ? `Ask about “${raim.label}”…` : aimPage
-  derive lines = min(3, max(1, ceil(bi.text.length / 30)))
-  derive yielded = ri.level != "play" and (st == "listening" or st == "talking")
-  derive wordy = st == "listening" or st == "talking" or st == "heard" or st == "error"
-  derive barH = typing ? 88 : (wordy ? 56 + (lines - 1) * 20 + (yielded ? 16 : 0) : 56)
+  derive onSetup = pg.top == "onboarding:setup"
+  derive setupLine = ob.step == "interview" ? (ob.paused ? "Interview paused" : ((st == "listening" or st == "talking" or st == "heard") ? "Interview: listening…" : "Interview: speaking…")) : (ob.step == "setup" ? "Setting up the voice…" : (ob.step == "mic" ? "Check the microphone" : (ob.step == "hearing" ? "Check that you can hear me" : (ob.step == "ready" ? "Voice is set up" : (ob.step == "writing" ? "Writing your edition…" : (ob.step == "done" ? "Your edition is ready" : "Voice setup"))))))
+  // What the line above the controls shows.
+  derive lineMode = micOn ? "listen" : (st == "heard" ? "heard" : (st == "holding" ? "holding" : (st == "revised" ? "revised" : (st == "error" ? "error" : (st == "playing" ? "playing" : (st == "paused" ? "paused" : (onSetup ? "setup" : (typing ? "aim" : "none"))))))))
+  derive loaded = ri.title != "" ? ri.title : bi.text
+  derive yielded = ri.level != "play" and micOn
   derive tint = st == "error" ? th.danger : (st == "revised" ? th.success : (st == "playing" ? th.accent2 : th.accent))
-  derive tintOn = (st == "idle" or st == "paused") ? 0 : (st == "playing" ? 0.1 : 0.16)
-  derive markState = st == "talking" ? "listening" : (st == "paused" ? "idle" : st)
+  derive tintOn = lineMode == "none" or lineMode == "aim" or lineMode == "paused" ? 0 : (st == "playing" ? 0.08 : 0.12)
+  derive markState = micOn ? "listening" : (st == "paused" ? "idle" : st)
+  derive isPlaying = ri.playing or st == "playing"
+  derive playWord = isPlaying ? "Pause" : "Play"
+  derive playLabel = isPlaying ? "Pause the radio" : (st == "paused" ? "Resume the radio" : "Play the edition")
   derive still = th.reducedMotion
   derive calm = still ? 0 : 1
   derive enter = still ? "none" : "barRise 220ms ease-out both"
+  derive panelH = vp.height * 0.62
   view
-    row testId="bar" position="absolute" left=12 right=12 bottom="calc(env(safe-area-inset-bottom) + 8px)" z-index=20
-      height=barH align-items="center" gap=4 padding=6 box-sizing="border-box"
-      pan=pullBar panrelease=pullEnd border-radius=th.radiusPill
-      backgroundMaterial=(th.material2 == "glass" ? "glass" : "none")
-      background-color=(th.material2 == "glass" ? "transparent" : th.paper)
-      box-shadow=th.shadow2
-      transition=`height ${th.motionEnterMs * calm}ms ease`
-      // the backing: the page colour under the glass, so text and the field stay legible over busy content in light and dark
-      box position="absolute" inset=0 border-radius=th.radiusPill pointer-events="none" z-index=-1
-        background-color=th.paper opacity=th.barBacking border-width=1 border-style="solid" border-color=th.rule
-      // the state's tint: warms while playing, brighter while the listener is heard, danger on a failure
-      box position="absolute" inset=0 border-radius=th.radiusPill pointer-events="none"
-        background-color=tint opacity=tintOn
-        transition=`opacity ${th.motionFastMs * calm}ms ease, background-color ${th.motionFastMs * calm}ms ease`
-      if typing == false
-        button testId="bar-pages" press=togglePile aria-label=`Open pages, ${pg.count} open` appearance="none" width=44 height=44
-          column align-items="center" justify-content="center"
-            image "symbol:layers" color=th.fg
-            text `${pg.count}` testId="bar-pages-count" font-family=th.fontUi font-size=11 color=th.muted
-      column flex=1 min-width=0 justify-content="center" gap=2
-        if typing
-          text aim testId="bar-aim" font-family=th.fontUi font-size=11 color=th.muted line-clamp=1 animation=enter
-        if st == "idle" and onSetup
-          text setupLine testId="bar-setup" font-family=th.fontUi font-size=15 color=th.fg line-clamp=1 padding="2px 6px" animation=enter
-        if st == "idle" and onSetup == false
-          input value=ask input=editAsk submit=sendAsk focus=barFocus blur=barBlur placeholder=aim aria-label=aim testId="bar-field" enterkeyhint="send"
-            font-family=th.fontRead font-size=16 color=th.fg padding="8px 6px"
-            ::placeholder
-              color=th.muted
-        if st == "playing"
-          column swipeleft=next swiperight=previous animation=enter
-            button press=showLayer("player") testId="bar-text" appearance="none" aria-label=`Now playing, ${bi.text}. Open the player`
-              column align-items="flex-start" gap=1 width="100%"
-                text "NOW PLAYING" font-family=th.fontUi font-size=10 font-weight=600 color=th.muted
-                text bi.text font-family=th.fontUi font-size=15 color=th.fg line-clamp=1 text-align="left"
-        if st == "paused"
-          button press=showLayer("player") testId="bar-text" appearance="none" aria-label=`Paused, ${bi.text}. Open the player` animation=enter
-            column align-items="flex-start" gap=1 width="100%"
-              text "PAUSED" font-family=th.fontUi font-size=10 font-weight=600 color=th.muted
-              text bi.text font-family=th.fontUi font-size=15 color=th.fg line-clamp=1 text-align="left"
-        if st == "listening" or st == "talking"
-          column animation=enter
+    column testId="bar-stack" position="absolute" left=0 right=0 bottom=0 z-index=20
+      // the launcher and the player rise from the lens; the lens stays under them, visible and usable
+      if layer == "launcher"
+        column testId="launcher" width="100%" height=panelH animation=(still ? "none" : "sheetUp 260ms ease-out both")
+          Launcher()
+      if layer == "player"
+        column testId="player" width="100%" height=panelH animation=(still ? "none" : "sheetUp 260ms ease-out both")
+          PlayerLayer()
+      // where you are in the stack
+      if onbd == false and layer == ""
+        row width="100%" justify-content="center" padding-bottom=8 pointer-events="none"
+          row testId="page-indicator" aria-label=`${frontKind}, ${stackCount} pages in the deck` align-items="center" gap=6 padding="4px 11px" border-radius=th.radiusPill
+            background-color=th.paper border-width=1 border-style="solid" border-color=th.rule
+            text `${frontKind} · ${stackCount} in the deck` font-family=th.fontUi font-size=11 font-weight=600 color=th.muted testId="page-indicator-text"
+      // the lens: glass over the page, full width, top corners rounded, running off the bottom edge
+      column testId="bar" position="relative" width="100%" box-sizing="border-box" gap=4
+        padding-top=8 padding-left=12 padding-right=12 padding-bottom="calc(env(safe-area-inset-bottom) + 6px)"
+        border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
+        backgroundMaterial=(th.material2 == "glass" ? "glass" : "none")
+        background-color=(th.material2 == "glass" ? "transparent" : th.paper)
+        box-shadow=th.shadow3
+        // the backing: the page colour under the glass, so the controls stay legible over busy content in light and dark
+        box position="absolute" inset=0 pointer-events="none" z-index=-1 border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
+          background-color=th.paper opacity=th.barBacking
+        // the state's tint
+        box position="absolute" inset=0 pointer-events="none" border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
+          background-color=tint opacity=tintOn
+          transition=`opacity ${th.motionFastMs * calm}ms ease, background-color ${th.motionFastMs * calm}ms ease`
+        // the top edge: a hairline and a soft highlight, the lip of the glass
+        box position="absolute" left=0 right=0 top=0 height=1 pointer-events="none" background-color=th.rule opacity=0.7
+          border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
+        box position="absolute" left=0 right=0 top=1 height=14 pointer-events="none" border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
+          background-image="linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0))"
+        // ---- the line above the controls
+        if lineMode == "aim"
+          text aim testId="bar-aim" font-family=th.fontUi font-size=11 color=th.muted line-clamp=1 padding-left=4 animation=enter
+        if lineMode == "setup"
+          text setupLine testId="bar-setup" font-family=th.fontUi font-size=14 font-weight=600 color=th.fg line-clamp=1 padding-left=4 animation=enter
+        if lineMode == "playing" or lineMode == "paused"
+          column gap=4 animation=enter
+            button press=showLayer("player") testId="bar-text" appearance="none" width="100%" aria-label=`${lineMode == "playing" ? "Now playing" : "Paused"}, ${loaded}. Open the player`
+              row gap=8 align-items="center" width="100%" padding-left=4 min-height=30
+                if lineMode == "playing"
+                  image "symbol:waveform" color=th.accent
+                if lineMode == "paused"
+                  image "symbol:pause" color=th.accent
+                column flex=1 min-width=0 gap=1 align-items="flex-start"
+                  text (lineMode == "playing" ? "NOW PLAYING" : "PAUSED") font-family=th.fontUi font-size=9 font-weight=700 letter-spacing=0.8 color=th.muted
+                  text loaded font-family=th.fontUi font-size=14 font-weight=600 color=th.fg line-clamp=1 text-align="left"
+                image "symbol:forward-chevron" color=th.muted
+            box testId="bar-progress" height=2 border-radius=1 background-color=th.rule opacity=(ri.level == "play" ? 1 : 0.4) transition=`opacity ${th.motionFastMs}ms ease`
+              box height=2 border-radius=1 width=`${floor(bi.progress * 100)}%` background-color=th.accent
+        if lineMode == "listen"
+          column gap=3 animation=enter padding-left=4
             if yielded
               row gap=5 align-items="center" testId="bar-yield" height=16
                 box width=6 height=6 border-radius=3 background-color=th.accent animation=(still ? "none" : "barBlink 1.1s ease-in-out infinite")
                 text (ri.level == "pause" ? "Radio paused while you speak" : "Radio lowered while you speak") font-family=th.fontUi font-size=11 color=th.muted
-            text bi.text testId="bar-text" font-family=th.fontRead font-size=15 font-style="italic" color=th.fg line-clamp=3 padding="2px 6px"
-        if st == "heard"
-          text bi.text testId="bar-text" font-family=th.fontRead font-size=15 color=th.fg line-clamp=3 padding="2px 6px" animation=enter
-        if st == "holding"
-          text bi.text testId="bar-text" font-family=th.fontUi font-size=15 color=th.fg line-clamp=2 padding="2px 6px" animation=enter
-        if st == "revised"
-          button press=showLayer("player") testId="bar-text" appearance="none" aria-label="Revised. Show" animation=enter
             row gap=6 align-items="center"
+              box width=8 height=8 border-radius=4 background-color=th.danger animation=(still ? "none" : "barBlink 1s ease-in-out infinite")
+              text "Listening" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.6 color=th.danger
+            text (bi.text == "" ? "Tap the microphone again to send." : bi.text) testId="bar-text" font-family=th.fontRead font-size=15 font-style="italic" color=th.fg line-clamp=3
+        if lineMode == "heard"
+          text bi.text testId="bar-text" font-family=th.fontRead font-size=15 color=th.fg line-clamp=3 padding-left=4 animation=enter
+        if lineMode == "holding"
+          text bi.text testId="bar-text" font-family=th.fontUi font-size=14 color=th.fg line-clamp=2 padding-left=4 animation=enter
+        if lineMode == "revised"
+          button press=showLayer("player") testId="bar-text" appearance="none" aria-label="Revised. Show" animation=enter
+            row gap=6 align-items="center" padding-left=4 min-height=30
               image "symbol:sparkles" color=th.success
-              text bi.text font-family=th.fontUi font-size=15 font-weight=600 color=th.fg
-        if st == "error"
-          row gap=6 align-items="center" animation=enter
+              text bi.text font-family=th.fontUi font-size=14 font-weight=600 color=th.fg
+        if lineMode == "error"
+          row gap=6 align-items="center" animation=enter padding-left=4
             image "symbol:alert" color=th.danger
             text bi.text testId="bar-text" font-family=th.fontUi font-size=14 color=th.fg line-clamp=3 flex=1
-      if typing
-        button testId="bar-send" press=sendAsk appearance="none" width=44 height=44 aria-label="Send"
-          row width=36 height=36 border-radius=18 align-items="center" justify-content="center" background-color=th.accent
-            image "symbol:send" color=th.onAccent
-      else
-        button testId="bar-voice" pointerdown=voiceDown pointerup=voiceUp appearance="none" width=44 height=44
-          aria-label=(st == "playing" ? "Pause. Hold to talk" : "Play. Hold to talk")
-          box position="relative" width=44 height=44
-            if st == "listening" or st == "talking"
-              box position="absolute" inset=2 border-radius=20 border-width=2 border-style="solid" border-color=th.accent pointer-events="none"
-                animation=(still ? "none" : "barPulse 1.2s ease-in-out infinite")
-            if st == "holding"
-              box position="absolute" inset=2 border-radius=20 border-width=2 border-style="dashed" border-color=th.accent pointer-events="none"
-                animation=(still ? "none" : "barSpin 2.4s linear infinite")
-            if st == "error"
-              box position="absolute" inset=2 border-radius=20 border-width=2 border-style="solid" border-color=th.danger pointer-events="none"
-            Mark(state=markState)
-      if st == "playing" or st == "paused"
-        box testId="bar-progress" position="absolute" left=22 right=22 bottom=3 height=2 border-radius=1 background-color=th.rule
-          opacity=(ri.level == "play" ? 1 : 0.4) transition=`opacity ${th.motionFastMs}ms ease`
-          box height=2 border-radius=1 width=`${floor(bi.progress * 100)}%` background-color=th.accent
+        // ---- the controls
+        row align-items="center" gap=6
+          button testId="bar-mark" press=toggleLauncher appearance="none" width=48 height=48 aria-label=(layer == "launcher" ? "Close the launcher" : "Open the launcher")
+            column width=48 height=48 align-items="center" justify-content="center"
+              Mark(state=markState)
+          row flex=1 min-width=0 align-items="center" min-height=44 border-radius=th.radiusPill background-color=th.paper2
+            border-width=1 border-style="solid" border-color=th.rule padding-left=10 padding-right=6 box-sizing="border-box"
+            input value=ask input=editAsk submit=sendAsk focus=barFocus blur=barBlur placeholder=aim aria-label=aim testId="bar-field" enterkeyhint="send" flex=1 min-width=0
+              font-family=th.fontRead font-size=16 color=th.fg padding="8px 2px"
+              ::placeholder
+                color=th.muted
+          if typing
+            button testId="bar-send" press=sendAsk appearance="none" width=52 height=48 aria-label="Send"
+              BarGlyph(glyph="send", caption="Send", on=true)
+          else
+            button testId="bar-mic" press=micTap appearance="none" width=52 height=48 aria-label=(micOn ? "Stop listening and send" : "Talk")
+              box position="relative" width=52 height=48
+                if micOn
+                  box position="absolute" left=9 top=3 width=34 height=28 border-radius=14 border-width=2 border-style="solid" border-color=th.danger pointer-events="none"
+                    animation=(still ? "none" : "barPulse 1.1s ease-in-out infinite")
+                BarGlyph(glyph=(micOn ? "stop" : "mic"), caption=(micOn ? "Send" : "Talk"), on=micOn)
+          button testId="bar-play" press=radioPlay appearance="none" width=52 height=48 aria-label=playLabel
+            BarGlyph(glyph=(isPlaying ? "pause" : "play"), caption=playWord, on=false)

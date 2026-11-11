@@ -56,7 +56,7 @@ component ComponentsPage
         text "Audio" role="heading" aria-level=2 font-family=th.fontUi font-size=13 font-weight=700 color=th.accent2 text-transform="uppercase" margin-top=8
         text `State ${aud.state} · engine ${aud.engine} · voice processing ${aud.voiceProcessing ? "on" : "off"}` testId="audio-state"
         text `Programme ${aud.audible ? "audible" : "silent"} at volume ${aud.volume.toFixed(2)} · last switch ${aud.lastSwitchMs.toFixed(0)} ms` testId="audio-level" color=th.muted
-        text aud.route testId="audio-route" font-family=th.fontMono font-size=12 color=th.muted
+        text aud.route testId="audio-route" font-family=th.fontMono font-size=12 color=th.muted width="100%" min-width=0
         for pol in aud.policies key=pol
           button press=setPolicy(pol) role="radio" aria-checked=(aud.policy == pol) testId=`policy-${pol}` appearance="none"
             Btn(label=`${aud.policy == pol ? "● " : "○ "}${pol}`, primary=false, wide=false)
@@ -70,7 +70,7 @@ component ComponentsPage
         text st.message testId="lab-message" color=th.muted
         text (st.transcript == "" ? "(listening)" : st.transcript) testId="lab-transcript"
         button pointerdown=talkDown pointerup=talkUp testId="lab-talk" appearance="none"
-          width="100%" padding=40 background-color=th.paper2 border-radius=th.radiusControl box-shadow=th.shadow1
+          width="100%" box-sizing="border-box" padding=40 background-color=th.paper2 border-radius=th.radiusControl box-shadow=th.shadow1
           text (st.phase == "playing" ? "Hold to talk" : st.phase)
         row gap=8 align-items="center"
           button press=inject testId="inject" appearance="none"

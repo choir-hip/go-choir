@@ -39,10 +39,10 @@ step() { printf '%s\n' "$1" >> "$STEPS"; }
 wait_() { step "clock +${1:-700} real"; step "clock data"; }
 shot() { step "screenshot $SHOTS/$1.png"; }
 view() { wait_ "${2:-800}"; step tree; shot "$1"; }   # settle, dump the tree, screenshot <name>
-place() { step "tap bar-pages"; wait_ 600; step "tap pile-places"; wait_ 600; step "tap place-$1"; wait_ "${2:-900}"; }
+place() { step "tap bar-mark"; wait_ 600; step "tap place-$1"; wait_ "${2:-900}"; }
 # Put the app in Depth, light, by its own Settings controls (the proof never trusts what an earlier run left).
 ensure_light() { place settings 900; step "tap settings-theme-depth"; wait_ 500; step "tap settings-mode-light"; wait_ 700; }
-goto() { step "tap bar-pages"; wait_ 600; step "tap pile-places"; wait_ 600; step "tap \"launcher-open-$1\""; wait_ 900; }
+goto() { step "tap bar-mark"; wait_ 600; step "tap \"launcher-open-$1\""; wait_ 900; }
 
 # run_drive <name> <mode> <onboarding?> <agent flags...>: reset, run the collected steps, retry a refused launch up to 3 times.
 run_drive() {

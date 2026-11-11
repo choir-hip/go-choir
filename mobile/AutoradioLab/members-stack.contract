@@ -1,0 +1,88 @@
+// Lane members file (the page deck, round 3, owner rulings 19 and the deck ruling of 2026-11-11): the main view is a DECK of
+// full-screen pages with one on top. Owned by SHELL. Swiping the top page sideways (either way; it follows the finger and flies off,
+// the next page showing beneath it with depth) sends it to the BOTTOM of the deck and brings the next to the top; keep swiping and
+// the whole deck cycles round. Nothing is closed by a swipe. Opening a page (a story, a Texture, a file, a message, a section)
+// puts it on top; if it is in the deck already it moves to the top (no duplicates). The launcher brings any page to the top and
+// removes opened pages; the five key pages (Paper, Textures, Files, Mail, Settings) cannot be removed.
+// `pan` on the deck with `touch-action="pan-y"` so a vertical drag still scrolls the page.
+//
+// `order` is the deck, top first. The Kit's OpenPages (pg.rows, pg.top) is the open set and the focus that every page's resources
+// read; the deck keeps the ORDER, which the Kit does not model. A move updates `order` at once and tells the Kit (pageOpen); the
+// page on top is drawn for real only when the Kit's focus has caught up (pg.top == the top), a placard before. If the Kit's focus is
+// ever somewhere else for half a second (something outside the deck opened a page) the deck follows it (task syncTop).
+use pageOpen, pageClose from "@choir/autoradio"
+use StackVp, stackName, isFixed, kindOf, kindWord from "./ui.contract"
+
+members Autoradio
+  resource vp = exactViewport() as shape StackVp
+  state order = ["paper:front", "textures:", "file:/", "mailbox:inbox", "settings:root"]
+  state px = 0
+  state pdrag = false
+  state flying = false
+
+  // Onboarding (the setup page and the interview) takes over the deck as before: one page, nothing to swipe.
+  derive onbd = pg.top.startsWith("onboarding:")
+  derive topAddr = order.slice(0, 1).join("")
+  derive stackAddrs = order
+  derive stackCount = order.length
+  derive deckWin = order.slice(0, 3)
+  derive shown = topAddr
+  derive frontName = stackName(pg.rows, topAddr)
+  derive frontKind = kindWord(kindOf(topAddr), topAddr)
+  // How far the top page is dragged, as a fraction of half the width (0 at rest, 1 when it is a half page away or more).
+  derive pxAbs = px < 0 ? 0 - px : px
+  derive prog = min(pxAbs / max(vp.width * 0.5, 1), 1)
+
+  // Bring a page to the top of the deck (opening it when it is new).
+  action openPage(address: string, title: string)
+    order = address.startsWith("onboarding:") ? order : [address].concat(order.filter(a => a != address))
+    px = 0
+    pdrag = false
+    flying = false
+    send pm = pageOpen(address=address, title=title)
+    layer = ""
+  action focusPage(address: string)
+    order = [address].concat(order.filter(a => a != address))
+    px = 0
+    pdrag = false
+    flying = false
+    send pm = pageOpen(address=address, title="")
+    layer = ""
+  // Remove an opened page from the deck (from the launcher). The five key pages stay. The page on top is kept too: it is the one
+  // being looked at.
+  action closePage(address: string)
+    if isFixed(address) == false and address != topAddr
+      order = order.filter(a => a != address)
+      send pm = pageClose(address=address)
+
+  // The drag: `pan` gives the move since its last event, so it accumulates; `panrelease` decides: a long enough or fast enough
+  // drag, either way, sends the page off; otherwise it springs back.
+  action pageDrag(dx: number, dy: number)
+    px = flying ? px : (pdrag ? px : 0) + dx
+    pdrag = true
+  action pageRelease(vx: number, vy: number)
+    pdrag = false
+    if flying == false
+      let far = px > vp.width * 0.25 or px < 0 - vp.width * 0.25 or vx > 700 or vx < 0 - 700
+      if far and stackCount > 1
+        let right = px > 0 or (px == 0 and vx > 0)
+        px = right ? vp.width * 1.3 : 0 - vp.width * 1.3
+        flying = true
+      else
+        px = 0
+  // The page has flown off: it goes to the bottom of the deck, the next one comes to the top.
+  task flyEnd when flying key=flying
+    after(230, cycleDeck)
+  action cycleDeck
+    let next = order.slice(1, 2).join("")
+    order = order.slice(1).concat(order.slice(0, 1))
+    px = 0
+    flying = false
+    send pm = pageOpen(address=next, title="")
+
+  // The deck follows the Kit's focus when something else moved it and it stayed there.
+  task syncTop when pg.top != "" and pg.top != topAddr and onbd == false key=`${pg.top}|${topAddr}`
+    after(500, syncDeck)
+  action syncDeck
+    if pg.top != "" and pg.top != topAddr and pg.top.startsWith("onboarding:") == false
+      order = [pg.top].concat(order.filter(a => a != pg.top))

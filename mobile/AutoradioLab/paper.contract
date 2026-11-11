@@ -7,7 +7,7 @@
 // paper-edition-<big|even|thin|default>, paper-signin, paper-status.
 use Theme, ChoirAuth, DemoInfo, PaperFront, PaperBand, PaperItem from "@choir/autoradio"
 use paperFront from "@choir/autoradio"
-use Card, Btn, BarClear from "./ui.contract"
+use Card, Btn, BarClear, sectionName from "./ui.contract"
 use FirstRunCard from "./onboarding.contract"
 
 // A headline with its dek and meta, as one story. `kicker` shows the section above, `listen` the play-from-here button.
@@ -23,7 +23,7 @@ component Story
   view
     column gap=6 align-items="flex-start" width="100%"
       if kicker
-        text s.section font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
+        text sectionName(s.section) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
       button press=openPage(`pub:${s.route}`, s.title) appearance="none" testId=`paper-story-${s.route}` width="100%"
         column gap=6 align-items="flex-start" width="100%"
           text s.title font-family=th.fontRead font-size=s.size font-weight=s.weight line-height=s.lineHeight color=th.fg text-align="left" text-wrap="balance"
@@ -56,7 +56,7 @@ component BriefRow
       row align-items="center" gap=4 width="100%" padding="10px 0" box-sizing="border-box"
         column flex=1 min-width=0 gap=3 align-items="flex-start"
           if kicker
-            text s.section font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
+            text sectionName(s.section) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
           button press=openPage(`pub:${s.route}`, s.title) appearance="none" testId=`paper-story-${s.route}` width="100%"
             text s.title font-family=th.fontRead font-size=s.size font-weight=s.weight line-height=s.lineHeight color=th.fg text-align="left"
           if s.byline != ""
@@ -117,21 +117,21 @@ component Band
       if b.module == "cluster"
         Card(level=1, testId=`paper-band-${b.id}`, minHeight=0)
           column padding=16 gap=2 width="100%" box-sizing="border-box"
-            text b.label font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
+            text sectionName(b.label) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
             for s in b.items key=s.route
               FollowRow(s=s)
       if b.module == "briefs" or b.module == "opinion"
         Card(level=1, testId=`paper-band-${b.id}`, minHeight=0)
           column padding="14px 16px 4px 16px" width="100%" box-sizing="border-box"
-            text b.label font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
+            text sectionName(b.label) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
             for s, i in b.items key=s.route
               BriefRow(s=s, kicker=(b.module == "briefs"), first=(i == 0))
       if b.module == "river"
         Card(level=1, testId=`paper-band-${b.id}`, minHeight=0)
           column padding="6px 16px 4px 16px" width="100%" box-sizing="border-box"
-            button press=openPage(`paper:section/${b.id.slice(6)}`, b.label) appearance="none" testId=`paper-more-${b.id.slice(6)}` width="100%"
+            button press=openPage(`paper:section/${b.id.slice(6)}`, sectionName(b.label)) appearance="none" testId=`paper-more-${b.id.slice(6)}` width="100%"
               row align-items="center" justify-content="space-between" padding="10px 0 2px 0" width="100%" box-sizing="border-box"
-                text b.label font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
+                text sectionName(b.label) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
                 image "symbol:forward-chevron" color=th.muted
             for s, i in b.items key=s.route
               BriefRow(s=s, kicker=false, first=(i == 0))
@@ -167,7 +167,7 @@ component PaperPage
             box height=1 background-color=th.fg width="100%"
             box height=1 background-color=th.fg width="100%" margin-top=2
             row justify-content="space-between" width="100%"
-              text (sect == "" ? "Front page" : pfront.sectionLabel) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent testId="paper-section-title"
+              text (sect == "" ? "Front page" : sectionName(pfront.sectionLabel)) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent testId="paper-section-title"
               text pfront.updated font-family=th.fontUi font-size=12 color=th.muted testId="paper-updated"
           // Not set up yet: "Make it yours" (voice setup and the interview) until the listener has done it or skipped it.
           FirstRunCard()
@@ -200,10 +200,10 @@ component PaperPage
               background-color=(sect == "" ? th.accent : th.paper2)
               text "Front" font-family=th.fontUi font-size=14 font-weight=600 color=(sect == "" ? th.onAccent : th.fg)
             for sec in pfront.sections key=sec.id
-              button press=openPage(`paper:section/${sec.id}`, sec.label) appearance="none" testId=`paper-section-${sec.id}`
+              button press=openPage(`paper:section/${sec.id}`, sectionName(sec.label)) appearance="none" testId=`paper-section-${sec.id}`
                 border-radius=th.radiusPill padding="8px 14px" flex-shrink=0 align-self="flex-start"
                 background-color=(sec.current ? th.accent : th.paper2)
-                text sec.label font-family=th.fontUi font-size=14 font-weight=600 color=(sec.current ? th.onAccent : th.fg)
+                text sectionName(sec.label) font-family=th.fontUi font-size=14 font-weight=600 color=(sec.current ? th.onAccent : th.fg)
           if pfront.status == "offline" or pfront.status == "error" or pfront.status == "empty"
             text pfront.message font-family=th.fontUi font-size=14 color=(pfront.status == "error" ? th.danger : th.muted) testId="paper-status"
           for b in pfront.bands key=b.id

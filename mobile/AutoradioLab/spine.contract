@@ -1,5 +1,6 @@
-// The spine's members of the root: open pages, the layer in front, the theme, the bar's state. Owned by the spine;
-// a lane does not edit this file (its own members go in members-<lane>.contract).
+// The spine's members of the root: the layer in front, the theme, the bar's state. Owned by the spine (round 3: SHELL);
+// a lane does not edit this file (its own members go in members-<lane>.contract). The page stack (open, close, jump, the
+// pager) is in members-stack.contract.
 use openPages, pageModel, theme, themeList, barState, demoInfo from "@choir/autoradio"
 use pageOpen, pageClose, pageFocus, pagePin, pageReopen, themeSet, schemeSet, signalRecord, demoSet from "@choir/autoradio"
 use PageList, PageModel, Theme, ThemeList, BarInfo, DemoInfo from "@choir/autoradio"
@@ -14,40 +15,24 @@ members Autoradio
   resource dm = demoInfo() as shape DemoInfo else empty()
   mutation pm as shape PageList
 
-  // The layer above the page: "" (none), "pile" (the open pages as cards), "launcher" (places and search).
+  // The layer above the page: "" (none), "launcher" (the stack's pages and the destinations), "player" (the expanded player, a
+  // sheet over the page with the bar still under it).
   state layer = ""
   // The Ask field in the bar.
   state ask = ""
-  // Voice button: a tap plays or pauses, a hold (350 ms) talks.
-  state voiceArmed = false
+  // The microphone button: a tap starts talking, a tap again sends. (The hold-to-talk of the first build is gone, owner 2026-11-11.)
   state voiceTalking = false
 
-  action openPage(address: string, title: string)
-    send pm = pageOpen(address=address, title=title)
-    layer = ""
-  action closePage(address: string)
-    send pm = pageClose(address=address)
-  action focusPage(address: string)
-    send pm = pageFocus(address=address)
-    layer = ""
-  action pinPage(address: string)
-    send pm = pagePin(address=address)
-  action reopenPage
-    send pm = pageReopen()
   action showLayer(name: string)
     layer = name
   action hideLayer
     layer = ""
-  action togglePile
-    layer = layer == "pile" ? "" : "pile"
-  // `pan` reports the movement since its last event, so the pull accumulates and `panrelease` decides.
-  state pull = 0
-  action pullBar(dx: number, dy: number)
-    pull = pull + dy
-  action pullEnd(vx: number, vy: number)
-    if pull < -60 and layer == ""
-      layer = "launcher"
-    pull = 0
+  action toggleLauncher
+    layer = layer == "launcher" ? "" : "launcher"
+  action pinPage(address: string)
+    send pm = pagePin(address=address)
+  action reopenPage
+    send pm = pageReopen()
 
   action setTheme(id: string)
     send pm = themeSet(id=id)
@@ -61,26 +46,17 @@ members Autoradio
 
   action editAsk(v: string)
     ask = v
+  // A typed ask is aimed at the page in front: its address goes with the turn (`aim`). The engine side reads `args["aim"]` of
+  // choirAsk and choirTalkDown; until it does, the turn runs without it (a gap named in the lane report).
   action sendAsk
     send pm = signalRecord(kind="ask", subject=pg.top, detail=ask)
-    // The typed question is a turn like a spoken one (found with real data: it was only recorded as a signal).
-    send acct = choirAsk(text=ask)
+    send acct = choirAsk(text=ask, aim=pg.top)
     ask = ""
-
-  task voiceHold when voiceArmed
-    after(350, voiceFire)
-  action voiceDown
-    voiceArmed = true
-  action voiceFire
-    if voiceArmed
-      voiceArmed = false
-      voiceTalking = true
-      send down = choirTalkDown()
-  action voiceUp
-    if voiceTalking
+  derive micOn = voiceTalking or bi.state == "listening" or bi.state == "talking"
+  action micTap
+    if micOn
       voiceTalking = false
       send up = choirTalkUp()
     else
-      if voiceArmed
-        voiceArmed = false
-        send acct = choirPlayPause()
+      voiceTalking = true
+      send down = choirTalkDown(aim=pg.top)
