@@ -135,7 +135,11 @@ function serializeListItemContent(li: any, nextID: (kind: string) => string, exi
   };
   for (const child of childNodes(li)) {
     const tag = isElement(child) ? elementTag(child) : '';
-    if (tag === 'p' || tag === 'ul' || tag === 'ol') {
+    // Every block the schema allows in a list item (paragraph, list, code_block, blockquote, heading, horizontal_rule)
+    // stays a block; only inline content is gathered into a paragraph.
+    const isBlock = tag === 'p' || tag === 'div' || tag === 'ul' || tag === 'ol' || tag === 'pre' || tag === 'blockquote' || tag === 'hr'
+      || /^h[1-6]$/.test(tag) || matches(child, '[data-texture-embed]');
+    if (isBlock) {
       flush();
       const block = serializeBlockNode(child, nextID, existingDoc);
       if (block) out.push(block);
@@ -369,7 +373,8 @@ function sourceEntitiesInReadingOrder(blocks: StructuredNode[], sourceEntities: 
   const visit = (node: StructuredNode) => {
     if (node.type === 'source_ref') {
       const id = String(node.attrs?.source_entity_id || '').trim();
-      const entity = sourceEntities.find((item) => sourceEntityID(item) === id);
+      // a ref with no id names no entity (it must not take one that has no id either)
+      const entity = id ? sourceEntities.find((item) => sourceEntityID(item) === id) : undefined;
       if (entity && !seen.has(entity)) {
         seen.add(entity);
         ordered.push(entity);
