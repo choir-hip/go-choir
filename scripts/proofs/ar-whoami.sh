@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Proof (Autoradio lane S, item 2): GET /auth/whoami answers a bearer key with
-# its own account id, public handle, key id and computer binding; it does not
+# its public handle, key id and computer binding; it does not
 # answer without a key and never carries an email address. Needs CHOIR_HOST
 # and CHOIR_API_KEY_FILE (a file holding the key; never echoed). Read-only.
 # `--dry-run` only checks the inputs.
@@ -21,8 +21,8 @@ echo "bearer: http $code"
 python3 -I - "$out" <<'PY'
 import json, re, sys
 r = json.load(open(sys.argv[1]))
-print({k: r.get(k) for k in ("user_id", "handle", "key_id", "computer_id")})
-ok = bool(r.get("user_id")) and re.fullmatch(r"writer-[0-9a-f]{6}", r.get("handle", "")) is not None and bool(r.get("key_id"))
+print({k: r.get(k) for k in ("handle", "key_id", "computer_id")})
+ok = "user_id" not in r and re.fullmatch(r"writer-[0-9a-f]{6}", r.get("handle", "")) is not None and bool(r.get("key_id"))
 ok = ok and "@" not in json.dumps(r)
 sys.exit(0 if ok else 1)
 PY
