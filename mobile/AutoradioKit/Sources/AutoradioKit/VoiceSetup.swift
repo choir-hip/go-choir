@@ -35,6 +35,92 @@ public enum SetupStage: String, Codable, CaseIterable, Sendable {
         case .transcriber: return "Hearing you"
         case .voice: return "The voice"
         case .decision: return "Quick decisions"
+        case .responder: return "Talking while it works"
+        }
+    }
+    /// The kit's stage kind this configures.
+    public var kind: StageKind {
+        switch self {
+        case .bounds: return .speechBounds
+        case .transcriber: return .transcriber
+        case .voice: return .voice
+        case .decision: return .system1
+        case .responder: return .holder
+        }
+    }
+}
+
+public struct SetupCandidate: Codable, Equatable, Sendable {
+    /// The model id in the ModelStore catalog, or the floor's id.
+    public var id: String
+    /// Plain name: "Parakeet, the larger model".
+    public var label: String
+    public var bytes: Int64
+    public var minMemoryGB: Double
+    /// The kit stage id this becomes when it passes (`StageRegistry` id), "" when the stage is not switchable here.
+    public var kitStageID: String
+    /// What the model is for: "decision", "responder", "" (audio models). The same file may serve two roles in two contexts.
+    public var role: String
+    /// About how much memory the model uses once loaded (MB). Our Mac measurements; the device's own reading replaces the guess.
+    public var needsMB: Double
+    /// The slowest decode (tokens per second) at which this candidate is worth choosing, measured on the device; nil: no floor.
+    public var minDecodeTokensPerSecond: Double?
+    public init(id: String, label: String, bytes: Int64, minMemoryGB: Double, kitStageID: String = "", role: String = "", needsMB: Double = 0,
+                minDecodeTokensPerSecond: Double? = nil) {
+        self.id = id; self.label = label; self.bytes = bytes; self.minMemoryGB = minMemoryGB; self.kitStageID = kitStageID
+        self.role = role; self.needsMB = needsMB; self.minDecodeTokensPerSecond = minDecodeTokensPerSecond
+    }
+    /// Needs no download: it is on the phone already.
+    public var isFloor: Bool { bytes == 0 }
+}
+
+public struct DeviceProfile: Codable, Equatable, Sendable {
+    public var chip: String
+    public var memoryGB: Double
+    public var freeDiskGB: Double
+    public var onWiFi: Bool
+    /// What the process may still use (`os_proc_available_memory()`), when the device can say; the plan uses it instead of physical memory.
+    public var availableMemoryMB: Double?
+    public init(chip: String, memoryGB: Double, freeDiskGB: Double, onWiFi: Bool, availableMemoryMB: Double? = nil) {
+        self.chip = chip; self.memoryGB = memoryGB; self.freeDiskGB = freeDiskGB; self.onWiFi = onWiFi; self.availableMemoryMB = availableMemoryMB
+    }
+
+    /// This device. `onWiFi` is true unless the host knows better (no Network framework here); the card asks first
+    /// when the host says it is not.
+    public static func current(onWiFi: Bool = true) -> DeviceProfile {
+        var size = 0
+        sysctlbyname("hw.machine", nil, &size, nil, 0)
+        var buf = [CChar](repeating: 0, count: max(size, 1))
+        sysctlbyname("hw.machine", &buf, &size, nil, 0)
+        let chip = String(decoding: buf.prefix(while: { $0 != 0 }).map { UInt8(bitPattern: $0) }, as: UTF8.self)
+        let mem = Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824
+        let home = URL(fileURLWithPath: NSHomeDirectory())
+        let free = ((try? home.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?.volumeAvailableCapacityForImportantUsage).map { Double($0) / 1_073_741_824 } ?? 0
+        return DeviceProfile(chip: chip, memoryGB: mem, freeDiskGB: free, onWiFi: onWiFi, availableMemoryMB: DeviceReading.availableMemoryMB())
+    }
+}
+
+/// The model table for setup: per stage, a ladder from the recommended model to the floor. Sizes are the model cards'
+/// figures (ModelHub.catalog), not measurements; setup replaces them with measured numbers in the record.
+public enum SetupCatalog {
+    public static func ladder(_ s: SetupStage) -> [SetupCandidate] {
+        switch s {
+        case .bounds:
+            return [SetupCandidate(id: "silero-vad-v6.2.1", label: "Silero speech detector", bytes: 2_000_000, minMemoryGB: 1, kitStageID: "silero-vad", needsMB: 110),
+                    SetupCandidate(id: "energy", label: "Level detector built in", bytes: 0, minMemoryGB: 0, kitStageID: "energy-vad")]
+        case .transcriber:
+            return [SetupCandidate(id: "parakeet-tdt-0.6b-v2", label: "Parakeet, the larger listener", bytes: 480_000_000, minMemoryGB: 6, kitStageID: "parakeet-tdt", needsMB: 700),
+                    SetupCandidate(id: "parakeet-eou-120m", label: "Parakeet, the smaller listener", bytes: 250_000_000, minMemoryGB: 3, kitStageID: "parakeet-eou", needsMB: 250),
+                    SetupCandidate(id: "apple-speech", label: "Apple's recogniser", bytes: 0, minMemoryGB: 0, kitStageID: "apple-speech")]
+        case .voice:
+            return [SetupCandidate(id: "kokoro-82m-ane", label: "Kokoro voice", bytes: 350_000_000, minMemoryGB: 4, kitStageID: "kokoro", needsMB: 750),
+                    SetupCandidate(id: "pocket-tts", label: "Pocket voice, the lighter one", bytes: 300_000_000, minMemoryGB: 3, kitStageID: "pocket-tts", needsMB: 500),
+                    SetupCandidate(id: "system-voice", label: "The system voice", bytes: 0, minMemoryGB: 0, kitStageID: "avspeech")]
+        case .decision:
+            // The small language model on the phone first; System 1 through the listener's computer is the floor.
+            return [SetupCandidate(id: "qwen3-0.6b-q8_0", label: "A small language model on this phone", bytes: 639_446_688, minMemoryGB: 4,
+                                   kitStageID: "llama-qwen3-0.6b", role: "decision", needsMB: 1000),
+                    SetupCandidate(id: "system1-computer", label: "Your computer", bytes: 0, minMemoryGB: 0, kitStageID: "choir-system1")]
         case .responder:
             // The voice that talks while the desk works. Order is set by the Mac sample runs (2026-11-11, docs/reference/ON-DEVICE-MODELS.md):
             // Qwen3-0.6B Q8_0 first (the most page-grounded of the fast ones, and the file the decision role already loads, so its weights
