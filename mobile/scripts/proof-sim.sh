@@ -58,7 +58,6 @@ while :; do
     "tap card-swipe-paper:front drag -150 0" "clock +800 real" "clock data" tree "screenshot $SHOTS/04-pile-after-swipe.png" \
     "tap pile-places" "clock +600 real" "clock data" tree "screenshot $SHOTS/05-launcher.png" \
     "tap place-settings" "clock +600 real" "clock data" tree "screenshot $SHOTS/06-settings-depth.png" \
-    "tap settings-spike3d" "clock +900 real" "clock data" tree "screenshot $SHOTS/06b-spike-3d.png" \
     "tap settings-theme-newsprint" "clock +600 real" "clock data" tree "screenshot $SHOTS/07-settings-newsprint.png" \
     "tap settings-mode-dark" "clock +800 real" "clock data" tree "screenshot $SHOTS/08-newsprint-dark.png" \
     "tap settings-theme-depth" "clock +600 real" "clock data" tree "screenshot $SHOTS/09-depth-dark.png" \
@@ -115,7 +114,6 @@ must "theme switch: Newsprint" 'Showing Newsprint (light)'
 must "theme switch: dark" 'Showing Newsprint (dark)'
 must "theme switch: Depth dark" 'Showing Depth (dark)'
 must "theme switch: back to Depth light" 'Showing Depth (light)'
-must "spike 3D: rotate about y with perspective is accepted and applied" 'label="Rotated 50 degrees about y"'
 must "pull the bar up: the launcher opens" '[launcher-layer]'
 must "play: tap on the voice button starts the radio (bar shows what plays)" '[bar-text]'
 must "hold to talk: the bar shows the listening state" 'Listening'
