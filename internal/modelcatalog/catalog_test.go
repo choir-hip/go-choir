@@ -65,7 +65,7 @@ func TestDefaultPoolMembers(t *testing.T) {
 		for _, m := range members {
 			// The OpenCode members are the free iceman and beam in the
 			// default pool (owner 2026-11-05); OpenCode's paid models stay out.
-			if (m.Provider == "opencode-go" || m.Provider == "opencode-zen") && (name != DefaultPool || (m.Model != "iceman-contributor-free" && m.Model != "beam-free")) {
+			if (m.Provider == "opencode-go" || m.Provider == "opencode-zen") && (!(name == DefaultPool || (name == AutoradioPool && m.Model == "beam-free")) || (m.Model != "iceman-contributor-free" && m.Model != "beam-free")) {
 				t.Fatalf("pool %s carries OpenCode member %v", name, m)
 			}
 		}
@@ -255,5 +255,36 @@ func TestDevinFlashIsTextOnlyAndImageTurnsSkipIt(t *testing.T) {
 	}
 	if _, ok := Lookup("devin", "swe-2-fast"); ok {
 		t.Fatal("swe-2-fast must not be catalogued")
+	}
+}
+
+// The autoradio pool (owner 2026-11-11: River DeepSeek, not Bedrock Haiku):
+// River leads and is the only member assigned threads; devin, beam and
+// Synthetic follow in order as fallbacks; Bedrock is not in it; River and
+// Synthetic are two providers serving the same DeepSeek snapshot.
+func TestAutoradioPool(t *testing.T) {
+	want := []PoolMember{
+		{Provider: "river", Model: "deepseek-ai/DeepSeek-V4.1-Flash-1017", Weight: 1},
+		{Provider: "devin", Model: "swe-2-flash", FallbackOnly: true},
+		{Provider: "opencode-go", Model: "beam-free", FallbackOnly: true},
+		{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
+	}
+	pool := Pools()[AutoradioPool]
+	if len(pool) != len(want) {
+		t.Fatalf("autoradio pool = %v, want %v", pool, want)
+	}
+	for i, m := range want {
+		if pool[i] != m {
+			t.Fatalf("autoradio pool[%d] = %v, want %v", i, pool[i], m)
+		}
+		if _, ok := Lookup(m.Provider, m.Model); !ok {
+			t.Fatalf("autoradio member %v is not in the catalog", m)
+		}
+		if m.Provider == "bedrock" {
+			t.Fatal("the autoradio pool has no Bedrock member")
+		}
+	}
+	if NoFailover(AutoradioPool) {
+		t.Fatal("the autoradio pool must walk to its next member")
 	}
 }

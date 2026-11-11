@@ -38,6 +38,11 @@ const (
 
 	VerifierRole           = "verifier"
 	MultimodalVerifierRole = "verifier_multimodal"
+	// AutoradioRole is the role of the Autoradio desk's spoken answers. It is
+	// not a registry profile (the desk is the package desk app:autoradio, whose
+	// name cannot head a TOML section), so NormalizeRole names it here, like
+	// the verifier roles.
+	AutoradioRole = "autoradio"
 
 	modelPolicyOverlayRelativeDir = "System/model-policy-overlays"
 
@@ -265,6 +270,28 @@ func (m *Manager) RoleChain(ctx context.Context, ownerID, role string) []provide
 		add(selection)
 	}
 	return out
+}
+
+// PoolChain is the models a role's own selection names, in order, with a pool
+// expanded to its members and nothing behind them: no continuation chain. A
+// spoken answer walks its pool and stops, because a slow free model at the end
+// of the computer-wide chain is worse than a plain spoken apology. A computer
+// whose policy file has no section for the role gets the platform's: the
+// autoradio role runs on the compiled autoradio pool, so a policy written
+// before the role existed needs no edit.
+func (m *Manager) PoolChain(ctx context.Context, ownerID, role string) []provideriface.LLMSelection {
+	policy, _ := m.Load(ctx, ownerID)
+	normalized := NormalizeRole(role)
+	selection := fillSelection(provideriface.LLMSelection{}, policy.Defaults)
+	if own, ok := policy.Roles[normalized]; ok {
+		selection = fillSelection(own, policy.Defaults)
+	} else if normalized == AutoradioRole {
+		selection = provideriface.LLMSelection{Model: modelcatalog.PoolSpecPrefix + modelcatalog.AutoradioPool, ReasoningEffort: "low", Source: "platform_fallback"}
+	}
+	if !strings.HasPrefix(selection.Model, modelcatalog.PoolSpecPrefix) {
+		return []provideriface.LLMSelection{selection}
+	}
+	return poolSelections(policy.poolMembersOf(strings.TrimPrefix(selection.Model, modelcatalog.PoolSpecPrefix)), selection)
 }
 
 // stampResolved resolves role from policy and writes the selection into
@@ -560,7 +587,7 @@ func NormalizeRole(role string) string {
 		return current
 	}
 	switch normalized {
-	case VerifierRole:
+	case VerifierRole, AutoradioRole:
 		return normalized
 	case MultimodalVerifierRole, "verifier-multimodal":
 		// One canonical spelling: the hyphenated form normalizes to the
@@ -727,6 +754,7 @@ func fallbackPolicy(_ provideriface.Config) Policy {
 			deskmanifest.DocumentCustodianName(): pool("low"),
 			VerifierRole:                         pool("low"),
 			MultimodalVerifierRole:               pool("low"),
+			AutoradioRole:                        {Model: modelcatalog.PoolSpecPrefix + modelcatalog.AutoradioPool, ReasoningEffort: "low", Source: "platform_fallback"},
 		},
 		Source: "platform_fallback",
 	}

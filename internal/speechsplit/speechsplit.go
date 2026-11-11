@@ -1,0 +1,188 @@
+// Package speechsplit cuts a stream of text deltas into sentences for the ear.
+//
+// The Autoradio desk streams a model's answer to the phone one sentence at a
+// time, so the phone can start speaking on the first. A sentence ends at ".",
+// "!" or "?" (with any closing quote or bracket) followed by whitespace and
+// then the start of the next sentence, or at a newline. A period is not an end
+// inside a number ("3.5"), inside a dotted abbreviation ("U.S.", "e.g."),
+// after a title or a common abbreviation ("Dr.", "Mrs.", "St."), after a
+// single capital initial ("J. K. Rowling"), or before a lowercase word. A run
+// of 200 characters with no end is cut at the last natural pause, so a model
+// that never punctuates still speaks.
+package speechsplit
+
+import (
+	"strings"
+	"unicode"
+	"unicode/utf8"
+)
+
+// MaxRunes is the forced-flush length of a sentence with no end.
+const MaxRunes = 200
+
+// Splitter accumulates deltas and returns each sentence as it completes.
+// The zero value is ready.
+type Splitter struct {
+	buf string
+}
+
+// Push adds a delta and returns the sentences it completed, in order.
+func (s *Splitter) Push(delta string) []string {
+	s.buf += delta
+	return s.drain(false)
+}
+
+// Flush returns what is left at the end of the stream as a final sentence.
+func (s *Splitter) Flush() []string { return s.drain(true) }
+
+func (s *Splitter) drain(final bool) []string {
+	var out []string
+	for {
+		end, rest, ok := nextBoundary(s.buf, final)
+		if !ok {
+			break
+		}
+		if sentence := clean(s.buf[:end]); sentence != "" {
+			out = append(out, sentence)
+		}
+		s.buf = s.buf[rest:]
+	}
+	if final {
+		if sentence := clean(s.buf); sentence != "" {
+			out = append(out, sentence)
+		}
+		s.buf = ""
+	}
+	return out
+}
+
+// titles never end a sentence; a period after one belongs to it.
+var titles = map[string]bool{
+	"mr": true, "mrs": true, "ms": true, "dr": true, "prof": true, "sr": true, "jr": true, "st": true, "mt": true,
+	"gen": true, "sen": true, "rep": true, "gov": true, "lt": true, "col": true, "capt": true, "sgt": true, "rev": true, "hon": true,
+	"vs": true, "no": true, "fig": true, "approx": true, "inc": true, "ltd": true, "co": true, "corp": true, "dept": true,
+	"jan": true, "feb": true, "mar": true, "apr": true, "jun": true, "jul": true, "aug": true, "sep": true, "sept": true, "oct": true, "nov": true, "dec": true,
+	"e.g": true, "i.e": true, "u.s": true, "u.k": true, "u.n": true, "d.c": true, "u.s.a": true,
+}
+
+// softAbbreviations end a sentence only when an uppercase word follows.
+var softAbbreviations = map[string]bool{"etc": true, "a.m": true, "p.m": true}
+
+// nextBoundary finds the end of the first sentence in buf: end is where the
+// sentence text stops, rest where the next one starts. With final false it
+// does not decide a boundary it cannot yet see (a period at the very end of
+// the buffer waits for the next character).
+func nextBoundary(buf string, final bool) (end, rest int, ok bool) {
+	runes := 0
+	for i := 0; i < len(buf); {
+		r, w := utf8.DecodeRuneInString(buf[i:])
+		runes++
+		switch {
+		case r == '\n':
+			if strings.TrimSpace(buf[:i]) != "" {
+				return i, i + w, true
+			}
+		case r == '。' || r == '！' || r == '？':
+			return i + w, i + w, true
+		case r == '.' || r == '!' || r == '?' || r == '…':
+			j := i + w
+			for j < len(buf) {
+				c, cw := utf8.DecodeRuneInString(buf[j:])
+				if c == '.' || c == '!' || c == '?' || c == '…' || c == '"' || c == '\'' || c == ')' || c == ']' || c == '”' || c == '’' {
+					j += cw
+					continue
+				}
+				break
+			}
+			if j >= len(buf) {
+				if final {
+					return 0, 0, false
+				}
+				return 0, 0, false // wait for the next character
+			}
+			c, _ := utf8.DecodeRuneInString(buf[j:])
+			if !unicode.IsSpace(c) {
+				// "3.5", "U.S.A", "example.com": inside a token.
+				i = j
+				continue
+			}
+			k := j
+			for k < len(buf) {
+				c, cw := utf8.DecodeRuneInString(buf[k:])
+				if !unicode.IsSpace(c) {
+					break
+				}
+				k += cw
+			}
+			if k >= len(buf) {
+				return 0, 0, false // the next sentence has not begun
+			}
+			next, _ := utf8.DecodeRuneInString(buf[k:])
+			if r == '.' && !periodEnds(buf[:i], next) {
+				i = j
+				continue
+			}
+			return j, k, true
+		}
+		if runes >= MaxRunes {
+			if cut, restAt, ok := forcedCut(buf, i+w); ok {
+				return cut, restAt, true
+			}
+		}
+		i += w
+	}
+	return 0, 0, false
+}
+
+// periodEnds reports whether a period after before ends a sentence, given the
+// first character of the next word.
+func periodEnds(before string, next rune) bool {
+	word := before
+	if i := strings.LastIndexFunc(before, unicode.IsSpace); i >= 0 {
+		word = before[i+1:]
+	}
+	word = strings.ToLower(strings.TrimLeft(word, "\"'([“‘"))
+	if titles[word] {
+		return false
+	}
+	// A single letter is an initial ("J. K. Rowling").
+	if utf8.RuneCountInString(word) == 1 && unicode.IsLetter([]rune(word)[0]) {
+		return false
+	}
+	if softAbbreviations[word] {
+		return unicode.IsUpper(next)
+	}
+	if unicode.IsLower(next) {
+		return false
+	}
+	return true
+}
+
+// forcedCut cuts an over-long run at its last pause at or before limit (a byte
+// offset just past the 200th rune): after a comma, semicolon or colon in the
+// second half, else at the last space, else at limit.
+func forcedCut(buf string, limit int) (end, rest int, ok bool) {
+	head := buf[:limit]
+	if i := strings.LastIndexAny(head, ",;:"); i >= len(head)/2 {
+		return i + 1, i + 1, true
+	}
+	if i := strings.LastIndexFunc(head, unicode.IsSpace); i > 0 {
+		return i, i + 1, true
+	}
+	return limit, limit, true
+}
+
+// clean makes a sentence plain for the ear: whitespace collapsed, markdown
+// marks dropped.
+func clean(s string) string {
+	s = strings.Map(func(r rune) rune {
+		switch r {
+		case '*', '`', '_', '#', '~', '|':
+			return -1
+		}
+		return r
+	}, s)
+	s = strings.Join(strings.Fields(s), " ")
+	s = strings.TrimLeft(s, "-> ")
+	return strings.TrimSpace(s)
+}

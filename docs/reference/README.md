@@ -25,3 +25,4 @@ Pages:
 - [ON-DEVICE-MODELS.md](ON-DEVICE-MODELS.md): models and runtimes for the
   Autoradio phone app; all candidates untested as of 2026-11-10.
 - [EXACT.md](EXACT.md): the Exact app-shell runtime (pinned commit, model, surprises, decision guide), with subpages in [exact/](exact/): ui-model, native-modules, audio, build-and-ship, testing-and-debugging, internals, gaps. The runnable example is [mobile/exact-spike/](../../mobile/exact-spike/README.md).
+- [AUTORADIO-TURNS.md](AUTORADIO-TURNS.md): `POST /api/autoradio/turns`, the Autoradio desk's fast answer: request, server-sent event shapes, records, pool order, measuring (slice 1).

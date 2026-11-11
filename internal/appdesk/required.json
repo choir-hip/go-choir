@@ -1,1 +1,9 @@
-{"packages": []}
+{"packages": [
+  {"package": "autoradio", "version": "1.0.0", "manifest": {
+    "package": "autoradio",
+    "verbs": ["Report", "Done"],
+    "taint_class": "untrusted_input",
+    "worker_max_bytes": 134217728,
+    "owned_object_kinds": []
+  }}
+]}

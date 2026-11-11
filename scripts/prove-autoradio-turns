@@ -1,0 +1,197 @@
+#!/usr/bin/env python3
+"""Proof: how fast does the Autoradio desk start speaking?
+
+Asks POST /api/autoradio/turns N times (default 10) and prints, per ask, the
+time from sending the request to the first `speech` event and to `done`
+(this machine's clock), the server's own hop timings from the `done` event, the
+model that answered and the sentence count. Then the median and the slowest.
+
+Exit status: 0 when the median time to the first `speech` event is at most
+--max-median-first (default 2.5 s) and every ask completed; 1 when the median
+is over, or an ask failed or never spoke; 2 on bad arguments or an unreadable
+key file. Asks slower than --slow (default 6 s) to first speech are named, as
+the design's pass criterion is none above 6 s.
+
+The key is read from --api-key-file and goes only in the Authorization header;
+it is never printed. An owner-wide key names no computer: pass --computer-id
+(sent as X-Choir-Computer); a key bound to one computer needs none.
+
+  scripts/prove-autoradio-turns --host choir.news --api-key-file ~/key \\
+      --computer-id <the test computer> [--count 10]
+
+Run it from a host off Node B. Design:
+docs/design/autoradio-desk-fast-turns-2026-11-11.md section 7; shapes:
+docs/reference/AUTORADIO-TURNS.md.
+"""
+import argparse
+import http.client
+import json
+import statistics
+import sys
+import time
+import uuid
+
+PAGE_TITLE = "Front page"
+PAGE_TEXT = (
+    "A strike by school staff in Nancy ended on Tuesday after three weeks. "
+    "Talks between the union and the regional council resume on Monday. "
+    "Parents said classes had been disrupted since the start of the term. "
+    "The council offered a one-time payment of 400 euros and a review of staffing in March. "
+    "The union called the offer a first step and said it would not return to full hours until the review is signed. "
+    "Elsewhere on the page, the weather service expects rain across the region through the weekend."
+)
+QUESTIONS = [
+    "What is the top story?",
+    "Who is on strike?",
+    "When do the talks resume?",
+    "How much did the council offer?",
+    "What is the weather going to be?",
+    "Why were classes disrupted?",
+    "What did the union say about the offer?",
+    "Is there anything about sports on this page?",
+    "How long did the strike last?",
+    "What happens in March?",
+]
+
+
+def read_key(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            key = "".join(f.read().split())
+    except OSError as err:
+        print(f"cannot read --api-key-file: {err.strerror}", file=sys.stderr)
+        sys.exit(2)
+    if not key:
+        print("--api-key-file is empty", file=sys.stderr)
+        sys.exit(2)
+    return key
+
+
+def one_ask(args, key, n):
+    """Return a dict for one ask. Times are seconds since the request was sent."""
+    body = json.dumps({
+        "turn_id": "prove-" + uuid.uuid4().hex[:16],
+        "words": QUESTIONS[n % len(QUESTIONS)],
+        "page": {"address": "pub:proof-front@1", "title": PAGE_TITLE, "text": PAGE_TEXT},
+    }).encode()
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream",
+        "Authorization": "Bearer " + key,
+    }
+    if args.computer_id:
+        headers["X-Choir-Computer"] = args.computer_id
+    conn_cls = http.client.HTTPConnection if args.insecure_http else http.client.HTTPSConnection
+    out = {"first_byte": None, "first_speech": None, "done_at": None, "done": None, "sentences": 0, "error": None, "status": None}
+    conn = conn_cls(args.host, timeout=args.timeout)
+    try:
+        t0 = time.perf_counter()
+        conn.request("POST", "/api/autoradio/turns", body=body, headers=headers)
+        resp = conn.getresponse()
+        out["http"] = resp.status
+        if resp.status != 200:
+            out["error"] = f"http {resp.status}: {resp.read(300).decode('utf-8', 'replace').strip()}"
+            return out
+        name = None
+        while True:
+            line = resp.readline()
+            if not line:
+                break
+            now = time.perf_counter() - t0
+            if out["first_byte"] is None:
+                out["first_byte"] = now
+            line = line.decode("utf-8", "replace").rstrip("\r\n")
+            if line.startswith("event: "):
+                name = line[7:]
+            elif line.startswith("data: ") and name:
+                try:
+                    data = json.loads(line[6:])
+                except ValueError:
+                    continue
+                if name == "speech":
+                    out["sentences"] += 1
+                    if out["first_speech"] is None:
+                        out["first_speech"] = now
+                elif name == "error":
+                    out["error"] = "error event: " + str(data.get("reason", ""))[:120]
+                elif name == "done":
+                    out["done_at"] = now
+                    out["done"] = data
+                    out["status"] = data.get("status")
+                    break
+    except (OSError, http.client.HTTPException) as err:
+        out["error"] = f"{type(err).__name__}: {err}"
+    finally:
+        conn.close()
+    return out
+
+
+def fmt(v):
+    return "   -  " if v is None else f"{v:6.2f}"
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Time the Autoradio desk's first spoken sentence.")
+    ap.add_argument("--host", required=True, help="e.g. choir.news")
+    ap.add_argument("--api-key-file", required=True)
+    ap.add_argument("--computer-id", default="")
+    ap.add_argument("--count", type=int, default=10)
+    ap.add_argument("--max-median-first", type=float, default=2.5, help="seconds")
+    ap.add_argument("--slow", type=float, default=6.0, help="seconds; asks slower than this to first speech are named")
+    ap.add_argument("--timeout", type=float, default=40.0)
+    ap.add_argument("--insecure-http", action="store_true", help="plain HTTP, for a local fake server")
+    ap.add_argument("--dry-run", action="store_true", help="check the arguments and the key file, send nothing")
+    args = ap.parse_args()
+    if args.count < 1:
+        print("--count must be at least 1", file=sys.stderr)
+        return 2
+    key = read_key(args.api_key_file)
+    if args.dry_run:
+        print("dry run ok")
+        return 0
+
+    print(f"{'ask':>3} {'first byte':>10} {'first speech':>12} {'done':>7}  {'srv rec':>7} {'srv 1st tok':>11} {'srv 1st sent':>12} {'srv done':>8}  sent  status        model")
+    rows = []
+    for n in range(args.count):
+        r = one_ask(args, key, n)
+        rows.append(r)
+        t = (r["done"] or {}).get("timings_ms") or {}
+        sv = lambda k: None if t.get(k, -1) < 0 else t[k] / 1000.0
+        model = ""
+        if r["done"]:
+            model = f"{r['done'].get('provider', '')}/{r['done'].get('model', '')}"
+        status = r["status"] or ("error" if r["error"] else "?")
+        print(f"{n + 1:>3} {fmt(r['first_byte']):>10} {fmt(r['first_speech']):>12} {fmt(r['done_at']):>7}  "
+              f"{fmt(sv('record_written')):>7} {fmt(sv('upstream_first_token')):>11} {fmt(sv('first_sentence')):>12} {fmt(sv('done')):>8}  "
+              f"{r['sentences']:>4}  {status:<12}  {model}")
+        if r["error"]:
+            print(f"      {r['error']}")
+
+    firsts = [r["first_speech"] for r in rows if r["first_speech"] is not None]
+    ok = [r for r in rows if r["status"] == "completed" and r["first_speech"] is not None]
+    print()
+    if not firsts:
+        print("FAIL: no ask produced a speech event")
+        return 1
+    median = statistics.median(firsts)
+    print(f"asks {len(rows)}, completed {len(ok)}, spoke {len(firsts)}")
+    print(f"median to first speech: {median:.2f} s   slowest: {max(firsts):.2f} s   median to done: "
+          f"{statistics.median([r['done_at'] for r in rows if r['done_at'] is not None] or [0]):.2f} s")
+    slow = [i + 1 for i, r in enumerate(rows) if r["first_speech"] is not None and r["first_speech"] > args.slow]
+    if slow:
+        print(f"asks above {args.slow:g} s to first speech: {slow} (the design's pass criterion is none)")
+    failed = [i + 1 for i, r in enumerate(rows) if r["status"] != "completed"]
+    if failed:
+        print(f"asks that did not complete: {failed}")
+    if median > args.max_median_first:
+        print(f"FAIL: median {median:.2f} s is over {args.max_median_first:g} s")
+        return 1
+    if failed or len(firsts) < len(rows):
+        print("FAIL: not every ask completed and spoke")
+        return 1
+    print(f"PASS: median {median:.2f} s is within {args.max_median_first:g} s")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
