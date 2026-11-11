@@ -74,8 +74,11 @@ public struct ReaderBlock: Codable, Sendable, Equatable {
     /// anchors of the citations in this block (the cards open after it)
     public var cites: [String]
     public var sentences: Int
+    /// an embed's alt text (the accessibility label; the drawn label is `text`)
+    public var alt: String
     public init(id: String, kind: String, level: Int = 0, depth: Int = 0, marker: String = "", runs: [ReaderRun] = [],
-                rows: [ReaderRow] = [], text: String = "", ordinal: Int = -1, cites: [String] = [], sentences: Int = 0) {
+                rows: [ReaderRow] = [], text: String = "", ordinal: Int = -1, cites: [String] = [], sentences: Int = 0, alt: String = "") {
+        self.alt = alt
         self.id = id; self.kind = kind; self.level = level; self.depth = depth; self.marker = marker; self.runs = runs
         self.rows = rows; self.text = text; self.ordinal = ordinal; self.cites = cites; self.sentences = sentences
     }
@@ -241,6 +244,7 @@ public enum TextureDocParser {
         var transclusions: [String: [String: Any]] = [:]       // anchor id -> transclusion
         var resolved: [String: [String: Any]] = [:]            // cid -> resolved block
         var checks: [String: [String: Any]] = [:]              // anchor id -> check
+        var manifestAnchors: [String: [String: Any]] = [:]     // anchor id -> manifest anchor (its ref holds the quoted words)
     }
 
     // MARK: Published bundle (GET /api/platform/publications/resolve)
@@ -269,6 +273,13 @@ public enum TextureDocParser {
         }
         for c in ((o["checks"] as? [String: Any])?["citations"] as? [[String: Any]]) ?? [] {
             if let a = c["anchor_id"] as? String { ctx.checks[a] = c }
+        }
+
+        // The manifest's anchors, as the web builds its published citation context (texture-published-citations.ts).
+        var manifest = payload["manifest"]
+        if let ms = manifest as? String, let d = ms.data(using: .utf8) { manifest = try? JSONSerialization.jsonObject(with: d) }
+        for a in ((manifest as? [String: Any])?["anchors"] as? [[String: Any]]) ?? [] {
+            if let id = a["anchor_id"] as? String, !id.isEmpty { ctx.manifestAnchors[id] = a }
         }
 
         let text = (artifact["content"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? (payload["text"] as? String) ?? ""
@@ -511,12 +522,12 @@ public enum TextureDocParser {
                 for child in content {
                     let ct = child["type"] as? String ?? ""
                     if ct == "paragraph" || ct == "heading" {
-                        emit(kind: ct == "heading" ? "h" : "quote", level: ct == "heading" ? 3 : 0, depth: quoteDepth + 1, marker: "",
+                        emit(kind: ct == "heading" ? "h" : "quote", level: ct == "heading" ? max(1, min(6, TextureDocParser.intValue((child["attrs"] as? [String: Any])?["level"]) ?? 3)) : 0, depth: quoteDepth + 1, marker: "",
                              inline: (child["content"] as? [[String: Any]]) ?? [], nodeId: (child["attrs"] as? [String: Any])?["id"] as? String)
                     } else { block(child, listDepth: listDepth, quoteDepth: quoteDepth + 1) }
                 }
             case "code_block":
-                let text = content.compactMap { $0["text"] as? String }.joined()
+                let text = content.compactMap { $0["text"] as? String }.joined(separator: "\n")   // the web joins a code block's text nodes with a newline
                 if !text.isEmpty { blocks.append(ReaderBlock(id: nextId("b"), kind: "code", text: text)) }
             case "horizontal_rule":
                 blocks.append(ReaderBlock(id: nextId("b"), kind: "rule"))
@@ -536,8 +547,12 @@ public enum TextureDocParser {
                 }
                 if !rows.isEmpty { blocks.append(ReaderBlock(id: nextId("b"), kind: "table", rows: rows)) }
             case "embed":
-                let label = (attrs["title"] as? String) ?? (attrs["alt"] as? String) ?? (attrs["kind"] as? String) ?? "Embedded item"
+                // The label the web draws: the caption, else the title (file, audio), else the alt text. The alt text
+                // stays on the block for accessibility labels.
+                func nonEmpty(_ k: String) -> String? { (attrs[k] as? String).map { $0.rdTrim }.flatMap { $0.isEmpty ? nil : $0 } }
+                let label = nonEmpty("caption") ?? nonEmpty("title") ?? nonEmpty("alt") ?? nonEmpty("kind") ?? "Embedded item"
                 var b = ReaderBlock(id: nextId("b"), kind: "embed", text: label)
+                b.alt = nonEmpty("alt") ?? ""
                 b.marker = attrs["kind"] as? String ?? ""
                 blocks.append(b)
             default:
@@ -568,14 +583,14 @@ public enum TextureDocParser {
 
         // MARK: Inline
 
-        mutating func addCite(anchorHint: String?, entityId: String, blockId: String) -> (anchor: String, number: Int, kind: String, title: String) {
+        mutating func addCite(anchorHint: String?, entityId: String, blockId: String, nodeRef: [String: Any]? = nil) -> (anchor: String, number: Int, kind: String, title: String) {
             var anchor = (anchorHint ?? "").rdTrim
             if anchor.isEmpty { anchor = "c\(cites.count + 1)" }
             if usedAnchorIds.contains(anchor) { var k = 2; while usedAnchorIds.contains("\(anchor)-\(k)") { k += 1 }; anchor = "\(anchor)-\(k)" }
             usedAnchorIds.insert(anchor)
             let number: Int
             if let n = entityNumber[entityId], !entityId.isEmpty { number = n } else { number = entityNumber.count + 1; if !entityId.isEmpty { entityNumber[entityId] = number } else { entityNumber["anon-\(anchor)"] = number } }
-            let c = Citations.cite(anchor: anchor, number: number, blockId: blockId, entityId: entityId, ctx: ctx)
+            let c = Citations.cite(anchor: anchor, number: number, blockId: blockId, entityId: entityId, ctx: ctx, nodeRef: nodeRef)
             anchors[anchor] = cites.count
             cites.append(c)
             return (anchor, number, c.kind, c.title)
@@ -611,6 +626,9 @@ public enum TextureDocParser {
     static func parseInline(_ nodes: [[String: Any]], builder: inout Builder, bare: Bool) -> (runs: [ReaderRun], plain: String) {
         var runs: [ReaderRun] = []
         var plain = ""
+        // The web collapses adjacent published citations of one source into one marker (renderInlineContent): only when the
+        // bundle carries manifest anchors; whitespace-only text between them does not break the run, anything else does.
+        var previousPublished = 0
         func walk(_ nodes: [[String: Any]]) {
             for n in nodes {
                 let type = n["type"] as? String ?? ""
@@ -622,11 +640,29 @@ public enum TextureDocParser {
                     let types = Set(marks.compactMap { $0["type"] as? String })
                     var href = ""
                     if let link = marks.first(where: { ($0["type"] as? String) == "link" }) { href = ((link["attrs"] as? [String: Any])?["href"] as? String) ?? "" }
+                    if !t.rdTrim.isEmpty { previousPublished = 0 }
+                    // Paired ** in an unmarked text node is bold written before Write parsed marks; the web draws it bold
+                    // (renderLegacyStrong), with the same flanking rule.
+                    if marks.isEmpty, t.contains("**") {
+                        let ns = t as NSString
+                        var last = 0
+                        for m in legacyStrong.matches(in: t, range: NSRange(location: 0, length: ns.length)) {
+                            let g2 = m.range(at: 2)
+                            let before = ns.substring(with: NSRange(location: last, length: g2.location - 2 - last))
+                            if !before.isEmpty { runs.append(ReaderRun(id: "x\(runs.count)", text: before)); plain += before }
+                            let bold = ns.substring(with: g2)
+                            runs.append(ReaderRun(id: "x\(runs.count)", text: bold, weight: 700)); plain += bold
+                            last = m.range.location + m.range.length
+                        }
+                        if last < ns.length { let rest = ns.substring(from: last); runs.append(ReaderRun(id: "x\(runs.count)", text: rest)); plain += rest }
+                        continue
+                    }
                     let kind = types.contains("code") ? "code" : (href.isEmpty ? "t" : "link")
                     runs.append(ReaderRun(id: "x\(runs.count)", text: t, kind: kind, weight: types.contains("strong") ? 700 : 400,
                                           slant: types.contains("emphasis") ? "italic" : "normal", href: href))
                     plain += t
                 case "hard_break":
+                    previousPublished = 0
                     runs.append(ReaderRun(id: "x\(runs.count)", text: "\n", kind: "br")); plain += "\n"
                 case "source_ref":
                     let attrs = n["attrs"] as? [String: Any] ?? [:]
@@ -635,7 +671,13 @@ public enum TextureDocParser {
                         // a table cell: a plain bracket mark with no card
                         runs.append(ReaderRun(id: "x\(runs.count)", text: "\u{2020}", kind: "t"))
                     } else {
-                        let c = builder.addCite(anchorHint: attrs["id"] as? String, entityId: entity, blockId: builder.currentBlock)
+                        let c = builder.addCite(anchorHint: attrs["id"] as? String, entityId: entity, blockId: builder.currentBlock,
+                                                nodeRef: Citations.refObject(attrs["ref"]))
+                        let published = (attrs["id"] as? String).flatMap { builder.ctx.manifestAnchors[$0] }.map { Citations.refObject($0["ref"])?["doc"] != nil } ?? false
+                        if published {
+                            if c.number == previousPublished { continue }   // the card stays in the Sources list
+                            previousPublished = c.number
+                        } else { previousPublished = 0 }
                         let isRef = c.kind == "texture"
                         runs.append(ReaderRun(id: "x\(runs.count)", text: isRef ? "\u{00A0}\(c.title)\u{00A0}" : "\u{00A0}\(c.number)\u{00A0}",
                                               kind: isRef ? "ref" : "cite", weight: 700, anchor: c.anchor, label: "\(c.number)"))
@@ -649,6 +691,10 @@ public enum TextureDocParser {
         walk(nodes)
         return (runs, plain)
     }
+
+    /// The web's legacy-bold pattern (texture-structured-editor-doc.ts LEGACY_STRONG_RE): the opener is not preceded by a letter,
+    /// digit or *, and is followed by a non-space; the closer is preceded by a non-space and not followed by a letter, digit or *.
+    static let legacyStrong = try! NSRegularExpression(pattern: #"(^|[^\p{L}\p{N}*])\*\*(?=[^\s*])([^*]*?[^\s*])\*\*(?![\p{L}\p{N}*])"#)
 
     // MARK: Sentences
 

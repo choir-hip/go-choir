@@ -38,24 +38,6 @@
    "reason": "web numbers an unpublished marker by its position in source_entities (renderInlineSourceRef: indexOf+1), native numbers by first citation in reading order (Builder.addCite); the published path (manifest anchors) also numbers by reading order, so the web unpublished path is the odd one"
   },
   {
-   "doc": "citations-published",
-   "key": "web#0~native#0.cites",
-   "side": "native",
-   "reason": "native shows the check outcome word (\"exact\") as the quote: Citations.cite reads checks.citations[].quote, which the server fills with the outcome, before the ref's quote (the quoted words are in the manifest anchor ref and attrs.ref)"
-  },
-  {
-   "doc": "citations-published",
-   "key": "web#1~native#1.cites",
-   "side": "native",
-   "reason": "same quote defect as above for the failed and tolerant checks; a citation with no check entry (a4) gets an empty quote on native though the manifest anchor has one; and native keeps two cards for adjacent cites of one source where web keeps one"
-  },
-  {
-   "doc": "citations-published",
-   "key": "web#1~native#1.text",
-   "side": "web",
-   "reason": "web collapses adjacent published citations of one source into one marker (renderInlineContent: a quarter of stories drew \"[1] [1]\"); native draws both. Native should collapse too, or web should stop; the format has no rule"
-  },
-  {
    "doc": "edge-shapes",
    "key": "web#0",
    "side": "by-design",
@@ -72,30 +54,6 @@
    "key": "web#2",
    "side": "web",
    "reason": "a whitespace-only paragraph: same as the empty paragraph"
-  },
-  {
-   "doc": "edge-shapes",
-   "key": "web#4~native#1.spans",
-   "side": "native",
-   "reason": "web renders paired ** in an unmarked text node as bold (renderLegacyStrong, for bodies written before Write parsed marks); native shows the asterisks"
-  },
-  {
-   "doc": "edge-shapes",
-   "key": "web#4~native#1.text",
-   "side": "native",
-   "reason": "same: the literal ** characters stay in native text"
-  },
-  {
-   "doc": "embeds",
-   "key": "web#1~native#1.text",
-   "side": "native",
-   "reason": "an image embed's label: web shows caption (else alt), native shows title, else alt, else kind and never the caption (TextureDoc.swift embed case)"
-  },
-  {
-   "doc": "embeds",
-   "key": "web#5~native#5.text",
-   "side": "native",
-   "reason": "a capsule_evidence embed: web shows caption, native shows alt (same cause: native ignores caption)"
   },
   {
    "doc": "lists",
@@ -138,24 +96,6 @@
    "key": "web#11~native#11.text",
    "side": "web",
    "reason": "same as the previous entry"
-  },
-  {
-   "doc": "quotes-code-rule",
-   "key": "web#6~native#6.level",
-   "side": "native",
-   "reason": "a heading inside a blockquote: native always draws level 3 (Builder.block, blockquote case), web keeps the node's level"
-  },
-  {
-   "doc": "quotes-code-rule",
-   "key": "web#11~native#11.text",
-   "side": "native",
-   "reason": "code_block with two text nodes: web and the Go projection join them with a newline, native joins them with nothing"
-  },
-  {
-   "doc": "transclusion",
-   "key": "web#0~native#0.cites",
-   "side": "native",
-   "reason": "native ignores a source_ref's own ref.quote (attrs.ref) and takes the quote only from a transclusion, a check or a ref carried by those (Citations.cite); web shows attrs.ref.quote"
   }
  ]
 }
