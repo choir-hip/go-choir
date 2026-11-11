@@ -23,7 +23,7 @@
 // flag, or `still`): the flat brand drawing, a gentle opacity change, state shown by tint.
 //
 // Every duration is a theme token: th.motionEnterMs (ramps, flip, shake, pop, reduced fade), th.markDriftS,
-// th.markTumble ("3.3s,5.9s": the turn's and the wobble's periods), th.markListenScale, th.reducedMotion.
+// th.markTumble ("3.3s,5.9s": the first sets the turn's period), th.markListenScale, th.reducedMotion.
 use Theme, RadioInfo from "@choir/autoradio"
 
 keyframes markpop
@@ -36,11 +36,20 @@ fn ryx(x: number, z: number, s: number, c: number): number = x * c + z * s
 fn ryz(x: number, z: number, s: number, c: number): number = z * c - x * s
 fn rxy(y: number, z: number, s: number, c: number): number = y * c - z * s
 fn rxz(y: number, z: number, s: number, c: number): number = y * s + z * c
-// One point: turn about y, tip about x, perspective (eye at 3.2 radii), then the brand box (256 is its centre).
-fn pxy(x: number, y: number, z: number, sa: number, ca: number, sb: number, cb: number, sc: number, tx: number, ty: number): string = `${256 + 256 * ryx(x, z, sa, ca) * 3.2 / (3.2 - rxz(y, ryz(x, z, sa, ca), sb, cb)) * sc + tx},${256 + 256 * rxy(y, ryz(x, z, sa, ca), sb, cb) * 3.2 / (3.2 - rxz(y, ryz(x, z, sa, ca), sb, cb)) * sc + ty}`
-fn blade(xs: number[], ys: number[], zs: number[], d: number, sa: number, ca: number, sb: number, cb: number, sc: number, tx: number, ty: number): string = xs.map((x, i) => pxy(x, at0(ys, i), at0(zs, i) * d, sa, ca, sb, cb, sc, tx, ty)).join(" ")
-// A blade's opacity from its facing a light at the upper left: 1 at rest, down to 0.5 turned away. A desk step lights blades in order.
-fn shade(n: number[], d: number, sa: number, ca: number, sb: number, cb: number, i: number, step: number): number = step >= 0 ? (i < step ? 1 : 0.28) : 1 - d * 0.5 * (0.5 - 0.5 * (ryx(at0(n, 0), at0(n, 2), sa, ca) * -0.42 + rxy(at0(n, 1), ryz(at0(n, 0), at0(n, 2), sa, ca), sb, cb) * -0.52 + rxz(at0(n, 1), ryz(at0(n, 0), at0(n, 2), sa, ca), sb, cb) * 0.74))
+// One point: turn about y, tip about x, perspective (eye at 8 radii; the divisor is clamped so no point can blow up), then
+// the brand box (256 is its centre).
+fn pxy(x: number, y: number, z: number, sa: number, ca: number, sb: number, cb: number, sc: number, tx: number, ty: number): string = `${256 + 256 * ryx(x, z, sa, ca) * 8 / max(8 - rxz(y, ryz(x, z, sa, ca), sb, cb), 4) * sc + tx},${256 + 256 * rxy(y, ryz(x, z, sa, ca), sb, cb) * 8 / max(8 - rxz(y, ryz(x, z, sa, ca), sb, cb), 4) * sc + ty}`
+// A blade's face at offset `o` behind its plane, along its normal `n` (o is 0 for the front face; the slab's thickness is the
+// largest o). Everything depth-like is scaled by d, so at d = 0 every face is the flat brand polygon.
+fn blade(xs: number[], ys: number[], zs: number[], n: number[], o: number, d: number, sa: number, ca: number, sb: number, cb: number, sc: number, tx: number, ty: number): string = xs.map((x, i) => pxy(x - o * d * at0(n, 0), at0(ys, i) - o * d * at0(n, 1), (at0(zs, i) - o * at0(n, 2)) * d, sa, ca, sb, cb, sc, tx, ty)).join(" ")
+// The blade's normal turned: its z says which face of the slab the eye sees (>= 0: the front); x and y feed the light.
+fn nrx(n: number[], d: number, sa: number, ca: number): number = ryx(at0(n, 0) * d, at0(n, 2), sa, ca)
+fn nrz1(n: number[], d: number, sa: number, ca: number): number = ryz(at0(n, 0) * d, at0(n, 2), sa, ca)
+fn nry(n: number[], d: number, sa: number, ca: number, sb: number, cb: number): number = rxy(at0(n, 1) * d, nrz1(n, d, sa, ca), sb, cb)
+fn nrz(n: number[], d: number, sa: number, ca: number, sb: number, cb: number): number = rxz(at0(n, 1) * d, nrz1(n, d, sa, ca), sb, cb)
+// The seen face's opacity over the darker slab colour, from a light at the upper left: 1 at rest, down to 0.35 turned away.
+// A desk step lights blades in order instead.
+fn shade(n: number[], d: number, sa: number, ca: number, sb: number, cb: number, i: number, step: number): number = step >= 0 ? (i < step ? 1 : 0.28) : 1 - d * 0.65 * (0.5 - 0.5 * (nrz(n, d, sa, ca, sb, cb) >= 0 ? 1 : -1) * (nrx(n, d, sa, ca) * -0.42 + nry(n, d, sa, ca, sb, cb) * -0.52 + nrz(n, d, sa, ca, sb, cb) * 0.74))
 fn smooth(u: number): number = u * u * (3 - 2 * u)
 fn backw(w: number): number = 1 + 2.70158 * w * w * w + 1.70158 * w * w
 fn canon(s: string): string = s == "playing" or s == "speaking" ? "speaking" : s == "listening" ? "listening" : s == "holding" or s == "thinking" or s == "heard" or s == "working" or s == "waiting" ? "thinking" : s == "revised" or s == "success" ? "success" : s == "error" or s == "failed" ? "error" : "idle"
@@ -69,9 +78,7 @@ component MarkAt
   derive r = calm ? 0 : smooth(eu)
   derive tparts = th.markTumble.split(",")
   derive taText = match tparts.at(0) { case some(v) => v.replaceAll("s", "").trim(), case none => "3.3" }
-  derive tbText = match tparts.at(1) { case some(v) => v.replaceAll("s", "").trim(), case none => "5.9" }
   derive ta = match parseNumber(taText) { case some(n) => max(n, 0.5), case none => 3.3 }
-  derive tb = match parseNumber(tbText) { case some(n) => max(n, 0.5), case none => 5.9 }
   derive dr = max(th.markDriftS, 8)
   derive dd = th.markDriftS > 0 ? 1 : 0
   derive breath = 0.5 + 0.5 * sin(6.2832 * tt / 2.6)
@@ -80,40 +87,45 @@ component MarkAt
   derive cyc = max(1.6, min(4, ta * 0.6))
   derive h = min(1, (ee % cyc) / cyc / 0.72)
   derive e1 = smooth(h)
-  derive wob = 6.2832 * tt / max(2, tb * 0.5)
   derive yaw = calm ? 0 : st == "idle" ? 0.14 * sin(6.2832 * tt / dr) * dd : st == "listening" ? r * (0.12 + 0.4 * amp) * sin(6.2832 * tt / 1.3) : st == "thinking" ? 6.2832 * e1 : st == "speaking" ? 0.55 * r * sin(6.2832 * tt / 3.2) : st == "success" ? 6.2832 * backw(su - 1) : 0
-  derive pitch = calm ? 0 : st == "idle" ? 0.07 * sin(6.2832 * tt / (dr * 0.7)) * dd : st == "listening" ? -0.3 * r * amp : st == "thinking" ? 0.35 * sin(6.2832 * e1) + 0.1 * r * sin(wob) : st == "speaking" ? 0.1 * r * sin(6.2832 * tt / 2.1) : 0
-  derive sc = calm ? 1 : st == "idle" ? 1 + 0.015 * sin(6.2832 * tt / 7) * dd : st == "listening" ? 1 + (th.markListenScale - 1) * (max(level, 0.6 * breath) + 0.5 * r) : st == "thinking" ? 1 + 0.07 * r * sin(3.1416 * h) : st == "speaking" ? 1 + 0.06 * r * pulse : st == "success" ? 1 + 0.08 * sin(3.1416 * su) : 1
-  derive tx = calm ? 0 : st == "thinking" ? 10 * r * sin(wob) : st == "error" ? 24 * (1 - eu) * (1 - eu) * sin(6.2832 * 8 * ee) : 0
-  derive ty = calm ? 0 : st == "thinking" ? -34 * r * sin(3.1416 * h) : 0
+  derive pitch = calm ? 0 : st == "idle" ? 0.07 * sin(6.2832 * tt / (dr * 0.7)) * dd : st == "listening" ? -0.3 * r * amp : st == "thinking" ? 0.22 * sin(6.2832 * e1) : st == "speaking" ? 0.1 * r * sin(6.2832 * tt / 2.1) : 0
+  derive sc = calm ? 1 : st == "idle" ? 1 + 0.015 * sin(6.2832 * tt / 7) * dd : st == "listening" ? min(1.1, 1 + (th.markListenScale - 1) * (max(level, 0.6 * breath) + 0.5 * r)) : st == "thinking" ? 1 + 0.04 * r * sin(3.1416 * h) : st == "speaking" ? 1 + 0.06 * r * pulse : st == "success" ? 1 + 0.08 * sin(3.1416 * su) : 1
+  derive tx = calm ? 0 : st == "thinking" ? 12 * r * sin(6.2832 * e1) : st == "error" ? 24 * (1 - eu) * (1 - eu) * sin(6.2832 * 8 * ee) : 0
+  derive ty = calm ? 0 : st == "thinking" ? -30 * r * sin(3.1416 * h) : 0
   derive d = min(1, 2 * (max(sin(yaw / 2), 0 - sin(yaw / 2)) + max(sin(pitch / 2), 0 - sin(pitch / 2))))
+  derive fit = 1 - 0.2 * d
+  derive scf = sc * fit
   derive sa = sin(yaw)
   derive ca = cos(yaw)
   derive sb = sin(pitch)
   derive cb = cos(pitch)
+  derive tint2 = th.accent2
   derive tint = st == "success" ? th.success : st == "error" ? th.danger : th.accent
   // BEGIN tetramark-data (generated by mobile/scripts/gen-tetramark.py from frontend/src/lib/tetramark.ts; do not edit)
   derive bx0 = [0.0536, 0.01, -0.0223, -0.0168, 0.0257, 0.0759, 0.1284, 0.1374, 0.2032, 0.4724, 0.6578, 0.7572, 0.8588, 0.7091, 0.4076, 0.2837, 0.1374]
   derive by0 = [-0.856, -0.7533, -0.4383, -0.1915, -0.0743, -0.0787, -0.2373, -0.5735, -0.588, -0.1156, 0.0932, 0.2675, 0.2775, -0.043, -0.4607, -0.6986, -0.8638]
-  derive bz0 = [-0.0842, -0.0001, 0.2033, 0.346, 0.3923, 0.3625, 0.2406, 0.0373, -0.0068, 0.1267, 0.1499, 0.199, 0.1501, 0.0417, -0.042, -0.1155, -0.1341]
-  derive bn0 = [0.4216, -0.461, 0.7809]
+  derive bz0 = [-0.1175, -0.0438, 0.1342, 0.259, 0.2995, 0.2734, 0.1667, -0.0111, -0.0497, 0.0671, 0.0874, 0.1304, 0.0876, -0.0072, -0.0805, -0.1448, -0.1611]
+  derive bn0 = [0.387, -0.4231, 0.8192]
   derive bx1 = [-0.3194, -0.4724, -0.6891, -0.7862, -0.8621, -0.8543, -0.7896, -0.2915, -0.1463, -0.1485, -0.1943, -0.4277, -0.6377, -0.6969, -0.6902, -0.3138]
   derive by1 = [-0.4182, -0.3144, 0.0977, 0.4104, 0.55, 0.6639, 0.7108, 0.5154, 0.3892, 0.3367, 0.3266, 0.4104, 0.5433, 0.5422, 0.4584, -0.3512]
-  derive bz1 = [0.3985, 0.251, -0.0652, -0.2587, -0.3675, -0.4082, -0.3824, 0.0404, 0.1917, 0.2114, 0.1838, -0.0112, -0.2099, -0.2503, -0.2118, 0.3753]
-  derive bn1 = [-0.5391, 0.3156, 0.7809]
+  derive bz1 = [0.305, 0.1758, -0.1008, -0.2701, -0.3653, -0.4009, -0.3784, -0.0084, 0.124, 0.1412, 0.1171, -0.0535, -0.2274, -0.2627, -0.229, 0.2846]
+  derive bn1 = [-0.4949, 0.2898, 0.8192]
   derive bx2 = [0.8611, 0.4344, 0.2691, 0.2747, 0.5204, 0.5182, -0.22, -0.3071, -0.3149, -0.277, 0.191, 0.7873, 0.8487]
   derive by2 = [0.7789, 0.4048, 0.3255, 0.4071, 0.6438, 0.7019, 0.7298, 0.7812, 0.8225, 0.8638, 0.8482, 0.8638, 0.8337]
-  derive bz2 = [-0.3838, 0.0205, 0.1284, 0.0661, -0.1825, -0.2251, -0.0273, -0.0397, -0.0681, -0.1101, -0.2369, -0.4251, -0.4208]
-  derive bn2 = [0.2311, 0.5804, 0.7809]
+  derive bz2 = [-0.3796, -0.0258, 0.0686, 0.0141, -0.2035, -0.2407, -0.0676, -0.0785, -0.1033, -0.1401, -0.2511, -0.4157, -0.412]
+  derive bn2 = [0.2122, 0.5328, 0.8192]
   // END tetramark-data
   view
     box testId=testId width=size height=size position="relative" role="img" aria-label=`TetraMark, ${st}`
       for k in [state] key=k
         box position="absolute" inset=0 animation=(calm ? `markfade ${th.motionEnterMs * 10}ms ease-in-out infinite` : `markpop ${th.motionEnterMs}ms ease-out both`)
           svg viewBox="0 0 512 512" width=size height=size overflow="visible"
-            polygon points=blade(bx0, by0, bz0, d, sa, ca, sb, cb, sc, tx, ty) fill=tint fill-opacity=shade(bn0, d, sa, ca, sb, cb, 0, step) stroke=th.fg stroke-opacity=(0.3 * d) stroke-width=5 stroke-linejoin="round"
-            polygon points=blade(bx1, by1, bz1, d, sa, ca, sb, cb, sc, tx, ty) fill=tint fill-opacity=shade(bn1, d, sa, ca, sb, cb, 1, step) stroke=th.fg stroke-opacity=(0.3 * d) stroke-width=5 stroke-linejoin="round"
-            polygon points=blade(bx2, by2, bz2, d, sa, ca, sb, cb, sc, tx, ty) fill=tint fill-opacity=shade(bn2, d, sa, ca, sb, cb, 2, step) stroke=th.fg stroke-opacity=(0.3 * d) stroke-width=5 stroke-linejoin="round"
+            for k in [0, 1, 2, 3, 4] key=k
+              polygon points=blade(bx0, by0, bz0, bn0, (4 - (nrz(bn0, d, sa, ca, sb, cb) >= 0 ? k : 4 - k)) * 0.1 / 4, d, sa, ca, sb, cb, scf, tx, ty) fill=(k == 4 ? tint : tint2) fill-opacity=(k == 4 ? shade(bn0, d, sa, ca, sb, cb, 0, step) : 1) stroke=(k == 4 ? th.fg : "none") stroke-opacity=(0.25 * d) stroke-width=4 stroke-linejoin="round"
+            for k in [0, 1, 2, 3, 4] key=k
+              polygon points=blade(bx1, by1, bz1, bn1, (4 - (nrz(bn1, d, sa, ca, sb, cb) >= 0 ? k : 4 - k)) * 0.1 / 4, d, sa, ca, sb, cb, scf, tx, ty) fill=(k == 4 ? tint : tint2) fill-opacity=(k == 4 ? shade(bn1, d, sa, ca, sb, cb, 1, step) : 1) stroke=(k == 4 ? th.fg : "none") stroke-opacity=(0.25 * d) stroke-width=4 stroke-linejoin="round"
+            for k in [0, 1, 2, 3, 4] key=k
+              polygon points=blade(bx2, by2, bz2, bn2, (4 - (nrz(bn2, d, sa, ca, sb, cb) >= 0 ? k : 4 - k)) * 0.1 / 4, d, sa, ca, sb, cb, scf, tx, ty) fill=(k == 4 ? tint : tint2) fill-opacity=(k == 4 ? shade(bn2, d, sa, ca, sb, cb, 2, step) : 1) stroke=(k == 4 ? th.fg : "none") stroke-opacity=(0.25 * d) stroke-width=4 stroke-linejoin="round"
 
 // The bar's voice button face: the 44 pt target with the mark at 36 pt. Keeps the spine's name, props and test id
 // (`mark`). It handles no gesture: the bar's tap button owns the press.

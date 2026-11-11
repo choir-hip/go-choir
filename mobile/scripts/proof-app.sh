@@ -18,6 +18,7 @@ echo "screenshots: $SHOTS"
 python3 -I "$HERE/embed-assets.py" > "$SCRATCH/embed.txt" 2>&1 || { tail -20 "$SCRATCH/embed.txt"; fail "embed assets"; }
 python3 -I "$HERE/gen-exact-interface.py" > "$SCRATCH/iface.txt" 2>&1 || { tail -20 "$SCRATCH/iface.txt"; fail "exact interface"; }
 python3 -I "$HERE/check-strings.py" > "$SCRATCH/strings.txt" 2>&1 || { tail -20 "$SCRATCH/strings.txt"; fail "strings"; }
+python3 -I "$HERE/check-tetramark-projection.py" > "$SCRATCH/tmproj.txt" 2>&1 || { cat "$SCRATCH/tmproj.txt"; fail "tetramark projection bound"; }
 python3 -I "$HERE/gen-tetramark.py" --check > "$SCRATCH/tetramark.txt" 2>&1 || { cat "$SCRATCH/tetramark.txt"; fail "tetramark drift"; }
 echo "ok: assets, interface, strings, tetramark data"
 
@@ -67,6 +68,16 @@ step "clock +450 real"; shot light-13-mark-d
 step "clock +450 real"; shot light-13-mark-e
 step "clock +450 real"; shot light-13-mark-f
 step "clock +450 real"; shot light-13-mark-g
+# the other states in motion at hero size: replay, scroll to the rows, three frames each
+step "tap motion-replay"; step "tap motion-scroll drag 0 -520"; step "clock +120 real"; step tree; shot light-13-states1-a
+step "clock +250 real"; shot light-13-states1-b
+step "clock +250 real"; shot light-13-states1-c
+step "tap motion-scroll drag 0 -520"; step "clock +200 real"; shot light-13-states2-a
+step "clock +250 real"; shot light-13-states2-b
+step "clock +250 real"; shot light-13-states2-c
+step "tap motion-scroll drag 0 -900"; step "clock +200 real"; shot light-13-states3-a
+step "clock +250 real"; shot light-13-states3-b
+step "clock +250 real"; shot light-13-states3-c
 place settings 900
 step "tap settings-setup-voice"; view light-14-setup-from-settings 900
 place settings 900
@@ -237,6 +248,7 @@ must "really light: the settings line says light" 'Showing Depth (light)'
 must "really dark: the settings line says dark" 'Showing Depth (dark)'
 # the installed icon: leave the app (its process ends) and look at the home screen, light then dark, and read the compiled icon set
 SIM terminate "$EXACT_SIM" $APP >/dev/null 2>&1; sleep 3
+SIM launch "$EXACT_SIM" $APP >/dev/null 2>&1 & sleep 0.5; SIM io "$EXACT_SIM" screenshot "$SHOTS/launch-screen.png" >/dev/null 2>&1; wait; sleep 4; SIM terminate "$EXACT_SIM" $APP >/dev/null 2>&1; sleep 2
 SIM ui "$EXACT_SIM" appearance light >/dev/null 2>&1; sleep 2; SIM io "$EXACT_SIM" screenshot "$SHOTS/home-icon-light.png" >/dev/null 2>&1
 SIM ui "$EXACT_SIM" appearance dark >/dev/null 2>&1; sleep 3; SIM io "$EXACT_SIM" screenshot "$SHOTS/home-icon-dark.png" >/dev/null 2>&1
 SIM ui "$EXACT_SIM" appearance light >/dev/null 2>&1
