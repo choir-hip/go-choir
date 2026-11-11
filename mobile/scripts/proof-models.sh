@@ -26,6 +26,13 @@ EOF
 # the bundled utterance), through the same code (HubModelProvider). One line per model; the exit code is non-zero if any fails.
 #   SETUP=1 mobile/scripts/proof-models.sh        (downloads about 1.5 GB the first time)
 "$BIN/autoradio-models" --ids || { echo "PROOF FAILED: a setup id is not in the catalog, the store or the stage registry"; exit 1; }
+# The configurator for a simulated 6, 8 and 12 GB phone (the planner enforces the memory budget; everything is downloaded, loaded together
+# and measured on this Mac): prints the plan order, what was measured and what was chosen for each profile.
+#   CONFIGURE=1 mobile/scripts/proof-models.sh        (downloads several GB the first time; weights of rejected candidates are deleted)
+if [ -n "${CONFIGURE:-}" ]; then
+  "$BIN/autoradio-models" --configure --json "$OUT/configure.json" 2>"$OUT/configure.err" || { echo "PROOF FAILED: the configurator fell back to the built-in voice for a profile, or crashed (see $OUT/configure.err)"; exit 1; }
+  echo "PROOF OK: the configurator chose real models for the 6, 8 and 12 GB profiles"; echo "records in $OUT"; exit 0
+fi
 if [ -n "${SETUP:-}" ]; then
   "$BIN/autoradio-models" --setup --json "$OUT/setup.json" 2>"$OUT/setup.err" || { echo "PROOF FAILED: a model failed fetch, verify, load or check (see $OUT/setup.json)"; exit 1; }
   echo "PROOF OK: every setup model fetched, verified, loaded and checked"; echo "records in $OUT"; exit 0

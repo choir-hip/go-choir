@@ -57,6 +57,16 @@ public actor ModelStore {
     public func attach(log: EventLog) { self.log = log }
     public func isRegistered(_ id: String) -> Bool { specs[id] != nil || managed[id] != nil }
 
+    /// Delete a pinned model's weights (the file and any partial download). The configurator removes what a rejected configuration fetched.
+    public func delete(_ id: String) {
+        guard let s = specs[id] else { return }
+        let final = root.appendingPathComponent(s.fileName)
+        try? FileManager.default.removeItem(at: final)
+        try? FileManager.default.removeItem(at: final.appendingPathExtension("part"))
+        loaded.remove(id)
+        log?.emit(.note("model \(id) deleted"))
+    }
+
     /// The model's file if it is on the phone already, whole (the file is moved into place only after its SHA-256 matched, so
     /// the size is enough here). Never fetches.
     public func localFileIfPresent(_ id: String) -> URL? {

@@ -122,8 +122,10 @@ final class OnboardingController: @unchecked Sendable {
             // came from a store of its own that nothing had registered into).
             backend = LiveSetupBackend(store: .shared)
         }
-        var s = VoiceSetup(backend: backend, profile: profile, smaller: false, stallSeconds: stall, patience: patience)
-        if !s.fitsOnDisk { s = VoiceSetup(backend: backend, profile: profile, smaller: true, stallSeconds: stall, patience: patience) }
+        // Not in demo: the configurator picks one model per role for THIS phone, the whole pipeline resident together, by measuring it.
+        let configurator: ConfigBackend? = demo ? nil : LiveConfigBackend()
+        var s = VoiceSetup(backend: backend, profile: profile, smaller: false, stallSeconds: stall, patience: patience, configBackend: configurator)
+        if !s.fitsOnDisk { s = VoiceSetup(backend: backend, profile: profile, smaller: true, stallSeconds: stall, patience: patience, configBackend: configurator) }
         if !profile.onWiFi && !mobileOK {
             set { setup = s; step = "setup"; askMobile = true; message = "" }
             return

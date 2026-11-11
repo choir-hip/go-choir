@@ -103,6 +103,99 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
         }
     }
 
+    public func unload(_ id: String, role: String) async {
+        if KnownModels.isPinned(id) {
+            #if canImport(llama)
+            if role == "responder" { LlamaLocalModel.slot(for: id).drop() } else { LlamaSystem1.slot.drop() }
+            #endif
+        } else {
+            await ModelStore.shared.unload(id)        // the audio stages' slots drop through the unloader the load registered
+        }
+    }
+
+    /// With everything of a configuration loaded: run each role on the bundled utterance and measure it, `rounds` times over (a fixed amount of
+    /// work, not a duration), then read the memory left and the phone's temperature. A role that errors is recorded as failed, the rest go on.
+    public func measureConfiguration(_ picks: [String: String], rounds: Int) async throws -> ConfigMeasurement {
+        var m = ConfigMeasurement()
+        m.thermalBefore = DeviceReading.thermal()
+        guard let audio = FixtureTurn.micSamples16k(), !audio.isEmpty else { m.failedRoles["measurement"] = "the bundled utterance could not be read"; return m }
+        let seconds = Double(audio.count) / 16000
+        var asr: [Double] = [], tts: [Double] = [], vad: [Double] = [], dec: [Double] = []
+        var rd: [Double] = [], wr: [Double] = [], warm: [Double] = []
+        var lowestLeft: Double? = DeviceReading.availableMemoryMB()
+        for _ in 0..<max(1, rounds) {
+            if picks["vad"] == "silero-vad-v6.2.1" {
+                do { let p = try await SileroVAD.probabilities(audio); vad.append(p.inferenceMs / (seconds * 1000)) } catch { m.failedRoles["vad"] = "\(error)" }
+            }
+            if let a = picks["transcriber"], a == "parakeet-eou-120m" || a == "parakeet-tdt-0.6b-v2" {
+                do {
+                    let stage: Transcriber = a == "parakeet-eou-120m" ? ParakeetEOUTranscriber(StageParams()) : ParakeetTDTTranscriber(StageParams())
+                    let s = try await stage.begin()
+                    let t0 = nowMs()
+                    for f in ModelProof.frames(audio) { s.append(f) }
+                    let text = try await s.finish()
+                    let ms = nowMs() - t0
+                    if FixtureTurn.expectedWords.filter({ text.lowercased().contains($0) }).count >= 2 { asr.append(ms / (seconds * 1000)) }
+                    else { m.failedRoles["transcriber"] = "it heard \"\(text)\"" }
+                } catch { m.failedRoles["transcriber"] = "\(error)" }
+            }
+            if let v = picks["voice"] {
+                do {
+                    if v == "kokoro-82m-ane" { let r = try await KokoroVoice.synthesizeOnce("Good morning. This is your radio."); tts.append(r.ms) }
+                    else if v == "pocket-tts" { let r = try await PocketTTSVoice.firstFrameMs("Good morning. This is your radio."); tts.append(r.firstMs) }
+                } catch { m.failedRoles["voice"] = "\(error)" }
+            }
+            #if canImport(llama)
+            if let d = picks["decision"], KnownModels.isPinned(d) {
+                do {
+                    let sys = LlamaSystem1(StageParams())
+                    let q = Question(id: "asks_for_something", text: "Does the listener ask for something to be done or looked up?", options: ["yes", "no"])
+                    let t0 = nowMs()
+                    let ans = try await sys.answer(System1Input(context: "A story about a new park.", listenerWords: "Tell me more about the park", questions: [q]))
+                    dec.append(nowMs() - t0)
+                    if ans.first?.option != "yes" { m.failedRoles["decision"] = "on a clear request it chose \"\(ans.first?.option ?? "nothing")\"" }
+                } catch { m.failedRoles["decision"] = "\(error)" }
+            }
+            if let r = picks["responder"], KnownModels.isPinned(r) {
+                do {
+                    let st = try await Self.responderStats(r)
+                    if st.sentence == nil { m.failedRoles["responder"] = "it wrote nothing the voice could say" }
+                    rd.append(st.cold.promptTokensPerSecond); wr.append(st.cold.decodeTokensPerSecond); warm.append(st.warm.firstTokenMs)
+                } catch { m.failedRoles["responder"] = "\(error)" }
+            }
+            #endif
+            if let left = DeviceReading.availableMemoryMB() { lowestLeft = min(lowestLeft ?? left, left) }
+        }
+        func avg(_ x: [Double]) -> Double? { x.isEmpty ? nil : x.reduce(0, +) / Double(x.count) }
+        m.asrRealTimeFactor = avg(asr); m.ttsFirstSoundMs = avg(tts); m.vadRealTimeFactor = avg(vad); m.decisionMs = avg(dec)
+        m.responderReadTPS = avg(rd); m.responderWriteTPS = avg(wr); m.responderWarmFirstWordMs = avg(warm)
+        m.residentMB = Double(residentBytes()) / 1_048_576
+        m.availableMBAfterLoad = lowestLeft
+        m.thermalAfter = DeviceReading.thermal()
+        return m
+    }
+
+    #if canImport(llama)
+    /// One responder's cold and warm measurement on the sample page (a fixed 40-token generation: this is a measurement, not speech).
+    static func responderStats(_ id: String) async throws -> (cold: LlamaStats, warm: LlamaStats, sentence: String?) {
+        let e = try await LlamaLocalModel.engine(id, download: false)
+        let layout = ChatLayout.forModel(id)
+        let p = samplePages[0]
+        let system = AckPrompt.system()
+        let prefix = AckPrompt.userPrefix(pageTitle: p.title, pageKind: p.kind, pageText: p.text)
+        let suffix = AckPrompt.userSuffix(listener: p.ask, previous: [])
+        e.resetCache()
+        var cold = LlamaStats(), text = ""
+        try e.generate(system: system, userPrefix: prefix, userSuffix: suffix, layout: layout, temperature: 0.7, stopAtSentence: false,
+                       measureTokens: 40, onPiece: { text += $0 }, onStats: { cold = $0 })
+        e.resetCache()
+        _ = try e.prefill(system: system, userPrefix: prefix, layout: layout, shouldStop: { false })
+        var warm = LlamaStats()
+        try e.generate(system: system, userPrefix: prefix, userSuffix: suffix, layout: layout, temperature: 0.7, stopAtSentence: false, measureTokens: 40, onStats: { warm = $0 })
+        return (cold, warm, AckPrompt.firstSentence(text))
+    }
+    #endif
+
     /// Audible: more than a third of a second and not silence.
     static func spoke(_ samples: [Float], rate: Double) -> Bool {
         guard rate > 0, Double(samples.count) / rate > 0.35 else { return false }

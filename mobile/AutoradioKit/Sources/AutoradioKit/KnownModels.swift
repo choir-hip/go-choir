@@ -62,11 +62,35 @@ public enum KnownModels {
         bytes: 1_049_615_680, fileName: "LFM3-1.7B-QAD-Q4_0.gguf")
 
     /// Models fetched by us over HTTP, pinned by SHA-256.
-    public static var pinned: [ModelSpec] { [qwen3, qwen3Q4, qwen317, qwen35, lfm3Text] }
+    public static var pinned: [ModelSpec] { [qwen3, qwen3Q4, qwen317, qwen35, lfm3Text] + extraGGUF.map(\.spec) }
+
+    /// More GGUF quantisations of the responder families, for the configurator (the candidate table, ModelCandidates.swift). Sizes and
+    /// SHA-256 digests are the Hugging Face API file listings' (LFS object ids) fetched 2026-11-11; names are the repos' own, not guessed.
+    struct ExtraGGUF { var spec: ModelSpec; var repo: String; var license: String }
+    static func gguf(_ id: String, repo: String, file: String, sha: String, bytes: Int64, license: String) -> ExtraGGUF {
+        ExtraGGUF(spec: ModelSpec(id: id, url: URL(string: "https://huggingface.co/\(repo)/resolve/main/\(file)")!, sha256: sha, bytes: bytes, fileName: file), repo: repo, license: license)
+    }
+    static let lfmLicense = "LFM Open License v1.0 (commercial use at or above US$10M annual revenue needs a separate licence from Liquid AI)"
+    static let extraGGUF: [ExtraGGUF] = [
+        gguf("lfm3-1.7b-q4_k_m", repo: "LiquidAI/LFM3-1.7B-GGUF", file: "LFM3-1.7B-Q4_K_M.gguf", sha: "3793e1e6e2266919d6e015287221b41100175a98eddaba92e111aed3b05c93c4", bytes: 1_099_627_808, license: lfmLicense),
+        gguf("lfm3-1.7b-q5_k_m", repo: "LiquidAI/LFM3-1.7B-GGUF", file: "LFM3-1.7B-Q5_K_M.gguf", sha: "41e51fb0be5f472d323055f2734d986d5a2429570973508fa6322f3f07f6d7f3", bytes: 1_258_663_200, license: lfmLicense),
+        gguf("lfm3-1.7b-q6_k", repo: "LiquidAI/LFM3-1.7B-GGUF", file: "LFM3-1.7B-Q6_K.gguf", sha: "54e1bd947c77167823d45bf495f1c3e2d226ca7fb242f83cfa141ee3a6ab55c6", bytes: 1_427_638_304, license: lfmLicense),
+        gguf("lfm3-1.7b-q8_0", repo: "LiquidAI/LFM3-1.7B-GGUF", file: "LFM3-1.7B-Q8_0.gguf", sha: "8f6b24182258205e9e01e21f1f24a1f208c1e8115578825d202ce39976af20b6", bytes: 1_846_238_496, license: lfmLicense),
+        gguf("lfm3-1.7b-nvfp4", repo: "LiquidAI/LFM3-1.7B-GGUF", file: "LFM3-1.7B-NVFP4.gguf", sha: "462c2379586a45b30fe3dbfa30e6ff08cbb440734d6934689e24e4fe59a67bec", bytes: 1_280_019_776, license: lfmLicense),
+        gguf("qwen3-1.7b-q6_k", repo: "unsloth/Qwen3-1.7B-GGUF", file: "Qwen3-1.7B-Q6_K.gguf", sha: "6a9cadec4883df6f3efcf337103479dcc6a3efa9f5f8cc64a904dba57808207a", bytes: 1_417_755_200, license: "Apache-2.0"),
+        gguf("qwen3-1.7b-q8_0", repo: "unsloth/Qwen3-1.7B-GGUF", file: "Qwen3-1.7B-Q8_0.gguf", sha: "0becaa825564295d82e9af4d008bca5f8b7f5f73bf1c6a0b58f7c53ef26b47fd", bytes: 1_834_426_944, license: "Apache-2.0"),
+        gguf("qwen3.5-0.8b-q8_0", repo: "unsloth/Qwen3.5-0.8B-GGUF", file: "Qwen3.5-0.8B-Q8_0.gguf", sha: "0ad885ffd4bb022fc4f0d33a3308fa108ef8613159d3b3a67e23abca056b7a6c", bytes: 811_843_840, license: "Apache-2.0"),
+        gguf("qwen3.5-2b-q4_k_m", repo: "unsloth/Qwen3.5-2B-GGUF", file: "Qwen3.5-2B-Q4_K_M.gguf", sha: "aaf42c8b7c3cab2bf3d69c355048d4a0ee9973d48f16c731c0520ee914699223", bytes: 1_280_835_840, license: "Apache-2.0"),
+        gguf("qwen3.5-2b-q8_0", repo: "unsloth/Qwen3.5-2B-GGUF", file: "Qwen3.5-2B-Q8_0.gguf", sha: "1b04acba824817554f4ce23639bc8495ff70453b8fcb047900c731521021f2c1", bytes: 2_012_012_800, license: "Apache-2.0"),
+    ]
 
     /// Every model the app can load, with the facts from the model cards (sizes are the cards' figures, not measurements).
     /// Library-managed ones are fetched, checksummed (Hugging Face LFS object ids) and compiled by FluidAudio itself.
     public static var managed: [ManagedModelSpec] {
+        let c = fluidRoot
+        return base + extraGGUF.map { ManagedModelSpec(id: $0.spec.id, label: $0.spec.fileName, source: "hf:" + $0.repo, approxBytes: $0.spec.bytes, license: $0.license, cachePath: storeRoot) }
+    }
+    private static var base: [ManagedModelSpec] {
         let c = fluidRoot
         return [
             ManagedModelSpec(id: "silero-vad-v6.2.1", label: "Silero VAD v6.2.1 (256 ms, Core ML)", source: "hf:FluidInference/silero-vad-coreml",
@@ -110,6 +134,15 @@ public protocol ModelProvider: Sendable {
     func fetch(_ id: String, role: String, onBytes: @escaping @Sendable (Int64) -> Void) async throws
     /// Run the model on this phone's bundled fixture and measure it.
     func check(_ id: String, role: String) async throws -> SetupCheck
+    /// Drop a loaded model from memory (the configurator unloads a rejected configuration).
+    func unload(_ id: String, role: String) async
+    /// With every model of a configuration loaded (role -> candidate id), run them and measure: memory left, the responder's speeds with the
+    /// page cache warm, first sound, recogniser speed, and the temperature after `rounds` rounds of the same work.
+    func measureConfiguration(_ picks: [String: String], rounds: Int) async throws -> ConfigMeasurement
+}
+public extension ModelProvider {
+    func unload(_ id: String, role: String) async {}
+    func measureConfiguration(_ picks: [String: String], rounds: Int) async throws -> ConfigMeasurement { throw LabError.unavailable(ModelProviders.missingNote) }
 }
 
 /// Which responder model setup chose (read at start, written when setup finishes).

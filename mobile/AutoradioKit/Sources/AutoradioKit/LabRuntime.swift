@@ -393,7 +393,7 @@ public final class LabRuntime: @unchecked Sendable {
         lock.unlock()
         if recs.isEmpty { recs = store.list().compactMap { try? $0.record() } }
         recs = Array(recs.sorted { $0.startedAt < $1.startedAt }.suffix(max(1, n)))
-        let export = TraceExport.make(records: recs, log: log.events, device: .current, describe: Self.describe)
+        let export = TraceExport.make(records: recs, log: log.events, device: .current, describe: Self.describe, configuration: ConfigRecordStore.load())
         guard let data = try? export.encoded() else { return nil }
         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("AutoradioExports")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

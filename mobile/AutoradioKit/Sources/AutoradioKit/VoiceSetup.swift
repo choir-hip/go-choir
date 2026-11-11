@@ -271,12 +271,34 @@ public final class VoiceSetup: @unchecked Sendable {
     private var items: [SetupStage: SetupRecord.Item] = [:]
     private var finished = false
     private var started = false
+    /// The configurator (when set, `run()` plans, measures and chooses a whole configuration instead of walking each stage's ladder).
+    private let configBackend: ConfigBackend?
+    private var configFirst: Configuration?
+    public private(set) var configurationRecord: ConfigurationRecord?
 
     public init(backend: SetupBackend, profile: DeviceProfile, smaller: Bool = false, stallSeconds: Double = 20, patience: Double = 45, maxTries: Int = 3,
-                now: @escaping @Sendable () -> Double = { Date().timeIntervalSince1970 }) {
+                configBackend: ConfigBackend? = nil, now: @escaping @Sendable () -> Double = { Date().timeIntervalSince1970 }) {
         self.backend = backend; self.profile = profile; self.stallSeconds = stallSeconds; self.patience = patience; self.maxTries = maxTries; self.now = now
+        self.configBackend = configBackend
         plan = SetupCatalog.plan(for: profile, smaller: smaller)
         for s in SetupStage.allCases { rowsByStage[s] = Self.freshRow(s, plan[s]![0]) }
+        if let cb = configBackend {
+            // The page says what the best plan for this phone would download, before anything does.
+            let device = cb.probe()
+            configFirst = ConfigPlanner.plan(device: device).first
+            if let f = configFirst {
+                for r in ConfigRole.allCases {
+                    if let id = f.pick(r), let c = CandidateTable.candidate(id, r) { rowsByStage[r.stage] = Self.configRow(r, c, state: "waiting", line: c.isFloor ? "Waiting" : "Waiting to download") }
+                }
+            } else if !device.supported {
+                for r in ConfigRole.allCases { rowsByStage[r.stage]?.statusLine = device.unsupportedReason ?? "Not supported on this phone" }
+            }
+        }
+    }
+
+    static func configRow(_ r: ConfigRole, _ c: ModelCandidate, state: String, line: String, progress: Double = 0) -> SetupRow {
+        SetupRow(stage: r.stage.rawValue, name: r.stage.title, model: c.quant.isEmpty ? c.label : "\(c.label), \(c.quant)", sizeLabel: SetupCatalog.sizeLabel(c.bytes),
+                 state: state, progress: progress, statusLine: line, isFallback: c.isFloor, canRetry: false, canFallback: false, numbers: "")
     }
 
     static func freshRow(_ s: SetupStage, _ c: SetupCandidate) -> SetupRow {
@@ -287,7 +309,7 @@ public final class VoiceSetup: @unchecked Sendable {
     // MARK: Reading
 
     public var rows: [SetupRow] { lock.lock(); defer { lock.unlock() }; return SetupStage.allCases.compactMap { rowsByStage[$0] } }
-    public var totalBytes: Int64 { lock.lock(); defer { lock.unlock() }; return SetupCatalog.totalBytes(plan) }
+    public var totalBytes: Int64 { lock.lock(); defer { lock.unlock() }; return configBackend != nil ? (configFirst?.downloadBytes ?? 0) : SetupCatalog.totalBytes(plan) }
     public var totalLabel: String { SetupCatalog.totalLabel(bytes: totalBytes, onWiFi: profile.onWiFi) }
     public var isFinished: Bool { lock.lock(); defer { lock.unlock() }; return finished }
     public var isStarted: Bool { lock.lock(); defer { lock.unlock() }; return started }
@@ -317,14 +339,59 @@ public final class VoiceSetup: @unchecked Sendable {
     /// Run every stage at once and return when each has a model that passed its check (or its floor).
     public func run() async {
         lock.lock(); if started && !finished { lock.unlock(); return }; started = true; finished = false; lock.unlock()
+        if configBackend != nil { await runConfigured(); lock.lock(); finished = true; lock.unlock(); onChange?(); return }
         await withTaskGroup(of: Void.self) { g in
             for s in SetupStage.allCases { g.addTask { [self] in await runStage(s) } }
         }
         lock.lock(); finished = true; lock.unlock(); onChange?()
     }
 
+    // MARK: The configurator's run
+
+    /// Plan, download, load everything together, measure, choose. Rows say what is being tried, and at the end one plain line per role.
+    private func runConfigured() async {
+        guard let cb = configBackend else { return }
+        let runner = ConfigRunner(backend: cb, now: now, observer: { [weak self] e in self?.observe(e) })
+        let rec = await runner.run()
+        lock.lock(); configurationRecord = rec; lock.unlock()
+    }
+
+    private func observe(_ e: ConfigEvent) {
+        switch e {
+        case .probed(let d):
+            for r in ConfigRole.allCases { update(r.stage) { $0.state = "preparing"; $0.statusLine = d.supported ? "Checking this phone" : (d.unsupportedReason ?? "Not supported") } }
+        case .planned: break
+        case .attempt(let i, let cfg):
+            for r in ConfigRole.allCases {
+                if let id = cfg.pick(r), let c = CandidateTable.candidate(id, r) {
+                    update(r.stage) { $0 = Self.configRow(r, c, state: "waiting", line: c.isFloor ? "Built in" : (i == 1 ? "Waiting to download" : "Trying a lighter choice")) }
+                }
+            }
+        case .preparing(let role, let c, let bytes):
+            update(role.stage) { $0.state = "downloading"; $0.progress = c.bytes > 0 ? min(1, Double(bytes) / Double(c.bytes)) : 1; $0.statusLine = "Downloading" }
+        case .measuring:
+            for r in ConfigRole.allCases { update(r.stage) { if $0.state != "ready" { $0.state = "preparing"; $0.progress = 1; $0.statusLine = "Checking everything together on this phone" } } }
+        case .rejected(_, let reasons):
+            for r in ConfigRole.allCases { update(r.stage) { $0.state = "waiting"; $0.statusLine = "Too much for this phone: \(reasons.first ?? "it did not pass")" } }
+        case .accepted(let cfg, let lines):
+            for r in ConfigRole.allCases {
+                guard let id = cfg.pick(r), let c = CandidateTable.candidate(id, r) else { continue }
+                update(r.stage) { $0 = Self.configRow(r, c, state: "ready", line: lines[r.rawValue] ?? c.label, progress: 1) }
+                let item = SetupRecord.Item(stage: r.stage.rawValue, chosen: c.id, kitStageID: c.kitStageID, fellBackFrom: [], reasons: [], check: nil)
+                lock.locked { items[r.stage] = item }
+            }
+            onChange?()
+        }
+    }
+
     /// "Try again" beside a stalled or failed row.
     public func retry(_ s: SetupStage) {
+        if configBackend != nil {
+            // The configurator plans the whole pipeline: a retry runs it again from the top (what is on disk is not fetched again).
+            lock.locked { items = [:]; finished = false; started = false }
+            Task { [self] in await run() }
+            return
+        }
         lock.lock(); let st = rowsByStage[s]?.state; lock.unlock()
         if st == "stalled" || st == "failed" { deliver(s, .retry); return }
         guard st == "ready", let first = plan[s]?.first else { return }

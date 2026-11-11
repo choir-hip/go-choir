@@ -125,8 +125,10 @@ public struct TraceExport: Codable, Sendable {
     public var device: DeviceInfo
     public var turns: [Turn]
     public var events: [Row]
+    /// The voice configurator's full record (device probe, plan, every measurement, what was chosen): so a phone's setup can be read afterwards.
+    public var configuration: ConfigurationRecord?
 
-    public static func make(records: [TurnRecord], log: [TimedEvent], device: DeviceInfo, describe: (LabEvent) -> String, now: Double = Date().timeIntervalSince1970) -> TraceExport {
+    public static func make(records: [TurnRecord], log: [TimedEvent], device: DeviceInfo, describe: (LabEvent) -> String, configuration: ConfigurationRecord? = nil, now: Double = Date().timeIntervalSince1970) -> TraceExport {
         let from = records.first?.startedAt ?? 0
         let live = log.filter { $0.t >= from - 0.001 }
         let timelines = TurnTimeline.compute(live)
@@ -138,7 +140,7 @@ public struct TraceExport: Codable, Sendable {
             return Turn(id: r.id, transcript: r.summary.transcript ?? "", configName: r.configuration.name, outcome: r.outcome.rawValue, timeline: tl, summary: r.summary)
         }
         return TraceExport(exportedAt: now, device: device, turns: turns,
-                           events: live.map { Row(ms: ($0.t - t0) * 1000, text: describe($0.event), event: $0.event) })
+                           events: live.map { Row(ms: ($0.t - t0) * 1000, text: describe($0.event), event: $0.event) }, configuration: configuration)
     }
     public func encoded() throws -> Data {
         let e = JSONEncoder(); e.outputFormatting = [.prettyPrinted, .sortedKeys]; return try e.encode(self)
