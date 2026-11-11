@@ -17,7 +17,7 @@
    "doc": "citations",
    "key": "web#2~native#2.cites",
    "side": "web",
-   "reason": "web numbers an unpublished marker by its position in source_entities (renderInlineSourceRef: indexOf+1), native numbers by first citation in reading order (Builder.addCite); the published path (manifest anchors) also numbers by reading order, so the web unpublished path is the odd one; and native ignores a source_ref's own ref.quote (attrs.ref) and takes the quote only from a transclusion, a check or a ref carried by those (Citations.cite); web shows attrs.ref.quote"
+   "reason": "numbering only (see the entry above): web numbers by position in source_entities, native by first citation. The quote part of this difference is fixed on native"
   },
   {
    "doc": "citations",
@@ -29,7 +29,7 @@
    "doc": "citations",
    "key": "web#3~native#3.cites",
    "side": "web",
-   "reason": "web numbers an unpublished marker by its position in source_entities (renderInlineSourceRef: indexOf+1), native numbers by first citation in reading order (Builder.addCite); the published path (manifest anchors) also numbers by reading order, so the web unpublished path is the odd one; and native ignores a source_ref's own ref.quote (attrs.ref) and takes the quote only from a transclusion, a check or a ref carried by those (Citations.cite); web shows attrs.ref.quote"
+   "reason": "numbering only (see the entry above): web numbers by position in source_entities, native by first citation. The quote part of this difference is fixed on native"
   },
   {
    "doc": "citations",
