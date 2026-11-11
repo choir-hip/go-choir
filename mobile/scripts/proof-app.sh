@@ -73,6 +73,7 @@ place settings 900; step tree; shot light-12-settings
 step "tap settings-motion"; view light-13-motion-lab 1500
 place settings 900
 step "tap settings-setup-voice"; view light-14-setup-from-settings 900
+step "tap ob-skip"; view light-14b-setup-left-back-to-deck 900
 place settings 900
 step "tap settings-dev-details"; wait_ 500
 goto "paper:front"; view light-15-paper-developer-controls 800
