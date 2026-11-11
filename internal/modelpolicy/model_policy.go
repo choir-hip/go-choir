@@ -38,6 +38,27 @@ const (
 
 	VerifierRole           = "verifier"
 	MultimodalVerifierRole = "verifier_multimodal"
+	// AutoradioRole is the role of the Autoradio desk's spoken answers. It is
+	// not a registry profile (the desk is the package desk app:autoradio, whose
+	// name cannot head a TOML section), so NormalizeRole names it here, like
+	// the verifier roles.
+	AutoradioRole = "autoradio"
+
+	// ReasoningOff is a reasoning setting only the autoradio role may hold:
+	// reasoning off for the call. Every other role keeps the 2026-11-09 rule
+	// that thinking is never off (the providers floor "none", "minimal" and
+	// the other off spellings at their lowest thinking setting). Owner
+	// 2026-11-11: "for auto radio, we may want to have reasoning off, at least
+	// for super fast responses, but at the same time, we definitely want
+	// reasoning on for scripting going forward ... Also to be cache aware,
+	// because I don't know if every model allows you to switch reasoning
+	// without breaking the cache." So reasoning is a property of the role,
+	// fixed per role, never toggled within one prompt lineage: the fast turn
+	// role (autoradio) runs with it off; the future script role
+	// (autoradio_programme) will run with it on, on its own prompt prefix.
+	// A policy file naming "off" for any other role is dropped with a
+	// diagnostic (sanitizeEffort), so no other role can reach it by accident.
+	ReasoningOff = "off"
 
 	modelPolicyOverlayRelativeDir = "System/model-policy-overlays"
 
@@ -265,6 +286,22 @@ func (m *Manager) RoleChain(ctx context.Context, ownerID, role string) []provide
 		add(selection)
 	}
 	return out
+}
+
+// PoolChain is the models a role's own selection names, in order, with a pool
+// expanded to its members and nothing behind them: no continuation chain. A
+// spoken answer walks its pool and stops, because a slow free model at the end
+// of the computer-wide chain is worse than a plain spoken apology. A computer
+// whose policy file has no section for the role gets the platform's: the
+// autoradio role runs on the compiled autoradio pool, so a policy written
+// before the role existed needs no edit.
+func (m *Manager) PoolChain(ctx context.Context, ownerID, role string) []provideriface.LLMSelection {
+	policy, _ := m.Load(ctx, ownerID)
+	selection := policy.Resolve(role)
+	if !strings.HasPrefix(selection.Model, modelcatalog.PoolSpecPrefix) {
+		return []provideriface.LLMSelection{selection}
+	}
+	return poolSelections(policy.poolMembersOf(strings.TrimPrefix(selection.Model, modelcatalog.PoolSpecPrefix)), selection)
 }
 
 // stampResolved resolves role from policy and writes the selection into
@@ -503,6 +540,9 @@ var ManagementTaskRole = deskmanifest.TaskRoleName()
 // Resolve returns the effective selection for role.
 func (p Policy) Resolve(role string) provideriface.LLMSelection {
 	normalized := NormalizeRole(role)
+	if normalized == AutoradioRole {
+		return p.resolveAutoradio()
+	}
 	if p.Roles != nil {
 		if selection, ok := p.Roles[normalized]; ok {
 			return fillSelection(selection, p.Defaults)
@@ -511,12 +551,46 @@ func (p Policy) Resolve(role string) provideriface.LLMSelection {
 	return fillSelection(provideriface.LLMSelection{}, p.Defaults)
 }
 
+// resolveAutoradio is the autoradio role's selection. The compiled role values
+// (pool:autoradio, reasoning off, no max_tokens) are the base, and a section in
+// the computer's policy overrides only what it names: a section with no
+// reasoning line does not inherit the Defaults' effort or max_tokens, which
+// would turn reasoning on and add a token budget without anyone saying so
+// (owner 2026-11-11: reasoning is fixed per role; no token budget). An owner
+// who writes a reasoning value or max_tokens in the section gets it (it is
+// their file); "none" and "off" both mean off for this role.
+func (p Policy) resolveAutoradio() provideriface.LLMSelection {
+	sel := provideriface.LLMSelection{
+		Model: modelcatalog.PoolSpecPrefix + modelcatalog.AutoradioPool, ReasoningEffort: ReasoningOff, Source: "platform_fallback",
+	}
+	own, ok := p.Roles[AutoradioRole]
+	if !ok {
+		return sel
+	}
+	sel.Source = "model_policy"
+	if own.Model != "" {
+		sel.Provider, sel.Model = own.Provider, own.Model
+	}
+	if own.ReasoningEffort != "" {
+		sel.ReasoningEffort = own.ReasoningEffort
+	}
+	if own.MaxTokens > 0 {
+		sel.MaxTokens = own.MaxTokens
+	}
+	return sel
+}
+
 // Selections returns each distinct model the policy names, defaults first
 // and then roles in name order, filled from the defaults: the models this
 // computer is configured to call.
 func (p Policy) Selections() []provideriface.LLMSelection {
 	roles := make([]string, 0, len(p.Roles))
 	for role := range p.Roles {
+		if role == AutoradioRole {
+			// The autoradio role's selection carries ReasoningOff, which no
+			// other role's chain may inherit.
+			continue
+		}
 		roles = append(roles, role)
 	}
 	sort.Strings(roles)
@@ -560,7 +634,7 @@ func NormalizeRole(role string) string {
 		return current
 	}
 	switch normalized {
-	case VerifierRole:
+	case VerifierRole, AutoradioRole:
 		return normalized
 	case MultimodalVerifierRole, "verifier-multimodal":
 		// One canonical spelling: the hyphenated form normalizes to the
@@ -727,6 +801,7 @@ func fallbackPolicy(_ provideriface.Config) Policy {
 			deskmanifest.DocumentCustodianName(): pool("low"),
 			VerifierRole:                         pool("low"),
 			MultimodalVerifierRole:               pool("low"),
+			AutoradioRole:                        {Model: modelcatalog.PoolSpecPrefix + modelcatalog.AutoradioPool, ReasoningEffort: ReasoningOff, Source: "platform_fallback"},
 		},
 		Source: "platform_fallback",
 	}
@@ -854,7 +929,7 @@ func parsePolicy(raw, source string) (Policy, error) {
 	}
 	for _, role := range sortedRoleNames(policy.Roles) {
 		selection := policy.Roles[role]
-		sanitizeEffort("role "+role, &selection, &policy.Diagnostics)
+		sanitizeEffortFor("role "+role, role == AutoradioRole, &selection, &policy.Diagnostics)
 		policy.Roles[role] = selection
 	}
 	if !validSelection(policy.Defaults) {
@@ -953,7 +1028,7 @@ func parseOverlay(id, raw, source string, filePools map[string]Pool) (policyOver
 	sanitizeEffort("overlay defaults", &overlay.Defaults, &overlay.Diagnostics)
 	for _, role := range sortedRoleNames(overlay.Roles) {
 		selection := overlay.Roles[role]
-		sanitizeEffort("overlay role "+role, &selection, &overlay.Diagnostics)
+		sanitizeEffortFor("overlay role "+role, role == AutoradioRole, &selection, &overlay.Diagnostics)
 		overlay.Roles[role] = selection
 	}
 	if pool := unknownPool(filePools, overlay.Defaults); pool != "" {
@@ -1081,9 +1156,18 @@ var validReasoningEfforts = map[string]bool{"none": true, "minimal": true, "low"
 // value is unset (the default applies); an unknown one is dropped so the role
 // falls back to the default effort, and a diagnostic names it.
 func sanitizeEffort(where string, selection *provideriface.LLMSelection, diagnostics *[]string) {
+	sanitizeEffortFor(where, false, selection, diagnostics)
+}
+
+// sanitizeEffortFor is sanitizeEffort for a role that may hold ReasoningOff.
+func sanitizeEffortFor(where string, allowOff bool, selection *provideriface.LLMSelection, diagnostics *[]string) {
 	raw := strings.TrimSpace(selection.ReasoningEffort)
 	if raw == "" {
 		selection.ReasoningEffort = ""
+		return
+	}
+	if allowOff && (strings.EqualFold(raw, ReasoningOff) || strings.EqualFold(raw, "none")) {
+		selection.ReasoningEffort = ReasoningOff
 		return
 	}
 	if effort := strings.ToLower(raw); validReasoningEfforts[effort] {

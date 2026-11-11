@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -83,6 +84,8 @@ type ProviderRequest struct {
 	CacheKey string `json:"cache_key,omitempty"`
 	// NoShed: the caller has no next pool member (see provider.LLMRequest).
 	NoShed bool `json:"no_shed,omitempty"`
+	// ReasoningOff is the autoradio role's exemption (provider.LLMRequest).
+	ReasoningOff bool `json:"reasoning_off,omitempty"`
 
 	// Messages is the conversation history in Anthropic Messages format.
 	Messages []provider.Message `json:"messages"`
@@ -474,6 +477,18 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// reasoning_off is the autoradio role's exemption from "thinking is never
+	// off" (owner 2026-11-11, "this role only"). The gateway cannot see the
+	// role, so it honours the flag only for a no-tools call to a member of the
+	// compiled autoradio pool, and ignores it (counted, logged) otherwise: a
+	// guest-claimed flag cannot turn reasoning off for anything else.
+	if req.ReasoningOff && (len(req.Tools) > 0 || !autoradioPoolMember(p.Name(), req.Model)) {
+		req.ReasoningOff = false
+		n := reasoningOffIgnored.Add(1)
+		log.Printf("gateway: reasoning_off ignored for autoputer %s (provider=%s model=%s tools=%d): not a no-tools call to an autoradio pool member (ignored %d times)",
+			computerID, p.Name(), req.Model, len(req.Tools), n)
+	}
+
 	// Step 5: Build the LLM request and call the provider.
 	llmReq := provider.LLMRequest{
 		Provider:        req.Provider,
@@ -488,6 +503,7 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		ConversationID:  req.ConversationID,
 		CacheKey:        req.CacheKey,
 		NoShed:          req.NoShed,
+		ReasoningOff:    req.ReasoningOff,
 	}
 
 	// Images are logged by count, size and short sha256, never by data
@@ -547,6 +563,9 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 // an SSE response and forwarding chunks from the provider to the client in
 // real-time (VAL-LLM-003, VAL-LLM-004).
 func (h *Handler) handleStreamingInference(w http.ResponseWriter, r *http.Request, p provider.Provider, llmReq provider.LLMRequest, computerID string) {
+	// Say what was applied, so a guest built for this gateway can tell a gateway
+	// that is older (no header) from one that honoured the request.
+	w.Header().Set(AppliedHeader, appliedValue(p.Name(), llmReq))
 	// Set up SSE response headers.
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -1285,4 +1304,45 @@ func inferenceSuccessLine(what, computerID string, resp *provider.LLMResponse) s
 	return fmt.Sprintf("%s for autoputer %s (provider=%s tokens=%d+%d cached=%d text_len=%d cache_write=%d cache_write_1h=%d model=%s)",
 		what, computerID, resp.ProviderName, u.InputTokens, u.OutputTokens, u.CachedInputTokens, len(resp.Text),
 		u.CacheWrite5mTokens+u.CacheWrite1hTokens, u.CacheWrite1hTokens, resp.Model)
+}
+
+// AppliedHeader names what the gateway applied of a call's reasoning_off and
+// cache_break requests: "reasoning=off|on;cache_break=accepted|ignored|none".
+// An older gateway sends none, which the guest reports as "unknown".
+const AppliedHeader = "X-Choir-Applied"
+
+// reasoningOffIgnored counts reasoning_off flags the gateway ignored.
+var reasoningOffIgnored atomic.Int64
+
+// autoradioPoolMember reports whether (provider, model) is a member of the
+// compiled autoradio pool.
+func autoradioPoolMember(providerName, model string) bool {
+	if model == "" {
+		return false
+	}
+	for _, m := range modelcatalog.Pools()[modelcatalog.AutoradioPool] {
+		if m.Provider == providerName && m.Model == model {
+			return true
+		}
+	}
+	return false
+}
+
+func appliedValue(providerName string, req provider.LLMRequest) string {
+	reasoning := "on"
+	if req.ReasoningOff && provider.ReasoningOffHonored(providerName, req.Model) {
+		reasoning = "off"
+	}
+	cacheBreak := "none"
+	for _, m := range req.Messages {
+		for _, b := range m.Content {
+			if b.CacheBreak {
+				cacheBreak = "ignored"
+				if provider.CacheBreakHonored(providerName) {
+					cacheBreak = "accepted"
+				}
+			}
+		}
+	}
+	return "reasoning=" + reasoning + ";cache_break=" + cacheBreak
 }
