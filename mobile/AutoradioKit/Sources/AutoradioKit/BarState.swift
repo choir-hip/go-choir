@@ -69,6 +69,8 @@ public struct RadioInfo: Codable, Sendable, Equatable {
     public var sentences: [String] = []
     public var next = ""
     public var items: [RadioItem] = []
+    /// 0...1, the smoothed microphone level while the mic is open (the mark breathes with it); 0 when nothing is heard.
+    public var micLevel = 0.0
     public init() {}
 }
 
@@ -100,8 +102,26 @@ public final class BarTracker: @unchecked Sendable {
     private var lastMessage = ""
     private var clock = BlockClock()
     public private(set) var speed = 1.0
+    private var level = 0.0
 
     public init() {}
+
+    // MARK: Microphone level
+    // Ways this can fail: (1) silence (-120 dB, or all-zero virtual frames) must read as 0, not as a negative level; (2) one loud
+    // frame must not stick: the level falls away over a few frames; (3) a flood of frames must not mean a flood of redraws, so the
+    // caller is told only when the value moved by more than a few percent.
+    public static func levelFor(db: Double) -> Double { min(1, max(0, (db + 55) / 35)) }
+
+    /// Feeds one frame's level in dB. Returns true when the smoothed level moved enough to be worth a redraw.
+    public func feedMic(db: Double) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        let t = Self.levelFor(db: db)
+        let next = t > level ? t : level * 0.85 + t * 0.15
+        let moved = abs(next - level) > 0.04 || (next < 0.01 && level != 0)
+        level = next < 0.01 ? 0 : next
+        return moved
+    }
+    public var micLevel: Double { lock.lock(); defer { lock.unlock() }; return level }
 
     // MARK: Events
 
@@ -213,6 +233,7 @@ public final class BarTracker: @unchecked Sendable {
         default: r.modeLabel = ""
         }
         r.micOpen = s.micActive
+        r.micLevel = (level * 100).rounded() / 100
         r.heard = s.phase == "playing" ? "" : s.transcript
         r.holding = holdingLine
         if let t = revisedAt, now.timeIntervalSince(t) < Self.revisedWindow { r.revised = revisedSummary }

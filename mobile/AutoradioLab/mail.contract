@@ -64,6 +64,7 @@ component MailboxPage
     th: Theme
     mbx: MailBoxView
     dm: DemoInfo
+    devDetails: bool
     openPage: action
   props
     address: string
@@ -94,7 +95,7 @@ component MailboxPage
         column width="100%"
           for r in mbx.rows key=r.id
             MailRowItem(id=r.id, address=r.address, sender=r.sender, subject=r.subject, snippet=r.snippet, stamp=r.stamp, unread=r.unread, attachment=r.hasAttachments, count=r.count)
-      if dm.on
+      if dm.on and devDetails
         text "Demo states" font-family=th.fontUi font-size=13 color=th.muted margin-top=16
         row gap=8 flex-wrap="wrap"
           button press=openPage("mailbox:demo-empty", "Mail") testId="mail-demo-empty" buttonStyle="bordered"

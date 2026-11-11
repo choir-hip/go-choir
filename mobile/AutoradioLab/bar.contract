@@ -17,7 +17,7 @@
 //   typing     (the field has the keyboard) the aim line above the field, Send in place of the voice button
 // Motion is declarative: height, tint and content enter with transitions and keyframes, all off under Reduce Motion.
 // testIds: bar, bar-pages, bar-pages-count, bar-field, bar-aim, bar-text, bar-yield, bar-voice, bar-send, bar-progress.
-use Theme, PageList, BarInfo, RadioInfo from "@choir/autoradio"
+use Theme, PageList, BarInfo, RadioInfo, ReaderAimInfo, Onboarding from "@choir/autoradio"
 use Mark from "./mark.contract"
 
 keyframes barRise
@@ -36,6 +36,8 @@ component BarShell
     pg: PageList
     bi: BarInfo
     ri: RadioInfo
+    raim: ReaderAimInfo
+    ob: Onboarding
     typing: bool
     ask: string
     editAsk: action
@@ -53,7 +55,10 @@ component BarShell
   derive st = bi.state
   derive aimOwn = `Edit ${pg.topTitle}…`
   derive aimReply = `Reply to ${pg.topTitle}…`
-  derive aim = pg.topKind == "reader" ? (pg.top.startsWith("texture:") ? aimOwn : aimReply) : "Ask about this page…"
+  // The prompt's aim: one block of the open document when the reader has aimed it there; before voice setup is done (and off the
+  // reader) the invitation to set up; otherwise the page.
+  derive aimPage = pg.topKind == "reader" ? (pg.top.startsWith("texture:") ? aimOwn : aimReply) : (ob.aim != "" ? ob.aim : "Ask about this page…")
+  derive aim = (raim.address == pg.top and raim.blockId != "") ? `Ask about “${raim.label}”…` : aimPage
   derive lines = min(3, max(1, ceil(bi.text.length / 30)))
   derive yielded = ri.level != "play" and (st == "listening" or st == "talking")
   derive wordy = st == "listening" or st == "talking" or st == "heard" or st == "error"
@@ -72,6 +77,9 @@ component BarShell
       background-color=(th.material2 == "glass" ? "transparent" : th.paper)
       box-shadow=th.shadow2
       transition=`height ${th.motionEnterMs * calm}ms ease`
+      // the backing: the page colour under the glass, so text and the field stay legible over busy content in light and dark
+      box position="absolute" inset=0 border-radius=th.radiusPill pointer-events="none" z-index=-1
+        background-color=th.paper opacity=0.82
       // the state's tint: warms while playing, brighter while the listener is heard, danger on a failure
       box position="absolute" inset=0 border-radius=th.radiusPill pointer-events="none"
         background-color=tint opacity=tintOn

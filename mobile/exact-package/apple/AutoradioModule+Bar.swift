@@ -35,6 +35,18 @@ extension AutoradioModule {
             RunLoop.main.add(t, forMode: .common)
         }
 
+        // The microphone's level feeds the mark (MarkAt level=): a gentle redraw only when it moved.
+        let micFrames = runtime.bus.mic()
+        Task { [weak self] in
+            var lastTouch = Date.distantPast
+            for await f in micFrames {
+                if tracker.feedMic(db: f.rmsDb), Date().timeIntervalSince(lastTouch) > 0.09 {
+                    lastTouch = Date()
+                    DispatchQueue.main.async { self?.touch(["radioView"]) }
+                }
+            }
+        }
+
         handle("barState") { [unowned self] _, reply in
             let info = tracker.barInfo(player: choir.playerView(), snapshot: runtime.snapshot())
             scheduleExpiry()
@@ -44,6 +56,7 @@ extension AutoradioModule {
         handle("radioView") { [unowned self] _, reply in
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
             let info = tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route)
+            ReaderFeed.shared.feed(info, route: route)
             reply(json(info))
         }
 
@@ -65,5 +78,20 @@ extension AutoradioModule {
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
             reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route)))
         }
+    }
+}
+
+/// Lane 1 feeds the reader: the sentence the radio is saying, by address, so the reader lights it (ReaderFollow, lane 3).
+/// Only a change is passed on; when nothing plays the follow is cleared.
+final class ReaderFeed: @unchecked Sendable {
+    static let shared = ReaderFeed()
+    private let lock = NSLock()
+    private var last = ""
+    func feed(_ r: RadioInfo, route: String) {
+        let spoken = r.playing && !route.isEmpty && r.sentences.indices.contains(r.sentenceIndex) ? r.sentences[r.sentenceIndex] : ""
+        let key = spoken.isEmpty ? "" : "pub:\(route)|\(spoken)"
+        lock.lock(); let changed = key != last; last = key; lock.unlock()
+        guard changed else { return }
+        if key.isEmpty { ReaderFollow.shared.clear() } else { ReaderFollow.shared.set(address: "pub:\(route)", spoken: spoken) }
     }
 }

@@ -8,6 +8,7 @@
 use Theme, ChoirAuth, DemoInfo, PaperFront, PaperBand, PaperItem from "@choir/autoradio"
 use paperFront from "@choir/autoradio"
 use Card from "./ui.contract"
+use FirstRunCard from "./onboarding.contract"
 
 // A headline with its dek and meta, as one story. `kicker` shows the section above, `listen` the play-from-here button.
 component Story
@@ -140,6 +141,7 @@ component PaperPage
     th: Theme
     au: ChoirAuth
     dm: DemoInfo
+    devDetails: bool
     signIn: action
     openPage: action
     pfront: PaperFront
@@ -168,8 +170,10 @@ component PaperPage
             row justify-content="space-between" width="100%"
               text (sect == "" ? "Front page" : pfront.sectionLabel) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent testId="paper-section-title"
               text pfront.updated font-family=th.fontUi font-size=12 color=th.muted testId="paper-updated"
-          // demo mode: three editions to show how the page changes with the day (under the masthead so a driver reaches them)
-          if dm.on
+          // Not set up yet: "Make it yours" (voice setup and the interview) until the listener has done it or skipped it.
+          FirstRunCard()
+          // demo mode, Settings, Developer, "Demo controls": three editions to show how the page changes with the day
+          if dm.on and devDetails
             column gap=8 width="100%" padding-top=8 box-sizing="border-box"
               text `Composition: ${pfront.composition}` font-family=th.fontMono font-size=11 color=th.muted testId="paper-composition"
               row gap=8 width="100%"
@@ -188,6 +192,8 @@ component PaperPage
                 text "Sign in to talk to your computer and to make this paper yours." font-family=th.fontRead font-size=17 line-height=1.35 color=th.fg
                 button press=signIn buttonStyle="filled" testId="paper-signin"
                   text "Sign in"
+                if au.message != ""
+                  text au.message testId="paper-signin-message" font-family=th.fontUi font-size=13 color=th.muted
           // sections: the front, then one chip per section; a chip opens that section as a page
           scroll overflow-x="scroll" overflow-y="hidden" display="flex" flex-direction="row" gap=8 width="100%" testId="paper-sections"
             button press=openPage("paper:front", "Paper") appearance="none" testId="paper-section-front"

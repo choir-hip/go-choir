@@ -228,7 +228,12 @@ extension AutoradioModule {
             touchLearning(); ack(reply)
         }
         handle("gestureSet") { [unowned self] args, reply in
-            _ = cs.prefs.setGesture(side: args["side"] as? String ?? "", meaning: args["meaning"] as? String ?? "")
+            let side = args["side"] as? String ?? "", meaning = args["meaning"] as? String ?? ""
+            if cs.prefs.setGesture(side: side, meaning: meaning) {   // Settings owns the meaning: keep it in step
+                let back = ["close-less": "closeLess", "less-in-stack": "lessInStack"][meaning] ?? meaning
+                _ = AppSettings.shared.set(side == "left" ? "swipeLeft" : "swipeRight", back)
+                touch(["settingRows"])
+            }
             touch(["toldPaper"]); ack(reply)
         }
     }

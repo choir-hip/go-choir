@@ -40,7 +40,9 @@ fi
 SIM privacy "$EXACT_SIM" grant all $APP >/dev/null 2>&1
 
 # ---- 4a. LIGHT tour (touch platform: drags and pinches)
-step "clock data"; wait_ 1500; step tree; shot light-01-paper-front
+step "clock data"; wait_ 1500
+ensure_light
+goto "paper:front"; step tree; shot light-01-paper-front
 step "tap paper-story-demo-grid-storage"; view light-02-paper-story-reader 1000
 step "tap bar-voice down"; step "tap up"; wait_ 1800
 step "tap bar-text"; view light-03-player 900
@@ -56,8 +58,24 @@ place textures 900; view light-10-textures-list 500
 step "tap textures-doc-texture:demo-notes"; view light-11-texture-document 1000
 place settings 900; step tree; shot light-12-settings
 step "tap settings-motion"; view light-13-motion-lab 1500
+place settings 900
+step "tap settings-setup-voice"; view light-14-setup-from-settings 900
+place settings 900
+step "tap settings-dev-details"; wait_ 500
+goto "paper:front"; view light-15-paper-developer-controls 800
 step logs
 run_drive light light "" --touch platform
+
+# ---- 4a2. the talk mode has one owner (Settings): choose "Always listening" there and the bar's player says so
+step "clock data"; wait_ 1500
+ensure_light
+place settings 900
+step "tap settings-nav-talk"; wait_ 700
+step "tap settings-choice-talkMode-open"; view light-16-settings-talk-open 700
+step "tap bar-voice down"; step "tap up"; wait_ 1800
+step "tap bar-text"; view light-17-player-open-mode 900
+step logs
+run_drive talk light "" --touch platform
 
 # ---- 4b. voice setup and the interview (the page opens at launch by a defaults flag), light
 step "clock data"; wait_ 1500; step tree; shot light-20-onboarding-welcome
@@ -78,6 +96,7 @@ run_drive voice light onboarding --touch platform
 
 # ---- 4c. DARK tour: the real switch is the Settings mode control
 step "clock data"; wait_ 1500
+ensure_light
 place settings 900
 step "tap settings-mode-dark"; view dark-01-settings-switched 900
 goto "paper:front"; view dark-02-paper-front 700
@@ -96,6 +115,8 @@ place textures 900; view dark-11-textures-list 500
 step "tap textures-doc-texture:demo-notes"; view dark-12-texture-document 1000
 place settings 900; step tree; shot dark-13-settings
 step "tap settings-motion"; view dark-14-motion-lab 1500
+place settings 900
+step "tap settings-setup-voice"; view dark-15-setup-from-settings 900
 place settings 900
 step "tap settings-mode-light"; view light-30-settings-reset 900
 step logs
@@ -141,6 +162,12 @@ must "voice: setup rows" '[ob-row-transcriber]'
 must "voice: microphone check" '[ob-mic-ask]'
 must "interview: listening" '[ob-listening]'
 must "interview: pause card" '[ob-paused]'
+must "first run: the card on the paper" '[firstrun-card]'
+must "settings: Set up voice row" '[settings-setup-voice]'
+must "settings: the mode control is ours" '[settings-mode-system]'
+must "developer: the demo controls come with the switch" '[paper-composition]'
+if grep -qF '[paper-composition]' "$SHOTS/drive-dark.txt" 2>/dev/null; then echo "UNWANTED: debug text shows without the developer switch"; FAILS="$FAILS [debug text]"; else echo "ok: no debug text without the developer switch"; fi
+must "talk mode: Settings sets it, the player reads it" 'Just speak; the radio is listening'
 must "really light: the settings line says light" 'Showing Depth (light)'
 must "really dark: the settings line says dark" 'Showing Depth (dark)'
 n=$(ls "$SHOTS"/light-*.png 2>/dev/null | wc -l); m=$(ls "$SHOTS"/dark-*.png 2>/dev/null | wc -l)

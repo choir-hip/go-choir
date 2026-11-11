@@ -233,7 +233,8 @@ final class OnboardingController: @unchecked Sendable {
         let rt = module.runtime!
         rt.setStage(.programme, id: InterviewProgramme.stageID)
         rt.setStage(.desk, id: InterviewDesk.stageID)
-        if rt.registry.stages(.addressing).contains(where: { $0.id == "open" }) { rt.setStage(.addressing, id: "open") }
+        // The talk mode has one owner: Settings (AppSettings "talkMode"). The interview reads it and does not set it.
+        AppSettings.shared.apply(to: rt)
         rt.setAudioPolicy(.alwaysTalking)
         Task { [weak self] in
             guard let self else { return }

@@ -539,3 +539,23 @@ a 3-chapter EPUB, a WAV, an MP4, CSV, Markdown, text and code, all invented). Pr
   (`Epub.swift`: ZIP central directory, raw deflate through Compression, container, OPF spine, XHTML to blocks, then Markdown for
   `text markup="markdown"`), text, Markdown, code, CSV/TSV, and an honest "cannot preview" page with the file's facts.
 - Ways the Swift can fail are listed at the top of `ChoirFiles.swift` and `Epub.swift`; `FilesTests.swift` covers each.
+
+## Integration (lane/ar-app): the nine lanes in one app
+
+`lane/ar-app` is the spine plus lanes 9, 1, 2, 3, 4, 5, 6, 7, 8 merged (`--no-ff`, in that order). One proof drives the whole app:
+`scripts/proof-app.sh` (helpers in `scripts/proof-common.sh`; the lane proofs keep their own copies). It runs the generators and checks
+(embed-assets, the Exact interface, strings), one `swift test` for the whole package, one build, then tours the app in demo mode in light
+and again in dark. The scheme really switches: the Settings mode control (`settings-mode-dark`) is tapped and the settings line
+"Showing Depth (dark)" is asserted; it is put back to light at the end. Screenshots are named `light-NN-*` / `dark-NN-*`.
+
+Decisions made at the seams:
+- **Generated files** (`BundledThemes.generated.swift`, `DemoFixtures.generated.swift`, `exact-package/exact.json`) are never hand-merged: take a side and
+  run `python3 scripts/embed-assets.py` / `gen-exact-interface.py`. The build runs both again.
+- **One owner per thing.** Talk mode: Settings (`AppSettings` `talkMode`); the bar and the interview read the engine's addressing stage that Settings
+  applies (the interview no longer forces "open"). Gesture meanings: Settings' `swipeLeft`/`swipeRight`, handed to lane 4's `Preferences`
+  (`syncGestureMeanings`), and lane 4's own buttons write back to Settings. "What the paper has learned": `PreferencesLearned`, over lane 4's acts.
+- **Signed out** the paper is the root; sign-in is a code screen over the app that appears when `au.status == "pending"` (the paper's Sign in button).
+- **Bar**: a page-colour backing under the glass (`th.paper`, 0.82), the aim reads `readerAim` (a block of the open document) and `ob.aim` before setup;
+  the mic level (`RadioInfo.micLevel`, from the audio bus) reaches `MarkAt(level=)`; lane 1 feeds `ReaderFollow` with the sentence being spoken.
+- **Developer**: Settings, Developer, "Demo controls" (`devDetails`) gates the paper's Composition line and edition chips, mail's demo states and the
+  reader's demo menu (demo mode only).

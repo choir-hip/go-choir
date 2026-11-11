@@ -4,6 +4,7 @@
 // testIds: page-title, textures-search, textures-edition, textures-make-edition, textures-new, textures-doc-<address>.
 use Theme, TextureList, TextureRow from "@choir/autoradio"
 use PageScroll, Card from "./ui.contract"
+use FirstRunCard from "./onboarding.contract"
 
 component TextureRowView
   inject
@@ -44,6 +45,7 @@ component TexturesPage
       text "Textures" role="heading" aria-level=1 font-family=th.fontRead font-size=30 font-weight=700 testId="page-title" color=th.fg
       input type="search" value=q input=editQ placeholder="Search your documents" aria-label="Search your documents" testId="textures-search"
         font-family=th.fontUi padding="10px 4px"
+      FirstRunCard()
       if tlist.status == "loading"
         progress aria-label="Loading" width=24 height=24 color=th.accent
       if tlist.status == "error"

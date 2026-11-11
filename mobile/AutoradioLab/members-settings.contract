@@ -43,3 +43,9 @@ members Autoradio
     send sm = learnedReset()
   action refreshActivity
     send sm = activityRefresh()
+
+  // Settings, Developer: demo controls and debug text (the paper's Composition line and edition chips, mail's demo states, the
+  // reader's demo menu) show only when this is on and the app is in demo mode.
+  state devDetails = false
+  action toggleDevDetails
+    devDetails = devDetails == false

@@ -296,6 +296,7 @@ component MenuSheet
     th: Theme
     rdoc: ReaderDoc
     dm: DemoInfo
+    devDetails: bool
     sideNotes: bool
     mdMode: bool
     showSheet: action
@@ -338,7 +339,7 @@ component MenuSheet
         row padding="12px 0" align-items="center" width="100%"
           text "Reload" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
           image "symbol:forward-chevron" color=th.muted
-      if dm.on
+      if dm.on and devDetails
         text "Demo" font-family=th.fontUi font-size=13 color=th.muted margin-top=8
         for b in rdoc.blocks.filter(b => b.kind == "p" and b.sentences > 1).slice(0, 1) key=b.id
           button press=demoFollow(address, b.runs.filter(r => r.sent == 1 and r.kind == "t").map(r => r.text).join("")) testId="reader-menu-follow" buttonStyle="bordered"

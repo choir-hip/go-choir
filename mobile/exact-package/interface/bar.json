@@ -29,7 +29,8 @@
    "sentenceIndex": "number",
    "sentences": "string[]",
    "next": "string",
-   "items": "RadioItem[]"
+   "items": "RadioItem[]",
+   "micLevel": "number"
   }
  },
  "names": [
@@ -42,7 +43,7 @@
      "title": "", "source": "", "position": "", "index": 0, "count": 0, "playing": false, "paused": false,
      "level": "play", "speed": "1", "speedChoices": ["0.8", "1", "1.25", "1.5"], "mode": "", "modeLabel": "",
      "micOpen": false, "heard": "", "holding": "", "revised": "", "progress": 0, "blockProgress": 0,
-     "sentenceIndex": 0, "sentences": [], "next": "", "items": []
+     "sentenceIndex": 0, "sentences": [], "next": "", "items": [], "micLevel": 0
     }
    }
   },

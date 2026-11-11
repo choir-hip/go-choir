@@ -24,7 +24,7 @@
 //
 // Every duration is a theme token: th.motionEnterMs (ramps, flip, shake, pop, reduced fade), th.markDriftS,
 // th.markTumble ("3.3s,5.9s"), th.markListenScale, th.reducedMotion.
-use Theme from "@choir/autoradio"
+use Theme, RadioInfo from "@choir/autoradio"
 
 keyframes markpop
   from opacity=0.35 scale=0.8
@@ -178,11 +178,12 @@ component MarkAt
 component Mark
   inject
     mkSince: number
+    ri: RadioInfo
   props
     state: string
   view
     row width=44 height=44 align-items="center" justify-content="center" testId="mark"
-      MarkAt(state=state, size=26, since=mkSince, level=0, step=-1, still=false, testId="mark-glyph")
+      MarkAt(state=state, size=26, since=mkSince, level=(state == "listening" ? ri.micLevel : 0), step=-1, still=false, testId="mark-glyph")
 
 // The large mark for onboarding and the wait (the caller owns `since` and `step`).
 component MarkHero

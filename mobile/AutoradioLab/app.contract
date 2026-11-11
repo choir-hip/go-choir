@@ -303,6 +303,8 @@ component Autoradio
     setSetting
     resetLearned
     refreshActivity
+    devDetails
+    toggleDevDetails
     // ---- lane 8: onboarding and the interview ----
     ob
     obBegin
@@ -334,20 +336,22 @@ component Autoradio
     main testId="app" width="100%" height="100%" position="relative" overflow="hidden" box-sizing="border-box"
       viewport-fit="cover" interactive-widget="resizes-content"
       background-color=th.paper color=th.fg font-family=th.fontRead
-      if au.signedIn == false
-        SignInScreen()
-      else
-        // elevation 0: the page, full bleed; it steps back when a layer is up
-        column position="absolute" inset=0
-          scale=(layer != "" ? th.behindScale3 : 1)
-          transition=`scale -exact-spring(${th.springStiffness}, ${th.springDamping}, ${th.springMass})`
-          PageHost(address=pg.top, kind=pg.topKind, title=pg.topTitle)
-        // elevation 3: the layers that rise from the bar
-        if layer == "pile"
-          Pile()
-        if layer == "launcher"
-          Launcher()
-        if layer == "player"
-          PlayerLayer()
-        // elevation 2: the bar, always on top
-        BarShell()
+      // elevation 0: the page, full bleed; it steps back when a layer is up
+      column position="absolute" inset=0
+        scale=(layer != "" ? th.behindScale3 : 1)
+        transition=`scale -exact-spring(${th.springStiffness}, ${th.springDamping}, ${th.springMass})`
+        PageHost(address=pg.top, kind=pg.topKind, title=pg.topTitle)
+      // elevation 3: the layers that rise from the bar
+      if layer == "pile"
+        Pile()
+      if layer == "launcher"
+        Launcher()
+      if layer == "player"
+        PlayerLayer()
+      // elevation 2: the bar, always on top
+      BarShell()
+      // Signed out the paper still reads and plays. Signing in is asked for when an action needs it (Sign in on the paper,
+      // Settings, Account): the code screen then covers the app until it is approved or cancelled.
+      if au.status == "pending"
+        column position="absolute" inset=0 background-color=th.paper z-index=50
+          SignInScreen()

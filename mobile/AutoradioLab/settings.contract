@@ -127,19 +127,35 @@ component ActionButton
       border-width=(primary ? 0 : 1) border-style="solid" border-color=(danger ? th.danger : th.rule)
       text label font-family=th.fontUi font-size=tx.sizeLabel font-weight=600 color=(primary ? th.onAccent : (danger ? th.danger : th.fg))
 
-// light / dark / system. The three buttons keep their test ids.
-component ModePicker
+// light / dark / system: a segmented control in the theme's own colours and radius (the native button styles tint blue and
+// ignore the theme). The three buttons keep their test ids.
+component ModeSegment
   inject
+    th: Theme
     thl: ThemeList
     setMode: action
+  props
+    mode: string
+    label: string
+    testId: string
+  derive picked = thl.mode == mode
   view
-    row gap=8 width="100%"
-      button press=setMode("light") testId="settings-mode-light" role="radio" aria-checked=(thl.mode == "light") buttonStyle=(thl.mode == "light" ? "filled" : "bordered")
-        text "Light"
-      button press=setMode("dark") testId="settings-mode-dark" role="radio" aria-checked=(thl.mode == "dark") buttonStyle=(thl.mode == "dark" ? "filled" : "bordered")
-        text "Dark"
-      button press=setMode("system") testId="settings-mode-system" role="radio" aria-checked=(thl.mode == "system") buttonStyle=(thl.mode == "system" ? "filled" : "bordered")
-        text "System"
+    button press=setMode(mode) testId=testId role="radio" aria-checked=picked appearance="none" flex=1 min-width=0
+      row align-items="center" justify-content="center" min-height=40 border-radius=th.radiusControl
+        background-color=(picked ? th.accent : "transparent")
+        box-shadow=(picked ? th.shadow1 : "none")
+        transition=`background-color ${th.motionFastMs}ms ease`
+        text label font-family=th.fontUi font-size=15 font-weight=600 color=(picked ? th.onAccent : th.fg)
+
+component ModePicker
+  inject
+    th: Theme
+  view
+    row gap=4 padding=4 width="100%" box-sizing="border-box" border-radius=th.radiusControl background-color=th.paper2
+      border-width=1 border-style="solid" border-color=th.rule
+      ModeSegment(mode="light", label="Light", testId="settings-mode-light")
+      ModeSegment(mode="dark", label="Dark", testId="settings-mode-dark")
+      ModeSegment(mode="system", label="System", testId="settings-mode-system")
 
 // One theme as a preview card, painted from the card's own colours, faces, radius and shadow (not the app's), so each theme
 // is seen as it will look. `compact` drops the sample paragraph.
@@ -197,6 +213,8 @@ component RootScreen
     dm: DemoInfo
     setDemo: action
     talkRows: SettingRows
+    devDetails: bool
+    toggleDevDetails: action
   view
     ToolScroll(id="settings")
       ScreenTitle(label="Settings", back=false)
@@ -216,6 +234,8 @@ component RootScreen
         NavRow(address="settings:computer", title="Computer", subtitle=(cmpt.updateAvailable ? "An update is waiting" : (cmpt.state == "" ? "Status, wake, restart to update" : cmpt.state)), testId="settings-nav-computer")
       SectionLabel(label="Listening")
       Card(level=1, testId="settings-card-listening", minHeight=0)
+        NavRow(address="onboarding:setup", title="Set up voice", subtitle="Download the voice models, check the microphone, tell the paper what you like", testId="settings-setup-voice")
+        Hairline()
         NavRow(address="settings:talk", title="Talk", subtitle=(talkRows.rows.length > 0 ? talkRows.rows.map(r => r.valueLabel).join(", ") : "How you talk to the radio"), testId="settings-nav-talk")
         Hairline()
         NavRow(address="settings:voice", title="Voice and models", subtitle="The voice, and the models that hear you", testId="settings-nav-voice")
@@ -237,6 +257,11 @@ component RootScreen
           column align-items="flex-start" gap=2 width="100%"
             text (dm.on ? "Demo mode is on" : "Demo mode is off") font-family=th.fontUi font-size=17 font-weight=600 color=th.fg
             text (dm.on ? "Takes effect at the next launch. Tap to turn off." : "Fixtures and no network, from the next launch. Tap to turn on.") font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+        Hairline()
+        button press=toggleDevDetails testId="settings-dev-details" appearance="none" width="100%" box-sizing="border-box" padding="14px 16px"
+          column align-items="flex-start" gap=2 width="100%"
+            text (devDetails ? "Demo controls are shown" : "Demo controls are hidden") font-family=th.fontUi font-size=17 font-weight=600 color=th.fg
+            text "The paper's editions and composition line, mail's demo states and the reader's demo menu (demo mode only)." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
         Hairline()
         NavRow(address="lab:motion", title="Motion gallery", subtitle="The mark in every state", testId="settings-motion")
         Hairline()

@@ -30,6 +30,14 @@ final class SettingsLane: @unchecked Sendable {
 }
 
 extension AutoradioModule {
+    /// Settings owns the gesture meanings (AppSettings swipeLeft / swipeRight); lane 4's Preferences applies them to the next swipe.
+    func syncGestureMeanings() {
+        guard let prefs = CardsState.shared.prefs else { return }
+        let l = AppSettings.shared.value("swipeLeft")
+        _ = prefs.setGesture(side: "left", meaning: ["closeLess": "close-less", "lessInStack": "less-in-stack"][l] ?? l)
+        _ = prefs.setGesture(side: "right", meaning: AppSettings.shared.value("swipeRight"))
+    }
+
     func registerSettings() {
         let demo = Demo.isOn
         let account = AccountModel(client: demo ? DemoAccountClient() : ChoirAccountClient(), demo: demo,
@@ -38,7 +46,7 @@ extension AutoradioModule {
         let activity = ActivityModel(client: demo ? DemoActivityClient() : ChoirActivityClient())
         let lane = SettingsLane(account: account, computer: computer, activity: activity,
                                 themeSource: demo ? DemoThemeSource() : ChoirThemeSource(),
-                                learned: SignalsLearned(signals: signals, demoSeed: demo))
+                                learned: PreferencesLearned(prefs: { CardsState.shared.prefs }, demoSeed: demo))
         account.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["settingsAccount"]) } }
         computer.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["settingsComputer", "activityInfo"]) } }
         activity.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["activityInfo"]) } }
@@ -88,8 +96,9 @@ extension AutoradioModule {
             }
         }
 
-        // The talk mode applies at launch and when set.
+        // The talk mode applies at launch and when set; the gesture meanings are Settings' too, handed to lane 4's Preferences.
         lane.settings.apply(to: runtime)
+        syncGestureMeanings()
 
         // ---- themes
         func cards(_ status: String = lane.themeStatus) -> [String: Any] {
@@ -154,6 +163,7 @@ extension AutoradioModule {
             let id = args["id"] as? String ?? "", value = args["value"] as? String ?? ""
             let ok = lane.settings.set(id, value)
             if ok, id == "talkMode" { lane.settings.apply(to: runtime) }
+            if ok, id == "swipeLeft" || id == "swipeRight" { syncGestureMeanings(); touch(["toldPaper"]) }
             touch(["settingRows"]); reply(ack(ok, ok ? "" : "That is not one of the choices."))
         }
 

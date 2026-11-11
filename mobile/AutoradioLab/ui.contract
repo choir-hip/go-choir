@@ -34,6 +34,9 @@ component Layer
       backgroundMaterial=(th.material3 == "glass" ? "glass" : "none")
       background-color=(th.material3 == "glass" ? "transparent" : th.paper2)
       box-shadow=th.shadow3
+      // a backing in the page colour under the glass: the page behind no longer ghosts through the layer's text
+      box position="absolute" inset=0 pointer-events="none" z-index=-1 background-color=th.paper opacity=0.86
+        border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
       children
 
 // For tool pages (Components, Trace): the scroll frame ends above the bar instead of running under it, so every control

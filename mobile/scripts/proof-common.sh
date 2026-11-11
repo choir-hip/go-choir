@@ -28,6 +28,9 @@ reset_state() { # [light|dark] [onboarding]
     S="$CONT/Library/Application Support/Autoradio"
     rm -f "$S/open-pages.json" "$S/onboarding.json" "$S/interview.json" "$S/voice-setup.json" "$S/interview.md" "$S/signals.jsonl" "$S/recent-files.json"
     rm -rf "$S/themes" "$CONT/Library/Caches/Autoradio/files"
+    # The app's own preferences (what it wrote itself: theme, mode, talk mode, gestures) outlive a `defaults write` made from outside
+    # (the earlier lanes' runs left Signal in dark there), so the app's own file goes too.
+    rm -f "$CONT/Library/Preferences/$APP.plist"
   fi
 }
 
@@ -37,6 +40,8 @@ wait_() { step "clock +${1:-700} real"; step "clock data"; }
 shot() { step "screenshot $SHOTS/$1.png"; }
 view() { wait_ "${2:-800}"; step tree; shot "$1"; }   # settle, dump the tree, screenshot <name>
 place() { step "tap bar-pages"; wait_ 600; step "tap pile-places"; wait_ 600; step "tap place-$1"; wait_ "${2:-900}"; }
+# Put the app in Depth, light, by its own Settings controls (the proof never trusts what an earlier run left).
+ensure_light() { place settings 900; step "tap settings-theme-depth"; wait_ 500; step "tap settings-mode-light"; wait_ 700; }
 goto() { step "tap bar-pages"; wait_ 600; step "tap pile-places"; wait_ 600; step "tap \"launcher-open-$1\""; wait_ 900; }
 
 # run_drive <name> <mode> <onboarding?> <agent flags...>: reset, run the collected steps, retry a refused launch up to 3 times.

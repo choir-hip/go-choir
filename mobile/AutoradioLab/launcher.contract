@@ -50,8 +50,9 @@ component Launcher
       column position="absolute" left=0 right=0 bottom=0 height="72%"
         animation=(th.reducedMotion ? "none" : `sheetIn ${th.motionEnterMs}ms ease both`)
         Layer(testId="launcher-layer")
-          scroll flex=1 min-height=0
-            column padding=20 gap=8 padding-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 16px)"
+          // the scroll frame ends above the bar (not under it): the last place is reachable and nothing reads through the glass
+          scroll flex=1 min-height=0 margin-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 8px)"
+            column padding=20 gap=8 padding-bottom=24
               input type="search" value=lq input=editLq placeholder="Search pages, files, mail" aria-label="Search" testId="launcher-search"
                 font-family=th.fontUi padding="10px 4px"
               if lnc.hasQuery

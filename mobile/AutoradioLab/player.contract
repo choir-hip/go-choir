@@ -62,7 +62,7 @@ component PlayerLayer
   derive aimReply = `Reply to ${pg.topTitle}…`
   derive aim = pg.topKind == "reader" ? (pg.top.startsWith("texture:") ? aimOwn : aimReply) : "Ask about this page…"
   derive listener = bi.state == "listening" or bi.state == "talking" or bi.state == "heard"
-  derive statusLine = listener ? (ri.heard == "" ? "Listening…" : `You: ${ri.heard}`) : (bi.state == "holding" ? bi.text : (bi.state == "revised" ? "Revised. Reading the new passage" : ri.modeLabel))
+  derive statusLine = listener ? (ri.heard == "" ? "Listening…" : `You: ${ri.heard}`) : (bi.state == "holding" ? bi.text : (bi.state == "revised" ? "Revised. Reading the new passage" : ""))
   derive yieldNote = ri.level == "dip" ? "Radio lowered while you speak" : (ri.level == "pause" ? "Radio paused while you speak" : "")
   view
     column testId="player" position="absolute" inset=0
