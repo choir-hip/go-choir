@@ -114,12 +114,6 @@ component BarShell
       if layer == "player"
         column testId="player" width="100%" height=panelH animation=(still ? "none" : "sheetUp 260ms ease-out both")
           PlayerLayer()
-      // where you are in the stack
-      if onbd == false and layer == ""
-        row width="100%" justify-content="center" padding-bottom=8 pointer-events="none"
-          row testId="page-indicator" aria-label=`${frontKind}, ${stackCount} pages in the deck` align-items="center" gap=6 padding="4px 11px" border-radius=th.radiusPill
-            background-color=th.paper border-width=1 border-style="solid" border-color=th.rule
-            text `${frontKind} · ${stackCount} in the deck` font-family=th.fontUi font-size=11 font-weight=600 color=th.muted testId="page-indicator-text"
       // the lens: glass over the page, full width, top corners rounded, running off the bottom edge
       column testId="bar" position="relative" width="100%" box-sizing="border-box" gap=4
         padding-top=8 padding-left=12 padding-right=12 padding-bottom="calc(env(safe-area-inset-bottom) + 6px)"
@@ -139,6 +133,9 @@ component BarShell
           border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
         box position="absolute" left=0 right=0 top=1 height=14 pointer-events="none" border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
           background-image="linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0))"
+        // the deck's quiet count: where you are, in a hairline of text at the top of the lens (not over the page)
+        if onbd == false and layer == ""
+          text `${frontKind} · ${stackCount} in the deck` testId="page-indicator" aria-label=`${frontKind}, ${stackCount} pages in the deck` font-family=th.fontUi font-size=10 font-weight=600 letter-spacing=0.4 color=th.muted text-align="center" width="100%"
         // ---- the line above the controls
         if lineMode == "aim"
           text aim testId="bar-aim" font-family=th.fontUi font-size=11 color=th.muted line-clamp=1 padding-left=4 animation=enter
@@ -167,7 +164,7 @@ component BarShell
             row gap=6 align-items="center"
               box width=8 height=8 border-radius=4 background-color=th.danger animation=(still ? "none" : "barBlink 1s ease-in-out infinite")
               text "Listening" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.6 color=th.danger
-            text (bi.text == "" ? "Tap the microphone again to send." : bi.text) testId="bar-text" font-family=th.fontRead font-size=15 font-style="italic" color=th.fg line-clamp=3
+            text ((bi.text == "" or bi.text.startsWith("Listening")) ? "Tap the microphone again to send." : bi.text) testId="bar-text" font-family=th.fontRead font-size=15 font-style="italic" color=th.fg line-clamp=3
         if lineMode == "heard"
           text bi.text testId="bar-text" font-family=th.fontRead font-size=15 color=th.fg line-clamp=3 padding-left=4 animation=enter
         if lineMode == "holding"

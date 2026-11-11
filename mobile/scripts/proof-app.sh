@@ -55,11 +55,11 @@ step "tap player-close"; wait_ 700
 step "tap bar-mic"; view light-03b-mic-listening 900
 step "tap bar-mic"; wait_ 1500
 # the deck: a sideways swipe sends the story to the bottom, the next page comes up; the launcher brings it back
-step "tap page-deck drag -320 0"; view light-04-deck-swiped-away 900
+step "tap page-deck drag -180 0"; view light-04-deck-swiped-away 900
 step "tap bar-mark"; view light-05-launcher 700
 step "tap \"launcher-open-pub:demo-grid-storage\""; view light-05b-story-brought-back 900
 # six swipes cycle the whole deck of six round to the story again
-for i in 1 2 3 4 5 6; do step "tap page-deck drag 320 0"; wait_ 900; if [ $i = 2 ]; then step tree; shot light-05c-deck-mid-cycle; fi; done
+for i in 1 2 3 4 5 6; do step "tap page-deck drag 180 0"; wait_ 900; if [ $i = 2 ]; then step tree; shot light-05c-deck-mid-cycle; fi; done
 step tree; shot light-05d-deck-cycled-round
 step "tap bar-mark"; wait_ 600
 step "tap place-files"; view light-06-files-list 1200
@@ -154,7 +154,7 @@ step "tap bar-text"; view dark-04-player 900
 step "tap player-close"; wait_ 700
 step "tap bar-mic"; view dark-04b-mic-listening 900
 step "tap bar-mic"; wait_ 1500
-step "tap page-deck drag -320 0"; view dark-05-deck-swiped-away 900
+step "tap page-deck drag -180 0"; view dark-05-deck-swiped-away 900
 step "tap bar-mark"; view dark-06-launcher 700
 step "tap \"launcher-open-pub:demo-grid-storage\""; view dark-06b-story-brought-back 900
 step "tap bar-mark"; wait_ 600
