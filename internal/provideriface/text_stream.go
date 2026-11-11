@@ -38,6 +38,11 @@ type TextStreamResponse struct {
 	Model      string
 	StopReason string
 	Usage      TokenUsage
+	// Applied is what the gateway said it applied of ReasoningOff and the
+	// stable-prefix cache break: "off" or "on" for reasoning; "accepted",
+	// "ignored" or "none" for the cache break; "unknown" for both when the
+	// gateway is older than the header.
+	AppliedReasoning, AppliedCacheBreak string
 }
 
 // TextStreamProvider streams a text answer. onDelta is called, in order, with

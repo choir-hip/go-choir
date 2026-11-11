@@ -187,6 +187,12 @@ func forcedCut(buf string, limit int) (end, rest int, ok bool) {
 	return limit, limit, true
 }
 
+// emphasis is a paired run of asterisks hugging its text ("**bold**", "*word*").
+var emphasis = regexp.MustCompile(`(\*+)([^*\s](?:[^*]*[^*\s])?)(\*+)`)
+
+// stars is a leftover run of two or more asterisks.
+var stars = regexp.MustCompile(`\*{2,}`)
+
 // structure is a leading heading, bullet or quote mark.
 var structure = regexp.MustCompile(`^(?:(?:#{1,6}|[-\x{2022}>])\s+)+`)
 
@@ -196,7 +202,11 @@ var structure = regexp.MustCompile(`^(?:(?:#{1,6}|[-\x{2022}>])\s+)+`)
 // a hash or a tilde inside the text is the text: "-5 degrees", "#1 story",
 // "about ~3 million", "C#".
 func clean(s string) string {
-	s = strings.NewReplacer("*", "", "`", "").Replace(s)
+	// Paired emphasis marks around a word or phrase go; a lone "*" ("5 * 3")
+	// is the text and stays. Leftover runs of two or more, and backticks, go.
+	s = emphasis.ReplaceAllString(s, "$2")
+	s = strings.NewReplacer("`", "").Replace(s)
+	s = stars.ReplaceAllString(s, "")
 	s = strings.Join(strings.Fields(s), " ")
 	return strings.TrimSpace(structure.ReplaceAllString(s, ""))
 }

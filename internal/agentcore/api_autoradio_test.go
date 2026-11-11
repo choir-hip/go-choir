@@ -26,10 +26,10 @@ import (
 //     trailing data, too much history are 400, and none reaches a model;
 //  4. a provider that cannot stream is 503, not a hang;
 //  5. the first speech event is flushed before the model finishes;
-//  6. a refusal before the first chunk walks to the next pool member and the
-//     listener sees no error; the pool order is River, devin, beam, Synthetic
-//     and no member is Bedrock;
-//  7. a member that says nothing within the first-chunk deadline is walked past;
+//  6. a refusal before a sentence is sent walks to the next pool member and the
+//     listener sees no error; the pool is River then Bedrock Haiku, nothing else;
+//  7. (retired) the desk holds no timer, so there is no first-chunk walk; an
+//     empty stream and a failure before the first sentence are the walks;
 //  8. every member refused is one spoken fallback line, an error event, a
 //     settled "failed" Report, and a done event;
 //  9. an upstream error after the first sentence stops the turn: the
@@ -43,7 +43,7 @@ import (
 // 12. a request record that cannot be written does not silence the listener:
 //     the answer streams and done says the record failed;
 // 13. the frame labels the page untrusted, carries the words last, and the
-//     call has no tools, a small max_tokens and reasoning no higher than low;
+//     call has no tools, no token budget, and reasoning off for both members;
 // 14. page text that holds instructions stays data (the call is the same and
 //     no hand-off exists to follow them);
 // 15. a turn creates no run, no inbox record and no Texture document: it

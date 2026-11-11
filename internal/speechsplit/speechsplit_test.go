@@ -53,6 +53,8 @@ func TestSplitterTable(t *testing.T) {
 		"ellipsis":                 {"Well... maybe. Not sure.", []string{"Well... maybe.", "Not sure."}},
 		"newline":                  {"First line\nSecond line", []string{"First line", "Second line"}},
 		"unterminated tail":        {"One. Two without end", []string{"One.", "Two without end"}},
+		"lone star is the text":    {"Compute 5 * 3 now. Done.", []string{"Compute 5 * 3 now.", "Done."}},
+		"paired emphasis":          {"This is *very* important. Yes.", []string{"This is very important.", "Yes."}},
 		"answer is no":             {"The answer is no. Talks resume.", []string{"The answer is no.", "Talks resume."}},
 		"no then number":           {"See no. 5 now. Done.", []string{"See no. 5 now.", "Done."}},
 		"negative number":          {"-5 degrees is cold. Yes.", []string{"-5 degrees is cold.", "Yes."}},

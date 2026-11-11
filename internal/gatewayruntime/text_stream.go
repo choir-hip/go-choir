@@ -55,7 +55,20 @@ func (p *Provider) StreamText(ctx context.Context, req provideriface.TextStreamR
 		body, _ := io.ReadAll(io.LimitReader(httpResp.Body, 1<<16))
 		return nil, gatewayStatusError(httpResp.Status, body)
 	}
-	return readTextStream(ctx, httpResp.Body, onDelta)
+	resp, err := readTextStream(ctx, httpResp.Body, onDelta)
+	if resp != nil {
+		resp.AppliedReasoning, resp.AppliedCacheBreak = "unknown", "unknown"
+		for _, kv := range strings.Split(httpResp.Header.Get("X-Choir-Applied"), ";") {
+			k, v, _ := strings.Cut(strings.TrimSpace(kv), "=")
+			switch k {
+			case "reasoning":
+				resp.AppliedReasoning = v
+			case "cache_break":
+				resp.AppliedCacheBreak = v
+			}
+		}
+	}
+	return resp, err
 }
 
 // readTextStream reads the gateway's SSE body (see StreamText).

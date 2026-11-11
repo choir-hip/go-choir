@@ -238,3 +238,24 @@ func TestCallWithToolsNeverSendsTheReasoningExemption(t *testing.T) {
 		}
 	}
 }
+
+// (10) the guest reads what the gateway applied; an older gateway, which sends
+// no header, is "unknown" and never taken for "off".
+func TestStreamTextReadsWhatTheGatewayApplied(t *testing.T) {
+	with := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Choir-Applied", "reasoning=off;cache_break=accepted")
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"type\":\"content_block_delta\",\"delta\":\"Hi.\"}\n\ndata: [DONE]\n\n")
+	}))
+	defer with.Close()
+	resp, err := New(with.URL, "tok").StreamText(context.Background(), provideriface.TextStreamRequest{User: "x"}, func(string) {})
+	if err != nil || resp.AppliedReasoning != "off" || resp.AppliedCacheBreak != "accepted" {
+		t.Fatalf("(10) %+v %v", resp, err)
+	}
+	without := sseServer(t, nil, func(w http.ResponseWriter, flush func()) { fmt.Fprint(w, "data: [DONE]\n\n") })
+	defer without.Close()
+	resp, err = New(without.URL, "tok").StreamText(context.Background(), provideriface.TextStreamRequest{User: "x"}, func(string) {})
+	if err != nil || resp.AppliedReasoning != "unknown" || resp.AppliedCacheBreak != "unknown" {
+		t.Fatalf("(10) %+v %v", resp, err)
+	}
+}

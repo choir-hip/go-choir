@@ -297,13 +297,7 @@ func (m *Manager) RoleChain(ctx context.Context, ownerID, role string) []provide
 // before the role existed needs no edit.
 func (m *Manager) PoolChain(ctx context.Context, ownerID, role string) []provideriface.LLMSelection {
 	policy, _ := m.Load(ctx, ownerID)
-	normalized := NormalizeRole(role)
-	selection := fillSelection(provideriface.LLMSelection{}, policy.Defaults)
-	if own, ok := policy.Roles[normalized]; ok {
-		selection = fillSelection(own, policy.Defaults)
-	} else if normalized == AutoradioRole {
-		selection = provideriface.LLMSelection{Model: modelcatalog.PoolSpecPrefix + modelcatalog.AutoradioPool, ReasoningEffort: ReasoningOff, Source: "platform_fallback"}
-	}
+	selection := policy.Resolve(role)
 	if !strings.HasPrefix(selection.Model, modelcatalog.PoolSpecPrefix) {
 		return []provideriface.LLMSelection{selection}
 	}
@@ -546,12 +540,44 @@ var ManagementTaskRole = deskmanifest.TaskRoleName()
 // Resolve returns the effective selection for role.
 func (p Policy) Resolve(role string) provideriface.LLMSelection {
 	normalized := NormalizeRole(role)
+	if normalized == AutoradioRole {
+		return p.resolveAutoradio()
+	}
 	if p.Roles != nil {
 		if selection, ok := p.Roles[normalized]; ok {
 			return fillSelection(selection, p.Defaults)
 		}
 	}
 	return fillSelection(provideriface.LLMSelection{}, p.Defaults)
+}
+
+// resolveAutoradio is the autoradio role's selection. The compiled role values
+// (pool:autoradio, reasoning off, no max_tokens) are the base, and a section in
+// the computer's policy overrides only what it names: a section with no
+// reasoning line does not inherit the Defaults' effort or max_tokens, which
+// would turn reasoning on and add a token budget without anyone saying so
+// (owner 2026-11-11: reasoning is fixed per role; no token budget). An owner
+// who writes a reasoning value or max_tokens in the section gets it (it is
+// their file); "none" and "off" both mean off for this role.
+func (p Policy) resolveAutoradio() provideriface.LLMSelection {
+	sel := provideriface.LLMSelection{
+		Model: modelcatalog.PoolSpecPrefix + modelcatalog.AutoradioPool, ReasoningEffort: ReasoningOff, Source: "platform_fallback",
+	}
+	own, ok := p.Roles[AutoradioRole]
+	if !ok {
+		return sel
+	}
+	sel.Source = "model_policy"
+	if own.Model != "" {
+		sel.Provider, sel.Model = own.Provider, own.Model
+	}
+	if own.ReasoningEffort != "" {
+		sel.ReasoningEffort = own.ReasoningEffort
+	}
+	if own.MaxTokens > 0 {
+		sel.MaxTokens = own.MaxTokens
+	}
+	return sel
 }
 
 // Selections returns each distinct model the policy names, defaults first
@@ -1140,7 +1166,7 @@ func sanitizeEffortFor(where string, allowOff bool, selection *provideriface.LLM
 		selection.ReasoningEffort = ""
 		return
 	}
-	if allowOff && strings.EqualFold(raw, ReasoningOff) {
+	if allowOff && (strings.EqualFold(raw, ReasoningOff) || strings.EqualFold(raw, "none")) {
 		selection.ReasoningEffort = ReasoningOff
 		return
 	}

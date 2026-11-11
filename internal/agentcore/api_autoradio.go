@@ -188,6 +188,12 @@ func (h *APIHandler) HandleAutoradioTurns(w http.ResponseWriter, r *http.Request
 		return
 	}
 	rep, _ := rt.store.GetCommitmentRecord(r.Context(), ownerID, rt.cfg.ComputerID, turn.reportRecordID())
+	// The Report is bound to the words as well, so a request record that was
+	// never written cannot let an old answer be replayed for a new question.
+	if rep != nil && rep.SubjectRefs["words_sha256"] != turn.wordsSHA {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "this turn_id was used for different words; use a new turn_id"})
+		return
+	}
 	turn.begin()
 	if turn.replay(rep) {
 		return
@@ -204,7 +210,7 @@ func parseAutoradioRequest(body []byte) (autoradioRequest, int, error) {
 	if err := dec.Decode(&req); err != nil {
 		return req, http.StatusBadRequest, fmt.Errorf("decode the request: %v", err)
 	}
-	if dec.More() {
+	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return req, http.StatusBadRequest, errors.New("decode the request: trailing data")
 	}
 	if !autoradioTurnID.MatchString(req.TurnID) {
@@ -220,8 +226,15 @@ func parseAutoradioRequest(body []byte) (autoradioRequest, int, error) {
 	if len(req.Page.Address) > 512 || len(req.Page.Title) > 300 || len(req.Programme) > 128 {
 		return req, http.StatusBadRequest, errors.New("page.address, page.title or programme is too long")
 	}
-	if req.Page.TextSHA256 != "" && !autoradioSHA.MatchString(req.Page.TextSHA256) {
-		return req, http.StatusBadRequest, errors.New("page.text_sha256 must be 64 lowercase hex digits")
+	if req.Page.TextSHA256 != "" {
+		if !autoradioSHA.MatchString(req.Page.TextSHA256) {
+			return req, http.StatusBadRequest, errors.New("page.text_sha256 must be 64 lowercase hex digits")
+		}
+		// The tape records the hash of the text the model saw, never a value
+		// the client asserted.
+		if req.Page.TextSHA256 != sha256Hex(req.Page.Text) {
+			return req, http.StatusBadRequest, errors.New("page.text_sha256 does not match page.text")
+		}
 	}
 	if req.Heard != nil {
 		if req.Heard.BlockIndex < 0 {
@@ -259,6 +272,11 @@ type autoradioTurn struct {
 	provider  string
 	model     string
 	reportID  string
+	// applied is what the gateway said it applied for the answering member;
+	// inForce is what the computer's policy gave the call.
+	appliedReasoning, appliedCacheBreak string
+	inForceReasoning                    string
+	inForceMaxTokens                    int
 }
 
 func (t *autoradioTurn) requestRecordID() string { return autoradioReqPrefix + t.req.TurnID }
@@ -341,10 +359,7 @@ func (t *autoradioTurn) recordLabels() []string {
 // no inbox, so it wakes nothing.
 func (t *autoradioTurn) writeRequestRecord(ctx context.Context) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	sum := t.req.Page.TextSHA256
-	if sum == "" {
-		sum = sha256Hex(t.req.Page.Text)
-	}
+	sum := sha256Hex(t.req.Page.Text) // computed here from the text received; see parseAutoradioRequest
 	refs := map[string]string{
 		"desk": autoradioDesk, "record_kind": autoradioRecordKind, "turn_id": t.req.TurnID, "words_sha256": t.wordsSHA,
 		"page_address": t.req.Page.Address, "page_text_sha256": sum, "page_text_bytes": strconv.Itoa(len(t.req.Page.Text)),
@@ -470,6 +485,13 @@ func (t *autoradioTurn) frame() (stable, volatile string) {
 	return stable, b.String()
 }
 
+func orUnknown(s string) string {
+	if s == "" {
+		return "unknown"
+	}
+	return s
+}
+
 func (t *autoradioTurn) ms(at time.Time) int64 {
 	if at.IsZero() {
 		return -1
@@ -504,7 +526,9 @@ func (t *autoradioTurn) done(status string, replayed bool, recordErr, reportErr 
 			"received": rfc(t.received), "record_written": rfc(t.recordWritten), "upstream_request": rfc(t.upstreamRequest),
 			"upstream_first_token": rfc(t.firstToken), "first_sentence": rfc(t.firstSentence), "done": rfc(finished),
 		},
-		"usage": map[string]any{"input_tokens": t.usage.InputTokens, "output_tokens": t.usage.OutputTokens, "cached_input_tokens": t.usage.CachedInputTokens, "cache_reported": t.usage.CacheReported},
+		"applied":  map[string]string{"reasoning": orUnknown(t.appliedReasoning), "cache_break": orUnknown(t.appliedCacheBreak)},
+		"in_force": map[string]any{"reasoning": t.inForceReasoning, "max_tokens": t.inForceMaxTokens},
+		"usage":    map[string]any{"input_tokens": t.usage.InputTokens, "output_tokens": t.usage.OutputTokens, "cached_input_tokens": t.usage.CachedInputTokens, "cache_reported": t.usage.CacheReported},
 	}
 	if recordErr != "" {
 		data["record_error"] = recordErr
@@ -543,11 +567,21 @@ func (t *autoradioTurn) run(ctx context.Context, streamer provideriface.TextStre
 	settled := false
 	defer func() {
 		// A panic after the request record is written still settles the turn.
-		if p := recover(); p != nil && !settled {
-			log.Printf("autoradio: turn %s: panic: %v", t.req.TurnID, p)
+		if p := recover(); p != nil {
+			log.Printf("autoradio: turn %s: panic (settling=%t): %v", t.req.TurnID, settled, p)
 			func() {
-				defer func() { _ = recover() }()
-				t.settle(ctx, "failed", fmt.Sprintf("internal error: %v", p), recordErr)
+				defer func() {
+					if p2 := recover(); p2 != nil {
+						log.Printf("autoradio: turn %s: panic while reporting the first: %v", t.req.TurnID, p2)
+					}
+				}()
+				if !settled {
+					t.settle(ctx, "failed", fmt.Sprintf("internal error: %v", p), recordErr)
+					return
+				}
+				// The panic was in settle itself: the turn must still end with
+				// a done event, whatever else was lost.
+				t.done("failed", false, recordErr, fmt.Sprintf("internal error while settling: %v", p))
 			}()
 		}
 	}()
@@ -586,6 +620,10 @@ func (t *autoradioTurn) run(ctx context.Context, streamer provideriface.TextStre
 			effort, reasoningOff = "", true
 		}
 		maxTokens := sel.MaxTokens
+		t.inForceReasoning, t.inForceMaxTokens = effort, maxTokens
+		if reasoningOff {
+			t.inForceReasoning = modelpolicy.ReasoningOff
+		}
 		var splitter speechsplit.Splitter
 		var firstTok time.Time
 		autoradioCallsTotal.Add(1)
@@ -625,6 +663,7 @@ func (t *autoradioTurn) run(ctx context.Context, streamer provideriface.TextStre
 			hop.Outcome = "answered"
 			t.hops = append(t.hops, hop)
 			t.usage = resp.Usage
+			t.appliedReasoning, t.appliedCacheBreak = resp.AppliedReasoning, resp.AppliedCacheBreak
 			status = "completed"
 			break
 		}

@@ -114,6 +114,8 @@ Last event of every stream. Example:
   "timestamps": {"received": "2026-11-11T14:00:00.001Z", "record_written": "...", "upstream_request": "...", "upstream_first_token": "...", "first_sentence": "...", "done": "..."},
   "members_tried": [{"member": "river/deepseek-ai/DeepSeek-V4.1-Flash-1017", "outcome": "answered", "ms": 1170}],
   "usage": {"input_tokens": 812, "output_tokens": 61, "cached_input_tokens": 700, "cache_reported": true},
+  "applied": {"reasoning": "off", "cache_break": "accepted"},
+  "in_force": {"reasoning": "off", "max_tokens": 0},
   "record_error": "only when the request record could not be written",
   "report_error": "only when the Report could not be written"
 }
@@ -134,13 +136,25 @@ past silently: the listener sees no `error`.
 Reserved for slice 2 (design section 4). Slice 1 never sends it; ignore unknown
 event names.
 
+`applied` is what the gateway said it applied for the answering member (header
+`X-Choir-Applied`): `reasoning` `off` or `on`, `cache_break` `accepted` (Bedrock),
+`ignored` (River, which caches unchanged prefixes by itself) or `none`. An older
+gateway sends no header and both read `unknown`; `unknown` or `on` for reasoning
+means the flag did not take effect. **Deploy the gateway before the guests that
+call this route.** `in_force` is what the computer's policy gave the call.
+
 ## Idempotency and disconnects
 
 A `turn_id` already answered `completed` (at least one sentence) is replayed:
 the recorded sentences as `speech` events and a `done` with `"replayed": true`,
 no model call. A failed or interrupted turn, and a turn that produced nothing
 speakable, is not a recorded answer: the same `turn_id` with the same words is
-answered anew. The same `turn_id` with different words is `409`.
+answered anew. The same `turn_id` with different words is `409`, whether the check finds the
+request record or only the Report (both carry the words' hash). A post of a
+`turn_id` that is still being answered is `409` too, including for a moment after
+the client dropped and the cancelled upstream call unwinds: retry after a short
+wait. `page.text_sha256`, if sent, must equal the SHA-256 of `page.text` (else
+`400`); the tape records the server's own hash.
 
 ## Records (the tape)
 
@@ -220,6 +234,15 @@ prompts, not deterministic rules."
   (`internal/appdesk/firstparty_prompts/autoradio.md`: a few short spoken
   sentences, the most important first, then stop, with the reason given).
 
+A policy section `[roles.autoradio]` overrides only what it names: the compiled
+role values (pool `autoradio`, reasoning off, no `max_tokens`) are the base, and
+the section does not inherit the defaults' effort or `max_tokens`. `reasoning =
+"off"` and `"none"` both mean off for this role; any other value is the owner's
+and is honored (`done.in_force` says what was in force). The gateway honors
+`reasoning_off` only for a no-tools call to a member of the compiled autoradio
+pool and ignores it (counted, logged) otherwise.
+`/api/model-policy/resolve?role=autoradio` shows this route.
+
 ### Per provider (vendor documentation read 2026-11-11; each point marked)
 
 | | River DeepSeek V4.1 Flash 1017 | Bedrock Claude Haiku 5.5 |
@@ -294,13 +317,31 @@ Owner 2026-11-11: no hard time budgets, no token budgets; steer with prompts.
 | Fixed spoken fallback lines on failure | kept: they are not a model output |
 | Body 80 KB, page 48 KB, words 2000 bytes, field lengths | kept: bounds on what a stranger can cause |
 
+## Residual risks
+
+- No per-owner concurrency bound on turns (by ruling: no limits on our own model
+  calls). An authenticated caller can run many distinct `turn_id`s at once, each
+  with a gateway stream and two durable records; failed and interrupted Reports
+  get a new id per attempt (`autoradio-turn-fail:<id>:<status>:<ns>`), so tape
+  growth is not bounded by the request body alone. Watch the log volume line.
+- Bedrock charges a call's `max_tokens` (here the model ceiling) against its
+  token quota when the call starts, so concurrent fallback turns can be
+  throttled earlier than their output would suggest. It is the last member, so a
+  refusal there ends the turn. Watch it in the staging proof.
+- The request record is addressed to `app:autoradio:<owner>`, the same agent id
+  as the Report; if that desk ever ran, the unresolved notice would appear in its
+  pack. It has no inbox and no accepts today.
+
 ## Measuring it
 
 `scripts/prove-autoradio-turns --host choir.news --api-key-file <file>
-[--computer-id <id>] [--count 10]` sends N asks, prints per ask the time to
+[--computer-id <id>] [--count 10]` sends N asks, two per page, prints per ask the time to
 first `speech` event and to `done` (client clock) beside the server's own hop
 timings, and the median; it exits non-zero when the median to the first
-sentence is above 2.5 s.
+sentence is above 2.5 s, when any ask failed, when the gateway did not confirm
+reasoning off on every ask, or when River never answered. It has no socket
+timeout by default (`--timeout` sets one): a slow tail is reported in the
+distribution.
 
 ## Surprises found building it
 
