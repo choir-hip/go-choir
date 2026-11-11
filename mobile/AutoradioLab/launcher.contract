@@ -1,14 +1,12 @@
-// The launcher: places with what is new there, the open pages and the recent ones as chips, search, "your paper" (what the swipes
-// taught it), and the story stack. A layer reaching about 70% of the screen; pull the bar up, or tap Places in the pile.
-// Lane 4 owns this file. Words and live content, never a grid of icons (plan section 1).
-// Search covers open pages, places, recent pages and today's stories; file names and mail subjects join when those lanes list them.
-// testIds: launcher, launcher-layer, launcher-scrim, launcher-search, launcher-open-<address>, launcher-recent-<address>,
-// search-hit-<address>, place-<slug>, place-line-<slug>, launcher-stack, gesture-left, gesture-right, told-open, told-reset, told-count.
-use Theme, PageList, Told, LauncherData from "@choir/autoradio"
-use Layer, Btn from "./ui.contract"
-
-keyframes sheetIn
-  from opacity=0 translate="0px 24px"
+// The launcher (round 3): opened by the mark, as on choir.news; it rises above the bar, which stays visible and usable under it.
+// It opens the key pages (each comes to the top of the deck) and lists the pages now in the deck (tap to bring one to the top, a
+// remove button on opened ones; the key pages stay), and the app's other destinations,
+// plus search over pages, files and stories. Titles are human: a page's title, else one made from its slug; never an address.
+// The panel is placed by the bar (bar.contract); the scrim behind the page is the root's.
+// testIds: launcher-layer, launcher-search, launcher-open-<address>, launcher-close-<address>, search-hit-<address>,
+// place-<slug> (paper, textures, files, mail, settings, activity, told, components), launcher-nohits.
+use Theme, PageList, LauncherData from "@choir/autoradio"
+use Layer, Btn, stackName, kindOf, kindWord, isFixed, pageName from "./ui.contract"
 
 component PlaceRow
   inject
@@ -20,87 +18,79 @@ component PlaceRow
     address: string
     line: string
   view
-    button press=openPage(address, name) testId=`place-${slug}` appearance="none" width="100%"
-      row padding="12px 0" align-items="center" width="100%" gap=8
+    button press=openPage(address, name) testId=`place-${slug}` appearance="none" width="100%" aria-label=`Open ${name}`
+      row padding="10px 0" align-items="center" width="100%" gap=8 min-height=44
         column flex=1 gap=2 align-items="flex-start"
           text name font-family=th.fontUi font-size=17 font-weight=600 color=th.fg text-align="left"
           if line != ""
-            text line testId=`place-line-${slug}` font-family=th.fontUi font-size=13 color=th.muted text-align="left" line-clamp=1
+            text line font-family=th.fontUi font-size=13 color=th.muted text-align="left" line-clamp=1
         image "symbol:forward-chevron" color=th.muted
+
+// One page of the stack: tap to jump to it; a close button when it can be closed.
+component StackRow
+  inject
+    th: Theme
+    pg: PageList
+    topAddr: string
+    focusPage: action
+    closePage: action
+  props
+    address: string
+    index: number
+  derive name = stackName(pg.rows, address)
+  derive word = kindWord(kindOf(address), address)
+  derive here = address == topAddr
+  view
+    row width="100%" align-items="center" gap=4 min-height=48
+      button press=focusPage(address) testId=`launcher-open-${address}` appearance="none" flex=1 min-width=0 aria-label=`${here ? "Current page, " : "Go to "}${name}, ${word}`
+        row align-items="center" gap=10 width="100%" padding="6px 0"
+          text `${index + 1}` font-family=th.fontMono font-size=12 color=th.muted width=18
+          column flex=1 min-width=0 gap=1 align-items="flex-start"
+            text name font-family=th.fontUi font-size=16 font-weight=(here ? 700 : 500) color=th.fg line-clamp=1 text-align="left"
+            text word font-family=th.fontUi font-size=11 font-weight=600 letter-spacing=0.6 text-transform="uppercase" color=(here ? th.accent : th.muted)
+          if here
+            box width=8 height=8 border-radius=4 background-color=th.accent
+      if isFixed(address) == false and here == false
+        button press=closePage(address) testId=`launcher-close-${address}` appearance="none" width=44 height=44 aria-label=`Remove ${name} from the deck`
+          row width=44 height=44 align-items="center" justify-content="center"
+            image "symbol:close" color=th.muted
 
 component Launcher
   inject
     th: Theme
     pg: PageList
     lnc: LauncherData
-    told: Told
     lq: string
+    stackAddrs: string[]
     editLq: action
     openPage: action
-    focusPage: action
-    hideLayer: action
-    openStack: action
-    leftNext: action
-    rightNext: action
-    resetTold: action
-    openTold: action
   view
-    column testId="launcher" position="absolute" top=0 left=0 right=0 bottom=0
-      box testId="launcher-scrim" position="absolute" top=0 left=0 right=0 bottom=0 background-color=th.fg opacity=th.behindDim3 press=hideLayer transition=`opacity ${th.motionFastMs}ms ease`
-      column position="absolute" left=0 right=0 bottom=0 height="72%"
-        animation=(th.reducedMotion ? "none" : `sheetIn ${th.motionEnterMs}ms ease both`)
-        Layer(testId="launcher-layer")
-          // the scroll frame ends above the bar (not under it): the last place is reachable and nothing reads through the glass
-          scroll flex=1 min-height=0 margin-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 8px)"
-            column padding=20 gap=8 padding-bottom=24
-              input type="search" value=lq input=editLq placeholder="Search pages, files, mail" aria-label="Search" testId="launcher-search"
-                font-family=th.fontUi padding="10px 4px"
-              if lnc.hasQuery
-                for h in lnc.hits key=h.address
-                  button press=openPage(h.address, h.title) testId=`search-hit-${h.address}` appearance="none" width="100%"
-                    column padding="8px 0" gap=2 align-items="flex-start" width="100%"
-                      text h.title font-family=th.fontUi font-size=17 font-weight=600 color=th.fg text-align="left" line-clamp=2
-                      row gap=6
-                        text h.kind font-family=th.fontUi font-size=12 font-weight=700 color=th.accent
-                        text h.detail font-family=th.fontUi font-size=13 color=th.muted text-align="left" line-clamp=1
-                if lnc.hits.length == 0
-                  text "Nothing found." testId="launcher-nohits" font-family=th.fontUi font-size=15 color=th.muted
-              if lnc.hasQuery == false
-                text "Open" font-family=th.fontUi font-size=13 color=th.muted
-                scroll overflow-x="scroll" overflow-y="hidden" display="flex" flex-direction="row" gap=8
-                  for p in pg.rows key=p.address
-                    button press=focusPage(p.address) testId=`launcher-open-${p.address}` appearance="none"
-                      Btn(label=(p.pinned ? `${p.title} (pinned)` : p.title), primary=false, wide=false)
-                if lnc.recent.length > 0
-                  text "Recent" font-family=th.fontUi font-size=13 color=th.muted
-                  scroll overflow-x="scroll" overflow-y="hidden" display="flex" flex-direction="row" gap=8
-                    for r in lnc.recent key=r.address
-                      button press=openPage(r.address, r.title) testId=`launcher-recent-${r.address}` appearance="none"
-                        Btn(label=r.title, primary=false, wide=false)
-                text "Places" font-family=th.fontUi font-size=13 color=th.muted
-                for pr in lnc.places key=pr.slug
-                  PlaceRow(slug=pr.slug, name=pr.name, address=pr.address, line=pr.line)
-                text "Your paper" font-family=th.fontUi font-size=13 color=th.muted
-                button press=openStack testId="launcher-stack" appearance="none" width="100%"
-                  row padding="12px 0" align-items="center" width="100%" gap=8
-                    column flex=1 gap=2 align-items="flex-start"
-                      text "Go through today's stories" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg text-align="left"
-                      text `${lnc.stories} stories, one by one. Swipe right for more like it.` font-family=th.fontUi font-size=13 color=th.muted text-align="left"
-                    image "symbol:forward-chevron" color=th.muted
-                text (told.count == 0 ? "You have not told the paper anything yet." : `You have told the paper ${told.count} ${told.count == 1 ? "thing" : "things"}.`) testId="told-count" font-family=th.fontUi font-size=13 color=th.muted
-                for t, i in told.rows key=i
-                  row gap=8 align-items="baseline" width="100%"
-                    text (t.kind == "more" ? "More" : "Less") font-family=th.fontUi font-size=12 font-weight=700 color=th.accent
-                    text `${t.title} (${t.entities})` font-family=th.fontUi font-size=13 color=th.fg flex=1 text-align="left" line-clamp=2
-                row gap=8 width="100%"
-                  button press=leftNext testId="gesture-left" appearance="none"
-                    Btn(label=`Swipe left: ${told.leftLabel}`, primary=false, wide=false)
-                  button press=rightNext testId="gesture-right" appearance="none"
-                    Btn(label=`Swipe right: ${told.rightLabel}`, primary=false, wide=false)
-                row gap=8 width="100%"
-                  button press=openTold testId="told-open" appearance="none"
-                    Btn(label="What I've told the paper", primary=false, wide=false)
-                  button press=resetTold testId="told-reset" appearance="none"
-                    Btn(label="Reset", primary=false, wide=false)
-                text "Developer" font-family=th.fontUi font-size=13 color=th.muted
-                PlaceRow(slug="components", name="Components", address="lab:components", line="")
+    Layer(testId="launcher-layer")
+      scroll testId="launcher-scroll" flex=1 min-height=0 width="100%"
+        column padding=20 gap=6 padding-bottom=24 box-sizing="border-box" width="100%"
+          input type="search" value=lq input=editLq placeholder="Search pages, files, mail" aria-label="Search" testId="launcher-search"
+            font-family=th.fontUi padding="10px 4px"
+          if lnc.hasQuery
+            for h in lnc.hits key=h.address
+              button press=openPage(h.address, pageName(h.title, h.address)) testId=`search-hit-${h.address}` appearance="none" width="100%"
+                column padding="8px 0" gap=2 align-items="flex-start" width="100%"
+                  text pageName(h.title, h.address) font-family=th.fontUi font-size=17 font-weight=600 color=th.fg text-align="left" line-clamp=2
+                  row gap=6
+                    text kindWord(kindOf(h.address), h.address) font-family=th.fontUi font-size=12 font-weight=700 color=th.accent
+                    text h.detail font-family=th.fontUi font-size=13 color=th.muted text-align="left" line-clamp=1
+            if lnc.hits.length == 0
+              text "Nothing found." testId="launcher-nohits" font-family=th.fontUi font-size=15 color=th.muted
+          if lnc.hasQuery == false
+            text "Key pages" font-family=th.fontUi font-size=13 color=th.muted margin-top=4
+            PlaceRow(slug="paper", name="Paper", address="paper:front", line="Today's front page")
+            PlaceRow(slug="textures", name="Textures", address="textures:", line="Your documents")
+            PlaceRow(slug="files", name="Files", address="file:/", line="")
+            PlaceRow(slug="mail", name="Mail", address="mailbox:inbox", line="")
+            PlaceRow(slug="settings", name="Settings", address="settings:root", line="")
+            text "In the deck, top first" font-family=th.fontUi font-size=13 color=th.muted margin-top=12
+            for a, i in stackAddrs key=a
+              StackRow(address=a, index=i)
+            text "More" font-family=th.fontUi font-size=13 color=th.muted margin-top=12
+            PlaceRow(slug="activity", name="Activity", address="activity:", line="What your computer has been doing")
+            PlaceRow(slug="told", name="What I've told the paper", address="texture:what-i-told-the-paper", line="")
+            PlaceRow(slug="components", name="Components", address="lab:components", line="Voice models and tools")

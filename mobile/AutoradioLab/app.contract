@@ -1,12 +1,9 @@
-// The Autoradio root: a full-bleed page, the bar floating over it, and the layers that rise from the bar.
+// The Autoradio root: the page deck (full bleed), the glass bar over its bottom edge, and the sheets that rise from the bar.
 // Everything else lives in other files. SHARED FILE: lanes edit this file in exactly two places, each a band of
 // their own, one line each: the `members` line (already present for every lane) and their `provide` band.
 // Nothing else here is a lane's to change (the spine owns the view).
-use PageHost from "./pages.contract"
+use PageDeck from "./pages.contract"
 use BarShell from "./bar.contract"
-use PlayerLayer from "./player.contract"
-use Pile from "./cards.contract"
-use Launcher from "./launcher.contract"
 use SignInScreen from "./onboarding.contract"
 
 component Autoradio
@@ -17,6 +14,7 @@ component Autoradio
   members "./members-paper.contract"
   members "./members-reader.contract"
   members "./members-cards.contract"
+  members "./members-stack.contract"
   members "./members-files.contract"
   members "./members-mail.contract"
   members "./members-settings.contract"
@@ -43,17 +41,15 @@ component Autoradio
     reopenPage
     showLayer
     hideLayer
-    togglePile
-    pullBar
-    pullEnd
+    toggleLauncher
+    micTap
+    micOn
     setTheme
     setMode
     setDemo
     record
     editAsk
     sendAsk
-    voiceDown
-    voiceUp
     // ---- integrator (engine, Lab, Choir sign-in, player) ----
     au
     pl
@@ -146,49 +142,30 @@ component Autoradio
     openLink
     shareDoc
     demoFollow
-    // ---- lane 4: cards, launcher, signals ----
-    cst
-    stk
-    told
-    und
-    shade
+    // ---- lane 4 (round 3): launcher search, the page deck ----
     lq
     lnc
-    pileMode
-    dragAddr
-    dragX
-    dragY
-    dragging
-    leaving
-    menuFor
-    sx
-    sy
-    sdragging
-    sFly
-    openStack
-    setPileMode
-    cardDrag
-    cardRelease
-    closeCard
-    undoClose
-    openMenu
-    closeMenu
-    menuPin
-    menuLess
-    menuMore
-    menuClose
-    stackDrag
-    stackRelease
-    stackAside
-    stackMore
-    stackUndoAct
-    stackRestart
     editLq
-    leftNext
-    rightNext
-    resetTold
-    forgetTold
-    openTold
+    moreFor
+    moreOfThis
+    vp
+    order
+    px
+    pdrag
+    flying
+    onbd
+    topAddr
+    stackAddrs
+    stackCount
+    deckWin
+    shown
+    frontName
+    frontKind
+    prog
+    pageDrag
+    pageRelease
+    cycleDeck
+    syncDeck
     // ---- lane 5: files and viewers ----
     fsList
     fsMode
@@ -336,19 +313,15 @@ component Autoradio
     main testId="app" width="100%" height="100%" position="relative" overflow="hidden" box-sizing="border-box"
       viewport-fit="cover" interactive-widget="resizes-content"
       background-color=th.paper color=th.fg font-family=th.fontRead
-      // elevation 0: the page, full bleed; it steps back when a layer is up
+      // elevation 0: the deck of pages, full bleed; it steps back when a sheet is up
       column position="absolute" inset=0
         scale=(layer != "" ? th.behindScale3 : 1)
         transition=`scale -exact-spring(${th.springStiffness}, ${th.springDamping}, ${th.springMass})`
-        PageHost(address=pg.top, kind=pg.topKind, title=pg.topTitle)
-      // elevation 3: the layers that rise from the bar
-      if layer == "pile"
-        Pile()
-      if layer == "launcher"
-        Launcher()
-      if layer == "player"
-        PlayerLayer()
-      // elevation 2: the bar, always on top
+        PageDeck()
+      // a sheet is up (the launcher or the player): the page dims behind it; a tap on it puts the sheet away
+      if layer != ""
+        box testId="layer-scrim" position="absolute" inset=0 background-color=th.fg opacity=th.behindDim3 press=hideLayer
+      // elevation 2: the glass bar, always on top, with the launcher and the player rising from it
       BarShell()
       // Signed out the paper still reads and plays. Signing in is asked for when an action needs it (Sign in on the paper,
       // Settings, Account): the code screen then covers the app until it is approved or cancelled.

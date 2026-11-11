@@ -1163,6 +1163,9 @@
     },
     {
       "send": "choirTalkDown",
+      "options": {
+        "aim": "string"
+      },
       "answers": "LabState"
     },
     {
@@ -1179,7 +1182,8 @@
     {
       "send": "choirAsk",
       "options": {
-        "text": "string"
+        "text": "string",
+        "aim": "string"
       },
       "answers": "LabState"
     },

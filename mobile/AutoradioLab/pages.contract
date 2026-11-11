@@ -5,7 +5,8 @@
 // replaces the body of its component; it takes whatever else it needs with `inject` (the root `provide`s it; a lane
 // adds its names to its own band in app.contract) and reads its page's model with the `pageModel` source.
 use Theme from "@choir/autoradio"
-use NotYetPage from "./ui.contract"
+use NotYetPage, StackVp, kindOf, kindWord, stackName, isFixed from "./ui.contract"
+use PageList from "@choir/autoradio"
 use PaperPage from "./paper.contract"
 use ReaderPage from "./reader.contract"
 use TexturesPage from "./textures.contract"
@@ -56,3 +57,69 @@ component PageHost
       // ---- end of kinds ----
       if known == false
         NotYetPage(address=address, title=title)
+
+// ---- the page deck (round 3, owner rulings): full-screen pages stacked with one on top ----
+// The top page follows the finger sideways (either way) and flies off; the next page beneath it grows into place, with depth
+// (a shadow, a smaller scale and a lower edge that ease out as the top page goes). Only the top page is mounted for real, and
+// only once the Kit's focus (pg.top, which every page's resources read) has caught up; the pages beneath are placards (kind and
+// title), so a drag never shows one page with another page's data. `touch-action="pan-y"` leaves vertical drags to the page.
+component Placard
+  inject
+    th: Theme
+    pg: PageList
+  props
+    address: string
+  view
+    column testId=`page-placard-${address}` position="absolute" inset=0 align-items="center" justify-content="center" gap=10 padding=40 box-sizing="border-box"
+      text kindWord(kindOf(address), address) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
+      text stackName(pg.rows, address) font-family=th.fontRead font-size=26 font-weight=700 color=th.fg text-align="center" line-clamp=3
+
+// A page of the deck. A story has a visible "More of this" button on it (it was a swipe once).
+component PageFrame
+  inject
+    th: Theme
+    pg: PageList
+    moreOfThis: action
+    moreFor: string
+  props
+    address: string
+  derive name = stackName(pg.rows, address)
+  view
+    column position="absolute" inset=0
+      PageHost(address=address, kind=kindOf(address), title=name)
+      if address.startsWith("pub:")
+        button press=moreOfThis(address) testId="story-more" appearance="none" position="absolute" right=16 top="calc(env(safe-area-inset-top) + 2px)" z-index=5 aria-label="More stories like this one"
+          row padding="7px 12px" border-radius=th.radiusPill align-items="center" background-color=th.paper2 border-width=1 border-style="solid" border-color=th.rule
+            text (moreFor == address ? "Noted" : "More of this") font-family=th.fontUi font-size=13 font-weight=600 color=th.fg
+
+component PageDeck
+  inject
+    th: Theme
+    pg: PageList
+    deckWin: string[]
+    px: number
+    prog: number
+    pdrag: bool
+    onbd: bool
+    pageDrag: action
+    pageRelease: action
+  derive sp = `-exact-spring(${th.springStiffness}, ${th.springDamping}, ${th.springMass})`
+  derive tr = (th.reducedMotion or pdrag) ? "none" : `translate ${sp}, scale ${sp}, rotate ${sp}`
+  view
+    if onbd
+      column testId="page-deck-takeover" position="absolute" inset=0 background-color=th.paper
+        PageHost(address=pg.top, kind=pg.topKind, title=pg.topTitle)
+    else
+      column testId="page-deck" position="absolute" inset=0 overflow="hidden" background-color=th.paper2 pan=pageDrag panrelease=pageRelease touch-action="pan-y"
+        for a, i in deckWin key=a
+          column testId=`deck-slot-${a}` position="absolute" inset=0 background-color=th.paper overflow="hidden" z-index=(3 - i)
+            border-radius=((i > 0 or px != 0) ? th.radiusCard : 0) box-shadow=(i > 0 or px != 0 ? th.shadow3 : "none")
+            translate=(i == 0 ? `${px}px 0px` : `0px ${(i - prog) * 14}px`)
+            scale=(i == 0 ? 1 : 1 - 0.06 * i + 0.06 * prog)
+            rotate=(i == 0 ? px * 0.015 : 0)
+            transition=tr
+            if i == 0 and a == pg.top
+              PageFrame(address=a)
+            else
+              Placard(address=a)
+
