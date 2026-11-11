@@ -134,6 +134,21 @@ step "type bar-field what is this page about"; view light-15b-typed-ask 900
 step logs
 run_drive light light "" --touch platform
 
+# `proof-app.sh deckdiag`: no tour; the swipe on four pages, then Textures twice more, reading the deck label and the app state after each
+# (the Textures stall, docs/problems/autoradio-deck-swipe-stalls-on-textures-2026-11-11.md). A page that lets the swipe through changes the label.
+if [ "${1:-}" = deckdiag ]; then
+  step "clock data"; wait_ 1500
+  for pl in files mail textures settings; do
+    place $pl 900; step "tap page-deck drag 180 0 from 201 300"; step state; wait_ 1500; step tree; step state
+  done
+  place textures 900; wait_ 4000
+  for dx in 180 -180; do step "tap page-deck drag $dx 0 from 201 200"; wait_ 2000; step tree; done
+  step logs
+  run_drive deckdiag light "" --touch platform
+  grep -o '\[page-indicator\] "[^"]*"' "$SHOTS/drive-deckdiag.txt"
+  echo "PROOF OK (deckdiag only)"; exit 0
+fi
+
 # ---- 4a-deck. the deck cycles: open a handful of pages, read the page count off the deck label, swipe through exactly that many, and the page
 # the walk started on is on top again. Two drives: the first only counts (the count is known only from the app), the second swipes.
 deck_open() {
