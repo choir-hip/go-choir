@@ -1,0 +1,303 @@
+// Mail: a mailbox (mailbox:<folder>) and a message (mail:<id>, mail:reply/<id>, mail:new, mail:draft/<id>). Lane 6 owns this file.
+// Mail is a place, not an app: a message is a page that opens as a card in the pile like any page. The phone never talks to a
+// mail provider; the Mail agent on the listener's computer is the only custodian of email, and the kit asks it (ChoirMail.swift).
+// A message reads in the theme's body face (th.fontRead); the original HTML is a secondary view in a sandboxed frame with
+// scripts, remote pictures and links off. Replies and new messages are drafts; sending is the listener's own act.
+// testIds: mail-compose, mail-folder-<name>, mail-row-<id>, mail-loading, mail-empty, mail-offline, mail-error, mail-retry,
+//   mail-demo-<state>, mail-from, mail-date, mail-to, mail-trust, mail-reply, mail-summarise, mail-read, mail-original-toggle,
+//   mail-unread, mail-note, mail-body, mail-quoted-toggle, mail-original-frame, mail-attachment-<id>, mail-thread-<id>,
+//   mail-field-to, mail-field-subject, mail-field-body, mail-save, mail-draft-status, mail-approval, mail-open-review.
+use Theme, DemoInfo, MailBoxView, MailMessageView, MailComposeView from "@choir/autoradio"
+use PageScroll, Card from "./ui.contract"
+
+// A message in a list: unread dot, sender, time, subject, a preview, a thread count.
+component MailRowItem
+  inject
+    th: Theme
+    openPage: action
+  props
+    id: string
+    address: string
+    sender: string
+    subject: string
+    snippet: string
+    stamp: string
+    unread: bool
+    attachment: bool
+    count: number
+  view
+    button press=openPage(address, subject) testId=`mail-row-${id}` appearance="none" width="100%"
+      row gap=10 padding="12px 0" align-items="flex-start" width="100%" border-top-width=1 border-right-width=0 border-bottom-width=0 border-left-width=0 border-style="solid" border-color=th.rule
+        box width=8 height=8 margin-top=7 border-radius=4 background-color=(unread ? th.accent : "transparent")
+        column flex=1 min-width=0 gap=2 align-items="flex-start"
+          row width="100%" gap=8 align-items="baseline"
+            text sender font-family=th.fontUi font-size=16 font-weight=(unread ? 700 : 500) color=th.fg flex=1 min-width=0 line-clamp=1 text-align="left"
+            text stamp font-family=th.fontUi font-size=13 color=th.muted
+          text subject font-family=th.fontRead font-size=16 font-weight=(unread ? 600 : 400) color=th.fg line-clamp=1 text-align="left"
+          text snippet font-family=th.fontUi font-size=14 color=th.muted line-clamp=2 text-align="left"
+          row gap=8
+            if count > 1
+              text `${count} in this thread` font-family=th.fontUi font-size=12 color=th.muted
+            if attachment
+              text "With attachment" font-family=th.fontUi font-size=12 color=th.muted
+
+// A state that is a whole screen: loading, empty, offline, error. A sentence, and when it helps, one action.
+component MailNotice
+  inject
+    th: Theme
+    retryMail: action
+  props
+    testId: string
+    title: string
+    body: string
+    retry: bool
+  view
+    column testId=testId gap=8 padding="24px 0" align-items="flex-start"
+      text title font-family=th.fontRead font-size=20 font-weight=700 color=th.fg
+      text body font-family=th.fontUi font-size=16 color=th.muted line-height=1.4
+      if retry
+        button press=retryMail testId="mail-retry" appearance="none" padding="8px 14px" border-radius=th.radiusPill background-color=th.paper2
+          text "Try again" color=th.fg font-family=th.fontUi font-size=15
+
+component MailboxPage
+  inject
+    th: Theme
+    mbx: MailBoxView
+    dm: DemoInfo
+    devDetails: bool
+    openPage: action
+  props
+    address: string
+    title: string
+  derive here = address == `mailbox:${mbx.folder}` and mbx.status != "" and mbx.status != "idle"
+  derive rowsShown = here and mbx.rows.length > 0
+  view
+    PageScroll(id="mailbox")
+      row align-items="center" gap=12
+        text "Mail" role="heading" aria-level=1 font-family=th.fontRead font-size=28 font-weight=700 testId="page-title" flex=1
+        button press=openPage("mail:new", "New message") testId="mail-compose" appearance="none" padding="8px 14px" border-radius=th.radiusPill background-color=th.paper2
+          text "New message" color=th.fg font-family=th.fontUi font-size=15
+      if here
+        scroll overflow-x="scroll" overflow-y="hidden" display="flex" flex-direction="row" gap=8
+          for f in mbx.folders key=f.name
+            button press=openPage(f.address, `Mail · ${f.label}`) testId=`mail-folder-${f.name}` appearance="none" padding="8px 14px" border-radius=th.radiusPill
+              background-color=(f.current ? th.fg : th.paper2)
+              text (f.badge == "" ? f.label : `${f.label} ${f.badge}`) font-family=th.fontUi font-size=15 font-weight=600 color=(f.current ? th.paper : th.fg)
+      if here == false
+        MailNotice(testId="mail-loading", title="Loading your mail…", body="Asking your computer for the latest messages.", retry=false)
+      if here and mbx.status == "empty"
+        MailNotice(testId="mail-empty", title="Nothing here", body=mbx.message, retry=false)
+      if here and mbx.status == "error"
+        MailNotice(testId="mail-error", title="Your mail could not be opened", body=mbx.message, retry=true)
+      if here and mbx.status == "offline"
+        MailNotice(testId="mail-offline", title=(mbx.cached ? "Offline: showing what was last loaded" : "You are offline"), body=mbx.message, retry=true)
+      if rowsShown
+        column width="100%"
+          for r in mbx.rows key=r.id
+            MailRowItem(id=r.id, address=r.address, sender=r.sender, subject=r.subject, snippet=r.snippet, stamp=r.stamp, unread=r.unread, attachment=r.hasAttachments, count=r.count)
+      if dm.on and devDetails
+        text "Demo states" font-family=th.fontUi font-size=13 color=th.muted margin-top=16
+        row gap=8 flex-wrap="wrap"
+          button press=openPage("mailbox:demo-empty", "Mail") testId="mail-demo-empty" appearance="none" padding="8px 14px" border-radius=th.radiusPill background-color=th.paper2
+            text "Empty" color=th.fg font-family=th.fontUi font-size=15
+          button press=openPage("mailbox:demo-loading", "Mail") testId="mail-demo-loading" appearance="none" padding="8px 14px" border-radius=th.radiusPill background-color=th.paper2
+            text "Loading" color=th.fg font-family=th.fontUi font-size=15
+          button press=openPage("mailbox:demo-offline", "Mail") testId="mail-demo-offline" appearance="none" padding="8px 14px" border-radius=th.radiusPill background-color=th.paper2
+            text "Offline" color=th.fg font-family=th.fontUi font-size=15
+          button press=openPage("mailbox:demo-error", "Mail") testId="mail-demo-error" appearance="none" padding="8px 14px" border-radius=th.radiusPill background-color=th.paper2
+            text "Error" color=th.fg font-family=th.fontUi font-size=15
+
+// One line in a message header: a small label and its value.
+component MailHeaderLine
+  inject
+    th: Theme
+  props
+    testId: string
+    label: string
+    value: string
+  view
+    row gap=8 align-items="baseline"
+      text label font-family=th.fontUi font-size=13 color=th.muted width=52
+      text value testId=testId font-family=th.fontUi font-size=15 color=th.fg flex=1 min-width=0
+
+component MailMessage
+  inject
+    th: Theme
+    mmsg: MailMessageView
+    mailQuoted: bool
+    mailOriginal: bool
+    mailNote: string
+    openPage: action
+    toggleMailQuoted: action
+    toggleMailOriginal: action
+    readMail: action
+    unreadMail: action
+    askMail: action
+  props
+    address: string
+    title: string
+  view
+    PageScroll(id="mail")
+      if mmsg.status == "error" or mmsg.status == "offline"
+        text title role="heading" aria-level=1 font-family=th.fontRead font-size=28 font-weight=700 testId="page-title"
+        MailNotice(testId=(mmsg.status == "offline" ? "mail-offline" : "mail-error"), title=(mmsg.status == "offline" ? "You are offline" : "This message could not be opened"), body=mmsg.message, retry=true)
+      if mmsg.status == "ready"
+        text mmsg.subject role="heading" aria-level=1 font-family=th.fontRead font-size=26 font-weight=700 line-height=1.2 testId="page-title"
+        column gap=4
+          MailHeaderLine(testId="mail-from", label="From", value=mmsg.sender)
+          MailHeaderLine(testId="mail-to", label="To", value=mmsg.toLine)
+          if mmsg.ccLine != ""
+            MailHeaderLine(testId="mail-cc", label="Cc", value=mmsg.ccLine)
+          MailHeaderLine(testId="mail-date", label="Date", value=mmsg.date)
+        if mmsg.trustNote != ""
+          Card(level=1, testId="mail-trust", minHeight=0)
+            column padding=12
+              text mmsg.trustNote font-family=th.fontUi font-size=14 color=th.danger
+        // What a person does with a message: reply, ask about it, hear it. The prompt in the bar is aimed at it too.
+        row gap=8 flex-wrap="wrap"
+          if mmsg.canReply
+            button press=openPage(`mail:reply/${mmsg.id}`, `Reply: ${mmsg.subject}`) testId="mail-reply" appearance="none" padding="9px 16px" border-radius=th.radiusPill background-color=th.accent
+              text mmsg.replyLabel color=th.onAccent font-family=th.fontUi font-size=15 font-weight=600
+          button press=askMail("Summarise this thread") testId="mail-summarise" appearance="none" padding="8px 14px" border-radius=th.radiusPill background-color=th.paper2
+            text "Summarise this thread" color=th.fg font-family=th.fontUi font-size=15
+          button press=readMail testId="mail-read" appearance="none" padding="8px 14px" border-radius=th.radiusPill background-color=th.paper2
+            text "Read it to me" color=th.fg font-family=th.fontUi font-size=15
+        row gap=8 flex-wrap="wrap"
+          if mmsg.hasOriginal
+            button press=toggleMailOriginal testId="mail-original-toggle" appearance="none" padding="8px 14px" border-radius=th.radiusPill background-color=th.paper2
+              text (mailOriginal ? "Show text" : "Show original") color=th.fg font-family=th.fontUi font-size=15
+          button press=unreadMail testId="mail-unread" appearance="none" padding="8px 14px" border-radius=th.radiusPill background-color=th.paper2
+            text "Mark unread" color=th.fg font-family=th.fontUi font-size=15
+        if mailNote != ""
+          text mailNote testId="mail-note" font-family=th.fontUi font-size=14 color=th.muted
+        // The body, in the reader's type. Quoted earlier messages are folded away until asked for.
+        if mailOriginal and mmsg.hasOriginal
+          text "The sender's own layout. Scripts, pictures and links are turned off." font-family=th.fontUi font-size=13 color=th.muted
+          iframe src=mmsg.originalPath sandbox="" testId="mail-original-frame" width="100%" height=520 border-radius=th.radiusControl background-color=th.paper2
+        if mailOriginal == false or mmsg.hasOriginal == false
+          column testId="mail-body" gap=14 margin-top=6
+            if mmsg.htmlOnly
+              text "This message has only a formatted version; this is its text." font-family=th.fontUi font-size=13 color=th.muted
+            for b, i in mmsg.blocks key=i
+              if b.kind == "p"
+                text b.text font-family=th.fontRead font-size=17 line-height=1.5 color=th.fg white-space="pre-wrap"
+              if b.kind == "quote" and mailQuoted
+                row gap=10
+                  box width=3 background-color=th.rule border-radius=2
+                  text b.text font-family=th.fontRead font-size=16 line-height=1.45 color=th.muted flex=1 min-width=0 white-space="pre-wrap"
+              if b.kind == "sig"
+                text b.text font-family=th.fontUi font-size=14 line-height=1.4 color=th.muted white-space="pre-wrap"
+            if mmsg.cut
+              text "This message is very long; the rest is not shown." font-family=th.fontUi font-size=13 color=th.muted
+            if mmsg.hasQuoted
+              button press=toggleMailQuoted testId="mail-quoted-toggle" appearance="none"
+                text (mailQuoted ? "Hide quoted text" : "Show quoted text") font-family=th.fontUi font-size=14 color=th.accent
+        if mmsg.attachments.length > 0
+          text "Attachments" font-family=th.fontUi font-size=13 color=th.muted margin-top=8
+          for a in mmsg.attachments key=a.id
+            if a.available
+              button press=openPage(a.address, a.filename) testId=`mail-attachment-${a.id}` appearance="none" width="100%"
+                Card(level=1, testId=`mail-attachment-card-${a.id}`, minHeight=0)
+                  row gap=10 padding=12 align-items="center" width="100%"
+                    column flex=1 min-width=0 gap=2 align-items="flex-start"
+                      text a.filename font-family=th.fontUi font-size=16 font-weight=600 color=th.fg line-clamp=1
+                      text `${a.kind} · ${a.size}` font-family=th.fontUi font-size=13 color=th.muted
+                    image "symbol:forward-chevron" color=th.muted
+            if a.available == false
+              Card(level=1, testId=`mail-attachment-${a.id}`, minHeight=0)
+                column gap=2 padding=12 width="100%"
+                  text a.filename font-family=th.fontUi font-size=16 font-weight=600 color=th.fg line-clamp=1
+                  text `${a.kind} · ${a.size}. ${a.note}` font-family=th.fontUi font-size=13 color=th.muted
+        if mmsg.thread.length > 1
+          text "In this thread" font-family=th.fontUi font-size=13 color=th.muted margin-top=8
+          for t in mmsg.thread key=t.id
+            button press=openPage(t.address, mmsg.subject) testId=`mail-thread-${t.id}` appearance="none" width="100%"
+              row gap=10 padding="8px 0" width="100%" align-items="baseline" border-top-width=1 border-right-width=0 border-bottom-width=0 border-left-width=0 border-style="solid" border-color=th.rule
+                text t.sender font-family=th.fontUi font-size=15 font-weight=(t.current ? 700 : 400) color=th.fg flex=1 min-width=0 line-clamp=1 text-align="left"
+                text (t.current ? "this one" : t.stamp) font-family=th.fontUi font-size=13 color=th.muted
+        text mmsg.replyLabel font-family=th.fontUi font-size=13 color=th.muted margin-top=8
+        text "You can also say or type this in the bar below." font-family=th.fontUi font-size=13 color=th.muted
+
+// A reply, a new message, or an existing draft. A draft is a document on the computer; sending it is the listener's own act.
+component MailCompose
+  inject
+    th: Theme
+    mcmp: MailComposeView
+    mailCurTo: string
+    mailCurSubject: string
+    mailCurBody: string
+    mailDraftStatus: string
+    mailDraftId: string
+    mailDraftNote: string
+    mailDraftUrl: string
+    mailDraftFrom: string
+    editMailTo: action
+    editMailSubject: action
+    editMailBody: action
+    saveMailDraft: action
+    approveMail: action
+    openMailReview: action
+  props
+    address: string
+    title: string
+  view
+    PageScroll(id="mail-compose-page")
+      // Save sits beside the title, so it is never under the keyboard or the bar.
+      row align-items="flex-start" gap=12
+        text title role="heading" aria-level=1 font-family=th.fontRead font-size=26 font-weight=700 line-height=1.2 testId="page-title" flex=1 min-width=0
+        if mailDraftStatus != "approval"
+          button press=saveMailDraft testId="mail-save" appearance="none" padding="9px 16px" border-radius=th.radiusPill background-color=th.accent
+            text (mailDraftStatus == "saved" ? "Save again" : "Save draft") color=th.onAccent font-family=th.fontUi font-size=15 font-weight=600
+      if mcmp.status == "error" and mailDraftId == ""
+        MailNotice(testId="mail-error", title="This draft could not be opened", body=mcmp.note, retry=false)
+      if mcmp.status != "error" or mailDraftId != ""
+        text (mailDraftFrom == "" ? "A draft on your computer. Nothing is sent from this screen." : `From ${mailDraftFrom}. Nothing is sent from this screen.`) testId="mail-draft-from" font-family=th.fontUi font-size=13 color=th.muted
+        if mailDraftStatus == "error"
+          text mailDraftNote testId="mail-draft-status" font-family=th.fontUi font-size=14 color=th.danger
+        if mailDraftStatus == "saved"
+          Card(level=1, testId="mail-saved-card", minHeight=0)
+            column gap=8 padding=12
+              text mailDraftNote testId="mail-draft-status" font-family=th.fontUi font-size=14 color=th.fg
+              text "Sending is your decision. Ask for an approval link by email, read the draft in your browser and send it from there." font-family=th.fontUi font-size=14 color=th.muted
+              button press=approveMail testId="mail-approval" appearance="none" padding="8px 14px" border-radius=th.radiusPill background-color=th.paper2
+                text "Email me the approval link" color=th.fg font-family=th.fontUi font-size=15
+        if mailDraftStatus == "approval"
+          Card(level=1, testId="mail-approval-card", minHeight=0)
+            column gap=8 padding=12
+              text mailDraftNote testId="mail-draft-status" font-family=th.fontUi font-size=14 color=th.success
+              if mailDraftUrl != ""
+                button press=openMailReview(mailDraftUrl) testId="mail-open-review" appearance="none" padding="8px 14px" border-radius=th.radiusPill background-color=th.paper2
+                  text "Open the approval page" color=th.fg font-family=th.fontUi font-size=15
+        column gap=4
+          text "To" font-family=th.fontUi font-size=13 color=th.muted
+          input value=mailCurTo input=editMailTo type="email" placeholder="name@example.com" aria-label="To" testId="mail-field-to"
+            font-family=th.fontUi font-size=16 color=th.fg padding="10px 12px" border-radius=th.radiusControl background-color=th.paper2
+        column gap=4
+          text "Subject" font-family=th.fontUi font-size=13 color=th.muted
+          input value=mailCurSubject input=editMailSubject placeholder="Subject" aria-label="Subject" testId="mail-field-subject"
+            font-family=th.fontUi font-size=16 color=th.fg padding="10px 12px" border-radius=th.radiusControl background-color=th.paper2
+        column gap=4
+          text "Message" font-family=th.fontUi font-size=13 color=th.muted
+          textarea value=mailCurBody input=editMailBody placeholder="Write here" aria-label="Message" testId="mail-field-body" appearance="none" width="100%" min-height=220 box-sizing="border-box"
+            font-family=th.fontRead font-size=17 line-height=1.5 color=th.fg padding="12px" border-radius=th.radiusControl background-color=th.paper2
+
+component MailPage
+  inject
+    th: Theme
+    mmsg: MailMessageView
+    mcmp: MailComposeView
+  props
+    address: string
+    title: string
+  derive isCompose = mcmp.forAddress == address and mcmp.status != "idle" and mcmp.status != ""
+  derive isMessage = mmsg.address == address and mmsg.status != "idle" and mmsg.status != ""
+  view
+    column position="absolute" inset=0
+      if isCompose
+        MailCompose(address=address, title=title)
+      if isMessage
+        MailMessage(address=address, title=title)
+      if isCompose == false and isMessage == false
+        PageScroll(id="mail-loading-page")
+          text title role="heading" aria-level=1 font-family=th.fontRead font-size=28 font-weight=700 testId="page-title"
+          MailNotice(testId="mail-loading", title="Opening…", body="Asking your computer for this message.", retry=false)

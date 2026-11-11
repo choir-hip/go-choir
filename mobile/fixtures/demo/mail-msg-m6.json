@@ -1,0 +1,32 @@
+{
+ "message": {
+  "id": "m6",
+  "direction": "inbound",
+  "from_address": "ana@example.com",
+  "subject": "Harbour barrier: site visit on Thursday",
+  "snippet": "Hi,  The council has confirmed the site visit for Thursday at 10:00. We meet at the east p",
+  "trust_status": "trusted",
+  "created_at": "2026-11-10T08:12:00Z",
+  "from_display": "Ana Reyes",
+  "received_at": "2026-11-10T08:12:00Z",
+  "has_attachments": true
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com",
+    "display": "You"
+   }
+  ]
+ },
+ "text_body": "Hi,\n\nThe council has confirmed the site visit for Thursday at 10:00. We meet at the east pier, by the old ferry office. Please bring boots; the path is muddy after the rain and the tide table puts the water at its lowest around 10:40.\n\nI have attached the site plan so you can see where the barrier gates would sit. The survey markers are the orange pins along the wall.\n\nCould you tell me by Wednesday evening whether you are coming, and whether anyone from the paper wants to join?\n\nThanks,\nAna\n\n-- \nAna Reyes\nHarbour Works Liaison",
+ "attachments": [
+  {
+   "id": "a1",
+   "filename": "site-plan.pdf",
+   "content_type": "application/pdf",
+   "size_bytes": 482113,
+   "status": "stored"
+  }
+ ]
+}

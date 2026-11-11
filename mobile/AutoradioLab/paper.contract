@@ -1,0 +1,213 @@
+// Paper: the front page, composed from data (plan section 3). Lane 2 owns this file.
+// The Kit's layout engine (Kit/Layout/*.swift, layout document mobile/layouts/default.json) takes the edition's stories and returns
+// placed bands: lead, colead, pair (side by side when it fits, stacked when it does not), cluster ("Developing"), briefs,
+// river (by section) and opinion. This file only draws a band by its module; sizes and weights of headlines come with the
+// items, faces, colours and depth come from the theme. Pages: paper:front and paper:section/<id>.
+// testIds: page-title, paper-section-<id>, paper-band-<id>, paper-story-<route>, paper-play-<route>, paper-composition,
+// paper-edition-<big|even|thin|default>, paper-signin, paper-status.
+use Theme, ChoirAuth, DemoInfo, PaperFront, PaperBand, PaperItem from "@choir/autoradio"
+use paperFront from "@choir/autoradio"
+use Card, Btn, BarClear from "./ui.contract"
+use FirstRunCard from "./onboarding.contract"
+
+// A headline with its dek and meta, as one story. `kicker` shows the section above, `listen` the play-from-here button.
+component Story
+  inject
+    th: Theme
+    openPage: action
+    playStory: action
+  props
+    s: PaperItem
+    kicker: bool
+    listen: bool
+  view
+    column gap=6 align-items="flex-start" width="100%"
+      if kicker
+        text s.section font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
+      button press=openPage(`pub:${s.route}`, s.title) appearance="none" testId=`paper-story-${s.route}` width="100%"
+        column gap=6 align-items="flex-start" width="100%"
+          text s.title font-family=th.fontRead font-size=s.size font-weight=s.weight line-height=s.lineHeight color=th.fg text-align="left" text-wrap="balance"
+          if s.showDek
+            text s.dek font-family=th.fontRead font-size=s.dekSize line-height=1.4 color=th.muted text-align="left"
+      if s.meta != ""
+        text s.meta font-family=th.fontUi font-size=12 font-variant-numeric="tabular-nums" color=th.muted
+      if s.entityLabels != ""
+        text s.entityLabels font-family=th.fontUi font-size=12 font-weight=600 color=th.accent2
+      if listen
+        button press=playStory(s.route) appearance="none" testId=`paper-play-${s.route}` aria-label=`Play from ${s.title}`
+          row gap=6 align-items="center" padding="6px 0"
+            image "symbol:play-fill" color=th.accent
+            text "Play from here" font-family=th.fontUi font-size=13 font-weight=600 color=th.accent
+
+// A compact row: a small headline and a play button at the trailing edge. Used for briefs, river and opinion.
+component BriefRow
+  inject
+    th: Theme
+    openPage: action
+    playStory: action
+  props
+    s: PaperItem
+    kicker: bool
+    first: bool
+  view
+    column width="100%"
+      if first == false
+        box height=1 background-color=th.rule width="100%"
+      row align-items="center" gap=4 width="100%" padding="10px 0" box-sizing="border-box"
+        column flex=1 min-width=0 gap=3 align-items="flex-start"
+          if kicker
+            text s.section font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
+          button press=openPage(`pub:${s.route}`, s.title) appearance="none" testId=`paper-story-${s.route}` width="100%"
+            text s.title font-family=th.fontRead font-size=s.size font-weight=s.weight line-height=s.lineHeight color=th.fg text-align="left"
+          if s.byline != ""
+            text s.byline font-family=th.fontUi font-size=12 color=th.muted
+        button press=playStory(s.route) appearance="none" testId=`paper-play-${s.route}` width=44 height=44 aria-label=`Play from ${s.title}`
+          image "symbol:play-fill" color=th.muted
+
+// A cluster follow-up: indented under the lead behind an accent rule.
+component FollowRow
+  inject
+    th: Theme
+    openPage: action
+    playStory: action
+  props
+    s: PaperItem
+  view
+    row align-items="center" gap=4 width="100%"
+      box width=2 align-self="stretch" background-color=th.accent border-radius=1
+      column flex=1 min-width=0 gap=2 align-items="flex-start" padding="8px 0 8px 10px"
+        button press=openPage(`pub:${s.route}`, s.title) appearance="none" testId=`paper-story-${s.route}` width="100%"
+          text s.title font-family=th.fontRead font-size=s.size font-weight=s.weight line-height=s.lineHeight color=th.fg text-align="left"
+        if s.entityLabels != ""
+          text s.entityLabels font-family=th.fontUi font-size=12 color=th.muted
+      button press=playStory(s.route) appearance="none" testId=`paper-play-${s.route}` width=44 height=44 aria-label=`Play from ${s.title}`
+        image "symbol:play-fill" color=th.muted
+
+component Band
+  inject
+    th: Theme
+    openPage: action
+  props
+    b: PaperBand
+  view
+    column width="100%" gap=12
+      if b.module == "lead"
+        Card(level=1, testId=`paper-band-${b.id}`, minHeight=0)
+          column padding=16 gap=10 width="100%" box-sizing="border-box"
+            for s in b.items key=s.route
+              Story(s=s, kicker=true, listen=true)
+      if b.module == "colead"
+        for s, i in b.items key=s.route
+          Card(level=1, testId=`paper-band-${b.id}-${i}`, minHeight=0)
+            column padding=16 gap=10 width="100%" box-sizing="border-box"
+              Story(s=s, kicker=true, listen=true)
+      if b.module == "pair" and b.side
+        row gap=12 width="100%" align-items="stretch" testId=`paper-band-${b.id}`
+          for s in b.items key=s.route
+            column flex=1 min-width=0
+              Card(level=1, testId=`paper-pair-${s.route}`, minHeight=0)
+                column padding=14 gap=8 width="100%" box-sizing="border-box"
+                  Story(s=s, kicker=true, listen=true)
+      if b.module == "pair" and b.side == false
+        column gap=12 width="100%" testId=`paper-band-${b.id}`
+          for s in b.items key=s.route
+            Card(level=1, testId=`paper-pair-${s.route}`, minHeight=0)
+              column padding=16 gap=8 width="100%" box-sizing="border-box"
+                Story(s=s, kicker=true, listen=true)
+      if b.module == "cluster"
+        Card(level=1, testId=`paper-band-${b.id}`, minHeight=0)
+          column padding=16 gap=2 width="100%" box-sizing="border-box"
+            text b.label font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
+            for s in b.items key=s.route
+              FollowRow(s=s)
+      if b.module == "briefs" or b.module == "opinion"
+        Card(level=1, testId=`paper-band-${b.id}`, minHeight=0)
+          column padding="14px 16px 4px 16px" width="100%" box-sizing="border-box"
+            text b.label font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
+            for s, i in b.items key=s.route
+              BriefRow(s=s, kicker=(b.module == "briefs"), first=(i == 0))
+      if b.module == "river"
+        Card(level=1, testId=`paper-band-${b.id}`, minHeight=0)
+          column padding="6px 16px 4px 16px" width="100%" box-sizing="border-box"
+            button press=openPage(`paper:section/${b.id.slice(6)}`, b.label) appearance="none" testId=`paper-more-${b.id.slice(6)}` width="100%"
+              row align-items="center" justify-content="space-between" padding="10px 0 2px 0" width="100%" box-sizing="border-box"
+                text b.label font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
+                image "symbol:forward-chevron" color=th.muted
+            for s, i in b.items key=s.route
+              BriefRow(s=s, kicker=false, first=(i == 0))
+
+component PaperPage
+  inject
+    th: Theme
+    au: ChoirAuth
+    dm: DemoInfo
+    devDetails: bool
+    signIn: action
+    openPage: action
+    pfront: PaperFront
+    paperSection: string
+    paperLoading: bool
+    paperReload: action
+    paperFit: action
+    pickEdition: action
+  props
+    address: string
+    title: string
+  derive sect = paperSection
+  view
+    column flex=1 min-height=0 width="100%" resize=paperFit
+      scroll id="paper" testId="paper-scroll" flex=1 min-height=0 width="100%" refresh=paperReload refreshing=paperLoading
+        column padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20 gap=14
+          font-family=th.fontRead color=th.fg
+          // the masthead: nameplate, a double rule, the date and when it was last updated
+          column gap=6 width="100%"
+            row align-items="baseline" justify-content="space-between" width="100%"
+              text "AUTOPAPER" font-family=th.fontRead font-size=34 font-weight=700 letter-spacing=-0.3 color=th.fg testId="page-title" role="heading" aria-level=1
+              text pfront.dateLine font-family=th.fontUi font-size=13 font-weight=600 color=th.muted testId="paper-date"
+            box height=1 background-color=th.fg width="100%"
+            box height=1 background-color=th.fg width="100%" margin-top=2
+            row justify-content="space-between" width="100%"
+              text (sect == "" ? "Front page" : pfront.sectionLabel) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent testId="paper-section-title"
+              text pfront.updated font-family=th.fontUi font-size=12 color=th.muted testId="paper-updated"
+          // Not set up yet: "Make it yours" (voice setup and the interview) until the listener has done it or skipped it.
+          FirstRunCard()
+          // demo mode, Settings, Developer, "Demo controls": three editions to show how the page changes with the day
+          if dm.on and devDetails
+            column gap=8 width="100%" padding-top=8 box-sizing="border-box"
+              text `Composition: ${pfront.composition}` font-family=th.fontMono font-size=11 color=th.muted testId="paper-composition"
+              row gap=8 width="100%"
+                button press=pickEdition("big") testId="paper-edition-big" appearance="none"
+                  Btn(label="Big news", primary=false, wide=false)
+                button press=pickEdition("even") testId="paper-edition-even" appearance="none"
+                  Btn(label="Even", primary=false, wide=false)
+                button press=pickEdition("thin") testId="paper-edition-thin" appearance="none"
+                  Btn(label="Thin", primary=false, wide=false)
+                button press=pickEdition("") testId="paper-edition-default" appearance="none"
+                  Btn(label="Default", primary=false, wide=false)
+          // signed out: the paper reads and plays; talking to your computer needs an account
+          if au.signedIn == false
+            Card(level=2, testId="paper-signin-card", minHeight=0)
+              column padding=16 gap=10 width="100%" box-sizing="border-box"
+                text "Sign in to talk to your computer and to make this paper yours." font-family=th.fontRead font-size=17 line-height=1.35 color=th.fg
+                button press=signIn testId="paper-signin" appearance="none"
+                  Btn(label="Sign in", primary=true, wide=false)
+                if au.message != ""
+                  text au.message testId="paper-signin-message" font-family=th.fontUi font-size=13 color=th.muted
+          // sections: the front, then one chip per section; a chip opens that section as a page
+          scroll overflow-x="scroll" overflow-y="hidden" display="flex" flex-direction="row" gap=8 width="100%" testId="paper-sections"
+            button press=openPage("paper:front", "Paper") appearance="none" testId="paper-section-front"
+              border-radius=th.radiusPill padding="8px 14px" flex-shrink=0 align-self="flex-start"
+              background-color=(sect == "" ? th.accent : th.paper2)
+              text "Front" font-family=th.fontUi font-size=14 font-weight=600 color=(sect == "" ? th.onAccent : th.fg)
+            for sec in pfront.sections key=sec.id
+              button press=openPage(`paper:section/${sec.id}`, sec.label) appearance="none" testId=`paper-section-${sec.id}`
+                border-radius=th.radiusPill padding="8px 14px" flex-shrink=0 align-self="flex-start"
+                background-color=(sec.current ? th.accent : th.paper2)
+                text sec.label font-family=th.fontUi font-size=14 font-weight=600 color=(sec.current ? th.onAccent : th.fg)
+          if pfront.status == "offline" or pfront.status == "error" or pfront.status == "empty"
+            text pfront.message font-family=th.fontUi font-size=14 color=(pfront.status == "error" ? th.danger : th.muted) testId="paper-status"
+          for b in pfront.bands key=b.id
+            Band(b=b)
+          if pfront.count > 0
+            text `${pfront.count} ${pfront.count == 1 ? "story" : "stories"} · pull down to refresh` font-family=th.fontUi font-size=12 color=th.muted text-align="center" width="100%"
+          BarClear()

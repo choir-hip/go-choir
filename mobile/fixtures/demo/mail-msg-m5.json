@@ -1,0 +1,22 @@
+{
+ "message": {
+  "id": "m5",
+  "direction": "inbound",
+  "from_address": "ben@example.com",
+  "subject": "Re: Q4 planning notes",
+  "snippet": "Agreed on the order. I would put the grid story first and the festival second.  I checked ",
+  "trust_status": "trusted",
+  "created_at": "2026-11-09T16:40:00Z",
+  "from_display": "Ben Okafor",
+  "received_at": "2026-11-09T16:40:00Z"
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com",
+    "display": "You"
+   }
+  ]
+ },
+ "text_body": "Agreed on the order. I would put the grid story first and the festival second.\n\nI checked the numbers on the second page: they hold up.\n\nOn Mon, 9 Nov 2026, Ana Reyes wrote:\n> I think we should lead with the battery and keep the festival short.\n> Ben, can you check the numbers on the second page?\n\nBen"
+}

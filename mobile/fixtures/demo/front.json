@@ -1,0 +1,44 @@
+{
+ "stories": [
+  {
+   "title": "The harbor council approves a tide barrier",
+   "dek": "After a year of hearings, the council voted seven to two to fund a movable barrier across the harbor mouth.",
+   "route": {
+    "bare": "demo-harbor-barrier"
+   },
+   "section": "World",
+   "words": 100,
+   "updated_at": "2026-11-10T06:00:00Z"
+  },
+  {
+   "title": "A regional grid adds its largest battery yet",
+   "dek": "The new installation can hold enough power for a small city through an evening peak.",
+   "route": {
+    "bare": "demo-grid-storage"
+   },
+   "section": "Tech and AI",
+   "words": 84,
+   "updated_at": "2026-11-10T07:00:00Z"
+  },
+  {
+   "title": "City libraries extend their evening hours",
+   "dek": "Branches in six neighbourhoods will stay open until ten on weekdays.",
+   "route": {
+    "bare": "demo-library-hours"
+   },
+   "section": "Culture",
+   "words": 70,
+   "updated_at": "2026-11-10T08:00:00Z"
+  },
+  {
+   "title": "The river festival returns with a quieter schedule",
+   "dek": "Organisers cut the fireworks and added a morning of boat tours.",
+   "route": {
+    "bare": "demo-river-festival"
+   },
+   "section": "Local",
+   "words": 72,
+   "updated_at": "2026-11-10T09:00:00Z"
+  }
+ ]
+}

@@ -1,0 +1,27 @@
+// Lane members file (mark and motion): the mark's clock. Owned by lane 9. Tasks are root-owned in Contract, so the mark's
+// one per-frame task lives here and writes `mkT`; MarkAt and the wait read it through `inject` (names in lane 9's band of
+// `provide`). The task runs only while a mark is moving: per frame while the bar is not idle, a sign-in or onboarding
+// screen is up or a motion page is open; five times a second for the idle drift; not at all under Reduce Motion.
+members Autoradio
+  state mkT = 0
+  state mkFrames = 0
+  state mkSince = 0
+  state galSince = 0
+  state waitSince = 0
+  derive mkHot = th.reducedMotion == false and (bi.state != "idle" or au.signedIn == false or pg.top == "lab:motion" or pg.top == "lab:wait" or pg.top.startsWith("onboarding"))
+  derive mkIdle = th.reducedMotion == false and mkHot == false
+  action mkStep
+    mkT = performanceNow()
+    mkFrames = mkFrames + 1
+  action mkEntered
+    mkSince = performanceNow()
+  action galReplay
+    galSince = performanceNow()
+  action waitReplay
+    waitSince = performanceNow()
+  task markFrame when mkHot
+    every(frame, mkStep)
+  task markIdle when mkIdle
+    every(200, mkStep)
+  task markEnter when true key=bi.state
+    after(1, mkEntered)

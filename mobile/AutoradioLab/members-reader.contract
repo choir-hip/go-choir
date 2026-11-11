@@ -1,0 +1,76 @@
+// Lane members file (reader): the reader's and the Textures place's resources, states and actions, as if written in the root.
+// Owned by the reader lane. The child components (reader.contract, textures.contract) `inject` these by name; each name is
+// in lane 3's band of the `provide` list in app.contract.
+use readerDoc, texturesList, readerFollow, readerAim from "@choir/autoradio"
+use readerAimSet, readerStop, readerRestore, readerReload, readerFollowSet from "@choir/autoradio"
+use ReaderDoc, TextureList, ReaderFollowInfo, ReaderAimInfo, ReaderAck from "@choir/autoradio"
+
+members Autoradio
+  // The page in front is a story or a document (readerDoc answers "loading" for any other address).
+  resource rdoc = readerDoc(address=pg.top) as shape ReaderDoc else empty()
+  // The Textures place reloads each time it is the page in front.
+  resource tlist = texturesList(at=pg.top) as shape TextureList else empty()
+  // The block and sentence the radio is reading (set by the radio); what the bar's prompt is aimed at.
+  resource rfollow = readerFollow() as shape ReaderFollowInfo else empty()
+  resource raim = readerAim() as shape ReaderAimInfo else empty()
+  mutation rack as shape ReaderAck
+  mutation raimm as shape ReaderAimInfo
+  mutation rfollowm as shape ReaderFollowInfo
+
+  // Open citation cards, keyed "<address>|<anchor>": several can be open, and a card is open for one page only.
+  state openCites: string[] = []
+  // The sheet over the reader: "" | "menu" | "versions" | "source", for the page `sheetFor`; `sheetAnchor` is the citation
+  // the source sheet shows.
+  state sheet = ""
+  state sheetFor = ""
+  state sheetAnchor = ""
+  // Experiments, offered in the page menu in demo mode: the side note that text flows around (textflow), and the document
+  // drawn as one Markdown text with citations as atom pills.
+  state sideNotes = false
+  state mdMode = false
+
+  action toggleCite(key: string)
+    openCites = openCites.includes(key) ? openCites.filter(k => k != key) : openCites.concat([key])
+  action showSheet(name: string)
+    sheet = name
+    sheetFor = pg.top
+  action showSource(anchor: string)
+    sheetAnchor = anchor
+    sheet = "source"
+    sheetFor = pg.top
+  action hideSheet
+    sheet = ""
+  action jumpSources
+    sheet = ""
+    scrollIntoView("reader-sources")
+  action toggleSideNotes
+    sideNotes = sideNotes == false
+    sheet = ""
+  action toggleMdMode
+    mdMode = mdMode == false
+    sheet = ""
+  action mdPress(e: AtomEvent)
+    let k = `${pg.top}|${e.href.replaceAll("cite:", "")}`
+    openCites = openCites.includes(k) ? openCites.filter(x => x != k) : openCites.concat([k])
+  action aimAt(address: string, blockId: string, label: string)
+    send raimm = readerAimSet(address=address, blockId=blockId, label=label)
+    sheet = ""
+  action clearAim
+    send raimm = readerAimSet(address="", blockId="", label="")
+  action stopRevision(address: string)
+    send rack = readerStop(address=address)
+  action restoreVersion(address: string, version: string)
+    send rack = readerRestore(address=address, version=version)
+    sheet = ""
+  action reloadDoc(address: string)
+    send rack = readerReload(address=address)
+    sheet = ""
+  action openLink(u: string)
+    openURL(u)
+  action shareDoc
+    share(title=rdoc.title, text=rdoc.plain, url=(rdoc.permalink == "" ? "" : `https://choir.news/${rdoc.permalink}`))
+    sheet = ""
+  // Demo only: pretend the radio reads the second sentence of the first paragraph that has one.
+  action demoFollow(address: string, spoken: string)
+    send rfollowm = readerFollowSet(address=address, spoken=spoken)
+    sheet = ""

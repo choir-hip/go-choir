@@ -1,0 +1,23 @@
+{
+ "message": {
+  "id": "m2",
+  "direction": "inbound",
+  "from_address": "reading@example.com",
+  "subject": "Your weekly reading list",
+  "snippet": "newsletter",
+  "trust_status": "trusted",
+  "created_at": "2026-11-06T07:00:00Z",
+  "from_display": "Library Reading List",
+  "received_at": "2026-11-06T07:00:00Z",
+  "read_at": "2026-11-06T07:00:00Z"
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com",
+    "display": "You"
+   }
+  ]
+ },
+ "html_body": "<html><head><title>Reading list</title><style>body{font-family:Georgia}.hero{background:url(https://tracker.example.com/bg.png)}</style><script>window.location='https://tracker.example.com/x'</script></head>\n<body><div class=\"hero\"><h1>This week at the library</h1></div>\n<p>Three books are waiting for you:</p><ul><li><b>The Salt Road</b> by M. Okoye</li><li><b>Tide Tables</b> by J. Lindqvist</li><li><b>A Quiet Grid</b> by R. Haddad</li></ul>\n<p>Opening hours change on Monday &amp; Tuesday. <a href=\"https://example.com/hours\" onclick=\"steal()\">See the hours</a>.</p>\n<img src=\"https://tracker.example.com/pixel.gif\" alt=\"\" width=\"1\" height=\"1\"><p><a href=\"javascript:alert(1)\">Unsubscribe</a></p></body></html>"
+}

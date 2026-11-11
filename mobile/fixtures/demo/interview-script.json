@@ -1,0 +1,16 @@
+{
+  "sections": ["World", "Local", "Culture", "Tech and AI"],
+  "steps": [
+    { "kind": "say", "words": "Honestly, the news", "note": "A vague answer: the radio offers sections from today's paper." },
+    { "kind": "interrupt", "words": "Actually, tech", "note": "Cuts in over the offer; the next line answers what was said." },
+    { "kind": "loud", "words": "", "note": "The room gets loud: the interview waits, kindly, on its card." },
+    { "kind": "resume", "words": "", "note": "Back in a quiet place: continue." },
+    { "kind": "say", "words": "The companies, mostly", "note": "Answers the prepared follow-up." },
+    { "kind": "say", "words": "Celebrity gossip, and sports", "note": "Tired of hearing about." },
+    { "kind": "say", "words": "I trust the public radio but not the tabloids", "note": "Sources." },
+    { "kind": "say", "words": "Dunmere, and I follow the harbor council", "note": "Places and people." },
+    { "kind": "say", "words": "Mornings on the train, about twenty minutes", "note": "When and how long." },
+    { "kind": "say", "words": "Drop sports", "note": "A change at the read-back." },
+    { "kind": "say", "words": "That's it", "note": "Confirms the read-back; the desk writes the edition." }
+  ]
+}

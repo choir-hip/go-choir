@@ -1,0 +1,9 @@
+{
+ "revision_id": "ed-r4",
+ "doc_id": "demo-edition",
+ "version_number": 3,
+ "author_label": "Texture desk",
+ "author_kind": "appagent",
+ "content": "# My edition\n\nA short front page for you, written this morning.\n\n## Today\n\n- A city rewires its kerbs for electric cars\n- A regional grid adds its largest battery yet\n- City libraries extend their evening hours\n\nThe edition is revised each morning from the sources you follow.",
+ "created_at": "2026-11-10T06:30:00Z"
+}

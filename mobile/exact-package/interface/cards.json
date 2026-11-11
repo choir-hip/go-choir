@@ -1,0 +1,230 @@
+{
+ "shapes": {
+  "CardStory": {
+   "route": "string",
+   "address": "string",
+   "title": "string",
+   "dek": "string",
+   "section": "string",
+   "entityLine": "string",
+   "primary": "string",
+   "lift": "number",
+   "n": "number",
+   "dir": "string",
+   "why": "string"
+  },
+  "CardStoryList": {
+   "rows": "CardStory[]",
+   "index": "number",
+   "setAside": "number",
+   "total": "number"
+  },
+  "ToldRow": {
+   "kind": "string",
+   "title": "string",
+   "entities": "string",
+   "when": "string",
+   "route": "string"
+  },
+  "Told": {
+   "count": "number",
+   "rows": "ToldRow[]",
+   "lines": "string[]",
+   "left": "string",
+   "right": "string",
+   "leftLabel": "string",
+   "rightLabel": "string",
+   "note": "string"
+  },
+  "UndoInfo": {
+   "open": "bool",
+   "title": "string",
+   "address": "string"
+  },
+  "LauncherPlace": {
+   "slug": "string",
+   "name": "string",
+   "address": "string",
+   "line": "string"
+  },
+  "LauncherHit": {
+   "address": "string",
+   "title": "string",
+   "kind": "string",
+   "detail": "string"
+  },
+  "LauncherData": {
+   "query": "string",
+   "hasQuery": "bool",
+   "places": "LauncherPlace[]",
+   "recent": "LauncherHit[]",
+   "hits": "LauncherHit[]",
+   "stories": "number"
+  },
+  "ShadeRow": {
+   "route": "string",
+   "lift": "number",
+   "rank": "number"
+  },
+  "Shading": {
+   "rows": "ShadeRow[]"
+  },
+  "CardAck": {
+   "message": "string"
+  }
+ },
+ "names": [
+  {
+   "source": "cardStories",
+   "live": true,
+   "answers": "CardStoryList",
+   "substitute": {
+    "default": {
+     "rows": [],
+     "index": 0,
+     "setAside": 0,
+     "total": 0
+    }
+   }
+  },
+  {
+   "source": "storyStack",
+   "live": true,
+   "answers": "CardStoryList",
+   "substitute": {
+    "default": {
+     "rows": [],
+     "index": 0,
+     "setAside": 0,
+     "total": 0
+    }
+   }
+  },
+  {
+   "source": "toldPaper",
+   "live": true,
+   "answers": "Told",
+   "substitute": {
+    "default": {
+     "count": 0,
+     "rows": [],
+     "lines": [],
+     "left": "close",
+     "right": "more",
+     "leftLabel": "Close",
+     "rightLabel": "More of this",
+     "note": ""
+    }
+   }
+  },
+  {
+   "source": "undoOffer",
+   "live": true,
+   "answers": "UndoInfo",
+   "substitute": {
+    "default": {
+     "open": false,
+     "title": "",
+     "address": ""
+    }
+   }
+  },
+  {
+   "source": "launcherData",
+   "live": true,
+   "answers": "LauncherData",
+   "options": {
+    "q": "string"
+   },
+   "substitute": {
+    "default": {
+     "query": "",
+     "hasQuery": false,
+     "places": [],
+     "recent": [],
+     "hits": [],
+     "stories": 0
+    }
+   }
+  },
+  {
+   "source": "shadingList",
+   "live": true,
+   "answers": "Shading",
+   "substitute": {
+    "default": {
+     "rows": []
+    }
+   }
+  },
+  {
+   "send": "storyMore",
+   "options": {
+    "address": "string",
+    "surface": "string"
+   },
+   "answers": "CardAck"
+  },
+  {
+   "send": "storyLess",
+   "options": {
+    "address": "string",
+    "surface": "string"
+   },
+   "answers": "CardAck"
+  },
+  {
+   "send": "cardFling",
+   "options": {
+    "address": "string"
+   },
+   "answers": "CardAck"
+  },
+  {
+   "send": "cardClose",
+   "options": {
+    "address": "string"
+   },
+   "answers": "CardAck"
+  },
+  {
+   "send": "cardUndo",
+   "answers": "CardAck"
+  },
+  {
+   "send": "stackDecide",
+   "options": {
+    "address": "string",
+    "side": "string"
+   },
+   "answers": "CardAck"
+  },
+  {
+   "send": "stackUndo",
+   "answers": "CardAck"
+  },
+  {
+   "send": "stackReset",
+   "answers": "CardAck"
+  },
+  {
+   "send": "toldForget",
+   "options": {
+    "address": "string"
+   },
+   "answers": "CardAck"
+  },
+  {
+   "send": "toldReset",
+   "answers": "CardAck"
+  },
+  {
+   "send": "gestureSet",
+   "options": {
+    "side": "string",
+    "meaning": "string"
+   },
+   "answers": "CardAck"
+  }
+ ]
+}

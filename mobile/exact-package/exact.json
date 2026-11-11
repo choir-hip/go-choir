@@ -1,0 +1,2278 @@
+{
+  "kind": "interface",
+  "name": "@choir/autoradio",
+  "version": "1.0.0",
+  "substitute": "implementation",
+  "shapes": {
+    "LabState": {
+      "running": "bool",
+      "paused": "bool",
+      "phase": "string",
+      "level": "string",
+      "addressing": "string",
+      "transcript": "string",
+      "configName": "string",
+      "blockIndex": "number",
+      "blockCount": "number",
+      "blockText": "string",
+      "residentMB": "number",
+      "thermal": "string",
+      "message": "string",
+      "micActive": "bool"
+    },
+    "StageRow": {
+      "kind": "string",
+      "kindLabel": "string",
+      "id": "string",
+      "name": "string",
+      "summary": "string",
+      "selected": "bool",
+      "network": "bool",
+      "models": "string"
+    },
+    "StageList": {
+      "rows": "StageRow[]"
+    },
+    "ParamRow": {
+      "kind": "string",
+      "stage": "string",
+      "name": "string",
+      "label": "string",
+      "value": "string",
+      "hint": "string"
+    },
+    "ParamList": {
+      "rows": "ParamRow[]"
+    },
+    "TimingRow": {
+      "stage": "string",
+      "startMs": "number",
+      "durMs": "number"
+    },
+    "Trace": {
+      "id": "string",
+      "transcript": "string",
+      "configName": "string",
+      "outcome": "string",
+      "addressedBy": "string",
+      "totalMs": "number",
+      "ackMs": "number",
+      "revisionMs": "number",
+      "audioSwitchMs": "number",
+      "timings": "TimingRow[]",
+      "lines": "string[]"
+    },
+    "TurnRow": {
+      "id": "string",
+      "transcript": "string",
+      "configName": "string",
+      "outcome": "string",
+      "ackMs": "number",
+      "revisionMs": "number"
+    },
+    "TurnList": {
+      "rows": "TurnRow[]"
+    },
+    "AudioInfo": {
+      "state": "string",
+      "policy": "string",
+      "engine": "string",
+      "route": "string",
+      "message": "string",
+      "voiceProcessing": "bool",
+      "audible": "bool",
+      "volume": "number",
+      "lastSwitchMs": "number",
+      "policies": "string[]",
+      "ackTiming": "string",
+      "ackTimings": "string[]"
+    },
+    "ExportInfo": {
+      "path": "string",
+      "documents": "string",
+      "name": "string"
+    },
+    "Lines": {
+      "lines": "string[]"
+    },
+    "Names": {
+      "names": "string[]"
+    },
+    "ChoirAuth": {
+      "signedIn": "bool",
+      "baseURL": "string",
+      "status": "string",
+      "userCode": "string",
+      "verificationURL": "string",
+      "message": "string"
+    },
+    "ChoirPlayer": {
+      "signedIn": "bool",
+      "loading": "bool",
+      "title": "string",
+      "passage": "string",
+      "position": "string",
+      "playing": "bool",
+      "talking": "bool",
+      "heard": "string",
+      "message": "string"
+    },
+    "StoryRow": {
+      "title": "string",
+      "dek": "string",
+      "route": "string",
+      "section": "string",
+      "current": "bool"
+    },
+    "StoryList": {
+      "rows": "StoryRow[]"
+    },
+    "RadioItem": {
+      "i": "number",
+      "text": "string",
+      "kind": "string",
+      "current": "bool",
+      "done": "bool"
+    },
+    "RadioInfo": {
+      "title": "string",
+      "source": "string",
+      "position": "string",
+      "index": "number",
+      "count": "number",
+      "playing": "bool",
+      "paused": "bool",
+      "level": "string",
+      "speed": "string",
+      "speedChoices": "string[]",
+      "mode": "string",
+      "modeLabel": "string",
+      "micOpen": "bool",
+      "heard": "string",
+      "holding": "string",
+      "revised": "string",
+      "progress": "number",
+      "blockProgress": "number",
+      "sentenceIndex": "number",
+      "sentences": "string[]",
+      "next": "string",
+      "items": "RadioItem[]",
+      "micLevel": "number"
+    },
+    "CardStory": {
+      "route": "string",
+      "address": "string",
+      "title": "string",
+      "dek": "string",
+      "section": "string",
+      "entityLine": "string",
+      "primary": "string",
+      "lift": "number",
+      "n": "number",
+      "dir": "string",
+      "why": "string"
+    },
+    "CardStoryList": {
+      "rows": "CardStory[]",
+      "index": "number",
+      "setAside": "number",
+      "total": "number"
+    },
+    "ToldRow": {
+      "kind": "string",
+      "title": "string",
+      "entities": "string",
+      "when": "string",
+      "route": "string"
+    },
+    "Told": {
+      "count": "number",
+      "rows": "ToldRow[]",
+      "lines": "string[]",
+      "left": "string",
+      "right": "string",
+      "leftLabel": "string",
+      "rightLabel": "string",
+      "note": "string"
+    },
+    "UndoInfo": {
+      "open": "bool",
+      "title": "string",
+      "address": "string"
+    },
+    "LauncherPlace": {
+      "slug": "string",
+      "name": "string",
+      "address": "string",
+      "line": "string"
+    },
+    "LauncherHit": {
+      "address": "string",
+      "title": "string",
+      "kind": "string",
+      "detail": "string"
+    },
+    "LauncherData": {
+      "query": "string",
+      "hasQuery": "bool",
+      "places": "LauncherPlace[]",
+      "recent": "LauncherHit[]",
+      "hits": "LauncherHit[]",
+      "stories": "number"
+    },
+    "ShadeRow": {
+      "route": "string",
+      "lift": "number",
+      "rank": "number"
+    },
+    "Shading": {
+      "rows": "ShadeRow[]"
+    },
+    "CardAck": {
+      "message": "string"
+    },
+    "FileCrumb": {
+      "name": "string",
+      "path": "string"
+    },
+    "FileRow": {
+      "name": "string",
+      "path": "string",
+      "address": "string",
+      "kind": "string",
+      "kindLabel": "string",
+      "symbol": "string",
+      "isDir": "bool",
+      "size": "number",
+      "sizeLabel": "string",
+      "modifiedLabel": "string",
+      "detail": "string",
+      "place": "string"
+    },
+    "FileListing": {
+      "path": "string",
+      "title": "string",
+      "crumbs": "FileCrumb[]",
+      "rows": "FileRow[]",
+      "count": "number",
+      "status": "string",
+      "message": "string",
+      "mode": "string",
+      "sort": "string",
+      "desc": "bool",
+      "query": "string"
+    },
+    "CsvRow": {
+      "cells": "string[]"
+    },
+    "FileChapterRef": {
+      "index": "number",
+      "title": "string"
+    },
+    "FileInfo": {
+      "address": "string",
+      "path": "string",
+      "folder": "string",
+      "name": "string",
+      "kind": "string",
+      "kindLabel": "string",
+      "size": "number",
+      "sizeLabel": "string",
+      "modifiedLabel": "string",
+      "mime": "string",
+      "status": "string",
+      "message": "string",
+      "src": "string",
+      "local": "string",
+      "text": "string",
+      "truncated": "bool",
+      "rows": "CsvRow[]",
+      "pages": "number",
+      "width": "number",
+      "height": "number",
+      "title": "string",
+      "author": "string",
+      "chapters": "FileChapterRef[]"
+    },
+    "FileChapter": {
+      "index": "number",
+      "count": "number",
+      "title": "string",
+      "markdown": "string",
+      "status": "string"
+    },
+    "FilePages": {
+      "query": "string",
+      "pages": "number[]",
+      "message": "string"
+    },
+    "MailRow": {
+      "id": "string",
+      "address": "string",
+      "sender": "string",
+      "subject": "string",
+      "snippet": "string",
+      "stamp": "string",
+      "trust": "string",
+      "direction": "string",
+      "unread": "bool",
+      "hasAttachments": "bool",
+      "count": "number"
+    },
+    "MailFolderRow": {
+      "name": "string",
+      "label": "string",
+      "address": "string",
+      "badge": "string",
+      "current": "bool"
+    },
+    "MailBoxView": {
+      "status": "string",
+      "message": "string",
+      "folder": "string",
+      "title": "string",
+      "unread": "number",
+      "total": "number",
+      "cached": "bool",
+      "rows": "MailRow[]",
+      "folders": "MailFolderRow[]"
+    },
+    "MailBlock": {
+      "kind": "string",
+      "text": "string"
+    },
+    "MailAttachmentRow": {
+      "id": "string",
+      "filename": "string",
+      "size": "string",
+      "kind": "string",
+      "address": "string",
+      "note": "string",
+      "available": "bool"
+    },
+    "MailThreadRow": {
+      "id": "string",
+      "address": "string",
+      "sender": "string",
+      "stamp": "string",
+      "snippet": "string",
+      "current": "bool"
+    },
+    "MailMessageView": {
+      "status": "string",
+      "message": "string",
+      "id": "string",
+      "address": "string",
+      "subject": "string",
+      "sender": "string",
+      "fromAddress": "string",
+      "toLine": "string",
+      "ccLine": "string",
+      "date": "string",
+      "trust": "string",
+      "trustNote": "string",
+      "unread": "bool",
+      "htmlOnly": "bool",
+      "hasOriginal": "bool",
+      "hasQuoted": "bool",
+      "canReply": "bool",
+      "cut": "bool",
+      "originalPath": "string",
+      "blocks": "MailBlock[]",
+      "attachments": "MailAttachmentRow[]",
+      "thread": "MailThreadRow[]",
+      "replyLabel": "string",
+      "spoken": "string"
+    },
+    "MailComposeView": {
+      "status": "string",
+      "forAddress": "string",
+      "sendAs": "string",
+      "toLine": "string",
+      "subject": "string",
+      "body": "string",
+      "draftId": "string",
+      "note": "string",
+      "reviewURL": "string",
+      "replyTo": "string"
+    },
+    "MailAck": {
+      "status": "string",
+      "message": "string"
+    },
+    "SetupRowView": {
+      "stage": "string",
+      "name": "string",
+      "model": "string",
+      "sizeLabel": "string",
+      "state": "string",
+      "statusLine": "string",
+      "numbers": "string",
+      "progress": "number",
+      "isFallback": "bool",
+      "canRetry": "bool",
+      "canFallback": "bool"
+    },
+    "TalkRow": {
+      "who": "string",
+      "text": "string",
+      "interrupted": "bool"
+    },
+    "Onboarding": {
+      "step": "string",
+      "title": "string",
+      "message": "string",
+      "totalLabel": "string",
+      "device": "string",
+      "mic": "string",
+      "heard": "string",
+      "route": "string",
+      "interviewStatus": "string",
+      "pauseReason": "string",
+      "nowSaying": "string",
+      "demoNote": "string",
+      "demoKind": "string",
+      "demoWords": "string",
+      "editionStatus": "string",
+      "writingLine": "string",
+      "editionError": "string",
+      "editionTitle": "string",
+      "editionIntro": "string",
+      "editionAddress": "string",
+      "card": "string",
+      "cardBody": "string",
+      "aim": "string",
+      "askMobile": "bool",
+      "setupFinished": "bool",
+      "setupStarted": "bool",
+      "hearingOK": "bool",
+      "paused": "bool",
+      "listening": "bool",
+      "demo": "bool",
+      "skipped": "bool",
+      "editionDone": "bool",
+      "level": "number",
+      "demoLeft": "number",
+      "rows": "SetupRowView[]",
+      "summary": "string[]",
+      "talk": "TalkRow[]",
+      "editionLines": "string[]"
+    },
+    "PaperItem": {
+      "route": "string",
+      "title": "string",
+      "dek": "string",
+      "section": "string",
+      "meta": "string",
+      "byline": "string",
+      "entityLabels": "string",
+      "entityIds": "string",
+      "size": "number",
+      "weight": "number",
+      "lineHeight": "number",
+      "lines": "number",
+      "showDek": "bool",
+      "dekSize": "number",
+      "dekLines": "number",
+      "indent": "bool",
+      "rank": "number"
+    },
+    "PaperBand": {
+      "id": "string",
+      "module": "string",
+      "label": "string",
+      "side": "bool",
+      "rule": "bool",
+      "items": "PaperItem[]"
+    },
+    "PaperSection": {
+      "id": "string",
+      "label": "string",
+      "count": "number",
+      "current": "bool"
+    },
+    "PaperFront": {
+      "status": "string",
+      "message": "string",
+      "edition": "string",
+      "layout": "string",
+      "composition": "string",
+      "dateLine": "string",
+      "updated": "string",
+      "sectionId": "string",
+      "sectionLabel": "string",
+      "count": "number",
+      "sections": "PaperSection[]",
+      "bands": "PaperBand[]"
+    },
+    "ReaderRun": {
+      "id": "string",
+      "text": "string",
+      "kind": "string",
+      "weight": "number",
+      "slant": "string",
+      "anchor": "string",
+      "label": "string",
+      "sent": "number",
+      "href": "string"
+    },
+    "ReaderCell": {
+      "runs": "ReaderRun[]",
+      "header": "bool"
+    },
+    "ReaderRow": {
+      "id": "string",
+      "cells": "ReaderCell[]"
+    },
+    "ReaderBlock": {
+      "id": "string",
+      "kind": "string",
+      "level": "number",
+      "depth": "number",
+      "marker": "string",
+      "runs": "ReaderRun[]",
+      "rows": "ReaderRow[]",
+      "text": "string",
+      "ordinal": "number",
+      "cites": "string[]",
+      "sentences": "number"
+    },
+    "ReaderCite": {
+      "anchor": "string",
+      "number": "number",
+      "blockId": "string",
+      "entityId": "string",
+      "title": "string",
+      "host": "string",
+      "url": "string",
+      "kind": "string",
+      "target": "string",
+      "quote": "string",
+      "before": "string",
+      "hit": "string",
+      "after": "string",
+      "check": "string",
+      "checkLabel": "string"
+    },
+    "ReaderSource": {
+      "number": "number",
+      "entityId": "string",
+      "title": "string",
+      "host": "string",
+      "url": "string",
+      "kind": "string",
+      "target": "string",
+      "quotes": "string[]",
+      "anchor": "string"
+    },
+    "ReaderVersion": {
+      "address": "string",
+      "number": "number",
+      "label": "string",
+      "when": "string",
+      "author": "string",
+      "current": "bool"
+    },
+    "ReaderRelated": {
+      "address": "string",
+      "title": "string",
+      "dek": "string"
+    },
+    "ReaderDoc": {
+      "address": "string",
+      "status": "string",
+      "message": "string",
+      "title": "string",
+      "kicker": "string",
+      "dek": "string",
+      "byline": "string",
+      "meta": "string",
+      "kind": "string",
+      "disclosure": "string",
+      "blocks": "ReaderBlock[]",
+      "cites": "ReaderCite[]",
+      "sources": "ReaderSource[]",
+      "versions": "ReaderVersion[]",
+      "related": "ReaderRelated[]",
+      "revision": "number",
+      "latest": "number",
+      "newer": "bool",
+      "historical": "bool",
+      "revising": "bool",
+      "revisingNote": "string",
+      "trajectory": "string",
+      "permalink": "string",
+      "plain": "string",
+      "textBlocks": "number",
+      "markdown": "string"
+    },
+    "TextureRow": {
+      "address": "string",
+      "title": "string",
+      "updated": "string",
+      "meta": "string",
+      "edition": "bool",
+      "revising": "bool"
+    },
+    "TextureList": {
+      "status": "string",
+      "message": "string",
+      "rows": "TextureRow[]",
+      "hasEdition": "bool"
+    },
+    "ReaderFollowInfo": {
+      "address": "string",
+      "blockId": "string",
+      "sentence": "number"
+    },
+    "ReaderAimInfo": {
+      "address": "string",
+      "blockId": "string",
+      "label": "string"
+    },
+    "ReaderAck": {
+      "ok": "bool"
+    },
+    "ThemeCard": {
+      "id": "string",
+      "name": "string",
+      "origin": "string",
+      "current": "bool",
+      "schemes": "string",
+      "contrast": "string",
+      "scale": "string",
+      "paper": "string",
+      "paper2": "string",
+      "fg": "string",
+      "muted": "string",
+      "accent": "string",
+      "accent2": "string",
+      "onAccent": "string",
+      "rule": "string",
+      "fontRead": "string",
+      "fontUi": "string",
+      "radiusCard": "number",
+      "radiusControl": "number",
+      "shadow": "string",
+      "material": "string"
+    },
+    "ThemeCards": {
+      "rows": "ThemeCard[]",
+      "mode": "string",
+      "scheme": "string",
+      "themeID": "string",
+      "problems": "string[]",
+      "status": "string"
+    },
+    "ThemeExtras": {
+      "sizeNameplate": "number",
+      "sizeHeadline": "number",
+      "sizeH2": "number",
+      "sizeBody": "number",
+      "sizeLabel": "number",
+      "sizeMeta": "number",
+      "lineBody": "number",
+      "lineHeadline": "number",
+      "weightHeadline": "number",
+      "weightUi": "number",
+      "flipStiffness": "number",
+      "flipDamping": "number",
+      "markTumbleAS": "number",
+      "markTumbleBS": "number",
+      "markStatic": "bool",
+      "pressTint": "bool",
+      "reduceMotion": "bool",
+      "contrast": "string"
+    },
+    "SettingsAck": {
+      "ok": "bool",
+      "message": "string"
+    },
+    "SettingsAccount": {
+      "status": "string",
+      "signedIn": "bool",
+      "handle": "string",
+      "keyID": "string",
+      "keyLabel": "string",
+      "scopes": "string",
+      "computerID": "string",
+      "message": "string",
+      "demo": "bool",
+      "baseURL": "string"
+    },
+    "SettingsComputer": {
+      "id": "string",
+      "state": "string",
+      "target": "string",
+      "phase": "string",
+      "updateAvailable": "bool",
+      "message": "string",
+      "epoch": "number",
+      "checked": "bool"
+    },
+    "SettingOption": {
+      "id": "string",
+      "label": "string",
+      "detail": "string",
+      "selected": "bool"
+    },
+    "SettingRowInfo": {
+      "id": "string",
+      "label": "string",
+      "help": "string",
+      "value": "string",
+      "valueLabel": "string",
+      "choices": "SettingOption[]"
+    },
+    "SettingRows": {
+      "rows": "SettingRowInfo[]"
+    },
+    "LearnedItem": {
+      "line": "string",
+      "kind": "string",
+      "ago": "string"
+    },
+    "LearnedInfo": {
+      "rows": "LearnedItem[]",
+      "count": "number",
+      "message": "string"
+    },
+    "ActivityItem": {
+      "id": "string",
+      "kind": "string",
+      "label": "string",
+      "detail": "string",
+      "group": "string",
+      "ago": "string",
+      "target": "string",
+      "title": "string",
+      "at": "number",
+      "unseen": "bool"
+    },
+    "ActivityInfo": {
+      "status": "string",
+      "message": "string",
+      "live": "ActivityItem[]",
+      "computer": "ActivityItem[]",
+      "desk": "ActivityItem[]",
+      "paper": "ActivityItem[]",
+      "radio": "ActivityItem[]",
+      "unseen": "number",
+      "blank": "bool"
+    },
+    "AboutInfo": {
+      "app": "string",
+      "build": "string",
+      "server": "string",
+      "base": "string",
+      "demo": "bool",
+      "signedIn": "bool"
+    },
+    "Page": {
+      "address": "string",
+      "kind": "string",
+      "title": "string",
+      "opener": "string",
+      "pinned": "bool"
+    },
+    "PageList": {
+      "rows": "Page[]",
+      "top": "string",
+      "topKind": "string",
+      "topTitle": "string",
+      "count": "number"
+    },
+    "PageModel": {
+      "address": "string",
+      "kind": "string",
+      "title": "string",
+      "status": "string",
+      "lines": "string[]",
+      "message": "string"
+    },
+    "Theme": {
+      "id": "string",
+      "name": "string",
+      "scheme": "string",
+      "schemes": "string",
+      "paper": "string",
+      "paper2": "string",
+      "fg": "string",
+      "muted": "string",
+      "accent": "string",
+      "accent2": "string",
+      "success": "string",
+      "danger": "string",
+      "onAccent": "string",
+      "rule": "string",
+      "scrim": "string",
+      "onScrim": "string",
+      "fontRead": "string",
+      "fontUi": "string",
+      "fontMono": "string",
+      "scale": "string",
+      "radiusCard": "number",
+      "radiusControl": "number",
+      "radiusPill": "number",
+      "radiusRules": "number",
+      "shadow1": "string",
+      "shadow2": "string",
+      "shadow3": "string",
+      "edge1": "string",
+      "edge2": "string",
+      "edge3": "string",
+      "material1": "string",
+      "material2": "string",
+      "material3": "string",
+      "press1": "number",
+      "behindScale3": "number",
+      "behindDim3": "number",
+      "barBacking": "number",
+      "layerBacking": "number",
+      "motionFastMs": "number",
+      "motionEnterMs": "number",
+      "motionSheetMs": "number",
+      "staggerMs": "number",
+      "springStiffness": "number",
+      "springDamping": "number",
+      "springMass": "number",
+      "reducedMotion": "bool",
+      "markDriftS": "number",
+      "markListenScale": "number",
+      "markTumble": "string"
+    },
+    "ThemeInfo": {
+      "id": "string",
+      "name": "string",
+      "current": "bool"
+    },
+    "ThemeList": {
+      "rows": "ThemeInfo[]",
+      "mode": "string",
+      "themeID": "string",
+      "scheme": "string",
+      "problems": "string[]"
+    },
+    "BarInfo": {
+      "state": "string",
+      "text": "string",
+      "playing": "bool",
+      "talking": "bool",
+      "signedIn": "bool",
+      "progress": "number"
+    },
+    "DemoInfo": {
+      "on": "bool"
+    },
+    "SignalRow": {
+      "at": "number",
+      "kind": "string",
+      "subject": "string",
+      "detail": "string"
+    },
+    "SignalList": {
+      "rows": "SignalRow[]"
+    }
+  },
+  "names": [
+    {
+      "source": "labState",
+      "live": true,
+      "answers": "LabState",
+      "substitute": {
+        "default": {
+          "running": false,
+          "paused": true,
+          "phase": "playing",
+          "level": "play",
+          "addressing": "",
+          "transcript": "",
+          "configName": "",
+          "blockIndex": 0,
+          "blockCount": 0,
+          "blockText": "",
+          "residentMB": 0,
+          "thermal": "nominal",
+          "message": "",
+          "micActive": false
+        }
+      }
+    },
+    {
+      "source": "labStages",
+      "live": true,
+      "answers": "StageList",
+      "substitute": {
+        "default": {
+          "rows": []
+        }
+      }
+    },
+    {
+      "source": "labParams",
+      "live": true,
+      "answers": "ParamList",
+      "substitute": {
+        "default": {
+          "rows": []
+        }
+      }
+    },
+    {
+      "source": "labTrace",
+      "live": true,
+      "answers": "Trace",
+      "options": {
+        "turn": "string"
+      },
+      "substitute": {
+        "default": {
+          "id": "",
+          "transcript": "",
+          "configName": "",
+          "outcome": "",
+          "addressedBy": "",
+          "totalMs": 0,
+          "ackMs": 0,
+          "revisionMs": 0,
+          "audioSwitchMs": 0,
+          "timings": [],
+          "lines": []
+        }
+      }
+    },
+    {
+      "source": "labAudio",
+      "live": true,
+      "answers": "AudioInfo",
+      "substitute": {
+        "default": {
+          "state": "none",
+          "policy": "switchOnAddress",
+          "engine": "off",
+          "route": "",
+          "message": "",
+          "voiceProcessing": false,
+          "audible": false,
+          "volume": 1,
+          "lastSwitchMs": 0,
+          "policies": [],
+          "ackTiming": "immediate",
+          "ackTimings": []
+        }
+      }
+    },
+    {
+      "send": "labInject",
+      "answers": "LabState"
+    },
+    {
+      "send": "labSetAudioPolicy",
+      "options": {
+        "policy": "string"
+      },
+      "answers": "LabState"
+    },
+    {
+      "send": "labSetAckTiming",
+      "options": {
+        "timing": "string"
+      },
+      "answers": "LabState"
+    },
+    {
+      "send": "labExportTurn",
+      "options": {
+        "turn": "string"
+      },
+      "answers": "ExportInfo"
+    },
+    {
+      "source": "labTurns",
+      "live": true,
+      "answers": "TurnList",
+      "substitute": {
+        "default": {
+          "rows": []
+        }
+      }
+    },
+    {
+      "source": "labEvents",
+      "live": true,
+      "answers": "Lines",
+      "substitute": {
+        "default": {
+          "lines": []
+        }
+      }
+    },
+    {
+      "source": "labConfigs",
+      "live": true,
+      "answers": "Names",
+      "substitute": {
+        "default": {
+          "names": []
+        }
+      }
+    },
+    {
+      "send": "labStart",
+      "answers": "LabState"
+    },
+    {
+      "send": "labStop",
+      "answers": "LabState"
+    },
+    {
+      "send": "labTalkDown",
+      "answers": "LabState"
+    },
+    {
+      "send": "labTalkUp",
+      "answers": "LabState"
+    },
+    {
+      "send": "labPlayPause",
+      "answers": "LabState"
+    },
+    {
+      "send": "labNext",
+      "answers": "LabState"
+    },
+    {
+      "send": "labPrevious",
+      "answers": "LabState"
+    },
+    {
+      "send": "labSelectStage",
+      "options": {
+        "kind": "string",
+        "id": "string"
+      },
+      "answers": "LabState"
+    },
+    {
+      "send": "labSetParam",
+      "options": {
+        "kind": "string",
+        "name": "string",
+        "value": "string"
+      },
+      "answers": "LabState"
+    },
+    {
+      "send": "labSaveConfig",
+      "options": {
+        "name": "string"
+      },
+      "answers": "LabState"
+    },
+    {
+      "send": "labLoadConfig",
+      "options": {
+        "name": "string"
+      },
+      "answers": "LabState"
+    },
+    {
+      "send": "labLoadConfigURL",
+      "options": {
+        "url": "string"
+      },
+      "answers": "LabState"
+    },
+    {
+      "send": "labReplay",
+      "options": {
+        "turn": "string"
+      },
+      "answers": "LabState"
+    },
+    {
+      "source": "choirAuth",
+      "live": true,
+      "answers": "ChoirAuth",
+      "substitute": {
+        "default": {
+          "signedIn": false,
+          "baseURL": "",
+          "status": "idle",
+          "userCode": "",
+          "verificationURL": "",
+          "message": ""
+        }
+      }
+    },
+    {
+      "source": "choirPlayer",
+      "live": true,
+      "answers": "ChoirPlayer",
+      "substitute": {
+        "default": {
+          "signedIn": false,
+          "loading": false,
+          "title": "",
+          "passage": "",
+          "position": "",
+          "playing": false,
+          "talking": false,
+          "heard": "",
+          "message": ""
+        }
+      }
+    },
+    {
+      "source": "choirStories",
+      "live": true,
+      "answers": "StoryList",
+      "substitute": {
+        "default": {
+          "rows": []
+        }
+      }
+    },
+    {
+      "send": "choirSignIn",
+      "answers": "LabState"
+    },
+    {
+      "send": "choirSignOut",
+      "answers": "LabState"
+    },
+    {
+      "send": "choirOpenApproval",
+      "answers": "LabState"
+    },
+    {
+      "send": "choirCancelSignIn",
+      "answers": "LabState"
+    },
+    {
+      "send": "choirRefresh",
+      "answers": "LabState"
+    },
+    {
+      "send": "choirPlayPause",
+      "answers": "LabState"
+    },
+    {
+      "send": "choirStartRadio",
+      "answers": "LabState"
+    },
+    {
+      "send": "choirTalkDown",
+      "answers": "LabState"
+    },
+    {
+      "send": "choirTalkUp",
+      "answers": "LabState"
+    },
+    {
+      "send": "choirPlay",
+      "options": {
+        "route": "string"
+      },
+      "answers": "LabState"
+    },
+    {
+      "send": "choirAsk",
+      "options": {
+        "text": "string"
+      },
+      "answers": "LabState"
+    },
+    {
+      "source": "radioView",
+      "live": true,
+      "answers": "RadioInfo",
+      "substitute": {
+        "default": {
+          "title": "",
+          "source": "",
+          "position": "",
+          "index": 0,
+          "count": 0,
+          "playing": false,
+          "paused": false,
+          "level": "play",
+          "speed": "1",
+          "speedChoices": [
+            "0.8",
+            "1",
+            "1.25",
+            "1.5"
+          ],
+          "mode": "",
+          "modeLabel": "",
+          "micOpen": false,
+          "heard": "",
+          "holding": "",
+          "revised": "",
+          "progress": 0,
+          "blockProgress": 0,
+          "sentenceIndex": 0,
+          "sentences": [],
+          "next": "",
+          "items": [],
+          "micLevel": 0
+        }
+      }
+    },
+    {
+      "send": "radioJump",
+      "options": {
+        "index": "string"
+      },
+      "answers": "RadioInfo"
+    },
+    {
+      "send": "radioSpeed",
+      "options": {
+        "speed": "string"
+      },
+      "answers": "RadioInfo"
+    },
+    {
+      "source": "cardStories",
+      "live": true,
+      "answers": "CardStoryList",
+      "substitute": {
+        "default": {
+          "rows": [],
+          "index": 0,
+          "setAside": 0,
+          "total": 0
+        }
+      }
+    },
+    {
+      "source": "storyStack",
+      "live": true,
+      "answers": "CardStoryList",
+      "substitute": {
+        "default": {
+          "rows": [],
+          "index": 0,
+          "setAside": 0,
+          "total": 0
+        }
+      }
+    },
+    {
+      "source": "toldPaper",
+      "live": true,
+      "answers": "Told",
+      "substitute": {
+        "default": {
+          "count": 0,
+          "rows": [],
+          "lines": [],
+          "left": "close",
+          "right": "more",
+          "leftLabel": "Close",
+          "rightLabel": "More of this",
+          "note": ""
+        }
+      }
+    },
+    {
+      "source": "undoOffer",
+      "live": true,
+      "answers": "UndoInfo",
+      "substitute": {
+        "default": {
+          "open": false,
+          "title": "",
+          "address": ""
+        }
+      }
+    },
+    {
+      "source": "launcherData",
+      "live": true,
+      "answers": "LauncherData",
+      "options": {
+        "q": "string"
+      },
+      "substitute": {
+        "default": {
+          "query": "",
+          "hasQuery": false,
+          "places": [],
+          "recent": [],
+          "hits": [],
+          "stories": 0
+        }
+      }
+    },
+    {
+      "source": "shadingList",
+      "live": true,
+      "answers": "Shading",
+      "substitute": {
+        "default": {
+          "rows": []
+        }
+      }
+    },
+    {
+      "send": "storyMore",
+      "options": {
+        "address": "string",
+        "surface": "string"
+      },
+      "answers": "CardAck"
+    },
+    {
+      "send": "storyLess",
+      "options": {
+        "address": "string",
+        "surface": "string"
+      },
+      "answers": "CardAck"
+    },
+    {
+      "send": "cardFling",
+      "options": {
+        "address": "string"
+      },
+      "answers": "CardAck"
+    },
+    {
+      "send": "cardClose",
+      "options": {
+        "address": "string"
+      },
+      "answers": "CardAck"
+    },
+    {
+      "send": "cardUndo",
+      "answers": "CardAck"
+    },
+    {
+      "send": "stackDecide",
+      "options": {
+        "address": "string",
+        "side": "string"
+      },
+      "answers": "CardAck"
+    },
+    {
+      "send": "stackUndo",
+      "answers": "CardAck"
+    },
+    {
+      "send": "stackReset",
+      "answers": "CardAck"
+    },
+    {
+      "send": "toldForget",
+      "options": {
+        "address": "string"
+      },
+      "answers": "CardAck"
+    },
+    {
+      "send": "toldReset",
+      "answers": "CardAck"
+    },
+    {
+      "send": "gestureSet",
+      "options": {
+        "side": "string",
+        "meaning": "string"
+      },
+      "answers": "CardAck"
+    },
+    {
+      "source": "fileList",
+      "live": true,
+      "answers": "FileListing",
+      "options": {
+        "path": "string",
+        "mode": "string",
+        "sort": "string",
+        "desc": "string",
+        "query": "string"
+      },
+      "substitute": {
+        "default": {
+          "path": "/",
+          "title": "Files",
+          "crumbs": [],
+          "rows": [],
+          "count": 0,
+          "status": "loading",
+          "message": "",
+          "mode": "browse",
+          "sort": "name",
+          "desc": false,
+          "query": ""
+        }
+      }
+    },
+    {
+      "source": "fileOpen",
+      "live": true,
+      "answers": "FileInfo",
+      "options": {
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "address": "",
+          "path": "",
+          "folder": "/",
+          "name": "",
+          "kind": "other",
+          "kindLabel": "File",
+          "size": 0,
+          "sizeLabel": "",
+          "modifiedLabel": "",
+          "mime": "",
+          "status": "loading",
+          "message": "",
+          "src": "",
+          "local": "",
+          "text": "",
+          "truncated": false,
+          "rows": [],
+          "pages": 0,
+          "width": 0,
+          "height": 0,
+          "title": "",
+          "author": "",
+          "chapters": []
+        }
+      }
+    },
+    {
+      "source": "fileChapter",
+      "live": true,
+      "answers": "FileChapter",
+      "options": {
+        "address": "string",
+        "index": "number"
+      },
+      "substitute": {
+        "default": {
+          "index": 0,
+          "count": 0,
+          "title": "",
+          "markdown": "",
+          "status": "loading"
+        }
+      }
+    },
+    {
+      "source": "filePages",
+      "live": true,
+      "answers": "FilePages",
+      "options": {
+        "address": "string",
+        "query": "string"
+      },
+      "substitute": {
+        "default": {
+          "query": "",
+          "pages": [],
+          "message": ""
+        }
+      }
+    },
+    {
+      "send": "fileMkdir",
+      "options": {
+        "dir": "string",
+        "name": "string"
+      },
+      "answers": "FileListing"
+    },
+    {
+      "send": "fileDelete",
+      "options": {
+        "path": "string"
+      },
+      "answers": "FileListing"
+    },
+    {
+      "send": "fileRename",
+      "options": {
+        "path": "string",
+        "name": "string"
+      },
+      "answers": "FileListing"
+    },
+    {
+      "send": "fileUpload",
+      "options": {
+        "from": "string",
+        "name": "string",
+        "dir": "string"
+      },
+      "answers": "FileListing"
+    },
+    {
+      "source": "mailBox",
+      "live": true,
+      "answers": "MailBoxView",
+      "options": {
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "status": "",
+          "message": "",
+          "folder": "",
+          "title": "",
+          "unread": 0,
+          "total": 0,
+          "cached": false,
+          "rows": [],
+          "folders": []
+        }
+      }
+    },
+    {
+      "source": "mailMessage",
+      "live": true,
+      "answers": "MailMessageView",
+      "options": {
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "status": "",
+          "message": "",
+          "id": "",
+          "address": "",
+          "subject": "",
+          "sender": "",
+          "fromAddress": "",
+          "toLine": "",
+          "ccLine": "",
+          "date": "",
+          "trust": "",
+          "trustNote": "",
+          "unread": false,
+          "htmlOnly": false,
+          "hasOriginal": false,
+          "hasQuoted": false,
+          "canReply": false,
+          "cut": false,
+          "originalPath": "",
+          "blocks": [],
+          "attachments": [],
+          "thread": [],
+          "replyLabel": "",
+          "spoken": ""
+        }
+      }
+    },
+    {
+      "source": "mailCompose",
+      "live": true,
+      "answers": "MailComposeView",
+      "options": {
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "status": "",
+          "forAddress": "",
+          "sendAs": "",
+          "toLine": "",
+          "subject": "",
+          "body": "",
+          "draftId": "",
+          "note": "",
+          "reviewURL": "",
+          "replyTo": ""
+        }
+      }
+    },
+    {
+      "send": "mailSaveDraft",
+      "options": {
+        "address": "string",
+        "recipients": "string",
+        "subject": "string",
+        "body": "string"
+      },
+      "answers": "MailComposeView"
+    },
+    {
+      "send": "mailApprovalEmail",
+      "options": {
+        "address": "string",
+        "draft": "string"
+      },
+      "answers": "MailComposeView"
+    },
+    {
+      "send": "mailOpenReview",
+      "options": {
+        "url": "string"
+      },
+      "answers": "MailAck"
+    },
+    {
+      "send": "mailRead",
+      "options": {
+        "address": "string"
+      },
+      "answers": "MailAck"
+    },
+    {
+      "send": "mailAsk",
+      "options": {
+        "address": "string",
+        "question": "string"
+      },
+      "answers": "MailAck"
+    },
+    {
+      "send": "mailMarkUnread",
+      "options": {
+        "address": "string"
+      },
+      "answers": "MailAck"
+    },
+    {
+      "source": "onboardingState",
+      "live": true,
+      "answers": "Onboarding",
+      "substitute": {
+        "default": {
+          "step": "welcome",
+          "title": "Make it yours",
+          "message": "",
+          "totalLabel": "",
+          "device": "",
+          "mic": "unasked",
+          "heard": "",
+          "route": "",
+          "interviewStatus": "notStarted",
+          "pauseReason": "",
+          "nowSaying": "",
+          "demoNote": "",
+          "demoKind": "",
+          "demoWords": "",
+          "editionStatus": "",
+          "writingLine": "",
+          "editionError": "",
+          "editionTitle": "My edition",
+          "editionIntro": "",
+          "editionAddress": "texture:my-edition",
+          "card": "",
+          "cardBody": "",
+          "aim": "",
+          "askMobile": false,
+          "setupFinished": false,
+          "setupStarted": false,
+          "hearingOK": false,
+          "paused": false,
+          "listening": false,
+          "demo": false,
+          "skipped": false,
+          "editionDone": false,
+          "level": 0,
+          "demoLeft": 0,
+          "rows": [],
+          "summary": [],
+          "talk": [],
+          "editionLines": []
+        }
+      }
+    },
+    {
+      "send": "onboardingBegin",
+      "options": {
+        "mobile": "string"
+      },
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingRetry",
+      "options": {
+        "stage": "string"
+      },
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingFallback",
+      "options": {
+        "stage": "string"
+      },
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingMic",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingMicNext",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingHearing",
+      "options": {
+        "ok": "string"
+      },
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingInterview",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingContinue",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingDemoNext",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingEditionRetry",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingSkip",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingReset",
+      "answers": "Onboarding"
+    },
+    {
+      "source": "paperFront",
+      "live": true,
+      "answers": "PaperFront",
+      "options": {
+        "section": "string",
+        "edition": "string",
+        "width": "number"
+      },
+      "substitute": {
+        "default": {
+          "status": "empty",
+          "message": "",
+          "edition": "",
+          "layout": "",
+          "composition": "",
+          "dateLine": "",
+          "updated": "",
+          "sectionId": "",
+          "sectionLabel": "",
+          "count": 0,
+          "sections": [],
+          "bands": []
+        }
+      }
+    },
+    {
+      "source": "readerDoc",
+      "live": true,
+      "answers": "ReaderDoc",
+      "options": {
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "address": "",
+          "status": "loading",
+          "message": "",
+          "title": "",
+          "kicker": "",
+          "dek": "",
+          "byline": "",
+          "meta": "",
+          "kind": "document",
+          "disclosure": "",
+          "blocks": [],
+          "cites": [],
+          "sources": [],
+          "versions": [],
+          "related": [],
+          "revision": 0,
+          "latest": 0,
+          "newer": false,
+          "historical": false,
+          "revising": false,
+          "revisingNote": "",
+          "trajectory": "",
+          "permalink": "",
+          "plain": "",
+          "textBlocks": 0,
+          "markdown": ""
+        }
+      }
+    },
+    {
+      "source": "texturesList",
+      "live": true,
+      "answers": "TextureList",
+      "options": {
+        "at": "string"
+      },
+      "substitute": {
+        "default": {
+          "status": "loading",
+          "message": "",
+          "rows": [],
+          "hasEdition": false
+        }
+      }
+    },
+    {
+      "source": "readerFollow",
+      "live": true,
+      "answers": "ReaderFollowInfo",
+      "substitute": {
+        "default": {
+          "address": "",
+          "blockId": "",
+          "sentence": -1
+        }
+      }
+    },
+    {
+      "source": "readerAim",
+      "live": true,
+      "answers": "ReaderAimInfo",
+      "substitute": {
+        "default": {
+          "address": "",
+          "blockId": "",
+          "label": ""
+        }
+      }
+    },
+    {
+      "send": "readerAimSet",
+      "options": {
+        "address": "string",
+        "blockId": "string",
+        "label": "string"
+      },
+      "answers": "ReaderAimInfo"
+    },
+    {
+      "send": "readerStop",
+      "options": {
+        "address": "string"
+      },
+      "answers": "ReaderAck"
+    },
+    {
+      "send": "readerRestore",
+      "options": {
+        "address": "string",
+        "version": "string"
+      },
+      "answers": "ReaderAck"
+    },
+    {
+      "send": "readerReload",
+      "options": {
+        "address": "string"
+      },
+      "answers": "ReaderAck"
+    },
+    {
+      "send": "readerFollowSet",
+      "options": {
+        "address": "string",
+        "spoken": "string"
+      },
+      "answers": "ReaderFollowInfo"
+    },
+    {
+      "source": "themeCards",
+      "live": true,
+      "answers": "ThemeCards",
+      "substitute": {
+        "default": {
+          "rows": [],
+          "mode": "system",
+          "scheme": "light",
+          "themeID": "",
+          "problems": [],
+          "status": ""
+        }
+      }
+    },
+    {
+      "source": "themeExtras",
+      "live": true,
+      "answers": "ThemeExtras",
+      "substitute": {
+        "default": {
+          "sizeNameplate": 36,
+          "sizeHeadline": 28,
+          "sizeH2": 19,
+          "sizeBody": 18,
+          "sizeLabel": 15,
+          "sizeMeta": 13,
+          "lineBody": 1.6,
+          "lineHeadline": 1.12,
+          "weightHeadline": 700,
+          "weightUi": 600,
+          "flipStiffness": 300,
+          "flipDamping": 22,
+          "markTumbleAS": 3.3,
+          "markTumbleBS": 5.9,
+          "markStatic": false,
+          "pressTint": false,
+          "reduceMotion": false,
+          "contrast": "AA"
+        }
+      }
+    },
+    {
+      "source": "settingsAccount",
+      "live": true,
+      "answers": "SettingsAccount",
+      "substitute": {
+        "default": {
+          "status": "",
+          "signedIn": false,
+          "handle": "",
+          "keyID": "",
+          "keyLabel": "",
+          "scopes": "",
+          "computerID": "",
+          "message": "",
+          "demo": false,
+          "baseURL": ""
+        }
+      }
+    },
+    {
+      "source": "settingsComputer",
+      "live": true,
+      "answers": "SettingsComputer",
+      "substitute": {
+        "default": {
+          "id": "",
+          "state": "",
+          "target": "",
+          "phase": "idle",
+          "updateAvailable": false,
+          "message": "",
+          "epoch": 0,
+          "checked": false
+        }
+      }
+    },
+    {
+      "source": "settingRows",
+      "live": true,
+      "answers": "SettingRows",
+      "options": {
+        "group": "string"
+      },
+      "substitute": {
+        "default": {
+          "rows": []
+        }
+      }
+    },
+    {
+      "source": "learnedInfo",
+      "live": true,
+      "answers": "LearnedInfo",
+      "substitute": {
+        "default": {
+          "rows": [],
+          "count": 0,
+          "message": ""
+        }
+      }
+    },
+    {
+      "source": "activityInfo",
+      "live": true,
+      "answers": "ActivityInfo",
+      "substitute": {
+        "default": {
+          "status": "",
+          "message": "",
+          "live": [],
+          "computer": [],
+          "desk": [],
+          "paper": [],
+          "radio": [],
+          "unseen": 0,
+          "blank": false
+        }
+      }
+    },
+    {
+      "source": "aboutInfo",
+      "live": true,
+      "answers": "AboutInfo",
+      "substitute": {
+        "default": {
+          "app": "",
+          "build": "",
+          "server": "",
+          "base": "",
+          "demo": false,
+          "signedIn": false
+        }
+      }
+    },
+    {
+      "send": "themeFromTexture",
+      "options": {
+        "doc": "string"
+      },
+      "answers": "SettingsAck"
+    },
+    {
+      "send": "themeRemove",
+      "options": {
+        "id": "string"
+      },
+      "answers": "SettingsAck"
+    },
+    {
+      "send": "accountRefresh",
+      "answers": "SettingsAck"
+    },
+    {
+      "send": "computerRefresh",
+      "answers": "SettingsAck"
+    },
+    {
+      "send": "computerWake",
+      "answers": "SettingsAck"
+    },
+    {
+      "send": "computerUpdate",
+      "answers": "SettingsAck"
+    },
+    {
+      "send": "settingSet",
+      "options": {
+        "id": "string",
+        "value": "string"
+      },
+      "answers": "SettingsAck"
+    },
+    {
+      "send": "learnedReset",
+      "answers": "SettingsAck"
+    },
+    {
+      "send": "activityRefresh",
+      "answers": "SettingsAck"
+    },
+    {
+      "source": "openPages",
+      "live": true,
+      "answers": "PageList",
+      "substitute": {
+        "default": {
+          "rows": [],
+          "top": "",
+          "topKind": "",
+          "topTitle": "",
+          "count": 0
+        }
+      }
+    },
+    {
+      "source": "pageModel",
+      "live": true,
+      "answers": "PageModel",
+      "options": {
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "address": "",
+          "kind": "",
+          "title": "",
+          "status": "loading",
+          "lines": [],
+          "message": ""
+        }
+      }
+    },
+    {
+      "source": "theme",
+      "live": true,
+      "answers": "Theme",
+      "substitute": {
+        "default": {
+          "id": "",
+          "name": "",
+          "scheme": "light",
+          "schemes": "light,dark",
+          "paper": "#FFFFFF",
+          "paper2": "#FFFFFF",
+          "fg": "#000000",
+          "muted": "#555555",
+          "accent": "#0066CC",
+          "accent2": "#004499",
+          "success": "#0C6644",
+          "danger": "#A3142F",
+          "onAccent": "#FFFFFF",
+          "rule": "#999999",
+          "scrim": "rgba(0,0,0,.7)",
+          "onScrim": "#FFFFFF",
+          "fontRead": "ui-serif",
+          "fontUi": "system-ui",
+          "fontMono": "ui-monospace",
+          "scale": "editorial",
+          "radiusCard": 14,
+          "radiusControl": 12,
+          "radiusPill": 999,
+          "radiusRules": 0,
+          "shadow1": "none",
+          "shadow2": "none",
+          "shadow3": "none",
+          "edge1": "none",
+          "edge2": "none",
+          "edge3": "none",
+          "material1": "solid",
+          "material2": "solid",
+          "material3": "solid",
+          "press1": 1,
+          "behindScale3": 1,
+          "behindDim3": 0,
+          "barBacking": 0.94,
+          "layerBacking": 0.86,
+          "motionFastMs": 120,
+          "motionEnterMs": 320,
+          "motionSheetMs": 260,
+          "staggerMs": 40,
+          "springStiffness": 240,
+          "springDamping": 26,
+          "springMass": 1,
+          "reducedMotion": false,
+          "markDriftS": 60,
+          "markListenScale": 1.15,
+          "markTumble": "3.3s,5.9s"
+        }
+      }
+    },
+    {
+      "source": "themeList",
+      "live": true,
+      "answers": "ThemeList",
+      "substitute": {
+        "default": {
+          "rows": [],
+          "mode": "system",
+          "themeID": "",
+          "scheme": "light",
+          "problems": []
+        }
+      }
+    },
+    {
+      "source": "barState",
+      "live": true,
+      "answers": "BarInfo",
+      "substitute": {
+        "default": {
+          "state": "idle",
+          "text": "",
+          "playing": false,
+          "talking": false,
+          "signedIn": false,
+          "progress": 0
+        }
+      }
+    },
+    {
+      "source": "demoInfo",
+      "live": true,
+      "answers": "DemoInfo",
+      "substitute": {
+        "default": {
+          "on": false
+        }
+      }
+    },
+    {
+      "source": "signalList",
+      "live": true,
+      "answers": "SignalList",
+      "substitute": {
+        "default": {
+          "rows": []
+        }
+      }
+    },
+    {
+      "send": "pageOpen",
+      "options": {
+        "address": "string",
+        "title": "string"
+      },
+      "answers": "PageList"
+    },
+    {
+      "send": "pageClose",
+      "options": {
+        "address": "string"
+      },
+      "answers": "PageList"
+    },
+    {
+      "send": "pageFocus",
+      "options": {
+        "address": "string"
+      },
+      "answers": "PageList"
+    },
+    {
+      "send": "pagePin",
+      "options": {
+        "address": "string"
+      },
+      "answers": "PageList"
+    },
+    {
+      "send": "pageReopen",
+      "answers": "PageList"
+    },
+    {
+      "send": "themeSet",
+      "options": {
+        "id": "string"
+      },
+      "answers": "PageList"
+    },
+    {
+      "send": "schemeSet",
+      "options": {
+        "mode": "string"
+      },
+      "answers": "PageList"
+    },
+    {
+      "send": "signalRecord",
+      "options": {
+        "kind": "string",
+        "subject": "string",
+        "detail": "string"
+      },
+      "answers": "PageList"
+    },
+    {
+      "send": "demoSet",
+      "options": {
+        "on": "string"
+      },
+      "answers": "PageList"
+    }
+  ]
+}

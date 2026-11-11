@@ -1,0 +1,33 @@
+{
+  "schema_version": 3,
+  "id": "lantern",
+  "name": "Lantern",
+  "schemes": ["light", "dark"],
+  "colors": {
+    "paper":  { "light": "#FBF1E1", "dark": "#1D140D" },
+    "paper2": { "light": "#F3E3CB", "dark": "#2A1D13" },
+    "fg":     { "light": "#2B1B0E", "dark": "#F7E9D3" },
+    "muted":  { "light": "#6A4C33", "dark": "#CDB598" },
+    "accent": { "light": "#B5470F", "dark": "#F29A4B" },
+    "accent2":{ "light": "#7E2F06", "dark": "#FFC48E" },
+    "success":{ "light": "#2F6B2F", "dark": "#8BCB7C" },
+    "danger": { "light": "#A12A1B", "dark": "#FF8F7C" },
+    "onAccent": { "light": "#FFFFFF", "dark": "#1D140D" },
+    "rule":   { "light": "rgba(43,27,14,.20)", "dark": "rgba(247,233,211,.18)" },
+    "scrim":  { "light": "rgba(24,14,30,.84)", "dark": "rgba(0,0,0,.86)" },
+    "onScrim": { "light": "#FFFFFF", "dark": "#F3F3F3" }
+  },
+  "type": { "read": "ui-serif", "ui": "ui-rounded", "mono": "ui-monospace", "scale": "large" },
+  "radii": { "card": "26px", "control": "20px", "pill": "999px", "rules": "2px" },
+  "elevation": {
+    "1": { "shadow": "0 2px 4px rgba(90,50,10,.10), 0 12px 28px rgba(90,50,10,.14)", "edge": "inset 0 1px 0 rgba(255,255,255,.55)", "press": 0.97 },
+    "2": { "backing": 0.94, "material": "solid", "shadow": "0 12px 32px rgba(90,50,10,.26)", "edge": "inset 0 1px 0 rgba(255,255,255,.45)" },
+    "3": { "backing": 0.86, "material": "glass", "shadow": "0 24px 60px rgba(90,50,10,.32)", "behind": { "scale": 0.94, "dim": 0.12 } }
+  },
+  "motion": {
+    "fast": "160ms ease-out", "enter": "460ms cubic-bezier(0.22,1,0.36,1)", "sheet": "340ms cubic-bezier(0.22,1,0.36,1)",
+    "spring": { "stiffness": 170, "damping": 19, "mass": 1 }, "stagger": "70ms",
+    "reduced": { "enter": "0ms", "spring": "none" }
+  },
+  "mark": { "drift": "90s", "tumble": ["4.1s", "7.3s"], "flip": { "stiffness": 220, "damping": 16 }, "listenScale": 1.22, "reduced": "static" }
+}

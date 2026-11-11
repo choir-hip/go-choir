@@ -1,0 +1,207 @@
+{
+ "stories": [
+  {
+   "title": "A regional grid adds its largest battery yet",
+   "dek": "The new installation can hold enough power for a small city through an evening peak.",
+   "route": {
+    "bare": "demo-grid-storage"
+   },
+   "section": "Tech and AI",
+   "importance": 8,
+   "source_count": 12,
+   "version_count": 9,
+   "words": 300,
+   "updated_at": "2026-11-10T08:00:00Z",
+   "entities": [
+    {
+     "id": "grid-battery",
+     "label": "Grid storage"
+    }
+   ]
+  },
+  {
+   "title": "A university lab releases open weights for a small speech model",
+   "dek": "Engineers say it runs on a mid-range phone with no network.",
+   "route": {
+    "bare": "demo-even-ai"
+   },
+   "section": "Tech and AI",
+   "importance": 8,
+   "source_count": 12,
+   "version_count": 8,
+   "words": 300,
+   "updated_at": "2026-11-10T07:30:00Z",
+   "entities": [
+    {
+     "id": "speech-models",
+     "label": "Speech models"
+    }
+   ]
+  },
+  {
+   "title": "The harbor council approves a tide barrier",
+   "dek": "After a year of hearings, the council voted seven to two to fund a movable barrier across the harbor mouth.",
+   "route": {
+    "bare": "demo-harbor-barrier"
+   },
+   "section": "World",
+   "importance": 6,
+   "source_count": 8,
+   "version_count": 5,
+   "words": 300,
+   "updated_at": "2026-11-10T07:00:00Z",
+   "entities": [
+    {
+     "id": "harbor-barrier",
+     "label": "Harbor tide barrier"
+    }
+   ]
+  },
+  {
+   "title": "Teachers and the district reach a tentative agreement",
+   "dek": "",
+   "route": {
+    "bare": "demo-even-schools"
+   },
+   "section": "Local",
+   "importance": 6,
+   "source_count": 6,
+   "version_count": 3,
+   "words": 300,
+   "updated_at": "2026-11-10T06:30:00Z",
+   "entities": []
+  },
+  {
+   "title": "City libraries extend their evening hours",
+   "dek": "Branches in six neighbourhoods will stay open until ten on weekdays.",
+   "route": {
+    "bare": "demo-library-hours"
+   },
+   "section": "Culture",
+   "importance": 5,
+   "source_count": 4,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T06:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "The river festival returns with a quieter schedule",
+   "dek": "Organisers cut the fireworks and added a morning of boat tours.",
+   "route": {
+    "bare": "demo-river-festival"
+   },
+   "section": "Local",
+   "importance": 5,
+   "source_count": 4,
+   "version_count": 2,
+   "words": 300,
+   "updated_at": "2026-11-10T05:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Bakers' guild marks two centuries with a public oven day",
+   "dek": "",
+   "route": {
+    "bare": "demo-even-1"
+   },
+   "section": "Culture",
+   "importance": 4,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T06:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Bridge repairs move to nights next month",
+   "dek": "",
+   "route": {
+    "bare": "demo-even-2"
+   },
+   "section": "Local",
+   "importance": 4,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T05:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Shipping rates drift lower for a third week",
+   "dek": "",
+   "route": {
+    "bare": "demo-even-3"
+   },
+   "section": "Business",
+   "importance": 5,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T04:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Insurer pauses new flood policies near the estuary",
+   "dek": "",
+   "route": {
+    "bare": "demo-even-4"
+   },
+   "section": "Business",
+   "importance": 5,
+   "source_count": 4,
+   "version_count": 2,
+   "words": 300,
+   "updated_at": "2026-11-10T04:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Museum acquires a collection of hand-lettered signs",
+   "dek": "",
+   "route": {
+    "bare": "demo-even-5"
+   },
+   "section": "Culture",
+   "importance": 4,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T03:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "New bus lane opens on the east ring road",
+   "dek": "",
+   "route": {
+    "bare": "demo-even-6"
+   },
+   "section": "Local",
+   "importance": 4,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T03:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Small models, large consequences",
+   "dek": "Why the open speech release matters.",
+   "route": {
+    "bare": "demo-even-op"
+   },
+   "section": "Opinion",
+   "importance": 5,
+   "source_count": 1,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T06:00:00Z",
+   "entities": [
+    {
+     "id": "speech-models",
+     "label": "Speech models"
+    }
+   ],
+   "kind": "opinion"
+  }
+ ]
+}

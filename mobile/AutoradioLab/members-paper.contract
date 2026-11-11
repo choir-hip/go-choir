@@ -1,0 +1,17 @@
+// Lane members file (paper): the composed front page. The page reads `pfront`; the layout runs in the Kit (Layout/*.swift).
+// A resource may only live in the root, so it is here, keyed by the open page (paper:front or paper:section/<id>), the
+// demo edition ("" live or default fixture, or big | even | thin) and the width the page reports.
+use paperFront, PaperFront from "@choir/autoradio"
+
+members Autoradio
+  state paperEdition = ""
+  state paperWidth = 0
+  derive paperSection = pg.top.startsWith("paper:section/") ? pg.top.slice(14) : ""
+  resource pfront = paperFront(section=paperSection, edition=paperEdition, width=paperWidth) as shape PaperFront else empty()
+  derive paperLoading = pending(pfront)
+  action paperReload
+    refresh pfront
+  action paperFit(w: number, h: number)
+    paperWidth = w
+  action pickEdition(e: string)
+    paperEdition = e

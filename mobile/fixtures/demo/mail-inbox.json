@@ -1,0 +1,78 @@
+{
+ "messages": [
+  {
+   "id": "m6",
+   "direction": "inbound",
+   "from_address": "ana@example.com",
+   "subject": "Harbour barrier: site visit on Thursday",
+   "snippet": "Hi,  The council has confirmed the site visit for Thursday at 10:00. We meet at the east p",
+   "trust_status": "trusted",
+   "created_at": "2026-11-10T08:12:00Z",
+   "from_display": "Ana Reyes",
+   "received_at": "2026-11-10T08:12:00Z",
+   "has_attachments": true
+  },
+  {
+   "id": "m5",
+   "direction": "inbound",
+   "from_address": "ben@example.com",
+   "subject": "Re: Q4 planning notes",
+   "snippet": "Agreed on the order. I would put the grid story first and the festival second.  I checked ",
+   "trust_status": "trusted",
+   "created_at": "2026-11-09T16:40:00Z",
+   "from_display": "Ben Okafor",
+   "received_at": "2026-11-09T16:40:00Z"
+  },
+  {
+   "id": "m4",
+   "direction": "inbound",
+   "from_address": "ana@example.com",
+   "subject": "Re: Q4 planning notes",
+   "snippet": "I think we should lead with the battery and keep the festival short.  Ben, can you check t",
+   "trust_status": "trusted",
+   "created_at": "2026-11-09T11:05:00Z",
+   "from_display": "Ana Reyes",
+   "received_at": "2026-11-09T11:05:00Z",
+   "read_at": "2026-11-09T11:05:00Z"
+  },
+  {
+   "id": "m3",
+   "direction": "inbound",
+   "from_address": "ben@example.com",
+   "subject": "Q4 planning notes",
+   "snippet": "Here are my notes for the quarter. Three themes: energy, the harbour, and local events.  T",
+   "trust_status": "trusted",
+   "created_at": "2026-11-08T17:30:00Z",
+   "from_display": "Ben Okafor",
+   "received_at": "2026-11-08T17:30:00Z",
+   "read_at": "2026-11-08T17:30:00Z"
+  },
+  {
+   "id": "m2",
+   "direction": "inbound",
+   "from_address": "reading@example.com",
+   "subject": "Your weekly reading list",
+   "snippet": "newsletter",
+   "trust_status": "trusted",
+   "created_at": "2026-11-06T07:00:00Z",
+   "from_display": "Library Reading List",
+   "received_at": "2026-11-06T07:00:00Z",
+   "read_at": "2026-11-06T07:00:00Z"
+  },
+  {
+   "id": "m1",
+   "direction": "inbound",
+   "from_address": "chidi@example.com",
+   "subject": "Photos from the festival",
+   "snippet": "The river festival was wonderful. Here is the photo I promised, taken just before the lant",
+   "trust_status": "trusted",
+   "created_at": "2026-10-30T20:15:00Z",
+   "from_display": "Chidi N.",
+   "received_at": "2026-10-30T20:15:00Z",
+   "read_at": "2026-10-30T20:15:00Z",
+   "has_attachments": true
+  }
+ ],
+ "total": 6,
+ "unread": 2
+}
