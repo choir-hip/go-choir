@@ -14,6 +14,7 @@ use MailPage, MailboxPage from "./mail.contract"
 use ActivityPage from "./activity.contract"
 use SettingsPage from "./settings.contract"
 use ComponentsPage, TracePage from "./components.contract"
+use MotionPage, WaitPage from "./motion.contract"
 
 component PageHost
   props
@@ -44,6 +45,10 @@ component PageHost
         ComponentsPage()
       if kind == "lab" and address == "lab:trace"
         TracePage()
+      if kind == "lab" and address == "lab:motion"
+        MotionPage()
+      if kind == "lab" and address == "lab:wait"
+        WaitPage()
       // ---- end of kinds ----
       if known == false
         NotYetPage(address=address, title=title)

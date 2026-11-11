@@ -39,18 +39,9 @@ component SettingsPage
       button press=setDemo(dm.on ? "false" : "true") testId="settings-demo" buttonStyle="bordered"
         text (dm.on ? "Demo mode is on (takes effect at the next launch). Turn off" : "Turn demo mode on (takes effect at the next launch)")
       text "Developer" font-family=th.fontUi font-size=13 color=th.muted
-      Spike3D()
+      button press=openPage("lab:motion", "Motion") testId="settings-motion" buttonStyle="bordered"
+        text "Motion gallery"
+      button press=openPage("lab:wait", "The wait") testId="settings-wait" buttonStyle="bordered"
+        text "The wait"
       button press=openPage("lab:components", "Components") testId="settings-components" buttonStyle="bordered"
         text "Components and Trace"
-
-// Spike (spine, item 7): does Exact draw a 3D rotation about y with perspective, animated by transition? Tap the square.
-// testId settings-spike3d; its label says the angle. Lane 9 deletes this when the mark exists.
-component Spike3D
-  state turned = false
-  action turn
-    turned = turned == false
-  view
-    column perspective=600 align-items="center" padding=12
-      button press=turn testId="settings-spike3d" appearance="none" aria-label=(turned ? "Rotated 50 degrees about y" : "Flat")
-        box width=80 height=80 background-color="#A60072" border-radius=8
-          rotate=(turned ? "y 50deg" : "y 0deg") transition="rotate 400ms ease"

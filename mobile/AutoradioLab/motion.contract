@@ -1,0 +1,120 @@
+// Motion (lane 9): the alive wait, the motion gallery (`lab:motion`), the wait on its own page (`lab:wait`) and the
+// 3D-box alternative mark (an experiment, see the README). Lane 9 owns this file. Pure Contract; every duration is a
+// theme token.
+use Theme from "@choir/autoradio"
+use MarkAt from "./mark.contract"
+use PageScroll from "./ui.contract"
+
+keyframes waitrise
+  from opacity=0 translate="0px 8px"
+
+// The wait for the desk (about 15 s): the hero mark tumbling, real lifecycle lines beneath it, never a spinner and never
+// a percentage. Real use: demo=false, `lines` are the document lifecycle's own sentences so far (the last three show),
+// `step` is how many of the four faces the desk's steps have filled (started, reading, writing, checking), `since` is
+// when the wait began on the root clock (mkT). Demo use: demo=true plays a scripted sequence from `since`, ends on
+// "Revision ready" with the success flip, and holds there.
+component AliveWait
+  inject
+    th: Theme
+    mkT: number
+  props
+    demo: bool
+    since: number
+    lines: string[]
+    step: number
+    testId: string
+  derive el = max(0, (mkT - since) / 1000)
+  derive script = ["Reading what you asked", "Looking for sources", "Reading example.com and example.org", "Drafting the revision", "Checking each claim against its source", "Revision ready"]
+  derive at = [0, 2.2, 4.8, 8, 11, 13.6]
+  derive stepAt = [1, 1, 2, 3, 4, 4]
+  derive idx = at.filter(x => x <= el).length - 1
+  derive done = demo and idx >= 5
+  derive shown = demo ? script.slice(max(0, idx - 2), max(0, idx) + 1) : lines.slice(-3)
+  derive stp = demo ? sum(stepAt.slice(max(0, idx), max(0, idx) + 1)) : step
+  derive markSince = done ? since + 13600 : since
+  view
+    column testId=testId align-items="center" gap=16 width="100%" padding-top=8 padding-bottom=8
+      MarkAt(state=(done ? "success" : "thinking"), size=132, since=markSince, level=0, step=stp, still=false, testId=`${testId}-mark`)
+      column align-items="center" gap=6 min-height=84 width="100%"
+        for l, i in shown key=l
+          row gap=6 align-items="center" justify-content="center"
+            animation=`waitrise ${th.motionEnterMs}ms ${th.staggerMs}ms ease-out both`
+            if i < shown.length - 1
+              image "symbol:checkmark" color=th.muted
+            text l testId=(i == shown.length - 1 ? `${testId}-line` : `${testId}-prev-${i}`) font-family=th.fontUi text-align="center"
+              font-size=(i == shown.length - 1 ? 17 : 14) font-weight=(i == shown.length - 1 ? 600 : 400) color=(i == shown.length - 1 ? th.fg : th.muted)
+        text `${floor(el)} s` testId=`${testId}-elapsed` font-family=th.fontMono font-size=12 color=th.muted
+
+// A 3D-box alternative mark (experiment): three triangular boxes turning about y inside one perspective box. Exact has no
+// preserve-3d and a box takes one `rotate` (one axis), so this is a spinning three-fin form, not a tetrahedron. The angle
+// comes from the root clock each frame (a `keyframes` rotate with an axis is refused: lower-keyframes BadValue).
+component FinMark
+  inject
+    th: Theme
+    mkT: number
+  props
+    size: number
+    clocked: bool
+    testId: string
+  derive deg = mkT / 1000 * 60
+  view
+    box testId=testId width=size height=size position="relative" perspective=(size * 4)
+      for k in [0, 1, 2] key=k
+        box position="absolute" left=(size * 0.1) top=0 width=(size * 0.8) height=size
+          rotate=`y ${deg + k * 60}deg`
+          svg viewBox="0 0 100 100" width="100%" height="100%"
+            polygon points="50,2 98,98 2,98" fill=th.accent fill-opacity=0.55 stroke=th.fg stroke-width=2 stroke-linejoin="round"
+
+// `lab:motion`: every mark state at every size, the reduced-motion form, the wait, and the 3D-box experiment.
+component MotionPage
+  inject
+    th: Theme
+    mkT: number
+    mkFrames: number
+    galSince: number
+    waitSince: number
+    galReplay: action
+    waitReplay: action
+  derive states = ["idle", "listening", "thinking", "speaking", "success", "error", "reduced"]
+  derive sizes = [26, 44, 96]
+  view
+    PageScroll(id="motion")
+      text "Motion" role="heading" aria-level=1 font-size=28 font-weight=700 testId="page-title"
+      text `Marks, 26 / 44 / 96 pt. The glyph is Contract: four vertices rotated by sin and cos, projected, culled by area.` font-family=th.fontUi font-size=13 color=th.muted
+      row gap=12 align-items="center"
+        button press=galReplay testId="motion-replay" buttonStyle="bordered"
+          text "Replay states"
+        text `${mkFrames} frames, ${floor(mkT)} ms` testId="motion-clock" font-family=th.fontMono font-size=12 color=th.muted
+      for s in states key=s
+        row gap=14 align-items="center" testId=`motion-row-${s}`
+          text s width=76 font-family=th.fontMono font-size=12 color=th.muted
+          for z in sizes key=z
+            row width=(z + 16) height=(z + 16) align-items="center" justify-content="center"
+              MarkAt(state=(s == "reduced" ? "thinking" : s), size=z, since=galSince, level=0, step=-1, still=(s == "reduced"), testId=`mark-${s}-${z}`)
+      text "Thinking with a face per desk step (step 2 of 4)" font-family=th.fontUi font-size=13 color=th.muted
+      row gap=14 align-items="center"
+        MarkAt(state="thinking", size=96, since=galSince, level=0, step=2, still=false, testId="mark-steps-96")
+        MarkAt(state="listening", size=96, since=galSince, level=1, step=-1, still=false, testId="mark-loud-96")
+      text "The wait (scripted, about 15 s)" font-family=th.fontUi font-size=13 color=th.muted
+      AliveWait(demo=true, since=waitSince, lines=[], step=0, testId="motion-wait")
+      button press=waitReplay testId="motion-wait-replay" buttonStyle="bordered"
+        text "Replay the wait"
+      text "Experiment: three triangular boxes with 3D rotate (angle from the clock; keyframes refuse an axis: BadValue)" font-family=th.fontUi font-size=13 color=th.muted
+      row gap=24 align-items="center"
+        FinMark(size=96, clocked=true, testId="fins-clocked")
+
+// `lab:wait`: the alive wait alone, the realistic worst case for the frame cost (one hero and the bar's mark).
+component WaitPage
+  inject
+    th: Theme
+    mkT: number
+    mkFrames: number
+    waitSince: number
+    waitReplay: action
+  view
+    PageScroll(id="waitpage")
+      text "The wait" role="heading" aria-level=1 font-size=28 font-weight=700 testId="page-title"
+      AliveWait(demo=true, since=waitSince, lines=[], step=0, testId="wait")
+      button press=waitReplay testId="wait-replay" buttonStyle="bordered"
+        text "Replay"
+      text `${mkFrames} frames, ${floor(mkT)} ms` testId="wait-clock" font-family=th.fontMono font-size=12 color=th.muted
