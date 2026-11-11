@@ -62,6 +62,16 @@ extension AutoradioModule {
             }
         }
 
+        // The bar's typed question: one turn, like a spoken one (the engine starts virtually under the agent, as for the buttons above).
+        handle("choirAsk") { [unowned self] args, reply in
+            let text = args["text"] as? String ?? ""
+            Task { [weak self] in
+                guard let self else { return }
+                _ = await self.runtime.ask(text)
+                DispatchQueue.main.async { reply(self.json(self.runtime.snapshot())) }
+            }
+        }
+
         // Sends. Every one answers the open-page list, the shape the page host reads.
         handle("pageOpen") { [unowned self] args, reply in
             pages.open(args["address"] as? String ?? "", title: args["title"] as? String); touch(["openPages"]); reply(pageList())

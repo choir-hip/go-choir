@@ -129,6 +129,18 @@ if [ -n "$BIG_ROW" ]; then
   run_drive big light "" --touch platform
 fi
 
+# ---- 3e. ASK drive (REAL_PROMPT=1 only: it is a model call on d@e): a typed question in the bar runs one turn on the computer
+if [ -n "${REAL_PROMPT:-}" ]; then
+  step "clock data"; wait_ 5000
+  step "tap ob-skip"; wait_ 2000
+  step "type bar-field \"What is the top story on the front page right now?\""; wait_ 500
+  view real-24-asked 400
+  step "tap bar-send"; wait_ 4000; step tree; shot real-25-asked-sent
+  step "clock +40000 real"; step "clock data"; step tree; shot real-26-answer
+  step logs
+  run_drive ask light "" --touch platform
+fi
+
 # ---- 4. assertions on real conditions
 if grep -lE "choir_sk_[A-Za-z0-9]" "$SHOTS"/*.txt "$OUT" >/dev/null 2>&1; then fail "key leak" "a key-shaped string is in the drive output"; fi
 SV="$SHOTS/drive-survey.txt"; RD="$SHOTS/drive-read.txt"
@@ -159,6 +171,10 @@ chk "reader: body blocks" '\[reader-block-' "$RD"
 chk "reader: more on this" '\[reader-related-pub:' "$RD"
 chk "radio: playing a real story" 'NOW PLAYING|Now playing,' "$RD"
 [ -n "$DOC1" ] && chk "texture document: opened" '\[reader-block-' "$RD"
+if [ -n "${REAL_PROMPT:-}" ]; then
+  chk "typed ask: the engine took the typed words as the turn" 'top story on the front page' "$SHOTS/drive-ask.txt"
+  bad "typed ask: no sign-in failure" 'Sign in to talk to your computer' "$SHOTS/drive-ask.txt"
+fi
 if [ -n "$THEME_DOC" ]; then
   TH="$SHOTS/drive-theme.txt"
   chk "theme: the Texture's theme is listed" '\[settings-theme-depth-teal-test\]' "$TH"

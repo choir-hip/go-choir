@@ -55,7 +55,7 @@ component TexturesPage
         text tlist.message testId="textures-message" font-family=th.fontUi color=th.muted
       if tlist.status == "ready" and tlist.hasEdition == false and q == ""
         Card(level=2, testId="textures-make-edition-card", minHeight=0)
-          column padding=18 gap=8 align-items="flex-start" width="100%"
+          column padding=18 gap=8 align-items="flex-start" width="100%" box-sizing="border-box"
             text "YOUR EDITION" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing="0.08em" color=th.accent
             text "Make your edition" font-family=th.fontRead font-size=22 font-weight=700 color=th.fg
             text "A front page written for you each morning from the sources you follow. Say what you want in it." font-family=th.fontRead font-size=16 line-height=1.45 color=th.muted width="100%"

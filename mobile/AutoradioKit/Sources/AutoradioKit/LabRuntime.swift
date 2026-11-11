@@ -180,6 +180,14 @@ public final class LabRuntime: @unchecked Sendable {
         refresh()
     }
 
+    /// A typed question from the bar: starts the engine when it is not running (the host's `startRequest`), then runs one turn.
+    @discardableResult
+    public func ask(_ text: String) async -> Bool {
+        if !snapshot().running, let go = startRequest { await go() }
+        guard snapshot().running else { return false }
+        return await engine.typedTurn(text)
+    }
+
     public func talkDown() { Task { await engine.buttonDown() } }
     public func talkUp() { Task { await engine.buttonUp() } }
 

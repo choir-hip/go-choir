@@ -1177,6 +1177,13 @@
       "answers": "LabState"
     },
     {
+      "send": "choirAsk",
+      "options": {
+        "text": "string"
+      },
+      "answers": "LabState"
+    },
+    {
       "source": "radioView",
       "live": true,
       "answers": "RadioInfo",

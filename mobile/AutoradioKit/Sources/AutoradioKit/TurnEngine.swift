@@ -177,6 +177,39 @@ public actor TurnEngine {
         await prepareIdle()
         await route(.buttonDown, now: now)
     }
+    /// A typed question (the bar's text field): the same pipeline as a spoken turn (System 1, the holder's acknowledgement, the
+    /// desk), with the words given instead of heard, so there is no microphone session and nothing to transcribe.
+    /// WAYS THIS CAN FAIL (written first): empty text: ignored; a spoken turn is already open: ignored (the voice wins, the
+    /// text stays in the field); the radio is mid-acknowledgement: that pipeline is interrupted like a new button press does;
+    /// a stage cannot be made: the error is logged and no turn starts (never a stuck phase).
+    /// Returns whether a turn started.
+    @discardableResult
+    public func typedTurn(_ text: String) async -> Bool {
+        let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !words.isEmpty else { return false }
+        let now = env.log.clock.now
+        if phase == .acknowledging || phase == .holding || phase == .revised { await interruptPipeline() }
+        await prepareIdle()
+        guard turn == nil else { return false }
+        let cfg = config
+        let cut = await env.playback.spoken()
+        do {
+            let transcriber = try env.registry.make(.transcriber, as: Transcriber.self, cfg)
+            let yield = try env.registry.make(.yieldPolicy, as: YieldPolicy.self, cfg)
+            let t = Turn(id: "turn-" + UUID().uuidString.prefix(8).lowercased(), config: cfg, transcriber: transcriber, yield: yield,
+                         session: EmptyTranscription(), firstEventIndex: env.log.count)
+            t.cut = cut; t.addressed = true; t.addressedAt = now
+            turn = t
+            setPhase(.candidate)
+            env.log.emit(.finalTranscript(words))
+            await runTurn(t, transcript: words)
+            return true
+        } catch {
+            env.log.emit(.error(stage: "turn-start", message: "\(error)"))
+            return false
+        }
+    }
+
     /// `held` overrides the measured hold (replay passes the recorded one: compute time must not count as holding).
     public func buttonUp(held explicit: Double? = nil) async {
         let now = env.log.clock.now

@@ -3,6 +3,7 @@
 use openPages, pageModel, theme, themeList, barState, demoInfo from "@choir/autoradio"
 use pageOpen, pageClose, pageFocus, pagePin, pageReopen, themeSet, schemeSet, signalRecord, demoSet from "@choir/autoradio"
 use PageList, PageModel, Theme, ThemeList, BarInfo, DemoInfo from "@choir/autoradio"
+use choirAsk from "@choir/autoradio"
 
 members Autoradio
   resource pg = openPages() as shape PageList else empty()
@@ -62,6 +63,8 @@ members Autoradio
     ask = v
   action sendAsk
     send pm = signalRecord(kind="ask", subject=pg.top, detail=ask)
+    // The typed question is a turn like a spoken one (found with real data: it was only recorded as a signal).
+    send asked = choirAsk(text=ask)
     ask = ""
 
   task voiceHold when voiceArmed

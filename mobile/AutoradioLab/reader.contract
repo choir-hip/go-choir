@@ -151,13 +151,13 @@ component BlockView
       if b.kind == "p"
         if noted
           box position="relative" width="100%" margin-bottom=remv(0.9)
-            text testId=`reader-block-${b.id}` font-family=th.fontRead font-size=remv(size) line-height=lh hyphens="auto" color=th.fg
+            text testId=`reader-block-${b.id}` font-family=th.fontRead font-size=remv(size) line-height=lh hyphens="auto" overflow-wrap="anywhere" color=th.fg
               Runs(runs=b.runs, address=address, size=size, weight=400, lh=lh, hi=hi, italic=false)
             for c in openHere.slice(0, 1) key=c.anchor
               box position="absolute" right=0 top=0 width=150 wrap-flow="both" shape-outside="inset(0 round 12px)" shape-margin=10
                 SideNote(c=c, address=address)
         else
-          text testId=`reader-block-${b.id}` font-family=th.fontRead font-size=remv(size) line-height=lh hyphens="auto" color=th.fg
+          text testId=`reader-block-${b.id}` font-family=th.fontRead font-size=remv(size) line-height=lh hyphens="auto" overflow-wrap="anywhere" color=th.fg
             margin-bottom=remv(0.9) contextmenu=aimAt(address, b.id, clip(b.text, 64))
             Runs(runs=b.runs, address=address, size=size, weight=400, lh=lh, hi=hi, italic=false)
       if b.kind == "h"
@@ -168,13 +168,13 @@ component BlockView
       if b.kind == "li"
         row align-items="flex-start" gap=remv(0.55) width="100%" margin-bottom=remv(0.4) padding-left=remv((b.depth - 1) * 1.3)
           text b.marker font-family=th.fontUi font-size=remv(size * 0.92) line-height=lh color=th.muted width=remv(1.4) text-align="right"
-          text testId=`reader-block-${b.id}` flex=1 min-width=0 font-family=th.fontRead font-size=remv(size) line-height=lh hyphens="auto" color=th.fg
+          text testId=`reader-block-${b.id}` flex=1 min-width=0 font-family=th.fontRead font-size=remv(size) line-height=lh hyphens="auto" overflow-wrap="anywhere" color=th.fg
             contextmenu=aimAt(address, b.id, clip(b.text, 64))
             Runs(runs=b.runs, address=address, size=size, weight=400, lh=lh, hi=hi, italic=false)
       if b.kind == "quote"
         row gap=14 width="100%" margin-bottom=remv(0.9) padding-left=remv((b.depth - 1) * 1.0)
           box width=2 border-radius=1 background-color=th.accent
-          text testId=`reader-block-${b.id}` flex=1 min-width=0 font-family=th.fontRead font-size=remv(size) line-height=lh color=th.fg
+          text testId=`reader-block-${b.id}` flex=1 min-width=0 font-family=th.fontRead font-size=remv(size) line-height=lh overflow-wrap="anywhere" color=th.fg
             contextmenu=aimAt(address, b.id, clip(b.text, 64))
             Runs(runs=b.runs, address=address, size=size, weight=400, lh=lh, hi=hi, italic=true)
       if b.kind == "code"
