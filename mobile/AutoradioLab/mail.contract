@@ -280,6 +280,7 @@ component MailCompose
 
 component MailPage
   inject
+    th: Theme
     mmsg: MailMessageView
     mcmp: MailComposeView
   props
