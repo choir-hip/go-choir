@@ -852,8 +852,10 @@ Exact's text model) is appendix B.
 | `font.mono` | `ui-monospace` | `ui-monospace, SFMono-Regular, Menlo, monospace` | `--choir-font-mono` |
 
 Change from the web: Texture's body is Inter today
-(`TX/App.svelte:2413-2437`); this proposal reads documents in the serif,
-as Autopaper's headlines already are (question 5). Optical sizing is
+(`TX/App.svelte:2413-2437`); the body face is the theme's `type.read`
+(owner, 2026-11-11: "the body text font should be part of the theme"), so
+no component names a font. The default phone theme reads in the serif, as
+Autopaper's headlines already do; another theme may read in a sans. Optical sizing is
 iOS-only (New York's `opsz`); the web stack has none.
 
 ### Type scale
@@ -1210,10 +1212,12 @@ deck and the front page; then a second, smaller fan-out for what is rough.
    web's version 2 (explicit schemes, type, elevation, materials, motion
    and the mark), with themes as Textures parsed on the server like the
    Style Guide.
-5. **Serif body for documents.** Recommend New York on the phone and the
-   Autopaper serif stack on the web for document body text, replacing Inter
-   there (a back-port).
-6. **Does swipe left shade the ranking?** Recommend closing as neutral
+5. **Body font.** Settled by the owner, 2026-11-11: it is part of the
+   theme (`type.read`). The phone's default theme uses the serif; the web
+   keeps Inter until its themes carry `type.read` (the back-port).
+6. **Does swipe left shade the ranking?** Default taken for the build
+   (2026-11-11, the owner may overrule): swipe left closes and is neutral.
+   Recommend closing as neutral
    everywhere, swipe right as "more of this", and "less of this" as a
    deliberate menu act; the meanings are a Components setting so variants
    (a) and (b) can be tried and compared from the gesture events
