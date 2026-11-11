@@ -138,6 +138,50 @@ Agent driving on a real phone: `bun exact.mjs agent ios --device [--phone
 per-launch token, over trusted LAN, unencrypted (`EXACT_AGENT_HOST` overrides
 the Mac IPv4) [doc: reference.md:2469-2473]. Keep the app visible.
 
+## Lane build scripts and build discipline (lanes `ar-integrate`, `ar-models`)
+
+Source: `mobile/README.md` on `origin/lane/ar-integrate` and `origin/lane/ar-models`
+(`lane/ar-spine` was not on origin). Script names are as the lanes wrote them;
+check `mobile/scripts/` on main before relying on one.
+
+| Script | Does |
+|---|---|
+| `scripts/xe.sh` | runs a command with the Xcode toolchain outside the Nix shell |
+| `scripts/setup-exact.sh` | pinned Exact checkout at `mobile/.exact-src` (gitignored) and Bun 1.4.2 at `~/.bun-1.4.2`; `EXACT_REPO=<local clone>` avoids the network |
+| `scripts/exact.sh` | wraps `exact.mjs` in `env -i` with the pinned Bun: `exact.sh ios` (simulator), `exact.sh ios --device --phone <udid>`, `exact.sh agent ios ...` |
+| `scripts/sim-device.sh` | creates and boots a simulator of your own; export it as `EXACT_SIM` |
+| `scripts/build-lab.sh` | syncs the kit into the package, builds, installs on `$EXACT_SIM` (or the phone with `--device --phone`) |
+| `scripts/sync-exact-package.sh`, `gen-exact-interface.py` | copy kit sources into the Exact package, write `apple/exact.json` and the interface (per-lane fragments are the plan, design doc section 6) |
+| `scripts/build-xcframeworks.sh` | static xcframeworks for third-party Swift/C++ (FluidAudio, llama.cpp) from pinned tags in `mobile/.deps` |
+| `scripts/make-profile.sh` | obtains a provisioning profile with a stub Xcode project and `-allowProvisioningUpdates` |
+| `scripts/proof-sim.sh` | drives the simulator and prints `PROOF OK` or `PROOF FAILED at <step>`; `NOBUILD=1` skips the build |
+
+**Third-party libraries:** static xcframeworks in the app module only
+(`native-modules.md`).
+
+**Build discipline (owner rule from the agent reports, 2026-11-10):** a cold
+Exact build is about 15 minutes and each worktree compiling its own copy
+overloaded the Mac (load average above 100 in model-lane runs). Use **one
+shared build tree, one build at a time, one simulator at a time**. Exact's own
+rule agrees: each worktree builds into its own `target/` and its scripts refuse
+a shared or symlinked one (`AGENTS.md` of the Exact repo [doc]); a private
+`CARGO_TARGET_DIR` outside every checkout is fine. Timings: a warm rebuild plus
+drive about 60 s, a TypeScript-only change about 57 s, a first build in a new
+worktree about 5 minutes with warm caches, a cold build about 15 minutes
+(`testing-and-debugging.md`, item 8). Exact keeps shared caches under
+`~/.cache/exact` (modules by input SHA-256, registry crates); deleting them only
+costs the next first build its time (Exact `AGENTS.md` [doc]).
+
+**Signing facts from the lanes:** the free provisioning team id is the one
+shown under Xcode > Settings > Accounts (not the certificate's person id); Exact
+needs an installed profile for the bundle id. A free account's profile lasts 7
+days. On 2026-11-10 `devicectl device process launch` worked after the
+certificate was trusted and a build was installed on the phone; builders do not
+install on the owner's phone without agreement.
+
+**We write no Rust.** Exact's Rust is the engine; the build compiles it, we do
+not author it.
+
 ## Archive, TestFlight, CI
 
 - `bun exact.mjs ios --device --archive out.ipa --unsigned` writes an ad-hoc
@@ -185,6 +229,6 @@ any machine.
 - Does `exact new` plus `ios --device` work end to end with a free account's
   7-day profile, and can it be automated without the Xcode GUI?
 - Can the app's `target/` be shared between the spike and the real app?
-- What is the exact cost of an incremental Swift-only rebuild (the docs say "a
-  minute or two")?
+- Incremental Swift-only rebuild cost: lanes measured about 60 s warm and 57 s
+  for a TypeScript-only change (see above).
 - TestFlight: does Exact's `.ipa` pass processing with `deploy.store: "0"`?

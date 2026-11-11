@@ -162,3 +162,28 @@ Podcast long-form playback is a candidate for the built-in element.
   for play-only without a mic (the "no mic" listening state)?
 - Do background capture and playback survive screen lock with our package's
   engine?
+
+## Claim options and switch timing (lane `ar-integrate`, 2026-11-10)
+
+Source: `origin/lane/ar-integrate` `mobile/README.md`, with `host/apple/Sources/ExactKit/NativeHatches.swift:233-243` [src].
+
+- Option bits: `mixWithOthers 0x1`, `duckOthers 0x2`, `allowBluetoothHFP 0x4`,
+  `defaultToSpeaker 0x8`, `allowBluetoothA2DP 0x20`, `overrideMutedMicrophoneInterruption
+  0x80`, `farFieldInput 1<<18`, `bluetoothHighQualityRecording 1<<19`. Mode names
+  accepted: `default`, `measurement`, `voiceChat`, `videoChat`, `videoRecording`;
+  an unknown name silently becomes `default` (`NativeHatches.swift:233`).
+- `playAndRecord` without `defaultToSpeaker` plays from the earpiece, so a
+  listening claim carries it. Our claims omit `mixWithOthers` on purpose (a radio
+  should take the session).
+- Release then claim works on the simulator: listening to talking 228 to 349 ms,
+  talking to listening 251 to 349 ms, including the engine stop and restart; the
+  second claim's `AVAudioSession.mode` reads `VoiceChat` right after [run,
+  simulator, not a phone number]. A category change stops the running
+  `AVAudioEngine`: restart it and reinstall taps after every switch.
+- Reported but unmeasured by us: 20 to 41 s route-switch stalls with AirPods on
+  iOS 27.0.1; our adapter emits an `error` at 5 s [unrun on a phone].
+- `Info.plist` for our lab carries `UIBackgroundModes: [audio]`,
+  `ExactCapturesInBackground: true` (from the `device.microphone-background`
+  grant), `ExactAudioSession: playback`, and the microphone and speech usage
+  strings (from `strings/en.json`) [run]. That the programme keeps playing with
+  the screen locked is not proven.

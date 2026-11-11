@@ -63,13 +63,16 @@ spec we can read.
   `ExactNativeModule.swift:~255`), so native views cost more than flat leaves.
 - Scrolling lists reuse rows; native control kinds are real UIKit controls
   (system buttons, switches, tab bars, navigation controllers).
-- Animations: `transition` on `translate/scale/rotate/opacity` and one spring,
-  executed by `exact-motion`; wall-clock animations do not follow the
+- Animations: `transition` on `translate/scale/rotate/opacity` (and more; see
+  `rendering-and-motion.md`) and one spring, executed by `exact-motion`; keyframes
+  on boxes and SVG are lowered to Core Animation; 3D `rotate` is `CATransform3D`; wall-clock animations do not follow the
   driver's clock unless `clock +N real`.
 - Text: CoreText, native selection and editing; Markdown has its own reader
   and editor modules loaded on demand (`ExactMarkdown`).
-- GPU: an optional wgpu/Metal canvas module loaded after first pixel; absent
-  (no Metal toolchain at build time), canvases use Core Graphics [run notice].
+- GPU: an optional wgpu/Metal canvas module (Vello) loaded after first pixel;
+  absent (no Metal toolchain at build time), canvases use Core Graphics [run
+  notice]. Contract itself never compiles to Metal; details and sources in
+  `rendering-and-motion.md` section 2.
 
 ## Numbers
 

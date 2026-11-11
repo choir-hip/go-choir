@@ -127,15 +127,48 @@ The class is made once per session, on the main thread.
 
 ## Packaging our Swift package (AutoradioKit)
 
-[unrun] The recipe: keep `AutoradioKit` a plain SwiftPM library with no
-Exact import, and write a thin Exact package whose `Spike.swift`-style file
-adapts: (1) implements a `SessionOwning` protocol over
-`context.audioSession.claim(...)`, (2) maps `later` names to kit methods,
-(3) calls `context.changed` from a snapshot observer. Exact compiles the
-package's `sources.swift` listed in `apple/exact.json` into
-`libexact_modules.dylib`; whether a package may list files from outside its
-own directory, or depend on a SwiftPM library, is not established
-(`js/package_tool.rs` and `host/apple/compose.mjs` are where to look first).
+Settled by reading the pinned source and proving it (lane `ar-models`,
+2026-11-10, branch `origin/lane/ar-models` `mobile/README.md`):
+
+- **A package may not depend on a SwiftPM library or import any third-party
+  module.** It is compiled by `swiftc` alone (`host/apple/build.mjs`
+  `swiftModuleArgs`): only the files listed in `sources.swift`, with
+  `-I <packages dir>`; no `-F`, no library `-I`, no SwiftPM [src]. (A package may
+  declare `native.library` for a Rust-linked dynamic library; that is not a
+  Swift route.)
+- **Third-party Swift and Core ML code goes in the app's own module** as a
+  static `*.xcframework` in `modules/apple/`. The app module is compiled with
+  every such xcframework linked (`frameworkSlice`): a static `lib*.a` slice
+  gives `-I Headers -L dir -l<name>`; a static framework slice gives `-F
+  -framework`. `import FluidAudio` works there [src; proven by a simulator
+  build with FluidAudio linked, lane report].
+- **Dynamic frameworks are not embedded by the build** ("a dynamic library is
+  not linked into the module"); that they would then fail to load at launch is
+  inferred, unrun. The official llama.cpp release is a dynamic framework with
+  no simulator slice, so it cannot be used as is.
+- No SwiftPM dependency, CocoaPod or remote URL is read for an app or package.
+- The app module can import package modules (`-I` of the packages directory). A
+  package reaches app-module code only by runtime lookup: the app module defines
+  an `@objc(...)` registrar class and the package finds it with
+  `NSClassFromString`. No registrar class means no models; the app still builds.
+- A `.swiftmodule` placed in a slice's `Headers` directory is found by `-I`.
+  `xcodebuild -create-xcframework -headers` refuses a `.swiftmodule` without a
+  `.swiftinterface`, so copy the module directories into each slice's `Headers`
+  afterwards.
+
+How our app wires it (`mobile/` on the lane branches; scripts may have moved):
+`AutoradioKit` stays dependency-free and is copied into the package;
+`scripts/sync-exact-package.sh` copies kit sources in (rewriting `import
+AutoradioKit` to `import ExactPkg_autoradio`), writes `exact-package/apple/exact.json`
+and copies model sources and xcframeworks into `AutoradioLab/modules/apple/`;
+`scripts/gen-exact-interface.py` writes the interface;
+`scripts/build-xcframeworks.sh` builds the static slices from pinned tags
+(FluidAudio by `swift build --triple arm64-apple-ios18.0[-simulator] --sdk
+<iphone sdk> --disable-default-traits --traits TTS`, about 10 minutes per slice
+on a loaded Mac; llama.cpp by its own `build-xcframework.sh`, static libraries
+merged with `libtool`). Third-party sources live in `mobile/.deps` (gitignored).
+Whether a package's `sources.swift` may point outside its own directory was
+not tested; our answer is to copy the kit in rather than reference it.
 
 ## The spike, end to end [run, simulator]
 
@@ -153,8 +186,19 @@ printed; see the open problem in `testing-and-debugging.md`.
 
 ## Open questions
 
-- Can a package depend on a local SwiftPM library, and can its `sources.swift`
-  point outside its directory?
 - What is the real coalescing behaviour of `changed` at 20 Hz?
 - Can a package hold a long-lived background task (wake-word detector) across
   a locked screen without Exact's foreground logic dropping it?
+
+## Native views and mutation results
+
+- Native view cost, props, `context.frames` and the `CATransformLayer` recipe:
+  `rendering-and-motion.md` sections 6 and 8a.
+- `mutation exp as shape X` reads as `option<X>`; a field read is
+  `type-not-a-record`. Use `derive v = match exp { case some(e) => e.field,
+  case none => "" }` (lane `ar-integrate` report [run]). `share(title=,
+  files=[path])` takes a path held in a derive and compiles.
+- Under the driver, `context.agent` does not silence an audio claim: ours was
+  real on the simulator, and an `AVAudioEngine` we start opens the simulator's
+  hardware (`audio.md`, `testing-and-debugging.md`). Branch on `context.agent`
+  for anything that can block the main thread.

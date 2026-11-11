@@ -19,14 +19,18 @@ their tracker as files [src].
 | 10 | No OTA logic delivery | `scripts/app.schema.json:1003` [src] | Accept; ship binaries. Put prompts and models in server-fetched data, not code. |
 | 11 | Bun 1.4.2 exactly; `setup` fetches every platform's Hermes | [run] | Lean install (see `build-and-ship.md`); script it in `mobile/`. |
 | 12 | Free provisioning needs an Xcode account; Exact does not create profiles | [run] | Owner signs in under Xcode > Settings > Accounts; one stub project builds the profile; then `ios --device`. |
-| 13 | 15-minute cold build, 3.8 GB `target/` per checkout and per app | [run] | One shared checkout; keep `target/` and `~/.cache/exact` between runs; CI mirror on the agents VM. |
+| 13 | 15-minute cold build, 3.8 GB `target/` per checkout and per app; parallel worktree builds overloaded the Mac | [run] | One shared build tree, one build, one simulator at a time; keep `target/` and `~/.cache/exact` between runs; CI mirror on the agents VM. |
 | 14 | The decision records `llp/` are missing from the tree | `ls llp` fails [run] | Treat docs and source comments as the spec; watch `QUEUE.md` and `rules/DEFERRED.md` for planned changes. |
-| 15 | The agent driver may not exercise real audio; unknown hang with a package that opens hardware | `testing-and-debugging.md` [run] | Branch on `context.agent`; supply a scripted double for tests; run hardware only on the phone. |
+| 15 | `context.agent` does not silence a package's audio; the driver attaches within a fixed 20 s; two drivers on one simulator conflict; a speech alert blocks it | `testing-and-debugging.md` [run, src] | Branch on `context.agent`; virtual engine under the agent; one simulator per driver; the phone proves hardware. |
 | 16 | Feedback notes may leave the machine (workers.dev) | build output [run] | `EXACT_FEEDBACK=0` everywhere. |
 | 17 | Custom timeline performance unknown | `ui-model.md` [unrun] | Prototype: SVG first, then a package `UIView` drawn with Core Graphics. |
 | 18 | Texture rendering | Markdown element exists, fit unknown [doc] | Evaluate `markdown` and `Text` runs with links before writing a renderer. |
-| 19 | A package depending on a local SwiftPM library (AutoradioKit) is unestablished | `native-modules.md` [unrun] | Try listing the kit's files in `apple/exact.json` `sources.swift`; else vendor-copy through a build step; else an upstream patch to `host/apple/compose.mjs`. |
+| 19 | A package cannot depend on a SwiftPM library or import a third-party module | `host/apple/build.mjs` `swiftModuleArgs` [src]; proven by the models lane | Settled: copy the kit into the package by script; third-party code as static xcframeworks in the app module (`native-modules.md`). |
 | 20 | Wake word, speaker verification, on-device models need continuous background audio | [unrun] | Package-owned engine with a `background:true` claim; verify the screen-locked behaviour on the phone first (the spike's step 4). |
+| 21 | No `preserve-3d`, no `matrix`/`skew`, 3D axis/z/perspective do not animate | `SpaceTransform.swift:1-5`, `property.rs` [src] | Package `CATransformLayer` view or pure-Contract projection (`rendering-and-motion.md`). |
+| 22 | `mix-blend-mode`, animated backdrop blur, particles, Lottie/Rive unavailable | `SvgIsland.swift:283`, `contract-for-humans.md:1036` [src, doc] | See the cannot-do table in `rendering-and-motion.md`. |
+| 23 | Keyframed 3D rotation likely lowers to z only on iOS; iOS drag-timeline run not found | `box_motion_tests.rs:117` [src]; [inferred] | Use `transition`/frame task; Spark `pan` pattern. Verify on device. |
+| 24 | The agent driver's 20 s attach bound is fixed | `scripts/agent.mjs:567-579` [src] | Retry; warm launch; clear alerts. Upstream: make it configurable. |
 
 ## What to ask upstream first
 
@@ -37,6 +41,6 @@ their tracker as files [src].
 
 ## Open questions
 
-- Is any of gaps 2, 4, 6 or 19 already tracked in Exact's `issues/`?
+- Is any of gaps 2, 4, 6 or 21 to 24 already tracked in Exact's `issues/`?
 - Does the phone spike show A2DP output held with the mic open?
 - How audible is the release/re-claim gap?
