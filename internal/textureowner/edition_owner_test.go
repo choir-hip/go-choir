@@ -1,10 +1,15 @@
 package textureowner
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // Failure list: edition_owner.go (D1-D4).
@@ -36,6 +41,62 @@ func TestEditionRouteFindsTheOwnersEdition(t *testing.T) {
 	}
 	if _, got, _ := getEdition(f, "user-2"); got["found"] == true { // D1
 		t.Fatalf("D1: user-2 saw %v", got)
+	}
+}
+
+// settleAndArchive settles a startTextDoc document's trajectory (a live one
+// cannot be archived), then archives the document.
+func settleAndArchive(t *testing.T, f *algoFixture, docID string) {
+	t.Helper()
+	ctx, s := context.Background(), f.core.Store()
+	owner, computer, traj := "user-1", "autoputer-test", "trajectory-"+docID
+	snap, err := s.GetLifecycleSnapshot(ctx, owner, computer, traj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, work := range snap.WorkItems {
+		if work.Status != types.WorkItemOpen {
+			continue
+		}
+		req := types.SettleLifecycleWorkRequest{OwnerID: owner, ComputerID: computer, CommandID: "settle-work:" + work.WorkItemID, TrajectoryID: traj,
+			WorkItemID: work.WorkItemID, ActingAgentID: "texture:" + docID, ResultRef: snap.Document.CurrentRevisionID}
+		req.CommandDigest, _ = store.ComputeSettleLifecycleWorkDigest(req)
+		if _, err := s.SettleLifecycleWork(ctx, req); err != nil {
+			t.Fatalf("settle work: %v", err)
+		}
+	}
+	snap, err = s.GetLifecycleSnapshot(ctx, owner, computer, traj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := types.SettleLifecycleTrajectoryRequest{OwnerID: owner, ComputerID: computer, CommandID: "settle:" + traj, TrajectoryID: traj,
+		ExpectedLifecycleVersion: snap.Trajectory.LifecycleVersion, ExpectedHeadRevisionID: snap.Document.CurrentRevisionID}
+	req.CommandDigest, _ = store.ComputeSettleLifecycleTrajectoryDigest(req)
+	if _, err := s.SettleLifecycleTrajectory(ctx, req); err != nil {
+		t.Fatalf("settle trajectory: %v", err)
+	}
+	if _, err := s.ArchiveTextureDocumentAuthority(ctx, docID, owner, computer); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+}
+
+func TestEditionRouteDuplicatesLatestWinsAndArchivedIsSkipped(t *testing.T) { // D1, D2
+	f := newAlgoFixture(t, "x")
+	_ = startTextDoc(t, f.core.Store(), "doc-edition-old", "My edition", "old")
+	time.Sleep(20 * time.Millisecond)
+	_ = startTextDoc(t, f.core.Store(), "doc-edition-new", "My Edition", "new")
+	for i := 0; i < 3; i++ { // stable across reads
+		if _, got, _ := getEdition(f, "user-1"); got["doc_id"] != "doc-edition-new" {
+			t.Fatalf("D2: read %d answered %v, want the most recently updated", i, got)
+		}
+	}
+	settleAndArchive(t, f, "doc-edition-new")
+	if _, got, _ := getEdition(f, "user-1"); got["doc_id"] != "doc-edition-old" {
+		t.Fatalf("D1: archived edition not skipped: %v", got)
+	}
+	settleAndArchive(t, f, "doc-edition-old")
+	if _, got, _ := getEdition(f, "user-1"); got["found"] == true {
+		t.Fatalf("D1: only archived editions, answered %v", got)
 	}
 }
 
