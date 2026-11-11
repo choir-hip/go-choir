@@ -24,13 +24,17 @@ their tracker as files [src].
 | 15 | `context.agent` does not silence a package's audio; the driver attaches within a fixed 20 s; two drivers on one simulator conflict; a speech alert blocks it | `testing-and-debugging.md` [run, src] | Branch on `context.agent`; virtual engine under the agent; one simulator per driver; the phone proves hardware. |
 | 16 | Feedback notes may leave the machine (workers.dev) | build output [run] | `EXACT_FEEDBACK=0` everywhere. |
 | 17 | Custom timeline performance unknown | `ui-model.md` [unrun] | Prototype: SVG first, then a package `UIView` drawn with Core Graphics. |
-| 18 | Texture rendering | Markdown element exists, fit unknown [doc] | Evaluate `markdown` and `Text` runs with links before writing a renderer. |
+| 18 | Texture rendering | `text markup="markdown"` reader exists; links and taps through atom pills and `atompress`; no documented footnote tap; fixed heading scale [src] | Evaluate `markdown` and `Text` runs with links before writing a renderer; citations as atoms is the candidate (`capabilities.md` section 5). |
 | 19 | A package cannot depend on a SwiftPM library or import a third-party module | `host/apple/build.mjs` `swiftModuleArgs` [src]; proven by the models lane | Settled: copy the kit into the package by script; third-party code as static xcframeworks in the app module (`native-modules.md`). |
 | 20 | Wake word, speaker verification, on-device models need continuous background audio | [unrun] | Package-owned engine with a `background:true` claim; verify the screen-locked behaviour on the phone first (the spike's step 4). |
 | 21 | No `preserve-3d`, no `matrix`/`skew`, 3D axis/z/perspective do not animate | `SpaceTransform.swift:1-5`, `property.rs` [src] | Package `CATransformLayer` view or pure-Contract projection (`rendering-and-motion.md`). |
 | 22 | `mix-blend-mode`, animated backdrop blur, particles, Lottie/Rive unavailable | `SvgIsland.swift:283`, `contract-for-humans.md:1036` [src, doc] | See the cannot-do table in `rendering-and-motion.md`. |
 | 23 | Keyframed 3D rotation likely lowers to z only on iOS; iOS drag-timeline run not found | `box_motion_tests.rs:117` [src]; [inferred] | Use `transition`/frame task; Spark `pan` pattern. Verify on device. |
 | 24 | The agent driver's 20 s attach bound is fixed | `scripts/agent.mjs:567-579` [src] | Retry; warm launch; clear alerts. Upstream: make it configurable. |
+| 25 | (Correction) Text flow around an obstacle was listed as missing. It exists: `wrap-flow`, `shape-outside`, `shape-margin` | `apps/textflow/app.contract`, `README.md:597` [src] | Use it for side notes and figures; unrun by us; supported shapes beyond `circle()` unverified (`capabilities.md` section 4). |
+| 26 | Metal Toolchain not installed: no vello Canvas 2D, SVG filters on Core Image | `xcodebuild -showComponent metalToolchain`: uninstalled [run]; `host/apple/build.mjs:155, 872` [src] | Install with `xcodebuild -downloadComponent MetalToolchain` under real Xcode if an animating Canvas 2D or SVG filters matter. Not needed for boxes, text, lists. |
+| 27 | A GPU canvas with children draws nothing on Android | `host/android/README.md:1254` [src] | Give a GPU surface no children, or keep the Contract form (pure Contract mark). |
+| 28 | GPU module ABI is unversioned; the crate must sit in the Exact workspace; build time unmeasured | `gpu/README.md:3-4` [src] | Rebuild host and module together; pin the sha; measure the first build. |
 
 ## What to ask upstream first
 

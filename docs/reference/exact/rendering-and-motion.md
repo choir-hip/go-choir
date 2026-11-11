@@ -61,6 +61,52 @@ composited by the shader (`apps/caltrain/gpu/src/glass.rs:1-10`;
 surface=weather(...)`) [src]. Caltrain ships three surfaces (`aurora`, `glass`,
 `stack`; `apps/caltrain/gpu/src/lib.rs:44-51`).
 
+## 2b. What draws Contract, by host
+
+Added 2026-11-11 from the read-only research "Does Exact render Contract UI
+through Metal?" (pin `76cd50f9`; upstream `main` was 20 commits ahead at
+`fe4632ed1`, none of them touching the renderer [doc, from the GitHub compare
+API; not re-checked by us]). The answer is a plain no.
+
+**Contract does not compile to Metal. Metal appears only in optional
+artifacts.** The sentence in Exact's README that reads as if it did is in the
+"Optional pieces" paragraph: "**Optional pieces** are separate artifacts: a wgpu
+GPU module (Metal on Apple, WebGPU in the browser), native modules (a hyphenated
+tag backed by a platform widget, like MapKit), and a game engine add-on"
+(`README.md:201-203`) [src]. The "(Metal on Apple ...)" parenthetical describes
+the optional GPU module, which a `canvas surface=...` node loads. The paragraph
+above it in the README is the default renderer, and names no Metal: "On macOS,
+iOS, and Linux, a Rust runner executes the same plan, a Rust layout kernel
+computes every box with CSS rules, and each platform draws with its own tools:
+AppKit, UIKit, or a GPU painter. There is no webview and no JavaScript bridge in
+the UI" (`README.md:50-53`) [src]. The "GPU painter" there is the Linux host's.
+
+| Host | What draws Contract | Quoted evidence |
+|---|---|---|
+| iOS (and macOS) | UIKit (AppKit on macOS) views, text measured and drawn by CoreText; `svg` as Core Animation layers | README diagram node `iOS<br/>UIKit + CoreText` (`README.md:178`); "The Apple host is a static library with a C ABI under AppKit and UIKit presenters" (`README.md:194`); "`ios/` the UIKit one" (`docs/reference.md:143`) [src] |
+| Android | The Rust records an op stream; Kotlin replays it onto Android's own Canvas: a `RenderNode` per row, scroller and animated layer, `drawGlyphs` for text | "The Rust records what it paints as an op stream ... The reader replays that stream onto Android's own Canvas: a `RenderNode` for each row, scroller and animated layer, hardware bitmaps for pictures, `drawGlyphs` for text the Rust has shaped" (`host/android/README.md:3-6`) [src] |
+| Linux | The host paints the whole tree itself: vello on the GPU (the main painter), tiny-skia on the CPU (fallback and pixel oracle) | "the kernel tree drawn by one walk over a backend — vello on the GPU (the main one), tiny-skia on the CPU" (`docs/reference.md:144`); diagram `Linux<br/>vello GPU / tiny-skia CPU` (`README.md:179`) [src] |
+| Web | The browser's DOM, with its own small runtime | "The web gets its own small runtime" (`README.md:127`) [doc]; web uses DOM per the research [inferred] |
+| macOS, development only | An experimental whole-tree "painted" presenter (the `ink` painter, wgpu and WGSL in `host/ink`) | "Apple keeps the native host by default; `host.macos.presenter: "painted"` builds the ink carrier for development, with distribution refused until its accessibility gate passes (LLP 1149 D12)" (`docs/reference.md:55-58`) [src]. It names macOS only: there is no whole-tree GPU renderer on iOS, now or at upstream `main` |
+
+Where Metal does appear on Apple (all optional, none the default for boxes,
+text or lists) [src]:
+
+| Artifact | When it is used | Without it |
+|---|---|---|
+| The per-app GPU module (`<app>-gpu`, wgpu with WGSL) | Only for a `canvas surface=name(...)` node, and only if the app has such a crate; loaded with `dlopen` after the first painted frame, "a surface per canvas node on its CAMetalLayer" (`host/apple/Sources/ExactSurfaces/GpuIOS.swift:1-7`) | The canvas shows its fallback children |
+| Canvas 2D on the GPU (`exact-canvas-vello`, vello replayed into an IOSurface) | Only for a canvas that animates, and only if built (`host/apple/build.mjs:897`, `Canvas2DGpu.swift:3-4`) | "without Xcode's Metal toolchain there is none, and Core Graphics draws" (`build.mjs:865-866`) |
+| SVG filter kernels (`host/apple/metal/SvgFilter.metal`, 35 lines) | Only for `svg` filter pictures (`build.mjs:146-163`) | Core Image draws them (`build.mjs:155`) |
+| The game engine add-on | Only inside a GPU module (`game/README.md:10-12`) | Not linked |
+
+Our Mac: `xcodebuild -showComponent metalToolchain` reports "Build Version:
+27A266a / Status: uninstalled" and `xcrun -sdk macosx metal --version` reports
+"error: tool 'metal' not found" (run by the research agent with
+`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`, Xcode 27.1,
+2026-11-11) [run]. Installing it changes only the SVG filter library and the
+vello Canvas 2D module. Boxes, text and lists are unchanged. Details and the
+install command: `capabilities.md`.
+
 ## 3. Motion catalogue
 
 Source of truth: `docs/recipes/motion.md:1-64`,
@@ -438,7 +484,7 @@ belongs to its own `sequence` [inferred].
 | `matrix`, `skew` | SVG elements keep full `transform`; or a package view |
 | Animate rotation axis, z, perspective | Animate the angle with `transition`, or a frame task |
 | Keyframed 3D rotation (probably z only) | `transition` or a frame task |
-| Particle systems | `CAEmitterLayer` in a package view; small counts on Canvas 2D |
+| Particle systems | Exact GPU module surface in Rust (WGSL), or the game add-on's `ParticleLook` (`capabilities.md`); `CAEmitterLayer` in a package view is iOS-only; small counts on Canvas 2D |
 | Lottie, Rive | SVG keyframes, or a native view |
 | Animated backdrop blur | Fade a material layer's opacity instead |
 | Animate `width` or `top` | `-exact-layout-transition` |

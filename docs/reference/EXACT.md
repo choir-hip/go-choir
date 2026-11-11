@@ -55,9 +55,10 @@ transitions, keyframes and Core Animation, not to JavaScript.
 `UIView`), calls (`later`, `call`), and device-level work (audio, sensors). A
 **package** declares names, views and events and can take audio claims. The
 app has exactly one **app module** (any number of packages), which is where
-third-party Swift and Core ML code enters as static xcframeworks. We write no
-Rust: Rust is Exact's engine, and we use it, not extend it
-(`exact/native-modules.md`).
+third-party Swift and Core ML code enters as static xcframeworks. We may
+write Rust where Contract and TypeScript cannot do the job, such as a wgpu GPU
+module (rule 5 below, `exact/capabilities.md`); we do not extend Exact's engine
+itself (`exact/native-modules.md`).
 
 ## Decision table: I need X, use Y
 
@@ -69,16 +70,20 @@ Rust: Rust is Exact's engine, and we use it, not extend it
 | Card drag with throw | `pan`/`panrelease` (Spark pattern) or a drag timeline | `rendering-and-motion.md` 8c |
 | A flat card in 3D (flip, lean, tilt) | `rotate="y 40deg"` with `perspective` on the parent | Native; angle animates through `transition` |
 | A spinning solid (the TetraMark) | Pure Contract `fn` projection plus `svg polygon` plus `every(frame)` (portable across hosts); a Swift package view with `CATransformLayer` only if measured too slow on the phone | No `preserve-3d`; `rendering-and-motion.md` 8a |
-| Glass, blur, shadow | `backgroundMaterial="glass"`, `box-shadow` | Native; `rendering-and-motion.md` 5 |
+| Glass, blur, shadow, depth | `backgroundMaterial="glass"`, `backdrop-filter`, `box-shadow` | Native; `rendering-and-motion.md` 5 |
 | Themes | bound data attributes for user themes; `app.tamber` for shipped modes | Binding proven upstream, unrun on device |
-| Per-frame custom drawing | package `UIView`; or `canvas surface=...` (Core Graphics, calls Hermes each frame) as last resort | `rendering-and-motion.md` 2 and 8a |
+| Per-frame custom drawing | pure Contract first; then an Exact GPU surface; a package `UIView` last; `canvas surface=...` Canvas 2D (Core Graphics, calls Hermes each frame) as last resort | `rendering-and-motion.md` 2 and 8a |
 | Network calls, JSON, small state machines | `app.ts` (Hermes) | Grant-checked `fetch`, SQLite, fs |
 | Audio session, `AVAudioEngine`, mic, wake word | Swift package | Only packages reach the owner's claims (`exact/audio.md`) |
 | Streams into the UI (RMS, partial transcripts) | Swift package plus `context.changed` | The only push path is "ask the source again" |
 | Playback with lock-screen controls | Contract `audio` with `metadata=` first | Exact's Now Playing exists only there |
 | A third-party Swift or Core ML library | static `.xcframework` in the app module | A package cannot import it (`exact/native-modules.md`) |
 | A system object (CallKit, Core ML, PDFKit) | Swift package view or the app module | Same |
-| Particles, Lottie, shaded 3D, blend modes | none native; see the cannot-do list | `rendering-and-motion.md` 9 |
+| Text wrapping around a figure, pull quote or side note | `wrap-flow="both"` and `shape-outside` (and `shape-margin`) on the obstacle box, beside a `text` body (apps/textflow) | `exact/capabilities.md` section 4; unrun by us |
+| A shader surface (fragment-shader field, glass, a mark with lighting) | Exact wgpu GPU module: a Rust crate with WGSL, used as `canvas surface=name(args)`; portable to Metal, Vulkan and WebGPU | `exact/capabilities.md` section 2; Android draws nothing under canvas children; build cost unmeasured |
+| A 3D or particle scene, physics | The game add-on, inside a GPU module, only if a scene graph, particles or physics are needed | `exact/capabilities.md` section 6; heavy, unmeasured |
+| A read-only rich-text document, tappable citations | `text markup="markdown"` with atom pills and `atompress`; `textarea markup="markdown"` is the editor | `exact/capabilities.md` section 5; no documented footnote tap |
+| Particles, Lottie, blend modes | none native; see the cannot-do list (particles: GPU module or game add-on) | `rendering-and-motion.md` 9 |
 | A build or driver run | one shared build tree, one build, one simulator at a time | `exact/build-and-ship.md` |
 
 ## Rules we work by
@@ -127,7 +132,9 @@ Rust: Rust is Exact's engine, and we use it, not extend it
 | Wrong idea | What is true |
 |---|---|
 | "Exact has no 3D transforms." | Box 3D exists: `rotate` with axis, `translate` z, parent `perspective`, `backface-visibility`. Missing: `preserve-3d`, `matrix`, `skew`, animating axis, z or perspective (`rendering-and-motion.md` 4) |
-| "Contract compiles to Metal / GPU." | It compiles to a plan run by a Rust interpreter; UIKit and Core Animation present it (`rendering-and-motion.md` 2) |
+| "Contract compiles to Metal / GPU." | It compiles to a plan run by a Rust interpreter; UIKit (iOS), a `RenderNode` replay (Android), a vello/tiny-skia painter (Linux) or the DOM (web) presents it. Metal appears only in optional artifacts: the GPU module, vello Canvas 2D, SVG filters. The README line "a wgpu GPU module (Metal on Apple, WebGPU in the browser)" is about the optional module (`rendering-and-motion.md` 2b) |
+| "Exact has no text flow around shapes." | It has: `wrap-flow`, `shape-outside`, `shape-margin` (apps/textflow). It is the basis for side notes and figures in a reader (`exact/capabilities.md` section 4) |
+| "Exact cannot do shaders; we write no Rust." | We may write Rust (owner, 2026-11-11). A shader surface is a Rust crate with WGSL (`exact/capabilities.md` section 2.1) |
 | "Data themes are unproven." | The binding mechanism is proven upstream; our bindings are unrun on a device |
 | "Project the 3D mark in TypeScript on a canvas." | That is the worst ranked option: a Hermes call per frame. Use pure Contract; a `CATransformLayer` package view is an iOS-only optimisation |
 | "The simulator exit after the audio claim is an audio bug." | "the app hung up (exit code 0)" is the driver's socket closing, usually a second driver on the same simulator (`exact/testing-and-debugging.md`) |
@@ -231,7 +238,8 @@ Full list with fixes: `exact/gaps.md`.
 ## Subpage index
 
 - [exact/ui-model.md](exact/ui-model.md): Contract, state, sources, layout, lists, inputs, navigation and tabs, accessibility.
-- [exact/rendering-and-motion.md](exact/rendering-and-motion.md): the pipeline, what is native vs drawn, transforms 2D and 3D, transitions, keyframes, frame tasks, gestures, shared elements, canvas/SVG/GPU, data-bound styling, recipes, cannot-do list.
+- [exact/rendering-and-motion.md](exact/rendering-and-motion.md): the pipeline, what is native vs drawn, transforms 2D and 3D, transitions, keyframes, frame tasks, gestures, shared elements, what draws Contract by host, canvas/SVG/GPU, data-bound styling, recipes, cannot-do list.
+- [exact/capabilities.md](exact/capabilities.md): the on-demand capabilities: the wgpu GPU module (with the full how-to for writing one in Rust), Canvas 2D, textflow, Markdown, the game add-on, native modules; what our build needs (Metal Toolchain); iOS and Android status.
 - [exact/native-modules.md](exact/native-modules.md): app module vs package, calling convention, streams out, threading, errors, third-party libraries.
 - [exact/audio.md](exact/audio.md): the session owner, claims, modes, background, Now Playing, interruptions.
 - [exact/build-and-ship.md](exact/build-and-ship.md): layout, CLI, build scripts, kit sync, xcframeworks, signing, install, pinning, build discipline.

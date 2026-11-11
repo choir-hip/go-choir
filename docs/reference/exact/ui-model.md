@@ -182,9 +182,19 @@ Exact itself embeds a SwiftUI `Text` for rolling numerals
 `UIHostingController` inside a native view is an established move. We have not
 run it.
 
-Markdown: a Markdown reader/editor element exists (`markdown/`, apps/markdown).
-It is the nearest built-in analogue of a Texture page and is the first thing to
-evaluate in the renderer lane [doc: contract-grammar.md:1381-1430; **[unrun]**].
+Markdown: `text note.body markup="markdown"` is the read-only reader (headings,
+lists, quotes, code and links painted as one node); `textarea ... input=edit
+markup="markdown"` is the editor. Taps go through inline atom pills and
+`atompress` (`atom citation link="cite:"`, `atoms="citation"`); no footnote tap
+is documented. Citations as atoms is the candidate mechanism for a Texture
+reader [src: `docs/contract-grammar.md:1394-1399, 1462-1483`; **[unrun]**]. See
+`capabilities.md` section 5.
+
+Text flow around shapes exists: `wrap-flow="both"`, `shape-outside` and
+`shape-margin` on an obstacle box beside a `text` body (`apps/textflow/app.contract`,
+`README.md:597`) [src; **[unrun]** by us]. An earlier version of this page and
+of the app plan said there was no such primitive; that was wrong. See
+`capabilities.md` section 4.
 
 ## Theming and accessibility
 
@@ -204,6 +214,7 @@ evaluate in the renderer lane [doc: contract-grammar.md:1381-1430; **[unrun]**].
 
 - How many `svg` nodes or canvas ops keep 60 fps on an iPhone 14 Pro Max for
   the trace timeline?
-- Can `markdown` render Texture pages with our link and highlight needs?
+- Can `markdown` render Texture pages with our link and highlight needs (atom pills for citations, no per-element styling hooks, fixed heading scale)?
+- Do `wrap-flow` and `shape-outside` work with a rectangular box of a side note in a long `list virtualized` row, on iOS?
 - Does a package `UIView` that hosts SwiftUI size correctly inside a Contract
   list row (`intrinsicSize`, `events.intrinsicSize(...)`)?
