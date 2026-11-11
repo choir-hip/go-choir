@@ -72,14 +72,14 @@ component ActivityBody
     ev: ActivityItem
     opens: bool
   view
-    row gap=12 align-items="flex-start" width="100%" padding="12px 16px"
+    row gap=12 align-items="flex-start" width="100%" box-sizing="border-box" padding="12px 16px"
       box width=8 height=8 margin-top=7 border-radius=4 background-color=(ev.unseen ? th.accent : "transparent")
       column flex=1 min-width=0 gap=3 align-items="flex-start"
         row gap=8 width="100%" align-items="flex-start"
-          text ev.label font-family=th.fontUi font-size=tx.sizeLabel font-weight=700 color=th.fg flex=1 min-width=0
+          text ev.label text-align="left" font-family=th.fontUi font-size=tx.sizeLabel font-weight=700 color=th.fg flex=1 min-width=0
           text ev.ago font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
-        text ev.detail font-family=th.fontRead font-size=tx.sizeLabel line-height=1.4 color=th.fg
+        text ev.detail text-align="left" font-family=th.fontRead font-size=tx.sizeLabel line-height=1.4 color=th.fg
         if ev.title != ""
-          text ev.title font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+          text ev.title text-align="left" font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
       if opens
         text "›" font-family=th.fontUi font-size=22 color=th.muted

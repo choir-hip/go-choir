@@ -86,7 +86,7 @@ component NavRow
     subtitle: string
     testId: string
   view
-    button press=openPage(address, title) testId=testId appearance="none" width="100%" padding="14px 16px"
+    button press=openPage(address, title) testId=testId appearance="none" width="100%" box-sizing="border-box" padding="14px 16px"
       row align-items="center" gap=12 width="100%"
         column flex=1 min-width=0 gap=2 align-items="flex-start"
           text title font-family=th.fontUi font-size=17 font-weight=600 color=th.fg
@@ -105,7 +105,7 @@ component FactRow
     mono: bool
     testId: string
   view
-    row width="100%" gap=12 padding="10px 16px" align-items="flex-start" justify-content="space-between"
+    row width="100%" box-sizing="border-box" gap=12 padding="10px 16px" align-items="flex-start" justify-content="space-between"
       text label font-family=th.fontUi font-size=tx.sizeLabel color=th.muted
       text value testId=testId font-family=(mono ? th.fontMono : th.fontUi) font-size=tx.sizeLabel color=th.fg text-align="right" flex=1 min-width=0
 
@@ -152,13 +152,13 @@ component ThemePreview
     t: ThemeCard
     compact: bool
   view
-    column width="100%" gap=6
-      button press=setTheme(t.id) testId=`settings-theme-${t.id}` role="radio" aria-checked=t.current appearance="none" width="100%"
+    column width="100%" gap=6 box-sizing="border-box"
+      button press=setTheme(t.id) testId=`settings-theme-${t.id}` role="radio" aria-checked=t.current appearance="none" width="100%" box-sizing="border-box"
         aria-label=`${t.name}${t.current ? ", selected" : ""}`
-        column width="100%" gap=10 padding=16 background-color=t.paper border-radius=t.radiusCard box-shadow=t.shadow
+        column width="100%" box-sizing="border-box" align-items="stretch" gap=10 padding=16 background-color=t.paper border-radius=t.radiusCard box-shadow=t.shadow
           border-width=2 border-style="solid" border-color=(t.current ? t.accent : "transparent")
           row align-items="center" gap=8 width="100%"
-            text t.name font-family=t.fontRead font-size=22 font-weight=700 color=t.fg flex=1 min-width=0
+            text t.name font-family=t.fontRead font-size=22 font-weight=700 color=t.fg text-align="left" flex=1 min-width=0
             if t.contrast == "AAA"
               row padding="3px 8px" border-radius=t.radiusControl border-width=1 border-style="solid" border-color=t.rule
                 text "AAA contrast" font-family=t.fontUi font-size=11 font-weight=700 color=t.fg
@@ -233,7 +233,7 @@ component RootScreen
       Card(level=1, testId="settings-card-developer", minHeight=0)
         NavRow(address="lab:components", title="Components and Trace", subtitle="Stages, parameters, kept turns", testId="settings-components")
         Hairline()
-        button press=setDemo(dm.on ? "false" : "true") testId="settings-demo" appearance="none" width="100%" padding="14px 16px"
+        button press=setDemo(dm.on ? "false" : "true") testId="settings-demo" appearance="none" width="100%" box-sizing="border-box" padding="14px 16px"
           column align-items="flex-start" gap=2 width="100%"
             text (dm.on ? "Demo mode is on" : "Demo mode is off") font-family=th.fontUi font-size=17 font-weight=600 color=th.fg
             text (dm.on ? "Takes effect at the next launch. Tap to turn off." : "Fixtures and no network, from the next launch. Tap to turn on.") font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
@@ -274,7 +274,7 @@ component AppearanceScreen
         text p testId="settings-theme-problems" font-family=th.fontMono font-size=12 color=th.danger
       SectionLabel(label="A theme from a Texture")
       Card(level=1, testId="settings-card-texture", minHeight=0)
-        column gap=10 padding=16 width="100%"
+        column gap=10 padding=16 width="100%" box-sizing="border-box"
           text "A theme is a Texture with one choir-theme block. Paste its id to add it here; the server checks it and so does the phone." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
           row gap=8 align-items="center" width="100%"
             input value=themeDoc input=editThemeDoc placeholder="Theme Texture id" aria-label="Theme Texture id" testId="settings-theme-doc" flex=1 min-width=0
@@ -287,7 +287,7 @@ component AppearanceScreen
             text tc.status testId="settings-theme-status" font-family=th.fontUi font-size=tx.sizeLabel color=th.fg
       SectionLabel(label="Type")
       Card(level=1, testId="settings-card-type", minHeight=0)
-        column gap=8 padding=16 width="100%"
+        column gap=8 padding=16 width="100%" box-sizing="border-box"
           text "Headline" font-family=th.fontRead font-size=tx.sizeHeadline font-weight=tx.weightHeadline color=th.fg
           text "The body face is the theme's own. This is a line of body text, set the way a story reads." font-family=th.fontRead font-size=tx.sizeBody line-height=tx.lineBody color=th.fg
           text "Labels and controls use the interface face." font-family=th.fontUi font-size=tx.sizeLabel font-weight=600 color=th.muted
@@ -295,7 +295,7 @@ component AppearanceScreen
           text `Scale ${th.scale} · body ${tx.sizeBody.toFixed(0)} pt · contrast ${tx.contrast}` font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
       SectionLabel(label="Depth")
       Card(level=1, testId="settings-card-depth", minHeight=0)
-        column gap=14 padding=16 width="100%"
+        column gap=14 padding=16 width="100%" box-sizing="border-box"
           row gap=12 width="100%"
             column flex=1 min-width=0
               Card(level=1, testId="settings-depth-1", minHeight=56)
@@ -322,7 +322,7 @@ component AccountScreen
     ToolScroll(id="settings")
       ScreenTitle(label="Account and devices", back=true)
       Card(level=1, testId="settings-card-account", minHeight=0)
-        column width="100%" padding="6px 0"
+        column width="100%" box-sizing="border-box" padding="6px 0"
           FactRow(label="Signed in", value=(au.signedIn ? "Yes" : "No"), mono=false, testId="settings-account-signed")
           Hairline()
           FactRow(label="You are", value=(acctInfo.handle == "" ? "Not shown yet" : acctInfo.handle), mono=false, testId="settings-account-handle")
@@ -361,12 +361,12 @@ component SettingChoices
     column gap=14 width="100%"
       for r in rows key=r.id
         Card(level=1, testId=`settings-setting-${r.id}`, minHeight=0)
-          column width="100%" padding="14px 0"
+          column width="100%" box-sizing="border-box" padding="14px 0"
             column gap=4 padding="0px 16px 10px 16px"
               text r.label font-family=th.fontUi font-size=17 font-weight=700 color=th.fg
               text r.help font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
             for o in r.choices key=o.id
-              button press=setSetting(r.id, o.id) testId=`settings-choice-${r.id}-${o.id}` role="radio" aria-checked=o.selected appearance="none" width="100%" padding="10px 16px"
+              button press=setSetting(r.id, o.id) testId=`settings-choice-${r.id}-${o.id}` role="radio" aria-checked=o.selected appearance="none" width="100%" box-sizing="border-box" padding="10px 16px"
                 row gap=12 align-items="flex-start" width="100%"
                   text (o.selected ? "●" : "○") font-family=th.fontUi font-size=18 color=(o.selected ? th.accent : th.muted)
                   column flex=1 min-width=0 gap=2 align-items="flex-start"
@@ -425,7 +425,7 @@ component ComputerScreen
     ToolScroll(id="settings")
       ScreenTitle(label="Computer", back=true)
       Card(level=1, testId="settings-card-computer", minHeight=0)
-        column width="100%" padding="6px 0"
+        column width="100%" box-sizing="border-box" padding="6px 0"
           FactRow(label="State", value=(cmpt.state == "" ? (cmpt.checked ? "Not reported" : "Checking…") : cmpt.state), mono=false, testId="settings-computer-state")
           Hairline()
           FactRow(label="Computer", value=(cmpt.id == "" ? "-" : cmpt.id), mono=true, testId="settings-computer-id")
@@ -457,9 +457,9 @@ component LearnedScreen
       ScreenTitle(label="What the paper has learned", back=true)
       text "Each time you asked for more or less of a story, in your own words. Your front page leans on these; the shared paper does not change." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
       Card(level=1, testId="settings-card-learned", minHeight=0)
-        column width="100%" padding="6px 0"
+        column width="100%" box-sizing="border-box" padding="6px 0"
           for r, i in learnt.rows key=i
-            column gap=2 padding="10px 16px" width="100%" testId="settings-learned-row"
+            column gap=2 padding="10px 16px" width="100%" box-sizing="border-box" testId="settings-learned-row"
               text r.line font-family=th.fontRead font-size=tx.sizeBody line-height=1.4 color=th.fg
               text r.ago font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
           if learnt.count == 0
@@ -479,7 +479,7 @@ component AboutScreen
     ToolScroll(id="settings")
       ScreenTitle(label="About", back=true)
       Card(level=1, testId="settings-card-about-info", minHeight=0)
-        column width="100%" padding="6px 0"
+        column width="100%" box-sizing="border-box" padding="6px 0"
           FactRow(label="Autoradio", value=(about.app == "" ? "-" : about.app), mono=false, testId="settings-about-app")
           Hairline()
           FactRow(label="Build", value=(about.build == "" ? "-" : about.build), mono=true, testId="settings-about-build")
