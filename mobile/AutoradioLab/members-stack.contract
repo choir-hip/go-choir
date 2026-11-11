@@ -87,3 +87,9 @@ members Autoradio
   action syncDeck
     if pg.top != "" and order.includes(pg.top) == false and pg.top.startsWith("onboarding:") == false
       order = [pg.top].concat(order.filter(a => a != pg.top))
+
+  // The lens variants under evaluation (lens-A: native glass, no wash; lens-B: no material, a 0.55 fill of the page colour;
+  // lens-C: the lighter native material, ultra-thin). The Developer rows in the launcher switch it in demo mode.
+  state lensStyle = "A"
+  action setLensStyle(v: string)
+    lensStyle = v
