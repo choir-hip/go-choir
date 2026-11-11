@@ -79,6 +79,7 @@ component BarShell
     micTap: action
     radioPlay: action
     toggleLauncher: action
+    showLayer: action
     hideLayer: action
     barFocus: action
     barBlur: action

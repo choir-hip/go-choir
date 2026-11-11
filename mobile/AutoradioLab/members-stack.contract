@@ -74,11 +74,11 @@ members Autoradio
   task flyEnd when flying key=flying
     after(230, cycleDeck)
   action cycleDeck
-    let next = order.slice(1, 2).join("")
+    let nxt = order.slice(1, 2).join("")
     order = order.slice(1).concat(order.slice(0, 1))
     px = 0
     flying = false
-    send pm = pageOpen(address=next, title="")
+    send pm = pageOpen(address=nxt, title="")
 
   // The deck follows the Kit's focus when something else moved it and it stayed there.
   task syncTop when pg.top != "" and pg.top != topAddr and onbd == false key=`${pg.top}|${topAddr}`
