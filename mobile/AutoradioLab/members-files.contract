@@ -101,7 +101,7 @@ members Autoradio
       showPicker("files-pick")
   action fsPicked(ps: Picked[])
     if ps.length > 0
-      send fsM = fileUpload(from=ps[0].path, name=ps[0].name, dir=fsPath)
+      send fsM = fileUpload(from=(match ps.at(0) { case some(p) => p.path, case none => "" }), name=(match ps.at(0) { case some(p) => p.name, case none => "" }), dir=fsPath)
       fsNoteOn = true
 
   // ------------------------------------------------------------------ the open file (file:/path/name.ext)
