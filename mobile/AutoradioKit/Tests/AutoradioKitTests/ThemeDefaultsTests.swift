@@ -138,6 +138,18 @@ final class ThemeDefaultsTests: XCTestCase {
         XCTAssertEqual(s.themeID, "liquid-metal"); XCTAssertEqual(s.current().scheme, "dark")
     }
 
+    func testTheDefaultCardPreviewsTheDefaultNotTheChosenTheme() {              // D12
+        let light = store(fresh(), system: "light"); light.setTheme("lantern")
+        let a = light.cards().first
+        XCTAssertEqual(a?.id, "default")
+        XCTAssertEqual(a?.paper, "#F7FBFE", "Chrome Pastel, though Lantern is chosen")
+        XCTAssertNotEqual(a?.paper, light.cards().first { $0.id == "lantern" }?.paper)
+        let dark = store(fresh(), system: "dark"); dark.setTheme("depth")
+        XCTAssertEqual(dark.cards().first?.paper, "#1C242E", "Liquid Metal in a dark scheme")
+        let locked = store(fresh(), system: "dark"); locked.setTheme("chrome-pastel")   // light-locked, the phone asks dark
+        XCTAssertEqual(locked.cards().first?.paper, "#1C242E", "the Default previews what selecting it would show")
+    }
+
     func testTheDefaultEntryIsFirstClearsTheChoiceAndIsInUseOnlyWithoutOne() {   // D11
         let d = fresh()
         let s = store(d, system: "light")
