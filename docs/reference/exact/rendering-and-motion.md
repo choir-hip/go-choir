@@ -272,7 +272,9 @@ adjusted. Check each with `contract build` before relying on it.
 
 ### 8a. A 3D mark (the TetraMark)
 
-Ranking, fastest and truest first:
+Ranking by iOS frame cost. **Our choice is option 2, pure Contract, because it
+is portable to other hosts** (owner, 2026-11-11); option 1 is an iOS-only
+optimisation taken only after a recorded measurement says option 2 is too slow:
 
 | Rank | Option | Per-frame cost | Notes |
 |---|---|---|---|

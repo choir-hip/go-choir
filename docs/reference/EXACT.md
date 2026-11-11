@@ -68,7 +68,7 @@ Rust: Rust is Exact's engine, and we use it, not extend it
 | Entrance, exit, stagger, spring, layout reorder | `transition`, `keyframes`, `-exact-exit-animation`, `-exact-layout-transition` | Native, no TypeScript (`exact/rendering-and-motion.md` section 3) |
 | Card drag with throw | `pan`/`panrelease` (Spark pattern) or a drag timeline | `rendering-and-motion.md` 8c |
 | A flat card in 3D (flip, lean, tilt) | `rotate="y 40deg"` with `perspective` on the parent | Native; angle animates through `transition` |
-| A spinning solid (the TetraMark) | Swift package view with `CATransformLayer`; second choice pure Contract `fn` projection plus `svg polygon` plus `every(frame)` | No `preserve-3d`; `rendering-and-motion.md` 8a |
+| A spinning solid (the TetraMark) | Pure Contract `fn` projection plus `svg polygon` plus `every(frame)` (portable across hosts); a Swift package view with `CATransformLayer` only if measured too slow on the phone | No `preserve-3d`; `rendering-and-motion.md` 8a |
 | Glass, blur, shadow | `backgroundMaterial="glass"`, `box-shadow` | Native; `rendering-and-motion.md` 5 |
 | Themes | bound data attributes for user themes; `app.tamber` for shipped modes | Binding proven upstream, unrun on device |
 | Per-frame custom drawing | package `UIView`; or `canvas surface=...` (Core Graphics, calls Hermes each frame) as last resort | `rendering-and-motion.md` 2 and 8a |
@@ -82,6 +82,12 @@ Rust: Rust is Exact's engine, and we use it, not extend it
 | A build or driver run | one shared build tree, one build, one simulator at a time | `exact/build-and-ship.md` |
 
 ## Rules we work by
+
+- **Contract first, for portability** (owner, 2026-11-11). UI, drawing and
+  motion are written in Contract so the app can run on other Exact hosts
+  (Android). A Swift package view is for what has no Contract path (audio,
+  models, system services) or for an optimisation taken after a recorded
+  measurement, with the Contract form kept.
 
 1. Read this page before touching Exact. Never answer an Exact question from
    memory.
@@ -111,7 +117,7 @@ Rust: Rust is Exact's engine, and we use it, not extend it
 | "Exact has no 3D transforms." | Box 3D exists: `rotate` with axis, `translate` z, parent `perspective`, `backface-visibility`. Missing: `preserve-3d`, `matrix`, `skew`, animating axis, z or perspective (`rendering-and-motion.md` 4) |
 | "Contract compiles to Metal / GPU." | It compiles to a plan run by a Rust interpreter; UIKit and Core Animation present it (`rendering-and-motion.md` 2) |
 | "Data themes are unproven." | The binding mechanism is proven upstream; our bindings are unrun on a device |
-| "Project the 3D mark in TypeScript on a canvas." | That is the worst ranked option: a Hermes call per frame. Use a `CATransformLayer` package view or pure Contract |
+| "Project the 3D mark in TypeScript on a canvas." | That is the worst ranked option: a Hermes call per frame. Use pure Contract; a `CATransformLayer` package view is an iOS-only optimisation |
 | "The simulator exit after the audio claim is an audio bug." | "the app hung up (exit code 0)" is the driver's socket closing, usually a second driver on the same simulator (`exact/testing-and-debugging.md`) |
 | "A package can depend on our SwiftPM library or a third-party one." | It is compiled with `swiftc` and its own files only; use the app module and static xcframeworks |
 | "A `pan` event gives the total drag." | It gives the move since the last event |

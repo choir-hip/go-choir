@@ -977,17 +977,23 @@ step and the sources is not verified; if it does not, that is a server gap
 **How the mark is built, in ranked order** (`docs/reference/exact/rendering-and-motion.md`
 section 8a; all unrun):
 
-1. **First choice: a Swift package view** holding a `CATransformLayer` with
-   four `CAShapeLayer` faces and a repeating `CABasicAnimation`, so the render
-   server plays the 3D with real occlusion and perspective and no per-frame CPU
-   (one hatched native view, gaps.md #7). State changes swap the animation or
-   its speed.
-2. **Second choice: pure Contract.** `sin`/`cos` projection in `fn`s, `svg
+Owner, 2026-11-11: "ideally we can do pure contract so we can easily run
+on other platforms (android eg)." The research ranked by iOS frame cost
+alone; portability outranks that. UI is written in Contract. A Swift
+package view is for what has no Contract path (audio, models, system
+services), not for drawing.
+
+1. **First choice: pure Contract.** `sin`/`cos` projection in `fn`s, `svg
    polygon` faces with back-face culling by signed area, ticked by an
-   `every(frame, step)` task. No TypeScript and no Swift; themed by `th`.
-3. **Last fallback: Canvas 2D from TypeScript**, projected in `app.ts` and drawn
-   each frame. It spends a Hermes call per frame at 60 Hz and its latency is
-   unmeasured.
+   `every(frame, step)` task. No TypeScript and no Swift, themed by `th`,
+   and the same on every Exact host. The per-frame work runs in Exact's
+   runner (not JavaScript): one string and one path update per face.
+2. **Only if measured too slow or too hot on the phone: a Swift package
+   view** (`CATransformLayer`, four faces, Core Animation) behind the same
+   `Mark` component, as an iOS-only optimisation with the Contract mark kept
+   as the portable form. The measurement and its numbers are recorded
+   before this is taken.
+3. **Not used: Canvas 2D from TypeScript** (a Hermes call per frame).
 
 **Motion belongs to the theme.** The theme's `motion` block carries the
 durations, easings and springs above and a `mark` block (drift, tumble
@@ -1199,11 +1205,11 @@ theme switches light, dark and Newsprint, and demo mode serves a fixture.
 | **6. Mail** | `mail.contract`, `members-mail.contract`, `Kit/ChoirMail.swift`, package view `MailOriginal.swift` | page host, `PageSource` | inbox and folders, a message as a page, reply and compose as drafts, attachments, the approval link | must: read, draft, attach / rough: original HTML view, threading | send and digest accepted from a key |
 | **7. Settings, themes, accounts** | `settings.contract`, `members-settings.contract`, `Kit/ThemeLoader.swift`, `mobile/themes/*.json`, `Kit/Accounts.swift`; restyles the integrator's Components and Trace (their files stay theirs) | theme loader, page host | themes listed and switched (and loaded from a Texture in demo mode); accounts and devices; talk mode; Computer (status, Wake, Restart to update); What the paper has learned; gesture meanings as components | must: themes, account, sign out, Computer / rough: theme from a Texture on staging | bearer "who am I"; `GET /api/texture/theme` |
 | **8. Onboarding and the interview** | `onboarding.contract`, `members-onboarding.contract`, `Kit/Interview.swift`, `mobile/interview/questions.md` (the default bank) | bar, page host, the integrator's engine, lane 3's reader for the edition page | sign-in presented; voice setup (model download, per-device checks, fallbacks; with lane M's `ModelStore`); the open-microphone, interruptible interview on the integrator's turn engine, by voice only (demo mode drives it with recorded clips); the edition written (demo) and shown; then the front page and a story playing | must: the whole path and its recoveries / rough: question wording, read-back phrasing | edition marker; the bank as a desk package document (later) |
-| **9. Motion and the mark** | `mark.contract`, the mark's package view (`CATransformLayer`; a Contract projection if the view is not worth it; a canvas `draw` in `app.ts` only as a last fallback), motion tokens in the themes | bar shell (the voice button), theme loader | the 3D mark in every state; the alive wait with real lifecycle lines in demo mode; card physics tuned; the front page composing; Reduce Motion | must: the mark in all states, the wait / rough: syllable sync, GPU path | lifecycle progress detail (if missing) |
+| **9. Motion and the mark** | `mark.contract`, the mark in pure Contract (`fn` projection, `svg polygon`, frame task; a `CATransformLayer` package view only if measured too slow; no canvas `draw` in `app.ts` only as a last fallback), motion tokens in the themes | bar shell (the voice button), theme loader | the 3D mark in every state; the alive wait with real lifecycle lines in demo mode; card physics tuned; the front page composing; Reduce Motion | must: the mark in all states, the wait / rough: syllable sync, GPU path | lifecycle progress detail (if missing) |
 | **S. Server** (Go, its own branch, ring rules, Ring-Expedite per CLAUDE.md) | `internal/platform` (entities on front and bundle), `internal/textureowner` (theme route, edition marker, block-addressed prompt, `request_id` on version events), `internal/auth` (bearer "who am I"), `internal/proxy/email.go` (owner act from a key) | none | each route deployed on staging with its own acceptance check | must: entities, who-am-I, theme route / later: mail owner act (red: auth) | itself |
 
 Exact limits and fallbacks, by lane: no layer above a UIKit sheet (lanes 1,
-4, 3: authored layers); 3D exists on boxes but not `preserve-3d` (lane 9: a package `CATransformLayer` view, else a Contract projection, canvas last);
+4, 3: authored layers); 3D exists on boxes but not `preserve-3d` (lane 9: a pure Contract projection first, for portability; a package view only if measured too slow);
 no EPUB or Quick Look element (lane 5: conversion and package views); PDF
 only through an iframe (lane 5: a PDFKit package view); data themes
 unrun on device (lane 7: the binding is proven upstream; compiled themes first, data themes after an app update if it does not paint);
