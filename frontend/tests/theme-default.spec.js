@@ -109,3 +109,13 @@ test('D9: an installed copy of the pack is refused by id, so Settings lists Chro
   expect(() => T.registerTheme(copy)).toThrow(/already taken/);
   expect(T.listThemes().filter((t) => t.name === 'Chrome Pastel')).toHaveLength(1);
 });
+
+test('D10: before the shell mounts, the theme service reports the scheme default, not the static one', async () => {
+  const was = globalThis.matchMedia;
+  try {
+    globalThis.matchMedia = scheme(true).matchMedia;
+    vite.moduleGraph.invalidateAll();
+    const S = await vite.ssrLoadModule('/src/lib/services/theme.ts');
+    expect(S.getTheme().id).toBe('liquid-metal');
+  } finally { globalThis.matchMedia = was; }
+});

@@ -177,6 +177,10 @@ test.describe('account switcher', () => {
 
   test('per-user localStorage: the theme boot cache does not bleed between accounts', async ({ page, context }) => {
     await mockServer(context);
+    // Only a chosen theme is cached (the shown default is not), so alice has chosen one.
+    await context.route('**/api/preferences/theme', (route) => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify({ theme: { schema_version: 2, id: 'frutiger-aero' } }),
+    }));
     await page.goto(BASE_URL);
     await expect(page.locator('[data-desktop][data-desktop-ready="true"]')).toBeVisible();
     const keys = await page.evaluate(() => Object.keys(localStorage));

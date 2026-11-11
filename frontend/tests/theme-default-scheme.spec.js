@@ -34,10 +34,14 @@ async function signedIn(page, preference) {
   }));
 }
 const root = (page) => page.locator('[data-auth-state]');
-const bootCache = (page) => page.evaluate((key) => {
-  const keys = Object.keys(window.localStorage).filter((k) => k.endsWith(key));
-  return keys.map((k) => window.localStorage.getItem(k));
-}, CACHE_KEY);
+// Every boot cache entry, plain or user-scoped (scopedKey is `${base}:${userId}`), as [key, value].
+const bootEntries = (page) => page.evaluate((key) => Object.keys(window.localStorage)
+  .filter((k) => k === key || k.startsWith(`${key}:`))
+  .map((k) => [k, window.localStorage.getItem(k)]), CACHE_KEY);
+const bootCache = async (page) => (await bootEntries(page)).map(([, v]) => v);
+// What the old release wrote for every visitor: the whole default theme, with its colours, never marked as a choice.
+const legacyDefault = { ...aeroTheme, colors: { bg: '#C4ECF9' } };
+const packTheme = { schema_version: 2, id: 'paper-night.dark', name: 'Paper Night', chosen: true };
 
 test('S1, S2: dark paints Liquid Metal, light paints Chrome Pastel, and neither is stored as a choice', async ({ page }) => {
   await signedOut(page);
@@ -67,12 +71,60 @@ test('S4: a stale cached default with no server preference gives way to the sche
   await page.addInitScript((theme) => {
     // The old default, cached by the old rule, which cached every applied theme.
     window.localStorage.setItem('choir.theme.boot.v2', JSON.stringify(theme));
-  }, aeroTheme);
+  }, legacyDefault);
   await page.goto(BASE_URL);
   await expect(root(page)).toHaveAttribute('data-auth-state', 'signed_in');
   await expect(root(page)).toHaveAttribute('data-theme-id', 'liquid-metal');
-  // The shown default is not stored as a choice (the seeded stale entry sits under another key).
+  // The shown default is not stored as a choice, under the signed-in user's key or any other.
   expect((await bootCache(page)).filter((c) => /liquid-metal|chrome-pastel/.test(c))).toEqual([]);
+  expect((await bootEntries(page)).filter(([k]) => k.startsWith(`${CACHE_KEY}:`))).toEqual([]);
+});
+
+test('S7: a saved choice whose pack has not registered yet is kept, not wiped, while the scheme default shows', async ({ page }) => {
+  await signedOut(page);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.addInitScript((theme) => {
+    window.localStorage.setItem('choir.theme.boot.v2', JSON.stringify(theme));
+  }, packTheme);
+  await page.goto(BASE_URL);
+  await expect(root(page)).toHaveAttribute('data-theme-id', 'liquid-metal');
+  await expect(root(page)).toHaveAttribute('data-auth-state', 'signed_out');
+  const kept = await bootCache(page);
+  expect(kept.length).toBe(1);
+  expect(JSON.parse(kept[0]).id).toBe('paper-night.dark');
+});
+
+test('S8: the old auto-written default is not a choice: signed out, dark shows Liquid Metal and follows the scheme', async ({ page }) => {
+  await signedOut(page);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.addInitScript((theme) => {
+    window.localStorage.setItem('choir.theme.boot.v2', JSON.stringify(theme));
+  }, legacyDefault);
+  await page.goto(BASE_URL);
+  await expect(root(page)).toHaveAttribute('data-auth-state', 'signed_out');
+  await expect(root(page)).toHaveAttribute('data-theme-id', 'liquid-metal');
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect(root(page)).toHaveAttribute('data-theme-id', 'chrome-pastel.hybrid');
+});
+
+test('S9: a theme seeded the way choir-shot does (id only) and a marked choice are honoured in dark mode', async ({ page }) => {
+  await signedOut(page);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.addInitScript((theme) => {
+    window.localStorage.setItem('choir.theme.boot.v2', JSON.stringify(theme));
+  }, aeroTheme);
+  await page.goto(BASE_URL);
+  await expect(root(page)).toHaveAttribute('data-theme-id', 'aero-chrome-heart');
+});
+
+test('S10: a marked choice of Aero Chrome Heart is honoured in dark mode', async ({ page }) => {
+  await signedOut(page);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.addInitScript((theme) => {
+    window.localStorage.setItem('choir.theme.boot.v2', JSON.stringify(theme));
+  }, { ...legacyDefault, chosen: true });
+  await page.goto(BASE_URL);
+  await expect(root(page)).toHaveAttribute('data-theme-id', 'aero-chrome-heart');
 });
 
 test('S5, S6: a saved choice wins in dark mode, at first paint and after the server answers, and is not rewritten', async ({ page }) => {
