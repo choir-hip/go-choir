@@ -23,7 +23,7 @@ export EXACT_SIM="${EXACT_SIM:-$("$HERE/sim-device.sh")}"
 echo "simulator $EXACT_SIM"
 if [ -z "${NOBUILD:-}" ]; then
   echo "building"
-  "$HERE/build-lab.sh" ios > "$SCRATCH/build.txt" 2>&1 || { grep -i "error" "$SCRATCH/build.txt" | head -25; tail -8 "$SCRATCH/build.txt"; fail "build"; }
+  "$HERE/build-lab.sh" ios > "$SCRATCH/build.txt" 2>&1 || { grep -v "^ *[0-9]* |" "$SCRATCH/build.txt" | head -60; fail "build"; }
 fi
 
 DD=/Applications/Xcode.app/Contents/Developer
