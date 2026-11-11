@@ -70,7 +70,7 @@ drive() { # <mode: light|dark> <attempt-file>
     "tap bar-pages drag 0 -200" "$L" "tap launcher-open-pub:demo-ev-charging" "clock +900 real" \
     "tap reader-source-3" "$L" "clock data" tree "screenshot $SHOTS/$M-14-source-from-list.png" \
     "tap reader-sheet-close" "$L" \
-    "tap reader-sources" "$L" "clock data" tree "screenshot $SHOTS/$M-15-sources-list.png" \
+    "tap reader-source-4" "$L" "clock data" tree "screenshot $SHOTS/$M-15-sources-list.png" \
     "tap reader-menu" "$L" "tap reader-menu-follow" "$L" "clock data" tree "screenshot $SHOTS/$M-16-read-along.png" \
     "tap reader-menu" "$L" "tap reader-menu-sidenotes" "$L" "tap reader-cite-a2" "$L" "clock data" tree "screenshot $SHOTS/$M-17-side-note.png" \
     "tap reader-menu" "$L" "tap reader-menu-sidenotes" "$L" \

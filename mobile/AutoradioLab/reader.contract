@@ -45,7 +45,7 @@ component Runs
     for r in runs key=r.id
       if r.kind == "cite"
         text r.text testId=`reader-cite-${r.anchor}` press=toggleCite(ckey(address, r.anchor)) aria-label=`Source ${r.label}`
-          font-family=th.fontUi font-size=remv(size * 0.72) font-weight=700 line-height=lh color=th.accent
+          font-family=th.fontUi font-size=remv(size * 0.8) font-weight=700 line-height=lh color=th.accent
           background-color=tint(th.accent, "22") border-radius=6
       else if r.kind == "ref"
         text r.text testId=`reader-ref-${r.anchor}` press=toggleCite(ckey(address, r.anchor)) aria-label=`Document ${r.label}`
@@ -83,9 +83,9 @@ component CiteCard
         Card(level=1, testId=`reader-card-${c.anchor}`, minHeight=0)
           column padding=14 gap=8
             row align-items="center" gap=8
-              text (c.kind == "texture" ? "In this document" : `${c.number}`) font-family=th.fontUi font-size=12 font-weight=700 color=th.accent
+              text (c.kind == "texture" ? "Texture" : `${c.number}`) font-family=th.fontUi font-size=12 font-weight=700 color=th.accent
                 background-color=tint(th.accent, "22") border-radius=6 padding="2px 7px"
-              text (c.kind == "texture" ? "Another Texture" : c.host) font-family=th.fontUi font-size=13 color=th.muted flex=1 min-width=0 line-clamp=1
+              text (c.kind == "texture" ? "Another document" : c.host) font-family=th.fontUi font-size=13 color=th.muted flex=1 min-width=0 line-clamp=1
               button press=toggleCite(ckey(address, c.anchor)) testId=`reader-card-close-${c.anchor}` appearance="none" aria-label="Close" width=32 height=32
                 image "symbol:close" color=th.muted
             text c.title font-family=th.fontUi font-size=15 font-weight=600 color=th.fg
