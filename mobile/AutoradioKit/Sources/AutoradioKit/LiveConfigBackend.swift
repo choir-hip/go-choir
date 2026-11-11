@@ -10,7 +10,11 @@ public final class LiveConfigBackend: ConfigBackend, @unchecked Sendable {
         self.store = store; self.probeFn = probe; self.rounds = rounds
     }
     public func probe() -> DeviceProbe { probeFn() }
-    public func isOnDisk(_ c: ModelCandidate) async -> Bool { KnownModels.isPinned(c.id) && (await store.localFileIfPresent(c.id)) != nil }
+    public func isOnDisk(_ c: ModelCandidate) async -> Bool {
+        guard KnownModels.isPinned(c.id) else { return false }
+        let f = await store.localFileIfPresent(c.id)
+        return f != nil
+    }
     func roleName(_ r: ConfigRole) -> String { r == .responder || r == .decision ? r.rawValue : "" }
     public func prepare(_ c: ModelCandidate, role: ConfigRole, onBytes: @escaping @Sendable (Int64) -> Void) async throws {
         guard KnownModels.contains(c.id) else { throw LabError.badInput("the candidate \(c.id) is not in the model catalog") }
