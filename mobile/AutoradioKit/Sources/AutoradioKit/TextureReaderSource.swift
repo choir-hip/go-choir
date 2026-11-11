@@ -182,15 +182,57 @@ public struct TextureList: Codable, Sendable, Equatable {
         return TextureList(status: "ready", rows: ed + rest, hasEdition: !ed.isEmpty)
     }
 
+    /// The server's own answer to "which document is my edition" (GET /api/texture/edition) applied to the list: that document is
+    /// pinned as the edition even when it is not titled "My edition" or is older than the page of documents the list holds.
+    public static func applying(_ ed: EditionInfo?, to list: TextureList) -> TextureList {
+        guard let ed, ed.found else { return list }
+        var l = list
+        let address = "texture:\(ed.docID)"
+        if let i = l.rows.firstIndex(where: { $0.address == address }) {
+            var r = l.rows.remove(at: i); r.edition = true; l.rows.insert(r, at: 0)
+        } else {
+            let when = TextureDocParser.shortDate(ed.updatedAt)
+            l.rows.insert(TextureRow(address: address, title: "My edition", updated: when, meta: when, edition: true, revising: false), at: 0)
+        }
+        l.hasEdition = true
+        return l
+    }
+
     public static func load() async -> TextureList {
         do {
             let r = try await ChoirEnvironment.shared.client().send("GET", "/api/texture/documents", query: ["limit": "100"], route: "/api/texture/documents")
-            return parse(try r.object())
+            return applying(await EditionLookup.fetch(), to: parse(try r.object()))
         } catch ChoirError.notSignedIn {
             return TextureList(status: "error", message: "Sign in to see your documents.")
         } catch {
             return TextureList(status: "error", message: "Could not load your documents. \(ReaderStore.describe(error))")
         }
+    }
+}
+
+// MARK: The listener's edition (GET /api/texture/edition)
+
+/// `{found:false}` before an edition exists (the normal first-run answer, not an error); `{found:true, doc_id, revision_id, updated_at}` after.
+public struct EditionInfo: Sendable, Equatable {
+    public var found = false
+    public var docID = "", revisionID = "", updatedAt = ""
+    public init(found: Bool = false, docID: String = "", revisionID: String = "", updatedAt: String = "") {
+        self.found = found; self.docID = docID; self.revisionID = revisionID; self.updatedAt = updatedAt
+    }
+    /// A `found` answer with no document id cannot be opened, so it counts as not found.
+    public static func parse(_ data: Data) throws -> EditionInfo {
+        guard let o = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ChoirError.decode("edition: not an object") }
+        let id = (o["doc_id"] as? String) ?? ""
+        guard (o["found"] as? Bool) == true, !id.isEmpty else { return EditionInfo() }
+        return EditionInfo(found: true, docID: id, revisionID: (o["revision_id"] as? String) ?? "", updatedAt: (o["updated_at"] as? String) ?? "")
+    }
+}
+
+public enum EditionLookup {
+    /// nil when the server cannot say (offline, not signed in, a server without the route): callers then behave as before.
+    public static func fetch() async -> EditionInfo? {
+        guard let r = try? await ChoirEnvironment.shared.client().send("GET", "/api/texture/edition", route: "/api/texture/edition") else { return nil }
+        return try? EditionInfo.parse(r.data)
     }
 }
 

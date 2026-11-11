@@ -60,5 +60,38 @@ final class RealShapeTests: XCTestCase {
         let w = try WhoAmI.parse(Data(#"{"handle":"writer-abcdef","key_id":"ak_1","key_label":"CLI key","scopes":["admin","owner:acts"],"computer_id":""}"#.utf8))
         XCTAssertEqual(w.handle, "writer-abcdef")
         XCTAssertEqual(w.computerID, "")
+        XCTAssertEqual(ChoirAccountClient.filled(w, stored: "computer-demo-1").computerID, "computer-demo-1", "the account page names the computer the phone found")
+        XCTAssertEqual(ChoirAccountClient.filled(w, stored: nil).computerID, "")
+        let bound = WhoAmI(handle: "h", computerID: "computer-bound")
+        XCTAssertEqual(ChoirAccountClient.filled(bound, stored: "computer-other").computerID, "computer-bound")
+    }
+
+    func testEditionNotFoundIsNotAnError() throws {
+        XCTAssertEqual(try EditionInfo.parse(Data(#"{"found":false}"#.utf8)), EditionInfo())
+        XCTAssertFalse(try EditionInfo.parse(Data(#"{"found":true}"#.utf8)).found, "found without a document id cannot be opened")
+        let e = try EditionInfo.parse(Data(#"{"found":true,"doc_id":"d9","revision_id":"r2","updated_at":"2026-11-11T05:00:00Z"}"#.utf8))
+        XCTAssertEqual(e, EditionInfo(found: true, docID: "d9", revisionID: "r2", updatedAt: "2026-11-11T05:00:00Z"))
+        XCTAssertThrowsError(try EditionInfo.parse(Data("[]".utf8)))
+    }
+
+    func testTheServersEditionIsPinnedFirst() {
+        let list = TextureList(status: "ready", rows: [
+            TextureRow(address: "texture:a", title: "Notes", updated: "", meta: "", edition: false, revising: false),
+            TextureRow(address: "texture:d9", title: "Morning paper", updated: "", meta: "", edition: false, revising: false)])
+        let pinned = TextureList.applying(EditionInfo(found: true, docID: "d9"), to: list)
+        XCTAssertEqual(pinned.rows.map(\.address), ["texture:d9", "texture:a"])
+        XCTAssertTrue(pinned.rows[0].edition)
+        XCTAssertTrue(pinned.hasEdition)
+        let absent = TextureList.applying(EditionInfo(found: true, docID: "old"), to: list)
+        XCTAssertEqual(absent.rows.first?.address, "texture:old", "an edition older than the page of documents is still shown")
+        XCTAssertEqual(TextureList.applying(EditionInfo(), to: list), list)
+        XCTAssertEqual(TextureList.applying(nil, to: list), list)
+    }
+
+    func testDekTidiesSentenceSpacing() {
+        // The real dek comes from a sentence tokeniser: "Abu Dhabi . The Kremlin ... earlier: ."
+        XCTAssertEqual(PaperStory.tidy("talks opened in Abu Dhabi . The Kremlin had said earlier: ."), "talks opened in Abu Dhabi. The Kremlin had said earlier:")
+        XCTAssertEqual(PaperStory.tidy("A plain line, kept."), "A plain line, kept.")
+        XCTAssertEqual(PaperStory.tidy("cut off\u{2026}"), "cut off\u{2026}")
     }
 }

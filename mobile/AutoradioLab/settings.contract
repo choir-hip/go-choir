@@ -107,7 +107,7 @@ component FactRow
   view
     row width="100%" box-sizing="border-box" gap=12 padding="10px 16px" align-items="flex-start" justify-content="space-between"
       text label font-family=th.fontUi font-size=tx.sizeLabel color=th.muted
-      text value testId=testId font-family=(mono ? th.fontMono : th.fontUi) font-size=tx.sizeLabel color=th.fg text-align="right" flex=1 min-width=0
+      text value testId=testId font-family=(mono ? th.fontMono : th.fontUi) font-size=tx.sizeLabel color=th.fg text-align="right" flex=1 min-width=0 overflow-wrap="anywhere"
 
 // A filled or bordered action button in the theme's shape.
 component ActionButton

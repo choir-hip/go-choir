@@ -51,10 +51,17 @@ public struct PaperStory: Sendable, Equatable {
         for e in (s["entities"] as? [[String: Any]]) ?? [] {
             if let id = e["id"] as? String, let l = e["label"] as? String, !l.isEmpty { ents.append(PaperEntity(id: id, label: l)) }
         }
-        return PaperStory(route: route, title: title, dek: s["dek"] as? String ?? "", section: s["section"] as? String ?? "",
+        return PaperStory(route: route, title: title, dek: tidy(s["dek"] as? String ?? ""), section: s["section"] as? String ?? "",
                           words: int("words") ?? 0, importance: int("importance") ?? 5, sources: int("source_count") ?? 0,
                           versions: max(1, int("version_count") ?? 1), updated: Self.date(s["updated_at"] as? String),
                           kind: s["kind"] as? String ?? "", author: s["author"] as? String ?? "", entities: ents)
+    }
+
+    /// The real dek is cut from sentences joined with a space before each stop ("Abu Dhabi . The Kremlin", "earlier: ."); say it the way it is read.
+    static func tidy(_ s: String) -> String {
+        var t = s.replacingOccurrences(of: "\\s+([.,;:!?])", with: "$1", options: .regularExpression)
+        t = t.replacingOccurrences(of: "([:;,])\\.", with: "$1", options: .regularExpression)
+        return t.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     public static func parseList(_ object: [String: Any]) -> [PaperStory] {

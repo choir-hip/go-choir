@@ -79,10 +79,15 @@ run_drive survey light "" --touch platform
 STORY1=$(ids "$SHOTS/drive-survey.txt" "paper-story-" | sed -n 1p)
 STORY2=$(ids "$SHOTS/drive-survey.txt" "paper-story-" | sed -n 4p)
 PLAY1=$(ids "$SHOTS/drive-survey.txt" "paper-play-" | sed -n 2p)
-DOC1=$(ids "$SHOTS/drive-survey.txt" "textures-doc-" | sed -n 2p)
+DOC1=$(ids "$SHOTS/drive-survey.txt" "textures-doc-" | sed -n 3p)
+# a document by its title: the id of the row whose card holds the title text (the tree lists the row, then its texts)
+docid() { awk -v t="$2" '/\[textures-doc-texture:/ { match($0, /\[textures-doc-texture:[^]]*\]/); id=substr($0, RSTART+1, RLENGTH-2) } index($0, "\"" t "\"") && id != "" { print id; exit }' "$1"; }
+THEME_ROW=$(docid "$SHOTS/drive-survey.txt" "Autoradio theme test")
+BIG_ROW=$(docid "$SHOTS/drive-survey.txt" "Master document")
 DIR1=$(ids "$SHOTS/drive-survey.txt" "files-row-" | sed -n 1p)
 MAIL1=$(ids "$SHOTS/drive-survey.txt" "mail-row-" | sed -n 1p)
-echo "picked: story1=${STORY1:+yes} story2=${STORY2:+yes} play=${PLAY1:+yes} doc=${DOC1:+yes} dir=${DIR1:+yes} mail=${MAIL1:+yes}"
+THEME_DOC=${THEME_ROW#textures-doc-texture:}
+echo "picked: theme=${THEME_DOC:+yes} big=${BIG_ROW:+yes} story1=${STORY1:+yes} story2=${STORY2:+yes} play=${PLAY1:+yes} doc=${DOC1:+yes} dir=${DIR1:+yes} mail=${MAIL1:+yes}"
 
 # ---- 3b. READ drive: two real stories in the reader, one played, one Texture, a folder, a message
 step "clock data"; wait_ 6000
@@ -101,6 +106,29 @@ place mail 900; wait_ 2500
 step logs
 run_drive read light "" --touch platform
 
+# ---- 3c. THEME drive: a theme from a Texture, loaded through Settings (the document "Autoradio theme test" on d@e holds one choir-theme block)
+if [ -n "$THEME_DOC" ]; then
+  step "clock data"; wait_ 5000
+  step "tap ob-skip"; wait_ 2000
+  place settings 900
+  step "tap settings-nav-appearance"; wait_ 700
+  step "type settings-theme-doc $THEME_DOC"; wait_ 500
+  step "tap settings-theme-load"; view real-21-theme-loaded 3500
+  step "tap settings-back"; wait_ 600; view real-22-settings-with-theme 700
+  step logs
+  run_drive theme light "" --touch platform
+fi
+
+# ---- 3d. BIG drive: the largest document on d@e (hundreds of versions) opens, or says plainly why not
+if [ -n "$BIG_ROW" ]; then
+  step "clock data"; wait_ 5000
+  step "tap ob-skip"; wait_ 2000
+  place textures 900; wait_ 2500
+  step "tap \"$BIG_ROW\""; view real-23-big-document 9000
+  step logs
+  run_drive big light "" --touch platform
+fi
+
 # ---- 4. assertions on real conditions
 if grep -lE "choir_sk_[A-Za-z0-9]" "$SHOTS"/*.txt "$OUT" >/dev/null 2>&1; then fail "key leak" "a key-shaped string is in the drive output"; fi
 SV="$SHOTS/drive-survey.txt"; RD="$SHOTS/drive-read.txt"
@@ -114,7 +142,7 @@ chk "not demo mode: no demo switch on the settings page" '\[settings-nav-account
 bad "not demo mode: no demo fixture story" 'harbor council approves a tide barrier' "$SV"
 chk "paper: the masthead" '\[page-title\] "AUTOPAPER"' "$SV"
 chk "paper: real stories (route ids)" '\[paper-story-/pub/' "$SV"
-chk "paper: a story title is not empty" '\[paper-story-/pub/[^]]*\][^"]*"[^"]{3,}' "$SV"
+if grep -A3 '\[paper-story-/pub/' "$SV" | grep -qE 'Text#[0-9]+ "[^"]{10,}"'; then echo "ok: paper: a story title is not empty"; else echo "MISSING: paper: a story title is not empty"; FAILS="$FAILS [story title]"; fi
 bad "paper: no error banner" '\[paper-status\] "(Could not|Offline)' "$SV"
 bad "paper: no sign-in card" '\[paper-signin-card\]' "$SV"
 chk "settings: the account shows a handle" '\[settings-account-handle\][^"]*"writer-' "$SV"
@@ -131,6 +159,11 @@ chk "reader: body blocks" '\[reader-block-' "$RD"
 chk "reader: more on this" '\[reader-related-pub:' "$RD"
 chk "radio: playing a real story" 'NOW PLAYING|Now playing,' "$RD"
 [ -n "$DOC1" ] && chk "texture document: opened" '\[reader-block-' "$RD"
+if [ -n "$THEME_DOC" ]; then
+  TH="$SHOTS/drive-theme.txt"
+  chk "theme: the Texture's theme is listed" '\[settings-theme-depth-teal-test\]' "$TH"
+  bad "theme: no problems reported" '\[settings-theme-problems\]' "$TH"
+fi
 n=$(ls "$SHOTS"/real-*.png 2>/dev/null | wc -l)
 [ "$n" -ge 18 ] || FAILS="$FAILS [screenshots: $n]"
 echo "ok: screenshots in $SHOTS ($n)"

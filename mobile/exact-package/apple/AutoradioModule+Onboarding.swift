@@ -301,6 +301,12 @@ final class OnboardingController: @unchecked Sendable {
         let f = DateFormatter(); f.dateFormat = "d MMM"; f.locale = Locale(identifier: "en_US_POSIX"); return f.string(from: Date())
     }
 
+    /// The computer already holds the listener's edition: no card, no offer.
+    func markEditionFound() {
+        set { progress.editionDone = true; step = "done" }
+        save()
+    }
+
     func skip() {
         set { progress.skipped = true; step = "skipped" }
         save()
@@ -401,7 +407,13 @@ extension AutoradioModule {
         handle("onboardingReset") { args, reply in c.reset(); reply(c.view()) }
 
         // Fresh install, signed in, not demo: offer the path once as the open page (closing it is a choice that sticks).
-        if !Demo.isOn { c.offerOnce(pages: pages) }
+        // The computer is asked first (GET /api/texture/edition): a listener who already has an edition (a second phone, a reinstall) is
+        // not offered the interview. No answer (offline, signed out, an older server) offers it as before.
+        if !Demo.isOn {
+            Task { [weak c, pages] in
+                if let ed = await EditionLookup.fetch(), ed.found { c?.markEditionFound() } else if let pages { c?.offerOnce(pages: pages) }
+            }
+        }
         // The proof (and a developer in demo mode): start the path fresh with the page open. Not a product switch; it only
         // exists in demo mode, where there is no listener to keep.
         if Demo.isOn && UserDefaults.standard.bool(forKey: "AutoradioOpenOnboarding") {

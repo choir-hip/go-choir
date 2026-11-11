@@ -2,7 +2,7 @@
 // The edition is pinned first; "Make your edition" is a card when there is none; the rest are recent, newest first, and a
 // search field filters them. A document opens in the reader (`texture:<doc>`). "New document" is a prompt, not an empty editor.
 // testIds: page-title, textures-search, textures-edition, textures-make-edition, textures-new, textures-doc-<address>.
-use Theme, TextureList, TextureRow from "@choir/autoradio"
+use Theme, TextureList, TextureRow, Onboarding from "@choir/autoradio"
 use PageScroll, Card, Btn from "./ui.contract"
 use FirstRunCard from "./onboarding.contract"
 
@@ -29,6 +29,7 @@ component TexturesPage
   inject
     th: Theme
     tlist: TextureList
+    ob: Onboarding
     openPage: action
     editAsk: action
   props
@@ -45,7 +46,9 @@ component TexturesPage
       text "Textures" role="heading" aria-level=1 font-family=th.fontRead font-size=30 font-weight=700 testId="page-title" color=th.fg
       input type="search" value=q input=editQ placeholder="Search your documents" aria-label="Search your documents" testId="textures-search"
         font-family=th.fontUi padding="10px 4px"
-      FirstRunCard()
+      // The generic "Make your edition" card is this page's own card below (found with real data: both showed, one under the other).
+      if ob.card != "Make your edition"
+        FirstRunCard()
       if tlist.status == "loading"
         progress aria-label="Loading" width=24 height=24 color=th.accent
       if tlist.status == "error"
@@ -55,7 +58,7 @@ component TexturesPage
           column padding=18 gap=8 align-items="flex-start" width="100%"
             text "YOUR EDITION" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing="0.08em" color=th.accent
             text "Make your edition" font-family=th.fontRead font-size=22 font-weight=700 color=th.fg
-            text "A front page written for you each morning from the sources you follow. Say what you want in it." font-family=th.fontRead font-size=16 line-height=1.45 color=th.muted
+            text "A front page written for you each morning from the sources you follow. Say what you want in it." font-family=th.fontRead font-size=16 line-height=1.45 color=th.muted width="100%"
             button press=editAsk("Make my edition: ") testId="textures-make-edition" appearance="none"
               Btn(label="Make your edition", primary=true, wide=false)
       for r in edition key=r.address

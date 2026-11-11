@@ -41,7 +41,13 @@ public struct ChoirAccountClient: AccountClient {
     public init() {}
     public func whoami() async throws -> WhoAmI {
         let r = try await ChoirEnvironment.shared.client().send("GET", "/auth/whoami", route: "/auth/whoami")
-        return try WhoAmI.parse(r.data)
+        return Self.filled(try WhoAmI.parse(r.data), stored: ChoirEnvironment.shared.keys.get(KeyAccount.computerID))
+    }
+    /// An owner-wide key answers `computer_id: ""` (checked on choir.news); the phone knows which computer it found, so say that one.
+    static func filled(_ w: WhoAmI, stored: String?) -> WhoAmI {
+        var x = w
+        if x.computerID.isEmpty, let s = stored, !s.isEmpty { x.computerID = s }
+        return x
     }
 }
 
