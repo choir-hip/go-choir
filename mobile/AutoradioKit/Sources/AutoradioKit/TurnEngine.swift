@@ -405,25 +405,35 @@ public actor TurnEngine {
             }
         }
 
-        // System 1, with a deadline: a slow answer must not hold the acknowledgement.
-        var answers: [System1Answer] = []
-        let system1Threw = Flag()
-        if let system1 {
+        // System 1, with a deadline: a slow answer must not hold the acknowledgement. It runs as a task so the
+        // immediate acknowledgement can start beside it.
+        let system1Limit = limits.system1Deadline
+        let s1Task: Task<[System1Answer], Never> = Task {
+            guard let system1 else { return [] }
+            let system1Threw = Flag()
             let input = System1Input(context: pos.context, listenerWords: transcript, questions: pos.questions)
-            let got: [System1Answer]? = await withDeadline(limits.system1Deadline) {
+            let got: [System1Answer]? = await withDeadline(system1Limit) {
                 do { return try await log.timed("system1") { try await system1.answer(input) } }
                 catch { system1Threw.set(); log.emit(.error(stage: "system1", message: "\(error)")); return nil }
             } ?? nil
-            if got == nil, !system1Threw.isSet { log.emit(.error(stage: "system1", message: "no answer within \(limits.system1Deadline)s; acknowledging without it")) }
-            answers = got ?? []
+            if got == nil, !system1Threw.isSet { log.emit(.error(stage: "system1", message: "no answer within \(system1Limit)s; acknowledging without it")) }
+            let answers = got ?? []
             for a in answers { log.emit(.system1Answer(questionID: a.questionID, option: a.option, score: a.score, ms: a.ms)) }
+            return answers
         }
+        let immediate = cfg.ack == .immediate
+        var answers: [System1Answer] = []
+        if !immediate { answers = await s1Task.value }   // afterSystem1: the line is chosen from the answers
 
-        // Acknowledge at once, then hold.
+        // Acknowledge, then hold.
         var speakTask: Task<Void, Never>?
+        var verdictTask: Task<Void, Never>?
+        let audible = Flag()
         if let holder, let voice {
             let (relayOut, relayCont) = AsyncStream.makeStream(of: String.self)
-            let src = holder.lines(for: HolderInput(listenerWords: transcript, answers: answers))
+            let src = immediate
+                ? holder.lines(for: HolderInput(listenerWords: transcript, answers: []), later: { await s1Task.value })
+                : holder.lines(for: HolderInput(listenerWords: transcript, answers: answers))
             relayTask = Task {
                 for await l in src { log.emit(.holdingSaid(l)); relayCont.yield(l) }
                 relayCont.finish()
@@ -439,6 +449,7 @@ public actor TurnEngine {
                     for try await f in frames {
                         if first {
                             first = false
+                            audible.set()
                             let now = log.clock.now
                             log.emit(.stageTiming(stage: "voice.firstAudio", startedAt: start, endedAt: now))
                             log.emit(.ackStarted(msSinceTurnEnd: (now - endedAt) * 1000))
@@ -451,8 +462,29 @@ public actor TurnEngine {
             setPhase(.holding)
             let pb = env.playback
             let play = Task { await pb.speak(tapOut) }
+            if immediate {
+                // System 1 selects what follows. If it says the turn needs nothing, stop the acknowledgement and the
+                // desk. An ack not yet audible is cancelled outright; one already speaking finishes its line (never
+                // cut mid-word) and no further line starts.
+                let (st, dt, rl) = (speakTask, deskTask, relayTask)
+                verdictTask = Task {
+                    let a = await s1Task.value
+                    guard Self.needsNothing(a) else { return }
+                    let wasAudible = audible.isSet
+                    log.emit(.ackCancelled(reason: "System 1: the listener asked for nothing", audible: wasAudible))
+                    holder.cancel(); rl?.cancel()
+                    if !wasAudible { st?.cancel(); play.cancel(); tapCont.finish() }
+                    if let dt { log.emit(.note("desk not engaged: System 1 said nothing was asked")); dt.cancel() }
+                }
+            }
             await withTaskCancellationHandler { await play.value } onCancel: { play.cancel(); speakTask?.cancel() }
         } else { setPhase(.holding) }
+        if immediate, holder == nil || voice == nil {
+            let a = await s1Task.value
+            if Self.needsNothing(a) { log.emit(.note("desk not engaged: System 1 said nothing was asked")); deskTask?.cancel() }
+        }
+        _ = await verdictTask?.value
+        _ = await s1Task.value
 
         // Hold until the desk finishes (or the timeout), never silent: more holding lines already came from the holder.
         if let deskTask {
@@ -476,6 +508,11 @@ public actor TurnEngine {
         }
         if let b = bounds { await b.reset() }
         setPhase(.playing)
+    }
+
+    /// System 1 answered "asks_for_something: no": the utterance needs nothing, the programme carries on.
+    static func needsNothing(_ answers: [System1Answer]) -> Bool {
+        answers.first { $0.questionID == "asks_for_something" }?.option == "no"
     }
 
     func onRevision(_ r: Revision, flag: Flag, endedAt: Double, relay: () -> Void) async {

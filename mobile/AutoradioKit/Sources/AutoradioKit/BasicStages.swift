@@ -247,19 +247,34 @@ public final class RemoteSystem1: System1, @unchecked Sendable {
 public final class FixedLinesHolder: Holder, @unchecked Sendable {
     public static let stageID = "fixed-lines"
     public static var descriptor: StageDescriptor {
-        StageDescriptor(displayName: "Fixed lines", summary: "An acknowledgement chosen by the System 1 answers, then a holding line every holdEvery s until the revision.",
+        StageDescriptor(displayName: "Fixed lines", summary: "An acknowledgement (at once, or chosen by the System 1 answers), then a holding line every holdEvery s until the revision.",
                         params: [.number("holdEvery", "Holding line every (s)", 8, 2, 60), .number("maxLines", "Most holding lines", 6, 0, 20)])
     }
     let every: Double, maxLines: Int
+    private let lock = NSLock()
+    private var task: Task<Void, Never>?
     public init(_ p: StageParams) { every = p.double("holdEvery", 8); maxLines = p.int("maxLines", 6) }
     static let holding = ["Still working on that.", "One moment, I am pulling that together.", "Nearly there.", "Thanks for waiting."]
+    static func asks(_ answers: [System1Answer]) -> Bool { answers.first { $0.questionID == "asks_for_something" }?.option == "yes" }
     public func lines(for i: HolderInput) -> AsyncStream<String> {
-        let asks = i.answers.first { $0.questionID == "asks_for_something" }?.option == "yes"
-        let ack = asks ? "Got it. Let me look into that." : "Got it."
+        let ack = Self.asks(i.answers) ? "Got it. Let me look into that." : "Got it."
+        return stream(first: ack, later: nil)
+    }
+    /// "Got it." at once; once System 1 has answered, a request adds "Let me look into that." as the next line.
+    public func lines(for i: HolderInput, later: @escaping @Sendable () async -> [System1Answer]) -> AsyncStream<String> {
+        stream(first: "Got it.", later: later)
+    }
+    public func cancel() { lock.lock(); let t = task; lock.unlock(); t?.cancel() }
+    private func stream(first: String, later: (@Sendable () async -> [System1Answer])?) -> AsyncStream<String> {
         let (every, maxLines) = (every, maxLines)
         return AsyncStream { c in
             let t = Task {
-                c.yield(ack)
+                c.yield(first)
+                if let later {
+                    let answers = await later()
+                    if Task.isCancelled { c.finish(); return }
+                    if Self.asks(answers) { c.yield("Let me look into that.") }
+                }
                 for n in 0..<maxLines {
                     try? await Task.sleep(nanoseconds: UInt64(every * 1e9))
                     if Task.isCancelled { break }
@@ -267,6 +282,7 @@ public final class FixedLinesHolder: Holder, @unchecked Sendable {
                 }
                 c.finish()
             }
+            self.lock.lock(); self.task = t; self.lock.unlock()
             c.onTermination = { _ in t.cancel() }
         }
     }

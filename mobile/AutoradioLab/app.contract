@@ -6,7 +6,7 @@ use choirAuth, choirPlayer, choirStories from "@choir/autoradio"
 use choirSignIn, choirSignOut, choirOpenApproval, choirCancelSignIn, choirRefresh, choirPlayPause, choirTalkDown, choirTalkUp, choirPlay from "@choir/autoradio"
 use ChoirAuth, ChoirPlayer, StoryList from "@choir/autoradio"
 use LabState, StageList, ParamList, Trace, TurnList, Lines, Names from "@choir/autoradio"
-use labAudio, labInject, labSetAudioPolicy, labExportTurn from "@choir/autoradio"
+use labAudio, labInject, labSetAudioPolicy, labSetAckTiming, labExportTurn from "@choir/autoradio"
 use AudioInfo, ExportInfo from "@choir/autoradio"
 
 routes nav
@@ -93,6 +93,8 @@ component Autoradio
 
   action setPolicy(p: string)
     send ctl = labSetAudioPolicy(policy=p)
+  action setAckTiming(t: string)
+    send ctl = labSetAckTiming(timing=t)
   action inject
     send ctl = labInject()
   action exportTurn(id: string)
@@ -120,7 +122,7 @@ component Autoradio
             for e in t.stack key=e.id
               column navigationKey=`${e.id}` navigationScroll=`content-${e.id}` position="absolute" inset=0
                 header padding="8px 16px" display="flex" align-items="center"
-                  text (e.name == "player" ? "Autoradio" : e.name == "lab" ? "Lab" : "Trace") role="heading" aria-level=1 flex=1
+                  text (e.name == "player" ? "Autoradio" : e.name == "lab" ? "Components" : "Trace") role="heading" aria-level=1 flex=1
                   text `${st.residentMB.toFixed(0)} MB · ${st.thermal}` testId="resources" color="-exact-secondary-label"
                 scroll id=`content-${e.id}` flex=1 min-height=0
                   if e.name == "player"
@@ -186,10 +188,18 @@ component Autoradio
                       for pol in aud.policies key=pol
                         button press=setPolicy(pol) role="radio" aria-checked=(aud.policy == pol) testId=`policy-${pol}`
                           text `${aud.policy == pol ? "● " : "○ "}${pol}`
+                      text "Acknowledgement" role="heading" aria-level=2
+                      for tm in aud.ackTimings key=tm
+                        button press=setAckTiming(tm) role="radio" aria-checked=(aud.ackTiming == tm) testId=`ack-${tm}`
+                          text `${aud.ackTiming == tm ? "● " : "○ "}${tm == "immediate" ? "Say it at once" : "Wait for System 1"}`
                       text yieldLabel testId="yield"
                       text modeLabel testId="mode" color="-exact-secondary-label"
                       text `Phase: ${st.phase} · mic ${st.micActive ? "on" : "off"} · config ${st.configName}` testId="phase" color="-exact-secondary-label"
                       text st.message testId="lab-message" color="-exact-secondary-label"
+                      text (st.transcript == "" ? "(listening)" : st.transcript) testId="lab-transcript"
+                      button pointerdown=talkDown pointerup=talkUp testId="lab-talk" appearance="none"
+                        width="100%" padding=40 background-color="-exact-secondary-background"
+                        text (st.phase == "playing" ? "Hold to talk" : st.phase)
                       row gap=8 align-items="center"
                         button press=inject testId="inject"
                           text "Inject fixture turn"
@@ -264,4 +274,4 @@ component Autoradio
           text "Radio"
         button role="tab" aria-controls="panel-lab" aria-selected=(nav.tab == "lab") press=pickTab("lab") testId="tab-lab" flex=1
           image "symbol:settings"
-          text "Lab"
+          text "Components"

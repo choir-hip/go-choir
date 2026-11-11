@@ -122,6 +122,9 @@ public final class AutoradioModule: ExactPackage {
         case "labInject":
             Task { [weak self] in await self?.runtime.injectFixtureTurn() }
             reply(state())
+        case "labSetAckTiming":
+            if let t = AckTiming(rawValue: args["timing"] as? String ?? "") { runtime.setAckTiming(t) }
+            reply(state())
         case "labSetAudioPolicy":
             if let p = AudioPolicy(rawValue: args["policy"] as? String ?? "") { runtime.setAudioPolicy(p) }
             reply(state())

@@ -83,7 +83,9 @@
       "audible": "bool",
       "volume": "number",
       "lastSwitchMs": "number",
-      "policies": "string[]"
+      "policies": "string[]",
+      "ackTiming": "string",
+      "ackTimings": "string[]"
     },
     "ExportInfo": {
       "path": "string",
@@ -208,7 +210,9 @@
           "audible": false,
           "volume": 1,
           "lastSwitchMs": 0,
-          "policies": []
+          "policies": [],
+          "ackTiming": "immediate",
+          "ackTimings": []
         }
       }
     },
@@ -220,6 +224,13 @@
       "send": "labSetAudioPolicy",
       "options": {
         "policy": "string"
+      },
+      "answers": "LabState"
+    },
+    {
+      "send": "labSetAckTiming",
+      "options": {
+        "timing": "string"
       },
       "answers": "LabState"
     },

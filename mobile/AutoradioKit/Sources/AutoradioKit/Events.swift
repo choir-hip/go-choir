@@ -42,6 +42,9 @@ public enum LabEvent: Codable, Sendable, Equatable {
     case system1Answer(questionID: String, option: String, score: Double, ms: Double)
     case ackStarted(msSinceTurnEnd: Double)
     case holdingSaid(String)
+    /// System 1 said the utterance needs nothing: the acknowledgement was stopped. `audible`: it had already started
+    /// (the line in flight finished; no further line started).
+    case ackCancelled(reason: String, audible: Bool)
     case revisionArrived(id: String, fromBlock: Int, blocks: Int, summary: String)
     case playbackState(PlaybackStateName)
     case yielded(YieldKind)
@@ -142,6 +145,8 @@ public struct TurnSummary: Codable, Sendable, Equatable {
     /// Milliseconds from the end of the turn to the first revision.
     public var turnEndToRevisionMs: Double?
     public var errors: [String]
+    /// Why the acknowledgement was stopped, when System 1 said the turn needed nothing.
+    public var ackCancelled: String?
     public var peakResidentBytes: Int64?
     /// Milliseconds the audio session took to change state during the turn (the sum of its switches).
     public var audioSwitchMs: Double?
@@ -173,6 +178,7 @@ public struct TurnRecord: Codable, Sendable {
             case .system1Answer(let q, let o, let sc, let ms): s.answers.append(AnswerEntry(questionID: q, option: o, score: sc, ms: ms))
             case .ackStarted(let ms): s.turnEndToAckMs = ms
             case .holdingSaid(let l): s.holdingLines.append(l)
+            case .ackCancelled(let r, let a): s.ackCancelled = r + (a ? " (the line already speaking finished)" : " (before any audio)")
             case .revisionArrived(let id, _, _, let sum):
                 s.revisions.append("\(id): \(sum)")
                 if s.turnEndToRevisionMs == nil, let e = turnEnd { s.turnEndToRevisionMs = (te.t - e) * 1000 }

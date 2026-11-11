@@ -1,6 +1,6 @@
 #!/bin/sh
 # End-to-end proof of the lab app on a simulator, driven through Exact's agent socket (no human, no device):
-# Player, Lab and Trace screens; Start audio (virtual engine: the agent opens no hardware); hold-to-talk;
+# a fresh launch with no key shows Sign in on the Radio tab; the Lab screen selects the stub stages explicitly (the app's default is the real listener configuration, which needs a key and the network); Lab and Trace screens; Start audio (virtual engine: the agent opens no hardware); hold-to-talk;
 # a kept turn injected through the live engine (yielding observed while it speaks); the turn record in Trace with
 # stage timings and the audio switch; the offline replay of the kept turn; the JSON export.
 # Last line: PROOF OK, or PROOF FAILED at <step>. Elements are found by test id, never by position.
@@ -36,16 +36,15 @@ while :; do
   "$HERE/exact.sh" agent ios \
     "clock data" tree \
     "tap tab-lab" "clock data" tree \
-    "tap tab-trace" "clock data" tree \
-    "tap tab-player" "clock data" tree \
+    "tap stage-addressing-hybrid" "tap stage-transcriber-scripted" "tap stage-system1-fixed" "tap stage-holder-fixed-lines" \
+      "tap stage-desk-stub-echo" "tap stage-programme-fixture" "tap ack-immediate" "clock data" tree \
     "tap start" "clock +1500 real" "clock data" tree \
-    "tap tab-lab" "tap stage-transcriber-scripted" "clock data" \
-    "tap tab-player" "tap talk down" "clock +700 real" "clock data" tree "tap up" "clock +1500 real" \
-    "tap tab-lab" "tap inject" "clock +3000 real" "clock data" tree \
-    "clock +9000 real" "clock data" "tap tab-trace" "clock data" tree \
-    "tap tab-lab" "tap stage-addressing-open" "tap inject" "clock +2500 real" "clock data" tree \
+    "tap lab-talk down" "clock +700 real" "clock data" tree "tap up" "clock +1500 real" \
+    "tap inject" "clock +3000 real" "clock data" tree \
+    "clock +9000 real" "clock data" "tap open-trace" "clock data" tree "tap tab-lab" \
+    "tap stage-addressing-open" "tap inject" "clock +2500 real" "clock data" tree \
     "clock +9000 real" "clock data" tree \
-    "tap tab-lab" "tap replay-fixture" "clock +9000 real" "clock data" "tap tab-trace" "clock data" tree \
+    "tap replay-fixture" "clock +9000 real" "clock data" "tap open-trace" "clock data" tree \
     "tap trace-export" "clock +800 real" "clock data" tree \
     logs > "$OUT" 2>&1
   rc=$?
@@ -63,8 +62,14 @@ must() { # <step name> <fixed text>
   echo "ok: $1"
 }
 
-must "player screen" '[playpause]'
-must "player has talk control" '[talk]'
+# A fresh launch with no key: the Radio tab shows Sign in, in plain words, and no player.
+must "fresh launch: sign-in button on the Radio tab" '[signin]'
+must "fresh launch: plain-words state" '[signin-intro] "Sign in to hear the paper and talk to your computer."'
+if grep -q '\[story-title\]' "$OUT"; then fail "fresh launch" "the player shows without a key"; fi
+echo "ok: fresh launch: no player without a key"
+must "lab screen: talk control" '[lab-talk]'
+must "lab screen: acknowledgement timing choice" '[ack-immediate]'
+must "lab screen: stub configuration selected explicitly" '"● System 1'
 must "lab screen: audio state before start" 'State none'
 must "lab screen: policy choices" '[policy-alwaysTalking]'
 must "lab screen: inject control" '[inject]'
@@ -81,6 +86,8 @@ grep -qE '\[trace-id\] "turn-' "$OUT" || fail "trace: turn record" "no live turn
 echo "ok: trace: live turn record"
 grep -qE 'Audio switch [0-9]+ ms · [1-9][0-9]* stage timings' "$OUT" || fail "trace: stage timings" "no stage timings in the record"
 echo "ok: trace: stage timings"
+grep -qE 'Acknowledgement [0-9]+ ms' "$OUT" || fail "trace: acknowledgement time" "no acknowledgement time in the record"
+echo "ok: trace: acknowledgement time"
 grep -qE 'Audio switch [1-9][0-9]* ms' "$OUT" || fail "trace: switch latency" "no audio switch latency in the turn record"
 echo "ok: trace: switch latency in the record"
 must "replay: record in trace" 'replay-fixture-plain'

@@ -139,10 +139,19 @@ public enum AudioPolicy: String, Codable, Sendable, CaseIterable {
     }
 }
 
+/// When the holder's first acknowledgement starts. `immediate`: as soon as the turn is the listener's, in parallel
+/// with System 1 and the desk; System 1's answers select only what follows. `afterSystem1`: the line is chosen from
+/// System 1's answers, so it waits for them.
+public enum AckTiming: String, Codable, Sendable, CaseIterable {
+    case immediate, afterSystem1
+}
+
 public struct LabConfiguration: Codable, Sendable, Equatable {
     public var name: String
     public var audioPolicy: AudioPolicy?
     public var audio: AudioPolicy { audioPolicy ?? .switchOnAddress }
+    public var ackTiming: AckTiming?
+    public var ack: AckTiming { ackTiming ?? .immediate }
     public var stages: [String: StageSetting]   // keyed by StageKind.rawValue
     public init(name: String, stages: [StageKind: StageSetting] = [:]) {
         self.name = name

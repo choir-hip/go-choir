@@ -38,6 +38,28 @@ Design: `docs/design/autoradio-lab-2026-11-10.md`. This directory holds `Autorad
 6. A replay mutates the kept turn: it never writes into the turn folder; `--out` is separate.
 7. Apple recognition needs authorization on the Mac: the command embeds usage strings; a missing authorization is an `error` event and a non-zero exit in the proof.
 
+## Acknowledgement timing (`ackTiming`): ways it can fail (written before the code)
+
+`LabConfiguration.ackTiming` is `immediate` (default) or `afterSystem1`. Measured on staging, the acknowledgement
+came 3.0 s after the turn ended: transcription ~0.8 s, the System 1 stage ~1.4 s (the line was chosen from its
+answers), first audio ~1.6 s. With `immediate`, the holder's first line starts as soon as the turn is the listener's,
+in parallel with System 1 and the desk; System 1's answers select only what follows.
+
+- **Ack spoken for a turn System 1 rejects.** The listener said something that needs nothing ("asks_for_something":
+  "no"), and the radio says "Got it." anyway. The engine must be able to stop the acknowledgement: the holder is
+  cancelled (no further lines), the desk is not engaged, the programme carries on, and the turn record says so
+  (`ackCancelled`, with whether the ack was already audible).
+- **Double speech when the desk answers fast.** The desk revision arrives while the immediate ack or its follow-up
+  line is still playing. The revision stops the holding lines (as today), the line in flight finishes, and the
+  revised programme starts after it, never over it. One voice at a time.
+- **Ack cut mid-word.** Cancelling on a System 1 verdict must not truncate audible speech: if the first audio has
+  started, the line in flight finishes and no further line starts; only an ack that has not started is cancelled
+  outright.
+- **System 1 never answers.** Deadline reached: the immediate ack has already played; the follow-up is the generic
+  holding line, and the record carries the System 1 error as today.
+- **Replay differs from live.** Both timings are `LabConfiguration` values, so the same kept turn replays under
+  either and the two records can be compared.
+
 ## What the listener does (first-run path)
 
 The app is called Autoradio and opens to the radio. No stage names, ids or jargon on this path; the Lab and Trace live behind the last tab, "Lab".

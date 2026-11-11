@@ -185,6 +185,15 @@ public protocol System1: Stage {
 /// Produces the acknowledgement and holding lines, as text, as they become known.
 public protocol Holder: Stage {
     func lines(for input: HolderInput) -> AsyncStream<String>
+    /// The immediate form: the first line comes at once, without System 1's answers; `later` resolves to them (empty
+    /// if System 1 failed or timed out) and selects only what follows.
+    func lines(for input: HolderInput, later: @escaping @Sendable () async -> [System1Answer]) -> AsyncStream<String>
+    /// Stop producing lines (System 1 said the turn needs nothing, or the desk answered).
+    func cancel()
+}
+public extension Holder {
+    func lines(for input: HolderInput, later: @escaping @Sendable () async -> [System1Answer]) -> AsyncStream<String> { lines(for: input) }
+    func cancel() {}
 }
 
 /// Text in, audio out. The first frame's time is measured by whoever consumes the stream.

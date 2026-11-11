@@ -42,6 +42,8 @@ public struct AudioInfo: Codable, Sendable {
     public var voiceProcessing = false, audible = false
     public var volume = 1.0, lastSwitchMs = 0.0
     public var policies: [String] = AudioPolicy.allCases.map(\.rawValue)
+    public var ackTiming = "immediate"
+    public var ackTimings: [String] = AckTiming.allCases.map(\.rawValue)
 }
 public struct StageRow: Codable, Sendable { public var kind, kindLabel, id, name, summary: String; public var selected: Bool; public var network: Bool; public var models: String }
 public struct ParamRow: Codable, Sendable { public var kind, stage, name, label, value, hint: String }
@@ -206,6 +208,11 @@ public final class LabRuntime: @unchecked Sendable {
         c.audioPolicy = p
         setConfiguration(c)
     }
+    public func setAckTiming(_ t: AckTiming) {
+        var c = configuration
+        c.ackTiming = t
+        setConfiguration(c)
+    }
     public func setStage(_ kind: StageKind, id: String) {
         var c = configuration
         c.set(kind, StageSetting(id: id))
@@ -310,6 +317,7 @@ public final class LabRuntime: @unchecked Sendable {
         var a = AudioInfo()
         a.state = coordinator.current?.rawValue ?? "none"
         a.policy = configuration.audio.rawValue
+        a.ackTiming = configuration.ack.rawValue
         a.engine = audio.virtual && audio.running ? "virtual" : audio.running ? "up" : audio.down ? "down" : "off"
         a.route = coordinator.describe()
         a.voiceProcessing = audio.voiceProcessing
@@ -382,6 +390,7 @@ public final class LabRuntime: @unchecked Sendable {
         case .system1Answer(let q, let o, let s, let ms): return String(format: "system1 %@ = %@ (%.2f, %.0f ms)", q, o, s, ms)
         case .ackStarted(let ms): return String(format: "acknowledgement audio %.0f ms after turn end", ms)
         case .holdingSaid(let l): return "holding: \(l)"
+        case .ackCancelled(let r, let a): return "acknowledgement stopped: \(r)\(a ? " (audible; the line finished)" : " (before any audio)")"
         case .revisionArrived(let id, let from, let n, let sum): return "revision \(id) from block \(from), \(n) blocks: \(sum)"
         case .playbackState(let s): return "playback \(s.rawValue)"
         case .yielded(let y): return "yield: \(y.rawValue)"
