@@ -12,7 +12,7 @@ use AudioInfo, ExportInfo from "@choir/autoradio"
 routes nav
   tab player "/"
   tab lab "/lab"
-  tab trace "/trace"
+    trace "/trace"
 
 component Autoradio
   resource st = labState() as shape LabState else empty()
@@ -41,6 +41,10 @@ component Autoradio
     nav = select(nav, name)
   action follow(url: string)
     nav = go(nav, url)
+  action back
+    nav = back(nav)
+  action openTrace
+    nav = push(nav, "/trace")
 
   action signIn
     send acct = choirSignIn()
@@ -174,7 +178,7 @@ component Autoradio
                       if au.signedIn
                         button press=signOut testId="signout"
                           text "Sign out"
-                      button press=pickTab("trace") testId="open-trace"
+                      button press=openTrace testId="open-trace"
                         text "Open the trace of the last turn"
                       row gap=8
                         button press=start testId="start"

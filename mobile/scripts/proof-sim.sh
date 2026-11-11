@@ -43,7 +43,7 @@ while :; do
     "tap inject" "clock +3000 real" "clock data" tree \
     "clock +9000 real" "clock data" "tap open-trace" "clock data" tree "tap tab-lab" \
     "tap stage-addressing-open" "tap inject" "clock +2500 real" "clock data" tree \
-    "clock +9000 real" "clock data" tree \
+    "clock +9000 real" "clock data" "tap open-trace" "clock data" tree "tap tab-lab" \
     "tap replay-fixture" "clock +9000 real" "clock data" "tap open-trace" "clock data" tree \
     "tap trace-export" "clock +800 real" "clock data" tree \
     logs > "$OUT" 2>&1
