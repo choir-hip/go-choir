@@ -45,7 +45,7 @@ final class TextureDocTests: XCTestCase {
 
     // 1: no body_doc falls back to markdown; nothing at all gives a visible empty block
     func testFallbackToMarkdownAndEmptyDocument() {
-        let o = obj(#"{"publication":{"title":"T"},"artifact":{"content":"# T\n\nOne **two** three.\n\n- a\n- b\n\n1. x\n2. y"},"nav":{}}"#)
+        let o = obj(##"{"publication":{"title":"T"},"artifact":{"content":"# T\n\nOne **two** three.\n\n- a\n- b\n\n1. x\n2. y"},"nav":{}}"##)
         let d = TextureDocParser.parseBundle(o, address: "pub:t")
         XCTAssertEqual(d.blocks.map(\.kind), ["p", "li", "li", "li", "li"], "the heading equal to the title is dropped (13)")
         XCTAssertEqual(d.blocks[1].marker, "\u{2022}")
@@ -187,7 +187,7 @@ final class TextureDocTests: XCTestCase {
 
     // Private documents: revision, versions, revising
     func testPrivateDocument() {
-        let rev = obj(#"{"revision_id":"r2","version_number":1,"content":"## Notes\n\nSome text.","created_at":"2026-11-09T10:00:00Z"}"#)
+        let rev = obj(###"{"revision_id":"r2","version_number":1,"content":"## Notes\n\nSome text.","created_at":"2026-11-09T10:00:00Z"}"###)
         let doc = obj(#"{"doc_id":"d1","title":"Plan","agent_revision_pending":true,"trajectory_id":"traj-1"}"#)
         let revs = [obj(#"{"revision_id":"r2","version_number":1,"author_label":"appagent","created_at":"2026-11-09T10:00:00Z"}"#),
                     obj(#"{"revision_id":"r1","version_number":0,"author_label":"you","created_at":"2026-11-08T10:00:00Z"}"#)]
