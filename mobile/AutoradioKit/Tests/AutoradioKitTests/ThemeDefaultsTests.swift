@@ -29,7 +29,9 @@ final class ThemeDefaultsTests: XCTestCase {
         let s = store(fresh(), system: "dark")
         XCTAssertEqual(s.themeID, "liquid-metal")
         XCTAssertEqual(s.current().scheme, "dark"); XCTAssertEqual(s.current().paper, "#1C242E")
-        XCTAssertEqual(s.cards().first { $0.current }?.id, "liquid-metal")
+        XCTAssertEqual(s.cards().first { $0.current }?.id, "default", "no choice: the Default entry is the one in use")
+        XCTAssertEqual(s.cards().first?.id, "default", "and it comes first")
+        XCTAssertEqual(s.cards().first?.paper, "#1C242E", "painted as the pair shows in the scheme in force")
     }
 
     func testAnExplicitModeDecidesTheDefault() {                               // D3
@@ -93,5 +95,61 @@ final class ThemeDefaultsTests: XCTestCase {
         s.remove("ember")
         XCTAssertNil(d.string(forKey: "AutoradioThemeID"))
         XCTAssertEqual(s.themeID, "liquid-metal")
+    }
+
+    // Failure list, second round (review findings):
+    //  D9  a Texture or a file installs a theme under a bundled id, replaces the bundled document and its origin, and remove deletes
+    //      the default; the id "default" is taken by a theme and hides the Default entry;
+    //  D10 a person who taps Chrome Pastel and then Dark is stuck light with no way back to the pair, or sees a half-dark screen;
+    //  D11 the Default entry is missing, is not first, is not the one in use with no choice, or does not clear a choice.
+
+    func testNothingReplacesABundledTheme() {                                  // D9
+        let d = fresh()
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("defaults-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let s = ThemeStore(userDir: dir, defaults: d, systemScheme: { "light" })
+        let paper = s.current().paper
+        let clash = ##"{"schema_version":3,"id":"chrome-pastel","name":"Fake","colors":{"paper":"#FFFFFF","fg":"#111111","muted":"#444444","accent":"#0000CC","onAccent":"#FFFFFF"}}"##
+        XCTAssertThrowsError(try s.installFromTexture(Data(clash.utf8)))
+        XCTAssertEqual(s.current().paper, paper); XCTAssertEqual(s.cards().first { $0.id == "chrome-pastel" }?.name, "Chrome Pastel")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("texture-chrome-pastel.json").path), "nothing is written")
+        try? Data(clash.utf8).write(to: dir.appendingPathComponent("chrome-pastel.json"))
+        s.reload()
+        XCTAssertTrue(s.problems.contains { $0.contains("bundled") })
+        s.remove("chrome-pastel")
+        XCTAssertEqual(s.themeID, "chrome-pastel"); XCTAssertEqual(s.current().paper, paper)
+        let reserved = ##"{"schema_version":3,"id":"default","name":"Mine","colors":{"paper":"#FFFFFF","fg":"#111111","muted":"#444444","accent":"#0000CC","onAccent":"#FFFFFF"}}"##
+        XCTAssertThrowsError(try s.installFromTexture(Data(reserved.utf8)))
+    }
+
+    func testAChosenSingleSchemeThemeLocksTheModeHonestlyAndTheDefaultGivesItBack() {   // D10
+        let d = fresh()
+        let s = store(d, system: "dark"); s.setMode("dark")
+        s.setTheme("chrome-pastel")
+        XCTAssertEqual(s.lockedScheme, "light")
+        XCTAssertEqual(s.schemeMode, "light", "the mode control shows the one scheme the theme has")
+        s.setMode("dark")
+        XCTAssertEqual(s.schemeMode, "light", "and refuses the other"); XCTAssertEqual(s.effectiveScheme(), "light")
+        XCTAssertEqual(s.current().scheme, "light"); XCTAssertEqual(s.current().id, "chrome-pastel")
+        s.setTheme("depth")                                                       // a two-scheme theme gives the person's mode back
+        XCTAssertNil(s.lockedScheme); XCTAssertEqual(s.schemeMode, "dark"); XCTAssertEqual(s.current().scheme, "dark")
+        s.setTheme("chrome-pastel"); s.setTheme("default")                         // and so does the Default entry
+        XCTAssertNil(s.lockedScheme); XCTAssertEqual(s.schemeMode, "dark")
+        XCTAssertEqual(s.themeID, "liquid-metal"); XCTAssertEqual(s.current().scheme, "dark")
+    }
+
+    func testTheDefaultEntryIsFirstClearsTheChoiceAndIsInUseOnlyWithoutOne() {   // D11
+        let d = fresh()
+        let s = store(d, system: "light")
+        XCTAssertEqual(s.cards().first?.id, "default"); XCTAssertEqual(s.cards().first?.name, "Default")
+        XCTAssertEqual(s.cards().filter { $0.current }.map(\.id), ["default"])
+        s.setTheme("lantern")
+        XCTAssertEqual(s.cards().filter { $0.current }.map(\.id), ["lantern"])
+        XCTAssertEqual(d.string(forKey: "AutoradioThemeID"), "lantern")
+        s.setTheme("default")
+        XCTAssertNil(d.string(forKey: "AutoradioThemeID"))
+        XCTAssertEqual(s.cards().filter { $0.current }.map(\.id), ["default"])
+        XCTAssertEqual(s.themeID, "chrome-pastel")
+        XCTAssertEqual(store(d, system: "light").themeID, "chrome-pastel", "and it survives a relaunch")
     }
 }
