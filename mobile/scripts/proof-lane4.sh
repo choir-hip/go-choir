@@ -62,8 +62,8 @@ drive() {
     if [ "$touch" = 1 ]; then "$S/exact.sh" agent ios --touch platform "$@" logs > "$out" 2>&1
     else "$S/exact.sh" agent ios "$@" logs > "$out" 2>&1; fi
     rc=$?
-    if grep -q "never opened its agent socket\|not foreground-active\|before opening its agent socket\|the app hung up" "$out" && [ $attempt -lt 3 ]; then
-      attempt=$((attempt + 1)); echo "launch refused, retry $attempt ($name)"
+    if grep -q "never opened its agent socket\|the touch runner did not start\|not foreground-active\|before opening its agent socket\|the app hung up" "$out" && [ $attempt -lt 4 ]; then
+      attempt=$((attempt + 1)); echo "launch refused, retry $attempt ($name)"; sleep 20
       sim terminate "$EXACT_SIM" $APP >/dev/null 2>&1; sleep 5; continue
     fi
     break
