@@ -124,6 +124,29 @@ function paragraphFromInline(inline: StructuredNode[], nextID: (kind: string) =>
   };
 }
 
+// A list item's children: runs of inline content are one paragraph, each <p> is a paragraph, a nested list stays a list.
+function serializeListItemContent(li: any, nextID: (kind: string) => string, existingDoc?: StructuredTextureDoc | null): StructuredNode[] {
+  const out: StructuredNode[] = [];
+  let run: any[] = [];
+  const flush = () => {
+    if (run.length === 0) return;
+    out.push(paragraphFromInline(run.flatMap((node) => serializeInlineNodes(node, nextID)), nextID));
+    run = [];
+  };
+  for (const child of childNodes(li)) {
+    const tag = isElement(child) ? elementTag(child) : '';
+    if (tag === 'p' || tag === 'ul' || tag === 'ol') {
+      flush();
+      const block = serializeBlockNode(child, nextID, existingDoc);
+      if (block) out.push(block);
+    } else {
+      run.push(child);
+    }
+  }
+  flush();
+  return out.length > 0 ? out : [paragraphFromInline([], nextID)];
+}
+
 function serializeBlockNode(node: any, nextID: (kind: string) => string, existingDoc?: StructuredTextureDoc | null): StructuredNode | null {
   if (!node) return null;
   if (node.nodeType === TEXT_NODE) return paragraphFromInline(serializeInlineNodes(node, nextID), nextID);
@@ -146,11 +169,12 @@ function serializeBlockNode(node: any, nextID: (kind: string) => string, existin
       .map((child: any) => ({
         type: 'list_item',
         attrs: { id: nextID('list-item') },
-        content: [paragraphFromInline(serializeInlineNodes(child, nextID), nextID)],
+        content: serializeListItemContent(child, nextID, existingDoc),
       }));
+    const start = Number(getAttr(node, 'start'));
     return {
       type: tag === 'ul' ? 'bullet_list' : 'ordered_list',
-      attrs: tag === 'ul' ? { id: nextID('list') } : { id: nextID('list'), start: 1 },
+      attrs: tag === 'ul' ? { id: nextID('list') } : { id: nextID('list'), start: Number.isInteger(start) && start > 1 ? start : 1 },
       content: items,
     };
   }
@@ -298,10 +322,18 @@ function renderBlockNode(node: StructuredNode, rc: RenderContext): string {
     }
     case 'bullet_list':
       return `<ul>${(node.content || []).map((item) => renderBlockNode(item, rc)).join('')}</ul>`;
-    case 'ordered_list':
-      return `<ol>${(node.content || []).map((item) => renderBlockNode(item, rc)).join('')}</ol>`;
-    case 'list_item':
-      return `<li>${(node.content || []).map((item) => item.type === 'paragraph' ? renderInlineContent(item.content || [], rc) : renderBlockNode(item, rc)).join('')}</li>`;
+    case 'ordered_list': {
+      // A list that starts at 3 counts from 3 (attrs.start, a positive whole number).
+      const start = Number(node.attrs?.start);
+      const startAttr = Number.isInteger(start) && start > 1 ? ` start="${start}"` : '';
+      return `<ol${startAttr}>${(node.content || []).map((item) => renderBlockNode(item, rc)).join('')}</ol>`;
+    }
+    case 'list_item': {
+      // One paragraph is the item's own text; with several, each is a <p> so the paragraphs stay apart.
+      const parts = node.content || [];
+      const several = parts.filter((item) => item.type === 'paragraph').length > 1;
+      return `<li>${parts.map((item) => item.type === 'paragraph' ? (several ? renderParagraph(item, rc) : renderInlineContent(item.content || [], rc)) : renderBlockNode(item, rc)).join('')}</li>`;
+    }
     case 'blockquote':
       return `<blockquote>${(node.content || []).map((item) => renderBlockNode(item, rc)).join('')}</blockquote>`;
     case 'code_block':
@@ -322,8 +354,31 @@ export function renderStructuredTextureDocHTML(
 ): string {
   if (!bodyDoc || bodyDoc.schema !== TEXTURE_DOC_SCHEMA || bodyDoc.doc?.type !== 'doc') return '';
   const blocks = Array.isArray(bodyDoc.doc?.content) ? bodyDoc.doc.content : [];
-  const rc: RenderContext = { sourceEntities, citations: options.citations || null, allBlank: allBlankOperations(blocks) };
+  const rc: RenderContext = { sourceEntities: sourceEntitiesInReadingOrder(blocks, sourceEntities), citations: options.citations || null, allBlank: allBlankOperations(blocks) };
   return blocks.map((node: StructuredNode) => renderBlockNode(node, rc)).join('\n');
+}
+
+/**
+ * The entities in the order the text first cites them, the rest after. An unpublished marker is numbered by its entity's
+ * position in this list (renderInlineSourceRef), so the number is the reading order: the same as a published citation's, the
+ * text projection's "[n]" and the native reader's.
+ */
+function sourceEntitiesInReadingOrder(blocks: StructuredNode[], sourceEntities: any[]): any[] {
+  const ordered: any[] = [];
+  const seen = new Set<any>();
+  const visit = (node: StructuredNode) => {
+    if (node.type === 'source_ref') {
+      const id = String(node.attrs?.source_entity_id || '').trim();
+      const entity = sourceEntities.find((item) => sourceEntityID(item) === id);
+      if (entity && !seen.has(entity)) {
+        seen.add(entity);
+        ordered.push(entity);
+      }
+    }
+    for (const child of node.content || []) visit(child);
+  };
+  blocks.forEach(visit);
+  return [...ordered, ...sourceEntities.filter((item) => !seen.has(item))];
 }
 
 function projectInlineNode(node: StructuredNode, sourceNumbers: Map<string, number>): string {

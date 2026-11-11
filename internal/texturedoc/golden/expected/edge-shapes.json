@@ -1,0 +1,23 @@
+{
+  "blocks" : [
+    {
+      "kind" : "paragraph",
+      "text" : "between breaks"
+    },
+    {
+      "kind" : "paragraph",
+      "spans" : [
+        {
+          "style" : "strong",
+          "text" : "Legacy bold."
+        }
+      ],
+      "text" : "Legacy bold. Written before Write parsed marks, kept as text in the stored body."
+    },
+    {
+      "kind" : "paragraph",
+      "text" : "The last real paragraph."
+    }
+  ],
+  "name" : "edge-shapes"
+}

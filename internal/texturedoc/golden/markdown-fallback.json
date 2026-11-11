@@ -1,0 +1,45 @@
+{
+ "golden": {
+  "name": "markdown-fallback",
+  "note": "No body_doc: both renderers draw the Markdown text. The first heading differs from the publication title so it is kept.",
+  "covers": [
+   "fallback:markdown-content-without-body_doc",
+   "markdown:table",
+   "markdown:fenced-code",
+   "markdown:rule",
+   "markdown:nested-list"
+  ],
+  "checks": false,
+  "validate": "texture"
+ },
+ "route": {
+  "path": "/pub/texture/golden-markdown-fallback",
+  "bare": "golden-markdown-fallback",
+  "permalink": "golden-markdown-fallback/v1"
+ },
+ "publication": {
+  "title": "Plain notes archive",
+  "kind": "document"
+ },
+ "version": {
+  "id": "pubver-markdown-fallback",
+  "number": 1,
+  "published_at": "2026-11-10T06:00:00Z"
+ },
+ "nav": {
+  "revision": 1,
+  "latest": 1,
+  "current": 1,
+  "prev": 0,
+  "next": 0
+ },
+ "artifact": {
+  "content": "# Plain notes\n\nA paragraph with **bold**, *slanted* and `code` words.\n\n## A list and a table\n\n- first item\n- second item\n  - nested item\n\n1. one\n2. two\n\n> A short quotation.\n\n| Port | Berths |\n|---|---|\n| North | 12 |\n| South | 8 |\n\n```\nfenced code\n  keeps indent\n```\n\n---\n\nThe last paragraph."
+ },
+ "payload": {},
+ "checks": {
+  "citations": []
+ },
+ "source_entities": [],
+ "transclusions": []
+}
