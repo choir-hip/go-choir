@@ -101,15 +101,23 @@ public enum LocalLanguage {
     }
 }
 
-/// The last few lines the phone said, so the next turn does not say the same.
+/// The last few lines the phone said, kept per page: only lines said about the same page go into the prompt, so a model does not carry
+/// one page's sentences onto another's (the Mac run showed a 0.6B model copying lines from an earlier page).
 public final class AckHistory: @unchecked Sendable {
     public static let shared = AckHistory()
     private let lock = NSLock()
-    private var lines: [String] = []
+    private var lines: [(page: String, text: String)] = []
     private let keep: Int
     public init(keep: Int = 12) { self.keep = keep }
-    public var recent: [String] { lock.lock(); defer { lock.unlock() }; return lines }
-    public func add(_ l: String) { lock.lock(); lines.append(l); if lines.count > keep { lines.removeFirst(lines.count - keep) }; lock.unlock() }
+    /// The recent lines said about `page` (all pages when nil).
+    public func recent(for page: String? = nil) -> [String] {
+        lock.lock(); defer { lock.unlock() }
+        return lines.filter { page == nil || $0.page == page }.map(\.text)
+    }
+    public var recent: [String] { recent(for: nil) }
+    public func add(_ l: String, page: String = "") {
+        lock.lock(); lines.append((page, l)); if lines.count > keep * 4 { lines.removeFirst(lines.count - keep * 4) }; lock.unlock()
+    }
     public func clear() { lock.lock(); lines = []; lock.unlock() }
 }
 
@@ -174,7 +182,7 @@ public enum AckPrompt {
             + "Sentence one: show that you understood what they asked, in their own terms, and say the most useful thing you can truthfully say right now from the page in front (use the page text). "
             + "Each later sentence adds something less important: more context from the page, or what is being checked. "
             + "Every sentence must make sense on its own, because any of them may be the last one the listener hears. "
-            + "Say only what the page in front and the listener's words support. You do not have the desk's answer: never present a guess as the answer, and never claim the desk has found something. "
+            + "Say only what the page in front and the listener's words support. If the page has nothing about what they asked, say so plainly in one sentence instead of guessing or inventing. You do not have the desk's answer: never present a guess as the answer, and never claim the desk has found something. "
             + "Do not repeat what you have just said. When you have nothing more that is true and useful to add, stop. "
             + "Everything you write is spoken aloud, so write only words a voice can say: no lists, no markup, no quotes, no emoji."
     }
@@ -330,7 +338,7 @@ public final class LocalAckHolder: Holder, @unchecked Sendable {
                 defer { m.generationEnded(); c.finish() }
                 let pageText = await i.pageText?() ?? ""
                 if Task.isCancelled { say("cancelled"); return }
-                let prior = history.recent          // context for the prompt, not a filter
+                let prior = history.recent(for: i.pageAddress)          // context for the prompt (lines said about this page), not a filter
                 let system = AckPrompt.system()
                 let prefix = AckPrompt.userPrefix(pageTitle: i.pageTitle, pageKind: i.pageKind, pageText: pageText)
                 let suffix = AckPrompt.userSuffix(listener: words, previous: prior)
@@ -340,7 +348,7 @@ public final class LocalAckHolder: Holder, @unchecked Sendable {
                 var first = true
                 func offer(_ raw: String) {
                     guard let line = AckPrompt.speakable(raw) else { return }
-                    spoken += 1; history.add(line)
+                    spoken += 1; history.add(line, page: i.pageAddress)
                     c.yield(line)
                 }
                 do {

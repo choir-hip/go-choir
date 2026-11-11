@@ -33,6 +33,10 @@ public struct TurnTimeline: Codable, Sendable, Equatable {
     public var localCutAfterSentences: Int?
     public var localCutReason: String?
     public var transitionMs: Double?
+    /// The streamed desk's own clock (ms since it received the request) for its first sentence and its end, and its status.
+    public var deskServerFirstSentenceMs: Double?
+    public var deskServerDoneMs: Double?
+    public var deskStatus: String?
     /// The responder's prompt for this turn: its size, how much was already cached, the time to read the rest, and whether the page was warm.
     public var promptTokens: Int?
     public var reusedTokens: Int?
@@ -68,6 +72,8 @@ public struct TurnTimeline: Codable, Sendable, Equatable {
                 case .localSentenceStarted(let t, let ms): tl.localSentences.append(LocalSentence(text: t, ms: ms))
                 case .localCut(let n, let r, let ms): tl.localCutMs = ms; tl.localCutAfterSentences = n; tl.localCutReason = r
                 case .transitionPlayed(let ms): tl.transitionMs = ms
+                case .deskSentenceStarted: if tl.deskAudioStartMs == nil { tl.deskAudioStartMs = (te.t - t0) * 1000 }
+                case .deskDone(let st, _, let a, let b): tl.deskStatus = st; tl.deskServerFirstSentenceMs = a; tl.deskServerDoneMs = b
                 case .localPrefill(let n, let pre, let re, let ms):
                     tl.promptTokens = n; tl.reusedTokens = re; tl.prefillMs = ms; tl.cacheWarm = pre > 0 && re >= pre
                 case .ackStarted(let ms): if tl.localAudioStartMs == nil { tl.localAudioStartMs = ms }
@@ -98,7 +104,7 @@ public struct TurnTimeline: Codable, Sendable, Equatable {
         if let c = localCutMs { out.append("local stream cut: " + f(c) + " after \(localCutAfterSentences ?? 0) sentences (" + (localCutReason ?? "") + ")") }
         else { out.append("local stream cut: none (it ended by itself, or never ran)") }
         out.append("hand-over sound: " + f(transitionMs))
-        out.append("desk first token: " + f(deskFirstTokenMs))
+        out.append("desk first token: " + f(deskFirstTokenMs) + (deskServerFirstSentenceMs.map { " (the server's clock: first sentence " + f($0) + ", done " + f(deskServerDoneMs) + ")" } ?? ""))
         out.append("desk audio start: " + f(deskAudioStartMs))
         return out
     }

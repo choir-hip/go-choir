@@ -128,7 +128,7 @@ struct ChatLayout {
     var begin = ""
     var thinkOff = "<think>\n\n</think>\n\n"
     static func forModel(_ id: String) -> ChatLayout {
-        id.hasPrefix("lfm") ? ChatLayout(begin: "<|startoftext|>", thinkOff: "") : ChatLayout()
+        id.hasPrefix("lfm") ? ChatLayout(begin: "<|startoftext|>", thinkOff: "<think></think>") : ChatLayout()     // LFM3 model card: enable_thinking=False ends the prompt "<|im_start|>assistant\n<think></think>"
     }
     func prefix(system: String, userPrefix: String) -> String { begin + "<|im_start|>system\n\(system)<|im_end|>\n<|im_start|>user\n" + userPrefix }
     func suffix(userSuffix: String) -> String { userSuffix + "<|im_end|>\n<|im_start|>assistant\n" + thinkOff }

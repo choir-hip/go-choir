@@ -233,17 +233,17 @@ public final class RemoteSystem1: System1, @unchecked Sendable {
     public static let stageID = "remote"
     public static var descriptor: StageDescriptor {
         StageDescriptor(displayName: "Remote (Jev)", summary: "HTTP POST to a configured URL; bearer token in the Keychain (service news.choir.autoradio, account system1).",
-                        params: [.text("url", "URL", ""), .number("timeoutSeconds", "Timeout (s)", 4, 0.5, 30)], needsNetwork: true)
+                        params: [.text("url", "URL", "")], needsNetwork: true)
     }
-    let url: String, timeout: Double
-    public init(_ p: StageParams) { url = p.string("url"); timeout = p.double("timeoutSeconds", 4) }
+    let url: String
+    public init(_ p: StageParams) { url = p.string("url") }
     static func requireConfiguredHost(_ u: URL) throws { try RemoteHost.require(u) }
     struct Req: Encodable { let context: String; let listener_words: String; let questions: [Question] }
     struct Resp: Decodable { struct A: Decodable { let question_id: String; let option: String; let score: Double? }; let answers: [A] }
     public func answer(_ i: System1Input) async throws -> [System1Answer] {
         guard let u = URL(string: url), !url.isEmpty else { throw LabError.badInput("remote System 1 has no url") }
         try Self.requireConfiguredHost(u)
-        var r = URLRequest(url: u, timeoutInterval: timeout)
+        var r = URLRequest(url: u, timeoutInterval: ChoirClient.idleTimeout)     // idle transport timeout only
         r.httpMethod = "POST"
         r.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let tok = Keychain.get(service: "news.choir.autoradio", account: "system1") { r.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization") }

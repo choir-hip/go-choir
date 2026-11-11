@@ -17,9 +17,11 @@ final class LocalSpeaker: @unchecked Sendable {
     let voice: Voice, playback: PlaybackControl, log: EventLog, endedAt: Double, heard: HeardLines
     /// Set to cut: the sentence being heard finishes, nothing after it starts.
     let cut: Flag
+    /// A speaker of the phone's own stream (`local`) or of the streamed desk answer (events and the first-sound timing differ).
+    let local: Bool
     private let count = Locked<Int>(0)
-    init(voice: Voice, playback: PlaybackControl, log: EventLog, endedAt: Double, heard: HeardLines, cut: Flag) {
-        self.voice = voice; self.playback = playback; self.log = log; self.endedAt = endedAt; self.heard = heard; self.cut = cut
+    init(voice: Voice, playback: PlaybackControl, log: EventLog, endedAt: Double, heard: HeardLines, cut: Flag, local: Bool = true) {
+        self.voice = voice; self.playback = playback; self.log = log; self.endedAt = endedAt; self.heard = heard; self.cut = cut; self.local = local
     }
     var sentencesHeard: Int { count.value }
 
@@ -28,7 +30,9 @@ final class LocalSpeaker: @unchecked Sendable {
     }
 
     /// Play the "heard you" cue, then every sentence from `sentences` as it arrives, until the stream ends or `cut` is set.
-    func run(cue: [AudioFrame], sentences: AsyncStream<String>) async {
+    /// `before` runs after synthesis has started and before anything is played (the desk speaker waits there for the local stream to
+    /// finish its sentence, then plays the hand-over sound), so the first desk sentence is already synthesised when its turn comes.
+    func run(cue: [AudioFrame], sentences: AsyncStream<String>, before: (() async -> Void)? = nil) async {
         let (bufOut, bufCont) = AsyncStream.makeStream(of: SpokenSentence.self)
         let (voice, log) = (voice, log)
         let cut = self.cut
@@ -44,14 +48,16 @@ final class LocalSpeaker: @unchecked Sendable {
             bufCont.finish()
         }
         let started = log.clock.now
-        await playback.speak(Self.stream(cue))
+        await before?()
+        if !cue.isEmpty { await playback.speak(Self.stream(cue)) }
         var firstSentence = true
         for await sp in bufOut {
             if cut.isSet || Task.isCancelled { break }                                           // failures 1, 2
             count.write { $0 += 1 }
             heard.add(sp.text)
-            log.emit(.localSentenceStarted(text: sp.text, msSinceTurnEnd: (log.clock.now - endedAt) * 1000))
-            if firstSentence {
+            if local { log.emit(.localSentenceStarted(text: sp.text, msSinceTurnEnd: (log.clock.now - endedAt) * 1000)) }
+            else { log.emit(.deskSentenceStarted(text: sp.text, msSinceTurnEnd: (log.clock.now - endedAt) * 1000)) }
+            if firstSentence, local {
                 firstSentence = false
                 log.emit(.stageTiming(stage: "voice.firstAudio", startedAt: started, endedAt: log.clock.now))
             }

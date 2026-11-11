@@ -57,6 +57,10 @@ public enum LabEvent: Codable, Sendable, Equatable {
     case localPrefill(promptTokens: Int, prefixTokens: Int, reusedTokens: Int, prefillMs: Double)
     /// The responder read the page in front into its cache ahead of any question (not part of a turn).
     case localWarm(address: String, tokens: Int, ms: Double, complete: Bool)
+    /// One sentence of the streamed desk answer started to be heard.
+    case deskSentenceStarted(text: String, msSinceTurnEnd: Double)
+    /// The streamed desk answer ended: its status, sentences, and the server's own clock for the first sentence and the end.
+    case deskDone(status: String, sentences: Int, serverFirstSentenceMs: Double?, serverDoneMs: Double?)
     /// The hand-over sound between the phone's stream and the desk's answer played.
     case transitionPlayed(msSinceTurnEnd: Double)
     /// The non-verbal cue started playing, ms from the end of the turn.

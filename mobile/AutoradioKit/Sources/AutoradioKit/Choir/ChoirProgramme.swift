@@ -101,17 +101,16 @@ public final class ChoirFrontProgramme: Programme, @unchecked Sendable {
                         params: [.text("baseURL", "Base URL", ChoirEnvironment.defaultBaseURL),
                                  .text("route", "Story route", "", note: "empty plays the newest story with text"),
                                  .text("section", "Section", "", note: "e.g. world, tech_ai; empty for all"),
-                                 .number("timeoutSeconds", "Timeout (s)", 15, 2, 60),
                                  .number("maxBlocks", "Most blocks", 80, 5, 400)],
                         needsNetwork: true)
     }
-    let baseURL: String, route: String, section: String, timeout: Double, maxBlocks: Int
+    let baseURL: String, route: String, section: String, maxBlocks: Int
     public init(_ p: StageParams) {
         baseURL = p.string("baseURL", ChoirEnvironment.defaultBaseURL); route = p.string("route"); section = p.string("section")
-        timeout = p.double("timeoutSeconds", 15); maxBlocks = p.int("maxBlocks", 80)
+        maxBlocks = p.int("maxBlocks", 80)
     }
     public func load() async throws -> ProgrammeDocument {
-        let client = ChoirEnvironment.shared.client(baseURL: baseURL, timeout: timeout)
+        let client = ChoirEnvironment.shared.client(baseURL: baseURL)
         if !route.isEmpty { return try await ChoirFront.load(route: route, client: client, maxBlocks: maxBlocks) }
         let list = try await ChoirFront.stories(client: client, limit: 12, section: section)
         if list.isEmpty { throw ChoirError.empty("the front page") }
