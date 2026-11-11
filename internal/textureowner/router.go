@@ -30,6 +30,9 @@ func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 	case stylePath:
 		h.HandleStyle(w, r)
 		return
+	case editionPath:
+		h.HandleEdition(w, r)
+		return
 	case themePath:
 		h.HandleTheme(w, r)
 		return
