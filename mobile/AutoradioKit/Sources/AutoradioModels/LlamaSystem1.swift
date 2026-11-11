@@ -100,12 +100,14 @@ enum LlamaFiles {
 final class LlamaWeights: @unchecked Sendable {
     let model: OpaquePointer, vocab: OpaquePointer
     private static let lock = NSLock()
-    nonisolated(unsafe) private static var cache: [String: LlamaWeights] = [:]
+    final class Weak { weak var w: LlamaWeights?; init(_ w: LlamaWeights) { self.w = w } }
+    nonisolated(unsafe) private static var cache: [String: Weak] = [:]
+    /// One copy of a file's weights while any context uses it (two roles on one file share it); when the last context goes, the weights go.
     static func shared(path: String, gpu: Bool) throws -> LlamaWeights {
         lock.lock(); defer { lock.unlock() }
-        if let w = cache[path] { return w }
+        if let w = cache[path]?.w { return w }
         let w = try LlamaWeights(path: path, gpu: gpu)
-        cache[path] = w
+        cache[path] = Weak(w)
         return w
     }
     private init(path: String, gpu: Bool) throws {
