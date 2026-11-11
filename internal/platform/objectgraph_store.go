@@ -420,6 +420,42 @@ func (o *ObjectGraphStore) ListEdges(ctx context.Context, filter objectgraph.Edg
 	return out, nil
 }
 
+// ListEdgesFromAny lists the live edges of one kind leaving any of the given
+// objects, in one query, oldest first.
+func (o *ObjectGraphStore) ListEdgesFromAny(ctx context.Context, fromIDs []string, kind objectgraph.EdgeKind, limit int) (out []objectgraph.Edge, err error) {
+	if len(fromIDs) == 0 {
+		return nil, nil
+	}
+	if o == nil || o.store == nil || o.store.db == nil {
+		return nil, fmt.Errorf("platform objectgraph: nil store")
+	}
+	done := o.store.retrievalTimer(retrievalListEdges)
+	defer func() { done("", len(out), err) }()
+	args := make([]any, 0, len(fromIDs)+3)
+	for _, id := range fromIDs {
+		args = append(args, id)
+	}
+	query := `SELECT edge_id, from_id, to_id, kind, metadata, created_at, tombstone FROM og_edges WHERE from_id IN (?` +
+		strings.Repeat(",?", len(fromIDs)-1) + `) AND kind = ? AND tombstone = ? ORDER BY created_at LIMIT ?`
+	args = append(args, string(kind), false, objectgraph.NormalizedLimit(limit))
+	rows, err := o.store.corpus().QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("platform objectgraph: list edges from any: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		edge, err := scanObjectGraphEdge(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, edge)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("platform objectgraph: iterate edges: %w", err)
+	}
+	return out, nil
+}
+
 func (o *ObjectGraphStore) Close() error {
 	// The platform store owns the DB connection; do not close it here.
 	return nil

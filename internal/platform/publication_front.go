@@ -69,6 +69,8 @@ type FrontStory struct {
 	// label), from the research desk's mentions_entity edges; absent when
 	// the story has none.
 	Entities []StoryEntityRef `json:"entities,omitempty"`
+	// canonical is the publication's object id, for the batched entity read.
+	canonical string
 }
 
 // FrontRoute is a story's bare link (serves the latest version in place)
@@ -282,6 +284,7 @@ func (s *Service) ListFrontStoriesInSection(ctx context.Context, limit int, curs
 		return page.Stories[i].UpdatedAt.After(page.Stories[j].UpdatedAt)
 	})
 	if !opinion {
+		s.attachFrontEntities(ctx, og, page.Stories)
 		s.attachFrontImportance(page.Stories)
 		page.Sections = s.frontSectionInfos()
 	}
@@ -356,6 +359,7 @@ func (s *Service) listFrontSection(ctx context.Context, og *ObjectGraphStore, li
 	sort.SliceStable(page.Stories, func(i, j int) bool {
 		return page.Stories[i].UpdatedAt.After(page.Stories[j].UpdatedAt)
 	})
+	s.attachFrontEntities(ctx, og, page.Stories)
 	s.attachFrontImportance(page.Stories)
 	page.Sections = s.frontSectionInfos()
 	return page, nil
@@ -511,7 +515,7 @@ func (s *Service) frontRow(ctx context.Context, og *ObjectGraphStore, pub frontP
 		Route:          FrontRoute{Bare: bare, Permalink: versionPermalink(bare, latest.Revision)},
 		SourceCount:    sourceCount,
 		Words:          words,
-		Entities:       storyCentralEntities(ctx, og, pub.CanonicalID),
+		canonical:      pub.CanonicalID,
 	}, true, nil
 }
 
