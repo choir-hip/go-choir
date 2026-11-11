@@ -169,6 +169,11 @@ fast spoken turn, on for writing the script. It is fixed per role, each role
 with its own prompt prefix, so no call switches reasoning on a prefix
 another call cached. Elsewhere the 2026-11-09 rule (reasoning stays on)
 holds.
+31. **The lens is glass and holds the buttons** (owner, 2026-11-11): "make
+it glass, and make the buttons inside of it, rather than the prompt area
+inside of the section at the bottom". One glass shape with the page showing
+through. The text entry and every control sit directly on it; there is no
+inner field box inside a bottom section.
 
 Also from the walk: a page title is never a raw address, a section name is
 never a raw id, nothing is clipped off a screen edge, and the bar speaks
