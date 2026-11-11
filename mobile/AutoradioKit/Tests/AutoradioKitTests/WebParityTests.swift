@@ -8,7 +8,8 @@ import XCTest
 //  1. The quote of a checked citation is the check's outcome word ("exact"): the server's checks.citations[].quote is the
 //     outcome, not the words. A demo-shaped check whose quote IS the words must still work.
 //  2. A citation's own attrs.ref.quote, or its manifest anchor's ref.quote, is not read when no transclusion or check has it.
-//  3. An embed shows its alt text where the web shows the caption; the alt text must still be carried for accessibility.
+//  3. An embed shows its alt text where the web shows the caption (alt is the fallback only; ReaderBlock has no alt field, it is
+//     a bridge shape declared in exact.json).
 //  4. A heading in a blockquote is forced to level 3 instead of keeping its own.
 //  5. A code block of two text nodes runs them together; the web joins with a newline.
 //  6. Adjacent citations of one source draw twice when the bundle has manifest anchors (the web draws one); without manifest
@@ -48,7 +49,6 @@ final class WebParityTests: XCTestCase {
         let e2 = #"{"type":"embed","attrs":{"id":"e2","kind":"image","target":{"digest":"x"},"alt":"only alt"}}"#
         let d = doc(e + "," + e2)
         XCTAssertEqual(d.blocks[0].text, "caption words")
-        XCTAssertEqual(d.blocks[0].alt, "alt words")
         XCTAssertEqual(d.blocks[1].text, "only alt")
     }
 

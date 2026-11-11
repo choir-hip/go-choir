@@ -74,11 +74,8 @@ public struct ReaderBlock: Codable, Sendable, Equatable {
     /// anchors of the citations in this block (the cards open after it)
     public var cites: [String]
     public var sentences: Int
-    /// an embed's alt text (the accessibility label; the drawn label is `text`)
-    public var alt: String
     public init(id: String, kind: String, level: Int = 0, depth: Int = 0, marker: String = "", runs: [ReaderRun] = [],
-                rows: [ReaderRow] = [], text: String = "", ordinal: Int = -1, cites: [String] = [], sentences: Int = 0, alt: String = "") {
-        self.alt = alt
+                rows: [ReaderRow] = [], text: String = "", ordinal: Int = -1, cites: [String] = [], sentences: Int = 0) {
         self.id = id; self.kind = kind; self.level = level; self.depth = depth; self.marker = marker; self.runs = runs
         self.rows = rows; self.text = text; self.ordinal = ordinal; self.cites = cites; self.sentences = sentences
     }
@@ -547,12 +544,12 @@ public enum TextureDocParser {
                 }
                 if !rows.isEmpty { blocks.append(ReaderBlock(id: nextId("b"), kind: "table", rows: rows)) }
             case "embed":
-                // The label the web draws: the caption, else the title (file, audio), else the alt text. The alt text
-                // stays on the block for accessibility labels.
+                // The label the web draws: the caption, else the title (file, audio), else the alt text. ReaderBlock has no
+                // alt field: the shape is declared in exact-package/exact.json and interface/reader.json, and adding a field
+                // there stalls the reader (seen in the app proof), so the alt text is the label only when there is no caption.
                 func nonEmpty(_ k: String) -> String? { (attrs[k] as? String).map { $0.rdTrim }.flatMap { $0.isEmpty ? nil : $0 } }
                 let label = nonEmpty("caption") ?? nonEmpty("title") ?? nonEmpty("alt") ?? nonEmpty("kind") ?? "Embedded item"
                 var b = ReaderBlock(id: nextId("b"), kind: "embed", text: label)
-                b.alt = nonEmpty("alt") ?? ""
                 b.marker = attrs["kind"] as? String ?? ""
                 blocks.append(b)
             default:
