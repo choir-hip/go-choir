@@ -103,6 +103,15 @@ component Autoradio
     compare
     replay
     // ---- lane 1: bar, radio, talk ----
+    ri
+    typing
+    barFocus
+    barBlur
+    jumpTo
+    setSpeed
+    sheetMove
+    sheetEnd
+    sheetPull
     // ---- lane 2: paper layout ----
     // ---- lane 3: texture reader ----
     // ---- lane 4: cards, launcher, signals ----
