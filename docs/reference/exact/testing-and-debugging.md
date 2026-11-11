@@ -98,39 +98,70 @@ double for AutoradioKit should be a package implementation that branches on
 | `error: No Account for Team "..."` / `No profiles for '<bundle id>' were found` | no Apple account in Xcode | owner signs in under Xcode > Settings > Accounts |
 | `error: tool 'xcodebuild' not found` / `'simctl' not found` / `'devicectl' not found` | the Nix dev shell shadows Xcode tools | use `env -i ... DEVELOPER_DIR=...` |
 | `host/apple: no Metal toolchain...` | optional | ignore or `xcodebuild -downloadComponent MetalToolchain` |
-| `op 2/4 \`tap listen\`: the app hung up (exit code 0)` | the app exited during the tap | open problem, below |
+| `op 2/4 \`tap listen\`: the app hung up (exit code 0)` | the app exited during the tap | a second driver on the same simulator closed the socket; see the limits section |
 | `no --storage named, so this drive keeps the store \`default\`...` | note | `--reset-storage` to empty it |
 
-## Open problem: the simulator exit after the claim
+## Driver limits and the "app hung up" message (resolved by the lane builders)
 
-Sequence [run]: build and install; `agent ios tree "tap listen" "clock settle"
-state`. The driver printed the tree, then the claim log lines (`stopped`, then
-`claimed listening`, category `PlayAndRecord`), then `the app hung up (exit
-code 0)` at op 2 of 4. The tone and RMS lines (`SPIKE running`, `SPIKE
-rms=...`) never appeared. Exit code 0 means the process exited cleanly or the
-driver's socket closed; it is not a crash report (we found no new
-`.ips` in `~/Library/Logs/DiagnosticReports` from the app).
+Source: `origin/lane/ar-integrate` `mobile/README.md`, read against the pinned
+Exact source. This replaces our earlier hypotheses (a) to (c) about an audio
+abort, which are not needed.
 
-Tried, none conclusive:
-
-1. Second drive `agent ios "tap listen" "clock +1500 real" tree logs`: ran
-   over 3 minutes without output and was stopped.
-2. `simctl privacy ... grant microphone news.choir.exactspike`: the command
-   hung and was stopped.
-3. `simctl launch --console-pty`: printed nothing (the app uses `NSLog`).
-
-Hypotheses, none verified: (a) `AVAudioEngine` start with the input node on
-the simulator, or `installTap` with a zero-sample-rate input format on the
-simulator without a microphone permission, aborted the app (an uncaught
-Objective-C exception would normally write an `.ips`); (b) the driver's tap
-returned only after the commit, and our `later` handler runs the whole
-engine start on the main thread before replying, so the driver's wait timed
-out and killed the app; (c) the driver treats a package that opens real
-hardware as unsupported under `context.agent`. **Next probes, in order:**
-make `start` reply before starting the engine and do the engine work on a
-queue; branch on `context.agent`; add `NSLog` lines around each engine step;
-check `inFmt.sampleRate == 0`; run on the phone, which has a real microphone.
-(`print`/`NSLog` placement matters: only lines after the claim were checked.)
+1. **"the app hung up (exit code 0)" is not a crash and not an audio bug.** It is
+   `Agent.exitAfterLanding` (`host/apple/Sources/ExactKit/Agent.swift:140-146`)
+   running because the driver's socket closed [src]. A second driver launching
+   the same bundle id on the same simulator does exactly that: every launch uses
+   `simctl launch --terminate-running-process` (`scripts/agent.mjs:529, 569`)
+   [src]. **Two drivers on one simulator conflict.** Give every driver a
+   simulator of its own (`xcrun simctl create`, then `EXACT_SIM`); our spike's
+   earlier exit most likely had this cause [inferred: it was run while another
+   agent was building; the other driver was not confirmed].
+2. **The attach bound is about 20 s.** The app opens its agent socket only after
+   the first frame is applied (`ExactIOS/main.swift:117-141`) and, on the
+   simulator, after the scene is foreground-active and the window key
+   (`ExactKit/IOS/AgentFrontIOS.swift:29-45`, up to 15 s). The driver gives up
+   after a fixed 20 s, not configurable (`scripts/agent.mjs:567-579`) [src]. A
+   cold first launch on a loaded Mac misses it ("the app never opened its agent
+   socket"); the second launch is warm. Retry a refused launch.
+3. **A system alert blocks the driver.** A speech-recognition permission alert
+   over the app keeps it from being foreground-active; it survives the app being
+   killed and blocks every later launch until the simulator is restarted.
+   `simctl privacy ... grant all` does not cover speech recognition (`simctl
+   privacy` has no speech service) [run, lane report]. Fix in our kit: while the
+   runtime is virtual (driven by the agent) the transcriber does not ask.
+4. **`context.agent` does not silence an audio claim.** Under the agent our claim
+   was real (`cat=PlayAndRecord mode=Default in=[MicrophoneBuiltIn]
+   out=[Speaker]`, `AudioSession.swift:238`); only Exact's own sounds are
+   replaced (`state.sounds.output = "agent"`). An `AVAudioEngine` we start opens
+   the simulator's audio hardware, and `AVSpeechSynthesizer.write` on
+   `@MainActor` stalled the main thread until the drive's `clock` op timed out at
+   120 s (`agent.mjs:85`, `REPLY_MS`). A package must branch on `context.agent`
+   for anything that can block the main thread [run, lane report]. Our lab runs
+   a virtual engine under the agent (same events and yield levels, playback as a
+   timed wait, microphone frames from a kept turn).
+5. **`tree` right after navigation** carries "N requests in flight ... start with
+   `clock data`": issue `clock data` before reading data-bound text. The tree
+   lists the panels of every tab (hidden ones marked `[hidden]`), so an assertion
+   on text must not depend on which tab shows.
+6. **Pointer drive:** `tap <id> down`, then bare `tap up` (not `tap <id> up`),
+   delivers `pointerdown` and `pointerup` to a `Pressable`; `tap up` with a
+   target is refused [run, lane report].
+7. **On a phone** a drive can end with "the app left the foreground ... so it is
+   suspended" when the phone is locked or showing a permission alert nobody can
+   answer. On a phone the module runs the real engine even under the agent (only
+   the simulator is virtual) [run, lane report]. Nothing is installed on the
+   owner's phone by builders without the owner's agreement.
+8. **Timings** [run, lane reports, loaded M1]: a warm rebuild plus drive takes
+   about 60 s; a TypeScript-only change about 57 s; a cold Exact build about 15
+   minutes; a first `ios` build in a new worktree about 5 minutes (cargo 220 s,
+   swift 128 s) when the caches were warm. A single exit 128 seen once was
+   transient. **Rule: one shared build tree, one build at a time, one simulator
+   at a time.** Each worktree compiling its own copy overloaded the Mac
+   (`build-and-ship.md`).
+9. **Mac-side wiring** (lane scripts, may have moved): `mobile/scripts/sim-device.sh`
+   makes and boots a private simulator; `exact.sh` passes `EXACT_SIM` through its
+   `env -i`; `proof-sim.sh` ends with `PROOF OK` or `PROOF FAILED at <step>` and
+   retries a refused launch.
 
 ## Common failure classes to expect [doc]
 
@@ -142,7 +173,6 @@ lists recorded drives and what no current run covers (`docs/testing.md:50-66`).
 
 ## Open questions
 
-- Why did the app exit at the tap? (Probes above.)
 - Can the driver run a package against real audio hardware on the simulator at
   all, or must a package branch on `context.agent`?
 - Can the driver feed scripted microphone audio, and if not, what is the

@@ -889,7 +889,8 @@ Exact's `ch` is 8 px, `exact:kernel/src/style/cells.rs:1-30`).
 ### Elevation
 
 Five levels. A theme gives each level its cues; Exact can draw every cue
-listed except 3D tilt.
+listed, including a small 3D tilt (`rotate` with a `perspective` parent; the
+angle animates, the axis does not).
 
 | Level | What | Cues in the default theme (Depth) | In a flat theme (Newsprint) |
 |---|---|---|---|
@@ -966,16 +967,27 @@ step and the sources is not verified; if it does not, that is a server gap
 | Need | Exact | Evidence | Verdict |
 |---|---|---|---|
 | Transitions, keyframes, springs, exit and layout animation | yes | `exact:docs/recipes/motion.md` [doc] | native |
-| 3D transforms (perspective, rotateX/Y) | no: `translate`, `rotate`, `scale` only | CFA:4163 [doc] | not possible on boxes |
-| Per-frame custom drawing | Canvas 2D `canvas surface=name(args)`; `app.ts` exports `draw(surface, args, ctx, frame)` and returns `true` to be drawn again next frame; Core Graphics on iOS | `exact:apps/canvas-gallery/app.ts:1-17`; CG:1940 [src, doc] | native: the 3D mark is projected in TypeScript and drawn as 2D shards each frame |
-| GPU drawing (Metal) | the GPU canvas (`exact-gpu`, wgpu on Metal) loaded on demand; needs the Metal toolchain, which our build lacks | `exact:docs/reference.md:142` [doc]; our build log | possible later |
+| 3D transforms (perspective, rotate with axis, translate z) | yes on boxes: `rotate="y 40deg"`, third `translate` length, parent `perspective`, `backface-visibility`; drawn as `CATransform3D`. No `preserve-3d`, `matrix` or `skew`; only the angle animates | `exact:scripts/fixtures/space.contract:15-33`; `exact:host/apple/Sources/ExactKit/SpaceTransform.swift:1-45` [src]; corrects CFA:4163, which lists 2D only | native for flat cards; a solid needs a package view or a Contract projection |
+| Per-frame custom drawing | Canvas 2D `canvas surface=name(args)`; `app.ts` exports `draw(surface, args, ctx, frame)` and returns `true` to be drawn again next frame; Core Graphics on iOS | `exact:apps/canvas-gallery/app.ts:1-17`; CG:1940 [src, doc] | native but the last fallback for the mark: it calls Hermes every frame (see the mark's ranking) |
+| GPU drawing (Metal) | the GPU canvas (`exact-gpu`, wgpu on Metal) loaded on demand; the Canvas 2D Vello replay and SVG filters need the Metal toolchain, which our build lacks. A package view or Core Animation needs none | `exact:docs/reference.md:142` [doc]; `exact:host/apple/build.mjs:147-163, 872` [src]; our build log | possible later |
 | Timers per frame | `every(ms, action, wait=frame)` | `exact:docs/recipes/timers.md:72` [doc] | native |
 | Lottie-style files | not found | | not available; the mark is code |
 | SVG geometry animation | yes | `motion.md` "What animates" [doc] | native: the static and reduced-motion mark |
 
-The fallback if the Canvas 2D mark costs too much on the 14 Pro Max
-[unrun]: a package view drawing the same shards with Core Animation layers
-(one native view, gaps.md #7).
+**How the mark is built, in ranked order** (`docs/reference/exact/rendering-and-motion.md`
+section 8a; all unrun):
+
+1. **First choice: a Swift package view** holding a `CATransformLayer` with
+   four `CAShapeLayer` faces and a repeating `CABasicAnimation`, so the render
+   server plays the 3D with real occlusion and perspective and no per-frame CPU
+   (one hatched native view, gaps.md #7). State changes swap the animation or
+   its speed.
+2. **Second choice: pure Contract.** `sin`/`cos` projection in `fn`s, `svg
+   polygon` faces with back-face culling by signed area, ticked by an
+   `every(frame, step)` task. No TypeScript and no Swift; themed by `th`.
+3. **Last fallback: Canvas 2D from TypeScript**, projected in `app.ts` and drawn
+   each frame. It spends a Hermes call per frame at 60 Hz and its latency is
+   unmeasured.
 
 **Motion belongs to the theme.** The theme's `motion` block carries the
 durations, easings and springs above and a `mark` block (drift, tumble
@@ -1101,10 +1113,12 @@ to the holding lines and the revision rule, `effects.blur` above 0 to
 material `glass`, `effects.shadowFloating` to elevation 2's shadow. A
 version 2 theme has one scheme; the phone shows it in that scheme only.
 
-**How the phone applies a theme** [unrun; the first spike]. Shipped themes
+**How the phone applies a theme** [unrun on a device]. Shipped themes
 compile into `app.tamber` and switch with `setMode`. A theme from data binds
 each role through a function from the theme resource to a colour string
-(CFA:4718). If a bound colour string does not paint, a data theme needs an
+(CFA:4718). The binding mechanism is proven upstream (Spark, design-tool and
+canvas-gallery bind style attributes from data); our own bindings have not
+been run on a device. If a bound colour string does not paint, a data theme needs an
 app update, which is an Exact gap to record and take upstream; the format
 and the web are unaffected.
 
@@ -1123,6 +1137,8 @@ sitting by one builder, then nine lanes in parallel, each in its own
 worktree, split along file boundaries so no two lanes edit the same file.
 The integrator lane (engine, Components, Trace, audio session) continues
 alongside and owns its files.
+
+An Exact lesson learned by any lane goes into docs/reference/EXACT.md or its subpages, not a lane README.
 
 ### Where today's code would collide, and the spine's answer
 
@@ -1183,17 +1199,17 @@ theme switches light, dark and Newsprint, and demo mode serves a fixture.
 | **6. Mail** | `mail.contract`, `members-mail.contract`, `Kit/ChoirMail.swift`, package view `MailOriginal.swift` | page host, `PageSource` | inbox and folders, a message as a page, reply and compose as drafts, attachments, the approval link | must: read, draft, attach / rough: original HTML view, threading | send and digest accepted from a key |
 | **7. Settings, themes, accounts** | `settings.contract`, `members-settings.contract`, `Kit/ThemeLoader.swift`, `mobile/themes/*.json`, `Kit/Accounts.swift`; restyles the integrator's Components and Trace (their files stay theirs) | theme loader, page host | themes listed and switched (and loaded from a Texture in demo mode); accounts and devices; talk mode; Computer (status, Wake, Restart to update); What the paper has learned; gesture meanings as components | must: themes, account, sign out, Computer / rough: theme from a Texture on staging | bearer "who am I"; `GET /api/texture/theme` |
 | **8. Onboarding and the interview** | `onboarding.contract`, `members-onboarding.contract`, `Kit/Interview.swift`, `mobile/interview/questions.md` (the default bank) | bar, page host, the integrator's engine, lane 3's reader for the edition page | sign-in presented; voice setup (model download, per-device checks, fallbacks; with lane M's `ModelStore`); the open-microphone, interruptible interview on the integrator's turn engine, by voice only (demo mode drives it with recorded clips); the edition written (demo) and shown; then the front page and a story playing | must: the whole path and its recoveries / rough: question wording, read-back phrasing | edition marker; the bank as a desk package document (later) |
-| **9. Motion and the mark** | `mark.contract`, the canvas `draw` in `app.ts` (its own module `mark.ts`), motion tokens in the themes | bar shell (the voice button), theme loader | the 3D mark in every state; the alive wait with real lifecycle lines in demo mode; card physics tuned; the front page composing; Reduce Motion | must: the mark in all states, the wait / rough: syllable sync, GPU path | lifecycle progress detail (if missing) |
+| **9. Motion and the mark** | `mark.contract`, the mark's package view (`CATransformLayer`; a Contract projection if the view is not worth it; a canvas `draw` in `app.ts` only as a last fallback), motion tokens in the themes | bar shell (the voice button), theme loader | the 3D mark in every state; the alive wait with real lifecycle lines in demo mode; card physics tuned; the front page composing; Reduce Motion | must: the mark in all states, the wait / rough: syllable sync, GPU path | lifecycle progress detail (if missing) |
 | **S. Server** (Go, its own branch, ring rules, Ring-Expedite per CLAUDE.md) | `internal/platform` (entities on front and bundle), `internal/textureowner` (theme route, edition marker, block-addressed prompt, `request_id` on version events), `internal/auth` (bearer "who am I"), `internal/proxy/email.go` (owner act from a key) | none | each route deployed on staging with its own acceptance check | must: entities, who-am-I, theme route / later: mail owner act (red: auth) | itself |
 
 Exact limits and fallbacks, by lane: no layer above a UIKit sheet (lanes 1,
-4, 3: authored layers); no 3D transforms (lane 9: projection in a canvas);
+4, 3: authored layers); 3D exists on boxes but not `preserve-3d` (lane 9: a package `CATransformLayer` view, else a Contract projection, canvas last);
 no EPUB or Quick Look element (lane 5: conversion and package views); PDF
 only through an iframe (lane 5: a PDFKit package view); data themes
-unproven (lane 7: compiled themes, data themes after an app update);
+unrun on device (lane 7: the binding is proven upstream; compiled themes first, data themes after an app update if it does not paint);
 no custom accessibility actions confirmed (lane 4: visible buttons under
-VoiceOver). Each goes into `mobile/README.md` "For EXACT.md" with its
-file:line as it is hit.
+VoiceOver). An Exact lesson learned by any lane goes into docs/reference/EXACT.md or its subpages, not a lane README.
+Each goes there with its file:line as it is hit.
 
 Review after the fan-out: every lane's screens in light, dark and large
 text on the simulator, side by side; one adjudication pass on the bar, the
@@ -1459,7 +1475,7 @@ Nothing blocks a function. These shape the design:
    pile, player, source panel) are authored overlays, and UIKit sheets are
    kept for tasks that take over.
 
-These go into `mobile/README.md` "For EXACT.md" when the build starts.
+These go into `docs/reference/EXACT.md` or its subpages when the build starts.
 
 
 ### Materials, depth and theming in Exact
@@ -1469,13 +1485,13 @@ These go into `mobile/README.md` "For EXACT.md" when the build starts.
 | Glass or blur behind a container | `backgroundMaterial="glass" \| "ultra-thin" …`; `backdrop-filter` maps to the nearest system blur | `exact:host/apple/Sources/ExactKit/Backdrop.swift:19-28,226,241-251` [src] | native |
 | Text over a blur | vibrancy view | `exact:host/apple/Sources/ExactKit/IOS/VibrancyIOS.swift:1-17` [src] | native |
 | Shadows | multi-layer, outer and inset, with spread | `exact:host/apple/Sources/ExactKit/BoxShadow.swift:1-10` [src] | native |
-| Transforms | `translate`, `rotate`, `scale`; no 3D or perspective | CFA:4163 [doc] | native, 2D only |
+| Transforms | `translate`, `rotate`, `scale`, plus 3D `rotate` axis, `translate` z, parent `perspective`, `backface-visibility`; no `preserve-3d`, `matrix`, `skew` | `exact:scripts/fixtures/space.contract:15-33` [src]; CFA:4163 lists 2D only | native; solids need a package view |
 | Pressed state | `:active` with colour, opacity, `-exact-press-scale`; not shadow or border | CFA:4492-4503 [doc] | native |
 | Scroll-linked effects | `scroll=` events; bounded timeline extensions | CG:1745,1802-1810; `exact:docs/contract-for-humans.md:1510-1512` [doc] | partial |
 | A layer above a UIKit sheet | not found | inferred from CFA:2698 | not possible: keep the bar's layers authored |
 | Theme tokens | `app.tamber` tokens and declared axes, switched at runtime with `setMode` and `setScheme` | CFA:4722-4734; CG:2701 [doc] | native for declared themes |
-| A theme's values from data | a bound `color=` string from data reads like a token name or colour; CSS custom properties cannot be set from state; `var()` refused in lengths | CFA:4718, CG:1530-1534, CFA:3166,4271 [doc] | unproven: the first spike |
-| `mix-blend-mode` | not found | | not possible |
+| A theme's values from data | a bound `color=` string from data reads like a token name or colour; CSS custom properties cannot be set from state; `var()` refused in lengths | CFA:4718, CG:1530-1534, CFA:3166,4271 [doc] | binding proven upstream; our bindings unrun on a device |
+| `mix-blend-mode` | a row exists but the iOS SVG path logs "not supported on iOS" | `exact:host/apple/Sources/ExactKit/SvgIsland.swift:283` [src] | not possible on iOS boxes |
 
 ## Appendix C. Real data, fixtures and server gaps
 

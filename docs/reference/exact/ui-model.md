@@ -132,6 +132,15 @@ A screen chosen by `if page == ...` has no URL, Back or deep link, and the
 build warns `lower-screen-by-state`. Tabs and a split list/detail need no code.
 Create/edit is a sheet; a row pushes its detail [doc: start-here.md].
 
+**Tab rule (agent finding, 2026-11-10; recorded as stated):** the iOS host
+builds the tab controller only from `tablist` tabs. A route that is not in the
+tablist must be pushed, not selected.
+
+**Drag events.** A `pan` event supplies the delta since the last event, not the
+total from the press (`docs/contract-grammar.md:1862-1863` [src]); accumulate
+into state or decide in `panrelease`, which appends release velocity. See
+`rendering-and-motion.md` section 3.
+
 ## Inputs
 
 `input value=query input=search placeholder="Search" type="search"` binds a
@@ -143,6 +152,11 @@ docs/recipes/keyboard-and-focus.md.
 
 ## Custom drawing (the timeline question for the lab)
 
+Motion, 3D transforms (they exist; see `rendering-and-motion.md` section 4),
+glass, gradients and the full list of what cannot be done are in
+[rendering-and-motion.md](rendering-and-motion.md). This section keeps the
+timeline question only.
+
 Three routes, cheapest first [doc unless marked]:
 
 1. **`svg` with `polyline`, `rect`, `path`, `text`** inside a component, with
@@ -152,9 +166,11 @@ Three routes, cheapest first [doc unless marked]:
 2. **`canvas surface=ink(points)`** with pointer events (`pointerdown`,
    `pointermove`, `offsetX/Y`) and Canvas 2D recording drawn through Core
    Graphics on iOS (LLP 1056 in Exact's `llp/`; `docs/contract-grammar.md:1924-1945`).
-   A GPU canvas needs the Metal toolchain; without it the build says
-   "no Canvas 2D GPU module: canvases draw with Core Graphics" [run:
-   that notice appeared in our build log]. Install with
+   The GPU replay (Vello on wgpu/Metal) needs the Metal toolchain; without it
+   the build says "no Canvas 2D GPU module: canvases draw with Core Graphics"
+   [run: that notice appeared in our build log]. A canvas `draw` is `app.ts`
+   JavaScript on every frame, so prefer an SVG, a transition or a package view
+   for a 60 Hz mark (`rendering-and-motion.md` 8a). Install with
    `xcodebuild -downloadComponent MetalToolchain` if needed.
 3. **A package-provided native view** (any `UIView`, even
    `UIHostingController.view`): declare `"views": {"my-timeline": {...}}` in the
@@ -172,6 +188,10 @@ evaluate in the renderer lane [doc: contract-grammar.md:1381-1430; **[unrun]**].
 
 ## Theming and accessibility
 
+- Data-bound theming (a theme resource bound to `background-color`, `font-family`,
+  `box-shadow`, `transition` strings): binding proven upstream, our bindings
+  unrun on a device (`rendering-and-motion.md` section 7). `backgroundMaterial`
+  accepts only a conditional of literal names.
 - Theming: `app.tamber` design file, role colours, dark mode via the platform;
   `bun exact.mjs tamber gen swift .` writes typed names for native views
   (`ExactTamber(view).color(.surfaceCard)`) [doc: reference.md around 2606].

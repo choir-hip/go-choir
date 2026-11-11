@@ -1,4 +1,4 @@
-# EXACT: the app shell runtime for Autoradio
+# EXACT: the reference for building Autoradio's app on Exact
 
 Observed: `expo/exact` at commit `76cd50f9e863129b3fc75db1673d6ad4bbf79258`
 (2026-11-10), Xcode 27.1, iOS 27 simulator, on an M1 Mac. The earlier handoff
@@ -7,44 +7,117 @@ backwards compatibility, no migration guide, by design" (Exact `README.md`).
 Pin a commit and move the pin on purpose.
 
 Owner ruling (2026-11-10): the app shell is built on Exact, with no SwiftUI
-host ("no swiftui please. lets do all exact"). Our voice and playback pieces
-are Swift modules inside it. This page and the subpages are the reference an
-agent reads before touching Exact.
+host ("no swiftui please. lets do all exact"). This page and the subpages are
+the single reference an agent reads before touching Exact: the Contract
+language, TypeScript members, Swift packages and the app module, rendering and
+motion, build, test and ship. A lesson learned by any lane goes here or in a
+subpage, not in a lane README (see `docs/design/autoradio-app-ui-2026-11-10.md`,
+section 6).
 
 Evidence marks used everywhere in this set:
 
 - **[run]** verified by running here (simulator, 2026-11-10), with the command
   or output named.
 - **[src]** read from Exact's source at the pinned commit. Paths are relative
-  to the Exact repo root; `file:line` is at the pinned commit.
+  to the Exact repo root (`mobile/.exact-src` in a checkout of this repo);
+  `file:line` is at the pinned commit.
 - **[doc]** stated in Exact's docs, not checked against source or by running.
-- **[unrun]** reasoned or planned, not run.
+- **[test]** read in a fixture or test in the tree, not run by us.
+- **[inferred]** reasoned from reads.
+- **[unrun]** planned or sketched, not run.
 
 Our real example code is tracked in
 [`mobile/exact-spike/`](../../mobile/exact-spike/README.md): one Swift package
 and one app. Examples in these pages are lifted from it unless stated.
 
-## What Exact is, in one page
+## What Exact is, in three paragraphs
 
-A cross-platform runtime. You write the interface in **Contract**
-(`app.contract`), a small declarative language that uses CSS names and CSS
-layout, and the data logic in TypeScript (`app.ts`, run on Hermes on native
-hosts) or Rust. The compiler lowers Contract to a **plan** (tables plus
+**A runtime, not a UI toolkit wrapper.** You write the interface in
+**Contract** (`app.contract`), a small declarative language that uses CSS names
+and CSS layout, and the data logic in TypeScript (`app.ts`, run on Hermes on
+native hosts) or Rust. The compiler lowers Contract to a **plan** (tables plus
 bytecode). On iOS a Rust **runner** executes the plan, a Rust **kernel**
 (Taffy, CSS rules) computes every box, the host measures text with CoreText,
-and **UIKit views** present the result. No webview, no JS bridge in the UI,
-no app JavaScript before first pixel [doc: `README.md` "How it works"].
+and **UIKit views** present the result; `svg` becomes Core Animation layers.
+No webview, no JavaScript bridge in the UI, no app JavaScript before first
+pixel [doc: `README.md` "How it works"]. It does not compile to Metal; Metal
+appears only in optional canvas, GPU-module and SVG-filter paths
+(`exact/rendering-and-motion.md`).
 
-The loop: `view` reads `state`, `derive` and `resource` values. A control's
+**The loop.** `view` reads `state`, `derive` and `resource` values. A control's
 event runs an `action` (a short, loop-free block that writes state together at
 commit). A `resource` is a reactive request to a **source**, answered in
-`app.ts` (or Rust, or a native module). A `mutation` is an explicit
-request (`send`). Native code reaches the app through a **package** (declared
-names, views, events) or the app's one **native module**.
+`app.ts` (or Rust, or a native module). A `mutation` is an explicit request
+(`send`). Per-frame work belongs to `every(frame, ...)` tasks and to
+transitions, keyframes and Core Animation, not to JavaScript.
 
-Where Swift sits: nowhere in the UI. Swift is a plug-in: native views (any
-`UIView`), calls (`later`, `call`), and device-level work (audio, sensors).
-There is exactly one app module per app and any number of packages.
+**Where Swift sits.** Nowhere in the UI. Swift is a plug-in: native views (any
+`UIView`), calls (`later`, `call`), and device-level work (audio, sensors). A
+**package** declares names, views and events and can take audio claims. The
+app has exactly one **app module** (any number of packages), which is where
+third-party Swift and Core ML code enters as static xcframeworks. We write no
+Rust: Rust is Exact's engine, and we use it, not extend it
+(`exact/native-modules.md`).
+
+## Decision table: I need X, use Y
+
+| I need | Use | Why / where |
+|---|---|---|
+| Screens, lists, forms, navigation, settings | Contract | It is the model (`exact/ui-model.md`) |
+| A timeline or waveform of lines, rects, text | Contract `svg` | Part of the model; hundreds of nodes unproven |
+| Entrance, exit, stagger, spring, layout reorder | `transition`, `keyframes`, `-exact-exit-animation`, `-exact-layout-transition` | Native, no TypeScript (`exact/rendering-and-motion.md` section 3) |
+| Card drag with throw | `pan`/`panrelease` (Spark pattern) or a drag timeline | `rendering-and-motion.md` 8c |
+| A flat card in 3D (flip, lean, tilt) | `rotate="y 40deg"` with `perspective` on the parent | Native; angle animates through `transition` |
+| A spinning solid (the TetraMark) | Swift package view with `CATransformLayer`; second choice pure Contract `fn` projection plus `svg polygon` plus `every(frame)` | No `preserve-3d`; `rendering-and-motion.md` 8a |
+| Glass, blur, shadow | `backgroundMaterial="glass"`, `box-shadow` | Native; `rendering-and-motion.md` 5 |
+| Themes | bound data attributes for user themes; `app.tamber` for shipped modes | Binding proven upstream, unrun on device |
+| Per-frame custom drawing | package `UIView`; or `canvas surface=...` (Core Graphics, calls Hermes each frame) as last resort | `rendering-and-motion.md` 2 and 8a |
+| Network calls, JSON, small state machines | `app.ts` (Hermes) | Grant-checked `fetch`, SQLite, fs |
+| Audio session, `AVAudioEngine`, mic, wake word | Swift package | Only packages reach the owner's claims (`exact/audio.md`) |
+| Streams into the UI (RMS, partial transcripts) | Swift package plus `context.changed` | The only push path is "ask the source again" |
+| Playback with lock-screen controls | Contract `audio` with `metadata=` first | Exact's Now Playing exists only there |
+| A third-party Swift or Core ML library | static `.xcframework` in the app module | A package cannot import it (`exact/native-modules.md`) |
+| A system object (CallKit, Core ML, PDFKit) | Swift package view or the app module | Same |
+| Particles, Lottie, shaded 3D, blend modes | none native; see the cannot-do list | `rendering-and-motion.md` 9 |
+| A build or driver run | one shared build tree, one build, one simulator at a time | `exact/build-and-ship.md` |
+
+## Rules we work by
+
+1. Read this page before touching Exact. Never answer an Exact question from
+   memory.
+2. Pin the commit in `mobile/`; move the pin in its own commit with a rebuild.
+3. Voice and playback code takes the session only through Exact's claims, and
+   is written so the same code could run behind a different session owner
+   (`AutoradioKit` takes a session-owner protocol; it never calls
+   `AVAudioSession`).
+4. Mark every new claim here **[run]**, **[src]**, **[doc]**, **[test]**,
+   **[inferred]** or **[unrun]**. A sketch nobody built stays **[unrun]**.
+5. We write no Rust. Rust is Exact's engine.
+6. Third-party Swift or Core ML code enters as a static xcframework in the app
+   module, never as a package dependency.
+7. Per-frame work stays out of Hermes: use frame tasks, transitions, keyframes
+   or Core Animation.
+8. One shared Exact build tree, one build at a time, one simulator per driver.
+   Each worktree compiling its own copy overloaded the Mac.
+9. An Exact lesson learned by any lane is written into this page or a subpage,
+   with its source, not into a lane README.
+10. Drive by `testId`, never coordinates; run `clock data` before reading
+    data-bound text.
+
+## Known wrong ideas (corrected)
+
+| Wrong idea | What is true |
+|---|---|
+| "Exact has no 3D transforms." | Box 3D exists: `rotate` with axis, `translate` z, parent `perspective`, `backface-visibility`. Missing: `preserve-3d`, `matrix`, `skew`, animating axis, z or perspective (`rendering-and-motion.md` 4) |
+| "Contract compiles to Metal / GPU." | It compiles to a plan run by a Rust interpreter; UIKit and Core Animation present it (`rendering-and-motion.md` 2) |
+| "Data themes are unproven." | The binding mechanism is proven upstream; our bindings are unrun on a device |
+| "Project the 3D mark in TypeScript on a canvas." | That is the worst ranked option: a Hermes call per frame. Use a `CATransformLayer` package view or pure Contract |
+| "The simulator exit after the audio claim is an audio bug." | "the app hung up (exit code 0)" is the driver's socket closing, usually a second driver on the same simulator (`exact/testing-and-debugging.md`) |
+| "A package can depend on our SwiftPM library or a third-party one." | It is compiled with `swiftc` and its own files only; use the app module and static xcframeworks |
+| "A `pan` event gives the total drag." | It gives the move since the last event |
+| "Select any route as a tab." | The iOS host builds tabs only from `tablist` tabs; push other routes |
+| "Over-the-air logic updates exist." | They do not (`scripts/app.schema.json:1003`); everything ships as a binary |
+| "`agent ios` is safe with two drivers." | Two drivers on one simulator kill each other's app |
 
 ## Surprises (the ten that matter)
 
@@ -98,26 +171,14 @@ Swift host 48s) and the `target/` of one Exact checkout plus one app is 7.6 GB
 start (`docs/contract-for-humans.md:260-324`) [doc]; an `else empty()` clause
 on a `resource` is how you give a source a placeholder [doc].
 
-## Decision guide: Exact UI model or a Swift module
-
-| Need | Write it in | Why |
-|---|---|---|
-| Screens, lists, forms, navigation, settings | Contract | It is the model; no Swift needed |
-| A timeline or waveform that is lines, rects, text | Contract `svg` | Part of the model; unproven for hundreds of nodes |
-| Per-frame custom drawing | `canvas surface=...` or a package `UIView` | Canvas 2D on Core Graphics; or any `UIView` from a package |
-| Network calls, JSON, small state machines | `app.ts` (Hermes) | Grant-checked `fetch`, SQLite, fs |
-| Audio session, `AVAudioEngine`, mic, wake word | Swift package | Only packages reach the owner's claims |
-| Streams into the UI (RMS, partial transcripts) | Swift package + `context.changed` | The only push path is "ask the source again" |
-| Playback with lock-screen controls | Contract `audio` + `metadata=` first | Exact's Now Playing exists only there |
-| Anything needing a system object (CallKit, CoreML) | Swift package | Same |
-
-## Patterns we will reuse
+## Patterns we reuse
 
 Screen, list, form, sheet and navigation patterns live in
-`exact/ui-model.md`. The native-stream-to-UI pattern (a Swift module producing
-a level meter or a transcript) lives in `exact/native-modules.md`, with the
-spike's `Spike.swift`. The background-audio app pattern (permissions, plist
-keys, claims) lives in `exact/audio.md`.
+`exact/ui-model.md`. Motion, 3D, drawing and theme recipes live in
+`exact/rendering-and-motion.md`. The native-stream-to-UI pattern (a Swift
+module producing a level meter or a transcript) lives in
+`exact/native-modules.md`, with the spike's `Spike.swift`. The background-audio
+app pattern (permissions, plist keys, claims) lives in `exact/audio.md`.
 
 The shape in one paragraph: a package declares one live source (`spikeStatus`)
 and one send (`spikeMode`). The Contract view reads the source as a
@@ -149,39 +210,32 @@ bounded rate (once per second in the spike). The UI re-asks and redraws.
 
 Full list with fixes: `exact/gaps.md`.
 
-## Index
+## Subpage index
 
-- [exact/ui-model.md](exact/ui-model.md): Contract, state, sources, layout, lists, inputs, navigation, custom drawing, theming, accessibility.
-- [exact/native-modules.md](exact/native-modules.md): app module vs package, calling convention, streams out, threading, errors.
+- [exact/ui-model.md](exact/ui-model.md): Contract, state, sources, layout, lists, inputs, navigation and tabs, accessibility.
+- [exact/rendering-and-motion.md](exact/rendering-and-motion.md): the pipeline, what is native vs drawn, transforms 2D and 3D, transitions, keyframes, frame tasks, gestures, shared elements, canvas/SVG/GPU, data-bound styling, recipes, cannot-do list.
+- [exact/native-modules.md](exact/native-modules.md): app module vs package, calling convention, streams out, threading, errors, third-party libraries.
 - [exact/audio.md](exact/audio.md): the session owner, claims, modes, background, Now Playing, interruptions.
-- [exact/build-and-ship.md](exact/build-and-ship.md): layout, CLI, build, signing, install, pinning.
-- [exact/testing-and-debugging.md](exact/testing-and-debugging.md): the driver, logs, failure messages.
+- [exact/build-and-ship.md](exact/build-and-ship.md): layout, CLI, build scripts, kit sync, xcframeworks, signing, install, pinning, build discipline.
+- [exact/testing-and-debugging.md](exact/testing-and-debugging.md): the driver, its limits, logs, failure messages.
 - [exact/internals.md](exact/internals.md): architecture, execution, rendering, measured numbers.
 - [exact/gaps.md](exact/gaps.md): what we need that is missing, with the cheapest fix.
-
-## Rules we follow
-
-1. Read this page before touching Exact. Never answer an Exact question from
-   memory.
-2. Pin the commit in `mobile/`; move the pin in its own commit with a rebuild.
-3. Voice and playback code takes the session only through Exact's claims, and
-   is written so the same code could run behind a different session owner
-   (`AutoradioKit` takes a session-owner protocol; it never calls
-   `AVAudioSession`).
-4. Mark every new claim here **[run]**, **[src]**, **[doc]** or **[unrun]**.
 
 ## Open questions
 
 - Does the spike's tone plus mic tap run on the phone, and survive a locked
   screen? (Blocked on Xcode account sign-in.)
-- What ended the simulator process after the claim? See
-  `exact/testing-and-debugging.md`.
 - Does `.playAndRecord` with `allowBluetoothA2DP` hold A2DP playback quality
   with the phone's own microphone as input?
+- The device behaviour of our data-bound theme strings and of a 3D `rotate`
+  transition (`exact/rendering-and-motion.md`, open items).
 
 ## Sources
 
 `https://github.com/expo/exact` at the commit above, cloned 2026-11-10. Docs
 read: `README.md`, `docs/start-here.md`, `docs/contract-for-humans.md`,
 `docs/contract-for-agents.md`, `docs/reference.md`, `docs/testing.md`,
-`docs/recipes/*.md`.
+`docs/recipes/*.md`. Lane knowledge folded in from the `mobile/README.md` of
+branches `lane/ar-integrate`, `lane/ar-models` and `lane/ar-ui` (2026-11-10;
+`lane/ar-spine` was not on origin), and from the 2026-11-10 contract and
+animation research.
