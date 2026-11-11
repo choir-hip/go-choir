@@ -375,6 +375,7 @@ component SettingChoices
 
 component TalkScreen
   inject
+    th: Theme
     tx: ThemeExtras
     talkRows: SettingRows
   view
@@ -385,6 +386,7 @@ component TalkScreen
 
 component GesturesScreen
   inject
+    th: Theme
     tx: ThemeExtras
     gestureRows: SettingRows
   view
