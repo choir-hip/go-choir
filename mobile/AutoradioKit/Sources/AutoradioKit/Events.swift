@@ -49,6 +49,10 @@ public enum LabEvent: Codable, Sendable, Equatable {
     case modelLoaded(id: String, ms: Double, residentBytes: Int64)
     case thermal(String)
     case audioSession(category: String, mode: String, note: String)
+    /// A claim moved the session between states (or made the first claim): `from` is "none" for the first.
+    case audioSwitch(from: String, to: String, ms: Double)
+    /// The system told the claim something: interrupted, resumed, reset, route (detail: the route now).
+    case audioNotice(kind: String, detail: String)
     case configurationChanged(String)
     case note(String)
     case error(stage: String, message: String)
@@ -139,6 +143,8 @@ public struct TurnSummary: Codable, Sendable, Equatable {
     public var turnEndToRevisionMs: Double?
     public var errors: [String]
     public var peakResidentBytes: Int64?
+    /// Milliseconds the audio session took to change state during the turn (the sum of its switches).
+    public var audioSwitchMs: Double?
 }
 
 public struct TurnRecord: Codable, Sendable {
@@ -170,6 +176,7 @@ public struct TurnRecord: Codable, Sendable {
             case .revisionArrived(let id, _, _, let sum):
                 s.revisions.append("\(id): \(sum)")
                 if s.turnEndToRevisionMs == nil, let e = turnEnd { s.turnEndToRevisionMs = (te.t - e) * 1000 }
+            case .audioSwitch(let from, _, let ms) where from != "none": s.audioSwitchMs = (s.audioSwitchMs ?? 0) + ms
             case .modelLoaded(_, _, let b): peak = max(peak, b)
             case .error(let st, let m): s.errors.append("\(st): \(m)")
             default: break

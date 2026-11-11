@@ -5,30 +5,56 @@ import ExactPackage
 import Foundation
 import UIKit
 
-/// Adapts Exact's session claims to the kit's AudioSessionOwner. One standing capture claim holds
-/// playAndRecord for the whole run; listening/talking are recorded as events (lane K does not switch
-/// voice processing, so both states are the same configuration).
+/// Adapts Exact's session claims to the kit's AudioSessionOwner. One standing capture claim at a time:
+/// listening (mode default, A2DP, speaker, no voice processing) or talking (voiceChat, HFP, speaker). A change of
+/// state is release, then claim, because the first claim's mode wins in Exact (AudioSession.swift:238-262). Options
+/// are always explicit: an empty list silently means defaultToSpeaker + allowBluetoothHFP (NativeHatches.swift:239-243).
 final class ExactSessionOwner: AudioSessionOwner, @unchecked Sendable {
     private let context: ExactPackageContext
     private var claim: ExactSubscription?
+    private var held: AudioState?
     private let note: (String) -> Void
+    private let lock = NSLock()
+    private var handler: (@Sendable (String, String) -> Void)?
     init(context: ExactPackageContext, note: @escaping (String) -> Void) { self.context = context; self.note = note }
 
-    func claim(_ state: AudioState, preferBuiltInMic: Bool, reason: String) async throws {
-        await MainActor.run {
-            if claim == nil {
-                claim = context.audioSession.claim(
-                    mode: "default",
-                    options: ["defaultToSpeaker", "allowBluetoothA2DP"],
-                    background: true,
-                    events: { [note] e in note("session event \(e)") })
-                let s = AVAudioSession.sharedInstance()
-                note("claimed \(state.rawValue) cat=\(s.category.rawValue) mode=\(s.mode.rawValue) out=\(s.currentRoute.outputs.map { $0.portType.rawValue }) in=\(s.currentRoute.inputs.map { $0.portType.rawValue })")
-            }
+    static func spec(_ s: AudioState) -> (mode: String, options: [String], expected: AVAudioSession.Mode) {
+        switch s {
+        case .listening: return ("default", ["defaultToSpeaker", "allowBluetoothA2DP"], .default)
+        case .talking: return ("voiceChat", ["defaultToSpeaker", "allowBluetoothHFP"], .voiceChat)
         }
-        if await MainActor.run(body: { claim == nil }) { throw LabError.unavailable("Exact refused the audio session claim") }
     }
-    func release() { claim?.cancel(); claim = nil }
+
+    func observe(_ h: @escaping @Sendable (String, String) -> Void) { lock.lock(); handler = h; lock.unlock() }
+
+    func claim(_ state: AudioState, preferBuiltInMic: Bool, reason: String) async throws {
+        let ok: Bool = await MainActor.run {
+            if claim != nil, held == state { return true }
+            claim?.cancel(); claim = nil; held = nil          // release first: the first claim's mode wins
+            let spec = Self.spec(state)
+            claim = context.audioSession.claim(mode: spec.mode, options: spec.options, background: true, events: { [weak self] e in
+                guard let self else { return }
+                self.lock.lock(); let h = self.handler; self.lock.unlock()
+                h?(e, self.describe())
+            })
+            guard claim != nil else { return false }
+            held = state
+            let s = AVAudioSession.sharedInstance()
+            note("claimed \(state.rawValue) (\(reason)): \(describe())")
+            if s.mode != spec.expected && !context.agent { note("MODE MISMATCH: asked \(spec.mode), session has \(s.mode.rawValue)") }
+            return true
+        }
+        if !ok { throw LabError.unavailable("Exact refused the audio session claim for \(state.rawValue)") }
+    }
+    func release() {
+        DispatchQueue.main.async { [self] in claim?.cancel(); claim = nil; held = nil; note("released") }
+    }
+    func describe() -> String {
+        let s = AVAudioSession.sharedInstance()
+        let cat = s.category.rawValue.replacingOccurrences(of: "AVAudioSessionCategory", with: "")
+        let mode = s.mode.rawValue.replacingOccurrences(of: "AVAudioSessionMode", with: "")
+        return "cat=\(cat) mode=\(mode) in=\(s.currentRoute.inputs.map { $0.portType.rawValue }) out=\(s.currentRoute.outputs.map { $0.portType.rawValue })"
+    }
 }
 
 public final class AutoradioModule: ExactPackage {
@@ -44,7 +70,7 @@ public final class AutoradioModule: ExactPackage {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
         owner = ExactSessionOwner(context: context) { [weak self] s in self?.context.log("AUTORADIO \(s)"); NSLog("AUTORADIO %@", s) }
         runtime = LabRuntime(supportDir: support, session: owner)
-        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["labState", "labEvents", "labTrace", "labTurns", "labStages", "labParams", "labConfigs"]) } }
+        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["labState", "labAudio", "labEvents", "labTrace", "labTurns", "labStages", "labParams", "labConfigs"]) } }
     }
 
     /// Coalesce change notifications to a few per second.
@@ -69,6 +95,7 @@ public final class AutoradioModule: ExactPackage {
         let state = { [unowned self] in self.json(self.runtime.snapshot()) }
         switch name {
         case "labState": reply(state())
+        case "labAudio": reply(json(runtime.audioInfo()))
         case "labStages": reply(["rows": runtime.stageRows().map { json($0) }])
         case "labParams": reply(["rows": runtime.paramRows().map { json($0) }])
         case "labEvents": reply(["lines": runtime.eventLines()])
@@ -78,9 +105,32 @@ public final class AutoradioModule: ExactPackage {
             let id = (args["turn"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             reply(json(runtime.trace(id: id)))
         case "labStart":
-            // Never start the engine inside the reply, and never open devices under the agent (the spike's simulator exit).
-            if !context.agent { DispatchQueue.main.async { [weak self] in Task { await self?.runtime.start() } } }
+            // Never start the engine inside the reply. Under the agent no device is opened: the engine is virtual.
+            // On a phone driven by the agent the real engine runs (that is how the device numbers are measured).
+            #if targetEnvironment(simulator)
+            let virtual = context.agent
+            #else
+            let virtual = false
+            #endif
+            DispatchQueue.main.async { [weak self] in Task { await self?.runtime.start(virtual: virtual) } }
             reply(state())
+        case "labInject":
+            Task { [weak self] in await self?.runtime.injectFixtureTurn() }
+            reply(state())
+        case "labSetAudioPolicy":
+            if let p = AudioPolicy(rawValue: args["policy"] as? String ?? "") { runtime.setAudioPolicy(p) }
+            reply(state())
+        case "labExportTurn":
+            let id = (args["turn"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            guard let u = runtime.export(id: id) else { return reply(["path": "", "documents": "", "name": ""]) }
+            // Also as an app:/ file, for the share sheet (the host resolves the path against the app's grants).
+            var shared = ""
+            if let d = context.file("app:/data/exports/\(u.lastPathComponent)") {
+                try? FileManager.default.createDirectory(at: d.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? FileManager.default.removeItem(at: d)
+                if (try? FileManager.default.copyItem(at: u, to: d)) != nil { shared = "app:/data/exports/\(u.lastPathComponent)" }
+            }
+            reply(["path": shared, "documents": u.path, "name": u.lastPathComponent])
         case "labStop": runtime.stop(); reply(state())
         case "labTalkDown": runtime.talkDown(); reply(state())
         case "labTalkUp": runtime.talkUp(); reply(state())
