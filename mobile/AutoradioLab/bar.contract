@@ -125,9 +125,10 @@ component BarShell
         backgroundMaterial=(th.material2 == "glass" ? "glass" : "none")
         background-color=(th.material2 == "glass" ? "transparent" : th.paper)
         box-shadow=th.shadow3
-        // the backing: the page colour under the glass, so the controls stay legible over busy content in light and dark
+        // a light wash of the page colour inside the glass, so the controls stay legible over busy content in light and dark (the lens itself
+        // is Exact's glass material: a blurred, translucent view of the page passing under it)
         box position="absolute" inset=0 pointer-events="none" z-index=-1 border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
-          background-color=th.paper opacity=(th.barBacking * 0.62)
+          background-color=th.paper opacity=(th.barBacking * 0.3)
         // the state's tint
         box position="absolute" inset=0 pointer-events="none" border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
           background-color=tint opacity=tintOn
@@ -195,12 +196,10 @@ component BarShell
           button testId="bar-mark" press=toggleLauncher appearance="none" width=48 height=48 aria-label=(layer == "launcher" ? "Close the launcher" : "Open the launcher")
             column width=48 height=48 align-items="center" justify-content="center"
               Mark(state=markState)
-          row flex=1 min-width=0 align-items="center" min-height=44 border-radius=th.radiusPill background-color=th.paper2
-            border-width=1 border-style="solid" border-color=th.rule padding-left=10 padding-right=6 box-sizing="border-box"
-            input value=ask input=editAsk submit=sendAsk focus=barFocus blur=barBlur placeholder=aim aria-label=aim testId="bar-field" enterkeyhint="send" flex=1 min-width=0
-              font-family=th.fontRead font-size=16 color=th.fg padding="8px 2px"
-              ::placeholder
-                color=th.muted
+          input value=ask input=editAsk submit=sendAsk focus=barFocus blur=barBlur placeholder=aim aria-label=aim testId="bar-field" enterkeyhint="send" flex=1 min-width=0 min-height=44
+            font-family=th.fontRead font-size=17 color=th.fg padding="8px 6px"
+            ::placeholder
+              color=th.muted
           if typing
             button testId="bar-send" press=sendAsk appearance="none" width=52 height=48 aria-label="Send"
               BarGlyph(glyph="send", caption="Send", on=true)
