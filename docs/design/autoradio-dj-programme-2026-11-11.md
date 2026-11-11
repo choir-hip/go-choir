@@ -880,3 +880,38 @@ listening records are kept). It is not asked again here.
   writes acknowledgements. The app does not use it today.
 - The listener's real wake time from hibernation on staging today. The 10 s
   figure is October's estimate.
+
+## Owner note after this design, 2026-11-11: planned, and made on the fly
+
+The owner: "auto radio desk needs to have scripts planned, but also respond on
+the fly, because the user is going to interrupt and it's going to need to make
+new material fast. And then it should be able to reuse the existing material
+it's already planned, but maybe modify it or revise it."
+
+This amends section 3.3. A `redirect` does not throw the unheard remainder
+away. The rule:
+
+- **Two speeds.** Stretches are planned ahead by the script call (quality,
+  about twenty minutes at a time). An interruption gets new material at the
+  speed of the fast turn: the answer first (slice 1), then, when the listener
+  wants more or a new direction, the first new segments from a streamed call
+  on the fast pool, so something new is on air within a few seconds, not after
+  a whole stretch is written.
+- **The remainder is input, not waste.** The request after a turn carries the
+  unheard segments of the current stretch, by id, with the turn. The desk
+  answers with a revised remainder: each old segment is kept as it is (same
+  id, no rewrite, no cost), moved, revised (a new segment that names the one
+  it `revises`, for example shortened, or reframed in light of what the
+  listener just said), or dropped, and new segments are inserted where they
+  belong. Planned work is reused unless the turn made it wrong.
+- **One mechanism.** The same request shape serves `redirect`, "more of
+  this", "skip the sport", and a result coming back from another desk: a
+  revision of the run sheet from a cut point. `supersedes_from` stays, and a
+  stretch records which segments it kept and which it revised, so the air log
+  and dedupe still hold.
+- **Small by construction.** A kept segment costs nothing. Only inserted and
+  revised segments are written, in one call.
+
+Slice 2 builds stretches so that this is possible (segments addressable by
+id, the remainder sendable); the revision request itself is the slice after
+it.
