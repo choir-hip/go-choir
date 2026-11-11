@@ -29,7 +29,7 @@ C="$HERE/../AutoradioLab"
 grep -q 'send up = choirTalkCancel()' "$C/spine.contract" || fail "wiring" "micCancel does not call choirTalkCancel (a cancelled turn would be sent)"
 grep -q 'choirAsk(text=ask, aim=pg.top)' "$C/spine.contract" || fail "wiring" "a typed ask does not carry the aim"
 grep -q 'choirTalkDown(aim=pg.top)' "$C/spine.contract" || fail "wiring" "a spoken turn does not carry the aim"
-if grep -rniE 'hold to talk|hold or tap|modeLabel|setLensStyle|lens-[abc]\b' "$C" "$HERE/../exact-package/interface" "$HERE/../AutoradioKit/Sources" > "$SCRATCH/banned.txt" 2>&1; then
+if grep -rIniE --exclude-dir=target --exclude-dir=node_modules --exclude-dir=.exact 'hold to talk|hold or tap|modeLabel|setLensStyle|lens-[abc]\b' "$C" "$HERE/../exact-package/interface" "$HERE/../AutoradioKit/Sources" > "$SCRATCH/banned.txt" 2>&1; then
   head -5 "$SCRATCH/banned.txt"; fail "wiring" "hold-to-talk wording, RadioInfo.modeLabel or the lens-variant switch is still in the app"
 fi
 for f in "$HERE"/../themes/*.json; do grep -q '"lens"' "$f" || fail "wiring" "$(basename "$f") has no lens data"; done
