@@ -506,3 +506,15 @@ page kind's address scheme is a spine change (`PageAddress.kind(of:)`).
 launch in demo mode, the bar visible, open a second page, the pile with two cards, switch through the launcher, close by swipe, pull the bar up for the
 launcher, Settings, theme Newsprint, dark, Depth, light, play on the bar, hold to talk, Components (a talk turn through the injected fixture path with
 the stub stages) and Trace. `mobile/scripts/proof-replay.sh` and `swift test` (30 tests, 7 of them the spine's) still pass.
+
+## Lane 3: the Texture reader and the Textures place
+
+Files: `reader.contract`, `textures.contract`, `members-reader.contract`; Kit `TextureDoc.swift` (model, parser), `Citations.swift`,
+`TextureMarkdown.swift`, `TextureReaderSource.swift` (loader, Textures list, read-along and aim state, demo routes);
+`AutoradioModule+Reader.swift`; `interface/reader.json`; fixtures `resolve-demo-ev-charging`, `related-*`, `texture-*`; proof `scripts/proof-lane3.sh`.
+
+- `pub:<route>` and `texture:<doc>[@rev]` both become a `ReaderDoc` (flat blocks of runs; no body_doc falls back to Markdown). Citations are tappable
+  runs (`reader-cite-<anchor>`), cards open in place (`reader-card-<anchor>`), "Open source" opens a sheet with the quote highlighted in its block; a
+  Texture transclusion is a nested card with "Open as page". Sources list, More on this, versions sheet, page menu, revising banner (`agent_revision_pending`).
+- Read along: lane 1 calls `ReaderFollow.shared.set(address:spoken:)`; matched by text. Aim: `ReaderAim.shared` / `raim` resource (long-press a paragraph, or the menu).
+- Demo-mode menu experiments: side notes (textflow) and Markdown with atom pills.
