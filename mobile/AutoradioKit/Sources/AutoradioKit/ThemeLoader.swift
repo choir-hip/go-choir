@@ -326,7 +326,10 @@ public final class ThemeStore: @unchecked Sendable {
         }
         // The Default entry comes first: the pair (Chrome Pastel in light, Liquid Metal in dark), painted as the one in force.
         var out: [ThemeCard] = []
-        if let d = ds[cur] {
+        // The pair member the scheme asked for (the mode, or the system's), never the chosen theme.
+        lock.lock(); let m = mode; lock.unlock()
+        let asked = m == "system" ? systemScheme() : m
+        if let d = ds[asked == "dark" ? Self.defaultDarkID : Self.defaultLightID] ?? ds[cur] {
             var c = card(Self.defaultChoice, d)
             c.id = Self.defaultChoice; c.name = "Default"; c.origin = "bundled"; c.current = !hasChoice; c.schemes = "light,dark"
             out.append(c)
