@@ -192,6 +192,7 @@ step "clock data"; wait_ 1500; step tree; shot light-20-onboarding-welcome
 step "tap ob-begin"; view light-21-setup-downloading 1200
 step "clock +3500 real"; step "clock data"; step tree; shot light-22-setup-stalled
 step "tap onboarding-scroll drag 0 -900"; view light-22b-setup-scrolled-to-end 700
+step "tap onboarding-scroll drag 0 800"; wait_ 900    # back up: the fallback button was scrolled under the status bar
 step "tap ob-fallback-transcriber"; view light-23-setup-fallback 900
 step "clock +7500 real"; step "clock data"; step tree; shot light-24-mic-ask
 step "tap ob-mic-ask"; wait_ 1800
