@@ -736,28 +736,36 @@ func TestAutoradioTurnFrameCarriesHeardAndHistory(t *testing.T) {
 }
 
 // flushRecorder is a ResponseWriter whose body can be read while the handler
-// is still writing.
+// is still writing, like a network connection: bytes written are held until
+// Flush, and snapshot returns only what has been flushed. A handler that never
+// flushes shows nothing, so the first-sentence test fails if a flush is lost.
 type flushRecorder struct {
-	mu   sync.Mutex
-	hdr  http.Header
-	body strings.Builder
-	code int
+	mu      sync.Mutex
+	hdr     http.Header
+	pending strings.Builder
+	flushed strings.Builder
+	code    int
 }
 
 func newFlushRecorder() *flushRecorder { return &flushRecorder{hdr: http.Header{}} }
 
 func (f *flushRecorder) Header() http.Header { return f.hdr }
 func (f *flushRecorder) WriteHeader(c int)   { f.code = c }
-func (f *flushRecorder) Flush()              {}
+func (f *flushRecorder) Flush() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.flushed.WriteString(f.pending.String())
+	f.pending.Reset()
+}
 func (f *flushRecorder) Write(b []byte) (int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.body.Write(b)
+	return f.pending.Write(b)
 }
 func (f *flushRecorder) snapshot() string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.body.String()
+	return f.flushed.String()
 }
 
 // fullUser is the whole user message as a provider that joins blocks sees it.

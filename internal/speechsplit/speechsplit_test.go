@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // Failure list (written before the code):
@@ -66,6 +67,9 @@ func TestSplitterTable(t *testing.T) {
 		"only whitespace":          {"  \n  ", nil},
 		"lowercase after period":   {"It is v. old. Maybe", []string{"It is v. old.", "Maybe"}},
 		"cjk":                      {"今天下雨。明天晴天。", []string{"今天下雨。", "明天晴天。"}},
+		"cjk closing quote stays":  {"他说：“下雨了。”然后走了。", []string{"他说：“下雨了。”", "然后走了。"}},
+		"urdu trailing space":      {"یہ سچ ہے۔ وہ چلا گیا۔ ٹھیک", []string{"یہ سچ ہے۔", "وہ چلا گیا۔", "ٹھیک"}},
+		"hindi quote and space":    {"उसने कहा \"ठीक है।\" फिर चला गया। अंत", []string{"उसने कहा \"ठीक है।\"", "फिर चला गया।", "अंत"}},
 		"arabic":                   {"هل هذا صحيح؟ نعم۔ شكرا", []string{"هل هذا صحيح؟", "نعم۔", "شكرا"}},
 		"devanagari":               {"यह सच है। वह चला गया॥ ठीक है", []string{"यह सच है।", "वह चला गया॥", "ठीक है"}},
 		"no. abbreviation":         {"See no. 5 for details. Done.", []string{"See no. 5 for details.", "Done."}},
@@ -144,5 +148,25 @@ func TestSplitterForcesAFlushOnlyAsATransportSafeguard(t *testing.T) {
 	// An unbroken run is cut hard.
 	if got := split(strings.Repeat("x", 9000)); len(got) < 3 {
 		t.Fatalf("hard cut: %d pieces", len(got))
+	}
+}
+
+// A forced cut at a multi-byte space (U+3000 ideographic, U+00A0) must leave
+// whole runes on both sides.
+func TestSplitterForcedCutAtAMultiByteSpaceKeepsWholeRunes(t *testing.T) {
+	for _, space := range []string{"\u3000", "\u00a0", "\u2003"} {
+		text := strings.Repeat("あ"+space, 4000) // 8000 runes, no terminator
+		got := split(text)
+		if len(got) < 2 {
+			t.Fatalf("%q: no forced cut: %d pieces", space, len(got))
+		}
+		for i, g := range got {
+			if !utf8.ValidString(g) || strings.ContainsRune(g, utf8.RuneError) {
+				t.Fatalf("%q: piece %d has a broken rune", space, i)
+			}
+		}
+		if strings.Join(strings.Fields(strings.Join(got, " ")), "") != strings.Repeat("あ", 4000) {
+			t.Fatalf("%q: text lost or changed", space)
+		}
 	}
 }

@@ -123,6 +123,8 @@ def one_ask(args, key, n):
             line = line.decode("utf-8", "replace").rstrip("\r\n")
             if line.startswith("event: "):
                 name = line[7:]
+            elif line == "":
+                name = None  # a blank line ends the event; the next data line needs its own name
             elif line.startswith("data: ") and name:
                 try:
                     data = json.loads(line[6:])
@@ -209,9 +211,12 @@ def main():
         mean = lambda xs: 100.0 * statistics.mean(xs) if xs else 0.0
         print(f"cached share of input tokens: first ask per page {mean(firsts_c):.0f}% mean, second ask per page {mean(seconds_c):.0f}% mean "
               f"(shown, not enforced: a provider below its minimum cacheable length reports 0)")
-    failed = [i + 1 for i, r in enumerate(rows) if r["status"] != "completed" or r["error"] or r["first_speech"] is None]
+    def tape_failed(r):
+        d = r.get("done") or {}
+        return bool(d.get("record_error") or d.get("report_error"))
+    failed = [i + 1 for i, r in enumerate(rows) if r["status"] != "completed" or r["error"] or r["first_speech"] is None or tape_failed(r)]
     if failed:
-        print(f"asks that failed, errored or never spoke: {failed}")
+        print(f"asks that failed, errored, never spoke, or reported a tape write failure (record_error / report_error): {failed}")
     answered = {}
     for r in rows:
         if r.get("provider"):

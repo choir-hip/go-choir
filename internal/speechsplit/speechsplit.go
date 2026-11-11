@@ -94,13 +94,36 @@ func nextBoundary(buf string, final bool) (end, rest int, ok bool) {
 			if strings.TrimSpace(buf[:i]) != "" {
 				return i, i + w, true
 			}
-		case r == '。' || r == '！' || r == '？' || r == '۔' || r == '؟' || r == '।' || r == '॥':
-			return i + w, i + w, true
+		case isScriptTerminator(r):
+			// Terminators of other scripts end a sentence with no abbreviation
+			// question; closing quotes and brackets stay with it, and the
+			// spaces after it are consumed.
+			j := i + w
+			for j < len(buf) {
+				c, cw := utf8.DecodeRuneInString(buf[j:])
+				if isScriptTerminator(c) || isCloser(c) {
+					j += cw
+					continue
+				}
+				break
+			}
+			if j >= len(buf) && !final {
+				return 0, 0, false // a closing quote may still arrive
+			}
+			k := j
+			for k < len(buf) {
+				c, cw := utf8.DecodeRuneInString(buf[k:])
+				if !unicode.IsSpace(c) {
+					break
+				}
+				k += cw
+			}
+			return j, k, true
 		case r == '.' || r == '!' || r == '?' || r == '…':
 			j := i + w
 			for j < len(buf) {
 				c, cw := utf8.DecodeRuneInString(buf[j:])
-				if c == '.' || c == '!' || c == '?' || c == '…' || c == '"' || c == '\'' || c == ')' || c == ']' || c == '”' || c == '’' {
+				if c == '.' || c == '!' || c == '?' || c == '…' || isCloser(c) {
 					j += cw
 					continue
 				}
@@ -182,7 +205,8 @@ func forcedCut(buf string, limit int) (end, rest int, ok bool) {
 		return i + 1, i + 1, true
 	}
 	if i := strings.LastIndexFunc(head, unicode.IsSpace); i > 0 {
-		return i, i + 1, true
+		_, w := utf8.DecodeRuneInString(head[i:]) // a space may be several bytes
+		return i, i + w, true
 	}
 	return limit, limit, true
 }
@@ -209,4 +233,23 @@ func clean(s string) string {
 	s = stars.ReplaceAllString(s, "")
 	s = strings.Join(strings.Fields(s), " ")
 	return strings.TrimSpace(structure.ReplaceAllString(s, ""))
+}
+
+// isScriptTerminator is a sentence terminator of a script other than Latin:
+// CJK, Arabic and Urdu, Devanagari.
+func isScriptTerminator(r rune) bool {
+	switch r {
+	case '。', '！', '？', '۔', '؟', '।', '॥':
+		return true
+	}
+	return false
+}
+
+// isCloser is a closing quote or bracket that stays with the sentence it ends.
+func isCloser(r rune) bool {
+	switch r {
+	case '"', '\'', ')', ']', '”', '’', '」', '』', '）', '】', '»':
+		return true
+	}
+	return false
 }
