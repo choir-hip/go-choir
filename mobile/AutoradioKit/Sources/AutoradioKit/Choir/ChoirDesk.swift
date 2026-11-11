@@ -33,7 +33,9 @@ public final class ChoirDeskStage: Desk, @unchecked Sendable {
     static func prompt(_ t: DeskTurn, playing: PlayingProgramme?, include: Bool) -> String {
         guard include, let p = playing, p.blocks.indices.contains(t.blockIndex) else { return t.listenerWords }
         let at = String(p.blocks[t.blockIndex].prefix(300))
-        return t.listenerWords + "\n\n(The listener was hearing paragraph \(t.blockIndex + 1) of \(p.blocks.count) of \"\(p.title)\": \"\(at)\")"
+        let cut = t.interrupted
+            ? "\n\n(The listener cut in on the radio. They had heard only: \"\(String(t.spokenText.suffix(300)))\")" : ""
+        return t.listenerWords + cut + "\n\n(The listener was hearing paragraph \(t.blockIndex + 1) of \(p.blocks.count) of \"\(p.title)\": \"\(at)\")"
     }
 
     public func submit(_ turn: DeskTurn) -> AsyncThrowingStream<Revision, Error> {
