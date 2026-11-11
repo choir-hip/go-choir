@@ -90,6 +90,7 @@ drive "$OUT" \
   "tap ob-demo-next" "clock +1200 real" "clock data" \
   "tap ob-demo-next" "clock +1200 real" "clock data" \
   "tap ob-demo-next" "clock +1200 real" "clock data" \
+  "tap ob-demo-next" "clock +1200 real" "clock data" \
   "tap ob-demo-next" "clock +1200 real" "clock data" tree "screenshot $SHOTS/15-readback.png" \
   "tap ob-demo-next" "clock +1200 real" "clock data" tree "screenshot $SHOTS/16-readback-corrected.png" \
   "tap ob-demo-next" "clock +900 real" "clock data" tree "screenshot $SHOTS/17-writing.png" \
