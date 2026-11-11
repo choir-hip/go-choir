@@ -147,6 +147,48 @@ component Autoradio
     shareDoc
     demoFollow
     // ---- lane 4: cards, launcher, signals ----
+    cst
+    stk
+    told
+    und
+    shade
+    lq
+    lnc
+    pileMode
+    dragAddr
+    dragX
+    dragY
+    dragging
+    leaving
+    menuFor
+    sx
+    sy
+    sdragging
+    sFly
+    openStack
+    setPileMode
+    cardDrag
+    cardRelease
+    closeCard
+    undoClose
+    openMenu
+    closeMenu
+    menuPin
+    menuLess
+    menuMore
+    menuClose
+    stackDrag
+    stackRelease
+    stackAside
+    stackMore
+    stackUndoAct
+    stackRestart
+    editLq
+    leftNext
+    rightNext
+    resetTold
+    forgetTold
+    openTold
     // ---- lane 5: files and viewers ----
     // ---- lane 6: mail ----
     // ---- lane 7: settings, themes, accounts ----
