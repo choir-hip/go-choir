@@ -24,12 +24,12 @@
 import { get, writable } from 'svelte/store';
 import { registerContributionPoint } from '../contributions';
 import {
-  DEFAULT_THEME,
   contrastErrors,
   isKnownThemeId,
   listThemes,
   normalizeThemeConfig,
   registerTheme,
+  systemDefaultTheme,
   validateThemeConfig,
   type ChoirTheme,
 } from '../theme';
@@ -37,7 +37,7 @@ import {
 export type ThemeHost = { apply(theme: unknown, persist: boolean): { ok: boolean; errors?: string[] } };
 
 let host: ThemeHost | null = null;
-const current = writable<ChoirTheme>(DEFAULT_THEME);
+const current = writable<ChoirTheme>(systemDefaultTheme());
 let wanted: unknown = null; // the owner's stored theme when its id was not selectable yet (T3)
 
 export function bindThemeHost(next: ThemeHost): () => void {
@@ -121,7 +121,7 @@ registerContributionPoint('themes', (pkg, entries, scope) => {
         // The selected theme leaves with its pack: the default shows, the choice is kept (T3).
         if (get(current).id === id) {
           wanted = get(current);
-          host?.apply(null, false); // no choice: the default for the system colour scheme
+          host?.apply(wanted, false); // a pending choice: the shell shows the scheme default and keeps the choice
         }
       });
       if (wanted && (wanted as any).id === id) {

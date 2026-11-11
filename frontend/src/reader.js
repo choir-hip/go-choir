@@ -23,6 +23,8 @@ import { loadPackageModule, MODULE_ABI } from './lib/apps/packages';
 import { bindShellHost } from './lib/shell-services';
 
 applyThemeToElement(document.documentElement, systemDefaultTheme());
+// The default follows the system colour scheme.
+window.matchMedia?.('(prefers-color-scheme: dark)')?.addEventListener?.('change', () => applyThemeToElement(document.documentElement, systemDefaultTheme()));
 installTetraMarkFavicon();
 
 const preview = document.getElementById('reader-root');
