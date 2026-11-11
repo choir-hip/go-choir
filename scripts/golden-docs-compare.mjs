@@ -34,8 +34,10 @@ for (const k of known) {
   }
 }
 
-const sig = (b) => JSON.stringify(b);
-const show = (v) => (v === undefined ? '(absent)' : JSON.stringify(v));
+// Canonical JSON: keys sorted, so the order a side wrote its fields in never counts.
+const canon = (v) => (Array.isArray(v) ? `[${v.map(canon).join(',')}]` : v && typeof v === 'object' ? `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canon(v[k])}`).join(',')}}` : JSON.stringify(v));
+const sig = canon;
+const show = (v) => (v === undefined ? '(absent)' : canon(v));
 
 function lcsAlign(a, b) {
   const n = a.length, m = b.length;
@@ -62,7 +64,7 @@ function diffDoc(web, native) {
       const w = gapW[k], n = gapN[k];
       const fields = [...new Set([...Object.keys(w), ...Object.keys(n)])].sort();
       for (const f of fields) {
-        if (JSON.stringify(w[f]) !== JSON.stringify(n[f])) {
+        if (canon(w[f]) !== canon(n[f])) {
           diffs.push({ key: `web#${wi + k}~native#${ni + k}.${f}`, text: `block web#${wi + k} (${w.kind}) vs native#${ni + k} (${n.kind}), field ${f}\n      web:    ${show(w[f])}\n      native: ${show(n[f])}` });
         }
       }
