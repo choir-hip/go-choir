@@ -24,6 +24,7 @@
 //	   or echoed back in ignored.
 //	T9 A transparent colour passes the contrast gate (onAccent rgba(.,.,.,0)),
 //	   or paper is not opaque.
+//	T11 Data after the first JSON value is read past, or a non-string scalar under type.* is served.
 //	T10 A font stack with unbalanced quotes is served.
 package themedoc
 
@@ -31,6 +32,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"regexp"
 	"sort"
@@ -95,6 +97,9 @@ func Parse(text string) (Theme, []string, error) {
 	if err := dec.Decode(&raw); err != nil {
 		return nil, nil, fmt.Errorf("the choir-theme block is not a JSON object: %v", err)
 	}
+	if _, err := dec.Token(); err != io.EOF { // T11: nothing may follow the one value
+		return nil, nil, fmt.Errorf("the choir-theme block holds data after the JSON object")
+	}
 	if v, ok := raw["schema_version"].(json.Number); !ok || v.String() != "3" { // T6
 		return nil, nil, fmt.Errorf("schema_version must be 3")
 	}
@@ -148,7 +153,7 @@ var keyRE = regexp.MustCompile(`^[A-Za-z0-9._-]{1,40}$`)
 func mustBeString(path string) bool {
 	return path == "id" || path == "name" || path == "schemes" ||
 		strings.HasPrefix(path, "schemes[") || strings.HasPrefix(path, "colors.") ||
-		strings.HasPrefix(path, "radii.") || path == "type.read" || path == "type.ui" || path == "type.mono"
+		strings.HasPrefix(path, "radii.") || strings.HasPrefix(path, "type.")
 }
 
 func cleanValue(path string, v any, depth int, budget *int) (any, error) {

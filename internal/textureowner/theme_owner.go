@@ -1,9 +1,11 @@
 package textureowner
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/themedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -23,6 +25,8 @@ import (
 //	R3 ?rev= names a revision of a different document and is served as this one.
 //	R4 A desk or an anonymous caller reads it; any method but GET.
 //	R5 The answer is cached.
+//	R6 A store failure while loading answers 404 as if the document were
+//	   missing, hiding an outage (5xx; 404 is for missing and foreign only).
 
 const themePath = "/api/texture/theme"
 
@@ -61,6 +65,10 @@ func (h *Handler) HandleTheme(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	ctx := r.Context()
 	doc, err := h.getTextureDocument(asOwner(ctx), ownerID, docID)
+	if err != nil && !themeMissing(err) { // R6: a store failure is a 5xx, not "missing"
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "the theme document could not be read"})
+		return
+	}
 	if err != nil || doc.ArchivedAt != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "no such theme document"}) // R1
 		return
@@ -68,12 +76,20 @@ func (h *Handler) HandleTheme(w http.ResponseWriter, r *http.Request) {
 	var rev types.Revision
 	if want := strings.TrimSpace(r.URL.Query().Get("rev")); want != "" {
 		rev, err = h.getTextureRevision(ctx, ownerID, want)
+		if err != nil && !themeMissing(err) {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "the theme revision could not be read"})
+			return
+		}
 		if err != nil || rev.DocID != doc.DocID { // R3
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "no such theme revision"})
 			return
 		}
 	} else {
 		rev, err = h.getTextureRevision(ctx, ownerID, doc.CurrentRevisionID)
+		if err != nil && !themeMissing(err) {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "the theme revision could not be read"})
+			return
+		}
 		if err != nil {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "the document has no readable revision"})
 			return
@@ -85,4 +101,10 @@ func (h *Handler) HandleTheme(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, themeAnswer{DocID: doc.DocID, RevisionID: rev.RevisionID, Theme: theme, Ignored: ignored})
+}
+
+// themeMissing reports an error that means "no such document or revision for
+// this owner", as opposed to a store failure.
+func themeMissing(err error) bool {
+	return errors.Is(err, store.ErrNotFound) || errors.Is(err, store.ErrLifecycleAuthorityRequired)
 }

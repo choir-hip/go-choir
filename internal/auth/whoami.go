@@ -51,6 +51,7 @@ type whoamiResponse struct {
 
 // HandleWhoami handles GET /auth/whoami for a Bearer API key.
 func (h *Handler) HandleWhoami(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store") // every answer, the refusals too
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
@@ -71,7 +72,6 @@ func (h *Handler) HandleWhoami(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = h.store.TouchAPIKeyLastUsed(r.Context(), key.ID)
-	w.Header().Set("Cache-Control", "no-store")
 	scopes := key.Scopes
 	if scopes == nil {
 		scopes = []string{}
