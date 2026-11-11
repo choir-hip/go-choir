@@ -15,7 +15,7 @@ private func story(_ route: String, _ title: String, _ section: String = "World"
 
 final class CardsTests: XCTestCase {
     private func prefs(_ c: TestClock = TestClock(1_000_000), file: URL? = nil) -> Preferences {
-        Preferences(file: file, now: { c.t })
+        Preferences(file: file, now: { Date(timeIntervalSince1970: c.t) })
     }
 
     // 1. nothing to learn from
