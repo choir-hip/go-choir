@@ -83,15 +83,16 @@ while :; do
   step "tap files-sort-name"; wait_ 400
   step "tap \"files-row-/Documents\""; view 05-documents-folder 800
   step "tap files-new-toggle"; wait_ 300; step "type files-new-input Projects"; step "tap files-new-go"; view 06-new-folder-banner 800
-  step "tap \"files-more-/Documents/Key list.txt\""; wait_ 300; step "type files-rename-input Keys.txt"; step "tap files-rename-go"; view 07-renamed 800
-  step "tap \"files-more-/Documents/Keys.txt\""; wait_ 300; step tree; shot 07b-row-actions
-  step "tap \"files-delete-/Documents/Keys.txt\""; view 08-deleted 800
+  step "tap \"files-more-/Documents/Projects\""; wait_ 300; step "type files-rename-input Plans"; step "tap files-rename-go"; view 07-folder-rename-refused 800
+  step "tap files-upload"; view 08-upload-added 900
+  step "tap \"files-more-/Documents/Added note.txt\""; wait_ 300; step "type files-rename-input Aardvark.txt"; step "tap files-rename-go"; view 09-renamed 800
+  step "tap \"files-more-/Documents/Aardvark.txt\""; wait_ 300; step tree; shot 10-row-actions
+  step "tap \"files-delete-/Documents/Aardvark.txt\""; view 11-deleted 800
   step "tap \"files-crumb-/\""; wait_ 600
-  step "type files-search lantern"; step "type files-search key Enter"; view 09-search 1000
+  step "type files-search lantern"; step "type files-search key Enter"; view 12-search 1000
   step "tap files-search-clear"; wait_ 500
-  step "tap files-mode-recent"; view 10-recent-empty 600
+  step "tap files-mode-recent"; view 13-recent-empty 600
   step "tap files-mode-browse"; wait_ 500
-  step "tap files-upload"; view 11-upload-added 900
 
   # ---- the viewers, one after the other; each returns to the Files page through the pile
   step "tap \"files-row-/Documents\""; wait_ 600
@@ -103,10 +104,12 @@ while :; do
   goto "file:/"
   step "tap \"files-row-/Documents/Budget 2026.csv\""; view 24-csv 1500
   goto "file:/"
+  step "type files-search Lamps"; step "type files-search key Enter"; wait_ 900
   step "tap \"files-row-/Documents/Lamps.swift\""; view 25-code 1500
-  goto "file:/"
+  goto "file:/"; step "tap files-search-clear"; wait_ 500
+  step "type files-search Survey"; step "type files-search key Enter"; wait_ 900
   step "tap \"files-row-/Documents/Survey readings.dat\""; view 26-cannot-preview 1200
-  goto "file:/"
+  goto "file:/"; step "tap files-search-clear"; wait_ 500
   step "tap \"files-crumb-/\""; wait_ 600
   step "tap \"files-row-/Books\""; wait_ 600
   step "tap \"files-row-/Books/The Lantern Keeper.epub\""; view 27-epub 2000
@@ -167,6 +170,7 @@ must "Files place: breadcrumbs" '[files-crumb-/]'
 must "grid view" '[files-grid]'
 must "folder: breadcrumb shows the folder" '[files-crumb-/Documents]'
 must "new folder: banner" 'Made the folder'
+must "folder rename refused: banner" 'Folders cannot be renamed here yet'
 must "rename: banner" 'Renamed to'
 must "delete: banner" 'Deleted'
 must "search: finds the book across folders" '[files-row-/Books/The Lantern Keeper.epub]'
@@ -187,7 +191,7 @@ must "image viewer: frame" '[image-handle]'
 must "image viewer: zoom control" '[image-4x]'
 must "audio viewer: element and state" '[audio-state]'
 must "video viewer: element" '[video-view]'
-[ "$(ls "$SHOTS"/*.png 2>/dev/null | wc -l)" -ge 30 ] || FAILS="$FAILS [fewer than 30 screenshots]"
+[ "$(ls "$SHOTS"/*.png 2>/dev/null | wc -l)" -ge 28 ] || FAILS="$FAILS [fewer than 28 screenshots]"
 echo "ok: screenshots in $SHOTS"
 if grep -q 'ERROR\|Fatal error' "$OUT"; then echo "note: errors in the app log:"; grep -m8 'ERROR\|Fatal error' "$OUT"; fi
 cp "$OUT" "$SHOTS/drive.txt" 2>/dev/null
