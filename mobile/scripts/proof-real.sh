@@ -89,14 +89,18 @@ MAIL1=$(ids "$SHOTS/drive-survey.txt" "mail-row-" | sed -n 1p)
 THEME_DOC=${THEME_ROW#textures-doc-texture:}
 echo "picked: theme=${THEME_DOC:+yes} big=${BIG_ROW:+yes} story1=${STORY1:+yes} story2=${STORY2:+yes} play=${PLAY1:+yes} doc=${DOC1:+yes} dir=${DIR1:+yes} mail=${MAIL1:+yes}"
 
+# Rows of the live front page sit wherever today's page puts them, and the bar's text field can cover one. Before a row is tapped the
+# list is dragged back to its top (twice, so a long page is covered), where the first rows are clear of the bar.
+to_top() { step "tap paper-scroll drag 0 700"; wait_ 400; step "tap paper-scroll drag 0 700"; wait_ 600; }
+
 # ---- 3b. READ drive: two real stories in the reader, one played, one Texture, a folder, a message
 step "clock data"; wait_ 6000
 step "tap ob-skip"; wait_ 2500
-[ -n "$STORY1" ] && { step "tap \"$STORY1\""; view real-11-story-1 4000; step "tap reader-scroll drag 0 -600"; view real-12-story-1-scrolled 900; step "tap reader-scroll drag 0 -900"; view real-13-story-1-more 900; }
+[ -n "$STORY1" ] && { to_top; step "tap \"$STORY1\""; view real-11-story-1 4000; step "tap reader-scroll drag 0 -600"; view real-12-story-1-scrolled 900; step "tap reader-scroll drag 0 -900"; view real-13-story-1-more 900; }
 goto "paper:front"; wait_ 1200
-[ -n "$STORY2" ] && { step "tap \"$STORY2\""; view real-14-story-2 4000; step "tap reader-scroll drag 0 -2500"; view real-15-story-2-end 900; }
+[ -n "$STORY2" ] && { to_top; step "tap \"$STORY2\""; view real-14-story-2 4000; step "tap reader-scroll drag 0 -2500"; view real-15-story-2-end 900; }
 goto "paper:front"; wait_ 1200
-[ -n "$PLAY1" ] && { step "tap \"$PLAY1\""; wait_ 5000; step tree; shot real-16-playing; step "tap bar-text"; view real-17-player 1200; step "tap player-close"; wait_ 700; }
+[ -n "$PLAY1" ] && { to_top; step "tap \"$PLAY1\""; wait_ 5000; step tree; shot real-16-playing; step "tap bar-text"; view real-17-player 1200; step "tap player-close"; wait_ 700; }
 place textures 900; wait_ 2500
 [ -n "$DOC1" ] && { step "tap \"$DOC1\""; view real-18-texture-document 4000; }
 place files 900; wait_ 2500
