@@ -1,1 +1,26 @@
-{ "shapes": {}, "names": [] }
+{
+  "shapes": {
+    "PaperItem": {
+      "route": "string", "title": "string", "dek": "string", "section": "string", "meta": "string", "byline": "string",
+      "entityLabels": "string", "entityIds": "string", "size": "number", "weight": "number", "lineHeight": "number",
+      "lines": "number", "showDek": "bool", "dekSize": "number", "dekLines": "number", "indent": "bool", "rank": "number"
+    },
+    "PaperBand": { "id": "string", "module": "string", "label": "string", "side": "bool", "rule": "bool", "items": "PaperItem[]" },
+    "PaperSection": { "id": "string", "label": "string", "count": "number", "current": "bool" },
+    "PaperFront": {
+      "status": "string", "message": "string", "edition": "string", "layout": "string", "composition": "string",
+      "dateLine": "string", "updated": "string", "sectionId": "string", "sectionLabel": "string", "count": "number",
+      "sections": "PaperSection[]", "bands": "PaperBand[]"
+    }
+  },
+  "names": [
+    {
+      "source": "paperFront", "live": true, "answers": "PaperFront",
+      "options": { "section": "string", "edition": "string", "width": "number" },
+      "substitute": { "default": {
+        "status": "empty", "message": "", "edition": "", "layout": "", "composition": "", "dateLine": "", "updated": "",
+        "sectionId": "", "sectionLabel": "", "count": 0, "sections": [], "bands": []
+      } }
+    }
+  ]
+}
