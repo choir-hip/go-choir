@@ -32,14 +32,14 @@ members Autoradio
 
   derive mdrFor = match mdr { case some(d) => d.forAddress, case none => "" }
   derive mdrStatus = match mdr { case some(d) => d.status, case none => "" }
-  derive mdrDraft = match mdr { case some(d) => d.mailDraftId, case none => "" }
+  derive mdrDraft = match mdr { case some(d) => d.draftId, case none => "" }
   derive mdrNote = match mdr { case some(d) => d.note, case none => "" }
   derive mdrUrl = match mdr { case some(d) => d.reviewURL, case none => "" }
   derive mdrSendAs = match mdr { case some(d) => d.sendAs, case none => "" }
   derive mdrMine = mdrFor == pg.top
   // What the compose page shows about the draft: the last save or approval for this page, else what the server said.
   derive mailDraftStatus = mdrMine ? mdrStatus : mcmp.status
-  derive mailDraftId = mdrMine and mdrDraft != "" ? mdrDraft : mcmp.mailDraftId
+  derive mailDraftId = mdrMine and mdrDraft != "" ? mdrDraft : mcmp.draftId
   derive mailDraftNote = mdrMine ? mdrNote : mcmp.note
   derive mailDraftUrl = mdrMine ? mdrUrl : ""
   derive mailDraftFrom = mdrMine and mdrSendAs != "" ? mdrSendAs : mcmp.sendAs
