@@ -5,3 +5,7 @@ DerivedData/
 .exact-src/
 .exact-build/
 exact-package/apple/Kit/
+# Third-party sources and static xcframeworks built by scripts/build-xcframeworks.sh; downloaded model weights.
+.deps/
+*.gguf
+*.mlmodelc/
