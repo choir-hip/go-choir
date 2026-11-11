@@ -97,6 +97,32 @@ func TestWhoamiAnswersTheBearersOwnRecordOnly(t *testing.T) {
 	}
 }
 
+func TestWhoamiIsNoStoreOnEveryAnswer(t *testing.T) { // W5
+	h, _ := testHandlerEnv(t)
+	user, err := h.store.CreateUser("whoami-ns", "whoami-ns@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, secret, err := h.store.CreateAPIKey(context.Background(), user.ID, "phone", []string{"read:base"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, c := range map[string]struct {
+		req  *http.Request
+		code int
+	}{
+		"200": {bearerReq(http.MethodGet, "/auth/whoami", nil, secret), http.StatusOK},
+		"401": {bearerReq(http.MethodGet, "/auth/whoami", nil, "choir_sk_nope"), http.StatusUnauthorized},
+		"405": {bearerReq(http.MethodPost, "/auth/whoami", nil, secret), http.StatusMethodNotAllowed},
+	} {
+		rec := httptest.NewRecorder()
+		h.HandleWhoami(rec, c.req)
+		if rec.Code != c.code || rec.Header().Get("Cache-Control") != "no-store" {
+			t.Errorf("%s: status=%d cache-control=%q", name, rec.Code, rec.Header().Get("Cache-Control"))
+		}
+	}
+}
+
 func TestWhoamiTakesTheBearerNotTheCookie(t *testing.T) { // W6
 	h, priv := testHandlerEnv(t)
 	user, err := h.store.CreateUser("whoami-cookie", "whoami-cookie@example.com")

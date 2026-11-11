@@ -53,6 +53,23 @@ func TestWrongTypedValuesRefuseAndNeverPanic(t *testing.T) {
 	}
 }
 
+// T11: data after the first JSON value is refused; every scalar under type.*
+// is a string (no numeric keys are allowed there).
+func TestTrailingDataAndTypeScalars(t *testing.T) {
+	cases := map[string]string{
+		"trailing object": strings.Replace(newsprint, "}\n```", "} {\"x\":1}\n```", 1),
+		"trailing text":   strings.Replace(newsprint, "}\n```", "} trailing\n```", 1),
+		"scale number":    strings.Replace(newsprint, `"scale": "editorial"`, `"scale": 1`, 1),
+		"scale bool":      strings.Replace(newsprint, `"scale": "editorial"`, `"scale": true`, 1),
+		"extra number":    strings.Replace(newsprint, `"scale": "editorial"`, `"scale": "editorial", "step": 12`, 1),
+	}
+	for name, text := range cases {
+		if _, _, err := Parse(text); err == nil {
+			t.Errorf("%s: parsed, want a refusal", name)
+		}
+	}
+}
+
 func TestTransparentOnAccentFailsTheGate(t *testing.T) { // T9
 	text := strings.Replace(newsprint, `"onAccent": { "light": "#FFFFFF", "dark": "#0E0E0E" }`, `"onAccent": { "light": "rgba(255,255,255,0)", "dark": "#0E0E0E" }`, 1)
 	if _, _, err := Parse(text); err == nil {

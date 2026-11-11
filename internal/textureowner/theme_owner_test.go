@@ -45,6 +45,19 @@ func TestThemeRouteServesAValidatedThemeFromATexture(t *testing.T) {
 	}
 }
 
+// R6: a store failure is a 5xx; 404 stays for missing and foreign documents.
+func TestThemeRouteStoreFailureIsNot404(t *testing.T) {
+	f := newAlgoFixture(t, "x")
+	_ = startTextDoc(t, f.core.Store(), "doc-theme", "Newsprint", themeDocBody)
+	if code, _, _ := getTheme(f, "?doc=nope", "user-1"); code != http.StatusNotFound {
+		t.Fatalf("missing doc status=%d", code)
+	}
+	_ = f.core.Store().Close()
+	if code, _, _ := getTheme(f, "?doc=doc-theme", "user-1"); code < 500 {
+		t.Fatalf("R6: closed store answered %d, want 5xx", code)
+	}
+}
+
 func TestThemeRouteRefusals(t *testing.T) {
 	f := newAlgoFixture(t, "x")
 	_ = startTextDoc(t, f.core.Store(), "doc-theme", "Newsprint", themeDocBody)
