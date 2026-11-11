@@ -194,7 +194,7 @@ if [ -z "${SHELLONLY:-}" ]; then
 step "clock data"; wait_ 1500
 step "tap bar-mark"; wait_ 600; step "tap place-settings"; wait_ 900
 step "tap settings-mode-dark"; wait_ 900
-goto "onboarding:setup"; view dark-20-onboarding-welcome 900
+step "tap settings-setup-voice"; view dark-20-onboarding-welcome 900
 step "tap ob-begin"; wait_ 4700; step tree; shot dark-21-setup-stalled
 step "tap ob-fallback-transcriber"; wait_ 8400; step tree; shot dark-22-mic-ask
 step "tap ob-mic-ask"; wait_ 2300; step tree; shot dark-23-mic-heard
