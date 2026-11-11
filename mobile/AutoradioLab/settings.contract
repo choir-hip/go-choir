@@ -1,50 +1,246 @@
-// Settings (settings:<screen>). Lane 7 owns this file. The spine ships a plain page with the three controls the
-// proof needs and later screens keep reachable: themes (data, switched at run time), light/dark/system, demo mode,
-// and the two developer pages.
-// testIds: settings-theme-<id>, settings-mode-<light|dark|system>, settings-demo, settings-components, settings-theme-problems.
-use Theme, ThemeList, DemoInfo from "@choir/autoradio"
-use PageScroll from "./ui.contract"
+// Settings (settings:<screen>). Lane 7 owns this file. One page component, SettingsPage, shows the screen the address names:
+//   settings:root (or settings:)  the list, with the theme picker and light/dark/system inline
+//   settings:appearance           themes as preview cards, light/dark/system, a theme from a Texture, the type and depth specimens
+//   settings:account              who am I, the device's key label, sign out
+//   settings:talk                 talk mode (button / word / open), set after onboarding
+//   settings:voice                voice and models: Components, and the voice setup card (lane 8)
+//   settings:computer             status, Wake, Restart to update
+//   settings:learned              what the paper has learned, with Reset
+//   settings:gestures             what each swipe means (a catalog of choices, applied to the next gesture)
+//   settings:about                app and server builds
+// testIds: settings-theme-<id>, settings-mode-<light|dark|system>, settings-demo, settings-components, settings-theme-problems,
+//   settings-spike3d (kept for the spine's proof), settings-nav-<screen>, settings-back, settings-theme-doc, settings-theme-load,
+//   settings-theme-demo-texture, settings-theme-status, settings-theme-remove-<id>, settings-signout, settings-account-*,
+//   settings-choice-<setting>-<option>, settings-wake, settings-update, settings-computer-*, settings-learned-reset, settings-learned-row,
+//   settings-about-*, settings-voice-components.
+// Every colour, face, radius and shadow is a theme token (th.*, tx.*); a theme's own preview card paints from the card's data.
+use Theme, ThemeList, DemoInfo, ThemeCard, ThemeExtras, SettingsAccount, SettingsComputer, SettingRowInfo, LearnedInfo, AboutInfo, ThemeCards, SettingRows, ChoirAuth from "@choir/autoradio"
+use PageScroll, Card from "./ui.contract"
 
 component SettingsPage
+  props
+    address: string
+    title: string
+  derive screen = address == "settings:" ? "root" : address.replaceAll("settings:", "")
+  view
+    if screen == "appearance"
+      AppearanceScreen()
+    if screen == "account"
+      AccountScreen()
+    if screen == "talk"
+      TalkScreen()
+    if screen == "voice"
+      VoiceScreen()
+    if screen == "computer"
+      ComputerScreen()
+    if screen == "learned"
+      LearnedScreen()
+    if screen == "gestures"
+      GesturesScreen()
+    if screen == "about"
+      AboutScreen()
+    if screen != "appearance" and screen != "account" and screen != "talk" and screen != "voice" and screen != "computer" and screen != "learned" and screen != "gestures" and screen != "about"
+      RootScreen()
+
+// ---------------------------------------------------------------- shared pieces
+
+component ScreenTitle
   inject
     th: Theme
-    thl: ThemeList
-    dm: DemoInfo
-    setTheme: action
-    setMode: action
-    setDemo: action
+    tx: ThemeExtras
+    openPage: action
+  props
+    label: string
+    back: bool
+  view
+    column gap=6 width="100%"
+      if back
+        button press=openPage("settings:root", "Settings") testId="settings-back" appearance="none" aria-label="Back to Settings"
+          text "‹ Settings" font-family=th.fontUi font-size=tx.sizeLabel font-weight=600 color=th.accent
+      text label role="heading" aria-level=1 font-family=th.fontRead font-size=tx.sizeHeadline font-weight=tx.weightHeadline color=th.fg testId="page-title"
+
+component SectionLabel
+  inject
+    th: Theme
+    tx: ThemeExtras
+  props
+    label: string
+  view
+    text label font-family=th.fontUi font-size=tx.sizeMeta font-weight=700 color=th.accent2 text-transform="uppercase" margin-top=10
+
+component Hairline
+  inject
+    th: Theme
+  view
+    box height=1 width="100%" background-color=th.rule
+
+// A list row that opens another settings screen (or any page).
+component NavRow
+  inject
+    th: Theme
+    tx: ThemeExtras
     openPage: action
   props
     address: string
     title: string
+    subtitle: string
+    testId: string
+  view
+    button press=openPage(address, title) testId=testId appearance="none" width="100%" padding="14px 16px"
+      row align-items="center" gap=12 width="100%"
+        column flex=1 min-width=0 gap=2 align-items="flex-start"
+          text title font-family=th.fontUi font-size=17 font-weight=600 color=th.fg
+          if subtitle != ""
+            text subtitle font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+        text "›" font-family=th.fontUi font-size=22 color=th.muted
+
+// A label and a value, on one line of a card.
+component FactRow
+  inject
+    th: Theme
+    tx: ThemeExtras
+  props
+    label: string
+    value: string
+    mono: bool
+    testId: string
+  view
+    row width="100%" gap=12 padding="10px 16px" align-items="flex-start" justify-content="space-between"
+      text label font-family=th.fontUi font-size=tx.sizeLabel color=th.muted
+      text value testId=testId font-family=(mono ? th.fontMono : th.fontUi) font-size=tx.sizeLabel color=th.fg text-align="right" flex=1 min-width=0
+
+// A filled or bordered action button in the theme's shape.
+component ActionButton
+  inject
+    th: Theme
+    tx: ThemeExtras
+  props
+    label: string
+    testId: string
+    primary: bool
+    danger: bool
+  view
+    column testId=testId align-items="center" justify-content="center" padding="12px 18px" min-height=44
+      border-radius=th.radiusControl
+      background-color=(primary ? th.accent : th.paper2)
+      box-shadow=(primary ? th.shadow1 : "none")
+      border-width=(primary ? 0 : 1) border-style="solid" border-color=(danger ? th.danger : th.rule)
+      text label font-family=th.fontUi font-size=tx.sizeLabel font-weight=600 color=(primary ? th.onAccent : (danger ? th.danger : th.fg))
+
+// light / dark / system. The three buttons keep their test ids.
+component ModePicker
+  inject
+    thl: ThemeList
+    setMode: action
+  view
+    row gap=8 width="100%"
+      button press=setMode("light") testId="settings-mode-light" role="radio" aria-checked=(thl.mode == "light") buttonStyle=(thl.mode == "light" ? "filled" : "bordered")
+        text "Light"
+      button press=setMode("dark") testId="settings-mode-dark" role="radio" aria-checked=(thl.mode == "dark") buttonStyle=(thl.mode == "dark" ? "filled" : "bordered")
+        text "Dark"
+      button press=setMode("system") testId="settings-mode-system" role="radio" aria-checked=(thl.mode == "system") buttonStyle=(thl.mode == "system" ? "filled" : "bordered")
+        text "System"
+
+// One theme as a preview card, painted from the card's own colours, faces, radius and shadow (not the app's), so each theme
+// is seen as it will look. `compact` drops the sample paragraph.
+component ThemePreview
+  inject
+    th: Theme
+    setTheme: action
+    removeTheme: action
+  props
+    t: ThemeCard
+    compact: bool
+  view
+    column width="100%" gap=6
+      button press=setTheme(t.id) testId=`settings-theme-${t.id}` role="radio" aria-checked=t.current appearance="none" width="100%"
+        aria-label=`${t.name}${t.current ? ", selected" : ""}`
+        column width="100%" gap=10 padding=16 background-color=t.paper border-radius=t.radiusCard box-shadow=t.shadow
+          border-width=2 border-style="solid" border-color=(t.current ? t.accent : "transparent")
+          row align-items="center" gap=8 width="100%"
+            text t.name font-family=t.fontRead font-size=22 font-weight=700 color=t.fg flex=1 min-width=0
+            if t.contrast == "AAA"
+              row padding="3px 8px" border-radius=t.radiusControl border-width=1 border-style="solid" border-color=t.rule
+                text "AAA contrast" font-family=t.fontUi font-size=11 font-weight=700 color=t.fg
+            if t.current
+              row padding="3px 10px" border-radius=t.radiusControl background-color=t.accent
+                text "In use" font-family=t.fontUi font-size=11 font-weight=700 color=t.onAccent
+          if compact == false
+            text "The harbor barrier vote moves to Thursday, and the council wants the storm-surge figures first." font-family=t.fontRead font-size=15 line-height=1.45 color=t.fg
+          row gap=8 align-items="center" width="100%"
+            box width=22 height=22 background-color=t.accent border-radius=t.radiusControl
+            box width=22 height=22 background-color=t.accent2 border-radius=t.radiusControl
+            box width=22 height=22 background-color=t.fg border-radius=t.radiusControl
+            box width=22 height=22 background-color=t.muted border-radius=t.radiusControl
+            box width=22 height=22 background-color=t.paper2 border-radius=t.radiusControl border-width=1 border-style="solid" border-color=t.rule
+            row flex=1 min-width=0 justify-content="flex-end"
+              text `${t.scale} · ${t.schemes.replaceAll(",", " + ")}${t.origin == "bundled" ? "" : " · " + t.origin}` font-family=t.fontUi font-size=12 color=t.muted
+          if compact == false
+            row gap=8 align-items="center"
+              row padding="8px 16px" border-radius=t.radiusControl background-color=t.accent
+                text "Listen" font-family=t.fontUi font-size=15 font-weight=600 color=t.onAccent
+              row padding="8px 16px" border-radius=t.radiusControl background-color=t.paper2 border-width=1 border-style="solid" border-color=t.rule
+                text "Ask the desk" font-family=t.fontUi font-size=15 font-weight=600 color=t.fg
+      if t.origin != "bundled" and compact == false
+        button press=removeTheme(t.id) testId=`settings-theme-remove-${t.id}` appearance="none"
+          text "Remove this theme" font-family=th.fontUi font-size=13 color=th.danger padding="2px 6px"
+
+// ---------------------------------------------------------------- root
+
+component RootScreen
+  inject
+    th: Theme
+    tx: ThemeExtras
+    tc: ThemeCards
+    acct: SettingsAccount
+    cmpt: SettingsComputer
+    dm: DemoInfo
+    setDemo: action
+    talkRows: SettingRows
   view
     PageScroll(id="settings")
-      text "Settings" role="heading" aria-level=1 font-size=28 font-weight=700 testId="page-title"
-      text "Theme" font-family=th.fontUi font-size=13 color=th.muted
-      for t in thl.rows key=t.id
-        button press=setTheme(t.id) testId=`settings-theme-${t.id}` role="radio" aria-checked=t.current appearance="none"
-          text `${t.current ? "● " : "○ "}${t.name}` font-family=th.fontUi font-size=17 color=th.fg padding="6px 0"
-      for t in thl.problems key=t
-        text t testId="settings-theme-problems" font-family=th.fontMono font-size=12 color=th.danger
-      text "Appearance" font-family=th.fontUi font-size=13 color=th.muted
-      row gap=8
-        button press=setMode("light") testId="settings-mode-light" role="radio" aria-checked=(thl.mode == "light") buttonStyle=(thl.mode == "light" ? "filled" : "bordered")
-          text "Light"
-        button press=setMode("dark") testId="settings-mode-dark" role="radio" aria-checked=(thl.mode == "dark") buttonStyle=(thl.mode == "dark" ? "filled" : "bordered")
-          text "Dark"
-        button press=setMode("system") testId="settings-mode-system" role="radio" aria-checked=(thl.mode == "system") buttonStyle=(thl.mode == "system" ? "filled" : "bordered")
-          text "System"
-      text `Showing ${th.name} (${th.scheme})` testId="settings-current" font-family=th.fontUi font-size=13 color=th.muted
-      text "Demo" font-family=th.fontUi font-size=13 color=th.muted
-      button press=setDemo(dm.on ? "false" : "true") testId="settings-demo" buttonStyle="bordered"
-        text (dm.on ? "Demo mode is on (takes effect at the next launch). Turn off" : "Turn demo mode on (takes effect at the next launch)")
-      text "Developer" font-family=th.fontUi font-size=13 color=th.muted
+      ScreenTitle(label="Settings", back=false)
+      SectionLabel(label="Appearance")
+      ModePicker()
+      for t in tc.rows key=t.id
+        ThemePreview(t=t, compact=true)
+      for p in tc.problems key=p
+        text p testId="settings-theme-problems" font-family=th.fontMono font-size=12 color=th.danger
+      Card(level=1, testId="settings-card-appearance", minHeight=0)
+        NavRow(address="settings:appearance", title="Appearance in detail", subtitle="Type, depth, a theme from a Texture", testId="settings-nav-appearance")
+      text `Showing ${th.name} (${th.scheme})` testId="settings-current" font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+      SectionLabel(label="You and your computer")
+      Card(level=1, testId="settings-card-you", minHeight=0)
+        NavRow(address="settings:account", title="Account and devices", subtitle=(acct.handle == "" ? "Who is signed in on this phone" : acct.handle), testId="settings-nav-account")
+        Hairline()
+        NavRow(address="settings:computer", title="Computer", subtitle=(cmpt.updateAvailable ? "An update is waiting" : (cmpt.state == "" ? "Status, wake, restart to update" : cmpt.state)), testId="settings-nav-computer")
+      SectionLabel(label="Listening")
+      Card(level=1, testId="settings-card-listening", minHeight=0)
+        NavRow(address="settings:talk", title="Talk", subtitle=(talkRows.rows.length > 0 ? talkRows.rows.map(r => r.valueLabel).join(", ") : "How you talk to the radio"), testId="settings-nav-talk")
+        Hairline()
+        NavRow(address="settings:voice", title="Voice and models", subtitle="The voice, and the models that hear you", testId="settings-nav-voice")
+      SectionLabel(label="The paper")
+      Card(level=1, testId="settings-card-paper", minHeight=0)
+        NavRow(address="settings:learned", title="What the paper has learned", subtitle="Your more and less of this, with Reset", testId="settings-nav-learned")
+        Hairline()
+        NavRow(address="settings:gestures", title="Swipes", subtitle="What each swipe on a story means", testId="settings-nav-gestures")
+        Hairline()
+        NavRow(address="activity:", title="Activity", subtitle="What the computer and the desk are doing", testId="settings-nav-activity")
+      SectionLabel(label="About")
+      Card(level=1, testId="settings-card-about", minHeight=0)
+        NavRow(address="settings:about", title="About", subtitle="Builds and server", testId="settings-nav-about")
+      SectionLabel(label="Developer")
+      Card(level=1, testId="settings-card-developer", minHeight=0)
+        NavRow(address="lab:components", title="Components and Trace", subtitle="Stages, parameters, kept turns", testId="settings-components")
+        Hairline()
+        button press=setDemo(dm.on ? "false" : "true") testId="settings-demo" appearance="none" width="100%" padding="14px 16px"
+          column align-items="flex-start" gap=2 width="100%"
+            text (dm.on ? "Demo mode is on" : "Demo mode is off") font-family=th.fontUi font-size=17 font-weight=600 color=th.fg
+            text (dm.on ? "Takes effect at the next launch. Tap to turn off." : "Fixtures and no network, from the next launch. Tap to turn on.") font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
       Spike3D()
-      button press=openPage("lab:components", "Components") testId="settings-components" buttonStyle="bordered"
-        text "Components and Trace"
 
 // Spike (spine, item 7): does Exact draw a 3D rotation about y with perspective, animated by transition? Tap the square.
-// testId settings-spike3d; its label says the angle. Lane 9 deletes this when the mark exists.
+// testId settings-spike3d; its label says the angle. Lane 9 deletes this when the mark exists (the spine's proof still taps it).
 component Spike3D
   state turned = false
   action turn
@@ -54,3 +250,240 @@ component Spike3D
       button press=turn testId="settings-spike3d" appearance="none" aria-label=(turned ? "Rotated 50 degrees about y" : "Flat")
         box width=80 height=80 background-color="#A60072" border-radius=8
           rotate=(turned ? "y 50deg" : "y 0deg") transition="rotate 400ms ease"
+
+// ---------------------------------------------------------------- appearance
+
+component AppearanceScreen
+  inject
+    th: Theme
+    tx: ThemeExtras
+    tc: ThemeCards
+    dm: DemoInfo
+    themeDoc: string
+    editThemeDoc: action
+    loadThemeDoc: action
+    loadDemoTheme: action
+  view
+    PageScroll(id="settings")
+      ScreenTitle(label="Appearance", back=true)
+      ModePicker()
+      text `Showing ${th.name} in ${th.scheme}${th.reducedMotion ? ", with reduced motion" : ""}.` testId="settings-current" font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+      for t in tc.rows key=t.id
+        ThemePreview(t=t, compact=false)
+      for p in tc.problems key=p
+        text p testId="settings-theme-problems" font-family=th.fontMono font-size=12 color=th.danger
+      SectionLabel(label="A theme from a Texture")
+      Card(level=1, testId="settings-card-texture", minHeight=0)
+        column gap=10 padding=16 width="100%"
+          text "A theme is a Texture with one choir-theme block. Paste its id to add it here; the server checks it and so does the phone." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+          row gap=8 align-items="center" width="100%"
+            input value=themeDoc input=editThemeDoc placeholder="Theme Texture id" aria-label="Theme Texture id" testId="settings-theme-doc" flex=1 min-width=0
+            button press=loadThemeDoc testId="settings-theme-load" buttonStyle="filled"
+              text "Add"
+          if dm.on
+            button press=loadDemoTheme testId="settings-theme-demo-texture" buttonStyle="bordered"
+              text "Add the demo theme Texture"
+          if tc.status != ""
+            text tc.status testId="settings-theme-status" font-family=th.fontUi font-size=tx.sizeLabel color=th.fg
+      SectionLabel(label="Type")
+      Card(level=1, testId="settings-card-type", minHeight=0)
+        column gap=8 padding=16 width="100%"
+          text "Headline" font-family=th.fontRead font-size=tx.sizeHeadline font-weight=tx.weightHeadline color=th.fg
+          text "The body face is the theme's own. This is a line of body text, set the way a story reads." font-family=th.fontRead font-size=tx.sizeBody line-height=tx.lineBody color=th.fg
+          text "Labels and controls use the interface face." font-family=th.fontUi font-size=tx.sizeLabel font-weight=600 color=th.muted
+          text "Mono: 12 of 14 sources read" font-family=th.fontMono font-size=tx.sizeMeta color=th.muted
+          text `Scale ${th.scale} · body ${tx.sizeBody.toFixed(0)} pt · contrast ${tx.contrast}` font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+      SectionLabel(label="Depth")
+      Card(level=1, testId="settings-card-depth", minHeight=0)
+        column gap=14 padding=16 width="100%"
+          row gap=12 width="100%"
+            column flex=1 min-width=0
+              Card(level=1, testId="settings-depth-1", minHeight=56)
+                text "1" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted padding=16
+            column flex=1 min-width=0
+              Card(level=2, testId="settings-depth-2", minHeight=56)
+                text "2" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted padding=16
+            column flex=1 min-width=0
+              Card(level=3, testId="settings-depth-3", minHeight=56)
+                text "3" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted padding=16
+          text `Cards ${th.material1}, the bar ${th.material2}, layers ${th.material3}. Corners ${th.radiusCard.toFixed(0)} pt.` font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+
+// ---------------------------------------------------------------- account
+
+component AccountScreen
+  inject
+    th: Theme
+    tx: ThemeExtras
+    acct: SettingsAccount
+    au: ChoirAuth
+    refreshAccount: action
+    signOut: action
+  view
+    PageScroll(id="settings")
+      ScreenTitle(label="Account and devices", back=true)
+      Card(level=1, testId="settings-card-account", minHeight=0)
+        column width="100%" padding="6px 0"
+          FactRow(label="Signed in", value=(au.signedIn ? "Yes" : "No"), mono=false, testId="settings-account-signed")
+          Hairline()
+          FactRow(label="You are", value=(acct.handle == "" ? "Not shown yet" : acct.handle), mono=false, testId="settings-account-handle")
+          Hairline()
+          FactRow(label="This device", value=(acct.keyLabel == "" ? "Not shown yet" : acct.keyLabel), mono=false, testId="settings-account-device")
+          Hairline()
+          FactRow(label="Key", value=(acct.keyID == "" ? "-" : acct.keyID), mono=true, testId="settings-account-keyid")
+          Hairline()
+          FactRow(label="Can", value=(acct.scopes == "" ? "-" : acct.scopes), mono=true, testId="settings-account-scopes")
+          Hairline()
+          FactRow(label="Computer", value=(acct.computerID == "" ? "-" : acct.computerID), mono=true, testId="settings-account-computer")
+          Hairline()
+          FactRow(label="Server", value=(acct.baseURL == "" ? "-" : acct.baseURL), mono=true, testId="settings-account-server")
+      if acct.message != ""
+        text acct.message testId="settings-account-message" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted
+      if acct.status == "loading"
+        text "Asking the server who this phone is…" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted
+      text "This phone holds its own key. Signing out removes the key from this phone and ends it on the server. Your computer and your documents stay where they are." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+      row gap=12 width="100%"
+        button press=refreshAccount testId="settings-account-refresh" appearance="none"
+          ActionButton(label="Refresh", testId="settings-account-refresh-box", primary=false, danger=false)
+        if au.signedIn
+          button press=signOut testId="settings-signout" appearance="none"
+            ActionButton(label="Sign out", testId="settings-signout-box", primary=false, danger=true)
+
+// ---------------------------------------------------------------- choices (talk, gestures)
+
+component SettingChoices
+  inject
+    th: Theme
+    tx: ThemeExtras
+    setSetting: action
+  props
+    rows: SettingRowInfo[]
+  view
+    column gap=14 width="100%"
+      for r in rows key=r.id
+        Card(level=1, testId=`settings-setting-${r.id}`, minHeight=0)
+          column width="100%" padding="14px 0"
+            column gap=4 padding="0px 16px 10px 16px"
+              text r.label font-family=th.fontUi font-size=17 font-weight=700 color=th.fg
+              text r.help font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+            for o in r.options key=o.id
+              button press=setSetting(r.id, o.id) testId=`settings-choice-${r.id}-${o.id}` role="radio" aria-checked=o.selected appearance="none" width="100%" padding="10px 16px"
+                row gap=12 align-items="flex-start" width="100%"
+                  text (o.selected ? "●" : "○") font-family=th.fontUi font-size=18 color=(o.selected ? th.accent : th.muted)
+                  column flex=1 min-width=0 gap=2 align-items="flex-start"
+                    text o.label font-family=th.fontUi font-size=tx.sizeLabel font-weight=600 color=th.fg
+                    text o.detail font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+
+component TalkScreen
+  inject
+    tx: ThemeExtras
+    talkRows: SettingRows
+  view
+    PageScroll(id="settings")
+      ScreenTitle(label="Talk", back=true)
+      text "You choose this once after the first run, and can change it here at any time. Holding the voice button always works." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+      SettingChoices(rows=talkRows.rows)
+
+component GesturesScreen
+  inject
+    tx: ThemeExtras
+    gestureRows: SettingRows
+  view
+    PageScroll(id="settings")
+      ScreenTitle(label="Swipes", back=true)
+      text "What each swipe on a story means is yours to choose. A change applies to the next swipe, and every swipe is recorded with the meaning in force." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+      SettingChoices(rows=gestureRows.rows)
+
+// ---------------------------------------------------------------- voice and models
+
+component VoiceScreen
+  inject
+    th: Theme
+    tx: ThemeExtras
+  view
+    PageScroll(id="settings")
+      ScreenTitle(label="Voice and models", back=true)
+      text "The voice that reads the paper, and the models that hear you, run on this phone. Their sizes and checks are on the Components page." font-family=th.fontRead font-size=tx.sizeBody line-height=tx.lineBody color=th.fg
+      Card(level=1, testId="settings-card-voice", minHeight=0)
+        NavRow(address="lab:components", title="Components", subtitle="Models, stages and parameters", testId="settings-voice-components")
+        Hairline()
+        NavRow(address="lab:trace", title="Trace", subtitle="The last turn, step by step", testId="settings-voice-trace")
+      text "Voice setup, with the model downloads and the checks for this device, opens from here once first run has it." testId="settings-voice-note" font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+
+// ---------------------------------------------------------------- computer
+
+component ComputerScreen
+  inject
+    th: Theme
+    tx: ThemeExtras
+    cmpt: SettingsComputer
+    refreshComputer: action
+    wakeComputer: action
+    updateComputer: action
+  view
+    PageScroll(id="settings")
+      ScreenTitle(label="Computer", back=true)
+      Card(level=1, testId="settings-card-computer", minHeight=0)
+        column width="100%" padding="6px 0"
+          FactRow(label="State", value=(cmpt.state == "" ? (cmpt.checked ? "Not reported" : "Checking…") : cmpt.state), mono=false, testId="settings-computer-state")
+          Hairline()
+          FactRow(label="Computer", value=(cmpt.id == "" ? "-" : cmpt.id), mono=true, testId="settings-computer-id")
+          Hairline()
+          FactRow(label="Update", value=(cmpt.updateAvailable ? `Waiting: ${cmpt.target}` : "Up to date"), mono=false, testId="settings-computer-update")
+      if cmpt.message != ""
+        text cmpt.message testId="settings-computer-message" font-family=th.fontUi font-size=tx.sizeLabel color=(cmpt.phase == "failed" ? th.danger : th.fg)
+      if cmpt.phase == "updating"
+        text "Your computer restarts while it updates. This can take a minute." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+      text "Restart to update asks your computer to restart onto the newest version. It waits if the computer is in the middle of a change." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+      column gap=12 width="100%"
+        button press=updateComputer testId="settings-update" appearance="none" width="100%"
+          ActionButton(label=(cmpt.updateAvailable ? "Restart to update" : "Check for an update"), testId="settings-update-box", primary=true, danger=false)
+        button press=wakeComputer testId="settings-wake" appearance="none" width="100%"
+          ActionButton(label="Wake the computer", testId="settings-wake-box", primary=false, danger=false)
+        button press=refreshComputer testId="settings-computer-refresh" appearance="none" width="100%"
+          ActionButton(label="Refresh", testId="settings-computer-refresh-box", primary=false, danger=false)
+
+// ---------------------------------------------------------------- what the paper has learned
+
+component LearnedScreen
+  inject
+    th: Theme
+    tx: ThemeExtras
+    learnt: LearnedInfo
+    resetLearned: action
+  view
+    PageScroll(id="settings")
+      ScreenTitle(label="What the paper has learned", back=true)
+      text "Each time you asked for more or less of a story, in your own words. Your front page leans on these; the shared paper does not change." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+      Card(level=1, testId="settings-card-learned", minHeight=0)
+        column width="100%" padding="6px 0"
+          for r, i in learnt.rows key=i
+            column gap=2 padding="10px 16px" width="100%" testId="settings-learned-row"
+              text r.text font-family=th.fontRead font-size=tx.sizeBody line-height=1.4 color=th.fg
+              text r.when font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+          if learnt.count == 0
+            text learnt.message testId="settings-learned-empty" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted padding=16
+      if learnt.count > 0
+        button press=resetLearned testId="settings-learned-reset" appearance="none"
+          ActionButton(label="Reset what the paper has learned", testId="settings-learned-reset-box", primary=false, danger=true)
+
+// ---------------------------------------------------------------- about
+
+component AboutScreen
+  inject
+    th: Theme
+    tx: ThemeExtras
+    about: AboutInfo
+  view
+    PageScroll(id="settings")
+      ScreenTitle(label="About", back=true)
+      Card(level=1, testId="settings-card-about-info", minHeight=0)
+        column width="100%" padding="6px 0"
+          FactRow(label="Autoradio", value=(about.app == "" ? "-" : about.app), mono=false, testId="settings-about-app")
+          Hairline()
+          FactRow(label="Build", value=(about.build == "" ? "-" : about.build), mono=true, testId="settings-about-build")
+          Hairline()
+          FactRow(label="Server build", value=(about.server == "" ? "-" : about.server), mono=true, testId="settings-about-server")
+          Hairline()
+          FactRow(label="Server", value=(about.base == "" ? "-" : about.base), mono=true, testId="settings-about-base")
+          Hairline()
+          FactRow(label="Mode", value=(about.demo ? "Demo fixtures" : "Live"), mono=false, testId="settings-about-mode")
