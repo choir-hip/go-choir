@@ -56,6 +56,8 @@
   // written to the boot cache or the server: only a chosen theme is.
   let currentTheme = systemDefaultTheme();
   let usingDefaultTheme = true;
+  // A saved choice whose pack has not registered yet: the default shows, and this is what a scheme change re-applies (null otherwise).
+  let pendingChoice = null;
   let authOverlayOpen = false;
   let pendingAuthIntent = null;
   let promptReplay = null;
@@ -398,6 +400,7 @@
       return validation;
     }
     usingDefaultTheme = showsDefault;
+    pendingChoice = isPendingChoice(theme) ? theme : null;
     currentTheme = normalized;
     publishTheme(normalized);
     applyThemeToElement(document.documentElement, normalized);
@@ -562,7 +565,7 @@
 
     // The system default follows the system colour scheme while the owner has not chosen a theme.
     const schemeQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
-    const handleSchemeChange = () => { if (usingDefaultTheme) applyTheme(null, false); };
+    const handleSchemeChange = () => { if (usingDefaultTheme) applyTheme(pendingChoice, false); };
     schemeQuery?.addEventListener?.('change', handleSchemeChange);
 
     return () => {
