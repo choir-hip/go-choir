@@ -141,9 +141,9 @@ boundaries:
 
 now:
   status: working
-  slice: wave A (lab core on the owner's iPhone, app API, Exact spike)
-  source_ref: origin/main 87f0d495cd1a479a40aa62c2abbc719e1a8a6cce
-  deploy_identity: choir.news d68d6f1a1c3a
+  slice: the product UI (Paper, Radio, Texture) on the working plumbing; integration of the audio lane; on-device models
+  source_ref: origin/main 17e67897fe879fd317ebb8b1e92532e27ad12a5c; app on origin/lane/autoradio-lab 3ebf121c2
+  deploy_identity: choir.news 79bd88f8bd68
   candidate:
     id: none
     state: none
@@ -178,21 +178,31 @@ now:
     owner_ratification_ref: owner, 2026-11-09 and 2026-11-10 ("built on Exact")
   belief:
     believed_state: >
-      The server side is mostly extension of running mechanisms. The risk is
-      on the phone, in audio session ownership and background listening,
-      which Mike does not do today.
+      The plumbing works against staging from the app's own code (2026-11-10:
+      device sign-in built, front page as programme, System 1 through the
+      listener's computer in one call, a desk revision in about 15 s, shown
+      by replay of kept turns as the test computer). The app the owner ran
+      was a skeleton with a lab console and no product. What is missing is
+      the product itself: the look and feel of Paper, Radio and Texture.
     main_uncertainty: >
-      whether AR-C1 holds on the pinned Exact commit, and whether any voice
-      mode clears the owner's threshold (owner, 2026-11-10: pure push-to-talk
-      does not)
-    next_observation: the step 0.3 spike on the owner's iPhone
+      whether Exact can carry the look and feel (long documents, live
+      revisions, a following transcript, a mini-player) without a second UI
+      stack; AR-C1 is still untested on the phone; whether any voice mode
+      clears the owner's threshold
+    next_observation: >
+      simulator screenshots of every screen from the UI lane, then the
+      owner's first session with the real app on the phone
   blocker_or_risk: >
-    The spike needs the owner's iPhone connected and unlocked, and a free
-    provisioning profile, which expires after seven days.
+    Builders must not install on the owner's phone while the owner is using
+    it (it reloaded under them on 2026-11-10); installs happen at agreed
+    points. The free provisioning profile expires after seven days. Nothing
+    about audio has been measured on the phone yet.
   next_action: >
-    Reconcile: for each Autopaper item in the handoff's section 5, record
-    whether it is on staging. Then start step 0.1 and 0.2 on the build VM and
-    0.3 on the Mac.
+    UI lane: design note, then Paper, Radio, Texture and first run in Exact
+    with simulator screenshots. Integrator: merge the audio lane, make the
+    acknowledgement start before System 1 answers, Components as a settings
+    screen. Models lane continues. Then one install on the phone for the
+    owner's QA.
 
 receipts: []
 
@@ -267,7 +277,41 @@ and the desk reads its own scored record when it builds the next run
 sheet. New settlement rule kinds (heard through, skipped early) and
 trusted playback events from the phone are design work for lane D.
 
-## The first app is a lab (owner, 2026-11-10)
+## The app is the product; components switch inside it (owner, 2026-11-10, later the same day)
+
+This replaces the framing of the next section. After running the first
+build on the phone the owner said: "Not really sure what to do with it ...
+we should just go ahead with the real auto radio app", and then: "I think I
+miscommunicated my intentions around 'experiments'. It's important that we
+actually build texture, autopaper, autoradio UI. Getting the look and feel
+will drive us forward. By experiments I meant that within the autoradio
+app we should be able to switch components and operations."
+
+What changes:
+
+- **There is no lab app.** There is one app, Autoradio, with three
+  experiences that are one thing seen three ways: Paper (the Autopaper
+  front page and stories, read), Radio (the same documents played aloud,
+  with talk-back), and Texture (the listener's documents, revised live).
+- **Look and feel is the work now.** A design note
+  ([autoradio-app-ui-2026-11-10.md](../design/autoradio-app-ui-2026-11-10.md),
+  written by the UI lane before its code) carries the web product's
+  identity to the phone. Proof at this stage is screenshots of every
+  screen, light and dark, then the owner's hands.
+- **Experiments are a settings screen.** Components: one row per stage of
+  the pipeline, the current choice in plain words, tap to change, applied
+  to the next turn. The rows come from the kit's registry. Trace of the
+  last turn sits under it. No console, no jargon on the listener's path.
+- **What is kept from the lab design:** the stage interfaces, the
+  registry, configuration as data, the turn record, kept turns and
+  replay. They are how components are switched and compared; they are no
+  longer the face of the app.
+
+What does not change: Exact only, no SwiftUI; the phone is a client of the
+listener's computer; one sign-in system and one input route; the
+acceptance list above.
+
+## The first app is a lab (owner, 2026-11-10; superseded in framing by the section above)
 
 "The first autoradio app should be experiments ... as full-featured and
 realistic/complete as possible while also being maximally modular so we
@@ -319,6 +363,26 @@ stages and measures them by replay):
 | R. Pages | the documents drawn natively |
 
 **Wave C:** the owner's QA; then narrowing.
+
+**Where this stands (2026-11-10, evening), and the order from here.** Wave
+A is done: K (kit, replay, an Exact app that builds, installs and
+launches), A (the API map), E (the Exact spike and `docs/reference/EXACT.md`).
+From wave B, done or running: the Choir client (sign-in, System 1, front
+page, desk; proved against staging by replay), the audio session lane
+(listening and talking states, a simulator proof that drives the app), the
+System 1 route for the phone on main, and the models lane (running). The
+order from here:
+
+| Lane | Output |
+| --- | --- |
+| UI | the design note; Paper, Radio, Texture, first run, mini-player and the visual system in Exact; screenshots of every screen |
+| I. Integration | audio lane merged into the app; acknowledgement starts before System 1 answers; Components and Trace as settings screens |
+| M. Models | as M1 to M3 above, each appearing as a Components choice |
+| S. Server | narrow the device key (scope, expiry, bound to one computer); a prompt addressed to a block; a revision event that names the request it answers; listing the listener's documents; the edition for the ear |
+| O. Onboarding and the edition | unchanged |
+| P. Playback | Now Playing and lock-screen controls for our engine; one timeline of speech and clips |
+
+Lane R (pages drawn natively) is now part of the UI lane.
 
 The lab host is an Exact app from the start (owner, 2026-11-10: "no
 swiftui please. lets do all exact. good to get more reps in with it").
