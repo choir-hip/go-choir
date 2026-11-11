@@ -400,7 +400,8 @@ if it adds a name a child component must `inject`).
 ### How the pieces fit
 
 - `AutoradioLab/app.contract` is the root: `members` lines (already wired, one per lane), the `provide` list (a band per
-  lane), and the view: sign-in screen, or the page (full bleed), the layers (pile, launcher, player) and the bar.
+  lane), and the view: sign-in screen, or the page deck (full bleed; `pages.contract` PageDeck, order and drag in `members-stack.contract`), and the glass
+  lens bar (`bar.contract`) with the launcher and the player rising from it as sheets. There is no pile view (round 3).
 - A **page** is `{address, kind, title}` (`Pages.swift`). `PageHost` in `pages.contract` maps kind to a component, one
   `if` line per kind, already pointing at each lane's component (`PaperPage`, `ReaderPage`, ...). The lane owns the
   component; it takes what it needs with `inject` (the root `provide`s names; children cannot hold resources, so a lane's
@@ -428,9 +429,9 @@ if it adds a name a child component must `inject`).
 ### Test id conventions
 
 `<lane>-<thing>[-<id>]`, lower case, every interactive element has one, ids built from addresses keep the address as is.
-Existing: `bar`, `bar-pages`, `bar-pages-count`, `bar-field`, `bar-text`, `bar-voice`, `bar-progress`, `mark`, `pile`, `pile-scrim`, `pile-places`,
-`pile-reopen`, `card-<address>`, `card-open-<address>`, `card-close-<address>`, `card-swipe-<address>`, `launcher`, `launcher-layer`,
-`launcher-scrim`, `launcher-open-<address>`, `place-<slug>`, `player`, `player-play`, `paper-story-<route>`, `reader-cite-<anchor>` (lane 3),
+Existing: `bar-stack`, `bar` (the glass lens), `bar-mark` (opens the launcher), `bar-field`, `bar-mic` (tap to talk, tap to send), `bar-send`, `bar-play`,
+`bar-text` (the now-playing line), `bar-progress`, `page-indicator`, `mark`, `page-deck` (the pan surface), `deck-slot-<address>`, `story-more`, `launcher`,
+`launcher-layer`, `launcher-open-<address>` (bring to the top), `launcher-close-<address>` (remove from the deck), `layer-scrim`, `place-<slug>`, `player`, `player-play`, `paper-story-<route>`, `reader-cite-<anchor>` (lane 3),
 `settings-theme-<id>`, `settings-mode-<light|dark|system>`, `settings-demo`, `settings-components`, `page-title` (every page's heading), plus the
 integrator's (`signin`, `lab-talk`, `inject`, `stage-<kind>-<id>`, `trace-*`, ...), unchanged. Keep an id or update `scripts/proof-sim.sh` in the same commit.
 
@@ -465,7 +466,7 @@ page kind's address scheme is a spine change (`PageAddress.kind(of:)`).
 2. **A card dragged left and closed: YES, with `swipeleft`, not `pan`.** `swipeleft=closePage(address)` on the card: it follows the finger and the action
    runs when the finger lifts past 64 pt (needs `touch-action="pan-y"`); the proof drives it with `tap card-swipe-<address> drag -150 0` under
    `agent ios --touch platform`. `pan` reports the movement since its last event, so a pull (the bar's drag up to the launcher) accumulates `dy` in a state and
-   decides in `panrelease` (`spine.contract`, `pullBar`/`pullEnd`); the proof's `tap bar-pages drag 0 -200` opens the launcher.
+   decides in `panrelease`. Round 3 uses that for the page deck (`pageDrag`/`pageRelease`, `touch-action="pan-y"` on the deck so vertical scroll is left to the page). The bar has no drag and no hold any more.
 3. **A colour bound from data: YES.** `background-color=th.paper`, `color=th.fg`, `box-shadow=th.shadow2` and `font-family=th.fontRead` (a data string,
    `ui-serif`) all paint from the `theme` source, and a switch (Depth, Newsprint, light, dark) repaints without a rebuild (proof screenshots 06 to 10).
    The data-theme path is therefore the only path: the "compiled themes" fallback is not needed.
