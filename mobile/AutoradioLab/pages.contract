@@ -14,13 +14,14 @@ use MailPage, MailboxPage from "./mail.contract"
 use ActivityPage from "./activity.contract"
 use SettingsPage from "./settings.contract"
 use ComponentsPage, TracePage from "./components.contract"
+use OnboardingPage from "./onboarding.contract"
 
 component PageHost
   props
     address: string
     kind: string
     title: string
-  derive known = ["paper", "reader", "textures", "file", "mail", "mailbox", "activity", "settings", "lab"].includes(kind)
+  derive known = ["paper", "reader", "textures", "file", "mail", "mailbox", "activity", "settings", "lab", "onboarding"].includes(kind)
   view
     column position="absolute" inset=0
       // ---- one line per kind: a lane replaces the component, not this line ----
@@ -44,6 +45,8 @@ component PageHost
         ComponentsPage()
       if kind == "lab" and address == "lab:trace"
         TracePage()
+      if kind == "onboarding"
+        OnboardingPage(address=address, title=title)
       // ---- end of kinds ----
       if known == false
         NotYetPage(address=address, title=title)
