@@ -1,8 +1,8 @@
 #!/bin/sh
 # Lane 5 proof: Files and the viewers, on a simulator, in demo mode (bundled invented files, no network).
 #   proof-lane5.sh check    only the fast steps: sync, interface, Contract build (prints the compiler's errors), no tests, no simulator
-#   proof-lane5.sh tests    the Swift tests for this lane (FilesPathTests, EpubTests, FilesServiceTests, ChoirFilesBackendTests)
-#   proof-lane5.sh          tests, build, then drive the screens; PROOF OK or PROOF FAILED at <step>
+#   proof-lane5.sh          build, drive the screens, then the Swift tests (FilesPathTests, EpubTests, FilesServiceTests,
+#                           ChoirFilesBackendTests); PROOF OK or PROOF FAILED at <step>
 #   NOBUILD=1  skip the build   NOTESTS=1  skip the Swift tests
 # Screenshots go to $PROOF_SHOTS. Elements are found by test id, never by position. File paths contain spaces, so those ids are quoted.
 set -u
@@ -24,18 +24,6 @@ python3 -I "$HERE/check-strings.py" > "$SCRATCH/strings.txt" 2>&1 || { tail -20 
 grep -E "^(warning|error)" "$SCRATCH/contract.txt" | grep -i "files\|viewers\|fs[A-Z]\|fv[A-Z]" | head -20
 echo "ok: contract build"
 [ "$MODE" = "check" ] && { echo "PROOF OK (check only)"; exit 0; }
-
-# ---- 2. Swift tests of this lane
-if [ -z "${NOTESTS:-}" ]; then
-  LOG="$SCRATCH/tests.txt"
-  if "$HERE/xe.sh" /usr/bin/swift test --package-path "$HERE/../AutoradioKit" --filter FilesPathTests --filter EpubTests --filter FilesServiceTests --filter ChoirFilesBackendTests > "$LOG" 2>&1; then
-    grep -E "Executed .* tests" "$LOG" | tail -1
-    echo "ok: swift tests"
-  else
-    grep -E "error:|failed|XCTAssert" "$LOG" | head -40; fail "swift tests"
-  fi
-fi
-[ "$MODE" = "tests" ] && { echo "PROOF OK (tests only)"; exit 0; }
 
 # ---- 3. build and drive
 export EXACT_SIM="${EXACT_SIM:-$("$HERE/sim-device.sh")}"
@@ -145,11 +133,10 @@ while :; do
 
   # ---- drive 2: pinch and drag on the image (the platform touch), then the dark theme
   if [ "$rc" -eq 0 ]; then
-    step "clock data"
+    step "clock data"; wait_ 1500
     goto "file:/Pictures/Harbor test card.png"
     step "tap image-handle pinch 2.5"; view 40-image-pinch 1000
     step "tap image-handle drag -60 -30"; view 41-image-pan 900
-    step "tap place-settings"
     step "tap bar-pages"; wait_ 600; step "tap pile-places"; wait_ 600; step "tap place-settings"; wait_ 800
     step "tap settings-mode-dark"; wait_ 900
     goto "file:/"
@@ -169,7 +156,8 @@ while :; do
 done
 [ "${rc:-0}" -eq 0 ] || { grep -v "^warning" "$OUT" | tail -25; fail "drive (exit $rc)"; }
 
-must() { grep -qF -- "$2" "$OUT" || fail "$1" "missing: $2"; echo "ok: $1"; }
+FAILS=""
+must() { if grep -qF -- "$2" "$OUT"; then echo "ok: $1"; else echo "MISSING: $1: $2"; FAILS="$FAILS [$1]"; fi; }
 
 must "Files place: heading" '[page-title] "Files"'
 must "Files place: a folder row" '[files-row-/Documents]'
@@ -199,8 +187,20 @@ must "image viewer: frame" '[image-handle]'
 must "image viewer: zoom control" '[image-4x]'
 must "audio viewer: element and state" '[audio-state]'
 must "video viewer: element" '[video-view]'
-[ "$(ls "$SHOTS"/*.png 2>/dev/null | wc -l)" -ge 30 ] || fail "screenshots" "fewer than 30 in $SHOTS"
+[ "$(ls "$SHOTS"/*.png 2>/dev/null | wc -l)" -ge 30 ] || FAILS="$FAILS [fewer than 30 screenshots]"
 echo "ok: screenshots in $SHOTS"
 if grep -q 'ERROR\|Fatal error' "$OUT"; then echo "note: errors in the app log:"; grep -m8 'ERROR\|Fatal error' "$OUT"; fi
 cp "$OUT" "$SHOTS/drive.txt" 2>/dev/null
+# ---- last: Swift tests of this lane (after the drive, so one run shows both)
+if [ -z "${NOTESTS:-}" ]; then
+  LOG="$SCRATCH/tests.txt"
+  if "$HERE/xe.sh" /usr/bin/swift test --package-path "$HERE/../AutoradioKit" --filter FilesPathTests --filter EpubTests --filter FilesServiceTests --filter ChoirFilesBackendTests > "$LOG" 2>&1; then
+    grep -E "Executed .* tests" "$LOG" | tail -1
+    echo "ok: swift tests"
+  else
+    grep -E "error:|failed|XCTAssert" "$LOG" | head -40; cp "$LOG" "$SHOTS/swift-tests.txt" 2>/dev/null; FAILS="$FAILS [swift tests]"
+  fi
+fi
+[ -z "$FAILS" ] || fail "checks:$FAILS"
+
 echo "PROOF OK"

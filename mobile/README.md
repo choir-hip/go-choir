@@ -506,3 +506,24 @@ page kind's address scheme is a spine change (`PageAddress.kind(of:)`).
 launch in demo mode, the bar visible, open a second page, the pile with two cards, switch through the launcher, close by swipe, pull the bar up for the
 launcher, Settings, theme Newsprint, dark, Depth, light, play on the bar, hold to talk, Components (a talk turn through the injected fixture path with
 the stub stages) and Trace. `mobile/scripts/proof-replay.sh` and `swift test` (30 tests, 7 of them the spine's) still pass.
+
+## Files and the viewers (lane 5)
+
+Files is a place, not an app: `file:/` is the listener's computer's files (folders, breadcrumbs, list and grid, sort by name, modified,
+size or kind, search under the folder, recent, new folder, add, rename, delete); `file:/path/name.ext` is one file opened as a page, so it
+sits in the pile with everything else. The lane owns `files.contract` (the place and the router), `viewers.contract`,
+`members-files.contract` (prefixes `fs` = the place, `fv` = the viewers), `exact-package/apple/AutoradioModule+Files.swift`,
+`Kit/ChoirFiles.swift`, `Kit/Epub.swift` and `Kit/FilesDemo.generated.swift` (made by `scripts/make-files-fixtures.py`: a PNG, a 3-page PDF,
+a 3-chapter EPUB, a WAV, an MP4, CSV, Markdown, text and code, all invented). Proof: `scripts/proof-lane5.sh` (`check` builds only the Contract).
+
+- Routes (`internal/autoputer/files.go`): `GET /api/files[/{path}]` (an array of `{name, type, size, modified}`), `?disposition=inline` for
+  media, `POST` makes a folder, `PUT` writes, `DELETE`, `PATCH {move_to}` renames a regular file and only when the server's move gate allows
+  (folders cannot be moved; the page says so). Demo mode serves an in-memory tree (`DemoFilesBackend`).
+- A file is brought to `app:/cache/files/<hash>/<safe-name>` (the hash is of path, size and time, so a changed file is a new entry), and the
+  viewers play from that path. Per-kind size caps refuse before downloading ("too large to open on this phone").
+- Viewers: image (`transformDragFor`: pinch and drag, 1x to 4x, plus Fit, 2x, 4x, Center), video and audio (native controls; the radio is
+  paused when media plays and media is paused when the radio plays, through `paused=` and `choirPlayPause`, never by claiming the
+  session), PDF (an `iframe` on the local `.pdf` is PDFKit's `PDFView`; page by `#page=N`; search by PDFKit in the module), e-book
+  (`Epub.swift`: ZIP central directory, raw deflate through Compression, container, OPF spine, XHTML to blocks, then Markdown for
+  `text markup="markdown"`), text, Markdown, code, CSV/TSV, and an honest "cannot preview" page with the file's facts.
+- Ways the Swift can fail are listed at the top of `ChoirFiles.swift` and `Epub.swift`; `FilesTests.swift` covers each.
