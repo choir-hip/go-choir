@@ -59,8 +59,11 @@ step "tap page-deck drag -180 0"; view light-04-deck-swiped-away 900
 step "tap bar-mark"; view light-05-launcher 700
 step "tap \"launcher-open-pub:demo-grid-storage\""; view light-05b-story-brought-back 900
 # six swipes cycle the whole deck of six round to the story again
-for i in 1 2 3 4 5 6; do step "tap page-deck drag 180 0"; wait_ 900; if [ $i = 2 ]; then step tree; shot light-05c-deck-mid-cycle; fi; done
+for i in 1 2 3 4 5 6; do step "tap page-deck drag 180 0"; wait_ 1500; if [ $i = 2 ]; then step tree; shot light-05c-deck-mid-cycle; fi; done
 step tree; shot light-05d-deck-cycled-round
+step "tap bar-mark"; wait_ 600
+step "tap place-settings"; wait_ 900
+step "tap settings-components"; view light-05e-components-page 1500
 step "tap bar-mark"; wait_ 600
 step "tap place-files"; view light-06-files-list 1200
 step "tap \"files-row-/Documents\""; wait_ 700
