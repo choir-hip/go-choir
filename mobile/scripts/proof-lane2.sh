@@ -46,13 +46,13 @@ for MODE in light dark; do
     "$HERE/exact.sh" agent ios --touch platform \
       "clock data" "clock +1500 real" "clock data" tree "screenshot $SHOTS/$MODE-01-default.png" \
       "tap paper-edition-big" "clock +900 real" "clock data" tree "screenshot $SHOTS/$MODE-02-big-top.png" \
-      "tap paper drag 0 -560" "clock +700 real" "clock data" tree "screenshot $SHOTS/$MODE-03-big-mid.png" \
-      "tap paper drag 0 -560" "clock +700 real" "clock data" tree "screenshot $SHOTS/$MODE-04-big-low.png" \
-      "tap paper drag 0 -560" "clock +700 real" "clock data" tree "screenshot $SHOTS/$MODE-05-big-end.png" \
-      "tap paper drag 0 1500" "clock +700 real" "clock data" \
+      "tap paper-scroll drag 0 -560" "clock +700 real" "clock data" tree "screenshot $SHOTS/$MODE-03-big-mid.png" \
+      "tap paper-scroll drag 0 -560" "clock +700 real" "clock data" tree "screenshot $SHOTS/$MODE-04-big-low.png" \
+      "tap paper-scroll drag 0 -560" "clock +700 real" "clock data" tree "screenshot $SHOTS/$MODE-05-big-end.png" \
+      "tap paper-scroll drag 0 1500" "clock +700 real" "clock data" \
       "tap paper-edition-even" "clock +900 real" "clock data" tree "screenshot $SHOTS/$MODE-06-even-top.png" \
-      "tap paper drag 0 -560" "clock +700 real" "clock data" tree "screenshot $SHOTS/$MODE-07-even-mid.png" \
-      "tap paper drag 0 1500" "clock +700 real" "clock data" \
+      "tap paper-scroll drag 0 -560" "clock +700 real" "clock data" tree "screenshot $SHOTS/$MODE-07-even-mid.png" \
+      "tap paper-scroll drag 0 1500" "clock +700 real" "clock data" \
       "tap paper-edition-thin" "clock +900 real" "clock data" tree "screenshot $SHOTS/$MODE-08-thin.png" \
       "tap paper-edition-big" "clock +900 real" "clock data" \
       "tap paper-play-demo-harbor-barrier" "clock +1500 real" "clock data" tree "screenshot $SHOTS/$MODE-09-play-from-here.png" \
@@ -61,7 +61,7 @@ for MODE in light dark; do
       "tap paper-story-demo-grid-storage" "clock +900 real" "clock data" tree "screenshot $SHOTS/$MODE-11-story-page.png" \
       "tap bar-pages" "clock +600 real" "clock data" "tap pile-places" "clock +600 real" "clock data" \
       "tap launcher-open-paper:front" "clock +900 real" "clock data" \
-      "tap paper drag 0 400" "clock +250 real" "screenshot $SHOTS/$MODE-12-pull-to-refresh.png" "clock +1500 real" "clock data" tree \
+      "tap paper-scroll drag 0 400" "clock +250 real" "screenshot $SHOTS/$MODE-12-pull-to-refresh.png" "clock +1500 real" "clock data" tree \
       logs >> "$OUT" 2>&1
     rc=$?
     if grep -q "never opened its agent socket\|not foreground-active\|before opening its agent socket\|the app hung up" "$OUT" && [ $attempt -lt 3 ]; then
