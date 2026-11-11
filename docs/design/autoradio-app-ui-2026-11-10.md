@@ -82,8 +82,8 @@ entities, with no conversation; whether swipe left shades away is open
 layout should get more dynamic; a one-at-a-time stack is an extra mode.
 16. Onboarding is in this build: voice onboarding (meaning: download and
 configure the voice and audio models, verify them on the device, fall
-back), then a fully hands-free, interruptible voice interview (text in
-grey) on the existing turn engine that creates the edition and explains
+back), then a fully hands-free, interruptible voice interview (voice only; the grey text option was withdrawn by the owner, 2026-11-11)
+on the existing turn engine that creates the edition and explains
 how Choir works in passing. 17. Visual pop and motion: the TetraMark spins in 3D, grows and
 shrinks; waiting for AI should feel alive. 18. Build the whole thing at
 once with parallel builders, about 85%, then review and iterate.
@@ -526,8 +526,9 @@ shows). Nothing here explains the product.
    "To check I can hear you I need the microphone. What you say stays on
    this phone as sound; only the words go to your computer." Then one live
    check: "Say anything." The level moves, the words appear. Refused or
-   silent: setup finishes with the bundled clip alone, talk falls back to
-   typing, and Settings can turn the microphone on later. A hearing check
+   silent: setup finishes with the bundled clip alone and the interview
+   waits; the paper stays readable and playable, typed prompts work, and
+   the "Make your edition" card says the interview needs the microphone. A hearing check
    through the current output route ("Playing on AirPods"; "Can you hear
    this?") closes the step.
 7. **Later changes are the same screen.** A new model, a changed phone or a
@@ -563,15 +564,21 @@ So the interview is the radio's own conversation, fully open:
   the question bank. The session coordinator, the System 1 questions, the
   holding voice and the desk are the ones the radio already uses. Nothing
   interview-specific is built below the bank and its questions.
-- The grey "Type instead" stays. Each line is short, and one sentence here
-  and there, in passing, says how Choir works. It is an interview about
-  the listener, never a lecture.
+- **Voice only.** There is no typed interview (owner, 2026-11-11: "We
+  need to do the onboarding with voice. Even if that won't work in every
+  single circumstance, it's better to just make that the standard, make it
+  the ritual ... they'll just have to wait until they find a quiet space";
+  this supersedes the earlier grey text option). The design from Mike
+  already works well in ordinary rooms, and that is the bar.
+- Each line is short, and one sentence here and there, in passing, says
+  how Choir works. It is an interview about the listener, never a lecture.
 
 Open interruption needs the phone not to hear itself: echo cancellation
 (voice processing) on the speaker, or headphones. Voice setup has already
 measured which this phone and route can do; where the speaker route cannot
-hold it, the interview says so and asks for headphones or offers typing,
-rather than falling back to a button.
+hold it, the interview says so and asks for headphones. When the room is
+too loud, it stops kindly and waits for a quiet place; it does not fall
+back to a button or to typing.
 
 | # | Question (the bank's default wording) | Branches (System 1 decides) | How Choir works, in passing |
 |---|---|---|---|
@@ -618,9 +625,9 @@ re-ranks by it and the first story plays.
 
 | Case | What happens |
 |---|---|
-| Silence after a question | reprompt once ("Take your time; or say skip"); then "Type instead" grows from grey to full; then the question is skipped |
-| Noise, or the radio hearing itself | "It's noisy here. Headphones will help, or type instead." The microphone stays open on headphones; typing otherwise |
-| Microphone refused | the whole interview runs in the bar as text with the same questions |
+| Silence after a question | reprompt once ("Take your time; or say skip"); then the question is skipped; after two silent questions: "I'll be here when you're ready," and the interview pauses on its card |
+| Noise, or the radio hearing itself | "It's too loud here for me to hear you well. Try headphones, or come back when it's quiet." The interview pauses on its card with what was said kept; the paper and the default edition go on meanwhile |
+| Microphone refused | no interview yet; the card "Make your edition" explains it is a spoken conversation and links to the microphone setting |
 | "Skip for now" | default edition; the card "Make your edition" in the Textures place |
 | The desk fails to write | the interview document is kept; "I couldn't write your edition just now. I'll keep what you said." and a Retry; the default edition meanwhile |
 | A crash mid-interview | per the restart rule, nothing resumes by itself; the interview document holds what was said, and the card reads "Continue your interview" (an owner act) |
@@ -1173,7 +1180,7 @@ theme switches light, dark and Newsprint, and demo mode serves a fixture.
 | **5. Files and viewers** | `files.contract`, `viewers.contract`, `members-files.contract`, `Kit/ChoirFiles.swift`, `Kit/Epub.swift`, package views `PDFPage.swift`, `QuickLookPage.swift` | page host, `PageSource` | browse folders, open text in the reader, image, video, audio and PDF pages, an EPUB as blocks, Quick Look for the rest; upload, rename, delete | must: browse and open every type / rough: PDF search, EPUB tables and images, image zoom | none |
 | **6. Mail** | `mail.contract`, `members-mail.contract`, `Kit/ChoirMail.swift`, package view `MailOriginal.swift` | page host, `PageSource` | inbox and folders, a message as a page, reply and compose as drafts, attachments, the approval link | must: read, draft, attach / rough: original HTML view, threading | send and digest accepted from a key |
 | **7. Settings, themes, accounts** | `settings.contract`, `members-settings.contract`, `Kit/ThemeLoader.swift`, `mobile/themes/*.json`, `Kit/Accounts.swift`; restyles the integrator's Components and Trace (their files stay theirs) | theme loader, page host | themes listed and switched (and loaded from a Texture in demo mode); accounts and devices; talk mode; Computer (status, Wake, Restart to update); What the paper has learned; gesture meanings as components | must: themes, account, sign out, Computer / rough: theme from a Texture on staging | bearer "who am I"; `GET /api/texture/theme` |
-| **8. Onboarding and the interview** | `onboarding.contract`, `members-onboarding.contract`, `Kit/Interview.swift`, `mobile/interview/questions.md` (the default bank) | bar, page host, the integrator's engine, lane 3's reader for the edition page | sign-in presented; voice setup (model download, per-device checks, fallbacks; with lane M's `ModelStore`); the open-microphone, interruptible interview on the integrator's turn engine, by voice and by text in demo mode; the edition written (demo) and shown; then the front page and a story playing | must: the whole path and its recoveries / rough: question wording, read-back phrasing | edition marker; the bank as a desk package document (later) |
+| **8. Onboarding and the interview** | `onboarding.contract`, `members-onboarding.contract`, `Kit/Interview.swift`, `mobile/interview/questions.md` (the default bank) | bar, page host, the integrator's engine, lane 3's reader for the edition page | sign-in presented; voice setup (model download, per-device checks, fallbacks; with lane M's `ModelStore`); the open-microphone, interruptible interview on the integrator's turn engine, by voice only (demo mode drives it with recorded clips); the edition written (demo) and shown; then the front page and a story playing | must: the whole path and its recoveries / rough: question wording, read-back phrasing | edition marker; the bank as a desk package document (later) |
 | **9. Motion and the mark** | `mark.contract`, the canvas `draw` in `app.ts` (its own module `mark.ts`), motion tokens in the themes | bar shell (the voice button), theme loader | the 3D mark in every state; the alive wait with real lifecycle lines in demo mode; card physics tuned; the front page composing; Reduce Motion | must: the mark in all states, the wait / rough: syllable sync, GPU path | lifecycle progress detail (if missing) |
 | **S. Server** (Go, its own branch, ring rules, Ring-Expedite per CLAUDE.md) | `internal/platform` (entities on front and bundle), `internal/textureowner` (theme route, edition marker, block-addressed prompt, `request_id` on version events), `internal/auth` (bearer "who am I"), `internal/proxy/email.go` (owner act from a key) | none | each route deployed on staging with its own acceptance check | must: entities, who-am-I, theme route / later: mail owner act (red: auth) | itself |
 
