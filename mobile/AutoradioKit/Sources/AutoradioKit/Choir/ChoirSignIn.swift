@@ -125,7 +125,7 @@ public final class ChoirSignIn: @unchecked Sendable {
         let id = env.keys.get(KeyAccount.keyID)
         var note = "signed out"
         if let id, env.keys.get(KeyAccount.apiKey) != nil {
-            let enc = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? ""
+            let enc = PathSegment.encode(id)
             do { try await client().send("DELETE", "/auth/api-keys/\(enc)", route: "/auth/api-keys/{id}", timeout: 8); note = "signed out; key revoked" }
             catch { note = "signed out; the key was not revoked on the server (\(error))" }
         }

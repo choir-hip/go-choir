@@ -98,6 +98,32 @@ public final class KeychainKeyStore: KeyStore, @unchecked Sendable {
 }
 #endif
 
+// MARK: Paths and hosts
+
+/// One id as one path segment: everything but unreserved characters is percent-encoded, so an id can never add a "/" (a second
+/// segment), a "?" or "#", and the segments "." and ".." cannot climb out of the route. Total: it has no failure to force-unwrap.
+public enum PathSegment {
+    private static let unreserved = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+    public static func encode(_ s: String) -> String {
+        if s == "." { return "%2E" }
+        if s == ".." { return "%2E%2E" }
+        return s.addingPercentEncoding(withAllowedCharacters: unreserved) ?? s.unicodeScalars.map { String(format: "%%%02X", $0.value & 0xFF) }.joined()
+    }
+}
+
+/// The one check before a credential is sent: the same scheme, host and port as the Choir host the app is configured for, and no
+/// user-info in the URL. A bearer key goes only where this says yes.
+public enum SameOrigin {
+    static func port(_ u: URL) -> Int? { u.port ?? (u.scheme?.lowercased() == "https" ? 443 : (u.scheme?.lowercased() == "http" ? 80 : nil)) }
+    public static func matches(_ a: URL, _ b: URL) -> Bool {
+        guard let sa = a.scheme?.lowercased(), let sb = b.scheme?.lowercased(), sa == sb, sa == "https" || sa == "http",
+              let ha = a.host?.lowercased(), let hb = b.host?.lowercased(), !ha.isEmpty, ha == hb,
+              let pa = port(a), let pb = port(b), pa == pb, a.user == nil, a.password == nil else { return false }
+        return true
+    }
+    public static func matches(_ s: String, _ b: URL) -> Bool { URL(string: s).map { matches($0, b) } ?? false }
+}
+
 // MARK: Errors
 
 public enum ChoirError: Error, CustomStringConvertible, Sendable, Equatable {
@@ -113,6 +139,8 @@ public enum ChoirError: Error, CustomStringConvertible, Sendable, Equatable {
     case busy(String)
     case deviceFlow(String)
     case gap(String)
+    /// A request that carries the key was aimed away from the configured Choir host; nothing was sent.
+    case wrongHost(String)
 
     public var description: String {
         switch self {
@@ -128,6 +156,7 @@ public enum ChoirError: Error, CustomStringConvertible, Sendable, Equatable {
         case .busy(let w): return "busy: \(w)"
         case .deviceFlow(let m): return "sign-in: \(m)"
         case .gap(let m): return "server gap: \(m)"
+        case .wrongHost(let h): return "refused: \(h) is not the configured Choir host; the key was not sent"
         }
     }
 }
@@ -142,6 +171,7 @@ public final class ChoirEnvironment: @unchecked Sendable {
     public static let defaultBaseURL = "https://choir.news"
     private let lock = NSLock()
     private var _keys: KeyStore = InMemoryKeyStore()
+    private var _configuredBase = ChoirEnvironment.defaultBaseURL
     private var _log: EventLog?
     private var _session: URLSession = .shared
     private var _playing: [String: PlayingProgramme] = [:]
@@ -158,8 +188,13 @@ public final class ChoirEnvironment: @unchecked Sendable {
         if c.hasKey { _ = try? await c.computerID() }
     }
 
+    /// The Choir host this app is set up for: the only place the key is ever sent. A stage configuration may name another
+    /// `baseURL` (a lab setting, or a configuration fetched from a link); a client made for it still refuses to carry the key.
+    public var configuredBaseURL: String { get { lock.lock(); defer { lock.unlock() }; return _configuredBase } set { lock.lock(); _configuredBase = newValue; lock.unlock() } }
+
     public func client(baseURL: String? = nil, timeout: Double = 15) -> ChoirClient {
-        ChoirClient(baseURL: (baseURL?.isEmpty == false ? baseURL! : Self.defaultBaseURL), keys: keys, session: session, log: log, timeout: timeout)
+        ChoirClient(baseURL: (baseURL?.isEmpty == false ? baseURL! : configuredBaseURL), keys: keys, session: session, log: log, timeout: timeout,
+                    trustedOrigin: URL(string: configuredBaseURL))
     }
 
     // What is playing, so the desk knows which document a turn is about.
@@ -211,8 +246,12 @@ public final class ChoirClient: @unchecked Sendable {
     let session: URLSession
     let log: EventLog?
     let timeout: Double
+    /// When set, a request that carries the key goes only if `baseURL` has this scheme, host and port.
+    let trustedOrigin: URL?
 
-    public init(baseURL: String, keys: KeyStore, session: URLSession = .shared, log: EventLog? = nil, timeout: Double = 15) {
+    public init(baseURL: String, keys: KeyStore, session: URLSession = .shared, log: EventLog? = nil, timeout: Double = 15,
+                trustedOrigin: URL? = nil) {
+        self.trustedOrigin = trustedOrigin
         self.baseURL = URL(string: baseURL.hasSuffix("/") ? String(baseURL.dropLast()) : baseURL) ?? URL(string: ChoirEnvironment.defaultBaseURL)!
         self.keys = keys; self.session = session; self.log = log; self.timeout = timeout
     }
@@ -225,6 +264,7 @@ public final class ChoirClient: @unchecked Sendable {
     public func send(_ method: String, _ path: String, query: [String: String] = [:], body: Data? = nil,
                      authenticated: Bool = true, route: String? = nil, timeout t: Double? = nil,
                      okStatuses: Set<Int> = []) async throws -> ChoirResponse {
+        if authenticated, let t = trustedOrigin, !SameOrigin.matches(baseURL, t) { throw ChoirError.wrongHost(baseURL.host ?? "(none)") }
         guard var comps = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { throw ChoirError.decode("bad base URL") }
         comps.percentEncodedPath = path
         if !query.isEmpty { comps.queryItems = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) } }
@@ -278,9 +318,16 @@ public final class ChoirClient: @unchecked Sendable {
         let id = ObjectIdentifier(keys)
         Self.flightLock.lock()
         let t: Task<String, Error>
-        if let f = Self.flights[id] { t = f } else { t = Task { [self] in try await discoverComputer() }; Self.flights[id] = t }
+        if let f = Self.flights[id] { t = f } else {
+            // The discovery clears its own entry when it ends (not when one caller stops waiting), so callers that come while it
+            // runs share it and a caller that gives up cannot make the next one start a second call.
+            t = Task { [self] in
+                defer { Self.flightLock.lock(); Self.flights[id] = nil; Self.flightLock.unlock() }
+                return try await discoverComputer()
+            }
+            Self.flights[id] = t
+        }
         Self.flightLock.unlock()
-        defer { Self.flightLock.lock(); Self.flights[id] = nil; Self.flightLock.unlock() }
         return try await t.value
     }
     nonisolated(unsafe) private static var flights: [ObjectIdentifier: Task<String, Error>] = [:]

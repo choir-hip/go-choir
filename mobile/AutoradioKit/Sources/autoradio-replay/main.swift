@@ -53,6 +53,7 @@ if let keyFile = take("--api-key-file") {
     }
 }
 let baseURLOverride = take("--base-url")
+if let b = baseURLOverride { ChoirEnvironment.shared.configuredBaseURL = b }   // the person running the command names the host the key may go to
 let turnPath = take("--turn"), configPath = take("--config"), out = take("--out")
 let realtime = args.contains("--realtime")
 guard let turnPath, let configPath else { usage() }

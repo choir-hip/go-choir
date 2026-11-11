@@ -12,10 +12,11 @@ func registerAppleStages(_ r: StageRegistry) {
 }
 
 func pcmBuffer(_ f: AudioFrame) -> AVAudioPCMBuffer? {
-    guard let fmt = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: f.sampleRate, channels: 1, interleaved: false),
+    guard f.sampleRate.isFinite, f.sampleRate > 0,
+          let fmt = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: f.sampleRate, channels: 1, interleaved: false),
           let b = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: AVAudioFrameCount(f.samples.count)) else { return nil }
     b.frameLength = AVAudioFrameCount(f.samples.count)
-    f.samples.withUnsafeBufferPointer { b.floatChannelData![0].update(from: $0.baseAddress!, count: f.samples.count) }
+    f.samples.withUnsafeBufferPointer { if let base = $0.baseAddress, let ch = b.floatChannelData { ch[0].update(from: base, count: f.samples.count) } }
     return b
 }
 
@@ -200,20 +201,25 @@ public final class AVSpeechVoice: Voice, @unchecked Sendable {
                     u.rate = rate
                     if !voiceID.isEmpty { u.voice = AVSpeechSynthesisVoice(identifier: voiceID) }
                     else { u.voice = AVSpeechSynthesisVoice(language: "en-US") }
-                    await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
-                        var finished = false
+                    // One resume, whichever comes first: the synthesizer's empty closing buffer (its thread), the 30 s timer (main), or
+                    // the task being cancelled. `Once` is the single place that decides.
+                    let once = Once<Void>()
+                    await withTaskCancellationHandler {
+                        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+                        once.arm(done)
                         // A synthesizer that never reports its end must not hang the turn.
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { if !finished { finished = true; done.resume() } }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { once.resume(()) }
                         synth.write(u) { buf in
                             guard let pcm = buf as? AVAudioPCMBuffer else { return }
-                            if pcm.frameLength == 0 { if !finished { finished = true; done.resume() }; return }
+                            if pcm.frameLength == 0 { once.resume(()); return }
                             let n = Int(pcm.frameLength)
                             var s = [Float](repeating: 0, count: n)
                             if let p = pcm.floatChannelData { for i in 0..<n { s[i] = p[0][i] } }
                             else if let p = pcm.int16ChannelData { for i in 0..<n { s[i] = Float(p[0][i]) / 32768 } }
                             cont.yield(AudioFrame(samples: s, sampleRate: pcm.format.sampleRate, t: ProcessInfo.processInfo.systemUptime))
                         }
-                    }
+                        }
+                    } onCancel: { once.resume(()) }
                 }
                 cont.finish()
             }

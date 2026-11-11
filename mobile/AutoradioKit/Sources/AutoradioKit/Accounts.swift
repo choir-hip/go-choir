@@ -141,7 +141,7 @@ public struct ChoirComputerClient: ComputerClient {
             throw ChoirError.gap("the account has no computer yet; try again in a moment")        // C4
         }
         var s = ComputerSnapshot(id: id, state: (pick["state"] as? String) ?? (pick["status"] as? String) ?? "")
-        let enc = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        let enc = PathSegment.encode(id)
         if let r = try? await c.send("GET", "/api/computers/\(enc)/update", route: "/api/computers/{id}/update"), let o = try? r.object() {
             s.updateTarget = ((o["update_available"] as? [String: Any])?["target"] as? String) ?? ""
         }
@@ -159,7 +159,7 @@ public struct ChoirComputerClient: ComputerClient {
     public func restartToUpdate() async throws -> UpdateOutcome {
         let c = ChoirEnvironment.shared.client()
         let id = try await c.computerID()
-        let enc = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        let enc = PathSegment.encode(id)
         do {
             let r = try await c.postJSON("/api/computers/\(enc)/lifecycle/update", ["idempotency_key": UUID().uuidString],
                                          route: "/api/computers/{id}/lifecycle/update", timeout: 30, okStatuses: [200, 201])

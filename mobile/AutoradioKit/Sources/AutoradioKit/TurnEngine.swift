@@ -418,7 +418,18 @@ public actor TurnEngine {
         setPhase(.playing)
     }
 
+    /// The pipeline and every task it starts live and die together: when the pipeline is cancelled (the listener spoke again)
+    /// or ends, the desk, System 1, the relay, the voice and the verdict tasks are cancelled with it, so a revision that
+    /// arrives late for an interrupted turn is never applied to the next one.
     func runPipeline(_ t: Turn, transcript: String, endedAt: Double) async {
+        let kids = TaskBag()
+        await withTaskCancellationHandler {
+            await runPipelineBody(t, transcript: transcript, endedAt: endedAt, kids: kids)
+        } onCancel: { kids.cancelAll() }
+        kids.cancelAll()
+    }
+
+    private func runPipelineBody(_ t: Turn, transcript: String, endedAt: Double, kids: TaskBag) async {
         let log = env.log
         let cfg = t.config
         let pos = await env.playback.position()
@@ -442,10 +453,12 @@ public actor TurnEngine {
             deskTask = Task { [self] in
                 do {
                     for try await r in desk.submit(turnReq) {
+                        if Task.isCancelled { break }       // an interrupted turn's revision is not applied
                         await self.onRevision(r, flag: revisionSeen, endedAt: endedAt, relay: { relayTask?.cancel() })
                     }
                 } catch { log.emit(.error(stage: "desk", message: "\(error)")) }
             }
+            if let d = deskTask { kids.add(d) }
         }
 
         // System 1, with a deadline: a slow answer must not hold the acknowledgement. It runs as a task so the
@@ -464,6 +477,7 @@ public actor TurnEngine {
             for a in answers { log.emit(.system1Answer(questionID: a.questionID, option: a.option, score: a.score, ms: a.ms)) }
             return answers
         }
+        kids.add(s1Task)
         let immediate = cfg.ack == .immediate
         var answers: [System1Answer] = []
         if !immediate { answers = await s1Task.value }   // afterSystem1: the line is chosen from the answers
@@ -481,6 +495,7 @@ public actor TurnEngine {
                 for await l in src { log.emit(.holdingSaid(l)); relayCont.yield(l) }
                 relayCont.finish()
             }
+            if let r = relayTask { kids.add(r) }
             let rt = relayTask
             relayCont.onTermination = { _ in rt?.cancel() }
             let frames = voice.speak(relayOut)
@@ -502,9 +517,11 @@ public actor TurnEngine {
                     tapCont.finish()
                 } catch { log.emit(.error(stage: "voice", message: "\(error)")); tapCont.finish(throwing: error) }
             }
+            if let st = speakTask { kids.add(st) }
             setPhase(.holding)
             let pb = env.playback
             let play = Task { await pb.speak(tapOut) }
+            kids.add(play)
             if immediate {
                 // System 1 selects what follows. If it says the turn needs nothing, stop the acknowledgement and the
                 // desk. An ack not yet audible is cancelled outright; one already speaking finishes its line (never
@@ -519,6 +536,7 @@ public actor TurnEngine {
                     if !wasAudible { st?.cancel(); play.cancel(); tapCont.finish() }
                     if let dt { log.emit(.note("desk not engaged: System 1 said nothing was asked")); dt.cancel() }
                 }
+                if let v = verdictTask { kids.add(v) }
             }
             await withTaskCancellationHandler { await play.value } onCancel: { play.cancel(); speakTask?.cancel() }
         } else { setPhase(.holding) }
@@ -573,23 +591,10 @@ final class Flag: @unchecked Sendable {
     var isSet: Bool { l.lock(); defer { l.unlock() }; return v }
 }
 
-/// Run `body` with a deadline; nil if it did not finish in time. The body is cancelled but not awaited.
-func withDeadline<T: Sendable>(_ seconds: Double, _ body: @escaping @Sendable () async -> T) async -> T? {
-    await withCheckedContinuation { (c: CheckedContinuation<T?, Never>) in
-        let once = Once<T?>(c)
-        let work = Task { once.resume(await body()) }
-        Task { try? await Task.sleep(nanoseconds: UInt64(seconds * 1e9)); work.cancel(); once.resume(nil) }
-    }
-}
 /// Stands in when the transcriber could not start: hears nothing, says nothing.
 final class EmptyTranscription: TranscriptionSession, @unchecked Sendable {
     let partials = AsyncStream<String> { $0.finish() }
     func append(_ frame: AudioFrame) {}
     func finish() async throws -> String { "" }
     func cancel() {}
-}
-final class Once<T>: @unchecked Sendable {
-    private let l = NSLock(); private var c: CheckedContinuation<T, Never>?
-    init(_ c: CheckedContinuation<T, Never>) { self.c = c }
-    func resume(_ v: T) { l.lock(); let x = c; c = nil; l.unlock(); x?.resume(returning: v) }
 }

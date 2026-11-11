@@ -186,6 +186,18 @@ public final class PauseAtOnce: YieldPolicy, @unchecked Sendable {
     }
 }
 
+/// A stage that sends a bearer token (or the listener's words) to a URL from its configuration may send it only to the configured
+/// Choir host. A configuration can come from a link, so its URL is not trusted.
+public enum RemoteHost {
+    public static func allows(_ u: URL, env: ChoirEnvironment = .shared) -> Bool {
+        guard let base = URL(string: env.configuredBaseURL) else { return false }
+        return SameOrigin.matches(u, base)
+    }
+    static func require(_ u: URL, env: ChoirEnvironment = .shared) throws {
+        guard allows(u, env: env) else { throw ChoirError.wrongHost(u.host ?? "(none)") }
+    }
+}
+
 // MARK: Keychain (bearer tokens; never in the repo)
 
 public enum Keychain {
@@ -225,10 +237,12 @@ public final class RemoteSystem1: System1, @unchecked Sendable {
     }
     let url: String, timeout: Double
     public init(_ p: StageParams) { url = p.string("url"); timeout = p.double("timeoutSeconds", 4) }
+    static func requireConfiguredHost(_ u: URL) throws { try RemoteHost.require(u) }
     struct Req: Encodable { let context: String; let listener_words: String; let questions: [Question] }
     struct Resp: Decodable { struct A: Decodable { let question_id: String; let option: String; let score: Double? }; let answers: [A] }
     public func answer(_ i: System1Input) async throws -> [System1Answer] {
         guard let u = URL(string: url), !url.isEmpty else { throw LabError.badInput("remote System 1 has no url") }
+        try Self.requireConfiguredHost(u)
         var r = URLRequest(url: u, timeoutInterval: timeout)
         r.httpMethod = "POST"
         r.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -356,8 +370,10 @@ public final class RemoteProgramme: Programme, @unchecked Sendable {
     }
     let url: String
     public init(_ p: StageParams) { url = p.string("url") }
+    static func requireConfiguredHost(_ u: URL) throws { try RemoteHost.require(u) }
     public func load() async throws -> ProgrammeDocument {
         guard let u = URL(string: url) else { throw LabError.badInput("remote programme has no url") }
+        try Self.requireConfiguredHost(u)
         var r = URLRequest(url: u)
         if let tok = Keychain.get(service: "news.choir.autoradio", account: "programme") { r.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization") }
         let (d, resp) = try await URLSession.shared.data(for: r)

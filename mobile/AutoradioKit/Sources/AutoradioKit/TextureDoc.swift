@@ -229,6 +229,8 @@ public struct TextureAddress: Equatable, Sendable {
 // MARK: Parser
 
 public enum TextureDocParser {
+    /// The most version rows one document gets, whatever count the server claims.
+    static let maxVersions = 500
     static let maxSentenceChars = 20_000
     static let disclosureStory = "Written by AI. Autopaper\u{2019}s agent desks wrote this story from the sources it links; no human editor reviewed it before publication."
     static let noticeOpinion = "Opinion. Written and published by a reader; Autopaper\u{2019}s agent desks did not write it and no editor reviewed it."
@@ -283,7 +285,7 @@ public enum TextureDocParser {
         // Versions and navigation: nav {revision, prev, next, latest}; a bare version summary otherwise.
         let version = o["version"] as? [String: Any] ?? [:]
         var rev = intValue(nav["revision"]) ?? intValue(version["revision"]) ?? intValue(payload["revision"]) ?? 0
-        let latest = intValue(nav["latest"]) ?? rev
+        let latest = min(max(0, intValue(nav["latest"]) ?? rev), TextureDocParser.maxVersions)   // a corrupt count must not become millions of rows
         if rev > latest { rev = latest }
         doc.revision = rev
         doc.latest = latest

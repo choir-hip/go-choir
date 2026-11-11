@@ -94,7 +94,7 @@ public enum AudioFiles {
         guard !samples.isEmpty else { return }
         let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: AVAudioFrameCount(samples.count))!
         buf.frameLength = AVAudioFrameCount(samples.count)
-        samples.withUnsafeBufferPointer { buf.floatChannelData![0].update(from: $0.baseAddress!, count: samples.count) }
+        samples.withUnsafeBufferPointer { if let base = $0.baseAddress, let ch = buf.floatChannelData { ch[0].update(from: base, count: samples.count) } }
         try file.write(from: buf)
     }
 }

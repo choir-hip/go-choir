@@ -183,6 +183,6 @@ fi
 n=$(ls "$SHOTS"/real-*.png 2>/dev/null | wc -l)
 [ "$n" -ge 18 ] || FAILS="$FAILS [screenshots: $n]"
 echo "ok: screenshots in $SHOTS ($n)"
-if grep -q 'ERROR\|Fatal error' "$OUT"; then echo "note: errors in the app log:"; grep -m8 'ERROR\|Fatal error' "$OUT" | sed -E 's/choir_sk_[A-Za-z0-9]+/<key>/g' | cut -c1-240; fi
+if grep -q 'ERROR\|Fatal error' "$OUT"; then echo "note: errors in the app log:"; grep -m8 'ERROR\|Fatal error' "$OUT" | sed -E 's/choir_sk_[^[:space:]"'"'"'<>]+/<key>/g' | cut -c1-240; fi
 [ -z "$FAILS" ] || fail "checks:$FAILS"
 echo "PROOF OK"

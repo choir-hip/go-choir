@@ -10,6 +10,7 @@ extension AutoradioModule {
     func registerReader() {
         pageSources.register(ReaderPageSource())
         ReaderFollow.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["readerFollow"]) } }
+        // Only ever read and written on the main thread: Exact runs every handler there, and the write below hops to it.
         var lastList = TextureList()
 
         handle("readerDoc") { [unowned self] args, reply in

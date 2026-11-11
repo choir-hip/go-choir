@@ -1,6 +1,9 @@
 import XCTest
 @testable import AutoradioKit
 
+// ProofKey exists only for the simulator and macOS (where these tests run); on a device build it is not compiled in.
+#if targetEnvironment(simulator) || os(macOS)
+
 final class ProofKeyTests: XCTestCase {
     var dir: URL!
     override func setUp() {
@@ -34,7 +37,7 @@ final class ProofKeyTests: XCTestCase {
             XCTAssertFalse(exists)
         }
     }
-    func testRefusedWriteKeepsTheFile() {
+    func testRefusedWriteStillDeletesThePlaintextKeyFile() {
         final class Refusing: KeyStore, @unchecked Sendable {
             func get(_ a: String) -> String? { nil }
             func set(_ v: String, account: String) throws { throw LabError.unavailable("no") }
@@ -42,6 +45,7 @@ final class ProofKeyTests: XCTestCase {
         }
         write("choir_sk_INVENTED0123456789")
         XCTAssertFalse(ProofKey.importIfPresent(documents: dir, into: Refusing()))
-        XCTAssertTrue(exists)
+        XCTAssertFalse(exists, "a secret must not stay in Documents when the Keychain refused it")
     }
 }
+#endif

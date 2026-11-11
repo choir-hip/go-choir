@@ -54,10 +54,9 @@ extension AutoradioModule {
             }
         }
 
-        // Open the approval page in the browser, only on the listener's own host over https.
+        // Open the approval page in the browser, only on the configured Choir host (same scheme, host and port), over https.
         handle("mailOpenReview") { [weak self] args, reply in
-            let host = URL(string: ChoirEnvironment.defaultBaseURL)?.host
-            if let u = URL(string: args["url"] as? String ?? ""), u.scheme == "https", u.host == host {
+            if let u = URL(string: args["url"] as? String ?? ""), u.scheme == "https", RemoteHost.allows(u) {
                 DispatchQueue.main.async { UIApplication.shared.open(u) }
                 reply(["status": "opened", "message": ""])
             } else {

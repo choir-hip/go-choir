@@ -25,7 +25,7 @@ final class Resampler {
 }
 
 func monoBuffer(_ s: [Float], rate: Double) -> AVAudioPCMBuffer? {
-    guard let f = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate, channels: 1, interleaved: false),
+    guard rate.isFinite, rate > 0, let f = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate, channels: 1, interleaved: false),
           let b = AVAudioPCMBuffer(pcmFormat: f, frameCapacity: AVAudioFrameCount(max(s.count, 1))) else { return nil }
     b.frameLength = AVAudioFrameCount(s.count)
     s.withUnsafeBufferPointer { if let base = $0.baseAddress { b.floatChannelData![0].update(from: base, count: s.count) } }
@@ -53,23 +53,35 @@ public final class LiveAudio: @unchecked Sendable {
     private var clock: LabClock?
     private var wantMic = false
     private var observer: NSObjectProtocol?
-    private var restarting = false
-    private var lastRestart = 0.0
+    /// Flags the audio thread, the notification queue, background tasks and the main thread all read: one lock (the repair of the
+    /// app review; `running` was polled by `playProgramme` while `bring` and `takeDown` wrote it).
+    private struct Flags { var running = false, micActive = false, down = false, nodeStopped = true, wantPlaying = false, restarting = false
+        var lastRestart = 0.0; var volume: Float = 1 }
+    private let flags = Locked(Flags())
+    /// Continuations waiting for a buffer to finish playing. Any stop of the nodes or the engine resumes them all (a stopped
+    /// player node does not call its `.dataPlayedBack` completions), so no wait outlives the audio it waits for.
+    let waiters = Locked<[UUID: Once<Void>]>([:])
+    private var restarting: Bool { get { flags.read { $0.restarting } } set { flags.write { $0.restarting = newValue } } }
+    private var lastRestart: Double { get { flags.read { $0.lastRestart } } set { flags.write { $0.lastRestart = newValue } } }
     private var generation = 0                  // bumped by every engine stop that drops scheduled buffers
     private var playhead: Playhead?             // where the block being played stands (guarded by `lock`)
-    private var nodeStopped = true              // the programme node has no timeline (never started, stopped, engine down)
+    private var nodeStopped: Bool {                // the programme node has no timeline (never started, stopped, engine down)
+        get { flags.read { $0.nodeStopped } } set { flags.write { $0.nodeStopped = newValue } }
+    }
     private var lastRender = 0
     private var rate = 1.0                      // programme speed, 1 = natural
-    private var wantPlaying = false             // the programme should be audible when the engine is up
-    private var volume: Float = 1
+    private var wantPlaying: Bool {                // the programme should be audible when the engine is up
+        get { flags.read { $0.wantPlaying } } set { flags.write { $0.wantPlaying = newValue } }
+    }
+    private var volume: Float { get { flags.read { $0.volume } } set { flags.write { $0.volume = newValue } } }
     private var virtualPaused = true
     private var virtualVolume: Float = 1
-    private(set) public var running = false
-    public private(set) var micActive = false
+    public private(set) var running: Bool { get { flags.read { $0.running } } set { flags.write { $0.running = newValue } } }
+    public private(set) var micActive: Bool { get { flags.read { $0.micActive } } set { flags.write { $0.micActive = newValue } } }
     public private(set) var virtual = false
     public private(set) var voiceProcessing = false
     /// The engine was down (interruption, failed restart) and has not come back.
-    public private(set) var down = false
+    public private(set) var down: Bool { get { flags.read { $0.down } } set { flags.write { $0.down = newValue } } }
     /// Told of anything worth an event: (kind, detail).
     public var onNotice: (@Sendable (String, String) -> Void)?
 
@@ -132,7 +144,7 @@ public final class LiveAudio: @unchecked Sendable {
         lock.lock(); generation += 1; lock.unlock()
         freezePlayhead()
         running = false; micActive = false
-        nodeStopped = true; engine = AVAudioEngine(); programmeNode = AVAudioPlayerNode(); voiceNode = AVAudioPlayerNode(); timePitch = AVAudioUnitTimePitch()
+        nodeStopped = true; releaseWaiters(); engine = AVAudioEngine(); programmeNode = AVAudioPlayerNode(); voiceNode = AVAudioPlayerNode(); timePitch = AVAudioUnitTimePitch()
         wire()
         do { try bring(voiceProcessing: voiceProcessing); observe(); onNotice?("engine", "rebuilt after media services reset") }
         catch { down = true; onNotice?("error", "engine rebuild failed: \(error)") }
@@ -140,6 +152,7 @@ public final class LiveAudio: @unchecked Sendable {
 
     public func stop() {
         if virtual { running = false; micActive = false; virtualPaused = true; return }
+        defer { releaseWaiters() }
         guard running else { return }
         if let o = observer { NotificationCenter.default.removeObserver(o); observer = nil }
         wantPlaying = false
@@ -166,6 +179,14 @@ public final class LiveAudio: @unchecked Sendable {
         engine.mainMixerNode.removeTap(onBus: 0)
         programmeNode.stop(); voiceNode.stop(); nodeStopped = true
         engine.stop(); running = false; micActive = false
+        releaseWaiters()
+    }
+
+    /// Resume every wait on a scheduled buffer. Each caller then looks at the generation and the playhead to see whether to
+    /// carry on from the frames already rendered (the engine restarted) or to end (a stop).
+    func releaseWaiters() {
+        let all = waiters.write { w -> [Once<Void>] in let x = Array(w.values); w = [:]; return x }
+        for o in all { o.resume(()) }
     }
 
     private func bring(voiceProcessing vp: Bool) throws {
@@ -224,13 +245,14 @@ public final class LiveAudio: @unchecked Sendable {
         freezePlayhead()
         if running { takeDown() }
         down = true
+        releaseWaiters()
     }
 
     // MARK: Programme node, guarded
 
     public func programmePlay() { wantPlaying = true; if virtual { virtualPaused = false } else if running { programmeNode.play(); nodeStopped = false } }
     public func programmePause() { wantPlaying = false; if virtual { virtualPaused = true } else if running { programmeNode.pause() } }
-    public func programmeStop() { wantPlaying = false; if virtual { virtualPaused = true } else { programmeNode.stop(); nodeStopped = true } }
+    public func programmeStop() { wantPlaying = false; if virtual { virtualPaused = true } else { programmeNode.stop(); nodeStopped = true; releaseWaiters() } }
     /// Speed of the programme, 0.5 to 2, pitch kept. Applies at once, also to what is already scheduled.
     public func setProgrammeRate(_ r: Double) {
         let c = r.isNaN ? 1 : min(2, max(0.5, r))
@@ -264,24 +286,35 @@ public final class LiveAudio: @unchecked Sendable {
         }
         let rs = Resampler(rate: LiveAudio.playRate)
         if running { voiceNode.play() }
+        let gate = NSLock()
         var pending = 0
-        let lock = NSLock()
-        var waiter: CheckedContinuation<Void, Never>?
         var finished = false
-        func settle() { lock.lock(); let w = (pending == 0 && finished) ? waiter : nil; if w != nil { waiter = nil }; lock.unlock(); w?.resume() }
+        var scheduledSeconds = 0.0
+        let once = Once<Void>()
+        let wid = UUID()
+        waiters.write { $0[wid] = once }
+        defer { waiters.write { $0[wid] = nil } }
+        func settle() { gate.lock(); let fire = pending == 0 && finished; gate.unlock(); if fire { once.resume(()) } }
         do {
             for try await f in frames {
                 guard running, let inb = monoBuffer(f.samples, rate: f.sampleRate) else { continue }
                 let s = rs.convert(inb)
                 guard let ob = monoBuffer(s, rate: LiveAudio.playRate), ob.frameLength > 0 else { continue }
-                lock.lock(); pending += 1; lock.unlock()
+                gate.lock(); pending += 1; scheduledSeconds += Double(ob.frameLength) / LiveAudio.playRate; gate.unlock()
                 voiceNode.scheduleBuffer(ob, completionCallbackType: .dataPlayedBack) { _ in
-                    lock.lock(); pending -= 1; lock.unlock(); settle()
+                    gate.lock(); pending -= 1; gate.unlock(); settle()
                 }
             }
         } catch {}
-        lock.lock(); finished = true; let done = pending == 0; lock.unlock()
-        if !done { await withCheckedContinuation { c in lock.lock(); waiter = c; let d = pending == 0; if d { waiter = nil }; lock.unlock(); if d { c.resume() } } }
+        gate.lock(); finished = true; let done = pending == 0; let secs = scheduledSeconds; gate.unlock()
+        if done { return }
+        // Every way the wait can end resumes it once: the last buffer played, a stop or restart (releaseWaiters), the caller
+        // cancelled, or the audio taking far longer than it is long.
+        let timer = Task { try? await Task.sleep(nanoseconds: UInt64((secs + 10) * 1e9)); once.resume(()) }
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in once.arm(c) }
+        } onCancel: { once.resume(()) }
+        timer.cancel()
     }
 
     /// Schedule a buffer on the programme node and wait until it has played. If the engine is restarted meanwhile
@@ -315,11 +348,19 @@ public final class LiveAudio: @unchecked Sendable {
             guard let ob = monoBuffer(Array(all[offset...]), rate: LiveAudio.playRate), ob.frameLength > 0 else { return }
             let base = renderedFrames()
             lock.lock(); if playhead?.tag == tag { playhead?.reschedule(from: offset, base: base) }; lock.unlock()
-            await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
-                let once = Once<Void>(c)
-                programmeNode.scheduleBuffer(ob, completionCallbackType: .dataPlayedBack) { _ in once.resume(()) }
-                if wantPlaying, !programmeNode.isPlaying { programmeNode.play(); nodeStopped = false }
-            }
+            // Resumed exactly once by: the buffer played, any stop or restart of the nodes or the engine (releaseWaiters), or the
+            // task being cancelled. A stopped node never calls the completion, so without these the wait would hang for good.
+            let once = Once<Void>()
+            let wid = UUID()
+            waiters.write { $0[wid] = once }
+            await withTaskCancellationHandler {
+                await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+                    once.arm(c)
+                    programmeNode.scheduleBuffer(ob, completionCallbackType: .dataPlayedBack) { _ in once.resume(()) }
+                    if wantPlaying, !programmeNode.isPlaying { programmeNode.play(); nodeStopped = false }
+                }
+            } onCancel: { once.resume(()) }
+            waiters.write { $0[wid] = nil }
             lock.lock(); let now = generation; let frozen = playhead?.tag == tag ? playhead?.frozen : nil; lock.unlock()
             if now == gen { return }           // played through, or stopped by a transport change
             offset = frozen ?? offset          // the engine restarted mid-buffer: continue from what was rendered
@@ -335,63 +376,91 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     let audio: LiveAudio
     let registry: StageRegistry
     let log: EventLog
-    private let lock = NSLock()
+    private let lock = NSLock()                 // guards `configuration` and `queue`
     private var configuration: LabConfiguration
-    public private(set) var document: ProgrammeDocument
-    public private(set) var blockIndex = 0
-    public private(set) var level: PlayLevel = .play
-    public private(set) var userPaused = true
-    private var jumpTo: Int?
-    private var loop: Task<Void, Never>?
+    /// Everything the transport changes and the loop, the bar, the lock screen and the engine read, behind one lock (the repair of
+    /// the app review: `document` was replaced from a revision while the loop indexed it). Never held across an await or a call out.
+    private struct State {
+        var document: ProgrammeDocument
+        var blockIndex = 0
+        var level: PlayLevel = .play
+        var userPaused = true
+        var jumpTo: Int?
+        var rate = 1.0
+        var loop: Task<Void, Never>?
+        var epoch = 0                           // bumped by every start: a loop that is no longer the current one writes nothing
+    }
+    private let st: Locked<State>
+    public var document: ProgrammeDocument { st.read { $0.document } }
+    public var blockIndex: Int { st.read { $0.blockIndex } }
+    public var level: PlayLevel { st.read { $0.level } }
+    public var userPaused: Bool { st.read { $0.userPaused } }
+    public var rate: Double { st.read { $0.rate } }
     public var onChange: (@Sendable () -> Void)?
     public var dipVolume: Float = 0.25
     /// Text the listener asked to hear (mail's "Read it to me"), behind the story now playing; each one a programme of its own.
     private var queue: [ProgrammeDocument] = []
-    public private(set) var rate = 1.0
 
     public init(audio: LiveAudio, registry: StageRegistry, log: EventLog, configuration: LabConfiguration, document: ProgrammeDocument) {
-        self.audio = audio; self.registry = registry; self.log = log; self.configuration = configuration; self.document = document
+        self.audio = audio; self.registry = registry; self.log = log; self.configuration = configuration
+        self.st = Locked(State(document: document))
         installRemoteCommands()
     }
     public func setConfiguration(_ c: LabConfiguration) { lock.lock(); configuration = c; lock.unlock() }
-    public func setDocument(_ d: ProgrammeDocument) { document = d; blockIndex = 0 }
+    public func setDocument(_ d: ProgrammeDocument) { st.write { $0.document = d; $0.blockIndex = 0 } }
 
     // MARK: Transport
 
     public func play() {
-        userPaused = false
-        if level != .pause { audio.programmePlay() }
-        if loop == nil { start(at: blockIndex) }
+        let (lvl, hasLoop, at) = st.write { s -> (PlayLevel, Bool, Int) in s.userPaused = false; return (s.level, s.loop != nil, s.blockIndex) }
+        if lvl != .pause { audio.programmePlay() }
+        if !hasLoop { start(at: at) }
         publishNowPlaying(); onChange?()
     }
-    public func pause() { userPaused = true; audio.programmePause(); publishNowPlaying(); onChange?() }
+    public func pause() { st.write { $0.userPaused = true }; audio.programmePause(); publishNowPlaying(); onChange?() }
     public func next() {
-        if blockIndex >= document.blocks.count - 1, let n = dequeue() { userPaused = false; setDocument(n); start(at: 0); return }
-        start(at: min(blockIndex + 1, document.blocks.count - 1))
+        let (i, count) = st.read { ($0.blockIndex, $0.document.blocks.count) }
+        if i >= count - 1, let n = dequeue() { st.write { $0.userPaused = false }; setDocument(n); start(at: 0); return }
+        start(at: min(i + 1, count - 1))
     }
     public func previous() { start(at: max(blockIndex - 1, 0)) }
 
     func start(at i: Int) {
-        loop?.cancel()
+        let (old, my) = st.write { s -> (Task<Void, Never>?, Int) in
+            let o = s.loop; s.epoch += 1; s.blockIndex = i; s.loop = nil; return (o, s.epoch)
+        }
+        old?.cancel()
         audio.programmeStop()
         audio.clearPlayhead()
-        blockIndex = i
-        loop = Task { [weak self] in
+        let task = Task { [weak self] in
             guard let self else { return }
             var n = i
-            while !Task.isCancelled, n < self.document.blocks.count {
-                self.blockIndex = n; self.audio.clearPlayhead(); self.onChange?(); self.publishNowPlaying()
-                if self.userPaused { self.audio.programmePause() } else if self.level != .pause { self.audio.programmePlay() }
-                await self.playBlock(self.document.blocks[n])
+            while !Task.isCancelled {
+                // One look at the state per block: the block to play, and whether this loop is still the current one.
+                let step = self.st.write { s -> (ProgrammeBlock, Bool, PlayLevel)? in
+                    guard s.epoch == my, n < s.document.blocks.count else { return nil }
+                    s.blockIndex = n
+                    return (s.document.blocks[n], s.userPaused, s.level)
+                }
+                guard let (block, paused, lvl) = step else { break }
+                self.audio.clearPlayhead(); self.onChange?(); self.publishNowPlaying()
+                if paused { self.audio.programmePause() } else if lvl != .pause { self.audio.programmePlay() }
+                await self.playBlock(block, index: n)
                 if Task.isCancelled { break }
                 n += 1
             }
             if !Task.isCancelled {
-                self.blockIndex = min(n, max(self.document.blocks.count - 1, 0)); self.loop = nil
+                let finished = self.st.write { s -> Bool in
+                    guard s.epoch == my else { return false }
+                    s.blockIndex = min(n, max(s.document.blocks.count - 1, 0)); s.loop = nil; return true
+                }
                 // The story is over: what the listener asked to hear comes next, like the next story.
-                if let q = self.dequeue() { self.setDocument(q); self.start(at: 0) } else { self.onChange?() }
+                if finished { if let q = self.dequeue() { self.setDocument(q); self.start(at: 0) } else { self.onChange?() } }
             }
         }
+        // Keep it unless a newer start has already replaced this one.
+        let orphan = st.write { s -> Bool in if s.epoch == my { s.loop = task; return false } else { return true } }
+        if orphan { task.cancel() }
     }
 
     // MARK: Speed
@@ -399,7 +468,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     /// Programme speed, 0.5 to 2, pitch kept (time-pitch in the audio engine). Applies to what is playing and to what follows.
     public func setRate(_ r: Double) {
         let c = r.isNaN ? 1 : min(2, max(0.5, r))
-        rate = c; audio.setProgrammeRate(c); publishNowPlaying(); onChange?()
+        st.write { $0.rate = c }; audio.setProgrammeRate(c); publishNowPlaying(); onChange?()
     }
 
     /// Where the player is in the block it is playing, from the audio rendered; nil when that block has no audio yet.
@@ -417,9 +486,10 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         guard !paras.isEmpty else { return false }
         let name = title ?? paras[0].split(separator: " ").prefix(6).joined(separator: " ")
         let doc = ProgrammeDocument(id: "text:\(address)", title: name, blocks: paras.map { .speech(text: $0) })
-        if startNow || loop == nil {
+        if startNow || st.read({ $0.loop == nil }) {
             lock.lock(); queue.removeAll { $0.id == doc.id }; lock.unlock()
-            loop?.cancel(); loop = nil; audio.programmeStop(); audio.clearPlayhead()
+            let old = st.write { s -> Task<Void, Never>? in let o = s.loop; s.loop = nil; s.epoch += 1; return o }
+            old?.cancel(); audio.programmeStop(); audio.clearPlayhead()
             setDocument(doc)
             if play { self.play() } else { publishNowPlaying(); onChange?() }
         } else {
@@ -433,7 +503,10 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     public var queuedTexts: [String] { lock.lock(); defer { lock.unlock() }; return queue.map(\.id) }
     private func dequeue() -> ProgrammeDocument? { lock.lock(); defer { lock.unlock() }; return queue.isEmpty ? nil : queue.removeFirst() }
 
-    func playBlock(_ b: ProgrammeBlock) async {
+    func playBlock(_ b: ProgrammeBlock) async { await playBlock(b, index: blockIndex) }
+
+    /// `index` tags the audio so the position answers for this block even if the index moves on while it plays.
+    func playBlock(_ b: ProgrammeBlock, index tag: Int) async {
         switch b {
         case .speech(let t), .listenerPassage(let t, _):
             lock.lock(); let cfg = configuration; lock.unlock()
@@ -443,44 +516,48 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
                 log.emit(.error(stage: "voice", message: "\(error)"))
             }
             if Task.isCancelled { return }
-            await audio.playProgramme(samples, rate: rate, tag: blockIndex)
+            await audio.playProgramme(samples, rate: rate, tag: tag)
         case .clip(let url, let start, let end, _):
             guard let u = FixtureResources.resolve(url), let all = try? AudioFiles.readMono(u, rate: 16_000) else {
                 log.emit(.error(stage: "player", message: "clip not found: \(url)")); return
             }
             let a = Int(start * 16_000), z = min(all.count, end.map { Int($0 * 16_000) } ?? all.count)
-            if a < z { await audio.playProgramme(Array(all[a..<z]), rate: 16_000, tag: blockIndex) }
+            if a < z { await audio.playProgramme(Array(all[a..<z]), rate: 16_000, tag: tag) }
         }
     }
 
     // MARK: PlaybackControl
 
     public func position() async -> ProgramPosition {
-        let blocks = document.blocks
-        let lo = max(0, blockIndex - 1), hi = min(blocks.count - 1, blockIndex + 1)
-        let ctx = blocks.isEmpty ? "" : blocks[lo...hi].compactMap { $0.spokenText }.joined(separator: " ")
-        return ProgramPosition(programmeID: document.id, blockIndex: blockIndex, context: ctx)
+        let (blocks, idx, id) = st.read { ($0.document.blocks, $0.blockIndex, $0.document.id) }
+        let lo = max(0, idx - 1), hi = min(blocks.count - 1, idx + 1)
+        let ctx = blocks.isEmpty || lo > hi ? "" : blocks[lo...hi].compactMap { $0.spokenText }.joined(separator: " ")
+        return ProgramPosition(programmeID: id, blockIndex: idx, context: ctx)
     }
     /// The line being spoken to the listener right now and how much of it has been heard (speech blocks only, audibly playing).
     public func spoken() async -> SpokenCut? {
-        let i = blockIndex
-        guard !userPaused, level != .pause, audio.programmeAudible, document.blocks.indices.contains(i),
-              let full = document.blocks[i].spokenText, let p = audio.programmePosition(tag: i), p.fraction < 1 else { return nil }
+        let (i, paused, lvl, doc) = st.read { ($0.blockIndex, $0.userPaused, $0.level, $0.document) }
+        guard !paused, lvl != .pause, audio.programmeAudible, doc.blocks.indices.contains(i),
+              let full = doc.blocks[i].spokenText, let p = audio.programmePosition(tag: i), p.fraction < 1 else { return nil }
         return SpokenCut(blockIndex: i, full: full, spoken: SpeechCut.text(of: full, upTo: p.fraction), fraction: p.fraction)
     }
     public func setLevel(_ l: PlayLevel) async {
-        level = l
+        let paused = st.write { s -> Bool in s.level = l; return s.userPaused }
         switch l {
-        case .play: audio.setProgrammeVolume(1); if !userPaused { audio.programmePlay() }
+        case .play: audio.setProgrammeVolume(1); if !paused { audio.programmePlay() }
         case .dip: audio.setProgrammeVolume(dipVolume)
         case .pause: audio.programmePause()
         }
         onChange?()
     }
     public func speak(_ frames: AsyncThrowingStream<AudioFrame, Error>) async { await audio.playVoice(frames) }
-    public func apply(_ r: Revision) async { document = document.applying(r); jumpTo = r.fromBlock; onChange?() }
+    public func apply(_ r: Revision) async { st.write { $0.document = $0.document.applying(r); $0.jumpTo = r.fromBlock }; onChange?() }
     public func resume() async {
-        if let j = jumpTo { jumpTo = nil; userPaused = false; start(at: min(j, max(document.blocks.count - 1, 0))) }
+        let jump = st.write { s -> Int? in
+            guard let j = s.jumpTo else { return nil }
+            s.jumpTo = nil; s.userPaused = false; return min(j, max(s.document.blocks.count - 1, 0))
+        }
+        if let j = jump { start(at: j) }
         else if !userPaused { audio.programmePlay() }
     }
 
@@ -498,10 +575,11 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         c.previousTrackCommand.addTarget { [weak self] _ in self?.previous(); return .success }
     }
     func publishNowPlaying() {
-        let text = document.blocks.indices.contains(blockIndex) ? document.blocks[blockIndex].summary : ""
+        let (doc, idx, paused, speed) = st.read { ($0.document, $0.blockIndex, $0.userPaused, $0.rate) }
+        let text = doc.blocks.indices.contains(idx) ? doc.blocks[idx].summary : ""
         MPNowPlayingInfoCenter.default().nowPlayingInfo = [
-            MPMediaItemPropertyTitle: text, MPMediaItemPropertyArtist: document.title.isEmpty ? "Autoradio" : document.title,
-            MPNowPlayingInfoPropertyPlaybackRate: userPaused ? 0.0 : rate,
+            MPMediaItemPropertyTitle: text, MPMediaItemPropertyArtist: doc.title.isEmpty ? "Autoradio" : doc.title,
+            MPNowPlayingInfoPropertyPlaybackRate: paused ? 0.0 : speed,
         ]
     }
 }

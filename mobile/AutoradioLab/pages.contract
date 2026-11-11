@@ -17,12 +17,13 @@ use ComponentsPage, TracePage from "./components.contract"
 use MotionPage, WaitPage from "./motion.contract"
 use OnboardingPage from "./onboarding.contract"
 
+// A "lab" page is known only at the four addresses below; any other lab:* address shows the not-yet page, not a blank screen.
 component PageHost
   props
     address: string
     kind: string
     title: string
-  derive known = ["paper", "reader", "textures", "file", "mail", "mailbox", "activity", "settings", "lab", "onboarding"].includes(kind)
+  derive known = ["paper", "reader", "textures", "file", "mail", "mailbox", "activity", "settings", "onboarding"].includes(kind) or (kind == "lab" and ["lab:components", "lab:trace", "lab:motion", "lab:wait"].includes(address))
   view
     column position="absolute" inset=0
       // ---- one line per kind: a lane replaces the component, not this line ----

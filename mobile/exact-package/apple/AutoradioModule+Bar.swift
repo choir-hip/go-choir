@@ -13,13 +13,16 @@ extension AutoradioModule {
         }
 
         // The engine's events feed the tracker: holding lines, revisions, errors.
+        // The module lives as long as the app (Exact makes it once per session), so these listeners are app-lifetime by design; they
+        // also end on their own once the module is gone (`guard let self`), and the timer invalidates itself.
         let stream = runtime.log.stream()
         Task { [weak self] in
             for await te in stream {
+                guard let self else { break }
                 tracker.observe(te.event)
                 switch te.event {
                 case .holdingSaid, .revisionArrived, .error, .phase, .yielded:
-                    DispatchQueue.main.async { self?.touch(["barState", "radioView"]); scheduleExpiry() }
+                    DispatchQueue.main.async { self.touch(["barState", "radioView"]); scheduleExpiry() }
                 default: break
                 }
             }
@@ -27,8 +30,8 @@ extension AutoradioModule {
 
         // While the programme plays, the position inside the block moves: one gentle refresh, ~2.5 per second.
         DispatchQueue.main.async { [weak self] in
-            let t = Timer(timeInterval: 0.4, repeats: true) { _ in
-                guard let self else { return }
+            let t = Timer(timeInterval: 0.4, repeats: true) { [weak self] timer in
+                guard let self else { timer.invalidate(); return }
                 let s = self.runtime.snapshot()
                 if s.running && !s.paused { self.touch(["radioView", "barState"]) }
             }
@@ -40,9 +43,10 @@ extension AutoradioModule {
         Task { [weak self] in
             var lastTouch = Date.distantPast
             for await f in micFrames {
+                guard let self else { break }
                 if tracker.feedMic(db: f.rmsDb), Date().timeIntervalSince(lastTouch) > 0.09 {
                     lastTouch = Date()
-                    DispatchQueue.main.async { self?.touch(["radioView"]) }
+                    DispatchQueue.main.async { self.touch(["radioView"]) }
                 }
             }
         }

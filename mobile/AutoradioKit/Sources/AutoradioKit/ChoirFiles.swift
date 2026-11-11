@@ -832,11 +832,20 @@ public final class FilesService: @unchecked Sendable {
         defer { try? h.close() }
         let data = (try? h.read(upToCount: limit + 1)) ?? Data()
         let cut = data.count > limit
-        var bytes = cut ? data.prefix(limit) : data
-        // Do not end inside a UTF-8 sequence.
-        while let last = bytes.last, cut, last & 0xC0 == 0x80 { bytes = bytes.dropLast() }
-        if cut, let last = bytes.last, last >= 0xC0 { bytes = bytes.dropLast() }
+        let bytes = cut ? Self.withoutPartialUTF8(data.prefix(limit)) : data
         return (String(decoding: bytes, as: UTF8.self), cut)
+    }
+
+    /// Drop a UTF-8 sequence the cut left unfinished (and only that: a character that ends exactly at the cut stays).
+    static func withoutPartialUTF8(_ d: Data) -> Data {
+        let b = Array(d)
+        var i = b.count - 1
+        var back = 0
+        while i >= 0, back < 3, b[i] & 0xC0 == 0x80 { i -= 1; back += 1 }      // continuation bytes at the end
+        guard i >= 0 else { return Data(b) }
+        let lead = b[i]
+        let need = lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : lead >= 0xC0 ? 2 : 1
+        return b.count - i < need ? Data(b[..<i]) : Data(b)
     }
 
     // MARK: books and PDFs

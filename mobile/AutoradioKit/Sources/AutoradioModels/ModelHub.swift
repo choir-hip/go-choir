@@ -70,6 +70,9 @@ final class ModelSlot<T>: @unchecked Sendable {
         if let t = loading { lock.unlock(); return try await t.value }
         let id = self.id
         let t = Task<T, Error> { [self] in
+            // The slot forgets this load when the load ends, not when one waiting caller leaves: a caller that times out or is
+            // cancelled must not let a second caller start a second copy of the same model beside the first.
+            defer { lock.lock(); loading = nil; lock.unlock() }
             var made: T?
             _ = try await ModelHub.store.measuredLoad(id) {
                 let (v, c) = try await make()
@@ -81,7 +84,6 @@ final class ModelSlot<T>: @unchecked Sendable {
         }
         loading = t
         lock.unlock()
-        defer { lock.lock(); loading = nil; lock.unlock() }
         return try await t.value
     }
     func drop() {
@@ -96,6 +98,7 @@ final class ModelSlot<T>: @unchecked Sendable {
 /// Linear resample to 16 kHz mono; every model here reads 16 kHz.
 func samples16k(_ f: AudioFrame) -> [Float] {
     if Int(f.sampleRate) == 16000 || f.samples.isEmpty { return f.samples }
+    guard f.sampleRate.isFinite, f.sampleRate > 0 else { return [] }     // a corrupt rate would divide by zero below
     let ratio = f.sampleRate / 16000
     let n = Int(Double(f.samples.count) / ratio)
     var out = [Float](repeating: 0, count: n)
@@ -108,10 +111,11 @@ func samples16k(_ f: AudioFrame) -> [Float] {
 }
 
 func pcm(_ samples: [Float], rate: Double) -> AVAudioPCMBuffer? {
-    guard let fmt = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate, channels: 1, interleaved: false),
+    guard rate.isFinite, rate > 0, !samples.isEmpty,
+          let fmt = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate, channels: 1, interleaved: false),
           let b = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: AVAudioFrameCount(samples.count)) else { return nil }
     b.frameLength = AVAudioFrameCount(samples.count)
-    samples.withUnsafeBufferPointer { b.floatChannelData![0].update(from: $0.baseAddress!, count: samples.count) }
+    samples.withUnsafeBufferPointer { if let base = $0.baseAddress, let ch = b.floatChannelData { ch[0].update(from: base, count: samples.count) } }
     return b
 }
 

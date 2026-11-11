@@ -18,8 +18,8 @@ if [ ! -f build-ios-device/src/Release-iphoneos/libllama.a ] || [ ! -f build-ios
     /bin/bash ./build-xcframework.sh ios-sim ios-device || true
 fi
 
+rm -rf "$DEPS/headers-llama"
 mkdir -p "$DEPS/headers-llama"
-rm -rf "$DEPS/headers-llama"/*
 cp include/llama.h ggml/include/*.h "$DEPS/headers-llama/"
 cat > "$DEPS/headers-llama/module.modulemap" <<'EOF'
 module llama {

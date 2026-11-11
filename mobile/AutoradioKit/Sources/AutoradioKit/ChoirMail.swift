@@ -281,28 +281,14 @@ public enum MailDates {
     }
 }
 
-/// The sanitiser behind "Show original". Defence in depth: tags and attributes that load or run are removed, and a
-/// Content-Security-Policy meta forbids everything but inline style and data: images, so a miss still loads nothing.
+/// The sanitiser behind "Show original". An allowlist (MailSanitizer.swift): only a small set of tags and attributes is written, links
+/// are http(s) and mailto only, images are data: only. Defence in depth: a Content-Security-Policy meta forbids everything but
+/// inline style and data: images, and the viewer's iframe is sandboxed, so a miss still runs and loads nothing.
 public enum MailHTML {
     public static let csp = "default-src 'none'; style-src 'unsafe-inline'; img-src data:"
 
     public static func sanitized(_ html: String) -> String {
-        var t = html
-        let ci: NSRegularExpression.Options = [.caseInsensitive, .dotMatchesLineSeparators]
-        // Only what is inside <body> (or everything when there is no body tag).
-        if let re = try? NSRegularExpression(pattern: "<body\\b[^>]*>(.*)</body\\s*>", options: ci),
-           let m = re.firstMatch(in: t, range: NSRange(t.startIndex..., in: t)), let r = Range(m.range(at: 1), in: t) { t = String(t[r]) }
-        t = MailText.replace(t, "<!--.*?-->", "")
-        t = MailText.replace(t, "<(script|iframe|object|embed|applet|frameset|noscript|form|template)\\b.*?</\\1\\s*>", "")
-        t = MailText.replace(t, "<(script|iframe|object|embed|applet|link|meta|base|input|button|frame|param|source|track)\\b[^>]*/?>", "")
-        t = MailText.replace(t, "</?(html|head|body|title)\\b[^>]*>", "")
-        t = MailText.replace(t, "\\s+on[a-z]+\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)", "")
-        t = MailText.replace(t, "\\s+(href|src|action|formaction|xlink:href|background|poster)\\s*=\\s*(\"\\s*(javascript|vbscript|data:text)[^\"]*\"|'\\s*(javascript|vbscript|data:text)[^']*')", "")
-        // Remote images: remove the src (keep the alt text readable); data: images stay.
-        t = MailText.replace(t, "(<img\\b[^>]*?)\\s+src\\s*=\\s*(\"(?!data:image/)[^\"]*\"|'(?!data:image/)[^']*'|(?![\"'])(?!data:image/)[^\\s>]+)", "$1")
-        t = MailText.replace(t, "\\s+(srcset|style)\\s*=\\s*\"[^\"]*(url\\(|expression\\(|@import)[^\"]*\"", "")
-        t = MailText.replace(t, "@import[^;]*;", "")
-        t = MailText.replace(t, "url\\([^)]*\\)", "none")
+        let t = HTMLSanitizer.clean(html)
         return """
         <!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="\(csp)">
         <meta name="viewport" content="width=device-width, initial-scale=1"><style>:root{color-scheme:light dark}body{font:16px -apple-system,sans-serif;margin:12px;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{max-width:100%}</style></head><body>\(t)</body></html>
@@ -525,7 +511,7 @@ public final class MailService: @unchecked Sendable {
         guard !rest.isEmpty, rest != "new", !rest.hasPrefix("reply/"), !rest.hasPrefix("draft/") else { v.status = "idle"; return v }
         v.id = rest; v.address = address
         do {
-            let o = try await client().send("GET", "/api/email/messages/" + rest.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!,
+            let o = try await client().send("GET", "/api/email/messages/" + PathSegment.encode(rest),
                                             route: "/api/email/messages/{id}").object()
             let d = MailParse.detail(o)
             if cached("inbox") == nil { if let l = try? await client().send("GET", "/api/email/messages", query: ["folder": "inbox"], route: "/api/email/messages").object() { store("inbox", MailParse.list(l)) } }
@@ -580,7 +566,7 @@ public final class MailService: @unchecked Sendable {
     @discardableResult
     public func setRead(id: String, read: Bool) async -> Bool {
         do {
-            try await client().send("POST", "/api/email/messages/\(id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id)/\(read ? "read" : "unread")",
+            try await client().send("POST", "/api/email/messages/\(PathSegment.encode(id))/\(read ? "read" : "unread")",
                                     route: "/api/email/messages/{id}/read")
             lock.lock()
             for k in cache.keys { for i in cache[k]!.rows.indices where cache[k]!.rows[i].id == id {
@@ -612,7 +598,7 @@ public final class MailService: @unchecked Sendable {
         if rest.hasPrefix("draft/") {
             let id = String(rest.dropFirst(6))
             do {
-                let o = try await client().send("GET", "/api/email/drafts/\(id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id)", route: "/api/email/drafts/{id}").object()
+                let o = try await client().send("GET", "/api/email/drafts/\(PathSegment.encode(id))", route: "/api/email/drafts/{id}").object()
                 let d = MailParse.draft(o)
                 v.status = "saved"; v.draftId = d.id; v.sendAs = d.from; v.toLine = d.to.joined(separator: ", "); v.subject = d.subject; v.body = d.text
                 v.note = "Saved. Sending needs your approval."
@@ -624,7 +610,7 @@ public final class MailService: @unchecked Sendable {
         let m = await message(address: "mail:" + id, now: now)
         guard m.status == "ready" else { v.status = "error"; v.note = m.message.isEmpty ? "Could not open the message to reply to." : m.message; return v }
         do {
-            let o = try await client().send("GET", "/api/email/messages/\(id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id)", route: "/api/email/messages/{id}").object()
+            let o = try await client().send("GET", "/api/email/messages/\(PathSegment.encode(id))", route: "/api/email/messages/{id}").object()
             let d = MailParse.detail(o)
             let target: String
             if d.summary.direction == "outbound" { target = MailText.addressOnly(d.to.first ?? "") }
@@ -674,7 +660,7 @@ public final class MailService: @unchecked Sendable {
         var v = MailComposeView()
         v.forAddress = address; v.draftId = draft
         do {
-            let o = try await client().postJSON("/api/email/drafts/\(draft.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? draft)/approval-email", [:],
+            let o = try await client().postJSON("/api/email/drafts/\(PathSegment.encode(draft))/approval-email", [:],
                                                 route: "/api/email/drafts/{id}/approval-email").object()
             v.status = "approval"; v.reviewURL = (o["review_url"] as? String) ?? ""
             v.note = "An approval link was emailed to you. Open it in your browser to read the draft and send it."
