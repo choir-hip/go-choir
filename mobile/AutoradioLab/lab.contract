@@ -46,7 +46,7 @@ members Autoradio
   action radioPlay
     send acct = choirPlayPause()
   action radioDown
-    send down = choirTalkDown()
+    send down = choirTalkDown(aim=pg.top)
   action radioUp
     send up = choirTalkUp()
   action playStory(route: string)
