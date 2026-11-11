@@ -72,6 +72,8 @@ component BarShell
     micOn: bool
     onbd: bool
     topAddr: string
+    moreFor: string
+    moreOfThis: action
     stackCount: number
     frontName: string
     frontKind: string
@@ -137,7 +139,12 @@ component BarShell
           background-image="linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0))"
         // the deck's quiet count: where you are, in a hairline of text at the top of the lens (not over the page)
         if onbd == false and layer == ""
-          text `${frontKind} · ${stackCount} in the deck` testId="page-indicator" aria-label=`${frontKind}, ${stackCount} pages in the deck` font-family=th.fontUi font-size=10 font-weight=600 letter-spacing=0.4 color=th.muted text-align="center" width="100%"
+          row width="100%" align-items="center" justify-content="space-between" gap=8
+            text `${frontKind} · ${stackCount} in the deck` testId="page-indicator" aria-label=`${frontKind}, ${stackCount} pages in the deck` font-family=th.fontUi font-size=10 font-weight=600 letter-spacing=0.4 color=th.muted
+            if topAddr.startsWith("pub:")
+              button press=moreOfThis(topAddr) testId="story-more" appearance="none" aria-label="More stories like this one"
+                row padding="3px 10px" border-radius=th.radiusPill border-width=1 border-style="solid" border-color=th.rule align-items="center"
+                  text (moreFor == topAddr ? "Noted" : "More of this") font-family=th.fontUi font-size=12 font-weight=600 color=th.fg
         // ---- the line above the controls
         if lineMode == "aim"
           text aim testId="bar-aim" font-family=th.fontUi font-size=11 color=th.muted line-clamp=1 padding-left=4 animation=enter
