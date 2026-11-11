@@ -119,8 +119,8 @@ final class AutoradioDeskTests: XCTestCase {
         XCTAssertTrue(log.events.contains { if case .error(let st, let m) = $0.event { return st == "desk" && m.contains("river refused") } else { return false } })
     }
 
-    func testADroppedStreamAfterSentencesIsInterruptedAndNotRetried() async throws {
-        StubProtocol.handler = { _ in .init(raw: Self.sse([("speech", #"{"seq":0,"text":"First sentence."}"#)]), dropAfter: true) }
+    func testAStreamThatEndsAfterSentencesWithNoDoneIsInterruptedAndNotRetried() async throws {
+        StubProtocol.handler = { _ in .init(raw: Self.sse([("speech", #"{"seq":0,"text":"First sentence."}"#)])) }
         let ev = try await collect(AutoradioDeskStage(StageParams()), turn())
         XCTAssertEqual(ev, [.sentence(seq: 0, text: "First sentence."), .done(status: "interrupted", sentences: 1, serverFirstSentenceMs: nil, serverDoneMs: nil)])
         XCTAssertEqual(turnRequests().count, 1, "the listener must not hear the first sentence twice")
@@ -189,7 +189,7 @@ final class AutoradioDeskTests: XCTestCase {
             }
         }
         let stage = AutoradioDeskStage(StageParams(["pollSeconds": .number(0.02), "settleSeconds": .number(0.2)]))
-        let ev = try await collect(stage, turn())
+        let ev = try await collect(stage, DeskTurn(turnID: "turn-fb1", programmeID: "fixture-1", blockIndex: 0, listenerWords: "change b"))
         XCTAssertTrue(ev.contains { if case .sentence(_, let t) = $0 { return t.contains("changed") } else { return false } }, "\(ev)")
         if case .done(let st, _, _, _)? = ev.last { XCTAssertEqual(st, "completed") } else { XCTFail("done last: \(ev)") }
     }

@@ -186,6 +186,10 @@ public final class AutoradioDeskStage: StreamingDesk, @unchecked Sendable {
                 if attempt >= 3 { throw ChoirError.transport("the Autoradio stream ended without a done event, \(attempt) times") }
                 env.log?.emit(.note("autoradio desk: the stream ended before any sentence; asking again with the same turn id"))
                 try await Task.sleep(nanoseconds: 300_000_000 * UInt64(attempt))     // a backoff after a real failure, not a limit on the model
+            } catch ChoirError.transport(let message) where sentences == 0 && attempt < 3 {
+                // The connection failed before any sentence (a reset, a refused connection): the same words, the same id, again.
+                env.log?.emit(.note("autoradio desk: transport error before any sentence (\(message)); asking again with the same turn id"))
+                try await Task.sleep(nanoseconds: 300_000_000 * UInt64(attempt))
             } catch ChoirError.server(let status, let message) where status == 409 {
                 if !freshIDUsed && attempt == 1 { freshIDUsed = true; id = routeID("turn-" + UUID().uuidString.prefix(8).lowercased()); env.log?.emit(.note("autoradio desk: 409, using a fresh turn id")); continue }
                 if attempt >= 4 { throw ChoirError.server(status: 409, message: message) }

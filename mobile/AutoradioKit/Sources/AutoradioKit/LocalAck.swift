@@ -116,7 +116,12 @@ public final class AckHistory: @unchecked Sendable {
     }
     public var recent: [String] { recent(for: nil) }
     public func add(_ l: String, page: String = "") {
-        lock.lock(); lines.append((page, l)); if lines.count > keep * 4 { lines.removeFirst(lines.count - keep * 4) }; lock.unlock()
+        lock.lock(); defer { lock.unlock() }
+        lines.append((page, l))
+        // At most `keep` lines per page, and a bound on the whole store.
+        var seen = 0
+        for i in stride(from: lines.count - 1, through: 0, by: -1) where lines[i].page == page { seen += 1; if seen > keep { lines.remove(at: i) } }
+        if lines.count > 400 { lines.removeFirst(lines.count - 400) }
     }
     public func clear() { lock.lock(); lines = []; lock.unlock() }
 }
