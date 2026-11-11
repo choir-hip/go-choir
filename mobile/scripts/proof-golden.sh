@@ -11,8 +11,8 @@ mkdir -p "$GOLDEN_OUT"
 SCRATCH="${TMPDIR:-/tmp}/proof-golden.$$"
 mkdir -p "$SCRATCH"
 trap 'rm -rf "$SCRATCH"' EXIT
-echo "swift test (GoldenDocumentsTests), projections to $GOLDEN_OUT/native"
-"$HERE/xe.sh" /usr/bin/env GOLDEN_OUT="$GOLDEN_OUT" /usr/bin/swift test --package-path "$HERE/../AutoradioKit" --filter GoldenDocumentsTests > "$SCRATCH/swift-test.txt" 2>&1 \
+echo "swift test (golden, parity and reader tests), projections to $GOLDEN_OUT/native"
+"$HERE/xe.sh" /usr/bin/env GOLDEN_OUT="$GOLDEN_OUT" /usr/bin/swift test --package-path "$HERE/../AutoradioKit" --filter "GoldenDocumentsTests|WebParityTests|TextureDocTests|RealShapeTests|RepairTests|RoundThreeRepairTests|CardsTests|FilesTests" > "$SCRATCH/swift-test.txt" 2>&1 \
   || { grep -E "error:|failed|Fatal" "$SCRATCH/swift-test.txt" | head -30; tail -15 "$SCRATCH/swift-test.txt"; echo "PROOF FAILED at swift test"; exit 1; }
 grep -E "Executed [0-9]+ tests" "$SCRATCH/swift-test.txt" | tail -1
 n=$(ls "$GOLDEN_OUT/native"/*.json 2>/dev/null | wc -l | tr -d ' ')
