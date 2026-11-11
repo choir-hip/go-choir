@@ -1,7 +1,32 @@
-// Lane members file (bar): this lane's states, derives, resources, mutations and actions, as if written in the root.
-// Owned by the bar lane. Declare the shapes you use with `use ... from "@choir/autoradio"` at the top of this file
-// (your shapes and source names live in exact-package/interface/bar.json). Every name you want a child component to
-// `inject` goes in your band of the `provide` list in app.contract.
+// Lane members file (bar): the radio view, the focus of the bar's field, the player's pull-down and jumps.
+// Owned by the bar lane. Source and send names live in exact-package/interface/bar.json.
+use radioView, radioJump, radioSpeed from "@choir/autoradio"
+use RadioInfo from "@choir/autoradio"
+
 members Autoradio
-  // placeholder so the block is not empty; delete it when you add your first member
-  state barPlaceholder = false
+  // The radio view: what plays, the block's sentences, the programme's items, the yield level, the talk mode.
+  resource ri = radioView() as shape RadioInfo else empty()
+  mutation rm as shape RadioInfo
+
+  // The bar's field has the keyboard: the bar grows, the pages button gives way and Send replaces the voice button.
+  state barFocused = false
+  action barFocus
+    barFocused = true
+  action barBlur
+    barFocused = false
+  // Typing is the field focused with words in it (the aim line then shows above, because the placeholder is gone).
+  derive typing = barFocused and ask != "" and bi.state == "idle"
+
+  action jumpTo(index: number)
+    send rm = radioJump(index=`${index}`)
+  action setSpeed(speed: string)
+    send rm = radioSpeed(speed=speed)
+
+  // Pull the expanded player down to put it away (`pan` gives the move since its last event; `panrelease` decides).
+  state sheetPull = 0
+  action sheetMove(dx: number, dy: number)
+    sheetPull = sheetPull + dy
+  action sheetEnd(vx: number, vy: number)
+    if sheetPull > 70
+      layer = ""
+    sheetPull = 0
