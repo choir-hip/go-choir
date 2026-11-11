@@ -174,6 +174,27 @@ it glass, and make the buttons inside of it, rather than the prompt area
 inside of the section at the bottom". One glass shape with the page showing
 through. The text entry and every control sit directly on it; there is no
 inner field box inside a bottom section.
+32. **Every model downloads; onboarding configures them** (owner,
+2026-11-11): "I want all the models downloadable. None ship with the app.
+The point is to build a configurator that selects the best models for users
+specific device in the onboarding." The app bundle carries no weights. During
+onboarding a configurator probes the device, measures the whole voice
+pipeline plus the language model on it, and picks the best model and quant
+that fit. A newer phone gets better quality. The iPhone 14 Pro Max is the
+benchmark: supported, but too old for the newest models. LFM3 1.7B runs on
+it by itself in another app (several quants); the open question is the quant
+that still fits alongside the voice pipeline. Phones older than about the 14
+generation, such as the iPhone 8 or XR, are out of scope.
+33. **No fallback for a missing desk route** (owner, 2026-11-11): "We
+shouldn't plan for the route to be missing. Need to make sure all computers
+are updated." The app does not fall back to the old Texture desk. Deploys
+make sure every computer carries the Autoradio desk.
+34. **Later, not this week: Autoradio on choir.news and in the Mac app**
+(owner, 2026-11-11). The web gets an Autoradio app that shares state with
+the iOS app. It has no on-device models. The Choir Mac app's Autoradio is
+full-featured, with on-device models and better language models where the
+Mac allows. Design only for now. This week's priority is an iOS app good
+enough to share on TestFlight.
 
 Also from the walk: a page title is never a raw address, a section name is
 never a raw id, nothing is clipped off a screen edge, and the bar speaks
