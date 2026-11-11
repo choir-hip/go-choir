@@ -83,6 +83,14 @@ Rust: Rust is Exact's engine, and we use it, not extend it
 
 ## Rules we work by
 
+- **As much in Exact as possible** (owner, 2026-11-11: "i would rather have
+  as much in exact as possible"). Order of preference for any piece of UI or
+  behaviour: Contract; then Exact's own capabilities (the wgpu GPU module,
+  Canvas 2D, textflow, the Markdown editor, the game add-on), in Rust where
+  they need it; then TypeScript members for data logic; a Swift package or
+  UIKit view last, only where Exact has no path (microphone and audio
+  session, on-device models, system services), and written so the same
+  interface could be met on another host.
 - **Contract first, for portability** (owner, 2026-11-11). UI, drawing and
   motion are written in Contract so the app can run on other Exact hosts
   (Android). A Swift package view is for what has no Contract path (audio,
