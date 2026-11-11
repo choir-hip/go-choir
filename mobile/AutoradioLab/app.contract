@@ -120,6 +120,32 @@ component Autoradio
     paperFit
     pickEdition
     // ---- lane 3: texture reader ----
+    rdoc
+    tlist
+    rfollow
+    raim
+    openCites
+    sheet
+    sheetFor
+    sheetAnchor
+    sideNotes
+    mdMode
+    toggleCite
+    showSheet
+    showSource
+    hideSheet
+    jumpSources
+    toggleSideNotes
+    toggleMdMode
+    mdPress
+    aimAt
+    clearAim
+    stopRevision
+    restoreVersion
+    reloadDoc
+    openLink
+    shareDoc
+    demoFollow
     // ---- lane 4: cards, launcher, signals ----
     // ---- lane 5: files and viewers ----
     // ---- lane 6: mail ----

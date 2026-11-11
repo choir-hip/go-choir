@@ -74,8 +74,9 @@ final class DemoURLProtocol: URLProtocol {
         switch path {
         case "/api/platform/publications/front": if let d = Demo.fixture("front") { return (200, d) }
         case "/api/compute/status": if let d = Demo.fixture("status") { return (200, d) }
-        case "/api/platform/publications/resolve": if let d = Demo.fixture("resolve-" + q("route")) { return (200, d) }
-        default: break
+        case "/api/platform/publications/resolve": if let d = Demo.fixture("resolve-" + TextureDemo.bareRoute(q("route"))) { return (200, d) }
+        case "/api/platform/publications/related": if let d = Demo.fixture("related-" + TextureDemo.bareRoute(q("route"))) { return (200, d) }
+        default: if let d = TextureDemo.route(path) { return (200, d) }
         }
         return (404, Data(#"{"error":"demo mode serves fixtures only"}"#.utf8))
     }

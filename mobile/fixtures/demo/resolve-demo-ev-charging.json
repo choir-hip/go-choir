@@ -1,0 +1,800 @@
+{
+ "route": {
+  "path": "demo-ev-charging",
+  "state": "latest",
+  "bare": "demo-ev-charging",
+  "permalink": "demo-ev-charging/v3"
+ },
+ "publication": {
+  "id": "pub-ev",
+  "title": "A city rewires its kerbs for electric cars",
+  "slug": "demo-ev-charging",
+  "state": "published",
+  "kind": "story",
+  "section": "Tech and AI",
+  "dek": "Marlow bolted four hundred sockets to lamp posts in three years. The surprise is who uses them, and when."
+ },
+ "version": {
+  "id": "v-ev-3",
+  "revision": 3,
+  "published_at": "2026-11-10T07:30:00Z",
+  "manifest_hash": "demo-ev-3"
+ },
+ "artifact": {
+  "manifest_id": "m-ev",
+  "media_type": "text/markdown",
+  "content": "",
+  "body_doc": {
+   "schema": "choir.texture_doc.v1",
+   "doc": {
+    "type": "doc",
+    "content": [
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p1"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Three years ago the city of Marlow had eleven public chargers, all in car parks. This autumn it has four hundred, and almost every one of them sits at the kerb, bolted to a lamp post."
+       },
+       {
+        "type": "source_ref",
+        "attrs": {
+         "id": "a1",
+         "source_entity_id": "e1",
+         "display_mode": "numbered_ref"
+        }
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p2"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "The change came from a pilot that began on two streets in the east of the city. Engineers fitted ordinary lamp posts with a metered socket and a cable that stays coiled until a driver taps a card. "
+       },
+       {
+        "type": "text",
+        "text": "Residents without a driveway",
+        "marks": [
+         {
+          "type": "emphasis"
+         }
+        ]
+       },
+       {
+        "type": "text",
+        "text": " were the pilot\u2019s target, and the first months showed how many of them there were."
+       },
+       {
+        "type": "source_ref",
+        "attrs": {
+         "id": "a2",
+         "source_entity_id": "e2",
+         "display_mode": "numbered_ref"
+        }
+       },
+       {
+        "type": "source_ref",
+        "attrs": {
+         "id": "a3",
+         "source_entity_id": "e3",
+         "display_mode": "numbered_ref"
+        }
+       }
+      ]
+     },
+     {
+      "type": "heading",
+      "attrs": {
+       "id": "h1",
+       "level": 2
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "What the pilot found"
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p3"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Across the first year, kerbside sockets delivered more energy per installed unit than the fast chargers in the car parks, even though each socket is far slower. The sockets were used overnight, when the cars were parked anyway, and they were used by the same few hundred households again and again."
+       },
+       {
+        "type": "source_ref",
+        "attrs": {
+         "id": "a4",
+         "source_entity_id": "e4",
+         "display_mode": "numbered_ref"
+        }
+       }
+      ]
+     },
+     {
+      "type": "bullet_list",
+      "attrs": {
+       "id": "l1"
+      },
+      "content": [
+       {
+        "type": "list_item",
+        "content": [
+         {
+          "type": "paragraph",
+          "content": [
+           {
+            "type": "text",
+            "text": "Overnight sessions averaged nine hours, against forty minutes at a fast charger."
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "list_item",
+        "content": [
+         {
+          "type": "paragraph",
+          "content": [
+           {
+            "type": "text",
+            "text": "Four in five users had no off-street parking at home."
+           },
+           {
+            "type": "source_ref",
+            "attrs": {
+             "id": "a5",
+             "source_entity_id": "e5",
+             "display_mode": "numbered_ref"
+            }
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "list_item",
+        "content": [
+         {
+          "type": "paragraph",
+          "content": [
+           {
+            "type": "text",
+            "text": "Faults were rare, but a third of them were cables left out by drivers rather than failures of the hardware."
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "blockquote",
+      "attrs": {
+       "id": "q1"
+      },
+      "content": [
+       {
+        "type": "paragraph",
+        "attrs": {
+         "id": "q1p"
+        },
+        "content": [
+         {
+          "type": "text",
+          "text": "People said they would never plug in at the kerb in the rain, and then it rained and they did. The cable is the whole product."
+         },
+         {
+          "type": "source_ref",
+          "attrs": {
+           "id": "a6",
+           "source_entity_id": "e6",
+           "display_mode": "numbered_ref"
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "heading",
+      "attrs": {
+       "id": "h2",
+       "level": 2
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "The cost question"
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p4"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "A kerbside socket costs about a tenth as much to install as a rapid charger, because the cable to the lamp post already exists. The city pays for the socket and the meter; the operator pays for the electricity and keeps a small share of each sale. "
+       },
+       {
+        "type": "text",
+        "text": "That split is the part other cities copy first.",
+        "marks": [
+         {
+          "type": "strong"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p5"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "The pilot\u2019s working notes, kept by the transport office, set out how the first streets were chosen and what the engineers would do differently."
+       },
+       {
+        "type": "source_ref",
+        "attrs": {
+         "id": "t1",
+         "source_entity_id": "tx",
+         "display_mode": "numbered_ref"
+        }
+       }
+      ]
+     },
+     {
+      "type": "ordered_list",
+      "attrs": {
+       "id": "l2",
+       "start": 1
+      },
+      "content": [
+       {
+        "type": "list_item",
+        "content": [
+         {
+          "type": "paragraph",
+          "content": [
+           {
+            "type": "text",
+            "text": "Choose streets where most homes have no driveway."
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "list_item",
+        "content": [
+         {
+          "type": "paragraph",
+          "content": [
+           {
+            "type": "text",
+            "text": "Fit every third lamp post, not every post, and add more only where the sockets fill up."
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "list_item",
+        "content": [
+         {
+          "type": "paragraph",
+          "content": [
+           {
+            "type": "text",
+            "text": "Publish the monthly figures, including the faults."
+           },
+           {
+            "type": "source_ref",
+            "attrs": {
+             "id": "a7",
+             "source_entity_id": "e2",
+             "display_mode": "numbered_ref"
+            }
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "heading",
+      "attrs": {
+       "id": "h3",
+       "level": 2
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "What comes next"
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p6"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Marlow plans to reach one thousand sockets by the end of next year. The harder problem, the office says, is not the hardware but the paperwork: every lamp post belongs to a different contract, and each contract has to be reopened before a socket can be added."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p7"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "For now the east side keeps its coiled cables, and on wet evenings a line of cars sits along the kerb, each one drawing a little current, none of them going anywhere until morning."
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ "source_entities": [
+  {
+   "id": "se-e1",
+   "source_entity_id": "e1",
+   "kind": "web",
+   "target_kind": "web_url",
+   "display_policy": "numbered",
+   "entity": {
+    "source_entity_id": "e1",
+    "target": {
+     "kind": "web_url",
+     "uri": "https://www.example.com/news/marlow-kerbside-chargers"
+    },
+    "display": {
+     "mode": "numbered_ref",
+     "title": "Marlow turns lamp posts into chargers"
+    },
+    "evidence": {
+     "state": "pending",
+     "open_surface": "source_viewer"
+    },
+    "provenance": {
+     "created_by": "demo"
+    }
+   }
+  },
+  {
+   "id": "se-e2",
+   "source_entity_id": "e2",
+   "kind": "web",
+   "target_kind": "web_url",
+   "display_policy": "numbered",
+   "entity": {
+    "source_entity_id": "e2",
+    "target": {
+     "kind": "web_url",
+     "uri": "https://transport.example.org/pilot/kerbside-year-one"
+    },
+    "display": {
+     "mode": "numbered_ref",
+     "title": "Kerbside charging pilot: year one report"
+    },
+    "evidence": {
+     "state": "pending",
+     "open_surface": "source_viewer"
+    },
+    "provenance": {
+     "created_by": "demo"
+    }
+   }
+  },
+  {
+   "id": "se-e3",
+   "source_entity_id": "e3",
+   "kind": "web",
+   "target_kind": "web_url",
+   "display_policy": "numbered",
+   "entity": {
+    "source_entity_id": "e3",
+    "target": {
+     "kind": "web_url",
+     "uri": "https://example.net/streets/who-has-a-driveway"
+    },
+    "display": {
+     "mode": "numbered_ref",
+     "title": "Who has a driveway? A street-by-street count"
+    },
+    "evidence": {
+     "state": "pending",
+     "open_surface": "source_viewer"
+    },
+    "provenance": {
+     "created_by": "demo"
+    }
+   }
+  },
+  {
+   "id": "se-e4",
+   "source_entity_id": "e4",
+   "kind": "web",
+   "target_kind": "web_url",
+   "display_policy": "numbered",
+   "entity": {
+    "source_entity_id": "e4",
+    "target": {
+     "kind": "web_url",
+     "uri": "https://data.example.com/charging/energy-per-unit"
+    },
+    "display": {
+     "mode": "numbered_ref",
+     "title": "Energy delivered per installed charger"
+    },
+    "evidence": {
+     "state": "pending",
+     "open_surface": "source_viewer"
+    },
+    "provenance": {
+     "created_by": "demo"
+    }
+   }
+  },
+  {
+   "id": "se-e5",
+   "source_entity_id": "e5",
+   "kind": "web",
+   "target_kind": "web_url",
+   "display_policy": "numbered",
+   "entity": {
+    "source_entity_id": "e5",
+    "target": {
+     "kind": "web_url",
+     "uri": "https://survey.example.org/ev-owners-2026"
+    },
+    "display": {
+     "mode": "numbered_ref",
+     "title": "EV owners survey 2026"
+    },
+    "evidence": {
+     "state": "pending",
+     "open_surface": "source_viewer"
+    },
+    "provenance": {
+     "created_by": "demo"
+    }
+   }
+  },
+  {
+   "id": "se-e6",
+   "source_entity_id": "e6",
+   "kind": "web",
+   "target_kind": "web_url",
+   "display_policy": "numbered",
+   "entity": {
+    "source_entity_id": "e6",
+    "target": {
+     "kind": "web_url",
+     "uri": "https://www.example.com/opinion/the-cable-is-the-product"
+    },
+    "display": {
+     "mode": "numbered_ref",
+     "title": "The cable is the product"
+    },
+    "evidence": {
+     "state": "pending",
+     "open_surface": "source_viewer"
+    },
+    "provenance": {
+     "created_by": "demo"
+    }
+   }
+  },
+  {
+   "id": "se-tx",
+   "source_entity_id": "tx",
+   "kind": "texture",
+   "target_kind": "texture_span",
+   "display_policy": "numbered",
+   "entity": {
+    "source_entity_id": "tx",
+    "target": {
+     "kind": "texture_span",
+     "uri": "texture:demo-notes",
+     "id": "demo-notes"
+    },
+    "display": {
+     "mode": "numbered_ref",
+     "title": "Charging pilot: working notes"
+    },
+    "evidence": {
+     "state": "pending",
+     "open_surface": "texture"
+    },
+    "provenance": {
+     "created_by": "demo"
+    }
+   }
+  }
+ ],
+ "transclusions": [
+  {
+   "id": "tr-a1",
+   "source_entity_id": "e1",
+   "anchor_id": "a1",
+   "ref": {
+    "doc": "doc-e1",
+    "version": "1",
+    "cid": "c1",
+    "hash": "h-c1",
+    "quote": "has gone from eleven public chargers to four hundred, nearly all of them on lamp posts"
+   },
+   "relation_type": "cites",
+   "default_display_mode": "collapsed_citation",
+   "snapshot_text": "has gone from eleven public chargers to four hundred, nearly all of them on lamp posts"
+  },
+  {
+   "id": "tr-a2",
+   "source_entity_id": "e2",
+   "anchor_id": "a2",
+   "ref": {
+    "doc": "doc-e2",
+    "version": "1",
+    "cid": "c2",
+    "hash": "h-c2",
+    "quote": "metered socket and a cable that stays coiled until a card is tapped"
+   },
+   "relation_type": "cites",
+   "default_display_mode": "collapsed_citation",
+   "snapshot_text": "metered socket and a cable that stays coiled until a card is tapped"
+  },
+  {
+   "id": "tr-a3",
+   "source_entity_id": "e3",
+   "anchor_id": "a3",
+   "ref": {
+    "doc": "doc-e3",
+    "version": "1",
+    "cid": "c3",
+    "hash": "h-c3",
+    "quote": "more than half of east-side homes have no driveway"
+   },
+   "relation_type": "cites",
+   "default_display_mode": "collapsed_citation",
+   "snapshot_text": "more than half of east-side homes have no driveway"
+  },
+  {
+   "id": "tr-a4",
+   "source_entity_id": "e4",
+   "anchor_id": "a4",
+   "ref": {
+    "doc": "doc-e4",
+    "version": "1",
+    "cid": "c4",
+    "hash": "h-c4",
+    "quote": "delivered more energy per installed unit than the rapid chargers"
+   },
+   "relation_type": "cites",
+   "default_display_mode": "collapsed_citation",
+   "snapshot_text": "delivered more energy per installed unit than the rapid chargers"
+  },
+  {
+   "id": "tr-a5",
+   "source_entity_id": "e5",
+   "anchor_id": "a5",
+   "ref": {
+    "doc": "doc-e5",
+    "version": "1",
+    "cid": "c5",
+    "hash": "h-c5",
+    "quote": "four in five users had no off-street parking"
+   },
+   "relation_type": "cites",
+   "default_display_mode": "collapsed_citation",
+   "snapshot_text": "four in five users had no off-street parking"
+  },
+  {
+   "id": "tr-a6",
+   "source_entity_id": "e6",
+   "anchor_id": "a6",
+   "ref": {
+    "doc": "doc-e6",
+    "version": "1",
+    "cid": "c6",
+    "hash": "h-c6",
+    "quote": "the cable is the whole product"
+   },
+   "relation_type": "cites",
+   "default_display_mode": "collapsed_citation",
+   "snapshot_text": "the cable is the whole product"
+  },
+  {
+   "id": "tr-a7",
+   "source_entity_id": "e2",
+   "anchor_id": "a7",
+   "ref": {
+    "doc": "doc-e2",
+    "version": "1",
+    "cid": "c2",
+    "hash": "h-c2",
+    "quote": "publish the monthly figures"
+   },
+   "relation_type": "cites",
+   "default_display_mode": "collapsed_citation",
+   "snapshot_text": "publish the monthly figures"
+  },
+  {
+   "id": "tr-t1",
+   "source_entity_id": "tx",
+   "anchor_id": "t1",
+   "relation_type": "cites",
+   "default_display_mode": "collapsed_citation",
+   "snapshot_text": "Streets were chosen by counting homes without a driveway. Every third lamp post got a socket first; the rest wait until the first sockets fill up."
+  }
+ ],
+ "payload": {
+  "revision": 3,
+  "text": "",
+  "manifest_hash": "demo-ev-3",
+  "resolved_blocks": [
+   {
+    "doc": "doc-e1",
+    "version": "1",
+    "cid": "c1",
+    "hash": "h-c1",
+    "kind": "paragraph",
+    "text": "In three years the city of Marlow has gone from eleven public chargers to four hundred, nearly all of them on lamp posts at the kerb. Officials call it the quietest infrastructure project in the city\u2019s history.",
+    "url": "https://www.example.com/news/marlow-kerbside-chargers",
+    "title": "Marlow turns lamp posts into chargers"
+   },
+   {
+    "doc": "doc-e2",
+    "version": "1",
+    "cid": "c2",
+    "hash": "h-c2",
+    "kind": "paragraph",
+    "text": "The pilot fitted lamp posts on two east-side streets with a metered socket and a cable that stays coiled until a card is tapped. Households without off-street parking were the target group.",
+    "url": "https://transport.example.org/pilot/kerbside-year-one",
+    "title": "Kerbside charging pilot: year one report"
+   },
+   {
+    "doc": "doc-e3",
+    "version": "1",
+    "cid": "c3",
+    "hash": "h-c3",
+    "kind": "paragraph",
+    "text": "The count of 3,800 east-side homes found that more than half of east-side homes have no driveway or garage, a share far higher than the city average.",
+    "url": "https://example.net/streets/who-has-a-driveway",
+    "title": "Who has a driveway? A street-by-street count"
+   },
+   {
+    "doc": "doc-e4",
+    "version": "1",
+    "cid": "c4",
+    "hash": "h-c4",
+    "kind": "paragraph",
+    "text": "Over twelve months the kerbside sockets delivered more energy per installed unit than the rapid chargers in the car parks, despite a charging rate one fifth as fast.",
+    "url": "https://data.example.com/charging/energy-per-unit",
+    "title": "Energy delivered per installed charger"
+   },
+   {
+    "doc": "doc-e5",
+    "version": "1",
+    "cid": "c5",
+    "hash": "h-c5",
+    "kind": "paragraph",
+    "text": "Of the kerbside users who answered, four in five users had no off-street parking at home.",
+    "url": "https://survey.example.org/ev-owners-2026",
+    "title": "EV owners survey 2026"
+   },
+   {
+    "doc": "doc-e6",
+    "version": "1",
+    "cid": "c6",
+    "hash": "h-c6",
+    "kind": "paragraph",
+    "text": "Nobody believed drivers would plug in at the kerb in the rain. Then it rained, and they did. In the end the cable is the whole product, and the cable is a piece of rubber.",
+    "url": "https://www.example.com/opinion/the-cable-is-the-product",
+    "title": "The cable is the product"
+   }
+  ]
+ },
+ "nav": {
+  "revision": 3,
+  "prev": 2,
+  "next": 0,
+  "latest": 3
+ },
+ "checks": {
+  "source": "demo",
+  "citations": [
+   {
+    "anchor_id": "a1",
+    "ref": {
+     "cid": "c1",
+     "quote": "has gone from eleven public chargers to four hundred, nearly all of them on lamp posts"
+    },
+    "state": "exact",
+    "quote": "has gone from eleven public chargers to four hundred, nearly all of them on lamp posts"
+   },
+   {
+    "anchor_id": "a2",
+    "ref": {
+     "cid": "c2",
+     "quote": "metered socket and a cable that stays coiled until a card is tapped"
+    },
+    "state": "exact",
+    "quote": "metered socket and a cable that stays coiled until a card is tapped"
+   },
+   {
+    "anchor_id": "a3",
+    "ref": {
+     "cid": "c3",
+     "quote": "more than half of east-side homes have no driveway"
+    },
+    "state": "tolerant",
+    "quote": "more than half of east-side homes have no driveway"
+   },
+   {
+    "anchor_id": "a4",
+    "ref": {
+     "cid": "c4",
+     "quote": "delivered more energy per installed unit than the rapid chargers"
+    },
+    "state": "exact",
+    "quote": "delivered more energy per installed unit than the rapid chargers"
+   },
+   {
+    "anchor_id": "a5",
+    "ref": {
+     "cid": "c5",
+     "quote": "four in five users had no off-street parking"
+    },
+    "state": "",
+    "quote": "four in five users had no off-street parking"
+   },
+   {
+    "anchor_id": "a6",
+    "ref": {
+     "cid": "c6",
+     "quote": "the cable is the whole product"
+    },
+    "state": "unread",
+    "quote": "the cable is the whole product"
+   },
+   {
+    "anchor_id": "a7",
+    "ref": {
+     "cid": "c2",
+     "quote": "publish the monthly figures"
+    },
+    "state": "exact",
+    "quote": "publish the monthly figures"
+   }
+  ]
+ }
+}

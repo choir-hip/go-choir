@@ -1,17 +1,507 @@
-// The reader: a story (pub:) or the listener's own document (texture:). Lane 3 owns this file.
-// The spine ships the plain-text renderer: the page's model (`pmod`, answered by the kit's PageSource) as paragraphs.
-use Theme, PageModel from "@choir/autoradio"
-use PlainPage, NotYetPage from "./ui.contract"
+// The reader: a story (pub:<route>) or the listener's own document (texture:<doc>[@<rev>]). Lane 3 owns this file.
+// A story and a document are the same reader (owner: stories are Textures). The page's model is `rdoc`, the kit's ReaderDoc:
+// flat blocks of styled runs, citations, sources, versions. See plan section 4 and 5.
+//
+// Reading type: every size is `rem` (it follows Dynamic Type), scaled by the theme's `scale`; the body face is the theme's
+// `fontRead`; the headings and labels are `fontUi`; the measure is `max-width` in rem. No colour or font is named here.
+// A citation is a tappable pill (no hover): the card opens under its paragraph and pushes the text down; "Open source" opens
+// the source sheet. A transclusion of another Texture is a nested card that opens as its own page.
+// testIds: page-title, reader-menu, reader-versions, reader-block-<id>, reader-cite-<anchor>, reader-card-<anchor>,
+//          reader-card-source-<anchor>, reader-card-open-<anchor>, reader-source-<n>, reader-sources, reader-related-<address>,
+//          reader-sheet(-layer, -scrim), reader-revising, reader-stop, reader-aim, reader-aim-clear, reader-md, reader-newer.
+use Theme, ReaderDoc, ReaderBlock, ReaderRun, ReaderCite from "@choir/autoradio"
+use ReaderFollowInfo, ReaderAimInfo, DemoInfo from "@choir/autoradio"
+use PageScroll, Card, Layer from "./ui.contract"
+
+// Citations drawn as atom pills in the Markdown experiment (the page menu, demo mode). Atom styles are literals, not tokens.
+atom citation link="cite:" color="light-dark(#7a0a57, #ff9bd6)" background-color="light-dark(#f7e4f2, #3a2236)" border-radius="6px" padding-inline="3px"
+
+shape ReaderViewport
+  width: number
+  height: number
+
+fn kscale(scale: string): number = scale == "compact" ? 0.94 : (scale == "large" ? 1.1 : 1)
+fn remv(n: number): string = `${n}rem`
+fn tint(c: string, a: string): string = c.length == 7 ? `${c}${a}` : c
+fn ckey(address: string, anchor: string): string = `${address}|${anchor}`
+fn clip(s: string, n: number): string = s.length > n ? `${s.slice(0, n)}…` : s
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The styled runs of one paragraph, as inline `text` children the kernel measures as one paragraph. Each run carries its
+// own size, weight, height and colour: a style row does not cascade into inline nodes.
+component Runs
+  inject
+    th: Theme
+    toggleCite: action
+  props
+    runs: ReaderRun[]
+    address: string
+    size: number
+    weight: number
+    lh: number
+    hi: number
+    italic: bool
+  view
+    for r in runs key=r.id
+      if r.kind == "cite"
+        text r.text testId=`reader-cite-${r.anchor}` press=toggleCite(ckey(address, r.anchor)) aria-label=`Source ${r.label}`
+          font-family=th.fontUi font-size=remv(size * 0.8) font-weight=700 line-height=lh color=th.accent
+          background-color=tint(th.accent, "22") border-radius=6
+      else if r.kind == "ref"
+        text r.text testId=`reader-ref-${r.anchor}` press=toggleCite(ckey(address, r.anchor)) aria-label=`Document ${r.label}`
+          font-family=th.fontUi font-size=remv(size * 0.82) font-weight=600 line-height=lh color=th.accent2
+          background-color=tint(th.accent, "1C") border-radius=6
+      else if r.kind == "code"
+        text r.text font-family=th.fontMono font-size=remv(size * 0.88) line-height=lh color=th.fg background-color=th.paper2 border-radius=4
+      else if r.kind == "link"
+        text r.text href=r.href font-family=th.fontRead font-size=remv(size) font-weight=(r.weight > weight ? r.weight : weight)
+          font-style=(italic ? "italic" : r.slant) line-height=lh color=th.accent
+      else if r.kind == "br"
+        text "\n" white-space="pre-line" font-size=remv(size) line-height=lh
+      else
+        text r.text font-family=th.fontRead font-size=remv(size) font-weight=(r.weight > weight ? r.weight : weight)
+          font-style=(italic ? "italic" : r.slant) line-height=lh color=th.fg
+          background-color=(hi == r.sent ? tint(th.accent, "30") : "") border-radius=3
+
+// ---------------------------------------------------------------------------------------------------------------------
+// A citation's card, opened in place under its paragraph. A source on the web shows its host, title, the pinned quote with its
+// check badge, and "Open source". A transclusion of another Texture is a nested card with "Open as page".
+component CiteCard
+  inject
+    th: Theme
+    toggleCite: action
+    showSource: action
+    openPage: action
+  props
+    c: ReaderCite
+    address: string
+  view
+    row width="100%" margin-bottom=remv(1) gap=8 align-items="stretch" testId=`reader-card-row-${c.anchor}`
+      if c.kind == "texture"
+        box width=3 border-radius=2 background-color=th.accent2
+      column flex=1 min-width=0
+        Card(level=1, testId=`reader-card-${c.anchor}`, minHeight=0)
+          column padding=14 gap=8
+            row align-items="center" gap=8
+              text (c.kind == "texture" ? "Texture" : `${c.number}`) font-family=th.fontUi font-size=12 font-weight=700 color=th.accent
+                background-color=tint(th.accent, "22") border-radius=6 padding="2px 7px"
+              text (c.kind == "texture" ? "Another document" : c.host) font-family=th.fontUi font-size=13 color=th.muted flex=1 min-width=0 line-clamp=1
+              button press=toggleCite(ckey(address, c.anchor)) testId=`reader-card-close-${c.anchor}` appearance="none" aria-label="Close" width=32 height=32
+                image "symbol:close" color=th.muted
+            text c.title font-family=th.fontUi font-size=15 font-weight=600 color=th.fg
+            if c.quote != ""
+              row gap=10
+                box width=2 border-radius=1 background-color=th.accent
+                text `“${c.quote}”` font-family=th.fontRead font-style="italic" font-size=15 line-height=1.5 color=th.fg flex=1 min-width=0
+            if c.kind != "texture"
+              row align-items="center" gap=6
+                image "symbol:checkmark" color=(c.check == "exact" or c.check == "tolerant" ? th.success : (c.check == "failed" ? th.danger : th.muted))
+                text c.checkLabel font-family=th.fontUi font-size=13 font-weight=500
+                  color=(c.check == "exact" or c.check == "tolerant" ? th.success : (c.check == "failed" ? th.danger : th.muted))
+            row gap=8
+              if c.kind == "texture"
+                button press=openPage(c.target, c.title) testId=`reader-card-open-${c.anchor}` buttonStyle="filled"
+                  text "Open as page"
+              else
+                button press=showSource(c.anchor) testId=`reader-card-source-${c.anchor}` buttonStyle="bordered"
+                  text "Open source"
+
+// A small note for a wide layout: the paragraph's text flows around this box (wrap-flow, shape-outside).
+component SideNote
+  inject
+    th: Theme
+    toggleCite: action
+    showSource: action
+  props
+    c: ReaderCite
+    address: string
+  view
+    column testId=`reader-note-${c.anchor}` padding=10 gap=4 box-sizing="border-box" width="100%" border-radius=th.radiusCard
+      background-color=th.paper2 box-shadow=th.shadow1
+      text (c.kind == "texture" ? c.title : `${c.number}  ${c.host}`) font-family=th.fontUi font-size=12 font-weight=700 color=th.accent line-clamp=2
+      text c.quote font-family=th.fontRead font-style="italic" font-size=13 line-height=1.35 color=th.fg line-clamp=5
+      button press=showSource(c.anchor) testId=`reader-note-source-${c.anchor}` appearance="none"
+        text "Source" font-family=th.fontUi font-size=12 font-weight=600 color=th.accent
+
+// ---------------------------------------------------------------------------------------------------------------------
+// One block of the document, its open citation cards after it.
+component BlockView
+  inject
+    th: Theme
+    rdoc: ReaderDoc
+    rfollow: ReaderFollowInfo
+    raim: ReaderAimInfo
+    openCites: string[]
+    aimAt: action
+    toggleCite: action
+  props
+    b: ReaderBlock
+    address: string
+    size: number
+    lh: number
+    sideOn: bool
+  derive hi = rfollow.address == address and rfollow.blockId == b.id ? rfollow.sentence : -1
+  derive following = rfollow.address == address and rfollow.blockId == b.id
+  derive aimed = raim.address == address and raim.blockId == b.id
+  derive openHere = rdoc.cites.filter(c => c.blockId == b.id and openCites.includes(ckey(address, c.anchor)))
+  derive noted = sideOn and b.kind == "p" and openHere.length > 0
+  derive stacked = noted ? openHere.slice(1) : openHere
+  view
+    column width="100%" position="relative"
+      if b.kind == "p"
+        if noted
+          box position="relative" width="100%" margin-bottom=remv(0.9)
+            text testId=`reader-block-${b.id}` font-family=th.fontRead font-size=remv(size) line-height=lh hyphens="auto" color=th.fg
+              Runs(runs=b.runs, address=address, size=size, weight=400, lh=lh, hi=hi, italic=false)
+            for c in openHere.slice(0, 1) key=c.anchor
+              box position="absolute" right=0 top=0 width=150 wrap-flow="both" shape-outside="inset(0 round 12px)" shape-margin=10
+                SideNote(c=c, address=address)
+        else
+          text testId=`reader-block-${b.id}` font-family=th.fontRead font-size=remv(size) line-height=lh hyphens="auto" color=th.fg
+            margin-bottom=remv(0.9) contextmenu=aimAt(address, b.id, clip(b.text, 64))
+            Runs(runs=b.runs, address=address, size=size, weight=400, lh=lh, hi=hi, italic=false)
+      if b.kind == "h"
+        text role="heading" aria-level=2 testId=`reader-block-${b.id}` text-wrap="balance"
+          font-family=th.fontUi font-size=remv((b.level < 3 ? 1.1875 : 1) * size / 1.125) font-weight=650 line-height=1.25 color=th.fg
+          margin-top=remv(1.4) margin-bottom=remv(0.45)
+          Runs(runs=b.runs, address=address, size=((b.level < 3 ? 1.1875 : 1) * size / 1.125), weight=650, lh=1.25, hi=hi, italic=false)
+      if b.kind == "li"
+        row align-items="flex-start" gap=remv(0.55) width="100%" margin-bottom=remv(0.4) padding-left=remv((b.depth - 1) * 1.3)
+          text b.marker font-family=th.fontUi font-size=remv(size * 0.92) line-height=lh color=th.muted width=remv(1.4) text-align="right"
+          text testId=`reader-block-${b.id}` flex=1 min-width=0 font-family=th.fontRead font-size=remv(size) line-height=lh hyphens="auto" color=th.fg
+            contextmenu=aimAt(address, b.id, clip(b.text, 64))
+            Runs(runs=b.runs, address=address, size=size, weight=400, lh=lh, hi=hi, italic=false)
+      if b.kind == "quote"
+        row gap=14 width="100%" margin-bottom=remv(0.9) padding-left=remv((b.depth - 1) * 1.0)
+          box width=2 border-radius=1 background-color=th.accent
+          text testId=`reader-block-${b.id}` flex=1 min-width=0 font-family=th.fontRead font-size=remv(size) line-height=lh color=th.fg
+            contextmenu=aimAt(address, b.id, clip(b.text, 64))
+            Runs(runs=b.runs, address=address, size=size, weight=400, lh=lh, hi=hi, italic=true)
+      if b.kind == "code"
+        scroll overflow-x="scroll" overflow-y="hidden" width="100%" margin-bottom=remv(0.9) border-radius=th.radiusControl background-color=th.paper2
+          text b.text testId=`reader-block-${b.id}` white-space="pre" font-family=th.fontMono font-size=remv(size * 0.85) line-height=1.5 color=th.fg padding=12
+      if b.kind == "rule"
+        box width="100%" height=1 margin-top=remv(0.6) margin-bottom=remv(1.1) background-color=th.rule
+      if b.kind == "table"
+        scroll overflow-x="scroll" overflow-y="hidden" display="flex" flex-direction="row" width="100%" margin-bottom=remv(1.1) testId=`reader-block-${b.id}`
+          column flex-shrink=0 border-radius=th.radiusControl border-width=1 border-style="solid" border-color=th.rule
+            for r in b.rows key=r.id
+              row flex-shrink=0
+                for cell, ci in r.cells key=ci
+                  column flex-shrink=0 width=170 padding="8px 12px" border-bottom-width=1 border-bottom-style="solid" border-bottom-color=th.rule
+                    background-color=(cell.header ? th.paper2 : "")
+                    text
+                      Runs(runs=cell.runs, address=address, size=(size * 0.88), weight=(cell.header ? 700 : 400), lh=1.4, hi=(0 - 1), italic=false)
+      if b.kind == "embed"
+        Card(level=1, testId=`reader-block-${b.id}`, minHeight=0)
+          row padding=14 gap=8 align-items="center"
+            image "symbol:document" color=th.muted
+            text b.text font-family=th.fontUi font-size=14 color=th.muted flex=1
+      if following
+        box position="absolute" left=-12 top=2 bottom=remv(0.9) width=3 border-radius=2 background-color=th.accent
+      if aimed
+        box position="absolute" left=-12 top=2 bottom=remv(0.9) width=3 border-radius=2 background-color=th.accent2
+      for c in stacked key=c.anchor
+        CiteCard(c=c, address=address)
+
+// ---------------------------------------------------------------------------------------------------------------------
+// A sheet over the page, rising from the bottom, clear of the bar (an authored layer, not a UIKit sheet).
+component SheetFrame
+  inject
+    th: Theme
+    hideSheet: action
+  props
+    testId: string
+    pct: string
+  slot
+  view
+    column position="absolute" inset=0 testId=testId
+      box position="absolute" inset=0 background-color=th.fg opacity=th.behindDim3 press=hideSheet testId=`${testId}-scrim`
+      column position="absolute" left=0 right=0 bottom=0 height=pct
+        Layer(testId=`${testId}-layer`)
+          scroll flex=1 min-height=0
+            column padding=20 gap=10 padding-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 16px)"
+              children
+
+component SourceSheet
+  inject
+    th: Theme
+    rdoc: ReaderDoc
+    sheetAnchor: string
+    hideSheet: action
+    openLink: action
+    openPage: action
+  view
+    column width="100%" gap=10
+      for c in rdoc.cites.filter(c => c.anchor == sheetAnchor) key=c.anchor
+        column gap=10 width="100%"
+          row align-items="center" gap=8
+            text (c.kind == "texture" ? "Another Texture" : c.host) font-family=th.fontUi font-size=13 color=th.muted flex=1
+            button press=hideSheet testId="reader-sheet-close" appearance="none" aria-label="Close" width=36 height=36
+              image "symbol:close" color=th.muted
+          text c.title font-family=th.fontRead font-size=22 font-weight=700 line-height=1.2 color=th.fg testId="reader-source-title"
+          row align-items="center" gap=6
+            image "symbol:checkmark" color=(c.check == "exact" or c.check == "tolerant" ? th.success : (c.check == "failed" ? th.danger : th.muted))
+            text c.checkLabel font-family=th.fontUi font-size=13 font-weight=500
+              color=(c.check == "exact" or c.check == "tolerant" ? th.success : (c.check == "failed" ? th.danger : th.muted))
+          text "THE QUOTE IN ITS SOURCE" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing="0.08em" color=th.muted margin-top=6
+          if c.hit != ""
+            text testId="reader-source-context" font-family=th.fontRead font-size=17 line-height=1.55 color=th.fg
+              text c.before font-family=th.fontRead font-size=17 line-height=1.55 color=th.muted
+              text c.hit font-family=th.fontRead font-size=17 line-height=1.55 font-weight=700 color=th.fg background-color=tint(th.accent, "33") border-radius=3
+              text c.after font-family=th.fontRead font-size=17 line-height=1.55 color=th.muted
+          else
+            text (c.before != "" ? c.before : c.quote) font-family=th.fontRead font-size=17 line-height=1.55 color=th.fg
+          if c.kind == "texture"
+            button press=openPage(c.target, c.title) testId="reader-source-open-page" buttonStyle="filled"
+              text "Open as page"
+          if c.kind == "web" and c.url != ""
+            button press=openLink(c.url) testId="reader-source-original" buttonStyle="bordered"
+              text "Open original"
+            text c.url font-family=th.fontMono font-size=12 color=th.muted line-clamp=2
+
+component VersionsSheet
+  inject
+    th: Theme
+    rdoc: ReaderDoc
+    hideSheet: action
+    openPage: action
+    restoreVersion: action
+  props
+    address: string
+  view
+    column width="100%" gap=6
+      row align-items="center" gap=8
+        text "Versions" role="heading" aria-level=2 font-family=th.fontUi font-size=18 font-weight=650 flex=1 color=th.fg
+        button press=hideSheet testId="reader-sheet-close" appearance="none" aria-label="Close" width=36 height=36
+          image "symbol:close" color=th.muted
+      for v in rdoc.versions key=v.number
+        row align-items="center" gap=8 padding="8px 0" width="100%" testId=`reader-version-${v.number}`
+          column flex=1 min-width=0 gap=2
+            text v.label font-family=th.fontUi font-size=15 font-weight=600 color=th.fg
+            text (v.author != "" ? `${v.when}  ·  ${v.author}` : v.when) font-family=th.fontUi font-size=13 color=th.muted
+          if v.current
+            text "Viewing" font-family=th.fontUi font-size=13 font-weight=600 color=th.accent
+          else
+            button press=openPage(v.address, rdoc.title) testId=`reader-version-open-${v.number}` buttonStyle="bordered"
+              text "Open"
+          if address.startsWith("texture:") and v.number != rdoc.latest
+            button press=restoreVersion(address, v.address) testId=`reader-version-restore-${v.number}` buttonStyle="bordered"
+              text "Restore"
+      if rdoc.versions.length == 0
+        text "This page has one version." font-family=th.fontUi font-size=14 color=th.muted
+
+component MenuSheet
+  inject
+    th: Theme
+    rdoc: ReaderDoc
+    dm: DemoInfo
+    sideNotes: bool
+    mdMode: bool
+    showSheet: action
+    hideSheet: action
+    jumpSources: action
+    aimAt: action
+    shareDoc: action
+    openLink: action
+    reloadDoc: action
+    demoFollow: action
+    toggleSideNotes: action
+    toggleMdMode: action
+  props
+    address: string
+  view
+    column width="100%" gap=2
+      text rdoc.title font-family=th.fontUi font-size=13 color=th.muted line-clamp=1 margin-bottom=4
+      button press=showSheet("versions") testId="reader-menu-versions" appearance="none" width="100%"
+        row padding="12px 0" align-items="center" width="100%"
+          text "Versions" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
+          image "symbol:forward-chevron" color=th.muted
+      button press=jumpSources testId="reader-menu-sources" appearance="none" width="100%"
+        row padding="12px 0" align-items="center" width="100%"
+          text "Sources" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
+          image "symbol:forward-chevron" color=th.muted
+      button press=aimAt(address, "", rdoc.title) testId="reader-menu-aim" appearance="none" width="100%"
+        row padding="12px 0" align-items="center" width="100%"
+          text "Ask about this document" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
+          image "symbol:forward-chevron" color=th.muted
+      button press=shareDoc testId="reader-menu-share" appearance="none" width="100%"
+        row padding="12px 0" align-items="center" width="100%"
+          text "Share" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
+          image "symbol:share" color=th.muted
+      if rdoc.permalink != ""
+        button press=openLink(`https://choir.news/${rdoc.permalink}`) testId="reader-menu-web" appearance="none" width="100%"
+          row padding="12px 0" align-items="center" width="100%"
+            text "Open on the web" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
+            image "symbol:forward-chevron" color=th.muted
+      button press=reloadDoc(address) testId="reader-menu-reload" appearance="none" width="100%"
+        row padding="12px 0" align-items="center" width="100%"
+          text "Reload" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
+          image "symbol:forward-chevron" color=th.muted
+      if dm.on
+        text "Demo" font-family=th.fontUi font-size=13 color=th.muted margin-top=8
+        for b in rdoc.blocks.filter(b => b.kind == "p" and b.sentences > 1).slice(0, 1) key=b.id
+          button press=demoFollow(address, b.runs.filter(r => r.sent == 1 and r.kind == "t").map(r => r.text).join("")) testId="reader-menu-follow" buttonStyle="bordered"
+            text "Read along (second sentence)"
+        button press=toggleSideNotes testId="reader-menu-sidenotes" buttonStyle="bordered"
+          text (sideNotes ? "Side notes: on (text flows around)" : "Side notes: off")
+        button press=toggleMdMode testId="reader-menu-markdown" buttonStyle="bordered"
+          text (mdMode ? "Markdown with atom pills: on" : "Markdown with atom pills: off")
+
+// ---------------------------------------------------------------------------------------------------------------------
+component ReaderBody
+  inject
+    th: Theme
+    rdoc: ReaderDoc
+    raim: ReaderAimInfo
+    openCites: string[]
+    sheet: string
+    sheetFor: string
+    sideNotes: bool
+    mdMode: bool
+    showSheet: action
+    showSource: action
+    openPage: action
+    stopRevision: action
+    clearAim: action
+    mdPress: action
+    toggleCite: action
+  props
+    address: string
+  resource vp = exactViewport() as shape ReaderViewport
+  derive k = kscale(th.scale)
+  derive size = 1.125 * k
+  derive lh = 1.62
+  derive wide = vp.width >= 700
+  derive sideOn = sideNotes or wide
+  derive titleSize = (rdoc.kind == "document" ? 1.75 : 1.875) * k
+  derive sheetOn = sheet != "" and sheetFor == address
+  view
+    column position="absolute" inset=0
+      scroll id="reader-scroll" testId="reader-scroll" flex=1 min-height=0 width="100%"
+        column width="100%" align-items="center" padding-top=`calc(env(safe-area-inset-top) + ${rdoc.revising ? 72 : 12}px)`
+          padding-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 72px)"
+          column width="100%" max-width="38rem" padding-left=20 padding-right=20 box-sizing="border-box" color=th.fg font-family=th.fontRead
+            // header: kicker, menu, headline, standfirst, byline and version line
+            row align-items="center" gap=8 margin-bottom=remv(0.5)
+              text rdoc.kicker testId="reader-kicker" font-family=th.fontUi font-size=12 font-weight=700 letter-spacing="0.08em" text-transform="uppercase"
+                color=th.accent flex=1
+              button press=showSheet("menu") testId="reader-menu" appearance="none" aria-label="Page menu" width=44 height=44
+                image "symbol:more" color=th.muted
+            text rdoc.title role="heading" aria-level=1 testId="page-title" text-wrap="balance"
+              font-family=th.fontRead font-size=remv(titleSize) font-weight=700 line-height=1.12 color=th.fg margin-bottom=remv(0.6)
+            if rdoc.dek != ""
+              text rdoc.dek testId="reader-dek" font-family=th.fontRead font-size=remv(1.1875 * k) line-height=1.42 color=th.muted margin-bottom=remv(0.8)
+            if rdoc.byline != ""
+              text rdoc.byline font-family=th.fontUi font-size=13 font-weight=500 color=th.muted margin-bottom=4
+            if rdoc.meta != ""
+              button press=showSheet("versions") testId="reader-versions" appearance="none" aria-label="Versions"
+                row align-items="center" gap=4 padding="4px 0"
+                  text rdoc.meta font-family=th.fontUi font-size=13 font-weight=500 color=th.muted
+                  image "symbol:forward-chevron" color=th.muted
+            if rdoc.newer
+              for v in rdoc.versions.filter(v => v.number == rdoc.latest) key=v.number
+                button press=openPage(v.address, rdoc.title) testId="reader-newer" buttonStyle="bordered"
+                  text "A newer version exists. Open it"
+            box width="100%" height=1 background-color=th.rule margin-top=remv(0.8) margin-bottom=remv(1.1)
+            // the body
+            if mdMode
+              text rdoc.markdown markup="markdown" atoms="citation" atompress=mdPress testId="reader-md"
+                font-family=th.fontRead font-size=remv(size) line-height=lh color=th.fg
+              for c in rdoc.cites.filter(c => openCites.includes(ckey(address, c.anchor))) key=c.anchor
+                CiteCard(c=c, address=address)
+            else
+              for b in rdoc.blocks key=b.id
+                BlockView(b=b, address=address, size=size, lh=lh, sideOn=sideOn)
+            // the end: disclosure, sources, related
+            if rdoc.disclosure != ""
+              text rdoc.disclosure testId="reader-disclosure" font-family=th.fontUi font-size=13 line-height=1.45 color=th.muted margin-top=remv(1.2)
+            if rdoc.sources.length > 0
+              column id="reader-sources" testId="reader-sources" width="100%" margin-top=remv(1.6) gap=2
+                text "Sources" role="heading" aria-level=2 font-family=th.fontUi font-size=remv(1.1875 * k) font-weight=650 color=th.fg margin-bottom=6
+                for s in rdoc.sources key=s.number
+                  if s.kind == "texture"
+                    button press=openPage(s.target, s.title) testId=`reader-source-${s.number}` appearance="none" width="100%"
+                      row padding="8px 0" gap=10 align-items="flex-start" width="100%"
+                        text `${s.number}` font-family=th.fontUi font-size=12 font-weight=700 color=th.accent width=24 text-align="center"
+                          background-color=tint(th.accent, "22") border-radius=6
+                        column flex=1 min-width=0 gap=2 align-items="flex-start"
+                          text s.title font-family=th.fontUi font-size=15 font-weight=600 color=th.fg text-align="left"
+                          text "Another Texture. Opens as a page" font-family=th.fontUi font-size=13 color=th.muted text-align="left"
+                  else
+                    button press=showSource(s.anchor) testId=`reader-source-${s.number}` appearance="none" width="100%"
+                      row padding="8px 0" gap=10 align-items="flex-start" width="100%"
+                        text `${s.number}` font-family=th.fontUi font-size=12 font-weight=700 color=th.accent width=24 text-align="center"
+                          background-color=tint(th.accent, "22") border-radius=6
+                        column flex=1 min-width=0 gap=2 align-items="flex-start"
+                          text s.title font-family=th.fontUi font-size=15 font-weight=600 color=th.fg text-align="left"
+                          text s.host font-family=th.fontUi font-size=13 color=th.muted text-align="left"
+            if rdoc.related.length > 0
+              column width="100%" margin-top=remv(1.6) gap=2
+                text "More on this" role="heading" aria-level=2 font-family=th.fontUi font-size=remv(1.1875 * k) font-weight=650 color=th.fg margin-bottom=6
+                for r in rdoc.related key=r.address
+                  button press=openPage(r.address, r.title) testId=`reader-related-${r.address}` appearance="none" width="100%"
+                    column padding="8px 0" gap=2 align-items="flex-start" width="100%"
+                      text r.title font-family=th.fontRead font-size=remv(1.0625 * k) font-weight=600 line-height=1.25 color=th.fg text-align="left"
+                      text r.dek font-family=th.fontRead font-size=14 line-height=1.4 color=th.muted text-align="left" line-clamp=2
+      // the desk is writing a new version
+      if rdoc.revising
+        row testId="reader-revising" position="absolute" left=16 right=16 top="calc(env(safe-area-inset-top) + 8px)" z-index=5
+          align-items="center" gap=10 padding="10px 14px" box-sizing="border-box" border-radius=th.radiusPill
+          backgroundMaterial=(th.material2 == "glass" ? "glass" : "none")
+          background-color=(th.material2 == "glass" ? "transparent" : th.paper)
+          box-shadow=th.shadow2
+          progress aria-label="Revising" width=20 height=20 color=th.accent
+          column flex=1 min-width=0
+            text "Revising" font-family=th.fontUi font-size=13 font-weight=700 color=th.fg
+            text rdoc.revisingNote font-family=th.fontUi font-size=12 color=th.muted line-clamp=1
+          button press=stopRevision(address) testId="reader-stop" buttonStyle="bordered"
+            text "Stop"
+      // the prompt is aimed at this document or one block of it
+      if raim.address == address
+        row testId="reader-aim" position="absolute" left=16 right=16 bottom="calc(env(safe-area-inset-bottom) + 8px + 56px + 10px)" z-index=6
+          align-items="center" gap=8 padding="8px 8px 8px 14px" box-sizing="border-box" border-radius=th.radiusPill
+          background-color=th.paper2 box-shadow=th.shadow2
+          text (raim.blockId == "" ? "Asking about this document" : `Asking about “${raim.label}”`) font-family=th.fontUi font-size=13 color=th.fg flex=1 min-width=0 line-clamp=1
+          button press=clearAim testId="reader-aim-clear" appearance="none" aria-label="Clear" width=32 height=32
+            image "symbol:close" color=th.muted
+      // sheets
+      if sheetOn and sheet == "menu"
+        SheetFrame(testId="reader-sheet", pct="62%")
+          MenuSheet(address=address)
+      if sheetOn and sheet == "versions"
+        SheetFrame(testId="reader-sheet", pct="62%")
+          VersionsSheet(address=address)
+      if sheetOn and sheet == "source"
+        SheetFrame(testId="reader-sheet", pct="74%")
+          SourceSheet()
+
+component ReaderMessage
+  inject
+    th: Theme
+  props
+    title: string
+    message: string
+    busy: bool
+  view
+    PageScroll(id="reader-message")
+      text title role="heading" aria-level=1 font-size=28 font-weight=700 testId="page-title"
+      if busy
+        progress aria-label="Loading" width=24 height=24 color=th.accent
+      if message != ""
+        text message testId="reader-message" font-family=th.fontUi color=th.muted
 
 component ReaderPage
   inject
     th: Theme
-    pmod: PageModel
+    rdoc: ReaderDoc
   props
     address: string
     title: string
   view
-    if pmod.status == "ready"
-      PlainPage(title=pmod.title, lines=pmod.lines)
+    if rdoc.address != address or rdoc.status == "loading"
+      ReaderMessage(title=title, message="", busy=true)
+    else if rdoc.status == "ready"
+      ReaderBody(address=address)
     else
-      NotYetPage(address=address, title=title)
+      ReaderMessage(title=title, message=rdoc.message, busy=false)
