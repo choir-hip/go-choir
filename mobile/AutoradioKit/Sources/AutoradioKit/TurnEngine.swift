@@ -12,7 +12,19 @@ public enum AudioState: String, Codable, Sendable {
 /// The only thing that touches the system audio session. The kit never calls AVAudioSession itself:
 /// the Exact app adapts Exact's session claims to this protocol; the Mac replay command uses `NullSessionOwner`.
 public protocol AudioSessionOwner: AnyObject, Sendable {
+    /// Make the session `state`. A change of state is release-then-claim (the first claim's mode wins in Exact).
     func claim(_ state: AudioState, preferBuiltInMic: Bool, reason: String) async throws
+    /// What the session is now, for the trace: category, mode, input and output ports.
+    func describe() -> String
+    /// Give the claim up (Stop). The session falls back to what the app's own sound wants.
+    func release()
+    /// The system told the claim something: "interrupted", "resumed", "reset", "route" (detail: the route now).
+    func observe(_ handler: @escaping @Sendable (_ kind: String, _ detail: String) -> Void)
+}
+public extension AudioSessionOwner {
+    func describe() -> String { "" }
+    func release() {}
+    func observe(_ handler: @escaping @Sendable (String, String) -> Void) {}
 }
 
 /// Used by the macOS replay command and tests: there is no session to claim.
@@ -276,7 +288,14 @@ public actor TurnEngine {
         do {
             let transcriber = try env.registry.make(.transcriber, as: Transcriber.self, cfg)
             let yield = try env.registry.make(.yieldPolicy, as: YieldPolicy.self, cfg)
-            let session = try await env.log.timed("transcriber.begin") { try await transcriber.begin() }
+            // A transcriber that cannot start (no permission, no model) must not end the turn: the turn goes on with an
+            // empty transcript, the error is on the record, and the button-addressed path still works.
+            let session: TranscriptionSession
+            do { session = try await env.log.timed("transcriber.begin") { try await transcriber.begin() } }
+            catch {
+                env.log.emit(.error(stage: "transcriber", message: "\(error); this turn has no transcript"))
+                session = EmptyTranscription()
+            }
             let t = Turn(id: id, config: cfg, transcriber: transcriber, yield: yield, session: session, firstEventIndex: env.log.count)
             for f in preroll { session.append(f) }
             preroll = []
@@ -481,6 +500,13 @@ func withDeadline<T: Sendable>(_ seconds: Double, _ body: @escaping @Sendable ()
         let work = Task { once.resume(await body()) }
         Task { try? await Task.sleep(nanoseconds: UInt64(seconds * 1e9)); work.cancel(); once.resume(nil) }
     }
+}
+/// Stands in when the transcriber could not start: hears nothing, says nothing.
+final class EmptyTranscription: TranscriptionSession, @unchecked Sendable {
+    let partials = AsyncStream<String> { $0.finish() }
+    func append(_ frame: AudioFrame) {}
+    func finish() async throws -> String { "" }
+    func cancel() {}
 }
 final class Once<T>: @unchecked Sendable {
     private let l = NSLock(); private var c: CheckedContinuation<T, Never>?

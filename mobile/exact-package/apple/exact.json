@@ -25,10 +25,13 @@
       "Kit/Core.swift",
       "Kit/Events.swift",
       "Kit/FixtureClip.swift",
+      "Kit/FixtureTurn.swift",
       "Kit/KeptTurns.swift",
       "Kit/LabRuntime.swift",
       "Kit/LiveAudio.swift",
       "Kit/ModelStore.swift",
+      "Kit/ScriptedStages.swift",
+      "Kit/SessionCoordinator.swift",
       "Kit/Stages.swift",
       "Kit/TurnEngine.swift"
     ]

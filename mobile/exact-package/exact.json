@@ -58,6 +58,7 @@
       "totalMs": "number",
       "ackMs": "number",
       "revisionMs": "number",
+      "audioSwitchMs": "number",
       "timings": "TimingRow[]",
       "lines": "string[]"
     },
@@ -71,6 +72,23 @@
     },
     "TurnList": {
       "rows": "TurnRow[]"
+    },
+    "AudioInfo": {
+      "state": "string",
+      "policy": "string",
+      "engine": "string",
+      "route": "string",
+      "message": "string",
+      "voiceProcessing": "bool",
+      "audible": "bool",
+      "volume": "number",
+      "lastSwitchMs": "number",
+      "policies": "string[]"
+    },
+    "ExportInfo": {
+      "path": "string",
+      "documents": "string",
+      "name": "string"
     },
     "Lines": {
       "lines": "string[]"
@@ -169,10 +187,48 @@
           "totalMs": 0,
           "ackMs": 0,
           "revisionMs": 0,
+          "audioSwitchMs": 0,
           "timings": [],
           "lines": []
         }
       }
+    },
+    {
+      "source": "labAudio",
+      "live": true,
+      "answers": "AudioInfo",
+      "substitute": {
+        "default": {
+          "state": "none",
+          "policy": "switchOnAddress",
+          "engine": "off",
+          "route": "",
+          "message": "",
+          "voiceProcessing": false,
+          "audible": false,
+          "volume": 1,
+          "lastSwitchMs": 0,
+          "policies": []
+        }
+      }
+    },
+    {
+      "send": "labInject",
+      "answers": "LabState"
+    },
+    {
+      "send": "labSetAudioPolicy",
+      "options": {
+        "policy": "string"
+      },
+      "answers": "LabState"
+    },
+    {
+      "send": "labExportTurn",
+      "options": {
+        "turn": "string"
+      },
+      "answers": "ExportInfo"
     },
     {
       "source": "labTurns",

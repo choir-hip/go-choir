@@ -121,8 +121,28 @@ public struct StageSetting: Codable, Sendable, Equatable {
 }
 
 /// A named choice of one implementation per stage, with parameters. Pure data.
+/// How the one audio session is shared between listening (full-quality playback, phone mic, no voice
+/// processing) and talking (voiceChat, voice processing, Bluetooth hands-free allowed).
+public enum AudioPolicy: String, Codable, Sendable, CaseIterable {
+    /// Listening until a turn is addressed, talking while it is open, listening again after.
+    case switchOnAddress
+    /// Talking (voice processing) for the whole run: interruptible answers, call-quality programme.
+    case alwaysTalking
+    /// Listening for the whole run: the phone's own microphone, never switches.
+    case alwaysListening
+    public var label: String {
+        switch self { case .switchOnAddress: return "Switch on address"; case .alwaysTalking: return "Always talking"; case .alwaysListening: return "Always listening" }
+    }
+    /// The state a request for `asked` becomes under this policy.
+    public func effective(_ asked: AudioState) -> AudioState {
+        switch self { case .switchOnAddress: return asked; case .alwaysTalking: return .talking; case .alwaysListening: return .listening }
+    }
+}
+
 public struct LabConfiguration: Codable, Sendable, Equatable {
     public var name: String
+    public var audioPolicy: AudioPolicy?
+    public var audio: AudioPolicy { audioPolicy ?? .switchOnAddress }
     public var stages: [String: StageSetting]   // keyed by StageKind.rawValue
     public init(name: String, stages: [StageKind: StageSetting] = [:]) {
         self.name = name

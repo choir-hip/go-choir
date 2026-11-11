@@ -5,6 +5,7 @@ import Speech
 func registerAppleStages(_ r: StageRegistry) {
     r.register(.transcriber, SFSpeechTranscriber.self) { SFSpeechTranscriber($0) }
     r.register(.voice, AVSpeechVoice.self) { AVSpeechVoice($0) }
+    r.register(.transcriber, ScriptedTranscriber.self) { ScriptedTranscriber($0) }
     if #available(iOS 26.0, macOS 26.0, *) {
         r.register(.transcriber, SpeechAnalyzerTranscriber.self) { SpeechAnalyzerTranscriber($0) }
     }
@@ -30,6 +31,11 @@ public final class SFSpeechTranscriber: Transcriber, @unchecked Sendable {
     public init(_ p: StageParams) { locale = p.string("locale", "en-US"); finalTimeout = p.double("finalTimeout", 8) }
 
     public func begin() async throws -> TranscriptionSession {
+        // Under the Exact agent (virtual audio) no system alert may open: it takes the foreground, and the driver
+        // then refuses taps and the next launch never opens its agent socket.
+        if SFSpeechRecognizer.authorizationStatus() == .notDetermined && !LabEnvironment.promptsAllowed {
+            throw LabError.unavailable("speech recognition not yet authorized; not asking while driven by an agent")
+        }
         let status = await withCheckedContinuation { c in SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0) } }
         guard status == .authorized else { throw LabError.unavailable("speech recognition not authorized (\(status.rawValue))") }
         guard let rec = SFSpeechRecognizer(locale: Locale(identifier: locale)), rec.isAvailable else { throw LabError.unavailable("recognizer unavailable for \(locale)") }
@@ -177,6 +183,16 @@ public final class AVSpeechVoice: Voice, @unchecked Sendable {
         let (voiceID, rate) = (voiceID, rate)
         return AsyncThrowingStream { cont in
             let task = Task { @MainActor in
+                if LabEnvironment.virtualAudio {
+                    // No synthesis under the agent: the first use of the synthesizer on a simulator blocks the main
+                    // thread (the drive's socket stops answering). Silence of about the spoken length instead.
+                    for await line in text {
+                        if Task.isCancelled { break }
+                        let secs = max(0.4, Double(line.count) / 14.0)
+                        cont.yield(AudioFrame(samples: [Float](repeating: 0, count: Int(secs * 22050)), sampleRate: 22050, t: ProcessInfo.processInfo.systemUptime))
+                    }
+                    cont.finish(); return
+                }
                 let synth = AVSpeechSynthesizer()
                 for await line in text {
                     if Task.isCancelled { break }
@@ -186,6 +202,8 @@ public final class AVSpeechVoice: Voice, @unchecked Sendable {
                     else { u.voice = AVSpeechSynthesisVoice(language: "en-US") }
                     await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
                         var finished = false
+                        // A synthesizer that never reports its end must not hang the turn.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { if !finished { finished = true; done.resume() } }
                         synth.write(u) { buf in
                             guard let pcm = buf as? AVAudioPCMBuffer else { return }
                             if pcm.frameLength == 0 { if !finished { finished = true; done.resume() }; return }
@@ -202,4 +220,12 @@ public final class AVSpeechVoice: Voice, @unchecked Sendable {
             cont.onTermination = { _ in task.cancel() }
         }
     }
+}
+
+/// Process-wide facts about how the app is being run.
+public enum LabEnvironment {
+    /// False while driven by the Exact agent: nothing may show a system permission alert.
+    nonisolated(unsafe) public static var promptsAllowed = true
+    /// True while the audio engine is virtual (the Exact agent): no hardware, no speech synthesis.
+    nonisolated(unsafe) public static var virtualAudio = false
 }

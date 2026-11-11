@@ -37,12 +37,18 @@ public struct LabSnapshot: Codable, Sendable {
     public var message = ""
     public var micActive = false
 }
+public struct AudioInfo: Codable, Sendable {
+    public var state = "none", policy = "switchOnAddress", engine = "off", route = "", message = ""
+    public var voiceProcessing = false, audible = false
+    public var volume = 1.0, lastSwitchMs = 0.0
+    public var policies: [String] = AudioPolicy.allCases.map(\.rawValue)
+}
 public struct StageRow: Codable, Sendable { public var kind, kindLabel, id, name, summary: String; public var selected: Bool; public var network: Bool; public var models: String }
 public struct ParamRow: Codable, Sendable { public var kind, stage, name, label, value, hint: String }
 public struct TimingRow: Codable, Sendable { public var stage: String; public var startMs, durMs: Double }
 public struct TraceView: Codable, Sendable {
     public var id = "", transcript = "", configName = "", outcome = "", addressedBy = ""
-    public var totalMs = 0.0, ackMs = 0.0, revisionMs = 0.0
+    public var totalMs = 0.0, ackMs = 0.0, revisionMs = 0.0, audioSwitchMs = 0.0
     public var timings: [TimingRow] = []
     public var lines: [String] = []
 }
@@ -62,6 +68,7 @@ public final class LabRuntime: @unchecked Sendable {
     public let store: KeptTurnStore
     public let configs: ConfigStore
     public let session: AudioSessionOwner
+    public let coordinator: SessionCoordinator
     public var onChange: (@Sendable () -> Void)?
 
     private let lock = NSLock()
@@ -73,16 +80,24 @@ public final class LabRuntime: @unchecked Sendable {
     private var micTask: Task<Void, Never>?
     private var eventTask: Task<Void, Never>?
     private var started = false
+    private var lastSwitchMs = 0.0
+    private let policyBox: PolicyBox
+    private var injecting = false
 
     public init(supportDir: URL, session: AudioSessionOwner, registry: StageRegistry = .builtIn()) {
         self.registry = registry
         let log = EventLog(clock: clock)
         self.log = log
-        self.session = LoggedSessionOwner(inner: session, log: log)
         let cfg = StageRegistry.listenerConfiguration()
         self.config = cfg
+        let policyBox = PolicyBox(cfg.audio)
+        self.policyBox = policyBox
+        let coord = SessionCoordinator(inner: session, log: log, audio: audio, policy: { policyBox.value })
+        self.coordinator = coord
+        self.session = coord
         store = KeptTurnStore(root: supportDir.appendingPathComponent("turns"))
         configs = ConfigStore(dir: supportDir.appendingPathComponent("configs"))
+        FixtureTurn.install(into: store)
         let doc = FixtureProgramme.document
         player = ProgrammePlayer(audio: audio, registry: registry, log: log, configuration: cfg, document: doc)
         recorder = TurnRecorder(bus: bus)
@@ -95,6 +110,7 @@ public final class LabRuntime: @unchecked Sendable {
         envBox = self
         snap.configName = cfg.name
         player.onChange = { [weak self] in self?.refresh() }
+        coord.onChange = { [weak self] in self?.refresh() }
         eventTask = Task { [weak self] in
             guard let self else { return }
             for await te in self.log.stream() { self.absorb(te) }
@@ -112,13 +128,16 @@ public final class LabRuntime: @unchecked Sendable {
 
     // MARK: Lifecycle
 
-    public func start() async {
+    /// `virtual`: no audio hardware (the Exact agent, tests): playback waits instead of playing, mic frames are injected.
+    public func start(virtual: Bool = false) async {
         guard !started else { return }
+        if virtual { LabEnvironment.promptsAllowed = false; LabEnvironment.virtualAudio = true }
         do {
             try await session.claim(.listening, preferBuiltInMic: true, reason: "start")
-            let micOK = await LiveAudio.requestMicPermission()
+            let micOK = virtual ? true : await LiveAudio.requestMicPermission()
             if !micOK { log.emit(.error(stage: "mic", message: "microphone permission denied; button/typing only")) }
-            try audio.start(bus: bus, clock: clock, wantMic: micOK)
+            try audio.start(bus: bus, clock: clock, wantMic: micOK, voiceProcessing: coordinator.current == .talking, virtual: virtual)
+            if virtual { log.emit(.note("virtual audio: no hardware is opened; mic frames are injected")) }
             started = true
             let mic = bus.mic()
             micTask = Task { [engine] in for await f in mic { await engine.ingest(f) } }
@@ -134,7 +153,7 @@ public final class LabRuntime: @unchecked Sendable {
     public func stop() {
         player.pause()
         micTask?.cancel(); micTask = nil
-        audio.stop(); started = false
+        audio.stop(); coordinator.release(); started = false
         lock.lock(); snap.running = false; lock.unlock()
         refresh()
     }
@@ -142,14 +161,50 @@ public final class LabRuntime: @unchecked Sendable {
     public func talkDown() { Task { await engine.buttonDown() } }
     public func talkUp() { Task { await engine.buttonUp() } }
 
+    /// Drive the live path with the bundled kept turn: press, feed its microphone audio in real time as if it came from
+    /// the hardware, release. Works with real or virtual audio; the turn lands in Trace like a spoken one.
+    public func injectFixtureTurn() async {
+        guard started, !injecting else { return }
+        injecting = true; defer { injecting = false }
+        guard let url = FixtureTurn.materialise(), let mic = try? AudioFiles.readMono(url) else {
+            log.emit(.error(stage: "inject", message: "no fixture turn audio")); return
+        }
+        log.emit(.note("injecting the fixture turn (\(mic.count / 16) ms) through the live engine"))
+        // Press the button only when the configuration addresses by button; in open mode the audio alone must do it.
+        let useButton = ["button", "hybrid"].contains(configuration.setting(.addressing)?.id ?? "")
+        if useButton { await engine.buttonDown() }
+        let n = 512   // 32 ms frames, paced in real time
+        var i = 0
+        while i < mic.count {
+            let f = AudioFrame(samples: Array(mic[i..<min(i + n, mic.count)]), sampleRate: busSampleRate, t: clock.now)
+            bus.pushMic(f)
+            i += n
+            try? await Task.sleep(nanoseconds: 32_000_000)
+        }
+        // trailing silence so the VAD closes, then the button
+        for _ in 0..<20 {
+            bus.pushMic(AudioFrame(samples: [Float](repeating: 0, count: n), sampleRate: busSampleRate, t: clock.now))
+            try? await Task.sleep(nanoseconds: 32_000_000)
+        }
+        if useButton { await engine.buttonUp() }
+    }
+
     // MARK: Configuration
 
     public var configuration: LabConfiguration { lock.lock(); defer { lock.unlock() }; return config }
     public func setConfiguration(_ c: LabConfiguration) {
         lock.lock(); config = c; snap.configName = c.name; lock.unlock()
+        let policyChanged = policyBox.value != c.audio
+        policyBox.value = c.audio
+        if policyChanged { Task { [coordinator] in await coordinator.reapply() } }
         player.setConfiguration(c)
         Task { await engine.setConfiguration(c) }
         refresh()
+    }
+    public func setAudioPolicy(_ p: AudioPolicy) {
+        var c = configuration
+        c.audioPolicy = p
+        setConfiguration(c)
     }
     public func setStage(_ kind: StageKind, id: String) {
         var c = configuration
@@ -209,10 +264,22 @@ public final class LabRuntime: @unchecked Sendable {
         var v = TraceView(id: r.id, transcript: r.summary.transcript ?? "", configName: r.configuration.name, outcome: r.outcome.rawValue,
                           addressedBy: r.summary.addressedBy ?? "", totalMs: ((r.events.last?.t ?? t0) - t0) * 1000,
                           ackMs: r.summary.turnEndToAckMs ?? 0, revisionMs: r.summary.turnEndToRevisionMs ?? 0)
+        v.audioSwitchMs = r.summary.audioSwitchMs ?? 0
         v.timings = r.summary.timings.map { TimingRow(stage: $0.stage, startMs: ($0.startedAt - t0) * 1000, durMs: $0.ms) }
         v.lines = r.events.filter { if case .partialTranscript = $0.event { return false }; if case .stageTiming = $0.event { return false }; return true }
             .map { String(format: "%7.0f ms  ", ($0.t - t0) * 1000) + Self.describe($0.event) }
         return v
+    }
+
+    /// Write a turn record (JSON) to Documents/AutoradioExports/<id>.json and return its URL. Pull it off a phone with
+    /// `xcrun devicectl device copy from --device <udid> --domain-type appDataContainer --domain-identifier <bundle id>
+    /// --source Documents/AutoradioExports/<id>.json --destination .`
+    public func export(id: String?) -> URL? {
+        guard let r = record(id: id), let data = try? r.encoded() else { return nil }
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("AutoradioExports")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent(r.id + ".json")
+        do { try data.write(to: url, options: .atomic); return url } catch { log.emit(.error(stage: "export", message: "\(error)")); return nil }
     }
 
     /// Run a kept turn through the current (or another) configuration; returns the new record's id.
@@ -238,6 +305,18 @@ public final class LabRuntime: @unchecked Sendable {
         s.addressing = configuration.setting(.addressing)?.id ?? ""
         s.micActive = audio.micActive
         return s
+    }
+    public func audioInfo() -> AudioInfo {
+        var a = AudioInfo()
+        a.state = coordinator.current?.rawValue ?? "none"
+        a.policy = configuration.audio.rawValue
+        a.engine = audio.virtual && audio.running ? "virtual" : audio.running ? "up" : audio.down ? "down" : "off"
+        a.route = coordinator.describe()
+        a.voiceProcessing = audio.voiceProcessing
+        a.audible = audio.programmeAudible
+        a.volume = Double(audio.programmeVolume)
+        lock.lock(); a.lastSwitchMs = lastSwitchMs; a.message = snap.message; lock.unlock()
+        return a
     }
     public func stageRows() -> [StageRow] {
         let c = configuration
@@ -278,6 +357,7 @@ public final class LabRuntime: @unchecked Sendable {
         case .phase(_, let to): snap.phase = to; if to == "candidate" { snap.transcript = "" }
         case .partialTranscript(let t), .finalTranscript(let t): snap.transcript = t
         case .error(_, let m): snap.message = m
+        case .audioSwitch(let from, _, let ms) where from != "none": lastSwitchMs = ms
         default: break
         }
         if case .partialTranscript = te.event {} else {
@@ -309,6 +389,8 @@ public final class LabRuntime: @unchecked Sendable {
         case .modelLoaded(let id, let ms, let b): return String(format: "model %@ loaded in %.0f ms, %lld MB", id, ms, b / 1_048_576)
         case .thermal(let t): return "thermal \(t)"
         case .audioSession(let c, let m, let n): return "audio session \(c)/\(m): \(n)"
+        case .audioSwitch(let f, let t, let ms): return String(format: "audio switch %@ -> %@ in %.0f ms", f, t, ms)
+        case .audioNotice(let k, let d): return "audio \(k): \(d)"
         case .configurationChanged(let n): return "configuration -> \(n)"
         case .note(let n): return n
         case .error(let s, let m): return "ERROR \(s): \(m)"
@@ -316,12 +398,8 @@ public final class LabRuntime: @unchecked Sendable {
     }
 }
 
-/// Wraps a session owner so every claim change is an event.
-public final class LoggedSessionOwner: AudioSessionOwner, @unchecked Sendable {
-    let inner: AudioSessionOwner; let log: EventLog
-    public init(inner: AudioSessionOwner, log: EventLog) { self.inner = inner; self.log = log }
-    public func claim(_ state: AudioState, preferBuiltInMic: Bool, reason: String) async throws {
-        log.emit(.audioSession(category: state.rawValue, mode: preferBuiltInMic ? "builtin-mic" : "route-mic", note: reason))
-        try await inner.claim(state, preferBuiltInMic: preferBuiltInMic, reason: reason)
-    }
+final class PolicyBox: @unchecked Sendable {
+    private let l = NSLock(); private var v: AudioPolicy
+    init(_ v: AudioPolicy) { self.v = v }
+    var value: AudioPolicy { get { l.lock(); defer { l.unlock() }; return v } set { l.lock(); v = newValue; l.unlock() } }
 }

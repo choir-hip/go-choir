@@ -6,6 +6,8 @@ use choirAuth, choirPlayer, choirStories from "@choir/autoradio"
 use choirSignIn, choirSignOut, choirOpenApproval, choirCancelSignIn, choirRefresh, choirPlayPause, choirTalkDown, choirTalkUp, choirPlay from "@choir/autoradio"
 use ChoirAuth, ChoirPlayer, StoryList from "@choir/autoradio"
 use LabState, StageList, ParamList, Trace, TurnList, Lines, Names from "@choir/autoradio"
+use labAudio, labInject, labSetAudioPolicy, labExportTurn from "@choir/autoradio"
+use AudioInfo, ExportInfo from "@choir/autoradio"
 
 routes nav
   tab player "/"
@@ -19,6 +21,8 @@ component Autoradio
   resource turns = labTurns() as shape TurnList else empty()
   resource events = labEvents() as shape Lines else empty()
   resource configs = labConfigs() as shape Names else empty()
+  resource aud = labAudio() as shape AudioInfo else empty()
+  mutation exp as shape ExportInfo
   state sel = ""
   state cmp = ""
   state cfgName = ""
@@ -87,6 +91,14 @@ component Autoradio
   action loadUrl
     send ctl = labLoadConfigURL(url=cfgUrl)
 
+  action setPolicy(p: string)
+    send ctl = labSetAudioPolicy(policy=p)
+  action inject
+    send ctl = labInject()
+  action exportTurn(id: string)
+    send exp = labExportTurn(turn=id)
+  action shareExport(path: string)
+    share(title="Autoradio turn", files=[path])
   action choose(id: string)
     sel = id
   action compare(id: string)
@@ -95,6 +107,8 @@ component Autoradio
     send ctl = labReplay(turn=id)
 
   derive modeLabel = st.addressing == "button" ? "Button: hold or tap to talk" : st.addressing == "open" ? "Open: just speak" : st.addressing == "hybrid" ? "Hybrid: button, then open for a window" : st.addressing
+  derive expPath = match exp { case some(e) => e.path, case none => "" }
+  derive expName = match exp { case some(e) => e.name, case none => "" }
   derive yieldLabel = st.level == "dip" ? "Dipped: you are speaking" : st.level == "pause" ? "Paused" : "Playing"
 
   view
@@ -165,6 +179,22 @@ component Autoradio
                           text (st.running ? "Restart audio" : "Start audio")
                         button press=stop testId="stop"
                           text "Stop"
+                      text "Audio" role="heading" aria-level=2
+                      text `State ${aud.state} · engine ${aud.engine} · voice processing ${aud.voiceProcessing ? "on" : "off"}` testId="audio-state"
+                      text `Programme ${aud.audible ? "audible" : "silent"} at volume ${aud.volume.toFixed(2)} · last switch ${aud.lastSwitchMs.toFixed(0)} ms` testId="audio-level" color="-exact-secondary-label"
+                      text aud.route testId="audio-route" font="-exact-footnote" color="-exact-secondary-label"
+                      for pol in aud.policies key=pol
+                        button press=setPolicy(pol) role="radio" aria-checked=(aud.policy == pol) testId=`policy-${pol}`
+                          text `${aud.policy == pol ? "● " : "○ "}${pol}`
+                      text yieldLabel testId="yield"
+                      text modeLabel testId="mode" color="-exact-secondary-label"
+                      text `Phase: ${st.phase} · mic ${st.micActive ? "on" : "off"} · config ${st.configName}` testId="phase" color="-exact-secondary-label"
+                      text st.message testId="lab-message" color="-exact-secondary-label"
+                      row gap=8 align-items="center"
+                        button press=inject testId="inject"
+                          text "Inject fixture turn"
+                        button press=replay("fixture-plain") testId="replay-fixture"
+                          text "Replay fixture turn"
                       text "Configuration" role="heading" aria-level=2
                       text `Current: ${st.configName}` testId="config"
                       row gap=8 align-items="center"
@@ -197,6 +227,16 @@ component Autoradio
                       text `"${trace.transcript}"` testId="trace-transcript"
                       text `${trace.configName} · addressed by ${trace.addressedBy} · outcome ${trace.outcome}` color="-exact-secondary-label"
                       text `Acknowledgement ${trace.ackMs.toFixed(0)} ms · revision ${trace.revisionMs.toFixed(0)} ms after the turn ended` testId="trace-times"
+                      text `${trace.id}` testId="trace-id" font="-exact-footnote" color="-exact-secondary-label"
+                      text `Audio switch ${trace.audioSwitchMs.toFixed(0)} ms · ${trace.timings.length} stage timings` testId="trace-switch" color="-exact-secondary-label"
+                      row gap=8 align-items="center"
+                        button press=exportTurn(trace.id) testId="trace-export"
+                          text "Export JSON"
+                        if expPath != ""
+                          button press=shareExport(expPath) testId="trace-share"
+                            text "Share"
+                      if expName != ""
+                        text `Saved ${expName} in Documents/AutoradioExports` testId="trace-exported" font="-exact-footnote" color="-exact-secondary-label"
                       for t2, j in trace.timings key=j
                         StatBar(label=`${t2.stage} (+${t2.startMs.toFixed(0)} ms)`, value=`${t2.durMs.toFixed(0)} ms`, fraction=(trace.totalMs > 0 ? t2.durMs / trace.totalMs : 0), tint=none)
                       text "Events" role="heading" aria-level=2
