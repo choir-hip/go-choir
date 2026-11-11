@@ -20,7 +20,7 @@ fail() { cp "$OUT" "${TMPDIR:-/tmp}/proof-lane8-last.txt" 2>/dev/null; echo "PRO
 python3 -I "$HERE/embed-assets.py" >/dev/null || fail "embed assets"
 if [ -z "${NOTESTS:-}" ]; then
   echo "swift test (InterviewTests, VoiceSetupTests)"
-  "$HERE/xe.sh" /usr/bin/swift test --package-path "$HERE/../AutoradioKit" --filter "InterviewTests|VoiceSetupTests|SpineTests" > "$SCRATCH/test.txt" 2>&1 || { tail -60 "$SCRATCH/test.txt"; fail "swift test"; }
+  "$HERE/xe.sh" /usr/bin/swift test --package-path "$HERE/../AutoradioKit" --filter "InterviewTests|VoiceSetupTests|SpineTests" > "$SCRATCH/test.txt" 2>&1 || { grep "error:" "$SCRATCH/test.txt" | cut -c1-700; tail -8 "$SCRATCH/test.txt"; fail "swift test"; }
   grep -E "Executed [0-9]+ tests" "$SCRATCH/test.txt" | tail -1
 fi
 

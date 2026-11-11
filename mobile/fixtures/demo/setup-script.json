@@ -8,5 +8,5 @@
     "kokoro-82m-ane": { "chunks": 7, "checkOK": false, "checkNote": "The voice made audio of the wrong length, so I will use a lighter one.", "checkMs": 1200 },
     "pocket-tts": { "chunks": 5, "checkMs": 1200 }
   },
-  "check": { "loadMs": 2300, "speed": 0.09, "unit": "x real time", "memoryMB": 410, "outputOK": true }
+  "check": { "loadMs": 2300, "speed": 0.09, "unit": "x real time", "memoryMB": 410, "outputOK": true, "note": "" }
 }
