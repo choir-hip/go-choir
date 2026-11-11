@@ -18,7 +18,8 @@ echo "screenshots: $SHOTS"
 python3 -I "$HERE/embed-assets.py" > "$SCRATCH/embed.txt" 2>&1 || { tail -20 "$SCRATCH/embed.txt"; fail "embed assets"; }
 python3 -I "$HERE/gen-exact-interface.py" > "$SCRATCH/iface.txt" 2>&1 || { tail -20 "$SCRATCH/iface.txt"; fail "exact interface"; }
 python3 -I "$HERE/check-strings.py" > "$SCRATCH/strings.txt" 2>&1 || { tail -20 "$SCRATCH/strings.txt"; fail "strings"; }
-echo "ok: assets, interface, strings"
+python3 -I "$HERE/gen-tetramark.py" --check > "$SCRATCH/tetramark.txt" 2>&1 || { cat "$SCRATCH/tetramark.txt"; fail "tetramark drift"; }
+echo "ok: assets, interface, strings, tetramark data"
 
 # ---- 2. Swift tests: the whole package
 if [ -z "${NOTESTS:-}" ]; then
@@ -60,6 +61,12 @@ place textures 900; view light-10-textures-list 500
 step "tap textures-doc-texture:demo-notes"; view light-11-texture-document 1000
 place settings 900; step tree; shot light-12-settings
 step "tap settings-motion"; view light-13-motion-lab 1500
+step "clock +450 real"; shot light-13-mark-b
+step "clock +450 real"; shot light-13-mark-c
+step "clock +450 real"; shot light-13-mark-d
+step "clock +450 real"; shot light-13-mark-e
+step "clock +450 real"; shot light-13-mark-f
+step "clock +450 real"; shot light-13-mark-g
 place settings 900
 step "tap settings-setup-voice"; view light-14-setup-from-settings 900
 place settings 900
@@ -147,6 +154,12 @@ place textures 900; view dark-11-textures-list 500
 step "tap textures-doc-texture:demo-notes"; view dark-12-texture-document 1000
 place settings 900; step tree; shot dark-13-settings
 step "tap settings-motion"; view dark-14-motion-lab 1500
+step "clock +450 real"; shot dark-14-mark-b
+step "clock +450 real"; shot dark-14-mark-c
+step "clock +450 real"; shot dark-14-mark-d
+step "clock +450 real"; shot dark-14-mark-e
+step "clock +450 real"; shot dark-14-mark-f
+step "clock +450 real"; shot dark-14-mark-g
 place settings 900
 step "tap settings-setup-voice"; view dark-15-setup-from-settings 900
 place settings 900
@@ -195,6 +208,14 @@ must "textures: list" '[textures-doc-texture:demo-notes]'
 must "textures: a document" '[page-title] "Charging pilot: working notes"'
 must "settings: modes" '[settings-mode-dark]'
 must "motion lab" '[page-title] "Motion"'
+must "mark: the flat brand mark at rest" '[mark-rest-120]'
+must "mark: thinking at hero size" '[mark-live-120]'
+must "mark: thinking at bar size" '[mark-live-36]'
+# the mark moves: frames of the thinking state differ, and the still mark does not change
+for p in light-13-mark-b:light-13-mark-c light-13-mark-c:light-13-mark-d light-13-mark-d:light-13-mark-e dark-14-mark-b:dark-14-mark-d; do
+  a=${p%%:*}; b=${p##*:}
+  if [ "$(md5 -q "$SHOTS/$a.png" 2>/dev/null)" != "$(md5 -q "$SHOTS/$b.png" 2>/dev/null)" ]; then echo "ok: $a and $b differ"; else echo "MISSING: the mark did not move between $a and $b"; FAILS="$FAILS [mark motion $a]"; fi
+done
 must "voice: welcome" '[ob-begin]'
 must "voice: setup rows" '[ob-row-transcriber]'
 must "voice: microphone check" '[ob-mic-ask]'
@@ -214,6 +235,14 @@ must "pile: closing a card offers Undo, above the bar" '[undo-pill]'
 if grep -qF '[reader-following]' "$SHOTS/drive-follow.txt" 2>/dev/null; then echo "ok: reader follow: the block being read is marked"; else echo "note: reader follow not seen in the demo run (wired: the bar feeds ReaderFollow; see light-19)"; fi
 must "really light: the settings line says light" 'Showing Depth (light)'
 must "really dark: the settings line says dark" 'Showing Depth (dark)'
+# the installed icon: leave the app (its process ends) and look at the home screen, light then dark, and read the compiled icon set
+SIM terminate "$EXACT_SIM" $APP >/dev/null 2>&1; sleep 3
+SIM ui "$EXACT_SIM" appearance light >/dev/null 2>&1; sleep 2; SIM io "$EXACT_SIM" screenshot "$SHOTS/home-icon-light.png" >/dev/null 2>&1
+SIM ui "$EXACT_SIM" appearance dark >/dev/null 2>&1; sleep 3; SIM io "$EXACT_SIM" screenshot "$SHOTS/home-icon-dark.png" >/dev/null 2>&1
+SIM ui "$EXACT_SIM" appearance light >/dev/null 2>&1
+CAR="$(SIM get_app_container "$EXACT_SIM" $APP 2>/dev/null)/Assets.car"
+if [ -f "$CAR" ]; then /usr/bin/xcrun assetutil --info "$CAR" 2>/dev/null | grep -E '"(Name|Appearance|AssetType)"' | sort | uniq -c > "$SHOTS/icon-assets.txt"; cat "$SHOTS/icon-assets.txt"; fi
+[ -f "$SHOTS/home-icon-light.png" ] && echo "ok: home screen screenshots taken" || FAILS="$FAILS [home screen]"
 n=$(ls "$SHOTS"/light-*.png 2>/dev/null | wc -l); m=$(ls "$SHOTS"/dark-*.png 2>/dev/null | wc -l)
 [ "$n" -ge 24 ] && [ "$m" -ge 18 ] || FAILS="$FAILS [screenshots: $n light, $m dark]"
 echo "ok: screenshots in $SHOTS ($n light, $m dark)"

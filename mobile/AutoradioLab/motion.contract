@@ -1,5 +1,4 @@
-// Motion (lane 9): the alive wait, the motion gallery (`lab:motion`), the wait on its own page (`lab:wait`) and the
-// 3D-box alternative mark (an experiment, see the README). Lane 9 owns this file. Pure Contract; every duration is a
+// Motion (lane 9): the alive wait, the motion gallery (`lab:motion`), the wait on its own page (`lab:wait`). Lane 9 owns this file. Pure Contract; every duration is a
 // theme token.
 use Theme from "@choir/autoradio"
 use MarkAt from "./mark.contract"
@@ -45,26 +44,6 @@ component AliveWait
               font-size=(i == shown.length - 1 ? 17 : 14) font-weight=(i == shown.length - 1 ? 600 : 400) color=(i == shown.length - 1 ? th.fg : th.muted)
         text `${floor(el)} s` testId=`${testId}-elapsed` font-family=th.fontMono font-size=12 color=th.muted
 
-// A 3D-box alternative mark (experiment): three triangular boxes turning about y inside one perspective box. Exact has no
-// preserve-3d and a box takes one `rotate` (one axis), so this is a spinning three-fin form, not a tetrahedron. The angle
-// comes from the root clock each frame (a `keyframes` rotate with an axis is refused: lower-keyframes BadValue).
-component FinMark
-  inject
-    th: Theme
-    mkT: number
-  props
-    size: number
-    clocked: bool
-    testId: string
-  derive deg = mkT / 1000 * 60
-  view
-    box testId=testId width=size height=size position="relative" perspective=(size * 4)
-      for k in [0, 1, 2] key=k
-        box position="absolute" left=(size * 0.1) top=0 width=(size * 0.8) height=size
-          rotate=`y ${deg + k * 60}deg`
-          svg viewBox="0 0 100 100" width="100%" height="100%"
-            polygon points="50,2 98,98 2,98" fill=th.accent fill-opacity=0.55 stroke=th.fg stroke-width=2 stroke-linejoin="round"
-
 // `lab:motion`: every mark state at every size, the reduced-motion form, the wait, and the 3D-box experiment.
 component MotionPage
   inject
@@ -76,11 +55,18 @@ component MotionPage
     galReplay: action
     waitReplay: action
   derive states = ["idle", "listening", "thinking", "speaking", "success", "error", "reduced"]
-  derive sizes = [26, 44, 96]
+  derive sizes = [36, 44, 120]
   view
     PageScroll(id="motion")
       text "Motion" role="heading" aria-level=1 font-size=28 font-weight=700 testId="page-title"
-      text `Marks, 26 / 44 / 96 pt. The glyph is Contract: four vertices rotated by sin and cos, projected, culled by area.` font-family=th.fontUi font-size=13 color=th.muted
+      text `The brand TetraMark, 36 pt (bar), 44 and 120 pt (hero). Each blade point has a depth; every frame turns, tips and perspective-projects them. The reduced row is the flat brand drawing.` font-family=th.fontUi font-size=13 color=th.muted
+      text "Top row: the flat brand mark (still), then the same mark thinking at hero, bar and 44 pt size." font-family=th.fontUi font-size=13 color=th.muted
+      row gap=14 align-items="center" testId="mark-top"
+        MarkAt(state="idle", size=120, since=galSince, level=0, step=-1, still=true, testId="mark-rest-120")
+        MarkAt(state="thinking", size=120, since=galSince, level=0, step=-1, still=false, testId="mark-live-120")
+        column gap=14 align-items="center"
+          MarkAt(state="thinking", size=36, since=galSince, level=0, step=-1, still=false, testId="mark-live-36")
+          MarkAt(state="speaking", size=44, since=galSince, level=0, step=-1, still=false, testId="mark-live-44")
       row gap=12 align-items="center"
         button press=galReplay testId="motion-replay" appearance="none"
           Btn(label="Replay states", primary=false, wide=false)
@@ -99,9 +85,6 @@ component MotionPage
       AliveWait(demo=true, since=waitSince, lines=[], step=0, testId="motion-wait")
       button press=waitReplay testId="motion-wait-replay" appearance="none"
         Btn(label="Replay the wait", primary=false, wide=false)
-      text "Experiment: three triangular boxes with 3D rotate (angle from the clock; keyframes refuse an axis: BadValue)" font-family=th.fontUi font-size=13 color=th.muted
-      row gap=24 align-items="center"
-        FinMark(size=96, clocked=true, testId="fins-clocked")
 
 // `lab:wait`: the alive wait alone, the realistic worst case for the frame cost (one hero and the bar's mark).
 component WaitPage

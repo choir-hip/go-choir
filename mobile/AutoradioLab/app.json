@@ -9,8 +9,12 @@
     "id": "news.choir.autoradio.lab",
     "name": "Autoradio"
   },
+  "icons": [
+    { "src": "modules/apple/Assets.xcassets/AppIcon.appiconset/icon-default.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }
+  ],
   "host": {
     "ios": {
+      "launchImage": { "src": "launch-mark.png", "width": 96 },
       "minimumOS": "18.0",
       "deviceFamily": ["iphone"],
       "backgroundModes": ["audio"]
