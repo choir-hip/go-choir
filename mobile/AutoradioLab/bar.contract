@@ -79,7 +79,7 @@ component BarShell
       transition=`height ${th.motionEnterMs * calm}ms ease`
       // the backing: the page colour under the glass, so text and the field stay legible over busy content in light and dark
       box position="absolute" inset=0 border-radius=th.radiusPill pointer-events="none" z-index=-1
-        background-color=th.paper opacity=0.82
+        background-color=th.paper opacity=0.94 border-width=1 border-style="solid" border-color=th.rule
       // the state's tint: warms while playing, brighter while the listener is heard, danger on a failure
       box position="absolute" inset=0 border-radius=th.radiusPill pointer-events="none"
         background-color=tint opacity=tintOn

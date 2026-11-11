@@ -162,7 +162,7 @@ extension AutoradioModule {
         handle("settingSet") { [unowned self] args, reply in
             let id = args["id"] as? String ?? "", value = args["value"] as? String ?? ""
             let ok = lane.settings.set(id, value)
-            if ok, id == "talkMode" { lane.settings.apply(to: runtime) }
+            if ok, id == "talkMode" { lane.settings.apply(to: runtime); touch(["radioView", "barState"]) }   // the bar and the player read it
             if ok, id == "swipeLeft" || id == "swipeRight" { syncGestureMeanings(); touch(["toldPaper"]) }
             touch(["settingRows"]); reply(ack(ok, ok ? "" : "That is not one of the choices."))
         }

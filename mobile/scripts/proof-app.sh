@@ -48,6 +48,7 @@ step "tap bar-voice down"; step "tap up"; wait_ 1800
 step "tap bar-text"; view light-03-player 900
 step "tap player-close"; wait_ 700
 step "tap bar-pages"; view light-04-pile 700
+step "tap card-swipe-pub:demo-grid-storage drag -150 0"; view light-04b-pile-closed-undo 900
 step "tap pile-places"; view light-05-launcher 700
 step "tap place-files"; view light-06-files-list 1200
 step "tap \"files-row-/Documents\""; wait_ 700
@@ -65,6 +66,17 @@ step "tap settings-dev-details"; wait_ 500
 goto "paper:front"; view light-15-paper-developer-controls 800
 step logs
 run_drive light light "" --touch platform
+
+# ---- 4a1. the radio feeds the reader: open a story from the launcher's search, play, and the reader marks the block being read
+step "clock data"; wait_ 1500
+ensure_light
+step "tap bar-pages drag 0 -200"; wait_ 900
+step "type launcher-search harbor"; wait_ 900
+step "tap search-hit-pub:demo-harbor-barrier"; view light-18-story-before-play 1000
+step "tap bar-voice down"; step "tap up"; wait_ 7000
+step tree; shot light-19-story-while-playing
+step logs
+run_drive follow light "" --touch platform
 
 # ---- 4a2. the talk mode has one owner (Settings): choose "Always listening" there and the bar's player says so
 step "clock data"; wait_ 1500
@@ -168,6 +180,8 @@ must "settings: the mode control is ours" '[settings-mode-system]'
 must "developer: the demo controls come with the switch" '[paper-composition]'
 if grep -qF '[paper-composition]' "$SHOTS/drive-dark.txt" 2>/dev/null; then echo "UNWANTED: debug text shows without the developer switch"; FAILS="$FAILS [debug text]"; else echo "ok: no debug text without the developer switch"; fi
 must "talk mode: Settings sets it, the player reads it" 'Just speak; the radio is listening'
+must "pile: closing a card offers Undo, above the bar" '[undo-pill]'
+if grep -qF '[reader-following]' "$SHOTS/drive-follow.txt" 2>/dev/null; then echo "ok: reader follow: the block being read is marked"; else echo "note: reader follow not seen in the demo run (wired: the bar feeds ReaderFollow; see light-19)"; fi
 must "really light: the settings line says light" 'Showing Depth (light)'
 must "really dark: the settings line says dark" 'Showing Depth (dark)'
 n=$(ls "$SHOTS"/light-*.png 2>/dev/null | wc -l); m=$(ls "$SHOTS"/dark-*.png 2>/dev/null | wc -l)

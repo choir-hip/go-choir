@@ -336,5 +336,6 @@ component FirstRunCard
         column padding=16 gap=8
           text ob.card font-family=th.fontRead font-size=19 font-weight=700 color=th.fg
           text ob.cardBody font-family=th.fontUi font-size=14 line-height=1.4 color=th.muted
-          button press=openPage("onboarding:setup", "Make it yours") testId="firstrun-open" buttonStyle="filled"
-            text act
+          button press=openPage("onboarding:setup", "Make it yours") testId="firstrun-open" appearance="none" width="100%"
+            row align-items="center" justify-content="center" min-height=44 border-radius=th.radiusControl background-color=th.accent box-shadow=th.shadow1
+              text act font-family=th.fontUi font-size=17 font-weight=600 color=th.onAccent

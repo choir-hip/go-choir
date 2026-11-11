@@ -198,7 +198,7 @@ component BlockView
             image "symbol:document" color=th.muted
             text b.text font-family=th.fontUi font-size=14 color=th.muted flex=1
       if following
-        box position="absolute" left=-12 top=2 bottom=remv(0.9) width=3 border-radius=2 background-color=th.accent
+        box testId="reader-following" position="absolute" left=-12 top=2 bottom=remv(0.9) width=3 border-radius=2 background-color=th.accent
       if aimed
         box position="absolute" left=-12 top=2 bottom=remv(0.9) width=3 border-radius=2 background-color=th.accent2
       for c in stacked key=c.anchor
