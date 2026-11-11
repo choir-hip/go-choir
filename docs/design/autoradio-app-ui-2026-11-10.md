@@ -144,6 +144,18 @@ not the shape of the product. Design:
 [autoradio-desk-fast-turns](autoradio-desk-fast-turns-2026-11-11.md) for the
 turn path; the programme script design follows it.
 
+27. **The on-device model talks for as long as the desk is working**
+(owner, 2026-11-11): "it shouldn't be limited to one line per se, but the
+information should be front-loaded so it can be interrupted and have the
+streams replaced at any time. And I suppose there should be some kind of a
+transition." The local response is a stream of stand-alone sentences, most
+useful first, replaced by the desk's speech the moment that is ready, with a
+short transition between the two. This refines ruling 23.
+28. **No deterministic timers around model calls** (owner, 2026-11-11): make
+it fast, measure it and optimise it; do not put cutoffs in the way. A turn
+moves on real signals: a refusal, an error, the end of a stream, the
+listener.
+
 Also from the walk: a page title is never a raw address, a section name is
 never a raw id, nothing is clipped off a screen edge, and the bar speaks
 about the page in front.
