@@ -71,12 +71,14 @@ component BarShell
     ask: string
     micOn: bool
     onbd: bool
+    topAddr: string
     stackCount: number
     frontName: string
     frontKind: string
     editAsk: action
     sendAsk: action
     micTap: action
+    micCancel: action
     radioPlay: action
     toggleLauncher: action
     showLayer: action
@@ -84,10 +86,10 @@ component BarShell
     barFocus: action
     barBlur: action
   derive st = bi.state
-  derive aimOwn = `Edit ${frontName}…`
-  derive aimReply = `Reply to ${frontName}…`
-  derive aimMail = (pg.topKind == "mail" and mmsg.replyLabel != "") ? `${mmsg.replyLabel}…` : ""
-  derive aimPage = pg.topKind == "reader" ? (pg.top.startsWith("texture:") ? aimOwn : aimReply) : (aimMail != "" ? aimMail : (ob.aim != "" and pg.topKind != "onboarding" ? ob.aim : "Ask about this page…"))
+  // What the field says it is aimed at: the page in front (owner, 2026-11-11). Before setup the invitation is the first-run card on
+  // Paper's; the bar still asks.
+  derive aimMail = (topAddr.startsWith("mail:") and mmsg.replyLabel != "") ? `${mmsg.replyLabel}…` : "Reply to this message…"
+  derive aimPage = topAddr.startsWith("paper:") ? "Ask about today's paper…" : (topAddr.startsWith("pub:") ? "Ask about this story…" : (topAddr.startsWith("texture:") ? "Ask about this Texture…" : (topAddr.startsWith("mail:") ? aimMail : ((topAddr.startsWith("file:") and topAddr != "file:/") ? "Ask about this file…" : "Ask or tell Choir…"))))
   derive aim = (raim.address == pg.top and raim.blockId != "") ? `Ask about “${raim.label}”…` : aimPage
   derive onSetup = pg.top == "onboarding:setup"
   derive setupLine = ob.step == "interview" ? (ob.paused ? "Interview paused" : ((st == "listening" or st == "talking" or st == "heard") ? "Interview: listening…" : "Interview: speaking…")) : (ob.step == "setup" ? "Setting up the voice…" : (ob.step == "mic" ? "Check the microphone" : (ob.step == "hearing" ? "Check that you can hear me" : (ob.step == "ready" ? "Voice is set up" : (ob.step == "writing" ? "Writing your edition…" : (ob.step == "done" ? "Your edition is ready" : "Voice setup"))))))
@@ -96,7 +98,7 @@ component BarShell
   derive loaded = ri.title != "" ? ri.title : bi.text
   derive yielded = ri.level != "play" and micOn
   derive tint = st == "error" ? th.danger : (st == "revised" ? th.success : (st == "playing" ? th.accent2 : th.accent))
-  derive tintOn = lineMode == "none" or lineMode == "aim" or lineMode == "paused" ? 0 : (st == "playing" ? 0.08 : 0.12)
+  derive tintOn = (lineMode == "none" or lineMode == "aim" or lineMode == "paused" or lineMode == "listen") ? 0 : (st == "playing" ? 0.08 : 0.12)
   derive markState = micOn ? "listening" : (st == "paused" ? "idle" : st)
   derive isPlaying = ri.playing or st == "playing"
   derive playWord = isPlaying ? "Pause" : "Play"
@@ -123,16 +125,16 @@ component BarShell
         box-shadow=th.shadow3
         // the backing: the page colour under the glass, so the controls stay legible over busy content in light and dark
         box position="absolute" inset=0 pointer-events="none" z-index=-1 border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
-          background-color=th.paper opacity=th.barBacking
+          background-color=th.paper opacity=(th.barBacking * 0.62)
         // the state's tint
         box position="absolute" inset=0 pointer-events="none" border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
           background-color=tint opacity=tintOn
           transition=`opacity ${th.motionFastMs * calm}ms ease, background-color ${th.motionFastMs * calm}ms ease`
         // the top edge: a hairline and a soft highlight, the lip of the glass
-        box position="absolute" left=0 right=0 top=0 height=1 pointer-events="none" background-color=th.rule opacity=0.7
+        box position="absolute" left=0 right=0 top=0 height=1 pointer-events="none" background-color=th.rule opacity=0.22
           border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
         box position="absolute" left=0 right=0 top=1 height=14 pointer-events="none" border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
-          background-image="linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0))"
+          background-image="linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0))"
         // the deck's quiet count: where you are, in a hairline of text at the top of the lens (not over the page)
         if onbd == false and layer == ""
           text `${frontKind} · ${stackCount} in the deck` testId="page-indicator" aria-label=`${frontKind}, ${stackCount} pages in the deck` font-family=th.fontUi font-size=10 font-weight=600 letter-spacing=0.4 color=th.muted text-align="center" width="100%"
@@ -161,9 +163,12 @@ component BarShell
               row gap=5 align-items="center" testId="bar-yield" height=16
                 box width=6 height=6 border-radius=3 background-color=th.accent animation=(still ? "none" : "barBlink 1.1s ease-in-out infinite")
                 text (ri.level == "pause" ? "Radio paused while you speak" : "Radio lowered while you speak") font-family=th.fontUi font-size=11 color=th.muted
-            row gap=6 align-items="center"
+            row gap=6 align-items="center" width="100%"
               box width=8 height=8 border-radius=4 background-color=th.danger animation=(still ? "none" : "barBlink 1s ease-in-out infinite")
-              text "Listening" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.6 color=th.danger
+              text "Listening" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.6 color=th.danger flex=1
+              button press=micCancel testId="bar-cancel" appearance="none" aria-label="Cancel listening"
+                row padding="4px 10px" border-radius=th.radiusPill border-width=1 border-style="solid" border-color=th.rule align-items="center"
+                  text "Cancel" font-family=th.fontUi font-size=12 font-weight=600 color=th.fg
             text ((bi.text == "" or bi.text.startsWith("Listening")) ? "Tap the microphone again to send." : bi.text) testId="bar-text" font-family=th.fontRead font-size=15 font-style="italic" color=th.fg line-clamp=3
         if lineMode == "heard"
           text bi.text testId="bar-text" font-family=th.fontRead font-size=15 color=th.fg line-clamp=3 padding-left=4 animation=enter

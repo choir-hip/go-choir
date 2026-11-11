@@ -132,6 +132,5 @@ component PlayerLayer
           row gap=4 justify-content="center"
             for v in ri.speedChoices key=v
               SpeedChip(v=v)
-          text ri.modeLabel testId="player-mode" font-family=th.fontUi font-size=12 color=th.muted
         // the prompt is the bar's (one field, not two), so the player has none
 

@@ -88,7 +88,7 @@ component PageFrame
     column position="absolute" inset=0
       PageHost(address=address, kind=kindOf(address), title=name)
       if address.startsWith("pub:")
-        button press=moreOfThis(address) testId="story-more" appearance="none" position="absolute" right=56 top="calc(env(safe-area-inset-top) + 2px)" z-index=5 aria-label="More stories like this one"
+        button press=moreOfThis(address) testId="story-more" appearance="none" position="absolute" right=64 top="calc(env(safe-area-inset-top) + 22px)" z-index=5 aria-label="More stories like this one"
           row padding="7px 12px" border-radius=th.radiusPill align-items="center" background-color=th.paper2 border-width=1 border-style="solid" border-color=th.rule
             text (moreFor == address ? "Noted" : "More of this") font-family=th.fontUi font-size=13 font-weight=600 color=th.fg
 
