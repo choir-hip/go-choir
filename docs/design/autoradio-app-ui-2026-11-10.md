@@ -122,6 +122,16 @@ from stock phrases.
 24. **The real voice models must load.** A build where only the fallbacks
 run is a defect ("model … not registered").
 
+25. **The stack is a deck that cycles** (owner, later the same day:
+"Swiping pages should cycle them to the bottom of the deck. So for a
+specific texture or file or mail, it can basically disappear, but it's
+always reaccessible. And then, yeah, the launcher should still be able to
+open the key pages."). Swiping the top page sends it to the bottom of the
+deck and brings up the next; nothing is closed by a swipe. Opening a page
+puts it on top. The launcher opens the key pages (Paper, Textures, Files,
+Mail, Settings) and can bring any page in the deck to the top. This refines
+ruling 19: the swipe is "send to the bottom", not previous and next.
+
 Also from the walk: a page title is never a raw address, a section name is
 never a raw id, nothing is clipped off a screen edge, and the bar speaks
 about the page in front.
