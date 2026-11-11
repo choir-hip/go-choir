@@ -140,15 +140,17 @@ entered below as lapsed, not scored.
 | 17 | 2026-11-10T22:10Z | lapsed | same | n/a |
 | 18 | 2026-11-10T22:10Z | lapsed | same | n/a |
 | 19 | 2026-11-10T22:10Z | lapsed | same | n/a |
+| C46 | 2026-11-11T10:40Z | true | four review outputs, verdict repair on each; the repair builder judged the key import, sanitizer, host check, audio continuations, shared state and stray tasks real | 0.16 |
+| C47 | 2026-11-11T10:48Z | true | `scripts/land land/ar-app` exit 0 on its first run, main at 29e01354f (the staging deploy was then refused for disk headroom, which the claim did not cover) | 0.16 |
 
 ### Scorecard
 
-Second form: 28 claims open, 0 settled. First form: 12 settled (7 true, 4
+Second form: 26 claims open, 2 settled. First form: 12 settled (7 true, 4
 false, 1 partial), 7 lapsed.
 
 | band | claims settled | came true |
 |---|---|---|
 | 0.0 to 0.3 | 0 | n/a |
 | 0.3 to 0.6 | 0 | n/a |
-| 0.6 to 0.8 | 0 | n/a |
+| 0.6 to 0.8 | 2 | 2 |
 | 0.8 to 1.0 | 0 | n/a |
