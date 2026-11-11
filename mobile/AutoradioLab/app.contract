@@ -107,6 +107,32 @@ component Autoradio
     // ---- lane 4: cards, launcher, signals ----
     // ---- lane 5: files and viewers ----
     // ---- lane 6: mail ----
+    mbx
+    mmsg
+    mcmp
+    mailCurTo
+    mailCurSubject
+    mailCurBody
+    mailDraftStatus
+    mailDraftId
+    mailDraftNote
+    mailDraftUrl
+    mailDraftFrom
+    mailQuoted
+    mailOriginal
+    mailNote
+    editMailTo
+    editMailSubject
+    editMailBody
+    saveMailDraft
+    approveMail
+    openMailReview
+    toggleMailQuoted
+    toggleMailOriginal
+    readMail
+    unreadMail
+    askMail
+    retryMail
     // ---- lane 7: settings, themes, accounts ----
     // ---- lane 8: onboarding and the interview ----
     // ---- lane 9: motion and the mark ----

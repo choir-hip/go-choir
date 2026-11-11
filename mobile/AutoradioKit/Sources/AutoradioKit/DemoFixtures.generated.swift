@@ -50,6 +50,392 @@ public enum DemoFixtureData {
  ]
 }
 """#,
+        "mail-aliases": #"""
+{
+ "aliases": [
+  {
+   "id": "al1",
+   "address": "listener@example.com",
+   "local_part": "listener",
+   "domain": "example.com",
+   "visibility": "private"
+  }
+ ]
+}
+"""#,
+        "mail-draft-demo-draft-1": #"""
+{
+ "id": "demo-draft-1",
+ "status": "draft",
+ "version": 1,
+ "version_hash": "h1",
+ "from_address": "listener@example.com",
+ "to_addresses": [
+  "ben@example.com"
+ ],
+ "subject": "Festival numbers",
+ "text_body": "Ben, can you send me the attendance figures when you have them?",
+ "created_at": "2026-11-09T18:00:00Z",
+ "updated_at": "2026-11-09T18:00:00Z"
+}
+"""#,
+        "mail-drafts": #"""
+{
+ "drafts": [
+  {
+   "id": "demo-draft-1",
+   "status": "draft",
+   "version": 1,
+   "version_hash": "h1",
+   "from_address": "listener@example.com",
+   "to_addresses": [
+    "ben@example.com"
+   ],
+   "subject": "Festival numbers",
+   "text_body": "Ben, can you send me the attendance figures when you have them?",
+   "created_at": "2026-11-09T18:00:00Z",
+   "updated_at": "2026-11-09T18:00:00Z"
+  }
+ ]
+}
+"""#,
+        "mail-inbox": #"""
+{
+ "messages": [
+  {
+   "id": "m6",
+   "direction": "inbound",
+   "from_address": "ana@example.com",
+   "subject": "Harbour barrier: site visit on Thursday",
+   "snippet": "Hi,  The council has confirmed the site visit for Thursday at 10:00. We meet at the east p",
+   "trust_status": "trusted",
+   "created_at": "2026-11-10T08:12:00Z",
+   "from_display": "Ana Reyes",
+   "received_at": "2026-11-10T08:12:00Z",
+   "has_attachments": true
+  },
+  {
+   "id": "m5",
+   "direction": "inbound",
+   "from_address": "ben@example.com",
+   "subject": "Re: Q4 planning notes",
+   "snippet": "Agreed on the order. I would put the grid story first and the festival second.  I checked ",
+   "trust_status": "trusted",
+   "created_at": "2026-11-09T16:40:00Z",
+   "from_display": "Ben Okafor",
+   "received_at": "2026-11-09T16:40:00Z"
+  },
+  {
+   "id": "m4",
+   "direction": "inbound",
+   "from_address": "ana@example.com",
+   "subject": "Re: Q4 planning notes",
+   "snippet": "I think we should lead with the battery and keep the festival short.  Ben, can you check t",
+   "trust_status": "trusted",
+   "created_at": "2026-11-09T11:05:00Z",
+   "from_display": "Ana Reyes",
+   "received_at": "2026-11-09T11:05:00Z",
+   "read_at": "2026-11-09T11:05:00Z"
+  },
+  {
+   "id": "m3",
+   "direction": "inbound",
+   "from_address": "ben@example.com",
+   "subject": "Q4 planning notes",
+   "snippet": "Here are my notes for the quarter. Three themes: energy, the harbour, and local events.  T",
+   "trust_status": "trusted",
+   "created_at": "2026-11-08T17:30:00Z",
+   "from_display": "Ben Okafor",
+   "received_at": "2026-11-08T17:30:00Z",
+   "read_at": "2026-11-08T17:30:00Z"
+  },
+  {
+   "id": "m2",
+   "direction": "inbound",
+   "from_address": "reading@example.com",
+   "subject": "Your weekly reading list",
+   "snippet": "newsletter",
+   "trust_status": "trusted",
+   "created_at": "2026-11-06T07:00:00Z",
+   "from_display": "Library Reading List",
+   "received_at": "2026-11-06T07:00:00Z",
+   "read_at": "2026-11-06T07:00:00Z"
+  },
+  {
+   "id": "m1",
+   "direction": "inbound",
+   "from_address": "chidi@example.com",
+   "subject": "Photos from the festival",
+   "snippet": "The river festival was wonderful. Here is the photo I promised, taken just before the lant",
+   "trust_status": "trusted",
+   "created_at": "2026-10-30T20:15:00Z",
+   "from_display": "Chidi N.",
+   "received_at": "2026-10-30T20:15:00Z",
+   "read_at": "2026-10-30T20:15:00Z",
+   "has_attachments": true
+  }
+ ],
+ "total": 6,
+ "unread": 2
+}
+"""#,
+        "mail-msg-m1": #"""
+{
+ "message": {
+  "id": "m1",
+  "direction": "inbound",
+  "from_address": "chidi@example.com",
+  "subject": "Photos from the festival",
+  "snippet": "The river festival was wonderful. Here is the photo I promised, taken just before the lant",
+  "trust_status": "trusted",
+  "created_at": "2026-10-30T20:15:00Z",
+  "from_display": "Chidi N.",
+  "received_at": "2026-10-30T20:15:00Z",
+  "read_at": "2026-10-30T20:15:00Z",
+  "has_attachments": true
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com",
+    "display": "You"
+   }
+  ]
+ },
+ "text_body": "The river festival was wonderful. Here is the photo I promised, taken just before the lanterns went out.\n\nSee you at the next one!",
+ "attachments": [
+  {
+   "id": "a2",
+   "filename": "lanterns.jpg",
+   "content_type": "image/jpeg",
+   "size_bytes": 2310455,
+   "status": "stored"
+  }
+ ]
+}
+"""#,
+        "mail-msg-m2": #"""
+{
+ "message": {
+  "id": "m2",
+  "direction": "inbound",
+  "from_address": "reading@example.com",
+  "subject": "Your weekly reading list",
+  "snippet": "newsletter",
+  "trust_status": "trusted",
+  "created_at": "2026-11-06T07:00:00Z",
+  "from_display": "Library Reading List",
+  "received_at": "2026-11-06T07:00:00Z",
+  "read_at": "2026-11-06T07:00:00Z"
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com",
+    "display": "You"
+   }
+  ]
+ },
+ "html_body": "<html><head><title>Reading list</title><style>body{font-family:Georgia}.hero{background:url(https://tracker.example.com/bg.png)}</style><script>window.location='https://tracker.example.com/x'</script></head>\n<body><div class=\"hero\"><h1>This week at the library</h1></div>\n<p>Three books are waiting for you:</p><ul><li><b>The Salt Road</b> by M. Okoye</li><li><b>Tide Tables</b> by J. Lindqvist</li><li><b>A Quiet Grid</b> by R. Haddad</li></ul>\n<p>Opening hours change on Monday &amp; Tuesday. <a href=\"https://example.com/hours\" onclick=\"steal()\">See the hours</a>.</p>\n<img src=\"https://tracker.example.com/pixel.gif\" alt=\"\" width=\"1\" height=\"1\"><p><a href=\"javascript:alert(1)\">Unsubscribe</a></p></body></html>"
+}
+"""#,
+        "mail-msg-m3": #"""
+{
+ "message": {
+  "id": "m3",
+  "direction": "inbound",
+  "from_address": "ben@example.com",
+  "subject": "Q4 planning notes",
+  "snippet": "Here are my notes for the quarter. Three themes: energy, the harbour, and local events.  T",
+  "trust_status": "trusted",
+  "created_at": "2026-11-08T17:30:00Z",
+  "from_display": "Ben Okafor",
+  "received_at": "2026-11-08T17:30:00Z",
+  "read_at": "2026-11-08T17:30:00Z"
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com",
+    "display": "You"
+   }
+  ]
+ },
+ "text_body": "Here are my notes for the quarter. Three themes: energy, the harbour, and local events.\n\nTell me what is missing.\n\nBen"
+}
+"""#,
+        "mail-msg-m4": #"""
+{
+ "message": {
+  "id": "m4",
+  "direction": "inbound",
+  "from_address": "ana@example.com",
+  "subject": "Re: Q4 planning notes",
+  "snippet": "I think we should lead with the battery and keep the festival short.  Ben, can you check t",
+  "trust_status": "trusted",
+  "created_at": "2026-11-09T11:05:00Z",
+  "from_display": "Ana Reyes",
+  "received_at": "2026-11-09T11:05:00Z",
+  "read_at": "2026-11-09T11:05:00Z"
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com",
+    "display": "You"
+   }
+  ]
+ },
+ "text_body": "I think we should lead with the battery and keep the festival short.\n\nBen, can you check the numbers on the second page?\n\n> Here are my notes for the quarter. Three themes: energy, the harbour, and local events.\n> Tell me what is missing.",
+ "raw_headers": {
+  "Reply-To": "Ana Reyes <ana.replies@example.com>"
+ }
+}
+"""#,
+        "mail-msg-m5": #"""
+{
+ "message": {
+  "id": "m5",
+  "direction": "inbound",
+  "from_address": "ben@example.com",
+  "subject": "Re: Q4 planning notes",
+  "snippet": "Agreed on the order. I would put the grid story first and the festival second.  I checked ",
+  "trust_status": "trusted",
+  "created_at": "2026-11-09T16:40:00Z",
+  "from_display": "Ben Okafor",
+  "received_at": "2026-11-09T16:40:00Z"
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com",
+    "display": "You"
+   }
+  ]
+ },
+ "text_body": "Agreed on the order. I would put the grid story first and the festival second.\n\nI checked the numbers on the second page: they hold up.\n\nOn Mon, 9 Nov 2026, Ana Reyes wrote:\n> I think we should lead with the battery and keep the festival short.\n> Ben, can you check the numbers on the second page?\n\nBen"
+}
+"""#,
+        "mail-msg-m6": #"""
+{
+ "message": {
+  "id": "m6",
+  "direction": "inbound",
+  "from_address": "ana@example.com",
+  "subject": "Harbour barrier: site visit on Thursday",
+  "snippet": "Hi,  The council has confirmed the site visit for Thursday at 10:00. We meet at the east p",
+  "trust_status": "trusted",
+  "created_at": "2026-11-10T08:12:00Z",
+  "from_display": "Ana Reyes",
+  "received_at": "2026-11-10T08:12:00Z",
+  "has_attachments": true
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com",
+    "display": "You"
+   }
+  ]
+ },
+ "text_body": "Hi,\n\nThe council has confirmed the site visit for Thursday at 10:00. We meet at the east pier, by the old ferry office. Please bring boots; the path is muddy after the rain and the tide table puts the water at its lowest around 10:40.\n\nI have attached the site plan so you can see where the barrier gates would sit. The survey markers are the orange pins along the wall.\n\nCould you tell me by Wednesday evening whether you are coming, and whether anyone from the paper wants to join?\n\nThanks,\nAna\n\n-- \nAna Reyes\nHarbour Works Liaison",
+ "attachments": [
+  {
+   "id": "a1",
+   "filename": "site-plan.pdf",
+   "content_type": "application/pdf",
+   "size_bytes": 482113,
+   "status": "stored"
+  }
+ ]
+}
+"""#,
+        "mail-msg-q1": #"""
+{
+ "message": {
+  "id": "q1",
+  "direction": "inbound",
+  "from_address": "prizes@example.com",
+  "subject": "You have been selected",
+  "snippet": "Claim your reward now by following the instructions in the attachment.",
+  "trust_status": "quarantined",
+  "created_at": "2026-11-07T03:10:00Z",
+  "received_at": "2026-11-07T03:10:00Z",
+  "read_at": "2026-11-07T03:10:00Z"
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com",
+    "display": "You"
+   }
+  ]
+ },
+ "text_body": "Claim your reward now by following the instructions in the attachment."
+}
+"""#,
+        "mail-msg-s1": #"""
+{
+ "message": {
+  "id": "s1",
+  "direction": "outbound",
+  "from_address": "listener@example.com",
+  "subject": "Re: Q4 planning notes",
+  "snippet": "Thanks Ana. I will look at the numbers tonight.",
+  "trust_status": "trusted",
+  "created_at": "2026-11-09T12:00:00Z",
+  "from_display": "You",
+  "sent_at": "2026-11-09T12:00:00Z"
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "ana@example.com",
+    "display": "Ana Reyes"
+   }
+  ]
+ },
+ "text_body": "Thanks Ana. I will look at the numbers tonight."
+}
+"""#,
+        "mail-quarantine": #"""
+{
+ "messages": [
+  {
+   "id": "q1",
+   "direction": "inbound",
+   "from_address": "prizes@example.com",
+   "subject": "You have been selected",
+   "snippet": "Claim your reward now by following the instructions in the attachment.",
+   "trust_status": "quarantined",
+   "created_at": "2026-11-07T03:10:00Z",
+   "received_at": "2026-11-07T03:10:00Z",
+   "read_at": "2026-11-07T03:10:00Z"
+  }
+ ],
+ "total": 1,
+ "unread": 0
+}
+"""#,
+        "mail-sent": #"""
+{
+ "messages": [
+  {
+   "id": "s1",
+   "direction": "outbound",
+   "from_address": "listener@example.com",
+   "subject": "Re: Q4 planning notes",
+   "snippet": "Thanks Ana. I will look at the numbers tonight.",
+   "trust_status": "trusted",
+   "created_at": "2026-11-09T12:00:00Z",
+   "from_display": "You",
+   "sent_at": "2026-11-09T12:00:00Z"
+  }
+ ],
+ "total": 1,
+ "unread": 0
+}
+"""#,
         "resolve-demo-grid-storage": #"""
 {
  "publication": {

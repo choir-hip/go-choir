@@ -1,0 +1,22 @@
+{
+ "message": {
+  "id": "s1",
+  "direction": "outbound",
+  "from_address": "listener@example.com",
+  "subject": "Re: Q4 planning notes",
+  "snippet": "Thanks Ana. I will look at the numbers tonight.",
+  "trust_status": "trusted",
+  "created_at": "2026-11-09T12:00:00Z",
+  "from_display": "You",
+  "sent_at": "2026-11-09T12:00:00Z"
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "ana@example.com",
+    "display": "Ana Reyes"
+   }
+  ]
+ },
+ "text_body": "Thanks Ana. I will look at the numbers tonight."
+}
