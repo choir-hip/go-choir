@@ -128,6 +128,8 @@ entered below as lapsed, not scored.
 | C45 | 2026-11-10T22:10Z | lead | effect | With the judges converted to one call at a time, no judge site's work is dropped for a deadline in the paper's first 24 hours (no new "budget expired" or deadline lines from those sites beyond the day before). | 0.65 | 24 hours after deploy | paper log lines via host, ledger |
 | C46 | 2026-11-11T10:10Z | lead | ready | The Gemini review seat, run on the four parts of the Autoradio app diff (`lane/ar-app` at 3d1b1934c), reports at least one blocking finding that I judge real after reading the code. | 0.60 | 2026-11-11T14:00Z | review outputs |
 | C47 | 2026-11-11T10:10Z | lead | ready | After any repairs, the app branch lands on main through `scripts/land` on its first run. | 0.60 | 2026-11-11T18:00Z | land log |
+| C48 | 2026-11-11T12:10Z | lead | ready | A btrfs metadata balance on Node B (`-musage` filter, metadata 25.1 GiB allocated, 3.4 used, DUP) raises `df` free space on `/` from 56 GiB to at least 85 GiB, with no service failure during it. | 0.75 | 2026-11-11T16:00Z | `btrfs filesystem usage /` before and after |
+| C49 | 2026-11-11T12:10Z | lead | ready | Once free space is over 60 GiB, the re-run staging deploy of 29e01354f (or a later main) passes on its first attempt. | 0.70 | 2026-11-11T18:00Z | CI deploy job |
 
 ### Settlements
 
