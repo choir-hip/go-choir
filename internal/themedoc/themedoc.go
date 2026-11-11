@@ -18,6 +18,13 @@
 //	   served, so the closed set widens silently; it must be reported ignored.
 //	T5 An oversize or deeply nested document is parsed without bound.
 //	T6 A version other than 3 is served as if it were v3.
+//	T7 A wrong-typed value (a number for a scheme, id, name, colour, radius or
+//	   font) reaches a type assertion and panics the handler.
+//	T8 A map key outside letters, digits, dot, dash and underscore is served,
+//	   or echoed back in ignored.
+//	T9 A transparent colour passes the contrast gate (onAccent rgba(.,.,.,0)),
+//	   or paper is not opaque.
+//	T10 A font stack with unbalanced quotes is served.
 package themedoc
 
 import (
@@ -92,11 +99,16 @@ func Parse(text string) (Theme, []string, error) {
 		return nil, nil, fmt.Errorf("schema_version must be 3")
 	}
 	var ignored []string
+	odd := 0
 	out := Theme{}
 	budget := maxEntries
 	for k, v := range raw {
 		if !sections[k] {
-			ignored = append(ignored, k)
+			if keyRE.MatchString(k) {
+				ignored = append(ignored, k)
+			} else {
+				odd++
+			}
 			continue
 		}
 		clean, err := cleanValue(k, v, 0, &budget)
@@ -106,6 +118,9 @@ func Parse(text string) (Theme, []string, error) {
 		out[k] = clean
 	}
 	sort.Strings(ignored)
+	if odd > 0 { // keys outside the identifier pattern are counted, never echoed
+		ignored = append(ignored, fmt.Sprintf("(%d other)", odd))
+	}
 	if err := out.check(); err != nil {
 		return nil, nil, err
 	}
@@ -126,6 +141,16 @@ func block(text string) (string, error) {
 	return found[0][1], nil
 }
 
+var keyRE = regexp.MustCompile(`^[A-Za-z0-9._-]{1,40}$`)
+
+// mustBeString reports whether a path holds a string by contract, so a
+// number or boolean there is a refusal and never reaches a type assertion.
+func mustBeString(path string) bool {
+	return path == "id" || path == "name" || path == "schemes" ||
+		strings.HasPrefix(path, "schemes[") || strings.HasPrefix(path, "colors.") ||
+		strings.HasPrefix(path, "radii.") || path == "type.read" || path == "type.ui" || path == "type.mono"
+}
+
 func cleanValue(path string, v any, depth int, budget *int) (any, error) {
 	if depth > maxDepth { // T5
 		return nil, fmt.Errorf("%s: nested too deep", path)
@@ -141,10 +166,19 @@ func cleanValue(path string, v any, depth int, budget *int) (any, error) {
 		}
 		return x, nil
 	case json.Number:
+		if mustBeString(path) { // T7
+			return nil, fmt.Errorf("%s: must be a string", path)
+		}
 		return x, nil
 	case bool:
+		if mustBeString(path) {
+			return nil, fmt.Errorf("%s: must be a string", path)
+		}
 		return x, nil
 	case []any:
+		if path != "schemes" && !strings.HasPrefix(path, "elevation") && !strings.HasPrefix(path, "motion") && !strings.HasPrefix(path, "mark") {
+			return nil, fmt.Errorf("%s: a list is not allowed here", path)
+		}
 		out := make([]any, 0, len(x))
 		for i, e := range x {
 			c, err := cleanValue(fmt.Sprintf("%s[%d]", path, i), e, depth+1, budget)
@@ -155,10 +189,13 @@ func cleanValue(path string, v any, depth int, budget *int) (any, error) {
 		}
 		return out, nil
 	case map[string]any:
+		if path == "id" || path == "name" || strings.HasPrefix(path, "schemes") || strings.HasPrefix(path, "radii.") || strings.HasPrefix(path, "type.") {
+			return nil, fmt.Errorf("%s: must be a string", path)
+		}
 		out := map[string]any{}
 		for k, e := range x {
-			if !safeRE.MatchString(k) {
-				return nil, fmt.Errorf("%s: key %q is not allowed", path, clip(k))
+			if !keyRE.MatchString(k) { // T8
+				return nil, fmt.Errorf("%s: a key is not allowed", path)
 			}
 			c, err := cleanValue(path+"."+k, e, depth+1, budget)
 			if err != nil {
@@ -203,6 +240,9 @@ func checkString(path, s string) error {
 	case path == "type.read" || path == "type.ui" || path == "type.mono":
 		if !stackRE.MatchString(s) {
 			return fmt.Errorf("%s: font stack has characters that are not allowed", path)
+		}
+		if strings.Count(s, "'")%2 != 0 || strings.Count(s, `"`)%2 != 0 { // T10
+			return fmt.Errorf("%s: font stack has unbalanced quotes", path)
 		}
 		first := strings.ToLower(strings.TrimSpace(strings.Split(s, ",")[0]))
 		if !genericFonts[first] {
@@ -302,6 +342,14 @@ func (t Theme) check() error {
 			return fmt.Errorf("the theme has no %s", k)
 		}
 	}
+	for _, k := range []string{"id", "name"} {
+		if _, ok := t[k].(string); !ok { // T7
+			return fmt.Errorf("%s must be a string", k)
+		}
+	}
+	if _, ok := t["colors"].(map[string]any); !ok {
+		return fmt.Errorf("colors must be an object")
+	}
 	schemes, _ := t["schemes"].([]any)
 	if len(schemes) == 0 || len(schemes) > 2 {
 		return fmt.Errorf("schemes lists light, dark or both")
@@ -311,20 +359,25 @@ func (t Theme) check() error {
 		min    float64
 	}{{"fg", "paper", 4.5}, {"muted", "paper", 4.5}, {"onAccent", "accent", 3}}
 	for _, sc := range schemes {
-		scheme := sc.(string)
+		scheme, ok := sc.(string)
+		if !ok { // T7
+			return fmt.Errorf("schemes lists strings")
+		}
 		for _, role := range []string{"paper", "fg", "muted", "accent", "onAccent"} { // T3
 			if _, ok := t.roleColor(role, scheme); !ok {
 				return fmt.Errorf("colors.%s has no %s value", role, scheme)
 			}
 		}
 		paper, _ := t.roleColor("paper", scheme)
+		if paper.a != 1 { // T9: the base every other colour composites over
+			return fmt.Errorf("%s scheme: paper must be opaque", scheme)
+		}
 		for _, p := range pairs {
 			fg, _ := t.roleColor(p.fg, scheme)
 			bg, _ := t.roleColor(p.bg, scheme)
-			if p.bg == "paper" {
-				fg = over(fg, paper)
-			}
-			if r := contrast(fg, over(bg, paper)); r < p.min {
+			bg = over(bg, paper) // T9: composite each layer, so a transparent text colour cannot pass
+			fg = over(fg, bg)
+			if r := contrast(fg, bg); r < p.min {
 				return fmt.Errorf("%s scheme: %s on %s has contrast %.2f, below %.1f", scheme, p.fg, p.bg, r, p.min)
 			}
 		}
