@@ -259,6 +259,16 @@ component OnboardingPage
 
       // ---- the interview: microphone open, interruptible, voice only
       if ob.step == "interview"
+        if ob.demo
+          Card(level=1, testId="ob-demo", minHeight=0)
+            column padding=14 gap=8
+              text "Demo: no microphone here" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
+              text ob.demoNote font-family=th.fontUi font-size=14 color=th.muted
+              if ob.demoWords != ""
+                text `“${ob.demoWords}”` font-family=th.fontRead font-size=17 color=th.fg
+              if ob.demoLeft > 0
+                button press=obDemoNext testId="ob-demo-next" buttonStyle="bordered"
+                  text `Play the next recorded turn (${ob.demoLeft} left)`
         if ob.paused
           Card(level=2, testId="ob-paused", minHeight=0)
             column padding=18 gap=10
@@ -280,16 +290,6 @@ component OnboardingPage
         column testId="ob-talk" gap=10 width="100%"
           for t, i in ob.talk key=i
             TalkLine(who=t.who, line=t.text, interrupted=t.interrupted)
-        if ob.demo
-          Card(level=1, testId="ob-demo", minHeight=0)
-            column padding=14 gap=8
-              text "Demo: no microphone here" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
-              text ob.demoNote font-family=th.fontUi font-size=14 color=th.muted
-              if ob.demoWords != ""
-                text `“${ob.demoWords}”` font-family=th.fontRead font-size=17 color=th.fg
-              if ob.demoLeft > 0
-                button press=obDemoNext testId="ob-demo-next" buttonStyle="bordered"
-                  text `Play the next recorded turn (${ob.demoLeft} left)`
         button press=obSkip testId="ob-skip" appearance="none" padding=10
           text "Skip for now" font-family=th.fontUi font-size=15 color=th.muted
 
