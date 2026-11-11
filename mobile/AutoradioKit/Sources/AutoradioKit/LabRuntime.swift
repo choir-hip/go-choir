@@ -112,6 +112,12 @@ public final class LabRuntime: @unchecked Sendable {
         envBox = self
         snap.configName = cfg.name
         player.onChange = { [weak self] in self?.refresh() }
+        // The bar and the player read the real position from the audio, and a speed picked there reaches the audio.
+        let pl = player
+        BarTracker.shared.positionSource = { [weak pl] in pl?.renderPosition() }
+        BarTracker.shared.speedSink = { [weak pl] v in pl?.setRate(v) }
+        // Mail's "Read it to me" speaks through the engine.
+        MailReading.shared.handler = { [weak self] address, text in Task { await self?.speakText(address: address, text: text) } }
         coord.onChange = { [weak self] in self?.refresh() }
         eventTask = Task { [weak self] in
             guard let self else { return }
@@ -150,6 +156,20 @@ public final class LabRuntime: @unchecked Sendable {
             lock.lock(); snap.message = "start failed: \(error)"; lock.unlock()
         }
         refresh()
+    }
+
+    /// Set by the host: how to start the engine when text is to be spoken and it is not running (the host knows whether the
+    /// engine is virtual). Without it the text becomes the loaded programme and plays when the radio is started.
+    public var startRequest: (@Sendable () async -> Void)?
+
+    /// Speak arbitrary text as a programme item (mail's "Read it to me"): it queues like a story, shows in now-playing, and the
+    /// listener can cut into it like any speech. Returns false for text with nothing to say.
+    @discardableResult
+    public func speakText(address: String, text: String, title: String? = nil) async -> Bool {
+        if !snapshot().running, let go = startRequest { await go() }
+        let running = snapshot().running
+        // Not running: the text is the loaded programme, played when the radio starts (the engine is not there to play it).
+        return player.speakText(address: address, text: text, title: title, startNow: !running, play: running)
     }
 
     public func stop() {

@@ -139,8 +139,10 @@ public struct InterviewTurn: Codable, Equatable, Sendable {
     /// The radio's line was cut off by the listener (or, for "you", the words cut in).
     public var interrupted: Bool
     public var questionID: String
-    public init(who: String, text: String, interrupted: Bool = false, questionID: String = "") {
-        self.who = who; self.text = text; self.interrupted = interrupted; self.questionID = questionID
+    /// For a radio line that was cut off: the words the listener actually heard of it (whole words, from the audio played).
+    public var heard: String?
+    public init(who: String, text: String, interrupted: Bool = false, questionID: String = "", heard: String? = nil) {
+        self.who = who; self.text = text; self.interrupted = interrupted; self.questionID = questionID; self.heard = heard
     }
 }
 
@@ -214,11 +216,15 @@ public struct Interview: Equatable, Sendable {
 
     /// The listener said something. `verdict` comes from System 1's typed question when it answered, else the heuristic.
     /// `interrupted`: the words cut in over the radio. `followKey`: System 1's choice of prepared follow-up, if any.
-    public mutating func hear(_ words: String, verdict: InterviewVerdict? = nil, interrupted: Bool = false, followKey: String? = nil) -> [InterviewLine] {
+    /// `heard`: when interrupted, how much of the radio's line the listener heard before cutting in.
+    public mutating func hear(_ words: String, verdict: InterviewVerdict? = nil, interrupted: Bool = false, followKey: String? = nil, heard: String? = nil) -> [InterviewLine] {
         guard state.status == .running || state.status == .readback else { return [] }   // failure 14
         let text = words.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return [] }
-        if interrupted, let i = state.turns.lastIndex(where: { $0.who == "radio" }) { state.turns[i].interrupted = true }
+        if interrupted, let i = state.turns.lastIndex(where: { $0.who == "radio" }) {
+            state.turns[i].interrupted = true
+            if let h = heard { state.turns[i].heard = h }
+        }
         state.turns.append(InterviewTurn(who: "you", text: text, interrupted: interrupted, questionID: current?.id ?? "readback"))
         state.silentRun = 0
         if let c = current { state.silentOn[c.id] = 0 }
@@ -459,7 +465,11 @@ public struct Interview: Equatable, Sendable {
         for t in state.turns {
             let who = t.who == "radio" ? "Radio" : "You"
             let cut = t.interrupted ? (t.who == "radio" ? " (cut off)" : " (cut in)") : ""
-            out += "**\(who)\(cut):** \(t.text)\n\n"
+            if t.who == "radio", t.interrupted, let h = t.heard {
+                out += "**\(who)\(cut):** \(h.isEmpty ? "(cut off before a word was heard)" : h + " …")\n\n"   // only what was heard
+            } else {
+                out += "**\(who)\(cut):** \(t.text)\n\n"
+            }
         }
         return out
     }
@@ -666,13 +676,9 @@ public final class InterviewSession: @unchecked Sendable {
     private var interview: Interview
     private let file: URL?
     private var startedAt: Double?
-    private var lastLinesAt: Double = 0
-    private var lastLinesSeconds: Double = 0
     public var onChange: (@Sendable () -> Void)?
     /// Typed System 1 answers for a turn; nil means the heuristic decides (System 1 slow, absent or wrong).
     public var classify: (@Sendable (String, InterviewQuestion) async -> (InterviewVerdict?, String?))?
-    /// Whether the radio was audibly speaking when the listener began (the engine knows; see the README note on `DeskTurn`).
-    public var radioSpeaking: (@Sendable () -> Bool)?
     public var now: @Sendable () -> Double = { Date().timeIntervalSince1970 }
 
     public init(interview: Interview, file: URL? = nil) { self.interview = interview; self.file = file }
@@ -695,44 +701,34 @@ public final class InterviewSession: @unchecked Sendable {
 
     private func elapsedNow() -> Double { lock.lock(); defer { lock.unlock() }; return startedAt.map { now() - $0 } ?? 0 }
 
-    private func spokenSeconds(_ lines: [InterviewLine]) -> Double { Double(lines.map(\.text).joined(separator: " ").split(separator: " ").count) / 2.7 }
-
-    private func note(_ lines: [InterviewLine]) {
-        lock.lock(); lastLinesAt = now(); lastLinesSeconds = spokenSeconds(lines); lock.unlock()
-    }
 
     public func start() -> [InterviewLine] {
         lock.lock(); startedAt = now(); let l = interview.start(); lock.unlock()
-        note(l); save(); onChange?(); return l
+        save(); onChange?(); return l
     }
 
     public func resume() -> [InterviewLine] {
         lock.lock(); startedAt = now() - interview.state.elapsed; let l = interview.resume(); lock.unlock()
-        note(l); save(); onChange?(); return l
+        save(); onChange?(); return l
     }
 
-    /// The listener spoke. `interrupted` overrides the probe (the demo and tests say it outright).
-    public func hear(_ words: String, interrupted: Bool? = nil) async -> [InterviewLine] {
+    /// The listener spoke. `interrupted` and `heard` come from the engine (`DeskTurn.interrupted`, `.spokenText`): it knows,
+    /// from the audio actually played, whether the listener cut into a line and how much of it they had heard. Nothing here
+    /// guesses from timing; no information means not interrupted.
+    public func hear(_ words: String, interrupted: Bool = false, heard: String? = nil) async -> [InterviewLine] {
         let (q, st) = { () -> (InterviewQuestion?, InterviewStatus) in lock.lock(); defer { lock.unlock() }; return (interview.current, interview.status) }()
         var verdict: InterviewVerdict?, follow: String?
         if st == .running, let q, let classify { (verdict, follow) = await classify(words, q) }
-        let cut: Bool = interrupted ?? (radioSpeaking?() ?? estimatedOverlap())
         let elapsed = elapsedNow()
         lock.lock()
         interview.tick(elapsed: elapsed)
-        let lines = interview.hear(words, verdict: verdict, interrupted: cut, followKey: follow)
+        let lines = interview.hear(words, verdict: verdict, interrupted: interrupted, followKey: follow, heard: interrupted ? heard : nil)
         lock.unlock()
-        note(lines); save(); onChange?(); return lines
+        save(); onChange?(); return lines
     }
 
-    private func estimatedOverlap() -> Bool {
-        lock.lock(); defer { lock.unlock() }
-        let gap = now() - lastLinesAt
-        return lastLinesAt > 0 && gap < lastLinesSeconds
-    }
-
-    public func silence() -> [InterviewLine] { lock.lock(); let l = interview.silence(); lock.unlock(); note(l); save(); onChange?(); return l }
-    public func tooLoud() -> [InterviewLine] { lock.lock(); let l = interview.tooLoud(); lock.unlock(); note(l); save(); onChange?(); return l }
+    public func silence() -> [InterviewLine] { lock.lock(); let l = interview.silence(); lock.unlock(); save(); onChange?(); return l }
+    public func tooLoud() -> [InterviewLine] { lock.lock(); let l = interview.tooLoud(); lock.unlock(); save(); onChange?(); return l }
 }
 
 // MARK: Stages: the interview on the existing engine
@@ -765,7 +761,7 @@ public final class InterviewDesk: Desk, @unchecked Sendable {
         AsyncThrowingStream { c in
             let task = Task {
                 guard let s = InterviewSession.shared else { c.finish(); return }
-                let lines = await s.hear(turn.listenerWords)
+                let lines = await s.hear(turn.listenerWords, interrupted: turn.interrupted, heard: turn.interrupted ? turn.spokenText : nil)
                 if !lines.isEmpty, !Task.isCancelled {
                     c.yield(Revision(id: "interview-\(turn.turnID)", fromBlock: turn.blockIndex + 1,
                                      blocks: lines.map { .speech(text: $0.text) }, keepRest: false, isFinal: true))

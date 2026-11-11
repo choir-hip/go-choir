@@ -95,8 +95,23 @@ public struct DeskTurn: Codable, Sendable {
     public var programmeID: String
     public var blockIndex: Int
     public var listenerWords: String
-    public init(turnID: String, programmeID: String, blockIndex: Int, listenerWords: String) {
+    /// The listener cut into a line the radio was speaking (set by the engine at the moment the listener began, from the audio
+    /// actually played). `spokenText` is the part of that line they heard, whole words only; `cutBlockIndex` is the line's block.
+    public var interrupted: Bool
+    public var spokenText: String
+    public var cutBlockIndex: Int?
+    public init(turnID: String, programmeID: String, blockIndex: Int, listenerWords: String,
+                interrupted: Bool = false, spokenText: String = "", cutBlockIndex: Int? = nil) {
         self.turnID = turnID; self.programmeID = programmeID; self.blockIndex = blockIndex; self.listenerWords = listenerWords
+        self.interrupted = interrupted; self.spokenText = spokenText; self.cutBlockIndex = cutBlockIndex
+    }
+    public init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        turnID = try c.decode(String.self, forKey: .turnID); programmeID = try c.decode(String.self, forKey: .programmeID)
+        blockIndex = try c.decode(Int.self, forKey: .blockIndex); listenerWords = try c.decode(String.self, forKey: .listenerWords)
+        interrupted = try c.decodeIfPresent(Bool.self, forKey: .interrupted) ?? false
+        spokenText = try c.decodeIfPresent(String.self, forKey: .spokenText) ?? ""
+        cutBlockIndex = try c.decodeIfPresent(Int.self, forKey: .cutBlockIndex)
     }
 }
 

@@ -67,7 +67,11 @@ public protocol PlaybackControl: AnyObject, Sendable {
     func apply(_ revision: Revision) async
     /// Return to the programme at the right place.
     func resume() async
+    /// The programme line being spoken this instant and how much of it has been heard; nil when nothing is being spoken
+    /// (paused, a clip, nothing playing). Asked by the engine at the moment a listener begins, so a turn knows what it cut into.
+    func spoken() async -> SpokenCut?
 }
+public extension PlaybackControl { func spoken() async -> SpokenCut? { nil } }
 
 /// Replay's player: nothing audible, the document is tracked.
 public final class SimulatedPlayback: PlaybackControl, @unchecked Sendable {
@@ -145,6 +149,8 @@ public actor TurnEngine {
         var addressedAt = 0.0
         var partialTask: Task<Void, Never>?
         var ended = false
+        /// What the listener cut into when this turn began (nil: the radio was not speaking).
+        var cut: SpokenCut?
         init(id: String, config: LabConfiguration, transcriber: Transcriber, yield: YieldPolicy, session: TranscriptionSession, firstEventIndex: Int) {
             self.id = id; self.config = config; self.transcriber = transcriber; self.yield = yield; self.session = session; self.firstEventIndex = firstEventIndex
         }
@@ -285,6 +291,8 @@ public actor TurnEngine {
     func beginTurn(addressed: Bool, now: Double) async {
         let id = "turn-" + UUID().uuidString.prefix(8).lowercased()
         let cfg = config
+        // First, before anything else takes time or yields the programme: what was being said, and how far.
+        let cut = await env.playback.spoken()
         do {
             let transcriber = try env.registry.make(.transcriber, as: Transcriber.self, cfg)
             let yield = try env.registry.make(.yieldPolicy, as: YieldPolicy.self, cfg)
@@ -300,6 +308,7 @@ public actor TurnEngine {
             for f in preroll { session.append(f) }
             preroll = []
             t.partialTask = Task { [log = env.log] in for await p in session.partials { log.emit(.partialTranscript(p)) } }
+            t.cut = cut
             turn = t
             if let l = lastFinished, now - l.t < limits.spokeAgainWindow { env.onOutcome(l.id, .spokeAgain); lastFinished = nil }
             setPhase(.candidate)
@@ -395,7 +404,8 @@ public actor TurnEngine {
         var relayTask: Task<Void, Never>?
         var deskTask: Task<Void, Never>?
         if let desk {
-            let turnReq = DeskTurn(turnID: t.id, programmeID: pos.programmeID, blockIndex: pos.blockIndex, listenerWords: transcript)
+            let turnReq = DeskTurn(turnID: t.id, programmeID: pos.programmeID, blockIndex: pos.blockIndex, listenerWords: transcript,
+                                 interrupted: t.cut != nil, spokenText: t.cut?.spoken ?? "", cutBlockIndex: t.cut?.blockIndex)
             deskTask = Task { [self] in
                 do {
                     for try await r in desk.submit(turnReq) {

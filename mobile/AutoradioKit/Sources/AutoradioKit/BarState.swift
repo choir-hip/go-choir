@@ -103,6 +103,10 @@ public final class BarTracker: @unchecked Sendable {
     private var clock = BlockClock()
     public private(set) var speed = 1.0
     private var level = 0.0
+    /// The audio's own position in the block (set by the runtime). Without one the estimate from play time is used.
+    public var positionSource: (@Sendable () -> RenderPosition?)?
+    /// Told when the listener picks a speed, so the audio can apply it.
+    public var speedSink: (@Sendable (Double) -> Void)?
 
     public init() {}
 
@@ -149,7 +153,10 @@ public final class BarTracker: @unchecked Sendable {
         }
     }
 
-    public func setSpeed(_ s: Double) { lock.lock(); speed = min(max(s, 0.5), 2.0); lock.unlock() }
+    public func setSpeed(_ s: Double) {
+        lock.lock(); speed = s.isNaN ? 1 : min(max(s, 0.5), 2.0); let v = speed; let sink = speedSink; lock.unlock()
+        sink?(v)
+    }
 
     /// When the bar's timed states next end, so the host can ask once more then (nil: nothing is timed).
     public func expiry(now: Date = Date()) -> TimeInterval? {
@@ -187,6 +194,11 @@ public final class BarTracker: @unchecked Sendable {
     }
 
     func clockProgress(_ s: LabSnapshot, doc: ProgrammeDocument?, now: Date) -> Double {
+        // The real position: the audio that was rendered, for this block. A block with no audio yet (loading, just skipped) is at 0.
+        if let src = positionSource {
+            guard let p = src(), p.index == s.blockIndex else { return 0 }
+            return min(0.99, max(0, p.fraction))
+        }
         let running = s.running && !s.paused && s.level == "play" && s.phase == "playing"
         clock.update(index: s.blockIndex, running: running, now: now)
         let words = max(1, (doc.flatMap { $0.blocks.indices.contains(s.blockIndex) ? $0.blocks[s.blockIndex].spokenText : nil } ?? s.blockText)
