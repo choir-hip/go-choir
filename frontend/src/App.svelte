@@ -378,26 +378,31 @@
   }
 
   // No theme at all (null, undefined, an empty object) means the owner has not
-  // chosen one: the system default shows and nothing is stored. A theme whose
-  // id is not selectable yet (a pack still loading) shows the default the same
-  // way; the owner's stored choice is applied when the pack registers.
+  // chosen one: the system default shows and the boot cache is cleared. A theme
+  // whose id is not selectable yet (a pack registers after mount) is a pending
+  // choice, not an absent one: the default shows meanwhile, the cache is kept,
+  // and the choice is applied when the pack registers (rememberWantedTheme).
   function isNoChoice(theme) {
-    return !theme || typeof theme !== 'object' || Object.keys(theme).length === 0 || !isKnownThemeId(theme.id);
+    return !theme || typeof theme !== 'object' || Object.keys(theme).length === 0;
+  }
+  function isPendingChoice(theme) {
+    return !isNoChoice(theme) && !isKnownThemeId(theme.id);
   }
 
   function applyTheme(theme, persist = true) {
     const noChoice = isNoChoice(theme);
-    const normalized = noChoice ? systemDefaultTheme() : normalizeThemeConfig(theme);
+    const showsDefault = noChoice || isPendingChoice(theme);
+    const normalized = showsDefault ? systemDefaultTheme() : normalizeThemeConfig(theme);
     const validation = validateThemeConfig(normalized);
     if (!validation.ok) {
       return validation;
     }
-    usingDefaultTheme = noChoice;
+    usingDefaultTheme = showsDefault;
     currentTheme = normalized;
     publishTheme(normalized);
     applyThemeToElement(document.documentElement, normalized);
-    if (noChoice) {
-      clearThemeBootCache();
+    if (showsDefault) {
+      if (noChoice) clearThemeBootCache();
     } else {
       saveThemeBootCache(normalized);
       if (persist && isAuthenticated) {
@@ -420,6 +425,13 @@
       const raw = window.localStorage?.getItem(scopedKey(THEME_BOOT_CACHE_KEY));
       if (!raw) return null;
       const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || parsed.schema_version !== 2) return null;
+      // Earlier releases wrote the whole default theme (Aero Chrome Heart, with its colours) for every
+      // visitor, never marked as a choice. That is not a choice: only an entry marked chosen, or one
+      // without colours (a theme seeded by id, as scripts/choir-shot.mjs does), is honoured.
+      if (parsed.id === 'aero-chrome-heart' && parsed.colors && !parsed.chosen) return null;
+      // A pack's theme is not selectable until the pack registers: hand it back as it is (a pending choice).
+      if (!isKnownThemeId(parsed.id)) return typeof parsed.id === 'string' && parsed.id ? parsed : null;
       const validation = validateThemeConfig(parsed);
       return validation.ok ? normalizeThemeConfig(parsed) : null;
     } catch (_err) {
@@ -429,7 +441,7 @@
 
   function saveThemeBootCache(theme) {
     try {
-      window.localStorage?.setItem(scopedKey(THEME_BOOT_CACHE_KEY), JSON.stringify(normalizeThemeConfig(theme)));
+      window.localStorage?.setItem(scopedKey(THEME_BOOT_CACHE_KEY), JSON.stringify({ ...normalizeThemeConfig(theme), chosen: true }));
     } catch (_err) {
       // The server preference remains authoritative; the boot cache is only a first-paint hint.
     }
@@ -479,7 +491,9 @@
     if (legacy !== null) {
       window.history.replaceState(window.history.state, '', `${legacy}${window.location.search}${window.location.hash}`);
     }
-    applyTheme(loadThemeBootCache(), false);
+    const cachedTheme = loadThemeBootCache();
+    rememberWantedTheme(cachedTheme);
+    applyTheme(cachedTheme, false);
     // The recovery page stands alone: no session check, prewarm or
     // computer-surface handoff (a handoff reload would drop the in-memory
     // recovery token). Deep links and public routes are the packages'
