@@ -1,1 +1,171 @@
-{ "shapes": {}, "names": [] }
+{
+ "shapes": {
+  "SetupRowView": {
+   "stage": "string",
+   "name": "string",
+   "model": "string",
+   "sizeLabel": "string",
+   "state": "string",
+   "statusLine": "string",
+   "numbers": "string",
+   "progress": "number",
+   "isFallback": "bool",
+   "canRetry": "bool",
+   "canFallback": "bool"
+  },
+  "TalkRow": {
+   "who": "string",
+   "text": "string",
+   "interrupted": "bool"
+  },
+  "Onboarding": {
+   "step": "string",
+   "title": "string",
+   "message": "string",
+   "totalLabel": "string",
+   "device": "string",
+   "mic": "string",
+   "heard": "string",
+   "route": "string",
+   "interviewStatus": "string",
+   "pauseReason": "string",
+   "nowSaying": "string",
+   "demoNote": "string",
+   "demoKind": "string",
+   "demoWords": "string",
+   "editionStatus": "string",
+   "writingLine": "string",
+   "editionError": "string",
+   "editionTitle": "string",
+   "editionIntro": "string",
+   "editionAddress": "string",
+   "card": "string",
+   "cardBody": "string",
+   "aim": "string",
+   "askMobile": "bool",
+   "setupFinished": "bool",
+   "setupStarted": "bool",
+   "hearingOK": "bool",
+   "paused": "bool",
+   "listening": "bool",
+   "demo": "bool",
+   "skipped": "bool",
+   "editionDone": "bool",
+   "level": "number",
+   "demoLeft": "number",
+   "rows": "SetupRowView[]",
+   "summary": "string[]",
+   "talk": "TalkRow[]",
+   "editionLines": "string[]"
+  }
+ },
+ "names": [
+  {
+   "source": "onboardingState",
+   "live": true,
+   "answers": "Onboarding",
+   "substitute": {
+    "default": {
+     "step": "welcome",
+     "title": "Make it yours",
+     "message": "",
+     "totalLabel": "",
+     "device": "",
+     "mic": "unasked",
+     "heard": "",
+     "route": "",
+     "interviewStatus": "notStarted",
+     "pauseReason": "",
+     "nowSaying": "",
+     "demoNote": "",
+     "demoKind": "",
+     "demoWords": "",
+     "editionStatus": "",
+     "writingLine": "",
+     "editionError": "",
+     "editionTitle": "My edition",
+     "editionIntro": "",
+     "editionAddress": "texture:my-edition",
+     "card": "",
+     "cardBody": "",
+     "aim": "",
+     "askMobile": false,
+     "setupFinished": false,
+     "setupStarted": false,
+     "hearingOK": false,
+     "paused": false,
+     "listening": false,
+     "demo": false,
+     "skipped": false,
+     "editionDone": false,
+     "level": 0,
+     "demoLeft": 0,
+     "rows": [],
+     "summary": [],
+     "talk": [],
+     "editionLines": []
+    }
+   }
+  },
+  {
+   "send": "onboardingBegin",
+   "options": {
+    "mobile": "string"
+   },
+   "answers": "Onboarding"
+  },
+  {
+   "send": "onboardingRetry",
+   "options": {
+    "stage": "string"
+   },
+   "answers": "Onboarding"
+  },
+  {
+   "send": "onboardingFallback",
+   "options": {
+    "stage": "string"
+   },
+   "answers": "Onboarding"
+  },
+  {
+   "send": "onboardingMic",
+   "answers": "Onboarding"
+  },
+  {
+   "send": "onboardingMicNext",
+   "answers": "Onboarding"
+  },
+  {
+   "send": "onboardingHearing",
+   "options": {
+    "ok": "string"
+   },
+   "answers": "Onboarding"
+  },
+  {
+   "send": "onboardingInterview",
+   "answers": "Onboarding"
+  },
+  {
+   "send": "onboardingContinue",
+   "answers": "Onboarding"
+  },
+  {
+   "send": "onboardingDemoNext",
+   "answers": "Onboarding"
+  },
+  {
+   "send": "onboardingEditionRetry",
+   "answers": "Onboarding"
+  },
+  {
+   "send": "onboardingSkip",
+   "answers": "Onboarding"
+  },
+  {
+   "send": "onboardingReset",
+   "answers": "Onboarding"
+  }
+ ]
+}

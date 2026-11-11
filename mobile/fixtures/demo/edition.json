@@ -1,0 +1,13 @@
+{
+  "title": "My edition",
+  "failFirst": true,
+  "intro": "This is your edition. Change anything by asking.",
+  "writingLines": ["Reading what you told me", "Sorting it into what you follow and what you do not", "Writing your edition"],
+  "sections": [
+    { "heading": "What I follow", "lines": ["Tech, the companies mostly: what they ship, who they hire, and what it does to work.", "The harbor council, from the tide barrier vote to the ferry timetable."] },
+    { "heading": "Less of", "lines": ["Celebrity gossip. Sports, unless my team makes the final."] },
+    { "heading": "Sources", "lines": ["I trust the public radio. I would rather not see the tabloids."] },
+    { "heading": "Places and people", "lines": ["Dunmere, and the harbor council."] },
+    { "heading": "When I listen", "lines": ["Mornings on the train, about twenty minutes."] }
+  ]
+}

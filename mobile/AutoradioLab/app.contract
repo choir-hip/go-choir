@@ -304,6 +304,23 @@ component Autoradio
     resetLearned
     refreshActivity
     // ---- lane 8: onboarding and the interview ----
+    ob
+    obBegin
+    obBeginMobile
+    obRetry
+    obFallback
+    obMic
+    obMicNext
+    obHearingYes
+    obHearingNo
+    obInterview
+    obContinue
+    obDemoNext
+    obEditionRetry
+    obSkip
+    obReset
+    obOpenEdition
+    obFinish
     // ---- lane 9: motion and the mark ----
     mkT
     mkFrames
