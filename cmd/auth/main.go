@@ -106,6 +106,7 @@ func authRoutes(handler *auth.Handler) []authRoute {
 		{"POST /auth/api-keys", act, handler.HandleCreateAPIKey},
 		{"GET /auth/api-keys", act, handler.HandleListAPIKeys},
 		{"DELETE /auth/api-keys/{id}", act, handler.HandleRevokeAPIKey},
+		{"GET /auth/whoami", read, handler.HandleWhoami},
 
 		// choir login: device authorization (docs/design/cli-agent-onboarding-2026-11-03.md).
 		// Token polls get their own class: slow_down paces each request.
