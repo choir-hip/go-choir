@@ -51,7 +51,7 @@ test('a pack contributes a theme; selecting it normalizes to it; uninstall resto
   const idsBefore = T.listThemes().map((t) => t.id);
   const restore = S.setThemeFileResolver((pkg, file) => (pkg === 'paper-night' && file === 'theme.json' ? night() : undefined));
   const applied = [];
-  const unbind = S.bindThemeHost({ apply: (theme, persist) => { applied.push([theme.id, persist]); S.publishTheme(T.normalizeThemeConfig(theme)); return { ok: true }; } });
+  const unbind = S.bindThemeHost({ apply: (theme, persist) => { const shown = theme ? T.normalizeThemeConfig(theme) : T.systemDefaultTheme(); applied.push([theme ? shown.id : null, persist]); S.publishTheme(shown); return { ok: true }; } });
   await X.setPackageContributions('paper-night', { themes: [{ id: 'paper-night.dark', file: 'theme.json' }] }, 'v1');
   expect(T.listThemes().map((t) => t.id)).toEqual([...idsBefore, 'paper-night.dark']);
   expect(T.normalizeThemeConfig(night()).id).toBe('paper-night.dark');
@@ -60,9 +60,9 @@ test('a pack contributes a theme; selecting it normalizes to it; uninstall resto
   expect(S.getTheme().id).toBe('paper-night.dark');
   const seen = [];
   const off = S.onThemeChange((t) => seen.push(t.id));
-  // the pack goes while selected: the default shows, not persisted
+  // the pack goes while selected: no choice is applied (the system default shows), not persisted
   await X.setPackageContributions('paper-night', null, '');
-  expect(applied.at(-1)).toEqual([T.DEFAULT_THEME.id, false]);
+  expect(applied.at(-1)).toEqual([null, false]);
   expect(seen).toEqual([T.DEFAULT_THEME.id]);
   expect(T.listThemes().map((t) => t.id)).toEqual(idsBefore);
   expect(S.setTheme('paper-night.dark').ok).toBe(false);
