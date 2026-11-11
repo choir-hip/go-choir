@@ -21,7 +21,7 @@ public enum BundledThemes {
     "danger": { "light": "#A3142F", "dark": "#FF6B7B" },
     "onAccent": { "light": "#FFFFFF", "dark": "#120D17" },
     "rule":   { "light": "rgba(32,20,58,.22)", "dark": "rgba(243,236,246,.18)" },
-    "scrim":  { "light": "rgba(24,14,30,.74)", "dark": "rgba(0,0,0,.80)" },
+    "scrim":  { "light": "rgba(24,14,30,.84)", "dark": "rgba(0,0,0,.86)" },
     "onScrim": { "light": "#FFFFFF", "dark": "#F3F3F3" }
   },
   "type": {
@@ -61,7 +61,7 @@ public enum BundledThemes {
     "danger": { "light": "#A12A1B", "dark": "#FF8F7C" },
     "onAccent": { "light": "#FFFFFF", "dark": "#1D140D" },
     "rule":   { "light": "rgba(43,27,14,.20)", "dark": "rgba(247,233,211,.18)" },
-    "scrim":  { "light": "rgba(24,14,30,.74)", "dark": "rgba(0,0,0,.80)" },
+    "scrim":  { "light": "rgba(24,14,30,.84)", "dark": "rgba(0,0,0,.86)" },
     "onScrim": { "light": "#FFFFFF", "dark": "#F3F3F3" }
   },
   "type": { "read": "ui-serif", "ui": "ui-rounded", "mono": "ui-monospace", "scale": "large" },
@@ -96,7 +96,7 @@ public enum BundledThemes {
     "danger": { "light": "#B3261E", "dark": "#FF6E5E" },
     "onAccent": { "light": "#FFFFFF", "dark": "#0E0E0E" },
     "rule":   { "light": "#111111", "dark": "#EDEDED" },
-    "scrim":  { "light": "rgba(24,14,30,.74)", "dark": "rgba(0,0,0,.80)" },
+    "scrim":  { "light": "rgba(24,14,30,.84)", "dark": "rgba(0,0,0,.86)" },
     "onScrim": { "light": "#FFFFFF", "dark": "#F3F3F3" }
   },
   "type": { "read": "ui-serif, Georgia, serif", "ui": "ui-serif, Georgia, serif", "mono": "ui-monospace, monospace", "scale": "editorial" },
@@ -131,7 +131,7 @@ public enum BundledThemes {
     "danger": { "light": "#A00018", "dark": "#FF8A8A" },
     "onAccent": { "light": "#FFFFFF", "dark": "#000000" },
     "rule":   { "light": "#000000", "dark": "#FFFFFF" },
-    "scrim":  { "light": "rgba(24,14,30,.74)", "dark": "rgba(0,0,0,.80)" },
+    "scrim":  { "light": "rgba(24,14,30,.84)", "dark": "rgba(0,0,0,.86)" },
     "onScrim": { "light": "#FFFFFF", "dark": "#F3F3F3" }
   },
   "type": { "read": "system-ui", "ui": "system-ui", "mono": "ui-monospace", "scale": "large" },

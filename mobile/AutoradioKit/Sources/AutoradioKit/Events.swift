@@ -39,9 +39,32 @@ public enum LabEvent: Codable, Sendable, Equatable {
     case partialTranscript(String)
     case finalTranscript(String)
     case turnEnded
+    /// The listener cancelled the turn while talking: the captured audio and words were dropped, no desk call, no local response.
+    case turnCancelled
     case system1Answer(questionID: String, option: String, score: Double, ms: Double)
     case ackStarted(msSinceTurnEnd: Double)
     case holdingSaid(String)
+    /// The phone's own model wrote the acknowledgement: the line, and ms from the end of the turn.
+    case localAckReady(text: String, msSinceTurnEnd: Double)
+    /// No line was written in time (or at all): why, and ms from the end of the turn; the engine plays a non-verbal cue.
+    case localAckSkipped(reason: String, msSinceTurnEnd: Double)
+    /// One sentence of the phone's own stream started to be heard.
+    case localSentenceStarted(text: String, msSinceTurnEnd: Double)
+    /// The local stream was cut (the desk spoke, System 1 said nothing was asked, ...) after this many sentences were heard.
+    case localCut(afterSentences: Int, reason: String, msSinceTurnEnd: Double)
+    /// What the local model's generation for this turn cost: the prompt, how much of its stable prefix (instructions and the page) was
+    /// already in the model's cache, and the time to read what was not.
+    case localPrefill(promptTokens: Int, prefixTokens: Int, reusedTokens: Int, prefillMs: Double)
+    /// The responder read the page in front into its cache ahead of any question (not part of a turn).
+    case localWarm(address: String, tokens: Int, ms: Double, complete: Bool)
+    /// The hand-over sound between the phone's stream and the desk's answer played.
+    case transitionPlayed(msSinceTurnEnd: Double)
+    /// The non-verbal cue started playing, ms from the end of the turn.
+    case cueStarted(msSinceTurnEnd: Double)
+    /// The first piece of the desk's answer arrived, ms from the end of the turn.
+    case deskFirstToken(msSinceTurnEnd: Double)
+    /// The programme's audio for block `block` started playing (after a revision: the desk's answer being heard).
+    case programmeAudioStart(block: Int)
     /// System 1 said the utterance needs nothing: the acknowledgement was stopped. `audible`: it had already started
     /// (the line in flight finished; no further line started).
     case ackCancelled(reason: String, audible: Bool)
@@ -145,6 +168,12 @@ public struct TurnSummary: Codable, Sendable, Equatable {
     /// Milliseconds from the end of the turn to the first revision.
     public var turnEndToRevisionMs: Double?
     public var errors: [String]
+    /// Milliseconds from the end of the turn until the local model's line was written (nil: none was).
+    public var localReplyReadyMs: Double?
+    /// Why there was no local line, when there was none.
+    public var localAckSkipped: String?
+    /// Milliseconds from the end of the turn to the first piece of the desk's answer.
+    public var deskFirstTokenMs: Double?
     /// Why the acknowledgement was stopped, when System 1 said the turn needed nothing.
     public var ackCancelled: String?
     public var peakResidentBytes: Int64?
@@ -176,8 +205,11 @@ public struct TurnRecord: Codable, Sendable {
             case .turnEnded: turnEnd = te.t
             case .stageTiming(let st, let a, let b): s.timings.append(StageTimingEntry(stage: st, startedAt: a, endedAt: b))
             case .system1Answer(let q, let o, let sc, let ms): s.answers.append(AnswerEntry(questionID: q, option: o, score: sc, ms: ms))
-            case .ackStarted(let ms): s.turnEndToAckMs = ms
+            case .ackStarted(let ms): if s.turnEndToAckMs == nil { s.turnEndToAckMs = ms }
             case .holdingSaid(let l): s.holdingLines.append(l)
+            case .localAckReady(_, let ms): s.localReplyReadyMs = ms
+            case .localAckSkipped(let r, _): s.localAckSkipped = r
+            case .deskFirstToken(let ms): if s.deskFirstTokenMs == nil { s.deskFirstTokenMs = ms }
             case .ackCancelled(let r, let a): s.ackCancelled = r + (a ? " (the line already speaking finished)" : " (before any audio)")
             case .revisionArrived(let id, _, _, let sum):
                 s.revisions.append("\(id): \(sum)")

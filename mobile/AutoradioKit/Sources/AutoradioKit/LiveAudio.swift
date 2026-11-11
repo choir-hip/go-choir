@@ -516,13 +516,14 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
                 log.emit(.error(stage: "voice", message: "\(error)"))
             }
             if Task.isCancelled { return }
+            log.emit(.programmeAudioStart(block: tag))      // the trace reads "desk audio start" from the first of these after a revision
             await audio.playProgramme(samples, rate: rate, tag: tag)
         case .clip(let url, let start, let end, _):
             guard let u = FixtureResources.resolve(url), let all = try? AudioFiles.readMono(u, rate: 16_000) else {
                 log.emit(.error(stage: "player", message: "clip not found: \(url)")); return
             }
             let a = Int(start * 16_000), z = min(all.count, end.map { Int($0 * 16_000) } ?? all.count)
-            if a < z { await audio.playProgramme(Array(all[a..<z]), rate: 16_000, tag: tag) }
+            if a < z { log.emit(.programmeAudioStart(block: tag)); await audio.playProgramme(Array(all[a..<z]), rate: 16_000, tag: tag) }
         }
     }
 

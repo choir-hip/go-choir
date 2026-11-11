@@ -131,6 +131,8 @@ component TracePage
         row gap=8 align-items="center"
           button press=exportTurn(trace.id) testId="trace-export" appearance="none"
             Btn(label="Export JSON", primary=false, wide=false)
+          button press=exportTurn("last") testId="trace-export-last" appearance="none"
+            Btn(label="Export last 5 turns", primary=false, wide=false)
           if expPath != ""
             button press=shareExport(expPath) testId="trace-share" appearance="none"
               Btn(label="Share", primary=false, wide=false)

@@ -13,7 +13,7 @@ extension StageRegistry {
         LabConfiguration(name: "listener", stages: [
             .micSource: .init(id: "builtin"), .addressing: .init(id: "button"), .speechBounds: .init(id: "energy-vad"),
             .speakerCheck: .init(id: "none"), .transcriber: .init(id: "apple-speech"), .yieldPolicy: .init(id: "dip-then-pause"),
-            .system1: .init(id: ChoirSystem1.stageID), .holder: .init(id: "fixed-lines"), .voice: .init(id: "avspeech"),
+            .system1: .init(id: ChoirSystem1.stageID), .holder: .init(id: "local-ack"), .voice: .init(id: "avspeech"),
             .desk: .init(id: ChoirDeskStage.stageID), .programme: .init(id: ChoirFrontProgramme.stageID),
         ])
     }

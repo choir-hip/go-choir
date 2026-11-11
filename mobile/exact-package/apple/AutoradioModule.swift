@@ -230,6 +230,7 @@ public final class AutoradioModule: ExactPackage {
         case "choirPlayPause": Task { [choir] in await choir?.playPause() }; reply(state())
         case "choirTalkDown": Task { [choir] in await choir?.talkDown() }; reply(state())
         case "choirTalkUp": runtime.talkUp(); reply(state())
+        case "choirTalkCancel": runtime.cancelTalk(); reply(state())      // Cancel beside Send while listening: discard, call nothing
         case "choirPlay": let r = args["route"] as? String ?? ""; Task { [choir] in await choir?.play(route: r) }; reply(state())
         default: reply(["error": "NotSupportedError"])
         }

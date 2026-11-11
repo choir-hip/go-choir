@@ -41,17 +41,39 @@ public actor ModelStore {
     private var specs: [String: ModelSpec] = [:]
     private var unloaders: [String: @Sendable () -> Void] = [:]
     private var loaded: Set<String> = []
-    private let log: EventLog?
-    public init(root: URL, log: EventLog? = nil) {
+    private var log: EventLog?
+    /// The one store of the app: voice setup, the engine's stages and the proof all use it. It is created with the whole
+    /// catalog (`KnownModels`) registered, so no model setup can ask for is ever "not registered".
+    public static let shared = ModelStore(root: KnownModels.storeRoot, registerKnown: true)
+    public init(root: URL, log: EventLog? = nil, registerKnown: Bool = false) {
         self.root = root; self.log = log
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        if registerKnown {
+            for s in KnownModels.pinned { specs[s.id] = s }
+            for m in KnownModels.managed { managed[m.id] = m }
+        }
+    }
+    /// The runtime attaches its event log so loads show in the trace.
+    public func attach(log: EventLog) { self.log = log }
+    public func isRegistered(_ id: String) -> Bool { specs[id] != nil || managed[id] != nil }
+
+    /// The model's file if it is on the phone already, whole (the file is moved into place only after its SHA-256 matched, so
+    /// the size is enough here). Never fetches.
+    public func localFileIfPresent(_ id: String) -> URL? {
+        guard let s = specs[id] else { return nil }
+        let final = root.appendingPathComponent(s.fileName)
+        let size = ((try? FileManager.default.attributesOfItem(atPath: final.path)[.size]) as? NSNumber)?.int64Value ?? -1
+        return size == s.bytes ? final : nil
     }
     public func register(_ s: ModelSpec) { specs[s.id] = s }
     public var registered: [ModelSpec] { Array(specs.values) }
 
     /// Fetch (or resume) and verify; returns the local file. `progress` receives bytes so far.
     public func ensure(_ id: String, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
-        guard let s = specs[id] else { throw LabError.badInput("model \(id) not registered") }
+        guard let s = specs[id] else {
+            if managed[id] != nil { throw LabError.badInput("model \(id) is fetched by its own library, not by the store") }
+            throw LabError.badInput("model \(id) not registered")
+        }
         let final = root.appendingPathComponent(s.fileName)
         if FileManager.default.fileExists(atPath: final.path), try sha(final) == s.sha256.lowercased() { return final }
         let part = final.appendingPathExtension("part")
@@ -120,7 +142,7 @@ public actor ModelStore {
     /// Unload everything except `keep` (used before a model that needs the whole budget loads).
     public func unloadAll(except keep: Set<String>) { for id in loaded.subtracting(keep) { unload(id) } }
 
-    static func directoryBytes(_ url: URL) -> Int64 {
+    public static func directoryBytes(_ url: URL) -> Int64 {
         guard let e = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.totalFileAllocatedSizeKey, .isRegularFileKey]) else { return 0 }
         var n: Int64 = 0
         for case let u as URL in e {

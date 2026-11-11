@@ -118,7 +118,9 @@ final class OnboardingController: @unchecked Sendable {
         if demo, let d = Demo.fixture("setup-script"), let sc = SimulatedSetupBackend.parse(d) {
             backend = SimulatedSetupBackend(script: sc); profile = sc.profile; stall = sc.stallSeconds ?? 1.6; patience = 3600
         } else {
-            backend = LiveSetupBackend(store: ModelStore(root: support.appendingPathComponent("models")))
+            // The one shared store, with the whole catalog in it from the start (the first phone walk's "model ... not registered"
+            // came from a store of its own that nothing had registered into).
+            backend = LiveSetupBackend(store: .shared)
         }
         var s = VoiceSetup(backend: backend, profile: profile, smaller: false, stallSeconds: stall, patience: patience)
         if !s.fitsOnDisk { s = VoiceSetup(backend: backend, profile: profile, smaller: true, stallSeconds: stall, patience: patience) }
@@ -145,6 +147,8 @@ final class OnboardingController: @unchecked Sendable {
                 module.runtime.setStage(kind, id: id)
             }
         }
+        // The responder model setup chose is the one the phone talks with (read again at every start).
+        if let r = s.record.items.first(where: { $0.stage == SetupStage.responder.rawValue }), KnownModels.isPinned(r.chosen) { ResponderChoice.current = r.chosen }
         set { progress.setupDone = true; step = "mic" }
         save()
     }

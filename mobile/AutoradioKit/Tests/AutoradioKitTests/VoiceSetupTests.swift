@@ -26,8 +26,8 @@ final class VoiceSetupTests: XCTestCase {
 
     func testTotalIsSaidPlainly() {
         let big = SetupCatalog.plan(for: device(8))
-        XCTAssertEqual(SetupCatalog.totalBytes(big), 2_000_000 + 480_000_000 + 350_000_000)
-        XCTAssertEqual(SetupCatalog.totalLabel(bytes: SetupCatalog.totalBytes(big), onWiFi: true), "About 830 MB. On Wi-Fi this takes a few minutes.")
+        XCTAssertEqual(SetupCatalog.totalBytes(big), 2_000_000 + 480_000_000 + 350_000_000 + 639_446_688 + 396_705_472)
+        XCTAssertEqual(SetupCatalog.totalLabel(bytes: SetupCatalog.totalBytes(big), onWiFi: true), "About 1.9 GB. On Wi-Fi this takes a few minutes.")
         XCTAssertTrue(SetupCatalog.totalLabel(bytes: 1_400_000_000, onWiFi: false).contains("1.4 GB"))
         XCTAssertTrue(SetupCatalog.totalLabel(bytes: 1_400_000_000, onWiFi: false).contains("mobile data"), "failure 7")
         XCTAssertTrue(SetupCatalog.totalLabel(bytes: 0, onWiFi: true).hasPrefix("Nothing to download"))
@@ -40,9 +40,9 @@ final class VoiceSetupTests: XCTestCase {
         XCTAssertTrue(s.isFinished)
         XCTAssertTrue(s.rows.allSatisfy { $0.state == "ready" && !$0.isFallback }, "\(s.rows)")
         XCTAssertEqual(s.choices[.transcriber], "parakeet-tdt")
-        XCTAssertEqual(s.choices[.system1], "choir-system1")
+        XCTAssertEqual(s.choices[.system1], "llama-qwen3-0.6b", "the small language model on the phone comes first")
         let rec = s.record
-        XCTAssertEqual(rec.items.count, 4)
+        XCTAssertEqual(rec.items.count, 5)
         XCTAssertEqual(rec.items.first { $0.stage == "transcriber" }?.check?.speed, 0.08)
         XCTAssertTrue(s.rows.first { $0.stage == "transcriber" }!.numbers.contains("0.08 x real time"))
         XCTAssertNotNil(try? JSONEncoder().encode(rec))
@@ -114,8 +114,8 @@ final class VoiceSetupTests: XCTestCase {
         let s = VoiceSetup(backend: Offline(), profile: device(8), stallSeconds: 5, patience: 0.05, maxTries: 1)
         await s.run()
         XCTAssertEqual(s.choices[.transcriber], "apple-speech")
-        XCTAssertEqual(s.choices[.voice], "apple-voice")
-        XCTAssertEqual(s.choices[.speechBounds], "energy-bounds")
+        XCTAssertEqual(s.choices[.voice], "avspeech")
+        XCTAssertEqual(s.choices[.speechBounds], "energy-vad")
         XCTAssertEqual(s.choices[.system1], "choir-system1")
         XCTAssertTrue(s.rows.allSatisfy { $0.state == "ready" }, "\(s.rows)")
         XCTAssertTrue(s.summary.contains { $0.contains("(fallback)") })

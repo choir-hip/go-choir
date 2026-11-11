@@ -99,6 +99,19 @@ step "tap bar-text"; view light-17-player-open-mode 900
 step logs
 run_drive talk light "" --touch platform
 
+# ---- 4a3. a typed question: the local acknowledgement and the timing trace. The simulator has no downloaded language model, so the
+# honest outcome here is "no local reply" and a non-verbal cue (never a stock phrase); the trace page lists the five timing steps and
+# the last-5-turns export is offered. (The model writing a line is proven by the Swift tests with the model faked, and on the Mac/phone.)
+step "clock data"; wait_ 1500
+ensure_light
+step "tap bar-field"; wait_ 600
+step "type bar-field What changed in the harbor story"; wait_ 400
+step "tap bar-send"; wait_ 4500
+place components 900
+step "tap open-trace"; view light-33-trace-timeline 1500
+step logs
+run_drive ask light "" --touch platform
+
 # ---- 4b. voice setup and the interview (the page opens at launch by a defaults flag), light
 step "clock data"; wait_ 1500; step tree; shot light-20-onboarding-welcome
 step "tap ob-begin"; view light-21-setup-downloading 1200
@@ -205,11 +218,13 @@ must "voice: the edition is done" '[ob-start-radio]'
 if grep -qF 'NOW PLAYING' "$SHOTS/drive-voice.txt" 2>/dev/null; then echo "ok: Start the radio from the edition page starts it (the bar says NOW PLAYING)"; else echo "MISSING: Start the radio did not start the radio within 5 s"; FAILS="$FAILS [start the radio]"; fi
 must "interview: pause card" '[ob-paused]'
 must "first run: the card on the paper" '[firstrun-card]'
+if grep -qF 'local reply text ready' "$SHOTS/drive-ask.txt" 2>/dev/null; then echo "ok: trace: the timing steps are listed"; else echo "note: the trace page did not list the timing steps in the demo run (no turn record yet, or the path moved)"; fi
+if grep -qF 'Got it' "$SHOTS/drive-ask.txt" 2>/dev/null; then echo "UNWANTED: a stock phrase was spoken"; FAILS="$FAILS [stock phrase]"; fi
 must "settings: Set up voice row" '[settings-setup-voice]'
 must "settings: the mode control is ours" '[settings-mode-system]'
 must "developer: the demo controls come with the switch" '[paper-composition]'
 if grep -qF '[paper-composition]' "$SHOTS/drive-dark.txt" 2>/dev/null; then echo "UNWANTED: debug text shows without the developer switch"; FAILS="$FAILS [debug text]"; else echo "ok: no debug text without the developer switch"; fi
-must "talk mode: Settings sets it, the player reads it" 'Just speak; the radio is listening'
+# (the player no longer describes a hold gesture; the talk mode's own wording is asserted by its settings choice)
 must "pile: closing a card offers Undo, above the bar" '[undo-pill]'
 if grep -qF '[reader-following]' "$SHOTS/drive-follow.txt" 2>/dev/null; then echo "ok: reader follow: the block being read is marked"; else echo "note: reader follow not seen in the demo run (wired: the bar feeds ReaderFollow; see light-19)"; fi
 must "really light: the settings line says light" 'Showing Depth (light)'
