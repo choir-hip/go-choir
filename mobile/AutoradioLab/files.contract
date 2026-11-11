@@ -1,9 +1,201 @@
-// Files: browse and open (file:<path>). Lane 5 owns this file and viewers.contract. The spine ships the "not yet" page.
-use NotYetPage from "./ui.contract"
+// Files: a feature of the phone, not an app (owner, 2026-11-10). Addresses: `file:/` is the place (your computer's files: folders,
+// breadcrumbs, list and grid, sort, search, recent); `file:/path/name.ext` is one file, opened as a page so it sits in the pile
+// with everything else. Lane 5 owns this file and viewers.contract; members-files.contract holds the states and actions.
+// testIds: files-search, files-mode-browse, files-mode-recent, files-sort-<key>, files-sort-dir, files-view-list, files-view-grid,
+// files-crumb-<path>, files-row-<path>, files-more-<path>, files-rename-input, files-rename-go, files-delete-<path>,
+// files-new-toggle, files-new-input, files-new-go, files-upload, files-banner, files-list, files-empty; page-title on every page.
+use Theme, FileListing, FileInfo, FileRow from "@choir/autoradio"
+use PageScroll, Card from "./ui.contract"
+use Chip, NoPreview, ImageViewer, VideoViewer, AudioViewer, PdfViewer, EpubViewer, TextViewer, CsvViewer from "./viewers.contract"
 
 component FilePage
+  inject
+    fvInfo: FileInfo
   props
     address: string
     title: string
+  derive isFolder = address == "file:" or address.endsWith("/")
   view
-    NotYetPage(address=address, title=title)
+    if isFolder
+      FilesPlace()
+    else if fvInfo.address != address or fvInfo.status == "loading"
+      NoPreview(address=address, title=title, message="Opening…")
+    else if fvInfo.status == "notfound" or fvInfo.status == "error" or fvInfo.status == "toolarge"
+      NoPreview(address=address, title=title, message=fvInfo.message)
+    else if fvInfo.kind == "image"
+      ImageViewer()
+    else if fvInfo.kind == "video"
+      VideoViewer()
+    else if fvInfo.kind == "audio"
+      AudioViewer()
+    else if fvInfo.kind == "pdf"
+      PdfViewer()
+    else if fvInfo.kind == "epub"
+      EpubViewer()
+    else if fvInfo.kind == "csv"
+      CsvViewer()
+    else if fvInfo.kind == "markdown" or fvInfo.kind == "text" or fvInfo.kind == "code"
+      TextViewer()
+    else
+      NoPreview(address=address, title=title, message="There is no viewer for this kind of file yet, so it cannot be previewed here.")
+
+// One line of a folder: icon, name and what it is, a button for its actions; the actions open under it.
+component RowBody
+  inject
+    th: Theme
+  props
+    item: FileRow
+  view
+    row width="100%" align-items="center" gap=14 padding="10px 0 10px 16px" min-height=56
+      image item.symbol width=26 height=26 color=(item.isDir ? th.accent : th.muted) flex-shrink=0
+      column flex=1 min-width=0 gap=2 align-items="flex-start"
+        text item.name font-family=th.fontUi font-size=17 color=th.fg text-align="left" line-clamp=1
+        text (item.place.length > 0 ? `${item.place} · ${item.detail}` : item.detail) font-family=th.fontUi font-size=13 color=th.muted text-align="left" line-clamp=1
+
+component FileRowItem
+  inject
+    th: Theme
+    fsSel: string
+    fsRenameText: string
+    openPage: action
+    fsBrowse: action
+    fsSelect: action
+    fsEditName: action
+    fsRename: action
+    fsDelete: action
+  props
+    item: FileRow
+    last: bool
+  view
+    column width="100%"
+      row width="100%" align-items="center"
+        if item.isDir
+          button press=fsBrowse(item.path) testId=`files-row-${item.path}` appearance="none" flex=1 min-width=0
+            RowBody(item=item)
+        else
+          button press=openPage(item.address, item.name) testId=`files-row-${item.path}` appearance="none" flex=1 min-width=0
+            RowBody(item=item)
+        button press=fsSelect(item.path, item.name) testId=`files-more-${item.path}` aria-label=`Actions for ${item.name}` appearance="none" width=44 height=44 flex-shrink=0
+          image "symbol:sf/ellipsis" color=th.muted
+      if fsSel == item.path
+        column padding="0 16px 14px 16px" gap=10
+          input value=fsRenameText input=fsEditName submit=fsRename placeholder="New name" aria-label="New name" testId="files-rename-input"
+            font-family=th.fontUi font-size=16 color=th.fg padding="8px 4px"
+          row gap=8 align-items="center"
+            Chip(label="Rename", active=false, testId="files-rename-go", press=fsRename)
+            button press=fsDelete(item.path) testId=`files-delete-${item.path}` appearance="none" padding="7px 14px" border-radius=th.radiusPill background-color=th.paper2
+              text "Delete" font-family=th.fontUi font-size=14 font-weight=600 color=th.danger
+      if not last
+        box height=1 margin-left=56 background-color=th.rule opacity=0.35
+
+component FileTile
+  inject
+    th: Theme
+    openPage: action
+    fsBrowse: action
+  props
+    item: FileRow
+  view
+    if item.isDir
+      button press=fsBrowse(item.path) testId=`files-row-${item.path}` appearance="none" width="100%"
+        column padding=14 gap=10 align-items="flex-start" width="100%" min-height=112 border-radius=th.radiusCard background-color=th.paper2 box-shadow=th.shadow1
+          image item.symbol width=34 height=34 color=th.accent
+          text item.name font-family=th.fontUi font-size=15 font-weight=600 color=th.fg text-align="left" line-clamp=2
+          text item.detail font-family=th.fontUi font-size=12 color=th.muted text-align="left" line-clamp=1
+    else
+      button press=openPage(item.address, item.name) testId=`files-row-${item.path}` appearance="none" width="100%"
+        column padding=14 gap=10 align-items="flex-start" width="100%" min-height=112 border-radius=th.radiusCard background-color=th.paper2 box-shadow=th.shadow1
+          image item.symbol width=34 height=34 color=th.muted
+          text item.name font-family=th.fontUi font-size=15 font-weight=600 color=th.fg text-align="left" line-clamp=2
+          text item.detail font-family=th.fontUi font-size=12 color=th.muted text-align="left" line-clamp=1
+
+// The place itself.
+component FilesPlace
+  inject
+    th: Theme
+    fsList: FileListing
+    fsMode: string
+    fsSort: string
+    fsDesc: bool
+    fsGrid: bool
+    fsDraft: string
+    fsNewing: bool
+    fsNewName: string
+    fsNoteOn: bool
+    fsNote: string
+    fsBrowse: action
+    fsSetMode: action
+    fsSortBy: action
+    fsFlip: action
+    fsSetGrid: action
+    fsEditQuery: action
+    fsSearch: action
+    fsClear: action
+    fsNewToggle: action
+    fsEditNew: action
+    fsMakeFolder: action
+    fsUpload: action
+    fsPicked: action
+  view
+    PageScroll(id="files")
+      text "Files" role="heading" aria-level=1 testId="page-title" font-size=34 font-weight=700
+      // Search the names under this folder (a bounded walk); Enter sends it.
+      row align-items="center" gap=8 padding="4px 14px" border-radius=th.radiusControl background-color=th.paper2
+        image "symbol:search" width=16 height=16 color=th.muted
+        input type="search" value=fsDraft input=fsEditQuery submit=fsSearch placeholder="Search files" aria-label="Search files" testId="files-search"
+          enterkeyhint="search" flex=1 min-width=0 font-family=th.fontUi font-size=16 color=th.fg padding="8px 0"
+        if fsList.mode == "search"
+          Chip(label="Clear", active=false, testId="files-search-clear", press=fsClear)
+      row gap=8 align-items="center"
+        Chip(label="Browse", active=(fsMode == "browse"), testId="files-mode-browse", press=fsSetMode("browse"))
+        Chip(label="Recent", active=(fsMode == "recent"), testId="files-mode-recent", press=fsSetMode("recent"))
+        box flex=1
+        Chip(label="List", active=(fsGrid == false), testId="files-view-list", press=fsSetGrid(false))
+        Chip(label="Grid", active=fsGrid, testId="files-view-grid", press=fsSetGrid(true))
+      if fsMode == "browse"
+        scroll overflow-x="scroll" overflow-y="hidden" display="flex" flex-direction="row" gap=8 testId="files-sorts"
+          Chip(label="Name", active=(fsSort == "name"), testId="files-sort-name", press=fsSortBy("name"))
+          Chip(label="Modified", active=(fsSort == "modified"), testId="files-sort-modified", press=fsSortBy("modified"))
+          Chip(label="Size", active=(fsSort == "size"), testId="files-sort-size", press=fsSortBy("size"))
+          Chip(label="Kind", active=(fsSort == "kind"), testId="files-sort-kind", press=fsSortBy("kind"))
+          Chip(label=(fsDesc ? "↓ Descending" : "↑ Ascending"), active=false, testId="files-sort-dir", press=fsFlip)
+        // Breadcrumbs: Files / Documents / ...
+        scroll overflow-x="scroll" overflow-y="hidden" display="flex" flex-direction="row" gap=4 align-items="center" testId="files-crumbs"
+          for c, i in fsList.crumbs key=c.path
+            if i > 0
+              image "symbol:forward-chevron" width=10 height=10 color=th.muted flex-shrink=0
+            button press=fsBrowse(c.path) testId=`files-crumb-${c.path}` appearance="none" padding="6px 6px" flex-shrink=0
+              text c.name font-family=th.fontUi font-size=15 font-weight=(i == fsList.crumbs.length - 1 ? 700 : 400) color=(i == fsList.crumbs.length - 1 ? th.fg : th.accent)
+        row gap=8 align-items="center"
+          Chip(label="New folder", active=fsNewing, testId="files-new-toggle", press=fsNewToggle)
+          Chip(label="Add a file", active=false, testId="files-upload", press=fsUpload)
+        if fsNewing
+          row gap=8 align-items="center" padding="4px 14px" border-radius=th.radiusControl background-color=th.paper2
+            input value=fsNewName input=fsEditNew submit=fsMakeFolder placeholder="Folder name" aria-label="Folder name" testId="files-new-input"
+              flex=1 min-width=0 font-family=th.fontUi font-size=16 color=th.fg padding="8px 0"
+            Chip(label="Create", active=true, testId="files-new-go", press=fsMakeFolder)
+      if fsList.mode == "search"
+        text `Results for “${fsList.query}” in ${fsList.title}` font-family=th.fontUi font-size=14 color=th.muted testId="files-search-title"
+      if fsNoteOn and fsNote.length > 0
+        Card(level=2, testId="files-banner", minHeight=0)
+          text fsNote font-family=th.fontUi font-size=14 color=th.fg padding="10px 14px" testId="files-banner-text"
+      if fsList.status == "loading"
+        text "Loading…" font-family=th.fontUi font-size=15 color=th.muted testId="files-loading"
+      if fsList.status == "error"
+        Card(level=1, testId="files-error", minHeight=0)
+          text fsList.message font-family=th.fontUi font-size=15 color=th.danger padding=16
+      if fsList.status == "empty"
+        text fsList.message font-family=th.fontUi font-size=15 color=th.muted testId="files-empty"
+      if fsList.status == "ready" and fsGrid == false
+        Card(level=1, testId="files-list", minHeight=0)
+          column width="100%" padding="4px 0"
+            for r, i in fsList.rows key=r.path
+              FileRowItem(item=r, last=(i == fsList.rows.length - 1))
+      if fsList.status == "ready" and fsGrid
+        view display="grid" grid-template-columns="repeat(2, 1fr)" gap=12 testId="files-grid"
+          for r in fsList.rows key=r.path
+            FileTile(item=r)
+      if fsList.status == "ready"
+        text `${fsList.count.toFixed(0)} items` font-family=th.fontUi font-size=12 color=th.muted testId="files-count"
+      // The system file picker (Add a file) opens this input; its copy lands under app:/tmp/picked.
+      input type="file" id="files-pick" change=fsPicked aria-label="Choose a file to add" width=1 height=1 opacity=0

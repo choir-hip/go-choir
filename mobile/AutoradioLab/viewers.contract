@@ -1,11 +1,282 @@
-// Viewers (image, video, audio, PDF, e-book) that FilePage picks between. Lane 5 owns this file.
-// Nothing imports it yet: FilePage in files.contract will `use` the components written here.
-use Theme from "@choir/autoradio"
+// Viewers (image, video, audio, PDF, e-book, text, table, and an honest "cannot preview") that FilePage in files.contract picks
+// between. Lane 5 owns this file. Every viewer is a component that injects what it needs from the root (members-files.contract:
+// fvInfo and the fv* states and actions). Themes are data: every colour, face, radius and shadow is a `th` token.
+//
+// What Exact gives at our pin, measured by building it (see mobile/README.md, "Files and viewers"):
+//   image  `image` + `transformDragFor`: pinch and drag, zoom 1x to 4x, clamped to the frame (Exact's own photo viewer pattern)
+//   video  `video` with native controls (AVPlayer): scrub, full screen, picture in picture
+//   audio  `audio` with native controls and `metadata=` for Now Playing and the lock screen
+//   PDF    `iframe` on a local .pdf shows PDFKit's PDFView: its own scrolling and pinch, page set by `#page=N` in src
+//   e-book chapters become Markdown for `text markup="markdown"` (no EPUB element in Exact; Kit/Epub.swift parses the book)
+use Theme, FileInfo, FileChapter, FilePages from "@choir/autoradio"
+use PageScroll, Card from "./ui.contract"
 
-component ViewerNotice
+// A small pill: the one control shape of the Files place and the viewers. `press` is an action call from the caller.
+component Chip
   inject
     th: Theme
   props
-    name: string
+    label: string
+    active: bool
+    testId: string
+    press: action
   view
-    text `${name} has no viewer yet.` font-family=th.fontUi color=th.muted
+    button press=press testId=testId appearance="none" padding="7px 14px" border-radius=th.radiusPill flex-shrink=0
+      background-color=(active ? th.accent : th.paper2) box-shadow=(active ? th.shadow1 : "none")
+      text label font-family=th.fontUi font-size=14 font-weight=600 color=(active ? th.onAccent : th.fg)
+
+// The page's heading, scrolling away with nothing: the viewers that fill the screen keep it above their frame.
+component ViewerHeader
+  inject
+    th: Theme
+  props
+    title: string
+    sub: string
+  view
+    column padding-left=20 padding-right=20 padding-top="calc(env(safe-area-inset-top) + 12px)" padding-bottom=10 gap=2 flex-shrink=0
+      text title role="heading" aria-level=1 testId="page-title" font-family=th.fontRead font-size=24 font-weight=700 color=th.fg line-clamp=2
+      text sub font-family=th.fontUi font-size=13 color=th.muted line-clamp=1
+
+component FactRow
+  inject
+    th: Theme
+  props
+    label: string
+    value: string
+  view
+    row gap=12 align-items="flex-start"
+      text label font-family=th.fontUi font-size=14 color=th.muted width=92 flex-shrink=0
+      text value font-family=th.fontUi font-size=14 color=th.fg flex=1 min-width=0
+
+// ---------------------------------------------------------------- image
+component ImageViewer
+  inject
+    th: Theme
+    fvInfo: FileInfo
+    fvZoom: number
+    fvPanX: number
+    fvPanY: number
+    fvZoomTo: action
+    fvCenter: action
+    fvGeometry: action
+    fvRelease: action
+    fvShare: action
+  view
+    column flex=1 min-height=0 width="100%" testId="viewer-image"
+      ViewerHeader(title=fvInfo.name, sub=`${fvInfo.kindLabel} · ${fvInfo.width.toFixed(0)} × ${fvInfo.height.toFixed(0)} · ${fvInfo.sizeLabel}`)
+      row gap=8 padding-left=20 padding-right=20 padding-bottom=10 align-items="center" flex-shrink=0
+        Chip(label="Fit", active=(fvZoom == 1), testId="image-fit", press=fvZoomTo(1))
+        Chip(label="2×", active=(fvZoom == 2), testId="image-2x", press=fvZoomTo(2))
+        Chip(label="4×", active=(fvZoom == 4), testId="image-4x", press=fvZoomTo(4))
+        Chip(label="Center", active=false, testId="image-center", press=fvCenter)
+        Chip(label="Share", active=false, testId="image-share", press=fvShare(fvInfo.name, fvInfo.src))
+      // The frame: it clips the picture (a rounded wrapper), and ends above the bar.
+      column flex=1 min-height=0 margin-left=12 margin-right=12 margin-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 16px)"
+        overflow="hidden" border-radius=th.radiusCard background-color=th.paper2 box-shadow=th.shadow1
+        // Exact's transform handle needs: the target box 100% x 100%, border-box, no padding, border or margin; its parent
+        // overflow hidden with no padding or border (docs/agent-pitfalls.md, "A transformDragFor handle does nothing").
+        box testId="image-clip" width="100%" height="100%" position="relative" overflow="hidden" padding=0 border-width=0 box-sizing="border-box"
+          box id="viewer-transform" testId="image-transform" width="100%" height="100%" position="relative" padding=0 border-width=0 margin=0 box-sizing="border-box"
+            translate=`${fvPanX}px ${fvPanY}px` scale=fvZoom transition=`translate -exact-spring(${th.springStiffness}, ${th.springDamping}, ${th.springMass}), scale -exact-spring(${th.springStiffness}, ${th.springDamping}, ${th.springMass})`
+            image fvInfo.src aria-label=fvInfo.name position="absolute" left=0 top=0 width="100%" height="100%" object-fit="contain" testId="image-view"
+            box transformDragFor="viewer-transform" transformgeometry=fvGeometry transformrelease=fvRelease touch-action="none" position="absolute" left=0 top=0 width="100%" height="100%" testId="image-handle" aria-label=`Pan and zoom ${fvInfo.name}`
+
+// ---------------------------------------------------------------- video
+component VideoViewer
+  inject
+    th: Theme
+    fvInfo: FileInfo
+    fvHold: bool
+    fvPlayed: action
+    fvPausedEv: action
+    fvEnded: action
+    fvTick: action
+    fvMeasured: action
+    fvShare: action
+  view
+    column flex=1 min-height=0 width="100%" testId="viewer-video"
+      ViewerHeader(title=fvInfo.name, sub=`${fvInfo.kindLabel} · ${fvInfo.sizeLabel} · ${fvInfo.modifiedLabel}`)
+      row gap=8 padding-left=20 padding-right=20 padding-bottom=10 align-items="center" flex-shrink=0
+        Chip(label="Share", active=false, testId="video-share", press=fvShare(fvInfo.name, fvInfo.src))
+      column flex=1 min-height=0 margin-left=12 margin-right=12 margin-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 16px)"
+        video fvInfo.src id="viewer-video" testId="video-view" aria-label=fvInfo.name controls=true playsinline=true preload="metadata" paused=fvHold
+          play=fvPlayed pause=fvPausedEv ended=fvEnded timeupdate=fvTick durationchange=fvMeasured
+          width="100%" flex=1 min-height=0 object-fit="contain" overflow="hidden" background-color=th.paper2 border-radius=th.radiusCard box-shadow=th.shadow1
+
+// ---------------------------------------------------------------- audio
+component AudioViewer
+  inject
+    th: Theme
+    fvInfo: FileInfo
+    fvHold: bool
+    fvPos: number
+    fvDur: number
+    fvPlayed: action
+    fvPausedEv: action
+    fvEnded: action
+    fvTick: action
+    fvMeasured: action
+    fvNudge: action
+    fvRestart: action
+    fvSkip: action
+    fvSeekAt: action
+    fvSeek: number
+  view
+    column flex=1 min-height=0 width="100%" testId="viewer-audio"
+      ViewerHeader(title=fvInfo.name, sub=`${fvInfo.kindLabel} · ${fvInfo.sizeLabel} · ${fvInfo.modifiedLabel}`)
+      // The element draws nothing of its own; with `controls` it is the system's audio controls. Now Playing and the lock screen
+      // follow it through `metadata`, and the radio yields (fvHold) rather than the two talking over each other.
+      Card(level=2, testId="audio-card", minHeight=0)
+        column padding=20 gap=16 align-items="center"
+          image "symbol:sf/waveform" width=64 height=64 color=th.accent
+          text fvInfo.title font-family=th.fontRead font-size=22 font-weight=700 color=th.fg text-align="center"
+          audio fvInfo.src testId="audio-view" controls=true preload="metadata" paused=fvHold currentTime=fvSeek width="100%"
+            timeupdate=fvTick durationchange=fvMeasured playing=fvPlayed pause=fvPausedEv ended=fvEnded
+            metadata=MediaMetadata(title=fvInfo.title, artist="Files", album="", artwork="")
+            seekbackwardOffset=15 seekforwardOffset=15 seekbackward=fvSkip(-1) seekforward=fvSkip(1) seekto=fvSeekAt
+          row gap=8 align-items="center"
+            Chip(label="Back 15 s", active=false, testId="audio-back", press=fvNudge(-1))
+            Chip(label="Start", active=false, testId="audio-restart", press=fvRestart)
+            Chip(label="Forward 15 s", active=false, testId="audio-forward", press=fvNudge(1))
+          text `${fvPos.toFixed(0)} s of ${fvDur.toFixed(0)} s` testId="audio-position" font-family=th.fontUi font-size=13 color=th.muted
+          text (fvHold ? "Paused" : "Playing") testId="audio-state" font-family=th.fontUi font-size=13 color=th.muted
+
+// ---------------------------------------------------------------- PDF
+// PDFKit draws and scrolls the pages itself (the iframe of a local .pdf is a PDFView); Contract keeps the page we last sent it to
+// and the search. What Exact does not give: the page the reader scrolled to, a fit control, highlighting a search hit.
+component PdfViewer
+  inject
+    th: Theme
+    fvInfo: FileInfo
+    fvPage: number
+    fvFindDraft: string
+    fvPages: FilePages
+    fvGo: action
+    fvEditFind: action
+    fvSearch: action
+    fvClearFind: action
+    fvShare: action
+  view
+    column flex=1 min-height=0 width="100%" testId="viewer-pdf"
+      ViewerHeader(title=(fvInfo.title.length > 0 ? fvInfo.title : fvInfo.name), sub=`PDF · ${fvInfo.pages.toFixed(0)} pages · ${fvInfo.sizeLabel}`)
+      row gap=8 padding-left=20 padding-right=20 padding-bottom=8 align-items="center" flex-shrink=0
+        Chip(label="‹", active=false, testId="pdf-prev", press=fvGo(fvPage - 1))
+        text `Page ${fvPage.toFixed(0)} of ${fvInfo.pages.toFixed(0)}` testId="pdf-page" font-family=th.fontUi font-size=14 color=th.fg flex=1 text-align="center"
+        Chip(label="›", active=false, testId="pdf-next", press=fvGo(fvPage + 1))
+        Chip(label="Share", active=false, testId="pdf-share", press=fvShare(fvInfo.name, fvInfo.src))
+      row gap=8 padding-left=20 padding-right=20 padding-bottom=8 align-items="center" flex-shrink=0
+        input type="search" value=fvFindDraft input=fvEditFind submit=fvSearch placeholder="Find in this PDF" aria-label="Find in this PDF" testId="pdf-find"
+          enterkeyhint="search" flex=1 min-width=0 font-family=th.fontUi font-size=15 color=th.fg padding="8px 4px"
+        if fvPages.query != ""
+          Chip(label="Clear", active=false, testId="pdf-find-clear", press=fvClearFind)
+      if fvPages.query != ""
+        row gap=8 padding-left=20 padding-right=20 padding-bottom=8 align-items="center" flex-shrink=0 testId="pdf-hits"
+          if fvPages.pages.length == 0
+            text fvPages.message font-family=th.fontUi font-size=13 color=th.muted
+          else
+            text `On pages` font-family=th.fontUi font-size=13 color=th.muted
+            for p in fvPages.pages key=p
+              Chip(label=`${p.toFixed(0)}`, active=(p == fvPage), testId=`pdf-hit-${p}`, press=fvGo(p))
+      // A page change re-creates the frame: PDFView opens at src's #page=N, and does not follow a changed fragment on its own.
+      column flex=1 min-height=0 margin-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 16px)" overflow="hidden" border-radius=th.radiusCard box-shadow=th.shadow1
+        for n in [fvPage] key=n
+          iframe src=`${fvInfo.src}#page=${n}` testId="pdf-frame" aria-label=fvInfo.name width="100%" flex=1 min-height=0
+
+// ---------------------------------------------------------------- e-book
+// Chapters arrive as Markdown (Kit/Epub.swift turns the book's XHTML into blocks, then Markdown) and are set in the reading face.
+// When lane 3's reader exposes a component taking blocks, this body becomes that component and the book gets the same typography.
+component EpubViewer
+  inject
+    th: Theme
+    fvInfo: FileInfo
+    fvChapter: FileChapter
+    fvChap: number
+    fvToc: bool
+    fvChapGo: action
+    fvTocToggle: action
+  view
+    PageScroll(id="epub")
+      text fvInfo.title role="heading" aria-level=1 testId="page-title" font-size=28 font-weight=700
+      text (fvInfo.author.length > 0 ? `${fvInfo.author} · ${fvInfo.chapters.length.toFixed(0)} chapters` : `${fvInfo.chapters.length.toFixed(0)} chapters`) font-family=th.fontUi font-size=14 color=th.muted
+      row gap=8 align-items="center"
+        Chip(label="Contents", active=fvToc, testId="epub-toc", press=fvTocToggle)
+        text `Chapter ${(fvChap + 1).toFixed(0)} of ${fvInfo.chapters.length.toFixed(0)}` testId="epub-position" font-family=th.fontUi font-size=13 color=th.muted
+      if fvToc
+        Card(level=1, testId="epub-contents", minHeight=0)
+          column padding="4px 16px"
+            for c in fvInfo.chapters key=c.index
+              button press=fvChapGo(c.index) testId=`epub-chapter-${c.index}` appearance="none" width="100%"
+                row padding="12px 0" align-items="center" width="100%"
+                  text c.title font-family=th.fontUi font-size=16 font-weight=(c.index == fvChap ? 700 : 400) color=th.fg flex=1 text-align="left"
+      else
+        text fvChapter.title font-family=th.fontUi font-size=13 font-weight=600 letter-spacing=1 color=th.accent testId="epub-chapter-title"
+        column width="100%" max-width=620
+          text fvChapter.markdown markup="markdown" testId="epub-text" font-family=th.fontRead font-size=19 line-height=1.65 color=th.fg
+        row gap=8 align-items="center"
+          Chip(label="‹ Previous", active=false, testId="epub-prev", press=fvChapGo(fvChap - 1))
+          Chip(label="Next ›", active=false, testId="epub-next", press=fvChapGo(fvChap + 1))
+
+// ---------------------------------------------------------------- plain text, Markdown and code
+component TextViewer
+  inject
+    th: Theme
+    fvInfo: FileInfo
+    fvShare: action
+  view
+    PageScroll(id="text")
+      text fvInfo.name role="heading" aria-level=1 testId="page-title" font-size=26 font-weight=700
+      text `${fvInfo.kindLabel} · ${fvInfo.sizeLabel} · ${fvInfo.modifiedLabel}` font-family=th.fontUi font-size=13 color=th.muted
+      row gap=8 align-items="center"
+        Chip(label="Share", active=false, testId="text-share", press=fvShare(fvInfo.name, fvInfo.src))
+      if fvInfo.kind == "markdown"
+        text fvInfo.text markup="markdown" testId="text-body" font-family=th.fontRead font-size=18 line-height=1.6 color=th.fg
+      else if fvInfo.kind == "code"
+        Card(level=1, testId="code-card", minHeight=0)
+          column padding=14
+            text fvInfo.text testId="text-body" white-space="pre-wrap" font-family=th.fontMono font-size=13 line-height=1.5 color=th.fg
+      else
+        text fvInfo.text testId="text-body" white-space="pre-wrap" font-family=th.fontRead font-size=17 line-height=1.6 color=th.fg
+      if fvInfo.truncated
+        text "Showing the start of this file." font-family=th.fontUi font-size=13 color=th.muted
+
+// ---------------------------------------------------------------- table (CSV, TSV)
+component CsvViewer
+  inject
+    th: Theme
+    fvInfo: FileInfo
+  view
+    PageScroll(id="csv")
+      text fvInfo.name role="heading" aria-level=1 testId="page-title" font-size=26 font-weight=700
+      text `Table · ${fvInfo.rows.length.toFixed(0)} rows · ${fvInfo.sizeLabel}` font-family=th.fontUi font-size=13 color=th.muted
+      Card(level=1, testId="csv-card", minHeight=0)
+        scroll overflow-x="scroll" overflow-y="hidden" display="flex" flex-direction="row" testId="csv-scroll"
+          column padding="4px 0"
+            for r, i in fvInfo.rows key=i
+              row background-color=(i == 0 ? th.paper : "transparent") border-top-left-radius=(i == 0 ? th.radiusCard : 0) border-top-right-radius=(i == 0 ? th.radiusCard : 0)
+                for c, j in r.cells key=j
+                  text c font-family=th.fontUi font-size=14 font-weight=(i == 0 ? 700 : 400) color=th.fg width=128 flex-shrink=0 padding="8px 10px" line-clamp=2
+
+// ---------------------------------------------------------------- nothing to open with, or a problem
+// The honest page: what the file is, and why it is not shown. `message` is the reason ("too large", "not there any more", ...).
+component NoPreview
+  inject
+    th: Theme
+    fvInfo: FileInfo
+  props
+    address: string
+    title: string
+    message: string
+  view
+    PageScroll(id="nopreview")
+      text (fvInfo.address == address and fvInfo.name.length > 0 ? fvInfo.name : title) role="heading" aria-level=1 testId="page-title" font-size=26 font-weight=700
+      Card(level=1, testId="nopreview-card", minHeight=0)
+        column padding=18 gap=14
+          row gap=14 align-items="center"
+            image (fvInfo.address == address ? "symbol:sf/doc" : "symbol:sf/hourglass") width=40 height=40 color=th.muted
+            text message testId="nopreview-message" font-family=th.fontUi font-size=16 color=th.fg flex=1 min-width=0
+          if fvInfo.address == address and fvInfo.name.length > 0
+            FactRow(label="Type", value=fvInfo.kindLabel)
+            FactRow(label="Size", value=fvInfo.sizeLabel)
+            FactRow(label="Modified", value=fvInfo.modifiedLabel)
+            FactRow(label="Location", value=fvInfo.folder)
+            FactRow(label="Kind", value=fvInfo.mime)

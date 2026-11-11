@@ -106,6 +106,70 @@ component Autoradio
     // ---- lane 3: texture reader ----
     // ---- lane 4: cards, launcher, signals ----
     // ---- lane 5: files and viewers ----
+    fsList
+    fsMode
+    fsSort
+    fsDesc
+    fsGrid
+    fsDraft
+    fsNewing
+    fsNewName
+    fsNoteOn
+    fsNote
+    fsSel
+    fsRenameText
+    fsBrowse
+    fsSetMode
+    fsSortBy
+    fsFlip
+    fsSetGrid
+    fsEditQuery
+    fsSearch
+    fsClear
+    fsNewToggle
+    fsEditNew
+    fsMakeFolder
+    fsUpload
+    fsPicked
+    fsSelect
+    fsEditName
+    fsRename
+    fsDelete
+    fvInfo
+    fvChapter
+    fvPages
+    fvZoom
+    fvPanX
+    fvPanY
+    fvHold
+    fvPos
+    fvDur
+    fvSeek
+    fvPage
+    fvFindDraft
+    fvChap
+    fvToc
+    fvMediaTitle
+    fvZoomTo
+    fvCenter
+    fvGeometry
+    fvRelease
+    fvShare
+    fvPlayed
+    fvPausedEv
+    fvEnded
+    fvTick
+    fvMeasured
+    fvNudge
+    fvRestart
+    fvSkip
+    fvSeekAt
+    fvGo
+    fvEditFind
+    fvSearch
+    fvClearFind
+    fvChapGo
+    fvTocToggle
     // ---- lane 6: mail ----
     // ---- lane 7: settings, themes, accounts ----
     // ---- lane 8: onboarding and the interview ----
