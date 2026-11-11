@@ -127,7 +127,7 @@ deck_open() {
 }
 deck_open; step tree
 run_drive deckprobe light "" --touch platform
-DECKN=$(grep -o '[0-9]* in the deck' "$SHOTS/drive-deckprobe.txt" | tail -1 | cut -d' ' -f1)
+DECKN=$(grep -o '[0-9][0-9]* in the deck"' "$SHOTS/drive-deckprobe.txt" | tail -1 | cut -d' ' -f1)
 case "$DECKN" in ''|*[!0-9]*) fail "deck cycle" "no deck count in the label";; esac
 [ "$DECKN" -ge 3 ] || fail "deck cycle" "the deck holds only $DECKN pages, a cycle proves nothing"
 echo "deck holds $DECKN pages"
