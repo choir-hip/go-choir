@@ -43,8 +43,8 @@ export EXACT_SIM="${EXACT_SIM:-$("$HERE/sim-device.sh")}"
 [ -n "$EXACT_SIM" ] || fail "simulator" "no simulator"
 echo "simulator $EXACT_SIM"
 if [ -z "${NOTESTS:-}" ]; then
-  echo "swift test (RealShapeTests, ProofKeyTests)"
-  "$HERE/xe.sh" /usr/bin/swift test --package-path "$HERE/../AutoradioKit" --filter "RealShapeTests|ProofKeyTests" > "$SCRATCH/test.txt" 2>&1 \
+  echo "swift test (RealShapeTests, ProofKeyTests, TypedTurnTests)"
+  "$HERE/xe.sh" /usr/bin/swift test --package-path "$HERE/../AutoradioKit" --filter "RealShapeTests|ProofKeyTests|TypedTurnTests" > "$SCRATCH/test.txt" 2>&1 \
     || { grep -E "error:|failed|XCTAssert" "$SCRATCH/test.txt" | cut -c1-400 | head -40; tail -6 "$SCRATCH/test.txt"; cp "$SCRATCH/test.txt" "$SHOTS/swift-tests.txt"; fail "swift test"; }
   grep -E "Executed [0-9]+ tests" "$SCRATCH/test.txt" | tail -1
   cp "$SCRATCH/test.txt" "$SHOTS/swift-tests.txt"
