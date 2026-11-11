@@ -673,7 +673,7 @@ public final class FilesService: @unchecked Sendable {
                          status: String? = nil, message: String = "") -> FileListing {
         let rows = entries.map { row($0, place: places[$0.path] ?? "") }
         let title = path == "/" ? "Files" : FilePath.name(path)
-        return FileListing(path: path, title: mode == "recent" ? "Recent" : (mode == "search" ? "Search" : title), crumbs: FilePath.crumbs(path), rows: rows,
+        return FileListing(path: path, title: mode == "recent" ? "Recent" : title, crumbs: FilePath.crumbs(path), rows: rows,
                            count: rows.count, status: status ?? (rows.isEmpty ? "empty" : "ready"),
                            message: message.isEmpty && rows.isEmpty ? (mode == "recent" ? "Files you open appear here." : mode == "search" ? "Nothing matches." : "This folder is empty.") : message,
                            mode: mode, sort: sort.rawValue, desc: desc, query: query)

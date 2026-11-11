@@ -126,20 +126,21 @@ component AudioViewer
       ViewerHeader(title=fvInfo.name, sub=`${fvInfo.kindLabel} · ${fvInfo.sizeLabel} · ${fvInfo.modifiedLabel}`)
       // The element draws nothing of its own; with `controls` it is the system's audio controls. Now Playing and the lock screen
       // follow it through `metadata`, and the radio yields (fvHold) rather than the two talking over each other.
-      Card(level=2, testId="audio-card", minHeight=0)
-        column padding=20 gap=16 align-items="center"
-          image "symbol:sf/waveform" width=64 height=64 color=th.accent
-          text fvInfo.title font-family=th.fontRead font-size=22 font-weight=700 color=th.fg text-align="center"
-          audio fvInfo.src testId="audio-view" controls=true preload="metadata" paused=fvHold currentTime=fvSeek width="100%"
-            timeupdate=fvTick durationchange=fvMeasured playing=fvPlayed pause=fvPausedEv ended=fvEnded
-            metadata=MediaMetadata(title=fvInfo.title, artist="Files", album="", artwork="")
-            seekbackwardOffset=15 seekforwardOffset=15 seekbackward=fvSkip(-1) seekforward=fvSkip(1) seekto=fvSeekAt
-          row gap=8 align-items="center"
-            Chip(label="Back 15 s", active=false, testId="audio-back", press=fvNudge(-1))
-            Chip(label="Start", active=false, testId="audio-restart", press=fvRestart)
-            Chip(label="Forward 15 s", active=false, testId="audio-forward", press=fvNudge(1))
-          text `${fvPos.toFixed(0)} s of ${fvDur.toFixed(0)} s` testId="audio-position" font-family=th.fontUi font-size=13 color=th.muted
-          text (fvHold ? "Paused" : "Playing") testId="audio-state" font-family=th.fontUi font-size=13 color=th.muted
+      column padding-left=20 padding-right=20 padding-top=8
+        Card(level=2, testId="audio-card", minHeight=0)
+          column padding=20 gap=16 align-items="center"
+            image "symbol:sf/waveform" width=64 height=64 color=th.accent
+            text fvInfo.title font-family=th.fontRead font-size=22 font-weight=700 color=th.fg text-align="center"
+            audio fvInfo.src testId="audio-view" controls=true preload="metadata" paused=fvHold currentTime=fvSeek width="100%"
+              timeupdate=fvTick durationchange=fvMeasured playing=fvPlayed pause=fvPausedEv ended=fvEnded
+              metadata=MediaMetadata(title=fvInfo.title, artist="Files", album="", artwork="")
+              seekbackwardOffset=15 seekforwardOffset=15 seekbackward=fvSkip(-1) seekforward=fvSkip(1) seekto=fvSeekAt
+            row gap=8 align-items="center"
+              Chip(label="Back 15 s", active=false, testId="audio-back", press=fvNudge(-1))
+              Chip(label="Start", active=false, testId="audio-restart", press=fvRestart)
+              Chip(label="Forward 15 s", active=false, testId="audio-forward", press=fvNudge(1))
+            text `${fvPos.toFixed(0)} s of ${fvDur.toFixed(0)} s` testId="audio-position" font-family=th.fontUi font-size=13 color=th.muted
+            text (fvHold ? "Paused" : "Playing") testId="audio-state" font-family=th.fontUi font-size=13 color=th.muted
 
 // ---------------------------------------------------------------- PDF
 // PDFKit draws and scrolls the pages itself (the iframe of a local .pdf is a PDFView); Contract keeps the page we last sent it to
@@ -279,4 +280,4 @@ component NoPreview
             FactRow(label="Size", value=fvInfo.sizeLabel)
             FactRow(label="Modified", value=fvInfo.modifiedLabel)
             FactRow(label="Location", value=fvInfo.folder)
-            FactRow(label="Kind", value=fvInfo.mime)
+            FactRow(label="Format", value=fvInfo.mime)

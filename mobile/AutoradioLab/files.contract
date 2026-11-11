@@ -97,13 +97,13 @@ component FileTile
     item: FileRow
   view
     if item.isDir
-      button press=fsBrowse(item.path) testId=`files-row-${item.path}` appearance="none" width="100%"
+      button press=fsBrowse(item.path) testId=`files-row-${item.path}` appearance="none" width="48%"
         column padding=14 gap=10 align-items="flex-start" width="100%" min-height=112 border-radius=th.radiusCard background-color=th.paper2 box-shadow=th.shadow1
           image item.symbol width=34 height=34 color=th.accent
           text item.name font-family=th.fontUi font-size=15 font-weight=600 color=th.fg text-align="left" line-clamp=2
           text item.detail font-family=th.fontUi font-size=12 color=th.muted text-align="left" line-clamp=1
     else
-      button press=openPage(item.address, item.name) testId=`files-row-${item.path}` appearance="none" width="100%"
+      button press=openPage(item.address, item.name) testId=`files-row-${item.path}` appearance="none" width="48%"
         column padding=14 gap=10 align-items="flex-start" width="100%" min-height=112 border-radius=th.radiusCard background-color=th.paper2 box-shadow=th.shadow1
           image item.symbol width=34 height=34 color=th.muted
           text item.name font-family=th.fontUi font-size=15 font-weight=600 color=th.fg text-align="left" line-clamp=2
@@ -190,10 +190,10 @@ component FilesPlace
             for r, i in fsList.rows key=r.path
               FileRowItem(item=r, last=(i == fsList.rows.length - 1))
       if fsList.status == "ready" and fsGrid
-        view display="grid" grid-template-columns="repeat(2, minmax(0, 1fr))" gap=12 width="100%" testId="files-grid"
+        row flex-wrap="wrap" gap=12 testId="files-grid"
           for r in fsList.rows key=r.path
             FileTile(item=r)
       if fsList.status == "ready"
-        text `${fsList.count.toFixed(0)} items` font-family=th.fontUi font-size=12 color=th.muted testId="files-count"
+        text (fsList.count == 1 ? "1 item" : `${fsList.count.toFixed(0)} items`) font-family=th.fontUi font-size=12 color=th.muted testId="files-count"
       // The system file picker (Add a file) opens this input; its copy lands under app:/tmp/picked.
       input type="file" id="files-pick" change=fsPicked aria-label="Choose a file to add" width=1 height=1 opacity=0
