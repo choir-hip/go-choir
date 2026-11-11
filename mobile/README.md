@@ -159,6 +159,51 @@ Proof: see "Proof: models" below (simulator build with FluidAudio linked, regist
 
 Replace the sentence "whether a package may list files from outside its own directory, or depend on a SwiftPM library, is not established" with: a package may not depend on a SwiftPM library or import any third-party module (it is compiled by `swiftc` with only its own files and `-I`); third-party Swift/Core ML code goes in the app's own module: static `*.xcframework` files in `modules/apple/` are linked into `libexact_modules.dylib` (`host/apple/build.mjs` `frameworkSlice`: static `lib*.a` slice with `-I HeadersPath -L -l`, or a static framework with `-F -framework`; dynamic frameworks are not embedded by the build; that they would then fail to load at launch is inferred, unrun). The app module can import package modules (`-I` of the packages directory); a package reaches app-module code only by runtime lookup (`NSClassFromString`). A `.swiftmodule` placed in a slice's `Headers` is found by `-I`.
 
+## On-device model stages: what is registered and what was measured
+
+`autoradio-replay --list-stages` lists 28 stages (the new ones below). Replay any kept turn with a model stage swapped in:
+`autoradio-replay --turn mobile/fixtures/turns/plain --config mobile/fixtures/configs/open.json --set transcriber=parakeet-eou --set speechBounds=silero-vad --set voice=kokoro`.
+`mobile/scripts/proof-models.sh` replays the fixture through each stage and prints one line per stage (`LFM3=1` adds the 2.9 GB LFM3-Audio pair; `STAGES=a,b` narrows). Nothing is bundled: each model downloads on first use into the app's Application Support (FluidAudio's cache, or `ModelStore` for the GGUF) and `ModelStore.unload` drops it.
+
+All figures: fixture turn `plain` (3.6 s of speech). "first" is the first load in a process, including the download and Core ML compile where the model was not yet on disk; "warm" is a reload from disk. Memory is process resident size right after load and after `unload` (Core ML maps lazily, so "loaded" under-reports until the first prediction). Mac = iMac21,1 (M1), shared with other builds, so its timings are noisy; the cold runs below were taken under load average above 100.
+
+| Stage id (kind) | Model, size, licence | Cold first load (download) | Warm load | Resident loaded / after unload | Speed | Measured on | Result on the fixture |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `silero-vad` (speechBounds) | Silero VAD v6.2.1 Core ML, about 1 MB, MIT | 8.6 s (1 MB) | 42-70 ms | 27-44 MB / same | 0.2-37 ms per 256 ms hop (cold-loaded machine) | Mac; phone (before the owner's ruling): load 93 ms, 0.6 ms per hop, 106 MB | speech start at 0.9 s (hops of 256 ms) |
+| `parakeet-eou` (transcriber, streaming) | Parakeet EOU 120M, chunk 320 ms, 219 MB, NVIDIA Open Model License | 28 s (219 MB) | 168 ms | 247 / 86 MB | RTF 0.05 (Mac); phone: 0.035 | Mac; phone (before the ruling): first load 34 s, 149 MB | "please tell me more about the harbour and the park" |
+| `parakeet-tdt` (transcriber, batch) | Parakeet TDT 0.6B v2 (English), about 480 MB, CC-BY-4.0 | not captured (downloaded in an earlier run) | 263 ms | 96 / 114 MB | RTF 0.02-0.03 | Mac | "Please tell me more about the harbour and the park" |
+| `llama-qwen3-0.6b` (system1) | Qwen3-0.6B Q8_0 GGUF via llama.cpp b12259, 639 MB, Apache-2.0 (llama.cpp MIT) | 217 s (625 MB) | 0.8-2.4 s | 1050 / 202 MB | 65-71 ms per question, option letter probability from logits | Mac (Metal) | asks_for_something=yes p=0.98; carry_on=yes p=0.61 |
+| `kokoro` (voice) | Kokoro 82M ANE v3 via FluidAudio, Apache-2.0 | 104 s | 4.5-22 s | 722 / 520 MB | first audio 253 ms (first sentence), RTF 0.07 | Mac | 6.3 s of audio at 24 kHz |
+| `pocket-tts` (voice) | Kyutai PocketTTS 100M via FluidAudio, CC-BY-4.0 | 44 s | 0.4-1.2 s | 1027 / 413 MB | first frame 120-239 ms, RTF 0.5 (streams frames) | Mac | 5.6 s of audio at 24 kHz |
+| `lfm3-audio-live`, `lfm3-holder`, `lfm3-audio-tts` | LFM3-Audio-2B Core ML via `LFM3AudioManager`, about 2.9 GB, LFM Open License (read it: commercial use limited by revenue) | 739 s (download of about 2.9 GB plus first Core ML compile; the cache delta was not captured because the library's cache folder is named differently) | not run | 238 MB loaded / 78 after unload (measured before the first prediction; vendor figure 1.9 GB peak) | live ASR RTF 4.97 (17.6 s for 3.6 s of audio, so slower than real time on this loaded M1; vendor: RTFx 10 on an M5 Pro); TTS first audio 2.4 s, RTF 1.65 | Mac only | live ASR: "Please tell me more about the harbour..." (correct); TTS: 5.9 s of audio at 24 kHz |
+
+Library licences: FluidAudio Apache-2.0; llama.cpp MIT. Models' licences are read from the Hugging Face cards (`cardData.license`), not from memory. `lfm3-holder` returns the same fixed lines as `fixed-lines` (FluidAudio exposes ASR and TTS for the model, not text generation); it exists so a configuration can take transcriber, holder and voice from the one loaded model.
+
+Findings worth acting on:
+- FluidAudio's downloader cancels a file as "stalled" when under 1 MB arrives in 120 s, even for a tiny file (`metadata.json`), then retries with back-off. On the phone this made the first `parakeet-eou` load look hung for more than 20 minutes; the second launch finished in 34 s. A first-run download therefore needs a visible progress state, not a spinner.
+- `parakeet-eou` is the smallest streaming model with partials; 120M parameters, 219 MB, RTF 0.035 on the A16. TDT 0.6B is more accurate at the end of a turn and 480 MB. For 6 GB, EOU first, TDT second; both fit beside Qwen3-0.6B (1 GB resident on the Mac).
+- The Silero events are quantised to 256 ms hops.
+
+## To measure on the phone (owner ruling: nothing is installed or launched on the owner's phone by builders)
+
+Two phone figures (Silero and Parakeet EOU) were taken before that ruling and are labelled above. These are the runs to do, by hand, when the owner agrees. Phone UDID `00008120-00114DE80A90C01E`.
+
+```sh
+mobile/scripts/build-lab.sh ios --device --phone 00008120-00114DE80A90C01E      # installs the app with the model stages linked
+cd mobile
+D="scripts/xe.sh /usr/bin/xcrun devicectl device"
+# the proof reads Documents/proof/turn/{mic.caf,context.json} in the app container
+$D copy to --device 00008120-00114DE80A90C01E --domain-type appDataContainer --domain-identifier news.choir.autoradio.lab --source fixtures/turns/plain/mic.caf --destination Documents/proof/turn/mic.caf
+$D copy to --device 00008120-00114DE80A90C01E --domain-type appDataContainer --domain-identifier news.choir.autoradio.lab --source fixtures/turns/plain/context.json --destination Documents/proof/turn/context.json
+# one launch per group (the first launch of a model downloads it; Wi-Fi, screen on). Stderr lines start "autoradio proof:".
+$D process launch --device 00008120-00114DE80A90C01E --terminate-existing --console news.choir.autoradio.lab -- -ModelProofStages silero-vad,parakeet-eou,parakeet-tdt
+$D process launch --device 00008120-00114DE80A90C01E --terminate-existing --console news.choir.autoradio.lab -- -ModelProofStages kokoro,pocket-tts,llama-qwen3-0.6b
+$D process launch --device 00008120-00114DE80A90C01E --terminate-existing --console news.choir.autoradio.lab -- -ModelProofStages lfm3-audio-live,lfm3-audio-tts   # 2.9 GB download; first load builds a multi-GB Core ML cache; keep 30 GB free
+$D copy from --device 00008120-00114DE80A90C01E --domain-type appDataContainer --domain-identifier news.choir.autoradio.lab --source Documents/proof/results.json --destination /tmp/phone-results.json
+```
+
+Also record, on the phone: thermal state after the LFM3 run (`labState.thermal` shows in the Player header), and whether iOS kills the app during LFM3's first load (jetsam), which is the figure that settles whether it fits beside the other models on 6 GB.
+
 ## The kit in one page
 
 Everything a stage concludes is a `LabEvent` on one `EventLog` (monotonic host-clock stamps; audio frames are not events). A turn is kept as a `TurnRecord`: the folded events, the `LabConfiguration` that ran, device model, OS, app build, and the outcome (`heardThrough`, `spokeAgain`, `skipped`, `corrected`, `unknown`).
