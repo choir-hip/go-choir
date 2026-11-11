@@ -145,7 +145,11 @@ public enum TypeScale {
 }
 
 public final class ThemeStore: @unchecked Sendable {
-    public static let defaultID = "depth"
+    /// The defaults for a person who has not chosen a theme: the light one in a light scheme, the dark one in a dark scheme
+    /// (the web's Chrome Pastel and Liquid Metal). A chosen theme (AutoradioThemeID) always wins and is never rewritten.
+    public static let defaultLightID = "chrome-pastel"
+    public static let defaultDarkID = "liquid-metal"
+    public static let defaultID = defaultLightID
     /// The faces Exact resolves on the phone, and the generics that map to them.
     static let faces: Set<String> = ["ui-serif", "system-ui", "ui-rounded", "ui-monospace"]
     static let genericMap: [String: String] = ["serif": "ui-serif", "sans-serif": "system-ui", "monospace": "ui-monospace", "ui-sans-serif": "system-ui"]
@@ -155,7 +159,7 @@ public final class ThemeStore: @unchecked Sendable {
     private var origins: [String: String] = [:]        // id -> bundled | file | texture
     private var order: [String] = []
     private var sourceProblems: [String: String] = [:] // source name -> reason (F5)
-    private var currentID: String
+    private var chosenID: String?                     // nil: no choice made, the default for the scheme shows
     private var mode: String                           // light | dark | system
     private var systemScheme: @Sendable () -> String
     /// The system's Reduce Motion; the host sets it (the module reads UIAccessibility).
@@ -169,7 +173,7 @@ public final class ThemeStore: @unchecked Sendable {
                 systemScheme: @escaping @Sendable () -> String = { "light" },
                 reduceMotion: @escaping @Sendable () -> Bool = { false }) {
         self.userDir = userDir; self.defaults = defaults; self.systemScheme = systemScheme; self.reduceMotion = reduceMotion
-        currentID = defaults.string(forKey: "AutoradioThemeID") ?? Self.defaultID
+        chosenID = defaults.string(forKey: "AutoradioThemeID")
         mode = defaults.string(forKey: "AutoradioThemeMode") ?? "system"
         for k in bundled.keys.sorted() { _ = add(Data(bundled[k]!.utf8), source: k, origin: "bundled") }
         reload()
@@ -221,7 +225,7 @@ public final class ThemeStore: @unchecked Sendable {
         lock.lock()
         guard let o = origins[id], o != "bundled" else { lock.unlock(); return }
         docs[id] = nil; origins[id] = nil; order.removeAll { $0 == id }
-        if currentID == id { currentID = Self.defaultID; defaults.set(currentID, forKey: "AutoradioThemeID") }
+        if chosenID == id { chosenID = nil; defaults.removeObject(forKey: "AutoradioThemeID") }
         lock.unlock()
         if let userDir, let names = try? FileManager.default.contentsOfDirectory(atPath: userDir.path) {
             for n in names where n == "texture-\(id).json" || n == "\(id).json" { try? FileManager.default.removeItem(at: userDir.appendingPathComponent(n)) }
@@ -229,15 +233,29 @@ public final class ThemeStore: @unchecked Sendable {
     }
 
     public func list() -> [ThemeInfo] {
+        let cur = themeID
         lock.lock(); defer { lock.unlock() }
-        return order.map { ThemeInfo(id: $0, name: docs[$0]?.name ?? $0, current: $0 == currentID) }
+        return order.map { ThemeInfo(id: $0, name: docs[$0]?.name ?? $0, current: $0 == cur) }
     }
 
-    public var themeID: String { lock.lock(); defer { lock.unlock() }; return docs[currentID] != nil ? currentID : (order.first ?? Self.defaultID) }
+    /// The theme in force: the chosen one, else the default for the scheme wanted (the mode, or the system's).
+    public var themeID: String {
+        lock.lock(); let chosen = chosenID, m = mode; lock.unlock()
+        let wanted = m == "system" ? systemScheme() : m
+        lock.lock(); defer { lock.unlock() }
+        if let chosen, docs[chosen] != nil { return chosen }
+        let d = wanted == "dark" ? Self.defaultDarkID : Self.defaultLightID
+        return docs[d] != nil ? d : (order.first ?? Self.defaultID)
+    }
+    private func activeDoc() -> ThemeDoc? {
+        let id = themeID
+        lock.lock(); defer { lock.unlock() }
+        return docs[id] ?? order.first.flatMap { docs[$0] }
+    }
     public var schemeMode: String { lock.lock(); defer { lock.unlock() }; return mode }
 
     public func setTheme(_ id: String) {
-        lock.lock(); if docs[id] != nil { currentID = id; defaults.set(id, forKey: "AutoradioThemeID") }; lock.unlock()
+        lock.lock(); if docs[id] != nil { chosenID = id; defaults.set(id, forKey: "AutoradioThemeID") }; lock.unlock()
     }
     /// light, dark or system
     public func setMode(_ m: String) {
@@ -247,8 +265,8 @@ public final class ThemeStore: @unchecked Sendable {
 
     /// The scheme in force: the chosen one, else the system's, limited to the sides the theme defines.
     public func effectiveScheme() -> String {
-        lock.lock(); let m = mode, doc = docs[currentID] ?? order.first.flatMap { docs[$0] }; lock.unlock()
-        return Self.limited(m == "system" ? systemScheme() : m, doc)
+        lock.lock(); let m = mode; lock.unlock()
+        return Self.limited(m == "system" ? systemScheme() : m, activeDoc())
     }
     static func limited(_ wanted: String, _ doc: ThemeDoc?) -> String {
         let sides = doc?.schemes ?? ["light", "dark"]
@@ -256,20 +274,21 @@ public final class ThemeStore: @unchecked Sendable {
     }
 
     public func current() -> Theme {
-        lock.lock(); let doc = docs[currentID] ?? order.first.flatMap { docs[$0] }; lock.unlock()
+        let doc = activeDoc()
         guard let doc else { return Theme() }
         return Self.resolve(doc, scheme: effectiveScheme(), reduced: reduceMotion())
     }
 
     public func extras() -> ThemeExtras {
-        lock.lock(); let doc = docs[currentID] ?? order.first.flatMap { docs[$0] }; lock.unlock()
+        let doc = activeDoc()
         guard let doc else { return ThemeExtras() }
         return Self.resolveExtras(doc, scheme: effectiveScheme(), reduced: reduceMotion())
     }
 
     /// Every theme as a preview card, in the scheme in force (or the theme's own side when it lacks that one).
     public func cards() -> [ThemeCard] {
-        lock.lock(); let ids = order, ds = docs, os = origins, cur = currentID; lock.unlock()
+        let cur = themeID
+        lock.lock(); let ids = order, ds = docs, os = origins; lock.unlock()
         let wanted = effectiveSchemeRequest()
         return ids.compactMap { id in
             guard let d = ds[id] else { return nil }
