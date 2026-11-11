@@ -35,7 +35,7 @@ component Stamps
     moreShow: number
     closeShow: number
   view
-    row position="absolute" left=0 right=0 top=14 padding-left=16 padding-right=16 justify-content="space-between" pointer-events="none"
+    row position="absolute" left=0 right=0 top=(0 - 12) padding-left=16 padding-right=16 justify-content="space-between" pointer-events="none"
       text moreLabel testId=`stamp-more-${tag}` font-family=th.fontUi font-size=14 font-weight=800 letter-spacing=1.5 color=th.accent
         border-width=3 border-style="solid" border-color=th.accent border-radius=8 padding="4px 10px" rotate=-8
         opacity=moreShow scale=(0.8 + 0.25 * moreShow)
@@ -112,7 +112,8 @@ component PileCard
       animation=(th.reducedMotion ? "none" : `cardIn ${th.motionEnterMs}ms cubic-bezier(.2, .9, .3, 1) ${depth * th.staggerMs}ms both`)
       -exact-layout-transition=`${th.motionEnterMs}ms ease`
       Card(level=2, testId=`card-${address}`, minHeight=300)
-        column padding=16 gap=6 align-items="flex-start" width="100%"
+        box position="absolute" top=0 left=0 right=0 bottom=0 border-radius=th.radiusCard background-color=th.paper2 opacity=0.9 pointer-events="none"
+        column padding=16 gap=6 align-items="flex-start" width="100%" box-sizing="border-box"
           row gap=8 align-items="center"
             text kind font-family=th.fontUi font-size=12 color=th.muted
             if pinned
@@ -212,7 +213,8 @@ component StackCard
       z-index=(40 - pos)
       transition=(held ? "none" : (pos == 0 ? `translate ${spring}, rotate ${spring}, scale ${th.motionEnterMs}ms ease-out, opacity ${th.motionFastMs}ms ease-out` : `translate ${th.motionEnterMs}ms cubic-bezier(.2, .8, .2, 1), rotate ${th.motionEnterMs}ms cubic-bezier(.2, .8, .2, 1), scale ${th.motionEnterMs}ms ease-out, opacity ${th.motionFastMs}ms ease-out`))
       Card(level=2, testId=`stack-face-${route}`, minHeight=430)
-        column padding=22 gap=10 align-items="flex-start" width="100%"
+        box position="absolute" top=0 left=0 right=0 bottom=0 border-radius=th.radiusCard background-color=th.paper2 opacity=0.9 pointer-events="none"
+        column padding=22 gap=10 align-items="flex-start" width="100%" box-sizing="border-box"
           text section font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=1.5 color=th.muted
           text title font-family=th.fontRead font-size=30 font-weight=700 color=th.fg text-align="left" line-clamp=5 width="100%"
           text dek font-family=th.fontRead font-size=18 color=th.muted text-align="left" line-clamp=6 width="100%"

@@ -215,10 +215,10 @@ drive D 1 \
   "clock data" "clock +1500 real" "clock data" \
   "tap bar-pages" "clock +700 real" "clock data" \
   "tap pile-mode-pages" "clock +700 real" "clock data" \
-  "tap card-swipe-pub:demo-river-festival drag 90 0 during \"screenshot $SHOTS/26-middrag-more.png\"" "clock +900 real" "clock data" \
-  "tap card-swipe-pub:demo-river-festival drag -90 0 during \"screenshot $SHOTS/27-middrag-close.png\"" "clock +900 real" "clock data" \
+  "tap card-swipe-pub:demo-river-festival drag 90 0 hold 700 during \"screenshot $SHOTS/26-middrag-more.png\"" "clock +900 real" "clock data" \
+  "tap card-swipe-pub:demo-river-festival drag -90 0 hold 700 during \"screenshot $SHOTS/27-middrag-close.png\"" "clock +900 real" "clock data" \
   "tap pile-mode-stack" "clock +900 real" "clock data" \
-  "tap stack-swipe-demo-harbor-barrier drag 90 0 during \"screenshot $SHOTS/28-middrag-stack-more.png\"" "clock +900 real" "clock data"
+  "tap stack-swipe-demo-harbor-barrier drag 90 0 hold 700 during \"screenshot $SHOTS/28-middrag-stack-more.png\"" "clock +900 real" "clock data"
 rc=$?
 if [ $rc -eq 0 ] && [ -f "$SHOTS/26-middrag-more.png" ]; then echo "ok: mid-drag screenshots"; else echo "note: mid-drag screenshots not taken (exit $rc); the marks are judged from the after-throw screenshots"; grep -v "^warning" "$SCRATCH/D.txt" | tail -5; fi
 
