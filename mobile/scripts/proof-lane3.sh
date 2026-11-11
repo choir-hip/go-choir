@@ -61,7 +61,7 @@ drive() { # <mode: light|dark> <attempt-file>
     "tap reader-aim-clear" "$L" \
     "tap bar-pages drag 0 -200" "$L" "tap place-textures" "$L" "tap textures-doc-texture:demo-draft" "clock +1000 real" "clock data" tree "screenshot $SHOTS/$M-07-revising.png" \
     "tap bar-pages drag 0 -200" "$L" "tap place-paper" "$L" "tap paper-story-demo-grid-storage" "clock +1000 real" "clock data" tree "screenshot $SHOTS/$M-08-plain-story.png" \
-    "tap reader-related-pub:demo-ev-charging" "clock +1200 real" "clock data" tree "screenshot $SHOTS/$M-09-story-top.png" \
+    "tap page-title drag 0 -600" "$L" "tap reader-related-pub:demo-ev-charging" "clock +1200 real" "clock data" tree "screenshot $SHOTS/$M-09-story-top.png" \
     "tap reader-cite-a1" "$L" "clock data" tree "screenshot $SHOTS/$M-10-cite-open.png" \
     "tap reader-card-source-a1" "$L" "clock data" tree "screenshot $SHOTS/$M-11-source-sheet.png" \
     "tap reader-sheet-close" "$L" \

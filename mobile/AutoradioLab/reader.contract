@@ -188,7 +188,7 @@ component BlockView
             for r in b.rows key=r.id
               row flex-shrink=0
                 for cell, ci in r.cells key=ci
-                  column flex-shrink=0 min-width=150 padding="8px 12px" border-bottom-width=1 border-bottom-style="solid" border-bottom-color=th.rule
+                  column flex-shrink=0 width=170 padding="8px 12px" border-bottom-width=1 border-bottom-style="solid" border-bottom-color=th.rule
                     background-color=(cell.header ? th.paper2 : "")
                     text
                       Runs(runs=cell.runs, address=address, size=(size * 0.88), weight=(cell.header ? 700 : 400), lh=1.4, hi=(0 - 1), italic=false)
@@ -379,7 +379,7 @@ component ReaderBody
   view
     column position="absolute" inset=0
       scroll id="reader-scroll" flex=1 min-height=0 width="100%"
-        column width="100%" align-items="center" padding-top="calc(env(safe-area-inset-top) + 12px)"
+        column width="100%" align-items="center" padding-top=`calc(env(safe-area-inset-top) + ${rdoc.revising ? 72 : 12}px)`
           padding-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 72px)"
           column width="100%" max-width="38rem" padding-left=20 padding-right=20 box-sizing="border-box" color=th.fg font-family=th.fontRead
             // header: kicker, menu, headline, standfirst, byline and version line
