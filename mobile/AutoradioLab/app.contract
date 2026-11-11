@@ -109,6 +109,23 @@ component Autoradio
     // ---- lane 6: mail ----
     // ---- lane 7: settings, themes, accounts ----
     // ---- lane 8: onboarding and the interview ----
+    ob
+    obBegin
+    obBeginMobile
+    obRetry
+    obFallback
+    obMic
+    obMicNext
+    obHearingYes
+    obHearingNo
+    obInterview
+    obContinue
+    obDemoNext
+    obEditionRetry
+    obSkip
+    obReset
+    obOpenEdition
+    obFinish
     // ---- lane 9: motion and the mark ----
 
   view

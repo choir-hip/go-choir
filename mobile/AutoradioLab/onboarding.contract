@@ -1,7 +1,27 @@
-// First run: sign in, then (lane 8) voice setup and the interview. Lane 8 owns this file.
-// The spine ships the sign-in screen the listener-first app already had, unchanged.
-// testIds: signin, signin-intro, signin-code, signin-open, signin-cancel, signin-message.
-use Theme, ChoirAuth from "@choir/autoradio"
+// First run: sign in, voice setup, the interview, the edition (plan section 2). Lane 8 owns this file.
+//
+// Sign-in is the screen the listener-first app already had (SignInScreen), restyled. After it, `OnboardingPage` is ONE page
+// (address onboarding:setup) that shows the step the controller is on: voice setup (configuring the voice and audio models:
+// download with honest progress, check each model on this phone, fall back), the microphone asked in context with one live
+// check, a hearing check, then the interview (voice only, microphone open, interruptible) and the edition. It is a page, so
+// it can be left and returned to; the paper stays usable meanwhile. `FirstRunCard` is the card other places show.
+//
+// The mark: the TetraMark and the alive wait are lane 9's. `ob-mark-slot` and `ob-wait-slot` hold the spine's Mark glyph.
+//
+// testIds: signin, signin-intro, signin-code, signin-open, signin-cancel, signin-message (unchanged);
+//   ob-steps, ob-mark-slot, ob-begin, ob-begin-mobile, ob-skip, ob-row-<stage>, ob-retry-<stage>, ob-fallback-<stage>,
+//   ob-summary, ob-mic-ask, ob-mic-level, ob-heard, ob-mic-next, ob-route, ob-hearing-yes, ob-hearing-no, ob-interview,
+//   ob-listening, ob-now-saying, ob-talk, ob-paused, ob-continue, ob-demo, ob-demo-next, ob-wait-slot, ob-writing-line,
+//   ob-edition-retry, ob-edition, ob-edition-open, ob-start-radio, firstrun-card, firstrun-open.
+use Theme, ChoirAuth, Onboarding from "@choir/autoradio"
+use Card, PageScroll from "./ui.contract"
+use Mark from "./mark.contract"
+
+keyframes obBreathe
+  from opacity=1 scale=1
+  to opacity=0.35 scale=0.7
+
+// ---------------------------------------------------------------- sign-in
 
 component SignInScreen
   inject
@@ -11,19 +31,308 @@ component SignInScreen
     cancelSignIn: action
     openApproval: action
   view
-    column position="absolute" inset=0 padding=24 gap=16 align-items="center" justify-content="center"
-      text "Autoradio" font-size=34 font-weight=700 role="heading" aria-level=2 font-family=th.fontRead color=th.fg
-      text "Sign in to hear the paper and talk to your computer." testId="signin-intro" text-align="center" font-family=th.fontRead color=th.fg
+    column position="absolute" inset=0 padding=24 gap=20 align-items="center" justify-content="center"
+      box testId="ob-mark-slot" width=72 height=72 align-items="center" justify-content="center"
+        Mark(state="idle")
+      column gap=8 align-items="center"
+        text "Autoradio" font-size=38 font-weight=700 role="heading" aria-level=2 font-family=th.fontRead color=th.fg
+        text "Sign in to hear the paper and talk to your computer." testId="signin-intro" text-align="center" font-size=17 line-height=1.45 font-family=th.fontRead color=th.muted
       if au.status == "pending"
-        column gap=12 align-items="center"
-          text "Your code" font-family=th.fontUi color=th.muted
-          text au.userCode testId="signin-code" font-size=34 font-family=th.fontMono color=th.fg
-          text "Approve this sign-in in your browser." font-family=th.fontUi color=th.muted
-          button press=openApproval testId="signin-open" buttonStyle="filled"
-            text "Open the approval page"
-          button press=cancelSignIn testId="signin-cancel"
-            text "Cancel"
+        Card(level=2, testId="signin-card", minHeight=0)
+          column padding=20 gap=12 align-items="center"
+            text "Your code" font-family=th.fontUi font-size=13 color=th.muted
+            text au.userCode testId="signin-code" font-size=36 font-weight=600 font-family=th.fontMono color=th.fg
+            text "Approve this sign-in in your browser." font-family=th.fontUi font-size=15 color=th.muted text-align="center"
+            button press=openApproval testId="signin-open" buttonStyle="filled"
+              text "Open the approval page"
+            button press=cancelSignIn testId="signin-cancel"
+              text "Cancel"
       if au.status != "pending"
         button press=signIn testId="signin" buttonStyle="filled" padding=16
           text "Sign in"
-      text au.message testId="signin-message" font-family=th.fontUi color=th.muted
+      text au.message testId="signin-message" font-family=th.fontUi font-size=14 color=th.muted text-align="center"
+
+// ---------------------------------------------------------------- the page
+
+component StepDots
+  inject
+    th: Theme
+  props
+    n: number
+  view
+    row testId="ob-steps" gap=6 width="100%" aria-label=`Step ${n} of 4`
+      box flex=1 height=4 border-radius=2 background-color=(n >= 1 ? th.accent : th.rule)
+      box flex=1 height=4 border-radius=2 background-color=(n >= 2 ? th.accent : th.rule)
+      box flex=1 height=4 border-radius=2 background-color=(n >= 3 ? th.accent : th.rule)
+      box flex=1 height=4 border-radius=2 background-color=(n >= 4 ? th.accent : th.rule)
+
+// One model's row: name in plain words, the model and its size, a real progress bar, the state in words, the numbers measured
+// on this phone, and "Try again" / "Use the fallback" where the row stalled or failed.
+component SetupRowItem
+  inject
+    th: Theme
+    obRetry: action
+    obFallback: action
+  props
+    stage: string
+    name: string
+    model: string
+    sizeLabel: string
+    state: string
+    progress: number
+    statusLine: string
+    numbers: string
+    isFallback: bool
+    canRetry: bool
+    canFallback: bool
+    compact: bool
+  derive bad = state == "stalled" or state == "failed"
+  view
+    Card(level=1, testId=`ob-row-${stage}`, minHeight=0)
+      column padding=14 gap=8
+        row gap=10 align-items="center"
+          column flex=1 min-width=0 gap=2
+            text name font-family=th.fontUi font-size=17 font-weight=600 color=th.fg
+            text `${model} · ${sizeLabel}` font-family=th.fontUi font-size=13 color=th.muted
+          if state == "ready"
+            image "symbol:checkmark" color=(isFallback ? th.muted : th.success)
+          if bad
+            image "symbol:alert" color=th.danger
+          if state == "preparing" and th.reducedMotion == false
+            box width=10 height=10 border-radius=5 background-color=th.accent animation="obBreathe 900ms ease-in-out infinite alternate"
+        if compact == false and state != "ready" and state != "waiting"
+          column height=6 border-radius=3 background-color=th.rule width="100%"
+            box height=6 border-radius=3 background-color=(bad ? th.danger : th.accent) width=`${floor(progress * 100)}%`
+        text statusLine font-family=th.fontUi font-size=14 color=(bad ? th.danger : th.fg) line-height=1.35
+        if numbers != ""
+          text numbers font-family=th.fontMono font-size=12 color=th.muted
+        if canRetry or canFallback
+          row gap=8
+            if canRetry
+              button press=obRetry(stage) testId=`ob-retry-${stage}` buttonStyle="bordered"
+                text "Try again"
+            if canFallback
+              button press=obFallback(stage) testId=`ob-fallback-${stage}` buttonStyle="bordered"
+                text "Use the fallback"
+
+component TalkLine
+  inject
+    th: Theme
+  props
+    who: string
+    line: string
+    interrupted: bool
+  derive label = who == "you" ? (interrupted ? "You, cutting in" : "You") : (interrupted ? "Radio, cut off" : "Radio")
+  view
+    column gap=2 align-items=(who == "you" ? "flex-end" : "flex-start") width="100%"
+      text label font-family=th.fontUi font-size=11 color=th.muted
+      column padding="8px 12px" border-radius=th.radiusControl max-width="86%" background-color=(who == "you" ? th.accent : th.paper2)
+        text line font-family=th.fontRead font-size=16 line-height=1.4 color=(who == "you" ? th.onAccent : th.fg)
+
+component OnboardingPage
+  inject
+    th: Theme
+    ob: Onboarding
+    obBegin: action
+    obBeginMobile: action
+    obMic: action
+    obMicNext: action
+    obHearingYes: action
+    obHearingNo: action
+    obInterview: action
+    obContinue: action
+    obDemoNext: action
+    obEditionRetry: action
+    obSkip: action
+    obOpenEdition: action
+    obFinish: action
+  props
+    address: string
+    title: string
+  derive n = ob.step == "mic" ? 2 : ob.step == "hearing" ? 3 : (ob.step == "ready" or ob.step == "interview" or ob.step == "writing" or ob.step == "done") ? 4 : 1
+  derive markState = ob.step == "writing" ? "holding" : (ob.step == "interview" and ob.listening) ? "listening" : "idle"
+  derive beginLabel = ob.setupStarted ? "Continue voice setup" : "Set up the voice"
+  derive deviceLine = ob.device == "" ? "Choosing the models that fit this phone." : `Chosen for this phone: ${ob.device}.`
+  derive micLabel = ob.mic == "unasked" ? "Allow the microphone" : "Try again"
+  derive pausedTitle = ob.pauseReason == "loud" ? "Waiting for a quieter place" : ob.pauseReason == "silent" ? "Paused" : "Your interview is paused"
+  derive eyebrow = ob.step == "done" ? "ALL SET" : ob.step == "skipped" ? "WHEN YOU ARE READY" : `STEP ${n} OF 4`
+  view
+    PageScroll(id="onboarding")
+      row gap=14 align-items="center"
+        box testId="ob-mark-slot" width=56 height=56 align-items="center" justify-content="center"
+          Mark(state=markState)
+        column flex=1 min-width=0 gap=2
+          text eyebrow font-family=th.fontUi font-size=12 font-weight=600 color=th.accent
+          text ob.title role="heading" aria-level=1 font-size=30 font-weight=700 line-height=1.1 testId="page-title" font-family=th.fontRead
+      StepDots(n=n)
+
+      // ---- welcome (and skipped): what is about to happen, plainly
+      if ob.step == "welcome" or ob.step == "skipped"
+        Card(level=1, testId="ob-welcome", minHeight=0)
+          column padding=18 gap=12
+            text "Autoradio can learn what you care about in a short spoken conversation, then write your paper to match." font-size=18 line-height=1.45
+            text "First it sets up the voice on this phone: a few audio models to download, and a check that each one works here." font-size=16 line-height=1.45 color=th.muted
+            text ob.totalLabel font-family=th.fontUi font-size=14 color=th.muted testId="ob-total"
+            button press=obBegin testId="ob-begin" buttonStyle="filled" padding=14
+              text beginLabel
+            if ob.step == "skipped"
+              text "You skipped this once. The paper stays as it is until you do it." font-family=th.fontUi font-size=13 color=th.muted
+        button press=obSkip testId="ob-skip" appearance="none" padding=10
+          text "Skip for now" font-family=th.fontUi font-size=15 color=th.muted
+
+      // ---- voice setup: configure the voice and audio models
+      if ob.step == "setup"
+        if ob.askMobile
+          Card(level=2, testId="ob-mobile", minHeight=0)
+            column padding=18 gap=10
+              text "You are on mobile data." font-weight=600 font-size=17
+              text ob.totalLabel font-family=th.fontUi font-size=15 color=th.muted
+              button press=obBeginMobile testId="ob-begin-mobile" buttonStyle="filled"
+                text "Download anyway"
+        if ob.askMobile == false
+          text ob.totalLabel font-family=th.fontUi font-size=15 color=th.muted testId="ob-total"
+          text deviceLine font-family=th.fontUi font-size=13 color=th.muted
+          for r in ob.rows key=r.stage
+            SetupRowItem(stage=r.stage, name=r.name, model=r.model, sizeLabel=r.sizeLabel, state=r.state, progress=r.progress, statusLine=r.statusLine, numbers=r.numbers, isFallback=r.isFallback, canRetry=r.canRetry, canFallback=r.canFallback, compact=false)
+          text "You can leave this page. The paper keeps playing, and setup carries on." font-family=th.fontUi font-size=13 color=th.muted
+          button press=obSkip testId="ob-skip" appearance="none" padding=10
+            text "Skip for now" font-family=th.fontUi font-size=15 color=th.muted
+
+      // ---- the microphone, asked in context, with one live check
+      if ob.step == "mic"
+        Card(level=1, testId="ob-mic", minHeight=0)
+          column padding=18 gap=12
+            if ob.mic == "unasked" or ob.mic == "refused" or ob.mic == "silent"
+              text "To check I can hear you I need the microphone." font-size=19 font-weight=600 line-height=1.35
+              text "What you say stays on this phone as sound; only the words go to your computer." font-size=16 line-height=1.45 color=th.muted
+              button press=obMic testId="ob-mic-ask" buttonStyle="filled" padding=14
+                text micLabel
+            if ob.mic == "checking"
+              text "Say anything." font-size=26 font-weight=700 font-family=th.fontRead
+              column testId="ob-mic-level" height=10 border-radius=5 background-color=th.rule width="100%"
+                box height=10 border-radius=5 background-color=th.success width=`${floor(ob.level * 100)}%`
+              text "Listening…" font-family=th.fontUi font-size=14 color=th.muted
+            if ob.mic == "heard"
+              row gap=8 align-items="center"
+                image "symbol:checkmark" color=th.success
+                text "I heard you:" font-family=th.fontUi font-size=15 color=th.muted
+              text ob.heard testId="ob-heard" font-size=22 font-family=th.fontRead line-height=1.3
+              button press=obMicNext testId="ob-mic-next" buttonStyle="filled" padding=14
+                text "Continue"
+            text ob.message font-family=th.fontUi font-size=14 color=th.danger
+        text "The models" font-family=th.fontUi font-size=13 color=th.muted
+        for r in ob.rows key=r.stage
+          SetupRowItem(stage=r.stage, name=r.name, model=r.model, sizeLabel=r.sizeLabel, state=r.state, progress=r.progress, statusLine=r.statusLine, numbers=r.numbers, isFallback=r.isFallback, canRetry=r.canRetry, canFallback=r.canFallback, compact=true)
+        button press=obSkip testId="ob-skip" appearance="none" padding=10
+          text "Skip for now" font-family=th.fontUi font-size=15 color=th.muted
+
+      // ---- a hearing check on the current output route
+      if ob.step == "hearing"
+        Card(level=1, testId="ob-hearing", minHeight=0)
+          column padding=18 gap=12
+            text ob.route testId="ob-route" font-family=th.fontUi font-size=15 color=th.muted
+            text "Can you hear this?" font-size=26 font-weight=700 font-family=th.fontRead
+            row gap=10
+              button press=obHearingYes testId="ob-hearing-yes" buttonStyle="filled" padding=14
+                text "Yes, I hear it"
+              button press=obHearingNo testId="ob-hearing-no" buttonStyle="bordered" padding=14
+                text "No"
+            text ob.message font-family=th.fontUi font-size=14 color=th.danger
+
+      // ---- ready: voice setup is done
+      if ob.step == "ready"
+        Card(level=1, testId="ob-ready", minHeight=0)
+          column padding=18 gap=12
+            text "The voice is set up." font-size=20 font-weight=700
+            text "Next, a short conversation about what you care about. Three to six minutes, out loud. You can cut in any time." font-size=17 line-height=1.45
+            text "It is spoken, so it works best somewhere quiet, or with headphones." font-family=th.fontUi font-size=14 color=th.muted
+            button press=obInterview testId="ob-interview" buttonStyle="filled" padding=14
+              text "Start the interview"
+            text ob.message font-family=th.fontUi font-size=14 color=th.danger
+        text "The models" font-family=th.fontUi font-size=13 color=th.muted testId="ob-summary"
+        for r in ob.rows key=r.stage
+          SetupRowItem(stage=r.stage, name=r.name, model=r.model, sizeLabel=r.sizeLabel, state=r.state, progress=r.progress, statusLine=r.statusLine, numbers=r.numbers, isFallback=r.isFallback, canRetry=r.canRetry, canFallback=r.canFallback, compact=true)
+        button press=obSkip testId="ob-skip" appearance="none" padding=10
+          text "Skip for now" font-family=th.fontUi font-size=15 color=th.muted
+
+      // ---- the interview: microphone open, interruptible, voice only
+      if ob.step == "interview"
+        if ob.paused
+          Card(level=2, testId="ob-paused", minHeight=0)
+            column padding=18 gap=10
+              text pausedTitle font-size=19 font-weight=700
+              text ob.nowSaying font-size=17 line-height=1.45 color=th.muted
+              button press=obContinue testId="ob-continue" buttonStyle="filled" padding=14
+                text "Continue your interview"
+        if ob.paused == false
+          row gap=10 align-items="center" testId="ob-listening"
+            if th.reducedMotion == false
+              box width=10 height=10 border-radius=5 background-color=th.danger animation="obBreathe 1100ms ease-in-out infinite alternate"
+            if th.reducedMotion
+              box width=10 height=10 border-radius=5 background-color=th.danger
+            text "The microphone is open. Talk any time, even over me." font-family=th.fontUi font-size=14 color=th.muted flex=1
+          Card(level=2, testId="ob-now", minHeight=0)
+            column padding=18 gap=6
+              text ob.nowSaying testId="ob-now-saying" font-family=th.fontRead font-size=24 line-height=1.3 color=th.fg
+        text "So far" font-family=th.fontUi font-size=13 color=th.muted
+        column testId="ob-talk" gap=10 width="100%"
+          for t, i in ob.talk key=i
+            TalkLine(who=t.who, line=t.text, interrupted=t.interrupted)
+        if ob.demo
+          Card(level=1, testId="ob-demo", minHeight=0)
+            column padding=14 gap=8
+              text "Demo: no microphone here" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
+              text ob.demoNote font-family=th.fontUi font-size=14 color=th.muted
+              if ob.demoWords != ""
+                text `“${ob.demoWords}”` font-family=th.fontRead font-size=17 color=th.fg
+              if ob.demoLeft > 0
+                button press=obDemoNext testId="ob-demo-next" buttonStyle="bordered"
+                  text `Play the next recorded turn (${ob.demoLeft} left)`
+        button press=obSkip testId="ob-skip" appearance="none" padding=10
+          text "Skip for now" font-family=th.fontUi font-size=15 color=th.muted
+
+      // ---- the desk writes the edition: the alive wait (lane 9 owns the mark and the motion)
+      if ob.step == "writing"
+        Card(level=2, testId="ob-writing", minHeight=0)
+          column padding=22 gap=14 align-items="center"
+            box testId="ob-wait-slot" width=96 height=96 align-items="center" justify-content="center"
+              Mark(state="holding")
+            if ob.editionStatus == "writing"
+              text ob.writingLine testId="ob-writing-line" font-family=th.fontRead font-size=20 text-align="center"
+              text "This takes about fifteen seconds." font-family=th.fontUi font-size=13 color=th.muted
+            if ob.editionStatus == "failed"
+              text ob.editionError testId="ob-edition-error" font-family=th.fontRead font-size=19 text-align="center" line-height=1.35
+              text "The paper carries on with the default edition meanwhile." font-family=th.fontUi font-size=13 color=th.muted text-align="center"
+              button press=obEditionRetry testId="ob-edition-retry" buttonStyle="filled" padding=14
+                text "Retry"
+        button press=obSkip testId="ob-skip" appearance="none" padding=10
+          text "Skip for now" font-family=th.fontUi font-size=15 color=th.muted
+
+      // ---- the edition, shown; then the front page and a story
+      if ob.step == "done"
+        Card(level=2, testId="ob-edition", minHeight=0)
+          column padding=20 gap=10
+            text ob.editionIntro font-size=20 font-weight=700 line-height=1.3
+            for l, i in ob.editionLines key=i
+              text l font-family=th.fontRead font-size=16 line-height=1.45 color=th.fg
+        button press=obOpenEdition testId="ob-edition-open" buttonStyle="bordered" padding=14
+          text "Open your edition"
+        button press=obFinish testId="ob-start-radio" buttonStyle="filled" padding=14
+          text "Start the radio"
+
+// The card other places show while the edition does not exist: "Make your edition" (Textures place), "Continue your interview",
+// "Finish voice setup", or the microphone note. Opens the same page; nothing resumes by itself.
+component FirstRunCard
+  inject
+    th: Theme
+    ob: Onboarding
+    openPage: action
+  derive act = ob.card == "Continue your interview" ? "Continue" : "Open"
+  view
+    if ob.card != ""
+      Card(level=1, testId="firstrun-card", minHeight=0)
+        column padding=16 gap=8
+          text ob.card font-family=th.fontRead font-size=19 font-weight=700 color=th.fg
+          text ob.cardBody font-family=th.fontUi font-size=14 line-height=1.4 color=th.muted
+          button press=openPage("onboarding:setup", "Make it yours") testId="firstrun-open" buttonStyle="filled"
+            text act

@@ -1,7 +1,50 @@
-// Lane members file (onboarding): this lane's states, derives, resources, mutations and actions, as if written in the root.
-// Owned by the onboarding lane. Declare the shapes you use with `use ... from "@choir/autoradio"` at the top of this file
-// (your shapes and source names live in exact-package/interface/onboarding.json). Every name you want a child component to
-// `inject` goes in your band of the `provide` list in app.contract.
+// Lane members file (onboarding): first run. Owned by the onboarding lane. The state is the controller's in the module
+// (AutoradioModule+Onboarding.swift): setup rows, microphone and hearing checks, the interview, the edition. The page reads
+// it as one resource, `ob`; every button is a send that answers the same shape.
+use onboardingState, onboardingBegin, onboardingRetry, onboardingFallback, onboardingMic, onboardingMicNext, onboardingHearing from "@choir/autoradio"
+use onboardingInterview, onboardingContinue, onboardingDemoNext, onboardingEditionRetry, onboardingSkip, onboardingReset from "@choir/autoradio"
+use pageOpen, pageClose, choirPlayPause from "@choir/autoradio"
+use Onboarding from "@choir/autoradio"
+
 members Autoradio
-  // placeholder so the block is not empty; delete it when you add your first member
-  state onboardingPlaceholder = false
+  resource ob = onboardingState() as shape Onboarding else empty()
+  mutation obm as shape Onboarding
+
+  action obBegin
+    send obm = onboardingBegin(mobile="false")
+  action obBeginMobile
+    send obm = onboardingBegin(mobile="true")
+  action obRetry(stage: string)
+    send obm = onboardingRetry(stage=stage)
+  action obFallback(stage: string)
+    send obm = onboardingFallback(stage=stage)
+  action obMic
+    send obm = onboardingMic()
+  action obMicNext
+    send obm = onboardingMicNext()
+  action obHearingYes
+    send obm = onboardingHearing(ok="true")
+  action obHearingNo
+    send obm = onboardingHearing(ok="false")
+  action obInterview
+    send obm = onboardingInterview()
+  action obContinue
+    send obm = onboardingContinue()
+  action obDemoNext
+    send obm = onboardingDemoNext()
+  action obEditionRetry
+    send obm = onboardingEditionRetry()
+  action obSkip
+    send obm = onboardingSkip()
+    send pm = pageClose(address="onboarding:setup")
+  action obReset
+    send obm = onboardingReset()
+  // The edition is a Texture page: open it (the reader draws it).
+  action obOpenEdition
+    send pm = pageOpen(address="texture:my-edition", title="My edition")
+    layer = ""
+  // Then the front page, and the first story playing.
+  action obFinish
+    send pm = pageOpen(address="paper:front", title="Paper")
+    send acct = choirPlayPause()
+    layer = ""
