@@ -59,7 +59,9 @@ SIM privacy "$EXACT_SIM" grant all $APP >/dev/null 2>&1
 
 # ---- 3a. SURVEY drive: every place once, trees dumped so the next drive can pick real ids
 step "clock data"; wait_ 6000
-view real-01-paper-front 2500
+view real-00-first-run 800
+step "tap ob-skip"; wait_ 2500
+view real-01-paper-front 1500
 step "tap paper-scroll drag 0 -500"; view real-02-paper-scrolled 900
 step "tap paper-scroll drag 0 -700"; view real-03-paper-scrolled-more 900
 place settings 900; view real-04-settings 600
@@ -84,6 +86,7 @@ echo "picked: story1=${STORY1:+yes} story2=${STORY2:+yes} play=${PLAY1:+yes} doc
 
 # ---- 3b. READ drive: two real stories in the reader, one played, one Texture, a folder, a message
 step "clock data"; wait_ 6000
+step "tap ob-skip"; wait_ 2500
 [ -n "$STORY1" ] && { step "tap \"$STORY1\""; view real-11-story-1 4000; step "tap reader-scroll drag 0 -600"; view real-12-story-1-scrolled 900; step "tap reader-scroll drag 0 -900"; view real-13-story-1-more 900; }
 goto "paper:front"; wait_ 1200
 [ -n "$STORY2" ] && { step "tap \"$STORY2\""; view real-14-story-2 4000; step "tap reader-scroll drag 0 -2500"; view real-15-story-2-end 900; }
