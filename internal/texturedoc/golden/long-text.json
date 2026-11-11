@@ -1,0 +1,798 @@
+{
+ "golden": {
+  "name": "long-text",
+  "note": "",
+  "covers": [
+   "text:paragraph-over-20000-chars",
+   "text:sixty-paragraphs"
+  ],
+  "checks": false,
+  "validate": "texture"
+ },
+ "route": {
+  "path": "/pub/texture/golden-long-text",
+  "bare": "golden-long-text",
+  "permalink": "golden-long-text/v1"
+ },
+ "publication": {
+  "title": "A long day",
+  "kind": "document"
+ },
+ "version": {
+  "id": "pubver-long-text",
+  "number": 1,
+  "published_at": "2026-11-10T06:00:00Z"
+ },
+ "nav": {
+  "revision": 1,
+  "latest": 1,
+  "current": 1,
+  "prev": 0,
+  "next": 0
+ },
+ "artifact": {
+  "content": "",
+  "body_doc": {
+   "schema": "choir.texture_doc.v1",
+   "doc": {
+    "type": "doc",
+    "attrs": {
+     "id": "g-long"
+    },
+    "content": [
+     {
+      "type": "heading",
+      "attrs": {
+       "id": "h1",
+       "level": 2
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "A very long story"
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "pl"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps0"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 1. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps1"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 2. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps2"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 3. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps3"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 4. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps4"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 5. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps5"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 6. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps6"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 7. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps7"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 8. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps8"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 9. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps9"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 10. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps10"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 11. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps11"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 12. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps12"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 13. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps13"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 14. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps14"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 15. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps15"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 16. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps16"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 17. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps17"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 18. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps18"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 19. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps19"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 20. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps20"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 21. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps21"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 22. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps22"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 23. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps23"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 24. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps24"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 25. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps25"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 26. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps26"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 27. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps27"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 28. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps28"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 29. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps29"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 30. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps30"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 31. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps31"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 32. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps32"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 33. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps33"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 34. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps34"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 35. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps35"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 36. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps36"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 37. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps37"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 38. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps38"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 39. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps39"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 40. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps40"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 41. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps41"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 42. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps42"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 43. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps43"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 44. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps44"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 45. Patient every each crosses the a of and that bar keeps log. Boat the harbour patient every each crosses the a of and that."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps45"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 46. Boat the harbour patient every each crosses the a of and that. Keeps log tide boat the harbour patient every each crosses the a."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps46"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 47. Keeps log tide boat the harbour patient every each crosses the a. And that bar keeps log tide boat the harbour patient every each."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps47"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 48. And that bar keeps log tide boat the harbour patient every each. The a of and that bar keeps log tide boat the harbour."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps48"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 49. The a of and that bar keeps log tide boat the harbour. Every each crosses the a of and that bar keeps log tide."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps49"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 50. Every each crosses the a of and that bar keeps log tide. The harbour patient every each crosses the a of and that bar."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps50"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 51. The harbour patient every each crosses the a of and that bar. Log tide boat the harbour patient every each crosses the a of."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps51"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 52. Log tide boat the harbour patient every each crosses the a of. That bar keeps log tide boat the harbour patient every each crosses."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps52"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 53. That bar keeps log tide boat the harbour patient every each crosses. A of and that bar keeps log tide boat the harbour patient."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps53"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 54. A of and that bar keeps log tide boat the harbour patient. Each crosses the a of and that bar keeps log tide boat."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps54"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 55. Each crosses the a of and that bar keeps log tide boat. Harbour patient every each crosses the a of and that bar keeps."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps55"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 56. Harbour patient every each crosses the a of and that bar keeps. Tide boat the harbour patient every each crosses the a of and."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps56"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 57. Tide boat the harbour patient every each crosses the a of and. Bar keeps log tide boat the harbour patient every each crosses the."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps57"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 58. Bar keeps log tide boat the harbour patient every each crosses the. Of and that bar keeps log tide boat the harbour patient every."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps58"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 59. Of and that bar keeps log tide boat the harbour patient every. Crosses the a of and that bar keeps log tide boat the."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "ps59"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Short paragraph number 60. Crosses the a of and that bar keeps log tide boat the. Patient every each crosses the a of and that bar keeps log."
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ "payload": {},
+ "checks": {
+  "citations": []
+ },
+ "source_entities": [],
+ "transclusions": []
+}

@@ -1,0 +1,173 @@
+{
+ "golden": {
+  "name": "transclusion",
+  "note": "",
+  "covers": [
+   "entity:texture_span",
+   "inline:source_ref-texture-transclusion",
+   "inline:source_ref-expanded_ref",
+   "inline:source_ref-ref-quote",
+   "entity:web_url"
+  ],
+  "checks": false,
+  "validate": "texture"
+ },
+ "route": {
+  "path": "/pub/texture/golden-transclusion",
+  "bare": "golden-transclusion",
+  "permalink": "golden-transclusion/v1"
+ },
+ "publication": {
+  "title": "Pulled from another page",
+  "kind": "document"
+ },
+ "version": {
+  "id": "pubver-transclusion",
+  "number": 1,
+  "published_at": "2026-11-10T06:00:00Z"
+ },
+ "nav": {
+  "revision": 1,
+  "latest": 1,
+  "current": 1,
+  "prev": 0,
+  "next": 0
+ },
+ "artifact": {
+  "content": "",
+  "body_doc": {
+   "schema": "choir.texture_doc.v1",
+   "doc": {
+    "type": "doc",
+    "attrs": {
+     "id": "g-transclusion"
+    },
+    "content": [
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p1"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "This paragraph pulls a passage from another Texture"
+       },
+       {
+        "type": "source_ref",
+        "attrs": {
+         "id": "t1",
+         "source_entity_id": "src_t",
+         "display_mode": "expanded_ref",
+         "ref": {
+          "doc": "cap-src_t",
+          "version": "v1",
+          "cid": "c1",
+          "hash": "h",
+          "quote": "The harbour closed at noon."
+         }
+        }
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p2"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "And a web source beside it"
+       },
+       {
+        "type": "source_ref",
+        "attrs": {
+         "id": "t2",
+         "source_entity_id": "src_w",
+         "display_mode": "numbered_ref"
+        }
+       },
+       {
+        "type": "text",
+        "text": ", then the Texture again"
+       },
+       {
+        "type": "source_ref",
+        "attrs": {
+         "id": "t3",
+         "source_entity_id": "src_t",
+         "display_mode": "numbered_ref"
+        }
+       },
+       {
+        "type": "text",
+        "text": "."
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ "payload": {},
+ "checks": {
+  "citations": []
+ },
+ "source_entities": [
+  {
+   "source_entity_id": "src_t",
+   "entity": {
+    "source_entity_id": "src_t",
+    "target": {
+     "kind": "texture_span",
+     "uri": "texture:doc-harbour-log@rev-7",
+     "id": "doc-harbour-log"
+    },
+    "selectors": [
+     {
+      "kind": "whole_resource"
+     }
+    ],
+    "display": {
+     "mode": "numbered_ref",
+     "title": "The harbour log"
+    },
+    "evidence": {
+     "state": "available",
+     "open_surface": "texture"
+    },
+    "provenance": {
+     "created_by": "golden"
+    }
+   }
+  },
+  {
+   "source_entity_id": "src_w",
+   "entity": {
+    "source_entity_id": "src_w",
+    "target": {
+     "kind": "web_url",
+     "uri": "https://example.com/tide-tables"
+    },
+    "selectors": [
+     {
+      "kind": "whole_resource"
+     }
+    ],
+    "display": {
+     "mode": "numbered_ref",
+     "title": "Tide tables"
+    },
+    "evidence": {
+     "state": "available",
+     "open_surface": "source"
+    },
+    "provenance": {
+     "created_by": "golden"
+    }
+   }
+  }
+ ],
+ "transclusions": []
+}
