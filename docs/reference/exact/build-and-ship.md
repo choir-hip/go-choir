@@ -179,7 +179,9 @@ days. On 2026-11-10 `devicectl device process launch` worked after the
 certificate was trusted and a build was installed on the phone; builders do not
 install on the owner's phone without agreement.
 
-**We write no Rust.** Exact's Rust is the engine; the build compiles it, we do
+**Rust is allowed, not the default** (owner, 2026-11-11: "we can write rust"). The sentence that follows was the earlier rule and holds as the default path only.
+
+**Earlier rule: we write no Rust.** Exact's Rust is the engine; the build compiles it, we do
 not author it.
 
 ## Archive, TestFlight, CI

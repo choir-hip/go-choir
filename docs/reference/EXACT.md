@@ -98,7 +98,11 @@ Rust: Rust is Exact's engine, and we use it, not extend it
    `AVAudioSession`).
 4. Mark every new claim here **[run]**, **[src]**, **[doc]**, **[test]**,
    **[inferred]** or **[unrun]**. A sketch nobody built stays **[unrun]**.
-5. We write no Rust. Rust is Exact's engine.
+5. We may write Rust (owner, 2026-11-11: "we can write rust"; this replaces
+   the earlier "TypeScript, not Rust"). Contract and TypeScript stay the
+   default because they rebuild in about a minute; Rust is for what they
+   cannot do, such as a wgpu GPU module, and each Rust crate states its
+   added build time.
 6. Third-party Swift or Core ML code enters as a static xcframework in the app
    module, never as a package dependency.
 7. Per-frame work stays out of Hermes: use frame tasks, transitions, keyframes

@@ -443,7 +443,7 @@ belongs to its own `sequence` [inferred].
 | Animated backdrop blur | Fade a material layer's opacity instead |
 | Animate `width` or `top` | `-exact-layout-transition` |
 | `mix-blend-mode` on iOS boxes | Canvas 2D compositing, or a pre-blended asset |
-| Lit or shaded 3D faces | Rust GPU surface (a Rust crate; we write no Rust, so avoid) |
+| Lit or shaded 3D faces | Rust GPU surface (a Rust crate; allowed since 2026-11-11, at a build-time cost to measure) |
 | Layer above a UIKit sheet | Authored overlays (design doc, Appendix B) |
 
 ## 10. Upstream examples worth grepping
