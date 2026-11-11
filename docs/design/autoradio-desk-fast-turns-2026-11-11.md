@@ -521,3 +521,13 @@ the role and pool names; the record fields.
   `autoradio` instead.
 - Whether the guest can resolve a publication by address itself (slice 3); the
   phone does today through the public platform route.
+
+## 11. Owner ruling after this note, 2026-11-11
+
+The owner widened the desk: the Autoradio desk is the interface, even to
+Texture. It writes the programme script, which spans many articles and mixes
+the paper, podcasts, mail and more; the app plays that script on open, as an
+AI DJ, not any one article; the listener interrupts at any time and reaches
+any app or desk through it. Slice 1 here (the fast answer to an interruption)
+stands as the turn path. The hand-off slices and the programme script are
+the desk's main work and get their own design note.

@@ -132,6 +132,18 @@ puts it on top. The launcher opens the key pages (Paper, Textures, Files,
 Mail, Settings) and can bring any page in the deck to the top. This refines
 ruling 19: the swipe is "send to the bottom", not previous and next.
 
+26. **Autoradio is an AI DJ, not an article reader, and the Autoradio desk
+is the interface** (owner, 2026-11-11). You open the app and it starts
+playing. What plays is not any one article: the Autoradio desk writes a
+script that spans many articles and mixes content from the paper, podcasts,
+the listener's mail and more. Texture shows individual articles; the
+Autoradio desk sits in front of Texture and the other desks. The listener
+can interrupt at any time and, through the Autoradio desk, interact with any
+of their apps or desks. "Listen to this article" is one thing the DJ can do,
+not the shape of the product. Design:
+[autoradio-desk-fast-turns](autoradio-desk-fast-turns-2026-11-11.md) for the
+turn path; the programme script design follows it.
+
 Also from the walk: a page title is never a raw address, a section name is
 never a raw id, nothing is clipped off a screen edge, and the bar speaks
 about the page in front.
