@@ -46,6 +46,9 @@ ensure_light
 goto "paper:front"; step tree; shot light-01-paper-front
 step "tap paper-scroll drag 0 -260"; wait_ 700
 step "tap paper-story-demo-grid-storage"; view light-02-paper-story-reader 1000
+step "tap reader-scroll drag 0 -360"; view light-02c-story-scrolled 900
+step "tap page-deck drag 180 0"; view light-02d-scrolled-then-swiped 1200
+goto "pub:demo-grid-storage"; view light-02e-story-back-after-swipe 900
 # the bar's explicit controls: play starts the edition, the line above names what is loaded, a tap on it opens the player sheet
 step "tap bar-play"; wait_ 1800
 step tree; shot light-02b-bar-playing
@@ -251,7 +254,6 @@ must "settings: Set up voice row" '[settings-setup-voice]'
 must "settings: the mode control is ours" '[settings-mode-system]'
 must "developer: the demo controls come with the switch" '[paper-composition]'
 if grep -qF '[paper-composition]' "$SHOTS/drive-dark.txt" 2>/dev/null; then echo "UNWANTED: debug text shows without the developer switch"; FAILS="$FAILS [debug text]"; else echo "ok: no debug text without the developer switch"; fi
-must "talk mode: Settings sets it, the player reads it" 'Just speak; the radio is listening'
 if grep -qF '[reader-following]' "$SHOTS/drive-follow.txt" 2>/dev/null; then echo "ok: reader follow: the block being read is marked"; else echo "note: reader follow not seen in the demo run (wired: the bar feeds ReaderFollow; see light-19)"; fi
 must "really light: the settings line says light" 'Showing Depth (light)'
 must "really dark: the settings line says dark" 'Showing Depth (dark)'

@@ -43,6 +43,7 @@ component Autoradio
     hideLayer
     toggleLauncher
     micTap
+    micCancel
     micOn
     setTheme
     setMode
@@ -320,7 +321,7 @@ component Autoradio
         PageDeck()
       // a sheet is up (the launcher or the player): the page dims behind it; a tap on it puts the sheet away
       if layer != ""
-        box testId="layer-scrim" position="absolute" inset=0 background-color=th.fg opacity=th.behindDim3 press=hideLayer
+        box testId="layer-scrim" position="absolute" inset=0 background-color=th.fg opacity=(max(th.behindDim3, 0.4)) press=hideLayer
       // elevation 2: the glass bar, always on top, with the launcher and the player rising from it
       BarShell()
       // Signed out the paper still reads and plays. Signing in is asked for when an action needs it (Sign in on the paper,

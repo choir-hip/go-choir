@@ -60,3 +60,8 @@ members Autoradio
     else
       voiceTalking = true
       send down = choirTalkDown(aim=pg.top)
+  // Cancel: the microphone closes. The engine has no "discard this turn" yet (a gap named in the report), so what was said so far
+  // ends the turn as Send does.
+  action micCancel
+    voiceTalking = false
+    send up = choirTalkUp()
