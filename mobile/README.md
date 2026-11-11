@@ -568,3 +568,25 @@ Decisions made at the seams:
   resource, so sharing it is not a small change). The mic level and
   the reader's read-along are wired (`RadioInfo.micLevel`, `ReaderFeed`) but the demo's engine is virtual, so neither is seen moving in the proof.
   Engine (round 2, done): playback rate with a real position (`Playhead`), `DeskTurn.interrupted`, and `speakText(address:text:)` (mail's "Read it to me").
+
+## Real data (lane/ar-app-real): the app signed in to a real computer
+
+`scripts/proof-real.sh` runs the app NOT in demo mode on the simulator, signed in as the test account on staging, and tours every place with real
+data (paper, two stories in the reader with "More on this", a played story, Textures list and documents, the edition state, Files, Mail, Settings
+account / computer / appearance, a theme loaded from a Texture, the largest document). It asserts real conditions (a title is not empty, no error
+banner), not fixture text. `REAL_PROMPT=1` adds one typed question in the bar (a model call on the test computer); it is off by default.
+- **Sign-in.** The real sign-in is a browser device flow a script cannot approve. The proof copies a key file (`REAL_KEY_FILE`, default the QA key of the
+  test account) with `cp` into the app's `Documents/proof-key`; the simulator build reads it into the Keychain at launch and deletes it
+  (`AutoradioKit/ProofKey.swift`, called under `#if targetEnvironment(simulator)` only). The key is never printed; the script fails if a `choir_sk_`
+  string appears in the drive output.
+- **First run is real.** With no edition on the computer the app opens the "Make it yours" offer once; the proof screenshots it (`real-00`) and skips it.
+  The app now asks the computer first (`GET /api/texture/edition`): `{found:false}` is the normal first-run answer; a computer that has an edition gets
+  no offer and no card, and the Textures list pins that document.
+- **What real data changed** (each with a test in `RealShapeTests`/`TypedTurnTests`): related stories are `links` in the real answer; the front dek comes
+  with a space before each stop (tidied); the owner key's `computer_id` is empty in `whoami` (the page names the computer the phone found); the typed Ask
+  in the bar was only recorded as a signal and now runs a turn (`TurnEngine.typedTurn`, `LabRuntime.ask`, send `choirAsk`); `touch` could be called
+  from a background thread and crashed (`Set.insert`, found in a crash report during the typed-ask drive); long ids and unbroken tokens ran off the card
+  (`overflow-wrap="anywhere"`); the Textures page showed the generic "Make your edition" card twice.
+- **Known and left.** A typed Ask forks and revises the story the radio has loaded, not the page in front (the desk stage's first turn forks the
+  programme); the Textures list shows the newest 100 documents (the route pages with `next_cursor`, not read yet); the document route returns every
+  revision body (the largest document on the test computer has 314), which the reader fetches whole.

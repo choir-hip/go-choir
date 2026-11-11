@@ -130,6 +130,9 @@ public final class AutoradioModule: ExactPackage {
 
     /// Coalesce change notifications to a few per second. `names` are source names without the "autoradio." prefix.
     func touch(_ names: [String]) {
+        // `dirty` is only touched on the main thread: a background caller (found by a real-data run: readServerBuild called this from a
+        // cooperative thread and crashed in Set.insert, EXC_BAD_ACCESS) is moved over first.
+        if !Thread.isMainThread { DispatchQueue.main.async { [weak self] in self?.touch(names) }; return }
         dirty.formUnion(names)
         guard !scheduled else { return }
         scheduled = true
