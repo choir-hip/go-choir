@@ -1,4 +1,4 @@
-import { DEFAULT_THEME } from './theme';
+import { systemDefaultTheme } from './theme';
 
 export const TETRA_MARK_VIEWBOX = '0 0 512 512';
 
@@ -12,12 +12,12 @@ function escapeSvg(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-export function tetraMarkFaviconSvg(background = DEFAULT_THEME.colors.bg, fill = DEFAULT_THEME.colors.tetramarkColor): string {
+export function tetraMarkFaviconSvg(background = systemDefaultTheme().colors.bg, fill = systemDefaultTheme().colors.tetramarkColor): string {
   const paths = TETRA_MARK_PATHS.map((path) => `<path d="${escapeSvg(path)}" fill="${fill}"/>`).join('');
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${TETRA_MARK_VIEWBOX}"><rect width="512" height="512" rx="112" fill="${background}"/><g>${paths}</g></svg>`;
 }
 
-export function tetraMarkFaviconHref(background = DEFAULT_THEME.colors.bg, fill = DEFAULT_THEME.colors.tetramarkColor): string {
+export function tetraMarkFaviconHref(background = systemDefaultTheme().colors.bg, fill = systemDefaultTheme().colors.tetramarkColor): string {
   return `data:image/svg+xml,${encodeURIComponent(tetraMarkFaviconSvg(background, fill))}`;
 }
 
@@ -31,4 +31,12 @@ export function installTetraMarkFavicon(): void {
     document.head.append(link);
   }
   link.href = tetraMarkFaviconHref();
+  // The default follows the system colour scheme, so the icon does too.
+  try {
+    window.matchMedia?.('(prefers-color-scheme: dark)')?.addEventListener?.('change', () => {
+      link!.href = tetraMarkFaviconHref();
+    });
+  } catch {
+    // The icon stays as installed.
+  }
 }

@@ -15,14 +15,14 @@
 // and draws the same icon. The Reader package itself never reaches the shell:
 // it is handed the variables.
 import '../reader-chrome.css';
-import { applyThemeToElement, DEFAULT_THEME } from './lib/theme';
+import { applyThemeToElement, systemDefaultTheme } from './lib/theme';
 import { installTetraMarkFavicon } from './lib/tetramark';
 import baseModules from 'virtual:choir-base-packages';
 import * as appSdk from './lib/app-sdk';
 import { loadPackageModule, MODULE_ABI } from './lib/apps/packages';
 import { bindShellHost } from './lib/shell-services';
 
-applyThemeToElement(document.documentElement, DEFAULT_THEME);
+applyThemeToElement(document.documentElement, systemDefaultTheme());
 installTetraMarkFavicon();
 
 const preview = document.getElementById('reader-root');

@@ -32,7 +32,7 @@
   import { markReturning, onAccountSwitched, scopedKey, setLastUserId, switchAccount } from './lib/accounts.js';
   import { prepareAccountSwitch } from './lib/shell-services';
   import { handoffToComputerSurfaceIfStale } from './lib/computer-surface-handoff.js';
-  import { DEFAULT_THEME, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme';
+  import { applyThemeToElement, isKnownThemeId, normalizeThemeConfig, systemDefaultTheme, validateThemeConfig } from './lib/theme';
   import { fetchThemePreference, saveThemePreference } from './lib/preferences.js';
   import { links } from './lib/services/links';
   import { contributionsSettled } from './lib/contributions';
@@ -51,7 +51,11 @@
   /** Whether a passkey ceremony is in progress. */
   let ceremonyInProgress = false;
 
-  let currentTheme = DEFAULT_THEME;
+  // An owner who has not chosen a theme sees the default for the system colour
+  // scheme (light: Chrome Pastel, dark: Liquid Metal). That default is never
+  // written to the boot cache or the server: only a chosen theme is.
+  let currentTheme = systemDefaultTheme();
+  let usingDefaultTheme = true;
   let authOverlayOpen = false;
   let pendingAuthIntent = null;
   let promptReplay = null;
@@ -373,31 +377,53 @@
     authOverlayOpen = true;
   }
 
+  // No theme at all (null, undefined, an empty object) means the owner has not
+  // chosen one: the system default shows and nothing is stored. A theme whose
+  // id is not selectable yet (a pack still loading) shows the default the same
+  // way; the owner's stored choice is applied when the pack registers.
+  function isNoChoice(theme) {
+    return !theme || typeof theme !== 'object' || Object.keys(theme).length === 0 || !isKnownThemeId(theme.id);
+  }
+
   function applyTheme(theme, persist = true) {
-    const normalized = normalizeThemeConfig(theme);
+    const noChoice = isNoChoice(theme);
+    const normalized = noChoice ? systemDefaultTheme() : normalizeThemeConfig(theme);
     const validation = validateThemeConfig(normalized);
     if (!validation.ok) {
       return validation;
     }
+    usingDefaultTheme = noChoice;
     currentTheme = normalized;
     publishTheme(normalized);
     applyThemeToElement(document.documentElement, normalized);
-    saveThemeBootCache(normalized);
-    if (persist && isAuthenticated) {
-      saveThemePreference(normalized).catch(() => {});
+    if (noChoice) {
+      clearThemeBootCache();
+    } else {
+      saveThemeBootCache(normalized);
+      if (persist && isAuthenticated) {
+        saveThemePreference(normalized).catch(() => {});
+      }
     }
     return validation;
+  }
+
+  function clearThemeBootCache() {
+    try {
+      window.localStorage?.removeItem(scopedKey(THEME_BOOT_CACHE_KEY));
+    } catch (_err) {
+      // The cache is only a first-paint hint.
+    }
   }
 
   function loadThemeBootCache() {
     try {
       const raw = window.localStorage?.getItem(scopedKey(THEME_BOOT_CACHE_KEY));
-      if (!raw) return DEFAULT_THEME;
+      if (!raw) return null;
       const parsed = JSON.parse(raw);
       const validation = validateThemeConfig(parsed);
-      return validation.ok ? normalizeThemeConfig(parsed) : DEFAULT_THEME;
+      return validation.ok ? normalizeThemeConfig(parsed) : null;
     } catch (_err) {
-      return DEFAULT_THEME;
+      return null;
     }
   }
 
@@ -412,7 +438,7 @@
   async function loadServerTheme() {
     try {
       const stored = await fetchThemePreference();
-      const theme = stored && Object.keys(stored).length > 0 ? stored : DEFAULT_THEME;
+      const theme = stored && Object.keys(stored).length > 0 ? stored : null;
       rememberWantedTheme(theme);
       applyTheme(theme, false);
     } catch (_err) {
@@ -478,10 +504,10 @@
     }));
 
     // setTheme in the SDK (services/theme.ts) applies and persists through this host.
-    const unbindThemeHost = bindThemeHost({ apply: (theme, persist) => applyTheme(theme || DEFAULT_THEME, persist) });
+    const unbindThemeHost = bindThemeHost({ apply: (theme, persist) => applyTheme(theme, persist) });
     const removeLiveListener = addLiveEventListener((message) => {
       if (message.kind !== 'theme.updated' || isOwnLiveEvent(message)) return;
-      const liveTheme = liveEventPayload(message).theme || DEFAULT_THEME;
+      const liveTheme = liveEventPayload(message).theme || null;
       rememberWantedTheme(liveTheme);
       applyTheme(liveTheme, false);
     });
@@ -520,8 +546,14 @@
       window.location.reload();
     });
 
+    // The system default follows the system colour scheme while the owner has not chosen a theme.
+    const schemeQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
+    const handleSchemeChange = () => { if (usingDefaultTheme) applyTheme(null, false); };
+    schemeQuery?.addEventListener?.('change', handleSchemeChange);
+
     return () => {
       offAccountSwitched();
+      schemeQuery?.removeEventListener?.('change', handleSchemeChange);
       unbindThemeHost();
       removeLiveListener();
       window.removeEventListener('pageshow', handlePageShow);
