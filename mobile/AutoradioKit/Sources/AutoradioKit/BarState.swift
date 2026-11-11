@@ -162,7 +162,7 @@ public final class BarTracker: @unchecked Sendable {
         }
         if let t = revisedAt, now.timeIntervalSince(t) < Self.revisedWindow { b.state = "revised"; b.text = "Revised · Show"; return b }
         if p.playing { b.state = "playing"; b.text = p.title }
-        else if !p.title.isEmpty, s.blockCount > 0 { b.state = "paused"; b.text = p.title }
+        else if !p.title.isEmpty, s.blockCount > 0, s.running { b.state = "paused"; b.text = p.title }
         return b
     }
 
