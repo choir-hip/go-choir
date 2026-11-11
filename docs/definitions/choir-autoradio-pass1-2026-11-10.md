@@ -130,7 +130,7 @@ boundaries:
   excluded:
     - Android, CarPlay, the watch
     - YouTube, Sign in with Google, e-books
-    - block editing on the phone, Mail
+    - block editing on the phone
     - a server-side voice
     - TestFlight and App Store submission (waits for the paid account)
     - the rename of retired Autopaper names in code
@@ -306,6 +306,31 @@ What changes:
   registry, configuration as data, the turn record, kept turns and
   replay. They are how components are switched and compared; they are no
   longer the face of the app.
+
+**The plan (2026-11-11).** The whole app is specified in
+[autoradio-app-ui-2026-11-10.md](../design/autoradio-app-ui-2026-11-10.md):
+one bar, many pages. Every story, document, file and mail message is a
+page; one glass bar floating over the page is the prompt, the radio and the
+launcher; open pages are cards; the front page is composed from a layout
+document; first run is a voice interview that writes the listener's
+edition; themes are data shared with the web. The note records eighteen
+owner rulings of 2026-11-10 and 2026-11-11 and seven open questions with
+recommendations. Files, Mail and Settings are features of the one app
+(owner, 2026-11-11), so Mail is no longer excluded.
+
+**How it is built** (owner, 2026-11-11: "plan to build the whole thing end
+to end. Aggressively build it, knowing you'll get like 85% of what you
+want ... then you can review it and reiterate"): a small shared spine in
+one sitting, then nine lanes in parallel split by file, plus a server
+lane; then a review of every screen and a second, smaller fan-out.
+
+**One build at a time on the Mac.** On 2026-11-11 four builders each
+compiled Exact from source and booted their own simulator, and the owner's
+Mac reached a load average of 500. From now on there is one shared Exact
+checkout and build cache, one simulator, and one app build at a time,
+started by the orchestrator. Builders write Contract, TypeScript and Swift
+and run the kit's tests; they do not start Exact builds or simulators, and
+nothing is installed on the owner's phone except at agreed points.
 
 What does not change: Exact only, no SwiftUI; the phone is a client of the
 listener's computer; one sign-in system and one input route; the
