@@ -15,7 +15,7 @@
 //   settings-about-*, settings-voice-components.
 // Every colour, face, radius and shadow is a theme token (th.*, tx.*); a theme's own preview card paints from the card's data.
 use Theme, ThemeList, DemoInfo, ThemeCard, ThemeExtras, SettingsAccount, SettingsComputer, SettingRowInfo, LearnedInfo, AboutInfo, ThemeCards, SettingRows, ChoirAuth from "@choir/autoradio"
-use PageScroll, Card from "./ui.contract"
+use ToolScroll, Card from "./ui.contract"
 
 component SettingsPage
   props
@@ -198,7 +198,7 @@ component RootScreen
     setDemo: action
     talkRows: SettingRows
   view
-    PageScroll(id="settings")
+    ToolScroll(id="settings")
       ScreenTitle(label="Settings", back=false)
       SectionLabel(label="Appearance")
       ModePicker()
@@ -264,7 +264,7 @@ component AppearanceScreen
     loadThemeDoc: action
     loadDemoTheme: action
   view
-    PageScroll(id="settings")
+    ToolScroll(id="settings")
       ScreenTitle(label="Appearance", back=true)
       ModePicker()
       text `Showing ${th.name} in ${th.scheme}${th.reducedMotion ? ", with reduced motion" : ""}.` testId="settings-current" font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
@@ -319,7 +319,7 @@ component AccountScreen
     refreshAccount: action
     signOut: action
   view
-    PageScroll(id="settings")
+    ToolScroll(id="settings")
       ScreenTitle(label="Account and devices", back=true)
       Card(level=1, testId="settings-card-account", minHeight=0)
         column width="100%" padding="6px 0"
@@ -379,7 +379,7 @@ component TalkScreen
     tx: ThemeExtras
     talkRows: SettingRows
   view
-    PageScroll(id="settings")
+    ToolScroll(id="settings")
       ScreenTitle(label="Talk", back=true)
       text "You choose this once after the first run, and can change it here at any time. Holding the voice button always works." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
       SettingChoices(rows=talkRows.rows)
@@ -390,7 +390,7 @@ component GesturesScreen
     tx: ThemeExtras
     gestureRows: SettingRows
   view
-    PageScroll(id="settings")
+    ToolScroll(id="settings")
       ScreenTitle(label="Swipes", back=true)
       text "What each swipe on a story means is yours to choose. A change applies to the next swipe, and every swipe is recorded with the meaning in force." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
       SettingChoices(rows=gestureRows.rows)
@@ -402,7 +402,7 @@ component VoiceScreen
     th: Theme
     tx: ThemeExtras
   view
-    PageScroll(id="settings")
+    ToolScroll(id="settings")
       ScreenTitle(label="Voice and models", back=true)
       text "The voice that reads the paper, and the models that hear you, run on this phone. Their sizes and checks are on the Components page." font-family=th.fontRead font-size=tx.sizeBody line-height=tx.lineBody color=th.fg
       Card(level=1, testId="settings-card-voice", minHeight=0)
@@ -422,7 +422,7 @@ component ComputerScreen
     wakeComputer: action
     updateComputer: action
   view
-    PageScroll(id="settings")
+    ToolScroll(id="settings")
       ScreenTitle(label="Computer", back=true)
       Card(level=1, testId="settings-card-computer", minHeight=0)
         column width="100%" padding="6px 0"
@@ -453,7 +453,7 @@ component LearnedScreen
     learnt: LearnedInfo
     resetLearned: action
   view
-    PageScroll(id="settings")
+    ToolScroll(id="settings")
       ScreenTitle(label="What the paper has learned", back=true)
       text "Each time you asked for more or less of a story, in your own words. Your front page leans on these; the shared paper does not change." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
       Card(level=1, testId="settings-card-learned", minHeight=0)
@@ -476,7 +476,7 @@ component AboutScreen
     tx: ThemeExtras
     about: AboutInfo
   view
-    PageScroll(id="settings")
+    ToolScroll(id="settings")
       ScreenTitle(label="About", back=true)
       Card(level=1, testId="settings-card-about-info", minHeight=0)
         column width="100%" padding="6px 0"

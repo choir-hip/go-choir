@@ -3,7 +3,7 @@
 // reads fixtures/demo/changelog.json; live it is GET /api/changelog (kit: ActivityFeed.swift). A row with a document or a route opens it
 // as a page. testIds: activity-refresh, activity-section-<name>, activity-row-<id>, activity-status, activity-empty.
 use Theme, ThemeExtras, ActivityInfo, ActivityItem from "@choir/autoradio"
-use PageScroll, Card from "./ui.contract"
+use ToolScroll, Card from "./ui.contract"
 use SectionLabel, Hairline, ScreenTitle from "./settings.contract"
 
 component ActivityPage
@@ -16,7 +16,7 @@ component ActivityPage
     address: string
     title: string
   view
-    PageScroll(id="activity")
+    ToolScroll(id="activity")
       ScreenTitle(label="Activity", back=false)
       row gap=12 align-items="center" width="100%"
         text (act.status == "loading" ? "Looking…" : (act.unseen > 0 ? `${act.unseen} new since you last looked` : "Up to date")) testId="activity-status" font-family=th.fontUi font-size=tx.sizeMeta color=th.muted flex=1 min-width=0
