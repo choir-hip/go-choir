@@ -181,7 +181,7 @@ step logs
 run_drive dark light "" --touch platform
 
 if [ -n "${SHELLONLY:-}" ]; then
-  for t in '[bar]' '[bar-mark]' '[bar-mic]' '[bar-play]' '[bar-field]' '[page-indicator]' '[page-deck]' '[story-more]' '[launcher-open-pub:demo-grid-storage]' '[place-files]'; do
+  for t in 'On: ' '[bar]' '[bar-mark]' '[bar-mic]' '[bar-play]' '[bar-field]' '[page-indicator]' '[page-deck]' '[story-more]' '[launcher-open-pub:demo-grid-storage]' '[place-files]'; do
     grep -qF -- "$t" "$OUT" && echo "ok: $t" || FAILS="$FAILS [$t]"
   done
   ls "$SHOTS"/*.png | wc -l
