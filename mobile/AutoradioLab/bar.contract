@@ -194,8 +194,8 @@ component BarShell
           button testId="bar-mark" press=toggleLauncher appearance="none" width=48 height=48 aria-label=(layer == "launcher" ? "Close the launcher" : "Open the launcher")
             column width=48 height=48 align-items="center" justify-content="center"
               Mark(state=markState)
-          input value=ask input=editAsk submit=sendAsk focus=barFocus blur=barBlur placeholder=aim aria-label=aim testId="bar-field" enterkeyhint="send" flex=1 min-width=0 min-height=44
-            font-family=th.fontRead font-size=17 color=th.fg padding="8px 6px"
+          input appearance="none" value=ask input=editAsk submit=sendAsk focus=barFocus blur=barBlur placeholder=aim aria-label=aim testId="bar-field" enterkeyhint="send" flex=1 min-width=0 min-height=44
+            font-family=th.fontRead font-size=17 color=th.fg padding="8px 6px" border-width=0 background-color="transparent"
             ::placeholder
               color=th.muted
           if typing
