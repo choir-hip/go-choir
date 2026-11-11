@@ -224,7 +224,7 @@ final class InterviewTests: XCTestCase {
 }
 
 // The demo's recorded turns (fixtures/demo/*.json) drive the proof; these tests keep them honest without a simulator.
-final class InterviewDemoFixtureTests: XCTestCase {
+final class InterviewTestsDemoFixtures: XCTestCase {
     func fixture(_ name: String) throws -> Data {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("fixtures/demo/\(name).json")

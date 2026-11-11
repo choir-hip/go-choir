@@ -1,5 +1,6 @@
 {
   "title": "My edition",
+  "failFirst": true,
   "intro": "This is your edition. Change anything by asking.",
   "writingLines": ["Reading what you told me", "Sorting it into what you follow and what you do not", "Writing your edition"],
   "sections": [
