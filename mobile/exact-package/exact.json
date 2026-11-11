@@ -127,6 +127,511 @@
     "StoryList": {
       "rows": "StoryRow[]"
     },
+    "RadioItem": {
+      "i": "number",
+      "text": "string",
+      "kind": "string",
+      "current": "bool",
+      "done": "bool"
+    },
+    "RadioInfo": {
+      "title": "string",
+      "source": "string",
+      "position": "string",
+      "index": "number",
+      "count": "number",
+      "playing": "bool",
+      "paused": "bool",
+      "level": "string",
+      "speed": "string",
+      "speedChoices": "string[]",
+      "mode": "string",
+      "modeLabel": "string",
+      "micOpen": "bool",
+      "heard": "string",
+      "holding": "string",
+      "revised": "string",
+      "progress": "number",
+      "blockProgress": "number",
+      "sentenceIndex": "number",
+      "sentences": "string[]",
+      "next": "string",
+      "items": "RadioItem[]"
+    },
+    "CardStory": {
+      "route": "string",
+      "address": "string",
+      "title": "string",
+      "dek": "string",
+      "section": "string",
+      "entityLine": "string",
+      "primary": "string",
+      "lift": "number",
+      "n": "number",
+      "dir": "string",
+      "why": "string"
+    },
+    "CardStoryList": {
+      "rows": "CardStory[]",
+      "index": "number",
+      "setAside": "number",
+      "total": "number"
+    },
+    "ToldRow": {
+      "kind": "string",
+      "title": "string",
+      "entities": "string",
+      "when": "string",
+      "route": "string"
+    },
+    "Told": {
+      "count": "number",
+      "rows": "ToldRow[]",
+      "lines": "string[]",
+      "left": "string",
+      "right": "string",
+      "leftLabel": "string",
+      "rightLabel": "string",
+      "note": "string"
+    },
+    "UndoInfo": {
+      "open": "bool",
+      "title": "string",
+      "address": "string"
+    },
+    "LauncherPlace": {
+      "slug": "string",
+      "name": "string",
+      "address": "string",
+      "line": "string"
+    },
+    "LauncherHit": {
+      "address": "string",
+      "title": "string",
+      "kind": "string",
+      "detail": "string"
+    },
+    "LauncherData": {
+      "query": "string",
+      "hasQuery": "bool",
+      "places": "LauncherPlace[]",
+      "recent": "LauncherHit[]",
+      "hits": "LauncherHit[]",
+      "stories": "number"
+    },
+    "ShadeRow": {
+      "route": "string",
+      "lift": "number",
+      "rank": "number"
+    },
+    "Shading": {
+      "rows": "ShadeRow[]"
+    },
+    "CardAck": {
+      "message": "string"
+    },
+    "FileCrumb": {
+      "name": "string",
+      "path": "string"
+    },
+    "FileRow": {
+      "name": "string",
+      "path": "string",
+      "address": "string",
+      "kind": "string",
+      "kindLabel": "string",
+      "symbol": "string",
+      "isDir": "bool",
+      "size": "number",
+      "sizeLabel": "string",
+      "modifiedLabel": "string",
+      "detail": "string",
+      "place": "string"
+    },
+    "FileListing": {
+      "path": "string",
+      "title": "string",
+      "crumbs": "FileCrumb[]",
+      "rows": "FileRow[]",
+      "count": "number",
+      "status": "string",
+      "message": "string",
+      "mode": "string",
+      "sort": "string",
+      "desc": "bool",
+      "query": "string"
+    },
+    "CsvRow": {
+      "cells": "string[]"
+    },
+    "FileChapterRef": {
+      "index": "number",
+      "title": "string"
+    },
+    "FileInfo": {
+      "address": "string",
+      "path": "string",
+      "folder": "string",
+      "name": "string",
+      "kind": "string",
+      "kindLabel": "string",
+      "size": "number",
+      "sizeLabel": "string",
+      "modifiedLabel": "string",
+      "mime": "string",
+      "status": "string",
+      "message": "string",
+      "src": "string",
+      "local": "string",
+      "text": "string",
+      "truncated": "bool",
+      "rows": "CsvRow[]",
+      "pages": "number",
+      "width": "number",
+      "height": "number",
+      "title": "string",
+      "author": "string",
+      "chapters": "FileChapterRef[]"
+    },
+    "FileChapter": {
+      "index": "number",
+      "count": "number",
+      "title": "string",
+      "markdown": "string",
+      "status": "string"
+    },
+    "FilePages": {
+      "query": "string",
+      "pages": "number[]",
+      "message": "string"
+    },
+    "MailRow": {
+      "id": "string",
+      "address": "string",
+      "sender": "string",
+      "subject": "string",
+      "snippet": "string",
+      "stamp": "string",
+      "trust": "string",
+      "direction": "string",
+      "unread": "bool",
+      "hasAttachments": "bool",
+      "count": "number"
+    },
+    "MailFolderRow": {
+      "name": "string",
+      "label": "string",
+      "address": "string",
+      "badge": "string",
+      "current": "bool"
+    },
+    "MailBoxView": {
+      "status": "string",
+      "message": "string",
+      "folder": "string",
+      "title": "string",
+      "unread": "number",
+      "total": "number",
+      "cached": "bool",
+      "rows": "MailRow[]",
+      "folders": "MailFolderRow[]"
+    },
+    "MailBlock": {
+      "kind": "string",
+      "text": "string"
+    },
+    "MailAttachmentRow": {
+      "id": "string",
+      "filename": "string",
+      "size": "string",
+      "kind": "string",
+      "address": "string",
+      "note": "string",
+      "available": "bool"
+    },
+    "MailThreadRow": {
+      "id": "string",
+      "address": "string",
+      "sender": "string",
+      "stamp": "string",
+      "snippet": "string",
+      "current": "bool"
+    },
+    "MailMessageView": {
+      "status": "string",
+      "message": "string",
+      "id": "string",
+      "address": "string",
+      "subject": "string",
+      "sender": "string",
+      "fromAddress": "string",
+      "toLine": "string",
+      "ccLine": "string",
+      "date": "string",
+      "trust": "string",
+      "trustNote": "string",
+      "unread": "bool",
+      "htmlOnly": "bool",
+      "hasOriginal": "bool",
+      "hasQuoted": "bool",
+      "canReply": "bool",
+      "cut": "bool",
+      "originalPath": "string",
+      "blocks": "MailBlock[]",
+      "attachments": "MailAttachmentRow[]",
+      "thread": "MailThreadRow[]",
+      "replyLabel": "string",
+      "spoken": "string"
+    },
+    "MailComposeView": {
+      "status": "string",
+      "forAddress": "string",
+      "sendAs": "string",
+      "toLine": "string",
+      "subject": "string",
+      "body": "string",
+      "draftId": "string",
+      "note": "string",
+      "reviewURL": "string",
+      "replyTo": "string"
+    },
+    "MailAck": {
+      "status": "string",
+      "message": "string"
+    },
+    "SetupRowView": {
+      "stage": "string",
+      "name": "string",
+      "model": "string",
+      "sizeLabel": "string",
+      "state": "string",
+      "statusLine": "string",
+      "numbers": "string",
+      "progress": "number",
+      "isFallback": "bool",
+      "canRetry": "bool",
+      "canFallback": "bool"
+    },
+    "TalkRow": {
+      "who": "string",
+      "text": "string",
+      "interrupted": "bool"
+    },
+    "Onboarding": {
+      "step": "string",
+      "title": "string",
+      "message": "string",
+      "totalLabel": "string",
+      "device": "string",
+      "mic": "string",
+      "heard": "string",
+      "route": "string",
+      "interviewStatus": "string",
+      "pauseReason": "string",
+      "nowSaying": "string",
+      "demoNote": "string",
+      "demoKind": "string",
+      "demoWords": "string",
+      "editionStatus": "string",
+      "writingLine": "string",
+      "editionError": "string",
+      "editionTitle": "string",
+      "editionIntro": "string",
+      "editionAddress": "string",
+      "card": "string",
+      "cardBody": "string",
+      "aim": "string",
+      "askMobile": "bool",
+      "setupFinished": "bool",
+      "setupStarted": "bool",
+      "hearingOK": "bool",
+      "paused": "bool",
+      "listening": "bool",
+      "demo": "bool",
+      "skipped": "bool",
+      "editionDone": "bool",
+      "level": "number",
+      "demoLeft": "number",
+      "rows": "SetupRowView[]",
+      "summary": "string[]",
+      "talk": "TalkRow[]",
+      "editionLines": "string[]"
+    },
+    "PaperItem": {
+      "route": "string",
+      "title": "string",
+      "dek": "string",
+      "section": "string",
+      "meta": "string",
+      "byline": "string",
+      "entityLabels": "string",
+      "entityIds": "string",
+      "size": "number",
+      "weight": "number",
+      "lineHeight": "number",
+      "lines": "number",
+      "showDek": "bool",
+      "dekSize": "number",
+      "dekLines": "number",
+      "indent": "bool",
+      "rank": "number"
+    },
+    "PaperBand": {
+      "id": "string",
+      "module": "string",
+      "label": "string",
+      "side": "bool",
+      "rule": "bool",
+      "items": "PaperItem[]"
+    },
+    "PaperSection": {
+      "id": "string",
+      "label": "string",
+      "count": "number",
+      "current": "bool"
+    },
+    "PaperFront": {
+      "status": "string",
+      "message": "string",
+      "edition": "string",
+      "layout": "string",
+      "composition": "string",
+      "dateLine": "string",
+      "updated": "string",
+      "sectionId": "string",
+      "sectionLabel": "string",
+      "count": "number",
+      "sections": "PaperSection[]",
+      "bands": "PaperBand[]"
+    },
+    "ReaderRun": {
+      "id": "string",
+      "text": "string",
+      "kind": "string",
+      "weight": "number",
+      "slant": "string",
+      "anchor": "string",
+      "label": "string",
+      "sent": "number",
+      "href": "string"
+    },
+    "ReaderCell": {
+      "runs": "ReaderRun[]",
+      "header": "bool"
+    },
+    "ReaderRow": {
+      "id": "string",
+      "cells": "ReaderCell[]"
+    },
+    "ReaderBlock": {
+      "id": "string",
+      "kind": "string",
+      "level": "number",
+      "depth": "number",
+      "marker": "string",
+      "runs": "ReaderRun[]",
+      "rows": "ReaderRow[]",
+      "text": "string",
+      "ordinal": "number",
+      "cites": "string[]",
+      "sentences": "number"
+    },
+    "ReaderCite": {
+      "anchor": "string",
+      "number": "number",
+      "blockId": "string",
+      "entityId": "string",
+      "title": "string",
+      "host": "string",
+      "url": "string",
+      "kind": "string",
+      "target": "string",
+      "quote": "string",
+      "before": "string",
+      "hit": "string",
+      "after": "string",
+      "check": "string",
+      "checkLabel": "string"
+    },
+    "ReaderSource": {
+      "number": "number",
+      "entityId": "string",
+      "title": "string",
+      "host": "string",
+      "url": "string",
+      "kind": "string",
+      "target": "string",
+      "quotes": "string[]",
+      "anchor": "string"
+    },
+    "ReaderVersion": {
+      "address": "string",
+      "number": "number",
+      "label": "string",
+      "when": "string",
+      "author": "string",
+      "current": "bool"
+    },
+    "ReaderRelated": {
+      "address": "string",
+      "title": "string",
+      "dek": "string"
+    },
+    "ReaderDoc": {
+      "address": "string",
+      "status": "string",
+      "message": "string",
+      "title": "string",
+      "kicker": "string",
+      "dek": "string",
+      "byline": "string",
+      "meta": "string",
+      "kind": "string",
+      "disclosure": "string",
+      "blocks": "ReaderBlock[]",
+      "cites": "ReaderCite[]",
+      "sources": "ReaderSource[]",
+      "versions": "ReaderVersion[]",
+      "related": "ReaderRelated[]",
+      "revision": "number",
+      "latest": "number",
+      "newer": "bool",
+      "historical": "bool",
+      "revising": "bool",
+      "revisingNote": "string",
+      "trajectory": "string",
+      "permalink": "string",
+      "plain": "string",
+      "textBlocks": "number",
+      "markdown": "string"
+    },
+    "TextureRow": {
+      "address": "string",
+      "title": "string",
+      "updated": "string",
+      "meta": "string",
+      "edition": "bool",
+      "revising": "bool"
+    },
+    "TextureList": {
+      "status": "string",
+      "message": "string",
+      "rows": "TextureRow[]",
+      "hasEdition": "bool"
+    },
+    "ReaderFollowInfo": {
+      "address": "string",
+      "blockId": "string",
+      "sentence": "number"
+    },
+    "ReaderAimInfo": {
+      "address": "string",
+      "blockId": "string",
+      "label": "string"
+    },
+    "ReaderAck": {
+      "ok": "bool"
+    },
     "ThemeCard": {
       "id": "string",
       "name": "string",
@@ -661,6 +1166,712 @@
         "route": "string"
       },
       "answers": "LabState"
+    },
+    {
+      "source": "radioView",
+      "live": true,
+      "answers": "RadioInfo",
+      "substitute": {
+        "default": {
+          "title": "",
+          "source": "",
+          "position": "",
+          "index": 0,
+          "count": 0,
+          "playing": false,
+          "paused": false,
+          "level": "play",
+          "speed": "1",
+          "speedChoices": [
+            "0.8",
+            "1",
+            "1.25",
+            "1.5"
+          ],
+          "mode": "",
+          "modeLabel": "",
+          "micOpen": false,
+          "heard": "",
+          "holding": "",
+          "revised": "",
+          "progress": 0,
+          "blockProgress": 0,
+          "sentenceIndex": 0,
+          "sentences": [],
+          "next": "",
+          "items": []
+        }
+      }
+    },
+    {
+      "send": "radioJump",
+      "options": {
+        "index": "string"
+      },
+      "answers": "RadioInfo"
+    },
+    {
+      "send": "radioSpeed",
+      "options": {
+        "speed": "string"
+      },
+      "answers": "RadioInfo"
+    },
+    {
+      "source": "cardStories",
+      "live": true,
+      "answers": "CardStoryList",
+      "substitute": {
+        "default": {
+          "rows": [],
+          "index": 0,
+          "setAside": 0,
+          "total": 0
+        }
+      }
+    },
+    {
+      "source": "storyStack",
+      "live": true,
+      "answers": "CardStoryList",
+      "substitute": {
+        "default": {
+          "rows": [],
+          "index": 0,
+          "setAside": 0,
+          "total": 0
+        }
+      }
+    },
+    {
+      "source": "toldPaper",
+      "live": true,
+      "answers": "Told",
+      "substitute": {
+        "default": {
+          "count": 0,
+          "rows": [],
+          "lines": [],
+          "left": "close",
+          "right": "more",
+          "leftLabel": "Close",
+          "rightLabel": "More of this",
+          "note": ""
+        }
+      }
+    },
+    {
+      "source": "undoOffer",
+      "live": true,
+      "answers": "UndoInfo",
+      "substitute": {
+        "default": {
+          "open": false,
+          "title": "",
+          "address": ""
+        }
+      }
+    },
+    {
+      "source": "launcherData",
+      "live": true,
+      "answers": "LauncherData",
+      "options": {
+        "q": "string"
+      },
+      "substitute": {
+        "default": {
+          "query": "",
+          "hasQuery": false,
+          "places": [],
+          "recent": [],
+          "hits": [],
+          "stories": 0
+        }
+      }
+    },
+    {
+      "source": "shadingList",
+      "live": true,
+      "answers": "Shading",
+      "substitute": {
+        "default": {
+          "rows": []
+        }
+      }
+    },
+    {
+      "send": "storyMore",
+      "options": {
+        "address": "string",
+        "surface": "string"
+      },
+      "answers": "CardAck"
+    },
+    {
+      "send": "storyLess",
+      "options": {
+        "address": "string",
+        "surface": "string"
+      },
+      "answers": "CardAck"
+    },
+    {
+      "send": "cardFling",
+      "options": {
+        "address": "string"
+      },
+      "answers": "CardAck"
+    },
+    {
+      "send": "cardClose",
+      "options": {
+        "address": "string"
+      },
+      "answers": "CardAck"
+    },
+    {
+      "send": "cardUndo",
+      "answers": "CardAck"
+    },
+    {
+      "send": "stackDecide",
+      "options": {
+        "address": "string",
+        "side": "string"
+      },
+      "answers": "CardAck"
+    },
+    {
+      "send": "stackUndo",
+      "answers": "CardAck"
+    },
+    {
+      "send": "stackReset",
+      "answers": "CardAck"
+    },
+    {
+      "send": "toldForget",
+      "options": {
+        "address": "string"
+      },
+      "answers": "CardAck"
+    },
+    {
+      "send": "toldReset",
+      "answers": "CardAck"
+    },
+    {
+      "send": "gestureSet",
+      "options": {
+        "side": "string",
+        "meaning": "string"
+      },
+      "answers": "CardAck"
+    },
+    {
+      "source": "fileList",
+      "live": true,
+      "answers": "FileListing",
+      "options": {
+        "path": "string",
+        "mode": "string",
+        "sort": "string",
+        "desc": "string",
+        "query": "string"
+      },
+      "substitute": {
+        "default": {
+          "path": "/",
+          "title": "Files",
+          "crumbs": [],
+          "rows": [],
+          "count": 0,
+          "status": "loading",
+          "message": "",
+          "mode": "browse",
+          "sort": "name",
+          "desc": false,
+          "query": ""
+        }
+      }
+    },
+    {
+      "source": "fileOpen",
+      "live": true,
+      "answers": "FileInfo",
+      "options": {
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "address": "",
+          "path": "",
+          "folder": "/",
+          "name": "",
+          "kind": "other",
+          "kindLabel": "File",
+          "size": 0,
+          "sizeLabel": "",
+          "modifiedLabel": "",
+          "mime": "",
+          "status": "loading",
+          "message": "",
+          "src": "",
+          "local": "",
+          "text": "",
+          "truncated": false,
+          "rows": [],
+          "pages": 0,
+          "width": 0,
+          "height": 0,
+          "title": "",
+          "author": "",
+          "chapters": []
+        }
+      }
+    },
+    {
+      "source": "fileChapter",
+      "live": true,
+      "answers": "FileChapter",
+      "options": {
+        "address": "string",
+        "index": "number"
+      },
+      "substitute": {
+        "default": {
+          "index": 0,
+          "count": 0,
+          "title": "",
+          "markdown": "",
+          "status": "loading"
+        }
+      }
+    },
+    {
+      "source": "filePages",
+      "live": true,
+      "answers": "FilePages",
+      "options": {
+        "address": "string",
+        "query": "string"
+      },
+      "substitute": {
+        "default": {
+          "query": "",
+          "pages": [],
+          "message": ""
+        }
+      }
+    },
+    {
+      "send": "fileMkdir",
+      "options": {
+        "dir": "string",
+        "name": "string"
+      },
+      "answers": "FileListing"
+    },
+    {
+      "send": "fileDelete",
+      "options": {
+        "path": "string"
+      },
+      "answers": "FileListing"
+    },
+    {
+      "send": "fileRename",
+      "options": {
+        "path": "string",
+        "name": "string"
+      },
+      "answers": "FileListing"
+    },
+    {
+      "send": "fileUpload",
+      "options": {
+        "from": "string",
+        "name": "string",
+        "dir": "string"
+      },
+      "answers": "FileListing"
+    },
+    {
+      "source": "mailBox",
+      "live": true,
+      "answers": "MailBoxView",
+      "options": {
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "status": "",
+          "message": "",
+          "folder": "",
+          "title": "",
+          "unread": 0,
+          "total": 0,
+          "cached": false,
+          "rows": [],
+          "folders": []
+        }
+      }
+    },
+    {
+      "source": "mailMessage",
+      "live": true,
+      "answers": "MailMessageView",
+      "options": {
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "status": "",
+          "message": "",
+          "id": "",
+          "address": "",
+          "subject": "",
+          "sender": "",
+          "fromAddress": "",
+          "toLine": "",
+          "ccLine": "",
+          "date": "",
+          "trust": "",
+          "trustNote": "",
+          "unread": false,
+          "htmlOnly": false,
+          "hasOriginal": false,
+          "hasQuoted": false,
+          "canReply": false,
+          "cut": false,
+          "originalPath": "",
+          "blocks": [],
+          "attachments": [],
+          "thread": [],
+          "replyLabel": "",
+          "spoken": ""
+        }
+      }
+    },
+    {
+      "source": "mailCompose",
+      "live": true,
+      "answers": "MailComposeView",
+      "options": {
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "status": "",
+          "forAddress": "",
+          "sendAs": "",
+          "toLine": "",
+          "subject": "",
+          "body": "",
+          "draftId": "",
+          "note": "",
+          "reviewURL": "",
+          "replyTo": ""
+        }
+      }
+    },
+    {
+      "send": "mailSaveDraft",
+      "options": {
+        "address": "string",
+        "recipients": "string",
+        "subject": "string",
+        "body": "string"
+      },
+      "answers": "MailComposeView"
+    },
+    {
+      "send": "mailApprovalEmail",
+      "options": {
+        "address": "string",
+        "draft": "string"
+      },
+      "answers": "MailComposeView"
+    },
+    {
+      "send": "mailOpenReview",
+      "options": {
+        "url": "string"
+      },
+      "answers": "MailAck"
+    },
+    {
+      "send": "mailRead",
+      "options": {
+        "address": "string"
+      },
+      "answers": "MailAck"
+    },
+    {
+      "send": "mailAsk",
+      "options": {
+        "address": "string",
+        "question": "string"
+      },
+      "answers": "MailAck"
+    },
+    {
+      "send": "mailMarkUnread",
+      "options": {
+        "address": "string"
+      },
+      "answers": "MailAck"
+    },
+    {
+      "source": "onboardingState",
+      "live": true,
+      "answers": "Onboarding",
+      "substitute": {
+        "default": {
+          "step": "welcome",
+          "title": "Make it yours",
+          "message": "",
+          "totalLabel": "",
+          "device": "",
+          "mic": "unasked",
+          "heard": "",
+          "route": "",
+          "interviewStatus": "notStarted",
+          "pauseReason": "",
+          "nowSaying": "",
+          "demoNote": "",
+          "demoKind": "",
+          "demoWords": "",
+          "editionStatus": "",
+          "writingLine": "",
+          "editionError": "",
+          "editionTitle": "My edition",
+          "editionIntro": "",
+          "editionAddress": "texture:my-edition",
+          "card": "",
+          "cardBody": "",
+          "aim": "",
+          "askMobile": false,
+          "setupFinished": false,
+          "setupStarted": false,
+          "hearingOK": false,
+          "paused": false,
+          "listening": false,
+          "demo": false,
+          "skipped": false,
+          "editionDone": false,
+          "level": 0,
+          "demoLeft": 0,
+          "rows": [],
+          "summary": [],
+          "talk": [],
+          "editionLines": []
+        }
+      }
+    },
+    {
+      "send": "onboardingBegin",
+      "options": {
+        "mobile": "string"
+      },
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingRetry",
+      "options": {
+        "stage": "string"
+      },
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingFallback",
+      "options": {
+        "stage": "string"
+      },
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingMic",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingMicNext",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingHearing",
+      "options": {
+        "ok": "string"
+      },
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingInterview",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingContinue",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingDemoNext",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingEditionRetry",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingSkip",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingReset",
+      "answers": "Onboarding"
+    },
+    {
+      "source": "paperFront",
+      "live": true,
+      "answers": "PaperFront",
+      "options": {
+        "section": "string",
+        "edition": "string",
+        "width": "number"
+      },
+      "substitute": {
+        "default": {
+          "status": "empty",
+          "message": "",
+          "edition": "",
+          "layout": "",
+          "composition": "",
+          "dateLine": "",
+          "updated": "",
+          "sectionId": "",
+          "sectionLabel": "",
+          "count": 0,
+          "sections": [],
+          "bands": []
+        }
+      }
+    },
+    {
+      "source": "readerDoc",
+      "live": true,
+      "answers": "ReaderDoc",
+      "options": {
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "address": "",
+          "status": "loading",
+          "message": "",
+          "title": "",
+          "kicker": "",
+          "dek": "",
+          "byline": "",
+          "meta": "",
+          "kind": "document",
+          "disclosure": "",
+          "blocks": [],
+          "cites": [],
+          "sources": [],
+          "versions": [],
+          "related": [],
+          "revision": 0,
+          "latest": 0,
+          "newer": false,
+          "historical": false,
+          "revising": false,
+          "revisingNote": "",
+          "trajectory": "",
+          "permalink": "",
+          "plain": "",
+          "textBlocks": 0,
+          "markdown": ""
+        }
+      }
+    },
+    {
+      "source": "texturesList",
+      "live": true,
+      "answers": "TextureList",
+      "options": {
+        "at": "string"
+      },
+      "substitute": {
+        "default": {
+          "status": "loading",
+          "message": "",
+          "rows": [],
+          "hasEdition": false
+        }
+      }
+    },
+    {
+      "source": "readerFollow",
+      "live": true,
+      "answers": "ReaderFollowInfo",
+      "substitute": {
+        "default": {
+          "address": "",
+          "blockId": "",
+          "sentence": -1
+        }
+      }
+    },
+    {
+      "source": "readerAim",
+      "live": true,
+      "answers": "ReaderAimInfo",
+      "substitute": {
+        "default": {
+          "address": "",
+          "blockId": "",
+          "label": ""
+        }
+      }
+    },
+    {
+      "send": "readerAimSet",
+      "options": {
+        "address": "string",
+        "blockId": "string",
+        "label": "string"
+      },
+      "answers": "ReaderAimInfo"
+    },
+    {
+      "send": "readerStop",
+      "options": {
+        "address": "string"
+      },
+      "answers": "ReaderAck"
+    },
+    {
+      "send": "readerRestore",
+      "options": {
+        "address": "string",
+        "version": "string"
+      },
+      "answers": "ReaderAck"
+    },
+    {
+      "send": "readerReload",
+      "options": {
+        "address": "string"
+      },
+      "answers": "ReaderAck"
+    },
+    {
+      "send": "readerFollowSet",
+      "options": {
+        "address": "string",
+        "spoken": "string"
+      },
+      "answers": "ReaderFollowInfo"
     },
     {
       "source": "themeCards",
