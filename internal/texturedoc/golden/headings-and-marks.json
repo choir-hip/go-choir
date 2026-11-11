@@ -1,0 +1,268 @@
+{
+ "golden": {
+  "name": "headings-and-marks",
+  "note": "",
+  "covers": [
+   "block:paragraph",
+   "block:heading-1",
+   "block:heading-2",
+   "block:heading-3",
+   "block:heading-4",
+   "block:heading-5",
+   "block:heading-6",
+   "inline:text",
+   "inline:strong",
+   "inline:emphasis",
+   "inline:strong+emphasis",
+   "inline:code",
+   "inline:hard_break"
+  ],
+  "checks": false,
+  "validate": "texture"
+ },
+ "route": {
+  "path": "/pub/texture/golden-headings-and-marks",
+  "bare": "golden-headings-and-marks",
+  "permalink": "golden-headings-and-marks/v1"
+ },
+ "publication": {
+  "title": "Harbour notes",
+  "kind": "document"
+ },
+ "version": {
+  "id": "pubver-headings-and-marks",
+  "number": 1,
+  "published_at": "2026-11-10T06:00:00Z"
+ },
+ "nav": {
+  "revision": 1,
+  "latest": 1,
+  "current": 1,
+  "prev": 0,
+  "next": 0
+ },
+ "artifact": {
+  "content": "",
+  "body_doc": {
+   "schema": "choir.texture_doc.v1",
+   "doc": {
+    "type": "doc",
+    "attrs": {
+     "id": "g-headings"
+    },
+    "content": [
+     {
+      "type": "heading",
+      "attrs": {
+       "id": "h1",
+       "level": 1
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "The harbour at first light"
+       }
+      ]
+     },
+     {
+      "type": "heading",
+      "attrs": {
+       "id": "h2",
+       "level": 2
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Boats and nets"
+       }
+      ]
+     },
+     {
+      "type": "heading",
+      "attrs": {
+       "id": "h3",
+       "level": 3
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Morning "
+       },
+       {
+        "type": "text",
+        "text": "tide",
+        "marks": [
+         {
+          "type": "emphasis"
+         }
+        ]
+       },
+       {
+        "type": "text",
+        "text": " table"
+       }
+      ]
+     },
+     {
+      "type": "heading",
+      "attrs": {
+       "id": "h4",
+       "level": 4
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Small print"
+       }
+      ]
+     },
+     {
+      "type": "heading",
+      "attrs": {
+       "id": "h5",
+       "level": 5
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Smaller print"
+       }
+      ]
+     },
+     {
+      "type": "heading",
+      "attrs": {
+       "id": "h6",
+       "level": 6
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Smallest print"
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p1"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "The fishing boats leave before dawn. "
+       },
+       {
+        "type": "text",
+        "text": "Every",
+        "marks": [
+         {
+          "type": "strong"
+         }
+        ]
+       },
+       {
+        "type": "text",
+        "text": " crew checks its nets, and "
+       },
+       {
+        "type": "text",
+        "text": "nobody",
+        "marks": [
+         {
+          "type": "emphasis"
+         }
+        ]
+       },
+       {
+        "type": "text",
+        "text": " hurries."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p2"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Bold and slanted together",
+        "marks": [
+         {
+          "type": "strong"
+         },
+         {
+          "type": "emphasis"
+         }
+        ]
+       },
+       {
+        "type": "text",
+        "text": ", then a call to "
+       },
+       {
+        "type": "text",
+        "text": "unload()",
+        "marks": [
+         {
+          "type": "code"
+         }
+        ]
+       },
+       {
+        "type": "text",
+        "text": ", then plain text again."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p3"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "First line of the log"
+       },
+       {
+        "type": "hard_break"
+       },
+       {
+        "type": "text",
+        "text": "second line of the log"
+       },
+       {
+        "type": "hard_break"
+       },
+       {
+        "type": "text",
+        "text": "third line of the log"
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p4"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "  Leading and trailing spaces   are  kept  in  the  data, but  a  reader  collapses  them.  "
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ "payload": {},
+ "checks": {
+  "citations": []
+ },
+ "source_entities": [],
+ "transclusions": []
+}

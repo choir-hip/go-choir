@@ -1,0 +1,459 @@
+{
+ "golden": {
+  "name": "lists",
+  "note": "",
+  "covers": [
+   "block:bullet_list",
+   "block:ordered_list",
+   "block:ordered_list-start",
+   "block:list_item-nested-list",
+   "block:list_item-two-blocks",
+   "inline:marks-in-list"
+  ],
+  "checks": false,
+  "validate": "texture"
+ },
+ "route": {
+  "path": "/pub/texture/golden-lists",
+  "bare": "golden-lists",
+  "permalink": "golden-lists/v1"
+ },
+ "publication": {
+  "title": "Packing list",
+  "kind": "document"
+ },
+ "version": {
+  "id": "pubver-lists",
+  "number": 1,
+  "published_at": "2026-11-10T06:00:00Z"
+ },
+ "nav": {
+  "revision": 1,
+  "latest": 1,
+  "current": 1,
+  "prev": 0,
+  "next": 0
+ },
+ "artifact": {
+  "content": "",
+  "body_doc": {
+   "schema": "choir.texture_doc.v1",
+   "doc": {
+    "type": "doc",
+    "attrs": {
+     "id": "g-lists"
+    },
+    "content": [
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p0"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Before the trip:"
+       }
+      ]
+     },
+     {
+      "type": "bullet_list",
+      "attrs": {
+       "id": "ul1"
+      },
+      "content": [
+       {
+        "type": "list_item",
+        "attrs": {
+         "id": "l1"
+        },
+        "content": [
+         {
+          "type": "paragraph",
+          "attrs": {
+           "id": "l1p"
+          },
+          "content": [
+           {
+            "type": "text",
+            "text": "Passports and tickets"
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "list_item",
+        "attrs": {
+         "id": "l2"
+        },
+        "content": [
+         {
+          "type": "paragraph",
+          "attrs": {
+           "id": "l2p"
+          },
+          "content": [
+           {
+            "type": "text",
+            "text": "Chargers, "
+           },
+           {
+            "type": "text",
+            "text": "two",
+            "marks": [
+             {
+              "type": "strong"
+             }
+            ]
+           },
+           {
+            "type": "text",
+            "text": " of them"
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "list_item",
+        "attrs": {
+         "id": "l3"
+        },
+        "content": [
+         {
+          "type": "paragraph",
+          "attrs": {
+           "id": "l3p"
+          },
+          "content": [
+           {
+            "type": "text",
+            "text": "Walking shoes"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "ordered_list",
+      "attrs": {
+       "id": "ol1"
+      },
+      "content": [
+       {
+        "type": "list_item",
+        "attrs": {
+         "id": "o1"
+        },
+        "content": [
+         {
+          "type": "paragraph",
+          "attrs": {
+           "id": "o1p"
+          },
+          "content": [
+           {
+            "type": "text",
+            "text": "Book the ferry"
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "list_item",
+        "attrs": {
+         "id": "o2"
+        },
+        "content": [
+         {
+          "type": "paragraph",
+          "attrs": {
+           "id": "o2p"
+          },
+          "content": [
+           {
+            "type": "text",
+            "text": "Confirm the room"
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "list_item",
+        "attrs": {
+         "id": "o3"
+        },
+        "content": [
+         {
+          "type": "paragraph",
+          "attrs": {
+           "id": "o3p"
+          },
+          "content": [
+           {
+            "type": "text",
+            "text": "Pack"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p1"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "A list that continues from three:"
+       }
+      ]
+     },
+     {
+      "type": "ordered_list",
+      "attrs": {
+       "id": "ol2",
+       "start": 3
+      },
+      "content": [
+       {
+        "type": "list_item",
+        "attrs": {
+         "id": "o4"
+        },
+        "content": [
+         {
+          "type": "paragraph",
+          "attrs": {
+           "id": "o4p"
+          },
+          "content": [
+           {
+            "type": "text",
+            "text": "Weigh the bags"
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "list_item",
+        "attrs": {
+         "id": "o5"
+        },
+        "content": [
+         {
+          "type": "paragraph",
+          "attrs": {
+           "id": "o5p"
+          },
+          "content": [
+           {
+            "type": "text",
+            "text": "Lock the door"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p2"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Nested:"
+       }
+      ]
+     },
+     {
+      "type": "ordered_list",
+      "attrs": {
+       "id": "ol3"
+      },
+      "content": [
+       {
+        "type": "list_item",
+        "attrs": {
+         "id": "n1"
+        },
+        "content": [
+         {
+          "type": "paragraph",
+          "attrs": {
+           "id": "n1p"
+          },
+          "content": [
+           {
+            "type": "text",
+            "text": "Outer one"
+           }
+          ]
+         },
+         {
+          "type": "bullet_list",
+          "attrs": {
+           "id": "ul2"
+          },
+          "content": [
+           {
+            "type": "list_item",
+            "attrs": {
+             "id": "n1a"
+            },
+            "content": [
+             {
+              "type": "paragraph",
+              "attrs": {
+               "id": "n1ap"
+              },
+              "content": [
+               {
+                "type": "text",
+                "text": "inner a"
+               }
+              ]
+             }
+            ]
+           },
+           {
+            "type": "list_item",
+            "attrs": {
+             "id": "n1b"
+            },
+            "content": [
+             {
+              "type": "paragraph",
+              "attrs": {
+               "id": "n1bp"
+              },
+              "content": [
+               {
+                "type": "text",
+                "text": "inner b"
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "list_item",
+        "attrs": {
+         "id": "n2"
+        },
+        "content": [
+         {
+          "type": "paragraph",
+          "attrs": {
+           "id": "n2p"
+          },
+          "content": [
+           {
+            "type": "text",
+            "text": "Outer two"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p3"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "An item with two paragraphs:"
+       }
+      ]
+     },
+     {
+      "type": "bullet_list",
+      "attrs": {
+       "id": "ul3"
+      },
+      "content": [
+       {
+        "type": "list_item",
+        "attrs": {
+         "id": "m1"
+        },
+        "content": [
+         {
+          "type": "paragraph",
+          "attrs": {
+           "id": "m1a"
+          },
+          "content": [
+           {
+            "type": "text",
+            "text": "First paragraph of the item."
+           }
+          ]
+         },
+         {
+          "type": "paragraph",
+          "attrs": {
+           "id": "m1b"
+          },
+          "content": [
+           {
+            "type": "text",
+            "text": "Second paragraph of the same item."
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "list_item",
+        "attrs": {
+         "id": "m2"
+        },
+        "content": [
+         {
+          "type": "paragraph",
+          "attrs": {
+           "id": "m2a"
+          },
+          "content": [
+           {
+            "type": "text",
+            "text": "A plain item."
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ "payload": {},
+ "checks": {
+  "citations": []
+ },
+ "source_entities": [],
+ "transclusions": []
+}

@@ -1,0 +1,117 @@
+{
+  "blocks" : [
+    {
+      "kind" : "paragraph",
+      "text" : "Before the trip:"
+    },
+    {
+      "depth" : 1,
+      "kind" : "list_item",
+      "marker" : "bullet",
+      "text" : "Passports and tickets"
+    },
+    {
+      "depth" : 1,
+      "kind" : "list_item",
+      "marker" : "bullet",
+      "spans" : [
+        {
+          "style" : "strong",
+          "text" : "two"
+        }
+      ],
+      "text" : "Chargers, two of them"
+    },
+    {
+      "depth" : 1,
+      "kind" : "list_item",
+      "marker" : "bullet",
+      "text" : "Walking shoes"
+    },
+    {
+      "depth" : 1,
+      "kind" : "list_item",
+      "marker" : "1.",
+      "text" : "Book the ferry"
+    },
+    {
+      "depth" : 1,
+      "kind" : "list_item",
+      "marker" : "2.",
+      "text" : "Confirm the room"
+    },
+    {
+      "depth" : 1,
+      "kind" : "list_item",
+      "marker" : "3.",
+      "text" : "Pack"
+    },
+    {
+      "kind" : "paragraph",
+      "text" : "A list that continues from three:"
+    },
+    {
+      "depth" : 1,
+      "kind" : "list_item",
+      "marker" : "3.",
+      "text" : "Weigh the bags"
+    },
+    {
+      "depth" : 1,
+      "kind" : "list_item",
+      "marker" : "4.",
+      "text" : "Lock the door"
+    },
+    {
+      "kind" : "paragraph",
+      "text" : "Nested:"
+    },
+    {
+      "depth" : 1,
+      "kind" : "list_item",
+      "marker" : "1.",
+      "text" : "Outer one"
+    },
+    {
+      "depth" : 2,
+      "kind" : "list_item",
+      "marker" : "bullet",
+      "text" : "inner a"
+    },
+    {
+      "depth" : 2,
+      "kind" : "list_item",
+      "marker" : "bullet",
+      "text" : "inner b"
+    },
+    {
+      "depth" : 1,
+      "kind" : "list_item",
+      "marker" : "2.",
+      "text" : "Outer two"
+    },
+    {
+      "kind" : "paragraph",
+      "text" : "An item with two paragraphs:"
+    },
+    {
+      "depth" : 1,
+      "kind" : "list_item",
+      "marker" : "bullet",
+      "text" : "First paragraph of the item."
+    },
+    {
+      "depth" : 1,
+      "kind" : "list_item",
+      "marker" : "",
+      "text" : "Second paragraph of the same item."
+    },
+    {
+      "depth" : 1,
+      "kind" : "list_item",
+      "marker" : "bullet",
+      "text" : "A plain item."
+    }
+  ],
+  "name" : "lists"
+}

@@ -1,0 +1,147 @@
+{
+ "golden": {
+  "name": "embeds",
+  "note": "Publication refuses a document holding an embed; both renderers draw embeds from a body_doc, which is what is compared.",
+  "covers": [
+   "block:embed-image",
+   "block:embed-audio",
+   "block:embed-video",
+   "block:embed-file",
+   "block:embed-capsule_evidence"
+  ],
+  "checks": false,
+  "validate": "texture"
+ },
+ "route": {
+  "path": "/pub/texture/golden-embeds",
+  "bare": "golden-embeds",
+  "permalink": "golden-embeds/v1"
+ },
+ "publication": {
+  "title": "Pictures and sound",
+  "kind": "document"
+ },
+ "version": {
+  "id": "pubver-embeds",
+  "number": 1,
+  "published_at": "2026-11-10T06:00:00Z"
+ },
+ "nav": {
+  "revision": 1,
+  "latest": 1,
+  "current": 1,
+  "prev": 0,
+  "next": 0
+ },
+ "artifact": {
+  "content": "",
+  "body_doc": {
+   "schema": "choir.texture_doc.v1",
+   "doc": {
+    "type": "doc",
+    "attrs": {
+     "id": "g-embeds"
+    },
+    "content": [
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p1"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Media in the page."
+       }
+      ]
+     },
+     {
+      "type": "embed",
+      "attrs": {
+       "id": "e-img",
+       "kind": "image",
+       "target": {
+        "digest": "abababababababababababababababababababababababababababababababab",
+        "width": 640,
+        "height": 360
+       },
+       "alt": "A quiet harbour at dawn",
+       "caption": "Dawn over the harbour"
+      }
+     },
+     {
+      "type": "embed",
+      "attrs": {
+       "id": "e-aud",
+       "kind": "audio",
+       "target": {
+        "url": "https://example.com/audio/episode-42.mp3"
+       },
+       "title": "Episode 42: the morning shipping forecast"
+      }
+     },
+     {
+      "type": "embed",
+      "attrs": {
+       "id": "e-vid",
+       "kind": "video",
+       "target": {
+        "video_id": "dQw4w9WgXcQ"
+       },
+       "alt": "A talk about tides",
+       "caption": "A talk about tides"
+      }
+     },
+     {
+      "type": "embed",
+      "attrs": {
+       "id": "e-file",
+       "kind": "file",
+       "target": {
+        "path": "Reports/summary.pdf",
+        "mime": "application/pdf"
+       },
+       "title": "Quarterly summary"
+      }
+     },
+     {
+      "type": "embed",
+      "attrs": {
+       "id": "e-cap",
+       "kind": "capsule_evidence",
+       "target": {
+        "digest": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+        "operation_id": "op-1",
+        "computer_id": "cmp-1",
+        "file": "Self-development/op-1/screens/home.png",
+        "width": 390,
+        "height": 844,
+        "blank": false
+       },
+       "alt": "Screenshot of the home screen",
+       "caption": "Home screen after the change"
+      }
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p2"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Text after the media."
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ "payload": {},
+ "checks": {
+  "citations": []
+ },
+ "source_entities": [],
+ "transclusions": []
+}
