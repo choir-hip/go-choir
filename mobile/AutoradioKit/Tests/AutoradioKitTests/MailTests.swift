@@ -186,7 +186,8 @@ final class MailTests: XCTestCase {
         StubProtocol.handler = { _ in .init(status: 404, json: ["error": "not found"]) }
         let gone = await svc.message(address: "mail:zzz")
         XCTAssertEqual(gone.status, "error"); XCTAssertEqual(gone.message, "This message is gone.")
-        XCTAssertEqual(await svc.message(address: "mail:new").status, "idle")
+        let idle = await svc.message(address: "mail:new")
+        XCTAssertEqual(idle.status, "idle")
     }
 
     // 10. reply addressing
