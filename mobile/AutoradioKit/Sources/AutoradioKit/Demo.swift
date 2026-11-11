@@ -61,7 +61,13 @@ final class DemoURLProtocol: URLProtocol {
 
     override func startLoading() {
         let url = request.url ?? URL(string: "https://demo.invalid/")!
-        let (status, body) = Self.route(path: url.path, query: URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? [])
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        var sent = request.httpBody ?? Data()
+        if let st = request.httpBodyStream { st.open(); var buf = [UInt8](repeating: 0, count: 4096)
+            while st.hasBytesAvailable { let n = st.read(&buf, maxLength: buf.count); if n <= 0 { break }; sent.append(buf, count: n) }; st.close() }
+        // Mail (lane 6) needs the method and the body, so it answers first; every other route is the one switch below.
+        let (status, body) = MailDemo.answer(method: request.httpMethod ?? "GET", path: url.path, query: items,
+                                             body: (try? JSONSerialization.jsonObject(with: sent)) as? [String: Any] ?? [:]) ?? Self.route(path: url.path, query: items)
         let resp = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: body)

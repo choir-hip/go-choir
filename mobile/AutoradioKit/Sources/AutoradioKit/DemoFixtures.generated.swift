@@ -19,6 +19,611 @@ public enum DemoFixtureData {
         "computer-update": #"""
 { "update_available": { "target": "demo-build-2" }, "state": "running", "realization_epoch": 7 }
 """#,
+        "entities": #"""
+{
+ "demo-harbor-barrier": ["Harbor Authority", "Flood defences"],
+ "demo-grid-storage": ["Regional grid", "Energy storage"],
+ "demo-library-hours": ["City libraries", "Evening hours"],
+ "demo-river-festival": ["River festival", "Harbor Authority"]
+}
+"""#,
+        "front-big": #"""
+{
+ "stories": [
+  {
+   "title": "The harbor council approves a tide barrier",
+   "dek": "After a year of hearings, the council voted seven to two to fund a movable barrier across the harbor mouth, the largest public works contract in the city's history.",
+   "route": {
+    "bare": "demo-harbor-barrier"
+   },
+   "section": "World",
+   "importance": 10,
+   "source_count": 27,
+   "version_count": 22,
+   "words": 300,
+   "updated_at": "2026-11-10T08:30:00Z",
+   "entities": [
+    {
+     "id": "harbor-barrier",
+     "label": "Harbor tide barrier"
+    },
+    {
+     "id": "harbor-council",
+     "label": "Harbor council"
+    }
+   ]
+  },
+  {
+   "title": "Barrier contract set at 1.4 billion over nine years, the council's budget office says",
+   "dek": "",
+   "route": {
+    "bare": "demo-big-barrier-cost"
+   },
+   "section": "World",
+   "importance": 6,
+   "source_count": 8,
+   "version_count": 4,
+   "words": 300,
+   "updated_at": "2026-11-10T08:00:00Z",
+   "entities": [
+    {
+     "id": "harbor-barrier",
+     "label": "Harbor tide barrier"
+    }
+   ]
+  },
+  {
+   "title": "Fishing crews ask for a guaranteed gap in the barrier during the autumn run",
+   "dek": "",
+   "route": {
+    "bare": "demo-big-barrier-fishers"
+   },
+   "section": "Local",
+   "importance": 6,
+   "source_count": 5,
+   "version_count": 3,
+   "words": 300,
+   "updated_at": "2026-11-10T07:00:00Z",
+   "entities": [
+    {
+     "id": "harbor-barrier",
+     "label": "Harbor tide barrier"
+    }
+   ]
+  },
+  {
+   "title": "Two dissenting members say the vote came too fast",
+   "dek": "",
+   "route": {
+    "bare": "demo-big-barrier-vote"
+   },
+   "section": "World",
+   "importance": 6,
+   "source_count": 6,
+   "version_count": 2,
+   "words": 300,
+   "updated_at": "2026-11-10T07:30:00Z",
+   "entities": [
+    {
+     "id": "harbor-council",
+     "label": "Harbor council"
+    }
+   ]
+  },
+  {
+   "title": "Construction could begin in the spring if permits clear by January",
+   "dek": "",
+   "route": {
+    "bare": "demo-big-barrier-timeline"
+   },
+   "section": "World",
+   "importance": 6,
+   "source_count": 4,
+   "version_count": 2,
+   "words": 300,
+   "updated_at": "2026-11-10T06:00:00Z",
+   "entities": [
+    {
+     "id": "harbor-barrier",
+     "label": "Harbor tide barrier"
+    }
+   ]
+  },
+  {
+   "title": "Regional rail operator proposes cutting off-peak service on eleven lines to close a widening budget gap, citing fewer weekday riders",
+   "dek": "The proposal goes to a public comment period next week.",
+   "route": {
+    "bare": "demo-big-pair-a"
+   },
+   "section": "Local",
+   "importance": 7,
+   "source_count": 6,
+   "version_count": 3,
+   "words": 300,
+   "updated_at": "2026-11-10T07:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "National statistics office revises last quarter's output upward after late reports from construction and farm cooperatives arrive",
+   "dek": "",
+   "route": {
+    "bare": "demo-big-pair-b"
+   },
+   "section": "Business",
+   "importance": 7,
+   "source_count": 6,
+   "version_count": 2,
+   "words": 300,
+   "updated_at": "2026-11-10T06:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "A regional grid adds its largest battery yet",
+   "dek": "The new installation can hold enough power for a small city through an evening peak.",
+   "route": {
+    "bare": "demo-grid-storage"
+   },
+   "section": "Tech and AI",
+   "importance": 6,
+   "source_count": 4,
+   "version_count": 3,
+   "words": 300,
+   "updated_at": "2026-11-10T05:00:00Z",
+   "entities": [
+    {
+     "id": "grid-battery",
+     "label": "Grid storage"
+    }
+   ]
+  },
+  {
+   "title": "Port authority tests quieter cranes overnight",
+   "dek": "",
+   "route": {
+    "bare": "demo-big-b1"
+   },
+   "section": "Local",
+   "importance": 5,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T06:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Hospital group opens a late clinic for walk-ins",
+   "dek": "",
+   "route": {
+    "bare": "demo-big-b2"
+   },
+   "section": "Local",
+   "importance": 5,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T04:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Winter fares announced for the ferry service",
+   "dek": "",
+   "route": {
+    "bare": "demo-big-b3"
+   },
+   "section": "Local",
+   "importance": 5,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T03:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Chip maker delays its next processor by a quarter",
+   "dek": "",
+   "route": {
+    "bare": "demo-big-b4"
+   },
+   "section": "Tech and AI",
+   "importance": 5,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T02:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "City choir announces a winter season of free concerts",
+   "dek": "",
+   "route": {
+    "bare": "demo-big-b5"
+   },
+   "section": "Culture",
+   "importance": 5,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T01:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Wheat prices ease as the harvest report lands",
+   "dek": "",
+   "route": {
+    "bare": "demo-big-b6"
+   },
+   "section": "Business",
+   "importance": 5,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T00:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "City libraries extend their evening hours",
+   "dek": "Branches in six neighbourhoods will stay open until ten on weekdays.",
+   "route": {
+    "bare": "demo-library-hours"
+   },
+   "section": "Culture",
+   "importance": 5,
+   "source_count": 4,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-09T23:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "The river festival returns with a quieter schedule",
+   "dek": "Organisers cut the fireworks and added a morning of boat tours.",
+   "route": {
+    "bare": "demo-river-festival"
+   },
+   "section": "Local",
+   "importance": 5,
+   "source_count": 4,
+   "version_count": 2,
+   "words": 300,
+   "updated_at": "2026-11-09T22:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Open-source toolkit adds offline mode for field teams",
+   "dek": "",
+   "route": {
+    "bare": "demo-big-t1"
+   },
+   "section": "Tech and AI",
+   "importance": 5,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-09T21:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Researchers publish a small, fast model for transcribing radio",
+   "dek": "",
+   "route": {
+    "bare": "demo-big-t2"
+   },
+   "section": "Tech and AI",
+   "importance": 5,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-09T20:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "The barrier is a bet on a century we cannot see",
+   "dek": "The case for patience in the harbor debate.",
+   "route": {
+    "bare": "demo-big-op"
+   },
+   "section": "Opinion",
+   "importance": 5,
+   "source_count": 1,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T03:00:00Z",
+   "entities": [
+    {
+     "id": "harbor-barrier",
+     "label": "Harbor tide barrier"
+    }
+   ],
+   "kind": "opinion"
+  }
+ ]
+}
+"""#,
+        "front-even": #"""
+{
+ "stories": [
+  {
+   "title": "A regional grid adds its largest battery yet",
+   "dek": "The new installation can hold enough power for a small city through an evening peak.",
+   "route": {
+    "bare": "demo-grid-storage"
+   },
+   "section": "Tech and AI",
+   "importance": 8,
+   "source_count": 12,
+   "version_count": 9,
+   "words": 300,
+   "updated_at": "2026-11-10T08:00:00Z",
+   "entities": [
+    {
+     "id": "grid-battery",
+     "label": "Grid storage"
+    }
+   ]
+  },
+  {
+   "title": "A university lab releases open weights for a small speech model",
+   "dek": "Engineers say it runs on a mid-range phone with no network.",
+   "route": {
+    "bare": "demo-even-ai"
+   },
+   "section": "Tech and AI",
+   "importance": 8,
+   "source_count": 12,
+   "version_count": 8,
+   "words": 300,
+   "updated_at": "2026-11-10T07:30:00Z",
+   "entities": [
+    {
+     "id": "speech-models",
+     "label": "Speech models"
+    }
+   ]
+  },
+  {
+   "title": "The harbor council approves a tide barrier",
+   "dek": "After a year of hearings, the council voted seven to two to fund a movable barrier across the harbor mouth.",
+   "route": {
+    "bare": "demo-harbor-barrier"
+   },
+   "section": "World",
+   "importance": 6,
+   "source_count": 8,
+   "version_count": 5,
+   "words": 300,
+   "updated_at": "2026-11-10T07:00:00Z",
+   "entities": [
+    {
+     "id": "harbor-barrier",
+     "label": "Harbor tide barrier"
+    }
+   ]
+  },
+  {
+   "title": "Teachers and the district reach a tentative agreement",
+   "dek": "",
+   "route": {
+    "bare": "demo-even-schools"
+   },
+   "section": "Local",
+   "importance": 6,
+   "source_count": 6,
+   "version_count": 3,
+   "words": 300,
+   "updated_at": "2026-11-10T06:30:00Z",
+   "entities": []
+  },
+  {
+   "title": "City libraries extend their evening hours",
+   "dek": "Branches in six neighbourhoods will stay open until ten on weekdays.",
+   "route": {
+    "bare": "demo-library-hours"
+   },
+   "section": "Culture",
+   "importance": 5,
+   "source_count": 4,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T06:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "The river festival returns with a quieter schedule",
+   "dek": "Organisers cut the fireworks and added a morning of boat tours.",
+   "route": {
+    "bare": "demo-river-festival"
+   },
+   "section": "Local",
+   "importance": 5,
+   "source_count": 4,
+   "version_count": 2,
+   "words": 300,
+   "updated_at": "2026-11-10T05:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Bakers' guild marks two centuries with a public oven day",
+   "dek": "",
+   "route": {
+    "bare": "demo-even-1"
+   },
+   "section": "Culture",
+   "importance": 4,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T06:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Bridge repairs move to nights next month",
+   "dek": "",
+   "route": {
+    "bare": "demo-even-2"
+   },
+   "section": "Local",
+   "importance": 4,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T05:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Shipping rates drift lower for a third week",
+   "dek": "",
+   "route": {
+    "bare": "demo-even-3"
+   },
+   "section": "Business",
+   "importance": 5,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T04:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Insurer pauses new flood policies near the estuary",
+   "dek": "",
+   "route": {
+    "bare": "demo-even-4"
+   },
+   "section": "Business",
+   "importance": 5,
+   "source_count": 4,
+   "version_count": 2,
+   "words": 300,
+   "updated_at": "2026-11-10T04:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Museum acquires a collection of hand-lettered signs",
+   "dek": "",
+   "route": {
+    "bare": "demo-even-5"
+   },
+   "section": "Culture",
+   "importance": 4,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T03:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "New bus lane opens on the east ring road",
+   "dek": "",
+   "route": {
+    "bare": "demo-even-6"
+   },
+   "section": "Local",
+   "importance": 4,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T03:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Small models, large consequences",
+   "dek": "Why the open speech release matters.",
+   "route": {
+    "bare": "demo-even-op"
+   },
+   "section": "Opinion",
+   "importance": 5,
+   "source_count": 1,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-10T06:00:00Z",
+   "entities": [
+    {
+     "id": "speech-models",
+     "label": "Speech models"
+    }
+   ],
+   "kind": "opinion"
+  }
+ ]
+}
+"""#,
+        "front-thin": #"""
+{
+ "stories": [
+  {
+   "title": "City libraries extend their evening hours",
+   "dek": "Branches in six neighbourhoods will stay open until ten on weekdays.",
+   "route": {
+    "bare": "demo-library-hours"
+   },
+   "section": "Culture",
+   "importance": 5,
+   "source_count": 4,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-09T18:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "The river festival returns with a quieter schedule",
+   "dek": "Organisers cut the fireworks and added a morning of boat tours.",
+   "route": {
+    "bare": "demo-river-festival"
+   },
+   "section": "Local",
+   "importance": 5,
+   "source_count": 4,
+   "version_count": 2,
+   "words": 300,
+   "updated_at": "2026-11-09T17:30:00Z",
+   "entities": []
+  },
+  {
+   "title": "A regional grid adds its largest battery yet",
+   "dek": "The new installation can hold enough power for a small city through an evening peak.",
+   "route": {
+    "bare": "demo-grid-storage"
+   },
+   "section": "Tech and AI",
+   "importance": 5,
+   "source_count": 3,
+   "version_count": 2,
+   "words": 300,
+   "updated_at": "2026-11-09T16:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Allotment waiting list falls below a hundred",
+   "dek": "",
+   "route": {
+    "bare": "demo-thin-1"
+   },
+   "section": "Local",
+   "importance": 4,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-09T14:00:00Z",
+   "entities": []
+  },
+  {
+   "title": "Tide tables for the week are published",
+   "dek": "",
+   "route": {
+    "bare": "demo-thin-2"
+   },
+   "section": "Local",
+   "importance": 4,
+   "source_count": 3,
+   "version_count": 1,
+   "words": 300,
+   "updated_at": "2026-11-09T13:00:00Z",
+   "entities": []
+  }
+ ]
+}
+"""#,
         "front": #"""
 {
  "stories": [
@@ -72,6 +677,1243 @@ public enum DemoFixtureData {
     { "at": 1793813600, "kind": "less", "text": "Less of this: Celebrity chef opens a third restaurant" },
     { "at": 1793727200, "kind": "more", "text": "More like this: Grid storage prices (energy, batteries)" }
   ]
+}
+"""#,
+        "mail-aliases": #"""
+{
+ "aliases": [
+  {
+   "id": "al1",
+   "address": "listener@example.com",
+   "local_part": "listener",
+   "domain": "example.com",
+   "visibility": "private"
+  }
+ ]
+}
+"""#,
+        "mail-draft-demo-draft-1": #"""
+{
+ "id": "demo-draft-1",
+ "status": "draft",
+ "version": 1,
+ "version_hash": "h1",
+ "from_address": "listener@example.com",
+ "to_addresses": [
+  "ben@example.com"
+ ],
+ "subject": "Festival numbers",
+ "text_body": "Ben, can you send me the attendance figures when you have them?",
+ "created_at": "2026-11-09T18:00:00Z",
+ "updated_at": "2026-11-09T18:00:00Z"
+}
+"""#,
+        "mail-drafts": #"""
+{
+ "drafts": [
+  {
+   "id": "demo-draft-1",
+   "status": "draft",
+   "version": 1,
+   "version_hash": "h1",
+   "from_address": "listener@example.com",
+   "to_addresses": [
+    "ben@example.com"
+   ],
+   "subject": "Festival numbers",
+   "text_body": "Ben, can you send me the attendance figures when you have them?",
+   "created_at": "2026-11-09T18:00:00Z",
+   "updated_at": "2026-11-09T18:00:00Z"
+  }
+ ]
+}
+"""#,
+        "mail-inbox": #"""
+{
+ "messages": [
+  {
+   "id": "m6",
+   "direction": "inbound",
+   "from_address": "ana@example.com",
+   "subject": "Harbour barrier: site visit on Thursday",
+   "snippet": "Hi,  The council has confirmed the site visit for Thursday at 10:00. We meet at the east p",
+   "trust_status": "trusted",
+   "created_at": "2026-11-10T08:12:00Z",
+   "from_display": "Ana Reyes",
+   "received_at": "2026-11-10T08:12:00Z",
+   "has_attachments": true
+  },
+  {
+   "id": "m5",
+   "direction": "inbound",
+   "from_address": "ben@example.com",
+   "subject": "Re: Q4 planning notes",
+   "snippet": "Agreed on the order. I would put the grid story first and the festival second.  I checked ",
+   "trust_status": "trusted",
+   "created_at": "2026-11-09T16:40:00Z",
+   "from_display": "Ben Okafor",
+   "received_at": "2026-11-09T16:40:00Z"
+  },
+  {
+   "id": "m4",
+   "direction": "inbound",
+   "from_address": "ana@example.com",
+   "subject": "Re: Q4 planning notes",
+   "snippet": "I think we should lead with the battery and keep the festival short.  Ben, can you check t",
+   "trust_status": "trusted",
+   "created_at": "2026-11-09T11:05:00Z",
+   "from_display": "Ana Reyes",
+   "received_at": "2026-11-09T11:05:00Z",
+   "read_at": "2026-11-09T11:05:00Z"
+  },
+  {
+   "id": "m3",
+   "direction": "inbound",
+   "from_address": "ben@example.com",
+   "subject": "Q4 planning notes",
+   "snippet": "Here are my notes for the quarter. Three themes: energy, the harbour, and local events.  T",
+   "trust_status": "trusted",
+   "created_at": "2026-11-08T17:30:00Z",
+   "from_display": "Ben Okafor",
+   "received_at": "2026-11-08T17:30:00Z",
+   "read_at": "2026-11-08T17:30:00Z"
+  },
+  {
+   "id": "m2",
+   "direction": "inbound",
+   "from_address": "reading@example.com",
+   "subject": "Your weekly reading list",
+   "snippet": "newsletter",
+   "trust_status": "trusted",
+   "created_at": "2026-11-06T07:00:00Z",
+   "from_display": "Library Reading List",
+   "received_at": "2026-11-06T07:00:00Z",
+   "read_at": "2026-11-06T07:00:00Z"
+  },
+  {
+   "id": "m1",
+   "direction": "inbound",
+   "from_address": "chidi@example.com",
+   "subject": "Photos from the festival",
+   "snippet": "The river festival was wonderful. Here is the photo I promised, taken just before the lant",
+   "trust_status": "trusted",
+   "created_at": "2026-10-30T20:15:00Z",
+   "from_display": "Chidi N.",
+   "received_at": "2026-10-30T20:15:00Z",
+   "read_at": "2026-10-30T20:15:00Z",
+   "has_attachments": true
+  }
+ ],
+ "total": 6,
+ "unread": 2
+}
+"""#,
+        "mail-msg-m1": #"""
+{
+ "message": {
+  "id": "m1",
+  "direction": "inbound",
+  "from_address": "chidi@example.com",
+  "subject": "Photos from the festival",
+  "snippet": "The river festival was wonderful. Here is the photo I promised, taken just before the lant",
+  "trust_status": "trusted",
+  "created_at": "2026-10-30T20:15:00Z",
+  "from_display": "Chidi N.",
+  "received_at": "2026-10-30T20:15:00Z",
+  "read_at": "2026-10-30T20:15:00Z",
+  "has_attachments": true
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com",
+    "display": "You"
+   }
+  ]
+ },
+ "text_body": "The river festival was wonderful. Here is the photo I promised, taken just before the lanterns went out.\n\nSee you at the next one!",
+ "attachments": [
+  {
+   "id": "a2",
+   "filename": "lanterns.jpg",
+   "content_type": "image/jpeg",
+   "size_bytes": 2310455,
+   "status": "stored"
+  }
+ ]
+}
+"""#,
+        "mail-msg-m2": #"""
+{
+ "message": {
+  "id": "m2",
+  "direction": "inbound",
+  "from_address": "reading@example.com",
+  "subject": "Your weekly reading list",
+  "snippet": "newsletter",
+  "trust_status": "trusted",
+  "created_at": "2026-11-06T07:00:00Z",
+  "from_display": "Library Reading List",
+  "received_at": "2026-11-06T07:00:00Z",
+  "read_at": "2026-11-06T07:00:00Z"
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com",
+    "display": "You"
+   }
+  ]
+ },
+ "html_body": "<html><head><title>Reading list</title><style>body{font-family:Georgia}.hero{background:url(https://tracker.example.com/bg.png)}</style><script>window.location='https://tracker.example.com/x'</script></head>\n<body><div class=\"hero\"><h1>This week at the library</h1></div>\n<p>Three books are waiting for you:</p><ul><li><b>The Salt Road</b> by M. Okoye</li><li><b>Tide Tables</b> by J. Lindqvist</li><li><b>A Quiet Grid</b> by R. Haddad</li></ul>\n<p>Opening hours change on Monday &amp; Tuesday. <a href=\"https://example.com/hours\" onclick=\"steal()\">See the hours</a>.</p>\n<img src=\"https://tracker.example.com/pixel.gif\" alt=\"\" width=\"1\" height=\"1\"><p><a href=\"javascript:alert(1)\">Unsubscribe</a></p></body></html>"
+}
+"""#,
+        "mail-msg-m3": #"""
+{
+ "message": {
+  "id": "m3",
+  "direction": "inbound",
+  "from_address": "ben@example.com",
+  "subject": "Q4 planning notes",
+  "snippet": "Here are my notes for the quarter. Three themes: energy, the harbour, and local events.  T",
+  "trust_status": "trusted",
+  "created_at": "2026-11-08T17:30:00Z",
+  "from_display": "Ben Okafor",
+  "received_at": "2026-11-08T17:30:00Z",
+  "read_at": "2026-11-08T17:30:00Z"
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com",
+    "display": "You"
+   }
+  ]
+ },
+ "text_body": "Here are my notes for the quarter. Three themes: energy, the harbour, and local events.\n\nTell me what is missing.\n\nBen"
+}
+"""#,
+        "mail-msg-m4": #"""
+{
+ "message": {
+  "id": "m4",
+  "direction": "inbound",
+  "from_address": "ana@example.com",
+  "subject": "Re: Q4 planning notes",
+  "snippet": "I think we should lead with the battery and keep the festival short.  Ben, can you check t",
+  "trust_status": "trusted",
+  "created_at": "2026-11-09T11:05:00Z",
+  "from_display": "Ana Reyes",
+  "received_at": "2026-11-09T11:05:00Z",
+  "read_at": "2026-11-09T11:05:00Z"
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com",
+    "display": "You"
+   }
+  ]
+ },
+ "text_body": "I think we should lead with the battery and keep the festival short.\n\nBen, can you check the numbers on the second page?\n\n> Here are my notes for the quarter. Three themes: energy, the harbour, and local events.\n> Tell me what is missing.",
+ "raw_headers": {
+  "Reply-To": "Ana Reyes <ana.replies@example.com>"
+ }
+}
+"""#,
+        "mail-msg-m5": #"""
+{
+ "message": {
+  "id": "m5",
+  "direction": "inbound",
+  "from_address": "ben@example.com",
+  "subject": "Re: Q4 planning notes",
+  "snippet": "Agreed on the order. I would put the grid story first and the festival second.  I checked ",
+  "trust_status": "trusted",
+  "created_at": "2026-11-09T16:40:00Z",
+  "from_display": "Ben Okafor",
+  "received_at": "2026-11-09T16:40:00Z"
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com",
+    "display": "You"
+   }
+  ]
+ },
+ "text_body": "Agreed on the order. I would put the grid story first and the festival second.\n\nI checked the numbers on the second page: they hold up.\n\nOn Mon, 9 Nov 2026, Ana Reyes wrote:\n> I think we should lead with the battery and keep the festival short.\n> Ben, can you check the numbers on the second page?\n\nBen"
+}
+"""#,
+        "mail-msg-m6": #"""
+{
+ "message": {
+  "id": "m6",
+  "direction": "inbound",
+  "from_address": "ana@example.com",
+  "subject": "Harbour barrier: site visit on Thursday",
+  "snippet": "Hi,  The council has confirmed the site visit for Thursday at 10:00. We meet at the east p",
+  "trust_status": "trusted",
+  "created_at": "2026-11-10T08:12:00Z",
+  "from_display": "Ana Reyes",
+  "received_at": "2026-11-10T08:12:00Z",
+  "has_attachments": true
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com",
+    "display": "You"
+   }
+  ]
+ },
+ "text_body": "Hi,\n\nThe council has confirmed the site visit for Thursday at 10:00. We meet at the east pier, by the old ferry office. Please bring boots; the path is muddy after the rain and the tide table puts the water at its lowest around 10:40.\n\nI have attached the site plan so you can see where the barrier gates would sit. The survey markers are the orange pins along the wall.\n\nCould you tell me by Wednesday evening whether you are coming, and whether anyone from the paper wants to join?\n\nThanks,\nAna\n\n-- \nAna Reyes\nHarbour Works Liaison",
+ "attachments": [
+  {
+   "id": "a1",
+   "filename": "site-plan.pdf",
+   "content_type": "application/pdf",
+   "size_bytes": 482113,
+   "status": "stored"
+  }
+ ]
+}
+"""#,
+        "mail-msg-q1": #"""
+{
+ "message": {
+  "id": "q1",
+  "direction": "inbound",
+  "from_address": "prizes@example.com",
+  "subject": "You have been selected",
+  "snippet": "Claim your reward now by following the instructions in the attachment.",
+  "trust_status": "quarantined",
+  "created_at": "2026-11-07T03:10:00Z",
+  "received_at": "2026-11-07T03:10:00Z",
+  "read_at": "2026-11-07T03:10:00Z"
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com",
+    "display": "You"
+   }
+  ]
+ },
+ "text_body": "Claim your reward now by following the instructions in the attachment."
+}
+"""#,
+        "mail-msg-s1": #"""
+{
+ "message": {
+  "id": "s1",
+  "direction": "outbound",
+  "from_address": "listener@example.com",
+  "subject": "Re: Q4 planning notes",
+  "snippet": "Thanks Ana. I will look at the numbers tonight.",
+  "trust_status": "trusted",
+  "created_at": "2026-11-09T12:00:00Z",
+  "from_display": "You",
+  "sent_at": "2026-11-09T12:00:00Z"
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "ana@example.com",
+    "display": "Ana Reyes"
+   }
+  ]
+ },
+ "text_body": "Thanks Ana. I will look at the numbers tonight."
+}
+"""#,
+        "mail-quarantine": #"""
+{
+ "messages": [
+  {
+   "id": "q1",
+   "direction": "inbound",
+   "from_address": "prizes@example.com",
+   "subject": "You have been selected",
+   "snippet": "Claim your reward now by following the instructions in the attachment.",
+   "trust_status": "quarantined",
+   "created_at": "2026-11-07T03:10:00Z",
+   "received_at": "2026-11-07T03:10:00Z",
+   "read_at": "2026-11-07T03:10:00Z"
+  }
+ ],
+ "total": 1,
+ "unread": 0
+}
+"""#,
+        "mail-sent": #"""
+{
+ "messages": [
+  {
+   "id": "s1",
+   "direction": "outbound",
+   "from_address": "listener@example.com",
+   "subject": "Re: Q4 planning notes",
+   "snippet": "Thanks Ana. I will look at the numbers tonight.",
+   "trust_status": "trusted",
+   "created_at": "2026-11-09T12:00:00Z",
+   "from_display": "You",
+   "sent_at": "2026-11-09T12:00:00Z"
+  }
+ ],
+ "total": 1,
+ "unread": 0
+}
+"""#,
+        "places": #"""
+{
+ "textures": "My edition, version 12",
+ "files": "Downloads, 2 new",
+ "mail": "3 unread, from Ana R.",
+ "activity": "2 new revisions",
+ "settings": ""
+}
+"""#,
+        "related-demo-ev-charging": #"""
+{
+ "related": [
+  {
+   "title": "A regional grid adds its largest battery yet",
+   "dek": "The new installation can hold enough power for a small city through an evening peak.",
+   "route": {
+    "bare": "demo-grid-storage"
+   }
+  },
+  {
+   "title": "The harbor council approves a tide barrier",
+   "dek": "After a year of hearings, the council voted seven to two.",
+   "route": {
+    "bare": "demo-harbor-barrier"
+   }
+  }
+ ]
+}
+"""#,
+        "related-demo-grid-storage": #"""
+{
+ "related": [
+  {
+   "title": "A city rewires its kerbs for electric cars",
+   "dek": "Marlow bolted four hundred sockets to lamp posts in three years. The surprise is who uses them, and when.",
+   "route": {
+    "bare": "demo-ev-charging"
+   }
+  },
+  {
+   "title": "The harbor council approves a tide barrier",
+   "dek": "After a year of hearings, the council voted seven to two.",
+   "route": {
+    "bare": "demo-harbor-barrier"
+   }
+  }
+ ]
+}
+"""#,
+        "resolve-demo-ev-charging": #"""
+{
+ "route": {
+  "path": "demo-ev-charging",
+  "state": "latest",
+  "bare": "demo-ev-charging",
+  "permalink": "demo-ev-charging/v3"
+ },
+ "publication": {
+  "id": "pub-ev",
+  "title": "A city rewires its kerbs for electric cars",
+  "slug": "demo-ev-charging",
+  "state": "published",
+  "kind": "story",
+  "section": "Tech and AI",
+  "dek": "Marlow bolted four hundred sockets to lamp posts in three years. The surprise is who uses them, and when."
+ },
+ "version": {
+  "id": "v-ev-3",
+  "revision": 3,
+  "published_at": "2026-11-10T07:30:00Z",
+  "manifest_hash": "demo-ev-3"
+ },
+ "artifact": {
+  "manifest_id": "m-ev",
+  "media_type": "text/markdown",
+  "content": "",
+  "body_doc": {
+   "schema": "choir.texture_doc.v1",
+   "doc": {
+    "type": "doc",
+    "content": [
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p1"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Three years ago the city of Marlow had eleven public chargers, all in car parks. This autumn it has four hundred, and almost every one of them sits at the kerb, bolted to a lamp post."
+       },
+       {
+        "type": "source_ref",
+        "attrs": {
+         "id": "a1",
+         "source_entity_id": "e1",
+         "display_mode": "numbered_ref"
+        }
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p2"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "The change came from a pilot that began on two streets in the east of the city. Engineers fitted ordinary lamp posts with a metered socket and a cable that stays coiled until a driver taps a card. "
+       },
+       {
+        "type": "text",
+        "text": "Residents without a driveway",
+        "marks": [
+         {
+          "type": "emphasis"
+         }
+        ]
+       },
+       {
+        "type": "text",
+        "text": " were the pilot\u2019s target, and the first months showed how many of them there were."
+       },
+       {
+        "type": "source_ref",
+        "attrs": {
+         "id": "a2",
+         "source_entity_id": "e2",
+         "display_mode": "numbered_ref"
+        }
+       },
+       {
+        "type": "source_ref",
+        "attrs": {
+         "id": "a3",
+         "source_entity_id": "e3",
+         "display_mode": "numbered_ref"
+        }
+       }
+      ]
+     },
+     {
+      "type": "heading",
+      "attrs": {
+       "id": "h1",
+       "level": 2
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "What the pilot found"
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p3"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Across the first year, kerbside sockets delivered more energy per installed unit than the fast chargers in the car parks, even though each socket is far slower. The sockets were used overnight, when the cars were parked anyway, and they were used by the same few hundred households again and again."
+       },
+       {
+        "type": "source_ref",
+        "attrs": {
+         "id": "a4",
+         "source_entity_id": "e4",
+         "display_mode": "numbered_ref"
+        }
+       }
+      ]
+     },
+     {
+      "type": "bullet_list",
+      "attrs": {
+       "id": "l1"
+      },
+      "content": [
+       {
+        "type": "list_item",
+        "content": [
+         {
+          "type": "paragraph",
+          "content": [
+           {
+            "type": "text",
+            "text": "Overnight sessions averaged nine hours, against forty minutes at a fast charger."
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "list_item",
+        "content": [
+         {
+          "type": "paragraph",
+          "content": [
+           {
+            "type": "text",
+            "text": "Four in five users had no off-street parking at home."
+           },
+           {
+            "type": "source_ref",
+            "attrs": {
+             "id": "a5",
+             "source_entity_id": "e5",
+             "display_mode": "numbered_ref"
+            }
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "list_item",
+        "content": [
+         {
+          "type": "paragraph",
+          "content": [
+           {
+            "type": "text",
+            "text": "Faults were rare, but a third of them were cables left out by drivers rather than failures of the hardware."
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "blockquote",
+      "attrs": {
+       "id": "q1"
+      },
+      "content": [
+       {
+        "type": "paragraph",
+        "attrs": {
+         "id": "q1p"
+        },
+        "content": [
+         {
+          "type": "text",
+          "text": "People said they would never plug in at the kerb in the rain, and then it rained and they did. The cable is the whole product."
+         },
+         {
+          "type": "source_ref",
+          "attrs": {
+           "id": "a6",
+           "source_entity_id": "e6",
+           "display_mode": "numbered_ref"
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "heading",
+      "attrs": {
+       "id": "h2",
+       "level": 2
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "The cost question"
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p4"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "A kerbside socket costs about a tenth as much to install as a rapid charger, because the cable to the lamp post already exists. The city pays for the socket and the meter; the operator pays for the electricity and keeps a small share of each sale. "
+       },
+       {
+        "type": "text",
+        "text": "That split is the part other cities copy first.",
+        "marks": [
+         {
+          "type": "strong"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p5"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "The pilot\u2019s working notes, kept by the transport office, set out how the first streets were chosen and what the engineers would do differently."
+       },
+       {
+        "type": "source_ref",
+        "attrs": {
+         "id": "t1",
+         "source_entity_id": "tx",
+         "display_mode": "numbered_ref"
+        }
+       }
+      ]
+     },
+     {
+      "type": "ordered_list",
+      "attrs": {
+       "id": "l2",
+       "start": 1
+      },
+      "content": [
+       {
+        "type": "list_item",
+        "content": [
+         {
+          "type": "paragraph",
+          "content": [
+           {
+            "type": "text",
+            "text": "Choose streets where most homes have no driveway."
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "list_item",
+        "content": [
+         {
+          "type": "paragraph",
+          "content": [
+           {
+            "type": "text",
+            "text": "Fit every third lamp post, not every post, and add more only where the sockets fill up."
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "list_item",
+        "content": [
+         {
+          "type": "paragraph",
+          "content": [
+           {
+            "type": "text",
+            "text": "Publish the monthly figures, including the faults."
+           },
+           {
+            "type": "source_ref",
+            "attrs": {
+             "id": "a7",
+             "source_entity_id": "e2",
+             "display_mode": "numbered_ref"
+            }
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "heading",
+      "attrs": {
+       "id": "h3",
+       "level": 2
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "What comes next"
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p6"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Marlow plans to reach one thousand sockets by the end of next year. The harder problem, the office says, is not the hardware but the paperwork: every lamp post belongs to a different contract, and each contract has to be reopened before a socket can be added."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p7"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "For now the east side keeps its coiled cables, and on wet evenings a line of cars sits along the kerb, each one drawing a little current, none of them going anywhere until morning."
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ "source_entities": [
+  {
+   "id": "se-e1",
+   "source_entity_id": "e1",
+   "kind": "web",
+   "target_kind": "web_url",
+   "display_policy": "numbered",
+   "entity": {
+    "source_entity_id": "e1",
+    "target": {
+     "kind": "web_url",
+     "uri": "https://www.example.com/news/marlow-kerbside-chargers"
+    },
+    "display": {
+     "mode": "numbered_ref",
+     "title": "Marlow turns lamp posts into chargers"
+    },
+    "evidence": {
+     "state": "pending",
+     "open_surface": "source_viewer"
+    },
+    "provenance": {
+     "created_by": "demo"
+    }
+   }
+  },
+  {
+   "id": "se-e2",
+   "source_entity_id": "e2",
+   "kind": "web",
+   "target_kind": "web_url",
+   "display_policy": "numbered",
+   "entity": {
+    "source_entity_id": "e2",
+    "target": {
+     "kind": "web_url",
+     "uri": "https://transport.example.org/pilot/kerbside-year-one"
+    },
+    "display": {
+     "mode": "numbered_ref",
+     "title": "Kerbside charging pilot: year one report"
+    },
+    "evidence": {
+     "state": "pending",
+     "open_surface": "source_viewer"
+    },
+    "provenance": {
+     "created_by": "demo"
+    }
+   }
+  },
+  {
+   "id": "se-e3",
+   "source_entity_id": "e3",
+   "kind": "web",
+   "target_kind": "web_url",
+   "display_policy": "numbered",
+   "entity": {
+    "source_entity_id": "e3",
+    "target": {
+     "kind": "web_url",
+     "uri": "https://example.net/streets/who-has-a-driveway"
+    },
+    "display": {
+     "mode": "numbered_ref",
+     "title": "Who has a driveway? A street-by-street count"
+    },
+    "evidence": {
+     "state": "pending",
+     "open_surface": "source_viewer"
+    },
+    "provenance": {
+     "created_by": "demo"
+    }
+   }
+  },
+  {
+   "id": "se-e4",
+   "source_entity_id": "e4",
+   "kind": "web",
+   "target_kind": "web_url",
+   "display_policy": "numbered",
+   "entity": {
+    "source_entity_id": "e4",
+    "target": {
+     "kind": "web_url",
+     "uri": "https://data.example.com/charging/energy-per-unit"
+    },
+    "display": {
+     "mode": "numbered_ref",
+     "title": "Energy delivered per installed charger"
+    },
+    "evidence": {
+     "state": "pending",
+     "open_surface": "source_viewer"
+    },
+    "provenance": {
+     "created_by": "demo"
+    }
+   }
+  },
+  {
+   "id": "se-e5",
+   "source_entity_id": "e5",
+   "kind": "web",
+   "target_kind": "web_url",
+   "display_policy": "numbered",
+   "entity": {
+    "source_entity_id": "e5",
+    "target": {
+     "kind": "web_url",
+     "uri": "https://survey.example.org/ev-owners-2026"
+    },
+    "display": {
+     "mode": "numbered_ref",
+     "title": "EV owners survey 2026"
+    },
+    "evidence": {
+     "state": "pending",
+     "open_surface": "source_viewer"
+    },
+    "provenance": {
+     "created_by": "demo"
+    }
+   }
+  },
+  {
+   "id": "se-e6",
+   "source_entity_id": "e6",
+   "kind": "web",
+   "target_kind": "web_url",
+   "display_policy": "numbered",
+   "entity": {
+    "source_entity_id": "e6",
+    "target": {
+     "kind": "web_url",
+     "uri": "https://www.example.com/opinion/the-cable-is-the-product"
+    },
+    "display": {
+     "mode": "numbered_ref",
+     "title": "The cable is the product"
+    },
+    "evidence": {
+     "state": "pending",
+     "open_surface": "source_viewer"
+    },
+    "provenance": {
+     "created_by": "demo"
+    }
+   }
+  },
+  {
+   "id": "se-tx",
+   "source_entity_id": "tx",
+   "kind": "texture",
+   "target_kind": "texture_span",
+   "display_policy": "numbered",
+   "entity": {
+    "source_entity_id": "tx",
+    "target": {
+     "kind": "texture_span",
+     "uri": "texture:demo-notes",
+     "id": "demo-notes"
+    },
+    "display": {
+     "mode": "numbered_ref",
+     "title": "Charging pilot: working notes"
+    },
+    "evidence": {
+     "state": "pending",
+     "open_surface": "texture"
+    },
+    "provenance": {
+     "created_by": "demo"
+    }
+   }
+  }
+ ],
+ "transclusions": [
+  {
+   "id": "tr-a1",
+   "source_entity_id": "e1",
+   "anchor_id": "a1",
+   "ref": {
+    "doc": "doc-e1",
+    "version": "1",
+    "cid": "c1",
+    "hash": "h-c1",
+    "quote": "has gone from eleven public chargers to four hundred, nearly all of them on lamp posts"
+   },
+   "relation_type": "cites",
+   "default_display_mode": "collapsed_citation",
+   "snapshot_text": "has gone from eleven public chargers to four hundred, nearly all of them on lamp posts"
+  },
+  {
+   "id": "tr-a2",
+   "source_entity_id": "e2",
+   "anchor_id": "a2",
+   "ref": {
+    "doc": "doc-e2",
+    "version": "1",
+    "cid": "c2",
+    "hash": "h-c2",
+    "quote": "metered socket and a cable that stays coiled until a card is tapped"
+   },
+   "relation_type": "cites",
+   "default_display_mode": "collapsed_citation",
+   "snapshot_text": "metered socket and a cable that stays coiled until a card is tapped"
+  },
+  {
+   "id": "tr-a3",
+   "source_entity_id": "e3",
+   "anchor_id": "a3",
+   "ref": {
+    "doc": "doc-e3",
+    "version": "1",
+    "cid": "c3",
+    "hash": "h-c3",
+    "quote": "more than half of east-side homes have no driveway"
+   },
+   "relation_type": "cites",
+   "default_display_mode": "collapsed_citation",
+   "snapshot_text": "more than half of east-side homes have no driveway"
+  },
+  {
+   "id": "tr-a4",
+   "source_entity_id": "e4",
+   "anchor_id": "a4",
+   "ref": {
+    "doc": "doc-e4",
+    "version": "1",
+    "cid": "c4",
+    "hash": "h-c4",
+    "quote": "delivered more energy per installed unit than the rapid chargers"
+   },
+   "relation_type": "cites",
+   "default_display_mode": "collapsed_citation",
+   "snapshot_text": "delivered more energy per installed unit than the rapid chargers"
+  },
+  {
+   "id": "tr-a5",
+   "source_entity_id": "e5",
+   "anchor_id": "a5",
+   "ref": {
+    "doc": "doc-e5",
+    "version": "1",
+    "cid": "c5",
+    "hash": "h-c5",
+    "quote": "four in five users had no off-street parking"
+   },
+   "relation_type": "cites",
+   "default_display_mode": "collapsed_citation",
+   "snapshot_text": "four in five users had no off-street parking"
+  },
+  {
+   "id": "tr-a6",
+   "source_entity_id": "e6",
+   "anchor_id": "a6",
+   "ref": {
+    "doc": "doc-e6",
+    "version": "1",
+    "cid": "c6",
+    "hash": "h-c6",
+    "quote": "the cable is the whole product"
+   },
+   "relation_type": "cites",
+   "default_display_mode": "collapsed_citation",
+   "snapshot_text": "the cable is the whole product"
+  },
+  {
+   "id": "tr-a7",
+   "source_entity_id": "e2",
+   "anchor_id": "a7",
+   "ref": {
+    "doc": "doc-e2",
+    "version": "1",
+    "cid": "c2",
+    "hash": "h-c2",
+    "quote": "publish the monthly figures"
+   },
+   "relation_type": "cites",
+   "default_display_mode": "collapsed_citation",
+   "snapshot_text": "publish the monthly figures"
+  },
+  {
+   "id": "tr-t1",
+   "source_entity_id": "tx",
+   "anchor_id": "t1",
+   "relation_type": "cites",
+   "default_display_mode": "collapsed_citation",
+   "snapshot_text": "Streets were chosen by counting homes without a driveway. Every third lamp post got a socket first; the rest wait until the first sockets fill up."
+  }
+ ],
+ "payload": {
+  "revision": 3,
+  "text": "",
+  "manifest_hash": "demo-ev-3",
+  "resolved_blocks": [
+   {
+    "doc": "doc-e1",
+    "version": "1",
+    "cid": "c1",
+    "hash": "h-c1",
+    "kind": "paragraph",
+    "text": "In three years the city of Marlow has gone from eleven public chargers to four hundred, nearly all of them on lamp posts at the kerb. Officials call it the quietest infrastructure project in the city\u2019s history.",
+    "url": "https://www.example.com/news/marlow-kerbside-chargers",
+    "title": "Marlow turns lamp posts into chargers"
+   },
+   {
+    "doc": "doc-e2",
+    "version": "1",
+    "cid": "c2",
+    "hash": "h-c2",
+    "kind": "paragraph",
+    "text": "The pilot fitted lamp posts on two east-side streets with a metered socket and a cable that stays coiled until a card is tapped. Households without off-street parking were the target group.",
+    "url": "https://transport.example.org/pilot/kerbside-year-one",
+    "title": "Kerbside charging pilot: year one report"
+   },
+   {
+    "doc": "doc-e3",
+    "version": "1",
+    "cid": "c3",
+    "hash": "h-c3",
+    "kind": "paragraph",
+    "text": "The count of 3,800 east-side homes found that more than half of east-side homes have no driveway or garage, a share far higher than the city average.",
+    "url": "https://example.net/streets/who-has-a-driveway",
+    "title": "Who has a driveway? A street-by-street count"
+   },
+   {
+    "doc": "doc-e4",
+    "version": "1",
+    "cid": "c4",
+    "hash": "h-c4",
+    "kind": "paragraph",
+    "text": "Over twelve months the kerbside sockets delivered more energy per installed unit than the rapid chargers in the car parks, despite a charging rate one fifth as fast.",
+    "url": "https://data.example.com/charging/energy-per-unit",
+    "title": "Energy delivered per installed charger"
+   },
+   {
+    "doc": "doc-e5",
+    "version": "1",
+    "cid": "c5",
+    "hash": "h-c5",
+    "kind": "paragraph",
+    "text": "Of the kerbside users who answered, four in five users had no off-street parking at home.",
+    "url": "https://survey.example.org/ev-owners-2026",
+    "title": "EV owners survey 2026"
+   },
+   {
+    "doc": "doc-e6",
+    "version": "1",
+    "cid": "c6",
+    "hash": "h-c6",
+    "kind": "paragraph",
+    "text": "Nobody believed drivers would plug in at the kerb in the rain. Then it rained, and they did. In the end the cable is the whole product, and the cable is a piece of rubber.",
+    "url": "https://www.example.com/opinion/the-cable-is-the-product",
+    "title": "The cable is the product"
+   }
+  ]
+ },
+ "nav": {
+  "revision": 3,
+  "prev": 2,
+  "next": 0,
+  "latest": 3
+ },
+ "checks": {
+  "source": "demo",
+  "citations": [
+   {
+    "anchor_id": "a1",
+    "ref": {
+     "cid": "c1",
+     "quote": "has gone from eleven public chargers to four hundred, nearly all of them on lamp posts"
+    },
+    "state": "exact",
+    "quote": "has gone from eleven public chargers to four hundred, nearly all of them on lamp posts"
+   },
+   {
+    "anchor_id": "a2",
+    "ref": {
+     "cid": "c2",
+     "quote": "metered socket and a cable that stays coiled until a card is tapped"
+    },
+    "state": "exact",
+    "quote": "metered socket and a cable that stays coiled until a card is tapped"
+   },
+   {
+    "anchor_id": "a3",
+    "ref": {
+     "cid": "c3",
+     "quote": "more than half of east-side homes have no driveway"
+    },
+    "state": "tolerant",
+    "quote": "more than half of east-side homes have no driveway"
+   },
+   {
+    "anchor_id": "a4",
+    "ref": {
+     "cid": "c4",
+     "quote": "delivered more energy per installed unit than the rapid chargers"
+    },
+    "state": "exact",
+    "quote": "delivered more energy per installed unit than the rapid chargers"
+   },
+   {
+    "anchor_id": "a5",
+    "ref": {
+     "cid": "c5",
+     "quote": "four in five users had no off-street parking"
+    },
+    "state": "",
+    "quote": "four in five users had no off-street parking"
+   },
+   {
+    "anchor_id": "a6",
+    "ref": {
+     "cid": "c6",
+     "quote": "the cable is the whole product"
+    },
+    "state": "unread",
+    "quote": "the cable is the whole product"
+   },
+   {
+    "anchor_id": "a7",
+    "ref": {
+     "cid": "c2",
+     "quote": "publish the monthly figures"
+    },
+    "state": "exact",
+    "quote": "publish the monthly figures"
+   }
+  ]
+ }
 }
 """#,
         "resolve-demo-grid-storage": #"""
@@ -141,6 +1983,237 @@ public enum DemoFixtureData {
    "kind": "interactive",
    "computer_id": "demo-computer",
    "current": true
+  }
+ ]
+}
+"""#,
+        "texture-doc-demo-draft": #"""
+{
+ "doc_id": "demo-draft",
+ "title": "Notes on the council meeting",
+ "current_revision_id": "dr-r2",
+ "current_version_number": 1,
+ "revision_count": 2,
+ "trajectory_id": "traj-demo",
+ "agent_revision_pending": true
+}
+"""#,
+        "texture-doc-demo-edition": #"""
+{
+ "doc_id": "demo-edition",
+ "title": "My edition",
+ "current_revision_id": "ed-r4",
+ "current_version_number": 3,
+ "revision_count": 4
+}
+"""#,
+        "texture-doc-demo-letter": #"""
+{
+ "doc_id": "demo-letter",
+ "title": "Letter to the library board",
+ "current_revision_id": "le-r1",
+ "current_version_number": 0,
+ "revision_count": 1
+}
+"""#,
+        "texture-doc-demo-notes": #"""
+{
+ "doc_id": "demo-notes",
+ "title": "Charging pilot: working notes",
+ "current_revision_id": "no-r3",
+ "current_version_number": 2,
+ "revision_count": 3
+}
+"""#,
+        "texture-documents": #"""
+{
+ "documents": [
+  {
+   "doc_id": "demo-edition",
+   "title": "My edition",
+   "created_at": "2026-11-09T08:00:00Z",
+   "updated_at": "2026-11-10T06:30:00Z",
+   "revision_count": 4,
+   "current_revision_id": "ed-r4",
+   "metadata": {
+    "role": "edition"
+   }
+  },
+  {
+   "doc_id": "demo-draft",
+   "title": "Notes on the council meeting",
+   "created_at": "2026-11-10T09:00:00Z",
+   "updated_at": "2026-11-10T09:20:00Z",
+   "revision_count": 2,
+   "current_revision_id": "dr-r2",
+   "trajectory_id": "traj-demo",
+   "agent_revision_pending": true
+  },
+  {
+   "doc_id": "demo-notes",
+   "title": "Charging pilot: working notes",
+   "created_at": "2026-11-05T09:00:00Z",
+   "updated_at": "2026-11-08T16:10:00Z",
+   "revision_count": 3,
+   "current_revision_id": "no-r3"
+  },
+  {
+   "doc_id": "demo-letter",
+   "title": "Letter to the library board",
+   "created_at": "2026-10-30T09:00:00Z",
+   "updated_at": "2026-11-02T11:00:00Z",
+   "revision_count": 1,
+   "current_revision_id": "le-r1"
+  }
+ ]
+}
+"""#,
+        "texture-rev-dr-r1": #"""
+{
+ "revision_id": "dr-r1",
+ "doc_id": "demo-draft",
+ "version_number": 0,
+ "author_label": "you",
+ "author_kind": "user",
+ "content": "# Notes on the council meeting\n\nThe council met on Tuesday evening.",
+ "created_at": "2026-11-10T09:00:00Z"
+}
+"""#,
+        "texture-rev-dr-r2": #"""
+{
+ "revision_id": "dr-r2",
+ "doc_id": "demo-draft",
+ "version_number": 1,
+ "author_label": "Texture desk",
+ "author_kind": "appagent",
+ "content": "# Notes on the council meeting\n\nThe council met on Tuesday evening. The main item was the harbor barrier.\n\n## Decisions\n\n- The barrier is funded.\n- Engineers report each quarter on cost and on the fishing channel.\n\nThe desk is adding what was said about the water mains.\n",
+ "created_at": "2026-11-10T09:20:00Z"
+}
+"""#,
+        "texture-rev-ed-r4": #"""
+{
+ "revision_id": "ed-r4",
+ "doc_id": "demo-edition",
+ "version_number": 3,
+ "author_label": "Texture desk",
+ "author_kind": "appagent",
+ "content": "# My edition\n\nA short front page for you, written this morning.\n\n## Today\n\n- A city rewires its kerbs for electric cars\n- A regional grid adds its largest battery yet\n- City libraries extend their evening hours\n\nThe edition is revised each morning from the sources you follow.",
+ "created_at": "2026-11-10T06:30:00Z"
+}
+"""#,
+        "texture-rev-le-r1": #"""
+{
+ "revision_id": "le-r1",
+ "doc_id": "demo-letter",
+ "version_number": 0,
+ "author_label": "you",
+ "author_kind": "user",
+ "content": "# Letter to the library board\n\nDear board,\n\nI am writing to ask that the evening hours at the central branch be extended to ten on weekdays. Students and shift workers have nowhere else quiet to read after six.\n\nThank you for considering it.",
+ "created_at": "2026-10-30T09:00:00Z"
+}
+"""#,
+        "texture-rev-no-r1": #"""
+{
+ "revision_id": "no-r1",
+ "doc_id": "demo-notes",
+ "version_number": 0,
+ "author_label": "you",
+ "author_kind": "user",
+ "content": "# Charging pilot: working notes\n\nFirst draft: count homes without a driveway.",
+ "created_at": "2026-11-05T09:00:00Z"
+}
+"""#,
+        "texture-rev-no-r2": #"""
+{
+ "revision_id": "no-r2",
+ "doc_id": "demo-notes",
+ "version_number": 1,
+ "author_label": "you",
+ "author_kind": "user",
+ "content": "# Charging pilot: working notes\n\nThese notes record how the first two streets were chosen, and what the engineers would change.\n\n## Choosing the streets\n\nWe counted homes without a driveway on every street in the east side, then ranked the streets by that count. The top two became the pilot.\n\n- Count homes with no off-street parking\n- Rank streets by that count\n- Check the lamp posts can carry a metered socket\n\n> Every third lamp post first, and more only where the sockets fill up.\n\n## What the first year showed\n\n| Measure | Kerbside | Rapid |\n|---|---|---|\n| Energy per unit (kWh a day) | 38 | 31 |\n| Average session | 9 hours | 40 minutes |\n| Share of users with no driveway | 81% | 12% |\n\n## Open questions\n\n1. How do we reopen the lamp post contracts without a vote for each one?\n2. Who pays when a cable is left out in the road?\n3. Can the monthly figures be published as a dataset?\n\n---\n\n*Written by the transport office. Figures are from the year-one report.*\n",
+ "created_at": "2026-11-06T10:00:00Z"
+}
+"""#,
+        "texture-rev-no-r3": #"""
+{
+ "revision_id": "no-r3",
+ "doc_id": "demo-notes",
+ "version_number": 2,
+ "author_label": "Texture desk",
+ "author_kind": "appagent",
+ "content": "# Charging pilot: working notes\n\nThese notes record how the first two streets were chosen, and what the engineers would change.\n\n## Choosing the streets\n\nWe counted homes without a driveway on every street in the east side, then ranked the streets by that count. The top two became the pilot.\n\n- Count homes with no off-street parking\n- Rank streets by that count\n- Check the lamp posts can carry a metered socket\n\n> Every third lamp post first, and more only where the sockets fill up.\n\n## What the first year showed\n\n| Measure | Kerbside | Rapid |\n|---|---|---|\n| Energy per unit (kWh a day) | 38 | 31 |\n| Average session | 9 hours | 40 minutes |\n| Faults a month | 2 | 5 |\n| Share of users with no driveway | 81% | 12% |\n\n## Open questions\n\n1. How do we reopen the lamp post contracts without a vote for each one?\n2. Who pays when a cable is left out in the road?\n3. Can the monthly figures be published as a dataset?\n\n---\n\n*Written by the transport office. Figures are from the year-one report.*\n",
+ "created_at": "2026-11-08T16:10:00Z"
+}
+"""#,
+        "texture-revs-demo-draft": #"""
+{
+ "revisions": [
+  {
+   "revision_id": "dr-r2",
+   "doc_id": "demo-draft",
+   "version_number": 1,
+   "author_label": "Texture desk",
+   "created_at": "2026-11-10T09:20:00Z"
+  },
+  {
+   "revision_id": "dr-r1",
+   "doc_id": "demo-draft",
+   "version_number": 0,
+   "author_label": "you",
+   "created_at": "2026-11-10T09:00:00Z"
+  }
+ ]
+}
+"""#,
+        "texture-revs-demo-edition": #"""
+{
+ "revisions": [
+  {
+   "revision_id": "ed-r4",
+   "doc_id": "demo-edition",
+   "version_number": 3,
+   "author_label": "Texture desk",
+   "created_at": "2026-11-10T06:30:00Z"
+  }
+ ]
+}
+"""#,
+        "texture-revs-demo-letter": #"""
+{
+ "revisions": [
+  {
+   "revision_id": "le-r1",
+   "doc_id": "demo-letter",
+   "version_number": 0,
+   "author_label": "you",
+   "created_at": "2026-10-30T09:00:00Z"
+  }
+ ]
+}
+"""#,
+        "texture-revs-demo-notes": #"""
+{
+ "revisions": [
+  {
+   "revision_id": "no-r3",
+   "doc_id": "demo-notes",
+   "version_number": 2,
+   "author_label": "Texture desk",
+   "created_at": "2026-11-08T16:10:00Z"
+  },
+  {
+   "revision_id": "no-r2",
+   "doc_id": "demo-notes",
+   "version_number": 1,
+   "author_label": "you",
+   "created_at": "2026-11-06T10:00:00Z"
+  },
+  {
+   "revision_id": "no-r1",
+   "doc_id": "demo-notes",
+   "version_number": 0,
+   "author_label": "you",
+   "created_at": "2026-11-05T09:00:00Z"
   }
  ]
 }

@@ -1,7 +1,94 @@
 // Lane members file (mail): this lane's states, derives, resources, mutations and actions, as if written in the root.
-// Owned by the mail lane. Declare the shapes you use with `use ... from "@choir/autoradio"` at the top of this file
-// (your shapes and source names live in exact-package/interface/mail.json). Every name you want a child component to
-// `inject` goes in your band of the `provide` list in app.contract.
+// Owned by the mail lane. The shapes and source names live in exact-package/interface/mail.json.
+//
+// One resource per page family, each asked for the top page's address and answering "idle" at once for any other
+// address, so only the page in front does any work: mbx (a mailbox), mmsg (a message), mcmp (a compose page: a reply,
+// a new message, or an existing draft). The compose fields are local state that takes the resource's seed (the
+// reply's recipient, subject and quoted text) the first time the person edits; after that the person's words win.
+use mailBox, mailMessage, mailCompose, mailSaveDraft, mailApprovalEmail, mailOpenReview, mailRead, mailMarkUnread, mailAsk from "@choir/autoradio"
+use MailBoxView, MailMessageView, MailComposeView, MailAck from "@choir/autoradio"
+
 members Autoradio
-  // placeholder so the block is not empty; delete it when you add your first member
-  state mailPlaceholder = false
+  resource mbx = mailBox(address=pg.top) as shape MailBoxView else empty()
+  resource mmsg = mailMessage(address=pg.top) as shape MailMessageView else empty()
+  resource mcmp = mailCompose(address=pg.top) as shape MailComposeView else empty()
+  mutation mdr as shape MailComposeView refreshes mbx
+  mutation mak as shape MailAck
+
+  // The compose fields, and the page they belong to.
+  state mailFor = ""
+  state mailTo = ""
+  state mailSubject = ""
+  state mailBody = ""
+  // Per-page view toggles: the address they are on for ("" none).
+  state mailQuotedFor = ""
+  state mailOriginalFor = ""
+  state mailNoteFor = ""
+
+  derive mailSeeded = mailFor == pg.top
+  derive mailCurTo = mailSeeded ? mailTo : mcmp.toLine
+  derive mailCurSubject = mailSeeded ? mailSubject : mcmp.subject
+  derive mailCurBody = mailSeeded ? mailBody : mcmp.body
+
+  derive mdrFor = match mdr { case some(d) => d.forAddress, case none => "" }
+  derive mdrStatus = match mdr { case some(d) => d.status, case none => "" }
+  derive mdrDraft = match mdr { case some(d) => d.draftId, case none => "" }
+  derive mdrNote = match mdr { case some(d) => d.note, case none => "" }
+  derive mdrUrl = match mdr { case some(d) => d.reviewURL, case none => "" }
+  derive mdrSendAs = match mdr { case some(d) => d.sendAs, case none => "" }
+  derive mdrMine = mdrFor == pg.top
+  // What the compose page shows about the draft: the last save or approval for this page, else what the server said.
+  derive mailDraftStatus = mdrMine ? mdrStatus : mcmp.status
+  derive mailDraftId = mdrMine and mdrDraft != "" ? mdrDraft : mcmp.draftId
+  derive mailDraftNote = mdrMine ? mdrNote : mcmp.note
+  derive mailDraftUrl = mdrMine ? mdrUrl : ""
+  derive mailDraftFrom = mdrMine and mdrSendAs != "" ? mdrSendAs : mcmp.sendAs
+
+  derive mailQuoted = mailQuotedFor == pg.top
+  derive mailOriginal = mailOriginalFor == pg.top
+  derive mailNoteRaw = match mak { case some(a) => a.message, case none => "" }
+  derive mailNote = mailNoteFor == pg.top ? mailNoteRaw : ""
+
+  action editMailTo(v: string)
+    if mailFor != pg.top
+      mailSubject = mcmp.subject
+      mailBody = mcmp.body
+      mailFor = pg.top
+    mailTo = v
+  action editMailSubject(v: string)
+    if mailFor != pg.top
+      mailTo = mcmp.toLine
+      mailBody = mcmp.body
+      mailFor = pg.top
+    mailSubject = v
+  action editMailBody(v: string)
+    if mailFor != pg.top
+      mailTo = mcmp.toLine
+      mailSubject = mcmp.subject
+      mailFor = pg.top
+    mailBody = v
+
+  action saveMailDraft
+    send mdr = mailSaveDraft(address=pg.top, recipients=mailCurTo, subject=mailCurSubject, body=mailCurBody)
+  action approveMail
+    send mdr = mailApprovalEmail(address=pg.top, draft=mailDraftId)
+  action openMailReview(url: string)
+    send mak = mailOpenReview(url=url)
+
+  action toggleMailQuoted
+    mailQuotedFor = mailQuotedFor == pg.top ? "" : pg.top
+  action toggleMailOriginal
+    mailOriginalFor = mailOriginalFor == pg.top ? "" : pg.top
+  action readMail
+    mailNoteFor = pg.top
+    send mak = mailRead(address=pg.top)
+  action unreadMail
+    mailNoteFor = pg.top
+    send mak = mailMarkUnread(address=pg.top)
+  action askMail(q: string)
+    mailNoteFor = pg.top
+    send mak = mailAsk(address=pg.top, question=q)
+  action retryMail
+    refresh mbx
+    refresh mmsg
+    refresh mcmp

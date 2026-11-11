@@ -1,0 +1,11 @@
+{
+ "aliases": [
+  {
+   "id": "al1",
+   "address": "listener@example.com",
+   "local_part": "listener",
+   "domain": "example.com",
+   "visibility": "private"
+  }
+ ]
+}

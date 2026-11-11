@@ -1,0 +1,23 @@
+{
+ "message": {
+  "id": "m3",
+  "direction": "inbound",
+  "from_address": "ben@example.com",
+  "subject": "Q4 planning notes",
+  "snippet": "Here are my notes for the quarter. Three themes: energy, the harbour, and local events.  T",
+  "trust_status": "trusted",
+  "created_at": "2026-11-08T17:30:00Z",
+  "from_display": "Ben Okafor",
+  "received_at": "2026-11-08T17:30:00Z",
+  "read_at": "2026-11-08T17:30:00Z"
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com",
+    "display": "You"
+   }
+  ]
+ },
+ "text_body": "Here are my notes for the quarter. Three themes: energy, the harbour, and local events.\n\nTell me what is missing.\n\nBen"
+}

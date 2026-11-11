@@ -1,0 +1,26 @@
+{
+ "message": {
+  "id": "m4",
+  "direction": "inbound",
+  "from_address": "ana@example.com",
+  "subject": "Re: Q4 planning notes",
+  "snippet": "I think we should lead with the battery and keep the festival short.  Ben, can you check t",
+  "trust_status": "trusted",
+  "created_at": "2026-11-09T11:05:00Z",
+  "from_display": "Ana Reyes",
+  "received_at": "2026-11-09T11:05:00Z",
+  "read_at": "2026-11-09T11:05:00Z"
+ },
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com",
+    "display": "You"
+   }
+  ]
+ },
+ "text_body": "I think we should lead with the battery and keep the festival short.\n\nBen, can you check the numbers on the second page?\n\n> Here are my notes for the quarter. Three themes: energy, the harbour, and local events.\n> Tell me what is missing.",
+ "raw_headers": {
+  "Reply-To": "Ana Reyes <ana.replies@example.com>"
+ }
+}
