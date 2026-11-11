@@ -88,11 +88,11 @@ component BarShell
     barFocus: action
     barBlur: action
   derive st = bi.state
-  // What the field says it is aimed at: the page in front (owner, 2026-11-11). Before setup the invitation is the first-run card on
-  // Paper's; the bar still asks.
-  derive aimMail = (topAddr.startsWith("mail:") and mmsg.replyLabel != "") ? `${mmsg.replyLabel}…` : "Reply to this message…"
-  derive aimPage = topAddr.startsWith("paper:") ? "Ask about today's paper…" : (topAddr.startsWith("pub:") ? "Ask about this story…" : (topAddr.startsWith("texture:") ? "Ask about this Texture…" : (topAddr.startsWith("mail:") ? aimMail : ((topAddr.startsWith("file:") and topAddr != "file:/") ? "Ask about this file…" : "Ask or tell Choir…"))))
-  derive aim = (raim.address == pg.top and raim.blockId != "") ? `Ask about “${raim.label}”…` : aimPage
+  // One neutral placeholder on every page (people instruct as well as ask: play, skip, open mail, rewrite this, more like this).
+  // The aim is shown apart, as a short label on the glass: "On: <the page's title>" (never an address). The address itself goes with
+  // the turn (`aim=`), unchanged.
+  derive aim = "Prompt Autoradio…"
+  derive aimTitle = topAddr == "paper:front" ? "Front page" : ((raim.address == pg.top and raim.blockId != "") ? raim.label : frontName)
   derive onSetup = pg.top == "onboarding:setup"
   derive setupLine = ob.step == "interview" ? (ob.paused ? "Interview paused" : ((st == "listening" or st == "talking" or st == "heard") ? "Interview: listening…" : "Interview: speaking…")) : (ob.step == "setup" ? "Setting up the voice…" : (ob.step == "mic" ? "Check the microphone" : (ob.step == "hearing" ? "Check that you can hear me" : (ob.step == "ready" ? "Voice is set up" : (ob.step == "writing" ? "Writing your edition…" : (ob.step == "done" ? "Your edition is ready" : "Voice setup"))))))
   // What the line above the controls shows.
@@ -141,14 +141,12 @@ component BarShell
         // the deck's quiet count: where you are, in a hairline of text at the top of the lens (not over the page)
         if onbd == false and layer == ""
           row width="100%" align-items="center" justify-content="space-between" gap=8
-            text `${frontKind} · ${stackCount} in the deck` testId="page-indicator" aria-label=`${frontKind}, ${stackCount} pages in the deck` font-family=th.fontUi font-size=10 font-weight=600 letter-spacing=0.4 color=th.muted
+            text `On: ${aimTitle} · ${stackCount} in the deck` testId="page-indicator" aria-label=`On ${aimTitle}. ${stackCount} pages in the deck` line-clamp=1 flex=1 min-width=0 font-family=th.fontUi font-size=10 font-weight=600 letter-spacing=0.4 color=th.muted
             if topAddr.startsWith("pub:")
               button press=moreOfThis(topAddr) testId="story-more" appearance="none" aria-label="More stories like this one"
                 row padding="3px 10px" border-radius=th.radiusPill border-width=1 border-style="solid" border-color=th.rule align-items="center"
                   text (moreFor == topAddr ? "Noted" : "More of this") font-family=th.fontUi font-size=12 font-weight=600 color=th.fg
         // ---- the line above the controls
-        if lineMode == "aim"
-          text aim testId="bar-aim" font-family=th.fontUi font-size=11 color=th.muted line-clamp=1 padding-left=4 animation=enter
         if lineMode == "setup"
           text setupLine testId="bar-setup" font-family=th.fontUi font-size=14 font-weight=600 color=th.fg line-clamp=1 padding-left=4 animation=enter
         if lineMode == "playing" or lineMode == "paused"
