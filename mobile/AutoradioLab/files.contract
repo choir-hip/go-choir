@@ -97,14 +97,14 @@ component FileTile
     item: FileRow
   view
     if item.isDir
-      button press=fsBrowse(item.path) testId=`files-row-${item.path}` appearance="none" width="48%"
-        column padding=14 gap=10 align-items="flex-start" width="100%" min-height=112 border-radius=th.radiusCard background-color=th.paper2 box-shadow=th.shadow1
+      button press=fsBrowse(item.path) testId=`files-row-${item.path}` appearance="none"
+        column padding=14 gap=10 align-items="flex-start" min-height=112 border-radius=th.radiusCard background-color=th.paper2 box-shadow=th.shadow1
           image item.symbol width=34 height=34 color=th.accent
           text item.name font-family=th.fontUi font-size=15 font-weight=600 color=th.fg text-align="left" line-clamp=2
           text item.detail font-family=th.fontUi font-size=12 color=th.muted text-align="left" line-clamp=1
     else
-      button press=openPage(item.address, item.name) testId=`files-row-${item.path}` appearance="none" width="48%"
-        column padding=14 gap=10 align-items="flex-start" width="100%" min-height=112 border-radius=th.radiusCard background-color=th.paper2 box-shadow=th.shadow1
+      button press=openPage(item.address, item.name) testId=`files-row-${item.path}` appearance="none"
+        column padding=14 gap=10 align-items="flex-start" min-height=112 border-radius=th.radiusCard background-color=th.paper2 box-shadow=th.shadow1
           image item.symbol width=34 height=34 color=th.muted
           text item.name font-family=th.fontUi font-size=15 font-weight=600 color=th.fg text-align="left" line-clamp=2
           text item.detail font-family=th.fontUi font-size=12 color=th.muted text-align="left" line-clamp=1
@@ -190,9 +190,17 @@ component FilesPlace
             for r, i in fsList.rows key=r.path
               FileRowItem(item=r, last=(i == fsList.rows.length - 1))
       if fsList.status == "ready" and fsGrid
-        row flex-wrap="wrap" gap=12 testId="files-grid"
-          for r in fsList.rows key=r.path
-            FileTile(item=r)
+        // Two columns of tiles, even rows left and odd rows right (percent widths in a padded page resolve against the
+        // full frame, so the columns share the row by flex instead).
+        row gap=12 align-items="flex-start" testId="files-grid"
+          column flex=1 min-width=0 gap=12
+            for r, i in fsList.rows key=r.path
+              if i % 2 == 0
+                FileTile(item=r)
+          column flex=1 min-width=0 gap=12
+            for r, i in fsList.rows key=r.path
+              if i % 2 == 1
+                FileTile(item=r)
       if fsList.status == "ready"
         text (fsList.count == 1 ? "1 item" : `${fsList.count.toFixed(0)} items`) font-family=th.fontUi font-size=12 color=th.muted testId="files-count"
       // The system file picker (Add a file) opens this input; its copy lands under app:/tmp/picked.
