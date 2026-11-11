@@ -65,6 +65,10 @@ type FrontStory struct {
 	// an email); empty for a story.
 	Kind   string `json:"kind,omitempty"`
 	Author string `json:"author,omitempty"`
+	// Entities are the entities the story is centrally about (id and
+	// label), from the research desk's mentions_entity edges; absent when
+	// the story has none.
+	Entities []StoryEntityRef `json:"entities,omitempty"`
 }
 
 // FrontRoute is a story's bare link (serves the latest version in place)
@@ -507,6 +511,7 @@ func (s *Service) frontRow(ctx context.Context, og *ObjectGraphStore, pub frontP
 		Route:          FrontRoute{Bare: bare, Permalink: versionPermalink(bare, latest.Revision)},
 		SourceCount:    sourceCount,
 		Words:          words,
+		Entities:       storyCentralEntities(ctx, og, pub.CanonicalID),
 	}, true, nil
 }
 
