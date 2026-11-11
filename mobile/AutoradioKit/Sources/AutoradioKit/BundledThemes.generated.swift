@@ -42,6 +42,39 @@ public enum BundledThemes {
   "mark": { "drift": "60s", "tumble": ["3.3s", "5.9s"], "flip": { "stiffness": 300, "damping": 22 }, "listenScale": 1.15, "reduced": "static" }
 }
 """#,
+        "lantern": #"""
+{
+  "schema_version": 3,
+  "id": "lantern",
+  "name": "Lantern",
+  "schemes": ["light", "dark"],
+  "colors": {
+    "paper":  { "light": "#FBF1E1", "dark": "#1D140D" },
+    "paper2": { "light": "#F3E3CB", "dark": "#2A1D13" },
+    "fg":     { "light": "#2B1B0E", "dark": "#F7E9D3" },
+    "muted":  { "light": "#6A4C33", "dark": "#CDB598" },
+    "accent": { "light": "#B5470F", "dark": "#F29A4B" },
+    "accent2":{ "light": "#7E2F06", "dark": "#FFC48E" },
+    "success":{ "light": "#2F6B2F", "dark": "#8BCB7C" },
+    "danger": { "light": "#A12A1B", "dark": "#FF8F7C" },
+    "onAccent": { "light": "#FFFFFF", "dark": "#1D140D" },
+    "rule":   { "light": "rgba(43,27,14,.20)", "dark": "rgba(247,233,211,.18)" }
+  },
+  "type": { "read": "ui-serif", "ui": "ui-rounded", "mono": "ui-monospace", "scale": "large" },
+  "radii": { "card": "26px", "control": "20px", "pill": "999px", "rules": "2px" },
+  "elevation": {
+    "1": { "shadow": "0 2px 4px rgba(90,50,10,.10), 0 12px 28px rgba(90,50,10,.14)", "edge": "inset 0 1px 0 rgba(255,255,255,.55)", "press": 0.97 },
+    "2": { "material": "solid", "shadow": "0 12px 32px rgba(90,50,10,.26)", "edge": "inset 0 1px 0 rgba(255,255,255,.45)" },
+    "3": { "material": "glass", "shadow": "0 24px 60px rgba(90,50,10,.32)", "behind": { "scale": 0.94, "dim": 0.12 } }
+  },
+  "motion": {
+    "fast": "160ms ease-out", "enter": "460ms cubic-bezier(0.22,1,0.36,1)", "sheet": "340ms cubic-bezier(0.22,1,0.36,1)",
+    "spring": { "stiffness": 170, "damping": 19, "mass": 1 }, "stagger": "70ms",
+    "reduced": { "enter": "0ms", "spring": "none" }
+  },
+  "mark": { "drift": "90s", "tumble": ["4.1s", "7.3s"], "flip": { "stiffness": 220, "damping": 16 }, "listenScale": 1.22, "reduced": "static" }
+}
+"""#,
         "newsprint": #"""
 {
   "schema_version": 3,
@@ -63,12 +96,49 @@ public enum BundledThemes {
   "type": { "read": "ui-serif, Georgia, serif", "ui": "ui-serif, Georgia, serif", "mono": "ui-monospace, monospace", "scale": "editorial" },
   "radii": { "card": "0px", "control": "0px", "pill": "0px", "rules": "0px" },
   "elevation": {
-    "1": { "shadow": "none", "edge": "0 1px 0 rule", "press": 1.0 },
+    "1": { "shadow": "none", "edge": "0 1px 0 rule", "press": 1.0, "pressTint": true },
     "2": { "material": "solid", "shadow": "none", "edge": "0 -1px 0 rule" },
     "3": { "material": "solid", "shadow": "none", "behind": { "scale": 1.0, "dim": 0.12 } }
   },
-  "motion": { "fast": "0ms", "enter": "160ms ease", "sheet": "200ms ease", "stagger": "0ms" },
+  "motion": {
+    "fast": "0ms", "enter": "160ms ease", "sheet": "200ms ease", "stagger": "0ms",
+    "spring": { "stiffness": 420, "damping": 48, "mass": 1 },
+    "reduced": { "enter": "0ms", "spring": "none" }
+  },
   "mark": { "drift": "none", "tumble": ["6s", "11s"], "flip": { "stiffness": 200, "damping": 30 }, "listenScale": 1.0, "reduced": "static" }
+}
+"""#,
+        "signal": #"""
+{
+  "schema_version": 3,
+  "id": "signal",
+  "name": "Signal",
+  "schemes": ["light", "dark"],
+  "colors": {
+    "paper":  { "light": "#FFFFFF", "dark": "#000000" },
+    "paper2": { "light": "#F0F0F0", "dark": "#141414" },
+    "fg":     { "light": "#000000", "dark": "#FFFFFF" },
+    "muted":  { "light": "#3A3A3A", "dark": "#D0D0D0" },
+    "accent": { "light": "#0033CC", "dark": "#FFD60A" },
+    "accent2":{ "light": "#001F7A", "dark": "#FFE866" },
+    "success":{ "light": "#005A24", "dark": "#5CFF9A" },
+    "danger": { "light": "#A00018", "dark": "#FF8A8A" },
+    "onAccent": { "light": "#FFFFFF", "dark": "#000000" },
+    "rule":   { "light": "#000000", "dark": "#FFFFFF" }
+  },
+  "type": { "read": "system-ui", "ui": "system-ui", "mono": "ui-monospace", "scale": "large" },
+  "radii": { "card": "6px", "control": "6px", "pill": "6px", "rules": "0px" },
+  "elevation": {
+    "1": { "shadow": "none", "edge": "0 0 0 2px rule", "press": 0.99, "pressTint": true },
+    "2": { "material": "solid", "shadow": "none", "edge": "0 0 0 2px rule" },
+    "3": { "material": "solid", "shadow": "none", "edge": "0 0 0 3px rule", "behind": { "scale": 1.0, "dim": 0.35 } }
+  },
+  "motion": {
+    "fast": "80ms linear", "enter": "140ms ease-out", "sheet": "160ms ease-out", "stagger": "0ms",
+    "spring": { "stiffness": 420, "damping": 44, "mass": 1 },
+    "reduced": { "enter": "0ms", "spring": "none" }
+  },
+  "mark": { "drift": "none", "tumble": ["5s", "9s"], "flip": { "stiffness": 360, "damping": 34 }, "listenScale": 1.1, "reduced": "static" }
 }
 """#,
     ]

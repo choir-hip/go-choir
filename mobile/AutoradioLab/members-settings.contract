@@ -1,7 +1,45 @@
 // Lane members file (settings): this lane's states, derives, resources, mutations and actions, as if written in the root.
-// Owned by the settings lane. Declare the shapes you use with `use ... from "@choir/autoradio"` at the top of this file
-// (your shapes and source names live in exact-package/interface/settings.json). Every name you want a child component to
-// `inject` goes in your band of the `provide` list in app.contract.
+// Owned by the settings lane (lane 7). Shapes and source names are in exact-package/interface/settings.json; the module is
+// exact-package/apple/AutoradioModule+Settings.swift. Every name a child component injects is in the lane 7 band of `provide`.
+use themeCards, themeExtras, settingsAccount, settingsComputer, settingRows, learnedInfo, activityInfo, aboutInfo from "@choir/autoradio"
+use themeFromTexture, themeRemove, accountRefresh, computerRefresh, computerWake, computerUpdate from "@choir/autoradio"
+use settingSet, learnedReset, activityRefresh from "@choir/autoradio"
+use ThemeCards, ThemeExtras, SettingsAck, SettingsAccount, SettingsComputer, SettingRows, LearnedInfo, ActivityInfo, AboutInfo from "@choir/autoradio"
+
 members Autoradio
-  // placeholder so the block is not empty; delete it when you add your first member
-  state settingsPlaceholder = false
+  resource tc = themeCards() as shape ThemeCards else empty()
+  resource tx = themeExtras() as shape ThemeExtras else empty()
+  resource acctInfo = settingsAccount() as shape SettingsAccount else empty()
+  resource cmpt = settingsComputer() as shape SettingsComputer else empty()
+  resource talkRows = settingRows(group="talk") as shape SettingRows else empty()
+  resource gestureRows = settingRows(group="gestures") as shape SettingRows else empty()
+  resource learnt = learnedInfo() as shape LearnedInfo else empty()
+  resource act = activityInfo() as shape ActivityInfo else empty()
+  resource about = aboutInfo() as shape AboutInfo else empty()
+  mutation sm as shape SettingsAck
+
+  // The id of a theme Texture typed in Appearance.
+  state themeDoc = ""
+  action editThemeDoc(v: string)
+    themeDoc = v
+  action loadThemeDoc
+    send sm = themeFromTexture(doc=themeDoc)
+  action loadDemoTheme
+    send sm = themeFromTexture(doc="demo-theme")
+  action removeTheme(id: string)
+    send sm = themeRemove(id=id)
+
+  action refreshAccount
+    send sm = accountRefresh()
+  action refreshComputer
+    send sm = computerRefresh()
+  action wakeComputer
+    send sm = computerWake()
+  action updateComputer
+    send sm = computerUpdate()
+  action setSetting(id: string, value: string)
+    send sm = settingSet(id=id, value=value)
+  action resetLearned
+    send sm = learnedReset()
+  action refreshActivity
+    send sm = activityRefresh()

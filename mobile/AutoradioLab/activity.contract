@@ -1,10 +1,85 @@
-// Activity: what the paper and the computer did lately (activity:). Owned by lane 7 (settings, accounts, "what the
-// paper has learned"). The spine ships the "not yet" page.
-use NotYetPage from "./ui.contract"
+// Activity (activity:). Lane 7. What the computer and the desk are doing now and recently: the owner's changelog (revisions, updates,
+// the desk's decisions, the paper using your work), the radio's own turns, and a "now" line for the radio and the computer. Demo mode
+// reads fixtures/demo/changelog.json; live it is GET /api/changelog (kit: ActivityFeed.swift). A row with a document or a route opens it
+// as a page. testIds: activity-refresh, activity-section-<name>, activity-row-<id>, activity-status, activity-empty.
+use Theme, ThemeExtras, ActivityInfo, ActivityItem from "@choir/autoradio"
+use ToolScroll, Card from "./ui.contract"
+use SectionLabel, Hairline, ScreenTitle from "./settings.contract"
 
 component ActivityPage
+  inject
+    th: Theme
+    tx: ThemeExtras
+    act: ActivityInfo
+    refreshActivity: action
   props
     address: string
     title: string
   view
-    NotYetPage(address=address, title=title)
+    ToolScroll(id="activity")
+      ScreenTitle(label="Activity", back=false)
+      row gap=12 align-items="center" width="100%"
+        text (act.status == "loading" ? "Looking…" : (act.unseen > 0 ? `${act.unseen} new since you last looked` : "Up to date")) testId="activity-status" font-family=th.fontUi font-size=tx.sizeMeta color=th.muted flex=1 min-width=0
+        button press=refreshActivity testId="activity-refresh" buttonStyle="bordered"
+          text "Refresh"
+      if act.message != ""
+        text act.message testId="activity-message" font-family=th.fontUi font-size=tx.sizeLabel color=th.danger
+      ActivitySection(label="Now", items=act.live, testId="activity-section-now")
+      ActivitySection(label="Your computer", items=act.computer, testId="activity-section-computer")
+      ActivitySection(label="The desk", items=act.desk, testId="activity-section-desk")
+      ActivitySection(label="The paper and you", items=act.paper, testId="activity-section-paper")
+      ActivitySection(label="The radio's turns", items=act.radio, testId="activity-section-radio")
+      if act.blank
+        text "Nothing has happened yet. When the desk revises your edition or your computer updates, it shows here." testId="activity-empty" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted
+
+component ActivitySection
+  props
+    label: string
+    items: ActivityItem[]
+    testId: string
+  view
+    column gap=8 width="100%"
+      if items.length > 0
+        SectionLabel(label=label)
+        Card(level=1, testId=testId, minHeight=0)
+          column width="100%"
+            for ev, i in items key=ev.id
+              column width="100%"
+                if i > 0
+                  Hairline()
+                ActivityRow(ev=ev)
+
+component ActivityRow
+  inject
+    th: Theme
+    openPage: action
+  props
+    ev: ActivityItem
+  view
+    column width="100%"
+      if ev.target != ""
+        button press=openPage(ev.target, ev.label) testId=`activity-row-${ev.id}` appearance="none" width="100%"
+          ActivityBody(ev=ev, opens=true)
+      if ev.target == ""
+        column testId=`activity-row-${ev.id}` width="100%"
+          ActivityBody(ev=ev, opens=false)
+
+component ActivityBody
+  inject
+    th: Theme
+    tx: ThemeExtras
+  props
+    ev: ActivityItem
+    opens: bool
+  view
+    row gap=12 align-items="flex-start" width="100%" box-sizing="border-box" padding="12px 16px"
+      box width=8 height=8 margin-top=7 border-radius=4 background-color=(ev.unseen ? th.accent : "transparent")
+      column flex=1 min-width=0 gap=3 align-items="flex-start"
+        row gap=8 width="100%" align-items="flex-start"
+          text ev.label text-align="left" font-family=th.fontUi font-size=tx.sizeLabel font-weight=700 color=th.fg flex=1 min-width=0
+          text ev.ago font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+        text ev.detail text-align="left" font-family=th.fontRead font-size=tx.sizeLabel line-height=1.4 color=th.fg
+        if ev.title != ""
+          text ev.title text-align="left" font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+      if opens
+        text "›" font-family=th.fontUi font-size=22 color=th.muted

@@ -127,6 +127,141 @@
     "StoryList": {
       "rows": "StoryRow[]"
     },
+    "ThemeCard": {
+      "id": "string",
+      "name": "string",
+      "origin": "string",
+      "current": "bool",
+      "schemes": "string",
+      "contrast": "string",
+      "scale": "string",
+      "paper": "string",
+      "paper2": "string",
+      "fg": "string",
+      "muted": "string",
+      "accent": "string",
+      "accent2": "string",
+      "onAccent": "string",
+      "rule": "string",
+      "fontRead": "string",
+      "fontUi": "string",
+      "radiusCard": "number",
+      "radiusControl": "number",
+      "shadow": "string",
+      "material": "string"
+    },
+    "ThemeCards": {
+      "rows": "ThemeCard[]",
+      "mode": "string",
+      "scheme": "string",
+      "themeID": "string",
+      "problems": "string[]",
+      "status": "string"
+    },
+    "ThemeExtras": {
+      "sizeNameplate": "number",
+      "sizeHeadline": "number",
+      "sizeH2": "number",
+      "sizeBody": "number",
+      "sizeLabel": "number",
+      "sizeMeta": "number",
+      "lineBody": "number",
+      "lineHeadline": "number",
+      "weightHeadline": "number",
+      "weightUi": "number",
+      "flipStiffness": "number",
+      "flipDamping": "number",
+      "markTumbleAS": "number",
+      "markTumbleBS": "number",
+      "markStatic": "bool",
+      "pressTint": "bool",
+      "reduceMotion": "bool",
+      "contrast": "string"
+    },
+    "SettingsAck": {
+      "ok": "bool",
+      "message": "string"
+    },
+    "SettingsAccount": {
+      "status": "string",
+      "signedIn": "bool",
+      "handle": "string",
+      "keyID": "string",
+      "keyLabel": "string",
+      "scopes": "string",
+      "computerID": "string",
+      "message": "string",
+      "demo": "bool",
+      "baseURL": "string"
+    },
+    "SettingsComputer": {
+      "id": "string",
+      "state": "string",
+      "target": "string",
+      "phase": "string",
+      "updateAvailable": "bool",
+      "message": "string",
+      "epoch": "number",
+      "checked": "bool"
+    },
+    "SettingOption": {
+      "id": "string",
+      "label": "string",
+      "detail": "string",
+      "selected": "bool"
+    },
+    "SettingRowInfo": {
+      "id": "string",
+      "label": "string",
+      "help": "string",
+      "value": "string",
+      "valueLabel": "string",
+      "choices": "SettingOption[]"
+    },
+    "SettingRows": {
+      "rows": "SettingRowInfo[]"
+    },
+    "LearnedItem": {
+      "line": "string",
+      "kind": "string",
+      "ago": "string"
+    },
+    "LearnedInfo": {
+      "rows": "LearnedItem[]",
+      "count": "number",
+      "message": "string"
+    },
+    "ActivityItem": {
+      "id": "string",
+      "kind": "string",
+      "label": "string",
+      "detail": "string",
+      "group": "string",
+      "ago": "string",
+      "target": "string",
+      "title": "string",
+      "at": "number",
+      "unseen": "bool"
+    },
+    "ActivityInfo": {
+      "status": "string",
+      "message": "string",
+      "live": "ActivityItem[]",
+      "computer": "ActivityItem[]",
+      "desk": "ActivityItem[]",
+      "paper": "ActivityItem[]",
+      "radio": "ActivityItem[]",
+      "unseen": "number",
+      "blank": "bool"
+    },
+    "AboutInfo": {
+      "app": "string",
+      "build": "string",
+      "server": "string",
+      "base": "string",
+      "demo": "bool",
+      "signedIn": "bool"
+    },
     "Page": {
       "address": "string",
       "kind": "string",
@@ -526,6 +661,188 @@
         "route": "string"
       },
       "answers": "LabState"
+    },
+    {
+      "source": "themeCards",
+      "live": true,
+      "answers": "ThemeCards",
+      "substitute": {
+        "default": {
+          "rows": [],
+          "mode": "system",
+          "scheme": "light",
+          "themeID": "",
+          "problems": [],
+          "status": ""
+        }
+      }
+    },
+    {
+      "source": "themeExtras",
+      "live": true,
+      "answers": "ThemeExtras",
+      "substitute": {
+        "default": {
+          "sizeNameplate": 36,
+          "sizeHeadline": 28,
+          "sizeH2": 19,
+          "sizeBody": 18,
+          "sizeLabel": 15,
+          "sizeMeta": 13,
+          "lineBody": 1.6,
+          "lineHeadline": 1.12,
+          "weightHeadline": 700,
+          "weightUi": 600,
+          "flipStiffness": 300,
+          "flipDamping": 22,
+          "markTumbleAS": 3.3,
+          "markTumbleBS": 5.9,
+          "markStatic": false,
+          "pressTint": false,
+          "reduceMotion": false,
+          "contrast": "AA"
+        }
+      }
+    },
+    {
+      "source": "settingsAccount",
+      "live": true,
+      "answers": "SettingsAccount",
+      "substitute": {
+        "default": {
+          "status": "",
+          "signedIn": false,
+          "handle": "",
+          "keyID": "",
+          "keyLabel": "",
+          "scopes": "",
+          "computerID": "",
+          "message": "",
+          "demo": false,
+          "baseURL": ""
+        }
+      }
+    },
+    {
+      "source": "settingsComputer",
+      "live": true,
+      "answers": "SettingsComputer",
+      "substitute": {
+        "default": {
+          "id": "",
+          "state": "",
+          "target": "",
+          "phase": "idle",
+          "updateAvailable": false,
+          "message": "",
+          "epoch": 0,
+          "checked": false
+        }
+      }
+    },
+    {
+      "source": "settingRows",
+      "live": true,
+      "answers": "SettingRows",
+      "options": {
+        "group": "string"
+      },
+      "substitute": {
+        "default": {
+          "rows": []
+        }
+      }
+    },
+    {
+      "source": "learnedInfo",
+      "live": true,
+      "answers": "LearnedInfo",
+      "substitute": {
+        "default": {
+          "rows": [],
+          "count": 0,
+          "message": ""
+        }
+      }
+    },
+    {
+      "source": "activityInfo",
+      "live": true,
+      "answers": "ActivityInfo",
+      "substitute": {
+        "default": {
+          "status": "",
+          "message": "",
+          "live": [],
+          "computer": [],
+          "desk": [],
+          "paper": [],
+          "radio": [],
+          "unseen": 0,
+          "blank": false
+        }
+      }
+    },
+    {
+      "source": "aboutInfo",
+      "live": true,
+      "answers": "AboutInfo",
+      "substitute": {
+        "default": {
+          "app": "",
+          "build": "",
+          "server": "",
+          "base": "",
+          "demo": false,
+          "signedIn": false
+        }
+      }
+    },
+    {
+      "send": "themeFromTexture",
+      "options": {
+        "doc": "string"
+      },
+      "answers": "SettingsAck"
+    },
+    {
+      "send": "themeRemove",
+      "options": {
+        "id": "string"
+      },
+      "answers": "SettingsAck"
+    },
+    {
+      "send": "accountRefresh",
+      "answers": "SettingsAck"
+    },
+    {
+      "send": "computerRefresh",
+      "answers": "SettingsAck"
+    },
+    {
+      "send": "computerWake",
+      "answers": "SettingsAck"
+    },
+    {
+      "send": "computerUpdate",
+      "answers": "SettingsAck"
+    },
+    {
+      "send": "settingSet",
+      "options": {
+        "id": "string",
+        "value": "string"
+      },
+      "answers": "SettingsAck"
+    },
+    {
+      "send": "learnedReset",
+      "answers": "SettingsAck"
+    },
+    {
+      "send": "activityRefresh",
+      "answers": "SettingsAck"
     },
     {
       "source": "openPages",

@@ -4,6 +4,21 @@ import Foundation
 public enum DemoFixtureData {
     /// File name (no extension) -> JSON text.
     public static let files: [String: String] = [
+        "changelog": #"""
+{
+  "events": [
+    { "inbox_seq": 41, "level": "major", "changelog": { "event_id": "ev-41", "kind": "revision_committed", "level": "major", "occurred_at": "2026-11-10T18:42:00Z", "actor_label": "Texture desk", "subject": { "doc_id": "demo-doc-edition" }, "summary": "Your edition was revised: two new stories on the harbor barrier and the grid storage vote.", "origin": "texture", "tape_ref": { "doc_id": "demo-doc-edition", "revision_id": "demo-rev-12" } } },
+    { "inbox_seq": 40, "level": "major", "changelog": { "event_id": "ev-40", "kind": "update_finished", "level": "major", "occurred_at": "2026-11-10T16:05:00Z", "actor_label": "Your computer", "subject": {}, "summary": "Your computer finished updating and restarted.", "origin": "computer" } },
+    { "inbox_seq": 39, "level": "minor", "changelog": { "event_id": "ev-39", "kind": "wake_decision", "level": "minor", "occurred_at": "2026-11-10T14:20:00Z", "actor_label": "Research desk", "subject": {}, "summary": "The research desk read 14 sources about the library hours story and decided no revision was needed.", "origin": "research" } },
+    { "inbox_seq": 38, "level": "major", "changelog": { "event_id": "ev-38", "kind": "parent_used", "level": "major", "occurred_at": "2026-11-09T21:12:00Z", "actor_label": "The paper", "subject": { "route_path": "/demo-river-festival" }, "summary": "The river festival story used your note as a source.", "origin": "paper" } },
+    { "inbox_seq": 37, "level": "minor", "changelog": { "event_id": "ev-37", "kind": "update_started", "level": "minor", "occurred_at": "2026-11-10T15:58:00Z", "actor_label": "Your computer", "subject": {}, "summary": "Update to demo-build-1 started.", "origin": "computer" } }
+  ],
+  "next_before": 0, "head": 41, "seen_seq": 38, "unseen_major": 2, "unseen_more": false
+}
+"""#,
+        "computer-update": #"""
+{ "update_available": { "target": "demo-build-2" }, "state": "running", "realization_epoch": 7 }
+"""#,
         "front": #"""
 {
  "stories": [
@@ -48,6 +63,15 @@ public enum DemoFixtureData {
    "updated_at": "2026-11-10T09:00:00Z"
   }
  ]
+}
+"""#,
+        "learned": #"""
+{
+  "lines": [
+    { "at": 1793900000, "kind": "more", "text": "More like this: Harbor barrier vote (harbor, storm surge, council)" },
+    { "at": 1793813600, "kind": "less", "text": "Less of this: Celebrity chef opens a third restaurant" },
+    { "at": 1793727200, "kind": "more", "text": "More like this: Grid storage prices (energy, batteries)" }
+  ]
 }
 """#,
         "resolve-demo-grid-storage": #"""
@@ -120,6 +144,35 @@ public enum DemoFixtureData {
   }
  ]
 }
+"""#,
+        "texture-theme": #"""
+{
+  "doc_id": "demo-theme",
+  "revision_id": "demo-theme-r3",
+  "theme": {
+    "schema_version": 3,
+    "id": "ember",
+    "name": "Ember",
+    "schemes": ["dark"],
+    "colors": {
+      "paper": "#14100E", "paper2": "#211A16", "fg": "#F4EBE3", "muted": "#C2B1A2",
+      "accent": "#FF7A45", "accent2": "#FFB48F", "success": "#7ED6A0", "danger": "#FF8A80",
+      "onAccent": "#14100E", "rule": "rgba(244,235,227,.18)"
+    },
+    "type": { "read": "ui-serif", "ui": "system-ui", "mono": "ui-monospace", "scale": "compact" },
+    "radii": { "card": "10px", "control": "8px", "pill": "999px", "rules": "0px" },
+    "elevation": {
+      "1": { "shadow": "0 1px 0 rgba(255,122,69,.10), 0 8px 20px rgba(0,0,0,.45)", "edge": "inset 0 1px 0 rgba(255,235,220,.10)", "press": 0.98 },
+      "2": { "material": "glass", "shadow": "0 10px 28px rgba(0,0,0,.55)", "edge": "inset 0 1px 0 rgba(255,235,220,.14)" },
+      "3": { "material": "glass", "shadow": "0 24px 60px rgba(0,0,0,.65)", "behind": { "scale": 0.95, "dim": 0.18 } }
+    },
+    "motion": { "fast": "110ms ease", "enter": "300ms ease-out", "sheet": "240ms ease-out", "spring": { "stiffness": 260, "damping": 24, "mass": 1 }, "stagger": "35ms", "reduced": { "enter": "0ms", "spring": "none" } },
+    "mark": { "drift": "75s", "tumble": ["3.7s", "6.1s"], "flip": { "stiffness": 320, "damping": 21 }, "listenScale": 1.18, "reduced": "static" }
+  }
+}
+"""#,
+        "whoami": #"""
+{ "handle": "quiet-heron-41", "key_id": "key-demo-0001", "key_label": "Autoradio on this phone (demo)", "scopes": ["owner:acts", "admin"], "computer_id": "demo-computer" }
 """#,
     ]
 }

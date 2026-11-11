@@ -256,6 +256,27 @@ component Autoradio
     fvTocToggle
     // ---- lane 6: mail ----
     // ---- lane 7: settings, themes, accounts ----
+    tc
+    tx
+    acctInfo
+    cmpt
+    talkRows
+    gestureRows
+    learnt
+    act
+    about
+    themeDoc
+    editThemeDoc
+    loadThemeDoc
+    loadDemoTheme
+    removeTheme
+    refreshAccount
+    refreshComputer
+    wakeComputer
+    updateComputer
+    setSetting
+    resetLearned
+    refreshActivity
     // ---- lane 8: onboarding and the interview ----
     // ---- lane 9: motion and the mark ----
     mkT

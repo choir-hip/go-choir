@@ -37,7 +37,7 @@ final class SpineTests: XCTestCase {
     func testThemesLoadAndResolveBothSchemes() {
         let s = ThemeStore(userDir: nil, defaults: UserDefaults(suiteName: "spine-test-\(UUID().uuidString)")!)
         XCTAssertEqual(s.problems, [])
-        XCTAssertEqual(s.list().map(\.id).sorted(), ["depth", "newsprint"])
+        XCTAssertEqual(s.list().map(\.id).sorted(), ["depth", "lantern", "newsprint", "signal"])
         s.setMode("dark"); s.setTheme("newsprint")
         let t = s.current()
         XCTAssertEqual(t.scheme, "dark"); XCTAssertEqual(t.paper, "#0E0E0E"); XCTAssertEqual(t.material2, "solid")
