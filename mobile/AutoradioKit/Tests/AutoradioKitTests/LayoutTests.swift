@@ -38,7 +38,7 @@ final class LayoutTests: XCTestCase {
     }
     func testEvenDay() throws {
         let f = compose(try fixture("front-even"))
-        XCTAssertEqual(f.composition, "colead+pair+briefs+river")
+        XCTAssertEqual(f.composition, "colead+pair+briefs+river+opinion")
         XCTAssertEqual(f.bands.first?.items.count, 2)
         XCTAssertTrue(f.bands.first!.rule)
     }
