@@ -37,7 +37,10 @@ func TestWhoamiAnswersTheBearersOwnRecordOnly(t *testing.T) {
 			t.Fatalf("W2: answer leaks %q: %s", leak, body)
 		}
 	}
-	for _, want := range []string{user.ID, keyID, "computer-a", PublicHandle(user.ID), "phone"} {
+	if strings.Contains(body, user.ID) || strings.Contains(body, "user_id") { // W7
+		t.Fatalf("W7: user id in answer: %s", body)
+	}
+	for _, want := range []string{keyID, "computer-a", PublicHandle(user.ID), "phone"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("answer lacks %q: %s", want, body)
 		}
@@ -91,5 +94,31 @@ func TestWhoamiAnswersTheBearersOwnRecordOnly(t *testing.T) {
 	h.HandleWhoami(rec, bearerReq(http.MethodPost, "/auth/whoami", nil, secret))
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("W4: POST status=%d", rec.Code)
+	}
+}
+
+func TestWhoamiTakesTheBearerNotTheCookie(t *testing.T) { // W6
+	h, priv := testHandlerEnv(t)
+	user, err := h.store.CreateUser("whoami-cookie", "whoami-cookie@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyID, secret, err := h.store.CreateAPIKey(context.Background(), user.ID, "phone", []string{"read:base"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := authedAPIKeyReq(http.MethodGet, "/auth/whoami", nil, priv, user.ID)
+	req.Header.Set("Authorization", "Bearer choir_sk_bogus")
+	rec := httptest.NewRecorder()
+	h.HandleWhoami(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("cookie + bogus bearer status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	req = authedAPIKeyReq(http.MethodGet, "/auth/whoami", nil, priv, user.ID)
+	req.Header.Set("Authorization", "Bearer "+secret)
+	rec = httptest.NewRecorder()
+	h.HandleWhoami(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), keyID) {
+		t.Fatalf("cookie + valid bearer status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
