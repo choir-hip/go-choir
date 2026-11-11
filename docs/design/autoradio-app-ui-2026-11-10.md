@@ -88,6 +88,44 @@ how Choir works in passing. 17. Visual pop and motion: the TetraMark spins in 3D
 shrinks; waiting for AI should feel alive. 18. Build the whole thing at
 once with parallel builders, about 85%, then review and iterate.
 
+### Rulings after the first phone walk, 2026-11-11
+
+The owner walked the first phone build and ruled on six things. Where these
+conflict with rulings 11, 14, 15 and 17 above, or with any section below,
+these win; the sections below are to be read through them until rewritten.
+
+19. **The page stack is the main view.** Paper front page, each story
+(Texture), Files, Mail and Settings are full-screen pages in one stack. A
+page scrolls vertically; a swipe left or right cycles to the neighbouring
+page. There is no separate pile view. (Replaces ruling 14's "swipe left to
+close" and "swipe right is more of this": closing a page and "more of this"
+become visible controls, because the horizontal swipe now means next and
+previous. Replaces ruling 15's "one-at-a-time stack is an extra mode".)
+20. **The mark is the TetraMark**, the brand drawing used on choir.news
+(`frontend/src/lib/tetramark.ts`: three curved blades in a 512 box), not a
+regular tetrahedron with straight edges. It is the button that opens the
+launcher, as on the web. It is animated: it spins, dances and takes depth.
+It is the app icon (the brand PNG exports).
+21. **No hidden gestures on the mark.** The push-to-talk experiment failed:
+tap for play and pause, hold to talk and drag up for a menu were
+undiscoverable. Talk, play and pause are separate visible controls with
+their own glyphs and labels for assistive tech.
+22. **The prompt bar is always visible and usable**, on every page and
+layer. It is a glass lens that covers and overlaps the bottom of the screen
+and runs off the bottom edge, not a capsule floating inside the screen.
+(Replaces ruling 11's floating capsule; the page still runs full bleed
+beneath the glass.)
+23. **Voice prompts go to an Autoradio desk with a fast model**, so a turn
+answers quickly. **The immediate response is generated on the phone by a
+local model**, from what was just said and the page in front, not drawn
+from stock phrases.
+24. **The real voice models must load.** A build where only the fallbacks
+run is a defect ("model … not registered").
+
+Also from the walk: a page title is never a raw address, a section name is
+never a raw id, nothing is clipped off a screen edge, and the bar speaks
+about the page in front.
+
 Conflict: the goal file
 ([choir-autoradio-pass1](../definitions/choir-autoradio-pass1-2026-11-10.md),
 `excluded:`) lists Mail; ruling 5 supersedes it (question 3).
