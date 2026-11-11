@@ -9,7 +9,7 @@ use ThemeCards, ThemeExtras, SettingsAck, SettingsAccount, SettingsComputer, Set
 members Autoradio
   resource tc = themeCards() as shape ThemeCards else empty()
   resource tx = themeExtras() as shape ThemeExtras else empty()
-  resource acct = settingsAccount() as shape SettingsAccount else empty()
+  resource acctInfo = settingsAccount() as shape SettingsAccount else empty()
   resource cmpt = settingsComputer() as shape SettingsComputer else empty()
   resource talkRows = settingRows(group="talk") as shape SettingRows else empty()
   resource gestureRows = settingRows(group="gestures") as shape SettingRows else empty()

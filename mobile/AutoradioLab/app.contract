@@ -110,7 +110,7 @@ component Autoradio
     // ---- lane 7: settings, themes, accounts ----
     tc
     tx
-    acct
+    acctInfo
     cmpt
     talkRows
     gestureRows

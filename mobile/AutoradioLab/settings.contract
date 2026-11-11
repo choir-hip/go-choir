@@ -192,7 +192,7 @@ component RootScreen
     th: Theme
     tx: ThemeExtras
     tc: ThemeCards
-    acct: SettingsAccount
+    acctInfo: SettingsAccount
     cmpt: SettingsComputer
     dm: DemoInfo
     setDemo: action
@@ -211,7 +211,7 @@ component RootScreen
       text `Showing ${th.name} (${th.scheme})` testId="settings-current" font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
       SectionLabel(label="You and your computer")
       Card(level=1, testId="settings-card-you", minHeight=0)
-        NavRow(address="settings:account", title="Account and devices", subtitle=(acct.handle == "" ? "Who is signed in on this phone" : acct.handle), testId="settings-nav-account")
+        NavRow(address="settings:account", title="Account and devices", subtitle=(acctInfo.handle == "" ? "Who is signed in on this phone" : acctInfo.handle), testId="settings-nav-account")
         Hairline()
         NavRow(address="settings:computer", title="Computer", subtitle=(cmpt.updateAvailable ? "An update is waiting" : (cmpt.state == "" ? "Status, wake, restart to update" : cmpt.state)), testId="settings-nav-computer")
       SectionLabel(label="Listening")
@@ -314,7 +314,7 @@ component AccountScreen
   inject
     th: Theme
     tx: ThemeExtras
-    acct: SettingsAccount
+    acctInfo: SettingsAccount
     au: ChoirAuth
     refreshAccount: action
     signOut: action
@@ -325,20 +325,20 @@ component AccountScreen
         column width="100%" padding="6px 0"
           FactRow(label="Signed in", value=(au.signedIn ? "Yes" : "No"), mono=false, testId="settings-account-signed")
           Hairline()
-          FactRow(label="You are", value=(acct.handle == "" ? "Not shown yet" : acct.handle), mono=false, testId="settings-account-handle")
+          FactRow(label="You are", value=(acctInfo.handle == "" ? "Not shown yet" : acctInfo.handle), mono=false, testId="settings-account-handle")
           Hairline()
-          FactRow(label="This device", value=(acct.keyLabel == "" ? "Not shown yet" : acct.keyLabel), mono=false, testId="settings-account-device")
+          FactRow(label="This device", value=(acctInfo.keyLabel == "" ? "Not shown yet" : acctInfo.keyLabel), mono=false, testId="settings-account-device")
           Hairline()
-          FactRow(label="Key", value=(acct.keyID == "" ? "-" : acct.keyID), mono=true, testId="settings-account-keyid")
+          FactRow(label="Key", value=(acctInfo.keyID == "" ? "-" : acctInfo.keyID), mono=true, testId="settings-account-keyid")
           Hairline()
-          FactRow(label="Can", value=(acct.scopes == "" ? "-" : acct.scopes), mono=true, testId="settings-account-scopes")
+          FactRow(label="Can", value=(acctInfo.scopes == "" ? "-" : acctInfo.scopes), mono=true, testId="settings-account-scopes")
           Hairline()
-          FactRow(label="Computer", value=(acct.computerID == "" ? "-" : acct.computerID), mono=true, testId="settings-account-computer")
+          FactRow(label="Computer", value=(acctInfo.computerID == "" ? "-" : acctInfo.computerID), mono=true, testId="settings-account-computer")
           Hairline()
-          FactRow(label="Server", value=(acct.baseURL == "" ? "-" : acct.baseURL), mono=true, testId="settings-account-server")
-      if acct.message != ""
-        text acct.message testId="settings-account-message" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted
-      if acct.status == "loading"
+          FactRow(label="Server", value=(acctInfo.baseURL == "" ? "-" : acctInfo.baseURL), mono=true, testId="settings-account-server")
+      if acctInfo.message != ""
+        text acctInfo.message testId="settings-account-message" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted
+      if acctInfo.status == "loading"
         text "Asking the server who this phone is…" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted
       text "This phone holds its own key. Signing out removes the key from this phone and ends it on the server. Your computer and your documents stay where they are." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
       row gap=12 width="100%"
