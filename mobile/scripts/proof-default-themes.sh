@@ -65,6 +65,12 @@ tour() { # <light|dark>
   step "tap place-mail"; view default-$m-06-mail-inbox 900
   step "tap mail-row-m6"; view default-$m-07-mail-message 900
   place settings 900; step tree; shot default-$m-08-settings
+  if [ "$m" = dark ]; then
+    # Choose the light-only theme, ask for dark (it refuses and shows light), then go back to the Default pair.
+    step "tap settings-theme-chrome-pastel"; view default-$m-09-chose-chrome-pastel 700
+    step "tap settings-mode-dark"; view default-$m-10-dark-asked-of-a-light-theme 700
+    step "tap settings-theme-default"; view default-$m-11-back-to-default 700
+  fi
   step logs
 }
 tour light; run_drive deflight light "" --touch platform
@@ -74,6 +80,7 @@ must "light: the default is Chrome Pastel" 'Showing Chrome Pastel (light)'
 must "dark: the default is Liquid Metal" 'Showing Liquid Metal (dark)'
 must "settings lists both" '[settings-theme-chrome-pastel]'
 must "settings lists both (dark)" '[settings-theme-liquid-metal]'
+must "settings has the Default entry" '[settings-theme-default]'
 must "paper: masthead" '[page-title] "AUTOPAPER"'
 n=$(ls "$SHOTS"/default-light-*.png 2>/dev/null | wc -l); m=$(ls "$SHOTS"/default-dark-*.png 2>/dev/null | wc -l)
 [ "$n" -ge 8 ] && [ "$m" -ge 8 ] || FAILS="$FAILS [screenshots: $n light, $m dark]"
