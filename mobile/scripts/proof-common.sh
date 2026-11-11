@@ -13,13 +13,13 @@ trap 'rm -rf "$SCRATCH"' EXIT
 fail() { cp "$OUT" "${TMPDIR:-/tmp}/proof-app-last.txt" 2>/dev/null; [ -n "${SHOTS:-}" ] && cp "$OUT" "$SHOTS/drive.txt" 2>/dev/null; echo "PROOF FAILED at $1"; [ -n "${2:-}" ] && echo "$2"; exit 1; }
 SIM() { DEVELOPER_DIR=$DD /usr/bin/xcrun simctl "$@"; }
 
-# A clean app: demo mode, Depth, the scheme given (default light), no open pages, no first-run flags, default settings.
+# A clean app: demo mode, NO theme chosen (so the default pair shows: Chrome Pastel in light, Liquid Metal in dark), the scheme given (default light), no open pages, no first-run flags, default settings.
 reset_state() { # [light|dark] [onboarding]
   SIM terminate "$EXACT_SIM" $APP >/dev/null 2>&1
   sleep 2
   SIM spawn "$EXACT_SIM" defaults write $APP AutoradioDemo -bool YES
   SIM spawn "$EXACT_SIM" defaults write $APP AutoradioThemeMode "${1:-light}"
-  SIM spawn "$EXACT_SIM" defaults write $APP AutoradioThemeID depth
+  SIM spawn "$EXACT_SIM" defaults delete $APP AutoradioThemeID >/dev/null 2>&1
   if [ "${2:-}" = onboarding ]; then SIM spawn "$EXACT_SIM" defaults write $APP AutoradioOpenOnboarding -bool YES
   else SIM spawn "$EXACT_SIM" defaults delete $APP AutoradioOpenOnboarding >/dev/null 2>&1; fi
   for k in talkMode swipeLeft swipeRight; do SIM spawn "$EXACT_SIM" defaults delete $APP "AutoradioSetting.$k" >/dev/null 2>&1; done
@@ -40,8 +40,8 @@ wait_() { step "clock +${1:-700} real"; step "clock data"; }
 shot() { step "screenshot $SHOTS/$1.png"; }
 view() { wait_ "${2:-800}"; step tree; shot "$1"; }   # settle, dump the tree, screenshot <name>
 place() { step "tap bar-mark"; wait_ 600; step "tap place-$1"; wait_ "${2:-900}"; }
-# Put the app in Depth, light, by its own Settings controls (the proof never trusts what an earlier run left).
-ensure_light() { place settings 900; step "tap settings-theme-depth"; wait_ 500; step "tap settings-mode-light"; wait_ 700; }
+# Put the app in the default theme, light, by its own Settings controls (the proof never trusts what an earlier run left).
+ensure_light() { place settings 900; step "tap settings-theme-default"; wait_ 500; step "tap settings-mode-light"; wait_ 700; }
 goto() { step "tap bar-mark"; wait_ 600; step "tap \"launcher-open-$1\""; wait_ 900; }
 
 # run_drive <name> <mode> <onboarding?> <agent flags...>: reset, run the collected steps, retry a refused launch up to 3 times.

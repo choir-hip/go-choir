@@ -27,6 +27,9 @@ import Foundation
 //     install validates before it writes, and the file name is texture-<id>.json; the origin is shown on the card.
 //  F8 A new colour role is missing in a partial theme: roles fall back to the base (paper2 to paper, accent2 to accent).
 //  F9 A Texture or a file installs a theme under a bundled id (or the reserved id "default") and replaces the bundled one: refused.
+//  F11 The lens (the glass the bar sits on) is a style (A native glass, B no material with a wash, C ultra-thin) and a wash of the
+//     page colour: both are theme data with A and 0 as the defaults, so a theme without a "lens" key shows the native glass; an
+//     unknown style or a wash outside 0...1 is refused.
 //  F10 A chosen theme that has only one scheme (Chrome Pastel, Liquid Metal) meets a mode control that asks for the other: the
 //     control shows the one scheme and refuses the other; the "default" id clears the choice and gives the person's mode back.
 
@@ -48,6 +51,8 @@ public struct Theme: Codable, Sendable, Equatable {
     public var behindScale3 = 1.0, behindDim3 = 0.0
     // the page-colour backing under the bar (level 2) and under a layer (level 3): how opaque, so text stays legible over the page
     public var barBacking = 0.94, layerBacking = 0.86
+    // the lens (the bar's glass): the style (A native glass, B none + wash, C ultra-thin) and the wash of the page colour over it (0...1)
+    public var lensStyle = "A", lensWash = 0.0
     // motion, in milliseconds, and the spring
     public var motionFastMs = 120.0, motionEnterMs = 320.0, motionSheetMs = 260.0, staggerMs = 40.0
     public var springStiffness = 240.0, springDamping = 26.0, springMass = 1.0
@@ -124,6 +129,7 @@ struct ThemeDoc: Decodable {
         var flip: Flip?
         var reduced: String?
     }
+    struct Lens: Decodable { var style: String?; var wash: Double? }
     var schema_version: Int
     var id: String
     var name: String
@@ -134,6 +140,7 @@ struct ThemeDoc: Decodable {
     var elevation: [String: Level]?
     var motion: Motion?
     var mark: Mark?
+    var lens: Lens?
 }
 
 /// Named type scales (the plan's type table; a theme names one and may override single steps with `type.sizes`).
@@ -376,6 +383,10 @@ public final class ThemeStore: @unchecked Sendable {
                 if let v = sp.mass, !(0.1...10).contains(v) { throw ThemeError.invalid("spring mass out of range") }
             }
         }
+        if let l = d.lens {
+            if let st = l.style, !["A", "B", "C"].contains(st) { throw ThemeError.invalid("lens.style is A, B or C") }
+            if let w = l.wash, !(0...1).contains(w) { throw ThemeError.invalid("lens.wash is between 0 and 1") }
+        }
         if let k = d.mark, let t = k.tumble, t.count != 2 || t.contains(where: { ms($0) == nil }) { throw ThemeError.invalid("mark.tumble is two durations") }
         for scheme in sides {
             let t = resolve(d, scheme: scheme, reduced: false)
@@ -439,6 +450,7 @@ public final class ThemeStore: @unchecked Sendable {
             t.springStiffness = m.spring?.stiffness ?? t.springStiffness; t.springDamping = m.spring?.damping ?? t.springDamping
             t.springMass = m.spring?.mass ?? t.springMass
         }
+        if let l = d.lens { t.lensStyle = l.style ?? t.lensStyle; t.lensWash = l.wash ?? t.lensWash }
         if let k = d.mark { t.markDriftS = (ms(k.drift) ?? 0) / 1000; t.markListenScale = k.listenScale ?? 1
             t.markTumble = (k.tumble ?? []).joined(separator: ",") }
         if reduced {

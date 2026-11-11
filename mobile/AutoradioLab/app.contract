@@ -44,8 +44,6 @@ component Autoradio
     toggleLauncher
     micTap
     micCancel
-    lensStyle
-    setLensStyle
     micOn
     setTheme
     setMode
@@ -71,7 +69,6 @@ component Autoradio
     expPath
     expName
     cmp
-    modeLabel
     yieldLabel
     signIn
     cancelSignIn

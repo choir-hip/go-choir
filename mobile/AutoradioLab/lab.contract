@@ -99,7 +99,6 @@ members Autoradio
   action replay(id: string)
     send ctl = labReplay(turn=id)
 
-  derive modeLabel = st.addressing == "button" ? "Button: hold or tap to talk" : st.addressing == "open" ? "Open: just speak" : st.addressing == "hybrid" ? "Hybrid: button, then open for a window" : st.addressing
   derive expPath = match exp { case some(e) => e.path, case none => "" }
   derive expName = match exp { case some(e) => e.name, case none => "" }
   derive yieldLabel = st.level == "dip" ? "Dipped: you are speaking" : st.level == "pause" ? "Paused" : "Playing"

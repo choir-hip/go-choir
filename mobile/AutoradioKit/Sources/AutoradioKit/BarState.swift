@@ -58,7 +58,6 @@ public struct RadioInfo: Codable, Sendable, Equatable {
     public var speedChoices: [String] = ["0.8", "1", "1.25", "1.5"]
     /// button | open | hybrid
     public var mode = ""
-    public var modeLabel = ""
     public var micOpen = false
     public var heard = ""
     public var holding = ""
@@ -238,7 +237,6 @@ public final class BarTracker: @unchecked Sendable {
         r.playing = p.playing; r.paused = n > 0 && !p.playing
         r.level = s.level; r.speed = Self.speedName(speed)
         r.mode = s.addressing
-        r.modeLabel = ""                       // retired: push-to-talk is gone, nothing describes a hold gesture (the field stays so contracts still compile)
         r.micOpen = s.micActive
         r.micLevel = (level * 100).rounded() / 100
         r.heard = s.phase == "playing" ? "" : s.transcript

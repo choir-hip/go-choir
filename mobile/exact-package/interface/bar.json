@@ -19,7 +19,6 @@
    "speed": "string",
    "speedChoices": "string[]",
    "mode": "string",
-   "modeLabel": "string",
    "micOpen": "bool",
    "heard": "string",
    "holding": "string",
@@ -41,7 +40,7 @@
    "substitute": {
     "default": {
      "title": "", "source": "", "position": "", "index": 0, "count": 0, "playing": false, "paused": false,
-     "level": "play", "speed": "1", "speedChoices": ["0.8", "1", "1.25", "1.5"], "mode": "", "modeLabel": "",
+     "level": "play", "speed": "1", "speedChoices": ["0.8", "1", "1.25", "1.5"], "mode": "",
      "micOpen": false, "heard": "", "holding": "", "revised": "", "progress": 0, "blockProgress": 0,
      "sentenceIndex": 0, "sentences": [], "next": "", "items": [], "micLevel": 0
     }

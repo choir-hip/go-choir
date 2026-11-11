@@ -20,7 +20,7 @@ public final class RouteMic: MicSource, @unchecked Sendable {
 
 // MARK: Addressing
 
-/// Button logic shared by the three addressing stages: hold to talk, tap to start and VAD (or a second tap) to end.
+/// Button logic shared by the three addressing stages: a press to start talking, then VAD or a second press to end.
 struct ButtonLogic {
     var active = false
     var holdSeconds: Double

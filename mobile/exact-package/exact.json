@@ -146,7 +146,6 @@
       "speed": "string",
       "speedChoices": "string[]",
       "mode": "string",
-      "modeLabel": "string",
       "micOpen": "bool",
       "heard": "string",
       "holding": "string",
@@ -829,6 +828,8 @@
       "behindDim3": "number",
       "barBacking": "number",
       "layerBacking": "number",
+      "lensStyle": "string",
+      "lensWash": "number",
       "motionFastMs": "number",
       "motionEnterMs": "number",
       "motionSheetMs": "number",
@@ -1173,6 +1174,10 @@
       "answers": "LabState"
     },
     {
+      "send": "choirTalkCancel",
+      "answers": "LabState"
+    },
+    {
       "send": "choirPlay",
       "options": {
         "route": "string"
@@ -1209,7 +1214,6 @@
             "1.5"
           ],
           "mode": "",
-          "modeLabel": "",
           "micOpen": false,
           "heard": "",
           "holding": "",
@@ -2152,6 +2156,8 @@
           "behindDim3": 0,
           "barBacking": 0.94,
           "layerBacking": 0.86,
+          "lensStyle": "A",
+          "lensWash": 0,
           "motionFastMs": 120,
           "motionEnterMs": 320,
           "motionSheetMs": 260,

@@ -17,7 +17,6 @@ component ComponentsPage
     configs: Names
     cfgName: string
     cfgUrl: string
-    modeLabel: string
     yieldLabel: string
     openPage: action
     signOut: action
@@ -65,13 +64,12 @@ component ComponentsPage
           button press=setAckTiming(tm) role="radio" aria-checked=(aud.ackTiming == tm) testId=`ack-${tm}` appearance="none"
             Btn(label=`${aud.ackTiming == tm ? "● " : "○ "}${tm == "immediate" ? "Say it at once" : "Wait for System 1"}`, primary=false, wide=false)
         text yieldLabel testId="yield"
-        text modeLabel testId="mode" color=th.muted
         text `Phase: ${st.phase} · mic ${st.micActive ? "on" : "off"} · config ${st.configName}` testId="phase" color=th.muted
         text st.message testId="lab-message" color=th.muted
         text (st.transcript == "" ? "(listening)" : st.transcript) testId="lab-transcript"
         button pointerdown=talkDown pointerup=talkUp testId="lab-talk" appearance="none"
           width="100%" box-sizing="border-box" padding=40 background-color=th.paper2 border-radius=th.radiusControl box-shadow=th.shadow1
-          text (st.phase == "playing" ? "Hold to talk" : st.phase)
+          text (st.phase == "playing" ? "Talk" : st.phase)
         row gap=8 align-items="center"
           button press=inject testId="inject" appearance="none"
             Btn(label="Inject fixture turn", primary=false, wide=false)

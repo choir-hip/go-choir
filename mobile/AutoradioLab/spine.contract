@@ -4,7 +4,7 @@
 use openPages, pageModel, theme, themeList, barState, demoInfo from "@choir/autoradio"
 use pageOpen, pageClose, pageFocus, pagePin, pageReopen, themeSet, schemeSet, signalRecord, demoSet from "@choir/autoradio"
 use PageList, PageModel, Theme, ThemeList, BarInfo, DemoInfo from "@choir/autoradio"
-use choirAsk from "@choir/autoradio"
+use choirAsk, choirTalkCancel from "@choir/autoradio"
 
 members Autoradio
   resource pg = openPages() as shape PageList else empty()
@@ -47,7 +47,7 @@ members Autoradio
   action editAsk(v: string)
     ask = v
   // A typed ask is aimed at the page in front: its address goes with the turn (`aim`). The engine side reads `args["aim"]` of
-  // choirAsk and choirTalkDown; until it does, the turn runs without it (a gap named in the lane report).
+  // choirAsk and choirTalkDown and puts the page's address, title and text in the Autoradio desk request.
   action sendAsk
     send pm = signalRecord(kind="ask", subject=pg.top, detail=ask)
     send acct = choirAsk(text=ask, aim=pg.top)
@@ -60,8 +60,8 @@ members Autoradio
     else
       voiceTalking = true
       send down = choirTalkDown(aim=pg.top)
-  // Cancel: the microphone closes. The engine has no "discard this turn" yet (a gap named in the report), so what was said so far
-  // ends the turn as Send does.
+  // Cancel: the microphone closes and the turn is discarded, not sent: the engine drops the audio and the words and calls nothing
+  // (choirTalkCancel; Send is micTap again).
   action micCancel
     voiceTalking = false
-    send up = choirTalkUp()
+    send up = choirTalkCancel()

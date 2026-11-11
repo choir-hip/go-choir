@@ -339,4 +339,15 @@ final class StreamedDeskEngineTests: XCTestCase {
         let phase = await engine.phase
         XCTAssertEqual(phase, .playing)
     }
+
+    // The aim: a typed turn aimed at a page (the bar's `aim`) puts THAT page's address in the desk request, not the page the
+    // environment calls the front one.
+    func testATypedTurnAimedAtAPageSendsThatPagesAddressToTheDesk() async throws {
+        let (engine, _, got, _) = try make(model: nil, front: FrontPage(address: "pub:front", title: "Front page", kind: "paper"))
+        let started = await engine.typedTurn("what is this about", front: FrontPage(address: "pub:aimed", title: "Aimed story", kind: "story"))
+        XCTAssertTrue(started)
+        for _ in 0..<100 where got.value == nil { try await Task.sleep(nanoseconds: 100_000_000) }
+        let r = try XCTUnwrap(ScriptedStreamingDesk.requests.first)
+        XCTAssertEqual(r.page?.address, "pub:aimed"); XCTAssertEqual(r.page?.title, "Aimed story")
+    }
 }

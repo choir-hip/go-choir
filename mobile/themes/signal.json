@@ -29,5 +29,6 @@
     "spring": { "stiffness": 420, "damping": 44, "mass": 1 },
     "reduced": { "enter": "0ms", "spring": "none" }
   },
-  "mark": { "drift": "none", "tumble": ["5s", "9s"], "flip": { "stiffness": 360, "damping": 34 }, "listenScale": 1.1, "reduced": "static" }
+  "mark": { "drift": "none", "tumble": ["5s", "9s"], "flip": { "stiffness": 360, "damping": 34 }, "listenScale": 1.1, "reduced": "static" },
+  "lens": { "style": "A", "wash": 0 }
 }

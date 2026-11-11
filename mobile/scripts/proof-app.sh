@@ -1,11 +1,12 @@
 #!/bin/sh
 # Whole-app proof (integration of the nine lanes), on a simulator of its own driven through Exact's agent socket, in demo mode.
 # 1. generators and checks (embedded assets, Exact interface, strings), 2. every Swift test of the package (one `swift test`),
-# 3. one build, 4. a tour: paper (front, a story in the reader), the bar's controls (play, mic, the player sheet), the deck (a swipe sends a page to the bottom, six swipes cycle round, the
-# launcher brings one back) and the launcher, files (list, a PDF),
+# 3. one build, 4. a tour: paper (front, a story in the reader), the bar's controls (play, mic, Cancel, the player sheet), the deck (a swipe sends a page to the bottom, the
+# launcher brings one back; a separate drive counts the pages from the deck label, swipes through all of them and asserts the starting page is on top
+# again) and the launcher, files (list, a PDF),
 # mail (inbox, a message), Textures (list, a document), settings, voice setup and the interview, the motion lab; first in LIGHT, then in
-# DARK. The scheme really switches: the Settings mode control (settings-mode-dark) is tapped, the settings line "Showing Depth (dark)" is
-# asserted, and it is put back to light at the end. Screenshot names say which mode they are: light-NN-*.png, dark-NN-*.png.
+# DARK. No theme is chosen: the app shows the default pair (Chrome Pastel in light, Liquid Metal in dark). The scheme really switches: the Settings
+# mode control (settings-mode-dark) is tapped, the settings line "Showing Liquid Metal (dark)" is asserted, and it is put back to light at the end. Screenshot names say which mode they are: light-NN-*.png, dark-NN-*.png.
 # Last line: PROOF OK, or PROOF FAILED at <step>. Screenshots: $PROOF_SHOTS.
 #   NOBUILD=1   skip the build        NOTESTS=1   skip swift test
 set -u
@@ -22,6 +23,17 @@ python3 -I "$HERE/check-strings.py" > "$SCRATCH/strings.txt" 2>&1 || { tail -20 
 python3 -I "$HERE/check-tetramark-projection.py" > "$SCRATCH/tmproj.txt" 2>&1 || { cat "$SCRATCH/tmproj.txt"; fail "tetramark projection bound"; }
 python3 -I "$HERE/gen-tetramark.py" --check > "$SCRATCH/tetramark.txt" 2>&1 || { cat "$SCRATCH/tetramark.txt"; fail "tetramark drift"; }
 echo "ok: assets, interface, strings, tetramark data"
+
+# ---- 1b. wiring the merge depends on (cheap, before the build): the contract and the Kit must agree on these
+C="$HERE/../AutoradioLab"
+grep -q 'send up = choirTalkCancel()' "$C/spine.contract" || fail "wiring" "micCancel does not call choirTalkCancel (a cancelled turn would be sent)"
+grep -q 'choirAsk(text=ask, aim=pg.top)' "$C/spine.contract" || fail "wiring" "a typed ask does not carry the aim"
+grep -q 'choirTalkDown(aim=pg.top)' "$C/spine.contract" || fail "wiring" "a spoken turn does not carry the aim"
+if grep -rniE 'hold to talk|hold or tap|modeLabel|setLensStyle|lens-[abc]\b' "$C" "$HERE/../exact-package/interface" "$HERE/../AutoradioKit/Sources" > "$SCRATCH/banned.txt" 2>&1; then
+  head -5 "$SCRATCH/banned.txt"; fail "wiring" "hold-to-talk wording, RadioInfo.modeLabel or the lens-variant switch is still in the app"
+fi
+for f in "$HERE"/../themes/*.json; do grep -q '"lens"' "$f" || fail "wiring" "$(basename "$f") has no lens data"; done
+echo "ok: cancel, aim, no hold wording, lens is theme data"
 
 # ---- 2. Swift tests: the whole package
 if [ -z "${NOTESTS:-}" ]; then
@@ -46,10 +58,6 @@ SIM privacy "$EXACT_SIM" grant all $APP >/dev/null 2>&1
 step "clock data"; wait_ 1500
 ensure_light
 goto "paper:front"; step tree; shot light-01-paper-front
-step "tap bar-mark"; wait_ 600; step "tap lens-a"; wait_ 500; step "tap bar-mark"; wait_ 800; step tree; shot lens-A-light
-step "tap bar-mark"; wait_ 600; step "tap lens-b"; wait_ 500; step "tap bar-mark"; wait_ 800; step tree; shot lens-B-light
-step "tap bar-mark"; wait_ 600; step "tap lens-c"; wait_ 500; step "tap bar-mark"; wait_ 800; step tree; shot lens-C-light
-step "tap bar-mark"; wait_ 600; step "tap lens-a"; wait_ 500; step "tap bar-mark"; wait_ 800
 step "tap paper-scroll drag 0 -260"; wait_ 700
 step "tap paper-story-demo-grid-storage"; view light-02-paper-story-reader 1000
 step "tap reader-scroll drag 0 -360"; view light-02c-story-scrolled 900
@@ -62,14 +70,13 @@ step "tap bar-text"; view light-03-player 900
 step "tap player-close"; wait_ 700
 # the mic: a tap talks, a tap again sends
 step "tap bar-mic"; view light-03b-mic-listening 900
+step "tap bar-cancel"; view light-03c-mic-cancelled 900
+step "tap bar-mic"; wait_ 900
 step "tap bar-mic"; wait_ 1500
 # the deck: a sideways swipe sends the story to the bottom, the next page comes up; the launcher brings it back
 step "tap page-deck drag -180 0"; view light-04-deck-swiped-away 900
 step "tap bar-mark"; view light-05-launcher 700
 step "tap \"launcher-open-pub:demo-grid-storage\""; view light-05b-story-brought-back 900
-# six swipes cycle the whole deck of six round to the story again
-for i in 1 2 3 4 5 6; do step "tap page-deck drag 180 0"; wait_ 1500; if [ $i = 2 ]; then step tree; shot light-05c-deck-mid-cycle; fi; done
-step tree; shot light-05d-deck-cycled-round
 step "tap bar-mark"; wait_ 600
 step "tap place-settings"; wait_ 900
 step "tap settings-components"; view light-05e-components-page 1500
@@ -108,6 +115,32 @@ goto "paper:front"; view light-15-paper-developer-controls 800
 step "type bar-field what is this page about"; view light-15b-typed-ask 900
 step logs
 run_drive light light "" --touch platform
+
+# ---- 4a-deck. the deck cycles: open a handful of pages, read the page count off the deck label, swipe through exactly that many, and the page
+# the walk started on is on top again. Two drives: the first only counts (the count is known only from the app), the second swipes.
+deck_open() {
+  step "clock data"; wait_ 1500
+  place files 900; place mail 900; place textures 900; place settings 900
+  goto "paper:front"
+  step "tap paper-scroll drag 0 -260"; wait_ 700
+  step "tap paper-story-demo-grid-storage"; wait_ 1000
+}
+deck_open; step tree
+run_drive deckprobe light "" --touch platform
+DECKN=$(grep -o '[0-9]* in the deck' "$SHOTS/drive-deckprobe.txt" | tail -1 | cut -d' ' -f1)
+case "$DECKN" in ''|*[!0-9]*) fail "deck cycle" "no deck count in the label";; esac
+[ "$DECKN" -ge 3 ] || fail "deck cycle" "the deck holds only $DECKN pages, a cycle proves nothing"
+echo "deck holds $DECKN pages"
+deck_open; step tree; shot light-05c-deck-start
+i=1
+while [ $i -le "$DECKN" ]; do
+  step "tap page-deck drag 180 0"; wait_ 1500; step tree
+  [ $i = 1 ] && shot light-05d-deck-after-one-swipe
+  [ $i = $(( (DECKN + 1) / 2 )) ] && shot light-05e-deck-mid-cycle
+  i=$((i + 1))
+done
+shot light-05f-deck-cycled-round
+run_drive deckcycle light "" --touch platform
 
 if [ -z "${SHELLONLY:-}" ]; then
 # ---- 4a0. "Read it to me" from nothing: a fresh app, a message, the button; the engine starts and the bar says now playing.
@@ -188,16 +221,14 @@ ensure_light
 place settings 900
 step "tap settings-mode-dark"; view dark-01-settings-switched 900
 goto "paper:front"; view dark-02-paper-front 700
-step "tap bar-mark"; wait_ 600; step "tap lens-a"; wait_ 500; step "tap bar-mark"; wait_ 800; step tree; shot lens-A-dark
-step "tap bar-mark"; wait_ 600; step "tap lens-b"; wait_ 500; step "tap bar-mark"; wait_ 800; step tree; shot lens-B-dark
-step "tap bar-mark"; wait_ 600; step "tap lens-c"; wait_ 500; step "tap bar-mark"; wait_ 800; step tree; shot lens-C-dark
-step "tap bar-mark"; wait_ 600; step "tap lens-a"; wait_ 500; step "tap bar-mark"; wait_ 800
 step "tap paper-scroll drag 0 -260"; wait_ 700
 step "tap paper-story-demo-grid-storage"; view dark-03-paper-story-reader 1000
 step "tap bar-play"; wait_ 1800
 step "tap bar-text"; view dark-04-player 900
 step "tap player-close"; wait_ 700
 step "tap bar-mic"; view dark-04b-mic-listening 900
+step "tap bar-cancel"; view dark-04c-mic-cancelled 900
+step "tap bar-mic"; wait_ 900
 step "tap bar-mic"; wait_ 1500
 step "tap page-deck drag -180 0"; view dark-05-deck-swiped-away 900
 step "tap bar-mark"; view dark-06-launcher 700
@@ -271,6 +302,8 @@ must "bar: the field" '[bar-field]'
 must "bar: the page-count line" '[page-indicator]'
 must "bar: the aim label names the page" 'On: '
 nomust "bar: no placeholder starts with Ask" 'Ask about'
+nomust "no hold-to-talk wording" 'old to talk'
+nomust "no hold-to-talk wording (mode line)" 'hold or tap'
 must "deck: the pages" '[page-deck]'
 must "deck: a story has a visible More of this" '[story-more]'
 must "launcher: the deck is listed" '[launcher-open-pub:demo-grid-storage]'
@@ -314,8 +347,16 @@ must "settings: the mode control is ours" '[settings-mode-system]'
 must "developer: the demo controls come with the switch" '[paper-composition]'
 if grep -qF '[paper-composition]' "$SHOTS/drive-dark.txt" 2>/dev/null; then echo "UNWANTED: debug text shows without the developer switch"; FAILS="$FAILS [debug text]"; else echo "ok: no debug text without the developer switch"; fi
 if grep -qF '[reader-following]' "$SHOTS/drive-follow.txt" 2>/dev/null; then echo "ok: reader follow: the block being read is marked"; else echo "note: reader follow not seen in the demo run (wired: the bar feeds ReaderFollow; see light-19)"; fi
-must "really light: the settings line says light" 'Showing Depth (light)'
-must "really dark: the settings line says dark" 'Showing Depth (dark)'
+must "default theme, light: Chrome Pastel with no theme chosen" 'Showing Chrome Pastel (light)'
+must "default theme, dark: Liquid Metal with no theme chosen" 'Showing Liquid Metal (dark)'
+nomust "no leftover Depth theme" 'Showing Depth'
+must "bar: Cancel is a visible control while listening" '[bar-cancel]'
+# the deck cycle: the label of the first tree and of the last are the same page, and one swipe changed it
+DK="$SHOTS/drive-deckcycle.txt"
+grep -o '\[page-indicator\] "[^"]*"' "$DK" > "$SHOTS/deck-labels.txt" 2>/dev/null
+d0=$(sed -n 1p "$SHOTS/deck-labels.txt"); d1=$(sed -n 2p "$SHOTS/deck-labels.txt"); dn=$(tail -1 "$SHOTS/deck-labels.txt")
+nl=$(wc -l < "$SHOTS/deck-labels.txt" | tr -d ' ')
+if [ "$nl" -eq $((DECKN + 1)) ] && [ -n "$d0" ] && [ "$d0" = "$dn" ] && [ "$d0" != "$d1" ]; then echo "ok: deck: $DECKN swipes bring the starting page back ($d0)"; else echo "MISSING: deck cycle: $nl labels, first '$d0', after one '$d1', last '$dn'"; FAILS="$FAILS [deck cycle]"; fi
 # the installed icon: leave the app (its process ends) and look at the home screen, light then dark, and read the compiled icon set
 SIM terminate "$EXACT_SIM" $APP >/dev/null 2>&1; sleep 3
 SIM launch "$EXACT_SIM" $APP >/dev/null 2>&1 & sleep 0.5; SIM io "$EXACT_SIM" screenshot "$SHOTS/launch-screen.png" >/dev/null 2>&1; wait; sleep 4; SIM terminate "$EXACT_SIM" $APP >/dev/null 2>&1; sleep 2

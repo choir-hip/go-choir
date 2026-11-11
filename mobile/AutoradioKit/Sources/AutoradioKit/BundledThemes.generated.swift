@@ -41,7 +41,8 @@ public enum BundledThemes {
     "spring": { "stiffness": 240, "damping": 26, "mass": 1 }, "stagger": "40ms",
     "reduced": { "enter": "0ms", "spring": "none" }
   },
-  "mark": { "drift": "60s", "tumble": ["3.3s", "5.9s"], "flip": { "stiffness": 300, "damping": 22 }, "listenScale": 1.15, "reduced": "static" }
+  "mark": { "drift": "60s", "tumble": ["3.3s", "5.9s"], "flip": { "stiffness": 300, "damping": 22 }, "listenScale": 1.15, "reduced": "static" },
+  "lens": { "style": "A", "wash": 0 }
 }
 """#,
         "depth": #"""
@@ -81,7 +82,8 @@ public enum BundledThemes {
     "spring": { "stiffness": 240, "damping": 26, "mass": 1 }, "stagger": "40ms",
     "reduced": { "enter": "0ms", "spring": "none" }
   },
-  "mark": { "drift": "60s", "tumble": ["3.3s", "5.9s"], "flip": { "stiffness": 300, "damping": 22 }, "listenScale": 1.15, "reduced": "static" }
+  "mark": { "drift": "60s", "tumble": ["3.3s", "5.9s"], "flip": { "stiffness": 300, "damping": 22 }, "listenScale": 1.15, "reduced": "static" },
+  "lens": { "style": "A", "wash": 0 }
 }
 """#,
         "lantern": #"""
@@ -116,7 +118,8 @@ public enum BundledThemes {
     "spring": { "stiffness": 170, "damping": 19, "mass": 1 }, "stagger": "70ms",
     "reduced": { "enter": "0ms", "spring": "none" }
   },
-  "mark": { "drift": "90s", "tumble": ["4.1s", "7.3s"], "flip": { "stiffness": 220, "damping": 16 }, "listenScale": 1.22, "reduced": "static" }
+  "mark": { "drift": "90s", "tumble": ["4.1s", "7.3s"], "flip": { "stiffness": 220, "damping": 16 }, "listenScale": 1.22, "reduced": "static" },
+  "lens": { "style": "A", "wash": 0 }
 }
 """#,
         "liquid-metal": #"""
@@ -156,7 +159,8 @@ public enum BundledThemes {
     "spring": { "stiffness": 240, "damping": 26, "mass": 1 }, "stagger": "40ms",
     "reduced": { "enter": "0ms", "spring": "none" }
   },
-  "mark": { "drift": "60s", "tumble": ["3.3s", "5.9s"], "flip": { "stiffness": 300, "damping": 22 }, "listenScale": 1.15, "reduced": "static" }
+  "mark": { "drift": "60s", "tumble": ["3.3s", "5.9s"], "flip": { "stiffness": 300, "damping": 22 }, "listenScale": 1.15, "reduced": "static" },
+  "lens": { "style": "A", "wash": 0 }
 }
 """#,
         "newsprint": #"""
@@ -191,7 +195,8 @@ public enum BundledThemes {
     "spring": { "stiffness": 420, "damping": 48, "mass": 1 },
     "reduced": { "enter": "0ms", "spring": "none" }
   },
-  "mark": { "drift": "none", "tumble": ["6s", "11s"], "flip": { "stiffness": 200, "damping": 30 }, "listenScale": 1.0, "reduced": "static" }
+  "mark": { "drift": "none", "tumble": ["6s", "11s"], "flip": { "stiffness": 200, "damping": 30 }, "listenScale": 1.0, "reduced": "static" },
+  "lens": { "style": "A", "wash": 0 }
 }
 """#,
         "signal": #"""
@@ -226,7 +231,8 @@ public enum BundledThemes {
     "spring": { "stiffness": 420, "damping": 44, "mass": 1 },
     "reduced": { "enter": "0ms", "spring": "none" }
   },
-  "mark": { "drift": "none", "tumble": ["5s", "9s"], "flip": { "stiffness": 360, "damping": 34 }, "listenScale": 1.1, "reduced": "static" }
+  "mark": { "drift": "none", "tumble": ["5s", "9s"], "flip": { "stiffness": 360, "damping": 34 }, "listenScale": 1.1, "reduced": "static" },
+  "lens": { "style": "A", "wash": 0 }
 }
 """#,
     ]

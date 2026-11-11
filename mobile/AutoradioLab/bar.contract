@@ -72,7 +72,6 @@ component BarShell
     micOn: bool
     onbd: bool
     topAddr: string
-    lensStyle: string
     moreFor: string
     moreOfThis: action
     stackCount: number
@@ -123,13 +122,13 @@ component BarShell
       column testId="bar" position="relative" width="100%" box-sizing="border-box" gap=4
         padding-top=8 padding-left=12 padding-right=12 padding-bottom="calc(env(safe-area-inset-bottom) + 6px)"
         border-top-left-radius=(th.radiusCard * 1.7) border-top-right-radius=(th.radiusCard * 1.7)
-        backgroundMaterial=(lensStyle == "B" ? "none" : (lensStyle == "C" ? "ultra-thin" : "glass"))
+        backgroundMaterial=(th.lensStyle == "B" ? "none" : (th.lensStyle == "C" ? "ultra-thin" : "glass"))
         background-color="transparent"
         box-shadow=th.shadow3
-        // a light wash of the page colour inside the glass, so the controls stay legible over busy content in light and dark (the lens itself
-        // is Exact's glass material: a blurred, translucent view of the page passing under it)
+        // a wash of the page colour inside the glass (theme data: th.lensWash, 0 for the native glass), so the controls stay legible over busy
+        // content in light and dark (the lens itself is Exact's glass material, th.lensStyle: A native glass, B none, C ultra-thin)
         box position="absolute" inset=0 pointer-events="none" z-index=-1 border-top-left-radius=(th.radiusCard * 1.7) border-top-right-radius=(th.radiusCard * 1.7)
-          background-color=th.paper opacity=(lensStyle == "B" ? 0.55 : 0)
+          background-color=th.paper opacity=th.lensWash
         // the state's tint
         box position="absolute" inset=0 pointer-events="none" border-top-left-radius=(th.radiusCard * 1.7) border-top-right-radius=(th.radiusCard * 1.7)
           background-color=tint opacity=tintOn

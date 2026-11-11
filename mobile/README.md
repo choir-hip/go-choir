@@ -591,3 +591,15 @@ banner), not fixture text. `REAL_PROMPT=1` adds one typed question in the bar (a
 - **Known and left.** A typed Ask forks and revises the story the radio has loaded, not the page in front (the desk stage's first turn forks the
   programme); the Textures list shows the newest 100 documents (the route pages with `next_cursor`, not read yet); the document route returns every
   revision body (the largest document on the test computer has 314), which the reader fetches whole.
+
+## Round 3 merge (lane/ar3-app)
+
+- The lens is theme data: a theme's `lens` is `{ "style": "A", "wash": 0 }` (A native glass, B no material with a wash of the page colour,
+  C ultra-thin; wash 0 to 1). Absent, it is A and 0. `Theme.lensStyle` / `Theme.lensWash` reach the bar as `th.lensStyle` / `th.lensWash`;
+  there is no in-app switch (the launcher's Developer lens rows are gone). Failure list F11 in `ThemeLoader.swift`, tests in `AimAndLensTests.swift`.
+- Cancel while listening calls `choirTalkCancel` (the engine drops the audio and the words, nothing is sent); Send is the microphone again.
+- `aim` (the address of the page in front) goes from the bar to `choirAsk` / `choirTalkDown`, into `LabRuntime.aimAddress`, and from there into the
+  Autoradio desk request's `page.address`.
+- `RadioInfo.modeLabel` is gone; nothing in the app describes a hold gesture.
+- With no theme chosen the app shows Chrome Pastel (light) and Liquid Metal (dark); `proof-common.sh` no longer writes a theme.
+- The deck cycle is proved by `proof-app.sh` (drives `deckprobe` and `deckcycle`): the page count is read off the deck label, not assumed.
