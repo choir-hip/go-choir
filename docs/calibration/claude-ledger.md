@@ -134,6 +134,8 @@ entered below as lapsed, not scored.
 | C51 | 2026-11-11T13:53Z | lead | estimate | On staging against d@e, `scripts/prove-autoradio-turns` reports a median time to the first spoken sentence of at most 2.5 s. | 0.55 | 2026-11-12T00:00Z | proof output |
 | C52 | 2026-11-11T13:53Z | lead | ready | The first staging run of `scripts/prove-autoradio-turns` exits 0: River answers, reasoning is confirmed off, and no tape write fails. | 0.45 | 2026-11-12T00:00Z | proof output |
 | C53 | 2026-11-11T13:53Z | lead | effect | After the default-themes deploy, a fresh browser with no stored theme shows Chrome Pastel on choir.news in light and Liquid Metal in dark, with no pink at first paint. | 0.80 | 2026-11-12T00:00Z | browser proof on staging |
+| C54 | 2026-11-11T20:05Z | lead | ready | The web golden-document fix (`lane/golden-web` at cbb9e5c95, Gemini accept in round 2) lands on main through `scripts/land` on its first run. | 0.65 | 2026-11-12T00:00Z | land log |
+| C55 | 2026-11-11T20:05Z | lead | effect | After that deploy, `GOLDEN_WEB_ONLY=1 scripts/golden-docs` run against the deployed frontend commit reports `GOLDEN COMPARE OK`, and no CI job on the landing commit fails. | 0.70 | 2026-11-12T02:00Z | CI run, deploy, golden compare |
 
 ### Settlements
 
