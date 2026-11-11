@@ -1,83 +1,120 @@
 #!/usr/bin/env python3
-"""The mark's projection is pure arithmetic, so its bound is checked numerically, not by eye.
+"""The mark's motion is pure arithmetic, so its bound is checked numerically, not by eye.
 
-Ports the projection in mobile/AutoradioLab/mark.contract (turn about y, tip about x, perspective, fit shrink, slab
-thickness along the blade normal) and asserts that over a full turn at the pitch extremes, with the hop and sway of the
-thinking state added, no projected point of any blade (front or back face) leaves LIMIT x the brand box's half size, and
-that the rest pose (d = 0) is exactly the brand drawing. The constants below must equal the ones in mark.contract; the
-script also checks the contract text still carries them. Run: python3 -I mobile/scripts/check-tetramark-projection.py"""
+Ports the choreography and the projection in mobile/AutoradioLab/mark.contract (qBeta, qRho, qTheta, qScale, the yaw, pitch,
+hop and sway of each state, the blend between pole A and pole B, the perspective with its clamped divisor) and asserts, over
+the full cycle of every state at its extremes (listening at three levels, error's shake at its peak), that no projected
+point of any blade or face leaves LIMIT x the brand box's half size, and that the rest pose is exactly the brand drawing.
+The contract text is checked for the constants this port assumes. Run: python3 -I mobile/scripts/check-tetramark-projection.py"""
 import math
-import re
+import runpy
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACT = (ROOT / "mobile/AutoradioLab/mark.contract").read_text()
-TS = (ROOT / "frontend/src/lib/tetramark.ts").read_text()
-
-D = 8.0          # eye distance in radii (pxy)
-S = 0.7          # face slope (gen-tetramark.py)
-C = 0.35         # apex depth (gen-tetramark.py)
-THICK = 0.1      # slab thickness, along the blade normal (mark.contract `thick`)
-FIT = 0.2       # shrink at full depth (mark.contract `fit`)
-SC_THINK = 1.04  # thinking's largest scale (with the hop and sway)
-SC_MAX = 1.1     # largest scale any other state applies (listening), without hop or sway
-PITCH_MAX = 0.3  # largest |pitch| any state applies
-HOP = 30         # thinking hop (up), brand-box units
-SWAY = 12        # thinking sway
 LIMIT = 1.15
+EYE = 8
 
-for needle in (f"max({D:g} - rxz(", f"* {THICK:g}", f"1 - {FIT:g} * d"):
+for needle in ("max(8 - rxz(", "0.2 * sin(3.1416 * rise(0.02 * i, 0.34 + 0.02 * i, u))", "0.17 * (1 - ue)", "-26 * sin(3.1416 * rise(0.3, 0.8, u))",
+               "r * (0.04 + 0.14 * amp)", "6.2832 * tfa", "0.25 * sin(3.1416 * rise(0.52, 0.8, u))", "1 + (0.05) * amp * r", "1 - 0.3 * sin(3.1416 * rise(0.02 * i, 0.34 + 0.02 * i, u))"):
     if needle not in CONTRACT:
         sys.exit(f"mark.contract no longer carries `{needle}`; update this script and the contract together")
 
-body = TS.split("TETRA_MARK_PATHS = [", 1)[1].split("];", 1)[0]
-blades = [[((float(x) - 256) / 256, (float(y) - 256) / 256) for x, y in re.findall(r"[ML]\s*([-\d.]+)\s+([-\d.]+)", d)] for d in re.findall(r"'([^']+)'", body)]
+M = runpy.run_path(str(ROOT / "mobile/scripts/gen-tetramark.py"), run_name="gen")["model"]()
 
 
-def project(p, z, n, o, yaw, pitch, sc):
-    d = min(1, 2 * (abs(math.sin(yaw / 2)) + abs(math.sin(pitch / 2))))
-    x, y = p
-    x, y, z = x - o * d * n[0], y - o * d * n[1], (z - o * n[2]) * d
+def smooth(u): return u * u * (3 - 2 * u)
+def rise(a, b, u): return smooth(min(1, max(0, (u - a) / (b - a))))
+def pulsei(tt, i): return 0.5 + 0.5 * math.sin(6.2832 * 3.1 * tt + 2.1 * i)
+
+
+def q(st, i, tt, r, amp, u, ue, dd=1, dr=8):
+    pi = math.pi
+    if st == "thinking":
+        return (rise(0.3 + 0.04 * i, 0.46 + 0.04 * i, u) - rise(0.8 + 0.03 * i, 0.92 + 0.03 * i, u),
+                0.2 * math.sin(pi * rise(0.02 * i, 0.34 + 0.02 * i, u)), 6.2832 * rise(0.02 * i, 0.28 + 0.02 * i, u), 1 - 0.3 * math.sin(pi * rise(0.02 * i, 0.34 + 0.02 * i, u)))
+    if st == "listening":
+        return (r * 0.2 * amp * (0.5 + 0.5 * math.sin(6.2832 * tt / 1.6 + 2.1 * i + 1)),
+                r * (0.04 + 0.14 * amp) * (0.6 + 0.4 * math.sin(6.2832 * tt / 1.6 + 2.1 * i)),
+                r * 0.1 * amp * math.sin(6.2832 * tt / 1.6 + 2.1 * i), 1 + 0.05 * amp * r)
+    if st == "speaking":
+        return (r * (0.1 + 0.12 * pulsei(tt, i)), r * 0.03 * pulsei(tt, i), r * 0.08 * math.sin(6.2832 * tt / 2.4 + 2.1 * i), 1)
+    if st == "success":
+        return (rise(0.05 * i, 0.25 + 0.05 * i, ue) - rise(0.6 + 0.05 * i, 0.9 + 0.05 * i, ue), 0, 0, 1)
+    if st == "error":
+        return (0, 0.17 * (1 - ue) * math.sin(6.2832 * (3 * ue + i / 3)), 0.25 * (1 - ue) * math.sin(6.2832 * (4 * ue + i / 3)), 1)
+    return (dd * 0.14 * (0.5 + 0.5 * math.sin(6.2832 * tt / dr + 2.1 * i)), 0, 0, 1)
+
+
+def whole(st, tt, amp, u, ue, bmin):
+    """yaw, pitch, tx, ty, sc, with the shake and the sway at their extremes."""
+    if st == "thinking":
+        tfa = rise(0.55, 0.77, u)
+        return (6.2832 * tfa, 0.25 * math.sin(math.pi * rise(0.52, 0.8, u)), 10 * math.sin(6.2832 * rise(0.3, 0.8, u)), -26 * math.sin(math.pi * rise(0.3, 0.8, u)), 1)
+    if st == "success":
+        return (6.2832 * rise(0.3, 0.6, ue), 0.2 * math.sin(math.pi * rise(0.25, 0.65, ue)), 0, -22 * math.sin(math.pi * rise(0, 0.6, ue)), 1 + 0.04 * math.sin(math.pi * ue))
+    if st == "listening":
+        return (0.3 * amp * math.sin(6.2832 * tt / 2.2) * bmin, 0, 0, 0, 1)
+    if st == "speaking":
+        return (0.3 * math.sin(6.2832 * tt / 3.2) * bmin, 0, 0, 0, 1)
+    if st == "error":
+        return (0, 0, 20 * (1 - ue) ** 2, 0, 1)
+    return (0, 0, 0, 0, 1)
+
+
+def pxy(x, y, z, yaw, pitch, sc, tx, ty):
     sa, ca, sb, cb = math.sin(yaw), math.cos(yaw), math.sin(pitch), math.cos(pitch)
     x1, z1 = x * ca + z * sa, z * ca - x * sa
     y2, z2 = y * cb - z1 * sb, y * sb + z1 * cb
-    k = D / max(D - z2, 0.5 * D)
-    f = sc * (1 - FIT * d)
-    return 256 * x1 * k * f, 256 * y2 * k * f, d
+    k = EYE / max(EYE - z2, 4)
+    return 256 * x1 * k * sc + tx, 256 * y2 * k * sc + ty
+
+
+def points(m, b, rho, th, s, yaw, pitch, sc, tx, ty):
+    out = []
+    ct, stt = math.cos(th), math.sin(th)
+    for (ax, ay), (bx, by, bz) in zip(m["a"], m["b"]):
+        lx, ly = ax + (bx - ax) * b, ay + (by - ay) * b
+        out.append(pxy(s * (lx * ct - ly * stt) + rho * m["u"][0], s * (lx * stt + ly * ct) + rho * m["u"][1], s * bz * b, yaw, pitch, sc, tx, ty))
+    return out
 
 
 def main():
-    worst_x = worst_y = 0.0
     rest = 0.0
-    for b in blades:
-        cx = sum(p[0] for p in b) / len(b)
-        cy = sum(p[1] for p in b) / len(b)
-        m = math.hypot(cx, cy)
-        ux, uy = cx / m, cy / m
-        c = C
-        nl = math.sqrt(S * S + 1)
-        n = (S * ux / nl, S * uy / nl, 1 / nl)
-        for p in b:
-            z = c - S * (p[0] * ux + p[1] * uy)
-            px, py, d = project(p, z, n, 0, 0, 0, 1)
-            rest = max(rest, abs(px - 256 * p[0]), abs(py - 256 * p[1]))
-            for deg in range(0, 361, 2):
-                for pitch in (-PITCH_MAX, -PITCH_MAX / 2, 0, PITCH_MAX / 2, PITCH_MAX):
-                    for o in (0, THICK):
-                        px, py, _ = project(p, z, n, o, math.radians(deg), pitch, SC_THINK)
-                        worst_x = max(worst_x, abs(px) + SWAY)
-                        worst_y = max(worst_y, abs(py) + HOP)
-                        px, py, _ = project(p, z, n, o, math.radians(deg), pitch, SC_MAX)
-                        worst_x = max(worst_x, abs(px))
-                        worst_y = max(worst_y, abs(py))
+    for m in M:
+        for (px, py), (ax, ay) in zip(points(m, 0, 0, 0, 1, 0, 0, 1, 0, 0), m["a"]):
+            rest = max(rest, abs(px - 256 * ax), abs(py - 256 * ay))
+    worst = 0.0
+    where = ""
+    cases = []
+    for n in range(0, 401):
+        v = n / 400
+        cases += [("thinking", 0, 0, v, 0), ("success", 0, 0, 0, v), ("error", 0, 0, 0, v)]
+    for n in range(0, 400):
+        tt = n * 0.05
+        for amp in (0.0, 0.5, 1.0):
+            cases += [("listening", tt, amp, 0, 0)]
+        cases += [("speaking", tt, 0, 0, 0), ("idle", tt, 0, 0, 0)]
+    for st, tt, amp, u, ue in cases:
+        qs = [q(st, i, tt, 1, amp, u, ue) for i in range(3)]
+        bmin = min(p[0] for p in qs)
+        yaw, pitch, tx, ty, sc = whole(st, tt, amp, u, ue, bmin)
+        for m, (b, rho, th, s) in zip(M, qs):
+            pts = points(m, b, rho, th, s, yaw, pitch, sc, tx, ty)
+            if bmin > 0.2:
+                pts += [pxy(x, y, z, yaw, pitch, sc, tx, ty) for x, y, z in m["f"]]
+            for px, py in pts:
+                r = max(abs(px), abs(py))
+                if r > worst:
+                    worst, where = r, f"{st} t={tt:.2f} u={u:.3f} ue={ue:.3f}"
     lim = 256 * LIMIT
-    print(f"rest pose error {rest:.6f} (must be 0); worst x {worst_x:.0f}, worst y {worst_y:.0f}, limit {lim:.0f}")
+    print(f"rest pose error {rest:.6f} (must be 0); worst point {worst:.0f} of limit {lim:.0f} at {where}")
     if rest > 1e-9:
         sys.exit("FAIL: the rest pose is not the brand drawing")
-    if max(worst_x, worst_y) > lim:
+    if worst > lim:
         sys.exit("FAIL: a projected point leaves the bound")
-    print("ok: projection stays inside the bound at every angle, rest pose exact")
+    print("ok: every state's cycle stays inside the bound, rest pose exact")
 
 
 main()

@@ -220,6 +220,8 @@ must "textures: a document" '[page-title] "Charging pilot: working notes"'
 must "settings: modes" '[settings-mode-dark]'
 must "motion lab" '[page-title] "Motion"'
 must "mark: the flat brand mark at rest" '[mark-rest-120]'
+must "mark: pole A, the flat brand symbol" '[mark-pole-a]'
+must "mark: pole B, the tetrahedron" '[mark-pole-b]'
 must "mark: thinking at hero size" '[mark-live-120]'
 must "mark: thinking at bar size" '[mark-live-36]'
 # the mark moves: frames of the thinking state differ, and the still mark does not change
