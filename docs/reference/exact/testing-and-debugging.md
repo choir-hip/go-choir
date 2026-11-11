@@ -1,7 +1,8 @@
 # Exact: testing, driving and debugging
 
 Part of [EXACT.md](../EXACT.md). Pinned commit `76cd50f9e`. Marks: **[run]**,
-**[src]**, **[doc]**, **[unrun]**.
+**[src]**, **[doc]**, **[seen]** (observed by our app builders, not read
+in source), **[unrun]**.
 
 ## The driver: ten operations, the same on every host [doc: README.md "Agent native"]
 
@@ -127,7 +128,8 @@ abort, which are not needed.
    over the app keeps it from being foreground-active; it survives the app being
    killed and blocks every later launch until the simulator is restarted.
    `simctl privacy ... grant all` does not cover speech recognition (`simctl
-   privacy` has no speech service) [run, lane report]. Fix in our kit: while the
+   privacy` has no speech service) [run, lane report]; for other services it
+   worked only on a freshly booted simulator [seen]. Fix in our kit: while the
    runtime is virtual (driven by the agent) the transcriber does not ask.
 4. **`context.agent` does not silence an audio claim.** Under the agent our claim
    was real (`cat=PlayAndRecord mode=Default in=[MicrophoneBuiltIn]
@@ -162,6 +164,49 @@ abort, which are not needed.
    makes and boots a private simulator; `exact.sh` passes `EXACT_SIM` through its
    `env -i`; `proof-sim.sh` ends with `PROOF OK` or `PROOF FAILED at <step>` and
    retries a refused launch.
+
+## Driving and proving the app: what cost us proof runs
+
+**[seen]** in our build (2026-11-11) unless marked. Nine lane builders and an
+integrator drove `AutoradioLab` on the simulator; these are what went wrong.
+
+1. **App-written preferences beat `simctl spawn ... defaults write`.** A value
+   the app wrote itself (theme, mode, talk mode, gestures) lives in the app's
+   own preferences plist, and that plist wins. Five lanes' "light" proof pass
+   came out dark for this reason. A proof must delete
+   `Library/Preferences/<bundle>.plist` in the app container, then set state
+   with the app's own controls (tap the Settings mode control, assert the
+   line it shows). `defaults write` is fine only for a key the app has never
+   written (our demo-mode flag).
+2. **The driver refuses to tap anything covered.** The floating bar or the
+   keyboard over a target gives a refusal ("covers its middle"). The fix is in
+   the layout (`ui-model.md`, "Buttons, scroll, text and tap targets").
+3. **Drive a scroll by drag through a `testId`.** `scroll id=` is not a tap
+   target.
+4. **Leave about 1.2 s between consecutive taps** on a page that is changing,
+   or the second can be dropped.
+5. **Drags need `agent ios --touch platform`.** Under that flag a `tap X
+   down`, `clock`, `tap up` sequence is refused, so hold gestures run in a
+   second drive without the flag. `screenshot <png> window` shows the real
+   display (keyboard, glass).
+6. **`tree` waits for pending resources**, so a loading screen cannot be
+   read with `tree`. Take a `screenshot` straight after the tap.
+7. **`simctl privacy <udid> grant all <bundle>` worked only on a freshly
+   booted simulator.** An unanswered system alert (microphone, speech) steals
+   the foreground until the simulator is rebooted (see "Driver limits").
+8. **`swift test --filter` matches class names.** A test class whose name
+   lacks the filter text never runs, and nothing says so. Filter on a name
+   the class contains, and check the count of tests run.
+9. **Load decides whether the driver can attach.** Booting a simulator puts
+   the Mac at load about 200 for minutes, and the touch runner does not start
+   above load about 60. Boot one simulator and keep it booted across runs;
+   run one Exact build at a time. Contract-only rebuilds took 12 to 40 s; a
+   cold build that adds Swift took about 3 minutes.
+10. **A lane's last unproven commit can break the merged build.** Before the
+    final proof, re-fetch and merge every lane head, then run the one
+    integrated proof (`scripts/proof-app.sh`). Lane proofs written before the
+    merge needed an updated assertion or a tapped setting afterwards; the
+    integrated proof is the one that counts.
 
 ## Common failure classes to expect [doc]
 

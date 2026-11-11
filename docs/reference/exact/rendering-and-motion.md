@@ -2,7 +2,8 @@
 
 Part of [EXACT.md](../EXACT.md). Pinned commit `76cd50f9e`. Marks: **[src]**
 read in source at the pinned commit, **[doc]** stated in Exact's docs only,
-**[test]** read in a fixture or test that exists in the tree (not run by us),
+**[seen]** observed by the builders of our app on the simulator, not read in
+source (EXACT.md, "Evidence marks"), **[test]** read in a fixture or test that exists in the tree (not run by us),
 **[run]** run by us, **[inferred]** reasoned from reads, **[unrun]** a sketch
 nobody has built. Paths are relative to the Exact repo root (`mobile/.exact-src`
 here) unless they start with `docs/` of this repo. Source of this page: the
@@ -294,6 +295,13 @@ leaves Exact's fast path" (`gaps.md` #7). Details of packaging are in
   (`contract/.../values.rs:520-570` for `Transitions::parse`;
   `styles_rows.rs:448-459` for materials). Runtime refusal behaviour was not
   read.
+- **Newer evidence (seen in our build, spike run 2026-11-10, simulator, not a
+  phone):** `background-color=th.paper`, `color=th.fg`, `box-shadow=th.shadow2`
+  and `font-family=th.fontRead` (a data string such as `ui-serif`) all painted
+  from the `theme` source, and switching theme (Depth, Newsprint, light, dark)
+  repainted without a rebuild. The status line above is older: the bindings
+  paint on the simulator. The composed `transition` string from a theme and
+  the phone remain unrun.
 - `backgroundMaterial` bound to data is allowed only as a conditional of
   literal names plus `none`, each arm checked at compile time
   (`styles_rows.rs:448-471`). An opaque runtime string such as
@@ -398,6 +406,24 @@ Limits: `backdrop-filter` is a fixed approximation and does not animate; blend m
 are unsupported; the glass look is the system's, themeable only as `glass` vs
 `glass-clear` vs a blur style.
 
+**Seen in our build (2026-11-11, simulator; the first three from the
+2026-11-10 spikes):**
+
+- A glass bar over a full-bleed `scroll` rides above the keyboard with the
+  field focused (`main viewport-fit="cover" interactive-widget="resizes-content"`,
+  the bar `position="absolute"` at `bottom: calc(env(safe-area-inset-bottom) + 8px)`).
+  A separate glass node under a text field covers it and swallows the tap;
+  put material, fill, radius and shadow on the node that holds the content.
+- `backgroundMaterial` took literal arms only: a ternary of `"glass"` and
+  `"none"` worked, an empty string did not.
+- A transparent glass card laid over a page is unreadable. What worked: an
+  opaque token for the card, or a page-colour backing under the glass (we used
+  `th.paper` at 0.82 alpha), or a coloured scrim that carries its own alpha.
+  Text on the scrim needs its own colour token.
+- `z-index=-1` backing boxes work.
+- A 3D rotation, `rotate="y 50deg"` with `perspective` on the parent and
+  `transition="rotate 400ms ease"`, drew as a narrower face.
+
 ### 8c. Card swipe with throw
 
 Two routes. The safe one is Spark's plain `pan`/`panrelease`: accumulate the
@@ -430,6 +456,16 @@ On a single card (closing a page) keep `swipeleft=closePage(address)`, whose
 node follows the finger with a 64 pt knee (`issues/20261022-no-swipeleft.md`
 lists iOS as not yet run [doc]), and add a `translate` spring. An iOS run of
 the drag timeline was not found [unrun]; Spark is the safer fallback.
+
+**Newer evidence, seen in our build (spike run 2026-11-10, simulator).**
+`swipeleft=closePage(address)` on a card does run on iOS: the card follows the
+finger and the action fires when the finger lifts past 64 pt. It needs
+`touch-action="pan-y"`. The driver drove it with `tap card-swipe-<address>
+drag -150 0` under `agent ios --touch platform`. `pan` reports movement since
+its last event, so a pull (our bar's drag up to the launcher) accumulates `dy`
+in state and decides in `panrelease`. The drag-timeline route above is still
+not run by us. This replaces "lists iOS as not yet run" for `swipeleft`; the
+issue file's own text is unchanged.
 
 ### 8d. Page transitions
 

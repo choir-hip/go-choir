@@ -187,3 +187,16 @@ Source: `origin/lane/ar-integrate` `mobile/README.md`, with `host/apple/Sources/
   grant), `ExactAudioSession: playback`, and the microphone and speech usage
   strings (from `strings/en.json`) [run]. That the programme keeps playing with
   the screen locked is not proven.
+
+## Playback position with a time-pitch unit (our app build)
+
+**[seen]** (2026-11-11), a builder's note on our own `AVAudioEngine` code.
+It is about the Swift engine, not Exact, and was not checked against Apple's
+documentation.
+
+- `AVAudioPlayerNode`'s render position counts source samples upstream of a
+  time-pitch unit. Position therefore needs no rate maths when playback rate
+  changes.
+- A block's position is the rendered position minus the rendered position at
+  the moment it was scheduled.
+- Stopping the node resets that clock. Freeze the position before a stop.

@@ -2,7 +2,8 @@
 
 Part of [EXACT.md](../EXACT.md). Pinned commit `76cd50f9e`. Marks: **[run]**
 verified by running (simulator), **[src]** read from source, **[doc]** from
-Exact's docs, **[unrun]** reasoned. Doc paths are in the Exact repo; the
+Exact's docs, **[seen]** observed by the builders of our app (see EXACT.md,
+"Evidence marks"), **[unrun]** reasoned. Doc paths are in the Exact repo; the
 canonical references are `docs/contract-for-humans.md` (tutorial order),
 `docs/contract-grammar.md` (full grammar) and `docs/contract-for-agents.md`.
 
@@ -140,6 +141,81 @@ tablist must be pushed, not selected.
 total from the press (`docs/contract-grammar.md:1862-1863` [src]); accumulate
 into state or decide in `panrelease`, which appends release velocity. See
 `rendering-and-motion.md` section 3.
+
+## Buttons, scroll, text and tap targets (our app build)
+
+All items in this section are **[seen]** in our build (2026-11-11): builders
+saw them on the simulator and did not read the Exact source for them, so they
+are what happened to us, not Exact guarantees.
+
+- **A native `buttonStyle="glass"|"bordered"|"filled"` button cannot carry
+  our theme.** Its `text` takes no `font-family` (build error
+  `lower-button-style`), so it uses the root font. In one case its label
+  colour ignored the theme (black on a dark page), and `filled` tinted system
+  blue. Pattern: `button appearance="none"` wrapping one themed face
+  component, so font, colour and fill come from the theme.
+- **The driver will not tap what is covered.** It refuses a target that the
+  floating bar or the keyboard covers (the message says the bar "covers its
+  middle"). Put primary buttons above long content, and end a glass layer's
+  scroll frame above the bar (our `ToolScroll`), because the driver also
+  scrolls a target to the bottom edge of the scroll frame, which is under the
+  bar.
+- **`padding-bottom` on a scroll's content column was not a reliable end
+  inset.** A trailing spacer component worked. Padding was not re-tested
+  after that, so do not read this as "padding never works".
+- **`scroll id=` is not a tap target.** Give the scroll a `testId` to drive
+  it by drag.
+- **Taps on a changing page need space.** About 1.2 s between consecutive
+  taps; a faster second tap can be dropped.
+- **`text` collapses `\n`** unless `white-space="pre-wrap"`.
+- **A separate glass node under a text field covers it**
+  (`_UIVisualEffectContentView` swallows the tap). Put material, fill, radius
+  and shadow on the node that holds the content. A glass bar over a full-bleed
+  `scroll` rides above the keyboard with `main viewport-fit="cover"
+  interactive-widget="resizes-content"` and the bar a `row position="absolute"`
+  at `bottom: calc(env(safe-area-inset-bottom) + 8px)`
+  (`rendering-and-motion.md` 8b).
+
+## Embedded files and `iframe` (our app build)
+
+**[seen]** (2026-11-11), lane 5 (Files).
+
+- `iframe src="app:/cache/x.html" sandbox=""` renders an HTML file the app
+  owns. There is no `srcdoc`: to show generated HTML, write it to a file under
+  `app:/cache/` and point `src` at it.
+- An `iframe` on a local `.pdf` is PDFKit's `PDFView`; `#page=N` picks the
+  page.
+- Media elements are paused with `paused=`, not by claiming the audio
+  session (our radio and a media viewer pause each other this way).
+- Our Files place brings each file to `app:/cache/files/<hash>/<name>` first
+  and every viewer plays from that path.
+
+## Components, props and names (our app build)
+
+**[seen]** (2026-11-11) unless marked.
+
+- **`provide` on the root, `inject` in children** carry resources, states,
+  derives and actions down. The page host passes a component only what is
+  specific to it (`address`, `title`). Children cannot hold resources, so
+  shared resources and actions live in a members file; a members file
+  (`members "./x.contract"`) needs at least one member.
+- **`use` cycles are refused** (`contract-use-cycle`). Shared components live
+  in a file that imports nothing of ours.
+- **A prop of type `action` works for a component** (`press: action`).
+  Passing a call with arguments as that prop was not tried.
+- **`after(ms, action)` exists only in a `task`.** Hold-to-talk is
+  `task voiceHold when voiceArmed`.
+- **Avoid the names `when` and `from` for fields or props in a contract.**
+  They are risky; our builders renamed them (`stamp`, `sender`). That the
+  compiler refuses them was not checked.
+- **`empty()` loads with status `""`.** "Loading" is `status == ""`. A stale
+  resource value can show while the next one loads, so check an address field
+  on the answer before drawing it.
+- **`width=(wide ? "100%" : "auto")` is accepted.** Builders avoided a
+  parenthesised ternary as `text` content and used a `derive`; whether it
+  works there is untested.
+- **Contract build takes about 2 s and finds nearly everything.** Run it
+  before every simulator build.
 
 ## Inputs
 

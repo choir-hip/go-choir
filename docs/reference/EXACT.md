@@ -24,6 +24,9 @@ Evidence marks used everywhere in this set:
 - **[doc]** stated in Exact's docs, not checked against source or by running.
 - **[test]** read in a fixture or test in the tree, not run by us.
 - **[inferred]** reasoned from reads.
+- **[seen]** observed by the builders of our app on the simulator
+  (2026-11-10 and 2026-11-11), not read in Exact's source and not checked by
+  a second person. What happened to us, not an Exact guarantee.
 - **[unrun]** planned or sketched, not run.
 
 Our real example code is tracked in
@@ -126,6 +129,28 @@ itself (`exact/native-modules.md`).
    with its source, not into a lane README.
 10. Drive by `testId`, never coordinates; run `clock data` before reading
     data-bound text.
+
+## Read these before building a screen
+
+Seen in our build (2026-11-11); the pages named hold the detail and the
+caveats.
+
+- A proof's state must be set with the app's own controls after deleting its
+  preferences plist; `defaults write` does not override the app
+  (`exact/testing-and-debugging.md`).
+- The driver refuses to tap anything the floating bar or keyboard covers, and
+  taps need about 1.2 s between them (`exact/testing-and-debugging.md`,
+  `exact/ui-model.md`).
+- Native `buttonStyle` buttons cannot be themed; wrap one themed face in
+  `button appearance="none"` (`exact/ui-model.md`).
+- A scroll needs a `testId` to be driven, and a trailing spacer, not
+  `padding-bottom`, was the reliable end inset (`exact/ui-model.md`).
+- `text` collapses `\n` without `white-space="pre-wrap"`; `iframe` has no
+  `srcdoc` (`exact/ui-model.md`, `exact/gaps.md`).
+- A glass layer over a page needs an opaque backing or a scrim; a glass node
+  under a text field covers it (`exact/rendering-and-motion.md`).
+- One booted simulator, one build at a time; load above about 60 stops the
+  driver (`exact/testing-and-debugging.md`).
 
 ## Known wrong ideas (corrected)
 
@@ -263,5 +288,6 @@ read: `README.md`, `docs/start-here.md`, `docs/contract-for-humans.md`,
 `docs/contract-for-agents.md`, `docs/reference.md`, `docs/testing.md`,
 `docs/recipes/*.md`. Lane knowledge folded in from the `mobile/README.md` of
 branches `lane/ar-integrate`, `lane/ar-models` and `lane/ar-ui` (2026-11-10;
-`lane/ar-spine` was not on origin), and from the 2026-11-10 contract and
+`lane/ar-spine` was not on origin), from the `mobile/README.md` of
+`lane/ar-app` and the builders' notes of 2026-11-11 (marked [seen]), and from the 2026-11-10 contract and
 animation research.
