@@ -1,7 +1,168 @@
-// Lane members file (cards): this lane's states, derives, resources, mutations and actions, as if written in the root.
-// Owned by the cards lane. Declare the shapes you use with `use ... from "@choir/autoradio"` at the top of this file
-// (your shapes and source names live in exact-package/interface/cards.json). Every name you want a child component to
-// `inject` goes in your band of the `provide` list in app.contract.
+// Lane members file (cards): the pile's drag, the story stack, the launcher's search, the signals' meanings, "what I've told the paper".
+// Owned by the cards lane. Every name a child component may `inject` is in the lane-4 band of the `provide` list in app.contract.
+// The kit side (Preferences.swift, OpenPagesUI.swift, AutoradioModule+Cards.swift) holds the data; this file holds the gesture state.
+//
+// Gesture physics (copied from Spark and the interaction gallery, 8c in the reference): `pan` gives the move since its last event, so the
+// drag accumulates in state; `panrelease` appends the release velocity and decides. A throw is 110 pt of travel or 800 pt/s. A card
+// thrown left keeps its place off screen at 560 pt for the time its close takes (the close lands 260 ms later in the module, after
+// which the task below clears the flight); a card thrown right on a story records "more of this" and springs home.
+// pageOpen, pagePin and the mutation pm come from spine.contract (a members file shares the root's imports).
+use cardStories, storyStack, toldPaper, undoOffer, launcherData, shadingList from "@choir/autoradio"
+use storyMore, storyLess, cardFling, cardClose, cardUndo, stackDecide, stackUndo, stackReset, toldForget, toldReset, gestureSet from "@choir/autoradio"
+use CardStoryList, Told, UndoInfo, LauncherData, Shading, CardAck from "@choir/autoradio"
+
 members Autoradio
-  // placeholder so the block is not empty; delete it when you add your first member
-  state cardsPlaceholder = false
+  resource cst = cardStories() as shape CardStoryList else empty()
+  resource stk = storyStack() as shape CardStoryList else empty()
+  resource told = toldPaper() as shape Told else empty()
+  resource und = undoOffer() as shape UndoInfo else empty()
+  resource shade = shadingList() as shape Shading else empty()
+  state lq = ""
+  resource lnc = launcherData(q=lq) as shape LauncherData else empty()
+  mutation cm as shape CardAck
+
+  // What the pile shows: "pages" (the open pages as cards) or "stack" (today's stories as cards).
+  state pileMode = "pages"
+
+  // The pile's drag: which card, how far, and the card in flight to the left.
+  state dragAddr = ""
+  state dragX = 0
+  state dragY = 0
+  state dragging = false
+  state leaving = ""
+  state menuFor = ""
+
+  // The story stack's drag. sFly is the n of the card thrown, -1 for none.
+  state sx = 0
+  state sy = 0
+  state sdragging = false
+  state sFly = -1
+
+  derive nextLeft = told.left == "close" ? "close-less" : (told.left == "close-less" ? "less-in-stack" : "close")
+  derive nextRight = told.right == "more" ? "nothing" : "more"
+
+  // ---- the pile
+  action openStack
+    pileMode = "stack"
+    layer = "pile"
+  action setPileMode(m: string)
+    pileMode = m
+  action cardDrag(address: string, dx: number, dy: number)
+    if dragAddr != address
+      dragAddr = address
+      dragX = 0
+      dragY = 0
+    dragX = dragX + dx
+    dragY = dragY + dy
+    dragging = true
+  action cardRelease(address: string, kind: string, vx: number, vy: number)
+    dragging = false
+    if dragAddr == address
+      let v = (dragX > 110 or vx > 800) ? 2 : ((dragX < 0 - 110 or vx < 0 - 800) ? 1 : 0)
+      if v == 1
+        leaving = address
+        dragX = 0 - 560
+        send cm = cardFling(address=address)
+      else
+        if v == 2 and kind == "reader"
+          send cm = storyMore(address=address, surface="pile")
+        dragX = 0
+        dragY = 0
+  task flightClear when leaving != ""
+    after(900, clearFlight)
+  action clearFlight
+    leaving = ""
+    if dragging == false
+      dragAddr = ""
+      dragX = 0
+      dragY = 0
+  action closeCard(address: string)
+    send cm = cardClose(address=address)
+  action undoClose
+    dragAddr = ""
+    dragX = 0
+    dragY = 0
+    leaving = ""
+    send cm = cardUndo()
+
+  // ---- the card's menu (a long press, or its "..." button)
+  action openMenu(address: string)
+    menuFor = address
+  action closeMenu
+    menuFor = ""
+  action menuPin(address: string)
+    menuFor = ""
+    send pm = pagePin(address=address)
+  action menuLess(address: string)
+    menuFor = ""
+    send cm = storyLess(address=address, surface="pile")
+  action menuMore(address: string)
+    menuFor = ""
+    send cm = storyMore(address=address, surface="pile")
+  action menuClose(address: string)
+    menuFor = ""
+    send cm = cardClose(address=address)
+
+  // ---- the story stack
+  action stackDrag(dx: number, dy: number)
+    if sdragging == false
+      sx = 0
+      sy = 0
+      sFly = -1
+    sx = sx + dx
+    sy = sy + dy
+    sdragging = true
+  action stackRelease(address: string, n: number, vx: number, vy: number)
+    sdragging = false
+    if n == stk.index
+      let v = (sx > 110 or vx > 800) ? 2 : ((sx < 0 - 110 or vx < 0 - 800) ? 1 : 0)
+      if v == 1
+        sFly = n
+        sx = 0 - 560
+        send cm = stackDecide(address=address, side="left")
+      if v == 2
+        sFly = n
+        sx = 560
+        send cm = stackDecide(address=address, side="right")
+      if v == 0
+        sx = 0
+        sy = 0
+  action stackAside(address: string, n: number)
+    sdragging = false
+    sFly = n
+    sx = 0 - 560
+    send cm = stackDecide(address=address, side="left")
+  action stackMore(address: string, n: number)
+    sdragging = false
+    sFly = n
+    sx = 560
+    send cm = stackDecide(address=address, side="right")
+  action stackUndoAct
+    sdragging = false
+    sFly = -1
+    sx = 0
+    sy = 0
+    send cm = stackUndo()
+  action stackRestart
+    sdragging = false
+    sFly = -1
+    sx = 0
+    sy = 0
+    send cm = stackReset()
+
+  // ---- the launcher
+  action editLq(v: string)
+    lq = v
+
+  // ---- what I've told the paper
+  action leftNext
+    send cm = gestureSet(side="left", meaning=nextLeft)
+  action rightNext
+    send cm = gestureSet(side="right", meaning=nextRight)
+  action resetTold
+    send cm = toldReset()
+  action forgetTold(address: string)
+    send cm = toldForget(address=address)
+  action openTold
+    layer = ""
+    send pm = pageOpen(address="texture:what-i-told-the-paper", title="What I've told the paper")
