@@ -36,5 +36,9 @@ if [ -d "$HERE/.deps/xcframeworks/FluidAudio.xcframework" ]; then
   for fw in "$HERE"/.deps/xcframeworks/*.xcframework; do cp -R "$fw" "$APPMOD/"; done
   echo "app module: $(ls "$APPMOD"/Models_*.swift | wc -l | tr -d ' ') model files, $(ls -d "$APPMOD"/*.xcframework | wc -l | tr -d ' ') xcframeworks"
 else
-  echo "app module: no .deps/xcframeworks/FluidAudio.xcframework (run scripts/build-xcframeworks.sh fluidaudio); building without models"
+  if [ -z "${ALLOW_NO_MODELS:-}" ]; then
+    echo "app module: no .deps/xcframeworks/FluidAudio.xcframework. A build without the model libraries has no voice models, only fallbacks (run scripts/ensure-deps.sh, or set ALLOW_NO_MODELS=1 to build one on purpose)" >&2
+    exit 1
+  fi
+  echo "app module: ALLOW_NO_MODELS=1, building without models"
 fi

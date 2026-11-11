@@ -26,7 +26,7 @@ import Foundation
 //     (below) wires the real downloader but reports a check as not run unless a checker is injected.
 
 public enum SetupStage: String, Codable, CaseIterable, Sendable {
-    case bounds, transcriber, voice, decision
+    case bounds, transcriber, voice, decision, responder
 
     /// Plain words for the listener.
     public var title: String {
@@ -35,6 +35,7 @@ public enum SetupStage: String, Codable, CaseIterable, Sendable {
         case .transcriber: return "Hearing you"
         case .voice: return "The voice"
         case .decision: return "Quick decisions"
+        case .responder: return "Talking while it works"
         }
     }
     /// The kit's stage kind this configures.
@@ -44,6 +45,7 @@ public enum SetupStage: String, Codable, CaseIterable, Sendable {
         case .transcriber: return .transcriber
         case .voice: return .voice
         case .decision: return .system1
+        case .responder: return .holder
         }
     }
 }
@@ -57,8 +59,16 @@ public struct SetupCandidate: Codable, Equatable, Sendable {
     public var minMemoryGB: Double
     /// The kit stage id this becomes when it passes (`StageRegistry` id), "" when the stage is not switchable here.
     public var kitStageID: String
-    public init(id: String, label: String, bytes: Int64, minMemoryGB: Double, kitStageID: String = "") {
+    /// What the model is for: "decision", "responder", "" (audio models). The same file may serve two roles in two contexts.
+    public var role: String
+    /// About how much memory the model uses once loaded (MB). Our Mac measurements; the device's own reading replaces the guess.
+    public var needsMB: Double
+    /// The slowest decode (tokens per second) at which this candidate is worth choosing, measured on the device; nil: no floor.
+    public var minDecodeTokensPerSecond: Double?
+    public init(id: String, label: String, bytes: Int64, minMemoryGB: Double, kitStageID: String = "", role: String = "", needsMB: Double = 0,
+                minDecodeTokensPerSecond: Double? = nil) {
         self.id = id; self.label = label; self.bytes = bytes; self.minMemoryGB = minMemoryGB; self.kitStageID = kitStageID
+        self.role = role; self.needsMB = needsMB; self.minDecodeTokensPerSecond = minDecodeTokensPerSecond
     }
     /// Needs no download: it is on the phone already.
     public var isFloor: Bool { bytes == 0 }
@@ -69,8 +79,10 @@ public struct DeviceProfile: Codable, Equatable, Sendable {
     public var memoryGB: Double
     public var freeDiskGB: Double
     public var onWiFi: Bool
-    public init(chip: String, memoryGB: Double, freeDiskGB: Double, onWiFi: Bool) {
-        self.chip = chip; self.memoryGB = memoryGB; self.freeDiskGB = freeDiskGB; self.onWiFi = onWiFi
+    /// What the process may still use (`os_proc_available_memory()`), when the device can say; the plan uses it instead of physical memory.
+    public var availableMemoryMB: Double?
+    public init(chip: String, memoryGB: Double, freeDiskGB: Double, onWiFi: Bool, availableMemoryMB: Double? = nil) {
+        self.chip = chip; self.memoryGB = memoryGB; self.freeDiskGB = freeDiskGB; self.onWiFi = onWiFi; self.availableMemoryMB = availableMemoryMB
     }
 
     /// This device. `onWiFi` is true unless the host knows better (no Network framework here); the card asks first
@@ -84,7 +96,7 @@ public struct DeviceProfile: Codable, Equatable, Sendable {
         let mem = Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824
         let home = URL(fileURLWithPath: NSHomeDirectory())
         let free = ((try? home.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?.volumeAvailableCapacityForImportantUsage).map { Double($0) / 1_073_741_824 } ?? 0
-        return DeviceProfile(chip: chip, memoryGB: mem, freeDiskGB: free, onWiFi: onWiFi)
+        return DeviceProfile(chip: chip, memoryGB: mem, freeDiskGB: free, onWiFi: onWiFi, availableMemoryMB: DeviceReading.availableMemoryMB())
     }
 }
 
@@ -94,19 +106,34 @@ public enum SetupCatalog {
     public static func ladder(_ s: SetupStage) -> [SetupCandidate] {
         switch s {
         case .bounds:
-            return [SetupCandidate(id: "silero-vad-v6.2.1", label: "Silero speech detector", bytes: 2_000_000, minMemoryGB: 1, kitStageID: "silero-vad"),
-                    SetupCandidate(id: "energy", label: "Level detector built in", bytes: 0, minMemoryGB: 0, kitStageID: "energy-bounds")]
+            return [SetupCandidate(id: "silero-vad-v6.2.1", label: "Silero speech detector", bytes: 2_000_000, minMemoryGB: 1, kitStageID: "silero-vad", needsMB: 110),
+                    SetupCandidate(id: "energy", label: "Level detector built in", bytes: 0, minMemoryGB: 0, kitStageID: "energy-vad")]
         case .transcriber:
-            return [SetupCandidate(id: "parakeet-tdt-0.6b-v2", label: "Parakeet, the larger listener", bytes: 480_000_000, minMemoryGB: 6, kitStageID: "parakeet-tdt"),
-                    SetupCandidate(id: "parakeet-eou-120m", label: "Parakeet, the smaller listener", bytes: 250_000_000, minMemoryGB: 3, kitStageID: "parakeet-eou"),
+            return [SetupCandidate(id: "parakeet-tdt-0.6b-v2", label: "Parakeet, the larger listener", bytes: 480_000_000, minMemoryGB: 6, kitStageID: "parakeet-tdt", needsMB: 700),
+                    SetupCandidate(id: "parakeet-eou-120m", label: "Parakeet, the smaller listener", bytes: 250_000_000, minMemoryGB: 3, kitStageID: "parakeet-eou", needsMB: 250),
                     SetupCandidate(id: "apple-speech", label: "Apple's recogniser", bytes: 0, minMemoryGB: 0, kitStageID: "apple-speech")]
         case .voice:
-            return [SetupCandidate(id: "kokoro-82m-ane", label: "Kokoro voice", bytes: 350_000_000, minMemoryGB: 4, kitStageID: "kokoro"),
-                    SetupCandidate(id: "pocket-tts", label: "Pocket voice, the lighter one", bytes: 300_000_000, minMemoryGB: 3, kitStageID: "pocket-tts"),
-                    SetupCandidate(id: "system-voice", label: "The system voice", bytes: 0, minMemoryGB: 0, kitStageID: "apple-voice")]
+            return [SetupCandidate(id: "kokoro-82m-ane", label: "Kokoro voice", bytes: 350_000_000, minMemoryGB: 4, kitStageID: "kokoro", needsMB: 750),
+                    SetupCandidate(id: "pocket-tts", label: "Pocket voice, the lighter one", bytes: 300_000_000, minMemoryGB: 3, kitStageID: "pocket-tts", needsMB: 500),
+                    SetupCandidate(id: "system-voice", label: "The system voice", bytes: 0, minMemoryGB: 0, kitStageID: "avspeech")]
         case .decision:
-            // No on-device decision model is proven yet: System 1 through the listener's computer is the default.
-            return [SetupCandidate(id: "system1-computer", label: "Your computer", bytes: 0, minMemoryGB: 0, kitStageID: "choir-system1")]
+            // The small language model on the phone first; System 1 through the listener's computer is the floor.
+            return [SetupCandidate(id: "qwen3-0.6b-q8_0", label: "A small language model on this phone", bytes: 639_446_688, minMemoryGB: 4,
+                                   kitStageID: "llama-qwen3-0.6b", role: "decision", needsMB: 1000),
+                    SetupCandidate(id: "system1-computer", label: "Your computer", bytes: 0, minMemoryGB: 0, kitStageID: "choir-system1")]
+        case .responder:
+            // The voice that talks while the desk works. Order is the research note's starting guess (smaller, faster first); setup
+            // times each on the phone and a candidate that is too slow or leaves too little memory is passed over. The floor is the
+            // soft cue alone (no words).
+            return [SetupCandidate(id: "qwen3-0.6b-q4_k_m", label: "A small language model, light", bytes: 396_705_472, minMemoryGB: 4,
+                                   kitStageID: "local-ack", role: "responder", needsMB: 600, minDecodeTokensPerSecond: 12),
+                    SetupCandidate(id: "qwen3-0.6b-q8_0", label: "A small language model, fuller", bytes: 639_446_688, minMemoryGB: 4,
+                                   kitStageID: "local-ack", role: "responder", needsMB: 1000, minDecodeTokensPerSecond: 12),
+                    SetupCandidate(id: "qwen3.5-0.8b-q4_k_m", label: "A newer small language model", bytes: 532_517_120, minMemoryGB: 4,
+                                   kitStageID: "local-ack", role: "responder", needsMB: 800, minDecodeTokensPerSecond: 12),
+                    SetupCandidate(id: "lfm3-1.7b-qad-q4_0", label: "A larger language model", bytes: 1_049_615_680, minMemoryGB: 6,
+                                   kitStageID: "local-ack", role: "responder", needsMB: 1500, minDecodeTokensPerSecond: 25),
+                    SetupCandidate(id: "cue-only", label: "A soft sound and no words", bytes: 0, minMemoryGB: 0, kitStageID: "local-ack")]
         }
     }
 
@@ -115,7 +142,14 @@ public enum SetupCatalog {
         var out: [SetupStage: [SetupCandidate]] = [:]
         for s in SetupStage.allCases {
             let all = ladder(s)
-            var rest = Array(all.drop(while: { $0.minMemoryGB > d.memoryGB }))
+            // The device's own reading of what is left when it has one: every candidate that does not fit is passed over (the floor
+            // always stays). Physical memory is only the fallback guess, as a starting point of the ladder.
+            var rest: [SetupCandidate]
+            if let avail = d.availableMemoryMB {
+                rest = all.filter { $0.isFloor || $0.needsMB == 0 || $0.needsMB <= avail - 600 }
+            } else {
+                rest = Array(all.drop(while: { $0.minMemoryGB > d.memoryGB }))
+            }
             if rest.isEmpty { rest = [all.last!] }                       // the floor always exists
             if smaller, rest.count > 1, !rest[0].isFloor { rest.removeFirst() }
             out[s] = rest
@@ -153,8 +187,20 @@ public struct SetupCheck: Codable, Equatable, Sendable {
     public var memoryMB: Double
     public var outputOK: Bool
     public var note: String
-    public init(loadMs: Double, speed: Double, unit: String, memoryMB: Double, outputOK: Bool, note: String = "") {
+    /// Measured on this device when the model is a language model: tokens per second reading the prompt, tokens per second writing.
+    public var promptTokensPerSecond: Double?
+    public var decodeTokensPerSecond: Double?
+    /// Measured for a voice: ms from the text to the first sound.
+    public var firstAudioMs: Double?
+    /// What the process may still use after the model loaded (`os_proc_available_memory()`), and the phone's temperature then.
+    public var availableMemoryMB: Double?
+    public var thermal: String?
+    public init(loadMs: Double, speed: Double, unit: String, memoryMB: Double, outputOK: Bool, note: String = "",
+                promptTokensPerSecond: Double? = nil, decodeTokensPerSecond: Double? = nil, firstAudioMs: Double? = nil,
+                availableMemoryMB: Double? = nil, thermal: String? = nil) {
         self.loadMs = loadMs; self.speed = speed; self.unit = unit; self.memoryMB = memoryMB; self.outputOK = outputOK; self.note = note
+        self.promptTokensPerSecond = promptTokensPerSecond; self.decodeTokensPerSecond = decodeTokensPerSecond; self.firstAudioMs = firstAudioMs
+        self.availableMemoryMB = availableMemoryMB; self.thermal = thermal
     }
 }
 
@@ -374,11 +420,18 @@ public final class VoiceSetup: @unchecked Sendable {
         lock.locked { items[s] = SetupRecord.Item(stage: s.rawValue, chosen: floor.id, kitStageID: floor.kitStageID, fellBackFrom: from, reasons: reasons, check: nil) }
     }
 
+    /// The measured numbers in plain words, for the setup result screen.
     static func numbers(_ c: SetupCheck) -> String {
-        let speed = c.unit.isEmpty ? "" : String(format: "%.2f ", c.speed) + c.unit
-        let load = c.loadMs >= 1000 ? String(format: "loaded in %.1f s", c.loadMs / 1000) : String(format: "loaded in %.0f ms", c.loadMs)
-        let mem = c.memoryMB > 0 ? String(format: "%.0f MB", c.memoryMB) : ""
-        return [speed, load, mem].filter { !$0.isEmpty }.joined(separator: " · ")
+        var parts: [String] = []
+        if !c.unit.isEmpty { parts.append(String(format: "%.2f ", c.speed) + c.unit) }
+        if let p = c.promptTokensPerSecond { parts.append("reads about \(Int((p * 0.75).rounded())) words a second") }
+        if let d = c.decodeTokensPerSecond { parts.append("writes about \(Int((d * 0.75).rounded())) words a second") }
+        if let f = c.firstAudioMs { parts.append("first sound in \(Int(f.rounded())) ms") }
+        parts.append(c.loadMs >= 1000 ? String(format: "loaded in %.1f s", c.loadMs / 1000) : String(format: "loaded in %.0f ms", c.loadMs))
+        if c.memoryMB > 0 { parts.append(String(format: "%.0f MB in use", c.memoryMB)) }
+        if let a = c.availableMemoryMB { parts.append(String(format: "%.0f MB left", a)) }
+        if let t = c.thermal, t != "nominal", !t.isEmpty { parts.append("the phone is \(t == "fair" ? "warm" : "hot")") }
+        return parts.joined(separator: " · ")
     }
 
     private func download(_ s: SetupStage, _ cand: SetupCandidate) async -> Outcome {
@@ -483,24 +536,69 @@ public final class SimulatedSetupBackend: SetupBackend, @unchecked Sendable {
     }
 }
 
-/// The real downloader: pinned models go through the ModelStore (HTTP Range resume, SHA-256). Library-managed models
-/// (FluidAudio's Core ML bundles) are fetched by their own loader inside `fetch`, which the app module supplies, and
-/// checked by `checker`, also supplied by the app module (it can import the model stages). With no checker the check
-/// says it did not run, so the card never claims a model works when nothing ran it.
+
+/// The real downloader. Pinned models (the small language model) go through the one shared ModelStore: HTTP Range resume and a
+/// SHA-256 check against the pinned digest. Library-managed models (FluidAudio's Core ML bundles) are fetched, checksummed and
+/// compiled by the app module's `ModelProvider`, which also runs the on-device check. With no provider installed (a build that
+/// links no model libraries) the row says exactly that; it never says a model "is not registered" and never claims a check ran.
 public final class LiveSetupBackend: SetupBackend, @unchecked Sendable {
     public typealias Fetch = @Sendable (SetupCandidate, @escaping @Sendable (Int64) -> Void) async throws -> Void
     public typealias Checker = @Sendable (SetupCandidate) async throws -> SetupCheck
     let store: ModelStore
     let fetch: Fetch?
     let checker: Checker?
-    public init(store: ModelStore, fetch: Fetch? = nil, checker: Checker? = nil) { self.store = store; self.fetch = fetch; self.checker = checker }
+    public init(store: ModelStore = .shared, fetch: Fetch? = nil, checker: Checker? = nil) { self.store = store; self.fetch = fetch; self.checker = checker }
 
     public func download(_ c: SetupCandidate, onBytes: @escaping @Sendable (Int64) -> Void) async throws {
         if let fetch { try await fetch(c, onBytes); return }
-        _ = try await store.ensure(c.id) { done, _ in onBytes(done) }
+        guard KnownModels.contains(c.id) else { throw LabError.badInput("setup asked for \(c.id), which is not in the model catalog") }
+        if KnownModels.isPinned(c.id) {
+            _ = try await store.ensure(c.id) { done, _ in onBytes(done) }      // download, resume, SHA-256
+            return
+        }
+        guard let p = ModelProviders.current else { throw LabError.unavailable(ModelProviders.missingNote) }
+        try await p.fetch(c.id, role: c.role, onBytes: onBytes)
     }
+
     public func check(_ c: SetupCandidate) async throws -> SetupCheck {
-        guard let checker else { return SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: "The check did not run on this phone.") }
-        return try await checker(c)
+        if let checker { return try await checker(c) }
+        if c.isFloor { return await Self.checkFloor(c) }
+        guard let p = ModelProviders.current else {
+            return SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: ModelProviders.missingNote)
+        }
+        var r = try await p.check(c.id, role: c.role)
+        // What the device measured decides: too slow to be worth it, or too little memory left, is a failed check (setup moves on).
+        if r.outputOK, let floor = c.minDecodeTokensPerSecond, let d = r.decodeTokensPerSecond, d < floor {
+            r.outputOK = false
+            r.note = "Too slow on this phone: it writes about \(Int((d * 0.75).rounded())) words a second."
+        }
+        if r.outputOK, let left = r.availableMemoryMB, left < 250 {
+            r.outputOK = false
+            r.note = "Too little memory would be left (\(Int(left)) MB)."
+        }
+        return r
+    }
+
+    /// The floor of each ladder needs no download. The level detector is checked for real (it must find speech in the bundled
+    /// utterance); the others are the system's own and run when used, which the note says.
+    static func checkFloor(_ c: SetupCandidate) async -> SetupCheck {
+        if c.id == "energy" {
+            let t0 = DispatchTime.now().uptimeNanoseconds
+            guard let samples = FixtureTurn.micSamples16k() else {
+                return SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: false, note: "The bundled utterance could not be read.")
+            }
+            let vad = EnergyVAD(StageParams())
+            var started = false
+            var i = 0
+            while i < samples.count {
+                let f = AudioFrame(samples: Array(samples[i..<min(samples.count, i + 512)]), sampleRate: 16000, t: Double(i) / 16000)
+                if case .speechStarted = await vad.feed(f) { started = true }
+                i += 512
+            }
+            let ms = Double(DispatchTime.now().uptimeNanoseconds - t0) / 1e6
+            return SetupCheck(loadMs: 0, speed: ms / max(1, Double(samples.count) / 16), unit: "× real time", memoryMB: 0, outputOK: started,
+                              note: started ? "" : "The level detector found no speech in the bundled utterance.")
+        }
+        return SetupCheck(loadMs: 0, speed: 0, unit: "", memoryMB: 0, outputOK: true, note: "Built in; it runs when it is used.")
     }
 }

@@ -9,3 +9,5 @@ exact-package/apple/Kit/
 .deps/
 *.gguf
 *.mlmodelc/
+AutoradioLab/modules/apple/Models_*.swift
+AutoradioLab/modules/apple/*.xcframework

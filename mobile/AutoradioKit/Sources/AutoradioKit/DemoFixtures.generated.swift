@@ -2018,7 +2018,8 @@ public enum DemoFixtureData {
     "parakeet-tdt-0.6b-v2": { "chunks": 10, "stallAt": 4 },
     "parakeet-eou-120m": { "chunks": 5, "checkMs": 1400 },
     "kokoro-82m-ane": { "chunks": 7, "checkOK": false, "checkNote": "The voice made audio of the wrong length, so I will use a lighter one.", "checkMs": 1200 },
-    "pocket-tts": { "chunks": 5, "checkMs": 1200 }
+    "pocket-tts": { "chunks": 5, "checkMs": 1200 },
+    "qwen3-0.6b-q8_0": { "chunks": 6, "checkMs": 1000 }
   },
   "check": { "loadMs": 2300, "speed": 0.09, "unit": "x real time", "memoryMB": 410, "outputOK": true, "note": "" }
 }

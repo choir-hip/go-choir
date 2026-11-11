@@ -7,8 +7,8 @@
 #   STAGES=silero-vad,parakeet-eou mobile/scripts/proof-models.sh
 set -eu
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-OUT="${PROOF_OUT:-$(mktemp -d)}"
-"$HERE/scripts/xe.sh" /usr/bin/swift build --package-path "$HERE/AutoradioKit" -c release >/dev/null
+OUT="${PROOF_OUT:-${PROOF_SHOTS:-$(mktemp -d)}}"; mkdir -p "$OUT"
+"$HERE/scripts/xe.sh" /usr/bin/swift build --package-path "$HERE/AutoradioKit" -c release > "$OUT/build.log" 2>&1 || { grep -E "error:" "$OUT/build.log" | head -30; tail -5 "$OUT/build.log"; echo "PROOF FAILED: swift build"; exit 1; }
 BIN="$HERE/AutoradioKit/.build/release"
 
 "$BIN/autoradio-replay" --list-stages >"$OUT/stages.json"
@@ -16,11 +16,20 @@ BIN="$HERE/AutoradioKit/.build/release"
 import json, sys
 ids = {(s["kind"], s["id"]) for s in json.load(open(sys.argv[1]))}
 need = {("speechBounds","silero-vad"),("transcriber","parakeet-eou"),("transcriber","parakeet-tdt"),("system1","llama-qwen3-0.6b"),
-        ("voice","kokoro"),("voice","pocket-tts"),("transcriber","lfm3-audio-live"),("holder","lfm3-holder"),("voice","lfm3-audio-tts")}
+        ("voice","kokoro"),("voice","pocket-tts"),("transcriber","lfm3-audio-live"),("voice","lfm3-audio-tts"),("holder","local-ack")}
 missing = need - ids
 if missing: print("PROOF FAILED: stages not listed:", sorted(missing)); sys.exit(1)
 print("stages listed:", len(need), "model stages")
 EOF
+
+# What voice setup does on the phone, here, for every model on every ladder (registered, fetched, verified, loaded, checked on
+# the bundled utterance), through the same code (HubModelProvider). One line per model; the exit code is non-zero if any fails.
+#   SETUP=1 mobile/scripts/proof-models.sh        (downloads about 1.5 GB the first time)
+"$BIN/autoradio-models" --ids || { echo "PROOF FAILED: a setup id is not in the catalog, the store or the stage registry"; exit 1; }
+if [ -n "${SETUP:-}" ]; then
+  "$BIN/autoradio-models" --setup --json "$OUT/setup.json" 2>"$OUT/setup.err" || { echo "PROOF FAILED: a model failed fetch, verify, load or check (see $OUT/setup.json)"; exit 1; }
+  echo "PROOF OK: every setup model fetched, verified, loaded and checked"; echo "records in $OUT"; exit 0
+fi
 
 STAGES="${STAGES:-silero-vad,parakeet-eou,parakeet-tdt,llama-qwen3-0.6b,kokoro,pocket-tts}"
 [ -n "${LFM3:-}" ] && STAGES="$STAGES,lfm3-audio-live,lfm3-audio-tts"

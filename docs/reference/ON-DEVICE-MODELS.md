@@ -272,3 +272,30 @@ llama.cpp xcframework includes libmtmd (PR merged 2026-06-25); open issue
 Everything in section 6 plus: Qwen3-0.6B Q4_K_M versus Q8_0, Qwen3.5-0.8B,
 LFM3-1.7B QAD-Q4_0 decode and prefill with a cached page; Phonon 31M first
 audio; `os_proc_available_memory()` at idle and after each load.
+
+
+## How the app uses them (round 3, 2026-11-11)
+
+- One catalog: `KnownModels` in the kit (`mobile/AutoradioKit/Sources/AutoradioKit/KnownModels.swift`), one store
+  (`ModelStore.shared`, created with the catalog registered), one provider (`HubModelProvider` in the models module,
+  installed by the app module's registrar) that fetches, loads and checks every model. Voice setup, the engine's stages
+  and `autoradio-models --setup` all go through them. The first phone walk's "model ... not registered" came from a store
+  of setup's own that nothing had registered into.
+- A build with no model libraries is refused: `scripts/build-lab.sh` runs `scripts/ensure-deps.sh` (xcframeworks from
+  `~/.cache/autoradio-deps`, else built), and `sync-exact-package.sh` exits unless `ALLOW_NO_MODELS=1`.
+- Verification: FluidAudio checks Hugging Face LFS SHA-256 object ids of the files it fetches (read in v0.18.3
+  `Shared/Download/ModelCache.swift`); the Qwen3 GGUF is checked against the pinned SHA-256 by the kit.
+- The responder (the voice that talks while the desk works) is its own setup stage ("Talking while it works"), separate from quick
+  decisions, each with its own llama.cpp context (a 0.6B model costs about 0.1 to 0.25 GB of KV cache per context at 1,024 to 2,048
+  tokens; two roles on one GGUF share the weights). Ladder: Qwen3-0.6B Q4_K_M, Q8_0, Qwen3.5-0.8B Q4_K_M, LFM3-1.7B QAD-Q4_0 (LFM Open
+  License: read it), then the soft cue alone. Sources and SHA-256 digests are the Hugging Face API listings of 2026-11-11.
+- The response is a stream, sentence by sentence, front-loaded, cut when the desk's speech is ready, with a hand-over sound. No
+  deterministic filters, word, token or time limits: it is steered by the prompt (`AckPrompt.system()`), and the recent lines ride in
+  the prompt (`AckPrompt.userSuffix`). The prompt is split so the cache can be reused: the fixed instructions and the page in front
+  (title, kind, text) are a byte-stable prefix read into the KV cache when the page comes to the front (`warmResponder`), and at end
+  of speech only the listener's words are read. The turn timeline records prompt tokens, tokens already cached and the prefill time.
+- Setup measures on the device: `os_proc_available_memory()` (iOS) instead of physical memory for the plan, and per candidate the
+  tokens per second reading and writing, first sound for a voice, memory in use and left, and the phone's temperature; a candidate
+  too slow or leaving too little memory fails its check and setup moves on. The numbers are shown in plain words on the result row.
+- Proof on the Mac: `SETUP=1 mobile/scripts/proof-models.sh` (setup's own path, every model); the phone-only facts are
+  listed in the round 3 report.

@@ -107,10 +107,14 @@ public final class LabRuntime: @unchecked Sendable {
         var envBox: LabRuntime?
         let env = EngineEnvironment(registry: registry, log: log, playback: player, session: self.session,
             onRecord: { rec in envBox?.keep(rec) },
-            onOutcome: { id, o in storeRef.updateOutcome(id: id, o); envBox?.setOutcome(id, o) })
+            onOutcome: { id, o in storeRef.updateOutcome(id: id, o); envBox?.setOutcome(id, o) },
+            frontPage: { envBox?.aimedPage() },
+            pageText: { address in await envBox?.pageTextProvider?(address) ?? "" })
         engine = TurnEngine(env: env, configuration: cfg)
         envBox = self
         snap.configName = cfg.name
+        // Model loads show in the trace; the one store is shared with voice setup.
+        Task { await ModelStore.shared.attach(log: log) }
         player.onChange = { [weak self] in self?.refresh() }
         // The bar and the player read the real position from the audio, and a speed picked there reaches the audio.
         let pl = player
@@ -139,6 +143,11 @@ public final class LabRuntime: @unchecked Sendable {
     /// `virtual`: no audio hardware (the Exact agent, tests): playback waits instead of playing, mic frames are injected.
     public func start(virtual: Bool = false) async {
         guard !started else { return }
+        // Load the small language model if its file is already on the phone (never downloads); the acknowledgement needs it loaded.
+        Task.detached { [weak self] in
+            await LocalLanguage.model?.warm()
+            self?.warmResponder(address: nil)          // the page in front, once the model is loaded
+        }
         if virtual { LabEnvironment.promptsAllowed = false; LabEnvironment.virtualAudio = true }
         do {
             try await session.claim(.listening, preferBuiltInMic: true, reason: "start")
@@ -180,16 +189,53 @@ public final class LabRuntime: @unchecked Sendable {
         refresh()
     }
 
+    /// Set by the host: the page for an address (nil: the page in front). The acknowledgement names its title and kind.
+    public var frontPageResolver: (@Sendable (String?) -> FrontPage?)?
+    /// Set by the host: the text of the page at an address, as far as the phone has it (the local stream may say something from it).
+    public var pageTextProvider: (@Sendable (String) async -> String)?
+    private var warmTask: Task<Void, Never>?
+    /// Read the page that is (or is about to be) in front into the responder's cache, in the background, so that at end of speech only
+    /// the listener's words remain to be read. Cancels the reading of the previous page; what was read of it stays in the model's cache
+    /// only as far as it is a prefix of the next prompt. No timer: it runs as long as the reading takes, and a turn preempts it.
+    public func warmResponder(address: String?) {
+        warmTask?.cancel()
+        warmTask = Task.detached { [weak self] in
+            guard let self, let model = LocalLanguage.model, model.isLoaded else { return }
+            let front = self.frontPageResolver?(address)
+            guard let front else { return }
+            let text = await self.pageTextProvider?(front.address) ?? ""
+            if Task.isCancelled { return }
+            let prefix = AckPrompt.userPrefix(pageTitle: front.title, pageKind: front.kind, pageText: text)
+            guard !prefix.isEmpty else { return }
+            await model.prefill(system: AckPrompt.system(), userPrefix: prefix)
+            if let r = model.lastPrefill() {
+                self.log.emit(.localWarm(address: front.address, tokens: r.prefixTokens, ms: r.prefillMs, complete: r.promptTokens >= r.prefixTokens))
+            }
+        }
+    }
+    private let aimBox = Locked<String>("")
+    /// The address of the page the listener aimed at (the bar's `aim`), kept for the spoken turn that follows a talk press.
+    /// Empty: the page in front now.
+    public var aimAddress: String { get { aimBox.value } set { aimBox.value = newValue } }
+    func aimedPage() -> FrontPage? {
+        let a = aimAddress
+        return frontPageResolver?(a.isEmpty ? nil : a)
+    }
+
     /// A typed question from the bar: starts the engine when it is not running (the host's `startRequest`), then runs one turn.
+    /// `pageAddress` is the address of the page the bar was showing when the listener asked (empty: the page in front now).
     @discardableResult
-    public func ask(_ text: String) async -> Bool {
+    public func ask(_ text: String, pageAddress: String = "") async -> Bool {
         if !snapshot().running, let go = startRequest { await go() }
         guard snapshot().running else { return false }
-        return await engine.typedTurn(text)
+        let front = pageAddress.isEmpty ? nil : frontPageResolver?(pageAddress)
+        return await engine.typedTurn(text, front: front)
     }
 
     public func talkDown() { Task { await engine.buttonDown() } }
     public func talkUp() { Task { await engine.buttonUp() } }
+    /// Discard the turn being talked (Cancel beside Send): stop the capture, drop the audio and words, call nothing.
+    public func cancelTalk() { Task { await engine.cancelTurn() } }
 
     /// Drive the live path with the bundled kept turn: press, feed its microphone audio in real time as if it came from
     /// the hardware, release. Works with real or virtual audio; the turn lands in Trace like a spoken one.
@@ -222,7 +268,10 @@ public final class LabRuntime: @unchecked Sendable {
     // MARK: Configuration
 
     public var configuration: LabConfiguration { lock.lock(); defer { lock.unlock() }; return config }
-    public func setConfiguration(_ c: LabConfiguration) {
+    public func setConfiguration(_ conf: LabConfiguration) {
+        var c = conf
+        // A configuration saved before the stock-phrase holder was removed names it; it now means the local model's holder.
+        if c.setting(.holder)?.id == "fixed-lines" { c.set(.holder, StageSetting(id: LocalAckHolder.stageID)) }
         lock.lock(); config = c; snap.configName = c.name; lock.unlock()
         let policyChanged = policyBox.value != c.audio
         policyBox.value = c.audio
@@ -303,6 +352,11 @@ public final class LabRuntime: @unchecked Sendable {
         v.timings = r.summary.timings.map { TimingRow(stage: $0.stage, startMs: ($0.startedAt - t0) * 1000, durMs: $0.ms) }
         v.lines = r.events.filter { if case .partialTranscript = $0.event { return false }; if case .stageTiming = $0.event { return false }; return true }
             .map { String(format: "%7.0f ms  ", ($0.t - t0) * 1000) + Self.describe($0.event) }
+        // The five steps of the turn, from the live log (the desk's audio starts after the record was folded).
+        if let anchor = r.events.first(where: { if case .turnEnded = $0.event { return true }; return false })?.t,
+           let tl = TurnTimeline.compute(log.events.filter { $0.t >= t0 - 0.001 }).first(where: { abs($0.turnEndedAt - anchor) < 0.001 }) {
+            v.lines = tl.lines + [""] + v.lines
+        }
         return v
     }
 
@@ -310,10 +364,27 @@ public final class LabRuntime: @unchecked Sendable {
     /// `xcrun devicectl device copy from --device <udid> --domain-type appDataContainer --domain-identifier <bundle id>
     /// --source Documents/AutoradioExports/<id>.json --destination .`
     public func export(id: String?) -> URL? {
+        if id == "last" || id == "*" { return exportTrace(last: 5) }
         guard let r = record(id: id), let data = try? r.encoded() else { return nil }
         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("AutoradioExports")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent(r.id + ".json")
+        do { try data.write(to: url, options: .atomic); return url } catch { log.emit(.error(stage: "export", message: "\(error)")); return nil }
+    }
+
+    /// The last `n` turns as one JSON file: each turn's timeline (end of speech, local reply text ready, local audio start, desk first
+    /// token, desk audio start) and the whole event log from the first of them. Written to Documents/AutoradioExports/trace-<time>.json.
+    public func exportTrace(last n: Int) -> URL? {
+        lock.lock()
+        var recs = Array(records.values)
+        lock.unlock()
+        if recs.isEmpty { recs = store.list().compactMap { try? $0.record() } }
+        recs = Array(recs.sorted { $0.startedAt < $1.startedAt }.suffix(max(1, n)))
+        let export = TraceExport.make(records: recs, log: log.events, device: .current, describe: Self.describe)
+        guard let data = try? export.encoded() else { return nil }
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("AutoradioExports")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("trace-\(Int(Date().timeIntervalSince1970)).json")
         do { try data.write(to: url, options: .atomic); return url } catch { log.emit(.error(stage: "export", message: "\(error)")); return nil }
     }
 
@@ -415,9 +486,20 @@ public final class LabRuntime: @unchecked Sendable {
         case .partialTranscript(let t): return "partial: \(t)"
         case .finalTranscript(let t): return "final: \(t)"
         case .turnEnded: return "turn ended"
+        case .turnCancelled: return "turn cancelled by the listener"
         case .system1Answer(let q, let o, let s, let ms): return String(format: "system1 %@ = %@ (%.2f, %.0f ms)", q, o, s, ms)
         case .ackStarted(let ms): return String(format: "acknowledgement audio %.0f ms after turn end", ms)
         case .holdingSaid(let l): return "holding: \(l)"
+        case .localAckReady(let t, let ms): return String(format: "local reply ready %.0f ms after turn end: ", ms) + t
+        case .localAckSkipped(let r, let ms): return String(format: "no local reply (%.0f ms after turn end): ", ms) + r
+        case .localSentenceStarted(let t, let ms): return String(format: "local sentence heard %.0f ms after turn end: ", ms) + t
+        case .localCut(let n, let r, let ms): return String(format: "local stream cut after %d sentences, %.0f ms after turn end: ", n, ms) + r
+        case .localPrefill(let n, let pre, let re, let ms): return String(format: "local prompt %d tokens (stable prefix %d, already cached %d), read in %.0f ms: ", n, pre, re, ms) + (pre > 0 && re >= pre ? "WARM cache" : "cold cache")
+        case .localWarm(let a, let n, let ms, let done): return String(format: "page read into the responder ahead of time: %@, %d tokens, %.0f ms", a, n, ms) + (done ? "" : " (preempted)")
+        case .transitionPlayed(let ms): return String(format: "hand-over sound %.0f ms after turn end", ms)
+        case .cueStarted(let ms): return String(format: "non-verbal cue %.0f ms after turn end", ms)
+        case .deskFirstToken(let ms): return String(format: "desk first token %.0f ms after turn end", ms)
+        case .programmeAudioStart(let b): return "programme audio started, block \(b)"
         case .ackCancelled(let r, let a): return "acknowledgement stopped: \(r)\(a ? " (audible; the line finished)" : " (before any audio)")"
         case .revisionArrived(let id, let from, let n, let sum): return "revision \(id) from block \(from), \(n) blocks: \(sum)"
         case .playbackState(let s): return "playback \(s.rawValue)"
