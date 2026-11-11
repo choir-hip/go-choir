@@ -14,7 +14,7 @@
     "danger": { "light": "#B3261E", "dark": "#FF6E5E" },
     "onAccent": { "light": "#FFFFFF", "dark": "#0E0E0E" },
     "rule":   { "light": "#111111", "dark": "#EDEDED" },
-    "scrim":  { "light": "rgba(24,14,30,.74)", "dark": "rgba(0,0,0,.80)" },
+    "scrim":  { "light": "rgba(24,14,30,.84)", "dark": "rgba(0,0,0,.86)" },
     "onScrim": { "light": "#FFFFFF", "dark": "#F3F3F3" }
   },
   "type": { "read": "ui-serif, Georgia, serif", "ui": "ui-serif, Georgia, serif", "mono": "ui-monospace, monospace", "scale": "editorial" },

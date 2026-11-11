@@ -14,7 +14,7 @@
     "danger": { "light": "#A00018", "dark": "#FF8A8A" },
     "onAccent": { "light": "#FFFFFF", "dark": "#000000" },
     "rule":   { "light": "#000000", "dark": "#FFFFFF" },
-    "scrim":  { "light": "rgba(24,14,30,.74)", "dark": "rgba(0,0,0,.80)" },
+    "scrim":  { "light": "rgba(24,14,30,.84)", "dark": "rgba(0,0,0,.86)" },
     "onScrim": { "light": "#FFFFFF", "dark": "#F3F3F3" }
   },
   "type": { "read": "system-ui", "ui": "system-ui", "mono": "ui-monospace", "scale": "large" },

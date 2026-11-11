@@ -14,7 +14,7 @@
     "danger": { "light": "#A3142F", "dark": "#FF6B7B" },
     "onAccent": { "light": "#FFFFFF", "dark": "#120D17" },
     "rule":   { "light": "rgba(32,20,58,.22)", "dark": "rgba(243,236,246,.18)" },
-    "scrim":  { "light": "rgba(24,14,30,.74)", "dark": "rgba(0,0,0,.80)" },
+    "scrim":  { "light": "rgba(24,14,30,.84)", "dark": "rgba(0,0,0,.86)" },
     "onScrim": { "light": "#FFFFFF", "dark": "#F3F3F3" }
   },
   "type": {

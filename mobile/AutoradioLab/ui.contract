@@ -63,11 +63,11 @@ component Btn
     primary: bool
     wide: bool
   view
-    row align-items="center" justify-content="center" min-height=44 padding="10px 18px" box-sizing="border-box"
+    row align-items="center" justify-content="center" min-height=44 padding="10px 14px" box-sizing="border-box"
       width=(wide ? "100%" : "auto") border-radius=th.radiusControl
       background-color=(primary ? th.accent : th.paper2)
       border-width=1 border-style="solid" border-color=(primary ? th.accent : th.rule)
-      text label font-family=th.fontUi font-size=16 font-weight=600 color=(primary ? th.onAccent : th.fg) text-align="center"
+      text label font-family=th.fontUi font-size=15 font-weight=600 color=(primary ? th.onAccent : th.fg) text-align="center"
 
 // The room a scrolling page leaves at its end so nothing important sits under the bar: the bar's 56, its 8 above the home
 // indicator, the indicator, and a gap. The one place the number is written; every scroll body ends with it.
@@ -98,7 +98,7 @@ component PageScroll
     id: string
   slot
   view
-    scroll id=id flex=1 min-height=0 width="100%"
+    scroll id=id testId=`${id}-scroll` flex=1 min-height=0 width="100%"
       column padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20
         gap=12 font-family=th.fontRead color=th.fg
         children

@@ -94,6 +94,7 @@ run_drive talk light "" --touch platform
 step "clock data"; wait_ 1500; step tree; shot light-20-onboarding-welcome
 step "tap ob-begin"; view light-21-setup-downloading 1200
 step "clock +3500 real"; step "clock data"; step tree; shot light-22-setup-stalled
+step "tap onboarding-scroll drag 0 -900"; view light-22b-setup-scrolled-to-end 700
 step "tap ob-fallback-transcriber"; view light-23-setup-fallback 900
 step "clock +7500 real"; step "clock data"; step tree; shot light-24-mic-ask
 step "tap ob-mic-ask"; wait_ 1800
@@ -105,7 +106,7 @@ step "tap ob-demo-next"; wait_ 1200
 step "tap ob-demo-next"; view light-27-interview-paused 1200
 step "tap ob-continue"; view light-28-interview-continued 700
 # on to the edition and "Start the radio" (this check is fatal: the radio must really start from the edition page)
-for i in 1 2 3 4 5 6 7 8; do step "tap ob-demo-next"; wait_ 1200; done
+for i in 1 2 3 4 5 6 7; do step "tap ob-demo-next"; wait_ 1200; done
 step "tap ob-demo-next"; view light-29-writing 900
 wait_ 3200; step "tap ob-edition-retry"; wait_ 1200
 wait_ 3500; step tree; shot light-31-edition-done
