@@ -93,12 +93,22 @@ while :; do
     "tap bar-pages" "$W" "tap pile-places" "$W" "tap place-mail" "$W" "clock data" \
     "tap mail-compose" "$W" "clock data" tree "screenshot $SHOTS/19-new-message.png" \
     "tap mail-save" "$W" "clock data" tree "screenshot $SHOTS/20-new-refused.png" \
-    "tap bar-pages" "$W" "tap pile-places" "$W" "tap place-settings" "$W" "tap settings-mode-dark" "$W" "clock data" \
-    "tap bar-pages" "$W" "tap pile-places" "$W" "tap place-mail" "$W" "clock data" tree "screenshot $SHOTS/21-inbox-dark.png" \
-    "tap mail-row-m6" "$W" "clock data" tree "screenshot $SHOTS/22-message-dark.png" \
-    "tap mail-reply" "$W" "clock data" tree "screenshot $SHOTS/23-reply-dark.png" \
     logs >> "$OUT" 2>&1
   rc=$?
+  # Drive 3: the same screens in dark, from a fresh launch (the launcher is long once many pages are open).
+  if [ $rc -eq 0 ]; then
+    DEVELOPER_DIR=$DD /usr/bin/xcrun simctl terminate "$EXACT_SIM" $APP >/dev/null 2>&1
+    DEVELOPER_DIR=$DD /usr/bin/xcrun simctl spawn "$EXACT_SIM" defaults write $APP AutoradioThemeMode dark
+    [ -n "$CONT" ] && rm -f "$CONT/Library/Application Support/Autoradio/open-pages.json"
+    sleep 2
+    "$HERE/exact.sh" agent ios --touch platform \
+      "clock data" "clock +1500 real" "clock data" \
+      "tap bar-pages" "$W" "tap pile-places" "$W" "tap place-mail" "$W" "clock data" tree "screenshot $SHOTS/21-inbox-dark.png" \
+      "tap mail-row-m6" "$W" "clock data" tree "screenshot $SHOTS/22-message-dark.png" \
+      "tap mail-reply" "$W" "clock data" tree "screenshot $SHOTS/23-reply-dark.png" \
+      logs >> "$OUT" 2>&1
+    rc=$?
+  fi
   if grep -q "never opened its agent socket\|not foreground-active\|before opening its agent socket\|the app hung up" "$OUT" && [ $attempt -lt 3 ]; then
     attempt=$((attempt + 1)); echo "launch refused, retry $attempt"; DEVELOPER_DIR=$DD /usr/bin/xcrun simctl terminate "$EXACT_SIM" $APP >/dev/null 2>&1; sleep 5; continue
   fi

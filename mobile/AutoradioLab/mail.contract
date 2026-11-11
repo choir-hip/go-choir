@@ -52,8 +52,8 @@ component MailNotice
     body: string
     retry: bool
   view
-    column testId=testId gap=8 padding="24px 8px" align-items="flex-start"
-      text title font-family=th.fontRead font-size=22 font-weight=700 color=th.fg
+    column testId=testId gap=8 padding="24px 0" align-items="flex-start"
+      text title font-family=th.fontRead font-size=20 font-weight=700 color=th.fg
       text body font-family=th.fontUi font-size=16 color=th.muted line-height=1.4
       if retry
         button press=retryMail testId="mail-retry" buttonStyle="bordered"

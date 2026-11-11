@@ -554,7 +554,7 @@ public final class MailService: @unchecked Sendable {
             v.thread = MailThreads.thread(of: s, in: allCached()).map { t in
                 var r = MailThreadRow(); r.id = t.id; r.address = "mail:" + t.id; r.sender = t.from; r.snippet = t.snippet
                 r.stamp = MailDates.short(t.at, now: now); r.current = t.id == s.id; return r }
-            v.canReply = s.direction != "outbound" || !d.to.isEmpty
+            v.canReply = (s.direction != "outbound" || !d.to.isEmpty) && s.trust != "quarantined"
             let who = s.from.components(separatedBy: " <").first ?? s.from
             v.replyLabel = "Reply to " + (who.isEmpty ? "sender" : who)
             v.spoken = MailText.spoken(from: v.sender, subject: v.subject, blocks: v.blocks)
