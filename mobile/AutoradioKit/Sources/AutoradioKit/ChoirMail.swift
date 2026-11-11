@@ -299,7 +299,7 @@ public enum MailHTML {
         t = MailText.replace(t, "\\s+on[a-z]+\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)", "")
         t = MailText.replace(t, "\\s+(href|src|action|formaction|xlink:href|background|poster)\\s*=\\s*(\"\\s*(javascript|vbscript|data:text)[^\"]*\"|'\\s*(javascript|vbscript|data:text)[^']*')", "")
         // Remote images: remove the src (keep the alt text readable); data: images stay.
-        t = MailText.replace(t, "(<img\\b[^>]*?)\\s+src\\s*=\\s*(\"(?!data:image/)[^\"]*\"|'(?!data:image/)[^']*'|(?!data:image/)[^\\s>]+)", "$1")
+        t = MailText.replace(t, "(<img\\b[^>]*?)\\s+src\\s*=\\s*(\"(?!data:image/)[^\"]*\"|'(?!data:image/)[^']*'|(?![\"'])(?!data:image/)[^\\s>]+)", "$1")
         t = MailText.replace(t, "\\s+(srcset|style)\\s*=\\s*\"[^\"]*(url\\(|expression\\(|@import)[^\"]*\"", "")
         t = MailText.replace(t, "@import[^;]*;", "")
         t = MailText.replace(t, "url\\([^)]*\\)", "none")
