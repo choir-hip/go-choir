@@ -116,7 +116,6 @@ must "wait: first scripted line" "$D" 'Reading what you asked'
 must "wait: a later scripted line" "$D" 'Drafting the revision'
 must "wait: the end" "$D" 'Revision ready'
 must "experiment: clocked 3D boxes" "$D" '[fins-clocked]'
-must "experiment: keyframe 3D boxes" "$D" '[fins-keyframes]'
 must "wait page: reachable" "$D" '[wait]'
 # the pictures must move: consecutive screenshots of the wait differ
 for p in 07-wait-1:07-wait-2 07-wait-2:07-wait-3 07-wait-3:07-wait-4 05-flip-a:05-flip-c; do

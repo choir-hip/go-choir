@@ -7,9 +7,6 @@ use PageScroll from "./ui.contract"
 
 keyframes waitrise
   from opacity=0 translate="0px 8px"
-keyframes finturn
-  from rotate="y 0deg"
-  to rotate="y 360deg"
 
 // The wait for the desk (about 15 s): the hero mark tumbling, real lifecycle lines beneath it, never a spinner and never
 // a percentage. Real use: demo=false, `lines` are the document lifecycle's own sentences so far (the last three show),
@@ -49,8 +46,8 @@ component AliveWait
         text `${floor(el)} s` testId=`${testId}-elapsed` font-family=th.fontMono font-size=12 color=th.muted
 
 // A 3D-box alternative mark (experiment): three triangular boxes turning about y inside one perspective box. Exact has no
-// preserve-3d and a box takes one `rotate` (one axis), so this is a spinning three-fin form, not a tetrahedron. `clocked`:
-// the angle comes from the root clock each frame; otherwise a keyframes animation turns it on the render server.
+// preserve-3d and a box takes one `rotate` (one axis), so this is a spinning three-fin form, not a tetrahedron. The angle
+// comes from the root clock each frame (a `keyframes` rotate with an axis is refused: lower-keyframes BadValue).
 component FinMark
   inject
     th: Theme
@@ -64,8 +61,7 @@ component FinMark
     box testId=testId width=size height=size position="relative" perspective=(size * 4)
       for k in [0, 1, 2] key=k
         box position="absolute" left=(size * 0.1) top=0 width=(size * 0.8) height=size
-          rotate=(clocked ? `y ${deg + k * 60}deg` : "y 0deg")
-          animation=(clocked ? "none" : `finturn 6s linear ${0 - k}s infinite`)
+          rotate=`y ${deg + k * 60}deg`
           svg viewBox="0 0 100 100" width="100%" height="100%"
             polygon points="50,2 98,98 2,98" fill=th.accent fill-opacity=0.55 stroke=th.fg stroke-width=2 stroke-linejoin="round"
 
@@ -103,10 +99,9 @@ component MotionPage
       AliveWait(demo=true, since=waitSince, lines=[], step=0, testId="motion-wait")
       button press=waitReplay testId="motion-wait-replay" buttonStyle="bordered"
         text "Replay the wait"
-      text "Experiment: three triangular boxes with 3D rotate (clocked, then keyframes)" font-family=th.fontUi font-size=13 color=th.muted
+      text "Experiment: three triangular boxes with 3D rotate (angle from the clock; keyframes refuse an axis: BadValue)" font-family=th.fontUi font-size=13 color=th.muted
       row gap=24 align-items="center"
         FinMark(size=96, clocked=true, testId="fins-clocked")
-        FinMark(size=96, clocked=false, testId="fins-keyframes")
 
 // `lab:wait`: the alive wait alone, the realistic worst case for the frame cost (one hero and the bar's mark).
 component WaitPage
