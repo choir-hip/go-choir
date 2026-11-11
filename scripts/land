@@ -215,6 +215,9 @@ write_runner() { # $1 = file
   done
   # agentcore + textureowner as importers only: shard the way CI does (2 shards in
   # parallel = at most 2 heavy packages at once). Not on --local (needs bash 4).
+  # As in CI, the load-sensitive tests in scripts/go-test-scale-tests stay out of
+  # the shards and run alone afterwards; half of agentcore per shard needs more
+  # than go test's default 10 minutes, so the shards get 30.
   if [ "$LOCAL" = 0 ] && printf ' %s ' "$H_PLAIN" | grep -q ' ./internal/agentcore ' && printf ' %s ' "$H_PLAIN" | grep -q ' ./internal/textureowner '; then
     SHARD=1; H_PLAIN=$(printf ' %s ' "$H_PLAIN" | sed 's# ./internal/agentcore # #; s# ./internal/textureowner # #')
   fi
@@ -234,7 +237,10 @@ use=\$(df -P "\$HOME" 2>/dev/null | awk 'NR==2{gsub("%","",\$5);print \$5}'); [ 
 EOF
   [ -n "$L_PLAIN" ] && echo "run go test -count=1 -timeout 30m -p=2$L_PLAIN" >>"$1"
   [ -n "$L_RACE" ] && echo "run go test -race -count=1 -timeout 30m -p=2$L_RACE" >>"$1"
-  [ "$SHARD" = 1 ] && echo "run env TOTAL_SHARDS=2 PARALLEL_SHARDS=1 scripts/go-test-runtime-shards" >>"$1"
+  if [ "$SHARD" = 1 ]; then
+    echo "run env QUARANTINE_FILE=scripts/go-test-scale-tests TOTAL_SHARDS=2 PARALLEL_SHARDS=1 scripts/go-test-runtime-shards -timeout 30m" >>"$1"
+    echo 'run scripts/go-test-with-timing ./internal/agentcore -count=1 -timeout 15m -run "$(grep -v '"'"'^\s*$'"'"' scripts/go-test-scale-tests | grep -v '"'"'^#'"'"' | paste -sd'"'"'|'"'"')"' >>"$1"
+  fi
   for p in $H_PLAIN; do echo "run go test -count=1 -timeout 45m -p=1 $p" >>"$1"; done
   for p in $H_RACE; do echo "run go test -race -count=1 -timeout 45m -p=1 $p" >>"$1"; done
   [ "$GH" = 1 ] && echo 'for t in .github/scripts/*-test; do run timeout 300 bash "$t"; done' >>"$1"
