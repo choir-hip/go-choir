@@ -57,29 +57,72 @@ final class ExactSessionOwner: AudioSessionOwner, @unchecked Sendable {
     }
 }
 
+/// A handler for one source or send name. Lanes register theirs from their own AutoradioModule+<Lane>.swift.
+public typealias AutoradioHandler = ([String: Any], @escaping ([String: Any]) -> Void) -> Void
+
 public final class AutoradioModule: ExactPackage {
-    private let context: ExactPackageContext
-    private var runtime: LabRuntime!
-    private var owner: ExactSessionOwner!
+    // Internal (not private) so the per-lane extension files can reach them.
+    let context: ExactPackageContext
+    var runtime: LabRuntime!
+    var owner: ExactSessionOwner!
+    var choir: ChoirApp!
+    /// The spine's shared kit objects: every lane reads these and none replaces them.
+    var pages: OpenPages!
+    var signals: Signals!
+    var themes: ThemeStore!
+    let pageSources = PageSources()
+    /// name -> handler. Looked up first in `later`; the integrator's switch below answers the rest.
+    var handlers: [String: AutoradioHandler] = [:]
     private var dirty = Set<String>()
     private var scheduled = false
     private var turnArg: [String: Any] = [:]
-    private var choir: ChoirApp!
 
     public init(context: ExactPackageContext) {
         self.context = context
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
         owner = ExactSessionOwner(context: context) { [weak self] s in self?.context.log("AUTORADIO \(s)"); NSLog("AUTORADIO %@", s) }
         runtime = LabRuntime(supportDir: support, session: owner)
-        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["labState", "labAudio", "labEvents", "labTrace", "labTurns", "labStages", "labParams", "labConfigs", "choirPlayer", "choirStories", "choirAuth"]) } }
+        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["labState", "labAudio", "labEvents", "labTrace", "labTurns", "labStages", "labParams", "labConfigs", "choirPlayer", "choirStories", "choirAuth", "barState"]) } }
+        // Demo mode first: the Choir environment then talks to the bundled fixtures, signed in as the demo listener.
+        if Demo.isOn { Demo.install() }
         // The listener path: sign-in (Keychain), the front page, the real stages.
-        choir = ChoirApp(runtime: runtime, keys: KeychainKeyStore(), openURL: { url in DispatchQueue.main.async { UIApplication.shared.open(url) } })
-        choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "labState"]) } }
+        choir = ChoirApp(runtime: runtime, keys: Demo.isOn ? Demo.keys() : KeychainKeyStore(), openURL: { url in DispatchQueue.main.async { UIApplication.shared.open(url) } })
+        choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "labState", "barState"]) } }
+        // The spine's objects.
+        signals = FileSignals(file: support.appendingPathComponent("signals.jsonl"))
+        pages = OpenPages(file: support.appendingPathComponent("open-pages.json"), signals: signals)
+        pages.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["openPages"]) } }
+        themes = ThemeStore(userDir: support.appendingPathComponent("themes"), systemScheme: { Self.systemScheme() })
+        pageSources.register(NotYetPageSource())
+        pageSources.register(PublicationTextSource())
+        // Registration: the spine, then one line per lane (each defined in that lane's own file).
+        registerSpine()
+        registerBar()
+        registerPaper()
+        registerReader()
+        registerCards()
+        registerFiles()
+        registerMail()
+        registerSettings()
+        registerOnboarding()
+        registerMark()
         Task { [choir] in await choir?.refresh() }
     }
 
-    /// Coalesce change notifications to a few per second.
-    private func touch(_ names: [String]) {
+    /// The system's appearance, read from the first window (main thread).
+    static func systemScheme() -> String {
+        let read: () -> String = {
+            let style = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first?.windows.first?.traitCollection.userInterfaceStyle
+            return style == .dark ? "dark" : "light"
+        }
+        return Thread.isMainThread ? read() : DispatchQueue.main.sync(execute: read)
+    }
+
+    /// Register a handler for a source or send name.
+    func handle(_ name: String, _ h: @escaping AutoradioHandler) { handlers[name] = h }
+
+    /// Coalesce change notifications to a few per second. `names` are source names without the "autoradio." prefix.
+    func touch(_ names: [String]) {
         dirty.formUnion(names)
         guard !scheduled else { return }
         scheduled = true
@@ -91,13 +134,14 @@ public final class AutoradioModule: ExactPackage {
         }
     }
 
-    private func json<T: Encodable>(_ v: T) -> [String: Any] {
+    func json<T: Encodable>(_ v: T) -> [String: Any] {
         guard let d = try? JSONEncoder().encode(v), let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return [:] }
         return o
     }
 
     public func later(_ name: String, _ args: [String: Any], preferred: Any?, reply: @escaping ([String: Any]) -> Void) {
         let state = { [unowned self] in self.json(self.runtime.snapshot()) }
+        if let h = handlers[name] { h(args, reply); return }
         switch name {
         case "labState": reply(state())
         case "labAudio": reply(json(runtime.audioInfo()))

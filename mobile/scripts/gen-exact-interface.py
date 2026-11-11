@@ -75,6 +75,21 @@ names = [
     snd("choirPlayPause"), snd("choirTalkDown"), snd("choirTalkUp"),
     snd("choirPlay", {"route": S}),
 ]
+# Per-lane fragments: exact-package/interface/<lane>.json = {"shapes": {...}, "names": [...]}. Each lane owns its own
+# file, so no two lanes edit the same one. A shape or a source/send name declared twice is an error.
+IFACE = os.path.join(HERE, "interface")
+seen = {(n.get("source") or n.get("send")) for n in names}
+for f in sorted(os.listdir(IFACE)) if os.path.isdir(IFACE) else []:
+    if not f.endswith(".json"): continue
+    frag = json.load(open(os.path.join(IFACE, f)))
+    for k, v in frag.get("shapes", {}).items():
+        if k in shapes: raise SystemExit("%s: shape %s is declared twice" % (f, k))
+        shapes[k] = v
+    for n in frag.get("names", []):
+        key = n.get("source") or n.get("send")
+        if key in seen: raise SystemExit("%s: name %s is declared twice" % (f, key))
+        seen.add(key); names.append(n)
+
 json.dump({"kind": "interface", "name": "@choir/autoradio", "version": "1.0.0", "substitute": "implementation",
            "shapes": shapes, "names": names}, open(os.path.join(HERE, "exact.json"), "w"), indent=2)
 json.dump({"name": "@choir/autoradio", "version": "1.0.0", "private": True,
