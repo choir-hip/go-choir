@@ -1,0 +1,22 @@
+// Paper: the front page. Lane 2 owns this file. The spine ships a placeholder front page: the stories as plain rows.
+// testIds: paper-story-<route>.
+use Theme, StoryList from "@choir/autoradio"
+use PageScroll, Card from "./ui.contract"
+
+component PaperPage
+  inject
+    th: Theme
+    sl: StoryList
+    openPage: action
+  props
+    address: string
+    title: string
+  view
+    PageScroll(id="paper")
+      text "AUTOPAPER" font-family=th.fontUi font-size=13 font-weight=700 letter-spacing=2 color=th.accent testId="page-title"
+      for s in sl.rows key=s.route
+        button press=openPage(`pub:${s.route}`, s.title) appearance="none" testId=`paper-story-${s.route}` width="100%"
+          column gap=4 align-items="flex-start" padding="10px 0" width="100%"
+            text s.section font-family=th.fontUi font-size=12 color=th.muted
+            text s.title font-family=th.fontRead font-size=24 font-weight=700 color=th.fg text-align="left"
+            text s.dek font-family=th.fontRead font-size=16 color=th.muted text-align="left"

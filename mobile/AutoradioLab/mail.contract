@@ -1,0 +1,16 @@
+// Mail: a mailbox (mailbox:<folder>) and a message (mail:<id>). Lane 6 owns this file. The spine ships the "not yet" pages.
+use NotYetPage from "./ui.contract"
+
+component MailboxPage
+  props
+    address: string
+    title: string
+  view
+    NotYetPage(address=address, title=title)
+
+component MailPage
+  props
+    address: string
+    title: string
+  view
+    NotYetPage(address=address, title=title)

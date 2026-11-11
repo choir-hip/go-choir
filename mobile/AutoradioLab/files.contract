@@ -1,0 +1,9 @@
+// Files: browse and open (file:<path>). Lane 5 owns this file and viewers.contract. The spine ships the "not yet" page.
+use NotYetPage from "./ui.contract"
+
+component FilePage
+  props
+    address: string
+    title: string
+  view
+    NotYetPage(address=address, title=title)

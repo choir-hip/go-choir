@@ -1,0 +1,7 @@
+// Lane members file (files): this lane's states, derives, resources, mutations and actions, as if written in the root.
+// Owned by the files lane. Declare the shapes you use with `use ... from "@choir/autoradio"` at the top of this file
+// (your shapes and source names live in exact-package/interface/files.json). Every name you want a child component to
+// `inject` goes in your band of the `provide` list in app.contract.
+members Autoradio
+  // placeholder so the block is not empty; delete it when you add your first member
+  state filesPlaceholder = false

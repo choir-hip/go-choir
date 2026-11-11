@@ -1,0 +1,56 @@
+// Settings (settings:<screen>). Lane 7 owns this file. The spine ships a plain page with the three controls the
+// proof needs and later screens keep reachable: themes (data, switched at run time), light/dark/system, demo mode,
+// and the two developer pages.
+// testIds: settings-theme-<id>, settings-mode-<light|dark|system>, settings-demo, settings-components, settings-theme-problems.
+use Theme, ThemeList, DemoInfo from "@choir/autoradio"
+use PageScroll from "./ui.contract"
+
+component SettingsPage
+  inject
+    th: Theme
+    thl: ThemeList
+    dm: DemoInfo
+    setTheme: action
+    setMode: action
+    setDemo: action
+    openPage: action
+  props
+    address: string
+    title: string
+  view
+    PageScroll(id="settings")
+      text "Settings" role="heading" aria-level=1 font-size=28 font-weight=700 testId="page-title"
+      text "Theme" font-family=th.fontUi font-size=13 color=th.muted
+      for t in thl.rows key=t.id
+        button press=setTheme(t.id) testId=`settings-theme-${t.id}` role="radio" aria-checked=t.current appearance="none"
+          text `${t.current ? "● " : "○ "}${t.name}` font-family=th.fontUi font-size=17 color=th.fg padding="6px 0"
+      for t in thl.problems key=t
+        text t testId="settings-theme-problems" font-family=th.fontMono font-size=12 color=th.danger
+      text "Appearance" font-family=th.fontUi font-size=13 color=th.muted
+      row gap=8
+        button press=setMode("light") testId="settings-mode-light" role="radio" aria-checked=(thl.mode == "light") buttonStyle=(thl.mode == "light" ? "filled" : "bordered")
+          text "Light"
+        button press=setMode("dark") testId="settings-mode-dark" role="radio" aria-checked=(thl.mode == "dark") buttonStyle=(thl.mode == "dark" ? "filled" : "bordered")
+          text "Dark"
+        button press=setMode("system") testId="settings-mode-system" role="radio" aria-checked=(thl.mode == "system") buttonStyle=(thl.mode == "system" ? "filled" : "bordered")
+          text "System"
+      text `Showing ${th.name} (${th.scheme})` testId="settings-current" font-family=th.fontUi font-size=13 color=th.muted
+      text "Demo" font-family=th.fontUi font-size=13 color=th.muted
+      button press=setDemo(dm.on ? "false" : "true") testId="settings-demo" buttonStyle="bordered"
+        text (dm.on ? "Demo mode is on (takes effect at the next launch). Turn off" : "Turn demo mode on (takes effect at the next launch)")
+      text "Developer" font-family=th.fontUi font-size=13 color=th.muted
+      Spike3D()
+      button press=openPage("lab:components", "Components") testId="settings-components" buttonStyle="bordered"
+        text "Components and Trace"
+
+// Spike (spine, item 7): does Exact draw a 3D rotation about y with perspective, animated by transition? Tap the square.
+// testId settings-spike3d; its label says the angle. Lane 9 deletes this when the mark exists.
+component Spike3D
+  state turned = false
+  action turn
+    turned = turned == false
+  view
+    column perspective=600 align-items="center" padding=12
+      button press=turn testId="settings-spike3d" appearance="none" aria-label=(turned ? "Rotated 50 degrees about y" : "Flat")
+        box width=80 height=80 background-color="#A60072" border-radius=8
+          rotate=(turned ? "y 50deg" : "y 0deg") transition="rotate 400ms ease"

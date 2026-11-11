@@ -1,0 +1,11 @@
+// Viewers (image, video, audio, PDF, e-book) that FilePage picks between. Lane 5 owns this file.
+// Nothing imports it yet: FilePage in files.contract will `use` the components written here.
+use Theme from "@choir/autoradio"
+
+component ViewerNotice
+  inject
+    th: Theme
+  props
+    name: string
+  view
+    text `${name} has no viewer yet.` font-family=th.fontUi color=th.muted

@@ -1,0 +1,29 @@
+// First run: sign in, then (lane 8) voice setup and the interview. Lane 8 owns this file.
+// The spine ships the sign-in screen the listener-first app already had, unchanged.
+// testIds: signin, signin-intro, signin-code, signin-open, signin-cancel, signin-message.
+use Theme, ChoirAuth from "@choir/autoradio"
+
+component SignInScreen
+  inject
+    th: Theme
+    au: ChoirAuth
+    signIn: action
+    cancelSignIn: action
+    openApproval: action
+  view
+    column position="absolute" inset=0 padding=24 gap=16 align-items="center" justify-content="center"
+      text "Autoradio" font-size=34 font-weight=700 role="heading" aria-level=2 font-family=th.fontRead color=th.fg
+      text "Sign in to hear the paper and talk to your computer." testId="signin-intro" text-align="center" font-family=th.fontRead color=th.fg
+      if au.status == "pending"
+        column gap=12 align-items="center"
+          text "Your code" font-family=th.fontUi color=th.muted
+          text au.userCode testId="signin-code" font-size=34 font-family=th.fontMono color=th.fg
+          text "Approve this sign-in in your browser." font-family=th.fontUi color=th.muted
+          button press=openApproval testId="signin-open" buttonStyle="filled"
+            text "Open the approval page"
+          button press=cancelSignIn testId="signin-cancel"
+            text "Cancel"
+      if au.status != "pending"
+        button press=signIn testId="signin" buttonStyle="filled" padding=16
+          text "Sign in"
+      text au.message testId="signin-message" font-family=th.fontUi color=th.muted

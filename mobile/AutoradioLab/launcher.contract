@@ -1,0 +1,51 @@
+// The launcher: places, search and open pages, a layer reaching about 70% of the screen. Lane 4 owns this file.
+// The spine ships the places as plain rows (live "what is new" lines are lane 4's), a search field that does nothing
+// yet, the open pages as chips, and a Developer row for the Components page. Pull the bar up, or tap Places in the pile.
+// testIds: launcher, launcher-search, place-<slug>, launcher-open-<address>.
+use Theme, PageList from "@choir/autoradio"
+use Layer from "./ui.contract"
+
+component PlaceRow
+  inject
+    th: Theme
+    openPage: action
+  props
+    slug: string
+    name: string
+    address: string
+  view
+    button press=openPage(address, name) testId=`place-${slug}` appearance="none" width="100%"
+      row padding="12px 0" align-items="center" width="100%"
+        text name font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
+        image "symbol:forward-chevron" color=th.muted
+
+component Launcher
+  inject
+    th: Theme
+    pg: PageList
+    openPage: action
+    focusPage: action
+    hideLayer: action
+  view
+    column testId="launcher" position="absolute" inset=0
+      box testId="launcher-scrim" position="absolute" inset=0 background-color=th.fg opacity=th.behindDim3 press=hideLayer transition=`opacity ${th.motionFastMs}ms ease`
+      column position="absolute" left=0 right=0 bottom=0 height="72%"
+        Layer(testId="launcher-layer")
+          scroll flex=1 min-height=0
+            column padding=20 gap=8 padding-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 16px)"
+              input type="search" placeholder="Search pages, files, mail" aria-label="Search" testId="launcher-search"
+                font-family=th.fontUi padding="10px 4px"
+              text "Open" font-family=th.fontUi font-size=13 color=th.muted
+              scroll overflow-x="scroll" overflow-y="hidden" display="flex" flex-direction="row" gap=8
+                for p in pg.rows key=p.address
+                  button press=focusPage(p.address) testId=`launcher-open-${p.address}` buttonStyle="bordered"
+                    text p.title
+              text "Places" font-family=th.fontUi font-size=13 color=th.muted
+              PlaceRow(slug="paper", name="Paper", address="paper:front")
+              PlaceRow(slug="textures", name="Textures", address="textures:")
+              PlaceRow(slug="files", name="Files", address="file:/")
+              PlaceRow(slug="mail", name="Mail", address="mailbox:inbox")
+              PlaceRow(slug="activity", name="Activity", address="activity:")
+              PlaceRow(slug="settings", name="Settings", address="settings:root")
+              text "Developer" font-family=th.fontUi font-size=13 color=th.muted
+              PlaceRow(slug="components", name="Components", address="lab:components")

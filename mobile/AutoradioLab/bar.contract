@@ -1,0 +1,50 @@
+// The bar: one glass capsule floating over the bottom of every page (plan section 1). Lane 1 owns this file.
+// Three zones: pages button (leading), the centre that changes with the bar's state (BarInfo.state), the voice button
+// (trailing: tap plays or pauses, hold 350 ms talks). It floats: bottom 8 pt above the home indicator, 12 pt in from
+// the sides, no border, no strip beneath it; the page runs full-bleed under it.
+// testIds: bar, bar-pages, bar-pages-count, bar-field, bar-text, bar-voice, bar-progress.
+use Theme, PageList, BarInfo from "@choir/autoradio"
+use Mark from "./mark.contract"
+use Surface from "./ui.contract"
+
+component BarShell
+  inject
+    th: Theme
+    pg: PageList
+    bi: BarInfo
+    ask: string
+    editAsk: action
+    sendAsk: action
+    togglePile: action
+    pullBar: action
+    pullEnd: action
+    voiceDown: action
+    voiceUp: action
+    showLayer: action
+  derive aim = pg.topKind == "reader" ? `Reply to ${pg.topTitle}…` : "Ask about this page…"
+  view
+    row testId="bar" position="absolute" left=12 right=12 bottom="calc(env(safe-area-inset-bottom) + 8px)" z-index=20
+      min-height=56 align-items="center" gap=4 padding=6 box-sizing="border-box"
+      pan=pullBar panrelease=pullEnd
+      Surface(level=2, radius=th.radiusPill, bleed=0)
+      button testId="bar-pages" press=togglePile aria-label=`Open pages, ${pg.count} open` appearance="none" width=44 height=44
+        column align-items="center" justify-content="center"
+          image "symbol:layers" color=th.fg
+          text `${pg.count}` testId="bar-pages-count" font-family=th.fontUi font-size=11 color=th.muted
+      column flex=1 min-width=0 justify-content="center"
+        if bi.state == "idle"
+          input value=ask input=editAsk submit=sendAsk placeholder=aim aria-label=aim testId="bar-field" enterkeyhint="send"
+            font-family=th.fontRead font-size=16 color=th.fg padding="8px 6px"
+            ::placeholder
+              color=th.muted
+        if bi.state == "playing"
+          button press=showLayer("player") testId="bar-text" appearance="none" aria-label="Open the player"
+            text bi.text font-family=th.fontUi font-size=15 color=th.fg line-clamp=1
+        if bi.state != "idle" and bi.state != "playing"
+          text bi.text testId="bar-text" font-family=th.fontUi font-size=15 color=th.fg line-clamp=3 padding="6px"
+      button testId="bar-voice" pointerdown=voiceDown pointerup=voiceUp appearance="none" width=44 height=44
+        aria-label="Play or pause; hold to talk"
+        Mark(state=bi.state)
+      if bi.state == "playing"
+        box testId="bar-progress" position="absolute" left=20 bottom=2 height=1 width=`${floor(bi.progress * 100)}%`
+          background-color=th.accent

@@ -1,0 +1,41 @@
+// Open pages as cards: the pile (plan section 1, "Open pages are cards"). Lane 4 owns this file.
+// The spine ships the deck with depth (older cards offset upward, smaller, dimmer), tap to go to a page, swipe left
+// to close it (`swipeleft`: the card follows the finger and the action runs when it lifts past 64 pt; this is the
+// spike's answer, not `pan`), a Close button for VoiceOver, "Places" and "Reopen". Swipe right and Undo are lane 4's.
+// testIds: pile, pile-scrim, pile-places, pile-reopen, card-<address>, card-close-<address>.
+use Theme, PageList from "@choir/autoradio"
+use Card from "./ui.contract"
+
+component Pile
+  inject
+    th: Theme
+    pg: PageList
+    closePage: action
+    focusPage: action
+    hideLayer: action
+    showLayer: action
+    reopenPage: action
+  view
+    column testId="pile" position="absolute" inset=0
+      box testId="pile-scrim" position="absolute" inset=0 background-color=th.fg opacity=th.behindDim3 press=hideLayer transition=`opacity ${th.motionFastMs}ms ease`
+      row position="absolute" left=20 right=20 top="calc(env(safe-area-inset-top) + 12px)" gap=8 justify-content="flex-end"
+        button press=reopenPage testId="pile-reopen" buttonStyle="glass"
+          text "Reopen"
+        button press=showLayer("launcher") testId="pile-places" buttonStyle="glass"
+          text "Places"
+      for p, i in pg.rows key=p.address
+        column position="absolute" left="9%" right="9%" height=300 touch-action="pan-y" testId=`card-swipe-${p.address}`
+          bottom=`calc(env(safe-area-inset-bottom) + ${96 + min(i, 5) * 34}px)`
+          scale=(1 - min(i, 5) * 0.04) opacity=(1 - min(i, 5) * 0.12) z-index=(50 - i)
+          swipeleft=closePage(p.address)
+          transition=`scale -exact-spring(${th.springStiffness}, ${th.springDamping}, ${th.springMass}), opacity ${th.motionFastMs}ms ease`
+          -exact-layout-transition=`${th.motionEnterMs}ms ease`
+          Card(level=2, testId=`card-${p.address}`, minHeight=300)
+            button press=focusPage(p.address) appearance="none" testId=`card-open-${p.address}` aria-label=`Go to ${p.title}`
+              column padding=16 gap=6 align-items="flex-start" width="100%"
+                text p.kind font-family=th.fontUi font-size=12 color=th.muted
+                text p.title font-family=th.fontRead font-size=22 font-weight=700 color=th.fg text-align="left"
+                text p.address font-family=th.fontMono font-size=12 color=th.muted
+            button press=closePage(p.address) testId=`card-close-${p.address}` aria-label=`Close ${p.title}` appearance="none"
+              position="absolute" top=8 right=8 width=44 height=44
+              image "symbol:close" color=th.muted

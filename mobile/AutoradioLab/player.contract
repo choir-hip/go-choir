@@ -1,0 +1,34 @@
+// The expanded player: a layer that rises from the bar. Lane 1 owns this file; the spine ships the controls the
+// listener-first app already had (title, passage, position, previous, play and pause, next).
+// testIds: player, player-title, player-passage, player-position, player-prev, player-play, player-next, player-close.
+use Theme, ChoirPlayer from "@choir/autoradio"
+use Layer from "./ui.contract"
+
+component PlayerLayer
+  inject
+    th: Theme
+    pl: ChoirPlayer
+    hideLayer: action
+    radioPlay: action
+    previous: action
+    next: action
+  view
+    column testId="player" position="absolute" inset=0
+      box testId="player-scrim" position="absolute" inset=0 background-color=th.fg opacity=th.behindDim3 press=hideLayer transition=`opacity ${th.motionFastMs}ms ease`
+      column position="absolute" left=0 right=0 bottom=0 height="62%"
+        Layer(testId="player-layer")
+          column padding=20 gap=12 padding-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 16px)"
+            row align-items="center"
+              text (pl.title == "" ? "Autoradio" : pl.title) testId="player-title" role="heading" aria-level=2 flex=1
+                font-size=22 font-weight=700 font-family=th.fontRead color=th.fg
+              button press=hideLayer testId="player-close" aria-label="Close the player" appearance="none"
+                image "symbol:close" color=th.muted
+            text pl.passage testId="player-passage" font-size=17 line-height=1.5 font-family=th.fontRead color=th.fg
+            text pl.position testId="player-position" font-size=13 font-family=th.fontUi color=th.muted
+            row gap=24 justify-content="center" align-items="center"
+              button press=previous testId="player-prev" aria-label="Previous passage" appearance="none"
+                image "symbol:skip-back-15" color=th.fg
+              button press=radioPlay testId="player-play" aria-label=(pl.playing ? "Pause" : "Play") appearance="none"
+                image "symbol:play-fill" color=th.accent
+              button press=next testId="player-next" aria-label="Next passage" appearance="none"
+                image "symbol:skip-forward-15" color=th.fg

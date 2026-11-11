@@ -1,0 +1,159 @@
+// The Components page (the Lab: stages, parameters, configurations, kept turns, the audio switch) and the Trace page. The
+// integrator lane owns this file: these are the screens it had as tabs, now pages ("lab:components", "lab:trace"). The
+// bodies are the originals; only the frame (PageScroll, `inject`) is the spine's. testIds are unchanged.
+use StatBar from "exact:content"
+use LabState, StageList, ParamList, Trace, TurnList, Lines, Names, AudioInfo, ChoirAuth, Theme from "@choir/autoradio"
+use PageScroll from "./ui.contract"
+
+component ComponentsPage
+  inject
+    th: Theme
+    st: LabState
+    aud: AudioInfo
+    au: ChoirAuth
+    stages: StageList
+    params: ParamList
+    events: Lines
+    configs: Names
+    cfgName: string
+    cfgUrl: string
+    modeLabel: string
+    yieldLabel: string
+    openPage: action
+    signOut: action
+    start: action
+    stop: action
+    setPolicy: action
+    setAckTiming: action
+    talkDown: action
+    talkUp: action
+    inject: action
+    replay: action
+    editCfgName: action
+    saveCfg: action
+    editCfgUrl: action
+    loadCfg: action
+    loadUrl: action
+    pick: action
+    setParam: action
+  view
+    PageScroll(id="components")
+      text "Components" role="heading" aria-level=1 font-size=28 font-weight=700 testId="page-title"
+      text `${st.residentMB.toFixed(0)} MB · ${st.thermal}` testId="resources" color="-exact-secondary-label"
+      column gap=12
+        text "Account" role="heading" aria-level=2
+        text (au.signedIn ? `Signed in to ${au.baseURL}` : "Not signed in") testId="account" color="-exact-secondary-label"
+        if au.signedIn
+          button press=signOut testId="signout"
+            text "Sign out"
+        button press=openPage("lab:trace", "Trace") testId="open-trace"
+          text "Open the trace of the last turn"
+        row gap=8
+          button press=start testId="start"
+            text (st.running ? "Restart audio" : "Start audio")
+          button press=stop testId="stop"
+            text "Stop"
+        text "Audio" role="heading" aria-level=2
+        text `State ${aud.state} · engine ${aud.engine} · voice processing ${aud.voiceProcessing ? "on" : "off"}` testId="audio-state"
+        text `Programme ${aud.audible ? "audible" : "silent"} at volume ${aud.volume.toFixed(2)} · last switch ${aud.lastSwitchMs.toFixed(0)} ms` testId="audio-level" color="-exact-secondary-label"
+        text aud.route testId="audio-route" font="-exact-footnote" color="-exact-secondary-label"
+        for pol in aud.policies key=pol
+          button press=setPolicy(pol) role="radio" aria-checked=(aud.policy == pol) testId=`policy-${pol}`
+            text `${aud.policy == pol ? "● " : "○ "}${pol}`
+        text "Acknowledgement" role="heading" aria-level=2
+        for tm in aud.ackTimings key=tm
+          button press=setAckTiming(tm) role="radio" aria-checked=(aud.ackTiming == tm) testId=`ack-${tm}`
+            text `${aud.ackTiming == tm ? "● " : "○ "}${tm == "immediate" ? "Say it at once" : "Wait for System 1"}`
+        text yieldLabel testId="yield"
+        text modeLabel testId="mode" color="-exact-secondary-label"
+        text `Phase: ${st.phase} · mic ${st.micActive ? "on" : "off"} · config ${st.configName}` testId="phase" color="-exact-secondary-label"
+        text st.message testId="lab-message" color="-exact-secondary-label"
+        text (st.transcript == "" ? "(listening)" : st.transcript) testId="lab-transcript"
+        button pointerdown=talkDown pointerup=talkUp testId="lab-talk" appearance="none"
+          width="100%" padding=40 background-color="-exact-secondary-background"
+          text (st.phase == "playing" ? "Hold to talk" : st.phase)
+        row gap=8 align-items="center"
+          button press=inject testId="inject"
+            text "Inject fixture turn"
+          button press=replay("fixture-plain") testId="replay-fixture"
+            text "Replay fixture turn"
+        text "Configuration" role="heading" aria-level=2
+        text `Current: ${st.configName}` testId="config"
+        row gap=8 align-items="center"
+          input value=cfgName input=editCfgName placeholder="Name to save as" aria-label="Configuration name" testId="cfg-name" flex=1 min-width=0
+          button press=saveCfg testId="cfg-save"
+            text "Save"
+        for n in configs.names key=n
+          button press=loadCfg(n) testId=`cfg-${n}`
+            text `Load ${n}`
+        row gap=8 align-items="center"
+          input value=cfgUrl input=editCfgUrl placeholder="Load from URL" aria-label="Configuration URL" testId="cfg-url" flex=1 min-width=0
+          button press=loadUrl testId="cfg-url-load"
+            text "Fetch"
+        text "Stages" role="heading" aria-level=2
+        for r in stages.rows key=`${r.kind}.${r.id}`
+          button press=pick(r.kind, r.id) role="radio" aria-checked=r.selected testId=`stage-${r.kind}-${r.id}`
+            text `${r.selected ? "● " : "○ "}${r.kindLabel}: ${r.name}${r.network ? " (network)" : ""}`
+        text "Parameters" role="heading" aria-level=2
+        for p, i in params.rows key=i
+          column gap=2
+            text `${p.stage} · ${p.label}` color="-exact-secondary-label"
+            input value=p.value input=setParam(p.kind, p.name) aria-label=p.label testId=`param-${p.kind}-${p.name}`
+            text p.hint color="-exact-secondary-label"
+        text "Events" role="heading" aria-level=2
+        for l, i in events.lines key=i
+          text l font="-exact-footnote"
+
+component TracePage
+  inject
+    th: Theme
+    trace: Trace
+    other: Trace
+    turns: TurnList
+    cmp: string
+    expPath: string
+    expName: string
+    exportTurn: action
+    shareExport: action
+    choose: action
+    compare: action
+    replay: action
+  view
+    PageScroll(id="trace")
+      text "Trace" role="heading" aria-level=1 font-size=28 font-weight=700 testId="page-title"
+      column gap=12
+        text "Last turn" role="heading" aria-level=2
+        text `"${trace.transcript}"` testId="trace-transcript"
+        text `${trace.configName} · addressed by ${trace.addressedBy} · outcome ${trace.outcome}` color="-exact-secondary-label"
+        text `Acknowledgement ${trace.ackMs.toFixed(0)} ms · revision ${trace.revisionMs.toFixed(0)} ms after the turn ended` testId="trace-times"
+        text `${trace.id}` testId="trace-id" font="-exact-footnote" color="-exact-secondary-label"
+        text `Audio switch ${trace.audioSwitchMs.toFixed(0)} ms · ${trace.timings.length} stage timings` testId="trace-switch" color="-exact-secondary-label"
+        row gap=8 align-items="center"
+          button press=exportTurn(trace.id) testId="trace-export"
+            text "Export JSON"
+          if expPath != ""
+            button press=shareExport(expPath) testId="trace-share"
+              text "Share"
+        if expName != ""
+          text `Saved ${expName} in Documents/AutoradioExports` testId="trace-exported" font="-exact-footnote" color="-exact-secondary-label"
+        for t2, j in trace.timings key=j
+          StatBar(label=`${t2.stage} (+${t2.startMs.toFixed(0)} ms)`, value=`${t2.durMs.toFixed(0)} ms`, fraction=(trace.totalMs > 0 ? t2.durMs / trace.totalMs : 0), tint=none)
+        text "Events" role="heading" aria-level=2
+        for l2, k in trace.lines key=k
+          text l2 font="-exact-footnote"
+        if cmp != ""
+          text "Compared with" role="heading" aria-level=2
+          text `${other.configName}: ack ${other.ackMs.toFixed(0)} ms, revision ${other.revisionMs.toFixed(0)} ms` testId="compare-times"
+          for t3, m in other.timings key=m
+            StatBar(label=t3.stage, value=`${t3.durMs.toFixed(0)} ms`, fraction=(other.totalMs > 0 ? t3.durMs / other.totalMs : 0), tint=none)
+        text "Kept turns" role="heading" aria-level=2
+        for r2 in turns.rows key=r2.id
+          column gap=4
+            text `${r2.transcript} (${r2.configName}, ${r2.outcome})`
+            row gap=8
+              button press=choose(r2.id) testId=`show-${r2.id}`
+                text "Show"
+              button press=compare(r2.id) testId=`cmp-${r2.id}`
+                text "Compare"
+              button press=replay(r2.id) testId=`replay-${r2.id}`
+                text "Replay with current configuration"

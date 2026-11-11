@@ -1,0 +1,9 @@
+// Textures: the listener's documents. Lane 3 owns this file (the reader lane). The spine ships the "not yet" page.
+use NotYetPage from "./ui.contract"
+
+component TexturesPage
+  props
+    address: string
+    title: string
+  view
+    NotYetPage(address=address, title=title)

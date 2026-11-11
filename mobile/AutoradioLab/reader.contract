@@ -1,0 +1,17 @@
+// The reader: a story (pub:) or the listener's own document (texture:). Lane 3 owns this file.
+// The spine ships the plain-text renderer: the page's model (`pmod`, answered by the kit's PageSource) as paragraphs.
+use Theme, PageModel from "@choir/autoradio"
+use PlainPage, NotYetPage from "./ui.contract"
+
+component ReaderPage
+  inject
+    th: Theme
+    pmod: PageModel
+  props
+    address: string
+    title: string
+  view
+    if pmod.status == "ready"
+      PlainPage(title=pmod.title, lines=pmod.lines)
+    else
+      NotYetPage(address=address, title=title)

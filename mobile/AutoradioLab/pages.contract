@@ -1,0 +1,49 @@
+// The page host and the spine's two trivial renderers. Owned by the spine.
+//
+// How a lane adds a page kind: the spine has already wired it. PageHost below names one component per kind, imported
+// from the lane's own file (paper.contract, reader.contract, ...), with the same two props (address, title). The lane
+// replaces the body of its component; it takes whatever else it needs with `inject` (the root `provide`s it; a lane
+// adds its names to its own band in app.contract) and reads its page's model with the `pageModel` source.
+use Theme from "@choir/autoradio"
+use NotYetPage from "./ui.contract"
+use PaperPage from "./paper.contract"
+use ReaderPage from "./reader.contract"
+use TexturesPage from "./textures.contract"
+use FilePage from "./files.contract"
+use MailPage, MailboxPage from "./mail.contract"
+use ActivityPage from "./activity.contract"
+use SettingsPage from "./settings.contract"
+use ComponentsPage, TracePage from "./components.contract"
+
+component PageHost
+  props
+    address: string
+    kind: string
+    title: string
+  derive known = ["paper", "reader", "textures", "file", "mail", "mailbox", "activity", "settings", "lab"].includes(kind)
+  view
+    column position="absolute" inset=0
+      // ---- one line per kind: a lane replaces the component, not this line ----
+      if kind == "paper"
+        PaperPage(address=address, title=title)
+      if kind == "reader"
+        ReaderPage(address=address, title=title)
+      if kind == "textures"
+        TexturesPage(address=address, title=title)
+      if kind == "file"
+        FilePage(address=address, title=title)
+      if kind == "mail"
+        MailPage(address=address, title=title)
+      if kind == "mailbox"
+        MailboxPage(address=address, title=title)
+      if kind == "activity"
+        ActivityPage(address=address, title=title)
+      if kind == "settings"
+        SettingsPage(address=address, title=title)
+      if kind == "lab" and address == "lab:components"
+        ComponentsPage()
+      if kind == "lab" and address == "lab:trace"
+        TracePage()
+      // ---- end of kinds ----
+      if known == false
+        NotYetPage(address=address, title=title)

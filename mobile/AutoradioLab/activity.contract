@@ -1,0 +1,10 @@
+// Activity: what the paper and the computer did lately (activity:). Owned by lane 7 (settings, accounts, "what the
+// paper has learned"). The spine ships the "not yet" page.
+use NotYetPage from "./ui.contract"
+
+component ActivityPage
+  props
+    address: string
+    title: string
+  view
+    NotYetPage(address=address, title=title)

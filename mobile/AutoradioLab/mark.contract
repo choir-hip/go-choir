@@ -1,0 +1,18 @@
+// The mark: the TetraMark that shows what the radio is doing, on the voice button. Lane 9 owns this file (and mark.ts).
+// The spine ships a flat placeholder glyph per bar state: idle and playing show play and pause, listening shows a microphone.
+use Theme from "@choir/autoradio"
+
+component Mark
+  inject
+    th: Theme
+  props
+    state: string
+  view
+    row width=44 height=44 align-items="center" justify-content="center" testId="mark"
+      if state == "playing"
+        image "symbol:pause-fill" color=th.accent2
+      else
+        if state == "listening" or state == "heard" or state == "holding"
+          image "symbol:microphone" color=th.accent2
+        else
+          image "symbol:play-fill" color=th.accent2
