@@ -5,7 +5,7 @@
 // top-level sections, checks every string against a restricted CSS subset so
 // a forked or taken document cannot inject CSS, and gates contrast on every
 // scheme the theme defines. It imports no desk or prompt code, like
-// internal/styleguide.
+// the styleguide package.
 //
 // Ways it can fail, written before the code:
 //
