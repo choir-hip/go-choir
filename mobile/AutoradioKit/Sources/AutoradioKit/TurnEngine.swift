@@ -181,6 +181,7 @@ public actor TurnEngine {
 
     public func buttonDown() async {
         let now = env.log.clock.now
+        ignoreNextButtonUp = false          // a new press: the release of a cancelled hold that never came must not swallow this turn's Send
         buttonDownAt = now
         if phase == .acknowledging || phase == .holding || phase == .revised { await interruptPipeline() }
         await prepareIdle()
@@ -239,6 +240,7 @@ public actor TurnEngine {
         if phase == .acknowledging || phase == .holding || phase == .revised {
             env.log.emit(.turnCancelled)
             await interruptPipeline()
+            await restoreProgramme(reason: "turn cancelled")
             return
         }
         guard turn != nil || buttonDownAt != nil else { return }
@@ -446,6 +448,17 @@ public actor TurnEngine {
         pipeline?.cancel(); pipeline = nil
         if let l = lastFinished { env.onOutcome(l.id, .spokeAgain) }
         setPhase(.playing)
+    }
+
+    /// The pipeline was cancelled before it reached its own tail (which resumes the programme and takes the listening session back):
+    /// do what the tail would have done. Not part of `interruptPipeline`: a new press or typed turn starts straight into the next turn.
+    func restoreProgramme(reason: String) async {
+        await setLevelTo(.play, reason: .resume)
+        await env.playback.resume()
+        do { try await env.session.claim(.listening, preferBuiltInMic: false, reason: reason) } catch {
+            env.log.emit(.error(stage: "audio-session", message: "\(error)"))
+        }
+        if let b = bounds { await b.reset() }
     }
 
     /// The pipeline and every task it starts live and die together: when the pipeline is cancelled (the listener spoke again)

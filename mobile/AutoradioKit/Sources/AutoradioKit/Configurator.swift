@@ -292,12 +292,12 @@ public final class ConfigRunner: @unchecked Sendable {
         var rec = ConfigurationRecord(device: device, thresholds: thresholds)
         rec.startedAt = now()
         observer(.probed(device))
-        guard device.supported else { rec.notes.append(device.unsupportedReason ?? "not supported"); return finalize(rec, floors()) }
+        guard device.supported else { rec.notes.append(device.unsupportedReason ?? "not supported"); return await accept(floors(), rec) }
         var unavailable = Set<String>()
         var plan = ConfigPlanner.plan(device: device, thresholds: thresholds, table: table)
         rec.plan = plan
         observer(.planned(plan.count))
-        if plan.isEmpty { rec.notes.append("no configuration fits the memory budget of this device; the built-in voice only"); return finalize(rec, floors()) }
+        if plan.isEmpty { rec.notes.append("no configuration fits the memory budget of this device; the built-in voice only"); return await accept(floors(), rec) }
 
         var attemptIndex = 0
         while !plan.isEmpty {

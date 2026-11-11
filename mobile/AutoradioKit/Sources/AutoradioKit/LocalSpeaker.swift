@@ -30,8 +30,9 @@ final class LocalSpeaker: @unchecked Sendable {
     }
 
     /// Play the "heard you" cue, then every sentence from `sentences` as it arrives, until the stream ends or `cut` is set.
-    /// `before` runs after synthesis has started and before anything is played (the desk speaker waits there for the local stream to
-    /// finish its sentence, then plays the hand-over sound), so the first desk sentence is already synthesised when its turn comes.
+    /// `before` runs once, when the first sentence is synthesised and before it is played (the desk speaker waits there for the local
+    /// stream to finish its sentence, then plays the hand-over sound), so the first desk sentence is already synthesised when its turn
+    /// comes. If no sentence ever comes (the desk failed, it said nothing) `before` never runs: no hand-over sound into silence.
     func run(cue: [AudioFrame], sentences: AsyncStream<String>, before: (() async -> Void)? = nil) async {
         let (bufOut, bufCont) = AsyncStream.makeStream(of: SpokenSentence.self)
         let (voice, log) = (voice, log)
@@ -48,11 +49,12 @@ final class LocalSpeaker: @unchecked Sendable {
             bufCont.finish()
         }
         let started = log.clock.now
-        await before?()
+        var before = before
         if !cue.isEmpty { await playback.speak(Self.stream(cue)) }
         var firstSentence = true
         for await sp in bufOut {
             if cut.isSet || Task.isCancelled { break }                                           // failures 1, 2
+            if let b = before { before = nil; await b(); if Task.isCancelled { break } }
             count.write { $0 += 1 }
             heard.add(sp.text)
             if local { log.emit(.localSentenceStarted(text: sp.text, msSinceTurnEnd: (log.clock.now - endedAt) * 1000)) }

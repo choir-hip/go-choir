@@ -283,7 +283,8 @@ final class StreamedDeskEngineTests: XCTestCase {
         let ends = log.events.compactMap { e -> (String, Double)? in
             switch e.event { case .localSentenceStarted(_, let ms): return ("local", ms); case .transitionPlayed(let ms): return ("transition", ms); case .deskSentenceStarted(_, let ms): return ("desk", ms); default: return nil } }
         let order = ends.map(\.0)
-        if let ti = order.firstIndex(of: "transition") { XCTAssertTrue(order[..<ti].allSatisfy { $0 == "local" } && order[(ti + 1)...].allSatisfy { $0 == "desk" }, "\(order)") }
+        let ti = try XCTUnwrap(order.firstIndex(of: "transition"), "\(order)")
+        do { XCTAssertTrue(order[..<ti].allSatisfy { $0 == "local" } && order[(ti + 1)...].allSatisfy { $0 == "desk" }, "\(order)") }
         XCTAssertNotNil(got.value)
     }
 
