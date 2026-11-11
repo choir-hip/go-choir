@@ -144,6 +144,7 @@ component PaperPage
     openPage: action
     pfront: PaperFront
     paperSection: string
+    paperLoading: bool
     paperReload: action
     paperFit: action
     pickEdition: action
@@ -153,7 +154,7 @@ component PaperPage
   derive sect = paperSection
   view
     column flex=1 min-height=0 width="100%" resize=paperFit
-      scroll id="paper" flex=1 min-height=0 width="100%" refresh=paperReload refreshing=pending(pfront)
+      scroll id="paper" flex=1 min-height=0 width="100%" refresh=paperReload refreshing=paperLoading
         column padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20
           padding-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 16px)" gap=14
           font-family=th.fontRead color=th.fg

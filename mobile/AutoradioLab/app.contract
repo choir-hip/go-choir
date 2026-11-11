@@ -104,6 +104,7 @@ component Autoradio
     // ---- lane 1: bar, radio, talk ----
     // ---- lane 2: paper layout ----
     pfront
+    paperLoading
     paperSection
     paperReload
     paperFit

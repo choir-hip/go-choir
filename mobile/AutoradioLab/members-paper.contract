@@ -8,6 +8,7 @@ members Autoradio
   state paperWidth = 0
   derive paperSection = pg.top.startsWith("paper:section/") ? pg.top.slice(14) : ""
   resource pfront = paperFront(section=paperSection, edition=paperEdition, width=paperWidth) as shape PaperFront else empty()
+  derive paperLoading = pending(pfront)
   action paperReload
     refresh pfront
   action paperFit(w: number, h: number)
