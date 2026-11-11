@@ -559,3 +559,12 @@ Decisions made at the seams:
   the mic level (`RadioInfo.micLevel`, from the audio bus) reaches `MarkAt(level=)`; lane 1 feeds `ReaderFollow` with the sentence being spoken.
 - **Developer**: Settings, Developer, "Demo controls" (`devDetails`) gates the paper's Composition line and edition chips, mail's demo states and the
   reader's demo menu (demo mode only).
+- **Proof state.** `defaults write` from `simctl spawn` does not override what the app itself has written (theme, mode, talk mode, gestures live in
+  the app's own preferences file): `proof-common.sh` removes the app's plist, and the light drives set Depth and light with the Settings controls first.
+- **Lane proofs after the merge.** `proof-lane2.sh` (edition chips, "Composition:"), `proof-lane3.sh` (the reader's demo menu: follow, side notes, Markdown),
+  `proof-lane6.sh` (mail demo states) and `proof-lane1.sh` / `proof-sim.sh` (the aim "Ask about this page", now "Make it yours" on the paper before setup) now need
+  `settings-dev-details` tapped, or an updated assertion; `proof-app.sh` is the proof that counts for the merged app.
+- **Rough / open.** Files still renders Markdown and EPUB text with its own `text markup="markdown"` (the reader's `ReaderBody` takes the one `rdoc`
+  resource, so sharing it is not a small change). Native `buttonStyle="filled"` buttons (onboarding's "Set up the voice") still tint system blue. The mic level and
+  the reader's read-along are wired (`RadioInfo.micLevel`, `ReaderFeed`) but the demo's engine is virtual, so neither is seen moving in the proof.
+  Engine: playback rate with a real position, and `DeskTurn.interrupted`, are not done (not this lane's).
