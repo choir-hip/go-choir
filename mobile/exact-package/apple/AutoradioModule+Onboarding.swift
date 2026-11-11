@@ -105,6 +105,11 @@ final class OnboardingController: @unchecked Sendable {
 
     func begin(mobileOK: Bool) {
         lock.lock()
+        let doneBefore = progress.setupDone && setup == nil && step == "skipped"
+        lock.unlock()
+        // Skipped after a finished setup: nothing to download again; go on to the interview.
+        if doneBefore { set { step = "ready"; progress.skipped = false }; save(); return }
+        lock.lock()
         if step == "setup", setup?.isStarted == true, setup?.isFinished == false { lock.unlock(); return }
         lock.unlock()
         let backend: SetupBackend
@@ -200,7 +205,10 @@ final class OnboardingController: @unchecked Sendable {
 
     func hearing(ok: Bool) {
         if ok { set { hearingOK = true; step = "ready"; progress.setupDone = true; message = "" }; save() }
-        else { set { message = "Try the volume, or another speaker or headphones, then play it again." } ; if !demo { microphoneNext() } }
+        else {
+            if !demo { microphoneNext() }
+            set { message = "Try the volume, or another speaker or headphones, then play it again." }
+        }
     }
 
     // MARK: The interview
@@ -393,6 +401,12 @@ extension AutoradioModule {
 
         // Fresh install, signed in, not demo: offer the path once as the open page (closing it is a choice that sticks).
         if !Demo.isOn { c.offerOnce(pages: pages) }
+        // The proof (and a developer in demo mode): start the path fresh with the page open. Not a product switch; it only
+        // exists in demo mode, where there is no listener to keep.
+        if Demo.isOn && UserDefaults.standard.bool(forKey: "AutoradioOpenOnboarding") {
+            c.reset()
+            pages.open("onboarding:setup", title: "Make it yours")
+        }
     }
 }
 

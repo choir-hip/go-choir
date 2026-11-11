@@ -220,7 +220,8 @@ component OnboardingPage
               button press=obMicNext testId="ob-mic-next" buttonStyle="filled" padding=14
                 text "Continue"
             text ob.message font-family=th.fontUi font-size=14 color=th.danger
-        text "The models" font-family=th.fontUi font-size=13 color=th.muted
+        if ob.setupStarted
+          text "The models" font-family=th.fontUi font-size=13 color=th.muted
         for r in ob.rows key=r.stage
           SetupRowItem(stage=r.stage, name=r.name, model=r.model, sizeLabel=r.sizeLabel, state=r.state, progress=r.progress, statusLine=r.statusLine, numbers=r.numbers, isFallback=r.isFallback, canRetry=r.canRetry, canFallback=r.canFallback, compact=true)
         button press=obSkip testId="ob-skip" appearance="none" padding=10
@@ -249,7 +250,8 @@ component OnboardingPage
             button press=obInterview testId="ob-interview" buttonStyle="filled" padding=14
               text "Start the interview"
             text ob.message font-family=th.fontUi font-size=14 color=th.danger
-        text "The models" font-family=th.fontUi font-size=13 color=th.muted testId="ob-summary"
+        if ob.setupStarted
+          text "The models" font-family=th.fontUi font-size=13 color=th.muted testId="ob-summary"
         for r in ob.rows key=r.stage
           SetupRowItem(stage=r.stage, name=r.name, model=r.model, sizeLabel=r.sizeLabel, state=r.state, progress=r.progress, statusLine=r.statusLine, numbers=r.numbers, isFallback=r.isFallback, canRetry=r.canRetry, canFallback=r.canFallback, compact=true)
         button press=obSkip testId="ob-skip" appearance="none" padding=10

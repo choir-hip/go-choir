@@ -221,3 +221,55 @@ final class InterviewTests: XCTestCase {
         XCTAssertEqual(InterviewHeuristic.readbackVerdict("looks good"), .done)
     }
 }
+
+// The demo's recorded turns (fixtures/demo/*.json) drive the proof; these tests keep them honest without a simulator.
+final class InterviewDemoFixtureTests: XCTestCase {
+    func fixture(_ name: String) throws -> Data {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("fixtures/demo/\(name).json")
+        return try Data(contentsOf: url)
+    }
+
+    func testRecordedInterviewRunsToTheEnd() throws {
+        let o = try XCTUnwrap(try JSONSerialization.jsonObject(with: fixture("interview-script")) as? [String: Any])
+        let steps = try XCTUnwrap(o["steps"] as? [[String: String]])
+        var i = Interview(sections: o["sections"] as? [String] ?? [])
+        _ = i.start()
+        var seen: [String] = []
+        for st in steps {
+            let words = st["words"] ?? ""
+            let lines: [InterviewLine]
+            switch st["kind"] ?? "say" {
+            case "interrupt": lines = i.hear(words, interrupted: true)
+            case "loud": lines = i.tooLoud()
+            case "resume": lines = i.resume()
+            default: lines = i.hear(words)
+            }
+            seen += lines.map(\.text)
+            XCTAssertFalse(lines.isEmpty, "step \(st) produced nothing (status \(i.status))")
+        }
+        XCTAssertEqual(i.status, .done)
+        let said = seen.joined(separator: " | ")
+        XCTAssertTrue(said.contains("Today's paper has World, Local, Culture"), said)
+        XCTAssertTrue(said.contains("Mm, tech"), said)
+        XCTAssertTrue(said.contains("too loud"), said)
+        XCTAssertTrue(said.contains("Welcome back"), said)
+        XCTAssertTrue(said.contains("Here is what I have"), said)
+        XCTAssertTrue(said.contains("Okay, I changed that"), said)
+        XCTAssertFalse(i.state.notes.less.contains("sports"), "the read-back correction took sports out")
+        XCTAssertTrue(i.state.turns.contains { $0.who == "radio" && $0.interrupted })
+        XCTAssertEqual(i.state.notes.avoided, ["tabloids"])
+    }
+
+    func testEditionFixtureAndOneDeskFailure() async throws {
+        let e = try XCTUnwrap(Edition.parse(fixture("edition")))
+        XCTAssertEqual(e.failFirst, true)
+        XCTAssertTrue(e.lines.contains("What I follow"))
+        let w = DemoEditionWriter(edition: e, tickMs: 1)
+        do { _ = try await w.write(from: Interview(), interviewTitle: "t") { _ in }; XCTFail("the first write fails") } catch {}
+        let ok = try await w.write(from: Interview(), interviewTitle: "t") { _ in }
+        XCTAssertEqual(ok.title, "My edition")
+        let off = UnbuiltEditionWriter()
+        do { _ = try await off.write(from: Interview(), interviewTitle: "t") { _ in }; XCTFail("not built") } catch { XCTAssertTrue("\(error)".contains("not connected")) }
+    }
+}
