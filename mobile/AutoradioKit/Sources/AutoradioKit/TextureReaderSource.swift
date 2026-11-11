@@ -82,7 +82,12 @@ public final class ReaderStore: @unchecked Sendable {
         guard let r = try? await client.send("GET", "/api/platform/publications/related", query: ["route": route, "limit": "5"],
                                              authenticated: false, route: "/api/platform/publications/related"),
               let o = try? r.object() else { return [] }
-        let arr = (o["related"] as? [[String: Any]]) ?? (o["stories"] as? [[String: Any]]) ?? (o["items"] as? [[String: Any]]) ?? []
+        return Self.parseRelated(o)
+    }
+
+    /// The related list. The real route answers `links` (checked against choir.news, 2026-11-11); the older guesses stay readable.
+    static func parseRelated(_ o: [String: Any]) -> [ReaderRelated] {
+        let arr = (o["links"] as? [[String: Any]]) ?? (o["related"] as? [[String: Any]]) ?? (o["stories"] as? [[String: Any]]) ?? (o["items"] as? [[String: Any]]) ?? []
         return arr.compactMap { s in
             guard let title = s["title"] as? String, !title.isEmpty else { return nil }
             let rt: String

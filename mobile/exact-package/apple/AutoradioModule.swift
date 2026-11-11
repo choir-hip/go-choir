@@ -86,7 +86,14 @@ public final class AutoradioModule: ExactPackage {
         // Demo mode first: the Choir environment then talks to the bundled fixtures, signed in as the demo listener.
         if Demo.isOn { Demo.install() }
         // The listener path: sign-in (Keychain), the front page, the real stages.
-        choir = ChoirApp(runtime: runtime, keys: Demo.isOn ? Demo.keys() : KeychainKeyStore(), openURL: { url in DispatchQueue.main.async { UIApplication.shared.open(url) } })
+        let appKeys: KeyStore = Demo.isOn ? Demo.keys() : KeychainKeyStore()
+        #if targetEnvironment(simulator)
+        // Real-data proof only (compiled out of device builds): a `proof-key` file in Documents becomes the stored key, then is deleted.
+        if !Demo.isOn, let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            ProofKey.importIfPresent(documents: docs, into: appKeys)
+        }
+        #endif
+        choir = ChoirApp(runtime: runtime, keys: appKeys, openURL: { url in DispatchQueue.main.async { UIApplication.shared.open(url) } })
         choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "labState", "barState"]) } }
         // The spine's objects.
         signals = FileSignals(file: support.appendingPathComponent("signals.jsonl"))
