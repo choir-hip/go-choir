@@ -19,7 +19,7 @@ import Foundation
 //     turned into `pub:<route>`.
 
 public struct ActivityItem: Codable, Sendable, Equatable {
-    public var id = "", kind = "", label = "", detail = "", group = "", when = "", target = "", title = ""
+    public var id = "", kind = "", label = "", detail = "", group = "", ago = "", target = "", title = ""
     public var at = 0.0
     public var unseen = false
     public init() {}
@@ -79,7 +79,7 @@ public enum ActivityParse {
             it.detail = String(((c["summary"] as? String) ?? "").prefix(240))                                                         // V1
             it.title = (c["actor_label"] as? String) ?? ""
             it.at = date(c["occurred_at"] as? String ?? "") ?? 0
-            it.when = when(it.at, now: now)
+            it.ago = when(it.at, now: now)
             it.target = target(docID: (subject["doc_id"] as? String) ?? (tape["doc_id"] as? String) ?? "", route: subject["route_path"] as? String ?? "")
             it.unseen = seq > seen && (e["level"] as? String ?? "major") == "major"
             return it
@@ -107,13 +107,13 @@ public struct ActivityView: Codable, Sendable, Equatable {
     /// idle | loading | ok | failed
     public var status = "idle"
     public var message = ""
-    public var now: [ActivityItem] = []
+    public var live: [ActivityItem] = []
     public var computer: [ActivityItem] = []
     public var desk: [ActivityItem] = []
     public var paper: [ActivityItem] = []
     public var radio: [ActivityItem] = []
     public var unseen = 0
-    public var empty = false
+    public var blank = false
     public init() {}
 }
 
@@ -134,10 +134,10 @@ public final class ActivityModel: @unchecked Sendable {
         lock.lock(); let ev = events, st = status, msg = message; lock.unlock()
         var v = ActivityView()
         v.status = st; v.message = msg
-        v.now = nowLines(); v.radio = Array(radioTurns().prefix(12))
+        v.live = nowLines(); v.radio = Array(radioTurns().prefix(12))
         v.computer = ev.filter { $0.group == "computer" }; v.desk = ev.filter { $0.group == "desk" }; v.paper = ev.filter { $0.group == "paper" }
         v.unseen = ev.filter { $0.unseen }.count
-        v.empty = ev.isEmpty && v.radio.isEmpty && v.now.isEmpty && st != "loading"
+        v.blank = ev.isEmpty && v.radio.isEmpty && v.live.isEmpty && st != "loading"
         return v
     }
 

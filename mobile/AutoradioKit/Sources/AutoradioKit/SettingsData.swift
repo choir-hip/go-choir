@@ -25,7 +25,7 @@ public struct SettingOptionRow: Codable, Sendable, Equatable {
 }
 public struct SettingRow: Codable, Sendable, Equatable {
     public var id = "", label = "", help = "", value = "", valueLabel = ""
-    public var options: [SettingOptionRow] = []
+    public var choices: [SettingOptionRow] = []
     public init() {}
 }
 
@@ -76,7 +76,7 @@ public final class AppSettings: @unchecked Sendable {
         SettingsCatalog.all.filter { $0.group == group }.map { def in
             var r = SettingRow(); r.id = def.id; r.label = def.label; r.help = def.help
             let v = value(def.id); r.value = v
-            r.options = def.options.map { SettingOptionRow(id: $0.id, label: $0.label, detail: $0.detail, selected: $0.id == v) }
+            r.choices = def.options.map { SettingOptionRow(id: $0.id, label: $0.label, detail: $0.detail, selected: $0.id == v) }
             r.valueLabel = def.options.first { $0.id == v }?.label ?? ""
             return r
         }
@@ -133,14 +133,14 @@ public final class SignalsLearned: LearnedProvider, @unchecked Sendable {
     public func reset() async { signals.record(SignalEvent(kind: "learned-reset", subject: "settings:learned", detail: "reset by the listener")) }
 }
 
-public struct LearnedRow: Codable, Sendable, Equatable { public var text: String, kind: String, when: String }
+public struct LearnedRow: Codable, Sendable, Equatable { public var line: String, kind: String, ago: String }
 public struct LearnedView: Codable, Sendable, Equatable {
     public var rows: [LearnedRow] = []
     public var count = 0
     public var message = ""
     public init() {}
     public init(lines: [LearnedLine], now: Date = Date()) {
-        rows = lines.map { LearnedRow(text: $0.text, kind: $0.kind, when: Self.when($0.at, now: now)) }
+        rows = lines.map { LearnedRow(line: $0.text, kind: $0.kind, ago: Self.when($0.at, now: now)) }
         count = rows.count
         message = rows.isEmpty ? "Nothing yet. Swipe right on a story you want more of, and it shows here." : ""
     }

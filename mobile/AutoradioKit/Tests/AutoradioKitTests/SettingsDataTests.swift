@@ -231,7 +231,7 @@ final class SettingsCatalogTests: XCTestCase {
     func testRowsMarkTheSelectedOption() {
         let s = AppSettings(defaults: freshDefaults()); s.set("swipeLeft", "closeLess")
         let r = s.rows(group: "gestures").first { $0.id == "swipeLeft" }!
-        XCTAssertEqual(r.options.filter(\.selected).map(\.id), ["closeLess"]); XCTAssertEqual(r.valueLabel, "Close, and less of this")
+        XCTAssertEqual(r.choices.filter(\.selected).map(\.id), ["closeLess"]); XCTAssertEqual(r.valueLabel, "Close, and less of this")
         XCTAssertEqual(s.rows(group: "talk").count, 1); XCTAssertEqual(s.rows(group: "gestures").count, 2)
     }
 
@@ -301,7 +301,7 @@ final class ActivityFeedTests: XCTestCase {
         let long = String(repeating: "x", count: 500)
         let d = Data(#"{"events":[{"inbox_seq":1,"level":"major","changelog":{"event_id":"e","kind":"wake_decision","occurred_at":"garbage","summary":"\#(long)","subject":{}}}]}"#.utf8)
         let it = try ActivityParse.items(from: d)
-        XCTAssertEqual(it[0].detail.count, 240); XCTAssertEqual(it[0].when, "")
+        XCTAssertEqual(it[0].detail.count, 240); XCTAssertEqual(it[0].ago, "")
     }
 
     func testRelativeTimes() {
@@ -318,7 +318,7 @@ final class ActivityFeedTests: XCTestCase {
         m.radioTurns = { [turn] in [turn] }
         await m.refresh()
         let v = m.view()
-        XCTAssertEqual(v.status, "failed"); XCTAssertTrue(v.message.contains("no activity feed")); XCTAssertEqual(v.radio.count, 1); XCTAssertFalse(v.empty)
+        XCTAssertEqual(v.status, "failed"); XCTAssertTrue(v.message.contains("no activity feed")); XCTAssertEqual(v.radio.count, 1); XCTAssertFalse(v.blank)
     }
 
     func testTheDemoModelFillsTheSections() async {

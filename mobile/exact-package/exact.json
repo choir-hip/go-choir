@@ -216,15 +216,15 @@
       "help": "string",
       "value": "string",
       "valueLabel": "string",
-      "options": "SettingOption[]"
+      "choices": "SettingOption[]"
     },
     "SettingRows": {
       "rows": "SettingRowInfo[]"
     },
     "LearnedItem": {
-      "text": "string",
+      "line": "string",
       "kind": "string",
-      "when": "string"
+      "ago": "string"
     },
     "LearnedInfo": {
       "rows": "LearnedItem[]",
@@ -237,7 +237,7 @@
       "label": "string",
       "detail": "string",
       "group": "string",
-      "when": "string",
+      "ago": "string",
       "target": "string",
       "title": "string",
       "at": "number",
@@ -246,13 +246,13 @@
     "ActivityInfo": {
       "status": "string",
       "message": "string",
-      "now": "ActivityItem[]",
+      "live": "ActivityItem[]",
       "computer": "ActivityItem[]",
       "desk": "ActivityItem[]",
       "paper": "ActivityItem[]",
       "radio": "ActivityItem[]",
       "unseen": "number",
-      "empty": "bool"
+      "blank": "bool"
     },
     "AboutInfo": {
       "app": "string",
@@ -773,13 +773,13 @@
         "default": {
           "status": "",
           "message": "",
-          "now": [],
+          "live": [],
           "computer": [],
           "desk": [],
           "paper": [],
           "radio": [],
           "unseen": 0,
-          "empty": false
+          "blank": false
         }
       }
     },

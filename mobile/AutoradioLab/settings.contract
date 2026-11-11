@@ -365,7 +365,7 @@ component SettingChoices
             column gap=4 padding="0px 16px 10px 16px"
               text r.label font-family=th.fontUi font-size=17 font-weight=700 color=th.fg
               text r.help font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
-            for o in r.options key=o.id
+            for o in r.choices key=o.id
               button press=setSetting(r.id, o.id) testId=`settings-choice-${r.id}-${o.id}` role="radio" aria-checked=o.selected appearance="none" width="100%" padding="10px 16px"
                 row gap=12 align-items="flex-start" width="100%"
                   text (o.selected ? "●" : "○") font-family=th.fontUi font-size=18 color=(o.selected ? th.accent : th.muted)
@@ -458,8 +458,8 @@ component LearnedScreen
         column width="100%" padding="6px 0"
           for r, i in learnt.rows key=i
             column gap=2 padding="10px 16px" width="100%" testId="settings-learned-row"
-              text r.text font-family=th.fontRead font-size=tx.sizeBody line-height=1.4 color=th.fg
-              text r.when font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+              text r.line font-family=th.fontRead font-size=tx.sizeBody line-height=1.4 color=th.fg
+              text r.ago font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
           if learnt.count == 0
             text learnt.message testId="settings-learned-empty" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted padding=16
       if learnt.count > 0
