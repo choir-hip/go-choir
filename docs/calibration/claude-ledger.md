@@ -130,6 +130,10 @@ entered below as lapsed, not scored.
 | C47 | 2026-11-11T10:10Z | lead | ready | After any repairs, the app branch lands on main through `scripts/land` on its first run. | 0.60 | 2026-11-11T18:00Z | land log |
 | C48 | 2026-11-11T12:10Z | lead | ready | A btrfs metadata balance on Node B (`-musage` filter, metadata 25.1 GiB allocated, 3.4 used, DUP) raises `df` free space on `/` from 56 GiB to at least 85 GiB, with no service failure during it. | 0.75 | 2026-11-11T16:00Z | `btrfs filesystem usage /` before and after |
 | C49 | 2026-11-11T12:10Z | lead | ready | Once free space is over 60 GiB, the re-run staging deploy of 29e01354f (or a later main) passes on its first attempt. | 0.70 | 2026-11-11T18:00Z | CI deploy job |
+| C50 | 2026-11-11T13:53Z | lead | ready | The Autoradio desk slice (`lane/autoradio-desk` at ac110aa5b, squashed) lands on main through `scripts/land` on its first run. | 0.60 | 2026-11-11T20:00Z | land log |
+| C51 | 2026-11-11T13:53Z | lead | estimate | On staging against d@e, `scripts/prove-autoradio-turns` reports a median time to the first spoken sentence of at most 2.5 s. | 0.55 | 2026-11-12T00:00Z | proof output |
+| C52 | 2026-11-11T13:53Z | lead | ready | The first staging run of `scripts/prove-autoradio-turns` exits 0: River answers, reasoning is confirmed off, and no tape write fails. | 0.45 | 2026-11-12T00:00Z | proof output |
+| C53 | 2026-11-11T13:53Z | lead | effect | After the default-themes deploy, a fresh browser with no stored theme shows Chrome Pastel on choir.news in light and Liquid Metal in dark, with no pink at first paint. | 0.80 | 2026-11-12T00:00Z | browser proof on staging |
 
 ### Settlements
 
@@ -149,7 +153,7 @@ entered below as lapsed, not scored.
 
 ### Scorecard
 
-Second form: 26 claims open, 2 settled. First form: 12 settled (7 true, 4
+Second form: 30 claims open, 2 settled. First form: 12 settled (7 true, 4
 false, 1 partial), 7 lapsed.
 
 | band | claims settled | came true |
