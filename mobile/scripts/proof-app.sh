@@ -43,6 +43,7 @@ SIM privacy "$EXACT_SIM" grant all $APP >/dev/null 2>&1
 step "clock data"; wait_ 1500
 ensure_light
 goto "paper:front"; step tree; shot light-01-paper-front
+step "tap paper-scroll drag 0 -260"; wait_ 700
 step "tap paper-story-demo-grid-storage"; view light-02-paper-story-reader 1000
 step "tap bar-voice down"; step "tap up"; wait_ 1800
 step "tap bar-text"; view light-03-player 900
@@ -112,6 +113,7 @@ ensure_light
 place settings 900
 step "tap settings-mode-dark"; view dark-01-settings-switched 900
 goto "paper:front"; view dark-02-paper-front 700
+step "tap paper-scroll drag 0 -260"; wait_ 700
 step "tap paper-story-demo-grid-storage"; view dark-03-paper-story-reader 1000
 step "tap bar-voice down"; step "tap up"; wait_ 1800
 step "tap bar-text"; view dark-04-player 900
