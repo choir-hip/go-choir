@@ -378,7 +378,7 @@ component ReaderBody
   derive sheetOn = sheet != "" and sheetFor == address
   view
     column position="absolute" inset=0
-      scroll id="reader-scroll" flex=1 min-height=0 width="100%"
+      scroll id="reader-scroll" testId="reader-scroll" flex=1 min-height=0 width="100%"
         column width="100%" align-items="center" padding-top=`calc(env(safe-area-inset-top) + ${rdoc.revising ? 72 : 12}px)`
           padding-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 72px)"
           column width="100%" max-width="38rem" padding-left=20 padding-right=20 box-sizing="border-box" color=th.fg font-family=th.fontRead
