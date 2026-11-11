@@ -122,6 +122,9 @@ func nowMs() -> Double { Double(DispatchTime.now().uptimeNanoseconds) / 1e6 }
 @objc(AutoradioModelsRegistrar)
 public final class AutoradioModelsRegistrar: NSObject {
     @objc public static func register(_ registry: AnyObject) {
-        if let r = registry as? StageRegistry { ModelHub.register(into: r) }
+        guard let r = registry as? StageRegistry else { return }
+        ModelHub.register(into: r)
+        ModelProof.runFromLaunchArguments()
+        fputs("autoradio models: registered \(ModelHub.catalog.count) models, \(r.all.count) stages\n", stderr)
     }
 }

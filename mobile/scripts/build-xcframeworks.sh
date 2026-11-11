@@ -19,7 +19,8 @@ fluidaudio() {
   SRC="$DEPS/FluidAudio"
   [ -d "$SRC" ] || git clone -q --depth 1 --branch "$TAG" https://github.com/FluidInference/FluidAudio.git "$SRC"
   for SLICE in sim dev; do
-    if [ "$SLICE" = sim ]; then SDKN=iphonesimulator; TRIPLE=arm64-apple-ios18.0-simulator; else SDKN=iphoneos; TRIPLE=arm64-apple-ios18.0; fi
+    # FluidAudio's own deployment target is iOS 17; Kokoro v3 and LFM3 are gated by #available(iOS 18) inside it.
+    if [ "$SLICE" = sim ]; then SDKN=iphonesimulator; TRIPLE=arm64-apple-ios17.0-simulator; else SDKN=iphoneos; TRIPLE=arm64-apple-ios17.0; fi
     SDK="$($X /usr/bin/xcrun --sdk $SDKN --show-sdk-path)"
     # Disable default traits, enable only TTS: no Diarizer, and no NemoTextProcessing (a prebuilt Rust staticlib; TTS
     # frontends then pass text through unchanged).
@@ -28,7 +29,6 @@ fluidaudio() {
     P="$DEPS/build-fa-$SLICE/out/Products/Release-$SDKN"
     H="$DEPS/headers-fa-$SLICE"
     rm -rf "$H"; mkdir -p "$H"
-    cp -R "$P/FluidAudio.swiftmodule" "$P/LuxTtsG2pResources.swiftmodule" "$H/"
     cp "$SRC/Sources/FastClusterWrapper/include/FastClusterWrapper.h" "$SRC/Sources/MachTaskSelfWrapper/include/MachTaskSelf.h" "$H/"
     cat > "$H/module.modulemap" <<'EOF'
 module FastClusterWrapper {
@@ -46,6 +46,11 @@ EOF
     -library "$DEPS/build-fa-sim/out/Products/Release-iphonesimulator/libFluidAudio.a" -headers "$DEPS/headers-fa-sim" \
     -library "$DEPS/build-fa-dev/out/Products/Release-iphoneos/libFluidAudio.a" -headers "$DEPS/headers-fa-dev" \
     -output "$OUT/FluidAudio.xcframework"
+  # xcodebuild refuses a .swiftmodule without a .swiftinterface in -headers, so the modules go into each slice afterwards.
+  for D in "$OUT"/FluidAudio.xcframework/*/Headers; do
+    case "$D" in *simulator*) P="$DEPS/build-fa-sim/out/Products/Release-iphonesimulator" ;; *) P="$DEPS/build-fa-dev/out/Products/Release-iphoneos" ;; esac
+    cp -R "$P/FluidAudio.swiftmodule" "$P/LuxTtsG2pResources.swiftmodule" "$D/"
+  done
   echo "built $OUT/FluidAudio.xcframework"
 }
 

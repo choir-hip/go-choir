@@ -20,7 +20,7 @@ fi
 
 mkdir -p "$DEPS/headers-llama"
 rm -rf "$DEPS/headers-llama"/*
-cp include/llama.h ggml/include/ggml.h ggml/include/ggml-alloc.h ggml/include/ggml-backend.h ggml/include/ggml-cpu.h ggml/include/gguf.h "$DEPS/headers-llama/"
+cp include/llama.h ggml/include/*.h "$DEPS/headers-llama/"
 cat > "$DEPS/headers-llama/module.modulemap" <<'EOF'
 module llama {
     header "llama.h"
