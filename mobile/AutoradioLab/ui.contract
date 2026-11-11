@@ -3,22 +3,9 @@
 // Elevation 2 and 3 use the theme's material ("glass" is UIGlassEffect on iOS 26, a blur before; "solid" is a fill).
 use Theme from "@choir/autoradio"
 
-// The surface behind a level: a box filling its parent with the theme's material and shadow for that elevation
-// (1 card, 2 bar, 3 layer). Glass where the theme says glass, a solid fill where it says solid.
-component Surface
-  inject
-    th: Theme
-  props
-    level: number
-    radius: number
-    bleed: number
-  derive mat = level >= 3 ? th.material3 : level == 2 ? th.material2 : th.material1
-  derive sh = level >= 3 ? th.shadow3 : level == 2 ? th.shadow2 : th.shadow1
-  view
-    box position="absolute" top=0 left=0 right=0 bottom=(0 - bleed) border-radius=radius box-shadow=sh
-      backgroundMaterial=(mat == "glass" ? "glass" : "none")
-      background-color=(mat == "glass" ? "transparent" : (level >= 2 ? th.paper : th.paper2))
-
+// Card (elevation 1, or 2 when `level` says) and Layer (elevation 3): the theme's material, fill, radius and shadow are on
+// the node itself (a separate glass node under the content would sit above a text field and swallow its taps: found on
+// the bar's input). `backgroundMaterial` takes literal arms only, so the material is a ternary of "glass" and "none".
 component Card
   inject
     th: Theme
@@ -27,11 +14,13 @@ component Card
     testId: string
     minHeight: number
   slot
+  derive glass = (level >= 3 ? th.material3 : level == 2 ? th.material2 : th.material1) == "glass"
   view
-    column testId=testId position="relative" min-height=minHeight
-      Surface(level=level, radius=th.radiusCard, bleed=0)
-      column overflow="hidden" border-radius=th.radiusCard flex=1
-        children
+    column testId=testId position="relative" min-height=minHeight border-radius=th.radiusCard
+      backgroundMaterial=(glass ? "glass" : "none")
+      background-color=(glass ? "transparent" : (level >= 2 ? th.paper : th.paper2))
+      box-shadow=(level >= 3 ? th.shadow3 : level == 2 ? th.shadow2 : th.shadow1)
+      children
 
 component Layer
   inject
@@ -41,8 +30,24 @@ component Layer
   slot
   view
     column testId=testId width="100%" height="100%" position="relative"
-      Surface(level=3, radius=th.radiusCard, bleed=60)
-      column flex=1 min-height=0
+      border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
+      backgroundMaterial=(th.material3 == "glass" ? "glass" : "none")
+      background-color=(th.material3 == "glass" ? "transparent" : th.paper2)
+      box-shadow=th.shadow3
+      children
+
+// For tool pages (Components, Trace): the scroll frame ends above the bar instead of running under it, so every control
+// stays tappable by a driver that scrolls an element to the frame's bottom edge.
+component ToolScroll
+  inject
+    th: Theme
+  props
+    id: string
+  slot
+  view
+    scroll id=id flex=1 min-height=0 width="100%" margin-bottom="calc(56px + 16px + env(safe-area-inset-bottom))"
+      column padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20 padding-bottom=24 gap=12
+        font-family=th.fontRead color=th.fg
         children
 
 // A full-bleed scrolling page body: starts under the status bar, ends clear of the bar
@@ -54,7 +59,7 @@ component PageScroll
     id: string
   slot
   view
-    scroll id=id flex=1 min-height=0 width="100%" scroll-padding-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 16px)"
+    scroll id=id flex=1 min-height=0 width="100%"
       column padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20
         padding-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 16px)" gap=12
         font-family=th.fontRead color=th.fg

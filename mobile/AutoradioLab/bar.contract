@@ -5,7 +5,6 @@
 // testIds: bar, bar-pages, bar-pages-count, bar-field, bar-text, bar-voice, bar-progress.
 use Theme, PageList, BarInfo from "@choir/autoradio"
 use Mark from "./mark.contract"
-use Surface from "./ui.contract"
 
 component BarShell
   inject
@@ -25,8 +24,10 @@ component BarShell
   view
     row testId="bar" position="absolute" left=12 right=12 bottom="calc(env(safe-area-inset-bottom) + 8px)" z-index=20
       min-height=56 align-items="center" gap=4 padding=6 box-sizing="border-box"
-      pan=pullBar panrelease=pullEnd
-      Surface(level=2, radius=th.radiusPill, bleed=0)
+      pan=pullBar panrelease=pullEnd border-radius=th.radiusPill
+      backgroundMaterial=(th.material2 == "glass" ? "glass" : "none")
+      background-color=(th.material2 == "glass" ? "transparent" : th.paper)
+      box-shadow=th.shadow2
       button testId="bar-pages" press=togglePile aria-label=`Open pages, ${pg.count} open` appearance="none" width=44 height=44
         column align-items="center" justify-content="center"
           image "symbol:layers" color=th.fg

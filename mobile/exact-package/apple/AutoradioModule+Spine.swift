@@ -4,6 +4,15 @@ import Foundation
 import UIKit
 
 extension AutoradioModule {
+    /// The simulator driven by the Exact agent opens no audio hardware.
+    var virtualEngine: Bool {
+        #if targetEnvironment(simulator)
+        return context.agent
+        #else
+        return false
+        #endif
+    }
+
     func pageList() -> [String: Any] {
         let list = pages.list()
         let top = list.first
@@ -29,6 +38,23 @@ extension AutoradioModule {
         handle("barState") { [unowned self] _, reply in reply(json(BarState.info(player: choir.playerView(), snapshot: runtime.snapshot()))) }
         handle("demoInfo") { _, reply in reply(["on": Demo.isOn]) }
         handle("signalList") { [unowned self] _, reply in reply(["rows": signals.recent(limit: 30).map { json($0) }]) }
+
+        // The radio's buttons start the engine on first use; under the simulator's agent that engine must be the virtual one
+        // (no microphone: demo and proof runs), as `labStart` already does. Start it virtually, then run the original action.
+        for name in ["choirPlayPause", "choirTalkDown", "choirPlay"] {
+            handle(name) { [unowned self] args, reply in
+                Task { [weak self] in
+                    guard let self else { return }
+                    if !self.runtime.snapshot().running { await self.runtime.start(virtual: self.virtualEngine) }
+                    switch name {
+                    case "choirPlayPause": await self.choir.playPause()
+                    case "choirTalkDown": await self.choir.talkDown()
+                    default: await self.choir.play(route: args["route"] as? String ?? "")
+                    }
+                    DispatchQueue.main.async { reply(self.json(self.runtime.snapshot())) }
+                }
+            }
+        }
 
         // Sends. Every one answers the open-page list, the shape the page host reads.
         handle("pageOpen") { [unowned self] args, reply in

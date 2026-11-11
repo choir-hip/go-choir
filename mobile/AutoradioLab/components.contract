@@ -3,7 +3,7 @@
 // bodies are the originals; only the frame (PageScroll, `inject`) is the spine's. testIds are unchanged.
 use StatBar from "exact:content"
 use LabState, StageList, ParamList, Trace, TurnList, Lines, Names, AudioInfo, ChoirAuth, Theme from "@choir/autoradio"
-use PageScroll from "./ui.contract"
+use ToolScroll from "./ui.contract"
 
 component ComponentsPage
   inject
@@ -37,7 +37,7 @@ component ComponentsPage
     pick: action
     setParam: action
   view
-    PageScroll(id="components")
+    ToolScroll(id="components")
       text "Components" role="heading" aria-level=1 font-size=28 font-weight=700 testId="page-title"
       text `${st.residentMB.toFixed(0)} MB · ${st.thermal}` testId="resources" color="-exact-secondary-label"
       column gap=12
@@ -119,7 +119,7 @@ component TracePage
     compare: action
     replay: action
   view
-    PageScroll(id="trace")
+    ToolScroll(id="trace")
       text "Trace" role="heading" aria-level=1 font-size=28 font-weight=700 testId="page-title"
       column gap=12
         text "Last turn" role="heading" aria-level=2

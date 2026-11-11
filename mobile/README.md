@@ -388,3 +388,121 @@ The phone (iPhone 14 Pro Max, `00008120-00114DE80A90C01E`) refused launches earl
 7. **`tree` right after a navigation** carries the note "N requests in flight ... start with `clock data`": always issue `clock data` before reading data-bound text. The tree lists the panels of every tab (hidden ones marked `[hidden]`), so an assertion on text must not depend on which tab shows.
 8. **Pointer drive**: `tap <id> down` then `tap up` (the bare `tap up`, not `tap <id> up`) delivers `pointerdown` and `pointerup` to a `Pressable`; `tap up` with a target is refused.
 9. **The Exact build log**: a first `ios` build in a new worktree took about 5 minutes (cargo 220 s, swift 128 s); the exit 128 seen once was a transient (a second run succeeded). The driver rebuilds nothing itself when the build is current.
+
+## The Autoradio app spine (lane/ar-spine)
+
+The plan is `docs/design/autoradio-app-ui-2026-11-10.md` (section 6). The spine is the shared skeleton the nine lanes build
+on: a page host, OpenPages, the bar and the layers, Card/Layer, the theme loader, `PageSource`/`Signals`/`Demo`, a dispatch
+table in the module, per-lane interface fragments. Every lane's files exist already as small stubs: **a lane replaces the
+body of its own files and edits no shared file except its own band of the `provide` list in `app.contract`** (and only
+if it adds a name a child component must `inject`).
+
+### How the pieces fit
+
+- `AutoradioLab/app.contract` is the root: `members` lines (already wired, one per lane), the `provide` list (a band per
+  lane), and the view: sign-in screen, or the page (full bleed), the layers (pile, launcher, player) and the bar.
+- A **page** is `{address, kind, title}` (`Pages.swift`). `PageHost` in `pages.contract` maps kind to a component, one
+  `if` line per kind, already pointing at each lane's component (`PaperPage`, `ReaderPage`, ...). The lane owns the
+  component; it takes what it needs with `inject` (the root `provide`s names; children cannot hold resources, so a lane's
+  resources and actions live in its `members-<lane>.contract`) and reads its page model with the `pmod` resource (the kit's
+  `PageSource`: address to `PageModel`). Open a page with the `openPage(address, title)` action.
+- **Dispatch table** (module): `handle("sourceOrSend") { args, reply in ... }` in your `AutoradioModule+<Lane>.swift`
+  (`registerX()` is called once by the module). Reach `pages`, `signals`, `themes`, `pageSources`, `runtime`, `choir`
+  through `self`; `touch(["name"])` refreshes a live source.
+- **Interface**: your source and send names and shapes go in `exact-package/interface/<lane>.json`
+  (`{"shapes": {...}, "names": [{"source": ..., "live": true, "answers": "Shape", "options": {...}, "substitute": {"default": {...}}} | {"send": ..., "answers": "Shape"}]}`).
+  `scripts/gen-exact-interface.py` merges the fragments and refuses a duplicate shape or name.
+- **Strings**: `AutoradioLab/strings/en.json`, keys prefixed per lane (`paper.*`, `reader.*`, ...); `scripts/check-strings.py` fails on a
+  duplicate or an unprefixed key.
+- **Themes** are data (plan section 5, schema v3): `mobile/themes/*.json`, embedded by `scripts/embed-assets.py` (run by
+  `sync-exact-package.sh`), plus any `*.json` dropped in the app's `Application Support/Autoradio/themes` (read at run time; `ThemeStore.reload()`).
+  The `th` record (`Theme`) is what views bind: `th.paper`, `th.fg`, `th.accent`, `th.fontRead` (the body face), `th.fontUi`, `th.radiusCard`,
+  `th.shadow1..3`, `th.material1..3`, `th.motionFastMs`, `th.springStiffness`... No component names a colour, a font or a radius.
+  `Card(level, testId, minHeight)`, `Layer(testId)`, `Surface(level, radius, bleed)`, `PageScroll(id)` are in `ui.contract`.
+- **Demo mode** (`Demo.swift`, fixtures in `mobile/fixtures/demo/`): signed in as a demo listener, every request answered from fixtures,
+  no network, no microphone. On (simulator): `xcrun simctl spawn <udid> defaults write news.choir.autoradio.lab AutoradioDemo -bool YES`.
+  A lane that needs a route adds a fixture file and one `case` in `DemoURLProtocol.route`; `scripts/embed-assets.py` embeds it.
+- `PageSource` (`Pages.swift`): `handles(address)` and `load(address) -> PageModel`; register in your `registerX()` with `pageSources.register(...)`
+  (the most recently registered wins). `Signals` (`Signals.swift`): `signals.record(SignalEvent(kind:, subject:, detail:))`.
+
+### Test id conventions
+
+`<lane>-<thing>[-<id>]`, lower case, every interactive element has one, ids built from addresses keep the address as is.
+Existing: `bar`, `bar-pages`, `bar-pages-count`, `bar-field`, `bar-text`, `bar-voice`, `bar-progress`, `mark`, `pile`, `pile-scrim`, `pile-places`,
+`pile-reopen`, `card-<address>`, `card-open-<address>`, `card-close-<address>`, `card-swipe-<address>`, `launcher`, `launcher-layer`,
+`launcher-scrim`, `launcher-open-<address>`, `place-<slug>`, `player`, `player-play`, `paper-story-<route>`, `reader-cite-<anchor>` (lane 3),
+`settings-theme-<id>`, `settings-mode-<light|dark|system>`, `settings-demo`, `settings-components`, `page-title` (every page's heading), plus the
+integrator's (`signin`, `lab-talk`, `inject`, `stage-<kind>-<id>`, `trace-*`, ...), unchanged. Keep an id or update `scripts/proof-sim.sh` in the same commit.
+
+### File ownership (from the plan, section 6) and the one shared line
+
+| Lane | Owns | The shared edit it may make |
+|---|---|---|
+| 1 Bar, radio, talk | `bar.contract`, `player.contract`, `members-bar.contract`, `AutoradioModule+Bar.swift`, `Kit/BarState.swift`, `exact-package/interface/bar.json` | its band in `provide` (app.contract) |
+| 2 Paper layout | `paper.contract`, `members-paper.contract`, `AutoradioModule+Paper.swift`, `Kit/Layout/*.swift`, `mobile/layouts/default.json`, `interface/paper.json` | its band in `provide` |
+| 3 Texture reader | `reader.contract`, `textures.contract`, `members-reader.contract`, `AutoradioModule+Reader.swift`, `Kit/TextureDoc.swift`, `Kit/Citations.swift`, `interface/reader.json` | its band in `provide` |
+| 4 Cards, launcher, signals | `cards.contract`, `launcher.contract`, `members-cards.contract`, `AutoradioModule+Cards.swift`, `Kit/OpenPagesUI.swift`, `Kit/Signals.swift`, `Kit/Preferences.swift`, `interface/cards.json` | its band in `provide` |
+| 5 Files and viewers | `files.contract`, `viewers.contract`, `members-files.contract`, `AutoradioModule+Files.swift`, `Kit/ChoirFiles.swift`, `Kit/Epub.swift`, package views `PDFPage.swift`, `QuickLookPage.swift`, `interface/files.json` | its band in `provide` |
+| 6 Mail | `mail.contract`, `members-mail.contract`, `AutoradioModule+Mail.swift`, `Kit/ChoirMail.swift`, package view `MailOriginal.swift`, `interface/mail.json` | its band in `provide` |
+| 7 Settings, themes, accounts | `settings.contract`, `activity.contract`, `members-settings.contract`, `AutoradioModule+Settings.swift`, `Kit/ThemeLoader.swift`, `mobile/themes/*.json`, `Kit/Accounts.swift`, `interface/settings.json` | its band in `provide` |
+| 8 Onboarding and the interview | `onboarding.contract`, `members-onboarding.contract`, `AutoradioModule+Onboarding.swift`, `Kit/Interview.swift`, `mobile/interview/questions.md`, `interface/onboarding.json` | its band in `provide` |
+| 9 Motion and the mark | `mark.contract`, `mark.ts` (if a canvas is used), `AutoradioModule+Mark.swift`, `interface/mark.json`, motion tokens in the themes | its band in `provide` |
+| Integrator | engine, `lab.contract`, `components.contract` (Components and Trace pages), audio session, `Kit/*` engine files | none |
+| Spine (done) | `app.contract` view, `spine.contract`, `ui.contract`, `pages.contract`, `AutoradioModule.swift`, `AutoradioModule+Spine.swift`, `Pages.swift`, `Demo.swift`, `scripts/*` | - |
+
+`Kit/` is `mobile/AutoradioKit/Sources/AutoradioKit/`; file names must be unique there (the sync script flattens them). Changing a
+page kind's address scheme is a spine change (`PageAddress.kind(of:)`).
+
+### The three spikes (answers, on the simulator, 2026-11-10)
+
+1. **A glass bar over a full-bleed scroll, with the keyboard: YES.** `main viewport-fit="cover" interactive-widget="resizes-content"`, the page a
+   `scroll` filling the screen, the bar a `row position="absolute"` at `bottom: calc(env(safe-area-inset-bottom) + 8px)` with
+   `backgroundMaterial="glass"` (`bar.contract`). With the field focused the bar rides above the keyboard (screenshot `12a-bar-field-focused.png`
+   in the proof's directory). Caveats: (a) a separate glass node *under* a text field covers it (`_UIVisualEffectContentView` swallows the tap), so
+   material, fill, radius and shadow go on the node that holds the content; (b) `backgroundMaterial` takes literal arms only: a ternary of
+   `"glass"` and `"none"`, not `""`; (c) the Exact agent refuses to tap an element under the bar, and scrolls an element to the bottom edge
+   of the scroll frame, which is under the bar: tool pages (Components, Trace) use `ToolScroll`, whose frame ends above the bar.
+2. **A card dragged left and closed: YES, with `swipeleft`, not `pan`.** `swipeleft=closePage(address)` on the card: it follows the finger and the action
+   runs when the finger lifts past 64 pt (needs `touch-action="pan-y"`); the proof drives it with `tap card-swipe-<address> drag -150 0` under
+   `agent ios --touch platform`. `pan` reports the movement since its last event, so a pull (the bar's drag up to the launcher) accumulates `dy` in a state and
+   decides in `panrelease` (`spine.contract`, `pullBar`/`pullEnd`); the proof's `tap bar-pages drag 0 -200` opens the launcher.
+3. **A colour bound from data: YES.** `background-color=th.paper`, `color=th.fg`, `box-shadow=th.shadow2` and `font-family=th.fontRead` (a data string,
+   `ui-serif`) all paint from the `theme` source, and a switch (Depth, Newsprint, light, dark) repaints without a rebuild (proof screenshots 06 to 10).
+   The data-theme path is therefore the only path: the "compiled themes" fallback is not needed.
+   Also spiked: a 3D rotation, `rotate="y 50deg"` with `perspective` on the parent and `transition="rotate 400ms ease"` (settings page,
+   `Spike3D`, `settings-spike3d`): draws as a narrower face, YES.
+
+### Exact lessons (from this build)
+
+- A `provide` list on the root and `inject` in children carry resources, states, derives and actions down: a lane's component takes what it needs and
+  the page host passes only `address` and `title`. A members file (`members "./x.contract"`, block `members Autoradio`) needs at least one member.
+- `use` cycles are refused (`contract-use-cycle`): shared components (`PlainPage`, `NotYetPage`) live in `ui.contract`, which imports nothing of ours.
+- A native button's `text` takes no `font-family` (`lower-button-style`); `buttonStyle="glass|bordered|filled"` buttons inherit the root font.
+- `swipeleft`/`swiperight` are the card-swipe primitive; `pan` gives deltas. `after(ms, action)` exists only in a `task` (hold-to-talk is `task voiceHold when voiceArmed`).
+- Driver: `agent ios --touch platform` is needed for drags; under it a `tap X down`, `clock`, `tap up` sequence is refused, so hold gestures run in a second
+  drive without the flag. `screenshot <png> window` shows the real display (keyboard, glass). The first launch of a fresh install can miss the
+  agent socket or find the scene not foreground-active: retry. A system permission alert (microphone, speech) steals the foreground until the
+  simulator is rebooted; `simctl privacy <udid> grant all <bundle>` works only on a freshly booted simulator.
+- Contract build takes 2 s and finds nearly everything; do it before every simulator build. A contract-only rebuild is 12 to 40 s; adding Swift 3 min when cold.
+- With a 3-minute cold build and 12-second contract builds, the Mac's load decides: at load above 60 the touch runner does not start.
+
+### Spine decisions a lane must know
+
+- Demo mode is a `defaults` flag (`AutoradioDemo`), signed in with a placeholder key; under the simulator's agent the engine is virtual, and the radio's
+  buttons (`choirPlayPause`, `choirTalkDown`, `choirPlay`) start it virtually (`AutoradioModule+Spine.swift`). Speech recognition is not authorized
+  in the proof, so a live turn has no transcript; the proof's turn uses the Lab's stub stages (scripted transcriber) through `inject`.
+- Sign-in is in demo mode skipped; the sign-in screen (`SignInScreen`, lane 8) shows when `au.signedIn == false`.
+- The pile keeps pages in focus order; an older card is covered by the one in front, so a driver switches with the launcher's "Open" chips
+  (`launcher-open-<address>`) or the card strip; lane 4 may fan the deck so older cards show.
+- OpenPages persist in `Application Support/Autoradio/open-pages.json`; the proof deletes it for a clean start.
+- Themes: Depth's dark `onAccent` is dark ink (the plan's white fails the 3:1 contrast gate on the dark accent). The loader enforces the gate.
+- There is no Swift view for drawing, layout or motion in the app; the only Swift is the engine, audio session, models and the module's data. Nothing to move to Contract.
+- Not done in the spine: keyed enter/exit when the page changes, the Undo pill, swipe right, the launcher's live rows, the TetraMark (a flat
+  glyph in `mark.contract`; lane 9 builds it in Contract), Android.
+
+### Proof
+
+`mobile/scripts/proof-sim.sh` (build, then drives the app in demo mode on a simulator of its own; `NOBUILD=1` to skip the build; prints the screenshot directory):
+launch in demo mode, the bar visible, open a second page, the pile with two cards, switch through the launcher, close by swipe, pull the bar up for the
+launcher, Settings, theme Newsprint, dark, Depth, light, play on the bar, hold to talk, Components (a talk turn through the injected fixture path with
+the stub stages) and Trace. `mobile/scripts/proof-replay.sh` and `swift test` (30 tests, 7 of them the spine's) still pass.
