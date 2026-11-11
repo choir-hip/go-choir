@@ -55,7 +55,7 @@ export function renderMarkdownBlocks(value: unknown, sourceEntities: any[] = [],
   const blocks: string[] = [];
   let paragraph: string[] = [];
   // List lines in reading order, each with its nesting depth (1 + indent / 2, as the native reader reads them) and kind.
-  let listItems: { depth: number; ordered: boolean; text: string }[] = [];
+  let listItems: { depth: number; ordered: boolean; start: number; text: string }[] = [];
   let quote: string[] = [];
   let table: string[] = [];
   let code: string[] = [];
@@ -90,7 +90,9 @@ export function renderMarkdownBlocks(value: unknown, sourceEntities: any[] = [],
       }
       if (top && top.depth === item.depth) close(); // the same depth, the other kind: a new list
       open.push({ depth: item.depth, ordered: item.ordered });
-      html += `<${tag(item.ordered)}><li>${inline(item.text)}`;
+      // a list opening at 3 counts from 3, as the native reader does
+      const startAttr = item.ordered && item.start > 1 ? ` start="${item.start}"` : '';
+      html += `<${tag(item.ordered)}${startAttr}><li>${inline(item.text)}`;
     }
     while (open.length > 0) close();
     blocks.push(html);
@@ -178,13 +180,13 @@ export function renderMarkdownBlocks(value: unknown, sourceEntities: any[] = [],
 
     const indent = line.match(/^[ \t]*/)![0].replace(/\t/g, '    ').length;
     const depth = 1 + Math.floor(indent / 2);
-    const bullet = trimmed.match(/^[-*]\s+(.+)$/);
-    const numbered = bullet ? null : trimmed.match(/^\d+\.\s+(.+)$/);
+    const bullet = trimmed.match(/^[-*+]\s+(.+)$/);
+    const numbered = bullet ? null : trimmed.match(/^(\d+)\.\s+(.+)$/);
     if (bullet || numbered) {
       flushParagraph();
       flushQuote();
       flushTable();
-      listItems.push({ depth, ordered: !bullet, text: (bullet || numbered)![1] });
+      listItems.push({ depth, ordered: !bullet, start: numbered ? Number(numbered[1]) : 1, text: bullet ? bullet[1] : numbered![2] });
       continue;
     }
 
