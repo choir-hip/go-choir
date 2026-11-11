@@ -15,7 +15,7 @@ final class ThemeLoaderTests: XCTestCase {
     func testBundledThemesAllLoadAndPassTheGate() {                            // F1
         let s = ThemeStore(userDir: nil, defaults: freshDefaults())
         XCTAssertEqual(s.problems, [])
-        XCTAssertEqual(s.list().map(\.id).sorted(), ["depth", "lantern", "newsprint", "signal"])
+        XCTAssertEqual(s.list().map(\.id).sorted(), ["chrome-pastel", "depth", "lantern", "liquid-metal", "newsprint", "signal"])
     }
 
     func testNewsprintDarkOnAccentPassesTheGate() {                            // F1

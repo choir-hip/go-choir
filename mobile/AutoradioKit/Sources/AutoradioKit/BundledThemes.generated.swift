@@ -4,6 +4,46 @@ import Foundation
 public enum BundledThemes {
     /// Theme id -> schema v3 JSON text.
     public static let json: [String: String] = [
+        "chrome-pastel": #"""
+{
+  "schema_version": 3,
+  "id": "chrome-pastel",
+  "name": "Chrome Pastel",
+  "schemes": ["light"],
+  "colors": {
+    "paper":  "#F7FBFE",
+    "paper2": "#EAF4FA",
+    "fg":     "#16232E",
+    "muted":  "#41596B",
+    "accent": "#1F6E8C",
+    "accent2":"#2F6F8F",
+    "success":"#146B4A",
+    "danger": "#9C2440",
+    "onAccent": "#FFFFFF",
+    "rule":   "rgba(31,110,140,.18)",
+    "scrim":  "rgba(22,35,46,.84)",
+    "onScrim": "#FFFFFF"
+  },
+  "type": {
+    "read": "system-ui, Inter, sans-serif",
+    "ui": "system-ui, Inter, sans-serif",
+    "mono": "ui-monospace, Menlo, monospace",
+    "scale": "editorial"
+  },
+  "radii": { "card": "25px", "control": "19px", "pill": "28px", "rules": "0px" },
+  "elevation": {
+    "1": { "shadow": "0 8px 20px rgba(18,52,74,.14)", "edge": "inset 0 1px 0 rgba(255,255,255,.9)", "press": 0.98 },
+    "2": { "backing": 0.94, "material": "glass", "shadow": "0 14px 34px rgba(18,52,74,.16)", "edge": "inset 0 0 0 1px rgba(255,255,255,.55)" },
+    "3": { "backing": 0.86, "material": "glass", "shadow": "0 24px 64px rgba(18,52,74,.22)", "edge": "inset 0 0 0 1px rgba(255,255,255,.55)", "behind": { "scale": 0.96, "dim": 0.08 } }
+  },
+  "motion": {
+    "fast": "120ms ease", "enter": "340ms cubic-bezier(0.16,1,0.3,1)", "sheet": "260ms cubic-bezier(0.2,0.8,0.2,1)",
+    "spring": { "stiffness": 240, "damping": 26, "mass": 1 }, "stagger": "40ms",
+    "reduced": { "enter": "0ms", "spring": "none" }
+  },
+  "mark": { "drift": "60s", "tumble": ["3.3s", "5.9s"], "flip": { "stiffness": 300, "damping": 22 }, "listenScale": 1.15, "reduced": "static" }
+}
+"""#,
         "depth": #"""
 {
   "schema_version": 3,
@@ -21,7 +61,7 @@ public enum BundledThemes {
     "danger": { "light": "#A3142F", "dark": "#FF6B7B" },
     "onAccent": { "light": "#FFFFFF", "dark": "#120D17" },
     "rule":   { "light": "rgba(32,20,58,.22)", "dark": "rgba(243,236,246,.18)" },
-    "scrim":  { "light": "rgba(24,14,30,.74)", "dark": "rgba(0,0,0,.80)" },
+    "scrim":  { "light": "rgba(24,14,30,.84)", "dark": "rgba(0,0,0,.86)" },
     "onScrim": { "light": "#FFFFFF", "dark": "#F3F3F3" }
   },
   "type": {
@@ -61,7 +101,7 @@ public enum BundledThemes {
     "danger": { "light": "#A12A1B", "dark": "#FF8F7C" },
     "onAccent": { "light": "#FFFFFF", "dark": "#1D140D" },
     "rule":   { "light": "rgba(43,27,14,.20)", "dark": "rgba(247,233,211,.18)" },
-    "scrim":  { "light": "rgba(24,14,30,.74)", "dark": "rgba(0,0,0,.80)" },
+    "scrim":  { "light": "rgba(24,14,30,.84)", "dark": "rgba(0,0,0,.86)" },
     "onScrim": { "light": "#FFFFFF", "dark": "#F3F3F3" }
   },
   "type": { "read": "ui-serif", "ui": "ui-rounded", "mono": "ui-monospace", "scale": "large" },
@@ -77,6 +117,46 @@ public enum BundledThemes {
     "reduced": { "enter": "0ms", "spring": "none" }
   },
   "mark": { "drift": "90s", "tumble": ["4.1s", "7.3s"], "flip": { "stiffness": 220, "damping": 16 }, "listenScale": 1.22, "reduced": "static" }
+}
+"""#,
+        "liquid-metal": #"""
+{
+  "schema_version": 3,
+  "id": "liquid-metal",
+  "name": "Liquid Metal",
+  "schemes": ["dark"],
+  "colors": {
+    "paper":  "#1C242E",
+    "paper2": "#1A222B",
+    "fg":     "#F5F8FA",
+    "muted":  "#B3BFCB",
+    "accent": "#65C5D8",
+    "accent2":"#9FE3EE",
+    "success":"#4FD3A0",
+    "danger": "#F47A88",
+    "onAccent": "#0B1116",
+    "rule":   "rgba(101,197,216,.22)",
+    "scrim":  "rgba(17,22,29,.86)",
+    "onScrim": "#F5F8FA"
+  },
+  "type": {
+    "read": "system-ui, Inter, sans-serif",
+    "ui": "system-ui, Inter, sans-serif",
+    "mono": "ui-monospace, Menlo, monospace",
+    "scale": "editorial"
+  },
+  "radii": { "card": "26px", "control": "20px", "pill": "30px", "rules": "0px" },
+  "elevation": {
+    "1": { "shadow": "0 10px 24px rgba(0,0,0,.32)", "edge": "inset 0 1px 0 rgba(255,255,255,.08)", "press": 0.98 },
+    "2": { "backing": 0.94, "material": "glass", "shadow": "0 16px 38px rgba(0,0,0,.46)", "edge": "inset 0 1px 0 rgba(255,255,255,.08)" },
+    "3": { "backing": 0.86, "material": "glass", "shadow": "0 24px 70px rgba(0,0,0,.54)", "edge": "inset 0 1px 0 rgba(255,255,255,.08)", "behind": { "scale": 0.96, "dim": 0.08 } }
+  },
+  "motion": {
+    "fast": "120ms ease", "enter": "340ms cubic-bezier(0.16,1,0.3,1)", "sheet": "260ms cubic-bezier(0.2,0.8,0.2,1)",
+    "spring": { "stiffness": 240, "damping": 26, "mass": 1 }, "stagger": "40ms",
+    "reduced": { "enter": "0ms", "spring": "none" }
+  },
+  "mark": { "drift": "60s", "tumble": ["3.3s", "5.9s"], "flip": { "stiffness": 300, "damping": 22 }, "listenScale": 1.15, "reduced": "static" }
 }
 """#,
         "newsprint": #"""
@@ -96,7 +176,7 @@ public enum BundledThemes {
     "danger": { "light": "#B3261E", "dark": "#FF6E5E" },
     "onAccent": { "light": "#FFFFFF", "dark": "#0E0E0E" },
     "rule":   { "light": "#111111", "dark": "#EDEDED" },
-    "scrim":  { "light": "rgba(24,14,30,.74)", "dark": "rgba(0,0,0,.80)" },
+    "scrim":  { "light": "rgba(24,14,30,.84)", "dark": "rgba(0,0,0,.86)" },
     "onScrim": { "light": "#FFFFFF", "dark": "#F3F3F3" }
   },
   "type": { "read": "ui-serif, Georgia, serif", "ui": "ui-serif, Georgia, serif", "mono": "ui-monospace, monospace", "scale": "editorial" },
@@ -131,7 +211,7 @@ public enum BundledThemes {
     "danger": { "light": "#A00018", "dark": "#FF8A8A" },
     "onAccent": { "light": "#FFFFFF", "dark": "#000000" },
     "rule":   { "light": "#000000", "dark": "#FFFFFF" },
-    "scrim":  { "light": "rgba(24,14,30,.74)", "dark": "rgba(0,0,0,.80)" },
+    "scrim":  { "light": "rgba(24,14,30,.84)", "dark": "rgba(0,0,0,.86)" },
     "onScrim": { "light": "#FFFFFF", "dark": "#F3F3F3" }
   },
   "type": { "read": "system-ui", "ui": "system-ui", "mono": "ui-monospace", "scale": "large" },

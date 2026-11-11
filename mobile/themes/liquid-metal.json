@@ -1,0 +1,38 @@
+{
+  "schema_version": 3,
+  "id": "liquid-metal",
+  "name": "Liquid Metal",
+  "schemes": ["dark"],
+  "colors": {
+    "paper":  "#1C242E",
+    "paper2": "#1A222B",
+    "fg":     "#F5F8FA",
+    "muted":  "#B3BFCB",
+    "accent": "#65C5D8",
+    "accent2":"#9FE3EE",
+    "success":"#4FD3A0",
+    "danger": "#F47A88",
+    "onAccent": "#0B1116",
+    "rule":   "rgba(101,197,216,.22)",
+    "scrim":  "rgba(17,22,29,.86)",
+    "onScrim": "#F5F8FA"
+  },
+  "type": {
+    "read": "system-ui, Inter, sans-serif",
+    "ui": "system-ui, Inter, sans-serif",
+    "mono": "ui-monospace, Menlo, monospace",
+    "scale": "editorial"
+  },
+  "radii": { "card": "26px", "control": "20px", "pill": "30px", "rules": "0px" },
+  "elevation": {
+    "1": { "shadow": "0 10px 24px rgba(0,0,0,.32)", "edge": "inset 0 1px 0 rgba(255,255,255,.08)", "press": 0.98 },
+    "2": { "backing": 0.94, "material": "glass", "shadow": "0 16px 38px rgba(0,0,0,.46)", "edge": "inset 0 1px 0 rgba(255,255,255,.08)" },
+    "3": { "backing": 0.86, "material": "glass", "shadow": "0 24px 70px rgba(0,0,0,.54)", "edge": "inset 0 1px 0 rgba(255,255,255,.08)", "behind": { "scale": 0.96, "dim": 0.08 } }
+  },
+  "motion": {
+    "fast": "120ms ease", "enter": "340ms cubic-bezier(0.16,1,0.3,1)", "sheet": "260ms cubic-bezier(0.2,0.8,0.2,1)",
+    "spring": { "stiffness": 240, "damping": 26, "mass": 1 }, "stagger": "40ms",
+    "reduced": { "enter": "0ms", "spring": "none" }
+  },
+  "mark": { "drift": "60s", "tumble": ["3.3s", "5.9s"], "flip": { "stiffness": 300, "damping": 22 }, "listenScale": 1.15, "reduced": "static" }
+}
