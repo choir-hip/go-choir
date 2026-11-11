@@ -1,55 +1,52 @@
-// The mark: the TetraMark that shows what the radio is doing. Lane 9 owns this file. PURE CONTRACT (owner, 2026-11-11:
-// "ideally we can do pure contract so we can easily run on other platforms"): no Swift view, no TypeScript, no Rust.
+// The mark: the brand TetraMark (frontend/src/lib/tetramark.ts), animated. Lane MARK owns this file. PURE CONTRACT (owner,
+// 2026-11-11: "ideally we can do pure contract so we can easily run on other platforms"): no Swift view, no TypeScript.
 //
-// What it is: a real tetrahedron, four vertices, whose rest pose projects onto the drawn brand mark (a leaning spire, a
-// left shard, a base: three faces with gaps where they meet; frontend/src/lib/tetramark.ts). Each frame the four
-// vertices are rotated about three axes (sin and cos only, no sqrt), perspective-divided, and the faces drawn as `svg
-// polygon`. A face is drawn only if its projected area is positive (back-face culling: for a convex solid that is the
-// whole of hidden-surface removal, so there is no depth sort; the culled faces are drawn as faint dashed ghosts at larger
-// sizes so the solid still reads). The hand-drawn feel: each face is shrunk toward its centre (the gaps of the brand
-// mark), inked with a round-joined stroke, re-inked by a second thinner stroke that "boils" (jitters at 8 Hz, as hand
-// animation does), and hatched at hero size; tone follows depth.
+// What it is: the three curved blades of the brand mark, each a closed polygon, drawn as `svg polygon` in the brand's own
+// 512 box. The blades are the three visible faces of a tetrahedron seen from a vertex: every point of a blade has a depth z
+// on its face plane (generated, with the points, between the `tetramark-data` markers below; the script
+// mobile/scripts/gen-tetramark.py rewrites the block from the web's drawing and `--check` fails when the two drift).
+// Each frame every point is turned about the mark's vertical axis (yaw) and tipped (pitch), perspective-divided and drawn;
+// each blade's opacity follows its facing to a light, so depth reads. Depth is scaled by `d`, which is 0 whenever yaw and
+// pitch are 0: at rest the projection is the exact flat brand drawing (no perspective, no shading), and a motion
+// that returns to rest settles back onto it. No sort and no culling: a blade is a thin flat shape, drawn two-sided.
 //
 // The clock: tasks are root-owned in Contract, so the one per-frame task lives in members-mark.contract; it writes the
 // root state `mkT` (ms) and a component reads it through `inject`. Time-in-state (`since`, ms) is the root's `mkSince`
 // for the bar, or the caller's own for another mark. Every pose is a closed form of tt (seconds) and ee (seconds since the
-// state began), starting from the rest pose with zero velocity at ee = 0, so a state change never jumps; the new state
-// also remounts the glyph (`for k in [state]`), which plays the `markpop` keyframes, so the change reads as a beat.
+// state began), starting from the rest pose at ee = 0 so a state change never jumps; the new state also remounts the
+// glyph (`for k in [state]`), which plays the `markpop` keyframes, so the change reads as a beat.
 //
-// States (the bar's names or the plain ones): idle (drift), listening (leans toward the voice, breath), thinking /
-// holding / heard (tumbles about three axes at the theme's two periods, grows and shrinks, a face per real desk step
-// when `step` >= 0), speaking / playing (turns, pulses with speech), success / revised (a flip that settles), error /
-// failed (a shake, danger tint). Reduced motion (the theme's flag, or `still`): the static drawn pose, a gentle opacity
-// change, state shown by tint and the faces.
+// States (the bar's names or the plain ones): idle (still when the theme's drift is none, else a slow breath),
+// listening (leans and pulses with the mic level), thinking / holding / heard (a hop with a full turn that eases out and
+// back to rest, then a pause, with a sway and a pitch wobble: it dances), speaking / playing (turns gently and pulses with
+// speech), success / revised (a flip that settles), error / failed (a shake, danger tint). Reduced motion (the theme's
+// flag, or `still`): the flat brand drawing, a gentle opacity change, state shown by tint.
 //
 // Every duration is a theme token: th.motionEnterMs (ramps, flip, shake, pop, reduced fade), th.markDriftS,
-// th.markTumble ("3.3s,5.9s"), th.markListenScale, th.reducedMotion.
+// th.markTumble ("3.3s,5.9s": the turn's and the wobble's periods), th.markListenScale, th.reducedMotion.
 use Theme, RadioInfo from "@choir/autoradio"
 
 keyframes markpop
-  from opacity=0.35 scale=0.8
+  from opacity=0.35 scale=0.85
 keyframes markfade
   50% opacity=0.65
 
-fn r1y(y: number, z: number, s: number, c: number): number = y * c - z * s
-fn r1z(y: number, z: number, s: number, c: number): number = y * s + z * c
-fn r2x(x: number, z: number, s: number, c: number): number = x * c + z * s
-fn r2z(x: number, z: number, s: number, c: number): number = z * c - x * s
-fn r3x(x: number, y: number, s: number, c: number): number = x * c - y * s
-fn r3y(x: number, y: number, s: number, c: number): number = x * s + y * c
-fn area(ax: number, ay: number, bx: number, by: number, cx: number, cy: number): number = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
-fn shr(v: number, m: number, k: number): number = m + (v - m) * k
-fn pt(x: number, y: number, mx: number, my: number, k: number, amp: number, b: number, seed: number): string = `${shr(x, mx, k) + amp * sin(b * 1.7 + seed * 2.1)},${shr(y, my, k) + amp * cos(b * 2.3 + seed * 1.3)}`
-fn tri(ax: number, ay: number, bx: number, by: number, cx: number, cy: number, k: number, amp: number, b: number, seed: number): string = `${pt(ax, ay, (ax + bx + cx) / 3, (ay + by + cy) / 3, k, amp, b, seed)} ${pt(bx, by, (ax + bx + cx) / 3, (ay + by + cy) / 3, k, amp, b, seed + 1)} ${pt(cx, cy, (ax + bx + cx) / 3, (ay + by + cy) / 3, k, amp, b, seed + 2)}`
-fn hs(a: number, b: number, c: number, u: number): number = shr(a, (a + b + c) / 3, 0.9) + (shr(b, (a + b + c) / 3, 0.9) - shr(a, (a + b + c) / 3, 0.9)) * u
-fn tone(zsum: number, i: number, step: number): number = step >= 0 ? (i < step ? 0.95 : 0.2) : 0.4 + 0.5 * min(1, max(0, zsum / 3 + 0.4))
+fn at0(xs: number[], i: number): number = match xs.at(i) { case some(v) => v, case none => 0 }
+fn ryx(x: number, z: number, s: number, c: number): number = x * c + z * s
+fn ryz(x: number, z: number, s: number, c: number): number = z * c - x * s
+fn rxy(y: number, z: number, s: number, c: number): number = y * c - z * s
+fn rxz(y: number, z: number, s: number, c: number): number = y * s + z * c
+// One point: turn about y, tip about x, perspective (eye at 3.2 radii), then the brand box (256 is its centre).
+fn pxy(x: number, y: number, z: number, sa: number, ca: number, sb: number, cb: number, sc: number, tx: number, ty: number): string = `${256 + 256 * ryx(x, z, sa, ca) * 3.2 / (3.2 - rxz(y, ryz(x, z, sa, ca), sb, cb)) * sc + tx},${256 + 256 * rxy(y, ryz(x, z, sa, ca), sb, cb) * 3.2 / (3.2 - rxz(y, ryz(x, z, sa, ca), sb, cb)) * sc + ty}`
+fn blade(xs: number[], ys: number[], zs: number[], d: number, sa: number, ca: number, sb: number, cb: number, sc: number, tx: number, ty: number): string = xs.map((x, i) => pxy(x, at0(ys, i), at0(zs, i) * d, sa, ca, sb, cb, sc, tx, ty)).join(" ")
+// A blade's opacity from its facing a light at the upper left: 1 at rest, down to 0.5 turned away. A desk step lights blades in order.
+fn shade(n: number[], d: number, sa: number, ca: number, sb: number, cb: number, i: number, step: number): number = step >= 0 ? (i < step ? 1 : 0.28) : 1 - d * 0.5 * (0.5 - 0.5 * (ryx(at0(n, 0), at0(n, 2), sa, ca) * -0.42 + rxy(at0(n, 1), ryz(at0(n, 0), at0(n, 2), sa, ca), sb, cb) * -0.52 + rxz(at0(n, 1), ryz(at0(n, 0), at0(n, 2), sa, ca), sb, cb) * 0.74))
 fn smooth(u: number): number = u * u * (3 - 2 * u)
-fn g(e: number): number = e < 1 ? e * e / 2 : e - 0.5
 fn backw(w: number): number = 1 + 2.70158 * w * w * w + 1.70158 * w * w
 fn canon(s: string): string = s == "playing" or s == "speaking" ? "speaking" : s == "listening" ? "listening" : s == "holding" or s == "thinking" or s == "heard" or s == "working" or s == "waiting" ? "thinking" : s == "revised" or s == "success" ? "success" : s == "error" or s == "failed" ? "error" : "idle"
 
 // The glyph at any size (points). `since`: ms on the root clock when the state began. `level`: 0 to 1 input level for
-// listening (0 = a synthesized breath). `step`: faces filled by real desk steps (0 to 4), or -1 for depth tones.
+// listening (0 = a synthesized breath). `step`: blades lit by real desk steps (0 to 3; 4 steps light all), or -1 for facing shades.
 // `still`: draw the reduced-motion form whatever the system says (the gallery's reduced row).
 component MarkAt
   inject
@@ -79,102 +76,47 @@ component MarkAt
   derive dd = th.markDriftS > 0 ? 1 : 0
   derive breath = 0.5 + 0.5 * sin(6.2832 * tt / 2.6)
   derive pulse = 0.5 + 0.25 * sin(6.2832 * 3.1 * tt) + 0.25 * sin(6.2832 * 5.3 * tt + 1)
-  derive ax = calm ? 0 : st == "idle" ? 0.1 * r * sin(6.2832 * tt / (dr / 3.1)) * dd : st == "listening" ? 0.55 * r : st == "thinking" ? 6.2832 * g(ee) / ta : st == "speaking" ? 0.12 * r * sin(6.2832 * tt / 2.1) : 0
-  derive ay = calm ? 0 : st == "idle" ? 0.38 * r * sin(6.2832 * tt / (dr / 4)) * dd : st == "listening" ? 0.14 * r * sin(6.2832 * tt / 1.7) : st == "thinking" ? 6.2832 * g(ee) / tb : st == "speaking" ? 0.55 * r * sin(6.2832 * tt / 3.2) : st == "success" ? 6.2832 * backw(su - 1) : 0
-  derive az = calm ? 0 : st == "thinking" ? 0.35 * r * sin(6.2832 * tt / 4.1) : st == "error" ? 0.1 * (1 - eu) * sin(6.2832 * 8 * ee + 1) : 0
-  derive sc = calm ? 1 : st == "idle" ? 1 + 0.015 * sin(6.2832 * tt / 7) : st == "listening" ? 1 + (th.markListenScale - 1) * (max(level, 0.6 * breath) + 0.5 * r) : st == "thinking" ? 1 + 0.16 * r * sin(6.2832 * tt / 2.3) - 0.04 * r : st == "speaking" ? 1 + 0.1 * r * pulse : st == "success" ? 1 + 0.08 * sin(3.1416 * su) : 1
-  derive dx = calm ? 0 : st == "error" ? 0.09 * (1 - eu) * (1 - eu) * sin(6.2832 * 8 * ee) : 0
-  derive sax = sin(ax)
-  derive cax = cos(ax)
-  derive say = sin(ay)
-  derive cay = cos(ay)
-  derive saz = sin(az)
-  derive caz = cos(az)
+  derive amp = max(level, 0.5 * breath)
+  derive cyc = max(1.6, min(4, ta * 0.6))
+  derive h = min(1, (ee % cyc) / cyc / 0.72)
+  derive e1 = smooth(h)
+  derive wob = 6.2832 * tt / max(2, tb * 0.5)
+  derive yaw = calm ? 0 : st == "idle" ? 0.14 * sin(6.2832 * tt / dr) * dd : st == "listening" ? r * (0.12 + 0.4 * amp) * sin(6.2832 * tt / 1.3) : st == "thinking" ? 6.2832 * e1 : st == "speaking" ? 0.55 * r * sin(6.2832 * tt / 3.2) : st == "success" ? 6.2832 * backw(su - 1) : 0
+  derive pitch = calm ? 0 : st == "idle" ? 0.07 * sin(6.2832 * tt / (dr * 0.7)) * dd : st == "listening" ? -0.3 * r * amp : st == "thinking" ? 0.35 * sin(6.2832 * e1) + 0.1 * r * sin(wob) : st == "speaking" ? 0.1 * r * sin(6.2832 * tt / 2.1) : 0
+  derive sc = calm ? 1 : st == "idle" ? 1 + 0.015 * sin(6.2832 * tt / 7) * dd : st == "listening" ? 1 + (th.markListenScale - 1) * (max(level, 0.6 * breath) + 0.5 * r) : st == "thinking" ? 1 + 0.07 * r * sin(3.1416 * h) : st == "speaking" ? 1 + 0.06 * r * pulse : st == "success" ? 1 + 0.08 * sin(3.1416 * su) : 1
+  derive tx = calm ? 0 : st == "thinking" ? 10 * r * sin(wob) : st == "error" ? 24 * (1 - eu) * (1 - eu) * sin(6.2832 * 8 * ee) : 0
+  derive ty = calm ? 0 : st == "thinking" ? -34 * r * sin(3.1416 * h) : 0
+  derive d = min(1, 2 * (max(sin(yaw / 2), 0 - sin(yaw / 2)) + max(sin(pitch / 2), 0 - sin(pitch / 2))))
+  derive sa = sin(yaw)
+  derive ca = cos(yaw)
+  derive sb = sin(pitch)
+  derive cb = cos(pitch)
   derive tint = st == "success" ? th.success : st == "error" ? th.danger : th.accent
-  derive boil = calm ? 0 : floor(tt * 8)
-  derive sw = max(0.04, 3 / size)
-  derive hatch = size >= 60
-  derive ghost = size >= 40
-  derive y1_0 = r1y(-1.0986, -0.225, sax, cax)
-  derive z1_0 = r1z(-1.0986, -0.225, sax, cax)
-  derive x2_0 = r2x(0.0098, z1_0, say, cay)
-  derive z2_0 = r2z(0.0098, z1_0, say, cay)
-  derive x3_0 = r3x(x2_0, y1_0, saz, caz)
-  derive y3_0 = r3y(x2_0, y1_0, saz, caz)
-  derive k_0 = 3 / (3 - z2_0) * sc
-  derive wx0 = x3_0 * k_0 + dx
-  derive wy0 = y3_0 * k_0
-  derive y1_1 = r1y(0.4443, -0.225, sax, cax)
-  derive z1_1 = r1z(0.4443, -0.225, sax, cax)
-  derive x2_1 = r2x(-0.9473, z1_1, say, cay)
-  derive z2_1 = r2z(-0.9473, z1_1, say, cay)
-  derive x3_1 = r3x(x2_1, y1_1, saz, caz)
-  derive y3_1 = r3y(x2_1, y1_1, saz, caz)
-  derive k_1 = 3 / (3 - z2_1) * sc
-  derive wx1 = x3_1 * k_1 + dx
-  derive wy1 = y3_1 * k_1
-  derive y1_2 = r1y(0.6006, -0.225, sax, cax)
-  derive z1_2 = r1z(0.6006, -0.225, sax, cax)
-  derive x2_2 = r2x(0.752, z1_2, say, cay)
-  derive z2_2 = r2z(0.752, z1_2, say, cay)
-  derive x3_2 = r3x(x2_2, y1_2, saz, caz)
-  derive y3_2 = r3y(x2_2, y1_2, saz, caz)
-  derive k_2 = 3 / (3 - z2_2) * sc
-  derive wx2 = x3_2 * k_2 + dx
-  derive wy2 = y3_2 * k_2
-  derive y1_3 = r1y(0.0537, 0.675, sax, cax)
-  derive z1_3 = r1z(0.0537, 0.675, sax, cax)
-  derive x2_3 = r2x(0.1855, z1_3, say, cay)
-  derive z2_3 = r2z(0.1855, z1_3, say, cay)
-  derive x3_3 = r3x(x2_3, y1_3, saz, caz)
-  derive y3_3 = r3y(x2_3, y1_3, saz, caz)
-  derive k_3 = 3 / (3 - z2_3) * sc
-  derive wx3 = x3_3 * k_3 + dx
-  derive wy3 = y3_3 * k_3
+  // BEGIN tetramark-data (generated by mobile/scripts/gen-tetramark.py from frontend/src/lib/tetramark.ts; do not edit)
+  derive bx0 = [0.0536, 0.01, -0.0223, -0.0168, 0.0257, 0.0759, 0.1284, 0.1374, 0.2032, 0.4724, 0.6578, 0.7572, 0.8588, 0.7091, 0.4076, 0.2837, 0.1374]
+  derive by0 = [-0.856, -0.7533, -0.4383, -0.1915, -0.0743, -0.0787, -0.2373, -0.5735, -0.588, -0.1156, 0.0932, 0.2675, 0.2775, -0.043, -0.4607, -0.6986, -0.8638]
+  derive bz0 = [-0.0842, -0.0001, 0.2033, 0.346, 0.3923, 0.3625, 0.2406, 0.0373, -0.0068, 0.1267, 0.1499, 0.199, 0.1501, 0.0417, -0.042, -0.1155, -0.1341]
+  derive bn0 = [0.4216, -0.461, 0.7809]
+  derive bx1 = [-0.3194, -0.4724, -0.6891, -0.7862, -0.8621, -0.8543, -0.7896, -0.2915, -0.1463, -0.1485, -0.1943, -0.4277, -0.6377, -0.6969, -0.6902, -0.3138]
+  derive by1 = [-0.4182, -0.3144, 0.0977, 0.4104, 0.55, 0.6639, 0.7108, 0.5154, 0.3892, 0.3367, 0.3266, 0.4104, 0.5433, 0.5422, 0.4584, -0.3512]
+  derive bz1 = [0.3985, 0.251, -0.0652, -0.2587, -0.3675, -0.4082, -0.3824, 0.0404, 0.1917, 0.2114, 0.1838, -0.0112, -0.2099, -0.2503, -0.2118, 0.3753]
+  derive bn1 = [-0.5391, 0.3156, 0.7809]
+  derive bx2 = [0.8611, 0.4344, 0.2691, 0.2747, 0.5204, 0.5182, -0.22, -0.3071, -0.3149, -0.277, 0.191, 0.7873, 0.8487]
+  derive by2 = [0.7789, 0.4048, 0.3255, 0.4071, 0.6438, 0.7019, 0.7298, 0.7812, 0.8225, 0.8638, 0.8482, 0.8638, 0.8337]
+  derive bz2 = [-0.3838, 0.0205, 0.1284, 0.0661, -0.1825, -0.2251, -0.0273, -0.0397, -0.0681, -0.1101, -0.2369, -0.4251, -0.4208]
+  derive bn2 = [0.2311, 0.5804, 0.7809]
+  // END tetramark-data
   view
     box testId=testId width=size height=size position="relative" role="img" aria-label=`TetraMark, ${st}`
       for k in [state] key=k
         box position="absolute" inset=0 animation=(calm ? `markfade ${th.motionEnterMs * 10}ms ease-in-out infinite` : `markpop ${th.motionEnterMs}ms ease-out both`)
-          svg viewBox="-1.25 -1.25 2.5 2.5" width=size height=size overflow="visible"
-            if area(wx1, wy1, wx3, wy3, wx2, wy2) > 0
-              polygon points=tri(wx1, wy1, wx3, wy3, wx2, wy2, 0.9, 0, 0, 0) fill=tint fill-opacity=tone(z2_1 + z2_3 + z2_2, 0, step) stroke="none"
-              polygon points=tri(wx1, wy1, wx3, wy3, wx2, wy2, 0.9, 0, 0, 0) fill="none" stroke=th.fg stroke-width=sw stroke-linejoin="round" stroke-linecap="round"
-              polygon points=tri(wx1, wy1, wx3, wy3, wx2, wy2, 1.06, 0.03, boil, 0) fill="none" stroke=th.fg stroke-width=(sw * 0.5) stroke-opacity=0.5 stroke-linejoin="round"
-              if hatch
-                for u, n in [0.3, 0.55, 0.8] key=n
-                  line x1=hs(wx1, wx3, wx2, u) y1=hs(wy1, wy3, wy2, u) x2=hs(wx1, wx2, wx3, u) y2=hs(wy1, wy2, wy3, u) stroke=th.fg stroke-width=(sw * 0.4) stroke-opacity=0.4 stroke-linecap="round"
-            if area(wx1, wy1, wx3, wy3, wx2, wy2) <= 0 and ghost
-              polygon points=tri(wx1, wy1, wx3, wy3, wx2, wy2, 1, 0, 0, 0) fill="none" stroke=th.muted stroke-width=(sw * 0.5) stroke-opacity=0.35 stroke-dasharray="0.05 0.07" stroke-linejoin="round"
-            if area(wx0, wy0, wx2, wy2, wx3, wy3) > 0
-              polygon points=tri(wx0, wy0, wx2, wy2, wx3, wy3, 0.9, 0, 0, 0) fill=tint fill-opacity=tone(z2_0 + z2_2 + z2_3, 1, step) stroke="none"
-              polygon points=tri(wx0, wy0, wx2, wy2, wx3, wy3, 0.9, 0, 0, 0) fill="none" stroke=th.fg stroke-width=sw stroke-linejoin="round" stroke-linecap="round"
-              polygon points=tri(wx0, wy0, wx2, wy2, wx3, wy3, 1.06, 0.03, boil, 1) fill="none" stroke=th.fg stroke-width=(sw * 0.5) stroke-opacity=0.5 stroke-linejoin="round"
-              if hatch
-                for u, n in [0.3, 0.55, 0.8] key=n
-                  line x1=hs(wx0, wx2, wx3, u) y1=hs(wy0, wy2, wy3, u) x2=hs(wx0, wx3, wx2, u) y2=hs(wy0, wy3, wy2, u) stroke=th.fg stroke-width=(sw * 0.4) stroke-opacity=0.4 stroke-linecap="round"
-            if area(wx0, wy0, wx2, wy2, wx3, wy3) <= 0 and ghost
-              polygon points=tri(wx0, wy0, wx2, wy2, wx3, wy3, 1, 0, 0, 0) fill="none" stroke=th.muted stroke-width=(sw * 0.5) stroke-opacity=0.35 stroke-dasharray="0.05 0.07" stroke-linejoin="round"
-            if area(wx0, wy0, wx3, wy3, wx1, wy1) > 0
-              polygon points=tri(wx0, wy0, wx3, wy3, wx1, wy1, 0.9, 0, 0, 0) fill=tint fill-opacity=tone(z2_0 + z2_3 + z2_1, 2, step) stroke="none"
-              polygon points=tri(wx0, wy0, wx3, wy3, wx1, wy1, 0.9, 0, 0, 0) fill="none" stroke=th.fg stroke-width=sw stroke-linejoin="round" stroke-linecap="round"
-              polygon points=tri(wx0, wy0, wx3, wy3, wx1, wy1, 1.06, 0.03, boil, 2) fill="none" stroke=th.fg stroke-width=(sw * 0.5) stroke-opacity=0.5 stroke-linejoin="round"
-              if hatch
-                for u, n in [0.3, 0.55, 0.8] key=n
-                  line x1=hs(wx0, wx3, wx1, u) y1=hs(wy0, wy3, wy1, u) x2=hs(wx0, wx1, wx3, u) y2=hs(wy0, wy1, wy3, u) stroke=th.fg stroke-width=(sw * 0.4) stroke-opacity=0.4 stroke-linecap="round"
-            if area(wx0, wy0, wx3, wy3, wx1, wy1) <= 0 and ghost
-              polygon points=tri(wx0, wy0, wx3, wy3, wx1, wy1, 1, 0, 0, 0) fill="none" stroke=th.muted stroke-width=(sw * 0.5) stroke-opacity=0.35 stroke-dasharray="0.05 0.07" stroke-linejoin="round"
-            if area(wx0, wy0, wx1, wy1, wx2, wy2) > 0
-              polygon points=tri(wx0, wy0, wx1, wy1, wx2, wy2, 0.9, 0, 0, 0) fill=tint fill-opacity=tone(z2_0 + z2_1 + z2_2, 3, step) stroke="none"
-              polygon points=tri(wx0, wy0, wx1, wy1, wx2, wy2, 0.9, 0, 0, 0) fill="none" stroke=th.fg stroke-width=sw stroke-linejoin="round" stroke-linecap="round"
-              polygon points=tri(wx0, wy0, wx1, wy1, wx2, wy2, 1.06, 0.03, boil, 3) fill="none" stroke=th.fg stroke-width=(sw * 0.5) stroke-opacity=0.5 stroke-linejoin="round"
-              if hatch
-                for u, n in [0.3, 0.55, 0.8] key=n
-                  line x1=hs(wx0, wx1, wx2, u) y1=hs(wy0, wy1, wy2, u) x2=hs(wx0, wx2, wx1, u) y2=hs(wy0, wy2, wy1, u) stroke=th.fg stroke-width=(sw * 0.4) stroke-opacity=0.4 stroke-linecap="round"
-            if area(wx0, wy0, wx1, wy1, wx2, wy2) <= 0 and ghost
-              polygon points=tri(wx0, wy0, wx1, wy1, wx2, wy2, 1, 0, 0, 0) fill="none" stroke=th.muted stroke-width=(sw * 0.5) stroke-opacity=0.35 stroke-dasharray="0.05 0.07" stroke-linejoin="round"
+          svg viewBox="0 0 512 512" width=size height=size overflow="visible"
+            polygon points=blade(bx0, by0, bz0, d, sa, ca, sb, cb, sc, tx, ty) fill=tint fill-opacity=shade(bn0, d, sa, ca, sb, cb, 0, step) stroke=th.fg stroke-opacity=(0.3 * d) stroke-width=5 stroke-linejoin="round"
+            polygon points=blade(bx1, by1, bz1, d, sa, ca, sb, cb, sc, tx, ty) fill=tint fill-opacity=shade(bn1, d, sa, ca, sb, cb, 1, step) stroke=th.fg stroke-opacity=(0.3 * d) stroke-width=5 stroke-linejoin="round"
+            polygon points=blade(bx2, by2, bz2, d, sa, ca, sb, cb, sc, tx, ty) fill=tint fill-opacity=shade(bn2, d, sa, ca, sb, cb, 2, step) stroke=th.fg stroke-opacity=(0.3 * d) stroke-width=5 stroke-linejoin="round"
 
-// The bar's voice button: the 44 pt target with the mark at 26 pt, so the grown mark stays inside it. Keeps the spine's
-// name, props and test id (`mark`).
+// The bar's voice button face: the 44 pt target with the mark at 36 pt. Keeps the spine's name, props and test id
+// (`mark`). It handles no gesture: the bar's tap button owns the press.
 component Mark
   inject
     mkSince: number
@@ -183,7 +125,7 @@ component Mark
     state: string
   view
     row width=44 height=44 align-items="center" justify-content="center" testId="mark"
-      MarkAt(state=state, size=26, since=mkSince, level=(state == "listening" ? ri.micLevel : 0), step=-1, still=false, testId="mark-glyph")
+      MarkAt(state=state, size=36, since=mkSince, level=(state == "listening" ? ri.micLevel : 0), step=-1, still=false, testId="mark-glyph")
 
 // The large mark for onboarding and the wait (the caller owns `since` and `step`).
 component MarkHero
