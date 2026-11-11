@@ -92,6 +92,14 @@ test('S7: a saved choice whose pack has not registered yet is kept, not wiped, w
   const kept = await bootCache(page);
   expect(kept.length).toBe(1);
   expect(JSON.parse(kept[0]).id).toBe('paper-night.dark');
+  // A scheme change while the choice is pending moves the default and keeps the choice.
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect(root(page)).toHaveAttribute('data-theme-id', 'chrome-pastel.hybrid');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(root(page)).toHaveAttribute('data-theme-id', 'liquid-metal');
+  const after = await bootCache(page);
+  expect(after.length).toBe(1);
+  expect(JSON.parse(after[0]).id).toBe('paper-night.dark');
 });
 
 test('S8: the old auto-written default is not a choice: signed out, dark shows Liquid Metal and follows the scheme', async ({ page }) => {
