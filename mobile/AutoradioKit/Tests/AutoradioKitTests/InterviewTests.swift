@@ -217,7 +217,8 @@ final class InterviewTests: XCTestCase {
         XCTAssertEqual(InterviewHeuristic.verdict("everything", topics: true), .vague)
         XCTAssertEqual(InterviewHeuristic.verdict("what is a texture?", topics: true), .asked)
         XCTAssertEqual(InterviewHeuristic.verdict("nope", topics: false), .refused)
-        XCTAssertEqual(InterviewHeuristic.readbackVerdict("yeah that's right"), .answered, "only exact confirmations end the read-back")
+        XCTAssertEqual(InterviewHeuristic.readbackVerdict("yeah that's right"), .done)
+        XCTAssertEqual(InterviewHeuristic.readbackVerdict("drop sports"), .answered, "a change is not a confirmation")
         XCTAssertEqual(InterviewHeuristic.readbackVerdict("looks good"), .done)
     }
 }
