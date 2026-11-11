@@ -179,13 +179,13 @@ component MailMessage
               text "This message has only a formatted version; this is its text." font-family=th.fontUi font-size=13 color=th.muted
             for b, i in mmsg.blocks key=i
               if b.kind == "p"
-                text b.text font-family=th.fontRead font-size=17 line-height=1.5 color=th.fg
+                text b.text font-family=th.fontRead font-size=17 line-height=1.5 color=th.fg white-space="pre-wrap"
               if b.kind == "quote" and mailQuoted
                 row gap=10
                   box width=3 background-color=th.rule border-radius=2
-                  text b.text font-family=th.fontRead font-size=16 line-height=1.45 color=th.muted flex=1 min-width=0
+                  text b.text font-family=th.fontRead font-size=16 line-height=1.45 color=th.muted flex=1 min-width=0 white-space="pre-wrap"
               if b.kind == "sig"
-                text b.text font-family=th.fontUi font-size=14 line-height=1.4 color=th.muted
+                text b.text font-family=th.fontUi font-size=14 line-height=1.4 color=th.muted white-space="pre-wrap"
             if mmsg.cut
               text "This message is very long; the rest is not shown." font-family=th.fontUi font-size=13 color=th.muted
             if mmsg.hasQuoted
@@ -241,26 +241,16 @@ component MailCompose
     title: string
   view
     PageScroll(id="mail-compose-page")
-      text title role="heading" aria-level=1 font-family=th.fontRead font-size=26 font-weight=700 line-height=1.2 testId="page-title"
+      // Save sits beside the title, so it is never under the keyboard or the bar.
+      row align-items="flex-start" gap=12
+        text title role="heading" aria-level=1 font-family=th.fontRead font-size=26 font-weight=700 line-height=1.2 testId="page-title" flex=1 min-width=0
+        if mailDraftStatus != "approval"
+          button press=saveMailDraft testId="mail-save" buttonStyle="filled"
+            text (mailDraftStatus == "saved" ? "Save again" : "Save draft")
       if mcmp.status == "error" and mailDraftId == ""
         MailNotice(testId="mail-error", title="This draft could not be opened", body=mcmp.note, retry=false)
       if mcmp.status != "error" or mailDraftId != ""
         text (mailDraftFrom == "" ? "A draft on your computer. Nothing is sent from this screen." : `From ${mailDraftFrom}. Nothing is sent from this screen.`) testId="mail-draft-from" font-family=th.fontUi font-size=13 color=th.muted
-        column gap=4
-          text "To" font-family=th.fontUi font-size=13 color=th.muted
-          input value=mailCurTo input=editMailTo type="email" placeholder="name@example.com" aria-label="To" testId="mail-field-to"
-            font-family=th.fontUi font-size=16 color=th.fg padding="10px 12px" border-radius=th.radiusControl background-color=th.paper2
-        column gap=4
-          text "Subject" font-family=th.fontUi font-size=13 color=th.muted
-          input value=mailCurSubject input=editMailSubject placeholder="Subject" aria-label="Subject" testId="mail-field-subject"
-            font-family=th.fontUi font-size=16 color=th.fg padding="10px 12px" border-radius=th.radiusControl background-color=th.paper2
-        column gap=4
-          text "Message" font-family=th.fontUi font-size=13 color=th.muted
-          textarea value=mailCurBody input=editMailBody placeholder="Write here" aria-label="Message" testId="mail-field-body" appearance="none" width="100%" min-height=220 box-sizing="border-box"
-            font-family=th.fontRead font-size=17 line-height=1.5 color=th.fg padding="12px" border-radius=th.radiusControl background-color=th.paper2
-        if mailDraftStatus != "approval"
-          button press=saveMailDraft testId="mail-save" buttonStyle="filled"
-            text (mailDraftStatus == "saved" ? "Save as a new draft" : "Save draft")
         if mailDraftStatus == "error"
           text mailDraftNote testId="mail-draft-status" font-family=th.fontUi font-size=14 color=th.danger
         if mailDraftStatus == "saved"
@@ -277,6 +267,18 @@ component MailCompose
               if mailDraftUrl != ""
                 button press=openMailReview(mailDraftUrl) testId="mail-open-review" buttonStyle="bordered"
                   text "Open the approval page"
+        column gap=4
+          text "To" font-family=th.fontUi font-size=13 color=th.muted
+          input value=mailCurTo input=editMailTo type="email" placeholder="name@example.com" aria-label="To" testId="mail-field-to"
+            font-family=th.fontUi font-size=16 color=th.fg padding="10px 12px" border-radius=th.radiusControl background-color=th.paper2
+        column gap=4
+          text "Subject" font-family=th.fontUi font-size=13 color=th.muted
+          input value=mailCurSubject input=editMailSubject placeholder="Subject" aria-label="Subject" testId="mail-field-subject"
+            font-family=th.fontUi font-size=16 color=th.fg padding="10px 12px" border-radius=th.radiusControl background-color=th.paper2
+        column gap=4
+          text "Message" font-family=th.fontUi font-size=13 color=th.muted
+          textarea value=mailCurBody input=editMailBody placeholder="Write here" aria-label="Message" testId="mail-field-body" appearance="none" width="100%" min-height=220 box-sizing="border-box"
+            font-family=th.fontRead font-size=17 line-height=1.5 color=th.fg padding="12px" border-radius=th.radiusControl background-color=th.paper2
 
 component MailPage
   inject
