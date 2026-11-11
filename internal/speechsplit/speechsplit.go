@@ -89,7 +89,7 @@ func nextBoundary(buf string, final bool) (end, rest int, ok bool) {
 			if strings.TrimSpace(buf[:i]) != "" {
 				return i, i + w, true
 			}
-		case r == '。' || r == '！' || r == '？':
+		case r == '。' || r == '！' || r == '？' || r == '۔' || r == '؟' || r == '।' || r == '॥':
 			return i + w, i + w, true
 		case r == '.' || r == '!' || r == '?' || r == '…':
 			j := i + w

@@ -91,10 +91,20 @@ func readTextStream(ctx context.Context, body io.Reader, onDelta func(string)) (
 			out.StopReason = chunk.StopReason
 		}
 		if chunk.Usage != nil {
-			out.Usage.InputTokens = chunk.Usage.InputTokens
-			out.Usage.OutputTokens = chunk.Usage.OutputTokens
+			// An Anthropic-style stream reports input tokens in one chunk
+			// (message_start) and output tokens in a later one
+			// (message_delta, input 0); a non-zero count is never replaced by
+			// zero. An OpenAI-style stream sends one merged chunk.
+			if chunk.Usage.InputTokens > 0 {
+				out.Usage.InputTokens = chunk.Usage.InputTokens
+			}
+			if chunk.Usage.OutputTokens > 0 {
+				out.Usage.OutputTokens = chunk.Usage.OutputTokens
+			}
 			if chunk.Usage.CacheReported {
-				out.Usage.CachedInputTokens = chunk.Usage.CachedInputTokens
+				if chunk.Usage.CachedInputTokens > 0 || !out.Usage.CacheReported {
+					out.Usage.CachedInputTokens = chunk.Usage.CachedInputTokens
+				}
 				out.Usage.CacheReported = true
 			}
 		}

@@ -171,3 +171,25 @@ func TestStreamTextCancellationIsSeenAsCancellation(t *testing.T) {
 		t.Fatalf("(7) err %v", err)
 	}
 }
+
+// (8) usage reported in two chunks (the Anthropic-style message_start with
+// input tokens and cache, then message_delta with output tokens and input 0)
+// is merged: a non-zero count is never replaced by zero. The first test's fake
+// sent one merged chunk, which hid this.
+func TestStreamTextMergesUsageAcrossChunks(t *testing.T) {
+	server := sseServer(t, nil, func(w http.ResponseWriter, flush func()) {
+		fmt.Fprint(w, "data: {\"type\":\"message_start\",\"model\":\"m\",\"usage\":{\"input_tokens\":812,\"cached_input_tokens\":700,\"cache_reported\":true}}\n\n")
+		fmt.Fprint(w, "data: {\"type\":\"content_block_delta\",\"delta\":\"Hi.\"}\n\n")
+		fmt.Fprint(w, "data: {\"type\":\"message_delta\",\"stop_reason\":\"end_turn\",\"usage\":{\"output_tokens\":61}}\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	})
+	defer server.Close()
+	resp, err := New(server.URL, "tok").StreamText(context.Background(), provideriface.TextStreamRequest{User: "x"}, func(string) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := resp.Usage
+	if u.InputTokens != 812 || u.OutputTokens != 61 || u.CachedInputTokens != 700 || !u.CacheReported {
+		t.Fatalf("(8) usage %+v", u)
+	}
+}

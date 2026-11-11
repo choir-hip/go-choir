@@ -64,6 +64,8 @@ func TestSplitterTable(t *testing.T) {
 		"only whitespace":          {"  \n  ", nil},
 		"lowercase after period":   {"It is v. old. Maybe", []string{"It is v. old.", "Maybe"}},
 		"cjk":                      {"今天下雨。明天晴天。", []string{"今天下雨。", "明天晴天。"}},
+		"arabic":                   {"هل هذا صحيح؟ نعم۔ شكرا", []string{"هل هذا صحيح؟", "نعم۔", "شكرا"}},
+		"devanagari":               {"यह सच है। वह चला गया॥ ठीक है", []string{"यह सच है।", "वह चला गया॥", "ठीक है"}},
 		"no. abbreviation":         {"See no. 5 for details. Done.", []string{"See no. 5 for details.", "Done."}},
 		"month abbreviation":       {"On Jan. 5 it began. Done.", []string{"On Jan. 5 it began.", "Done."}},
 		"list bullet is plain":     {"- first item. second", []string{"first item. second"}},
