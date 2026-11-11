@@ -11,7 +11,7 @@
 //          reader-sheet(-layer, -scrim), reader-revising, reader-stop, reader-aim, reader-aim-clear, reader-md, reader-newer.
 use Theme, ReaderDoc, ReaderBlock, ReaderRun, ReaderCite from "@choir/autoradio"
 use ReaderFollowInfo, ReaderAimInfo, DemoInfo from "@choir/autoradio"
-use PageScroll, Card, Layer from "./ui.contract"
+use PageScroll, Card, Layer, Btn, BarClear from "./ui.contract"
 
 // Citations drawn as atom pills in the Markdown experiment (the page menu, demo mode). Atom styles are literals, not tokens.
 atom citation link="cite:" color="light-dark(#7a0a57, #ff9bd6)" background-color="light-dark(#f7e4f2, #3a2236)" border-radius="6px" padding-inline="3px"
@@ -100,11 +100,11 @@ component CiteCard
                   color=(c.check == "exact" or c.check == "tolerant" ? th.success : (c.check == "failed" ? th.danger : th.muted))
             row gap=8
               if c.kind == "texture"
-                button press=openPage(c.target, c.title) testId=`reader-card-open-${c.anchor}` buttonStyle="filled"
-                  text "Open as page"
+                button press=openPage(c.target, c.title) testId=`reader-card-open-${c.anchor}` appearance="none"
+                  Btn(label="Open as page", primary=true, wide=false)
               else
-                button press=showSource(c.anchor) testId=`reader-card-source-${c.anchor}` buttonStyle="bordered"
-                  text "Open source"
+                button press=showSource(c.anchor) testId=`reader-card-source-${c.anchor}` appearance="none"
+                  Btn(label="Open source", primary=false, wide=false)
 
 // A small note for a wide layout: the paragraph's text flows around this box (wrap-flow, shape-outside).
 component SideNote
@@ -220,8 +220,9 @@ component SheetFrame
       column position="absolute" left=0 right=0 bottom=0 height=pct
         Layer(testId=`${testId}-layer`)
           scroll flex=1 min-height=0
-            column padding=20 gap=10 padding-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 16px)"
+            column padding=20 gap=10
               children
+              BarClear()
 
 component SourceSheet
   inject
@@ -253,11 +254,11 @@ component SourceSheet
           else
             text (c.before != "" ? c.before : c.quote) font-family=th.fontRead font-size=17 line-height=1.55 color=th.fg
           if c.kind == "texture"
-            button press=openPage(c.target, c.title) testId="reader-source-open-page" buttonStyle="filled"
-              text "Open as page"
+            button press=openPage(c.target, c.title) testId="reader-source-open-page" appearance="none"
+              Btn(label="Open as page", primary=true, wide=false)
           if c.kind == "web" and c.url != ""
-            button press=openLink(c.url) testId="reader-source-original" buttonStyle="bordered"
-              text "Open original"
+            button press=openLink(c.url) testId="reader-source-original" appearance="none"
+              Btn(label="Open original", primary=false, wide=false)
             text c.url font-family=th.fontMono font-size=12 color=th.muted line-clamp=2
 
 component VersionsSheet
@@ -283,11 +284,11 @@ component VersionsSheet
           if v.current
             text "Viewing" font-family=th.fontUi font-size=13 font-weight=600 color=th.accent
           else
-            button press=openPage(v.address, rdoc.title) testId=`reader-version-open-${v.number}` buttonStyle="bordered"
-              text "Open"
+            button press=openPage(v.address, rdoc.title) testId=`reader-version-open-${v.number}` appearance="none"
+              Btn(label="Open", primary=false, wide=false)
           if address.startsWith("texture:") and v.number != rdoc.latest
-            button press=restoreVersion(address, v.address) testId=`reader-version-restore-${v.number}` buttonStyle="bordered"
-              text "Restore"
+            button press=restoreVersion(address, v.address) testId=`reader-version-restore-${v.number}` appearance="none"
+              Btn(label="Restore", primary=false, wide=false)
       if rdoc.versions.length == 0
         text "This page has one version." font-family=th.fontUi font-size=14 color=th.muted
 
@@ -342,12 +343,12 @@ component MenuSheet
       if dm.on and devDetails
         text "Demo" font-family=th.fontUi font-size=13 color=th.muted margin-top=8
         for b in rdoc.blocks.filter(b => b.kind == "p" and b.sentences > 1).slice(0, 1) key=b.id
-          button press=demoFollow(address, b.runs.filter(r => r.sent == 1 and r.kind == "t").map(r => r.text).join("")) testId="reader-menu-follow" buttonStyle="bordered"
-            text "Read along (second sentence)"
-        button press=toggleSideNotes testId="reader-menu-sidenotes" buttonStyle="bordered"
-          text (sideNotes ? "Side notes: on (text flows around)" : "Side notes: off")
-        button press=toggleMdMode testId="reader-menu-markdown" buttonStyle="bordered"
-          text (mdMode ? "Markdown with atom pills: on" : "Markdown with atom pills: off")
+          button press=demoFollow(address, b.runs.filter(r => r.sent == 1 and r.kind == "t").map(r => r.text).join("")) testId="reader-menu-follow" appearance="none"
+            Btn(label="Read along (second sentence)", primary=false, wide=false)
+        button press=toggleSideNotes testId="reader-menu-sidenotes" appearance="none"
+          Btn(label=(sideNotes ? "Side notes: on (text flows around)" : "Side notes: off"), primary=false, wide=false)
+        button press=toggleMdMode testId="reader-menu-markdown" appearance="none"
+          Btn(label=(mdMode ? "Markdown with atom pills: on" : "Markdown with atom pills: off"), primary=false, wide=false)
 
 // ---------------------------------------------------------------------------------------------------------------------
 component ReaderBody
@@ -381,7 +382,6 @@ component ReaderBody
     column position="absolute" inset=0
       scroll id="reader-scroll" testId="reader-scroll" flex=1 min-height=0 width="100%"
         column width="100%" align-items="center" padding-top=`calc(env(safe-area-inset-top) + ${rdoc.revising ? 72 : 12}px)`
-          padding-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 72px)"
           column width="100%" max-width="38rem" padding-left=20 padding-right=20 box-sizing="border-box" color=th.fg font-family=th.fontRead
             // header: kicker, menu, headline, standfirst, byline and version line
             row align-items="center" gap=8 margin-bottom=remv(0.5)
@@ -402,8 +402,8 @@ component ReaderBody
                   image "symbol:forward-chevron" color=th.muted
             if rdoc.newer
               for v in rdoc.versions.filter(v => v.number == rdoc.latest) key=v.number
-                button press=openPage(v.address, rdoc.title) testId="reader-newer" buttonStyle="bordered"
-                  text "A newer version exists. Open it"
+                button press=openPage(v.address, rdoc.title) testId="reader-newer" appearance="none"
+                  Btn(label="A newer version exists. Open it", primary=false, wide=false)
             box width="100%" height=1 background-color=th.rule margin-top=remv(0.8) margin-bottom=remv(1.1)
             // the body
             if mdMode
@@ -445,6 +445,7 @@ component ReaderBody
                     column padding="8px 0" gap=2 align-items="flex-start" width="100%"
                       text r.title font-family=th.fontRead font-size=remv(1.0625 * k) font-weight=600 line-height=1.25 color=th.fg text-align="left"
                       text r.dek font-family=th.fontRead font-size=14 line-height=1.4 color=th.muted text-align="left" line-clamp=2
+          BarClear()
       // the desk is writing a new version
       if rdoc.revising
         row testId="reader-revising" position="absolute" left=16 right=16 top="calc(env(safe-area-inset-top) + 8px)" z-index=5
@@ -456,8 +457,8 @@ component ReaderBody
           column flex=1 min-width=0
             text "Revising" font-family=th.fontUi font-size=13 font-weight=700 color=th.fg
             text rdoc.revisingNote font-family=th.fontUi font-size=12 color=th.muted line-clamp=1
-          button press=stopRevision(address) testId="reader-stop" buttonStyle="bordered"
-            text "Stop"
+          button press=stopRevision(address) testId="reader-stop" appearance="none"
+            Btn(label="Stop", primary=false, wide=false)
       // the prompt is aimed at this document or one block of it
       if raim.address == address
         row testId="reader-aim" position="absolute" left=16 right=16 bottom="calc(env(safe-area-inset-bottom) + 8px + 56px + 10px)" z-index=6

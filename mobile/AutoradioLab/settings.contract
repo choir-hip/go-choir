@@ -15,7 +15,7 @@
 //   settings-about-*, settings-voice-components.
 // Every colour, face, radius and shadow is a theme token (th.*, tx.*); a theme's own preview card paints from the card's data.
 use Theme, ThemeList, DemoInfo, ThemeCard, ThemeExtras, SettingsAccount, SettingsComputer, SettingRowInfo, LearnedInfo, AboutInfo, ThemeCards, SettingRows, ChoirAuth from "@choir/autoradio"
-use ToolScroll, Card from "./ui.contract"
+use ToolScroll, Card, Btn from "./ui.contract"
 
 component SettingsPage
   props
@@ -294,11 +294,11 @@ component AppearanceScreen
           text "A theme is a Texture with one choir-theme block. Paste its id to add it here; the server checks it and so does the phone." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
           row gap=8 align-items="center" width="100%"
             input value=themeDoc input=editThemeDoc placeholder="Theme Texture id" aria-label="Theme Texture id" testId="settings-theme-doc" flex=1 min-width=0
-            button press=loadThemeDoc testId="settings-theme-load" buttonStyle="filled"
-              text "Add"
+            button press=loadThemeDoc testId="settings-theme-load" appearance="none"
+              Btn(label="Add", primary=true, wide=false)
           if dm.on
-            button press=loadDemoTheme testId="settings-theme-demo-texture" buttonStyle="bordered"
-              text "Add the demo theme Texture"
+            button press=loadDemoTheme testId="settings-theme-demo-texture" appearance="none"
+              Btn(label="Add the demo theme Texture", primary=false, wide=false)
           if tc.status != ""
             text tc.status testId="settings-theme-status" font-family=th.fontUi font-size=tx.sizeLabel color=th.fg
       SectionLabel(label="Type")

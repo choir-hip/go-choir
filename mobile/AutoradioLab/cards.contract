@@ -13,7 +13,7 @@
 // menu-pin, menu-more, menu-less, menu-close, stack, stack-swipe-<route>, stack-card-<route>, stack-aside, stack-more, stack-undo,
 // stack-restart, stack-all, undo-pill, undo-close, note-toast, stamp-more-<id>, stamp-close-<id>.
 use Theme, PageList, CardStoryList, Told, UndoInfo from "@choir/autoradio"
-use Card from "./ui.contract"
+use Card, PaperCard, Btn from "./ui.contract"
 
 fn unit(v: number): number = v > 0 ? min(v, 1) : 0
 
@@ -107,12 +107,11 @@ component PileCard
       z-index=(50 - i)
       translate=`${tx}px ${ty}px` rotate=(tx * 0.05)
       scale=((1 - depth * 0.04) * (1 + 0.02 * (moreShow + closeShow)))
-      opacity=(leaving == address ? 0 : 1 - depth * 0.12)
+      opacity=(leaving == address ? 0 : 1)
       transition=(held ? "none" : `translate -exact-spring(${th.springStiffness}, ${th.springDamping}, ${th.springMass}), rotate -exact-spring(${th.springStiffness}, ${th.springDamping}, ${th.springMass}), scale -exact-spring(${th.springStiffness}, ${th.springDamping}, ${th.springMass}), opacity ${th.motionFastMs}ms ease`)
       animation=(th.reducedMotion ? "none" : `cardIn ${th.motionEnterMs}ms cubic-bezier(.2, .9, .3, 1) ${depth * th.staggerMs}ms both`)
       -exact-layout-transition=`${th.motionEnterMs}ms ease`
-      Card(level=2, testId=`card-${address}`, minHeight=300)
-        box position="absolute" top=0 left=0 right=0 bottom=0 border-radius=th.radiusCard background-color=th.paper2 opacity=0.9 pointer-events="none"
+      PaperCard(testId=`card-${address}`, minHeight=300)
         column padding=16 gap=6 align-items="flex-start" width="100%" box-sizing="border-box"
           row gap=8 align-items="center"
             text kind font-family=th.fontUi font-size=12 color=th.muted
@@ -123,6 +122,7 @@ component PileCard
             text dek font-family=th.fontRead font-size=16 color=th.muted text-align="left" line-clamp=3 width="100%"
             text entityLine font-family=th.fontUi font-size=12 color=th.accent
           text address font-family=th.fontMono font-size=12 color=th.muted
+        box position="absolute" top=0 left=0 right=0 bottom=0 border-radius=th.radiusCard background-color=th.scrim opacity=(depth * 0.12) pointer-events="none"
         Stamps(tag=address, moreLabel="MORE OF THIS", closeLabel="CLOSE", moreShow=moreShow, closeShow=closeShow)
         column testId=`card-swipe-${address}` position="absolute" top=0 left=0 right=0 bottom=0 touch-action="none"
           pan=cardDrag(address) panrelease=cardRelease(address, kind) press=focusPage(address) contextmenu=openMenu(address)
@@ -212,8 +212,7 @@ component StackCard
       translate=`${tx}px ${ty}px` rotate=tilt scale=(pos <= 0 ? 1 : (pos == 1 ? 0.94 + 0.06 * progress : 0.9)) opacity=(pos == 2 ? 0 : 1)
       z-index=(40 - pos)
       transition=(held ? "none" : (pos == 0 ? `translate ${spring}, rotate ${spring}, scale ${th.motionEnterMs}ms ease-out, opacity ${th.motionFastMs}ms ease-out` : `translate ${th.motionEnterMs}ms cubic-bezier(.2, .8, .2, 1), rotate ${th.motionEnterMs}ms cubic-bezier(.2, .8, .2, 1), scale ${th.motionEnterMs}ms ease-out, opacity ${th.motionFastMs}ms ease-out`))
-      Card(level=2, testId=`stack-face-${route}`, minHeight=430)
-        box position="absolute" top=0 left=0 right=0 bottom=0 border-radius=th.radiusCard background-color=th.paper2 opacity=0.9 pointer-events="none"
+      PaperCard(testId=`stack-face-${route}`, minHeight=430)
         column padding=22 gap=10 align-items="flex-start" width="100%" box-sizing="border-box"
           text section font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=1.5 color=th.muted
           text title font-family=th.fontRead font-size=30 font-weight=700 color=th.fg text-align="left" line-clamp=5 width="100%"
@@ -243,28 +242,28 @@ component StoryStack
     column testId="stack" position="absolute" top=0 left=0 right=0 bottom=0
       if stk.total == 0
         column position="absolute" top=0 left=0 right=0 bottom=0 align-items="center" justify-content="center" padding=32
-          text "No stories yet." font-family=th.fontRead font-size=20 color=th.fg
+          text "No stories yet." font-family=th.fontRead font-size=20 color=th.onScrim
       if done
         column testId="stack-end" position="absolute" top=0 left=0 right=0 bottom=0 align-items="center" justify-content="center" gap=14 padding=32
-          text "That is all for now." font-family=th.fontRead font-size=24 font-weight=700 color=th.fg
-          text `Set aside ${stk.setAside}. They stay on the front page.` font-family=th.fontUi font-size=15 color=th.muted
+          text "That is all for now." font-family=th.fontRead font-size=24 font-weight=700 color=th.onScrim
+          text `Set aside ${stk.setAside}. They stay on the front page.` font-family=th.fontUi font-size=15 color=th.onScrim
           row gap=10
-            button press=stackRestart testId="stack-restart" buttonStyle="glass"
-              text "Start over"
-            button press=hideLayer testId="stack-all" buttonStyle="glass"
-              text "All stories"
+            button press=stackRestart testId="stack-restart" appearance="none"
+              Btn(label="Start over", primary=false, wide=false)
+            button press=hideLayer testId="stack-all" appearance="none"
+              Btn(label="All stories", primary=false, wide=false)
       for r in deck key=r.route
         StackCard(route=r.route, address=r.address, title=r.title, dek=r.dek, section=r.section, entityLine=r.entityLine, lift=r.lift, n=r.n, dir=r.dir)
       if done == false
         column position="absolute" left=0 right=0 bottom="calc(env(safe-area-inset-bottom) + 132px)" align-items="center" gap=8 z-index=55
-          text `${min(stk.index + 1, stk.total)} of ${stk.total}  ·  set aside ${stk.setAside}` font-family=th.fontUi font-size=13 color=th.muted testId="stack-count"
+          text `${min(stk.index + 1, stk.total)} of ${stk.total}  ·  set aside ${stk.setAside}` font-family=th.fontUi font-size=13 color=th.onScrim testId="stack-count"
           row gap=8
-            button press=stackAside(topAddr, stk.index) testId="stack-aside" buttonStyle="glass"
-              text "Set aside"
-            button press=stackUndoAct testId="stack-undo" buttonStyle="glass"
-              text "Undo"
-            button press=stackMore(topAddr, stk.index) testId="stack-more" buttonStyle="glass"
-              text "More of this"
+            button press=stackAside(topAddr, stk.index) testId="stack-aside" appearance="none"
+              Btn(label="Set aside", primary=false, wide=false)
+            button press=stackUndoAct testId="stack-undo" appearance="none"
+              Btn(label="Undo", primary=false, wide=false)
+            button press=stackMore(topAddr, stk.index) testId="stack-more" appearance="none"
+              Btn(label="More of this", primary=false, wide=false)
 
 component Pile
   inject
@@ -278,17 +277,17 @@ component Pile
     setPileMode: action
   view
     column testId="pile" position="absolute" top=0 left=0 right=0 bottom=0
-      box testId="pile-scrim" position="absolute" top=0 left=0 right=0 bottom=0 background-color=th.paper2 opacity=0.93 press=hideLayer transition=`opacity ${th.motionFastMs}ms ease`
+      box testId="pile-scrim" position="absolute" top=0 left=0 right=0 bottom=0 background-color=th.scrim press=hideLayer
       row position="absolute" left=20 right=20 top="calc(env(safe-area-inset-top) + 12px)" gap=6 align-items="center" z-index=60
-        button press=setPileMode("pages") testId="pile-mode-pages" buttonStyle="glass" opacity=(pileMode == "pages" ? 1 : 0.55)
-          text "Pages"
-        button press=setPileMode("stack") testId="pile-mode-stack" buttonStyle="glass" opacity=(pileMode == "stack" ? 1 : 0.55)
-          text "Stories"
+        button press=setPileMode("pages") testId="pile-mode-pages" appearance="none" opacity=(pileMode == "pages" ? 1 : 0.55)
+          Btn(label="Pages", primary=false, wide=false)
+        button press=setPileMode("stack") testId="pile-mode-stack" appearance="none" opacity=(pileMode == "stack" ? 1 : 0.55)
+          Btn(label="Stories", primary=false, wide=false)
         box flex=1
-        button press=undoClose testId="pile-reopen" buttonStyle="glass"
-          text "Reopen"
-        button press=showLayer("launcher") testId="pile-places" buttonStyle="glass"
-          text "Places"
+        button press=undoClose testId="pile-reopen" appearance="none"
+          Btn(label="Reopen", primary=false, wide=false)
+        button press=showLayer("launcher") testId="pile-places" appearance="none"
+          Btn(label="Places", primary=false, wide=false)
       if pileMode == "pages"
         for p, i in pg.rows key=p.address
           PileCard(address=p.address, kind=p.kind, title=p.title, pinned=p.pinned, i=i)

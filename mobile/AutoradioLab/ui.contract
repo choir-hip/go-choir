@@ -35,9 +35,45 @@ component Layer
       background-color=(th.material3 == "glass" ? "transparent" : th.paper2)
       box-shadow=th.shadow3
       // a backing in the page colour under the glass: the page behind no longer ghosts through the layer's text
-      box position="absolute" inset=0 pointer-events="none" z-index=-1 background-color=th.paper opacity=0.86
+      box position="absolute" inset=0 pointer-events="none" z-index=-1 background-color=th.paper opacity=th.layerBacking
         border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
       children
+
+// An opaque card: the theme's surface colour with no material, so nothing behind it reads through (the pile's cards, the
+// interview's question). The shadow and a hairline keep the depth.
+component PaperCard
+  inject
+    th: Theme
+  props
+    testId: string
+    minHeight: number
+  slot
+  view
+    column testId=testId position="relative" min-height=minHeight border-radius=th.radiusCard background-color=th.paper2
+      border-width=1 border-style="solid" border-color=th.rule box-shadow=th.shadow3
+      children
+
+// The one button face (primary: the accent; otherwise a quiet paper button with a hairline), in theme tokens only. It is the
+// content of a `button ... appearance="none"` that keeps its own press and testId, so no button draws the system's blue.
+component Btn
+  inject
+    th: Theme
+  props
+    label: string
+    primary: bool
+    wide: bool
+  view
+    row align-items="center" justify-content="center" min-height=44 padding="10px 18px" box-sizing="border-box"
+      width=(wide ? "100%" : "auto") border-radius=th.radiusControl
+      background-color=(primary ? th.accent : th.paper2)
+      border-width=1 border-style="solid" border-color=(primary ? th.accent : th.rule)
+      text label font-family=th.fontUi font-size=16 font-weight=600 color=(primary ? th.onAccent : th.fg) text-align="center"
+
+// The room a scrolling page leaves at its end so nothing important sits under the bar: the bar's 56, its 8 above the home
+// indicator, the indicator, and a gap. The one place the number is written; every scroll body ends with it.
+component BarClear
+  view
+    box width="100%" height="calc(56px + 8px + env(safe-area-inset-bottom) + 24px)"
 
 // For tool pages (Components, Trace): the scroll frame ends above the bar instead of running under it, so every control
 // stays tappable by a driver that scrolls an element to the frame's bottom edge.
@@ -64,9 +100,9 @@ component PageScroll
   view
     scroll id=id flex=1 min-height=0 width="100%"
       column padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20
-        padding-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 16px)" gap=12
-        font-family=th.fontRead color=th.fg
+        gap=12 font-family=th.fontRead color=th.fg
         children
+        BarClear()
 
 // A page with a heading, the page's text, and nothing else. `lines` are paragraphs.
 component PlainPage

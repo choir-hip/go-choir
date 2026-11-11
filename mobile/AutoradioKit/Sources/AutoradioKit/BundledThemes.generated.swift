@@ -20,7 +20,9 @@ public enum BundledThemes {
     "success":{ "light": "#0C6644", "dark": "#4FD3A0" },
     "danger": { "light": "#A3142F", "dark": "#FF6B7B" },
     "onAccent": { "light": "#FFFFFF", "dark": "#120D17" },
-    "rule":   { "light": "rgba(32,20,58,.22)", "dark": "rgba(243,236,246,.18)" }
+    "rule":   { "light": "rgba(32,20,58,.22)", "dark": "rgba(243,236,246,.18)" },
+    "scrim":  { "light": "rgba(24,14,30,.74)", "dark": "rgba(0,0,0,.80)" },
+    "onScrim": { "light": "#FFFFFF", "dark": "#F3F3F3" }
   },
   "type": {
     "read": "ui-serif, 'Iowan Old Style', Charter, Georgia, serif",
@@ -31,8 +33,8 @@ public enum BundledThemes {
   "radii": { "card": "14px", "control": "12px", "pill": "999px", "rules": "0px" },
   "elevation": {
     "1": { "shadow": "0 1px 2px rgba(32,20,58,.08), 0 6px 16px rgba(32,20,58,.08)", "edge": "inset 0 1px 0 rgba(255,255,255,.6)", "press": 0.98 },
-    "2": { "material": "glass", "shadow": "0 8px 24px rgba(32,20,58,.18)", "edge": "inset 0 1px 0 rgba(255,255,255,.5)" },
-    "3": { "material": "glass", "shadow": "0 18px 48px rgba(32,20,58,.24)", "behind": { "scale": 0.96, "dim": 0.08 } }
+    "2": { "backing": 0.94, "material": "glass", "shadow": "0 8px 24px rgba(32,20,58,.18)", "edge": "inset 0 1px 0 rgba(255,255,255,.5)" },
+    "3": { "backing": 0.86, "material": "glass", "shadow": "0 18px 48px rgba(32,20,58,.24)", "behind": { "scale": 0.96, "dim": 0.08 } }
   },
   "motion": {
     "fast": "120ms ease", "enter": "320ms cubic-bezier(0.16,1,0.3,1)", "sheet": "260ms cubic-bezier(0.2,0.8,0.2,1)",
@@ -58,14 +60,16 @@ public enum BundledThemes {
     "success":{ "light": "#2F6B2F", "dark": "#8BCB7C" },
     "danger": { "light": "#A12A1B", "dark": "#FF8F7C" },
     "onAccent": { "light": "#FFFFFF", "dark": "#1D140D" },
-    "rule":   { "light": "rgba(43,27,14,.20)", "dark": "rgba(247,233,211,.18)" }
+    "rule":   { "light": "rgba(43,27,14,.20)", "dark": "rgba(247,233,211,.18)" },
+    "scrim":  { "light": "rgba(24,14,30,.74)", "dark": "rgba(0,0,0,.80)" },
+    "onScrim": { "light": "#FFFFFF", "dark": "#F3F3F3" }
   },
   "type": { "read": "ui-serif", "ui": "ui-rounded", "mono": "ui-monospace", "scale": "large" },
   "radii": { "card": "26px", "control": "20px", "pill": "999px", "rules": "2px" },
   "elevation": {
     "1": { "shadow": "0 2px 4px rgba(90,50,10,.10), 0 12px 28px rgba(90,50,10,.14)", "edge": "inset 0 1px 0 rgba(255,255,255,.55)", "press": 0.97 },
-    "2": { "material": "solid", "shadow": "0 12px 32px rgba(90,50,10,.26)", "edge": "inset 0 1px 0 rgba(255,255,255,.45)" },
-    "3": { "material": "glass", "shadow": "0 24px 60px rgba(90,50,10,.32)", "behind": { "scale": 0.94, "dim": 0.12 } }
+    "2": { "backing": 0.94, "material": "solid", "shadow": "0 12px 32px rgba(90,50,10,.26)", "edge": "inset 0 1px 0 rgba(255,255,255,.45)" },
+    "3": { "backing": 0.86, "material": "glass", "shadow": "0 24px 60px rgba(90,50,10,.32)", "behind": { "scale": 0.94, "dim": 0.12 } }
   },
   "motion": {
     "fast": "160ms ease-out", "enter": "460ms cubic-bezier(0.22,1,0.36,1)", "sheet": "340ms cubic-bezier(0.22,1,0.36,1)",
@@ -91,14 +95,16 @@ public enum BundledThemes {
     "success":{ "light": "#1E5E3A", "dark": "#5CC48A" },
     "danger": { "light": "#B3261E", "dark": "#FF6E5E" },
     "onAccent": { "light": "#FFFFFF", "dark": "#0E0E0E" },
-    "rule":   { "light": "#111111", "dark": "#EDEDED" }
+    "rule":   { "light": "#111111", "dark": "#EDEDED" },
+    "scrim":  { "light": "rgba(24,14,30,.74)", "dark": "rgba(0,0,0,.80)" },
+    "onScrim": { "light": "#FFFFFF", "dark": "#F3F3F3" }
   },
   "type": { "read": "ui-serif, Georgia, serif", "ui": "ui-serif, Georgia, serif", "mono": "ui-monospace, monospace", "scale": "editorial" },
   "radii": { "card": "0px", "control": "0px", "pill": "0px", "rules": "0px" },
   "elevation": {
     "1": { "shadow": "none", "edge": "0 1px 0 rule", "press": 1.0, "pressTint": true },
-    "2": { "material": "solid", "shadow": "none", "edge": "0 -1px 0 rule" },
-    "3": { "material": "solid", "shadow": "none", "behind": { "scale": 1.0, "dim": 0.12 } }
+    "2": { "backing": 0.94, "material": "solid", "shadow": "none", "edge": "0 -1px 0 rule" },
+    "3": { "backing": 0.86, "material": "solid", "shadow": "none", "behind": { "scale": 1.0, "dim": 0.12 } }
   },
   "motion": {
     "fast": "0ms", "enter": "160ms ease", "sheet": "200ms ease", "stagger": "0ms",
@@ -124,14 +130,16 @@ public enum BundledThemes {
     "success":{ "light": "#005A24", "dark": "#5CFF9A" },
     "danger": { "light": "#A00018", "dark": "#FF8A8A" },
     "onAccent": { "light": "#FFFFFF", "dark": "#000000" },
-    "rule":   { "light": "#000000", "dark": "#FFFFFF" }
+    "rule":   { "light": "#000000", "dark": "#FFFFFF" },
+    "scrim":  { "light": "rgba(24,14,30,.74)", "dark": "rgba(0,0,0,.80)" },
+    "onScrim": { "light": "#FFFFFF", "dark": "#F3F3F3" }
   },
   "type": { "read": "system-ui", "ui": "system-ui", "mono": "ui-monospace", "scale": "large" },
   "radii": { "card": "6px", "control": "6px", "pill": "6px", "rules": "0px" },
   "elevation": {
     "1": { "shadow": "none", "edge": "0 0 0 2px rule", "press": 0.99, "pressTint": true },
-    "2": { "material": "solid", "shadow": "none", "edge": "0 0 0 2px rule" },
-    "3": { "material": "solid", "shadow": "none", "edge": "0 0 0 3px rule", "behind": { "scale": 1.0, "dim": 0.35 } }
+    "2": { "backing": 0.94, "material": "solid", "shadow": "none", "edge": "0 0 0 2px rule" },
+    "3": { "backing": 0.86, "material": "solid", "shadow": "none", "edge": "0 0 0 3px rule", "behind": { "scale": 1.0, "dim": 0.35 } }
   },
   "motion": {
     "fast": "80ms linear", "enter": "140ms ease-out", "sheet": "160ms ease-out", "stagger": "0ms",

@@ -133,6 +133,14 @@ public final class ChoirApp: @unchecked Sendable {
         if runtime.player.userPaused { runtime.player.play() } else { runtime.player.pause() }
         onChange?()
     }
+    /// Start the radio and leave it playing, whatever it was doing (a toggle would pause it if the interview had left it
+    /// running): the setup's "Start the radio". A programme is loaded first when none is.
+    public func startRadio() async {
+        if !runtime.snapshot().running { await runtime.start() }
+        if runtime.player.document.blocks.isEmpty { await loadProgramme() }
+        runtime.player.play()
+        onChange?()
+    }
     public func startPlaying() async {
         if !runtime.snapshot().running { await runtime.start() }
         runtime.player.play()

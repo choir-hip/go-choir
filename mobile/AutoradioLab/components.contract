@@ -3,7 +3,7 @@
 // bodies are the originals; only the frame (PageScroll, `inject`) is the spine's. testIds are unchanged.
 use StatBar from "exact:content"
 use LabState, StageList, ParamList, Trace, TurnList, Lines, Names, AudioInfo, ChoirAuth, Theme from "@choir/autoradio"
-use ToolScroll from "./ui.contract"
+use ToolScroll, Btn from "./ui.contract"
 
 component ComponentsPage
   inject
@@ -44,26 +44,26 @@ component ComponentsPage
         text "Account" role="heading" aria-level=2 font-family=th.fontUi font-size=13 font-weight=700 color=th.accent2 text-transform="uppercase" margin-top=8
         text (au.signedIn ? `Signed in to ${au.baseURL}` : "Not signed in") testId="account" color=th.muted
         if au.signedIn
-          button press=signOut testId="signout"
-            text "Sign out"
-        button press=openPage("lab:trace", "Trace") testId="open-trace"
-          text "Open the trace of the last turn"
+          button press=signOut testId="signout" appearance="none"
+            Btn(label="Sign out", primary=false, wide=false)
+        button press=openPage("lab:trace", "Trace") testId="open-trace" appearance="none"
+          Btn(label="Open the trace of the last turn", primary=false, wide=false)
         row gap=8
-          button press=start testId="start"
-            text (st.running ? "Restart audio" : "Start audio")
-          button press=stop testId="stop"
-            text "Stop"
+          button press=start testId="start" appearance="none"
+            Btn(label=(st.running ? "Restart audio" : "Start audio"), primary=false, wide=false)
+          button press=stop testId="stop" appearance="none"
+            Btn(label="Stop", primary=false, wide=false)
         text "Audio" role="heading" aria-level=2 font-family=th.fontUi font-size=13 font-weight=700 color=th.accent2 text-transform="uppercase" margin-top=8
         text `State ${aud.state} · engine ${aud.engine} · voice processing ${aud.voiceProcessing ? "on" : "off"}` testId="audio-state"
         text `Programme ${aud.audible ? "audible" : "silent"} at volume ${aud.volume.toFixed(2)} · last switch ${aud.lastSwitchMs.toFixed(0)} ms` testId="audio-level" color=th.muted
         text aud.route testId="audio-route" font-family=th.fontMono font-size=12 color=th.muted
         for pol in aud.policies key=pol
-          button press=setPolicy(pol) role="radio" aria-checked=(aud.policy == pol) testId=`policy-${pol}`
-            text `${aud.policy == pol ? "● " : "○ "}${pol}`
+          button press=setPolicy(pol) role="radio" aria-checked=(aud.policy == pol) testId=`policy-${pol}` appearance="none"
+            Btn(label=`${aud.policy == pol ? "● " : "○ "}${pol}`, primary=false, wide=false)
         text "Acknowledgement" role="heading" aria-level=2 font-family=th.fontUi font-size=13 font-weight=700 color=th.accent2 text-transform="uppercase" margin-top=8
         for tm in aud.ackTimings key=tm
-          button press=setAckTiming(tm) role="radio" aria-checked=(aud.ackTiming == tm) testId=`ack-${tm}`
-            text `${aud.ackTiming == tm ? "● " : "○ "}${tm == "immediate" ? "Say it at once" : "Wait for System 1"}`
+          button press=setAckTiming(tm) role="radio" aria-checked=(aud.ackTiming == tm) testId=`ack-${tm}` appearance="none"
+            Btn(label=`${aud.ackTiming == tm ? "● " : "○ "}${tm == "immediate" ? "Say it at once" : "Wait for System 1"}`, primary=false, wide=false)
         text yieldLabel testId="yield"
         text modeLabel testId="mode" color=th.muted
         text `Phase: ${st.phase} · mic ${st.micActive ? "on" : "off"} · config ${st.configName}` testId="phase" color=th.muted
@@ -73,27 +73,27 @@ component ComponentsPage
           width="100%" padding=40 background-color=th.paper2 border-radius=th.radiusControl box-shadow=th.shadow1
           text (st.phase == "playing" ? "Hold to talk" : st.phase)
         row gap=8 align-items="center"
-          button press=inject testId="inject"
-            text "Inject fixture turn"
-          button press=replay("fixture-plain") testId="replay-fixture"
-            text "Replay fixture turn"
+          button press=inject testId="inject" appearance="none"
+            Btn(label="Inject fixture turn", primary=false, wide=false)
+          button press=replay("fixture-plain") testId="replay-fixture" appearance="none"
+            Btn(label="Replay fixture turn", primary=false, wide=false)
         text "Configuration" role="heading" aria-level=2 font-family=th.fontUi font-size=13 font-weight=700 color=th.accent2 text-transform="uppercase" margin-top=8
         text `Current: ${st.configName}` testId="config"
         row gap=8 align-items="center"
           input value=cfgName input=editCfgName placeholder="Name to save as" aria-label="Configuration name" testId="cfg-name" flex=1 min-width=0
-          button press=saveCfg testId="cfg-save"
-            text "Save"
+          button press=saveCfg testId="cfg-save" appearance="none"
+            Btn(label="Save", primary=false, wide=false)
         for n in configs.names key=n
-          button press=loadCfg(n) testId=`cfg-${n}`
-            text `Load ${n}`
+          button press=loadCfg(n) testId=`cfg-${n}` appearance="none"
+            Btn(label=`Load ${n}`, primary=false, wide=false)
         row gap=8 align-items="center"
           input value=cfgUrl input=editCfgUrl placeholder="Load from URL" aria-label="Configuration URL" testId="cfg-url" flex=1 min-width=0
-          button press=loadUrl testId="cfg-url-load"
-            text "Fetch"
+          button press=loadUrl testId="cfg-url-load" appearance="none"
+            Btn(label="Fetch", primary=false, wide=false)
         text "Stages" role="heading" aria-level=2 font-family=th.fontUi font-size=13 font-weight=700 color=th.accent2 text-transform="uppercase" margin-top=8
         for r in stages.rows key=`${r.kind}.${r.id}`
-          button press=pick(r.kind, r.id) role="radio" aria-checked=r.selected testId=`stage-${r.kind}-${r.id}`
-            text `${r.selected ? "● " : "○ "}${r.kindLabel}: ${r.name}${r.network ? " (network)" : ""}`
+          button press=pick(r.kind, r.id) role="radio" aria-checked=r.selected testId=`stage-${r.kind}-${r.id}` appearance="none"
+            Btn(label=`${r.selected ? "● " : "○ "}${r.kindLabel}: ${r.name}${r.network ? " (network)" : ""}`, primary=false, wide=false)
         text "Parameters" role="heading" aria-level=2 font-family=th.fontUi font-size=13 font-weight=700 color=th.accent2 text-transform="uppercase" margin-top=8
         for p, i in params.rows key=i
           column gap=2
@@ -129,11 +129,11 @@ component TracePage
         text `${trace.id}` testId="trace-id" font-family=th.fontMono font-size=12 color=th.muted
         text `Audio switch ${trace.audioSwitchMs.toFixed(0)} ms · ${trace.timings.length} stage timings` testId="trace-switch" color=th.muted
         row gap=8 align-items="center"
-          button press=exportTurn(trace.id) testId="trace-export"
-            text "Export JSON"
+          button press=exportTurn(trace.id) testId="trace-export" appearance="none"
+            Btn(label="Export JSON", primary=false, wide=false)
           if expPath != ""
-            button press=shareExport(expPath) testId="trace-share"
-              text "Share"
+            button press=shareExport(expPath) testId="trace-share" appearance="none"
+              Btn(label="Share", primary=false, wide=false)
         if expName != ""
           text `Saved ${expName} in Documents/AutoradioExports` testId="trace-exported" font-family=th.fontMono font-size=12 color=th.muted
         for t2, j in trace.timings key=j
@@ -151,9 +151,9 @@ component TracePage
           column gap=4
             text `${r2.transcript} (${r2.configName}, ${r2.outcome})`
             row gap=8
-              button press=choose(r2.id) testId=`show-${r2.id}`
-                text "Show"
-              button press=compare(r2.id) testId=`cmp-${r2.id}`
-                text "Compare"
-              button press=replay(r2.id) testId=`replay-${r2.id}`
-                text "Replay with current configuration"
+              button press=choose(r2.id) testId=`show-${r2.id}` appearance="none"
+                Btn(label="Show", primary=false, wide=false)
+              button press=compare(r2.id) testId=`cmp-${r2.id}` appearance="none"
+                Btn(label="Compare", primary=false, wide=false)
+              button press=replay(r2.id) testId=`replay-${r2.id}` appearance="none"
+                Btn(label="Replay with current configuration", primary=false, wide=false)

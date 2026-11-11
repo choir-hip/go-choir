@@ -3,7 +3,7 @@
 // it as one resource, `ob`; every button is a send that answers the same shape.
 use onboardingState, onboardingBegin, onboardingRetry, onboardingFallback, onboardingMic, onboardingMicNext, onboardingHearing from "@choir/autoradio"
 use onboardingInterview, onboardingContinue, onboardingDemoNext, onboardingEditionRetry, onboardingSkip, onboardingReset from "@choir/autoradio"
-use pageOpen, pageClose, choirPlayPause from "@choir/autoradio"
+use pageOpen, pageClose, choirStartRadio from "@choir/autoradio"
 use Onboarding from "@choir/autoradio"
 
 members Autoradio
@@ -46,5 +46,5 @@ members Autoradio
   // Then the front page, and the first story playing.
   action obFinish
     send pm = pageOpen(address="paper:front", title="Paper")
-    send acct = choirPlayPause()
+    send acct = choirStartRadio()
     layer = ""

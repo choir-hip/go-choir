@@ -6,12 +6,12 @@
 //   - transport: previous, play and pause, next, and the reading speed;
 //   - the talk status: the listener's words, the holding line, and when the programme yields to the listener ("Radio
 //     lowered/paused while you speak");
-//   - the talk mode as the engine has it (hold / just speak / hold or speak), and the Ask field as the last row.
+//   - the talk mode as the engine has it (hold / just speak / hold or speak). The prompt is the bar's, not the player's.
 // Pull the header down to put it away. Everything is declarative motion (keyframes and transitions), off under Reduce Motion.
 // testIds: player, player-scrim, player-layer, player-title, player-position, player-status, player-yield, player-passage,
 // player-sentence-<k>, player-next-passage, player-segments, player-seg-<i>, player-item-<i>, player-prev, player-play,
-// player-next, player-speed-<v>, player-mode, player-ask, player-close.
-use Theme, PageList, BarInfo, RadioInfo from "@choir/autoradio"
+// player-next, player-speed-<v>, player-mode, player-close.
+use Theme, BarInfo, RadioInfo from "@choir/autoradio"
 use Layer, Card from "./ui.contract"
 
 keyframes playerRise
@@ -42,12 +42,8 @@ component SpeedChip
 component PlayerLayer
   inject
     th: Theme
-    pg: PageList
     bi: BarInfo
     ri: RadioInfo
-    ask: string
-    editAsk: action
-    sendAsk: action
     hideLayer: action
     radioPlay: action
     previous: action
@@ -58,9 +54,6 @@ component PlayerLayer
     sheetEnd: action
   derive still = th.reducedMotion
   derive calm = still ? 0 : 1
-  derive aimOwn = `Edit ${pg.topTitle}…`
-  derive aimReply = `Reply to ${pg.topTitle}…`
-  derive aim = pg.topKind == "reader" ? (pg.top.startsWith("texture:") ? aimOwn : aimReply) : "Ask about this page…"
   derive listener = bi.state == "listening" or bi.state == "talking" or bi.state == "heard"
   derive statusLine = listener ? (ri.heard == "" ? "Listening…" : `You: ${ri.heard}`) : (bi.state == "holding" ? bi.text : (bi.state == "revised" ? "Revised. Reading the new passage" : ""))
   derive yieldNote = ri.level == "dip" ? "Radio lowered while you speak" : (ri.level == "pause" ? "Radio paused while you speak" : "")
@@ -87,14 +80,15 @@ component PlayerLayer
             scroll flex=1 min-height=0 width="100%"
               column padding="4px 20px 12px" gap=14
                 // what is happening now: the listener's words, the holding line, the yield
-                column testId="player-status" gap=6 min-height=40 justify-content="center"
-                  if statusLine != ""
-                    text statusLine font-family=th.fontUi font-size=14 color=(listener ? th.fg : th.muted) font-style=(listener ? "italic" : "normal") line-clamp=3
-                      animation=(still ? "none" : "playerIn 200ms ease-out both")
-                  if yieldNote != ""
-                    row gap=6 align-items="center" testId="player-yield"
-                      box width=7 height=7 border-radius=4 background-color=th.accent animation=(still ? "none" : "playerBlink 1.1s ease-in-out infinite")
-                      text yieldNote font-family=th.fontUi font-size=12 font-weight=600 color=th.accent
+                if statusLine != "" or yieldNote != ""
+                  column testId="player-status" gap=6 justify-content="center" min-height=40
+                    if statusLine != ""
+                      text statusLine font-family=th.fontUi font-size=14 color=(listener ? th.fg : th.muted) font-style=(listener ? "italic" : "normal") line-clamp=3
+                        animation=(still ? "none" : "playerIn 200ms ease-out both")
+                    if yieldNote != ""
+                      row gap=6 align-items="center" testId="player-yield"
+                        box width=7 height=7 border-radius=4 background-color=th.accent animation=(still ? "none" : "playerBlink 1.1s ease-in-out infinite")
+                        text yieldNote font-family=th.fontUi font-size=12 font-weight=600 color=th.accent
                 // the passage being read, the current sentence lit
                 Card(level=2, testId="player-card", minHeight=140)
                   column padding=18 gap=10
@@ -145,12 +139,6 @@ component PlayerLayer
                 for v in ri.speedChoices key=v
                   SpeedChip(v=v)
               text ri.modeLabel testId="player-mode" font-family=th.fontUi font-size=12 color=th.muted
-            // the Ask field is the last row
-            row padding="8px 20px 0" width="100%" box-sizing="border-box"
-              row flex=1 align-items="center" border-radius=th.radiusPill padding="0 16px" height=44 background-color=th.paper
-                input value=ask input=editAsk submit=sendAsk placeholder=aim aria-label=aim testId="player-ask" enterkeyhint="send" flex=1
-                  font-family=th.fontRead font-size=16 color=th.fg
-                  ::placeholder
-                    color=th.muted
+            // the prompt is the bar's (one field, not two), so the player has none
             // clear of the bar
             box height="calc(56px + 8px + env(safe-area-inset-bottom) + 12px)"

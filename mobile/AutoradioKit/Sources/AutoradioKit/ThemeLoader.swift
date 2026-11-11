@@ -32,6 +32,8 @@ public struct Theme: Codable, Sendable, Equatable {
     // colours for the resolved scheme (hex or rgba strings)
     public var paper = "#FFFFFF", paper2 = "#FFFFFF", fg = "#000000", muted = "#555555", accent = "#0066CC", accent2 = "#004499"
     public var success = "#0C6644", danger = "#A3142F", onAccent = "#FFFFFF", rule = "#999999"
+    // the dimming scrim behind the pile's cards (a colour with its own alpha)
+    public var scrim = "rgba(0,0,0,.7)", onScrim = "#FFFFFF"
     // type: CSS font stacks reduced to the one face Exact resolves; `fontRead` is the body face
     public var fontRead = "ui-serif", fontUi = "system-ui", fontMono = "ui-monospace", scale = "editorial"
     public var radiusCard = 14.0, radiusControl = 12.0, radiusPill = 999.0, radiusRules = 0.0
@@ -41,6 +43,8 @@ public struct Theme: Codable, Sendable, Equatable {
     public var material1 = "solid", material2 = "solid", material3 = "solid"
     public var press1 = 1.0
     public var behindScale3 = 1.0, behindDim3 = 0.0
+    // the page-colour backing under the bar (level 2) and under a layer (level 3): how opaque, so text stays legible over the page
+    public var barBacking = 0.94, layerBacking = 0.86
     // motion, in milliseconds, and the spring
     public var motionFastMs = 120.0, motionEnterMs = 320.0, motionSheetMs = 260.0, staggerMs = 40.0
     public var springStiffness = 240.0, springDamping = 26.0, springMass = 1.0
@@ -101,6 +105,7 @@ struct SchemeColor: Decodable {
 
 struct ThemeDoc: Decodable {
     struct Level: Decodable { var shadow: String?; var edge: String?; var material: String?; var press: Double?; var pressTint: Bool?
+        var backing: Double?
         var behind: Behind? ; struct Behind: Decodable { var scale: Double?; var dim: Double? } }
     struct TypeDoc: Decodable { var read: String?; var ui: String?; var mono: String?; var scale: String?; var sizes: [String: Double]? }
     struct Motion: Decodable {
@@ -350,7 +355,7 @@ public final class ThemeStore: @unchecked Sendable {
         func c(_ k: String, _ fallback: String) -> String { d.colors[k]?.pick(scheme) ?? fallback }
         t.paper = c("paper", t.paper); t.paper2 = c("paper2", t.paper); t.fg = c("fg", t.fg); t.muted = c("muted", t.muted)
         t.accent = c("accent", t.accent); t.accent2 = c("accent2", t.accent); t.success = c("success", t.success)
-        t.danger = c("danger", t.danger); t.onAccent = c("onAccent", t.onAccent); t.rule = c("rule", t.rule)
+        t.danger = c("danger", t.danger); t.onAccent = c("onAccent", t.onAccent); t.rule = c("rule", t.rule); t.scrim = c("scrim", t.scrim); t.onScrim = c("onScrim", t.onScrim)
         if let ty = d.type {
             t.fontRead = ty.read.flatMap(face) ?? t.fontRead; t.fontUi = ty.ui.flatMap(face) ?? t.fontUi
             t.fontMono = ty.mono.flatMap(face) ?? t.fontMono; t.scale = ty.scale ?? t.scale
@@ -364,9 +369,9 @@ public final class ThemeStore: @unchecked Sendable {
         }
         if let e = d.elevation {
             if let l = e["1"] { t.shadow1 = l.shadow ?? "none"; t.edge1 = edge(l.edge); t.material1 = l.material ?? "solid"; t.press1 = l.press ?? 1 }
-            if let l = e["2"] { t.shadow2 = l.shadow ?? "none"; t.edge2 = edge(l.edge); t.material2 = l.material ?? "solid" }
+            if let l = e["2"] { t.shadow2 = l.shadow ?? "none"; t.edge2 = edge(l.edge); t.material2 = l.material ?? "solid"; t.barBacking = l.backing ?? t.barBacking }
             if let l = e["3"] { t.shadow3 = l.shadow ?? "none"; t.edge3 = edge(l.edge); t.material3 = l.material ?? "solid"
-                t.behindScale3 = l.behind?.scale ?? 1; t.behindDim3 = l.behind?.dim ?? 0 }
+                t.behindScale3 = l.behind?.scale ?? 1; t.behindDim3 = l.behind?.dim ?? 0; t.layerBacking = l.backing ?? t.layerBacking }
         }
         func joined(_ shadow: String, _ edge: String) -> String {
             if shadow == "none" { return edge }

@@ -79,7 +79,7 @@ run_drive A \
   "clock +1800 real" "clock data" tree "screenshot $SHOTS/10-later.png" \
   logs
 must() { grep -qF -- "$2" "$OUT" || fail "$1" "missing: $2"; echo "ok: $1"; }
-must "idle: the Ask field with its aim" 'label="Ask about this page'
+must "idle: the Ask field with its aim (first run: the invitation)" 'label="Make it yours'
 must "typing: Send replaces the voice button" '[bar-send]'
 must "typing: the aim line above the field" '[bar-aim]'
 must "playing: the bar says what plays" 'NOW PLAYING'
@@ -88,7 +88,6 @@ must "player: the passage, sentence by sentence" '[player-sentence-0]'
 must "player: programme segments" '[player-seg-0]'
 must "player: speed choices" '[player-speed-1.25]'
 must "player: the programme rows" '[player-item-0]'
-must "player: the Ask field" '[player-ask]'
 must "paused: the bar says paused" 'PAUSED'
 must "talk: the bar shows the listening state" 'Listening'
 

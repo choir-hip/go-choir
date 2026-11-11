@@ -41,13 +41,14 @@ extension AutoradioModule {
 
         // The radio's buttons start the engine on first use; under the simulator's agent that engine must be the virtual one
         // (no microphone: demo and proof runs), as `labStart` already does. Start it virtually, then run the original action.
-        for name in ["choirPlayPause", "choirTalkDown", "choirPlay"] {
+        for name in ["choirPlayPause", "choirStartRadio", "choirTalkDown", "choirPlay"] {
             handle(name) { [unowned self] args, reply in
                 Task { [weak self] in
                     guard let self else { return }
                     if !self.runtime.snapshot().running { await self.runtime.start(virtual: self.virtualEngine) }
                     switch name {
                     case "choirPlayPause": await self.choir.playPause()
+                    case "choirStartRadio": await self.choir.startRadio()
                     case "choirTalkDown": await self.choir.talkDown()
                     default: await self.choir.play(route: args["route"] as? String ?? "")
                     }

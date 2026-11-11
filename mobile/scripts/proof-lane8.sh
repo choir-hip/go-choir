@@ -154,7 +154,7 @@ must "edition: shown" '[ob-edition]'
 must "edition: open as a page" '[ob-edition-open]'
 must "finish: start the radio" '[ob-start-radio]'
 must "finish: the front page is the page in front" '[page-title] "AUTOPAPER"'
-grep -qF '[bar-text]' "$OUT" && echo "ok: front page playing: the bar shows what plays" || echo "note: the radio had not started playing within 5 s (demo, virtual engine); not fatal"
+grep -qF 'NOW PLAYING' "$OUT" && echo "ok: front page playing: the bar shows what plays" || fail "finish: start the radio" "the radio had not started playing within 5 s"
 must "dark: welcome" '[ob-begin]' "$OUT2"
 must "dark: the pause" '[ob-paused]' "$OUT2"
 [ "$(ls "$SHOTS"/*.png 2>/dev/null | wc -l)" -ge 28 ] || fail "screenshots" "fewer than 28 in $SHOTS"

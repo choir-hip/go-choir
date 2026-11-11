@@ -7,7 +7,7 @@
 // paper-edition-<big|even|thin|default>, paper-signin, paper-status.
 use Theme, ChoirAuth, DemoInfo, PaperFront, PaperBand, PaperItem from "@choir/autoradio"
 use paperFront from "@choir/autoradio"
-use Card from "./ui.contract"
+use Card, Btn, BarClear from "./ui.contract"
 use FirstRunCard from "./onboarding.contract"
 
 // A headline with its dek and meta, as one story. `kicker` shows the section above, `listen` the play-from-here button.
@@ -157,8 +157,7 @@ component PaperPage
   view
     column flex=1 min-height=0 width="100%" resize=paperFit
       scroll id="paper" testId="paper-scroll" flex=1 min-height=0 width="100%" refresh=paperReload refreshing=paperLoading
-        column padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20
-          padding-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 16px)" gap=14
+        column padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20 gap=14
           font-family=th.fontRead color=th.fg
           // the masthead: nameplate, a double rule, the date and when it was last updated
           column gap=6 width="100%"
@@ -177,21 +176,21 @@ component PaperPage
             column gap=8 width="100%" padding-top=8 box-sizing="border-box"
               text `Composition: ${pfront.composition}` font-family=th.fontMono font-size=11 color=th.muted testId="paper-composition"
               row gap=8 width="100%"
-                button press=pickEdition("big") buttonStyle="bordered" testId="paper-edition-big"
-                  text "Big news"
-                button press=pickEdition("even") buttonStyle="bordered" testId="paper-edition-even"
-                  text "Even"
-                button press=pickEdition("thin") buttonStyle="bordered" testId="paper-edition-thin"
-                  text "Thin"
-                button press=pickEdition("") buttonStyle="bordered" testId="paper-edition-default"
-                  text "Default"
+                button press=pickEdition("big") testId="paper-edition-big" appearance="none"
+                  Btn(label="Big news", primary=false, wide=false)
+                button press=pickEdition("even") testId="paper-edition-even" appearance="none"
+                  Btn(label="Even", primary=false, wide=false)
+                button press=pickEdition("thin") testId="paper-edition-thin" appearance="none"
+                  Btn(label="Thin", primary=false, wide=false)
+                button press=pickEdition("") testId="paper-edition-default" appearance="none"
+                  Btn(label="Default", primary=false, wide=false)
           // signed out: the paper reads and plays; talking to your computer needs an account
           if au.signedIn == false
             Card(level=2, testId="paper-signin-card", minHeight=0)
               column padding=16 gap=10 width="100%" box-sizing="border-box"
                 text "Sign in to talk to your computer and to make this paper yours." font-family=th.fontRead font-size=17 line-height=1.35 color=th.fg
-                button press=signIn buttonStyle="filled" testId="paper-signin"
-                  text "Sign in"
+                button press=signIn testId="paper-signin" appearance="none"
+                  Btn(label="Sign in", primary=true, wide=false)
                 if au.message != ""
                   text au.message testId="paper-signin-message" font-family=th.fontUi font-size=13 color=th.muted
           // sections: the front, then one chip per section; a chip opens that section as a page
@@ -211,3 +210,4 @@ component PaperPage
             Band(b=b)
           if pfront.count > 0
             text `${pfront.count} ${pfront.count == 1 ? "story" : "stories"} · pull down to refresh` font-family=th.fontUi font-size=12 color=th.muted text-align="center" width="100%"
+          BarClear()

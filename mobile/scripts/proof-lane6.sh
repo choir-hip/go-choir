@@ -81,7 +81,7 @@ while :; do
     "tap bar-pages" "$W" "tap pile-places" "$W" "tap place-mail" "$W" "clock data" \
     "tap mail-folder-drafts" "$W" "clock data" tree "screenshot $SHOTS/13-drafts.png" \
     "tap mail-row-demo-draft-1" "$W" "clock data" tree "screenshot $SHOTS/14-draft-page.png" \
-    "tap bar-pages" "$W" "tap pile-places" "$W" "tap place-mail" "$W" "clock data" \
+    "tap bar-pages" "$W" "tap pile-places" "$W" "tap place-settings" "$W" "tap settings-dev-details" "$W" "tap bar-pages" "$W" "tap pile-places" "$W" "tap place-mail" "$W" "clock data" \
     "tap mail-demo-empty" "$W" "clock data" tree "screenshot $SHOTS/15-empty.png" \
     "tap bar-pages" "$W" "tap pile-places" "$W" "tap place-mail" "$W" "clock data" \
     "tap mail-demo-offline" "$W" "clock data" tree "screenshot $SHOTS/16-offline.png" \

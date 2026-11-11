@@ -5,7 +5,7 @@
 // testIds: launcher, launcher-layer, launcher-scrim, launcher-search, launcher-open-<address>, launcher-recent-<address>,
 // search-hit-<address>, place-<slug>, place-line-<slug>, launcher-stack, gesture-left, gesture-right, told-open, told-reset, told-count.
 use Theme, PageList, Told, LauncherData from "@choir/autoradio"
-use Layer from "./ui.contract"
+use Layer, Btn from "./ui.contract"
 
 keyframes sheetIn
   from opacity=0 translate="0px 24px"
@@ -69,14 +69,14 @@ component Launcher
                 text "Open" font-family=th.fontUi font-size=13 color=th.muted
                 scroll overflow-x="scroll" overflow-y="hidden" display="flex" flex-direction="row" gap=8
                   for p in pg.rows key=p.address
-                    button press=focusPage(p.address) testId=`launcher-open-${p.address}` buttonStyle="bordered"
-                      text (p.pinned ? `${p.title} (pinned)` : p.title)
+                    button press=focusPage(p.address) testId=`launcher-open-${p.address}` appearance="none"
+                      Btn(label=(p.pinned ? `${p.title} (pinned)` : p.title), primary=false, wide=false)
                 if lnc.recent.length > 0
                   text "Recent" font-family=th.fontUi font-size=13 color=th.muted
                   scroll overflow-x="scroll" overflow-y="hidden" display="flex" flex-direction="row" gap=8
                     for r in lnc.recent key=r.address
-                      button press=openPage(r.address, r.title) testId=`launcher-recent-${r.address}` buttonStyle="bordered"
-                        text r.title
+                      button press=openPage(r.address, r.title) testId=`launcher-recent-${r.address}` appearance="none"
+                        Btn(label=r.title, primary=false, wide=false)
                 text "Places" font-family=th.fontUi font-size=13 color=th.muted
                 for pr in lnc.places key=pr.slug
                   PlaceRow(slug=pr.slug, name=pr.name, address=pr.address, line=pr.line)
@@ -93,14 +93,14 @@ component Launcher
                     text (t.kind == "more" ? "More" : "Less") font-family=th.fontUi font-size=12 font-weight=700 color=th.accent
                     text `${t.title} (${t.entities})` font-family=th.fontUi font-size=13 color=th.fg flex=1 text-align="left" line-clamp=2
                 row gap=8 width="100%"
-                  button press=leftNext testId="gesture-left" buttonStyle="bordered"
-                    text `Swipe left: ${told.leftLabel}`
-                  button press=rightNext testId="gesture-right" buttonStyle="bordered"
-                    text `Swipe right: ${told.rightLabel}`
+                  button press=leftNext testId="gesture-left" appearance="none"
+                    Btn(label=`Swipe left: ${told.leftLabel}`, primary=false, wide=false)
+                  button press=rightNext testId="gesture-right" appearance="none"
+                    Btn(label=`Swipe right: ${told.rightLabel}`, primary=false, wide=false)
                 row gap=8 width="100%"
-                  button press=openTold testId="told-open" buttonStyle="bordered"
-                    text "What I've told the paper"
-                  button press=resetTold testId="told-reset" buttonStyle="bordered"
-                    text "Reset"
+                  button press=openTold testId="told-open" appearance="none"
+                    Btn(label="What I've told the paper", primary=false, wide=false)
+                  button press=resetTold testId="told-reset" appearance="none"
+                    Btn(label="Reset", primary=false, wide=false)
                 text "Developer" font-family=th.fontUi font-size=13 color=th.muted
                 PlaceRow(slug="components", name="Components", address="lab:components", line="")

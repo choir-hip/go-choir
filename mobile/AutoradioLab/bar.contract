@@ -4,7 +4,8 @@
 // the sides, no border, no strip beneath it; the page runs full-bleed under it and shows through the glass.
 //
 // States (BarInfo.state, from BarState.swift) and what the centre shows:
-//   idle       the aim ("Ask about this page…", "Reply to <title>…", "Edit <title>…") as the Ask field
+//   idle       the aim ("Ask about this page…", "Reply to <sender>…", "Edit <title>…") as the Ask field; on the setup page the
+//              state of setup or of the interview (listening / speaking / paused) instead of a field (bar-setup)
 //   playing    NOW PLAYING and the title; hairline progress rule; swipe left/right: next/previous; tap: the player
 //   paused     PAUSED and the title; tap: the player
 //   listening  the mic is open (open mode heard something): "Listening…", a pulsing ring on the voice button
@@ -17,7 +18,7 @@
 //   typing     (the field has the keyboard) the aim line above the field, Send in place of the voice button
 // Motion is declarative: height, tint and content enter with transitions and keyframes, all off under Reduce Motion.
 // testIds: bar, bar-pages, bar-pages-count, bar-field, bar-aim, bar-text, bar-yield, bar-voice, bar-send, bar-progress.
-use Theme, PageList, BarInfo, RadioInfo, ReaderAimInfo, Onboarding from "@choir/autoradio"
+use Theme, PageList, BarInfo, RadioInfo, ReaderAimInfo, Onboarding, MailMessageView from "@choir/autoradio"
 use Mark from "./mark.contract"
 
 keyframes barRise
@@ -38,6 +39,7 @@ component BarShell
     ri: RadioInfo
     raim: ReaderAimInfo
     ob: Onboarding
+    mmsg: MailMessageView
     typing: bool
     ask: string
     editAsk: action
@@ -57,7 +59,13 @@ component BarShell
   derive aimReply = `Reply to ${pg.topTitle}…`
   // The prompt's aim: one block of the open document when the reader has aimed it there; before voice setup is done (and off the
   // reader) the invitation to set up; otherwise the page.
-  derive aimPage = pg.topKind == "reader" ? (pg.top.startsWith("texture:") ? aimOwn : aimReply) : (ob.aim != "" ? ob.aim : "Ask about this page…")
+  // On a mail message the aim is the reply ("Reply to <sender>…", from the message itself).
+  derive aimMail = (pg.topKind == "mail" and mmsg.replyLabel != "") ? `${mmsg.replyLabel}…` : ""
+  derive aimPage = pg.topKind == "reader" ? (pg.top.startsWith("texture:") ? aimOwn : aimReply) : (aimMail != "" ? aimMail : (ob.aim != "" and pg.topKind != "onboarding" ? ob.aim : "Ask about this page…"))
+  // While the setup page is in front the bar says where setup is, not an aim: voice setup's step, then the interview's own state.
+  derive onSetup = pg.top == "onboarding:setup"
+  derive bi2 = bi.state == "listening" or bi.state == "talking" or bi.state == "heard"
+  derive setupLine = ob.step == "interview" ? (ob.paused ? "Interview paused" : (bi2 ? "Interview: listening…" : "Interview: speaking…")) : (ob.step == "setup" ? "Setting up the voice…" : (ob.step == "mic" ? "Check the microphone" : (ob.step == "hearing" ? "Check that you can hear me" : (ob.step == "ready" ? "Voice is set up" : (ob.step == "writing" ? "Writing your edition…" : (ob.step == "done" ? "Your edition is ready" : "Voice setup"))))))
   derive aim = (raim.address == pg.top and raim.blockId != "") ? `Ask about “${raim.label}”…` : aimPage
   derive lines = min(3, max(1, ceil(bi.text.length / 30)))
   derive yielded = ri.level != "play" and (st == "listening" or st == "talking")
@@ -79,7 +87,7 @@ component BarShell
       transition=`height ${th.motionEnterMs * calm}ms ease`
       // the backing: the page colour under the glass, so text and the field stay legible over busy content in light and dark
       box position="absolute" inset=0 border-radius=th.radiusPill pointer-events="none" z-index=-1
-        background-color=th.paper opacity=0.94 border-width=1 border-style="solid" border-color=th.rule
+        background-color=th.paper opacity=th.barBacking border-width=1 border-style="solid" border-color=th.rule
       // the state's tint: warms while playing, brighter while the listener is heard, danger on a failure
       box position="absolute" inset=0 border-radius=th.radiusPill pointer-events="none"
         background-color=tint opacity=tintOn
@@ -92,7 +100,9 @@ component BarShell
       column flex=1 min-width=0 justify-content="center" gap=2
         if typing
           text aim testId="bar-aim" font-family=th.fontUi font-size=11 color=th.muted line-clamp=1 animation=enter
-        if st == "idle"
+        if st == "idle" and onSetup
+          text setupLine testId="bar-setup" font-family=th.fontUi font-size=15 color=th.fg line-clamp=1 padding="2px 6px" animation=enter
+        if st == "idle" and onSetup == false
           input value=ask input=editAsk submit=sendAsk focus=barFocus blur=barBlur placeholder=aim aria-label=aim testId="bar-field" enterkeyhint="send"
             font-family=th.fontRead font-size=16 color=th.fg padding="8px 6px"
             ::placeholder

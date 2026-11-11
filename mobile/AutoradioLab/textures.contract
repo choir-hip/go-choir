@@ -3,7 +3,7 @@
 // search field filters them. A document opens in the reader (`texture:<doc>`). "New document" is a prompt, not an empty editor.
 // testIds: page-title, textures-search, textures-edition, textures-make-edition, textures-new, textures-doc-<address>.
 use Theme, TextureList, TextureRow from "@choir/autoradio"
-use PageScroll, Card from "./ui.contract"
+use PageScroll, Card, Btn from "./ui.contract"
 use FirstRunCard from "./onboarding.contract"
 
 component TextureRowView
@@ -56,8 +56,8 @@ component TexturesPage
             text "YOUR EDITION" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing="0.08em" color=th.accent
             text "Make your edition" font-family=th.fontRead font-size=22 font-weight=700 color=th.fg
             text "A front page written for you each morning from the sources you follow. Say what you want in it." font-family=th.fontRead font-size=16 line-height=1.45 color=th.muted
-            button press=editAsk("Make my edition: ") testId="textures-make-edition" buttonStyle="filled"
-              text "Make your edition"
+            button press=editAsk("Make my edition: ") testId="textures-make-edition" appearance="none"
+              Btn(label="Make your edition", primary=true, wide=false)
       for r in edition key=r.address
         TextureRowView(r=r, pinned=true)
       if others.length > 0
@@ -66,5 +66,5 @@ component TexturesPage
         TextureRowView(r=r, pinned=false)
       if tlist.status == "ready" and shown.length == 0 and q != ""
         text "No documents match." font-family=th.fontUi color=th.muted testId="textures-none"
-      button press=editAsk("New document: ") testId="textures-new" buttonStyle="bordered"
-        text "New document"
+      button press=editAsk("New document: ") testId="textures-new" appearance="none"
+        Btn(label="New document", primary=false, wide=false)

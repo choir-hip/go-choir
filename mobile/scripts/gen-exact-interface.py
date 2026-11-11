@@ -72,7 +72,7 @@ names = [
         "playing": False, "talking": False, "heard": "", "message": ""}),
     src("choirStories", "StoryList", default={"rows": []}),
     snd("choirSignIn"), snd("choirSignOut"), snd("choirOpenApproval"), snd("choirCancelSignIn"), snd("choirRefresh"),
-    snd("choirPlayPause"), snd("choirTalkDown"), snd("choirTalkUp"),
+    snd("choirPlayPause"), snd("choirStartRadio"), snd("choirTalkDown"), snd("choirTalkUp"),
     snd("choirPlay", {"route": S}),
 ]
 # Per-lane fragments: exact-package/interface/<lane>.json = {"shapes": {...}, "names": [...]}. Each lane owns its own

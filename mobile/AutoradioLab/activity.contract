@@ -3,7 +3,7 @@
 // reads fixtures/demo/changelog.json; live it is GET /api/changelog (kit: ActivityFeed.swift). A row with a document or a route opens it
 // as a page. testIds: activity-refresh, activity-section-<name>, activity-row-<id>, activity-status, activity-empty.
 use Theme, ThemeExtras, ActivityInfo, ActivityItem from "@choir/autoradio"
-use ToolScroll, Card from "./ui.contract"
+use ToolScroll, Card, Btn from "./ui.contract"
 use SectionLabel, Hairline, ScreenTitle from "./settings.contract"
 
 component ActivityPage
@@ -20,8 +20,8 @@ component ActivityPage
       ScreenTitle(label="Activity", back=false)
       row gap=12 align-items="center" width="100%"
         text (act.status == "loading" ? "Looking…" : (act.unseen > 0 ? `${act.unseen} new since you last looked` : "Up to date")) testId="activity-status" font-family=th.fontUi font-size=tx.sizeMeta color=th.muted flex=1 min-width=0
-        button press=refreshActivity testId="activity-refresh" buttonStyle="bordered"
-          text "Refresh"
+        button press=refreshActivity testId="activity-refresh" appearance="none"
+          Btn(label="Refresh", primary=false, wide=false)
       if act.message != ""
         text act.message testId="activity-message" font-family=th.fontUi font-size=tx.sizeLabel color=th.danger
       ActivitySection(label="Now", items=act.live, testId="activity-section-now")

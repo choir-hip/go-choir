@@ -103,7 +103,15 @@ step "tap ob-interview"; view light-26-interview-q1 800
 step "tap ob-demo-next"; wait_ 1200
 step "tap ob-demo-next"; wait_ 1200
 step "tap ob-demo-next"; view light-27-interview-paused 1200
-step "tap ob-continue"; wait_ 700
+step "tap ob-continue"; view light-28-interview-continued 700
+# on to the edition and "Start the radio" (this check is fatal: the radio must really start from the edition page)
+for i in 1 2 3 4 5 6 7 8; do step "tap ob-demo-next"; wait_ 1200; done
+step "tap ob-demo-next"; view light-29-writing 900
+wait_ 3200; step "tap ob-edition-retry"; wait_ 1200
+wait_ 3500; step tree; shot light-31-edition-done
+step "tap ob-edition-open"; wait_ 900
+step "tap bar-pages"; wait_ 600; step "tap pile-places"; wait_ 600; step "tap \"launcher-open-onboarding:setup\""; wait_ 900
+step "tap ob-start-radio"; view light-32-front-page-playing 5000
 step logs
 run_drive voice light onboarding --touch platform
 
@@ -149,6 +157,10 @@ step "tap ob-hearing-yes"; wait_ 600
 step "tap ob-interview"; wait_ 800
 step "tap ob-demo-next"; wait_ 1200
 step "tap ob-demo-next"; view dark-25-interview-interrupted 1200
+step "tap ob-demo-next"; view dark-26-interview-paused 1200
+step "tap ob-continue"; wait_ 700
+for i in 1 2 3 4 5; do step "tap ob-demo-next"; wait_ 1200; done
+step "tap ob-demo-next"; view dark-27-readback 1200
 step "tap bar-pages"; wait_ 600; step "tap pile-places"; wait_ 600; step "tap place-settings"; wait_ 900
 step "tap settings-mode-light"; wait_ 900; step tree
 step logs
@@ -175,6 +187,10 @@ must "voice: welcome" '[ob-begin]'
 must "voice: setup rows" '[ob-row-transcriber]'
 must "voice: microphone check" '[ob-mic-ask]'
 must "interview: listening" '[ob-listening]'
+must "bar: tells the setup state" '[bar-setup]'
+must "bar: tells the interview state" 'Interview: '
+must "voice: the edition is done" '[ob-start-radio]'
+if grep -qF 'NOW PLAYING' "$SHOTS/drive-voice.txt" 2>/dev/null; then echo "ok: Start the radio from the edition page starts it (the bar says NOW PLAYING)"; else echo "MISSING: Start the radio did not start the radio within 5 s"; FAILS="$FAILS [start the radio]"; fi
 must "interview: pause card" '[ob-paused]'
 must "first run: the card on the paper" '[firstrun-card]'
 must "settings: Set up voice row" '[settings-setup-voice]'
@@ -187,7 +203,7 @@ if grep -qF '[reader-following]' "$SHOTS/drive-follow.txt" 2>/dev/null; then ech
 must "really light: the settings line says light" 'Showing Depth (light)'
 must "really dark: the settings line says dark" 'Showing Depth (dark)'
 n=$(ls "$SHOTS"/light-*.png 2>/dev/null | wc -l); m=$(ls "$SHOTS"/dark-*.png 2>/dev/null | wc -l)
-[ "$n" -ge 20 ] && [ "$m" -ge 18 ] || FAILS="$FAILS [screenshots: $n light, $m dark]"
+[ "$n" -ge 24 ] && [ "$m" -ge 18 ] || FAILS="$FAILS [screenshots: $n light, $m dark]"
 echo "ok: screenshots in $SHOTS ($n light, $m dark)"
 if grep -q 'ERROR\|Fatal error' "$OUT"; then echo "note: errors in the app log:"; grep -m8 'ERROR\|Fatal error' "$OUT"; fi
 [ -z "$FAILS" ] || fail "checks:$FAILS"

@@ -14,7 +14,7 @@
 //   ob-listening, ob-now-saying, ob-talk, ob-paused, ob-continue, ob-demo, ob-demo-next, ob-wait-slot, ob-writing-line,
 //   ob-edition-retry, ob-edition, ob-edition-open, ob-start-radio, firstrun-card, firstrun-open.
 use Theme, ChoirAuth, Onboarding from "@choir/autoradio"
-use Card, PageScroll from "./ui.contract"
+use Card, PaperCard, PageScroll, Btn from "./ui.contract"
 use Mark from "./mark.contract"
 
 keyframes obBreathe
@@ -43,13 +43,13 @@ component SignInScreen
             text "Your code" font-family=th.fontUi font-size=13 color=th.muted
             text au.userCode testId="signin-code" font-size=36 font-weight=600 font-family=th.fontMono color=th.fg
             text "Approve this sign-in in your browser." font-family=th.fontUi font-size=15 color=th.muted text-align="center"
-            button press=openApproval testId="signin-open" buttonStyle="filled"
-              text "Open the approval page"
-            button press=cancelSignIn testId="signin-cancel"
-              text "Cancel"
+            button press=openApproval testId="signin-open" appearance="none"
+              Btn(label="Open the approval page", primary=true, wide=false)
+            button press=cancelSignIn testId="signin-cancel" appearance="none"
+              Btn(label="Cancel", primary=false, wide=false)
       if au.status != "pending"
-        button press=signIn testId="signin" buttonStyle="filled" padding=16
-          text "Sign in"
+        button press=signIn testId="signin" appearance="none"
+          Btn(label="Sign in", primary=true, wide=true)
       text au.message testId="signin-message" font-family=th.fontUi font-size=14 color=th.muted text-align="center"
 
 // ---------------------------------------------------------------- the page
@@ -109,11 +109,11 @@ component SetupRowItem
         if canRetry or canFallback
           row gap=8
             if canRetry
-              button press=obRetry(stage) testId=`ob-retry-${stage}` buttonStyle="bordered"
-                text "Try again"
+              button press=obRetry(stage) testId=`ob-retry-${stage}` appearance="none"
+                Btn(label="Try again", primary=false, wide=false)
             if canFallback
-              button press=obFallback(stage) testId=`ob-fallback-${stage}` buttonStyle="bordered"
-                text "Use the fallback"
+              button press=obFallback(stage) testId=`ob-fallback-${stage}` appearance="none"
+                Btn(label="Use the fallback", primary=false, wide=false)
 
 component TalkLine
   inject
@@ -173,8 +173,8 @@ component OnboardingPage
             text "Autoradio can learn what you care about in a short spoken conversation, then write your paper to match." font-size=18 line-height=1.45
             text "First it sets up the voice on this phone: a few audio models to download, and a check that each one works here." font-size=16 line-height=1.45 color=th.muted
             text ob.totalLabel font-family=th.fontUi font-size=14 color=th.muted testId="ob-total"
-            button press=obBegin testId="ob-begin" buttonStyle="filled" padding=14
-              text beginLabel
+            button press=obBegin testId="ob-begin" appearance="none"
+              Btn(label=beginLabel, primary=true, wide=true)
             if ob.step == "skipped"
               text "You skipped this once. The paper stays as it is until you do it." font-family=th.fontUi font-size=13 color=th.muted
         button press=obSkip testId="ob-skip" appearance="none" padding=10
@@ -187,8 +187,8 @@ component OnboardingPage
             column padding=18 gap=10
               text "You are on mobile data." font-weight=600 font-size=17
               text ob.totalLabel font-family=th.fontUi font-size=15 color=th.muted
-              button press=obBeginMobile testId="ob-begin-mobile" buttonStyle="filled"
-                text "Download anyway"
+              button press=obBeginMobile testId="ob-begin-mobile" appearance="none"
+                Btn(label="Download anyway", primary=true, wide=true)
         if ob.askMobile == false
           text ob.totalLabel font-family=th.fontUi font-size=15 color=th.muted testId="ob-total"
           text deviceLine font-family=th.fontUi font-size=13 color=th.muted
@@ -205,8 +205,8 @@ component OnboardingPage
             if ob.mic == "unasked" or ob.mic == "refused" or ob.mic == "silent"
               text "To check I can hear you I need the microphone." font-size=19 font-weight=600 line-height=1.35
               text "What you say stays on this phone as sound; only the words go to your computer." font-size=16 line-height=1.45 color=th.muted
-              button press=obMic testId="ob-mic-ask" buttonStyle="filled" padding=14
-                text micLabel
+              button press=obMic testId="ob-mic-ask" appearance="none"
+                Btn(label=micLabel, primary=true, wide=true)
             if ob.mic == "checking"
               text "Say anything." font-size=26 font-weight=700 font-family=th.fontRead
               column testId="ob-mic-level" height=10 border-radius=5 background-color=th.rule width="100%"
@@ -217,8 +217,8 @@ component OnboardingPage
                 image "symbol:checkmark" color=th.success
                 text "I heard you:" font-family=th.fontUi font-size=15 color=th.muted
               text ob.heard testId="ob-heard" font-size=22 font-family=th.fontRead line-height=1.3
-              button press=obMicNext testId="ob-mic-next" buttonStyle="filled" padding=14
-                text "Continue"
+              button press=obMicNext testId="ob-mic-next" appearance="none"
+                Btn(label="Continue", primary=true, wide=true)
             text ob.message font-family=th.fontUi font-size=14 color=th.danger
         if ob.setupStarted
           text "The models" font-family=th.fontUi font-size=13 color=th.muted
@@ -234,10 +234,10 @@ component OnboardingPage
             text ob.route testId="ob-route" font-family=th.fontUi font-size=15 color=th.muted
             text "Can you hear this?" font-size=26 font-weight=700 font-family=th.fontRead
             row gap=10
-              button press=obHearingYes testId="ob-hearing-yes" buttonStyle="filled" padding=14
-                text "Yes, I hear it"
-              button press=obHearingNo testId="ob-hearing-no" buttonStyle="bordered" padding=14
-                text "No"
+              button press=obHearingYes testId="ob-hearing-yes" appearance="none"
+                Btn(label="Yes, I hear it", primary=true, wide=false)
+              button press=obHearingNo testId="ob-hearing-no" appearance="none"
+                Btn(label="No", primary=false, wide=false)
             text ob.message font-family=th.fontUi font-size=14 color=th.danger
 
       // ---- ready: voice setup is done
@@ -247,8 +247,8 @@ component OnboardingPage
             text "The voice is set up." font-size=20 font-weight=700
             text "Next, a short conversation about what you care about. Three to six minutes, out loud. You can cut in any time." font-size=17 line-height=1.45
             text "It is spoken, so it works best somewhere quiet, or with headphones." font-family=th.fontUi font-size=14 color=th.muted
-            button press=obInterview testId="ob-interview" buttonStyle="filled" padding=14
-              text "Start the interview"
+            button press=obInterview testId="ob-interview" appearance="none"
+              Btn(label="Start the interview", primary=true, wide=true)
             text ob.message font-family=th.fontUi font-size=14 color=th.danger
         if ob.setupStarted
           text "The models" font-family=th.fontUi font-size=13 color=th.muted testId="ob-summary"
@@ -267,15 +267,15 @@ component OnboardingPage
               if ob.demoWords != ""
                 text `“${ob.demoWords}”` font-family=th.fontRead font-size=17 color=th.fg
               if ob.demoLeft > 0
-                button press=obDemoNext testId="ob-demo-next" buttonStyle="bordered"
-                  text `Play the next recorded turn (${ob.demoLeft} left)`
+                button press=obDemoNext testId="ob-demo-next" appearance="none"
+                  Btn(label=`Play the next recorded turn (${ob.demoLeft} left)`, primary=false, wide=true)
         if ob.paused
           Card(level=2, testId="ob-paused", minHeight=0)
             column padding=18 gap=10
               text pausedTitle font-size=19 font-weight=700
               text ob.nowSaying font-size=17 line-height=1.45 color=th.muted
-              button press=obContinue testId="ob-continue" buttonStyle="filled" padding=14
-                text "Continue your interview"
+              button press=obContinue testId="ob-continue" appearance="none"
+                Btn(label="Continue your interview", primary=true, wide=true)
         if ob.paused == false
           row gap=10 align-items="center" testId="ob-listening"
             if th.reducedMotion == false
@@ -283,7 +283,7 @@ component OnboardingPage
             if th.reducedMotion
               box width=10 height=10 border-radius=5 background-color=th.danger
             text "The microphone is open. Talk any time, even over me." font-family=th.fontUi font-size=14 color=th.muted flex=1
-          Card(level=2, testId="ob-now", minHeight=0)
+          PaperCard(testId="ob-now", minHeight=0)
             column padding=18 gap=6
               text ob.nowSaying testId="ob-now-saying" font-family=th.fontRead font-size=24 line-height=1.3 color=th.fg
         text "So far" font-family=th.fontUi font-size=13 color=th.muted
@@ -305,17 +305,17 @@ component OnboardingPage
             if ob.editionStatus == "failed"
               text ob.editionError testId="ob-edition-error" font-family=th.fontRead font-size=19 text-align="center" line-height=1.35
               text "The paper carries on with the default edition meanwhile." font-family=th.fontUi font-size=13 color=th.muted text-align="center"
-              button press=obEditionRetry testId="ob-edition-retry" buttonStyle="filled" padding=14
-                text "Retry"
+              button press=obEditionRetry testId="ob-edition-retry" appearance="none"
+                Btn(label="Retry", primary=true, wide=true)
         button press=obSkip testId="ob-skip" appearance="none" padding=10
           text "Skip for now" font-family=th.fontUi font-size=15 color=th.muted
 
       // ---- the edition, shown; then the front page and a story
       if ob.step == "done"
-        button press=obOpenEdition testId="ob-edition-open" buttonStyle="bordered" padding=14
-          text "Open your edition"
-        button press=obFinish testId="ob-start-radio" buttonStyle="filled" padding=14
-          text "Start the radio"
+        button press=obOpenEdition testId="ob-edition-open" appearance="none"
+          Btn(label="Open your edition", primary=false, wide=true)
+        button press=obFinish testId="ob-start-radio" appearance="none"
+          Btn(label="Start the radio", primary=true, wide=true)
         Card(level=2, testId="ob-edition", minHeight=0)
           column padding=20 gap=10
             text ob.editionIntro font-size=20 font-weight=700 line-height=1.3
@@ -337,5 +337,4 @@ component FirstRunCard
           text ob.card font-family=th.fontRead font-size=19 font-weight=700 color=th.fg
           text ob.cardBody font-family=th.fontUi font-size=14 line-height=1.4 color=th.muted
           button press=openPage("onboarding:setup", "Make it yours") testId="firstrun-open" appearance="none" width="100%"
-            row align-items="center" justify-content="center" min-height=44 border-radius=th.radiusControl background-color=th.accent box-shadow=th.shadow1
-              text act font-family=th.fontUi font-size=17 font-weight=600 color=th.onAccent
+            Btn(label=act, primary=true, wide=true)

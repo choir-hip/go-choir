@@ -51,6 +51,7 @@ drive() { # <mode: light|dark> <attempt-file>
   M=$1
   "$HERE/exact.sh" agent ios --touch platform \
     "clock data" "clock +1500 real" "clock data" tree \
+    "tap bar-pages drag 0 -200" "$L" "tap place-settings" "$L" "tap settings-dev-details" "$L" \
     "tap bar-pages drag 0 -200" "$L" "tap place-textures" "$L" "clock data" tree "screenshot $SHOTS/$M-01-textures.png" \
     "tap textures-doc-texture:demo-notes" "clock +1000 real" "clock data" tree "screenshot $SHOTS/$M-02-document-top.png" \
     "tap reader-block-b10" "$L" "clock data" tree "screenshot $SHOTS/$M-03-document-table.png" \
