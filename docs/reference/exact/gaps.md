@@ -1,7 +1,8 @@
 # Exact: gaps the Autoradio lab will hit, and the cheapest fix
 
 Part of [EXACT.md](../EXACT.md). Pinned commit `76cd50f9e`. Marks: **[run]**,
-**[src]**, **[doc]**, **[unrun]**. "Upstream" links: none searched yet; no
+**[src]**, **[doc]**, **[seen]** (observed by our app builders on the simulator, 2026-11-11, not read
+in source), **[unrun]**. "Upstream" links: none searched yet; no
 Exact issue or PR numbers are known to us. `issues/` in the Exact repo holds
 their tracker as files [src].
 
@@ -35,6 +36,13 @@ their tracker as files [src].
 | 26 | Metal Toolchain not installed: no vello Canvas 2D, SVG filters on Core Image | `xcodebuild -showComponent metalToolchain`: uninstalled [run]; `host/apple/build.mjs:155, 872` [src] | Install with `xcodebuild -downloadComponent MetalToolchain` under real Xcode if an animating Canvas 2D or SVG filters matter. Not needed for boxes, text, lists. |
 | 27 | A GPU canvas with children draws nothing on Android | `host/android/README.md:1254` [src] | Give a GPU surface no children, or keep the Contract form (pure Contract mark). |
 | 28 | GPU module ABI is unversioned; the crate must sit in the Exact workspace; build time unmeasured | `gpu/README.md:3-4` [src] | Rebuild host and module together; pin the sha; measure the first build. |
+| 29 | A native `buttonStyle` button (`bordered`, `filled`, `glass`) cannot be themed: `text` takes no `font-family` (`lower-button-style`), the label colour ignored the theme, `filled` tints system blue | [seen] | `button appearance="none"` wrapping one themed face component (`ui-model.md`). |
+| 30 | `iframe` has no `srcdoc` | [seen] | Write the HTML to `app:/cache/x.html` and use `iframe src="app:/cache/x.html" sandbox=""`. |
+| 31 | `padding-bottom` on a scroll's content column was not a reliable end inset; padding was not re-tested | [seen] | A trailing spacer component. |
+| 32 | The driver cannot tap what the floating bar or keyboard covers, and cannot drive a `scroll id=` without a `testId` | [seen] | Layout: primary buttons above long content, scroll frames that end above the bar, `testId` on scrolls (`testing-and-debugging.md`). |
+| 33 | `simctl spawn defaults write` does not override a value the app wrote itself | [seen] | Delete the app's preferences plist, set state with the app's controls (`testing-and-debugging.md`). |
+| 34 | `text` collapses `\n` | [seen] | `white-space="pre-wrap"`. |
+| 35 | Field or prop names `when` and `from` were risky in a contract | [seen]; whether the compiler refuses them is unchecked | Use other names (`stamp`, `sender`). |
 
 ## What to ask upstream first
 

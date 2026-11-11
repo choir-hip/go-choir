@@ -172,6 +172,13 @@ worktree about 5 minutes with warm caches, a cold build about 15 minutes
 `~/.cache/exact` (modules by input SHA-256, registry crates); deleting them only
 costs the next first build its time (Exact `AGENTS.md` [doc]).
 
+**Merging lanes (seen in our build, 2026-11-11):** a lane's last unproven
+commit can break the merged build. Re-fetch and merge every lane head just
+before the final proof. Booting a simulator puts the Mac at load about 200 for
+minutes and the driver cannot attach above about 60, so keep one simulator
+booted across runs (`testing-and-debugging.md`, "Driving and proving the
+app").
+
 **Signing facts from the lanes:** the free provisioning team id is the one
 shown under Xcode > Settings > Accounts (not the certificate's person id); Exact
 needs an installed profile for the bundle id. A free account's profile lasts 7
