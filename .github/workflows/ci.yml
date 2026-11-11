@@ -445,8 +445,21 @@ jobs:
         run: |
           set -euo pipefail
           if ! command -v rg >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y ripgrep
+            # A pinned release binary from GitHub, checked against a pinned
+            # digest, so the job does not depend on the Ubuntu mirrors.
+            rg_version=15.2.0
+            rg_sha256=33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c
+            rg_name="ripgrep-${rg_version}-x86_64-unknown-linux-musl"
+            rg_dir="$(mktemp -d)"
+            curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors \
+              -o "$rg_dir/rg.tar.gz" \
+              "https://github.com/BurntSushi/ripgrep/releases/download/${rg_version}/${rg_name}.tar.gz"
+            echo "${rg_sha256}  $rg_dir/rg.tar.gz" | sha256sum -c -
+            tar -xzf "$rg_dir/rg.tar.gz" -C "$rg_dir"
+            mkdir -p "$HOME/.local/bin"
+            install -m 0755 "$rg_dir/${rg_name}/rg" "$HOME/.local/bin/rg"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+            "$HOME/.local/bin/rg" --version
           fi
 
       - name: Report discovery counts and enforce promoted families
@@ -942,8 +955,34 @@ jobs:
       - name: Install dependencies
         run: cd frontend && pnpm install --frozen-lockfile
 
+      # No apt on the path that must succeed: the browser comes from
+      # Playwright's CDN. The system packages are tried next and may fail
+      # (the Ubuntu mirrors can be down); the launch check after them is what
+      # decides whether the job can run.
       - name: Install Chromium
-        run: cd frontend && pnpm exec playwright install --with-deps chromium
+        run: cd frontend && pnpm exec playwright install chromium
+
+      - name: Install Chromium system packages (best effort)
+        shell: bash
+        run: |
+          cd frontend
+          for attempt in 1 2 3; do
+            if sudo env "PATH=$PATH" pnpm exec playwright install-deps chromium; then
+              exit 0
+            fi
+            echo "install-deps attempt $attempt failed"
+            sleep 10
+          done
+          echo "::warning::playwright install-deps chromium failed 3 times (Ubuntu mirrors unreachable?); the launch check decides whether Chromium can run"
+
+      - name: Chromium launches
+        shell: bash
+        run: |
+          cd frontend
+          if ! node -e "require('@playwright/test').chromium.launch().then(b => b.close()).catch(e => { console.error(e.message); process.exit(1); })"; then
+            echo "::error::Chromium cannot start on this runner; the system packages are missing and could not be installed"
+            exit 1
+          fi
 
       # The base's copy of the checker runs as well as the head's, as the
       # guest-epoch check does, so a change cannot loosen the rules it is

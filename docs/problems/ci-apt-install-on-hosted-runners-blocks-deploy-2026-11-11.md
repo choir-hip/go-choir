@@ -1,6 +1,6 @@
 # CI jobs that install tools with apt fail when the runner cannot reach the Ubuntu mirrors, and that blocks the deploy
 
-Date: 2026-11-11. Status: open, cause outside the repo, no fix chosen.
+Date: 2026-11-11. Status: fix in review (options 1 and 2); cause outside the repo.
 
 ## Problem
 
@@ -34,9 +34,20 @@ slice (6f0c773ed) sat on main undeployed for over an hour.
 
 ## Remaining error and options
 
-Not yet known how often this happens; this is the first record. Options, none
-taken: have the heresy job use the runner's own grep or a pinned ripgrep
+Not yet known how often this happens; this is the first record. Options: have the heresy job use the runner's own grep or a pinned ripgrep
 binary fetched from our own release cache; cache Playwright's browsers and
 system packages between runs; move both jobs to the Node B runner, which has
 the tools from the Nix shell. Each touches `.github/workflows/ci.yml`, a gate
 file, so it needs the gate-change trailers and a review.
+
+## Option taken
+
+Neither job installs from the Ubuntu mirrors on the path that must succeed.
+Heresy Detector fetches the pinned ripgrep 15.2.0 musl binary from GitHub
+releases and checks its SHA-256 (the digest matches the release's published
+`.sha256` asset). Package Modularity installs Chromium from Playwright's CDN
+(`playwright install chromium`), tries `install-deps chromium` three times as a
+best-effort step that warns on failure, then a launch check fails the job
+loudly if Chromium cannot start. No checking step was changed or relaxed.
+Not yet shown: that Chromium launches on ubuntu-24.04 without the apt step; the
+first CI run with the mirrors down is that proof.
