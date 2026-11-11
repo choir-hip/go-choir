@@ -45,12 +45,13 @@ step "clock data"; wait_ 1500
 ensure_light
 goto "paper:front"; step tree; shot light-01-paper-front
 step "tap paper-scroll drag 0 -260"; wait_ 700
-step "tap paper-story-demo-grid-storage"; view light-02-paper-story-reader 1000
-step "tap reader-scroll drag 0 -200"; wait_ 900
+step "tap paper-scroll drag 0 -380"; wait_ 900
 step "tap bar-mark"; wait_ 600; step "tap lens-a"; wait_ 500; step "tap bar-mark"; wait_ 800; step tree; shot lens-A-light
 step "tap bar-mark"; wait_ 600; step "tap lens-b"; wait_ 500; step "tap bar-mark"; wait_ 800; step tree; shot lens-B-light
 step "tap bar-mark"; wait_ 600; step "tap lens-c"; wait_ 500; step "tap bar-mark"; wait_ 800; step tree; shot lens-C-light
 step "tap bar-mark"; wait_ 600; step "tap lens-a"; wait_ 500; step "tap bar-mark"; wait_ 800
+step "tap paper-scroll drag 0 380"; wait_ 700
+step "tap paper-story-demo-grid-storage"; view light-02-paper-story-reader 1000
 step "tap reader-scroll drag 0 -360"; view light-02c-story-scrolled 900
 step "tap page-deck drag 180 0"; view light-02d-scrolled-then-swiped 1200
 goto "pub:demo-grid-storage"; view light-02e-story-back-after-swipe 900
@@ -159,12 +160,13 @@ place settings 900
 step "tap settings-mode-dark"; view dark-01-settings-switched 900
 goto "paper:front"; view dark-02-paper-front 700
 step "tap paper-scroll drag 0 -260"; wait_ 700
-step "tap paper-story-demo-grid-storage"; view dark-03-paper-story-reader 1000
-step "tap reader-scroll drag 0 -200"; wait_ 900
+step "tap paper-scroll drag 0 -380"; wait_ 900
 step "tap bar-mark"; wait_ 600; step "tap lens-a"; wait_ 500; step "tap bar-mark"; wait_ 800; step tree; shot lens-A-dark
 step "tap bar-mark"; wait_ 600; step "tap lens-b"; wait_ 500; step "tap bar-mark"; wait_ 800; step tree; shot lens-B-dark
 step "tap bar-mark"; wait_ 600; step "tap lens-c"; wait_ 500; step "tap bar-mark"; wait_ 800; step tree; shot lens-C-dark
 step "tap bar-mark"; wait_ 600; step "tap lens-a"; wait_ 500; step "tap bar-mark"; wait_ 800
+step "tap paper-scroll drag 0 380"; wait_ 700
+step "tap paper-story-demo-grid-storage"; view dark-03-paper-story-reader 1000
 step "tap bar-play"; wait_ 1800
 step "tap bar-text"; view dark-04-player 900
 step "tap player-close"; wait_ 700
