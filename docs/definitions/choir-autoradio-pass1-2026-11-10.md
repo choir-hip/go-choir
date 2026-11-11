@@ -140,14 +140,14 @@ boundaries:
     - tape and evidence (lanes D and U)
 
 now:
-  status: working
+  status: blocked_incomplete
   slice: round 3 after the owner's first phone walk (rulings 19 to 32), the Autoradio desk, the on-device configurator; first install of round 3 tonight
-  source_ref: origin/main f7a55285e (desk slice 6f0c773ed, web default themes 42d54ab43, CI apt fixes ebe9c3145 and f7a55285e); app on origin/lane/ar3-app-repair 617bc3a65
-  deploy_identity: choir.news f7a55285e (deployed 2026-11-11T16:17Z)
+  source_ref: origin/main 26f9d66f3 (web golden-document fix a7ac6a50c and 26f9d66f3, land shard fix 215e9ac9a, desk slice 6f0c773ed, web default themes 42d54ab43); install candidate origin/lane/golden-docs da1e678ad (ar3-app-repair 617bc3a65 plus native reader golden fixes)
+  deploy_identity: choir.news 26f9d66f3 (deployed 2026-11-11T21:35Z; web GOLDEN COMPARE OK); every running computer refreshed, refresh queue empty
   candidate:
     id: ar3-app
     state: reviewed (Gemini accept after repair, two rounds); proof exit 1 only at the deck cycle step
-    ref: origin/lane/ar3-app-repair
+    ref: origin/lane/golden-docs (da1e678ad, on top of ar3-app-repair 617bc3a65)
     base: origin/main ce678d41c
     digest: 617bc3a656595ff641fccee63dd12b82dceb8aa3
     scope: [mobile/, docs/reference/ON-DEVICE-MODELS.md, docs/design/autoradio-app-ui-2026-11-10.md]
@@ -200,7 +200,7 @@ now:
     (docs/problems/autoradio-deck-swipe-stalls-on-textures-2026-11-11.md on
     lane/ar3-app-deck). The free provisioning profile expires after seven days.
   next_action: >
-    On the owner's go: install origin/lane/ar3-app-repair on the phone; the
+    Blocked on the owner since 2026-11-11T22:00Z. On the owner's go: install origin/lane/golden-docs da1e678ad on the phone; the
     owner walks setup, the radio and a voice turn; read the trace export.
     Then land the app, fix what the walk finds, and decide River. Priority
     for the week (owner, 2026-11-11): the iOS app good enough to share on
