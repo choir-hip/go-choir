@@ -53,6 +53,10 @@ if [ -z "${NOBUILD:-}" ]; then
   "$HERE/build-lab.sh" ios > "$SCRATCH/build.txt" 2>&1 || { grep -v '^warning' "$SCRATCH/build.txt" | head -60; tail -15 "$SCRATCH/build.txt"; cp "$SCRATCH/build.txt" "$SHOTS/build.txt"; fail "build"; }
 fi
 SIM privacy "$EXACT_SIM" grant all $APP >/dev/null 2>&1
+# No model weights may ship in the app (owner, 2026-11-11): the built bundle is checked before anything is driven.
+BUILT_APP=$(ls -dt $(find "$HERE/../AutoradioLab/target/clients" -type d -name Autoradio.app 2>/dev/null) 2>/dev/null | head -1)
+[ -n "$BUILT_APP" ] || fail "no weights check" "the built Autoradio.app was not found"
+"$HERE/check-no-weights.sh" "$BUILT_APP" || fail "no model weights in the app"
 
 # `proof-app.sh deckdiag`: only where a deck swipe starts matters (a diagnostic of the Textures page, which did not cycle): no tour.
 if [ "${1:-}" = deckdiag ]; then
