@@ -793,7 +793,7 @@ on the front page writes nothing.
 | Type | Renders with | In Exact today | Needs |
 |---|---|---|---|
 | Texture (story or own document) | our reader: `body_doc` blocks as Contract text runs | native: parent `text` with child runs (`exact:apps/exact-live/app.contract:857-878`) | the renderer (build) |
-| Markdown, plain text | the same reader (converted to blocks) or `text markup="markdown"` | native (CFA:2213-2236) | none |
+| Markdown, plain text | the same reader (converted to blocks) or `text markup="markdown"` (the read-only reader; `textarea` is the editor) | native (CFA:2213-2236) | none |
 | Image | `image` from an `app:/cache` file | native; remote URLs carry no auth header, so the kit downloads with `fetch(…, {exactBodyTo})` first; SVG does not draw on Apple; no pinch zoom (CFA:1837-1907) | pinch zoom by hand with `pan` and `scale`, or a package view |
 | Video | `video` (AVPlayerLayer), controls, picture in picture, full screen | native (CFA:2115-2119; `exact:host/apple/videoarm/VideoArm.swift:394-402,850-880`) | none |
 | Audio | `audio` with `metadata=` for Now Playing | native; needs `audio_session: "playback"` and the `audio` background mode (CFA:2154-2206) | none |
@@ -815,6 +815,13 @@ its card, so nothing but the bar is fixed on screen.
   marks group into one pill "3 · 4". The pill pads its tap area to the line
   height; a missed tap on the paragraph selects nothing else, so a near
   miss on a mark still opens it [unrun: measure on the phone].
+- **Mechanism candidates [unrun].** In a Markdown-sourced page the mark can be
+  an atom pill (`atom citation link="cite:"`, `atoms="citation"`, tap =
+  `atompress`; `docs/reference/exact/capabilities.md` section 5), since no
+  footnote tap is documented. In the block reader it is a run with `press=`.
+  On a wide screen the expanded quote may be a side note that the paragraph's
+  text flows around (`wrap-flow`, `shape-outside`; capabilities section 4); on
+  a phone column it stays the stacked card below.
 - **Tap: expand in place.** A quote card is inserted after the paragraph
   and pushes the text below it down (the web's own stacked mode). It shows
   the source host and title, the pinned quote with its check badge
@@ -969,13 +976,29 @@ step and the sources is not verified; if it does not, that is a server gap
 | Transitions, keyframes, springs, exit and layout animation | yes | `exact:docs/recipes/motion.md` [doc] | native |
 | 3D transforms (perspective, rotate with axis, translate z) | yes on boxes: `rotate="y 40deg"`, third `translate` length, parent `perspective`, `backface-visibility`; drawn as `CATransform3D`. No `preserve-3d`, `matrix` or `skew`; only the angle animates | `exact:scripts/fixtures/space.contract:15-33`; `exact:host/apple/Sources/ExactKit/SpaceTransform.swift:1-45` [src]; corrects CFA:4163, which lists 2D only | native for flat cards; a solid needs a package view or a Contract projection |
 | Per-frame custom drawing | Canvas 2D `canvas surface=name(args)`; `app.ts` exports `draw(surface, args, ctx, frame)` and returns `true` to be drawn again next frame; Core Graphics on iOS | `exact:apps/canvas-gallery/app.ts:1-17`; CG:1940 [src, doc] | native but the last fallback for the mark: it calls Hermes every frame (see the mark's ranking) |
-| GPU drawing (Metal) | the GPU canvas (`exact-gpu`, wgpu on Metal) loaded on demand; the Canvas 2D Vello replay and SVG filters need the Metal toolchain, which our build lacks. A package view or Core Animation needs none | `exact:docs/reference.md:142` [doc]; `exact:host/apple/build.mjs:147-163, 872` [src]; our build log | possible later |
+| GPU drawing (Metal) | the GPU module (`exact-gpu`, a Rust crate with WGSL shaders, wgpu: Metal, Vulkan, WebGPU) used as `canvas surface=name(args)`, loaded on demand; the Canvas 2D Vello replay and SVG filters need the Metal Toolchain (not installed here; `xcodebuild -downloadComponent MetalToolchain`). Contract itself is not drawn by Metal. Android draws nothing for a GPU canvas with children | `exact:docs/reference.md:142` [doc]; `exact:host/apple/build.mjs:147-163, 872`; `exact:host/android/README.md:1254` [src]; `docs/reference/exact/capabilities.md` | ranked second for the mark (below); build cost unmeasured |
+| Text around a figure or note | `wrap-flow="both"`, `shape-outside`, `shape-margin` on the obstacle box beside a `text` body | `exact:apps/textflow/app.contract`; `exact:README.md:597` [src] | native on iOS per the README; unrun by us |
 | Timers per frame | `every(ms, action, wait=frame)` | `exact:docs/recipes/timers.md:72` [doc] | native |
 | Lottie-style files | not found | | not available; the mark is code |
 | SVG geometry animation | yes | `motion.md` "What animates" [doc] | native: the static and reduced-motion mark |
 
-**How the mark is built, in ranked order** (`docs/reference/exact/rendering-and-motion.md`
-section 8a; all unrun):
+**How the mark and the waiting animation are built, in ranked order**
+(owner, 2026-11-11: "i would rather have as much in exact as possible";
+`docs/reference/exact/rendering-and-motion.md` section 8a and
+`capabilities.md`; all unrun). The ranking for both:
+
+1. Pure Contract: projection `fn`s, `svg polygon` and an `every(frame)` task
+   for the mark; Contract transitions, springs and keyframes for the wait.
+2. If richer visuals are wanted: an Exact wgpu GPU surface in Rust with WGSL
+   (portable Metal, Vulkan and WebGPU). Android draws nothing for a GPU canvas
+   with children, so the surface has none; build cost is unmeasured.
+3. The game add-on only if a scene graph, particles or physics are needed.
+4. A Swift or Core Animation view last, iOS-only.
+
+Glass and depth stay in Contract: `backdrop-filter`, materials
+(`backgroundMaterial`) and `box-shadow`; no GPU surface is needed for them.
+
+The detailed ranking of the mark, as first written:
 
 Owner, 2026-11-11: "ideally we can do pure contract so we can easily run
 on other platforms (android eg)." The research ranked by iOS frame cost
@@ -1303,7 +1326,7 @@ Short paths: `AP` = `frontend/src/packages/autopaper`, `TX` =
 | "More research" (ask the paper to expand) | `GET …/expansion?route=`, `POST …/expand` | `TX/autopaper-expand.ts` | design: a row at the end of a story |
 | Citation marks numbered in reading order, check badge (exact, tolerant, pending, unread, failed) | in bundle | `TX/texture-published-citations.ts:69-105,135,307` | design: tap to expand (section 4) |
 | Hover popover: source title, pinned quote, Open source | none | `TX/App.svelte:2551` | deliberately different: no hover; tap expands in place |
-| Expanded "journal flow" side note (pretext) | none | `TX/texture-source-flow.ts:1-12,83-170,325` | deliberately different: the phone uses the web's own narrow fallback, the stacked card (section 4) |
+| Expanded "journal flow" side note (pretext) | none | `TX/texture-source-flow.ts:1-12,83-170,325` | design: the reader lane uses Exact's text flow (`wrap-flow`, `shape-outside` on the note box beside the paragraph's `text`) on a wide screen (an iPad), and the stacked card (section 4) on a phone column, as the web does below 620 px; unrun (`docs/reference/exact/capabilities.md` section 4) |
 | Sources panel: numbered list, host, pinned blocks, model provenance | in bundle; private: `GET /api/texture/documents/{id}/models` | `TX/texture-published-citations.ts:326`; `TX/texture-model-provenance.ts:163,197` | design: "Sources" at the end of every document and from the page menu |
 | Open source: Texture span, Web Lens, media, Source Viewer | `/api/content/import-url`, `/api/content/items` | `L/source-contract.ts:100-165` | design: the source panel; "Open original" goes to the system browser; a stored reader snapshot shows in the panel (signed in) |
 | Texture-to-Texture transclusion `texture:<doc>@<rev>` with version pin and "newer version" | none | `L/texture-source-renderer.ts` (`renderInlineTextureRef`) | design: an inline chip; tap pushes that document at the pinned version |
@@ -1431,11 +1454,11 @@ block in hand: expanding needs no request.
 | A tappable citation inside a sentence | a run with `press=` (or a Markdown `atom citation` pill with `atompress`) | CFA:3367-3370; CG:1462-1540 [doc] |
 | Highlight a word or sentence (karaoke) | split the paragraph into runs; the current run gets `background-color` and `border-radius`, painted as `InlineBackground`; no `mark` tag, `::highlight` is textarea-only | `exact:host/apple/Sources/ExactKit/Text.swift:210-232` [src]; CG:1328-1360 [doc] |
 | Where an inline run is on screen | `frame(id)` on Apple; `rangeFrame` only for atom pills | CG:1073,1079-1086 [doc] |
-| Read-only Markdown | `text markup="markdown"`; fixed heading scale 1.6/1.4/1.2/1.1/1.0; no per-element styling hooks | CG:1381-1395; `exact:markdown/src/pieces.rs:133-142` [src] |
+| Read-only Markdown | `text markup="markdown"` is the reader (the `textarea` is the editor); fixed heading scale 1.6/1.4/1.2/1.1/1.0; no per-element styling hooks; taps through atom pills and `atompress`; no documented footnote tap, so citations as atoms is the candidate mechanism [unrun] | CG:1381-1395, 1462-1483; `exact:markdown/src/pieces.rs:133-142` [src] |
 | Expand in place | no `details`; state plus `if open` | CFA:1401-1403 [doc] |
 | A sheet with detents | route `navigationPresentation="modal"`, `navigationDetent="medium large"`, `navigationInitialDetent`, `navigationGrabber` | CFA:2694-2750 [doc] |
 | Arbitrary-content popover on iOS | none found (macOS only); menus become `UIMenu` | CFA:1581-1584,1689 [doc] |
-| Text-flow around an obstacle (pretext's side note) | no primitive found; layout is the kernel's | not found [src grep]; `exact:textflow/` not read |
+| Text-flow around an obstacle (pretext's side note) | yes: `wrap-flow="both"` and `shape-outside` (`circle()`, or a `clip-path` outline) with `shape-margin` on the obstacle box, in the same container as the `text`; an earlier version of this table said none was found, which was wrong | `exact:apps/textflow/app.contract:102,113`; `exact:README.md:597,645` [src]; unrun by us; supported rectangular shapes unverified |
 | Long documents | `list virtualized` with keyed rows; `scrollIntoView(list, key, block="center")` | CFA:1452-1510; CG:2711 [doc] |
 | Selection | `user-select="text"`, one paragraph at a time on iOS | CFA:4599-4607 [doc] |
 | A bar floating over the pages | no `bottomAccessory`; an authored overlay after the panels paints over routes and bars; or the tabs hatch hands a package the `UITabBarController` | CFA:2604,2692-2693 [doc]; `exact:host/apple/Sources/ExactKit/IOS/NavigationTabsIOS.swift:99` [src] |
@@ -1464,8 +1487,10 @@ Nothing blocks a function. These shape the design:
 
 1. No hover and no iOS content popover: sheets and in-place expansion
    (designed above).
-2. No text-flow around an obstacle: the stacked card, which is the web's
-   own narrow mode.
+2. Text-flow around an obstacle exists (`wrap-flow`, `shape-outside`;
+   corrected 2026-11-11), so the reader lane may flow prose around a side
+   note or figure instead of stacking, where the column is wide. The stacked
+   card stays the phone-width form, as on the web [unrun].
 3. Sub-sentence highlight re-lays out the paragraph on every change; at a
    sentence a few seconds the cost is unmeasured [unrun]. Floor:
    paragraph highlight, which changes only a background.
