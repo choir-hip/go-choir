@@ -531,3 +531,8 @@ AI DJ, not any one article; the listener interrupts at any time and reaches
 any app or desk through it. Slice 1 here (the fast answer to an interruption)
 stands as the turn path. The hand-off slices and the programme script are
 the desk's main work and get their own design note.
+
+**Model (owner, 2026-11-11):** "We should actually use River DeepSeek rather
+than Bedrock Haiku for this." The `autoradio` pool is led by River's DeepSeek
+model; Bedrock Haiku is not in the pool. This settles open question 1 and
+replaces the order in section 5.
