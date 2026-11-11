@@ -156,6 +156,20 @@ it fast, measure it and optimise it; do not put cutoffs in the way. A turn
 moves on real signals: a refusal, an error, the end of a stream, the
 listener.
 
+29. **Steer models with prompts, not deterministic rules** (owner,
+2026-11-11): "I don't like hard time budgets or token budgets. We should be
+able to steer models with prompts, not deterministic rules, which will lead
+to weird behaviors." No token budget, word cap or output filter is used to
+shape what a model says, on the desk or on the phone; the prompt does that.
+A provider's required max-tokens field carries the provider's own ceiling.
+Bounds on what a stranger can cause (auth, request size) are not steering
+and stay.
+30. **Reasoning by role** (owner, 2026-11-11): reasoning off for the
+fast spoken turn, on for writing the script. It is fixed per role, each role
+with its own prompt prefix, so no call switches reasoning on a prefix
+another call cached. Elsewhere the 2026-11-09 rule (reasoning stays on)
+holds.
+
 Also from the walk: a page title is never a raw address, a section name is
 never a raw id, nothing is clipped off a screen edge, and the bar speaks
 about the page in front.
