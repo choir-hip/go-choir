@@ -98,7 +98,7 @@ step "clock data"; wait_ 6000
 step "tap ob-skip"; wait_ 2500
 [ -n "$STORY1" ] && { to_top; step "tap \"$STORY1\""; view real-11-story-1 4000; step "tap reader-scroll drag 0 -600"; view real-12-story-1-scrolled 900; step "tap reader-scroll drag 0 -900"; view real-13-story-1-more 900; }
 goto "paper:front"; wait_ 1200
-[ -n "$STORY2" ] && { to_top; step "tap paper-scroll drag 0 -350"; wait_ 600; step "tap \"$STORY2\""; view real-14-story-2 4000; step "tap reader-scroll drag 0 -2500"; view real-15-story-2-end 900; }
+[ -n "$STORY2" ] && { to_top; step "tap paper-scroll drag 0 -350"; wait_ 1800; step "tap \"$STORY2\""; view real-14-story-2 4000; step "tap reader-scroll drag 0 -2500"; view real-15-story-2-end 900; }
 goto "paper:front"; wait_ 1200
 [ -n "$PLAY1" ] && { to_top; step "tap \"$PLAY1\""; wait_ 5000; step tree; shot real-16-playing; step "tap bar-text"; view real-17-player 1200; step "tap player-close"; wait_ 700; }
 place textures 900; wait_ 2500
