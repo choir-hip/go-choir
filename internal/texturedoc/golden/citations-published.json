@@ -1,0 +1,331 @@
+{
+ "golden": {
+  "name": "citations-published",
+  "note": "Server-shaped checks carry both state and quote (quote is the outcome word, not the quoted words).",
+  "covers": [
+   "inline:source_ref-with-manifest-anchor",
+   "published:resolved-blocks",
+   "published:citation-checks",
+   "published:check-state-exact",
+   "published:check-state-failed",
+   "published:check-state-tolerant",
+   "published:check-state-pending",
+   "inline:source_ref-adjacent-same-source"
+  ],
+  "checks": true,
+  "validate": "texture"
+ },
+ "route": {
+  "path": "/pub/texture/golden-citations-published",
+  "bare": "golden-citations-published",
+  "permalink": "golden-citations-published/v1"
+ },
+ "publication": {
+  "title": "Budget and buses",
+  "kind": "story"
+ },
+ "version": {
+  "id": "pubver-citations-published",
+  "number": 1,
+  "published_at": "2026-11-10T06:00:00Z"
+ },
+ "nav": {
+  "revision": 1,
+  "latest": 1,
+  "current": 1,
+  "prev": 0,
+  "next": 0
+ },
+ "artifact": {
+  "content": "",
+  "body_doc": {
+   "schema": "choir.texture_doc.v1",
+   "doc": {
+    "type": "doc",
+    "attrs": {
+     "id": "g-pubcites"
+    },
+    "content": [
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p1"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "The council approved the budget"
+       },
+       {
+        "type": "source_ref",
+        "attrs": {
+         "id": "a1",
+         "source_entity_id": "src_a",
+         "display_mode": "numbered_ref",
+         "ref": {
+          "doc": "cap-src_a",
+          "version": "v1",
+          "cid": "c1",
+          "hash": "h",
+          "quote": "The council approved the budget on Tuesday."
+         }
+        }
+       },
+       {
+        "type": "text",
+        "text": "."
+       }
+      ]
+     },
+     {
+      "type": "paragraph",
+      "attrs": {
+       "id": "p2"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "Ridership rose"
+       },
+       {
+        "type": "source_ref",
+        "attrs": {
+         "id": "a2",
+         "source_entity_id": "src_b",
+         "display_mode": "numbered_ref",
+         "ref": {
+          "doc": "cap-src_b",
+          "version": "v1",
+          "cid": "c1",
+          "hash": "h",
+          "quote": "Ridership rose four percent in the quarter."
+         }
+        }
+       },
+       {
+        "type": "source_ref",
+        "attrs": {
+         "id": "a3",
+         "source_entity_id": "src_b",
+         "display_mode": "numbered_ref",
+         "ref": {
+          "doc": "cap-src_b",
+          "version": "v1",
+          "cid": "c1",
+          "hash": "h",
+          "quote": "Ridership rose four percent in the quarter."
+         }
+        }
+       },
+       {
+        "type": "text",
+        "text": " while the budget passed"
+       },
+       {
+        "type": "source_ref",
+        "attrs": {
+         "id": "a4",
+         "source_entity_id": "src_a",
+         "display_mode": "numbered_ref",
+         "ref": {
+          "doc": "cap-src_a",
+          "version": "v1",
+          "cid": "c1",
+          "hash": "h",
+          "quote": "The council approved the budget."
+         }
+        }
+       },
+       {
+        "type": "text",
+        "text": "."
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ "payload": {
+  "manifest": {
+   "anchors": [
+    {
+     "anchor_id": "a1",
+     "source_entity_id": "src_a",
+     "relation": "cites",
+     "cids": [
+      "c1"
+     ],
+     "ref": {
+      "doc": "cap-a",
+      "version": "v1",
+      "cid": "c1",
+      "hash": "h",
+      "quote": "The council approved the budget on Tuesday."
+     }
+    },
+    {
+     "anchor_id": "a2",
+     "source_entity_id": "src_b",
+     "relation": "cites",
+     "cids": [
+      "c2"
+     ],
+     "ref": {
+      "doc": "cap-b",
+      "version": "v1",
+      "cid": "c2",
+      "hash": "h",
+      "quote": "Ridership rose four percent in the quarter."
+     }
+    },
+    {
+     "anchor_id": "a3",
+     "source_entity_id": "src_b",
+     "relation": "cites",
+     "cids": [
+      "c2"
+     ],
+     "ref": {
+      "doc": "cap-b",
+      "version": "v1",
+      "cid": "c2",
+      "hash": "h",
+      "quote": "Ridership rose four percent in the quarter."
+     }
+    },
+    {
+     "anchor_id": "a4",
+     "source_entity_id": "src_a",
+     "relation": "cites",
+     "cids": [
+      "c1"
+     ],
+     "ref": {
+      "doc": "cap-a",
+      "version": "v1",
+      "cid": "c1",
+      "hash": "h",
+      "quote": "The council approved the budget."
+     }
+    }
+   ]
+  },
+  "resolved_blocks": [
+   {
+    "doc": "cap-a",
+    "cid": "c1",
+    "kind": "paragraph",
+    "text": "Late on Tuesday evening, The council approved the budget on Tuesday. Members of the opposition abstained.",
+    "url": "https://example.com/budget",
+    "title": "Budget statement"
+   },
+   {
+    "doc": "cap-b",
+    "cid": "c2",
+    "kind": "paragraph",
+    "text": "Transit officials said Ridership rose four percent in the quarter. Weekend service grew fastest.",
+    "url": "https://example.org/riders",
+    "title": "Ridership figures"
+   }
+  ]
+ },
+ "checks": {
+  "citations": [
+   {
+    "anchor_id": "a1",
+    "ref": {
+     "doc": "cap-a",
+     "version": "v1",
+     "cid": "c1",
+     "hash": "h",
+     "quote": "The council approved the budget on Tuesday."
+    },
+    "state": "exact",
+    "quote": "exact",
+    "judgement": "supported"
+   },
+   {
+    "anchor_id": "a2",
+    "ref": {
+     "doc": "cap-b",
+     "version": "v1",
+     "cid": "c2",
+     "hash": "h",
+     "quote": "Ridership rose four percent in the quarter."
+    },
+    "state": "failed",
+    "quote": "failed",
+    "judgement": "unsupported"
+   },
+   {
+    "anchor_id": "a3",
+    "ref": {
+     "doc": "cap-b",
+     "version": "v1",
+     "cid": "c2",
+     "hash": "h",
+     "quote": "Ridership rose four percent in the quarter."
+    },
+    "state": "tolerant",
+    "quote": "tolerant",
+    "judgement": "supported"
+   }
+  ]
+ },
+ "source_entities": [
+  {
+   "source_entity_id": "src_a",
+   "entity": {
+    "source_entity_id": "src_a",
+    "target": {
+     "kind": "web_url",
+     "uri": "https://example.com/budget"
+    },
+    "selectors": [
+     {
+      "kind": "whole_resource"
+     }
+    ],
+    "display": {
+     "mode": "numbered_ref",
+     "title": "Budget statement"
+    },
+    "evidence": {
+     "state": "available",
+     "open_surface": "source"
+    },
+    "provenance": {
+     "created_by": "golden"
+    }
+   }
+  },
+  {
+   "source_entity_id": "src_b",
+   "entity": {
+    "source_entity_id": "src_b",
+    "target": {
+     "kind": "web_url",
+     "uri": "https://example.org/riders"
+    },
+    "selectors": [
+     {
+      "kind": "whole_resource"
+     }
+    ],
+    "display": {
+     "mode": "numbered_ref",
+     "title": "Ridership figures"
+    },
+    "evidence": {
+     "state": "available",
+     "open_surface": "source"
+    },
+    "provenance": {
+     "created_by": "golden"
+    }
+   }
+  }
+ ],
+ "transclusions": []
+}
