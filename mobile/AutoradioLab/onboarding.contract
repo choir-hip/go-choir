@@ -312,15 +312,15 @@ component OnboardingPage
 
       // ---- the edition, shown; then the front page and a story
       if ob.step == "done"
+        button press=obOpenEdition testId="ob-edition-open" buttonStyle="bordered" padding=14
+          text "Open your edition"
+        button press=obFinish testId="ob-start-radio" buttonStyle="filled" padding=14
+          text "Start the radio"
         Card(level=2, testId="ob-edition", minHeight=0)
           column padding=20 gap=10
             text ob.editionIntro font-size=20 font-weight=700 line-height=1.3
             for l, i in ob.editionLines key=i
               text l font-family=th.fontRead font-size=16 line-height=1.45 color=th.fg
-        button press=obOpenEdition testId="ob-edition-open" buttonStyle="bordered" padding=14
-          text "Open your edition"
-        button press=obFinish testId="ob-start-radio" buttonStyle="filled" padding=14
-          text "Start the radio"
 
 // The card other places show while the edition does not exist: "Make your edition" (Textures place), "Continue your interview",
 // "Finish voice setup", or the microphone note. Opens the same page; nothing resumes by itself.
