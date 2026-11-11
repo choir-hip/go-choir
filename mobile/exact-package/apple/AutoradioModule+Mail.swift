@@ -66,8 +66,8 @@ extension AutoradioModule {
             _ = self
         }
 
-        // "Read this to me": the radio is asked to read the message. There is no engine entry for arbitrary text yet,
-        // so the request is held (MailReading) and recorded as a signal without the text.
+        // "Read this to me": the radio reads the message as a programme item (LabRuntime.speakText through the handler that
+        // MailReading holds). The signal records that it was asked, without the text.
         handle("mailRead") { [weak self] args, reply in
             let address = args["address"] as? String ?? ""
             Task {
@@ -75,7 +75,7 @@ extension AutoradioModule {
                 guard v.status == "ready" else { reply(["status": "error", "message": v.message]); return }
                 MailReading.shared.request(address: address, text: v.spoken)
                 self?.signals.record(SignalEvent(kind: "read-aloud", subject: address, detail: "mail"))
-                reply(["status": "requested", "message": "The radio has been asked to read this."])
+                reply(["status": "requested", "message": "Reading it now."])
             }
         }
 

@@ -565,6 +565,6 @@ Decisions made at the seams:
   `proof-lane6.sh` (mail demo states) and `proof-lane1.sh` / `proof-sim.sh` (the aim "Ask about this page", now "Make it yours" on the paper before setup) now need
   `settings-dev-details` tapped, or an updated assertion; `proof-app.sh` is the proof that counts for the merged app.
 - **Rough / open.** Files still renders Markdown and EPUB text with its own `text markup="markdown"` (the reader's `ReaderBody` takes the one `rdoc`
-  resource, so sharing it is not a small change). Native `buttonStyle="filled"` buttons (onboarding's "Set up the voice") still tint system blue. The mic level and
+  resource, so sharing it is not a small change). The mic level and
   the reader's read-along are wired (`RadioInfo.micLevel`, `ReaderFeed`) but the demo's engine is virtual, so neither is seen moving in the proof.
-  Engine: playback rate with a real position, and `DeskTurn.interrupted`, are not done (not this lane's).
+  Engine (round 2, done): playback rate with a real position (`Playhead`), `DeskTurn.interrupted`, and `speakText(address:text:)` (mail's "Read it to me").

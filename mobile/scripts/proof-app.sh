@@ -56,6 +56,7 @@ step "tap \"files-row-/Documents\""; wait_ 700
 step "tap \"files-row-/Documents/Council minutes.pdf\""; view light-07-files-pdf 2500
 place mail 900; view light-08-mail-inbox 500
 step "tap mail-row-m6"; view light-09-mail-message 900
+step "tap mail-read"; view light-09b-mail-read-aloud 1800
 place textures 900; view light-10-textures-list 500
 step "tap textures-doc-texture:demo-notes"; view light-11-texture-document 1000
 place settings 900; step tree; shot light-12-settings
@@ -180,6 +181,8 @@ must "files: list" '[files-row-/Documents]'
 must "files: the PDF viewer" '[pdf-frame]'
 must "mail: inbox" '[mail-row-m6]'
 must "mail: a message" '[mail-body]'
+# "Read it to me" really speaks now (engine speakText): the radio is no longer idle or paused on the message screen
+if grep -qF 'Now playing,' "$SHOTS/drive-light.txt" 2>/dev/null; then echo "ok: mail: Read it to me shows in now-playing"; else echo "MISSING: mail: Read it to me did not show in now-playing"; FAILS="$FAILS [mail read aloud]"; fi
 must "textures: list" '[textures-doc-texture:demo-notes]'
 must "textures: a document" '[page-title] "Charging pilot: working notes"'
 must "settings: modes" '[settings-mode-dark]'
