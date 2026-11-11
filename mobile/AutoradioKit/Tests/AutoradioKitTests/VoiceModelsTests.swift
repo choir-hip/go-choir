@@ -145,7 +145,7 @@ final class VoiceModelsTests: XCTestCase {
         XCTAssertEqual(s.choices[.voice], "pocket-tts", "Kokoro failed its check, the next on the ladder is used")
         XCTAssertEqual(s.choices[.system1], "llama-qwen3-0.6b")
         XCTAssertEqual(s.choices[.holder], "local-ack")
-        XCTAssertEqual(s.record.items.first { $0.stage == "responder" }?.chosen, "qwen3-0.6b-q4_k_m", "the lighter quantisation is tried first")
+        XCTAssertEqual(s.record.items.first { $0.stage == "responder" }?.chosen, "qwen3-0.6b-q8_0", "the file the decision role already loads comes first")
         XCTAssertFalse(s.rows.contains { $0.statusLine.contains("did not run") || $0.statusLine.contains("not registered") }, "\(s.rows)")
         XCTAssertTrue(s.rows.first { $0.stage == "voice" }!.statusLine.contains("wrong output"))
     }
@@ -156,9 +156,9 @@ final class VoiceModelsTests: XCTestCase {
         XCTAssertEqual(SetupCatalog.plan(for: device(3))[.decision]!.map(\.id), ["system1-computer"], "a phone with little memory starts at the floor")
     }
 
-    func testTheResponderIsItsOwnStageWithQ4First() {
+    func testTheResponderIsItsOwnStageOrderedByTheMacSampleRuns() {
         let ids = SetupCatalog.plan(for: device(8))[.responder]!.map(\.id)
-        XCTAssertEqual(ids, ["qwen3-0.6b-q4_k_m", "qwen3-0.6b-q8_0", "qwen3-1.7b-q4_k_m", "qwen3.5-0.8b-q4_k_m", "lfm3-1.7b-qad-q4_0", "cue-only"])
+        XCTAssertEqual(ids, ["qwen3-0.6b-q8_0", "qwen3.5-0.8b-q4_k_m", "qwen3-0.6b-q4_k_m", "qwen3-1.7b-q4_k_m", "lfm3-1.7b-qad-q4_0", "cue-only"])
         XCTAssertEqual(SetupStage.responder.kind, .holder)
         XCTAssertTrue(SetupCatalog.ladder(.responder).filter { !$0.isFloor }.allSatisfy { $0.role == "responder" })
         XCTAssertTrue(SetupCatalog.ladder(.decision).filter { !$0.isFloor }.allSatisfy { $0.role == "decision" }, "setup can pick the two independently")
@@ -179,12 +179,13 @@ final class VoiceModelsTests: XCTestCase {
         let p = FakeProvider(); p.decode = ["qwen3-0.6b-q4_k_m": 6, "qwen3-0.6b-q8_0": 30]; p.leftMB = ["qwen3-0.6b-q8_0": 900]
         ModelProviders.current = p
         let b = LiveSetupBackend(store: .shared)
-        let slow = try await b.check(SetupCatalog.ladder(.responder)[0])
+        let ladder = SetupCatalog.ladder(.responder)
+        let slow = try await b.check(ladder.first { $0.id == "qwen3-0.6b-q4_k_m" }!)
         XCTAssertFalse(slow.outputOK); XCTAssertTrue(slow.note.contains("Too slow"), slow.note)
-        let fast = try await b.check(SetupCatalog.ladder(.responder)[1])
+        let fast = try await b.check(ladder.first { $0.id == "qwen3-0.6b-q8_0" }!)
         XCTAssertTrue(fast.outputOK)
         p.leftMB = ["qwen3-0.6b-q8_0": 100]
-        let tight = try await b.check(SetupCatalog.ladder(.responder)[1])
+        let tight = try await b.check(ladder.first { $0.id == "qwen3-0.6b-q8_0" }!)
         XCTAssertFalse(tight.outputOK); XCTAssertTrue(tight.note.contains("Too little memory"), tight.note)
     }
 
@@ -207,6 +208,6 @@ final class VoiceModelsTests: XCTestCase {
             XCTAssertEqual(spec?.sha256.count, 64)
             XCTAssertTrue(spec?.url.absoluteString.hasPrefix("https://huggingface.co/") == true)
         }
-        XCTAssertEqual(ResponderChoice.defaultID, "qwen3-0.6b-q4_k_m")
+        XCTAssertEqual(ResponderChoice.defaultID, "qwen3-0.6b-q8_0")
     }
 }

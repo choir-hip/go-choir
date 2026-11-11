@@ -114,7 +114,7 @@ public protocol ModelProvider: Sendable {
 
 /// Which responder model setup chose (read at start, written when setup finishes).
 public enum ResponderChoice {
-    public static let defaultID = "qwen3-0.6b-q4_k_m"
+    public static let defaultID = "qwen3-0.6b-q8_0"
     static let key = "AutoradioResponderModel"
     public static var current: String {
         get { UserDefaults.standard.string(forKey: key).flatMap { KnownModels.isPinned($0) ? $0 : nil } ?? defaultID }
