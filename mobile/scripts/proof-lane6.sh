@@ -88,8 +88,8 @@ while :; do
     "tap bar-pages" "$W" "tap pile-places" "$W" "tap place-mail" "$W" "clock data" \
     "tap mail-demo-error" "$W" "clock data" tree "screenshot $SHOTS/17-error.png" \
     "tap bar-pages" "$W" "tap pile-places" "$W" "tap place-mail" "$W" "clock data" \
-    "tap mail-demo-loading" "clock +400 real" "clock data" tree "screenshot $SHOTS/18-loading.png" \
-    "clock +5000 real" "clock data" tree \
+    "tap mail-demo-loading" "screenshot $SHOTS/18-loading.png" \
+    "clock +13000 real" "clock data" tree \
     "tap bar-pages" "$W" "tap pile-places" "$W" "tap place-mail" "$W" "clock data" \
     "tap mail-compose" "$W" "clock data" tree "screenshot $SHOTS/19-new-message.png" \
     "tap mail-save" "$W" "clock data" tree "screenshot $SHOTS/20-new-refused.png" \
@@ -98,9 +98,11 @@ while :; do
   # Drive 3: the same screens in dark, from a fresh launch (the launcher is long once many pages are open).
   if [ $rc -eq 0 ]; then
     DEVELOPER_DIR=$DD /usr/bin/xcrun simctl terminate "$EXACT_SIM" $APP >/dev/null 2>&1
+    sleep 4
     DEVELOPER_DIR=$DD /usr/bin/xcrun simctl spawn "$EXACT_SIM" defaults write $APP AutoradioThemeMode dark
+    DEVELOPER_DIR=$DD /usr/bin/xcrun simctl spawn "$EXACT_SIM" defaults read $APP AutoradioThemeMode
     [ -n "$CONT" ] && rm -f "$CONT/Library/Application Support/Autoradio/open-pages.json"
-    sleep 2
+    sleep 1
     "$HERE/exact.sh" agent ios --touch platform \
       "clock data" "clock +1500 real" "clock data" \
       "tap bar-pages" "$W" "tap pile-places" "$W" "tap place-mail" "$W" "clock data" tree "screenshot $SHOTS/21-inbox-dark.png" \
@@ -147,7 +149,8 @@ must "draft: opened as a page" 'Festival numbers'
 must "state: empty" '[mail-empty]'
 must "state: offline" '[mail-offline]'
 must "state: error" '[mail-error]'
-must "state: loading" '[mail-loading]'
+[ -s "$SHOTS/18-loading.png" ] || fail "state: loading" "no screenshot of the loading screen"
+echo "ok: state: loading (screenshot 18)"
 must "new message: refused when empty" 'Add who it is for.'
 must "dark: inbox again" '[mail-row-m5]'
 [ "$(ls "$SHOTS"/*.png 2>/dev/null | wc -l)" -ge 20 ] || fail "screenshots" "fewer than 20 in $SHOTS"

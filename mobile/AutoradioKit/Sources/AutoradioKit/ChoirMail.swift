@@ -507,7 +507,7 @@ public final class MailService: @unchecked Sendable {
             if let c = cached("inbox") { v.rows = MailThreads.rows(c.rows); v.cached = true }
         case "demo-error": v.status = "error"; v.message = "Your computer could not list this folder (500)."
         default:
-            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            try? await Task.sleep(nanoseconds: 12_000_000_000)
             v.status = "empty"; v.message = Self.emptyWords("inbox")
         }
         v.title = "Mail"
