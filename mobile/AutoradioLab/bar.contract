@@ -54,7 +54,7 @@ component BarGlyph
           image "symbol:pause-fill" color=(on ? th.onAccent : th.fg)
         if glyph == "send"
           image "symbol:send" color=(on ? th.onAccent : th.fg)
-      text caption font-family=th.fontUi font-size=10 font-weight=600 color=(on ? th.accent : th.muted)
+      text caption font-family=th.fontUi font-size=10 font-weight=600 color=th.muted
 
 component BarShell
   inject
@@ -121,22 +121,22 @@ component BarShell
       // the lens: glass over the page, full width, top corners rounded, running off the bottom edge
       column testId="bar" position="relative" width="100%" box-sizing="border-box" gap=4
         padding-top=8 padding-left=12 padding-right=12 padding-bottom="calc(env(safe-area-inset-bottom) + 6px)"
-        border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
+        border-top-left-radius=(th.radiusCard * 1.7) border-top-right-radius=(th.radiusCard * 1.7)
         backgroundMaterial=(th.material2 == "glass" ? "glass" : "none")
         background-color=(th.material2 == "glass" ? "transparent" : th.paper)
         box-shadow=th.shadow3
         // a light wash of the page colour inside the glass, so the controls stay legible over busy content in light and dark (the lens itself
         // is Exact's glass material: a blurred, translucent view of the page passing under it)
-        box position="absolute" inset=0 pointer-events="none" z-index=-1 border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
-          background-color=th.paper opacity=(th.barBacking * 0.3)
+        box position="absolute" inset=0 pointer-events="none" z-index=-1 border-top-left-radius=(th.radiusCard * 1.7) border-top-right-radius=(th.radiusCard * 1.7)
+          background-color=th.paper opacity=(th.barBacking * 0.1)
         // the state's tint
-        box position="absolute" inset=0 pointer-events="none" border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
+        box position="absolute" inset=0 pointer-events="none" border-top-left-radius=(th.radiusCard * 1.7) border-top-right-radius=(th.radiusCard * 1.7)
           background-color=tint opacity=tintOn
           transition=`opacity ${th.motionFastMs * calm}ms ease, background-color ${th.motionFastMs * calm}ms ease`
         // the top edge: a hairline and a soft highlight, the lip of the glass
         box position="absolute" left=0 right=0 top=0 height=1 pointer-events="none" background-color=th.rule opacity=0.22
-          border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
-        box position="absolute" left=0 right=0 top=1 height=14 pointer-events="none" border-top-left-radius=th.radiusCard border-top-right-radius=th.radiusCard
+          border-top-left-radius=(th.radiusCard * 1.7) border-top-right-radius=(th.radiusCard * 1.7)
+        box position="absolute" left=0 right=0 top=1 height=14 pointer-events="none" border-top-left-radius=(th.radiusCard * 1.7) border-top-right-radius=(th.radiusCard * 1.7)
           background-image="linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0))"
         // the deck's quiet count: where you are, in a hairline of text at the top of the lens (not over the page)
         if onbd == false and layer == ""
@@ -161,7 +161,7 @@ component BarShell
                   text (lineMode == "playing" ? "NOW PLAYING" : "PAUSED") font-family=th.fontUi font-size=9 font-weight=700 letter-spacing=0.8 color=th.muted
                   text loaded font-family=th.fontUi font-size=14 font-weight=600 color=th.fg line-clamp=1 text-align="left"
                 image "symbol:forward-chevron" color=th.muted
-            box testId="bar-progress" height=2 border-radius=1 background-color=th.rule opacity=(ri.level == "play" ? 1 : 0.4) transition=`opacity ${th.motionFastMs}ms ease`
+            box testId="bar-progress" height=2 border-radius=1 background-color="transparent" opacity=(ri.level == "play" ? 1 : 0.4) transition=`opacity ${th.motionFastMs}ms ease`
               box height=2 border-radius=1 width=`${floor(bi.progress * 100)}%` background-color=th.accent
         if lineMode == "listen"
           column gap=3 animation=enter padding-left=4
