@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
+	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 )
@@ -76,7 +77,7 @@ func TestRiverStreamsTheAutoradioAnswerSentenceBySentence(t *testing.T) {
 	var deltas []string
 	go func() {
 		resp, err := river.StreamText(context.Background(), provideriface.TextStreamRequest{
-			Provider: "river", Model: riverStreamModel, ReasoningEffort: "low", System: "s", User: "u", MaxTokens: 220,
+			Provider: "river", Model: riverStreamModel, ReasoningOff: true, System: "s", StableUser: "page", User: "u",
 		}, func(d string) { deltas = append(deltas, d); first <- d })
 		done <- result{resp, err}
 	}()
@@ -175,7 +176,7 @@ func TestBedrockHaikuAnswersTheAutoradioCallWithNoToolsAndASpendableBudget(t *te
 	})
 	var deltas []string
 	resp, err := bedrock.StreamText(context.Background(), provideriface.TextStreamRequest{
-		Provider: "bedrock", Model: bedrockStreamModel, ReasoningEffort: "low", System: "s", User: "u", MaxTokens: 1200,
+		Provider: "bedrock", Model: bedrockStreamModel, ReasoningOff: true, System: "s", StableUser: "page block", User: "u",
 	}, func(d string) { deltas = append(deltas, d) })
 	if err != nil {
 		t.Fatal(err)
@@ -186,12 +187,26 @@ func TestBedrockHaikuAnswersTheAutoradioCallWithNoToolsAndASpendableBudget(t *te
 	if _, has := body["tools"]; has {
 		t.Fatalf("(5) the call carries tools: %v", body["tools"])
 	}
-	if body["max_tokens"] != float64(1200) {
-		t.Fatalf("(5) max_tokens %v", body["max_tokens"])
+	// No token budget of the desk's: the model's own ceiling from the catalog.
+	if want := float64(modelcatalog.MaxOutputTokensForModel(bedrockStreamModel)); body["max_tokens"] != want {
+		t.Fatalf("(5) max_tokens %v, want the catalog ceiling %v", body["max_tokens"], want)
 	}
 	raw, _ := json.Marshal(body)
-	if !strings.Contains(string(raw), `"thinking":{"type":"adaptive"}`) || !strings.Contains(string(raw), `"effort":"low"`) || strings.Contains(string(raw), "budget_tokens") {
+	// Reasoning off for the autoradio role: thinking disabled (Haiku 5.5
+	// accepts it at effort high or below), effort stays low, never a budget.
+	if !strings.Contains(string(raw), `"thinking":{"type":"disabled"}`) || !strings.Contains(string(raw), `"effort":"low"`) || strings.Contains(string(raw), "budget_tokens") {
 		t.Fatalf("(5) thinking shape: %s", raw)
+	}
+	// Cache markers: the system block (1 hour) and the stable page block
+	// (5 minutes), not the volatile block.
+	msgs, _ := body["messages"].([]any)
+	content, _ := msgs[0].(map[string]any)["content"].([]any)
+	if len(content) != 2 || content[0].(map[string]any)["cache_control"] == nil || content[1].(map[string]any)["cache_control"] != nil {
+		t.Fatalf("(5) cache markers on the user blocks: %v", content)
+	}
+	sys, _ := body["system"].([]any)
+	if len(sys) != 1 || sys[0].(map[string]any)["cache_control"] == nil {
+		t.Fatalf("(5) system block %v", body["system"])
 	}
 	spoken := strings.Join(deltas, "")
 	if spoken != "The top story is a strike. Talks resume Monday." || strings.Contains(spoken, "private") || resp.Text != spoken {
@@ -211,5 +226,50 @@ func TestBedrockRefusalBeforeAnyChunkIsAnErrorBeforeAnyDelta(t *testing.T) {
 	_, err := bedrock.StreamText(context.Background(), provideriface.TextStreamRequest{Provider: "bedrock", Model: bedrockStreamModel, User: "u"}, func(string) { called = true })
 	if err == nil || called {
 		t.Fatalf("(7) err %v, delta called %v", err, called)
+	}
+}
+
+// River takes reasoning_effort "none" for the autoradio call (River documents
+// it as off, and off as the DeepSeek default), sends no max_tokens, and still
+// floors every other call at "low" (the 2026-11-09 rule is River-compatible
+// by our choice, not River's). The page block and the words arrive as one
+// message, in order, so River's prefix cache sees the stable part first.
+func TestRiverAutoradioCallRequestBody(t *testing.T) {
+	var bodies []map[string]any
+	river := riverStreamRig(t, func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		bodies = append(bodies, b)
+		w.Header().Set("Content-Type", "text/event-stream")
+		riverChunk(w, `{"id":"r1","choices":[{"index":0,"delta":{"content":"Ok."},"finish_reason":"stop"}]}`)
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	})
+	for _, off := range []bool{true, false} {
+		_, err := river.StreamText(context.Background(), provideriface.TextStreamRequest{
+			Provider: "river", Model: riverStreamModel, ReasoningEffort: "none", ReasoningOff: off,
+			System: "s", StableUser: "PAGE", User: "WORDS",
+		}, func(string) {})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if bodies[0]["reasoning_effort"] != "none" {
+		t.Fatalf("off: reasoning_effort %v", bodies[0]["reasoning_effort"])
+	}
+	if bodies[1]["reasoning_effort"] != "low" {
+		t.Fatalf("an unexempted call must keep the floor: %v", bodies[1]["reasoning_effort"])
+	}
+	for i, b := range bodies {
+		if _, has := b["max_tokens"]; has {
+			t.Fatalf("body %d carries max_tokens: %v", i, b["max_tokens"])
+		}
+		if _, has := b["tools"]; has {
+			t.Fatalf("body %d carries tools", i)
+		}
+		msgs := b["messages"].([]any)
+		user := msgs[len(msgs)-1].(map[string]any)["content"]
+		if user != "PAGE\nWORDS" {
+			t.Fatalf("body %d user message %v", i, user)
+		}
 	}
 }

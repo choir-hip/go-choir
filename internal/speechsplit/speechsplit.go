@@ -7,8 +7,8 @@
 // inside a number ("3.5"), inside a dotted abbreviation ("U.S.", "e.g."),
 // after a title or a common abbreviation ("Dr.", "Mrs.", "St."), after a
 // single capital initial ("J. K. Rowling"), or before a lowercase word. A run
-// of 200 characters with no end is cut at the last natural pause, so a model
-// that never punctuates still speaks.
+// of MaxRunes characters with no end at all is cut at the last natural pause (a
+// transport safeguard, see MaxRunes).
 package speechsplit
 
 import (
@@ -18,8 +18,13 @@ import (
 	"unicode/utf8"
 )
 
-// MaxRunes is the forced-flush length of a sentence with no end.
-const MaxRunes = 200
+// MaxRunes is a transport safeguard, not a steer on what the model says: a
+// stream that runs this long with no terminator at all (a page of text with no
+// full stop) is cut at its last pause so the phone is never starved of a
+// speech event. It is far above any real spoken sentence; the length and shape
+// of the answer are the prompt's to steer (owner 2026-11-11: no deterministic
+// rules to shape a model).
+const MaxRunes = 4000
 
 // Splitter accumulates deltas and returns each sentence as it completes.
 // The zero value is ready.

@@ -66,13 +66,15 @@ const (
 	autoradioMaxWords       = 2000
 	autoradioMaxHistory     = 8
 	autoradioMaxHistoryText = 1000
-	autoradioMaxHeardRunes  = 300
-	// autoradioMaxTokens is the cap on one spoken answer's length. Thinking is
-	// never turned off on either pool member (owner 2026-11-09; River's
-	// reasoning_effort "low" is the floor, Bedrock Haiku 5.5 thinks adaptively)
-	// and it is counted in max_tokens, so the budget leaves room for it: the
-	// spoken answer itself is a few sentences (the prompt says at most six).
-	autoradioMaxTokens = 1200
+	autoradioMaxHeardRunes  = 2000
+	// There is no token budget here (owner 2026-11-11: "I don't want a token
+	// budget either ... We should be able to steer models with prompts, not
+	// deterministic rules"). The length and shape of the answer are steered by
+	// the desk's prompt. The call sends max_tokens 0: River's field is omitted
+	// and Bedrock's is the model's own ceiling from the catalog
+	// (provider.defaultMaxTokens), which is the provider's limit and not a steer.
+	// The limits below bound what a stranger can send; they reject, and never
+	// shorten what is sent to the model.
 
 	autoradioDesk       = "app:autoradio"
 	autoradioRecordKind = "autoradio.turn"
@@ -225,8 +227,8 @@ func parseAutoradioRequest(body []byte) (autoradioRequest, int, error) {
 		if req.Heard.BlockIndex < 0 {
 			return req, http.StatusBadRequest, errors.New("heard.block_index must not be negative")
 		}
-		if rs := []rune(req.Heard.Text); len(rs) > autoradioMaxHeardRunes {
-			req.Heard.Text = string(rs[len(rs)-autoradioMaxHeardRunes:]) // the last 300 characters
+		if len([]rune(req.Heard.Text)) > autoradioMaxHeardRunes {
+			return req, http.StatusBadRequest, fmt.Errorf("heard.text exceeds %d characters", autoradioMaxHeardRunes)
 		}
 	}
 	if len(req.History) > autoradioMaxHistory {
@@ -416,13 +418,17 @@ func fenceSafe(s string) string {
 // line of its own that looks like a section or a speaker.
 func oneLine(s string) string { return fenceSafe(strings.Join(strings.Fields(s), " ")) }
 
-// frame is the user message: the page first (data from the world, fenced),
+// frame is the user message in two parts: the stable prefix (the page block,
+// whose fences carry a content-derived token, so it is byte-identical from turn
+// to turn about the same page and the provider can cache it) and the volatile
+// rest (programme, where the listener was, the last turns, the words). It is the
+// page first (data from the world, fenced),
 // then where the listener was, then the last turns, then the words, so the
 // prefix stays the same for the provider's prompt cache. Its fence lines carry
 // a token derived from the page's own content: the same page keeps the same
 // prefix from turn to turn, and a page cannot name its own hash, so no page
 // text can forge a fence. Text a client supplied is made fence-safe as well.
-func (t *autoradioTurn) frame() string {
+func (t *autoradioTurn) frame() (stable, volatile string) {
 	p := t.req.Page
 	token := "AR" + sha256Hex(p.Address + "\x00" + p.Title + "\x00" + p.Text)[:16]
 	fence := func(name string) string { return "<<<" + token + " " + name + ">>>\n" }
@@ -441,6 +447,8 @@ func (t *autoradioTurn) frame() string {
 		b.WriteString(fenceSafe(p.Text) + "\n")
 	}
 	b.WriteString(fence("end page"))
+	stable = b.String()
+	b.Reset()
 	if t.req.Programme != "" {
 		b.WriteString("\nProgramme: " + oneLine(t.req.Programme) + "\n")
 	}
@@ -459,7 +467,7 @@ func (t *autoradioTurn) frame() string {
 	}
 	b.WriteString("\n" + fence("listener"))
 	b.WriteString(fenceSafe(t.req.Words))
-	return b.String()
+	return stable, b.String()
 }
 
 func (t *autoradioTurn) ms(at time.Time) int64 {
@@ -496,7 +504,7 @@ func (t *autoradioTurn) done(status string, replayed bool, recordErr, reportErr 
 			"received": rfc(t.received), "record_written": rfc(t.recordWritten), "upstream_request": rfc(t.upstreamRequest),
 			"upstream_first_token": rfc(t.firstToken), "first_sentence": rfc(t.firstSentence), "done": rfc(finished),
 		},
-		"usage": map[string]int{"input_tokens": t.usage.InputTokens, "output_tokens": t.usage.OutputTokens, "cached_input_tokens": t.usage.CachedInputTokens},
+		"usage": map[string]any{"input_tokens": t.usage.InputTokens, "output_tokens": t.usage.OutputTokens, "cached_input_tokens": t.usage.CachedInputTokens, "cache_reported": t.usage.CacheReported},
 	}
 	if recordErr != "" {
 		data["record_error"] = recordErr
@@ -553,7 +561,7 @@ func (t *autoradioTurn) run(ctx context.Context, streamer provideriface.TextStre
 
 	prompt, _ := appdesk.FirstPartyPrompt("autoradio")
 	promptSum := sha256Hex(prompt)
-	frame := t.frame()
+	stable, volatile := t.frame()
 	chain := t.rt.modelPolicy.PoolChain(ctx, t.ownerID, modelpolicy.AutoradioRole)
 
 	status, reason := "failed", "no model answered"
@@ -568,21 +576,23 @@ func (t *autoradioTurn) run(ctx context.Context, streamer provideriface.TextStre
 		if t.upstreamRequest.IsZero() {
 			t.upstreamRequest = hopStart
 		}
-		effort := strings.ToLower(strings.TrimSpace(sel.ReasoningEffort))
-		if effort != "none" && effort != "minimal" {
-			effort = "low"
+		// Reasoning is a property of the role, fixed per role (owner
+		// 2026-11-11): the fast turn role runs with it off, so no call flips
+		// reasoning on a prefix another call cached. Any other value is the
+		// computer's policy, passed as it is. A max_tokens is sent only when
+		// the owner's policy file names one.
+		effort, reasoningOff := strings.ToLower(strings.TrimSpace(sel.ReasoningEffort)), false
+		if effort == modelpolicy.ReasoningOff {
+			effort, reasoningOff = "", true
 		}
-		maxTokens := autoradioMaxTokens
-		if sel.MaxTokens > 0 && sel.MaxTokens < maxTokens {
-			maxTokens = sel.MaxTokens
-		}
+		maxTokens := sel.MaxTokens
 		var splitter speechsplit.Splitter
 		var firstTok time.Time
 		autoradioCallsTotal.Add(1)
 		resp, err := streamer.StreamText(ctx, provideriface.TextStreamRequest{
 			Provider: sel.Provider, Model: sel.Model, ReasoningEffort: effort,
 			ConversationID: t.req.TurnID, CacheKey: "autoradio:" + t.rt.cfg.ComputerID + ":" + promptSum[:8],
-			System: prompt, User: frame, MaxTokens: maxTokens,
+			System: prompt, StableUser: stable, User: volatile, MaxTokens: maxTokens, ReasoningOff: reasoningOff,
 		}, func(delta string) {
 			if firstTok.IsZero() && strings.TrimSpace(delta) != "" {
 				firstTok = time.Now()

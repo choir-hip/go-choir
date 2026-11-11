@@ -28,11 +28,18 @@ import (
 // finished one. (parseGatewaySSE, which the desk loop's Execute uses, skips
 // the untyped error line.)
 func (p *Provider) StreamText(ctx context.Context, req provideriface.TextStreamRequest, onDelta func(string)) (*provideriface.TextStreamResponse, error) {
+	content := []block{{Type: "text", Text: req.User}}
+	if req.StableUser != "" {
+		// The stable prefix is its own block, marked as the end of the part a
+		// provider may cache; the volatile rest follows it.
+		content = []block{{Type: "text", Text: req.StableUser, CacheBreak: true}, {Type: "text", Text: req.User}}
+	}
 	llmReq := llmRequest{
 		Provider:        firstNonEmpty(req.Provider, p.llmProvider),
 		Model:           firstNonEmpty(req.Model, p.llmModel),
 		System:          req.System,
-		Messages:        []message{{Role: "user", Content: []block{{Type: "text", Text: req.User}}}},
+		ReasoningOff:    req.ReasoningOff,
+		Messages:        []message{{Role: "user", Content: content}},
 		MaxTokens:       req.MaxTokens,
 		Stream:          true,
 		ReasoningEffort: firstNonEmpty(req.ReasoningEffort, p.reasoningEffort),

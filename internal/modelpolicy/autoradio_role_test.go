@@ -78,3 +78,62 @@ func TestAutoradioRoleSectionIsAcceptedAndOverrides(t *testing.T) {
 		t.Fatalf("(4) pool override chain = %v", got)
 	}
 }
+
+// Reasoning off is the autoradio role's alone (owner 2026-11-11), fixed per
+// role. Ways it could fail, written before the code:
+//
+//  6. the autoradio chain does not carry reasoning off for BOTH members;
+//  7. another role can hold "off" (a policy file naming it) or inherit it
+//     through the continuation chain;
+//  8. an owner-edited autoradio section cannot say "off" or has it dropped.
+
+func TestAutoradioRoleRunsEveryMemberWithReasoningOff(t *testing.T) {
+	m := autoradioManager(t, defaultPolicyText(provideriface.Config{}))
+	sels := m.PoolChain(context.Background(), "owner", AutoradioRole)
+	if len(sels) != 2 {
+		t.Fatalf("members %d", len(sels))
+	}
+	for _, s := range sels {
+		if s.ReasoningEffort != ReasoningOff {
+			t.Fatalf("(6) %s/%s reasoning %q", s.Provider, s.Model, s.ReasoningEffort)
+		}
+	}
+	m = autoradioManager(t, "# owner-edited\n[defaults]\nmodel = \"pool:default\"\nreasoning = \"low\"\n\n[roles.autoradio]\nmodel = \"pool:autoradio\"\nreasoning = \"off\"\n")
+	pol, _ := m.Load(context.Background(), "owner")
+	if len(pol.Diagnostics) != 0 || m.PoolChain(context.Background(), "owner", AutoradioRole)[0].ReasoningEffort != ReasoningOff {
+		t.Fatalf("(8) diagnostics %v", pol.Diagnostics)
+	}
+}
+
+func TestNoOtherRoleCanHoldReasoningOff(t *testing.T) {
+	text := "# owner-edited\n[defaults]\nmodel = \"pool:default\"\nreasoning = \"off\"\n\n[roles.texture]\nmodel = \"pool:default\"\nreasoning = \"off\"\n\n[roles.autoradio]\nmodel = \"pool:autoradio\"\nreasoning = \"off\"\n"
+	m := autoradioManager(t, text)
+	pol, _ := m.Load(context.Background(), "owner")
+	if got := pol.Resolve("texture").ReasoningEffort; got == ReasoningOff {
+		t.Fatalf("(7) texture holds %q", got)
+	}
+	if got := pol.Defaults.ReasoningEffort; got == ReasoningOff {
+		t.Fatalf("(7) the defaults hold %q", got)
+	}
+	if len(pol.Diagnostics) < 2 {
+		t.Fatalf("(7) dropped values left no diagnostic: %v", pol.Diagnostics)
+	}
+	// And no role inherits it through the continuation chain.
+	for _, s := range pol.Selections() {
+		if s.ReasoningEffort == ReasoningOff {
+			t.Fatalf("(7) Selections carries off: %+v", s)
+		}
+	}
+	for _, s := range m.ContinuationChain(context.Background(), "owner") {
+		if s.ReasoningEffort == ReasoningOff {
+			t.Fatalf("(7) the continuation chain carries off: %+v", s)
+		}
+	}
+	for _, role := range []string{"texture", "management", "research", "engineering", "conductor", "verifier"} {
+		for _, s := range m.RoleChain(context.Background(), "owner", role) {
+			if s.ReasoningEffort == ReasoningOff {
+				t.Fatalf("(7) role %s chain carries off: %+v", role, s)
+			}
+		}
+	}
+}

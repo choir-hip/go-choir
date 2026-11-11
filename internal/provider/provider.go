@@ -80,6 +80,16 @@ type LLMRequest struct {
 	// Bedrock forces this to false because it uses binary EventStream.
 	Stream bool `json:"stream,omitempty"`
 
+	// ReasoningOff is the narrow exemption from "thinking is never off" (owner
+	// 2026-11-09), for the autoradio role only (owner 2026-11-11: "for auto
+	// radio, we may want to have reasoning off, at least for super fast
+	// responses"). Only gatewayruntime.StreamText sets it. River honors it
+	// (reasoning_effort "none", which River documents as off) and Bedrock Haiku
+	// 5.5 honors it (thinking disabled, accepted at effort high or below);
+	// every other adapter ignores it and keeps its floor. Never toggle it
+	// within one prompt lineage: the thinking configuration is rendered into
+	// the Anthropic prompt, so a change invalidates the cached messages.
+	ReasoningOff bool `json:"reasoning_off,omitempty"`
 	// ReasoningEffort is an optional provider-specific reasoning control.
 	// For ChatGPT/OpenAI Responses this maps to reasoning.effort.
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
@@ -120,6 +130,10 @@ type Block struct {
 	Input     json.RawMessage `json:"input,omitempty"`       // tool_use: tool arguments as JSON
 	ToolUseID string          `json:"tool_use_id,omitempty"` // tool_result: ID of the originating tool call
 	IsError   bool            `json:"is_error,omitempty"`    // tool_result: true if result is an error
+	// CacheBreak marks the end of a stable prefix: an Anthropic-wire adapter
+	// puts an explicit prompt-cache breakpoint on this block (5-minute
+	// lifetime). Adapters that cache by prefix without markers ignore it.
+	CacheBreak bool `json:"cache_break,omitempty"`
 }
 
 // MediaSource is the provider-neutral image/media source representation. The
@@ -565,6 +579,11 @@ func (p *BedrockProvider) buildRequestBody(req LLMRequest) anthropicRequest {
 		// enabled+budget_tokens is a 400 and disabled drops the cache, so
 		// neither is ever sent.
 		ar.Thinking = &anthropicThinking{Type: "adaptive"}
+		if req.ReasoningOff {
+			// The autoradio role only (LLMRequest.ReasoningOff). Haiku 5.5
+			// accepts "disabled" at effort high or below; effort stays low.
+			ar.Thinking = &anthropicThinking{Type: "disabled"}
+		}
 	}
 
 	// Bedrock: system prompt with cache_control for prompt caching.
@@ -2284,6 +2303,11 @@ func markHistoryCacheBreakpoint(messages []anthropicMessage, long bool) {
 		return
 	}
 	content := messages[len(messages)-1].Content
+	for _, c := range content {
+		if c.CacheControl != nil {
+			return // the caller already marked its stable prefix
+		}
+	}
 	for i := len(content) - 1; i >= 0; i-- {
 		switch content[i].Type {
 		case "thinking", "redacted_thinking":
@@ -2372,6 +2396,9 @@ func convertMessages(msgs []Message) []anthropicMessage {
 				Input:     block.Input,
 				ToolUseID: block.ToolUseID,
 				IsError:   block.IsError,
+			}
+			if block.CacheBreak {
+				ac.CacheControl = bedrockCacheControl(false)
 			}
 			// For tool_result blocks, the result content goes in the
 			// "content" field (not "text") per Anthropic Messages API.

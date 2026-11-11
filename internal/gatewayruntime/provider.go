@@ -603,6 +603,8 @@ type llmRequest struct {
 	// CacheKey is the prompt-cache thread key (provideriface.ToolLoopRequest).
 	CacheKey string `json:"cache_key,omitempty"`
 	NoShed   bool   `json:"no_shed,omitempty"`
+	// ReasoningOff is set by StreamText only (the autoradio role's exemption).
+	ReasoningOff bool `json:"reasoning_off,omitempty"`
 
 	Messages        []message `json:"messages"`
 	System          string    `json:"system,omitempty"`
@@ -628,6 +630,8 @@ type block struct {
 	Input     json.RawMessage `json:"input,omitempty"`
 	ToolUseID string          `json:"tool_use_id,omitempty"`
 	IsError   bool            `json:"is_error,omitempty"`
+	// CacheBreak ends a stable prefix (provider.Block.CacheBreak).
+	CacheBreak bool `json:"cache_break,omitempty"`
 }
 
 type mediaSource struct {

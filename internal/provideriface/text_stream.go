@@ -15,8 +15,21 @@ type TextStreamRequest struct {
 	ConversationID string
 	CacheKey       string
 	System         string
-	User           string
-	MaxTokens      int
+	// StableUser is the part of the user message that is byte-identical from
+	// turn to turn (for the Autoradio desk, the page block): it comes first,
+	// is its own content block, and carries the provider's explicit cache
+	// breakpoint where the provider needs one. User is the volatile rest.
+	StableUser string
+	User       string
+	// MaxTokens is zero for the desk: no token budget steers the answer (owner
+	// 2026-11-11). Zero omits the field where the provider's API allows and
+	// otherwise sends the model's own ceiling from the catalog.
+	MaxTokens int
+	// ReasoningOff asks the provider for reasoning off for this call. It is the
+	// one narrow exemption from "thinking is never off" (owner 2026-11-09),
+	// for the autoradio role only; see modelpolicy.ReasoningOff. Nothing else
+	// sets it: ToolLoopRequest has no such field.
+	ReasoningOff bool
 }
 
 // TextStreamResponse is what a finished stream reports.

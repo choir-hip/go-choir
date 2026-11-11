@@ -32,27 +32,43 @@ import sys
 import time
 import uuid
 
-PAGE_TITLE = "Front page"
-PAGE_TEXT = (
-    "A strike by school staff in Nancy ended on Tuesday after three weeks. "
-    "Talks between the union and the regional council resume on Monday. "
-    "Parents said classes had been disrupted since the start of the term. "
-    "The council offered a one-time payment of 400 euros and a review of staffing in March. "
-    "The union called the offer a first step and said it would not return to full hours until the review is signed. "
-    "Elsewhere on the page, the weather service expects rain across the region through the weekend."
-)
-QUESTIONS = [
-    "What is the top story?",
-    "Who is on strike?",
-    "When do the talks resume?",
-    "How much did the council offer?",
-    "What is the weather going to be?",
-    "Why were classes disrupted?",
-    "What did the union say about the offer?",
-    "Is there anything about sports on this page?",
-    "How long did the strike last?",
-    "What happens in March?",
+# Two pages, each asked about at least twice in a row, so the second ask about a
+# page can read the provider's prompt cache. Each page is long enough (about
+# 12 KB) to be worth caching; a provider's minimum cacheable length is its own
+# (not verified for Bedrock Haiku 5.5), so a share of 0 on a short page is not
+# a failure of the desk.
+def make_page(topic, facts):
+    paras = []
+    for i in range(24):
+        fact = facts[i % len(facts)]
+        paras.append(f"{topic}, report {i + 1}. {fact} Officials said on day {i + 1} that the matter remained under review "
+                     f"and that a further statement would follow. Residents interviewed on day {i + 1} described the effect on daily life.")
+    return "\n\n".join(paras)
+
+PAGES = [
+    {"address": "pub:proof-front@1", "title": "Front page",
+     "text": make_page("Nancy school strike", [
+         "A strike by school staff in Nancy ended on Tuesday after three weeks.",
+         "Talks between the union and the regional council resume on Monday.",
+         "The council offered a one-time payment of 400 euros and a review of staffing in March.",
+         "The union called the offer a first step and would not return to full hours until the review is signed.",
+         "The weather service expects rain across the region through the weekend."]),
+     "questions": ["What is the top story?", "When do the talks resume?"]},
+    {"address": "pub:proof-business@1", "title": "Business page",
+     "text": make_page("Harbour freight", [
+         "Container volumes at the harbour rose four percent in the quarter.",
+         "The port authority approved a new crane purchase worth 18 million euros.",
+         "Dock workers agreed to a revised shift pattern starting in January.",
+         "Shipping lines warned that fuel costs may lift rates in spring.",
+         "A cold-storage warehouse opened on the eastern quay on Monday."]),
+     "questions": ["What happened to container volumes?", "What did the port authority approve?"]},
 ]
+
+
+def ask_for(n):
+    """Ask n: pages in turn, each asked about twice before the next page."""
+    page = PAGES[(n // 2) % len(PAGES)]
+    return page, page["questions"][n % 2]
 
 
 def read_key(path):
@@ -70,10 +86,11 @@ def read_key(path):
 
 def one_ask(args, key, n):
     """Return a dict for one ask. Times are seconds since the request was sent."""
+    page, words = ask_for(n)
     body = json.dumps({
         "turn_id": "prove-" + uuid.uuid4().hex[:16],
-        "words": QUESTIONS[n % len(QUESTIONS)],
-        "page": {"address": "pub:proof-front@1", "title": PAGE_TITLE, "text": PAGE_TEXT},
+        "words": words,
+        "page": {"address": page["address"], "title": page["title"], "text": page["text"]},
     }).encode()
     headers = {
         "Content-Type": "application/json",
@@ -150,7 +167,7 @@ def main():
         print("dry run ok")
         return 0
 
-    print(f"{'ask':>3} {'first byte':>10} {'first speech':>12} {'done':>7}  {'srv rec':>7} {'srv 1st tok':>11} {'srv 1st sent':>12} {'srv done':>8}  sent  status        answered by  [members tried]")
+    print(f"{'ask':>3} {'first byte':>10} {'first speech':>12} {'done':>7}  {'srv rec':>7} {'srv 1st tok':>11} {'srv 1st sent':>12} {'srv done':>8}  {'cached':>6}  sent  status        answered by  [members tried]")
     rows = []
     for n in range(args.count):
         r = one_ask(args, key, n)
@@ -161,8 +178,12 @@ def main():
         answered = f"{d.get('provider', '')}/{d.get('model', '')}" if d else ""
         tried = ",".join(f"{h.get('member', '?')}:{h.get('outcome', '?')}" for h in d.get("members_tried", []))
         status = r["status"] or ("error" if r["error"] else "?")
+        usage = d.get("usage") or {}
+        inp, cached = usage.get("input_tokens", 0), usage.get("cached_input_tokens", 0)
+        share = f"{100.0 * cached / inp:5.0f}%" if inp else "     -"
+        r["cached_share"] = (cached / inp) if inp else None
         print(f"{n + 1:>3} {fmt(r['first_byte']):>10} {fmt(r['first_speech']):>12} {fmt(r['done_at']):>7}  "
-              f"{fmt(sv('record_written')):>7} {fmt(sv('upstream_first_token')):>11} {fmt(sv('first_sentence')):>12} {fmt(sv('done')):>8}  "
+              f"{fmt(sv('record_written')):>7} {fmt(sv('upstream_first_token')):>11} {fmt(sv('first_sentence')):>12} {fmt(sv('done')):>8}  {share:>6}  "
               f"{r['sentences']:>4}  {status:<12}  {answered}  [{tried}]")
         if r["error"]:
             print(f"      {r['error']}")
@@ -176,6 +197,13 @@ def main():
             print(f"{label:>12}: min {xs[0]:.2f}  median {statistics.median(xs):.2f}  p90 {percentile(xs, 90):.2f}  max {xs[-1]:.2f}  (seconds, this machine's clock)")
         else:
             print(f"{label:>12}: none")
+    # The cache: the second ask about a page should read what the first wrote.
+    firsts_c = [r["cached_share"] for i, r in enumerate(rows) if i % 2 == 0 and r.get("cached_share") is not None]
+    seconds_c = [r["cached_share"] for i, r in enumerate(rows) if i % 2 == 1 and r.get("cached_share") is not None]
+    if firsts_c or seconds_c:
+        mean = lambda xs: 100.0 * statistics.mean(xs) if xs else 0.0
+        print(f"cached share of input tokens: first ask per page {mean(firsts_c):.0f}% mean, second ask per page {mean(seconds_c):.0f}% mean "
+              f"(shown, not enforced: a provider below its minimum cacheable length reports 0)")
     failed = [i + 1 for i, r in enumerate(rows) if r["status"] != "completed" or r["error"] or r["first_speech"] is None]
     if failed:
         print(f"asks that failed, errored or never spoke: {failed}")

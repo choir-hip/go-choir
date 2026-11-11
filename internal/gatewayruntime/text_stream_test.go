@@ -67,7 +67,7 @@ func TestStreamTextDeliversEachDeltaAsItArrivesAndSendsNoTools(t *testing.T) {
 		defer close(done)
 		resp, err = p.StreamText(context.Background(), provideriface.TextStreamRequest{
 			Provider: "river", Model: "deepseek-ai/DeepSeek-V4.1-Flash-1017", ReasoningEffort: "low",
-			ConversationID: "turn-1", CacheKey: "autoradio:c1", System: "sys", User: "hi", MaxTokens: 220,
+			ConversationID: "turn-1", CacheKey: "autoradio:c1", System: "sys", User: "hi",
 		}, func(d string) { deltas = append(deltas, d); first <- d })
 	}()
 	select {
@@ -90,7 +90,7 @@ func TestStreamTextDeliversEachDeltaAsItArrivesAndSendsNoTools(t *testing.T) {
 		t.Fatalf("response %+v", resp)
 	}
 	if !got.Stream || len(got.Tools) != 0 || got.ToolChoice != "" || got.Provider != "river" || got.Model != "deepseek-ai/DeepSeek-V4.1-Flash-1017" ||
-		got.CacheKey != "autoradio:c1" || got.ConversationID != "turn-1" || got.MaxTokens != 220 || got.ReasoningEffort != "low" || got.System != "sys" {
+		got.CacheKey != "autoradio:c1" || got.ConversationID != "turn-1" || got.MaxTokens != 0 || got.ReasoningOff || got.ReasoningEffort != "low" || got.System != "sys" {
 		t.Fatalf("(3) request %+v", got)
 	}
 }
@@ -191,5 +191,50 @@ func TestStreamTextMergesUsageAcrossChunks(t *testing.T) {
 	u := resp.Usage
 	if u.InputTokens != 812 || u.OutputTokens != 61 || u.CachedInputTokens != 700 || !u.CacheReported {
 		t.Fatalf("(8) usage %+v", u)
+	}
+}
+
+// (9) the reasoning-off exemption is the autoradio call's alone: StreamText
+// sends it only when asked, a stable prefix is its own cache-marked block, and
+// CallWithTools (every other role) can never send it.
+func TestReasoningOffAndCacheBreakAreOnlySentWhenAsked(t *testing.T) {
+	var got llmRequest
+	server := sseServer(t, &got, func(w http.ResponseWriter, flush func()) {
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	})
+	defer server.Close()
+	p := New(server.URL, "tok")
+	_, _ = p.StreamText(context.Background(), provideriface.TextStreamRequest{StableUser: "page block", User: "words", ReasoningOff: true}, func(string) {})
+	if !got.ReasoningOff || len(got.Messages) != 1 || len(got.Messages[0].Content) != 2 ||
+		!got.Messages[0].Content[0].CacheBreak || got.Messages[0].Content[0].Text != "page block" ||
+		got.Messages[0].Content[1].CacheBreak || got.Messages[0].Content[1].Text != "words" {
+		t.Fatalf("(9) request %+v", got)
+	}
+	got = llmRequest{}
+	_, _ = p.StreamText(context.Background(), provideriface.TextStreamRequest{User: "words"}, func(string) {})
+	if got.ReasoningOff || len(got.Messages[0].Content) != 1 || got.Messages[0].Content[0].CacheBreak {
+		t.Fatalf("(9) an unasked call carries the exemption or a cache break: %+v", got)
+	}
+}
+
+func TestCallWithToolsNeverSendsTheReasoningExemption(t *testing.T) {
+	var raw map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&raw)
+		writeJSON(t, w, llmResponse{ID: "r", Text: "ok", Model: "m", StopReason: "end_turn", ProviderName: "river"})
+	}))
+	defer server.Close()
+	p := New(server.URL, "tok")
+	for _, effort := range []string{"off", "none", "low", ""} {
+		raw = nil
+		_, err := p.CallWithTools(context.Background(), provideriface.ToolLoopRequest{
+			System: "s", Messages: []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"hi"}]}`)}, ReasoningEffort: effort,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, has := raw["reasoning_off"]; has {
+			t.Fatalf("(9) CallWithTools with effort %q sent reasoning_off", effort)
+		}
 	}
 }

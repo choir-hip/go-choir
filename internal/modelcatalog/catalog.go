@@ -545,8 +545,10 @@ func Pools() map[string][]PoolMember {
 		// beam is often parked. A refusal here is audible silence, so a member
 		// is tried the moment the one before it refuses. Bedrock does not
 		// stream (provider.BedrockProvider.Stream makes one whole call), so as
-		// the fallback it delivers its answer at once. Thinking is never turned
-		// off on either member (owner 2026-11-09), so the caller budgets for it
+		// the fallback it delivers its answer at once. The autoradio role runs
+		// both members with reasoning off, the one exemption from "thinking is
+		// never off" (owner 2026-11-09; modelpolicy.ReasoningOff, owner
+		// 2026-11-11), and sends no token budget
 		// (docs/design/autoradio-desk-fast-turns-2026-11-11.md section 5).
 		AutoradioPool: {
 			{Provider: "river", Model: "deepseek-ai/DeepSeek-V4.1-Flash-1017", Weight: 1},

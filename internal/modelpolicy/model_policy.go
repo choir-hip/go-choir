@@ -44,6 +44,22 @@ const (
 	// the verifier roles.
 	AutoradioRole = "autoradio"
 
+	// ReasoningOff is a reasoning setting only the autoradio role may hold:
+	// reasoning off for the call. Every other role keeps the 2026-11-09 rule
+	// that thinking is never off (the providers floor "none", "minimal" and
+	// the other off spellings at their lowest thinking setting). Owner
+	// 2026-11-11: "for auto radio, we may want to have reasoning off, at least
+	// for super fast responses, but at the same time, we definitely want
+	// reasoning on for scripting going forward ... Also to be cache aware,
+	// because I don't know if every model allows you to switch reasoning
+	// without breaking the cache." So reasoning is a property of the role,
+	// fixed per role, never toggled within one prompt lineage: the fast turn
+	// role (autoradio) runs with it off; the future script role
+	// (autoradio_programme) will run with it on, on its own prompt prefix.
+	// A policy file naming "off" for any other role is dropped with a
+	// diagnostic (sanitizeEffort), so no other role can reach it by accident.
+	ReasoningOff = "off"
+
 	modelPolicyOverlayRelativeDir = "System/model-policy-overlays"
 
 	defaultChatGPTProvider  = "chatgpt"
@@ -286,7 +302,7 @@ func (m *Manager) PoolChain(ctx context.Context, ownerID, role string) []provide
 	if own, ok := policy.Roles[normalized]; ok {
 		selection = fillSelection(own, policy.Defaults)
 	} else if normalized == AutoradioRole {
-		selection = provideriface.LLMSelection{Model: modelcatalog.PoolSpecPrefix + modelcatalog.AutoradioPool, ReasoningEffort: "low", Source: "platform_fallback"}
+		selection = provideriface.LLMSelection{Model: modelcatalog.PoolSpecPrefix + modelcatalog.AutoradioPool, ReasoningEffort: ReasoningOff, Source: "platform_fallback"}
 	}
 	if !strings.HasPrefix(selection.Model, modelcatalog.PoolSpecPrefix) {
 		return []provideriface.LLMSelection{selection}
@@ -544,6 +560,11 @@ func (p Policy) Resolve(role string) provideriface.LLMSelection {
 func (p Policy) Selections() []provideriface.LLMSelection {
 	roles := make([]string, 0, len(p.Roles))
 	for role := range p.Roles {
+		if role == AutoradioRole {
+			// The autoradio role's selection carries ReasoningOff, which no
+			// other role's chain may inherit.
+			continue
+		}
 		roles = append(roles, role)
 	}
 	sort.Strings(roles)
@@ -754,7 +775,7 @@ func fallbackPolicy(_ provideriface.Config) Policy {
 			deskmanifest.DocumentCustodianName(): pool("low"),
 			VerifierRole:                         pool("low"),
 			MultimodalVerifierRole:               pool("low"),
-			AutoradioRole:                        {Model: modelcatalog.PoolSpecPrefix + modelcatalog.AutoradioPool, ReasoningEffort: "low", Source: "platform_fallback"},
+			AutoradioRole:                        {Model: modelcatalog.PoolSpecPrefix + modelcatalog.AutoradioPool, ReasoningEffort: ReasoningOff, Source: "platform_fallback"},
 		},
 		Source: "platform_fallback",
 	}
@@ -882,7 +903,7 @@ func parsePolicy(raw, source string) (Policy, error) {
 	}
 	for _, role := range sortedRoleNames(policy.Roles) {
 		selection := policy.Roles[role]
-		sanitizeEffort("role "+role, &selection, &policy.Diagnostics)
+		sanitizeEffortFor("role "+role, role == AutoradioRole, &selection, &policy.Diagnostics)
 		policy.Roles[role] = selection
 	}
 	if !validSelection(policy.Defaults) {
@@ -981,7 +1002,7 @@ func parseOverlay(id, raw, source string, filePools map[string]Pool) (policyOver
 	sanitizeEffort("overlay defaults", &overlay.Defaults, &overlay.Diagnostics)
 	for _, role := range sortedRoleNames(overlay.Roles) {
 		selection := overlay.Roles[role]
-		sanitizeEffort("overlay role "+role, &selection, &overlay.Diagnostics)
+		sanitizeEffortFor("overlay role "+role, role == AutoradioRole, &selection, &overlay.Diagnostics)
 		overlay.Roles[role] = selection
 	}
 	if pool := unknownPool(filePools, overlay.Defaults); pool != "" {
@@ -1109,9 +1130,18 @@ var validReasoningEfforts = map[string]bool{"none": true, "minimal": true, "low"
 // value is unset (the default applies); an unknown one is dropped so the role
 // falls back to the default effort, and a diagnostic names it.
 func sanitizeEffort(where string, selection *provideriface.LLMSelection, diagnostics *[]string) {
+	sanitizeEffortFor(where, false, selection, diagnostics)
+}
+
+// sanitizeEffortFor is sanitizeEffort for a role that may hold ReasoningOff.
+func sanitizeEffortFor(where string, allowOff bool, selection *provideriface.LLMSelection, diagnostics *[]string) {
 	raw := strings.TrimSpace(selection.ReasoningEffort)
 	if raw == "" {
 		selection.ReasoningEffort = ""
+		return
+	}
+	if allowOff && strings.EqualFold(raw, ReasoningOff) {
+		selection.ReasoningEffort = ReasoningOff
 		return
 	}
 	if effort := strings.ToLower(raw); validReasoningEfforts[effort] {

@@ -83,6 +83,8 @@ type ProviderRequest struct {
 	CacheKey string `json:"cache_key,omitempty"`
 	// NoShed: the caller has no next pool member (see provider.LLMRequest).
 	NoShed bool `json:"no_shed,omitempty"`
+	// ReasoningOff is the autoradio role's exemption (provider.LLMRequest).
+	ReasoningOff bool `json:"reasoning_off,omitempty"`
 
 	// Messages is the conversation history in Anthropic Messages format.
 	Messages []provider.Message `json:"messages"`
@@ -488,6 +490,7 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		ConversationID:  req.ConversationID,
 		CacheKey:        req.CacheKey,
 		NoShed:          req.NoShed,
+		ReasoningOff:    req.ReasoningOff,
 	}
 
 	// Images are logged by count, size and short sha256, never by data

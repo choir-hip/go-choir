@@ -114,8 +114,13 @@ func TestSplitterReturnsASentenceBeforeTheStreamEnds(t *testing.T) {
 }
 
 // (9) forced flush.
-func TestSplitterForcesAFlushAtTwoHundredCharacters(t *testing.T) {
-	words := strings.Repeat("word ", 90) // 450 characters, no punctuation
+func TestSplitterForcesAFlushOnlyAsATransportSafeguard(t *testing.T) {
+	// A long real sentence is left whole: the cut is no steer on length.
+	long := strings.Repeat("word ", 150) + "end." // 754 characters, one sentence
+	if got := split(long); len(got) != 1 {
+		t.Fatalf("a long sentence was cut: %d pieces", len(got))
+	}
+	words := strings.Repeat("word ", 900) // 4500 characters, no punctuation
 	got := split(words)
 	if len(got) < 2 {
 		t.Fatalf("no forced flush: %q", got)
@@ -129,13 +134,13 @@ func TestSplitterForcesAFlushAtTwoHundredCharacters(t *testing.T) {
 		t.Fatalf("text lost or changed: %q", got)
 	}
 	// A pause is preferred when there is one in the second half.
-	text := strings.Repeat("a", 120) + ", " + strings.Repeat("b", 150)
+	text := strings.Repeat("a", 2500) + ", " + strings.Repeat("b", 3000)
 	got = split(text)
 	if len(got) != 2 || !strings.HasSuffix(got[0], ",") {
 		t.Fatalf("pause cut: %q", got)
 	}
 	// An unbroken run is cut hard.
-	if got := split(strings.Repeat("x", 450)); len(got) < 3 {
+	if got := split(strings.Repeat("x", 9000)); len(got) < 3 {
 		t.Fatalf("hard cut: %d pieces", len(got))
 	}
 }

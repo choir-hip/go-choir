@@ -36,7 +36,7 @@ Unknown fields anywhere are refused (`400`).
     "text": "A strike ended in Nancy. Talks resume Monday.",
     "text_sha256": "<64 lowercase hex, optional>"
   },
-  "heard": {"block_index": 2, "text": "the last 300 characters spoken"},
+  "heard": {"block_index": 2, "text": "the last words spoken"},
   "programme": "<edition document id, optional>",
   "history": [
     {"role": "listener", "text": "Who won?"},
@@ -53,7 +53,7 @@ Unknown fields anywhere are refused (`400`).
 | `page.title` | optional; at most 300 bytes |
 | `page.text` | the text the phone is showing; at most 48 KB (`413` over); data from the world, never instructions |
 | `page.text_sha256` | optional; recorded; the server hashes the text itself when absent |
-| `heard` | optional; `block_index` at least 0; `text` is cut to its last 300 characters |
+| `heard` | optional; `block_index` at least 0; `text` at most 2000 characters (more is `400`, never cut); send the last few sentences spoken |
 | `programme` | optional; at most 128 bytes; recorded and shown to the model |
 | `history` | optional; at most 8 lines, each `listener` or `radio`, 1 to 1000 bytes; the last few turns, oldest first |
 
@@ -80,7 +80,7 @@ data: {"seq":0,"text":"The top story is a strike in Nancy."}
 One complete sentence, in order, `seq` from 0. Speak it. Plain text for the
 ear: no markdown. Sentences are cut at `.` `!` `?` followed by a space and the
 next sentence, never inside a number, a dotted abbreviation or after a title
-(`Dr.`, `U.S.`, `3.5`); a run of 200 characters with no end is cut at a pause.
+(`Dr.`, `U.S.`, `3.5`); a run of 4000 characters with no terminator at all is cut at a pause (a transport safeguard far above any real sentence, not a steer on length).
 
 ### `error`
 
@@ -113,7 +113,7 @@ Last event of every stream. Example:
   "timings_ms": {"record_written": 4, "upstream_request": 4, "upstream_first_token": 610, "first_sentence": 790, "done": 1180},
   "timestamps": {"received": "2026-11-11T14:00:00.001Z", "record_written": "...", "upstream_request": "...", "upstream_first_token": "...", "first_sentence": "...", "done": "..."},
   "members_tried": [{"member": "river/deepseek-ai/DeepSeek-V4.1-Flash-1017", "outcome": "answered", "ms": 1170}],
-  "usage": {"input_tokens": 812, "output_tokens": 61, "cached_input_tokens": 0},
+  "usage": {"input_tokens": 812, "output_tokens": 61, "cached_input_tokens": 700, "cache_reported": true},
   "record_error": "only when the request record could not be written",
   "report_error": "only when the Report could not be written"
 }
@@ -184,13 +184,67 @@ Not in the pool, by ruling: devin `swe-2-flash` (overloaded by AutoPaper),
 opencode-go `beam-free` (often parked), Synthetic.
 
 The chain is the pool only; there is no continuation chain behind it. The call is
-streamed, has no tools, and asks for reasoning at most `low`. **Thinking is not
-turned off on either member** (owner 2026-11-09, enforced by
-`internal/provider/thinking_floor_test.go`: River maps off spellings to `low`,
-Bedrock Haiku 5.5 always sends adaptive thinking), and it is counted in
-`max_tokens`, so the call asks for `max_tokens` 1200 and the prompt keeps the
-spoken answer to a few sentences. A stream that ends with nothing speakable (the
-budget spent on thinking) is treated as a refusal and walks to the next member.
+streamed and has no tools.
+
+### Reasoning, the token budget and the cache (owner 2026-11-11)
+
+Owner: "for auto radio, we may want to have reasoning off, at least for super
+fast responses, but at the same time, we definitely want reasoning on for
+scripting going forward ... Also to be cache aware, because I don't know if
+every model allows you to switch reasoning without breaking the cache." And: "I
+don't want a token budget either ... We should be able to steer models with
+prompts, not deterministic rules."
+
+- **Reasoning is a property of the role, fixed per role, never toggled within a
+  prompt lineage.** The fast turn role `autoradio` runs with reasoning off
+  (`modelpolicy.ReasoningOff`, the value `off`). The future script role
+  (`autoradio_programme`, design section 11) will run with reasoning on, on its
+  own prompt prefix, so each role has its own stable cache and no call flips
+  reasoning on a prefix another call cached.
+- **The exemption is explicit and narrow.** The 2026-11-09 rule (thinking is
+  never off) and its test stay in force for every other role. `off` is accepted
+  in a policy file for the `autoradio` role only (any other role naming it gets
+  a diagnostic and the default effort), `PoolChain` and the platform fallback
+  give it to that role, `Selections()` leaves that role out of every other
+  role's continuation chain, and only `gatewayruntime.StreamText` can send the
+  request flag `reasoning_off` (`CallWithTools` has no such field). Only River
+  and Bedrock Haiku 5.5 honor the flag; every other adapter ignores it and keeps
+  its floor. Tests: `internal/modelpolicy/autoradio_role_test.go`,
+  `effort_low_test.go` (names the exemption), `internal/gatewayruntime/
+  text_stream_test.go`, `internal/gateway/autoradio_river_stream_test.go`.
+- **No token budget of the desk's.** The call sends `max_tokens` 0: River's field
+  is omitted; Bedrock's is the model's own ceiling from the catalog
+  (`provider.defaultMaxTokens`), which is the provider's limit, not a steer. A
+  `max_tokens` in the owner's policy file is honored (the owner's own setting).
+  The length and shape of the answer are steered by the desk's prompt
+  (`internal/appdesk/firstparty_prompts/autoradio.md`: a few short spoken
+  sentences, the most important first, then stop, with the reason given).
+
+### Per provider (vendor documentation read 2026-11-11; each point marked)
+
+| | River DeepSeek V4.1 Flash 1017 | Bedrock Claude Haiku 5.5 |
+|---|---|---|
+| Can reasoning be off? | **Yes, River documents it.** "For both DeepSeek models ... reasoning is off by default. Chat Completions accepts `reasoning_effort` with `none` (off), `low`, `high`, and `max`" (docs.river.ai/guides/inference-controls). The `low` floor was **ours** (the 2026-11-09 rule; `riverReasoningEffort` maps off spellings to `low`), not River's. The autoradio call sends `none`. | **Yes.** "Claude Haiku 5.5 also has thinking on by default and accepts `thinking: {type: "disabled"}` at effort `high` or below" (platform.claude.com thinking page; the page lists Amazon Bedrock InvokeModel as a supported platform). Lowest otherwise: effort `low` ("minimizes thinking; skips thinking for simple tasks"). The call sends `thinking: {type: "disabled"}` and `output_config.effort: "low"`. Telling Haiku 5.5 in the prompt to answer directly "didn't stop it from thinking" (same source). |
+| Does changing the setting between calls that share a prefix invalidate the cache? | **Not documented.** The River pages say only "Unchanged prefixes can reuse the cache when available" and "There is no separate cache-write fee." relayed-unverified: assume a change could miss the cache; the design never changes it within a role. | **Yes, for the messages, always:** "changing [thinking parameters] always invalidates message blocks; tool and system caches are also invalidated on models that render the configuration ahead of them" (model-specific, not stated for Haiku 5.5); the same holds for `output_config.effort` ("Setting effort explicitly to the model's default [medium on Haiku 5.5] is equivalent to omitting it and does not invalidate"). Our own comment records that `disabled` drops the cache relative to adaptive. Per-message effort (beta) keeps the cache but is not used here. |
+| Reasoning tokens: streamed and billed | Not documented for DeepSeek on River (River documents `reasoning_content` for GLM only). Our reader treats `reasoning_content` as hidden state and never speaks it. Billing: not stated for DeepSeek; GLM's "count toward the output budget and price". relayed-unverified. | Billed as output tokens, counted in `max_tokens`; `usage.output_tokens_details.thinking_tokens` has the breakdown on the final `message_delta` (vendor docs). With thinking disabled there are none. |
+| Cache mechanism | Automatic prefix reuse, no markers; the frame puts the stable part first. | Explicit breakpoints only: the system block (1 hour) and the page block (5 minutes, `cache_break`), none on the volatile block. A prompt below the model's minimum cacheable length reports no cache (the minimum for Haiku 5.5 is not verified). |
+| First-sentence cost that remains | Reasoning off removes thinking latency. Remaining: network, River time to first token (not measured). | Not streamed by our provider: the whole call completes before the first sentence is sent, so as the fallback it costs the full generation time (short answer, thinking off). |
+
+### Cache-aware frame
+
+The user message is two content blocks. The stable block comes first and is
+byte-identical for the same page: the page between fence lines whose token is
+derived from the page's own content hash (a page cannot name its own hash, so
+it cannot forge a fence, and the same page keeps the same prefix). The volatile
+block follows: programme, where the listener was, the last turns, the listener's
+words. The system prompt is the third stable part. A test asserts the system
+prompt, cache key and stable block are byte-identical across two turns about one
+page. `done.usage` carries `input_tokens`, `cached_input_tokens` and
+`cache_reported`, and `scripts/prove-autoradio-turns` prints the cached share per
+ask and asks two questions per page so the second can hit.
+
+A stream that ends with nothing speakable is treated as a refusal and walks to the
+next member.
 
 ## What ends or redirects a turn
 
@@ -224,6 +278,22 @@ Listed, not changed in this slice:
 
 None of them is reached by a spoken answer of a few sentences.
 
+## Deterministic shaping rules in this slice, and what became of them
+
+Owner 2026-11-11: no hard time budgets, no token budgets; steer with prompts.
+
+| Rule | Status |
+|---|---|
+| First-chunk walk 6 s, stall timer, 30 s whole-turn deadline | removed |
+| `max_tokens` 220, then 1200 | removed; none sent (above) |
+| Reasoning clamped to low | removed; the role's setting is passed as policy gives it |
+| Forced sentence cut at 200 characters | kept only as a transport safeguard at 4000 (`speechsplit.MaxRunes`) |
+| `heard.text` silently cut to its last 300 characters | removed; over 2000 characters is `400` |
+| History at most 8 lines of 1000 bytes | kept as a request bound (rejects, never truncates); named here for the owner: it does shape what the model is given, by refusal, so it is a stranger bound only if the app sends a few lines |
+| Markdown marks stripped from a sentence before it is sent | kept: a transport transform for the ear (`**`, backticks, a leading bullet), it never changes the words |
+| Fixed spoken fallback lines on failure | kept: they are not a model output |
+| Body 80 KB, page 48 KB, words 2000 bytes, field lengths | kept: bounds on what a stranger can cause |
+
 ## Measuring it
 
 `scripts/prove-autoradio-turns --host choir.news --api-key-file <file>
@@ -242,7 +312,8 @@ sentence is above 2.5 s.
 - Bedrock Haiku 5.5 is not streamed by the gateway provider (one whole call, one
   chunk). Its pool position makes that acceptable; it is not a streaming test.
 - A stream can end cleanly with nothing to say when thinking spends the whole
-  `max_tokens`. Treated as a refusal; never recorded as a completed answer.
+  `max_tokens`. Treated as a refusal; never recorded as a completed answer. With
+  no token budget of the desk's and reasoning off it should not happen.
 - A provider quota before the first chunk comes back as an HTTP error before
   any SSE (the typed `provider_quota` answer), which `StreamText` returns as
   `provideriface.ProviderQuotaError` before any delta.
