@@ -64,7 +64,7 @@ members Autoradio
   action sendAsk
     send pm = signalRecord(kind="ask", subject=pg.top, detail=ask)
     // The typed question is a turn like a spoken one (found with real data: it was only recorded as a signal).
-    send asked = choirAsk(text=ask)
+    send acct = choirAsk(text=ask)
     ask = ""
 
   task voiceHold when voiceArmed
