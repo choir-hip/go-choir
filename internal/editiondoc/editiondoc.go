@@ -2,7 +2,7 @@
 // titled "My edition" that the Autoradio onboarding interview writes
 // (docs/design/autoradio-app-ui-2026-11-10.md, section 2, "What the server
 // lacks"). The marker is the title, as IsGuideTitle is for the Style Guide
-// (internal/styleguide): no new document role or schema, so the document stays
+// (the styleguide package): no new document role or schema, so the document stays
 // an ordinary Texture the owner reads, edits and forks.
 package editiondoc
 
