@@ -1,0 +1,43 @@
+import Foundation
+
+/// The text of mobile/layouts/default.json (kept equal by LayoutTests.testEmbeddedDefaultEqualsFile).
+enum DefaultLayout {
+    static let json = #"""
+{
+  "schema": "choir.layout.v1",
+  "name": "Autopaper default",
+  "grid": { "units": 6, "gutter": 12, "margin": 20 },
+  "steps": {
+    "xl": { "size": 34, "weight": 700, "lineHeight": 1.06 },
+    "l":  { "size": 27, "weight": 700, "lineHeight": 1.1 },
+    "m":  { "size": 21, "weight": 650, "lineHeight": 1.16 },
+    "s":  { "size": 17, "weight": 600, "lineHeight": 1.25 },
+    "dek": { "size": 16, "weight": 400, "lineHeight": 1.4 }
+  },
+  "freshHours": 12,
+  "modules": {
+    "lead":    { "slots": [{ "span": 6, "headline": ["xl", "l"], "maxLines": 5, "dek": true, "dekLines": 4, "meta": "full" }] },
+    "colead":  { "slots": [{ "span": 6, "headline": ["l", "m"], "maxLines": 4, "dek": true, "dekLines": 3, "meta": "short" },
+                           { "span": 6, "headline": ["l", "m"], "maxLines": 4, "dek": true, "dekLines": 3, "meta": "short" }], "rule": "between" },
+    "cluster": { "follow": { "max": 4, "headline": ["s"], "label": "Developing" } },
+    "pair":    { "slots": [{ "span": 3, "headline": ["m", "s"], "maxLines": 5, "dek": true, "dekLines": 3, "meta": "short" },
+                           { "span": 3, "headline": ["m", "s"], "maxLines": 5, "dek": true, "dekLines": 3, "meta": "short" }],
+                 "degrade": "stack", "stackHeadline": ["m", "s"], "stackMaxLines": 4 },
+    "briefs":  { "list": { "max": 6, "headline": ["s"], "label": "In brief" } },
+    "river":   { "bySection": true, "perSection": 4, "maxSections": 5, "headline": ["s"] },
+    "opinion": { "list": { "max": 4, "headline": ["s"], "label": "Opinion" } }
+  },
+  "rules": [
+    { "group": "top", "if": "top.weight >= 1.6 * second.weight", "use": "lead" },
+    { "group": "top", "if": "fresh < 6", "use": "pair" },
+    { "group": "top", "if": "top.weight < 1.15 * second.weight", "use": "colead" },
+    { "group": "top", "else": "lead" },
+    { "if": "related(lead) >= 2", "use": "cluster" },
+    { "if": "has(lead) and remaining >= 2", "use": "pair" },
+    { "if": "remaining >= 7", "use": "briefs" },
+    { "then": "river" },
+    { "then": "opinion" }
+  ]
+}
+"""#
+}

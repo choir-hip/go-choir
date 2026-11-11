@@ -113,6 +113,12 @@ component Autoradio
     sheetEnd
     sheetPull
     // ---- lane 2: paper layout ----
+    pfront
+    paperLoading
+    paperSection
+    paperReload
+    paperFit
+    pickEdition
     // ---- lane 3: texture reader ----
     // ---- lane 4: cards, launcher, signals ----
     // ---- lane 5: files and viewers ----
