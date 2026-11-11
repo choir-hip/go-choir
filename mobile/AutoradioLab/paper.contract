@@ -142,23 +142,18 @@ component PaperPage
     dm: DemoInfo
     signIn: action
     openPage: action
+    pfront: PaperFront
+    paperSection: string
+    paperReload: action
+    paperFit: action
+    pickEdition: action
   props
     address: string
     title: string
-  // paper:front is the whole edition, paper:section/<id> one section of it.
-  derive sect = address.startsWith("paper:section/") ? address.slice(14) : ""
-  state edition = ""
-  state colW = 0
-  resource front = paperFront(section=sect, edition=edition, width=colW) as shape PaperFront else empty()
-  action reload
-    refresh front
-  action fit(w: number, h: number)
-    colW = w
-  action pickEdition(e: string)
-    edition = e
+  derive sect = paperSection
   view
-    column flex=1 min-height=0 width="100%" resize=fit
-      scroll id="paper" flex=1 min-height=0 width="100%" refresh=reload refreshing=pending(front)
+    column flex=1 min-height=0 width="100%" resize=paperFit
+      scroll id="paper" flex=1 min-height=0 width="100%" refresh=paperReload refreshing=pending(pfront)
         column padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20
           padding-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 16px)" gap=14
           font-family=th.fontRead color=th.fg
@@ -166,16 +161,16 @@ component PaperPage
           column gap=6 width="100%"
             row align-items="baseline" justify-content="space-between" width="100%"
               text "AUTOPAPER" font-family=th.fontRead font-size=34 font-weight=700 letter-spacing=-0.3 color=th.fg testId="page-title" role="heading" aria-level=1
-              text front.dateLine font-family=th.fontUi font-size=13 font-weight=600 color=th.muted testId="paper-date"
+              text pfront.dateLine font-family=th.fontUi font-size=13 font-weight=600 color=th.muted testId="paper-date"
             box height=1 background-color=th.fg width="100%"
             box height=1 background-color=th.fg width="100%" margin-top=2
             row justify-content="space-between" width="100%"
-              text (sect == "" ? "Front page" : front.sectionLabel) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent testId="paper-section-title"
-              text front.updated font-family=th.fontUi font-size=12 color=th.muted testId="paper-updated"
+              text (sect == "" ? "Front page" : pfront.sectionLabel) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent testId="paper-section-title"
+              text pfront.updated font-family=th.fontUi font-size=12 color=th.muted testId="paper-updated"
           // demo mode: three editions to show how the page changes with the day (under the masthead so a driver reaches them)
           if dm.on
             column gap=8 width="100%" padding-top=8
-              text `Composition: ${front.composition}` font-family=th.fontMono font-size=11 color=th.muted testId="paper-composition"
+              text `Composition: ${pfront.composition}` font-family=th.fontMono font-size=11 color=th.muted testId="paper-composition"
               row gap=8 width="100%"
                 button press=pickEdition("big") buttonStyle="bordered" testId="paper-edition-big"
                   text "Big news"
@@ -198,14 +193,14 @@ component PaperPage
               border-radius=th.radiusPill padding="7px 14px"
               background-color=(sect == "" ? th.accent : th.paper2)
               text "Front" font-family=th.fontUi font-size=14 font-weight=600 color=(sect == "" ? th.onAccent : th.fg)
-            for sec in front.sections key=sec.id
+            for sec in pfront.sections key=sec.id
               button press=openPage(`paper:section/${sec.id}`, sec.label) appearance="none" testId=`paper-section-${sec.id}`
                 border-radius=th.radiusPill padding="7px 14px"
                 background-color=(sec.current ? th.accent : th.paper2)
                 text sec.label font-family=th.fontUi font-size=14 font-weight=600 color=(sec.current ? th.onAccent : th.fg)
-          if front.status == "offline" or front.status == "error" or front.status == "empty"
-            text front.message font-family=th.fontUi font-size=14 color=(front.status == "error" ? th.danger : th.muted) testId="paper-status"
-          for b in front.bands key=b.id
+          if pfront.status == "offline" or pfront.status == "error" or pfront.status == "empty"
+            text pfront.message font-family=th.fontUi font-size=14 color=(pfront.status == "error" ? th.danger : th.muted) testId="paper-status"
+          for b in pfront.bands key=b.id
             Band(b=b)
-          if front.count > 0
-            text `${front.count} ${front.count == 1 ? "story" : "stories"} · pull down to refresh` font-family=th.fontUi font-size=12 color=th.muted text-align="center" width="100%"
+          if pfront.count > 0
+            text `${pfront.count} ${pfront.count == 1 ? "story" : "stories"} · pull down to refresh` font-family=th.fontUi font-size=12 color=th.muted text-align="center" width="100%"

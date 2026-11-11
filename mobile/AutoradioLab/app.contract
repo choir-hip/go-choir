@@ -103,6 +103,11 @@ component Autoradio
     replay
     // ---- lane 1: bar, radio, talk ----
     // ---- lane 2: paper layout ----
+    pfront
+    paperSection
+    paperReload
+    paperFit
+    pickEdition
     // ---- lane 3: texture reader ----
     // ---- lane 4: cards, launcher, signals ----
     // ---- lane 5: files and viewers ----

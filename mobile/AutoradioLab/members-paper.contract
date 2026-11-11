@@ -1,7 +1,16 @@
-// Lane members file (paper): this lane's states, derives, resources, mutations and actions, as if written in the root.
-// Owned by the paper lane. Declare the shapes you use with `use ... from "@choir/autoradio"` at the top of this file
-// (your shapes and source names live in exact-package/interface/paper.json). Every name you want a child component to
-// `inject` goes in your band of the `provide` list in app.contract.
+// Lane members file (paper): the composed front page. The page reads `pfront`; the layout runs in the Kit (Layout/*.swift).
+// A resource may only live in the root, so it is here, keyed by the open page (paper:front or paper:section/<id>), the
+// demo edition ("" live or default fixture, or big | even | thin) and the width the page reports.
+use paperFront, PaperFront from "@choir/autoradio"
+
 members Autoradio
-  // placeholder so the block is not empty; delete it when you add your first member
-  state paperPlaceholder = false
+  state paperEdition = ""
+  state paperWidth = 0
+  derive paperSection = pg.top.startsWith("paper:section/") ? pg.top.slice(14) : ""
+  resource pfront = paperFront(section=paperSection, edition=paperEdition, width=paperWidth) as shape PaperFront else empty()
+  action paperReload
+    refresh pfront
+  action paperFit(w: number, h: number)
+    paperWidth = w
+  action pickEdition(e: string)
+    paperEdition = e
