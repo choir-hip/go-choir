@@ -58,12 +58,12 @@ BUILT_APP=$(ls -dt $(find "$HERE/../AutoradioLab/target/clients" -type d -name A
 [ -n "$BUILT_APP" ] || fail "no weights check" "the built Autoradio.app was not found"
 "$HERE/check-no-weights.sh" "$BUILT_APP" || fail "no model weights in the app"
 
-# `proof-app.sh deckdiag`: only where a deck swipe starts matters (a diagnostic of the Textures page, which did not cycle): no tour.
+# `proof-app.sh deckdiag`: only which pages let a deck swipe through (a diagnostic: Textures did not cycle): no tour.
 if [ "${1:-}" = deckdiag ]; then
   step "clock data"; wait_ 1500
-  for y in 150 300 462 600 760; do
-    place textures 900; step tree; shot diag-textures-$y-before
-    step "tap page-deck drag 180 0 from 201 $y"; wait_ 1500; step tree; shot diag-textures-$y-after
+  for pl in files mail textures settings; do
+    place $pl 900; step tree; shot diag-$pl-before
+    step "tap page-deck drag 180 0 from 201 300"; wait_ 1500; step tree; shot diag-$pl-after
   done
   step logs
   run_drive deckdiag light "" --touch platform
