@@ -82,16 +82,16 @@ drive "$OUT" \
   "tap ob-mic-next" "clock +600 real" "clock data" tree "screenshot $SHOTS/08-hearing.png" \
   "tap ob-hearing-yes" "clock +600 real" "clock data" tree "screenshot $SHOTS/09-ready.png" \
   "tap ob-interview" "clock +800 real" "clock data" tree "screenshot $SHOTS/10-interview-q1.png" \
-  "tap ob-demo-next" "clock +700 real" "clock data" tree "screenshot $SHOTS/11-vague-offer.png" \
-  "tap ob-demo-next" "clock +700 real" "clock data" tree "screenshot $SHOTS/12-interrupted.png" \
-  "tap ob-demo-next" "clock +700 real" "clock data" tree "screenshot $SHOTS/13-paused-loud.png" \
+  "tap ob-demo-next" "clock +1200 real" "clock data" tree "screenshot $SHOTS/11-vague-offer.png" \
+  "tap ob-demo-next" "clock +1200 real" "clock data" tree "screenshot $SHOTS/12-interrupted.png" \
+  "tap ob-demo-next" "clock +1200 real" "clock data" tree "screenshot $SHOTS/13-paused-loud.png" \
   "tap ob-continue" "clock +700 real" "clock data" tree "screenshot $SHOTS/14-continued.png" \
-  "tap ob-demo-next" "clock +600 real" "clock data" \
-  "tap ob-demo-next" "clock +600 real" "clock data" \
-  "tap ob-demo-next" "clock +600 real" "clock data" \
-  "tap ob-demo-next" "clock +600 real" "clock data" \
-  "tap ob-demo-next" "clock +700 real" "clock data" tree "screenshot $SHOTS/15-readback.png" \
-  "tap ob-demo-next" "clock +700 real" "clock data" tree "screenshot $SHOTS/16-readback-corrected.png" \
+  "tap ob-demo-next" "clock +1200 real" "clock data" \
+  "tap ob-demo-next" "clock +1200 real" "clock data" \
+  "tap ob-demo-next" "clock +1200 real" "clock data" \
+  "tap ob-demo-next" "clock +1200 real" "clock data" \
+  "tap ob-demo-next" "clock +1200 real" "clock data" tree "screenshot $SHOTS/15-readback.png" \
+  "tap ob-demo-next" "clock +1200 real" "clock data" tree "screenshot $SHOTS/16-readback-corrected.png" \
   "tap ob-demo-next" "clock +900 real" "clock data" tree "screenshot $SHOTS/17-writing.png" \
   "clock +3200 real" "clock data" tree "screenshot $SHOTS/18-writing-failed.png" \
   "tap ob-edition-retry" "clock +1200 real" "clock data" tree "screenshot $SHOTS/19-writing-retry.png" \
@@ -113,8 +113,8 @@ drive "$OUT2" \
   "tap ob-mic-ask" "clock +2300 real" "clock data" tree "screenshot $SHOTS/33-dark-mic-heard.png" \
   "tap ob-mic-next" "clock +600 real" "clock data" tree "screenshot $SHOTS/34-dark-hearing.png" \
   "tap ob-hearing-yes" "clock +600 real" "clock data" "tap ob-interview" "clock +800 real" "clock data" \
-  "tap ob-demo-next" "clock +700 real" "clock data" "tap ob-demo-next" "clock +700 real" "clock data" tree "screenshot $SHOTS/35-dark-interrupted.png" \
-  "tap ob-demo-next" "clock +700 real" "clock data" tree "screenshot $SHOTS/36-dark-paused.png" \
+  "tap ob-demo-next" "clock +1200 real" "clock data" "tap ob-demo-next" "clock +1200 real" "clock data" tree "screenshot $SHOTS/35-dark-interrupted.png" \
+  "tap ob-demo-next" "clock +1200 real" "clock data" tree "screenshot $SHOTS/36-dark-paused.png" \
   logs
 rc=$?
 [ $rc -eq 0 ] || { grep -v "^warning" "$OUT2" | tail -15; cp "$OUT2" "$OUT"; fail "drive 2 (exit $rc)"; }
