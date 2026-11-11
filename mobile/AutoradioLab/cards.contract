@@ -117,9 +117,9 @@ component PileCard
             text kind font-family=th.fontUi font-size=12 color=th.muted
             if pinned
               text "Pinned" font-family=th.fontUi font-size=12 font-weight=700 color=th.accent
-          text title font-family=th.fontRead font-size=22 font-weight=700 color=th.fg text-align="left" line-clamp=3
+          text title font-family=th.fontRead font-size=22 font-weight=700 color=th.fg text-align="left" line-clamp=3 width="100%" padding-right=8
           if isStory
-            text dek font-family=th.fontRead font-size=16 color=th.muted text-align="left" line-clamp=3
+            text dek font-family=th.fontRead font-size=16 color=th.muted text-align="left" line-clamp=3 width="100%"
             text entityLine font-family=th.fontUi font-size=12 color=th.accent
           text address font-family=th.fontMono font-size=12 color=th.muted
         Stamps(tag=address, moreLabel="MORE OF THIS", closeLabel="CLOSE", moreShow=moreShow, closeShow=closeShow)
@@ -214,8 +214,8 @@ component StackCard
       Card(level=2, testId=`stack-face-${route}`, minHeight=430)
         column padding=22 gap=10 align-items="flex-start" width="100%"
           text section font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=1.5 color=th.muted
-          text title font-family=th.fontRead font-size=30 font-weight=700 color=th.fg text-align="left" line-clamp=5
-          text dek font-family=th.fontRead font-size=18 color=th.muted text-align="left" line-clamp=6
+          text title font-family=th.fontRead font-size=30 font-weight=700 color=th.fg text-align="left" line-clamp=5 width="100%"
+          text dek font-family=th.fontRead font-size=18 color=th.muted text-align="left" line-clamp=6 width="100%"
           text entityLine font-family=th.fontUi font-size=13 color=th.accent
           text shadeNote font-family=th.fontUi font-size=12 font-weight=700 color=th.accent
         Stamps(tag=route, moreLabel="MORE OF THIS", closeLabel="SET ASIDE", moreShow=moreShow, closeShow=asideShow)
@@ -276,7 +276,7 @@ component Pile
     setPileMode: action
   view
     column testId="pile" position="absolute" top=0 left=0 right=0 bottom=0
-      box testId="pile-scrim" position="absolute" top=0 left=0 right=0 bottom=0 background-color=th.fg opacity=th.behindDim3 press=hideLayer transition=`opacity ${th.motionFastMs}ms ease`
+      box testId="pile-scrim" position="absolute" top=0 left=0 right=0 bottom=0 background-color=th.paper2 opacity=0.93 press=hideLayer transition=`opacity ${th.motionFastMs}ms ease`
       row position="absolute" left=20 right=20 top="calc(env(safe-area-inset-top) + 12px)" gap=6 align-items="center" z-index=60
         button press=setPileMode("pages") testId="pile-mode-pages" buttonStyle="glass" opacity=(pileMode == "pages" ? 1 : 0.55)
           text "Pages"

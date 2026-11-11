@@ -48,12 +48,10 @@ members Autoradio
   action setPileMode(m: string)
     pileMode = m
   action cardDrag(address: string, dx: number, dy: number)
-    if dragAddr != address
-      dragAddr = address
-      dragX = 0
-      dragY = 0
-    dragX = dragX + dx
-    dragY = dragY + dy
+    // an action reads the state as it was when it began, so a new card's start is written as a value, not as a reset first
+    dragX = (dragAddr == address ? dragX : 0) + dx
+    dragY = (dragAddr == address ? dragY : 0) + dy
+    dragAddr = address
     dragging = true
   action cardRelease(address: string, kind: string, vx: number, vy: number)
     dragging = false
@@ -105,12 +103,9 @@ members Autoradio
 
   // ---- the story stack
   action stackDrag(dx: number, dy: number)
-    if sdragging == false
-      sx = 0
-      sy = 0
-      sFly = -1
-    sx = sx + dx
-    sy = sy + dy
+    sx = (sdragging ? sx : 0) + dx
+    sy = (sdragging ? sy : 0) + dy
+    sFly = sdragging ? sFly : 0 - 1
     sdragging = true
   action stackRelease(address: string, n: number, vx: number, vy: number)
     sdragging = false

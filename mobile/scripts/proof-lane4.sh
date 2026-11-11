@@ -15,7 +15,7 @@ M="$(cd "$S/.." && pwd)"
 SCRATCH="${TMPDIR:-/tmp}/proof-lane4.$$"
 mkdir -p "$SCRATCH"
 trap 'rm -rf "$SCRATCH"' EXIT
-fail() { echo "PROOF FAILED at $1"; [ -n "${2:-}" ] && echo "$2"; exit 1; }
+fail() { echo "PROOF FAILED at $1"; [ -n "${2:-}" ] && echo "$2"; for f in "$SCRATCH"/*.txt; do [ -f "$f" ] && cp "$f" "${PROOF_SHOTS:-/tmp}/drive-$(basename "$f")"; done; exit 1; }
 
 if [ -z "${NOTESTS:-}" ]; then
   echo "== kit tests =="
