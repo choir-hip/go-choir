@@ -43,8 +43,11 @@ for MODE in light dark; do
   [ -n "$CONT" ] && rm -f "$CONT/Library/Application Support/Autoradio/open-pages.json"
   attempt=1
   while :; do
+    PRE=""
+    [ "$MODE" = dark ] && PRE='tap bar-pages|clock +600 real|tap pile-places|clock +600 real|tap place-settings|clock +600 real|tap settings-mode-dark|clock +900 real|tap bar-pages|clock +600 real|tap pile-places|clock +600 real|tap launcher-open-paper:front|clock +900 real'
+    OLDIFS=$IFS; IFS='|'; set -- $PRE; IFS=$OLDIFS
     "$HERE/exact.sh" agent ios --touch platform \
-      "clock data" "clock +1500 real" "clock data" tree "screenshot $SHOTS/$MODE-01-default.png" \
+      "clock data" "clock +1500 real" "clock data" "$@" tree "screenshot $SHOTS/$MODE-01-default.png" \
       "clock settle" "tap paper-edition-big" "clock +900 real" "clock data" tree "screenshot $SHOTS/$MODE-02-big-top.png" \
       "tap paper-scroll drag 0 -560" "clock +700 real" "clock data" tree "screenshot $SHOTS/$MODE-03-big-mid.png" \
       "tap paper-scroll drag 0 -560" "clock +700 real" "clock data" tree "screenshot $SHOTS/$MODE-04-big-low.png" \
