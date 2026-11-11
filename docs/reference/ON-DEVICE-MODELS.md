@@ -3,16 +3,21 @@
 Reference page (convention: [README.md](README.md)). Compiled 2026-11-10
 from three design notes: [turns](../design/autoradio-turns-2026-11-10.md),
 [lab](../design/autoradio-lab-2026-11-10.md),
-[voice modes](../design/autoradio-voice-modes-2026-11-10.md). No web fetch
-was made for this page, so every figure below is relayed from those notes'
-own research of 2026-11-10 and is **relayed-unverified** unless it says
-otherwise. **Nothing has been run by us on any phone as of 2026-11-10; every
-candidate is untested in our lab.** A cell that says "not recorded" means the
-notes do not give the fact; do not fill it from memory, fetch and cite it.
+[voice modes](../design/autoradio-voice-modes-2026-11-10.md). Sections 1 to
+7 were written without a web fetch, so their figures are **relayed-unverified**
+unless marked otherwise. **Section 8 (2026-11-11) was fetched from primary
+sources on 2026-11-11 and supersedes sections 1 to 7 where they differ**;
+the analysis is in
+[autoradio-on-device-voice-configurations-2026-11-11](../design/autoradio-on-device-voice-configurations-2026-11-11.md).
+Phone measurements by us as of 2026-11-11: Silero VAD and Parakeet EOU on
+the A16 only (`mobile/README.md`); everything else is untested on any phone.
+A cell that says "not recorded" means the notes do not give the fact; do not
+fill it from memory, fetch and cite it.
 
-Qualifiers used: **vendor** (the maker's own figure), **independent**
-(third-party benchmark), **unmeasured** (no figure exists), **ours** (we
-measured it; none yet).
+Qualifiers used: **vendor** (the maker's own figure), **independent** or
+**3P** (third-party benchmark), **unmeasured** or **unk** (no figure exists),
+**ours** (we measured it, file cited), **est** (our arithmetic from marked
+inputs; a hypothesis, not a fact).
 
 ## 1. The floor device
 
@@ -169,3 +174,101 @@ thermal state, outcome) so models are compared by replay, not impression.
   beyond those listed; that is a limit of the search, not proof.
 - No fetch was made for this page: re-fetch and cite before relying on any
   figure.
+
+## 8. Findings of 2026-11-11 (fetched today; each marked)
+
+Source for each line is a Hugging Face API listing or card, a vendor page or
+a repo, all fetched 2026-11-11; links in the design note's source list.
+
+### 8.1 Corrections to sections 1 to 7
+
+- **Apple Foundation Models and the 14 Pro Max (vendor, support.apple.com
+  121115):** the Apple Intelligence iPhone list is "iPhone 16 models or
+  later, iPhone 15 Pro, iPhone 15 Pro Max, iPhone Air" plus a model named
+  iPhone Duo. The 14 Pro Max is not on it: unavailable there. Apple's
+  framework page did not render for the fetcher; its context size stays
+  unconfirmed.
+- **iOS 27 on the 14 Pro Max (3P, 9to5mac):** Apple says iOS 27 supports the
+  same iPhones as iOS 26, a list that includes the 14 Pro and 14 Pro Max, so
+  Core AI builds are possible.
+- **LFM Open License (vendor, full text):** Threshold is annual revenue of
+  US$10,000,000 or more, counted across the legal entity and its controlled,
+  controlling and commonly controlled entities; non-profit research
+  exception; works that only link to the interfaces are not derivative works.
+  FluidInference's card says commercial use at or above the threshold needs
+  a separate licence.
+- **LFM3-Audio-2B (vendor card):** 2.0B parameters, 32K context, text or
+  16 kHz audio in, text or 24 kHz speech out; voice chat English only; 18
+  speech languages; "time to first token as low as 50 ms" (hardware not
+  stated); interruption not mentioned; licence LFM Open License v1.0.
+- **Phonon (vendor, Gradium):** 31M English, Apache-2.0, 65 MB; 28 ms p95 time
+  to first audio on a CPU streaming benchmark (Pocket TTS 165 ms on it); the
+  40M multilingual variant is non-commercial. No iPhone measurement. Arm
+  separately reports about 28 ms and 15x real time on Arm CPUs (relayed).
+- **FluidAudio (vendor README):** Kokoro does not stream; "physical iOS
+  inference remains unvalidated" for Kokoro; Phonon 31m about 20x real time on
+  the Neural Engine; Parakeet and Kokoro v3 need iOS 18.
+
+### 8.2 LFM3-Audio-2B builds (Hugging Face API sizes)
+
+| Build | Size | Notes |
+|---|---|---|
+| GGUF Q4_0 / Q4_K_M / Q8_0 / F16 | 1,050 / 1,100 / 1,846 / 3,467 MB | llama.cpp v0.8.0 (b11960) or newer; `llama-tts`, `POST /tts`, `/v1/realtime` |
+| mmproj Q4_0 / Q4_K_M / Q8_0 / BF16 | 161 / 172 / 304 / 571 MB | audio projector, needed for audio in |
+| MLX 4-bit / 8-bit | 1,585 / 2,335 MB + 147 MB codec | MLX-VLM, Apple Silicon; no MLX Swift port for LFM3 found |
+| Core ML (FluidAudio) | LM int8 block-32, ASR about 2.5 GB, speech out +0.4 GB, context 4,096 | int4 failed the authors' speech-frame check; vendor M5 Pro: TTS first audio 37 ms, 4.3 to 4.5x real time, live ASR 10.4x, ASR peak 1.9 GB |
+| Core AI (iOS 27) | LM 2,159 MB + depth decoder 218 MB | vendor M5 Pro: TTS 5.07x, ASR 24.6x |
+| LiteRT / litertlm | 1,146 to 1,531 MB int4; 2,141 MB int8 | Android oriented |
+| ONNX | q4 decoder 1,687 MB + encoder and codec | not iOS-documented |
+
+No smaller LFM3 audio model exists. No iPhone measurement of LFM3-Audio by
+anyone (unk). Our Mac run (ours, `mobile/README.md`, loaded M1) was slower
+than vendor M5 Pro numbers by about 5x for ASR and 7x for speech out, and
+slower than real time for both.
+
+### 8.3 Text model files and figures
+
+Qwen3-0.6B Q4_K_M 397 MB (Q8_0 639 MB is what we run); Qwen3-1.7B Q4_K_M
+1,107 MB; Qwen3.5-0.8B Q4_K_M 533 MB, non-thinking by default (card);
+Qwen3.5-2B Q4_K_M 1,281 MB; LFM3-1.7B Q4_K_M 1,100 MB, QAD-Q4_0 1,050 MB,
+thinking on by default, switch off "can be inconsistent" (card);
+LFM2.5-1.2B Q4_K_M 731 MB; LFM2.5-350M Q4_K_M 229 MB; Gemma 3 1B Q4_K_M
+806 MB; Gemma 3 270M Q4_K_M 253 MB; Gemma 4 E2B Q4_K_M 3,107 MB (Apache-2.0,
+2.3B effective); SmolLM3-3B Q4_K_M 1,915 MB (`/no_think`); Phi-4-mini Q4_K_M
+2,492 MB; Llama 3.2 1B Q4_K_M 808 MB, 3B 2,019 MB; MiniCPM5-2B Q4_K_M
+1,561 MB.
+
+iPhone decode speeds (3P unless marked): iPhone 17 Pro (A19 Pro): Qwen3-0.6B
+MLX Q4 159 to 167 tok/s, LiteRT-LM 121, Core AI 193; Gemma 4 E2B LiteRT-LM
+61, MLX 49, Core AI 47, llama.cpp Q4_K_M 39, sustained 600 s run falls to 18
+to 27; LFM3-1.7B Q4_0 43.6 tok/s at 1.90 GB (vendor chart, read through a
+search summary). iPhone 14 Pro (A16), December 2023 llama.cpp: TinyLlama 1.1B
+Q4_0 pp512 505, tg128 54 tok/s; Q8_0 34; Phi-2 2.7B Q4_0 tg 23. iPhone 15 Pro
+(A17 Pro) same model Q4_0 pp 646, tg 57. Nothing newer on an A16 or A17 Pro.
+Sources: john-rocky/apple-silicon-llm-bench, llama.cpp discussion 4508.
+
+### 8.4 Speech-to-speech models
+
+Moshi MLX q4 4,806 MB + 385 MB codec (CC-BY 4.0; 160 ms theoretical; the
+repo says MLX is for iPhone and Mac, no iPhone figure); NVIDIA PersonaPlex 7B
+(8.4B, 16.7 GB BF16); NVIDIA NemotronLabs VoiceChat 11B (about 450 ms
+turn-taking, MLX 4-bit about 9 GB, OpenMDW 1.1); LFM2.5-Audio-1.5B MLX
+4/5/6/8-bit about 0.9/1.1/1.3/1.7 GB with an MLX Swift library; Sesame CSM-1B
+6.2 GB (speech generator only); Ultravox v0.5 1B (audio in, text out). No
+distilled Moshi found. None has an iPhone measurement. Nothing except the
+two Liquid models is small enough for 6 GB beside the app.
+
+### 8.5 iOS memory limits
+
+Apple documents no per-device figure. Forum measurements (3P): about 6,144 MB
+with the increased-memory-limit entitlement on an 8 GB iPhone 16 Pro Max and a
+12 GB iPhone 17 Pro Max (6,656 MB with the debugging entitlement); 2.2 to 2.3
+GB available on a 4 GB iPhone 13, iOS 15.3.1. A 6 GB iPhone: unk. The
+llama.cpp xcframework includes libmtmd (PR merged 2026-06-25); open issue
+#30556 reports freed model memory leaving the footprint elevated on iOS.
+
+### 8.6 Still to measure on the phone
+
+Everything in section 6 plus: Qwen3-0.6B Q4_K_M versus Q8_0, Qwen3.5-0.8B,
+LFM3-1.7B QAD-Q4_0 decode and prefill with a cached page; Phonon 31M first
+audio; `os_proc_available_memory()` at idle and after each load.
