@@ -80,9 +80,10 @@ members Autoradio
     flying = false
     send pm = pageOpen(address=nxt, title="")
 
-  // The deck follows the Kit's focus when something else moved it and it stayed there.
-  task syncTop when pg.top != "" and pg.top != topAddr and onbd == false key=`${pg.top}|${topAddr}`
+  // The deck takes in a page the Kit opened that the deck does not know (something outside the deck opened it). A focus that is only
+  // behind the deck (the answer to a move still on its way) is never followed: that would undo a swipe.
+  task syncTop when pg.top != "" and order.includes(pg.top) == false and onbd == false key=pg.top
     after(500, syncDeck)
   action syncDeck
-    if pg.top != "" and pg.top != topAddr and pg.top.startsWith("onboarding:") == false
+    if pg.top != "" and order.includes(pg.top) == false and pg.top.startsWith("onboarding:") == false
       order = [pg.top].concat(order.filter(a => a != pg.top))
