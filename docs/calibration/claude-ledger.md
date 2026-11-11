@@ -126,6 +126,8 @@ entered below as lapsed, not scored.
 | C43 | 2026-11-10T22:10Z | lead | effect | The first deploy with no expedite anywhere in its range walks R0 to R5 with no ring held more than 20 minutes and no rollback. | 0.60 | 2026-11-24T00:00Z | vmctl journal |
 | C44 | 2026-11-10T22:10Z | lead | diagnosis | `TestResearchChildModelCallsShareOneComputerGate` fails again in the next ten whole-suite runs of agentcore (land or CI). | 0.35 | after ten runs | land logs, CI |
 | C45 | 2026-11-10T22:10Z | lead | effect | With the judges converted to one call at a time, no judge site's work is dropped for a deadline in the paper's first 24 hours (no new "budget expired" or deadline lines from those sites beyond the day before). | 0.65 | 24 hours after deploy | paper log lines via host, ledger |
+| C46 | 2026-11-11T10:10Z | lead | ready | The Gemini review seat, run on the four parts of the Autoradio app diff (`lane/ar-app` at 3d1b1934c), reports at least one blocking finding that I judge real after reading the code. | 0.60 | 2026-11-11T14:00Z | review outputs |
+| C47 | 2026-11-11T10:10Z | lead | ready | After any repairs, the app branch lands on main through `scripts/land` on its first run. | 0.60 | 2026-11-11T18:00Z | land log |
 
 ### Settlements
 
@@ -141,7 +143,7 @@ entered below as lapsed, not scored.
 
 ### Scorecard
 
-Second form: 26 claims open, 0 settled. First form: 12 settled (7 true, 4
+Second form: 28 claims open, 0 settled. First form: 12 settled (7 true, 4
 false, 1 partial), 7 lapsed.
 
 | band | claims settled | came true |
