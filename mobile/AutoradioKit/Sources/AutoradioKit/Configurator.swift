@@ -69,7 +69,8 @@ public struct DeviceProbe: Codable, Equatable, Sendable {
 
     /// A pretend phone of a memory class, for the Mac proof and tests: the memory budget is the PLANNER's, not the Mac's.
     public static func simulated(_ tier: DeviceClass, availableMB: Double? = nil) -> DeviceProbe {
-        let gbs = [DeviceClass.unsupported: 4.0, .tier6: 5.6, .tier8: 7.4, .tier12: 11.4][tier] ?? 4
+        let gbs: Double
+        switch tier { case .unsupported: gbs = 4.0; case .tier6: gbs = 5.6; case .tier8: gbs = 7.4; case .tier12: gbs = 11.4 }
         return DeviceProbe(model: "simulated-\(tier.rawValue)GB", chip: "simulated", physicalGB: gbs, availableMB: availableMB ?? assumedAvailableMB(tier: tier),
                            availableIsAssumption: true, freeDiskGB: 50, thermal: "nominal", osVersion: "simulated", tier: tier, simulated: true)
     }
@@ -121,7 +122,7 @@ public struct Configuration: Codable, Equatable, Sendable {
     public var estimatedMB: Double
     public var downloadBytes: Int64
     public func pick(_ r: ConfigRole) -> String? { picks[r.rawValue] }
-    public var key: String { ConfigRole.allCases.compactMap { picks[$0.rawValue].map { "\($0.rawValue)=\($0)" } }.joined(separator: " ") }
+    public var key: String { ConfigRole.allCases.compactMap { r in picks[r.rawValue].map { id in "\(r.rawValue)=\(id)" } }.joined(separator: " ") }
 }
 
 public enum ConfigPlanner {
