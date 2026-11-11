@@ -962,18 +962,16 @@ jobs:
       - name: Install Chromium
         run: cd frontend && pnpm exec playwright install chromium
 
+      # Bounded: with the mirrors' DNS down, apt waits on each lookup and an
+      # unbounded try ate the job's whole 15 minutes (run 43050887617). One
+      # try, cut off at 4 minutes; either way the launch check decides.
       - name: Install Chromium system packages (best effort)
         shell: bash
         run: |
           cd frontend
-          for attempt in 1 2 3; do
-            if sudo env "PATH=$PATH" pnpm exec playwright install-deps chromium; then
-              exit 0
-            fi
-            echo "install-deps attempt $attempt failed"
-            sleep 10
-          done
-          echo "::warning::playwright install-deps chromium failed 3 times (Ubuntu mirrors unreachable?); the launch check decides whether Chromium can run"
+          if ! sudo timeout --kill-after=20 240 env "PATH=$PATH" pnpm exec playwright install-deps chromium; then
+            echo "::warning::playwright install-deps chromium failed or ran past 4 minutes (Ubuntu mirrors unreachable?); the launch check decides whether Chromium can run"
+          fi
 
       - name: Chromium launches
         shell: bash
