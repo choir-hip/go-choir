@@ -26,6 +26,20 @@ component PlaceRow
             text line font-family=th.fontUi font-size=13 color=th.muted text-align="left" line-clamp=1
         image "symbol:forward-chevron" color=th.muted
 
+// A key page as a chip: tap to bring it to the top of the deck.
+component ChipPlace
+  inject
+    th: Theme
+    openPage: action
+  props
+    slug: string
+    name: string
+    address: string
+  view
+    button press=openPage(address, name) testId=`place-${slug}` appearance="none" flex-shrink=0 aria-label=`Open ${name}`
+      row padding="10px 12px" border-radius=th.radiusPill align-items="center" justify-content="center" min-height=44 background-color=th.paper2 border-width=1 border-style="solid" border-color=th.rule
+        text name font-family=th.fontUi font-size=15 font-weight=600 color=th.fg
+
 // One page of the stack: tap to jump to it; a close button when it can be closed.
 component StackRow
   inject
@@ -82,12 +96,13 @@ component Launcher
               text "Nothing found." testId="launcher-nohits" font-family=th.fontUi font-size=15 color=th.muted
           if lnc.hasQuery == false
             text "Key pages" font-family=th.fontUi font-size=13 color=th.muted margin-top=4
-            PlaceRow(slug="paper", name="Paper", address="paper:front", line="Today's front page")
-            PlaceRow(slug="textures", name="Textures", address="textures:", line="Your documents")
-            PlaceRow(slug="files", name="Files", address="file:/", line="")
-            PlaceRow(slug="mail", name="Mail", address="mailbox:inbox", line="")
-            PlaceRow(slug="settings", name="Settings", address="settings:root", line="")
-            text "In the deck, top first" font-family=th.fontUi font-size=13 color=th.muted margin-top=12
+            scroll overflow-x="scroll" overflow-y="hidden" display="flex" flex-direction="row" gap=8 width="100%" testId="launcher-key-pages"
+              ChipPlace(slug="paper", name="Paper", address="paper:front")
+              ChipPlace(slug="textures", name="Textures", address="textures:")
+              ChipPlace(slug="files", name="Files", address="file:/")
+              ChipPlace(slug="mail", name="Mail", address="mailbox:inbox")
+              ChipPlace(slug="settings", name="Settings", address="settings:root")
+            text "In the deck, top first" font-family=th.fontUi font-size=13 color=th.muted margin-top=8
             for a, i in stackAddrs key=a
               StackRow(address=a, index=i)
             text "More" font-family=th.fontUi font-size=13 color=th.muted margin-top=12
