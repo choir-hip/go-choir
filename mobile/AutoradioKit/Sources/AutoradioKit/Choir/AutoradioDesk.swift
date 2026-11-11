@@ -11,8 +11,9 @@ import Foundation
 //     already heard it is NOT retried (the listener would hear them twice): the turn ends "interrupted".
 //  3. A 409 (the same id is still being answered, or was used for other words): the first time a fresh turn_id is used; on a retry the same
 //     id is tried again after a real backoff (the server says to), a few times, then it is an error.
-//  4. 401/400/413/503 before any stream: a typed error, nothing spoken. 404 and 503 (the route is not deployed, or no streaming model is
-//     bound) fall back to the polling Texture desk for this turn, so a computer without the route still answers.
+//  4. 401/400/413 before any stream: a typed error, nothing spoken. 404 and 503 (the route is missing, or no streaming model is bound) are a
+//     plain error too (every computer is updated; the route is not planned to be missing): the status is logged, one short honest line is
+//     spoken (`unreachableLine`), the turn ends "error". There is no other desk to fall back to and no retry.
 //  5. `text_sha256`, if sent, must be the SHA-256 of the exact UTF-8 bytes sent, or the server answers 400: it is omitted (the server hashes
 //     the text itself).
 //  6. A field over the contract's bound (page text 48 KB, words 2000 bytes, heard text 2000 characters, history lines 1000 bytes) is
@@ -69,17 +70,16 @@ public final class AutoradioDeskStage: StreamingDesk, @unchecked Sendable {
     public static let stageID = "autoradio-desk"
     public static var descriptor: StageDescriptor {
         StageDescriptor(displayName: "Autoradio desk (your computer, streamed)",
-                        summary: "Sends what you said and the page in front to your computer's Autoradio desk and speaks its answer sentence by sentence as it is written. Falls back to the Texture desk when the route is not there.",
+                        summary: "Sends what you said and the page in front to your computer's Autoradio desk and speaks its answer sentence by sentence as it is written.",
                         params: [.text("baseURL", "Base URL", ChoirEnvironment.defaultBaseURL)],
                         needsNetwork: true)
     }
     let baseURL: String
     let history: TurnHistory
-    /// Parameters handed to the polling desk when the route is not there (poll and settle times, for tests).
-    let fallbackParams: [String: JSONValue]
+    /// Spoken when the route is missing or unavailable (404, 503).
+    public static let unreachableLine = "I can't reach your computer's radio desk right now."
     public init(_ p: StageParams, history: TurnHistory = .shared) {
         baseURL = p.string("baseURL", ChoirEnvironment.defaultBaseURL); self.history = history
-        fallbackParams = p.values.filter { ["pollSeconds", "settleSeconds"].contains($0.key) }
     }
 
     /// A turn id the route accepts: `[A-Za-z0-9][A-Za-z0-9_.-]{0,63}`.
@@ -111,10 +111,10 @@ public final class AutoradioDeskStage: StreamingDesk, @unchecked Sendable {
 
     /// The streamed answer as sentences.
     public func speech(_ turn: DeskTurn, heard: HeardLines) -> AsyncThrowingStream<DeskEvent, Error> {
-        let (baseURL, history, fb) = (self.baseURL, self.history.snapshot(), self.fallbackParams)
+        let (baseURL, history) = (self.baseURL, self.history.snapshot())
         return AsyncThrowingStream { c in
             let task = Task {
-                do { try await Self.run(turn, baseURL: baseURL, history: history, fallbackParams: fb) { c.yield($0) }; c.finish() }
+                do { try await Self.run(turn, baseURL: baseURL, history: history) { c.yield($0) }; c.finish() }
                 catch is CancellationError { c.finish() }
                 catch { c.finish(throwing: error) }
             }
@@ -143,7 +143,7 @@ public final class AutoradioDeskStage: StreamingDesk, @unchecked Sendable {
         }
     }
 
-    static func run(_ turn: DeskTurn, baseURL: String, history: [TurnHistory.Line], fallbackParams: [String: JSONValue] = [:], deliver: (DeskEvent) -> Void) async throws {
+    static func run(_ turn: DeskTurn, baseURL: String, history: [TurnHistory.Line], deliver: (DeskEvent) -> Void) async throws {
         let env = ChoirEnvironment.shared
         let client = env.client(baseURL: baseURL)
         var id = routeID(turn.turnID)
@@ -194,22 +194,13 @@ public final class AutoradioDeskStage: StreamingDesk, @unchecked Sendable {
                 if !freshIDUsed && attempt == 1 { freshIDUsed = true; id = routeID("turn-" + UUID().uuidString.prefix(8).lowercased()); env.log?.emit(.note("autoradio desk: 409, using a fresh turn id")); continue }
                 if attempt >= 4 { throw ChoirError.server(status: 409, message: message) }
                 try await Task.sleep(nanoseconds: 500_000_000 * UInt64(attempt))     // the server asks for a short wait before retrying a turn still being answered
-            } catch ChoirError.server(let status, _) where (status == 404 || status == 503) && sentences == 0 && attempt == 1 {
-                env.log?.emit(.note("autoradio desk: the route answered \(status); this turn goes to the Texture desk"))
-                try await fallback(turn, baseURL: baseURL, params: fallbackParams, deliver: deliver)
+            } catch ChoirError.server(let status, let message) where (status == 404 || status == 503) && sentences == 0 {
+                let reason = "POST /api/autoradio/turns answered \(status) (\(message))"
+                env.log?.emit(.error(stage: "desk", message: reason))
+                deliver(.failed(spoken: Self.unreachableLine, reason: reason))
+                deliver(.done(status: "error", sentences: 1, serverFirstSentenceMs: nil, serverDoneMs: nil))
                 return
             }
         }
-    }
-
-    /// The polling Texture desk for a computer without the route: each revision's spoken blocks become sentences.
-    static func fallback(_ turn: DeskTurn, baseURL: String, params: [String: JSONValue], deliver: (DeskEvent) -> Void) async throws {
-        var pv = params; pv["baseURL"] = .string(baseURL)
-        let desk = ChoirDeskStage(StageParams(pv))
-        var n = 0
-        for try await rev in desk.submit(turn) {
-            for b in rev.blocks { if let t = b.spokenText, !t.isEmpty { deliver(.sentence(seq: n, text: t)); n += 1 } }
-        }
-        deliver(.done(status: "completed", sentences: n, serverFirstSentenceMs: nil, serverDoneMs: nil))
     }
 }

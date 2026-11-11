@@ -177,21 +177,17 @@ final class AutoradioDeskTests: XCTestCase {
         catch { XCTAssertEqual(error as? ChoirError, .server(status: 413, message: "page too large")) }
     }
 
-    func testAMissingRouteFallsBackToThePollingDesk() async throws {
-        env.setPlaying(PlayingProgramme(programmeID: "fixture-1", title: "T", route: "/r", publicationVersionID: "", manifestHash: "", blocks: ["a", "b", "c"], docID: "doc-1"))
-        StubProtocol.handler = { req in
-            switch req.path {
-            case "/api/autoradio/turns": return .init(status: 404, json: ["error": "not found"])
-            case "/api/prompt-bar": return .init(status: 202, json: ["doc_id": "doc-1", "revision_id": "r1"])
-            case "/api/texture/revisions/r1": return .init(json: ["author_kind": "user", "version_number": 1])
-            case "/api/texture/revisions/r2": return .init(json: ["author_kind": "appagent", "version_number": 2, "content": "a\n\nb changed\n\nc"])
-            default: return .init(json: ["events": [["event_type": "version", "revision_id": "r2", "work_state": "working"]], "next_cursor": 5])
-            }
+    // A missing or unavailable route is a plain error (owner: computers are updated, the route is not planned to be missing): one short
+    // honest line is spoken, the status is logged, and nothing else is asked (no polling desk, no retry).
+    func testAMissingOrUnavailableRouteIsASpokenErrorAndNeverTheOtherDesk() async throws {
+        for status in [404, 503] {
+            let paths = Locked<[String]>([])
+            StubProtocol.handler = { req in paths.write { $0.append(req.path) }; return .init(status: status, json: ["error": "nope"]) }
+            let ev = try await collect(AutoradioDeskStage(StageParams()), turn())
+            XCTAssertEqual(paths.value, ["/api/autoradio/turns"], "status \(status): one request, no other desk")
+            XCTAssertTrue(ev.contains { if case .failed(let spoken, let reason) = $0 { return spoken == AutoradioDeskStage.unreachableLine && reason.contains("\(status)") } else { return false } }, "\(ev)")
+            if case .done(let st, _, _, _)? = ev.last { XCTAssertEqual(st, "error") } else { XCTFail("done last: \(ev)") }
         }
-        let stage = AutoradioDeskStage(StageParams(["pollSeconds": .number(0.02), "settleSeconds": .number(0.2)]))
-        let ev = try await collect(stage, DeskTurn(turnID: "turn-fb1", programmeID: "fixture-1", blockIndex: 0, listenerWords: "change b"))
-        XCTAssertTrue(ev.contains { if case .sentence(_, let t) = $0 { return t.contains("changed") } else { return false } }, "\(ev)")
-        if case .done(let st, _, _, _)? = ev.last { XCTAssertEqual(st, "completed") } else { XCTFail("done last: \(ev)") }
     }
 
     func testNoTimerSourceSurvivesAroundModelCalls() throws {
