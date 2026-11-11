@@ -77,8 +77,8 @@ step logs
 run_drive survey light "" --touch platform
 
 STORY1=$(ids "$SHOTS/drive-survey.txt" "paper-story-" | sed -n 1p)
-STORY2=$(ids "$SHOTS/drive-survey.txt" "paper-story-" | sed -n 4p)
-PLAY1=$(ids "$SHOTS/drive-survey.txt" "paper-play-" | sed -n 2p)
+STORY2=$(ids "$SHOTS/drive-survey.txt" "paper-story-" | sed -n 2p)
+PLAY1=$(ids "$SHOTS/drive-survey.txt" "paper-play-" | sed -n 1p)
 DOC1=$(ids "$SHOTS/drive-survey.txt" "textures-doc-" | sed -n 3p)
 # a document by its title: the id of the row whose card holds the title text (the tree lists the row, then its texts)
 docid() { awk -v t="$2" '/\[textures-doc-texture:/ { match($0, /\[textures-doc-texture:[^]]*\]/); id=substr($0, RSTART+1, RLENGTH-2) } index($0, "\"" t "\"") && id != "" { print id; exit }' "$1"; }
