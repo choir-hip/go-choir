@@ -90,7 +90,7 @@ func (p *RiverProvider) call(ctx context.Context, req LLMRequest, onChunk func(S
 		Tools:           convertOpenAIChatTools(req.Tools),
 		ToolChoice:      openAIChatToolChoice(req.ToolChoice),
 		Stream:          req.Stream,
-		ReasoningEffort: riverReasoningEffort(req.ReasoningEffort),
+		ReasoningEffort: riverEffortFor(req),
 	}
 	if req.MaxTokens > 0 {
 		maxTokens := req.MaxTokens
@@ -133,6 +133,17 @@ func (p *RiverProvider) call(ctx context.Context, req LLMRequest, onChunk func(S
 		return parseOpenAIChatCompletionsResponse(resp, modelID, "river")
 	}
 	return parseOpenAIChatCompletionsStream(resp.Body, modelID, "river", onChunk)
+}
+
+// riverEffortFor is the effort one River call sends. River documents
+// reasoning_effort "none" as off (and off as the DeepSeek default), so the
+// floor at "low" below is ours, from the 2026-11-09 rule that thinking is never
+// off, not River's. The autoradio role is the one exemption.
+func riverEffortFor(req LLMRequest) string {
+	if req.ReasoningOff {
+		return "none"
+	}
+	return riverReasoningEffort(req.ReasoningEffort)
 }
 
 // riverReasoningEffort maps Choir's effort to what River accepts. Probed

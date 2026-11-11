@@ -28,6 +28,8 @@ import (
 // Each Phase 4 slice that turns a built-in desk into a package adds that
 // package to required.json: the set is the management, research, engineering
 // and Texture packages and the prompt router. The Mail package is not required.
+// The first-party autoradio desk is (docs/design/autoradio-desk-fast-turns-2026-11-11.md):
+// the app's voice turns call it on every computer.
 
 // Required is one package the image requires: its desk manifest and the
 // version the image ships.

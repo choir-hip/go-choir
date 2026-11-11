@@ -14,6 +14,16 @@ func TestPlatformDefaultEffortsAreAllLow(t *testing.T) {
 		t.Fatalf("defaults = %+v", p.Defaults)
 	}
 	for role, sel := range p.Roles {
+		// The one named exemption (owner 2026-11-11: "for auto radio, we may
+		// want to have reasoning off, at least for super fast responses"): the
+		// autoradio role, this role only, holds ReasoningOff. Every other role
+		// stays low.
+		if role == AutoradioRole {
+			if sel.ReasoningEffort != ReasoningOff {
+				t.Fatalf("role %s effort = %q, want %q", role, sel.ReasoningEffort, ReasoningOff)
+			}
+			continue
+		}
 		if sel.ReasoningEffort != "low" {
 			t.Fatalf("role %s effort = %q", role, sel.ReasoningEffort)
 		}

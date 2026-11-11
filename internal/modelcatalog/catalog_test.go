@@ -257,3 +257,28 @@ func TestDevinFlashIsTextOnlyAndImageTurnsSkipIt(t *testing.T) {
 		t.Fatal("swe-2-fast must not be catalogued")
 	}
 }
+
+// The autoradio pool (owner 2026-11-11): River DeepSeek leads and Bedrock
+// Haiku 5.5 is the only fallback. No devin (overloaded by AutoPaper), no beam
+// (often parked), no Synthetic (reserved for self-development).
+func TestAutoradioPool(t *testing.T) {
+	want := []PoolMember{
+		{Provider: "river", Model: "deepseek-ai/DeepSeek-V4.1-Flash-1017", Weight: 1},
+		{Provider: "bedrock", Model: "us.anthropic.claude-haiku-5-5", FallbackOnly: true},
+	}
+	pool := Pools()[AutoradioPool]
+	if len(pool) != len(want) {
+		t.Fatalf("autoradio pool = %v, want %v", pool, want)
+	}
+	for i, m := range want {
+		if pool[i] != m {
+			t.Fatalf("autoradio pool[%d] = %v, want %v", i, pool[i], m)
+		}
+		if _, ok := Lookup(m.Provider, m.Model); !ok {
+			t.Fatalf("autoradio member %v is not in the catalog", m)
+		}
+	}
+	if NoFailover(AutoradioPool) {
+		t.Fatal("the autoradio pool must walk to its next member")
+	}
+}

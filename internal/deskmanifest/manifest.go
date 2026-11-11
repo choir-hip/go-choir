@@ -770,7 +770,7 @@ func validateStructure(d Desk) error {
 // built-in packages (files, image, library-next, reader) may carry a desk
 // through the owner's own track, so they are not reserved here and the first-party desks the plan names ahead of their move.
 var reservedAppSlugs = map[string]bool{
-	"audio": true, "autopaper": true, "browser": true, "calendar": true, "compute-monitor": true,
+	"audio": true, "autopaper": true, "autoradio": true, "browser": true, "calendar": true, "compute-monitor": true,
 	"conductor": true, "content": true, "desk": true, "desktop": true, "email": true, "engineering": true,
 	"epub": true, "mail": true, "mail-reader-drill": true,
 	"management": true, "management-task": true, "management_task": true, "owner": true, "pdf": true,
@@ -798,7 +798,7 @@ func Renamed(name string) (string, bool) {
 // carries its own desk under (MA4.7): the slug stays reserved for every other
 // package, and only a spec marked FirstParty, which internal/appdesk sets
 // solely for the manifest the image ships for that package, may take it.
-var firstPartyAppSlugs = map[string]bool{"mail": true, "mail-reader-drill": true}
+var firstPartyAppSlugs = map[string]bool{"mail": true, "mail-reader-drill": true, "autoradio": true}
 
 // CarriedByPackage reports whether name is a registered desk that the
 // in-tree first-party package of the same name carries (Desk.Packaged): that
