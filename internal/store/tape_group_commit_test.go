@@ -256,8 +256,11 @@ func TestGroupCommitUnknownOutcomeIsNotRetried(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if attempts != 1 {
-		t.Fatalf("CAS attempts after the lead = %d, want 1 (the group once: no retry)", attempts)
+	// The store does not retry; the appender re-sends the SAME request once
+	// when an outcome is unknown (idempotent at the host), so two calls reach
+	// the CAS and still only one tape event could result.
+	if attempts != 2 {
+		t.Fatalf("CAS attempts after the lead = %d, want 2 (the group once, plus the appender's same-request re-send)", attempts)
 	}
 	if st := h.store.TelemetryStats().GroupCommit; st.UnknownOutcome != 1 {
 		t.Fatalf("unknown_outcome = %d, want 1", st.UnknownOutcome)
