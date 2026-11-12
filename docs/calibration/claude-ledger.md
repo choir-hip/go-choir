@@ -136,6 +136,7 @@ entered below as lapsed, not scored.
 | C53 | 2026-11-11T13:53Z | lead | effect | After the default-themes deploy, a fresh browser with no stored theme shows Chrome Pastel on choir.news in light and Liquid Metal in dark, with no pink at first paint. | 0.80 | 2026-11-12T00:00Z | browser proof on staging |
 | C54 | 2026-11-11T20:05Z | lead | ready | The web golden-document fix (`lane/golden-web` at cbb9e5c95, Gemini accept in round 2) lands on main through `scripts/land` on its first run. | 0.65 | 2026-11-12T00:00Z | land log |
 | C55 | 2026-11-11T20:05Z | lead | effect | After that deploy, `GOLDEN_WEB_ONLY=1 scripts/golden-docs` run against the deployed frontend commit reports `GOLDEN COMPARE OK`, and no CI job on the landing commit fails. | 0.70 | 2026-11-12T02:00Z | CI run, deploy, golden compare |
+| C56 | 2026-11-12T19:35Z | lead | diagnosis | The paper's 15:26:30Z wedge (local head 10914341, platform 10914342) came from a lost CAS reply: corpusd committed event 10914342, the guest's CAS call returned an error, and `appendLockedInner` discarded the prepared row. Test: the host records accept 10914342 from the paper at about 15:26:30Z, with no later conflicting append at that sequence and no other path (replay, restore) that advanced the host head alone. False if the host head moved without a guest CAS, or the guest got a success reply. | 0.70 | 2026-11-13T19:00Z | host control records, corpusd and guest logs, code |
 
 ### Settlements
 
