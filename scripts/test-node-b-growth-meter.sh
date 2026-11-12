@@ -116,6 +116,8 @@ mkdir -p "$w/state/vm-state/vm-aaa" "$w/state/vm-state/candidate-x" \
   "$w/state/platform-artifacts/tape-seg/computer-a" \
   "$w/state/platform-artifacts/sha256/pin-receipts/computer-a" \
   "$w/state/platform-artifacts/sha256/file-cas-chunks/computer-a" \
+  "$w/state/platform-artifacts/capture-bodies/computer-a" \
+  "$w/state/platform-artifacts/platform-update/rel-1" \
   "$w/state/guest-releases/r1" "$w/state/files" "$w/state/mail" \
   "$w/cg/system.slice/go-choir-vmctl.service" "$w/cg/system.slice/postgresql.service" \
   "$w/proc/4242" "$root/fake"
@@ -173,6 +175,12 @@ assert 'events_delta' not in r['units']['go-choir-vmctl.service']
 \""
 check "G2 first reading counts no receipts, only sets the mark" "! grep -q receipts_since_last.computer-a '$ledger' && [ ! -e '$root/fake/kind-sql.log' ]"
 check "G3 heavy stores measured on the first reading" "grep -q 'fs.artifacts.pin-receipts' '$ledger'"
+check "G3 chunks (total and largest computer dir), capture-bodies and platform-update are metered" "python3 -c \"
+import json
+r=json.loads(open('$ledger').readline())['items']
+for k in ('fs.artifacts.file-cas-chunks','fs.artifacts.file-cas-chunks.computer-a','fs.artifacts.capture-bodies','fs.artifacts.capture-bodies.computer-a','fs.artifacts.platform-update','fs.artifacts.platform-update.rel-1'): assert k in r,k
+\""
+check "G3 capture-bodies and platform-update are heavy, not hourly" "grep -q 'capture-bodies' '$root/fake/du.log' && grep -q 'platform-update' '$root/fake/du.log'"
 check "G4 classes" "python3 -c \"
 import json
 r=json.loads(open('$ledger').readline())
@@ -194,7 +202,7 @@ import json
 r=json.loads(open('$ledger').read().splitlines()[1])
 assert r['receipts_since_last']=={'computer-a':{'projection_batch_recorded':7}}, r['receipts_since_last']
 \""
-check "G3 heavy stores skipped within the window" "! grep -q 'pin-receipts' '$root/fake/du.log' && ! grep -q file-cas-chunks '$root/fake/du.log' && grep -q tape-seg '$root/fake/du.log'"
+check "G3 heavy stores skipped within the window" "! grep -q 'pin-receipts' '$root/fake/du.log' && ! grep -q 'capture-bodies' '$root/fake/du.log' && ! grep -q 'platform-update' '$root/fake/du.log' && ! grep -q file-cas-chunks '$root/fake/du.log' && grep -q tape-seg '$root/fake/du.log'"
 
 # ---- G8 a failing du is recorded, not fatal -------------------------------
 FAKE_DU_FAIL=1 meter $((t0 + 7200)) >"$root/out3" 2>&1
