@@ -15,3 +15,8 @@ Append-only. One terse entry per pass.
   run-memory writes, one entry each; an event is four corpusd calls. C58
   settled false (ephemeral share about 15%). S5 rescoped; decision D8 added.
   lane/storage-guards built, in one-seat review.
+- 2026-11-12T21:10Z. Owner rulings: D1 default (no local tape dropped;
+  revisit before Autoradio goes to TestFlight); D2 to D7 defaults; D8 group
+  commit should be on (lossless coalescing only). Jev: use the vendor's
+  limits, not our 30,000-byte guard. lane/storage-guards repaired after a
+  REPAIR verdict (two blocking findings) and is in scripts/land.

@@ -167,6 +167,11 @@ stations:
     scope: tiering design and the archive-and-verify half; column compression after the table census; the floor recomputed from measured peaks
     class: red, owner decisions first
 
+owner_rulings:
+  - 2026-11-12, D1: "let's go with the default; don't drop the old tape segments from node b yet. We will revisit this before we ship autoradio to TestFlight."
+  - 2026-11-12, D2 to D7: "I go with your defaults"
+  - 2026-11-12, D8: "group commit, I decided it off but it should be on, huh?" Read as yes to coalescing with no loss window and no setting; the two loss windows stay deleted. Counters land first.
+
 decisions_for_the_owner:
   - id: D1
     question: Where does the second copy of cold tape live?
