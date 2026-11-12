@@ -142,6 +142,7 @@ entered below as lapsed, not scored.
 | C59 | 2026-11-12T20:40Z | lead | diagnosis | The 6 GiB an hour of paper chunks is whole-store snapshots that do not dedupe against the previous snapshot (new sealed bytes for unchanged content), taken about every 23 minutes. Test: the chunk-drain trace (chunking and sealing code, snapshot roots' shared-chunk counts). | 0.60 | 2026-11-13T12:00Z | investigator report |
 | C60 | 2026-11-12T21:00Z | lead | landing | lane/storage-guards (three commits, head 7a6557548) lands through scripts/land, passes CI and deploys to staging on the first attempt, and the first `go-choir-disk-forecast` run on Node B exits 0 and prints a days-to-floor line and a 6-hour drain line. False if the land, CI, deploy or first forecast run fails or needs a fix commit. | 0.65 | 2026-11-13T02:00Z | scripts/land output, CI run, deploy receipt, journal of the forecast unit |
 | C61 | 2026-11-12T21:40Z | lead | estimate | Storage mission conjecture SS2-C1: after stations S4 to S6 land, the paper's image, tape, receipts and chunks on Node B sum to at most 90 GiB (196 on 2026-11-12) with no tape moved off the host, and Node B's free space falls by at most 3 GiB a day over seven days with no hand release. False if either reading misses. | 0.45 | 2026-12-10T00:00Z | Node B du and pg_total_relation_size; the hourly growth ledger |
+| C62 | 2026-11-12T21:35Z | lead | landing | lane/snapshot-loop (tip 67288e86d: backoff from the attempt's end, witness before pages, 90 minute budget, free-space guard) lands, deploys, and within 3 hours of the paper's refresh either the paper records one snapshot (`snapshot_recorded` after the deploy) or its failed attempt uploads under 200 MiB of new chunks and the next attempt waits at least 20 minutes; and Node B's 6-hour drain measured from one hour after the refresh is under 1 GiB an hour. False if the paper keeps uploading chunks at more than 1 GiB an hour, or a fix commit is needed. | 0.60 | 2026-11-13T04:00Z | deploy receipt, the paper's observability and gateway/corpusd logs, the forecast unit's fast-drain line |
 
 ### Settlements
 
@@ -166,15 +167,16 @@ entered below as lapsed, not scored.
 | C56 | 2026-11-12T20:05Z | true | host control DB: 10914342 committed 15:26:29.866Z in a normal burst after 10914341, nothing after until the 19:18Z refresh; corpusd compaction shows the host head at 10914342; guest CAS is the only path that moves the head; recovery's `err=<nil>` with split heads means no prepared row survived, and the post-CAS-error discard is the only delete on that path. The guest's CAS error line itself rotated out, so the step is shown by elimination (docs/problems/event-appender-wedges-clustering-assessment-2026-11-12.md) | 0.09 |
 | C59 | 2026-11-12T20:30Z | partial | the chunks are whole-store snapshot attempts that do not dedupe on a live store (fixed 4 MiB cut, 88% of chunks differ after 30 minutes), as claimed; but the cadence is a retry loop of failed attempts (budget abort in the witness, no backoff), not a 23-minute schedule of good snapshots (docs/evidence/paper-chunk-drain-trace-2026-11-12.md) | 0.16 |
 | C58 | 2026-11-12T20:50Z | false | the write census: acknowledged run-memory writes are about 62% of events and are agent record; telemetry batches are 12% and pure ephemeral writers (in-flight marks, poll and wake pairs) 2 to 4%, so about 15% by count, under the 30% bar (docs/evidence/tape-write-census-2026-11-12.md) | 0.25 |
+| C60 | 2026-11-12T21:26Z | true | landed as cca135073 (CI success, deployed 20:53Z); the forecast unit's first run at 21:25Z exited 0 and printed the days-to-floor line (1.4 days, slope -12.2 GiB a day) and the 6-hour drain line. No fix commit. The first `scripts/land` run failed because the lead ran a copy of the script outside the worktree, not because of the lane | 0.12 |
 
 ### Scorecard
 
-Second form: 29 claims open, 12 settled (recounted 2026-11-12). First form: 12 settled (7 true, 4
+Second form: 29 claims open, 13 settled (recounted 2026-11-12). First form: 12 settled (7 true, 4
 false, 1 partial), 7 lapsed.
 
 | band | claims settled | came true |
 |---|---|---|
 | 0.0 to 0.3 | 0 | n/a |
 | 0.3 to 0.6 | 3 | 1 |
-| 0.6 to 0.8 | 9 | 6, and 1 partial |
+| 0.6 to 0.8 | 10 | 7, and 1 partial |
 | 0.8 to 1.0 | 0 | n/a |

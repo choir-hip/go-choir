@@ -132,8 +132,8 @@ stations:
     class: orange
     review: one seat (Gemini 4 Hydrogen; REPAIR, two blocking findings fixed)
     depends_on: []
-    carrier: main cca135073, deployed 2026-11-12T20:53Z
-    status: landed
+    carrier: main cca135073, deployed 2026-11-12T20:53Z; first forecast run 21:25Z exit 0
+    status: proved
   - id: S2
     name: the appender wedge fix
     scope: re-send on an unclear CAS reply, in-place catch-up

@@ -39,3 +39,12 @@ Append-only. One terse entry per pass.
   is dropped from S0 and moves to S4 behind root-time verification. Four
   skill-text commits each triggered CI and a deploy; lane/ci-docs-like
   built to stop that. Free 78.9 GiB at 21:08Z.
+- 2026-11-12T21:35Z. S1 proved: forecast at 21:25Z reads free 77 GiB, slope
+  -12.2 GiB a day, 1.4 days to the floor; 24-hour growers: paper chunks
+  +27.8 GiB, nix store +13.4, paper image +9.3, tape +2.6. C60 true. The
+  fast-drain line said ok at 11.8 GiB in 6 hours, so its threshold is too
+  lenient for today's drain; and the nix store grew 13.4 GiB in a day of
+  many deploys. Seat 2 accepted the repaired snapshot tip 67288e86d; seat 1
+  re-review running. C62 entered. The second sweep dry run died at the
+  0d0c4f164 deploy (a skill-text commit); it is re-run after the snapshot
+  deploy.
