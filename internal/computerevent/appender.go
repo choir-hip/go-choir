@@ -854,14 +854,19 @@ func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Eve
 	}
 	receipt, err := a.cas.CompareAndSwap(ctx, request)
 	if err != nil {
-		// The discard must not share a cancelled ctx with the CAS, or the
-		// prepared row outlives the failed append and blocks the next one.
-		dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
-		if derr := a.projection.DiscardPrepared(dctx, a.computerID, digest); derr != nil {
-			log.Printf("computer event appender: discard prepared seq=%d after failed CAS: %v", event.Sequence, derr)
+		if CASRefusedDefinitely(err) {
+			a.discardPreparedLocked(ctx, request)
+			return Receipt{}, fmt.Errorf("computer event appender: head CAS: %w", err)
 		}
-		cancel()
-		return Receipt{}, fmt.Errorf("computer event appender: head CAS: %w", err)
+		// The outcome is unknown: the host may have committed before the
+		// reply was lost (a reset, a cancelled caller, a 5xx after the
+		// commit). Deleting the prepared row here left the local projection
+		// one behind with nothing to recover from, and the computer refused
+		// every write until a boot (the paper, 2026-11-02 and 2026-11-12).
+		// Ask the host by re-sending the same request.
+		if receipt, err = a.resendUnclearCASLocked(ctx, request, err); err != nil {
+			return Receipt{}, err
+		}
 	}
 	if err := a.verifier.VerifyEventHeadReceipt(ctx, receipt, request); err != nil {
 		return Receipt{}, fmt.Errorf("computer event appender: verify head receipt: %w", err)
@@ -876,6 +881,46 @@ func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Eve
 		go (*observer)(event.EventKind)
 	}
 	return receipt, nil
+}
+
+// casResendTimeout bounds the re-send of a CAS whose outcome is unknown. It is
+// a deadline, not a limit on calls; appends wait behind it under a.mu.
+const casResendTimeout = 30 * time.Second
+
+// discardPreparedLocked drops the prepared row of a request the host refused,
+// on a context that outlives a cancelled caller.
+func (a *ComputerEventAppender) discardPreparedLocked(ctx context.Context, request CASRequest) {
+	// The discard must not share a cancelled ctx with the CAS, or the
+	// prepared row outlives the failed append and blocks the next one.
+	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+	if derr := a.projection.DiscardPrepared(dctx, a.computerID, request.EventDigest); derr != nil {
+		log.Printf("computer event appender: discard prepared seq=%d after failed CAS: %v", request.Event.Sequence, derr)
+	}
+}
+
+// resendUnclearCASLocked settles a CAS that returned an error without proving
+// a refusal. It re-sends the same request on a context that outlives a
+// cancelled caller: the host answers a request it already committed with the
+// stored receipt (it checks the idempotency key first, under the computer's
+// lock), commits one it never saw, and refuses one that cannot commit. Only a
+// definite refusal discards the prepared row. If the re-send is unclear too,
+// the row stays: RecoverPrepared finalizes it when the host committed and
+// discards it when the host did not.
+func (a *ComputerEventAppender) resendUnclearCASLocked(ctx context.Context, request CASRequest, first error) (Receipt, error) {
+	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), casResendTimeout)
+	defer cancel()
+	receipt, err := a.cas.CompareAndSwap(rctx, request)
+	if err == nil {
+		log.Printf("computer event appender: seq=%d head CAS outcome was unclear (%v); the re-send settled it", request.Event.Sequence, first)
+		return receipt, nil
+	}
+	if CASRefusedDefinitely(err) {
+		a.discardPreparedLocked(ctx, request)
+		return Receipt{}, fmt.Errorf("computer event appender: head CAS: %w", err)
+	}
+	log.Printf("computer event appender: seq=%d head CAS outcome unknown after a re-send (%v; first: %v); prepared row kept for recovery", request.Event.Sequence, err, first)
+	return Receipt{}, fmt.Errorf("computer event appender: head CAS outcome unknown, prepared row kept for recovery: %w (re-send: %v)", first, err)
 }
 
 // recoverPreparedInPlaceLocked runs RecoverPrepared on a running computer and
