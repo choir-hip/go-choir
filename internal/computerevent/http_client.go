@@ -135,12 +135,17 @@ func (c *HTTPClient) PinNonPrivatePayload(ctx context.Context, computerID string
 	return c.pinPayload(ctx, computerID, payload, mediaType, privacyClass, requestCommitment)
 }
 
-// CASError is the typed failure of a head CAS call. Definite is true only when
-// the host refused the request before committing it (400, 403, 409, 422): the
-// event is not on the tape. Every other failure (a transport error, a cancelled
-// caller, a 5xx, a reply that did not decode) leaves the outcome unknown,
-// because the host may have committed before the reply was lost. Status is 0
-// when no HTTP status was received.
+// CASError is the typed failure of a head CAS call. Definite is true when the
+// host answered 400, 403, 409 or 422. For the FIRST send of a request that is
+// a refusal: the append is not on the tape, and the appender may drop its
+// prepared row. It does not prove the same for a RE-SEND: the host runs
+// authorization and pin validation before it looks up the idempotency key, and
+// maps unclassified internal errors to 400, so a refusal of a re-send can
+// follow a first send that committed. The appender therefore keeps its row on
+// any failure of a re-send. Every other failure (a transport error, a
+// cancelled caller, a 5xx, a reply that did not decode) leaves the outcome
+// unknown even for a first send, because the host may have committed before
+// the reply was lost. Status is 0 when no HTTP status was received.
 type CASError struct {
 	Status   int
 	Definite bool
