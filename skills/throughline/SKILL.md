@@ -387,8 +387,27 @@ Use explicit mission statuses:
 - `blocked_incomplete`: a named blocker prevents progress after root-cause
   probes and shifts. Must include the smallest safe next probe or the external
   authority required to continue.
+- `observing`: everything the mission builds has landed, deployed, passed its
+  deployed acceptance and its review gate, and the only acceptance items left
+  are readings over time that no further work can bring forward (seven days
+  of a growth ledger, a soak, a calibration window). Not success, and not a
+  place to park unfinished work.
 - `superseded`: target-level or invariant-level learning changed the mission
   identity enough that continuing would optimize the wrong artifact.
+
+**Observation** (owner, 2026-11-12). A mission enters `observing` only with a
+`now.observation` block that names: the readings and where they are recorded;
+the reader, which must run without a live session (a host unit, a scheduled
+tick, a dated routine), never "the agent will remember"; the window's end
+date; the pass line for each reading; and the tripwire, the reading that puts
+the mission back to `working` at once. While observing, `/goal` may stop:
+say "Mission built; under observation until <date>", and the live station may
+move to the next mission. At the window's end the mission settles `complete`
+with the readings as receipts, or returns to `working` with the failed
+reading as its next slice. A window is extended once at most, with the
+reason; a second miss is a finding about the mission, not about the clock.
+An acceptance item that needs any construction, repair or decision keeps the
+mission `working` or `blocked_incomplete`.
 
 Do not phrase `checkpoint_incomplete` as "completed" or "done." Say plainly:
 "Mission incomplete; checkpoint landed." The default action when the stopping

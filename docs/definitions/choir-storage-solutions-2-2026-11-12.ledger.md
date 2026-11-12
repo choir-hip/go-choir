@@ -20,3 +20,7 @@ Append-only. One terse entry per pass.
   commit should be on (lossless coalescing only). Jev: use the vendor's
   limits, not our 30,000-byte guard. lane/storage-guards repaired after a
   REPAIR verdict (two blocking findings) and is in scripts/land.
+- 2026-11-12T21:30Z. lane/storage-guards landed (cca135073), not yet
+  deploy-verified. Throughline gains the status `observing`; this mission
+  carries an observation plan and hands the live station to Autoradio when
+  it enters that status.

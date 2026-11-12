@@ -79,7 +79,14 @@ boundaries:
   protected_surfaces: [<required for red/black work>]
 
 now:
-  status: working | complete | checkpoint_incomplete | blocked_incomplete | superseded
+  status: working | observing | complete | checkpoint_incomplete | blocked_incomplete | superseded
+  observation:            # required when status is observing, absent otherwise
+    readings: [<what is read, and the record it is read from>]
+    reader: <the unit, tick or routine that reads it with no live session>
+    window_ends: <ISO date>
+    pass: [<the line each reading must hold>]
+    tripwire: <the reading that returns the mission to working>
+    extended: <no | once, with the reason>
   slice: <one coherent active change>
   source_ref: <current immutable commit/digest>
   deploy_identity: <current observed identity or unknown>

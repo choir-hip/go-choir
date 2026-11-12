@@ -168,9 +168,16 @@ stations:
     class: red, owner decisions first
 
 owner_rulings:
-  - 2026-11-12, D1: "let's go with the default; don't drop the old tape segments from node b yet. We will revisit this before we ship autoradio to TestFlight."
-  - 2026-11-12, D2 to D7: "I go with your defaults"
-  - 2026-11-12, D8: "group commit, I decided it off but it should be on, huh?" Read as yes to coalescing with no loss window and no setting; the two loss windows stay deleted. Counters land first.
+  - on: 2026-11-12
+    decision: D1
+    said: "let's go with the default; don't drop the old tape segments from node b yet. We will revisit this before we ship autoradio to TestFlight."
+  - on: 2026-11-12
+    decision: D2 to D7
+    said: "I go with your defaults"
+  - on: 2026-11-12
+    decision: D8
+    said: "group commit, I decided it off but it should be on, huh?"
+    read_as: yes to coalescing with no loss window and no setting; the two loss windows stay deleted; counters land first
 
 decisions_for_the_owner:
   - id: D1
@@ -213,6 +220,17 @@ decisions_for_the_owner:
   - id: D7
     question: A bigger disk or a second device?
     default: not needed if S4 to S6 meet the footprint; decide at the seven-day reading
+
+observation_plan: >
+  When every station has landed and passed its deployed proof, this mission
+  moves to `observing` (skills/throughline, Settlement). Readings: the hourly
+  growth ledger and the go-choir-disk-forecast line on Node B; the paper's
+  footprint by surface, daily; snapshot_recorded spacing. Reader: the forecast
+  unit on Node B, and the combined hourly status tick once it is in the repo.
+  Window: seven days from the last landing. Pass: the first two acceptance
+  items. Tripwire: a forecast warning, a failed paper snapshot, or a day with
+  more than 3 GiB lost returns the mission to `working`. Autoradio resumes
+  when this mission enters `observing`, not when it completes.
 
 now:
   status: working
