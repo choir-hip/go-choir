@@ -197,8 +197,8 @@ each promotion is recorded:
 intent       a direction, not yet shaped — exists so the idea isn't lost;
              do not execute
 drafted      authored to the schema; unreviewed; not executable
-reviewed     passed review of THIS file (one Gemini seat by default; a
-             Sonnet seat too when the file authorizes tier 2 work), bound to a
+reviewed     passed review of THIS file (one Gemini 4 Hydrogen seat by default; a
+             DeepSeek too when the file authorizes tier 2 work), bound to a
              frozen digest in `review`; coherent and authority-checked
 executable   authorized to run: `readiness: executable` +
              `now.status: working` + named authority (owner statement, or
@@ -323,8 +323,8 @@ moving target to a panel and do not use a panel merely to narrate progress.
 
 **Allocate review by risk, not by habit** (owner, 2026-10-23: "allocating code
 review to hard stuff and trusting that we can handle the easy stuff cold";
-since 2026-11-12 seat 1 is Gemini 4 Hydrogen and seat 2 DeepSeek v4.1
-flash, both through OMP; Devin does not review). The tiers are in the repo operating
+"make devin the go-to reviewer"; since 2026-11-12 the seats are Gemini 4
+Hydrogen and DeepSeek v4.1 flash through OMP, and Devin does not review). The tiers are in the repo operating
 contract (`CLAUDE.md`, Mutation Classes). Cheap checks come first, every
 time (repo gates, nix eval when nix changed, dry run of touched proof scripts,
 CI mirror, rebase onto the deploy tree). Tier 0, no model review: green and
@@ -332,8 +332,8 @@ yellow by default, proof tooling, mechanical rebases, and fixes answering doc,
 nit or test-only findings; but an architectural design (a new mechanism, a
 doctrine change, a design a build will follow) is reviewed like the change it
 designs, and the proof, rollback and procedure text of a red deploy is not
-tier 0. Tier 1, one seat, Gemini: orange, and red that is additive, behind a
-switch, with a one-act rollback. Tier 2, two seats, Gemini and Sonnet: red
+tier 0. Tier 1, one seat, Gemini 4 Hydrogen: orange, and red that is additive, behind a
+switch, with a one-act rollback. Tier 2, two seats, Gemini 4 Hydrogen and DeepSeek: red
 where a defect would be silent or irreversible. The tiers are a default and the
 orchestrator judges by context. A goal file names the tier of each candidate it
 lands and does not hardcode a panel. Re-review a red delta, one seat, whenever
@@ -350,7 +350,7 @@ pass.
 **Review is a completion gate, sized by tier.** Before a behavior-changing
 mission may settle `complete`, run the tier's review on the frozen landed
 candidate (diff identity + deployed evidence): none for tier 0, one Gemini
-seat for tier 1, Gemini plus Sonnet for tier 2. The gate is not
+seat for tier 1, Gemini plus DeepSeek for tier 2. The gate is not
 advisory:
 
 - **Approve** → record the `consensus_review` receipt (or the tier 0 check

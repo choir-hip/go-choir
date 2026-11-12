@@ -248,7 +248,7 @@ One entry — the latest review of this file (not of landed code).
 `frozen_ref` binds the verdict to a content digest; a `reviewed` file
 whose digest changed since its `accept` is `drafted` again. This is the
 authoring gate; the landed-candidate review gate at `complete` (sized by
-risk tier: none, one Gemini seat, or Gemini plus Sonnet) is a separate, unchanged
+risk tier: none, one Gemini 4 Hydrogen seat, or Gemini 4 Hydrogen plus DeepSeek v4.1 flash) is a separate, unchanged
 obligation for behavior change.
 
 ### `metamission` — ordered station set
