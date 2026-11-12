@@ -48,3 +48,9 @@ Append-only. One terse entry per pass.
   re-review running. C62 entered. The second sweep dry run died at the
   0d0c4f164 deploy (a skill-text commit); it is re-run after the snapshot
   deploy.
+- 2026-11-12T22:35Z. S0 landed as 0d2f0bd46 (both seats ACCEPT on the tip),
+  deployed 22:31Z, expedited. The paper has not taken it: every planned
+  refresh is refused while a snapshot streams, and on the old code one
+  always is (docs/problems/snapshot-loop-blocks-its-own-fix-2026-11-12.md).
+  Free 67.8 GiB. Sweep dry run ts-20261112T223140Z-d1a3ccd3 running. An act
+  on the paper is needed; asked the owner.

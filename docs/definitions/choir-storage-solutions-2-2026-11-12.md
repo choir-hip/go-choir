@@ -124,8 +124,8 @@ stations:
     class: red; the sweep apply is black, owner go given 2026-11-12
     review: two seats
     depends_on: []
-    carrier: lane/snapshot-loop (in build); sweep dry run ts-20261112T205401Z-5755efcc
-    status: working
+    carrier: main 0d2f0bd46, deployed 2026-11-12T22:31Z, not yet on the paper; sweep dry run ts-20261112T223140Z-d1a3ccd3
+    status: landed
   - id: S1
     name: guards
     scope: metadata balance, hourly forecast with a fast-drain line, meter coverage of capture bodies and platform updates, swap 16 to 4 GiB
@@ -308,9 +308,10 @@ now:
       paper's image
     next_observation: the sweep manifest; the forecast unit's first run at 21:25Z; the snapshot and wedge lane reports
   blocker_or_risk: >
-    About four hours to the deploy floor at the current drain. A deploy
-    restarts the platform service and kills a running sweep, so the sweep is
-    applied before the snapshot fix deploys, or re-run after it.
+    The paper refuses every planned refresh while a snapshot streams, and its
+    loop keeps one streaming, so the fix cannot reach it without a host stop
+    of the paper's VM. That is an act on the paper and needs the owner. Free
+    space is 67.8 GiB, 7.8 above the deploy floor.
   next_action: >
     Read the sweep manifest and apply it. Review lane/snapshot-loop with two
     seats, land it with a parsed Ring-Expedite trailer, and verify on staging
