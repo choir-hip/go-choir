@@ -935,8 +935,10 @@ func TestSealFailureAfterPinIsNotRetried(t *testing.T) {
 	mu.Lock()
 	got := attempts
 	mu.Unlock()
-	if got != 1 {
-		t.Fatalf("CAS attempted %d times for one sealed batch, want exactly 1 (no retry)", got)
+	// One sealed batch is sent once by the store; the appender re-sends the
+	// same request once because the outcome is unknown (idempotent at the host).
+	if got != 2 {
+		t.Fatalf("CAS attempted %d times for one sealed batch, want 2 (the send and the appender's same-request re-send)", got)
 	}
 	stats := h.store.TelemetryStats().Batching
 	if stats.UnknownOutcomeLoss != 3 || stats.SealFailures != 1 {

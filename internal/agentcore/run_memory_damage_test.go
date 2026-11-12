@@ -19,16 +19,18 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// unknownOutcomeCAS fails the next head CAS once with an error that is not a
+// unknownOutcomeCAS fails the next two head CAS calls with an error that is not a
 // refusal: the append's outcome is unknown, so the sealer drops and does not
 // retry.
 type unknownOutcomeCAS struct {
 	computerevent.HeadCAS
-	armed atomic.Bool
+	// failNext is how many CompareAndSwap calls still fail: the append and the
+	// appender's re-send of the same request, so the outcome stays unknown.
+	failNext atomic.Int32
 }
 
 func (c *unknownOutcomeCAS) CompareAndSwap(ctx context.Context, req computerevent.CASRequest) (computerevent.Receipt, error) {
-	if c.armed.CompareAndSwap(true, false) {
+	if c.failNext.Add(-1) >= 0 {
 		return computerevent.Receipt{}, errors.New("cas: connection reset, outcome unknown")
 	}
 	return c.HeadCAS.CompareAndSwap(ctx, req)
@@ -43,7 +45,7 @@ type armingProvider struct {
 }
 
 func (p *armingProvider) CallWithTools(context.Context, provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
-	p.cas.armed.Store(true)
+	p.cas.failNext.Store(2)
 	return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "final answer",
 		Usage: provideriface.TokenUsage{InputTokens: 1, OutputTokens: 1}, Model: "test-model"}, nil
 }
