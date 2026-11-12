@@ -105,3 +105,50 @@ guest gives the goroutine dump that would settle it. The unauthenticated
 host read that worked on 2026-11-08 now answers `authentication required`.
 The dump needs the paper owner's session. A restart without it loses the
 evidence. Guest logs do not reach the Node B journal.
+
+## Update 19:20Z: cause found, an event appender wedge; refreshed
+
+The goroutine dump and recent log (the paper owner's
+`/api/runtime/observability?goroutines=1`, read with the paper's owner key
+after renewing it with `scripts/qa_renew_key.mjs`) settle it. The 19:10Z
+belief (a blocked store or actor call) was wrong in kind: nothing was
+blocked. The store refused every write.
+
+- `computer event appender: wedge began` at 15:26:30Z with
+  `heads differ after in-place recovery`: local head 10914341, platform
+  head 10914342. The platform's canonical chain held one event the local
+  projection never applied. More than 1,600 refusals followed, one or more
+  a minute, each `in-place prepared recovery (heads differ): err=<nil>`
+  without closing the gap.
+- Every write then failed with `computer event projection repair required`.
+  The sweep logged `sweep failed (6 in a row): re-arm
+  social:mastodon:newsie.social:tag:news: ... append projection batch:
+  computer event projection repair required` and backed off to hourly.
+- The dump has 45 goroutines and none blocked since 15:26; the sweep loop
+  sat in its backoff wait. No deadlock, no stuck lock.
+- `recoverPreparedInPlaceLocked` only discards orphaned prepared rows; it
+  never fetches the missing platform event. The boot replay does
+  (`source.Events` after the local head, then a head check). The code
+  comment records the same wedge on the paper twice on 2026-11-02, "until
+  its next boot".
+
+A second defect: `choir paper restart` (the operator path) answered 502
+`the restart receipt could not be recorded; nothing was restarted`. It
+records its receipt in the guest's store before restarting
+(`internal/proxy/platform_operator_computers.go`), so it cannot restart
+a computer whose store refuses writes, the one case where a restart is the
+repair.
+
+Act: the owner asked for capture and restart. A planned refresh as the
+paper's owner (`POST /api/computers/<paper>/lifecycle/refresh`) returned
+201 at 19:18:54Z, epoch 13677 to 13678.
+
+Remaining error:
+
+- Why the local projection missed event 10914342 is not known. It came
+  with the Devin stream deadlines (15:19 to 15:28Z), but a link is not
+  shown. Three wedges of this kind on the paper in ten days.
+- The running computer cannot heal this wedge: in-place recovery should
+  replay from the platform as the boot does. Until it does, every such
+  wedge stops the paper until a person restarts it, and the liveness alert
+  reaches no one.
