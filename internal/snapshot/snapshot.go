@@ -251,6 +251,12 @@ type Config struct {
 	// uploads (a long read pins the WAL). The stream aborts with
 	// ErrTimeBudget, which leaves no root and no event.
 	MaxDuration time.Duration
+	// FreeSpace, when set, is checked every FreeSpaceEvery (default a minute)
+	// while the capture runs: the read transaction pins the WAL, which grows
+	// on the guest's disk. A non-nil result ends the capture with that error
+	// as its cause, so a snapshot cannot push the guest to ENOSPC.
+	FreeSpace      func() error
+	FreeSpaceEvery time.Duration
 	// Now overrides the clock in tests.
 	Now func() time.Time
 
@@ -472,7 +478,7 @@ func (u *chunkUploader) finish() {
 }
 
 // capture opens the one read transaction and does everything that must see one
-// state: the head (first statement), the page stream, the witness.
+// state: the head (first statement), the witness, the page stream.
 func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr error) {
 	budgetCtx := ctx
 	if cfg.MaxDuration > 0 {
@@ -482,6 +488,31 @@ func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr 
 	}
 	runCtx, cancel := context.WithCancelCause(budgetCtx)
 	defer cancel(nil)
+	if cfg.FreeSpace != nil {
+		every := cfg.FreeSpaceEvery
+		if every <= 0 {
+			every = time.Minute
+		}
+		guardDone := make(chan struct{})
+		defer close(guardDone)
+		go func() {
+			tick := time.NewTicker(every)
+			defer tick.Stop()
+			for {
+				select {
+				case <-guardDone:
+					return
+				case <-runCtx.Done():
+					return
+				case <-tick.C:
+					if err := cfg.FreeSpace(); err != nil {
+						cancel(err)
+						return
+					}
+				}
+			}
+		}()
+	}
 	// cause is why the run ended: the budget, a worker's failure, or the
 	// caller's cancellation.
 	cause := func(err error) error {
@@ -529,22 +560,24 @@ func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr 
 		}
 	}
 
+	// The witness runs first, in the same transaction as the head: the WAL
+	// snapshot the head fixed is the one the witness and then the pages read,
+	// so all three are one state. It is the long step on a large store (22 to
+	// 35 minutes on the paper), so an attempt that cannot finish inside its
+	// budget dies here with nothing uploaded; the pages upload only once the
+	// witness is in hand.
+	witnessStart := time.Now()
+	if out.witness, err = cfg.Witness(runCtx, tx); err != nil {
+		return out, fmt.Errorf("snapshot: witness of the snapshot: %w", cause(err))
+	}
+	out.stats.WitnessTime = time.Since(witnessStart)
+
 	streamStart := time.Now()
 	fs, err := streamFile(runCtx, cfg, dek, cancel, cause, tx, cfg.pageHook)
 	if err != nil {
 		return out, err
 	}
 	out.stats.StreamTime = time.Since(streamStart)
-
-	// The witness is computed in the same transaction while the workers drain
-	// the last chunks.
-	witnessStart := time.Now()
-	if out.witness, err = cfg.Witness(runCtx, tx); err != nil {
-		cancel(err)
-		fs.up.finish()
-		return out, fmt.Errorf("snapshot: witness of the snapshot: %w", cause(err))
-	}
-	out.stats.WitnessTime = time.Since(witnessStart)
 	rollback()
 
 	if err := fs.finish(runCtx); err != nil {
