@@ -135,13 +135,48 @@ func (c *HTTPClient) PinNonPrivatePayload(ctx context.Context, computerID string
 	return c.pinPayload(ctx, computerID, payload, mediaType, privacyClass, requestCommitment)
 }
 
+// CASError is the typed failure of a head CAS call. Definite is true only when
+// the host refused the request before committing it (400, 403, 409, 422): the
+// event is not on the tape. Every other failure (a transport error, a cancelled
+// caller, a 5xx, a reply that did not decode) leaves the outcome unknown,
+// because the host may have committed before the reply was lost. Status is 0
+// when no HTTP status was received.
+type CASError struct {
+	Status   int
+	Definite bool
+	Err      error
+}
+
+func (e *CASError) Error() string { return e.Err.Error() }
+func (e *CASError) Unwrap() error { return e.Err }
+
+// CASRefusedDefinitely reports whether err proves the host did not commit the
+// request. An error of unknown type is not a refusal: the caller must treat
+// its outcome as unknown.
+func CASRefusedDefinitely(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, ErrCASConflict) {
+		return true
+	}
+	var casErr *CASError
+	return errors.As(err, &casErr) && casErr.Definite
+}
+
 func (c *HTTPClient) CompareAndSwap(ctx context.Context, request CASRequest) (Receipt, error) {
 	var receipt Receipt
 	status, err := c.do(ctx, http.MethodPost, "/internal/computers/events/append", request, &receipt)
-	if status == http.StatusConflict {
-		return Receipt{}, fmt.Errorf("%w: %v", ErrCASConflict, err)
+	if err == nil {
+		return receipt, nil
 	}
-	return receipt, err
+	switch status {
+	case http.StatusConflict:
+		return Receipt{}, &CASError{Status: status, Definite: true, Err: fmt.Errorf("%w: %v", ErrCASConflict, err)}
+	case http.StatusBadRequest, http.StatusForbidden, http.StatusUnprocessableEntity:
+		return Receipt{}, &CASError{Status: status, Definite: true, Err: err}
+	}
+	return Receipt{}, &CASError{Status: status, Err: err}
 }
 
 func (c *HTTPClient) FetchPayload(ctx context.Context, computerID, artifactDigest string) ([]byte, error) {
