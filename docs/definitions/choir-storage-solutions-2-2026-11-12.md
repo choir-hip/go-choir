@@ -120,7 +120,7 @@ boundaries:
 stations:
   - id: S0
     name: stop the drain, release the dead
-    scope: backoff after a failed snapshot, witness before upload, 90-minute deadline, 3-hour unrooted window; apply the destroyed-computer sweep from a read manifest
+    scope: backoff after a failed snapshot counted from the attempt's end, witness before upload, 90-minute deadline, a free-space guard during the capture; apply the destroyed-computer sweep from a read manifest
     class: red; the sweep apply is black, owner go given 2026-11-12
     review: two seats
     depends_on: []
@@ -152,7 +152,7 @@ stations:
     status: working
   - id: S4
     name: snapshots cost the change, keep two
-    scope: stable chunk boundaries or a page-diff snapshot, a faster witness, a replay-cost trigger, immediate collection of superseded snapshots
+    scope: stable chunk boundaries or a page-diff snapshot, a faster witness, a replay-cost trigger, immediate collection of superseded snapshots; root-time chunk verification and a capture that does not span hibernation, then the shorter unrooted-chunk window (docs/problems/snapshot-root-recorded-without-chunk-check-2026-11-12.md)
     class: red, design record first
     review: two seats
     depends_on: [S0]

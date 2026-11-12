@@ -32,3 +32,10 @@ Append-only. One terse entry per pass.
   C61, S5 rewritten from the census, S9 (status scripts) added.
 - 2026-11-12T21:50Z. Correction: the new throughline format is version 7, not 5.
   Old files already carry versions 5 and 6 from earlier experiments.
+- 2026-11-12T21:15Z. Seat 1 on lane/snapshot-loop: REPAIR. Blocking: the
+  3-hour chunk window can delete chunks of a capture that spans hibernation,
+  and the root is recorded unchecked; the backoff was counted from the
+  attempt's start, so a 90-minute abort retried at once. The window change
+  is dropped from S0 and moves to S4 behind root-time verification. Four
+  skill-text commits each triggered CI and a deploy; lane/ci-docs-like
+  built to stop that. Free 78.9 GiB at 21:08Z.
