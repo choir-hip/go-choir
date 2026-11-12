@@ -171,6 +171,13 @@ descriptions, not the numbers or neighboring levels" [V score].
 | Timeouts | SDK default 10 s per HTTP operation, `RetryPolicy.timeout` 30 s total per call; server timeout unpublished | [V constants][V retries] |
 | Throughput claim in the open | an independent run: concurrency 1 to 32 with flat upstream time | [T jevresearch] |
 
+Update 2026-11-12: we no longer keep requests under that figure. Intake labels,
+the event layer and the support judge are sized by the 64k and 32k token limits
+(three quarters, `internal/jevbudget`), and a choice question's 255-option limit
+is met by cutting a capture's options into parts, every part a question over the
+same state. Before the change no call of ours exceeded 30,046 bytes, so the
+logs held no evidence about the line either way.
+
 Tension to resolve before trusting the 32,000-byte figure: the vendor states
 limits in tokens (64k/32k) and puts long-context behind a header; OpenRouter
 states a byte threshold with no header. Whether OpenRouter flips the header

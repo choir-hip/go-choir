@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/jevbudget"
 	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"github.com/yusefmosiah/go-choir/internal/outlet"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
@@ -68,11 +69,11 @@ const (
 	// event-layer-false-merges-at-marginal-p-2026-10-16.md).
 	eventJoinP      = 0.92
 	eventTentativeP = 0.5
-	// eventStateMaxBytes keeps a call under Jev's default context (above
-	// about 32 KB, 1.14 runs a slower, less accurate long-context mode).
-	eventStateMaxBytes = 24 * 1024
-	eventSummaryRunes  = 400
-	eventRecentTitles  = 2
+	// A call is bounded by the vendor's token limits (jevbudget), not by the
+	// 24 KiB guard it had, which came from OpenRouter's "about 32,000 bytes"
+	// long-context line (owner, 2026-11-12: Jev is sized by vendor limits).
+	eventSummaryRunes = 400
+	eventRecentTitles = 2
 	// eventIndexLoad bounds the rebuild read.
 	eventIndexLoadEvents      = 10000
 	eventIndexLoadMemberships = 20000
@@ -385,10 +386,10 @@ func eventPrepareChunk(idx *eventIndex, chunk []eventInput, now time.Time) (stat
 	// criteria, so they grow with chunk x candidates (code review, Devin
 	// B2). Split the chunk first; a single capture over the bound drops its
 	// summary, then its weakest candidates.
-	if eventRequestBytes(state, questions) > eventStateMaxBytes && len(chunk) > 1 {
+	if !jevbudget.Fits(state, questions) && len(chunk) > 1 {
 		return nil, nil, alias, true
 	}
-	for summary := eventSummaryRunes; eventRequestBytes(state, questions) > eventStateMaxBytes; {
+	for summary := eventSummaryRunes; !jevbudget.Fits(state, questions); {
 		if summary > 0 {
 			summary = 0
 		} else if len(candidates) > 0 {
@@ -585,16 +586,6 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 			}
 		}
 	}
-}
-
-// eventRequestBytes is what one call sends upstream: the state and every
-// question.
-func eventRequestBytes(state json.RawMessage, questions map[string]json.RawMessage) int {
-	n := len(state)
-	for _, q := range questions {
-		n += len(q)
-	}
-	return n
 }
 
 // writeMembership writes one capture's membership. ok is false when the

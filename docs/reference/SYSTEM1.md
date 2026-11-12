@@ -44,8 +44,8 @@ reason for each is from our data.
 | 3 | **Separate contexts can justify concurrent calls; that is never plan A.** | Different states that cannot share one request are the only legitimate case (owner, 2026-11-10). A question that needs another's answer needs a second request built in code. |
 | 4 | **No limiter, pool, reserve, quota or hard-coded vendor rate.** Too many calls is a code problem. Backing off after a real 429, deadlines and the op-ed gate's bound on strangers stay. | The vendor publishes no rate limit; our 15/s bucket rested on a relayed 20 rps (section 4, item 2). Upstream 429s seen: 0 in 16,133 calls M. |
 | 5 | **Record every call** (`judgeCall`, `internal/jevrecord`) and keep the decision id so outcomes can settle it. | Thresholds are guesses until joined to outcomes (section 6). |
-| 6 | **Keep the state to what the questions need and under 30,000 bytes; split the overflow, never trim.** | Vendor long-context mode is "slower and less accurate" and starts near 32,000 bytes on OpenRouter [V]. A 1.14 intake call reached about 9,000 tokens from repeated criteria M. |
-| 7 | **Measure before raising a batch size.** | Accuracy against questions per call is unpublished and unmeasured by us above 12 (section 9). |
+| 6 | **Keep the state to what the questions need and inside the vendor's limits, 64k tokens a request and 32k for the state plus one question (we use three quarters, estimated from the text by `internal/jevbudget`); split the overflow by captures, then by stories, never trim.** The old 30,000-byte guard is gone (owner, 2026-11-12: "use vendor limits not our arbitrary size limits ... I expect Jev to work well with many questions to big context"). | The vendor sizes by tokens [V]. The 30,000 B guard came from OpenRouter's "about 32,000 bytes" long-context line [V], whose effect on answers is unpublished and unmeasured by us (section 10, item 2); we no longer stay under it, so the shadow comparison is where its cost would show. A 1.14 intake call reached about 9,000 tokens from repeated criteria M. |
+| 7 | **Measure before raising a batch size.** Intake labels now carry a whole flush (up to 12 captures, 24 questions and more when a window needs parts) in one call, on the owner's 2026-11-12 ruling; `cmd/intake-shadow` is the measurement. | Accuracy against questions per call is unpublished and unmeasured by us above 12 (section 9). |
 | 8 | **Do not answer about Jev's limits, prices or accuracy from memory.** Read this page and the subpage. | The old page carried a $1/day cost that was 7.5x low M. |
 
 ## 3. The wire shape and how we call it
@@ -124,9 +124,10 @@ cannot paste evidence text.
 | Context per request / per question | 64k / 32k tokens; the per-question limit binds | [V] |
 | Long-context mode | direct: header `TypeSafe-Danger-Zone-Long-Context: true`, 262k tokens, same price, "slower and less accurate"; OpenRouter: "more than about 32,000 bytes of text" or any image | [V] |
 | Questions per request | no stated limit | [V] |
-| Choice options / score levels | 255 / 1 to 10 | [V] |
+| Choice options / score levels | 255 / 1 to 10 | [V]; a state may list more candidates than one question may offer, so intake offers a capture's stories in parts of 243 (255 less 11 siblings and `new`), every part a question over the same state (`intakeMaxStoryOptions`) C |
 | Rate limits | per organisation, tokens/s and requests/s, 429 when exceeded, **no numbers published** | [V] |
-| Our intake guard / event-layer guard / gateway body | 30,000 B / 24 KiB / 1 MiB | C |
+| Our request size bound (intake, event layer, support judge) | 75% of the vendor's limits: 48,000 tokens a request, 24,000 for the state plus one question, estimated by script from the text (`internal/jevbudget`); was 30,000 B / 24 KiB / 30,000 B | C |
+| Gateway body | 1 MiB | C |
 | System 1 verb | 12 questions, 6 choices, 400 rune question text | C; accuracy above 12 unmeasured |
 | Observed input | max 17,481 tokens, p99 15,766; 54% of calls over 8,000 tokens | M |
 | Timeouts | SDK 10 s per operation, 30 s total per call; server unpublished | [V] |
@@ -134,7 +135,15 @@ cannot paste evidence text.
 Full table: [jev-vendor.md](system1/jev-vendor.md#4-hard-limits-one-table).
 Tokenizer: Latin prose about 0.26 tokens per codepoint, digits 0.94, Cyrillic
 0.94, CJK 0.92, emoji 1.71 [T]; input tokens = 412 + 0.224 x state characters
-+ 0.210 x question characters (R2 0.990) [T].
++ 0.210 x question characters (R2 0.990) [T]. `jevbudget.Tokens` uses those
+per-script figures rounded up (Latin letters 0.30, digits 1.0, JSON punctuation
+0.7, Cyrillic, Greek, Han, Kana, Hangul, Arabic, Hebrew 1.0, emoji 2.0, rare
+scripts one token per UTF-8 byte) because the flat fit, 0.224 a character, is
+half what an intake request costs: its criteria are hundreds of `"c123":null`
+keys, and we saw up to 17,481 tokens for at most 30,046 bytes, 0.58 a token a
+byte M (bytes from the usage review, tokens from 11-10: different days, so the
+ratio is an inference). The estimate puts such a request at about 0.54 to 0.6
+a byte C.
 
 ### 3.4 The doors and call sites
 
@@ -142,8 +151,10 @@ Doors, all converging on `JevTransport.Decide` (`jev.go:104` C):
 
 1. Guest `POST /provider/v1/judgments` (`HandleJudgment`, `jev.go:374`),
    client `gatewayruntime.JudgmentClient.Decide` (`jev.go:58`), reached
-   through `Runtime.judgeCall` (`intake_labels.go:890`), which times and
-   records the call.
+   through `Runtime.judgeCall` (`intake_labels.go:1298`), which times and
+   records the call and sends the call site as `X-Choir-Jev-Site`
+   (`gatewayruntime.WithJevSite`), so the gateway's `jev call` line names the
+   site; before 2026-11-12 every guest call logged `site=unknown`.
 2. Host `POST /provider/v1/host/judgments` (`host_judgment.go:28`), caller
    table (`hostJudgmentCallers`, today only `front-importance`); refuses a
    `scope`.
@@ -158,7 +169,7 @@ counted 13 because it merged the router and classifier):
 
 | # | Site (`internal/...`) | Unit | Questions per call | Action rule |
 |---|---|---|---|---|
-| 1 | intake labels `agentcore/intake_labels.go:779` | up to 4 captures | 2 per capture, up to 8 | max-p choice, p stored |
+| 1 | intake labels `agentcore/intake_labels.go:1188` (`askIntakeCall`; plan `:987`) | the whole flush, up to 12 captures, one call per state | 2 per capture per 243-story part: 24 for a window of up to 243 stories, split into more calls by captures when the estimate crosses the budget | max-p choice over parts and chunks, p stored |
 | 2 | event layer `event_layer.go:460` | up to 12 captures | 1 each | join at p>=0.92, tentative 0.5 to 0.92 |
 | 3 | support judge `support_judge.go:369` | citation pairs of a revision | one per pair, uncapped | yes and p>=0.5 |
 | 4 | System 1 verb `system1_verb.go:286` | a desk's ask | up to 12 | returned with probabilities |
@@ -312,6 +323,26 @@ order they should change a decision.
     1,866 ms behind our own limiter.** Both U
     ([our-usage](system1/our-usage.md#6-surprises-and-anomalies) lists the
     other eleven anomalies).
+25. **Repeating the state was the small part of an intake call; the criteria
+    are the bill.** Each question lists every story it offers as a `criteria`
+    key, so a flush costs captures x 2 x stories keys however the state is cut.
+    For 6 captures over 450 stories the plan (`cmd/intake-shadow`, estimates
+    from `jevbudget`, not billed) is 6 calls and 156,774 request bytes under the
+    old 15,000-byte slices against 3 calls and 153,621 bytes with one state: 3
+    fewer calls and about 2% fewer bytes. The 2026-11-12 usage review's
+    "up to 70% fewer bytes" for collapsing the slices is wrong for the
+    same reason; the repeated task, captures and instructions are 6 to 8 KB of
+    a 23 KB call (the review's estimate, not measured), but the questions
+    grow with the window. The levers that
+    would cut tokens are fewer options per question (a shortlist, as the event
+    layer does) or a smaller window, both of which change what Jev sees (C,
+    arithmetic).
+26. **The 255-choice limit, not the byte guard, is what cut the window into
+    slices.** A question offers at most 255 options and the window is up to 480
+    stories, so one question cannot list it. The slices of 15,000 bytes (about
+    100 to 150 stories) kept each question under 255; the single state keeps the
+    stories once and puts them in questions of 243 each (`intakeMaxStoryOptions`)
+    C.
 
 ## 5. Patterns
 
@@ -587,7 +618,13 @@ Unverified:
 2. Accuracy against state size and the cost of long-context mode: no number [V].
    Whether the 32,000-byte line counts questions, and whether OpenRouter flips
    the vendor header itself above it: unpublished. The independent latency fit
-   shows no cliff to 28,859 tokens on the direct API [T].
+   shows no cliff to 28,859 tokens on the direct API [T]. **Ours: no call of
+   ours crossed 32,000 bytes before 2026-11-12 (maximum 30,046 B, usage
+   review), so the "17,481 input tokens" maximum is not evidence about the line
+   (tokens are not bytes); since the single-state change they do cross it. A
+   run of `cmd/intake-shadow -run` on d@e that compares the old slices (all
+   under 30,000 B) with the single state is the first test: label agreement and
+   the gap between estimated and billed tokens.**
 3. Any A16 or iPhone figure for a decision model, an mmBERT-class encoder or
    Strands Decider; Apple's logprobs after June 2026.
 4. Caching of repeated state and any cached-token price [V absence].
@@ -617,7 +654,7 @@ Where subpages or sources disagree (none resolved silently):
 | Banking77, small classifier against Jev | `model-space.md` / `evaluation.md`: 22M encoder + LR 93.2% against Jev 80.1% [T, one blog] | `field-reports.md`: BGE-small + LR 93.3% against Jev 83.2% [T, repo not seen] | Both show the classifier winning; the Jev score differs by 3 points. |
 | d1-3B score | `model-space.md`: 48.57 on one index version | 38.90 on another; SQuAD 2.0 85.3 against 83.3 in two tables | The vendor's blog and HF post disagree. |
 | Perplexity Decider hosted price | $0.02 per M | $0.04 per M | Sources disagree [R]. |
-| Long-context trigger | vendor: tokens, 64k / 32k, behind a header [V] | OpenRouter: about 32,000 bytes, no header [V] | Bytes against tokens; unresolved. |
+| Long-context trigger | vendor: tokens, 64k / 32k, behind a header [V] | OpenRouter: about 32,000 bytes, no header [V] | Bytes against tokens; unresolved. Until 2026-11-12 we kept every intake call under 30,000 bytes (largest seen 30,046 B, so no call crossed the line); the single-state calls now routinely exceed 32,000 bytes (a 450-story flush is about 50 KB a call), so the first deployed days are the first evidence either way. A logged `usage.input_tokens` per call beside `bytes` and `upstream_ms` is what to read. |
 | Two-question intake share | old page: about 900 calls an hour, 72% of the day's calls | `our-usage.md`: 675 an hour, 78% of paper calls before 14:55Z (61% of all calls on the day) | Different windows; the later page measured. |
 | Call-site count | old page: 13 (router and classifier merged) | `our-usage.md`: 14 | Resolved by the split; section 3.4 uses 14. |
 | Front-importance scorer | old page and 2026-11-10 evidence: serial | `our-usage.md`: concurrent, 28 calls in a second | Code and measurement win. |

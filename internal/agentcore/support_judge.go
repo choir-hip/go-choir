@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/jevbudget"
 	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"log"
 	"math"
@@ -369,7 +370,7 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 	sizes := make(map[string]int, len(ordered))
 	for _, name := range ordered {
 		pj, _ := json.Marshal(pairs[name])
-		sizes[name] = len(pj) + len(questions[name]) + len(name) + 8
+		sizes[name] = jevbudget.Tokens(pj) + jevbudget.Tokens(questions[name]) + jevbudget.Tokens([]byte(name)) + 4
 	}
 	var judged []types.SupportVerdict
 	var firstErr error
@@ -392,21 +393,23 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 	return judged, nil
 }
 
-// supportRequestMaxBytes is the most one support call's state and questions
-// may hold: the same line intake uses (Jev's long-context mode starts above
-// about 32,000 bytes and is slower and less accurate).
-const supportRequestMaxBytes = 30000
+// supportEnvelopeTokens is the task text and the envelope of a support call.
+const supportEnvelopeTokens = 400
 
-// splitSupportBatches packs names, in order, into batches of at most
-// supportRequestMaxBytes (a lone over-size pair is its own batch).
+// splitSupportBatches packs names, in order, into batches whose pairs and
+// questions, sizes in estimated tokens, stay inside the vendor's per-question
+// budget (the state of a support call is its pairs, so that limit binds; the
+// request total is larger). It replaced a 30,000-byte guard that came from
+// OpenRouter's long-context line (owner, 2026-11-12). A lone over-size pair
+// is its own batch.
 func splitSupportBatches(ordered []string, sizes map[string]int) [][]string {
 	var batches [][]string
 	var cur []string
-	total := 1000 // the task text and the envelope
+	total := supportEnvelopeTokens
 	for _, name := range ordered {
-		if len(cur) > 0 && total+sizes[name] > supportRequestMaxBytes {
+		if len(cur) > 0 && total+sizes[name] > jevbudget.QuestionBudgetTokens {
 			batches = append(batches, cur)
-			cur, total = nil, 1000
+			cur, total = nil, supportEnvelopeTokens
 		}
 		cur = append(cur, name)
 		total += sizes[name]

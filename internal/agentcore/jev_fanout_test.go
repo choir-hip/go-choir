@@ -421,7 +421,7 @@ func TestSupportRevisionQueuedBehindOneThatJudgedItsPairCallsNobody(t *testing.T
 	}
 }
 
-func TestSupportRevisionOverTheByteBoundSplitsIntoSequentialCalls(t *testing.T) {
+func TestSupportRevisionOverTheVendorBoundSplitsIntoSequentialCalls(t *testing.T) {
 	jev := &fakeSupportJudge{choice: "yes"}
 	peak := &peakJudge{inner: jev, delay: 10 * time.Millisecond}
 	rt, _ := testRuntime(t)
@@ -430,7 +430,7 @@ func TestSupportRevisionOverTheByteBoundSplitsIntoSequentialCalls(t *testing.T) 
 	var pending []types.SupportVerdict
 	for i := 0; i < 3; i++ {
 		cid := fmt.Sprintf("big-%d", i)
-		text := strings.Repeat(fmt.Sprintf("passage %d words. ", i), 1000)[:16000]
+		text := strings.Repeat(fmt.Sprintf("passage %d words. ", i), 3000)[:40000]
 		blocks = append(blocks, quotematch.Block{ID: cid, Text: text})
 		pair := types.CitationPair{Key: "k-" + cid, Text: fmt.Sprintf("Sentence %d.", i), Cited: types.Ref{Doc: "cap-big", CID: cid, Hash: texturewrite.TextHash(text), Quote: "passage"}}
 		pending = append(pending, types.SupportVerdict{Key: pair.Key, Pair: &pair})
@@ -443,8 +443,9 @@ func TestSupportRevisionOverTheByteBoundSplitsIntoSequentialCalls(t *testing.T) 
 	if len(judged) != 3 {
 		t.Fatalf("judged %d of 3 pairs", len(judged))
 	}
-	// Two passages of 16,000 bytes do not fit one 30,000 byte call, so each
-	// goes alone, one after another.
+	// Two passages of 40,000 bytes (about 14,000 estimated tokens each) do not
+	// fit the vendor's 32k per-question limit together, so each goes alone,
+	// one after another.
 	peak.assertSerial(t, 3)
 }
 

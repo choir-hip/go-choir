@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
+	"github.com/yusefmosiah/go-choir/internal/jevbudget"
 	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"log"
 	"math"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -68,17 +71,20 @@ var (
 const (
 	// intakeFlushCaptures is the most captures one flush takes from the
 	// queue (the event layer's chunk size); a call carries at most
-	// intakeCallCaptures of them, and the byte guard below can split a call
+	// intakeCallCaptures of them, and the vendor-limit policy below can split a call
 	// earlier (docs/design/jev-batched-questions-2026-11-10.md, "Intake
 	// flush").
 	intakeFlushCaptures = 12
-	// intakeCallCaptures is the most captures one call carries (two
-	// questions each, so 12). The flush holds 12 captures, but accuracy
-	// above 12 questions a call is unmeasured and the old code carried at
-	// most 8; further calls follow in sequence. Raise it only after the
-	// shadow comparison of docs/design/jev-batched-questions-2026-11-10.md
-	// measures accuracy at the larger size.
-	intakeCallCaptures = 6
+	// intakeCallCaptures is the most captures one call carries: the whole
+	// flush, two questions each, so 24. The vendor sets no limit on questions
+	// a request, and the owner ruled on 2026-11-12 that Jev is meant to take
+	// many questions over a big context ("use vendor limits not our
+	// arbitrary size limits"). It was 6 (12 questions) because accuracy above
+	// 12 questions a call is unmeasured (SYSTEM1.md rule 7); the shadow
+	// comparison (intake_shadow.go, cmd/intake-shadow) is where accuracy at
+	// the larger size is checked. A call is split only when the vendor's
+	// token limits would be crossed (intakeTokenPolicy).
+	intakeCallCaptures = intakeFlushCaptures
 	// intakeBatchCaptures is the count handed to labelPoll's grouping.
 	intakeBatchCaptures = intakeCallCaptures
 	// Owner rule 2026-11-10: never call Jev concurrently, put many questions
@@ -86,17 +92,27 @@ const (
 	// capture is asked at once, and captures that arrive while a call is in
 	// flight go out together in the next, so a burst batches by itself and a
 	// quiet moment costs one call. Compiled constants, not settings.
-	// intakeRequestMaxBytes is the most a call's state and questions may
-	// carry: under OpenRouter's ~32,000-byte line past which Jev runs a
-	// slower, less accurate long-context mode. A group of captures that
-	// would cross it is split, never trimmed.
-	intakeRequestMaxBytes = 30000
-	// intakeChunkStateBytes is the most the stories of one call may take (the
-	// state's story entries plus each story's two option names in a
-	// question); the stories are cut into chunks by bytes, not by a count, so
-	// a quiet window fits one call. About half the guard is left for the
-	// captures' own state and questions.
-	intakeChunkStateBytes     = 15000
+	//
+	// A call's size is bounded by the vendor's token limits, 64k a request
+	// and 32k for the state plus any one question (jevbudget), not by a byte
+	// guard of ours. A group of captures that would cross them is split,
+	// never trimmed.
+	//
+	// intakeCallReserveTokens is what a call needs beside its stories: the
+	// task text, the captures block, up to twelve corrections and one
+	// capture's two questions' instructions (about 1,000 tokens in all; four
+	// times that is left for a long summary or a language that tokenizes
+	// dense). The stories of a chunk may take the budget less this.
+	intakeCallReserveTokens = 4000
+	// intakeMaxStoryOptions is the most stories one question offers: the
+	// vendor takes 255 choices a question (jevbudget.VendorMaxChoices), and an
+	// event question also offers the poll's other captures (at most
+	// intakeFlushCaptures-1) and new. A capture with more candidates in a call
+	// is asked in parts, every part over the same state.
+	intakeMaxStoryOptions = jevbudget.VendorMaxChoices - intakeFlushCaptures
+	// intakeOptionTokens is what one option key costs in a question's
+	// criteria (`"c123":null,`, estimated at 8 to 9; rounded up).
+	intakeOptionTokens        = 10
 	intakeShortlistOverlap    = 10
 	intakeShortlistHorizon    = 72 * time.Hour
 	intakeOverrideExamples    = 12
@@ -124,7 +140,7 @@ type intakeLibrary struct {
 
 // intakePollStats are counts only: the calls a poll's labels made, their
 // questions and the largest request.
-type intakePollStats struct{ calls, questions, maxBytes int }
+type intakePollStats struct{ calls, questions, maxBytes, maxTokens int }
 
 func (lib *intakeLibrary) summaryOf(ctx context.Context, doc types.Document) store.StorySummary {
 	lib.mu.Lock()
@@ -563,8 +579,8 @@ func (rt *Runtime) labelHeld(ctx context.Context, ownerID, computerID string, he
 	}
 	// One line per flush, counts only: the per-capture lines above stop when
 	// the budget ends, and a slow Jev would otherwise leave no trace.
-	log.Printf("intake labels: flush captures=%d calls=%d questions=%d bytes_max=%d waited_ms=%d unlabelled=%d cancelled=%t",
-		len(items), lib.stats.calls, lib.stats.questions, lib.stats.maxBytes, waited.Milliseconds(), len(items)-labelled, ctx.Err() != nil)
+	log.Printf("intake labels: flush captures=%d calls=%d questions=%d bytes_max=%d est_tokens_max=%d waited_ms=%d unlabelled=%d cancelled=%t",
+		len(items), lib.stats.calls, lib.stats.questions, lib.stats.maxBytes, lib.stats.maxTokens, waited.Milliseconds(), len(items)-labelled, ctx.Err() != nil)
 	return labelled, len(items) - labelled
 }
 
@@ -594,7 +610,7 @@ type intakePoll struct {
 	stories []intakeStory
 	// views[i] is what items[i] is compared with.
 	views []intakeView
-	// cuts[k] is the end of chunk k in stories (see intakeChunkStateBytes).
+	// cuts[k] is the end of chunk k in stories (see intakeTokenPolicy).
 	cuts []int
 }
 
@@ -628,7 +644,7 @@ type intakeView struct {
 // newIntakePoll builds the poll's handles and each capture's candidates: the
 // stories updated within the window, then the rest by title overlap, as the
 // per-capture path chose them.
-func newIntakePoll(ctx context.Context, lib *intakeLibrary, items []sourcegraph.CapturedItem) (*intakePoll, error) {
+func newIntakePoll(ctx context.Context, lib *intakeLibrary, items []sourcegraph.CapturedItem, policy intakePolicy) (*intakePoll, error) {
 	p := &intakePoll{items: items, handles: make([]string, len(items)), views: make([]intakeView, len(items))}
 	byDoc := map[string]string{}
 	addStory := func(doc types.Document) (string, error) {
@@ -678,16 +694,17 @@ func newIntakePoll(ctx context.Context, lib *intakeLibrary, items []sourcegraph.
 		}
 		p.views[i] = v
 	}
-	// The stories are cut into chunks by bytes, never by a count: a chunk
-	// closes when the next story would take it past intakeChunkStateBytes.
-	size := 0
+	// The stories are one chunk unless they cannot be: a chunk closes only
+	// when the next story would take a one-capture call past the policy's
+	// limits (the vendor's, in production). Never by a count, never trimmed.
+	var request, question int
 	for n, s := range p.stories {
-		cost := len(s.entry) + 2*(len(s.handle)+8)
-		if size > 0 && size+cost > intakeChunkStateBytes {
+		r, q := policy.storyCost(s)
+		if n > 0 && (request+r > policy.chunkRequest || question+q > policy.chunkQuestion) {
 			p.cuts = append(p.cuts, n)
-			size = 0
+			request, question = 0, 0
 		}
-		size += cost
+		request, question = request+r, question+q
 	}
 	if len(p.stories) > 0 {
 		p.cuts = append(p.cuts, len(p.stories))
@@ -718,8 +735,9 @@ func storyIndex(handle string) int {
 	return n - 1
 }
 
-// chunkCount is how many chunks of at most intakeChunkStateBytes of stories the
-// poll's candidates make (one, even with none: the siblings' call).
+// chunkCount is how many chunks the poll's candidates make: one unless a single
+// capture's call could not carry them all (and one, even with none: the
+// siblings' call).
 func (p *intakePoll) chunkCount() int {
 	return max(1, len(p.cuts))
 }
@@ -735,10 +753,18 @@ func (p *intakePoll) chunk(k int) []intakeStory {
 	return p.stories[lo:p.cuts[k]]
 }
 
-// intakeAsk is one capture's questions in one call: the choices offered and
-// the questions' names.
+// intakeAsk is one capture's questions in one call. A capture's options are
+// cut into parts of at most intakeMaxStoryOptions stories, because the vendor
+// takes at most 255 choices a question; every part is a question over the same
+// state, so the call still carries the stories once.
 type intakeAsk struct {
-	capture      int
+	capture int
+	parts   []intakePart
+}
+
+// intakePart is one event question, and one topic question when it offers
+// stories, over one run of the capture's candidate stories.
+type intakePart struct {
 	eventName    string
 	topicName    string
 	eventChoices []string
@@ -746,7 +772,8 @@ type intakeAsk struct {
 }
 
 // intakeCall is one Jev call: a chunk's stories (the state, sent once) and
-// the event and topic questions of a group of captures.
+// the event and topic questions of a group of captures, one pair per part of
+// each capture's options.
 type intakeCall struct {
 	chunk int
 	// first is the first capture's id, the record's DecisionID; each
@@ -797,49 +824,68 @@ func (rt *Runtime) buildIntakeCall(lib *intakeLibrary, p *intakePoll, k int, mem
 	call := intakeCall{chunk: k, first: p.items[members[0]].CaptureID, questions: map[string]json.RawMessage{}, decisions: map[string]string{}}
 	for _, i := range members {
 		captures[p.handles[i]] = intakeCaptureState(p.items[i], intakeSummaryRunes)
-		ask := intakeAsk{capture: i, eventName: "event_" + p.handles[i]}
+		ask := intakeAsk{capture: i}
 		inChunk := map[string]bool{}
 		for _, s := range stories {
 			inChunk[s.handle] = true
 		}
+		var own []string
 		for _, h := range p.views[i].order {
 			if inChunk[h] {
-				ask.storyChoices = append(ask.storyChoices, h)
+				own = append(own, h)
 			}
 		}
 		var siblingChoices []string
 		if k == 0 {
 			siblingChoices = p.views[i].siblings
 		}
-		// Choice order is as it was: the stories newest first, then the other
-		// captures, then new (and none last for the topic). The first option
-		// is what Jev leans toward, so the order is not changed here.
-		ask.eventChoices = append(append(append([]string(nil), ask.storyChoices...), siblingChoices...), store.CaptureLabelEventNew)
-		// The option set is the keys of criteria (the vendor's schema has no
-		// choices field): a handle has a null description, read by name
-		// alone, and the state entry carries what it means.
-		event, err := json.Marshal(map[string]any{
-			"type":         "choice",
-			"instructions": intakeEventInstructions(p.handles[i], len(ask.storyChoices) > 0, len(siblingChoices) > 0, len(lib.examples) > 0),
-			"criteria":     intakeCriteria(ask.eventChoices, map[string]string{store.CaptureLabelEventNew: "No story and no other new capture reports this event; a shared topic or shared actors alone do not count."}),
-		})
-		if err != nil {
-			return intakeCall{}, err
-		}
-		call.questions[ask.eventName] = event
-		call.decisions[ask.eventName] = p.items[i].CaptureID
-		if len(ask.storyChoices) > 0 {
-			ask.topicName = "topic_" + p.handles[i]
-			topic, err := json.Marshal(map[string]any{
+		// A capture's options go out in parts of at most intakeMaxStoryOptions
+		// stories (the vendor's 255-choice limit a question). The first part
+		// keeps the capture's own order, so the option Jev leans toward is as
+		// it was; the siblings ride the first part only.
+		for n := 0; n == 0 || n*intakeMaxStoryOptions < len(own); n++ {
+			part := intakePart{eventName: "event_" + p.handles[i], storyChoices: own[min(n*intakeMaxStoryOptions, len(own)):min((n+1)*intakeMaxStoryOptions, len(own))]}
+			if n > 0 {
+				part.eventName += fmt.Sprintf("_s%d", n+1)
+			}
+			siblings := siblingChoices
+			if n > 0 {
+				siblings = nil
+			}
+			// Choice order is as it was: the stories newest first, then the
+			// other captures, then new (and none last for the topic). The first
+			// option is what Jev leans toward, so the order is not changed here.
+			part.eventChoices = append(append(append([]string(nil), part.storyChoices...), siblings...), store.CaptureLabelEventNew)
+			// The option set is the keys of criteria (the vendor's schema has no
+			// choices field): a handle has a null description, read by name
+			// alone, and the state entry carries what it means.
+			event, err := json.Marshal(map[string]any{
 				"type":         "choice",
-				"instructions": "Which story in state.stories shares state.captures." + p.handles[i] + "'s topic: the same ongoing subject (a war, an election, a company, a trial), even when it is a different event? The options are the story handles (c1, c2, … each at the start of its entry in state.stories) and none; answer none when no story does.",
-				"criteria":     intakeCriteria(append(append([]string(nil), ask.storyChoices...), "none"), map[string]string{"none": "No story shares the capture's topic."}),
+				"instructions": intakeEventInstructions(p.handles[i], len(part.storyChoices) > 0, len(siblings) > 0, len(lib.examples) > 0),
+				"criteria":     intakeCriteria(part.eventChoices, map[string]string{store.CaptureLabelEventNew: "No story and no other new capture reports this event; a shared topic or shared actors alone do not count."}),
 			})
 			if err != nil {
 				return intakeCall{}, err
 			}
-			call.questions[ask.topicName] = topic
-			call.decisions[ask.topicName] = p.items[i].CaptureID
+			call.questions[part.eventName] = event
+			call.decisions[part.eventName] = p.items[i].CaptureID
+			if len(part.storyChoices) > 0 {
+				part.topicName = "topic_" + p.handles[i]
+				if n > 0 {
+					part.topicName += fmt.Sprintf("_s%d", n+1)
+				}
+				topic, err := json.Marshal(map[string]any{
+					"type":         "choice",
+					"instructions": "Which story in state.stories shares state.captures." + p.handles[i] + "'s topic: the same ongoing subject (a war, an election, a company, a trial), even when it is a different event? The options are the story handles (c1, c2, … each at the start of its entry in state.stories) and none; answer none when no story does.",
+					"criteria":     intakeCriteria(append(append([]string(nil), part.storyChoices...), "none"), map[string]string{"none": "No story shares the capture's topic."}),
+				})
+				if err != nil {
+					return intakeCall{}, err
+				}
+				call.questions[part.topicName] = topic
+				call.decisions[part.topicName] = p.items[i].CaptureID
+			}
+			ask.parts = append(ask.parts, part)
 		}
 		call.asks = append(call.asks, ask)
 	}
@@ -902,12 +948,43 @@ func intakeEventInstructions(handle string, stories, siblings, corrections bool)
 	return text
 }
 
+// intakePolicy is how a poll is cut into calls: where the stories of a chunk
+// end, and when a group of captures is full.
+type intakePolicy struct {
+	// storyCost is what one story adds to a chunk: to a one-capture request
+	// (its entry in the state and its key in the capture's two questions) and
+	// to the state a question reads.
+	storyCost func(s intakeStory) (request, question int)
+	// chunkRequest and chunkQuestion are the most a chunk's stories may add.
+	chunkRequest, chunkQuestion int
+	// fits reports whether a call is within the policy's size limit.
+	fits func(c intakeCall) bool
+}
+
+// intakeTokenPolicy sizes calls by the vendor's token limits (jevbudget):
+// 64k tokens a request, 32k for the state plus any one question, less a
+// quarter margin. Stories are chunked only when one capture's call could not
+// carry them all; a group of captures is split when the estimate says the
+// request or one of its questions would cross the budget.
+var intakeTokenPolicy = intakePolicy{
+	storyCost: func(s intakeStory) (int, int) {
+		entry, _ := json.Marshal(s.entry)
+		key := jevbudget.Tokens([]byte(strconv.Quote(s.handle) + ":null,"))
+		state := jevbudget.Tokens(entry) + 1
+		return state + 2*key, state
+	},
+	chunkRequest: jevbudget.RequestBudgetTokens - intakeCallReserveTokens,
+	// A question offers at most 255 keys, however many stories the state lists.
+	chunkQuestion: jevbudget.QuestionBudgetTokens - intakeCallReserveTokens - jevbudget.VendorMaxChoices*intakeOptionTokens,
+	fits:          func(c intakeCall) bool { return jevbudget.Fits(c.state, c.questions) },
+}
+
 // planIntakeCalls lists the poll's calls, chunk by chunk: a chunk's captures
 // (those with a candidate in it, and in the first chunk those with siblings)
 // in groups of at most batch captures, and a group is closed early when
-// adding a capture would take the request over intakeRequestMaxBytes, so a
+// adding a capture would take the request past the policy's limit, so a
 // capture is never dropped, only moved to the next group of the same chunk.
-func (rt *Runtime) planIntakeCalls(lib *intakeLibrary, p *intakePoll, batch int, live []int) ([]intakeCall, error) {
+func (rt *Runtime) planIntakeCalls(lib *intakeLibrary, p *intakePoll, batch int, live []int, policy intakePolicy) ([]intakeCall, error) {
 	var calls []intakeCall
 	for k := 0; k < p.chunkCount(); k++ {
 		inChunk := map[string]bool{}
@@ -941,7 +1018,7 @@ func (rt *Runtime) planIntakeCalls(lib *intakeLibrary, p *intakePoll, batch int,
 			if err != nil {
 				return nil, err
 			}
-			if len(group) > 0 && (len(trial) > max(batch, 1) || next.bytes() > intakeRequestMaxBytes) {
+			if len(group) > 0 && (len(trial) > max(batch, 1) || !policy.fits(next)) {
 				flush()
 				if next, err = rt.buildIntakeCall(lib, p, k, []int{i}); err != nil {
 					return nil, err
@@ -967,8 +1044,14 @@ type intakeCallAnswer struct {
 // stories, sent once); a capture's answer is read from its own questions, so
 // one capture's bad answer, or one failed call, leaves the others' labels.
 func (rt *Runtime) labelPoll(ctx context.Context, lib *intakeLibrary, ownerID, computerID, sourceID string, items []sourcegraph.CapturedItem, batch int) []intakeLabelResult {
+	return rt.labelPollWith(ctx, lib, ownerID, computerID, sourceID, items, batch, intakeTokenPolicy)
+}
+
+// labelPollWith is labelPoll under a policy; production uses
+// intakeTokenPolicy, the shadow comparison also runs the old byte policy.
+func (rt *Runtime) labelPollWith(ctx context.Context, lib *intakeLibrary, ownerID, computerID, sourceID string, items []sourcegraph.CapturedItem, batch int, policy intakePolicy) []intakeLabelResult {
 	out := make([]intakeLabelResult, len(items))
-	p, err := newIntakePoll(ctx, lib, items)
+	p, err := newIntakePoll(ctx, lib, items, policy)
 	if err != nil {
 		for i := range out {
 			out[i].Err = err
@@ -993,7 +1076,7 @@ func (rt *Runtime) labelPoll(ctx context.Context, lib *intakeLibrary, ownerID, c
 		}
 		live = append(live, i)
 	}
-	calls, err := rt.planIntakeCalls(lib, p, batch, live)
+	calls, err := rt.planIntakeCalls(lib, p, batch, live, policy)
 	if err != nil {
 		for _, i := range live {
 			out[i].Err = err
@@ -1004,28 +1087,24 @@ func (rt *Runtime) labelPoll(ctx context.Context, lib *intakeLibrary, ownerID, c
 	for _, c := range calls {
 		lib.stats.questions += len(c.questions)
 		lib.stats.maxBytes = max(lib.stats.maxBytes, c.bytes())
+		lib.stats.maxTokens = max(lib.stats.maxTokens, jevbudget.Measure(c.state, c.questions).Request)
 	}
-	// answers[i][k] is capture i's answer to chunk k's call.
+	// answers[i] are capture i's answers, one per part of its options in
+	// each call that asked it.
 	answers := make([][]intakeCallAnswer, len(items))
-	for _, i := range live {
-		answers[i] = make([]intakeCallAnswer, p.chunkCount())
-		for k := range answers[i] {
-			answers[i][k].err = errIntakeNotAsked
-		}
-	}
 	// One call after another, never concurrently: Jev answers a call's
 	// questions in parallel, so the way to go faster is a bigger call.
 	for _, c := range calls {
-		var ans []intakeCallAnswer
+		var ans [][]intakeCallAnswer
 		err := ctx.Err()
 		if err == nil {
 			ans, err = rt.askIntakeCall(ctx, lib, c)
 		}
 		for a, ask := range c.asks {
 			if err != nil {
-				answers[ask.capture][c.chunk] = intakeCallAnswer{err: err}
+				answers[ask.capture] = append(answers[ask.capture], intakeCallAnswer{err: err})
 			} else {
-				answers[ask.capture][c.chunk] = ans[a]
+				answers[ask.capture] = append(answers[ask.capture], ans[a]...)
 			}
 		}
 	}
@@ -1035,17 +1114,16 @@ func (rt *Runtime) labelPoll(ctx context.Context, lib *intakeLibrary, ownerID, c
 	return out
 }
 
-var errIntakeNotAsked = fmt.Errorf("intake: the capture was not asked")
-
 func siblingIndex(handle string) int {
 	var n int
 	_, _ = fmt.Sscanf(handle, "n%d", &n)
 	return n - 1
 }
 
-// mergeIntakeAnswers merges a capture's chunk answers, in chunk order, into
-// its label: the story with the highest event probability wins, a sibling
-// only when no story matched, and new only when no chunk named anything.
+// mergeIntakeAnswers merges a capture's answers, in the order asked (chunk by
+// chunk, part by part), into its label: the story with the highest event
+// probability wins, a sibling only when no story matched, and new only when no
+// part named anything.
 func (rt *Runtime) mergeIntakeAnswers(p *intakePoll, i int, label store.CaptureLabel, answers []intakeCallAnswer) intakeLabelResult {
 	storyOf := map[string]store.StorySummary{}
 	for _, s := range p.stories {
@@ -1058,9 +1136,6 @@ func (rt *Runtime) mergeIntakeAnswers(p *intakePoll, i int, label store.CaptureL
 	var event, topic intakeAnswer
 	newP, haveNew := 1.0, false
 	for _, r := range answers {
-		if r.err == errIntakeNotAsked {
-			continue // no candidate of the capture is in this chunk
-		}
 		if r.err != nil {
 			// A capture that missed part of the window is unlabelled, not
 			// labelled "new" on part of the evidence.
@@ -1106,10 +1181,11 @@ func (rt *Runtime) mergeIntakeAnswers(p *intakePoll, i int, label store.CaptureL
 }
 
 // askIntakeCall makes one call and reads each of its captures' answers from
-// that capture's own questions. The slice is in call.asks order. A capture
-// whose answer is missing or off the menu carries its own error; the call's
-// usage is split among the captures by question count.
-func (rt *Runtime) askIntakeCall(ctx context.Context, lib *intakeLibrary, call intakeCall) ([]intakeCallAnswer, error) {
+// that capture's own questions, one answer per part of its options. The slices
+// are in call.asks order. A part whose answer is missing or off the menu
+// carries its own error; the call's usage is split among the parts by
+// question count.
+func (rt *Runtime) askIntakeCall(ctx context.Context, lib *intakeLibrary, call intakeCall) ([][]intakeCallAnswer, error) {
 	meta := jevrecord.Meta{Site: "intake_labels", DecisionID: call.first, Scope: judgmentScopeIntakeLabels, QuestionDecisions: call.decisions}
 	raw, err := rt.judgeCall(ctx, meta, intakeLabelCallTimeout, call.state, call.questions)
 	if err != nil {
@@ -1131,34 +1207,37 @@ func (rt *Runtime) askIntakeCall(ctx context.Context, lib *intakeLibrary, call i
 		return nil, fmt.Errorf("decode Jev's answer: %w", err)
 	}
 	total := len(call.questions)
-	out := make([]intakeCallAnswer, len(call.asks))
+	out := make([][]intakeCallAnswer, len(call.asks))
 	for a, ask := range call.asks {
-		share := 1.0
-		if total > 0 {
-			share = float64(1+btoi(ask.topicName != "")) / float64(total)
-		}
-		event, ok := distribution.Answers[ask.eventName]
-		if !ok {
-			out[a].err = fmt.Errorf("Jev gave no event answer")
-			continue
-		}
-		choice := strings.TrimSpace(event.Choice)
-		if !intakeHas(ask.eventChoices, choice) {
-			out[a].err = fmt.Errorf("Jev chose %q, which is not a choice", choice)
-			continue
-		}
-		res := intakeAnswer{event: choice, eventP: event.Probabilities[choice], model: distribution.Model,
-			inputTokens:  int(math.Round(float64(distribution.Usage.InputTokens) * share)),
-			outputTokens: int(math.Round(float64(distribution.Usage.OutputTokens) * share)),
-			cost:         distribution.Usage.Cost * share}
-		if ask.topicName != "" {
-			if topic, ok := distribution.Answers[ask.topicName]; ok {
-				if t := strings.TrimSpace(topic.Choice); t != "" && t != "none" && intakeHas(ask.storyChoices, t) {
-					res.topic, res.topicP = t, topic.Probabilities[t]
+		out[a] = make([]intakeCallAnswer, len(ask.parts))
+		for n, part := range ask.parts {
+			share := 1.0
+			if total > 0 {
+				share = float64(1+btoi(part.topicName != "")) / float64(total)
+			}
+			event, ok := distribution.Answers[part.eventName]
+			if !ok {
+				out[a][n].err = fmt.Errorf("Jev gave no event answer")
+				continue
+			}
+			choice := strings.TrimSpace(event.Choice)
+			if !intakeHas(part.eventChoices, choice) {
+				out[a][n].err = fmt.Errorf("Jev chose %q, which is not a choice", choice)
+				continue
+			}
+			res := intakeAnswer{event: choice, eventP: event.Probabilities[choice], model: distribution.Model,
+				inputTokens:  int(math.Round(float64(distribution.Usage.InputTokens) * share)),
+				outputTokens: int(math.Round(float64(distribution.Usage.OutputTokens) * share)),
+				cost:         distribution.Usage.Cost * share}
+			if part.topicName != "" {
+				if topic, ok := distribution.Answers[part.topicName]; ok {
+					if t := strings.TrimSpace(topic.Choice); t != "" && t != "none" && intakeHas(part.storyChoices, t) {
+						res.topic, res.topicP = t, topic.Probabilities[t]
+					}
 				}
 			}
+			out[a][n].answer = res
 		}
-		out[a].answer = res
 	}
 	return out, nil
 }
@@ -1197,8 +1276,8 @@ const (
 	// newest-30 reach.
 	intakeShortlistFloor = 30
 	// Entries in a chunk are a headline and a time (a lede only on the newest
-	// intakeLedeCandidates), so a story costs about 100 bytes and a chunk
-	// holds on the order of 100; see intakeChunkStateBytes.
+	// intakeLedeCandidates), so a story costs about 100 bytes; how many a
+	// call holds is intakeTokenPolicy's, from the vendor's limits.
 	intakeLedeCandidates = 30
 )
 
@@ -1223,6 +1302,9 @@ func (rt *Runtime) judgeCall(ctx context.Context, meta jevrecord.Meta, timeout t
 		// only.
 		meta.NoText = true
 	}
+	// The site rides the request as X-Choir-Jev-Site, so the gateway's log
+	// line names it (it said site=unknown for every guest call).
+	ctx = gatewayruntime.WithJevSite(ctx, meta.Site)
 	return jevrecord.Observe(rt.jevRecorder(), meta, state, questions, func() (json.RawMessage, error) {
 		return callJudgeWithin(ctx, rt.candidateJudge, meta.Scope, timeout, state, questions)
 	})

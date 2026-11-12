@@ -195,10 +195,16 @@ ms and status. Tokens and dollars come from R (receipts exist for every success)
 
 ### 3.2 Request bytes (C)
 
-Bounds: intake 30,000 bytes (`intake_labels.go:74`), event layer 24 KiB (`event_layer.go:75`), gateway 1
-MiB. Bytes per token is **not logged** (the receipt holds a request digest, not a size). Observed input:
-max 17,481 tokens, p99 15,766; 8,651 of 16,137 calls (54%) over 8,000 tokens. Whether a call crosses the
-vendor's 32,000-byte long-context line cannot be told from tokens. **U**
+Bounds, until 2026-11-12: intake 30,000 bytes, event layer 24 KiB, support judge 30,000 bytes, gateway 1
+MiB. Since 2026-11-12 the three sites are bounded by the vendor's token limits through `internal/jevbudget`
+(75% of 64k a request and of 32k for the state plus one question, estimated from the text; intake
+`intakeTokenPolicy`, `intake_labels.go:969`), and a capture's options are cut into parts of 243 stories
+(`intakeMaxStoryOptions`) because a question takes at most 255 choices. Bytes per token is **not logged**
+(the receipt holds a request digest, not a size); the flush line now carries `est_tokens_max` beside
+`bytes_max`. Observed input: max 17,481 tokens, p99 15,766; 8,651 of 16,137 calls (54%) over 8,000
+tokens (11-10). The 11-12 usage review saw at most 30,046 bytes a call: **no call crossed the 32,000-byte
+line before the change**, so 17,481 tokens says nothing about it (tokens are not bytes). Whether a call
+crosses the line is now routine and is the open question (SYSTEM1.md section 10, item 2). **U**
 
 ### 3.3 Rate by window
 
@@ -239,8 +245,8 @@ Options and bounds are from code; no question text is quoted.
 
 | # | Site, call at | Unit and question shapes | State and bound | Answer to action | On failure | Rec |
 |---|---|---|---|---|---|---|
-| 1 | Intake `agentcore/intake_labels.go:779` (plan :578) | up to 4 captures, 2 `choice` each (event, topic); options are `criteria` keys: up to 80 stories + siblings + `none`; criteria used | story list once under handles; 30,000 B (:74); 7.9k-13.7k tokens | max-p choice; p stored (`EventP`, `TopicP` :815-822, `store/capture_label.go:54`); no threshold at read | capture stays unlabelled; 5 s (:57) | yes `intake_labels` |
-| 2 | Event layer `event_layer.go:460` | up to 12 captures (:48), 1 `choice` each (`k1..kN`) over events, siblings, `none`; queued at `source_schedule.go:284` | 24 KiB (:75), summaries clipped, chunk halves past it | `p>=0.92` join (:71), `0.5<=p<0.92` tentative (:72), else none; applied :535-545 | unanswered skip the fold (:560); 30 s (:41) | yes, threshold text recorded |
+| 1 | Intake `agentcore/intake_labels.go:1188` (`askIntakeCall`; plan :987) | the whole flush, up to 12 captures, 2 `choice` each (event, topic) per part of at most 243 stories; options are `criteria` keys: stories + siblings + `none`; criteria used | story list once under handles (the window, split into chunks only when one capture's call cannot carry it); vendor token budget (`intakeTokenPolicy` :969); was 7.9k-13.7k tokens (11-10) | max-p choice; p stored (`EventP`, `TopicP` :815-822, `store/capture_label.go:54`); no threshold at read | capture stays unlabelled; 5 s (:57) | yes `intake_labels` |
+| 2 | Event layer `event_layer.go:460` | up to 12 captures (:48), 1 `choice` each (`k1..kN`) over events, siblings, `none`; queued at `source_schedule.go:284` | vendor token budget (`event_layer.go:389`), summaries clipped, chunk halves past it; was 24 KiB | `p>=0.92` join (:71), `0.5<=p<0.92` tentative (:72), else none; applied :535-545 | unanswered skip the fold (:560); 30 s (:41) | yes, threshold text recorded |
 | 3 | Support judge `support_judge.go:369` | 1 `choice` yes/no per citation pair of a revision, `p1..pN`, N uncapped | sentence, quote, cited passage; no byte bound | `yes` and `p(yes)>=0.5` supported (:408); p kept in basis points | pairs stay pending; 90 s (:62), 8 at once (:60) | yes |
 | 4 | System 1 verb `system1_verb.go:286` (`system1Call` :216, `Ask` :134,150) | a desk's closed `choice` questions, 2-6 options, up to 12 (`yaegikernel/system1.go:26`) | host-resolved refs: 4 a question, 16 a call (:31-32) | returned to the cell with probabilities; replay by digest | request on the tape then answered or `failed`; 60 s (:74) | yes (NoText) |
 | 5 | Story analysis `story_analysis.go:355` (via 4) | novelty, entity type, role per candidate; chunks of 12, 2 chunks | story text, host side | probabilities and top choice (:382) to the cell | `a.Error`; no answer | yes (via 4) |

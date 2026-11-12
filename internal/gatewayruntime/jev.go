@@ -22,6 +22,26 @@ type JudgmentRequest struct {
 	Scope string `json:"scope,omitempty"`
 }
 
+// JevSiteHeader names the request header by which a guest says which call
+// site is asking. It is the same name the gateway reads
+// (internal/gateway/jev_limiter.go, gateway.JevSiteHeader); the gateway
+// sanitises it, logs it and never sends it upstream.
+const JevSiteHeader = "X-Choir-Jev-Site"
+
+type jevSiteKey struct{}
+
+// WithJevSite names the call site of the Jev calls made with the returned
+// context, so the gateway's log line is attributable per site.
+func WithJevSite(ctx context.Context, site string) context.Context {
+	return context.WithValue(ctx, jevSiteKey{}, site)
+}
+
+// JevSiteFrom is the call site WithJevSite put in ctx, or "".
+func JevSiteFrom(ctx context.Context) string {
+	site, _ := ctx.Value(jevSiteKey{}).(string)
+	return site
+}
+
 // JudgmentResponse preserves the complete OpenRouter response distribution.
 // Callers must interpret it themselves; the transport never flattens it into a
 // score or applies a confidence gate.
@@ -72,6 +92,9 @@ func (c *JudgmentClient) Decide(ctx context.Context, request JudgmentRequest) (*
 	}
 	httpRequest.Header.Set("Authorization", "Bearer "+c.token)
 	httpRequest.Header.Set("Content-Type", "application/json")
+	if site := strings.TrimSpace(JevSiteFrom(ctx)); site != "" {
+		httpRequest.Header.Set(JevSiteHeader, site)
+	}
 	httpResponse, err := c.httpClient.Do(httpRequest)
 	if err != nil {
 		return nil, fmt.Errorf("judgment client: http call: %w", err)

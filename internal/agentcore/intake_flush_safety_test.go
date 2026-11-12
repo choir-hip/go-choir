@@ -135,7 +135,7 @@ func TestIntakeFlushTwoComputersNeverCallJevConcurrently(t *testing.T) {
 	t.Cleanup(f.rt.Stop)
 	f.rt.enqueueIntakeLabels(f.owner, "computer-a", "src", flushTestItems(12, "s"))
 	f.rt.enqueueIntakeLabels(f.owner, "computer-b", "src", flushTestItems(12, "s"))
-	waitFlush(t, "both flushes", func() bool { return len(judge.labelCalls()) >= 4 })
+	waitFlush(t, "both flushes", func() bool { return len(judge.labelCalls()) >= 2 })
 	if got := judge.maxSeen.Load(); got != 1 {
 		t.Fatalf("%d Jev calls in flight at once across computers; want 1", got)
 	}

@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
+	"github.com/yusefmosiah/go-choir/internal/jevbudget"
 	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
@@ -55,7 +57,7 @@ import (
 //	B2. A capture is silently unlabelled, or labelled twice, when the batch
 //	    splits at the capture cap or at the byte line: every capture must be
 //	    in exactly one group per chunk it has candidates in.
-//	B3. A request goes over the byte line (intakeRequestMaxBytes) instead of
+//	B3. A request goes over the vendor's token budget (jevbudget) instead of
 //	    splitting the capture batch, or the split drops a capture.
 //	B4. One bad answer (a missing event answer, an off-menu choice) voids the
 //	    other captures of the call.
@@ -148,6 +150,10 @@ type fakeIntakeCall struct {
 	bytes int
 	// raw is the questions as sent, key order intact.
 	raw map[string]json.RawMessage
+	// fits is whether the request was inside the vendor's token budgets;
+	// site is the call site the request context carried.
+	fits bool
+	site string
 }
 
 // storyEntries are state.stories, the list of "c12: headline (time) — lede".
@@ -213,6 +219,8 @@ func (j *fakeIntakeJudge) JudgeScoped(ctx context.Context, scope string, state j
 	_ = json.Unmarshal(state, &call.state)
 	call.bytes = len(state)
 	call.raw = questions
+	call.fits = jevbudget.Fits(state, questions)
+	call.site = gatewayruntime.JevSiteFrom(ctx)
 	for name, q := range questions {
 		call.bytes += len(q)
 		var m map[string]any
@@ -251,6 +259,7 @@ func (j *fakeIntakeJudge) JudgeScoped(ctx context.Context, scope string, state j
 	answers := map[string]any{}
 	for name := range questions {
 		kind, handle, _ := strings.Cut(name, "_")
+		handle, _, _ = strings.Cut(handle, "_") // event_n1_s2 is n1's second part
 		subject, _ := captures[handle].(map[string]any)
 		title, _ := subject["title"].(string)
 		switch kind {
@@ -584,8 +593,9 @@ func TestIntakeLabelsFailingOrSlowJevLeavesCapturesUnlabelledWithinBudget(t *tes
 	}
 }
 
-// B7: twelve captures against no stories are two calls of six, and the site never
-// has more than one in flight.
+// B7: twelve captures against no stories are one call of twelve questions
+// (the flush's whole group, owner 2026-11-12), and the site never has more
+// than one in flight.
 func TestIntakeLabelsBatchTwelveCapturesIntoTwoCalls(t *testing.T) {
 	f := newIntakeFixture(t, "owner-labels-parallel")
 	f.enable(t)
@@ -596,8 +606,8 @@ func TestIntakeLabelsBatchTwelveCapturesIntoTwoCalls(t *testing.T) {
 	}
 	f.poll(t)
 	labelCalls := judge.labelCalls()
-	if got := len(labelCalls); got != 2 {
-		t.Fatalf("B7: %d label calls for 12 captures; want 2 of 6", got)
+	if got := len(labelCalls); got != 1 {
+		t.Fatalf("B7: %d label calls for 12 captures; want one", got)
 	}
 	if max := judge.maxSeen.Load(); max != 1 {
 		t.Fatalf("B7: %d calls ran at once; want 1", max)
@@ -608,8 +618,8 @@ func TestIntakeLabelsBatchTwelveCapturesIntoTwoCalls(t *testing.T) {
 				t.Fatal("a topic question was asked with no candidate stories")
 			}
 		}
-		if len(call.questions) != 6 {
-			t.Fatalf("B2: a call has %d questions; want 6 (one per capture, 6 captures)", len(call.questions))
+		if len(call.questions) != 12 {
+			t.Fatalf("B2: a call has %d questions; want 12 (one per capture, 12 captures)", len(call.questions))
 		}
 	}
 }
@@ -618,7 +628,7 @@ func TestIntakeLabelsBatchTwelveCapturesIntoTwoCalls(t *testing.T) {
 // stories, measured on the poll's own cutting.
 func storiesPerChunk(t *testing.T, rt *Runtime) int {
 	t.Helper()
-	p, err := newIntakePoll(context.Background(), pollLib(rt, 2000), pollItems("probe"))
+	p, err := newIntakePoll(context.Background(), pollLib(rt, 4000), pollItems("probe"), intakeTokenPolicy)
 	if err != nil || len(p.cuts) < 2 {
 		t.Fatalf("probe poll: %v", err)
 	}
@@ -756,34 +766,45 @@ func TestIntakeBatchSplitsAtTheCaptureCapAndDropsNone(t *testing.T) {
 	}
 }
 
-// B3: with lede-heavy candidates a chunk's state is big, so four captures'
-// questions do not fit under the byte line and the batch splits; no request
-// is over the line and no capture is dropped. The chunk of 80 candidates is
-// the state; the byte line is on state plus questions.
-func TestIntakeBatchRespectsTheByteLineBySplittingTheCaptureBatch(t *testing.T) {
+// B3: a window of 200 stories and twelve captures asks 24 questions whose
+// criteria each list every story, which is more than the vendor's request
+// limit allows in one call. The batch splits by captures: no request is over
+// the vendor's token budget (jevbudget), no capture is dropped, and no call
+// is given part of the window (the stories are never trimmed).
+func TestIntakeBatchRespectsTheVendorLimitsBySplittingTheCaptureBatch(t *testing.T) {
 	rt, _ := testRuntime(t)
-	lib := pollLib(rt, 80)
-	for _, d := range lib.recent {
-		lib.summary[d.DocID] = store.StorySummary{DocID: d.DocID, Headline: d.Title, UpdatedAt: d.UpdatedAt, Lede: strings.Repeat("lede words ", 50)}
-	}
+	lib := pollLib(rt, 200)
 	judge := &fakeIntakeJudge{}
 	rt.SetCandidateJudge(judge)
 	long := strings.Repeat("a long capture summary sentence. ", 40)
-	items := pollItems("one", "two", "three", "four", "five", "six")
+	var titles []string
+	for i := 0; i < 12; i++ {
+		titles = append(titles, fmt.Sprintf("Capture %d", i))
+	}
+	items := pollItems(titles...)
 	for i := range items {
 		items[i].Summary = long
 	}
-	labels := mustLabels(t, rt.labelPoll(context.Background(), lib, "owner", "computer", "src", items, 4))
+	labels := mustLabels(t, rt.labelPoll(context.Background(), lib, "owner", "computer", "src", items, intakeBatchCaptures))
 	if len(labels) != len(items) {
 		t.Fatalf("B2: %d labels for %d captures", len(labels), len(items))
 	}
-	if judge.callCount() <= 2 {
-		t.Fatalf("B3: %d calls for 6 captures; the byte line should have split the groups of 4", judge.callCount())
+	calls := judge.labelCalls()
+	if len(calls) < 2 {
+		t.Fatalf("B3: %d call for 24 questions over 300 stories; the vendor's request limit should have split it", len(calls))
 	}
-	for _, call := range judge.calls {
-		if call.bytes > intakeRequestMaxBytes {
-			t.Fatalf("B3: a request is %d bytes, over the %d line", call.bytes, intakeRequestMaxBytes)
+	asked := 0
+	for _, call := range calls {
+		if !call.fits {
+			t.Fatalf("B3: a request of %d bytes is over the vendor's token budget", call.bytes)
 		}
+		if got := len(storyEntries(call.state)); got != 200 {
+			t.Fatalf("B3: a call carries %d of 200 stories; the window is split by captures, never trimmed", got)
+		}
+		asked += len(call.questions)
+	}
+	if asked != 24 {
+		t.Fatalf("B3: %d questions asked; want 24", asked)
 	}
 }
 
@@ -1092,13 +1113,23 @@ func TestIntakeBatchQuestionsOfferExactlyTheCriteriaKeys(t *testing.T) {
 		}
 		captures, _ := call.state["captures"].(map[string]any)
 		for name, raw := range call.raw {
-			kind, handle, _ := strings.Cut(name, "_")
+			kind, rest, _ := strings.Cut(name, "_")
+			handle, partName, _ := strings.Cut(rest, "_")
 			if captures[handle] == nil {
 				t.Fatalf("question %s names %s, which is not in state.captures", name, handle)
 			}
-			want := append([]string(nil), stories...)
+			// A capture's options go out in parts of at most
+			// intakeMaxStoryOptions stories (the vendor's 255 choices a
+			// question): event_n1, event_n1_s2, ...
+			part := 0
+			if partName != "" {
+				_, _ = fmt.Sscanf(partName, "s%d", &part)
+				part--
+			}
+			lo := min(part*intakeMaxStoryOptions, len(stories))
+			want := append([]string(nil), stories[lo:min(lo+intakeMaxStoryOptions, len(stories))]...)
 			if kind == "event" {
-				if k == 0 { // the siblings ride the first chunk only
+				if k == 0 && part == 0 { // the siblings ride the first chunk's first part only
 					for _, other := range []string{"n1", "n2", "n3"} {
 						if other != handle {
 							want = append(want, other)

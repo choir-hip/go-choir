@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/jevbudget"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 )
@@ -65,12 +66,14 @@ import (
 // eventJudge answers each capture question by title: target is an event
 // headline, a recent title of one, or another capture's title; "" is new.
 type eventJudge struct {
-	mu       sync.Mutex
-	answers  map[string]eventAnswer
-	omit     map[string]bool // capture titles whose answer is left out
-	calls    []map[string]any
-	asked    []map[string]json.RawMessage // each call's questions
-	bytes    []int
+	mu      sync.Mutex
+	answers map[string]eventAnswer
+	omit    map[string]bool // capture titles whose answer is left out
+	calls   []map[string]any
+	asked   []map[string]json.RawMessage // each call's questions
+	bytes   []int
+	// fits[i] is whether call i was inside the vendor's token budgets.
+	fits     []bool
 	delay    time.Duration
 	inFlight int
 	maxIn    int
@@ -112,6 +115,7 @@ func (j *eventJudge) JudgeScoped(_ context.Context, _ string, stateRaw json.RawM
 	j.calls = append(j.calls, generic)
 	j.asked = append(j.asked, questions)
 	j.bytes = append(j.bytes, total)
+	j.fits = append(j.fits, jevbudget.Fits(stateRaw, questions))
 	j.inFlight++
 	if j.inFlight > j.maxIn {
 		j.maxIn = j.inFlight
@@ -369,7 +373,7 @@ func TestEventLayerKeepsEachCallUnderTheContextBound(t *testing.T) {
 	if _, err := rt.resolveEvents(context.Background(), owner, computer, fill); err != nil {
 		t.Fatal(err)
 	}
-	judge.bytes = nil
+	judge.bytes, judge.fits = nil, nil
 	var inputs []eventInput
 	for i := 0; i < eventChunkSize*2; i++ {
 		inputs = append(inputs, capItem(fmt.Sprintf("l%d", i), fmt.Sprintf("Long item %d", i), fmt.Sprintf("https://l%d.example.com/x", i), long))
@@ -381,9 +385,12 @@ func TestEventLayerKeepsEachCallUnderTheContextBound(t *testing.T) {
 	if r.Unresolved != 0 || r.Minted != len(inputs) {
 		t.Fatalf("report = %+v", r)
 	}
-	for i, n := range judge.bytes { // R8
-		if n > eventStateMaxBytes {
-			t.Fatalf("call %d state and questions = %d bytes, over %d", i, n, eventStateMaxBytes)
+	if len(judge.fits) == 0 {
+		t.Fatal("no call was made")
+	}
+	for i, ok := range judge.fits { // R8
+		if !ok {
+			t.Fatalf("call %d state and questions = %d bytes, over the vendor's token budget", i, judge.bytes[i])
 		}
 	}
 }

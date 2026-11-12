@@ -143,7 +143,7 @@ func TestIntakeFlushBurstDuringACallBatchesIntoCeilNOverSix(t *testing.T) {
 	}
 }
 
-func TestIntakeFlushPacksToTheByteGuardNotACount(t *testing.T) {
+func TestIntakeFlushPacksToTheVendorLimitsNotACount(t *testing.T) {
 	rt, _ := testRuntime(t)
 	judge := &fakeIntakeJudge{}
 	rt.SetCandidateJudge(judge)
@@ -156,20 +156,15 @@ func TestIntakeFlushPacksToTheByteGuardNotACount(t *testing.T) {
 	calls := judge.labelCalls()
 	total := 0
 	for _, c := range calls {
-		if c.bytes > intakeRequestMaxBytes {
-			t.Errorf("F4: a call is %d bytes; the guard is %d", c.bytes, intakeRequestMaxBytes)
+		if !c.fits {
+			t.Errorf("F4: a call of %d bytes is over the vendor's token budget", c.bytes)
 		}
 		total += len(c.questions)
 	}
-	if len(calls) < 1 || total != 24 {
-		t.Fatalf("calls=%d questions=%d; want 24 questions (two per capture, none split or dropped)", len(calls), total)
-	}
-	most := 0
-	for _, c := range calls {
-		most = max(most, len(c.questions))
-	}
-	if most > 2*intakeCallCaptures || most <= 8 {
-		t.Fatalf("the largest call has %d questions; want more than 8 and at most %d", most, 2*intakeCallCaptures)
+	// Twelve captures over 20 stories fit one call: 24 questions, the state
+	// once. Under the old byte guard this was three calls.
+	if len(calls) != 1 || total != 24 {
+		t.Fatalf("calls=%d questions=%d; want one call of 24 questions (two per capture, none split or dropped)", len(calls), total)
 	}
 	if judge.maxSeen.Load() != 1 {
 		t.Fatalf("F1: max in flight = %d", judge.maxSeen.Load())

@@ -259,8 +259,8 @@ func TestEventLayerLinkChoicesAreBounded(t *testing.T) {
 	defer judge.mu.Unlock()
 	sawLinks := false
 	for i := before; i < len(judge.calls); i++ {
-		if judge.bytes[i] > eventStateMaxBytes {
-			t.Fatalf("call %d = %d bytes, over the bound %d", i, judge.bytes[i], eventStateMaxBytes)
+		if !judge.fits[i] {
+			t.Fatalf("call %d = %d bytes, over the vendor's token budget", i, judge.bytes[i])
 		}
 		for key, raw := range judge.asked[i] {
 			var q struct {
