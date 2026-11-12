@@ -169,7 +169,9 @@ type ComputerEventAppender struct {
 	reconstructing atomic.Bool
 	// recoveryFailedAt bounds a recovery that keeps failing (a poison
 	// finalize): appends refuse fast for inPlaceRecoveryCooldown after it.
-	recoveryFailedAt   time.Time
+	recoveryFailedAt time.Time
+	// catchUpPages overrides catchUpMaxPages when positive (tests).
+	catchUpPages       int
 	wedge              wedgeState
 	wedgeNow           func() time.Time // test clock; nil is time.Now
 	replaySeq          uint64
@@ -804,6 +806,11 @@ func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Eve
 		if embeddedHead, err = a.recoverPreparedInPlaceLocked(ctx, "heads differ"); err != nil {
 			return Receipt{}, err
 		}
+		// Recovery may have moved the host's head as seen by this append (a
+		// resent committed row, a catch-up); bind to the head as it is now.
+		if platformHead, err = a.cas.Head(ctx, a.computerID); err != nil {
+			return Receipt{}, fmt.Errorf("computer event appender: resolve canonical head after recovery: %w", err)
+		}
 		if !sameHead(platformHead, embeddedHead) {
 			return Receipt{}, &wedgeError{kind: "heads differ after in-place recovery", err: ErrNeedsProjectionRepair}
 		}
@@ -895,7 +902,7 @@ func (a *ComputerEventAppender) discardPreparedLocked(ctx context.Context, reque
 	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancel()
 	if derr := a.projection.DiscardPrepared(dctx, a.computerID, request.EventDigest); derr != nil {
-		log.Printf("computer event appender: discard prepared seq=%d after failed CAS: %v", request.Event.Sequence, derr)
+		log.Printf("computer event appender: discard prepared seq=%d after a refused CAS or failed apply: %v", request.Event.Sequence, derr)
 	}
 }
 
@@ -944,6 +951,13 @@ func (a *ComputerEventAppender) recoverPreparedInPlaceLocked(ctx context.Context
 	a.recoveryFailedAt = time.Time{}
 	if herr != nil {
 		return nil, fmt.Errorf("computer event appender: embedded head after recovery: %w", herr)
+	}
+	// No prepared row explains the gap: if the host is simply ahead, fetch
+	// what the local projection missed, as the boot does.
+	head, err = a.catchUpLocked(ctx, head)
+	if err != nil {
+		a.recoveryFailedAt = time.Now()
+		return nil, err
 	}
 	return head, nil
 }
@@ -1099,29 +1113,14 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 	current := localHead
 	apply := func(record DurableEvent) error {
 		applyStarted := time.Now()
-		next, err := Reduce(current, record.Request.Event, record.Request.Input)
+		next, timings, err := a.applyDurableEvent(ctx, current, record)
+		replayReduce += timings.reduce
+		replayVerify += timings.verify
+		replayPrepare += timings.prepare
+		replayFinalize += timings.finalize
 		if err != nil {
-			return fmt.Errorf("computer event appender: replay sequence %d: %w", record.Request.Event.Sequence, err)
+			return err
 		}
-		if !sameHead(&next, &record.Request.Next) {
-			return fmt.Errorf("computer event appender: replay projection mismatch at sequence %d", record.Request.Event.Sequence)
-		}
-		verifyStarted := time.Now()
-		if err := a.verifier.VerifyEventHeadReceipt(ctx, record.Receipt, record.Request); err != nil {
-			return fmt.Errorf("computer event appender: replay receipt sequence %d: %w", record.Request.Event.Sequence, err)
-		}
-		prepareStarted := time.Now()
-		replayReduce += verifyStarted.Sub(applyStarted)
-		replayVerify += prepareStarted.Sub(verifyStarted)
-		if err := a.projection.Prepare(ctx, record.Request); err != nil {
-			return fmt.Errorf("computer event appender: replay prepare sequence %d: %w", record.Request.Event.Sequence, err)
-		}
-		finalizeStarted := time.Now()
-		replayPrepare += finalizeStarted.Sub(prepareStarted)
-		if err := a.finalizeProjection(ctx, record.Request.Event, record.Request.EventDigest, record.Receipt); err != nil && !errors.Is(err, ErrProjectionBatchUnreadable) {
-			return fmt.Errorf("computer event appender: replay finalize sequence %d: %w", record.Request.Event.Sequence, err)
-		}
-		replayFinalize += time.Since(finalizeStarted)
 		a.setReplayProgress(record.Request.Event.Sequence, a.committedReplaySeq())
 		a.mu.Lock()
 		a.replayAppliedRows++
@@ -1264,6 +1263,44 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 		return fmt.Errorf("computer event appender: replay commit: %w", err)
 	}
 	return nil
+}
+
+// applyTimings splits the cost of one applyDurableEvent for the replay log.
+type applyTimings struct{ reduce, verify, prepare, finalize time.Duration }
+
+// applyDurableEvent applies one event of the canonical tape to the local
+// projection: reduce it against current, check the result against the head the
+// host committed, verify the host's receipt, prepare, and finalize. The boot
+// replay (reconstruct) and the in-place catch-up (catchUpLocked) both apply
+// events through this one step, so they cannot disagree about what applying
+// means. It never performs a CAS and never touches the host.
+func (a *ComputerEventAppender) applyDurableEvent(ctx context.Context, current *Head, record DurableEvent) (Head, applyTimings, error) {
+	var timings applyTimings
+	applyStarted := time.Now()
+	next, err := Reduce(current, record.Request.Event, record.Request.Input)
+	if err != nil {
+		return Head{}, timings, fmt.Errorf("computer event appender: replay sequence %d: %w", record.Request.Event.Sequence, err)
+	}
+	if !sameHead(&next, &record.Request.Next) {
+		return Head{}, timings, fmt.Errorf("computer event appender: replay projection mismatch at sequence %d: %w", record.Request.Event.Sequence, ErrProjectionMismatch)
+	}
+	verifyStarted := time.Now()
+	if err := a.verifier.VerifyEventHeadReceipt(ctx, record.Receipt, record.Request); err != nil {
+		return Head{}, timings, fmt.Errorf("computer event appender: replay receipt sequence %d: %w", record.Request.Event.Sequence, err)
+	}
+	prepareStarted := time.Now()
+	timings.reduce = verifyStarted.Sub(applyStarted)
+	timings.verify = prepareStarted.Sub(verifyStarted)
+	if err := a.projection.Prepare(ctx, record.Request); err != nil {
+		return Head{}, timings, fmt.Errorf("computer event appender: replay prepare sequence %d: %w", record.Request.Event.Sequence, err)
+	}
+	finalizeStarted := time.Now()
+	timings.prepare = finalizeStarted.Sub(prepareStarted)
+	if err := a.finalizeProjection(ctx, record.Request.Event, record.Request.EventDigest, record.Receipt); err != nil && !errors.Is(err, ErrProjectionBatchUnreadable) {
+		return Head{}, timings, fmt.Errorf("computer event appender: replay finalize sequence %d: %w", record.Request.Event.Sequence, err)
+	}
+	timings.finalize = time.Since(finalizeStarted)
+	return next, timings, nil
 }
 
 func (a *ComputerEventAppender) commitReplay(ctx context.Context) error {
