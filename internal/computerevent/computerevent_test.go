@@ -1249,7 +1249,10 @@ func (p *batchCountingProjection) FinalizeBatch(ctx context.Context, computerID 
 		return err
 	}
 	p.applied = append(p.applied, batch.EventID)
-	return nil
+	// Finalize for real: the head advances and the row is released, as in the
+	// store. (This fake used to leave the row prepared forever, which made
+	// the next append recover it instead of failing its own finalize.)
+	return p.memoryProjection.Finalize(ctx, computerID, digest, receipt)
 }
 
 // Failure modes (docs/problems/guest-appender-retains-every-projection-

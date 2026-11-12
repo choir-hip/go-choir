@@ -25,6 +25,10 @@ const (
 	catchUpMaxPages = 16
 	// catchUpTimeout bounds one attempt's wall time.
 	catchUpTimeout = 2 * time.Minute
+	// catchUpHeadTimeout bounds the local head reads around an attempt.
+	catchUpHeadTimeout = 30 * time.Second
+
+	wedgeKindCatchUpIncomplete = "catch-up incomplete"
 )
 
 func (a *ComputerEventAppender) catchUpPageBound() int {
@@ -46,12 +50,14 @@ func headCanonical(h *Head) string {
 // RecoverPrepared. It refuses (keeping the wedge, changing nothing) when the
 // local head is not strictly behind the host's, when it runs under a
 // reconstruct (the caller's guard), and on any event that does not extend the
-// local chain: it never heals a fork.
+// local chain: it never heals a fork. An attempt that stops at its page or
+// time bound returns a wedge error of kind "catch-up incomplete" with its
+// progress kept.
 func (a *ComputerEventAppender) catchUpLocked(ctx context.Context, local *Head) (*Head, error) {
 	if a.replayProjection || a.replayActive || a.reconstructing.Load() {
 		return local, nil
 	}
-	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), catchUpTimeout)
+	cctx, cancel := a.detached(ctx, catchUpTimeout)
 	defer cancel()
 	platform, err := a.cas.Head(cctx, a.computerID)
 	if err != nil {
@@ -77,9 +83,9 @@ func (a *ComputerEventAppender) catchUpLocked(ctx context.Context, local *Head) 
 	defer func() {
 		// The live append never delivered these events to the post-commit
 		// observer: its caller saw an error, or the append never ran here.
-		// Deliver each kind once. The observer only re-arms coalesced
-		// reconciles that read committed state, so one call per kind is the
-		// exactly-once delivery the live path owes them.
+		// Deliver each kind once per attempt. The observer only re-arms
+		// coalesced reconciles that read committed state, so a repeat across
+		// a resumed attempt is harmless; a missed delivery would not be.
 		if observer := a.postCommitObserver.Load(); observer != nil {
 			for kind := range kinds {
 				go (*observer)(kind)
@@ -94,8 +100,12 @@ func (a *ComputerEventAppender) catchUpLocked(ctx context.Context, local *Head) 
 		return &wedgeError{kind: kind, err: fmt.Errorf("%w: catch-up from the host at sequence %d: %w", ErrNeedsProjectionRepair, seq, cause)}
 	}
 	reached := func() bool { return headSeq(current) >= platform.Sequence }
+	incomplete := func(why string) error {
+		return refuse(wedgeKindCatchUpIncomplete, headSeq(current)+1, fmt.Errorf("%s at sequence %d of %d; the next append resumes", why, headSeq(current), platform.Sequence))
+	}
 
-	for pages := 0; pages < a.catchUpPageBound() && !reached(); pages++ {
+	timedOut := false
+	for pages := 0; pages < a.catchUpPageBound() && !reached() && !timedOut; pages++ {
 		var page []DurableEvent
 		var err error
 		if isPaged {
@@ -111,8 +121,9 @@ func (a *ComputerEventAppender) catchUpLocked(ctx context.Context, local *Head) 
 		}
 		for _, record := range page {
 			if cctx.Err() != nil {
-				// Out of time: keep the progress, resume on the next append.
-				return a.projection.Head(context.WithoutCancel(ctx), a.computerID)
+				// Out of time, or interrupted: keep the progress.
+				timedOut = true
+				break
 			}
 			event := record.Request.Event
 			if event.Sequence != headSeq(current)+1 || event.PreviousHead != headCanonical(current) {
@@ -121,8 +132,9 @@ func (a *ComputerEventAppender) catchUpLocked(ctx context.Context, local *Head) 
 			next, _, err := a.applyDurableEvent(cctx, current, record)
 			if err != nil {
 				// applyDurableEvent prepares before it finalizes; a failure
-				// between them leaves a prepared row that would block the next
-				// attempt's RecoverPrepared. Nothing of this event is committed.
+				// between them leaves a prepared row. Nothing of this event is
+				// committed, and the next RecoverPrepared drops a row that
+				// this discard misses.
 				a.discardPreparedLocked(cctx, record.Request)
 				kind := "catch-up failed"
 				if errors.Is(err, ErrProjectionMismatch) {
@@ -130,6 +142,7 @@ func (a *ComputerEventAppender) catchUpLocked(ctx context.Context, local *Head) 
 				}
 				return nil, refuse(kind, event.Sequence, err)
 			}
+			a.dropLivePayload(event)
 			current = &next
 			after = event.Sequence
 			applied++
@@ -145,5 +158,13 @@ func (a *ComputerEventAppender) catchUpLocked(ctx context.Context, local *Head) 
 	if reached() && headSeq(current) == platform.Sequence && *current != *platform {
 		return nil, refuse("divergent chain", platform.Sequence, fmt.Errorf("the applied chain head differs from the host's head at %d", platform.Sequence))
 	}
-	return a.projection.Head(context.WithoutCancel(ctx), a.computerID)
+	if !reached() {
+		if timedOut {
+			return nil, incomplete("stopped by its time bound or an interrupt")
+		}
+		return nil, incomplete("stopped by its page bound")
+	}
+	hctx, hcancel := a.detached(ctx, catchUpHeadTimeout)
+	defer hcancel()
+	return a.projection.Head(hctx, a.computerID)
 }
