@@ -11,7 +11,23 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
-## Live station (2026-11-09 evening): Autopaper improvement, then one merged overnight mission
+## Live station (2026-11-12): storage solutions, part 2
+
+**Goal:** [`definitions/choir-storage-solutions-2-2026-11-12.md`](definitions/choir-storage-solutions-2-2026-11-12.md)
+(`readiness: executable`, `now.status: working`; ledger
+[`definitions/choir-storage-solutions-2-2026-11-12.ledger.md`](definitions/choir-storage-solutions-2-2026-11-12.ledger.md)).
+Run it with `/goal docs/definitions/choir-storage-solutions-2-2026-11-12.md`.
+
+Owner, 2026-11-12: "Let's make a storage solutions mission (part 2) as our
+next priority. We can return to autoradio after we do that." Node B was
+81 GiB free and draining 6 GiB an hour. Frame:
+[`design/storage-pressure-frame-2026-11-12.md`](design/storage-pressure-frame-2026-11-12.md).
+Autoradio pass 1
+([`definitions/choir-autoradio-pass1-2026-11-10.md`](definitions/choir-autoradio-pass1-2026-11-10.md))
+stays `blocked_incomplete` on the owner's install go and resumes after this
+mission.
+
+## Earlier station (2026-11-09 evening): Autopaper improvement, then one merged overnight mission
 
 **Goal:** [`definitions/choir-autopaper-improvement-2026-11-09.md`](definitions/choir-autopaper-improvement-2026-11-09.md)
 (`readiness: executable`, `now.status: working`; ledger

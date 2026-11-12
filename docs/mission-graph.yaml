@@ -1373,3 +1373,17 @@ nodes:
     execution_mode: subordinate_only
     depends_on: [choir-pd3-texture-root-desk-2026-10-11]
     enables: []
+  - id: choir-storage-solutions-2-2026-11-12
+    title: Storage solutions, part 2 — stop the snapshot drain, then snapshots that cost the change, group commit on the tape, folded receipts, a collector that reaps by itself
+    path: docs/definitions/choir-storage-solutions-2-2026-11-12.md
+    ledger: docs/definitions/choir-storage-solutions-2-2026-11-12.ledger.md
+    status: working  # 2026-11-12, live station
+    kind: station
+    entrypoint: true
+    depends_on: []
+    enables: []
+    settled_by: owner
+    note: >-
+      Owner 2026-11-12: "Let's make a storage solutions mission (part 2) as
+      our next priority. We can return to autoradio after we do that."
+      Frame: docs/design/storage-pressure-frame-2026-11-12.md.
