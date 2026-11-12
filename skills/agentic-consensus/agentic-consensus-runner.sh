@@ -6,7 +6,7 @@ usage() {
 agentic-consensus-runner.sh --prompt TEXT | --prompt-file FILE [options]
 
 Runs one prompt across an agentic consensus panel and writes one output file per agent.
-Default panel: codex, devin, claude, opencode, omp-gpt61-sol, omp-gpt6-luna, omp-gemini38,
+Default panel: codex, claude, opencode, omp-gpt61-sol, omp-gpt6-luna, omp-gemini4-hydrogen,
 omp-muse-spark, omp-deepseek-v41-flash, omp-glm53-flash.
 External CLIs use their configured default model unless a --*-model override is passed.
 
@@ -35,7 +35,7 @@ Panel selection:
                                 not supported is a hard error, not a silent drop:
                                 a panel that quietly runs fewer panelists than
                                 asked for reports success it did not deliver.
-                                Default: codex,devin,claude,opencode,omp-gpt61-sol,omp-gpt6-luna,omp-gemini38,omp-muse-spark,omp-deepseek-v41-flash,omp-glm53-flash
+                                Default: codex,claude,opencode,omp-gpt61-sol,omp-gpt6-luna,omp-gemini4-hydrogen,omp-muse-spark,omp-deepseek-v41-flash,omp-glm53-flash
   --exclude LIST                Comma-separated agent ids to skip.
   --list-agents                 Print supported agent ids and exit.
 
@@ -58,7 +58,7 @@ Model overrides, optional:
   --opencode-model MODEL        Pass -m MODEL to opencode run.
   --omp-gpt61-sol-model MODEL   Default: openai-codex/gpt-6.1-sol.
   --omp-gpt6-luna-model MODEL   Default: openai-codex/gpt-6-luna.
-  --omp-gemini38-model MODEL    Default: google-antigravity/gemini-3.8-flash.
+  --omp-gemini4-hydrogen-model MODEL    Default: google-antigravity/gemini-4-hydrogen-high.
   --omp-claude-opus46-model MODEL Default: google-antigravity/claude-opus-4-6.
   --omp-muse-spark-model MODEL  Default: opencode-go/muse-spark-1.3-contributor.
   --omp-deepseek-v41-flash-model MODEL Default: opencode-go/deepseek-v4.1-flash.
@@ -71,7 +71,7 @@ Model overrides, optional:
   Thinking levels, each with its default:
   --omp-gpt61-sol-thinking LEVEL      xhigh
   --omp-gpt6-luna-thinking LEVEL      max
-  --omp-gemini38-thinking LEVEL       high
+  --omp-gemini4-hydrogen-thinking LEVEL       high
   --omp-claude-opus46-thinking LEVEL  high
   --omp-muse-spark-thinking LEVEL     max
   --omp-deepseek-v41-flash-thinking LEVEL max
@@ -99,8 +99,8 @@ Output:
 USAGE
 }
 
-DEFAULT_INCLUDE="codex,devin,claude,opencode,omp-gpt61-sol,omp-gpt6-luna,omp-gemini38,omp-muse-spark,omp-deepseek-v41-flash,omp-glm53-flash,omp-minimax-m31-flash"
-SUPPORTED_AGENTS=(codex devin claude cursor opencode omp-gpt61-sol omp-gpt6-luna omp-gemini38 omp-claude-opus46 omp-muse-spark omp-deepseek-v41-flash omp-glm53-flash omp-deepseek-v4-pro omp-kimi-k3 omp-minimax-m3 omp-minimax-m31-flash)
+DEFAULT_INCLUDE="codex,claude,opencode,omp-gpt61-sol,omp-gpt6-luna,omp-gemini4-hydrogen,omp-muse-spark,omp-deepseek-v41-flash,omp-glm53-flash,omp-minimax-m31-flash"
+SUPPORTED_AGENTS=(codex devin claude cursor opencode omp-gpt61-sol omp-gpt6-luna omp-gemini4-hydrogen omp-claude-opus46 omp-muse-spark omp-deepseek-v41-flash omp-glm53-flash omp-deepseek-v4-pro omp-kimi-k3 omp-minimax-m3 omp-minimax-m31-flash)
 
 PROMPT=""
 PROMPT_FILE=""
@@ -125,7 +125,7 @@ CURSOR_MODEL=""
 OPENCODE_MODEL=""
 OMP_GPT61_SOL_MODEL="openai-codex/gpt-6.1-sol"
 OMP_GPT6_LUNA_MODEL="openai-codex/gpt-6-luna"
-OMP_GEMINI38_MODEL="google-antigravity/gemini-3.8-flash"
+OMP_GEMINI4_HYDROGEN_MODEL="google-antigravity/gemini-4-hydrogen-high"
 OMP_CLAUDE_OPUS46_MODEL="google-antigravity/claude-opus-4-6"
 OMP_MUSE_SPARK_MODEL="opencode-go/muse-spark-1.3-contributor"
 OMP_DEEPSEEK_V41_FLASH_MODEL="opencode-go/deepseek-v4.1-flash"
@@ -136,7 +136,7 @@ OMP_MINIMAX_M3_MODEL="opencode-go/minimax-m3"
 OMP_MINIMAX_M31_FLASH_MODEL="opencode-go/minimax-m3.1-flash-free"
 OMP_GPT61_SOL_THINKING="xhigh"
 OMP_GPT6_LUNA_THINKING="max"
-OMP_GEMINI38_THINKING="high"
+OMP_GEMINI4_HYDROGEN_THINKING="high"
 OMP_CLAUDE_OPUS46_THINKING="high"
 OMP_MUSE_SPARK_THINKING="max"
 OMP_DEEPSEEK_V41_FLASH_THINKING="max"
@@ -178,8 +178,8 @@ OMP_FLAG_VARS=(
   "omp-gpt61-sol-thinking:OMP_GPT61_SOL_THINKING"
   "omp-gpt6-luna-model:OMP_GPT6_LUNA_MODEL"
   "omp-gpt6-luna-thinking:OMP_GPT6_LUNA_THINKING"
-  "omp-gemini38-model:OMP_GEMINI38_MODEL"
-  "omp-gemini38-thinking:OMP_GEMINI38_THINKING"
+  "omp-gemini4-hydrogen-model:OMP_GEMINI4_HYDROGEN_MODEL"
+  "omp-gemini4-hydrogen-thinking:OMP_GEMINI4_HYDROGEN_THINKING"
   "omp-claude-opus46-model:OMP_CLAUDE_OPUS46_MODEL"
   "omp-claude-opus46-thinking:OMP_CLAUDE_OPUS46_THINKING"
   "omp-muse-spark-model:OMP_MUSE_SPARK_MODEL"

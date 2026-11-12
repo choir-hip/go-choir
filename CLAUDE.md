@@ -87,10 +87,10 @@ A commit subject ends with its class and rollback, for example
 - Green and yellow: no model review. Orange: one seat. Red where a defect
   would be silent or irreversible: two seats. Re-review a red change after a
   blocking finding.
-- Any second agent may be the seat; the author may not. The default seat is
-  Gemini 3.8 flash (high) through `agy`. Sonnet is the second seat. Opus, Sol
-  and Luna do not run code review. Devin does not run review or sit on a
-  panel while the paper runs on its quota (owner, 2026-11-11).
+- The author may not be a seat. Seat 1 is Gemini 4 Hydrogen (high) and seat
+  2 is DeepSeek v4.1 flash (max), both through OMP
+  (`--include omp-gemini4-hydrogen,omp-deepseek-v41-flash`; owner,
+  2026-11-12). Devin, Opus, Sol and Luna do not run code review.
 - Guest-security paths need the `Security-Effect` and
   `Security-Effect-Reviewed-By` trailers (`scripts/check-guest-security-epoch`).
   Never write a review trailer that no review backs.

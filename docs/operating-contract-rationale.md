@@ -263,7 +263,8 @@ system cutover; see Operating Tempo) (owner, 2026-10-23: "we
 should be more judicious, allocating code review to hard stuff and trusting
 that we can handle the easy stuff cold"; "make devin the go-to reviewer"; 2026-11-10: any second agent may be the
 review seat, and Gemini 3.8 flash through `agy` is the default while Devin
-serves the paper).
+serves the paper; 2026-11-12: seat 1 is Gemini 4 Hydrogen and seat 2 DeepSeek
+v4.1 flash, both through OMP, and Devin does not run code review).
 Cheap checks run before any review, every time: the repo gates
 (`check-v1-writer-purity`, `check-decode-roots`, `check-test-hang-guards`,
 `selftest-guest-token`, `check-switch-registry`, which refuses any new switch), a nix eval of both systems when `nix/` or the flake
@@ -274,12 +275,12 @@ architectural design, meaning a new mechanism, a doctrine change or a design
 a build will follow, is reviewed like the change it designs), proof tooling, mechanical rebases, and fixes that answer an earlier
 finding with only doc, nit or test-only items; the checks are the review.
 Proof, rollback and procedure text for a red deploy is not tier 0: it gets
-the deploy's own review. Tier 1, one seat, Devin: orange changes, and red
+the deploy's own review. Tier 1, one seat (Gemini 4 Hydrogen): orange changes, and red
 changes that are additive, with a one-act
-rollback that shows on staging within minutes. Tier 2, two seats (Devin and
+rollback that shows on staging within minutes. Tier 2, two seats (Gemini 4 Hydrogen and
 DeepSeek v4.1 flash): red where a defect would be silent or irreversible —
 deletes, tape/evidence, Texture canonical writes, auth/session, store schema,
-boot path, new concurrency. A red delta is re-reviewed, one seat (Devin),
+boot path, new concurrency. A red delta is re-reviewed, one seat (Gemini),
 whenever the previous round found a blocking-real defect; not when it found
 only doc, nit or test-only items. After three rounds on one mechanism, stop
 adding rounds and look at the substrate ("Escalate on dead ends" below). Sol

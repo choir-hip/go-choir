@@ -47,7 +47,7 @@ PROBE_CHECKSUM="1be0686a" # sha256("choir")[:8]
 DEFAULT_SPECS=(
   "openai-codex/gpt-6.1-sol:xhigh"
   "openai-codex/gpt-6-luna:max"
-  "google-antigravity/gemini-3.8-flash:high"
+  "google-antigravity/gemini-4-hydrogen-high:high"
   "opencode-go/muse-spark-1.3-contributor:max"
   "opencode-go/deepseek-v4.1-flash:max"
   "opencode-go/glm-5.3-flash:high"

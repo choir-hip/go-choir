@@ -323,8 +323,8 @@ moving target to a panel and do not use a panel merely to narrate progress.
 
 **Allocate review by risk, not by habit** (owner, 2026-10-23: "allocating code
 review to hard stuff and trusting that we can handle the easy stuff cold";
-the seat is Gemini, not Devin, since 2026-11-11: Devin's quota serves the
-paper). The tiers are in the repo operating
+since 2026-11-12 seat 1 is Gemini 4 Hydrogen and seat 2 DeepSeek v4.1
+flash, both through OMP; Devin does not review). The tiers are in the repo operating
 contract (`CLAUDE.md`, Mutation Classes). Cheap checks come first, every
 time (repo gates, nix eval when nix changed, dry run of touched proof scripts,
 CI mirror, rebase onto the deploy tree). Tier 0, no model review: green and
