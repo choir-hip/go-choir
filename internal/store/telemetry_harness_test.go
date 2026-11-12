@@ -31,7 +31,10 @@ type recordingTape struct {
 	pinErr func(payload []byte) error
 	// casErr, when set and non-nil for a request, fails the CAS after the pin.
 	casErr func(request computerevent.CASRequest) error
-	pins   int
+	// casAfter, when set and non-nil for a request, fails the CAS AFTER the
+	// platform accepted it: the reply is lost.
+	casAfter func(request computerevent.CASRequest) error
+	pins     int
 	// leaseDigests are the payload digests of projection batches that carry
 	// only the stream_seq lease object. The lease is store bookkeeping, not
 	// part of the workload a test scripts: its batches are recorded apart
@@ -117,12 +120,28 @@ func (c recordingCAS) CompareAndSwap(ctx context.Context, request computerevent.
 			IdempotencyKey: e.IdempotencyKey, ActorProfile: e.ActorProfile, PrivacyClass: e.PrivacyClass,
 			PayloadDigest: e.PayloadCommitment,
 		}
-		if c.tape.leaseDigests[e.PayloadCommitment] {
+		// The platform is idempotent on the key: a re-send of an accepted
+		// request returns the receipt and adds no row.
+		seen := false
+		for _, existing := range append(append([]tapeRecord(nil), c.tape.records...), c.tape.leaseRecords...) {
+			if existing.IdempotencyKey == e.IdempotencyKey {
+				seen = true
+			}
+		}
+		if seen {
+			// no new row
+		} else if c.tape.leaseDigests[e.PayloadCommitment] {
 			c.tape.leaseRecords = append(c.tape.leaseRecords, record)
 		} else {
 			c.tape.records = append(c.tape.records, record)
 		}
+		after := c.tape.casAfter
 		c.tape.mu.Unlock()
+		if after != nil {
+			if aerr := after(request); aerr != nil {
+				return computerevent.Receipt{}, aerr
+			}
+		}
 	}
 	return receipt, err
 }
