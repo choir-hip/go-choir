@@ -1,5 +1,5 @@
 ---
-definition_version: 5
+definition_version: 7
 
 readiness: executable
 

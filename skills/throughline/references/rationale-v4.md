@@ -1,7 +1,7 @@
 # Throughline version 4: the full text and its reasoning
 
-Kept as rationale for [version 5](../SKILL.md), which is the format in force.
-Where this page and version 5 differ, version 5 wins. The review seats and
+Kept as rationale for [version 7](../SKILL.md), which is the format in force.
+Where this page and version 7 differ, version 7 wins. The review seats and
 tiers named here are historical; the repository contract holds the current
 ones.
 

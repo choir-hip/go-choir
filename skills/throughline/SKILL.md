@@ -18,7 +18,9 @@ done, how that is proved, what may be changed, what the mission is optimising,
 what it believes, and what comes next. It is executable authority, not a plan
 transcript or a status report.
 
-This is version 5 (2026-11-12). It is shorter than version 4 because the
+This is version 7 (2026-11-12; goal files carry `definition_version: 7`).
+Versions 5 and 6 were earlier experiments still present in old files. It is
+shorter than version 4, the last widely used form, because the
 agents that run it no longer need a per-step procedure. The fields are in
 [references/mission-schema.md](references/mission-schema.md). The reasoning
 behind the format, and the version 4 text, are in

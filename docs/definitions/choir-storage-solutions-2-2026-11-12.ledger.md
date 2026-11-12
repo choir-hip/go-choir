@@ -30,3 +30,5 @@ Append-only. One terse entry per pass.
   configured 4 GiB: free 73 to 84.7 GiB. Goal file moved to throughline
   version 5: stations carry status and carrier, conjecture bound to claim
   C61, S5 rewritten from the census, S9 (status scripts) added.
+- 2026-11-12T21:50Z. Correction: the new throughline format is version 7, not 5.
+  Old files already carry versions 5 and 6 from earlier experiments.

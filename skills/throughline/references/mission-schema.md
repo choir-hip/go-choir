@@ -8,14 +8,14 @@ equivalent clearly labelled YAML blocks. Keep the machine-readable record near
 the top. The goal file is semantic authority; generated HTML and evidence
 archives are projections. See [`../SKILL.md`](../SKILL.md) for the rules these
 fields serve. `scripts/check-goal-files` checks that the frontmatter parses
-(version 4 and later) and enforces the field rules (version 5 and later).
-Version 4 files stay valid; a file moves to 5 when it is next revised.
+and enforces the field rules for version 7 and later. Older files stay as
+they are; a file moves to 7 when it is next revised.
 
 ## Minimal Template
 
 ```yaml
 ---
-definition_version: 5
+definition_version: 7
 
 # readiness ladder — how far this file is from execution. The further from
 # execution, the less likely finalization; non-executable files are still
