@@ -117,7 +117,7 @@ mkdir -p "$w/state/vm-state/vm-aaa" "$w/state/vm-state/candidate-x" \
   "$w/state/platform-artifacts/sha256/pin-receipts/computer-a" \
   "$w/state/platform-artifacts/sha256/file-cas-chunks/computer-a" \
   "$w/state/platform-artifacts/capture-bodies/computer-a" \
-  "$w/state/platform-artifacts/platform-update/rel-1" \
+  "$w/state/platform-artifacts/sha256/platform-update" \
   "$w/state/guest-releases/r1" "$w/state/files" "$w/state/mail" \
   "$w/cg/system.slice/go-choir-vmctl.service" "$w/cg/system.slice/postgresql.service" \
   "$w/proc/4242" "$root/fake"
@@ -178,8 +178,10 @@ check "G3 heavy stores measured on the first reading" "grep -q 'fs.artifacts.pin
 check "G3 chunks (total and largest computer dir), capture-bodies and platform-update are metered" "python3 -c \"
 import json
 r=json.loads(open('$ledger').readline())['items']
-for k in ('fs.artifacts.file-cas-chunks','fs.artifacts.file-cas-chunks.computer-a','fs.artifacts.capture-bodies','fs.artifacts.capture-bodies.computer-a','fs.artifacts.platform-update','fs.artifacts.platform-update.rel-1'): assert k in r,k
+for k in ('fs.artifacts.file-cas-chunks','fs.artifacts.file-cas-chunks.computer-a','fs.artifacts.capture-bodies','fs.artifacts.capture-bodies.computer-a',): assert k in r,k
+assert 'fs.artifacts.platform-update' in r and not [k for k in r if k.startswith('fs.artifacts.platform-update.')], 'platform-update: total only (blob files; sha keys would be noise)'
 \""
+check "G3 platform-update is read at sha256/platform-update, not a made-up path" "grep -q 'sha256/platform-update' '$root/fake/du.log' && ! grep -q 'platform-artifacts/platform-update' '$root/fake/du.log'"
 check "G3 capture-bodies and platform-update are heavy, not hourly" "grep -q 'capture-bodies' '$root/fake/du.log' && grep -q 'platform-update' '$root/fake/du.log'"
 check "G4 classes" "python3 -c \"
 import json
@@ -264,6 +266,25 @@ before="$(wc -c <"$(ls "$root"/ledger/*.jsonl | head -1)")"
 run_meter env GROWTH_NOW=$((t0 + 90000)) GROWTH_MAX_FILE_BYTES=$before python3 "$script" >"$root/out4" 2>&1
 rc=$?
 check "G6 refuses past the cap, exit 1, file unchanged" "[ $rc -eq 1 ] && [ \$(wc -c <\"\$(ls '$root'/ledger/*.jsonl | head -1)\") -eq $before ] && grep -q 'byte cap' '$root/out4'"
+
+# ---- G10 a du budget keeps the ledger line inside the unit timeout ----------
+: >"$root/fake/du.log"
+rm -rf "$root/ledger10"
+run_meter env GROWTH_DIR="$root/ledger10" GROWTH_NOW=$((t0 + 7200 * 40)) GROWTH_DU_BUDGET_S=0 python3 "$script" >"$root/out10" 2>&1
+check "G10 over-budget du is skipped, recorded in errors, ledger line still written" "python3 -c \"
+import json,glob
+r=json.loads(open(glob.glob('$root/ledger10/*.jsonl')[0]).readline())
+assert any('budget' in e for e in r['errors']), r['errors']
+assert 'fs.root.used' in r['items']
+\""
+check "G10 unit TimeoutStartSec exceeds the du budget default by 5 min" "python3 - <<'PY'
+import re
+src=open('$script').read(); nix=open('$nixfile').read()
+b=float(re.search(r'GROWTH_DU_BUDGET_S\", \"([0-9.]+)\"',src).group(1))
+blk=nix[nix.index('systemd.services.go-choir-growth-meter ='):]
+m=int(re.search(r'TimeoutStartSec = \"(\d+)min\"',blk).group(1))
+assert m*60 >= b+300, (m,b)
+PY"
 
 # ---- G7 wrapper PATH carries every tool -----------------------------------
 unit="$(awk '/systemd.services.go-choir-growth-meter = \{/,/^  \};/' "$nixfile")"

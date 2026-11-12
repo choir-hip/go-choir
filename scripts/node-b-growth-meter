@@ -112,6 +112,12 @@ ANON_FLAG = float(ENV("GROWTH_ANON_FLAG", "0.8"))
 MAX_FILE = int(ENV("GROWTH_MAX_FILE_BYTES", str(64 << 20)))
 HEAVY_EVERY_S = float(ENV("GROWTH_HEAVY_EVERY_H", "23")) * 3600
 DU_TIMEOUT = int(ENV("GROWTH_DU_TIMEOUT_S", "900"))
+# All du and btrfs-du walks of one reading share this budget (seconds): once
+# it is spent, later walks are skipped and recorded in "errors", so the ledger
+# line is written inside the unit's TimeoutStartSec (45 min) however slow the
+# stores are. Six heavy stores at DU_TIMEOUT each would otherwise not fit.
+DU_BUDGET = float(ENV("GROWTH_DU_BUDGET_S", "2100"))
+T_START = time.time()
 PSQL_TIMEOUT = int(ENV("GROWTH_PSQL_TIMEOUT_S", "120"))
 SELF_UNIT_GLOBS = ("go-choir-*.service", "postgresql.service", "nix-daemon.service")
 NOW = float(ENV("GROWTH_NOW", "0")) or time.time()
@@ -229,6 +235,14 @@ def measure_df(items, errors):
 KEEP_CHILDREN = int(ENV("GROWTH_KEEP_CHILDREN", "10"))
 
 
+def run_du(argv, errors, label):
+    left = DU_BUDGET - (time.time() - T_START)
+    if left <= 0:
+        errors.append(f"{label}: du budget {DU_BUDGET:.0f}s spent; skipped")
+        return None
+    return run(argv, min(DU_TIMEOUT, left), errors, label)
+
+
 def top_children(kids):
     """Largest KEEP_CHILDREN children by name plus one aggregate, so a store
     with 200 computer directories does not add 200 ledger keys an hour."""
@@ -242,7 +256,7 @@ def top_children(kids):
 
 def du_children(path, errors, label):
     """Allocated bytes per immediate child plus the total, one du pass."""
-    out = run(["du", "-x", "-d1", "-B1", path], DU_TIMEOUT, errors, label)
+    out = run_du(["du", "-x", "-d1", "-B1", path], errors, label)
     res = {}
     total = None
     for line in (out or "").splitlines():
@@ -257,7 +271,7 @@ def du_children(path, errors, label):
 
 
 def du_total(path, errors, label):
-    out = run(["du", "-sx", "-B1", path], DU_TIMEOUT, errors, label)
+    out = run_du(["du", "-sx", "-B1", path], errors, label)
     if out:
         f = out.split("\t")[0].split()
         if f and f[0].isdigit():
@@ -288,12 +302,17 @@ def fs_type(path):
 
 def btrfs_du(path, errors, label):
     """(total, exclusive, set_shared) raw bytes from `btrfs filesystem du -s`."""
-    out = run(["btrfs", "filesystem", "du", "-s", "--raw", path], DU_TIMEOUT, errors, label)
+    out = run_du(["btrfs", "filesystem", "du", "-s", "--raw", path], errors, label)
     for line in reversed((out or "").splitlines()):
         f = line.split()
         if len(f) >= 4 and all(x.isdigit() for x in f[:3]):
             return int(f[0]), int(f[1]), int(f[2])
     return None
+
+
+# platform-update holds content-addressed blob files (one per sha256), not
+# computer directories: a total only, a child key per blob would be noise.
+NO_CHILDREN = ("platform-update",)
 
 
 def measure_fs(items, errors, heavy_due, state):
@@ -340,7 +359,7 @@ def measure_fs(items, errors, heavy_due, state):
         ("computer-inputs", f"{art}/computer-inputs"),
         ("file-cas-chunks", f"{art}/sha256/file-cas-chunks"),
         ("capture-bodies", f"{art}/capture-bodies"),
-        ("platform-update", f"{art}/platform-update"),
+        ("platform-update", f"{art}/sha256/platform-update"),
         ("pin-receipts", f"{art}/sha256/pin-receipts"),
         ("computer-event", f"{art}/sha256/computer-event"),
         ("computer-event-payload", f"{art}/sha256/computer-event-payload"),
@@ -352,9 +371,10 @@ def measure_fs(items, errors, heavy_due, state):
         total, kids = du_children(path, errors, sub)
         if total is not None:
             items[f"fs.artifacts.{sub}"] = total
-        for kid, v in top_children(kids).items():
-            items[f"fs.artifacts.{sub}.{kid}"] = v
-        if sub in HEAVY:
+        if sub not in NO_CHILDREN:
+            for kid, v in top_children(kids).items():
+                items[f"fs.artifacts.{sub}.{kid}"] = v
+        if sub in HEAVY and total is not None:
             heavy_ok.append(sub)
     if heavy_due and heavy_ok:
         state["heavy_at"] = NOW
@@ -988,13 +1008,48 @@ def epoch(ts):
     return calendar.timegm(time.strptime(ts, "%Y-%m-%dT%H:%M:%SZ"))
 
 
-def forecast():
+TS_RE = re.compile(r'"ts":\s*"([0-9T:Z-]+)"')
+FORECAST_DAYS = 8
+
+
+def read_forecast_rows():
+    """(epoch, {"items": {...}}) for readings of the last FORECAST_DAYS days,
+    streamed a line at a time from the last three monthly files: a reading is
+    about 16 KB and the unit has MemoryMax 128M, so the whole ledger (read_ledger
+    holds three months, about 209 MiB) is never loaded. Only numeric items are
+    kept."""
+    cutoff = NOW - FORECAST_DAYS * 86400
     rows = []
-    for r in read_ledger():
+    try:
+        names = sorted(n for n in os.listdir(GROWTH_DIR) if re.match(r"\d{4}-\d{2}\.jsonl$", n))
+    except OSError:
+        return rows
+    for n in names[-3:]:
         try:
-            rows.append((epoch(r["ts"]), r))
-        except (KeyError, ValueError):
-            pass
+            f = open(os.path.join(GROWTH_DIR, n))
+        except OSError:
+            continue
+        with f:
+            for ln in f:
+                m = TS_RE.search(ln)
+                if not m:
+                    continue
+                try:
+                    t = epoch(m.group(1))
+                except ValueError:
+                    continue
+                if t < cutoff:
+                    continue
+                try:
+                    items = json.loads(ln).get("items", {})
+                except ValueError:
+                    continue
+                rows.append((t, {"items": {k: v for k, v in items.items() if isinstance(v, (int, float))}}))
+    return rows
+
+
+def forecast():
+    rows = read_forecast_rows()
     rows.sort(key=lambda x: x[0])
     avail_rows = [(t, r["items"]["fs.root.avail"]) for t, r in rows if "fs.root.avail" in r.get("items", {})]
     days = sorted({time.strftime("%Y-%m-%d", time.gmtime(t)) for t, _ in avail_rows if t >= (avail_rows[-1][0] - 7 * 86400)}) if avail_rows else []
@@ -1022,7 +1077,9 @@ def forecast():
     slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sxx if sxx else 0.0  # bytes per day
     facts = f"free {cur // GIB} GiB, slope {slope / GIB:+.1f} GiB/day over {len(pts)} daily minima"
     floor_gib = FORECAST_FLOOR / GIB
-    if slope >= 0:
+    if cur < FORECAST_FLOOR:
+        print(f"<3>disk forecast ERROR: {facts}, already below the {FORECAST_FLOOR / GIB:.0f} GiB floor")
+    elif slope >= 0:
         print(f"<6>disk forecast ok: {facts}, not declining")
     else:
         left = max(cur - FORECAST_FLOOR, 0) / -slope
@@ -1046,8 +1103,8 @@ def forecast():
     # top five 24 h growers by ledger key (heavy keys carry from the latest
     # reading that has them, as --report does)
     newest = rows[-1][0]
-    base_t = min((t for t, _ in rows[:-1]), key=lambda t: abs(t - (newest - 86400)), default=None)
-    if base_t is None or newest - base_t < 20 * 3600:
+    base_t = min((t for t, _ in rows[:-1] if newest - t >= 20 * 3600), key=lambda t: abs(t - (newest - 86400)), default=None)
+    if base_t is None:
         print("<6>disk growers (24 h): need about 24 h of ledger")
         return 0
 
@@ -1074,7 +1131,7 @@ def forecast():
             grown.append((a - b, k))
     grown.sort(key=lambda x: (-x[0], x[1]))
     top = ", ".join(f"{k} {d / GIB:+.1f} GiB" for d, k in grown[:5]) or "none"
-    print(f"<6>disk growers (24 h): {top}")
+    print(f"<6>disk growers ({(newest - base_t) / 3600:.1f} h): {top}")
     return 0
 
 
