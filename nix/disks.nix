@@ -32,7 +32,14 @@
     options = [ "subvol=@swap" "noatime" ];
   };
 
+  # 4 GiB, was 16 GiB: it holds under 200 MiB with 33 GiB of RAM
+  # (docs/problems/node-b-storage-clustering-assessment-2026-11-11.md A3).
+  # NixOS creates the file through mkswap-swap-swapfile.service, which
+  # restartIfChanged=false and which only the swap unit pulls in: the resize
+  # happens at the next boot (the old file is removed and recreated while swap
+  # is not yet active), not at activation. Rollback: revert, or size = 16384.
   swapDevices = [{
     device = "/swap/swapfile";
+    size = 4 * 1024;
   }];
 }
