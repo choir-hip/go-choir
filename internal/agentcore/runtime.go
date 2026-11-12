@@ -1418,6 +1418,9 @@ func (rt *Runtime) Stop() {
 		delete(rt.running, runID)
 	}
 	rt.runningMu.Unlock()
+	// Detached recovery, re-send and catch-up work ignores its callers'
+	// cancellation by design; shutdown must not wait for it.
+	rt.eventAppender.InterruptDetachedWork()
 
 	rt.wg.Wait()
 

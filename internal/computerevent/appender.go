@@ -171,7 +171,14 @@ type ComputerEventAppender struct {
 	// finalize): appends refuse fast for inPlaceRecoveryCooldown after it.
 	recoveryFailedAt time.Time
 	// catchUpPages overrides catchUpMaxPages when positive (tests).
-	catchUpPages       int
+	catchUpPages int
+	// stop is the parent of every detached recovery, re-send, finalize and
+	// catch-up context (detached below). InterruptDetachedWork cancels it so a
+	// shutdown, a hibernate or a store close is not held for minutes by work
+	// that deliberately ignores its caller's cancellation.
+	stopMu             sync.Mutex
+	stop               context.Context
+	cancel             context.CancelFunc
 	wedge              wedgeState
 	wedgeNow           func() time.Time // test clock; nil is time.Now
 	replaySeq          uint64
@@ -516,10 +523,25 @@ func (a *ComputerEventAppender) AppendNewPayload(ctx context.Context, event Even
 	if err == nil {
 		// Finalized: drop the cached plaintext, or every payload this process
 		// ever appended stays on the heap (docs/problems/guest-appender-
-		// retains-every-projection-payload-2026-10-19.md). After a failure it
-		// stays for the prepared-event recovery paths, which read through to
-		// the artifact store without it.
+		// retains-every-projection-payload-2026-10-19.md).
 		delete(a.livePayloads, payloadDigest)
+	} else {
+		// After a failure it stays only while a prepared row may still be
+		// finalized from it (the recovery paths read through to the artifact
+		// store without it, but need not); a refusal left no row, and 1,600
+		// refusals of a wedge must not each keep a plaintext (F23).
+		pctx, pcancel := a.detached(ctx, 30*time.Second)
+		prepared, perr := a.projection.Prepared(pctx, a.computerID)
+		pcancel()
+		held := perr != nil
+		for _, row := range prepared {
+			if row.Event.PayloadCommitment == payloadDigest {
+				held = true
+			}
+		}
+		if !held {
+			delete(a.livePayloads, payloadDigest)
+		}
 	}
 	return receipt, payloadDigest, err
 }
@@ -875,10 +897,15 @@ func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Eve
 			return Receipt{}, err
 		}
 	}
-	if err := a.verifier.VerifyEventHeadReceipt(ctx, receipt, request); err != nil {
+	// With a receipt in hand the event is canonical: the caller going away
+	// (a cancelled turn, the incident's likeliest trigger) must not fail the
+	// local finalize, which begins its transaction on the ctx it is given.
+	fctx, fcancel := a.detached(ctx, finalizeTimeout)
+	defer fcancel()
+	if err := a.verifier.VerifyEventHeadReceipt(fctx, receipt, request); err != nil {
 		return Receipt{}, fmt.Errorf("computer event appender: verify head receipt: %w", err)
 	}
-	if err := a.finalizeProjection(ctx, event, digest, receipt); err != nil {
+	if err := a.finalizeProjection(fctx, event, digest, receipt); err != nil {
 		if errors.Is(err, ErrProjectionBatchUnreadable) {
 			return Receipt{}, fmt.Errorf("computer event appender: sequence %d: %w", event.Sequence, err)
 		}
@@ -890,41 +917,93 @@ func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Eve
 	return receipt, nil
 }
 
-// casResendTimeout bounds the re-send of a CAS whose outcome is unknown. It is
-// a deadline, not a limit on calls; appends wait behind it under a.mu.
-const casResendTimeout = 30 * time.Second
+const (
+	// casResendTimeout bounds the re-send of a CAS whose outcome is unknown.
+	// It is a deadline, not a limit on calls; appends wait behind it under a.mu.
+	casResendTimeout = 30 * time.Second
+	// finalizeTimeout bounds verify and finalize once a receipt is in hand.
+	finalizeTimeout = time.Minute
+)
+
+// detached returns a context that keeps ctx's values but not its cancellation,
+// ends at timeout, and ends when InterruptDetachedWork runs. Work that must
+// settle canonical state after its caller left uses it; shutdown still stops it.
+func (a *ComputerEventAppender) detached(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	stop := a.currentStop()
+	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+	unregister := context.AfterFunc(stop, cancel)
+	return dctx, func() { unregister(); cancel() }
+}
+
+func (a *ComputerEventAppender) currentStop() context.Context {
+	a.stopMu.Lock()
+	defer a.stopMu.Unlock()
+	if a.stop == nil {
+		a.stop, a.cancel = context.WithCancel(context.Background())
+	}
+	return a.stop
+}
+
+// InterruptDetachedWork cancels the detached recovery, re-send, finalize and
+// catch-up work in flight, so shutdown (Runtime.Stop, Store.Close) is not held
+// by it. Whatever it leaves is recovered by the next append or the next boot:
+// a prepared row is resolved from the host's chain, and a half-applied
+// catch-up resumes. The appender stays usable; later detached work runs under
+// a fresh stop context.
+func (a *ComputerEventAppender) InterruptDetachedWork() {
+	if a == nil {
+		return
+	}
+	a.stopMu.Lock()
+	cancel := a.cancel
+	a.stop, a.cancel = context.WithCancel(context.Background())
+	a.stopMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
 
 // discardPreparedLocked drops the prepared row of a request the host refused,
 // on a context that outlives a cancelled caller.
 func (a *ComputerEventAppender) discardPreparedLocked(ctx context.Context, request CASRequest) {
 	// The discard must not share a cancelled ctx with the CAS, or the
 	// prepared row outlives the failed append and blocks the next one.
-	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	dctx, cancel := a.detached(ctx, 30*time.Second)
 	defer cancel()
 	if derr := a.projection.DiscardPrepared(dctx, a.computerID, request.EventDigest); derr != nil {
 		log.Printf("computer event appender: discard prepared seq=%d after a refused CAS or failed apply: %v", request.Event.Sequence, derr)
+	} else {
+		a.dropLivePayload(request.Event)
 	}
+}
+
+// dropLivePayload releases the cached plaintext of a projection payload once
+// no prepared row needs it.
+func (a *ComputerEventAppender) dropLivePayload(event Event) {
+	delete(a.livePayloads, event.PayloadCommitment)
 }
 
 // resendUnclearCASLocked settles a CAS that returned an error without proving
 // a refusal. It re-sends the same request on a context that outlives a
 // cancelled caller: the host answers a request it already committed with the
-// stored receipt (it checks the idempotency key first, under the computer's
-// lock), commits one it never saw, and refuses one that cannot commit. Only a
-// definite refusal discards the prepared row. If the re-send is unclear too,
-// the row stays: RecoverPrepared finalizes it when the host committed and
-// discards it when the host did not.
+// stored receipt (it checks the idempotency key under the computer's lock),
+// commits one it never saw, and refuses one that cannot commit.
+//
+// Any failure of the re-send keeps the prepared row. A refusal of the re-send
+// does not prove that the first send did not commit: the host runs
+// authorization and pin validation before it looks up the idempotency key, and
+// maps unclassified internal errors to 400. RecoverPrepared decides on the
+// next pass against the host's chain: it finalizes the row when the host's
+// head is that event, and discards it when the host holds another event at its
+// sequence or has not reached it. Only a definite refusal of the FIRST send
+// discards at once.
 func (a *ComputerEventAppender) resendUnclearCASLocked(ctx context.Context, request CASRequest, first error) (Receipt, error) {
-	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), casResendTimeout)
+	rctx, cancel := a.detached(ctx, casResendTimeout)
 	defer cancel()
 	receipt, err := a.cas.CompareAndSwap(rctx, request)
 	if err == nil {
 		log.Printf("computer event appender: seq=%d head CAS outcome was unclear (%v); the re-send settled it", request.Event.Sequence, first)
 		return receipt, nil
-	}
-	if CASRefusedDefinitely(err) {
-		a.discardPreparedLocked(ctx, request)
-		return Receipt{}, fmt.Errorf("computer event appender: head CAS: %w", err)
 	}
 	log.Printf("computer event appender: seq=%d head CAS outcome unknown after a re-send (%v; first: %v); prepared row kept for recovery", request.Event.Sequence, err, first)
 	return Receipt{}, fmt.Errorf("computer event appender: head CAS outcome unknown, prepared row kept for recovery: %w (re-send: %v)", first, err)
@@ -939,13 +1018,21 @@ func (a *ComputerEventAppender) recoverPreparedInPlaceLocked(ctx context.Context
 	if !a.recoveryFailedAt.IsZero() && time.Since(a.recoveryFailedAt) < inPlaceRecoveryCooldown {
 		return nil, ErrNeedsProjectionRepair
 	}
-	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+	stop := a.currentStop()
+	// A failure while the work was interrupted (a shutdown, a store close) is
+	// not the recovery failing: it gets no cooldown.
+	failed := func() {
+		if stop.Err() == nil {
+			a.recoveryFailedAt = time.Now()
+		}
+	}
+	rctx, cancel := a.detached(ctx, time.Minute)
 	defer cancel()
 	err := a.RecoverPrepared(rctx)
 	head, herr := a.projection.Head(rctx, a.computerID)
 	log.Printf("computer event appender: in-place prepared recovery (%s): err=%v embedded_seq=%d", why, err, headSeq(head))
 	if err != nil {
-		a.recoveryFailedAt = time.Now()
+		failed()
 		return nil, err
 	}
 	a.recoveryFailedAt = time.Time{}
@@ -956,7 +1043,10 @@ func (a *ComputerEventAppender) recoverPreparedInPlaceLocked(ctx context.Context
 	// what the local projection missed, as the boot does.
 	head, err = a.catchUpLocked(ctx, head)
 	if err != nil {
-		a.recoveryFailedAt = time.Now()
+		var we *wedgeError
+		if !(errors.As(err, &we) && we.kind == wedgeKindCatchUpIncomplete) {
+			failed() // an incomplete catch-up made progress: resume at once
+		}
 		return nil, err
 	}
 	return head, nil
@@ -1013,12 +1103,27 @@ func (a *ComputerEventAppender) RecoverPrepared(ctx context.Context) error {
 			if err := a.finalizeProjection(ctx, request.Event, request.EventDigest, receipt); err != nil && !errors.Is(err, ErrProjectionBatchUnreadable) {
 				return fmt.Errorf("%w: finalize recovery: %w", ErrNeedsProjectionRepair, ClassifyProjectionFailure(err))
 			}
+			a.dropLivePayload(request.Event)
 			continue
 		}
 		if (platformHead == nil && request.Event.Sequence == 1 && request.Event.PreviousHead == ZeroHead) ||
 			(platformHead != nil && platformHead.Sequence+1 == request.Event.Sequence && platformHead.CanonicalEventHead == request.Event.PreviousHead) {
 			if err := a.projection.DiscardPrepared(ctx, a.computerID, request.EventDigest); err != nil {
 				return fmt.Errorf("computer event appender: discard uncommitted projection: %w", err)
+			}
+			a.dropLivePayload(request.Event)
+			continue
+		}
+		if platformHead != nil && request.Event.Sequence <= platformHead.Sequence {
+			// The host's chain has moved past this row, or holds another event
+			// at its sequence. The host is authoritative and the row is only a
+			// local note of an attempt: drop it. When the host did commit this
+			// very event (the row of an append whose outcome was unknown, and
+			// the chain moved on since), the catch-up applies it from the host's
+			// tape through the same step as the boot replay. Its cached
+			// plaintext stays for that.
+			if err := a.projection.DiscardPrepared(ctx, a.computerID, request.EventDigest); err != nil {
+				return fmt.Errorf("computer event appender: discard prepared projection the host has passed: %w", err)
 			}
 			continue
 		}
