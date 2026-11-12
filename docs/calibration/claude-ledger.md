@@ -141,6 +141,7 @@ entered below as lapsed, not scored.
 | C58 | 2026-11-12T20:40Z | lead | diagnosis | At least 30% of the paper's projection batches by count are ephemeral or reconstructible state (in-flight marks, leases, bookkeeping, telemetry), not canonical content. Test: per-writer batch counts from code and guest counters. | 0.50 | 2026-11-16T00:00Z | census report |
 | C59 | 2026-11-12T20:40Z | lead | diagnosis | The 6 GiB an hour of paper chunks is whole-store snapshots that do not dedupe against the previous snapshot (new sealed bytes for unchanged content), taken about every 23 minutes. Test: the chunk-drain trace (chunking and sealing code, snapshot roots' shared-chunk counts). | 0.60 | 2026-11-13T12:00Z | investigator report |
 | C60 | 2026-11-12T21:00Z | lead | landing | lane/storage-guards (three commits, head 7a6557548) lands through scripts/land, passes CI and deploys to staging on the first attempt, and the first `go-choir-disk-forecast` run on Node B exits 0 and prints a days-to-floor line and a 6-hour drain line. False if the land, CI, deploy or first forecast run fails or needs a fix commit. | 0.65 | 2026-11-13T02:00Z | scripts/land output, CI run, deploy receipt, journal of the forecast unit |
+| C61 | 2026-11-12T21:40Z | lead | estimate | Storage mission conjecture SS2-C1: after stations S4 to S6 land, the paper's image, tape, receipts and chunks on Node B sum to at most 90 GiB (196 on 2026-11-12) with no tape moved off the host, and Node B's free space falls by at most 3 GiB a day over seven days with no hand release. False if either reading misses. | 0.45 | 2026-12-10T00:00Z | Node B du and pg_total_relation_size; the hourly growth ledger |
 
 ### Settlements
 
@@ -168,7 +169,7 @@ entered below as lapsed, not scored.
 
 ### Scorecard
 
-Second form: 28 claims open, 12 settled (recounted 2026-11-12). First form: 12 settled (7 true, 4
+Second form: 29 claims open, 12 settled (recounted 2026-11-12). First form: 12 settled (7 true, 4
 false, 1 partial), 7 lapsed.
 
 | band | claims settled | came true |

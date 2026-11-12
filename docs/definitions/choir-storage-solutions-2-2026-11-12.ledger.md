@@ -24,3 +24,9 @@ Append-only. One terse entry per pass.
   deploy-verified. Throughline gains the status `observing`; this mission
   carries an observation plan and hands the live station to Autoradio when
   it enters that status.
+- 2026-11-12T21:40Z. Guards deployed (cca135073). The deploy restarted the
+  platform service and killed the first sweep dry run after 32 minutes;
+  re-run as ts-20261112T205401Z-5755efcc. Swap file resized by hand to the
+  configured 4 GiB: free 73 to 84.7 GiB. Goal file moved to throughline
+  version 5: stations carry status and carrier, conjecture bound to claim
+  C61, S5 rewritten from the census, S9 (status scripts) added.

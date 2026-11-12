@@ -6,14 +6,16 @@ uses the compact goal file and loads evidence only for its active slice.
 The source may be YAML frontmatter followed by short Markdown explanation, or
 equivalent clearly labelled YAML blocks. Keep the machine-readable record near
 the top. The goal file is semantic authority; generated HTML and evidence
-archives are projections. See [`../SKILL.md`](../SKILL.md) for the circuit and
-the rules these fields serve.
+archives are projections. See [`../SKILL.md`](../SKILL.md) for the rules these
+fields serve. `scripts/check-goal-files` checks that the frontmatter parses
+(version 4 and later) and enforces the field rules (version 5 and later).
+Version 4 files stay valid; a file moves to 5 when it is next revised.
 
 ## Minimal Template
 
 ```yaml
 ---
-definition_version: 4
+definition_version: 5
 
 # readiness ladder — how far this file is from execution. The further from
 # execution, the less likely finalization; non-executable files are still
@@ -78,6 +80,32 @@ boundaries:
   excluded: [<non-goals>]
   protected_surfaces: [<required for red/black work>]
 
+# stations — the changes this mission lands. Independent stations run in
+# parallel lanes. Optional for a one-change mission.
+stations:
+  - id: <S0, S1, ...>
+    name: <short name>
+    scope: <what it changes>
+    class: <green | yellow | orange | red | black, with a note if needed>
+    review: <none | one seat | two seats>
+    depends_on: [<station ids>]
+    carrier: <lane, commit or none yet>
+    status: pending | working | landed | proved | superseded
+
+# owner decisions — every question has a default the mission follows until
+# the owner rules; a ruling records the owner's words.
+decisions_for_the_owner:
+  - id: <D1, ...>
+    question: <the question>
+    why: <what it changes>
+    options: <the choices>
+    default: <the conservative option taken meanwhile>
+owner_rulings:
+  - on: <ISO date>
+    decision: <decision id or ids>
+    said: "<the owner's words>"
+    read_as: <optional: how the words were read>
+
 now:
   status: working | observing | complete | checkpoint_incomplete | blocked_incomplete | superseded
   observation:            # required when status is observing, absent otherwise
@@ -99,6 +127,7 @@ now:
     scope: [<path>]
   conjecture:
     id: <conjecture id>
+    calibration_claim: <id in docs/calibration/claude-ledger.md>
     claim: <what might be true>
     test: <how the current observer would know>
     edge: independence | resource | missing_oracle | frame_lock
@@ -225,6 +254,19 @@ inside an owner boundary; a purpose/architecture/authority decision stays
 
 `belief` subfields: `believed_state`, `main_uncertainty`, `next_observation`.
 The compact resumable picture — three lines, not a second ledger.
+
+### `stations`, `decisions_for_the_owner`, `owner_rulings`
+
+A station is `landed` when its commit is on main and `proved` when its
+deployed acceptance passed; only `proved` or `superseded` stations let the
+mission leave `working`. Every decision carries a default, so none blocks the
+work; anything irreversible waits for the ruling. A ruling quotes the owner;
+`read_as` is present when the words needed interpreting.
+
+### `now.observation`
+
+Required when `now.status` is `observing` and absent otherwise. The reader
+must run without a live agent session.
 
 ### `receipts` — compact
 
