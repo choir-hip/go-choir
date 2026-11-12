@@ -2079,27 +2079,25 @@ in
   # chunk is allocated to data, metadata cannot grow and writes fail with
   # ENOSPC while df shows 135 GB free
   # (docs/problems/node-b-btrfs-metadata-exhausted-small-artifact-files-2026-10-16.md).
-  # Once a day, if unallocated space is under 30 GiB, relocate at most 20
-  # data chunks that are at most 20% used, returning them as unallocated
-  # space. Bounded and online; no file content changes.
-  # Rollback: remove this unit and timer.
+  # Once a day (scripts/node-b-btrfs-headroom; test:
+  # scripts/test-node-b-btrfs-headroom.sh): if unallocated space is under 30
+  # GiB, relocate at most 20 data chunks that are at most 20% used; and if
+  # metadata Size is over three times metadata Used, relocate at most 10
+  # metadata chunks that are at most 40% used (38 GiB sat stranded in empty
+  # metadata chunks, storage assessment B1). Bounded and online; no file
+  # content changes.
+  # Rollback: revert (the metadata balance), or remove this unit and timer.
   systemd.services.go-choir-btrfs-headroom = {
     description = "go-choir btrfs unallocated-space headroom for metadata";
     serviceConfig = {
       Type = "oneshot";
       Nice = 19;
       IOSchedulingClass = "idle";
-      ExecStart = pkgs.writeShellScript "go-choir-btrfs-headroom" ''
-        set -euo pipefail
-        export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.gawk pkgs.btrfs-progs ]}:$PATH"
-        unallocated=$(btrfs filesystem usage -b / | awk '/Device unallocated:/ {print $3}')
-        echo "btrfs unallocated: $((unallocated / 1073741824)) GiB"
-        if [ "$unallocated" -ge $((30 * 1073741824)) ]; then
-          exit 0
-        fi
-        btrfs balance start -dusage=20,limit=20 /
-        btrfs filesystem usage -b / | awk '/Device unallocated:/ {print "btrfs unallocated after balance: " int($3 / 1073741824) " GiB"}'
-      '';
+      Environment = [
+        "PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.gawk pkgs.btrfs-progs ]}"
+      ];
+      ExecStart = pkgs.writeShellScript "go-choir-btrfs-headroom"
+        (builtins.readFile ../scripts/node-b-btrfs-headroom);
     };
   };
 
@@ -2197,6 +2195,38 @@ in
       OnCalendar = "hourly";
       RandomizedDelaySec = "2m";
       # A missed reading is not resumed; the next one is current.
+      Persistent = false;
+    };
+  };
+
+  # Disk forecast (scripts/node-b-growth-meter --forecast; test:
+  # scripts/test-node-b-disk-forecast.sh; storage assessment B2). Hourly, 25
+  # minutes past, after the growth meter's reading. Reads the last 7 days of
+  # the hourly ledger and prints journald-prefixed lines: days to the 60 GiB
+  # deploy floor from the slope of daily free-space minima (warning under 7
+  # days, error under 3), a fast-drain line (warning when free space fell
+  # more than 15 GiB in 6 hours) and the top five 24 hour growers by ledger
+  # key. Read-only; always exits 0. Alarms:
+  #   journalctl -u go-choir-disk-forecast -p warning
+  # Rollback: remove this service and timer.
+  systemd.services.go-choir-disk-forecast = {
+    description = "go-choir disk forecast (days to the deploy floor, fast drain, top growers)";
+    serviceConfig = {
+      Type = "oneshot";
+      Nice = 19;
+      IOSchedulingClass = "idle";
+      MemoryMax = "128M";
+      TimeoutStartSec = "2min";
+      Environment = [ "GROWTH_DIR=/var/lib/go-choir/growth-meter" ];
+      ExecStart = "${pkgs.python3}/bin/python3 -I ${../scripts/node-b-growth-meter} --forecast";
+    };
+  };
+
+  systemd.timers.go-choir-disk-forecast = {
+    description = "go-choir disk forecast hourly";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*:25:00";
       Persistent = false;
     };
   };
