@@ -71,3 +71,37 @@ and turns were not reachable.
   destroys the live evidence of the wedge; if the wedge is a deadlock it
   can recur. Starting schedules one by one would take the same lock and
   likely hang.
+
+## Update 19:10Z: the whole guest froze, not only the schedules
+
+Read-only, from the schedule list, the Node B gateway journal and the code.
+
+- The schedule list now shows 66 schedules, all `active`, 64 `overdue`.
+  Only newsie carries an in-flight mark (15:26:07Z); the other 63 overdue
+  ones carry none. Their wakes never got past marking themselves in flight,
+  and the sweep never re-armed them: with no in-flight mark the sweep
+  repairs a schedule at once (`sourceScheduleNeedsRepair`), and its write
+  would have changed `next_due` and the generation. Neither changed.
+- The paper made no gateway call of any kind after 15:28:05Z: no model
+  call, no Jev call, no failure. Its last calls were ordinary (Devin
+  successes, Jev bulk calls at about 120 ms). So the freeze is not limited
+  to the schedule path. Every desk went quiet about two minutes after the
+  newsie poll began.
+- The schedule list read and the health endpoint still answer, so HTTP
+  serving and store reads work.
+- Every schedule write, and the sweep, runs under the process-wide
+  `sourceScheduleMu`. The poll's long work runs without it, and inside an
+  activation the next-wake arm only buffers. A holder that never released
+  the lock would explain the schedules, but not the silence of every other
+  desk.
+
+Belief, revised: a store-level or actor-kernel block (a write that never
+returns, or a dispatcher that stopped delivering) froze all writers at
+about 15:26 to 15:28Z. The schedule lock is a casualty, not the cause.
+Unconfirmed.
+
+Evidence capture: `GET /api/runtime/observability?goroutines=1` on the
+guest gives the goroutine dump that would settle it. The unauthenticated
+host read that worked on 2026-11-08 now answers `authentication required`.
+The dump needs the paper owner's session. A restart without it loses the
+evidence. Guest logs do not reach the Node B journal.
