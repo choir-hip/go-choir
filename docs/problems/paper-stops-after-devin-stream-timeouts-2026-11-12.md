@@ -44,3 +44,30 @@ ledger and logs, which the host does not keep and this read did not reach.
   paper is seen only by a person reading the journal or by this hourly
   tick.
 - Acting on the paper (a restart or a refresh) is the owner's call.
+
+## Update 17:50Z: schedules wedged, not closed
+
+Read-only, through `choir paper status` and the code; the guest's own logs
+and turns were not reachable.
+
+- All 56 source schedules are `active`; none is closed, paused or in the
+  crash state. Every `updated_at` is 15:26:07Z or earlier and 54 are
+  `overdue` (next due 15:27Z to 16:22Z). One,
+  `social:mastodon:newsie.social:tag:news`, shows `poll_in_flight_since`
+  15:26:07Z with no result.
+- The overdue sweep (`sweepOverdueSourceSchedules`,
+  `internal/agentcore/source_schedule.go`, every 5 minutes, re-arms a
+  schedule more than 15 minutes overdue) should have re-armed them from
+  about 15:41Z. Nothing has been written for two hours, so the sweep is
+  blocked or dead. Leading hypothesis: a store or actor write stuck while
+  holding the process-wide `sourceScheduleMu`, which every schedule write
+  and the sweep take; reads still answer.
+- Ruled out: a crash-loop closure, a guest crash-boot (no schedule
+  rewrite), and vmctl acting on the unhealthy VM (`checkAllHealth` only
+  logs). vmctl still reports the VM busy.
+- It is not expected to resume by itself. The smallest owner act is a
+  planned refresh, `choir paper restart --reason ...` (marker-backed;
+  re-arms overdue schedules at boot). It interrupts in-flight turns and
+  destroys the live evidence of the wedge; if the wedge is a deadlock it
+  can recur. Starting schedules one by one would take the same lock and
+  likely hang.
