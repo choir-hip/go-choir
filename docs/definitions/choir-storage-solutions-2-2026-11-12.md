@@ -144,7 +144,12 @@ stations:
     review: two seats
   - id: S5
     name: group commit, then ephemeral state off the tape
-    scope: one event per set of queued store writes; then the owner-ratified list of state that is not taped
+    scope: >
+      counters first (ops and bytes per kind, waiters at the appender);
+      run-memory writes batched at the call site; lossless coalescing of
+      queued writers with no setting and no loss window (decision D8); the
+      ephemeral share is about 15% of events (claim C58 false), so moving
+      state off the tape is not the lever
     class: red, design record first
     review: two seats
   - id: S6
@@ -189,6 +194,17 @@ decisions_for_the_owner:
   - id: D6
     question: Is file history older than a day a product promise?
     default: yes, seven days as now; no thinning
+  - id: D8
+    question: May the lossless half of tape group commit ship, with no setting, after your 2026-11-03 ruling to delete tape.group_commit?
+    why: >
+      The census found group commit already built behind the default-off
+      setting tape.group_commit, which you ruled deleted ("i dont like the
+      sound of losing events just before a crash"). The loss came from two
+      windows (telemetry stretched to 10 s, run-memory messages joining it).
+      Leader and follower coalescing of writers already waiting loses
+      nothing: every caller still returns only after its event is on the
+      tape. Estimate 519k events a day to about 130k.
+    default: delete the setting and both windows now, as ruled; add the waiters-at-enter counter; ship coalescing only on the owner's word
   - id: D7
     question: A bigger disk or a second device?
     default: not needed if S4 to S6 meet the footprint; decide at the seven-day reading
