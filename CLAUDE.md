@@ -132,6 +132,10 @@ A commit subject ends with its class and rollback, for example
   proof. Local tests are not proof. `origin/main` is the source of truth;
   never edit tracked files on Node B.
 - Docs-only commits skip CI and deploy by design. Do not weaken those filters.
+  Docs-like now means `docs/`, top-level `*.md`, `skills/` (except Go files)
+  and developer-side `scripts/` (owner, 2026-11-12); they ship with the next
+  deploy. Scripts that CI, nix or a deploy program reads still trigger
+  (`.github/scripts/ci-docs-like-paths`).
 - Platform deploy SHA and a computer's effective identity may differ on
   purpose after a product restore. Do not "fix" that by pushing main.
 

@@ -141,6 +141,11 @@ mark_host_os_only() {
   deploy_vmctl_restart=true
 }
 
+# is_docs_like_path: docs, skill text and developer-side scripts ship with the
+# next deploy that runs (owner, 2026-11-12); see ci-docs-like-paths.
+# shellcheck source=ci-docs-like-paths
+source "$(dirname "${BASH_SOURCE[0]}")/ci-docs-like-paths"
+
 for path in "${changed[@]}"; do
   case "$path" in
     .gitignore|LICENSE|NOTICE|cmd/doccheck/*|scripts/doccheck|scripts/node-b-deploy-disk-preflight|scripts/node-b-ci-gate-probe)
@@ -198,6 +203,14 @@ for path in "${changed[@]}"; do
 
   if [[ "$path" != */* && "$path" == *.md ]]; then
     add_explanation "$path -> ignored (top-level markdown)"
+    continue
+  fi
+
+  # Skills are not ignored here: they ship into the guest, so a range holding a
+  # skill edit must rebuild autoputer (the skills/* case below). A skills-only
+  # push never gets this far; the CI classifier calls it docs_only.
+  if [[ "$path" != skills/* ]] && is_docs_like_path "$path"; then
+    add_explanation "$path -> ignored (docs-like: skill text or developer-side script; ships with the next deploy)"
     continue
   fi
 

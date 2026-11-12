@@ -61,9 +61,13 @@ flakehub=false
 high_risk_race=false
 ci=false
 
+# is_docs_like_path: docs, skill text and developer-side scripts need no CI
+# lane (owner, 2026-11-12); they ship with the next push that does run.
+# shellcheck source=ci-docs-like-paths
+source "$(dirname "${BASH_SOURCE[0]}")/ci-docs-like-paths"
+
 is_docs_path() {
-  local path="$1"
-  [[ "$path" == docs/* ]] || [[ "$path" != */* && "$path" == *.md ]]
+  is_docs_like_path "$1"
 }
 
 mark() {
@@ -112,10 +116,15 @@ else
     esac
 
     case "$path" in
-      cmd/*|internal/*|configs/*|skills/*|go.mod|go.sum|scripts/go-test-*)
+      cmd/*|internal/*|configs/*|scripts/*.go|skills/*.go|skills/*/go.mod|skills/*/go.sum|go.mod|go.sum|scripts/go-test-*)
         mark go "$path -> Go verification"
         ;;
     esac
+
+    # Scripts that Go code names run the Go lane (ci-docs-like-paths).
+    if ci_go_script_path "$path"; then
+      mark go "$path -> Go verification (a Go test reads or runs this script)"
+    fi
 
     # internal/pkgruntime embeds a byte copy of the boundary plugin; its Go test
     # (TestEmbeddedBoundaryPluginIsTheFrontends) must run when the frontend copy changes.
@@ -143,7 +152,7 @@ else
     esac
 
     case "$path" in
-      flake.nix|flake.lock|go.mod|go.sum|skills/*|frontend/src/*|frontend/public/*|frontend/package.json|frontend/package-lock.json|frontend/svelte.config.js|frontend/vite.config.js|frontend/index.html)
+      flake.nix|flake.lock|go.mod|go.sum|frontend/src/*|frontend/public/*|frontend/package.json|frontend/package-lock.json|frontend/svelte.config.js|frontend/vite.config.js|frontend/index.html)
         mark sbom "$path -> SBOM derivation input"
         ;;
       cmd/*|internal/*)

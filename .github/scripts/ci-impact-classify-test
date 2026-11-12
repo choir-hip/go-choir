@@ -64,6 +64,92 @@ assert_output sbom-helper $'.github/scripts/build-sboms-differential\n' \
 assert_output sbom-verifier $'.github/scripts/verify-sbom-candidate\n' \
   'go=false' 'sbom=true' 'flakehub=false' 'ci=true'
 
+# Docs-like paths (owner, 2026-11-12): skill text and developer-side scripts.
+assert_output skills-text-only $'skills/throughline/SKILL.md\nskills/throughline/references/format.md\nskills/agentic-consensus/agentic-consensus-runner.sh\n' \
+  'docs_only=true' 'non_docs=false' 'go=false' 'sbom=false' 'flakehub=false' 'frontend=false'
+
+assert_output skills-go-file $'skills/throughline/check/main.go\n' \
+  'docs_only=false' 'go=true' 'flakehub=true'
+
+assert_output dev-scripts-only $'scripts/land\nscripts/spend-report\nscripts/system_briefing.py\nscripts/probes/x.sh\nscripts/prove-autoradio-turns\n' \
+  'docs_only=true' 'non_docs=false' 'go=false' 'flakehub=false'
+
+assert_output mixed-skill-and-code $'skills/throughline/SKILL.md\ninternal/auth/service.go\n' \
+  'docs_only=false' 'go=true' 'sbom=true' 'flakehub=true'
+
+assert_output mixed-script-and-docs $'scripts/land\ndocs/x.md\n' \
+  'docs_only=true'
+
+assert_output ci-gate-script $'scripts/check-guest-security-epoch\n' \
+  'docs_only=false' 'non_docs=true' 'flakehub=true'
+
+assert_output ci-gate-support $'scripts/lib/choir_internal.sh\nscripts/testdata/desk-names/good/internal/x/a.go\nscripts/store-handles-allowlist.json\n' \
+  'docs_only=false'
+
+assert_output scripts-go-file $'scripts/kernelgate/main.go\n' \
+  'docs_only=false' 'go=true'
+
+assert_output github-never-docs $'.github/scripts/ci-docs-like-paths\n' \
+  'docs_only=false' 'non_docs=true' 'ci=true'
+
+# Every script that something outside the script folder, or a kept script,
+# names must stay non-docs: a host unit, a deploy program, a CI step, a Go test
+# or a frontend test reads it. Computed here so a new reference cannot be
+# missed. The scan covers nix/, flake.nix, .github (the two classifiers and
+# their tests excluded, they list patterns), cmd/, internal/ and frontend/, then
+# follows the transitive closure through every referenced script.
+repo_root="$(cd "$script_dir/../.." && pwd)"
+scan_refs() { # prints scripts/<name> strings found in the given paths
+  (cd "$repo_root" && grep -rhoE '(^|[^A-Za-z0-9_/.-])scripts/[A-Za-z0-9_./-]+' "$@" \
+    --exclude=ci-impact-classify --exclude=ci-impact-classify-test --exclude=deploy-impact-classify \
+    --exclude=deploy-impact-classify-test --exclude=ci-docs-like-paths \
+    --exclude-dir=node_modules --exclude-dir=testdata 2>/dev/null |
+    sed -E 's/^[^s]//;s/[.]+$//' | sort -u) || true
+}
+declare -A seen=()
+queue=()
+while IFS= read -r ref; do
+  [[ -f "$repo_root/$ref" ]] && queue+=("$ref")
+done < <(scan_refs nix flake.nix .github cmd internal frontend)
+checked=0
+while ((${#queue[@]} > 0)); do
+  ref="${queue[0]}"
+  queue=("${queue[@]:1}")
+  [[ -n "${seen[$ref]:-}" ]] && continue
+  seen[$ref]=1
+  out="$tmpdir/ref.out"; : >"$out"
+  printf '%s\n' "$ref" | "$classifier" --sha 0000000000000000000000000000000000000000 "$out" >/dev/null
+  if ! grep -qxF 'docs_only=false' "$out"; then
+    echo "script $ref is named by a deployed, CI, Go or kept file but classifies as docs-like; add it to ci_deploy_script_path in ci-docs-like-paths" >&2
+    exit 1
+  fi
+  checked=$((checked + 1))
+  while IFS= read -r nested; do
+    [[ -f "$repo_root/$nested" ]] && queue+=("$nested")
+  done < <(cd "$repo_root" && grep -hoE '(^|[^A-Za-z0-9_/.-])scripts/[A-Za-z0-9_./-]+' "$ref" 2>/dev/null | sed -E 's/^[^s]//;s/[.]+$//' | sort -u || true)
+done
+if ((checked < 40)); then
+  echo "referenced-script check saw only $checked scripts; the reference grep is broken" >&2
+  exit 1
+fi
+
+# A script a Go test or Go code reads must run the Go lane, not only count as non-docs.
+go_checked=0
+while IFS= read -r ref; do
+  [[ -f "$repo_root/$ref" ]] || continue
+  out="$tmpdir/goref.out"; : >"$out"
+  printf '%s\n' "$ref" | "$classifier" --sha 0000000000000000000000000000000000000000 "$out" >/dev/null
+  if ! grep -qxF 'go=true' "$out"; then
+    echo "script $ref is named by Go code under cmd/ or internal/ but does not select the Go lane" >&2
+    exit 1
+  fi
+  go_checked=$((go_checked + 1))
+done < <(cd "$repo_root" && grep -rhoE '(^|[^A-Za-z0-9_/.-])scripts/[A-Za-z0-9_./-]+' cmd internal --include='*.go' --exclude-dir=testdata 2>/dev/null | sed -E 's/^[^s]//;s/[.]+$//' | sort -u || true)
+if ((go_checked < 10)); then
+  echo "go-reference check saw only $go_checked scripts; the grep is broken" >&2
+  exit 1
+fi
+
 sample_output="$tmpdir/sample.out"
 printf 'cmd/auth/main.go\n' | "$classifier" --sha 0000001400000000000000000000000000000000 "$sample_output" >/dev/null
 grep -qxF 'sample_bucket=0' "$sample_output"
