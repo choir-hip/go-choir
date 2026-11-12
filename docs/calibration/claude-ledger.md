@@ -158,6 +158,7 @@ entered below as lapsed, not scored.
 | C52 | 2026-11-11T16:20Z | false | same run exit 1: River never answered (gateway: `unsupported provider: river`; RIVER_API_KEY is in the local .env but not in Node B's gateway-provider.env, so River was never registered); reasoning off, no tape errors | 0.20 |
 | C54 | 2026-11-11T20:25Z | false | `scripts/land origin/lane/golden-web` exit 1 twice (19:56Z, 20:14Z): agentcore hit go test's 10-minute default in both runtime shards, unrelated to the frontend change; the landing script is the defect (docs/problems/land-runtime-shards-time-out-2026-11-11.md) | 0.42 |
 | C55 | 2026-11-11T21:45Z | true | staging deploy receipt: 26f9d66f3 deployed; `GOLDEN_WEB_ONLY=1 scripts/golden-docs` at 26f9d66f3: GOLDEN COMPARE OK; CI run 43097709400 attempt 2 success (attempt 1 ran no job: GitHub Actions incident, no runner assigned) | 0.09 |
+| C56 | 2026-11-12T20:05Z | true | host control DB: 10914342 committed 15:26:29.866Z in a normal burst after 10914341, nothing after until the 19:18Z refresh; corpusd compaction shows the host head at 10914342; guest CAS is the only path that moves the head; recovery's `err=<nil>` with split heads means no prepared row survived, and the post-CAS-error discard is the only delete on that path. The guest's CAS error line itself rotated out, so the step is shown by elimination (docs/problems/event-appender-wedges-clustering-assessment-2026-11-12.md) | 0.09 |
 
 ### Scorecard
 
