@@ -50,7 +50,7 @@ func newFaultRig(t *testing.T) *faultRig {
 	return rig
 }
 
-func (r *faultRig) newAppender(projection *memoryProjection) *ComputerEventAppender {
+func (r *faultRig) newAppender(projection ProjectionStore) *ComputerEventAppender {
 	r.t.Helper()
 	appender, err := NewComputerEventAppender(testComputerID, memoryPinner{signer: r.signer}, projection, r.cas, r.verifier)
 	if err != nil {
@@ -61,7 +61,7 @@ func (r *faultRig) newAppender(projection *memoryProjection) *ComputerEventAppen
 
 // boot builds a new appender over the SAME stores and runs the boot sequence
 // (replay mode, Reconstruct), as the autoputer does.
-func (r *faultRig) boot(projection *memoryProjection) *ComputerEventAppender {
+func (r *faultRig) boot(projection ProjectionStore) *ComputerEventAppender {
 	r.t.Helper()
 	appender := r.newAppender(projection)
 	appender.SetReplayMode(true)
@@ -177,9 +177,11 @@ func TestFaultCASUnclearErrorHostNeverSawIt(t *testing.T) {
 	rig.requireAligned("after the next append", rig.cas.head.Sequence)
 }
 
-// F3: an unclear error, and the host commits the request late (after the
-// guest gave up on it). The guest must never conclude "not committed" and
-// delete the only record that it might have been.
+// F3: an unclear error while the original request is still in flight at the
+// host, which commits it only after the guest's call returned. The re-send
+// settles it (the host answers a request it already holds, or commits it
+// once); the late arrival of the original must not add a row. F3b below is
+// the case where the guest never learns the outcome before the commit lands.
 func TestFaultCASLateCommitIsNotDiscarded(t *testing.T) {
 	rig := newFaultRig(t)
 	rig.genesis(rig.app)
@@ -371,7 +373,7 @@ func TestFaultCatchUpPageFetchFailsThenResumes(t *testing.T) {
 	rig.genesis(rig.app)
 	rig.hostAhead(EventReplayPageSize + 1)
 	fail := true
-	rig.cas.onEventsPage = func(after uint64) error {
+	rig.cas.onEventsPage = func(_ context.Context, after uint64) error {
 		if after > 1 && fail {
 			fail = false
 			return errPageFailed
@@ -453,7 +455,7 @@ func TestFaultAppendWaitsForCatchUp(t *testing.T) {
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	var once sync.Once
-	rig.cas.onEventsPage = func(uint64) error {
+	rig.cas.onEventsPage = func(context.Context, uint64) error {
 		once.Do(func() { close(entered) })
 		<-release
 		return nil
