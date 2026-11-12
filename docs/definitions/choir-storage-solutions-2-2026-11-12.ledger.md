@@ -54,3 +54,13 @@ Append-only. One terse entry per pass.
   always is (docs/problems/snapshot-loop-blocks-its-own-fix-2026-11-12.md).
   Free 67.8 GiB. Sweep dry run ts-20261112T223140Z-d1a3ccd3 running. An act
   on the paper is needed; asked the owner.
+- 2026-11-12T23:30Z. On the owner's word ("stop and restart the paper and
+  do what works") the paper's VM was stopped on the host at 22:52:11Z
+  (POST /internal/vmctl/stop); the always-on sweep booted it at 22:52:48Z on
+  0d2f0bd46. First snapshot on the new code recorded at 23:28:18Z, head
+  10978774: 44.1 GB of pages in 25m51s (witness 22m37s, stream 3m02s), 10,524
+  chunks, 5,858 uploaded (4.04 GB sealed), 4,666 already held. Free space
+  69.2 GiB at 22:55Z, 79.7 at 23:05Z after the hourly collector, 75.1 after
+  the snapshot's upload. The paper published a story at 23:20Z; its call
+  rate after the boot is being watched. Sweep dry run still in references
+  after 58 minutes.

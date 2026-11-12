@@ -124,7 +124,7 @@ stations:
     class: red; the sweep apply is black, owner go given 2026-11-12
     review: two seats
     depends_on: []
-    carrier: main 0d2f0bd46, deployed 2026-11-12T22:31Z, not yet on the paper; sweep dry run ts-20261112T223140Z-d1a3ccd3
+    carrier: main 0d2f0bd46, deployed 2026-11-12T22:31Z, on the paper since 22:53Z, snapshot recorded 23:28Z; sweep dry run ts-20261112T223140Z-d1a3ccd3 not yet applied
     status: landed
   - id: S1
     name: guards
@@ -308,14 +308,15 @@ now:
       paper's image
     next_observation: the sweep manifest; the forecast unit's first run at 21:25Z; the snapshot and wedge lane reports
   blocker_or_risk: >
-    The paper refuses every planned refresh while a snapshot streams, and its
-    loop keeps one streaming, so the fix cannot reach it without a host stop
-    of the paper's VM. That is an act on the paper and needs the owner. Free
-    space is 67.8 GiB, 7.8 above the deploy floor.
+    The sweep dry run has not finished after an hour in its references phase.
+    A planned restart still refuses while a snapshot streams, now for up to
+    90 minutes. The failed-attempt path of the fix (upload nothing, back off)
+    has not been seen on the paper, because its first attempt succeeded.
   next_action: >
-    Read the sweep manifest and apply it. Review lane/snapshot-loop with two
-    seats, land it with a parsed Ring-Expedite trailer, and verify on staging
-    that the paper records a snapshot and the chunk births stop.
+    Confirm the paper keeps publishing and the 6-hour drain falls under
+    1 GiB an hour (claim C62). Read the sweep manifest and apply it. Then
+    review and land lane/appender-wedge (S2), the planned-restart change
+    (cancel an in-flight capture), lane/ci-docs-like and lane/goal-file-check.
 
 receipts: []
 
