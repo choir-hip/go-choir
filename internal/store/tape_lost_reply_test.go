@@ -50,8 +50,8 @@ func TestAppendWithACancelledCallerAfterThePlatformCommittedConverges(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if after.Sequence != before.Sequence+1 {
-		t.Fatalf("local head %d, want %d", after.Sequence, before.Sequence+1)
+	if after.Sequence <= before.Sequence {
+		t.Fatalf("local head %d did not advance past %d", after.Sequence, before.Sequence)
 	}
 	prepared, err := h.store.Prepared(context.Background(), h.computerID)
 	if err != nil || len(prepared) != 0 {

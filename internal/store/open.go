@@ -503,6 +503,13 @@ func (s *Store) Close() error {
 	// Graceful close seals the telemetry window first. A crash does not, which
 	// is the loss the ruling allows.
 	telemetryStopped := s.closeTelemetry()
+	// The appender's detached recovery and catch-up read and write this
+	// database on contexts that ignore their callers; interrupt them before
+	// the connection is pinned so Close is not held by them and they stop
+	// issuing statements on a store that is closing.
+	if tape := s.projectionTape; tape != nil {
+		tape.appender.InterruptDetachedWork()
+	}
 	deadline := time.Now().Add(closeDeadline)
 	// The lease goroutines end before the write connection is pinned (a
 	// statement of theirs in flight would fail the pin closed).
