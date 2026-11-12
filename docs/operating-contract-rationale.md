@@ -514,6 +514,18 @@ ignores `docs/**` and top-level `*.md`; do not weaken those filters to force a
 full CI or staging deploy path for docs-only changes. Docs-only pushes and pull
 requests should run the report-only docs truth checker workflow instead.
 
+Owner, 2026-11-12: "we should make the skills folder part of docs only. Even
+though we have scripts in it, we don't need to run CI if we edit a skill or a
+script. Same for the scripts folder in general." Four commits that only edited
+`skills/throughline` text each ran full CI and a staging deploy that restarted
+host services. Docs-like now also covers `skills/` (except Go files) and
+developer-side `scripts/`. A script that CI runs, a nix module or flake reads,
+or a deploy program runs is not developer-side and keeps triggering; the list
+is `.github/scripts/ci-docs-like-paths`, and `ci-impact-classify-test` fails
+when a script named in `nix/`, `flake.nix` or `.github/` is missing from it. On
+main the plan base is the live staging commit, so a skipped path stays in the
+diff of the next run that does deploy.
+
 ## Worktree Hygiene
 
 Before handing off or stopping a mission, run `git status --short` and classify

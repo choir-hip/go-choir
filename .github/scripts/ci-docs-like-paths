@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Sourced by ci-impact-classify and deploy-impact-classify. One definition of
+# "docs-like": a path whose edit needs no CI lane and no deploy because it
+# ships with the next deploy that does run (owner, 2026-11-12: "we should make
+# the skills folder part of docs only ... Same for the scripts folder in
+# general"). On main the plan base is the live staging commit, so a skipped
+# path stays in the base..head diff of every later run.
+#
+# docs-like:
+#   docs/*, top-level *.md
+#   skills/*, except Go source and Go module files (the goal-file checker is Go)
+#   scripts/*, except CI/deploy-relevant scripts (ci_deploy_script_path below)
+#
+# The deploy classifier applies this to scripts only: skills/* keeps its autoputer
+# mapping there, so a range holding a skill edit ships it. .github/* is never docs-like.
+
+# Scripts that Go code under cmd/ or internal/ names (a Go test runs or reads
+# them): a change must run the Go lane, not only count as non-docs.
+ci_go_script_path() {
+  case "$1" in
+    scripts/check-*|scripts/choir-shot*|scripts/choir-spec.sh|scripts/desk_cell_confinement_probe.py) return 0 ;;
+    scripts/e2e-*|scripts/event-blind-sample.py|scripts/fixtures/*|scripts/fuzz-broker-protocol.sh) return 0 ;;
+    scripts/golden-docs*|scripts/node-b-guest-release-*|scripts/off-host-backup.sh) return 0 ;;
+    scripts/reeng_tracer*.mjs|scripts/rollback/*|scripts/snapshot-vault.sh|scripts/test-node-b-*) return 0 ;;
+    scripts/verify-host-hardening.py|scripts/vision_probe.py|scripts/vmm_confinement_verify.py) return 0 ;;
+    scripts/vmmanager-netfilter-test.sh|scripts/host_floor_probe.py) return 0 ;;
+  esac
+  return 1
+}
+
+# A script is CI/deploy-relevant when CI runs it, a nix module or flake reads
+# it, or a deploy program runs it, or when such a script reads it (fixtures,
+# allowlists, the shell helper library, the Go gate sources). The test
+# .github/scripts/ci-impact-classify-test recomputes the set of scripts named in
+# nix/, flake.nix, .github/workflows, .github/actions and .github/scripts and
+# fails when one of them is not matched here.
+ci_deploy_script_path() {
+  ci_go_script_path "$1" && return 0
+  case "$1" in
+    *.go|scripts/testdata/*|scripts/kernelgate/*|scripts/lib/*|scripts/fixtures/*|scripts/*-allowlist.json) return 0 ;;
+    scripts/check-*|scripts/selftest-*|scripts/test-*|scripts/test_*|scripts/go-test-*) return 0 ;;
+    scripts/ci-*|scripts/deploy-*|scripts/build-sboms-*|scripts/sbom-*|scripts/verify-sbom-*) return 0 ;;
+    scripts/doccheck|scripts/guest-*|scripts/node-b-*|scripts/node_b_*|scripts/off-host-*) return 0 ;;
+    scripts/snapshot-vault*|scripts/choir-shot*|scripts/mail-resend-setup) return 0 ;;
+    scripts/paper-liveness-probe.py|scripts/verify-host-hardening.py|scripts/vmm_confinement_verify.py) return 0 ;;
+    scripts/fuzz-broker-protocol.sh|scripts/res10_balloon_stats_probe.sh|scripts/vmmanager-netfilter-test.sh) return 0 ;;
+    # Read by a kept script (selftest-guest-token, node_b_host_reboot.py).
+    scripts/qa_test_computer.mjs|scripts/generate-podcast-fixture.mjs|scripts/proofs/lib.sh|scripts/management_latency_probe.py|scripts/choir_internal.py|scripts/density/*|scripts/m3_*|scripts/mail-*) return 0 ;;
+  esac
+  return 1
+}
+
+is_docs_like_path() {
+  local path="$1"
+  case "$path" in
+    docs/*) return 0 ;;
+    skills/*)
+      case "$path" in
+        *.go|*/go.mod|*/go.sum) return 1 ;;
+      esac
+      return 0
+      ;;
+    scripts/*)
+      ci_deploy_script_path "$path" && return 1
+      return 0
+      ;;
+  esac
+  [[ "$path" != */* && "$path" == *.md ]]
+}

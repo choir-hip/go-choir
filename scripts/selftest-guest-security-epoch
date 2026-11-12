@@ -63,6 +63,7 @@ new_repo() {
 	echo '#!/bin/sh' >"$d/scripts/selftest-guest-security-epoch"
 	echo '#!/bin/sh' >"$d/.github/scripts/deploy-base-select"
 	echo '#!/bin/sh' >"$d/.github/scripts/ci-impact-classify"
+	echo '#!/bin/sh' >"$d/.github/scripts/ci-docs-like-paths"
 	ci_yml >"$d/.github/workflows/ci.yml"
 	echo 'package agentcore' >"$d/internal/agentcore/a.go"
 	echo 'package other' >"$d/internal/other/o.go"
@@ -377,6 +378,10 @@ expect "a change to deploy-base-select needs the gate trailers" 1 "$r" "$base" "
 r=$tmp/g11b; new_repo "$r"; base=$(rev "$r")
 echo '# changed' >>"$r/.github/scripts/ci-impact-classify"; commit "$r" "change the CI classifier"
 expect "a change to ci-impact-classify (the non_docs off-switch) needs the gate trailers" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/g11c; new_repo "$r"; base=$(rev "$r")
+echo '# changed' >>"$r/.github/scripts/ci-docs-like-paths"; commit "$r" "change the docs-like rule"
+expect "a change to ci-docs-like-paths (the shared docs-only rule) needs the gate trailers" 1 "$r" "$base" "$(rev "$r")"
 
 # review 331: the check job's own block is checked too
 r=$tmp/g13; new_repo "$r"; base=$(rev "$r")

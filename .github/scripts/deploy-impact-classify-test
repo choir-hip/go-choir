@@ -200,20 +200,28 @@ calibration_output="$(run_classifier "internal/calibration/handler.go")"
 assert_contains "$calibration_output" "host_services=gateway,autoputer"
 assert_contains "$calibration_output" "internal/calibration/handler.go -> gateway/autoputer service pointers + vmctl runtime-package endpoint restart"
 
-# A runtime-only change (no vmctl or host change) still takes the canonical
-# guest boot path: there is no platform app-layer push, so the base image and
-# every new realization move with the deploy (version skew decision
-# 2026-10-09).
+# Skill text ships into the guest (nix/autoputer-vm.nix RUNTIME_SKILLS_ROOT), so
+# the deploy classifier keeps its mapping: any deploy whose range holds a skill
+# edit rebuilds autoputer. A skills-only push never reaches this classifier
+# because the CI classifier calls it docs_only and skips the deploy plan.
 skill_runtime_output="$(run_classifier "skills/definition/SKILL.md")"
 assert_contains "$skill_runtime_output" "deploy_needed=true"
-assert_contains "$skill_runtime_output" "deploy_host_service=true"
-assert_contains "$skill_runtime_output" "deploy_host_os=true"
-assert_contains "$skill_runtime_output" "deploy_vmctl_restart=true"
-assert_contains "$skill_runtime_output" "deploy_active_vm_refresh=true"
 assert_contains "$skill_runtime_output" "host_services=autoputer"
 assert_contains "$skill_runtime_output" "skills/definition/SKILL.md -> autoputer runtime skill package"
-assert_contains "$skill_runtime_output" "autoputer runtime selected -> canonical guest boot closure + active VM refresh"
-assert_not_contains "$skill_runtime_output" "deploy_app_layer"
+skill_range_output="$(run_classifier "skills/throughline/SKILL.md" "internal/auth/service.go")"
+assert_contains "$skill_range_output" "autoputer"
+skill_go_output="$(run_classifier "skills/throughline/check/main.go")"
+assert_contains "$skill_go_output" "host_services=autoputer"
+
+# Developer-side scripts are docs-like; scripts a nix module, a deploy program
+# or CI reads keep their effect (unchanged cases follow below).
+dev_scripts_output="$(run_classifier "scripts/land" "scripts/spend-report" "scripts/system_briefing.py" "scripts/prove-autoradio-turns" "scripts/probes/x.sh")"
+assert_contains "$dev_scripts_output" "deploy_needed=false"
+assert_contains "$dev_scripts_output" "scripts/land -> ignored (docs-like"
+mixed_skill_output="$(run_classifier "skills/definition/SKILL.md" "internal/store/db.go")"
+assert_contains "$mixed_skill_output" "deploy_needed=true"
+ci_script_deploys_output="$(run_classifier "scripts/ci-prune-go-cache" "scripts/selftest-store-handles")"
+assert_contains "$ci_script_deploys_output" "deploy_needed=true"
 
 tooling_scripts_output="$(
   run_classifier \

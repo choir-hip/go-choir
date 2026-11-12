@@ -68,7 +68,7 @@ POLICY=nix/guest-release-policy.json
 SURFACES=nix/guest-security-surfaces.txt
 FLOOR=nix/guest-floor-paths.txt
 CI_YML=.github/workflows/ci.yml
-GATE_FILES=(nix/guest-security-surfaces.txt scripts/check-guest-security-epoch scripts/selftest-guest-security-epoch .github/scripts/deploy-base-select .github/scripts/ci-impact-classify)
+GATE_FILES=(nix/guest-security-surfaces.txt scripts/check-guest-security-epoch scripts/selftest-guest-security-epoch .github/scripts/deploy-base-select .github/scripts/ci-impact-classify .github/scripts/ci-docs-like-paths)
 
 base=${GUEST_SECURITY_EPOCH_BASE:-}
 head=HEAD
