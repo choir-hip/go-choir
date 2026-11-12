@@ -68,7 +68,7 @@ gen '330 + 10 * h / 24' 168; forecast
 check "D1 330 GiB, -10/day (27 days): ok" 'grep -q "^<6>disk forecast ok: .*27\.0 days" "$root/out"'
 check "D2 exit 0" '[ "$(cat "$root/rc")" = 0 ]'
 gen '40 + 1 * h / 24' 168; forecast
-check "D2 already under the floor: error, 0.0 days" 'grep -q "^<3>disk forecast ERROR: .*0\.0 days" "$root/out"'
+check "D2 already under the floor: error" 'grep -q "^<3>disk forecast ERROR: .*already below the 60 GiB floor" "$root/out"'
 
 gen '90 - 5 * h / 24' 168; forecast
 check "D3 rising disk: ok, not declining" 'grep -q "^<6>disk forecast ok: .*not declining" "$root/out"'
@@ -113,6 +113,63 @@ rm -rf "$root/ledger"; mkdir "$root/ledger"; forecast
 check "D7 empty ledger: info line, exit 0" 'grep -q "need at least 3 days" "$root/out" && [ "$(cat "$root/rc")" = 0 ]'
 gen '140' 168; forecast GROWTH_NOW=$((1794441600 + 4 * 3600))
 check "D8 newest reading 4 h old: stale warning" 'grep -q "^<4>disk forecast WARNING: .*newest ledger reading is 4\.0 h old" "$root/out"'
+
+# D10: under the floor already, flat: not "ok"
+gen '40' 168; forecast
+check "D10 under the floor and flat: error saying so" 'grep -q "^<3>disk forecast ERROR: .*below the 60 GiB floor" "$root/out"'
+# D11: growers span is the real span after a gap (base reading 72 h old)
+gen '140' 168
+python3 - "$root/ledger/2026-11.jsonl" <<'PY'
+import json, sys, calendar, time
+p = sys.argv[1]
+rows = [json.loads(l) for l in open(p)]
+G = 1 << 30
+end = calendar.timegm(time.strptime(rows[-1]["ts"], "%Y-%m-%dT%H:%M:%SZ"))
+keep = []
+for r in rows:
+    t = calendar.timegm(time.strptime(r["ts"], "%Y-%m-%dT%H:%M:%SZ"))
+    if not (end - 72 * 3600 < t < end - 2 * 3600):
+        r["items"]["fs.x"] = (100 if t <= end - 72 * 3600 else 130) * G
+        keep.append(r)
+open(p, "w").write("".join(json.dumps(r) + "\n" for r in keep))
+PY
+forecast
+check "D11 growers line names the real span (72 h), not 24 h" 'grep -q "^<6>disk growers (72\.0 h): fs.x +30\.0 GiB" "$root/out"'
+# D12: a big ledger is streamed (the unit has MemoryMax 128M; three months
+# whole-loaded was about 209 MiB)
+rm -rf "$root/ledger"; mkdir -p "$root/ledger"
+python3 - "$root/ledger" <<'PY'
+import json, sys, time
+d = sys.argv[1]
+G = 1 << 30
+end = 1794441600
+pad = {"fs.pad.%d" % i: i for i in range(400)}
+units = {"u%d.service" % i: {"peak": i, "max": 1 << 30, "events": {"oom": 0}} for i in range(60)}
+for mon, t0 in (("2026-09", end - 70 * 86400), ("2026-10", end - 40 * 86400), ("2026-11", end - 10 * 86400)):
+    with open("%s/%s.jsonl" % (d, mon), "w") as f:
+        for h in range(0, 30 * 24):
+            t = t0 + h * 3600
+            if t > end:
+                break
+            items = dict(pad); items["fs.root.avail"] = int((200 - (end - t) / 86400.0) * G)
+            f.write(json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t)), "items": items, "units": units, "pad": "x" * 6000}) + "\n")
+PY
+ledger_mb=$(du -sm "$root/ledger" | cut -f1)
+cat >"$root/rss.py" <<'PY'
+import resource, runpy, sys
+sys.argv = ["x", "--forecast"]
+try:
+    runpy.run_path(sys.argv_script, run_name="__main__")
+except SystemExit:
+    pass
+kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+print("MAXRSS_MB", kb // (1024 * 1024) if sys.platform == "darwin" else kb // 1024)
+PY
+sed -i.bak "s#sys.argv_script#'$script'#" "$root/rss.py"
+env GROWTH_DIR="$root/ledger" GROWTH_NOW=1794441600 python3 "$root/rss.py" >"$root/out" 2>&1
+rss_mb=$(awk '/MAXRSS_MB/ {print $2}' "$root/out")
+check "D12 large ledger (${ledger_mb} MB): forecast still answers" 'grep -q "^<[346]>disk forecast" "$root/out"'
+check "D12 peak RSS ${rss_mb} MB stays under 64 MB (whole-load was ~209 MB at 3 months)" '[ "${rss_mb:-9999}" -lt 64 ]'
 
 # D9: nix wiring
 svc="$(awk '/systemd.services.go-choir-disk-forecast = \{/,/^  \};/' "$nixfile")"
