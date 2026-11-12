@@ -25,7 +25,7 @@ agents that run it no longer need a per-step procedure. The fields are in
 [references/mission-schema.md](references/mission-schema.md). The reasoning
 behind the format, and the version 4 text, are in
 [references/rationale-v4.md](references/rationale-v4.md); read it when a rule
-here seems arbitrary. `scripts/check-goal-files` enforces the checkable rules.
+here seems arbitrary. `scripts/check-goal-files` enforces the checkable rules (the checker's source is in `skills/throughline/check`).
 
 ## What `/goal` means
 

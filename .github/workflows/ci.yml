@@ -520,6 +520,8 @@ jobs:
           scripts/check-kernel-imports
           scripts/check-kernel-names
           scripts/check-kernel-responsibilities
+          go test -count=1 ./skills/throughline/check
+          scripts/check-goal-files
 
       # No privilege keys on a desk name (plan MA2.5, R3): a new hard-coded desk
       # name outside scripts/desk-names-allowlist.json fails.

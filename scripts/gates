@@ -26,6 +26,8 @@ run scripts/check-owner-files-writes
 run scripts/check-gatefixture-imports
 run python3 -I scripts/check-switch-registry
 run go run ./cmd/deskprotocol-lock
+run go test -count=1 ./skills/throughline/check
+run scripts/check-goal-files
 run scripts/check-guest-security-epoch --base "$base" --head HEAD
 if [ "$f" = 0 ]; then echo "ALL GATES PASS"; else echo "GATES FAILED"; fi
 exit "$f"
