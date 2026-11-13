@@ -130,7 +130,10 @@ func main() {
 	// artifact collector (station S7). No setting: it follows
 	// PLATFORM_TAPE_SWEEP_MODE as the route does, never acknowledges
 	// unrecorded fork lineage and never passes no_archive.
-	platform.NewTapeSweepScheduler(svc).Start(context.Background())
+	tapeSweepCtx, cancelTapeSweep := context.WithCancel(context.Background())
+	tapeSweepSched := platform.NewTapeSweepScheduler(svc)
+	tapeSweepSched.Start(tapeSweepCtx)
+	defer cancelTapeSweep()
 	eventCAS, eventArtifacts, eventAuth, err := svc.ComputerEventRuntime()
 	if err != nil {
 		log.Fatalf("corpusd computer event runtime: %v", err)
@@ -220,6 +223,15 @@ func main() {
 	}
 	s := server.NewServer("corpusd", cfg.Port)
 	platform.RegisterRoutes(s, handler)
+	// A scheduled tape sweep is stopped at a batch boundary and waited for
+	// before the store closes under it (its tombstone counts are written per
+	// batch, so even an abandoned wait leaves them truthful).
+	s.AddShutdownHook(func(ctx context.Context) {
+		cancelTapeSweep()
+		if err := tapeSweepSched.Wait(ctx); err != nil {
+			log.Printf("corpusd: tape sweep schedule still running at the shutdown deadline")
+		}
+	})
 
 	// Object graph API: allows VMs to project and query
 	// object graph data stored in the platform PostgreSQL databases (corpusd).
