@@ -1862,36 +1862,6 @@
    }
   },
   {
-   "id": "tape_group_commit",
-   "kind": "setting",
-   "life": "release",
-   "owner": "store",
-   "class": "red",
-   "surface": "store",
-   "introduced": "2026-10-31",
-   "settings": [
-    "tape.group_commit"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-28",
-   "ring": "R0",
-   "promote": [
-    {
-     "metric": "unplanned_crash_closures",
-     "bound": "== 0"
-    },
-    {
-     "metric": "settings_apply_errors",
-     "bound": "== 0"
-    }
-   ],
-   "retire": "delete the key and group always once the paper shows refused_splits and unknown_outcome at zero and replay equivalent",
-   "note": "Acknowledged unconditional projection writes share a tape event; pending telemetry and run-memory messages ride it (crash-lossy window, owner 2026-10-31; cursor, cell fate, compaction and receipts stay acknowledged); telemetry window 10 s; opening messages as one write (docs/design/tape-group-commit-2026-10-31.md). On for d@e by stored setting first; then the paper; then the default. Off is the live rollback; nothing new is written. Default off, held 2026-11-03: owner ruled delete (crash-lossy window)."
-  },
-  {
    "id": "telemetry_batch",
    "kind": "setting",
    "life": "release",

@@ -46,12 +46,11 @@ type PlannedRestart struct {
 	// sealed before the restart, so the resume's records say the trace may
 	// have a gap. Telemetry never blocks the restart.
 	TelemetryDrainFailed bool `json:"telemetry_drain_failed,omitempty"`
-	// RunMemoryWindowOpen records, at drain time, whether the run-memory window
-	// (tape.group_commit) was open, so a failed drain may have lost a run's
-	// newest messages. The next boot gates its crash-close on this, not on the
-	// setting it reads at boot, which the owner may have flipped or which
-	// defaulted off on a settings read error. nil is a marker written before
-	// the field existed: a failed drain there is treated as window-open.
+	// RunMemoryWindowOpen is read, never written: a marker written by a
+	// build before 2026-11-13 stamped whether the run-memory window of the
+	// deleted tape.group_commit setting was open when its drain failed. The
+	// one boot that follows such a marker still closes its runs rather than
+	// resume them on a log that may lack its newest messages.
 	RunMemoryWindowOpen *bool `json:"run_memory_window_open,omitempty"`
 }
 
@@ -480,12 +479,8 @@ func (rt *Runtime) markPlannedRestart(reason, target string) (func(applyErr erro
 	// normally means the queue was empty when the restart began and the one
 	// resume starts on a tape with no telemetry gap. New telemetry takes the
 	// acknowledged path until then. A failed drain is recorded, not fatal.
-	wasOpen := rt != nil && rt.store != nil && rt.store.TapeGroupCommitOn()
 	drainFailed, restoreTelemetry := rt.drainTelemetryForRestart()
-	// A run damaged in this process is a failed drain for the boot: it must
-	// close runs, not park a damaged one as a seed.
-	drainFailed = drainFailed || (rt != nil && rt.store != nil && rt.store.AnyRunMemoryDamaged())
-	if err := WritePlannedRestartMarker(storePath, PlannedRestart{Reason: reason, Target: target, TelemetryDrainFailed: drainFailed, RunMemoryWindowOpen: rt.runMemoryWindowStamp(wasOpen, drainFailed)}); err != nil {
+	if err := WritePlannedRestartMarker(storePath, PlannedRestart{Reason: reason, Target: target, TelemetryDrainFailed: drainFailed}); err != nil {
 		// Without the marker the restart reads as a crash and pending work is
 		// interrupted, which is safe; the apply itself proceeds.
 		log.Printf("runtime: %v (restart will be treated as a crash)", err)
@@ -875,4 +870,21 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 	}
 	log.Printf("runtime: host requested a planned restart (%s %s; allow_busy=%v, interrupting %d running run(s))", marker.Reason, marker.Target, allowBusy, work.Running)
 	writeAPIJSON(w, http.StatusOK, plannedRestartWrittenResponse{PlannedRestart: marker, InterruptedRunningRuns: work.Running})
+}
+
+// bootResumesWork reports whether this boot parks pre-boot runs for their one
+// resume: a planned restart, except one whose marker a pre-2026-11-13 build
+// wrote with a failed telemetry drain under an open run-memory window. Then a
+// run's memory may have lost its tail, so no run resumes on it: the runs are
+// closed as after a crash.
+func (rt *Runtime) bootResumesWork() bool {
+	marker, planned := rt.BootWasPlannedRestart()
+	if !planned {
+		return false
+	}
+	if marker.TelemetryDrainFailed && marker.RunMemoryWindowOpen != nil && *marker.RunMemoryWindowOpen {
+		log.Printf("runtime: planned restart whose telemetry drain failed, with the run-memory window open at drain time: closing pre-boot runs as after a crash")
+		return false
+	}
+	return true
 }

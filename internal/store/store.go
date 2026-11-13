@@ -223,11 +223,8 @@ type Store struct {
 	// on in this process (telemetry_sealer.go).
 	telemetryStats telemetryCounters
 	telemetry      atomic.Pointer[telemetrySealer]
-	// tapeGroup is tape.group_commit's state (tape_group_commit.go).
+	// tapeGroup is the coalescing state of queued tape writers (tape_group_commit.go).
 	tapeGroup groupCommit
-	// runMem is the run-memory window's tail cache and damage set
-	// (run_memory_batch.go).
-	runMem runMemoryState
 	// eventTableWrites is store.event_table as the runtime applied it: the
 	// writer stamps the storage class's ops for choir_events (event_table.go).
 	eventTableWrites atomic.Bool
