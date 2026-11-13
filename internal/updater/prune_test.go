@@ -711,7 +711,9 @@ func TestUpdaterRootIsBoundedOverManyApplies(t *testing.T) {
 	}
 	baseManifestPath, bootedDigest := layeredTestBase(t)
 	u, root, _ := newApplyRig(t, baseManifestPath)
-	dirPaths, err := MaterializeClosure(dirBlob, filepath.Join(t.TempDir(), "probe-store"))
+	probeStore := filepath.Join(t.TempDir(), "probe-store")
+	t.Cleanup(func() { makeTreeWritable(probeStore) })
+	dirPaths, err := MaterializeClosure(dirBlob, probeStore)
 	if err != nil || len(dirPaths) != 1 {
 		t.Fatalf("dir fixture: %v %v", dirPaths, err)
 	}
@@ -771,7 +773,9 @@ func TestRollbackStillWorksAfterThePrune(t *testing.T) {
 	}
 	baseManifestPath, bootedDigest := layeredTestBase(t)
 	u, root, prober := newApplyRig(t, baseManifestPath)
-	dirPaths, err := MaterializeClosure(dirBlob, filepath.Join(t.TempDir(), "probe-store"))
+	probeStore := filepath.Join(t.TempDir(), "probe-store")
+	t.Cleanup(func() { makeTreeWritable(probeStore) })
+	dirPaths, err := MaterializeClosure(dirBlob, probeStore)
 	if err != nil || len(dirPaths) != 1 {
 		t.Fatalf("dir fixture: %v %v", dirPaths, err)
 	}
