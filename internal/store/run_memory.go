@@ -204,11 +204,16 @@ func (s *Store) AppendRunMemoryEntries(ctx context.Context, entries []types.RunM
 // Writers of other runs that wait behind the in-flight append share an event
 // with this one (tape_group_commit.go).
 func (s *Store) appendRunMemoryTapeLocked(ctx context.Context, runID string, items []normalizedRunMemory) ([]types.RunMemoryEntry, error) {
-	// An earlier append of this run whose outcome was unclear left a prepared
-	// row: settle it first, or its entries are missing from the table this
-	// write numbers itself from, and the finalize fails on (run, seq).
-	if err := s.projectionTape.appender.SettlePrepared(ctx); err != nil {
-		return nil, fmt.Errorf("settle prepared run memory append: %w", err)
+	// An earlier run-memory append that failed may have left a prepared row (an
+	// unclear CAS keeps it): settle it before numbering from the table, or this
+	// write reuses its (run, seq) and the finalize fails on the unique key. The
+	// settle takes the appender mutex, so it runs only after a failure: a
+	// run-memory writer must queue behind the append in flight like any other.
+	if s.runMemorySettle.Swap(false) {
+		if err := s.projectionTape.appender.SettlePrepared(ctx); err != nil {
+			s.runMemorySettle.Store(true)
+			return nil, fmt.Errorf("settle prepared run memory append: %w", err)
+		}
 	}
 	var tail runMemoryTail
 	haveTail := false
@@ -253,6 +258,7 @@ func (s *Store) appendRunMemoryTapeLocked(ctx context.Context, runID string, ite
 		// one exemption from the telemetry append barrier (design 4.3). A
 		// source-scan test allows exactly three WithBarrierExemption callers.
 		if err := s.projectionTape.appendOps(computerevent.WithBarrierExemption(ctx), acked); err != nil {
+			s.runMemorySettle.Store(true)
 			return nil, fmt.Errorf("append projected run memory entry: %w", err)
 		}
 	}
