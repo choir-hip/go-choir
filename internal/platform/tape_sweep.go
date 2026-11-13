@@ -336,6 +336,8 @@ type tapeSweepState struct {
 	schedMaxDeletes int
 	schedMaxBytes   int64
 	schedMaxRounds  int
+	// schedAfterDry runs after each scheduled dry run (test-only).
+	schedAfterDry func()
 }
 
 // SetTapeSweepPolicy records the configured policy.
