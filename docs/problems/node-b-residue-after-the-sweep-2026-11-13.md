@@ -66,3 +66,37 @@ not yet identified.
 
 Next: a `data_volume` section in guest observability (statfs and allocated
 bytes per top-level directory), then prune what it names.
+
+## Host survey, 2026-11-14T00:10Z (read-only)
+
+A second pass over every directory above 0.2 GiB found no unaccounted
+consumer on the host. Corrections and additions to the survey above:
+
+- `vm-state/candidate-fleet-bf04…` (19.2 GiB logical) is not a candidate: it
+  is b@c's VM directory under an old id scheme, registered and hibernated.
+  `candidate-fleet-e15cb…` is the owner's computer, active. Nothing creates
+  or reaps `candidate-fleet-*` as a class. A third such id in
+  `ownerships.json` has no directory (a dangling record).
+- `btrfs filesystem du` reports logical bytes. Per-path sums come to about
+  367 GiB against 305.7 GiB of data used; the gap is zstd compression and
+  links shared between `/nix`, the guest release store and the jails.
+- The nix store is bounded: two system generations, a collector every four
+  hours (9.3 GiB freed at 20:40Z). The "9.9 GiB in a day" was the gap
+  between collections.
+- The file-chunk collector is working: 10,193, 10,686 and 12,868 objects
+  deleted in three hourly runs (7.2 to 8.5 GB each), `in_grace` at 0.
+- Receipts: 28 GB, 12.6 M live rows, 2.8% dead, so the size is live rows,
+  not bloat. Five indexes total 10 GB; `receipt_id_idx` (2.3 GB) has 2,198
+  scans in its lifetime and its reader is not identified.
+- Unbounded and small: `artifact-gc-log` (1.5 GiB: applied sweep manifests
+  and compressed day logs nothing prunes), `tape_sweep_ref_chunks`
+  (935 MB of sweep resume state), `taperepack-work` (1.8 GiB from a one-time
+  run on 11-01, referenced by no unit).
+- Needing an owner decision: four tape directories (5.5 GiB) of computers
+  with no ownership record that the sweep skips as registered or routed;
+  three hibernated test-class VM directories (5.6 GiB) the retention prune
+  has not removed, cause not established.
+
+The two largest controllable items are live and inside the paper: its guest
+store (docs/problems/the-papers-store-doubles-in-eleven-days-2026-11-13.md)
+and its tape.
