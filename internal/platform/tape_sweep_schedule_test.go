@@ -301,7 +301,7 @@ func TestTapeSweepSchedulerRetriesBusyAndErrorPasses(t *testing.T) {
 func TestScheduledTapeSweepApplyErrorsAreNotDone(t *testing.T) {
 	f := newTapeFixture(t)
 	f.scheduleOpts(true)
-	blocker := filepath.Join(f.root, "not-a-dir")
+	blocker := filepath.Join(filepath.Dir(f.root), "not-a-dir")
 	if err := os.WriteFile(blocker, []byte("x"), 0o640); err != nil {
 		t.Fatal(err)
 	}

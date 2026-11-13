@@ -25,10 +25,12 @@ import (
 // classifies and reports, active also applies.
 //
 // Two things the pass does not do, on purpose:
-//   - it never acknowledges unrecorded fork lineage. The destroyed proof lists
-//     nothing without that acknowledgement, so until a lineage record exists
-//     or the owner rules, a pass reports the computers it leaves
-//     (blocked_by_fork_lineage) and applies nothing;
+//   - it never acknowledges unrecorded fork lineage. Without that
+//     acknowledgement the dry run lists no destroyed computer, and apply
+//     refuses every computer whatever a lineage record would say. So today the
+//     schedule REPORTS ONLY: a pass logs outcome=blocked_by_fork_lineage and
+//     deletes nothing, until the owner rules on where the acknowledgement
+//     comes from (this file adds no source for it);
 //   - it never passes no_archive. A destroyed computer's files are archived
 //     on Node B (decision D1) before any unlink.
 //
@@ -63,11 +65,17 @@ const (
 	TapeSweepPassNothing    = "nothing"
 	TapeSweepPassDryRunOnly = "dry_run_only"
 	TapeSweepPassDone       = "done"
+	// TapeSweepPassSkipped: computers were listed but apply deleted nothing
+	// and skipped them (a refusal or a re-proof failure). Not "done".
+	TapeSweepPassSkipped    = "skipped_by_apply"
 	TapeSweepPassStalled    = "stalled"
 	TapeSweepPassRoundLimit = "round_limit"
 )
 
-// TapeSweepPassResult is what one scheduled pass did, summed over its rounds.
+// TapeSweepPassResult is what one scheduled pass did. Deleted, Bytes, Errors,
+// the computer counts, Warnings and Archives are summed over its rounds;
+// Computers, DestroyedFound, Listed and BlockedByLineage are the last round's
+// (DeferredByCap is the last apply's).
 type TapeSweepPassResult struct {
 	Outcome          string
 	Mode             string
@@ -101,12 +109,11 @@ func (s *Service) RunScheduledTapeSweep(ctx context.Context) TapeSweepPassResult
 }
 
 func (s *Service) runScheduledTapeSweep(ctx context.Context) TapeSweepPassResult {
+	if s == nil || s.store == nil || s.artifactsRoot == "" {
+		return TapeSweepPassResult{Outcome: TapeSweepPassError, Err: "platform store and artifacts root are required"}
+	}
 	policy, _ := s.tapeSweepPolicy()
 	res := TapeSweepPassResult{Mode: policy.Mode}
-	if s == nil || s.store == nil || s.artifactsRoot == "" {
-		res.Outcome, res.Err = TapeSweepPassError, "platform store and artifacts root are required"
-		return res
-	}
 	if policy.Mode == ArtifactGCModeOff {
 		res.Outcome = TapeSweepPassOff
 		return res
@@ -116,6 +123,7 @@ func (s *Service) runScheduledTapeSweep(ctx context.Context) TapeSweepPassResult
 		return res
 	}
 	defer s.tapeSweep.passMu.Unlock()
+	s.removeUnsealedTapeArchives(policy.ArchiveDir, time.Now())
 
 	s.tapeSweep.mu.Lock()
 	ack, maxDeletes, maxBytes, maxRounds := s.tapeSweep.schedForkAck, s.tapeSweep.schedMaxDeletes, s.tapeSweep.schedMaxBytes, s.tapeSweep.schedMaxRounds
@@ -141,6 +149,9 @@ func (s *Service) runScheduledTapeSweep(ctx context.Context) TapeSweepPassResult
 			return fail(err)
 		}
 		res.RunIDs = append(res.RunIDs, dry.RunID)
+		if hook := s.tapeSweep.schedAfterDry; hook != nil {
+			hook()
+		}
 		res.Computers, res.DestroyedFound = dry.Computers, dry.DestroyedComputers
 		res.Listed, res.BlockedByLineage = dry.DestroyedListed, dry.DestroyedBlockedByLineage
 		res.Warnings += len(dry.Warnings)
@@ -183,11 +194,22 @@ func (s *Service) runScheduledTapeSweep(ctx context.Context) TapeSweepPassResult
 			res.Outcome, res.Refused = TapeSweepPassRefused, applied.DestroyedRefused
 			return res
 		}
-		if res.DeferredByCap == 0 {
-			res.Outcome = TapeSweepPassDone
+		// Errors first: an apply that hit errors is never "done", whatever
+		// the cap says; it is retried at the retry interval.
+		if applied.Apply == nil || applied.Apply.Errors > 0 {
+			res.Outcome = TapeSweepPassError
+			res.Err = "apply reported errors; see the sweep log"
 			return res
 		}
-		if applied.Apply == nil || applied.Apply.Deleted == 0 || applied.Apply.Errors > 0 {
+		if res.DeferredByCap == 0 {
+			if res.Deleted == 0 && res.ComputersSkipped > 0 {
+				res.Outcome = TapeSweepPassSkipped
+			} else {
+				res.Outcome = TapeSweepPassDone
+			}
+			return res
+		}
+		if applied.Apply.Deleted == 0 {
 			res.Outcome = TapeSweepPassStalled
 			return res
 		}
@@ -250,22 +272,87 @@ func (s *Service) afterTapeSweepPass(res TapeSweepPassResult, now time.Time) tim
 	return TapeSweepScheduleInterval
 }
 
+// removeUnsealedTapeArchives removes what a killed apply left in the archive
+// directory: a .tar.zst with no .json sidecar, and a stray .tmp, each older
+// than an hour. They are removed, not kept, because apply unlinks nothing
+// before the sidecar of a verified archive exists, so such a file backs no
+// deletion: every file it holds is still on disk and the next dry run lists
+// it again. The age bound and the no-run-in-progress check keep a hand job's
+// archive in the middle of being written.
+func (s *Service) removeUnsealedTapeArchives(dir string, now time.Time) {
+	s.tapeSweep.mu.Lock()
+	running := s.tapeSweep.running
+	s.tapeSweep.mu.Unlock()
+	if running || strings.TrimSpace(dir) == "" {
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if !e.Type().IsRegular() {
+			continue
+		}
+		stray := strings.HasSuffix(name, ".tar.zst.tmp")
+		if !stray && strings.HasSuffix(name, ".tar.zst") {
+			_, serr := os.Stat(filepath.Join(dir, name+".json"))
+			stray = os.IsNotExist(serr)
+		}
+		if !stray {
+			continue
+		}
+		if info, err := e.Info(); err != nil || now.Sub(info.ModTime()) < time.Hour {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, name)); err == nil {
+			log.Printf("tape sweep schedule: removed unsealed archive %s (no sidecar; nothing was deleted on its strength)", name)
+		}
+	}
+}
+
 // TapeSweepScheduler runs the pass on its cadence beside the GC runner.
-type TapeSweepScheduler struct{ service *Service }
+type TapeSweepScheduler struct {
+	service *Service
+	// first is the wait before the first pass; next is the wait after a pass.
+	// Production reads the cadence state file; tests inject short waits.
+	first func() time.Duration
+	next  func(TapeSweepPassResult) time.Duration
+	// afterPass, when set, sees each finished pass (tests).
+	afterPass func(TapeSweepPassResult)
+	done      chan struct{}
+}
 
 // NewTapeSweepScheduler returns the scheduler for the service.
 func NewTapeSweepScheduler(service *Service) *TapeSweepScheduler {
-	return &TapeSweepScheduler{service: service}
+	r := &TapeSweepScheduler{service: service}
+	if service != nil {
+		r.first = func() time.Duration { return service.tapeSweepScheduleDelay(time.Now()) }
+		r.next = func(res TapeSweepPassResult) time.Duration { return service.afterTapeSweepPass(res, time.Now()) }
+	}
+	return r
 }
 
-// Start runs passes until ctx is done. There is no setting: the mode the
-// sweep already has decides what a pass may do.
+// Start runs passes until ctx is done; Wait returns once the loop and any
+// running pass have ended. There is no setting: the mode the sweep already
+// has decides what a pass may do, and mode off does not start the loop.
 func (r *TapeSweepScheduler) Start(ctx context.Context) {
-	if r == nil || r.service == nil {
+	if r == nil {
+		return
+	}
+	r.done = make(chan struct{})
+	policy := TapeSweepPolicy{}
+	if r.service != nil {
+		policy, _ = r.service.tapeSweepPolicy()
+	}
+	if r.service == nil || r.first == nil || r.next == nil || policy.Mode == ArtifactGCModeOff {
+		close(r.done)
 		return
 	}
 	go func() {
-		timer := time.NewTimer(r.service.tapeSweepScheduleDelay(time.Now()))
+		defer close(r.done)
+		timer := time.NewTimer(r.first())
 		defer timer.Stop()
 		for {
 			select {
@@ -273,8 +360,25 @@ func (r *TapeSweepScheduler) Start(ctx context.Context) {
 				return
 			case <-timer.C:
 				res := r.service.RunScheduledTapeSweep(ctx)
-				timer.Reset(r.service.afterTapeSweepPass(res, time.Now()))
+				if r.afterPass != nil {
+					r.afterPass(res)
+				}
+				timer.Reset(r.next(res))
 			}
 		}
 	}()
+}
+
+// Wait blocks until the scheduler has stopped, or ctx is done. A scheduler
+// that was never started has stopped.
+func (r *TapeSweepScheduler) Wait(ctx context.Context) error {
+	if r == nil || r.done == nil {
+		return nil
+	}
+	select {
+	case <-r.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }

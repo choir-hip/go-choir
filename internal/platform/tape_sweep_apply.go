@@ -103,6 +103,10 @@ type tapeSweepApplyRun struct {
 	counts     *TapeSweepApplyCounts
 	deletes    int
 	bytes      int64
+	// onBatch, when set, runs after each batch of unlinks with that batch's
+	// deleted files and bytes (the destroyed apply persists its tombstone
+	// counts there, so a killed apply leaves a truthful tombstone).
+	onBatch func(deleted int, bytes int64)
 }
 
 func sha256File(path string) (string, error) {
@@ -440,6 +444,12 @@ func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run 
 	if !run.p.destroyed {
 		return nil
 	}
+	// A cap already spent: do not tombstone or archive a computer nothing can
+	// be deleted from this run. The next dry run lists it again.
+	if len(items) > 0 && (run.deletes >= run.p.maxDeletes || run.bytes >= run.p.maxBytes) {
+		run.counts.DeferredByCap += len(items)
+		return nil
+	}
 	id := proof.ComputerID
 	existing, hasTomb, err := s.store.TapeTombstone(ctx, id)
 	if err != nil {
@@ -515,9 +525,18 @@ func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run 
 		return err
 	}
 
+	baseFiles, baseBytes, batchFiles, batchBytes := tomb.FilesDeleted, tomb.BytesDeleted, int64(0), int64(0)
+	run.onBatch = func(n int, b int64) {
+		batchFiles += int64(n)
+		batchBytes += b
+		tomb.FilesDeleted, tomb.BytesDeleted = baseFiles+batchFiles, baseBytes+batchBytes
+		if perr := s.store.putTapeTombstone(context.WithoutCancel(ctx), tomb); perr != nil {
+			log.Printf("tape sweep: computer=%s tombstone counts: %v", id, perr)
+		}
+	}
 	deleted, bytesDeleted, complete, err := s.deleteTapeItems(ctx, run, items)
-	tomb.FilesDeleted += int64(deleted)
-	tomb.BytesDeleted += bytesDeleted
+	run.onBatch = nil
+	tomb.FilesDeleted, tomb.BytesDeleted = baseFiles+int64(deleted), baseBytes+bytesDeleted
 	// Directories, then every row (escrow last, in the same transaction):
 	// only when every listed file is gone.
 	if complete && err == nil {
@@ -626,6 +645,7 @@ func (s *Service) deleteTapeItems(ctx context.Context, run *tapeSweepApplyRun, i
 		if err := run.log.flush(); err != nil {
 			return deleted, bytesDeleted, false, fmt.Errorf("tape sweep: deletion log write failed, batch not deleted: %w", err)
 		}
+		batchDeleted, batchBytesDeleted := deleted, bytesDeleted
 		for _, it := range batch {
 			if hook := s.tapeSweep.beforeDelete; hook != nil {
 				hook(it)
@@ -652,6 +672,9 @@ func (s *Service) deleteTapeItems(ctx context.Context, run *tapeSweepApplyRun, i
 				}
 			}
 			run.log.item(op, it, size, errText)
+		}
+		if run.onBatch != nil && deleted > batchDeleted {
+			run.onBatch(deleted-batchDeleted, bytesDeleted-batchBytesDeleted)
 		}
 		if err := run.log.flush(); err != nil {
 			return deleted, bytesDeleted, false, fmt.Errorf("tape sweep: deletion log write failed: %w", err)
