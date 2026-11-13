@@ -48,6 +48,7 @@ BEDROCK_DAILY_LIMIT = 20.0   # flag line for the projected day, USD
 RIVER_DAILY_LIMIT = 1.0      # flag line for River today, USD
 DEVIN_SHARE_MIN = 0.5
 PAID_SEARCH = ("tavily", "brave", "parallel", "serper", "serpapi")   # the paid search providers
+SEARCH_ZERO_SHARE = 0.05     # flag when more than this share of requests got no provider (Keenable, uncapped, answers nearly all; a few time out)
 SEARCH_QUOTA_SHARE = 0.8     # flag when every paid provider is quota_limited in more lines than this
 PUBLISHING_WINDOW_MIN = 20
 
@@ -225,7 +226,7 @@ def compute(raw):
     if pc and pc["trips"] > 0:
         f.append("pacer tripped %d times in hour %s" % (pc["trips"], pc["hour"]))
     sr = rep["search"]
-    if sr["zero"]:
+    if sr["requests"] and sr["zero"] > SEARCH_ZERO_SHARE * sr["requests"]:
         f.append("search: %d of %d requests answered by 0 providers" % (sr["zero"], sr["requests"]))
     if sr["requests"] and all(sr["by"].get(n, {}).get("quota_limited", 0) > SEARCH_QUOTA_SHARE * sr["requests"]
                               for n in PAID_SEARCH):
