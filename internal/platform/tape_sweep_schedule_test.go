@@ -30,7 +30,7 @@ func (f *tapeFixture) scheduleOpts(ack bool) {
 	f.svc.tapeSweep.mu.Unlock()
 }
 
-func captureLog(t *testing.T) *bytes.Buffer {
+func captureScheduleLog(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
 	var mu sync.Mutex
@@ -103,7 +103,7 @@ func TestScheduledTapeSweepRepeatsWhileCapped(t *testing.T) {
 	if res.Outcome != TapeSweepPassDone || res.Deleted != 12 || res.Rounds != 3 || res.ComputersDeleted != 1 {
 		t.Fatalf("pass = %+v", res)
 	}
-	f.allExist(dead, true == false)
+	f.allExist(dead, false)
 }
 
 // F2: a pass that deletes nothing while capped does not loop for ever.
@@ -228,7 +228,7 @@ func TestScheduledTapeSweepLogsOneLinePerPass(t *testing.T) {
 	f := newTapeFixture(t)
 	f.scheduleOpts(true)
 	f.chain("dead-1", 1, tapeAged)
-	buf := captureLog(t)
+	buf := captureScheduleLog(t)
 	f.svc.RunScheduledTapeSweep(f.ctx)
 	var lines []string
 	for _, l := range strings.Split(buf.String(), "\n") {

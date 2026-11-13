@@ -94,8 +94,9 @@ func main() {
 	svc.SetArtifactGCPolicy(gcPolicy)
 	platform.NewGCRunner(svc, gcPolicy, gcInterval).Start(context.Background())
 	// Tape sweep (orphan pins, destroyed computers' tapes): dry-run unless
-	// PLATFORM_TAPE_SWEEP_MODE=active; on demand only, at
-	// /internal/platform/artifact-gc/tape. The destroyed proof needs vmctl.
+	// PLATFORM_TAPE_SWEEP_MODE=active; on demand at
+	// /internal/platform/artifact-gc/tape and, for destroyed computers, daily.
+	// The destroyed proof needs vmctl.
 	svc.SetTapeSweepPolicy(platform.TapeSweepPolicy{Mode: cfg.TapeSweepMode, ArchiveDir: cfg.TapeSweepArchiveDir})
 	// Tape segments (stage A2): off unless PLATFORM_TAPE_SEGMENTS=write. The
 	// read path is segment first, legacy second whatever this says.
@@ -125,6 +126,11 @@ func main() {
 			log.Fatalf("corpusd guest binding: %v", err)
 		}
 	}
+	// The destroyed-computer tape sweep on its own, daily, beside the hourly
+	// artifact collector (station S7). No setting: it follows
+	// PLATFORM_TAPE_SWEEP_MODE as the route does, never acknowledges
+	// unrecorded fork lineage and never passes no_archive.
+	platform.NewTapeSweepScheduler(svc).Start(context.Background())
 	eventCAS, eventArtifacts, eventAuth, err := svc.ComputerEventRuntime()
 	if err != nil {
 		log.Fatalf("corpusd computer event runtime: %v", err)

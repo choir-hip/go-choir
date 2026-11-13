@@ -143,7 +143,12 @@ type TapeSweepRequest struct {
 	// computer's file is listed or deleted.
 	AcceptUnrecordedForkLineage bool `json:"accept_unrecorded_fork_lineage,omitempty"`
 	// NoArchive skips the archive of a destroyed computer's files and rows
-	// (test computers). The default is to archive. The dry-run records it in
+	// (test computers). It does not cover the orphan sweep: applyOrphans
+	// always archives the pins it deletes, so an apply that includes orphans
+	// writes a small archive under tape-sweep-archive whatever this says. The
+	// archive is local (decision D1: no tape leaves Node B). The scheduled
+	// pass runs the destroyed sweep only and never sets this. The default is
+	// to archive. The dry-run records it in
 	// the manifest and apply must repeat it exactly.
 	NoArchive      bool   `json:"no_archive,omitempty"`
 	RunID          string `json:"run_id,omitempty"`
@@ -319,6 +324,18 @@ type tapeSweepState struct {
 	// route is called and never written in production, so it is read without
 	// the sweep lock.
 	extraRefsMax int
+	// passMu makes a scheduled pass (a dry run and the apply of its manifest,
+	// repeated) one unit: a second schedule in the process never starts
+	// while one holds it. A hand-started job is stopped by running instead.
+	passMu sync.Mutex
+	// schedForkAck, schedMaxDeletes, schedMaxBytes and schedMaxRounds are
+	// test-only overrides of the scheduled pass (see tape_sweep_schedule.go).
+	// Production never sets them: the schedule never acknowledges unrecorded
+	// fork lineage, and uses the sweep's own caps and a fixed round bound.
+	schedForkAck    bool
+	schedMaxDeletes int
+	schedMaxBytes   int64
+	schedMaxRounds  int
 }
 
 // SetTapeSweepPolicy records the configured policy.
