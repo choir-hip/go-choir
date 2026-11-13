@@ -204,6 +204,12 @@ func (s *Store) AppendRunMemoryEntries(ctx context.Context, entries []types.RunM
 // Writers of other runs that wait behind the in-flight append share an event
 // with this one (tape_group_commit.go).
 func (s *Store) appendRunMemoryTapeLocked(ctx context.Context, runID string, items []normalizedRunMemory) ([]types.RunMemoryEntry, error) {
+	// An earlier append of this run whose outcome was unclear left a prepared
+	// row: settle it first, or its entries are missing from the table this
+	// write numbers itself from, and the finalize fails on (run, seq).
+	if err := s.projectionTape.appender.SettlePrepared(ctx); err != nil {
+		return nil, fmt.Errorf("settle prepared run memory append: %w", err)
+	}
 	var tail runMemoryTail
 	haveTail := false
 	acked := make([]computerevent.ProjectionOp, 0, len(items))
