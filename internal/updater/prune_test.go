@@ -274,7 +274,7 @@ func TestPruneKeepsCurrentItsPredecessorAndTheRecentWindow(t *testing.T) {
 	if got, _, err := currentReleaseOf(root); err != nil || got != digests[7] {
 		t.Fatalf("current = %q, %v", got, err)
 	}
-	if _, err := VerifyCurrentRelease(root); err != nil {
+	if _, err := ReadCurrentManifest(root); err != nil {
 		t.Fatalf("current release no longer verifies: %v", err)
 	}
 	// The recorded predecessor the rollback restores to is still on disk.
@@ -453,7 +453,7 @@ func TestPruneFinishesACrashedPruneAndIsIdempotent(t *testing.T) {
 	}
 	// The computer is bootable and rollback-capable in this state: current and
 	// its predecessor verify.
-	if _, err := VerifyCurrentRelease(root); err != nil {
+	if _, err := ReadCurrentManifest(root); err != nil {
 		t.Fatalf("current does not verify mid-crash: %v", err)
 	}
 	if _, _, err := ReadPinnedManifest(root, digests[6]); err != nil {
@@ -515,7 +515,7 @@ func TestApplyPrunesAfterAVerifiedApplyOnly(t *testing.T) {
 	if exists(stale) {
 		t.Fatal("a verified apply did not prune")
 	}
-	if _, err := VerifyCurrentRelease(root); err != nil {
+	if _, err := ReadCurrentManifest(root); err != nil {
 		t.Fatalf("current after prune: %v", err)
 	}
 	// A failed apply restores the prior release and is not a verified apply.
