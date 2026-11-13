@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"errors"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -11,18 +10,20 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
-// Tape group commit (docs/design/tape-group-commit-2026-10-31.md). With the
-// computer setting tape.group_commit on, acknowledged projection writes whose
-// ops are all unconditional upserts share one projection_batch_recorded tape
-// event with the writes that arrived while an earlier one was being
-// committed, and with the telemetry the sealer still holds. Every member
-// returns only after the shared event's CAS and local finalize: no
-// acknowledged write is answered before it is durable.
+// Coalescing of queued tape writers (owner ruling D8, 2026-11-12; first built
+// as docs/design/tape-group-commit-2026-10-31.md). Acknowledged projection
+// writes whose ops are all unconditional upserts share one
+// projection_batch_recorded tape event with the writes that were already
+// waiting behind the append in flight, and with the telemetry the sealer still
+// holds. Every member returns only after the shared event's CAS and local
+// finalize: no acknowledged write is answered before it is durable. There is
+// no setting: the old tape.group_commit and its two loss windows (a 10 s
+// telemetry stretch, run-memory messages queued with telemetry) are deleted.
 //
-// Leader and followers, no timer: a lone writer commits at once, as before.
-// Lock order is flushMu (the sealer's) -> appender mutex, the same order the
-// sealer's own flush uses; the leader appends with the barrier exemption
-// because it has itself done what the barrier does.
+// Leader and followers, no timer: a lone writer commits at once. Lock order
+// is flushMu (the sealer's) -> appender mutex, the same order the sealer's own
+// flush uses; the leader appends with the barrier exemption because it has
+// itself done what the barrier does.
 
 const (
 	// groupMaxOps and groupMaxBytes cap the members' part of one group; one
@@ -31,16 +32,10 @@ const (
 	groupMaxBytes = 1 << 20
 	// groupCommitTimeout bounds one shared append, like the sealer's.
 	groupCommitTimeout = 30 * time.Second
-	// telemetryGroupWindow is the sealer's window while group commit is on:
-	// telemetry rides the next acknowledged write, so the window only matters
-	// when no acknowledged write comes for that long.
-	telemetryGroupWindow = 10 * time.Second
 )
 
-// groupCommit is the per-store group state. The zero value is off.
+// groupCommit is the per-store group state; the zero value is ready.
 type groupCommit struct {
-	on atomic.Bool
-
 	mu      sync.Mutex // leaf: protects pending
 	pending []*groupMember
 
@@ -53,7 +48,6 @@ type groupCommit struct {
 	membersHist     [opsHistogramBuckets]atomic.Int64
 	telemetryRidden atomic.Int64
 	refusedSplits   atomic.Int64
-	offSealFailures atomic.Int64
 	unknownOutcome  atomic.Int64
 	cancelled       atomic.Int64
 	waitNanosTotal  atomic.Int64
@@ -73,41 +67,6 @@ func (g *groupCommit) leaderToken() chan struct{} {
 	g.once.Do(func() { g.token = make(chan struct{}, 1) })
 	return g.token
 }
-
-// SetTapeGroupCommit turns group commit on or off at once. Off sends every
-// later write down the direct path; a group already being committed finishes.
-func (s *Store) SetTapeGroupCommit(on bool) {
-	if s == nil {
-		return
-	}
-	if s.tapeGroup.on.Swap(on) != on {
-		// The run-memory tail cache is kept only while on; a stretch off
-		// wrote entries it did not see (run_memory_batch.go).
-		s.runMem.mu.Lock()
-		s.runMem.tails = nil
-		s.runMem.mu.Unlock()
-		if !on {
-			// Off must stop the lossy window now: seal what is queued (the
-			// records keep their 10 s deadline otherwise).
-			if sl := s.telemetry.Load(); sl != nil {
-				before := s.telemetryStats.recordsDropped.Load()
-				sl.barrier(sealBarrier)
-				if lost := s.telemetryStats.recordsDropped.Load() - before; lost > 0 {
-					s.tapeGroup.offSealFailures.Add(1)
-					log.Printf("store: tape.group_commit off: sealing the queue lost %d record(s); their runs are marked damaged", lost)
-				}
-				sl.mu.Lock()
-				if len(sl.queue) > 0 && !sl.stopped {
-					sl.armTimerLocked()
-				}
-				sl.mu.Unlock()
-			}
-		}
-	}
-}
-
-// TapeGroupCommitOn reports whether acknowledged writes are being grouped.
-func (s *Store) TapeGroupCommitOn() bool { return s != nil && s.tapeGroup.on.Load() }
 
 // groupableOps reports whether every op is an unconditional upsert by key:
 // only those can share an event without one member's guard failing another
@@ -212,10 +171,17 @@ func (t *projectionTape) leadGroup() {
 		memberOps = append(memberOps, m.ops...)
 	}
 	commit := func(teleOps []computerevent.ProjectionOp) error {
-		all := make([]computerevent.ProjectionOp, 0, len(teleOps)+len(memberOps))
-		all = append(all, teleOps...)
-		all = append(all, memberOps...)
-		return t.appendDirect(ctx, all, projectionAuthority)
+		// One event, ops in arrival order: the riding telemetry first, then
+		// each member's ops. The parts keep the writers apart for the counters
+		// (a mixed event is counted per member family, tape_write_counters.go).
+		parts := make([][]computerevent.ProjectionOp, 0, len(members)+1)
+		if len(teleOps) > 0 {
+			parts = append(parts, teleOps)
+		}
+		for _, m := range members {
+			parts = append(parts, m.ops)
+		}
+		return t.appendDirectParts(ctx, parts, projectionAuthority, len(teleOps) > 0)
 	}
 	var err error
 	ridden := 0
@@ -333,7 +299,6 @@ func (sl *telemetrySealer) sealRiding(commit func(teleOps []computerevent.Projec
 		stats.sealFailures.Add(1)
 		stats.unknownOutcomeLoss.Add(int64(len(ride)))
 		stats.recordsDropped.Add(int64(len(ride)))
-		sl.noteDropped(ride...)
 		sl.logFailure("riding seal failed, outcome unknown, not retried", err)
 	}
 	return len(ride), err
@@ -352,7 +317,6 @@ func (sl *telemetrySealer) finishInflight(chunk []telemetryRecord) {
 
 // GroupCommitStats is the group-commit part of the observability snapshot.
 type GroupCommitStats struct {
-	Enabled         bool             `json:"enabled"`
 	Groups          int64            `json:"groups"`
 	Members         int64            `json:"members"`
 	Ops             int64            `json:"ops"`
@@ -360,7 +324,6 @@ type GroupCommitStats struct {
 	MeanMembers     float64          `json:"mean_members_per_group"`
 	TelemetryRidden int64            `json:"telemetry_ridden"`
 	RefusedSplits   int64            `json:"refused_splits"`
-	OffSealFailures int64            `json:"off_seal_failures"`
 	UnknownOutcome  int64            `json:"unknown_outcome"`
 	Cancelled       int64            `json:"cancelled"`
 	WaitMeanMS      float64          `json:"wait_ms_mean"`
@@ -370,14 +333,12 @@ type GroupCommitStats struct {
 func (s *Store) groupCommitStats() GroupCommitStats {
 	g := &s.tapeGroup
 	out := GroupCommitStats{
-		Enabled:         g.on.Load(),
 		Groups:          g.groups.Load(),
 		Members:         g.members.Load(),
 		Ops:             g.ops.Load(),
 		MembersPerGroup: map[string]int64{},
 		TelemetryRidden: g.telemetryRidden.Load(),
 		RefusedSplits:   g.refusedSplits.Load(),
-		OffSealFailures: g.offSealFailures.Load(),
 		UnknownOutcome:  g.unknownOutcome.Load(),
 		Cancelled:       g.cancelled.Load(),
 		WaitMaxMS:       float64(g.waitNanosMax.Load()) / 1e6,

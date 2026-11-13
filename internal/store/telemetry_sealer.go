@@ -51,10 +51,8 @@ const (
 
 	telemetryDefaultWindow = time.Second
 	telemetryMinWindow     = 250 * time.Millisecond
-	// telemetryMaxWindow stays 2 s; the 10 s deadline of tape.group_commit
-	// is telemetryGroupWindow, applied only while that setting is on.
-	telemetryMaxWindow   = 2 * time.Second
-	telemetrySealTimeout = 30 * time.Second
+	telemetryMaxWindow     = 2 * time.Second
+	telemetrySealTimeout   = 30 * time.Second
 )
 
 // TelemetryBatchConfig is the sealer's runtime configuration.
@@ -105,9 +103,6 @@ type telemetryRecord struct {
 	op        computerevent.ProjectionOp
 	size      int
 	n         int64 // enqueue order, assigned by the sealer
-	// runMemory is set for a run-memory entry in the window
-	// (run_memory_batch.go); kind and seq are then zero.
-	runMemory *computerevent.RunMemoryEntryProjection
 }
 
 // newTelemetryRecord builds the choir.event object and op for a batched kind,
@@ -454,13 +449,11 @@ func (sl *telemetrySealer) armTimerLocked() {
 	})
 }
 
-// timerWindowLocked is the deadline a newly armed queue gets: W, or 10 s while
-// tape.group_commit is on, when telemetry rides the next acknowledged write and
-// the deadline only covers a stretch with none (tape_group_commit.go).
+// timerWindowLocked is the deadline a newly armed queue gets: the window W,
+// never longer. Telemetry that rides an acknowledged write leaves earlier; the
+// deadline bounds the stretch with none (owner ruling D8: the 10 s stretch of
+// the old group-commit setting is deleted).
 func (sl *telemetrySealer) timerWindowLocked() time.Duration {
-	if sl.s.TapeGroupCommitOn() && sl.window < telemetryGroupWindow {
-		return telemetryGroupWindow
-	}
 	return sl.window
 }
 
@@ -544,9 +537,6 @@ func (sl *telemetrySealer) flushThrough(reason sealReason, upTo int64) {
 // already enforces: an object op, of kind choir.event, whose event kind is
 // batched (design 3.4 layer 4), unstamped or stamped for choir_events. It is the independent second look.
 func recheckTelemetryOp(op computerevent.ProjectionOp) error {
-	if op.Kind == computerevent.ProjectionOpRunMemoryEntry {
-		return recheckRunMemoryOp(op)
-	}
 	if op.Kind != computerevent.ProjectionOpObject {
 		return fmt.Errorf("op kind %q is not an object", op.Kind)
 	}
@@ -597,7 +587,6 @@ func (sl *telemetrySealer) seal(chunk []telemetryRecord, reason sealReason) {
 				// flushMu this seal holds.
 				if err := tape.appendDirect(ctx, []computerevent.ProjectionOp{r.op}, projectionAuthority); err != nil {
 					stats.recordsDropped.Add(1)
-					sl.noteDropped(r)
 					sl.logFailure("class-violation single", err)
 				}
 			}
@@ -624,13 +613,11 @@ func (sl *telemetrySealer) seal(chunk []telemetryRecord, reason sealReason) {
 			case errors.Is(single, computerevent.ErrBatchRefused):
 				stats.poisonDropped.Add(1)
 				stats.recordsDropped.Add(1)
-				sl.noteDropped(rec)
 				sl.logFailure("poison record dropped", single)
 			default:
 				stats.sealFailures.Add(1)
 				stats.unknownOutcomeLoss.Add(1)
 				stats.recordsDropped.Add(1)
-				sl.noteDropped(rec)
 				sl.logFailure("single seal failed, not retried", single)
 			}
 		}
@@ -638,7 +625,6 @@ func (sl *telemetrySealer) seal(chunk []telemetryRecord, reason sealReason) {
 		stats.sealFailures.Add(1)
 		stats.unknownOutcomeLoss.Add(int64(len(chunk)))
 		stats.recordsDropped.Add(int64(len(chunk)))
-		sl.noteDropped(chunk...)
 		sl.logFailure(fmt.Sprintf("seal of %d records failed, outcome unknown, not retried", len(chunk)), err)
 	}
 }

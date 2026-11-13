@@ -2,11 +2,9 @@
 
 Adversarial drills for the test computer d@e
 (`computer-59c902c5d46caecc0a180a8557164e72`) on staging Node B. They are the
-acceptance drill for `tape.group_commit` (telemetry rides the next
-acknowledged write, grouped acknowledged writes, run-memory messages in a
-crash-lossy window of at most 10 s;
-`docs/design/tape-group-commit-2026-10-31.md` on `lane/tape-group-commit`)
-before it widens to the paper. Mutation class: yellow (proof tooling).
+acceptance drill for tape coalescing (telemetry rides the next acknowledged
+write; queued acknowledged writers share one event; no setting, no loss window;
+`docs/evidence/tape-write-coalescing-design-2026-11-12.md`). Mutation class: yellow (proof tooling).
 
 ```
 scripts/chaos/run --list

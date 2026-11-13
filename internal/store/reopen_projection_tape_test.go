@@ -117,6 +117,7 @@ func TestReopenedStoreRoutesConcurrentObjectGraphWritesThroughTheTape(t *testing
 		t.Fatalf("head: %v %#v", err, head)
 	}
 	before := head.Sequence
+	opsBefore := productStore.TelemetryStats().TapeOps
 
 	const writers = 6
 	var wg sync.WaitGroup
@@ -145,8 +146,14 @@ func TestReopenedStoreRoutesConcurrentObjectGraphWritesThroughTheTape(t *testing
 	if err != nil || head == nil {
 		t.Fatalf("head after writes: %v %#v", err, head)
 	}
-	if got := head.Sequence - before; got != 2*writers {
-		t.Fatalf("%d concurrent OG writes appended %d tape events; a write bypassed the tape", 2*writers, got)
+	// Writers queued behind one another share events (coalescing), so the
+	// event count is between one and one per write; every write's ops must be
+	// on the tape (a write that bypassed it adds no op).
+	if got := head.Sequence - before; got < 1 || got > 2*writers {
+		t.Fatalf("%d concurrent OG writes appended %d tape events, want 1 to %d", 2*writers, got, 2*writers)
+	}
+	if got := productStore.TelemetryStats().TapeOps - opsBefore; got < 2*writers {
+		t.Fatalf("%d concurrent OG writes put %d ops on the tape; a write bypassed the tape", 2*writers, got)
 	}
 }
 

@@ -157,9 +157,8 @@ func normalizeRunMemoryEntry(entry types.RunMemoryEntry) (normalizedRunMemory, e
 }
 
 // AppendRunMemoryEntries appends several entries of one run, in order, as one
-// tape write: the acknowledged ones share one tape event, and with
-// tape.group_commit on the message entries join the run-memory window
-// (run_memory_batch.go). It is the batched form of AppendRunMemoryEntry for a
+// tape write: one acknowledged tape event, durable before it returns. It is
+// the batched form of AppendRunMemoryEntry for a
 // run's opening and carried-over messages; an empty list does nothing.
 func (s *Store) AppendRunMemoryEntries(ctx context.Context, entries []types.RunMemoryEntry) ([]types.RunMemoryEntry, error) {
 	if len(entries) == 0 {
@@ -197,26 +196,23 @@ func (s *Store) AppendRunMemoryEntries(ctx context.Context, entries []types.RunM
 }
 
 // appendRunMemoryTapeLocked numbers and writes entries of one run, holding the
-// run's append lock. Seq and parent come from the run's last entry: from the
-// tail cache while tape.group_commit is on (queued entries are not in the
-// table yet), else from the table. Message entries go to the run-memory window
-// when it is open; every other kind, and every entry while it is closed, is
-// written acknowledged, all of those in one tape event.
+// run's append lock. Seq and parent come from the run's last entry in the
+// table (every earlier entry is acknowledged, so it is there). All entries go
+// in one tape event, and the call returns only after that event's CAS and
+// local finalize: an entry the caller was told about is on the tape (owner
+// ruling D8, 2026-11-12; the run-memory window of 2026-10-31 is deleted).
+// Writers of other runs that wait behind the in-flight append share an event
+// with this one (tape_group_commit.go).
 func (s *Store) appendRunMemoryTapeLocked(ctx context.Context, runID string, items []normalizedRunMemory) ([]types.RunMemoryEntry, error) {
-	if err := s.runMemoryDamagedErr(runID); err != nil {
-		return nil, err
-	}
-	sl := s.telemetry.Load()
-	group := sl != nil && s.TapeGroupCommitOn()
 	var tail runMemoryTail
 	haveTail := false
-	var acked []computerevent.ProjectionOp
+	acked := make([]computerevent.ProjectionOp, 0, len(items))
 	out := make([]types.RunMemoryEntry, 0, len(items))
 	for _, item := range items {
 		entry := item.entry
 		if entry.Seq <= 0 || entry.ParentEntryID == "" {
 			if !haveTail {
-				t, err := s.runMemoryTailLocked(ctx, runID, group, sl)
+				t, err := s.runMemoryTailLocked(ctx, runID)
 				if err != nil {
 					return nil, err
 				}
@@ -243,18 +239,7 @@ func (s *Store) appendRunMemoryTapeLocked(ctx context.Context, runID string, ite
 		if err != nil {
 			return nil, fmt.Errorf("marshal projected run memory entry: %w", err)
 		}
-		op := computerevent.ProjectionOp{Kind: computerevent.ProjectionOpRunMemoryEntry, CanonicalID: entry.EntryID, Body: body}
-		if group && runMemoryKindBatched(entry.Kind) && sl.reserve() {
-			rec, err := newRunMemoryRecord(proj, op)
-			if err != nil {
-				sl.release()
-				return nil, err
-			}
-			reason, triggered := sl.enqueue(rec)
-			sl.afterEnqueue(reason, triggered)
-		} else {
-			acked = append(acked, op)
-		}
+		acked = append(acked, computerevent.ProjectionOp{Kind: computerevent.ProjectionOpRunMemoryEntry, CanonicalID: entry.EntryID, Body: body})
 		out = append(out, entry)
 	}
 	if len(acked) > 0 {
@@ -262,29 +247,20 @@ func (s *Store) appendRunMemoryTapeLocked(ctx context.Context, runID string, ite
 		// one exemption from the telemetry append barrier (design 4.3). A
 		// source-scan test allows exactly three WithBarrierExemption callers.
 		if err := s.projectionTape.appendOps(computerevent.WithBarrierExemption(ctx), acked); err != nil {
-			if group {
-				s.forgetRunMemoryTail(runID)
-			}
 			return nil, fmt.Errorf("append projected run memory entry: %w", err)
 		}
-	}
-	if group {
-		s.putRunMemoryTail(runID, tail)
 	}
 	return out, nil
 }
 
+// runMemoryTail is a run's last entry: the seq and parent of the next one.
+type runMemoryTail struct {
+	seq     int64
+	entryID string
+}
+
 // runMemoryTailLocked is the run's last entry (seq 0 and no id for a new run).
-func (s *Store) runMemoryTailLocked(ctx context.Context, runID string, group bool, sl *telemetrySealer) (runMemoryTail, error) {
-	if group {
-		if t, ok := s.getRunMemoryTail(runID); ok {
-			return t, nil
-		}
-	}
-	if sl != nil && sl.holdsRunMemory(runID) {
-		// Queued entries are not in the table yet: seal them before reading it.
-		sl.barrier(sealRead)
-	}
+func (s *Store) runMemoryTailLocked(ctx context.Context, runID string) (runMemoryTail, error) {
 	var t runMemoryTail
 	if err := s.db.QueryRowContext(ctx,
 		`SELECT COALESCE(MAX(seq), 0) FROM run_memory_entries WHERE loop_id = ?`,
@@ -344,10 +320,6 @@ func (s *Store) LatestActorRunMemoryEntries(ctx context.Context, ownerID, comput
 		if rec.State != types.RunCompleted && rec.State != types.RunPassivated {
 			continue
 		}
-		// A run whose queued entry was lost has a hole in its log: never a seed.
-		if s.RunMemoryDamaged(rec.RunID) {
-			continue
-		}
 		priority := rec.UpdatedAt
 		if rec.FinishedAt != nil {
 			priority = *rec.FinishedAt
@@ -379,19 +351,7 @@ func (s *Store) ListRunMemoryEntries(ctx context.Context, ownerID, runID string)
 	if runID == "" {
 		return nil, fmt.Errorf("list run memory: loop_id is required")
 	}
-	if err := s.runMemoryDamagedErr(runID); err != nil {
-		return nil, err
-	}
-	// The window's queued entries first, then the table (run_memory_batch.go).
-	pending, err := s.pendingRunMemoryEntries(ownerID, runID, "")
-	if err != nil {
-		return nil, err
-	}
-	entries, err := s.listRunMemoryEntriesTable(ctx, ownerID, runID)
-	if err != nil {
-		return nil, err
-	}
-	return mergeRunMemory(entries, pending), nil
+	return s.listRunMemoryEntriesTable(ctx, ownerID, runID)
 }
 
 func (s *Store) listRunMemoryEntriesTable(ctx context.Context, ownerID, runID string) ([]types.RunMemoryEntry, error) {
@@ -476,11 +436,6 @@ func (s *Store) ListRunMemoryEntriesForAgent(ctx context.Context, ownerID, agent
 	s.runMemoryAgentList.calls.Add(1)
 	if agentID == "" {
 		return nil, fmt.Errorf("list run memory for agent: agent_id is required")
-	}
-	// A read across runs seals the window first (run_memory_batch.go), unless
-	// the kinds asked for can never wait in it: reads do not write.
-	if kindsMayBeWindowed(kinds) {
-		s.sealRunMemoryForRead(ctx)
 	}
 	query, args := runMemoryAgentListQuery(ownerID, agentID, kinds)
 	obs := runMemoryAgentListRead{site: runMemoryReadSite(ctx), agentID: agentID, kinds: len(kinds)}
@@ -636,20 +591,7 @@ func listRunMemoryEntryFingerprints(ctx context.Context, q interface {
 
 // LatestRunMemoryEntry returns the most recent memory entry for a run.
 func (s *Store) LatestRunMemoryEntry(ctx context.Context, runID string) (types.RunMemoryEntry, error) {
-	pending, err := s.pendingRunMemoryEntries("", runID, "")
-	if err != nil {
-		return types.RunMemoryEntry{}, err
-	}
-	latest, err := s.latestRunMemoryEntryTable(ctx, runID)
-	if err != nil && !(errors.Is(err, ErrNotFound) && len(pending) > 0) {
-		return types.RunMemoryEntry{}, err
-	}
-	for _, e := range pending {
-		if e.Seq > latest.Seq {
-			latest = e
-		}
-	}
-	return latest, nil
+	return s.latestRunMemoryEntryTable(ctx, runID)
 }
 
 func (s *Store) latestRunMemoryEntryTable(ctx context.Context, runID string) (types.RunMemoryEntry, error) {
@@ -671,11 +613,6 @@ func (s *Store) latestRunMemoryEntryTable(ctx context.Context, runID string) (ty
 func (s *Store) GetRunMemoryEntry(ctx context.Context, ownerID, entryID string) (types.RunMemoryEntry, error) {
 	if entryID == "" {
 		return types.RunMemoryEntry{}, fmt.Errorf("get run memory: entry_id is required")
-	}
-	if pending, err := s.pendingRunMemoryEntries(ownerID, "", entryID); err != nil {
-		return types.RunMemoryEntry{}, err
-	} else if len(pending) > 0 {
-		return pending[0], nil
 	}
 	if ownerID == "" {
 		row := s.db.QueryRowContext(ctx,

@@ -347,3 +347,33 @@ Two defects the counters exposed:
 
 Remaining error: one 17-minute window just after a boot, when queues may be
 deeper than in steady state. Read again after a day before fixing the shape.
+
+## Built (lane/s5-coalesce, 2026-11-13)
+
+Coalescing is the behaviour of every store; there is no setting.
+`tape.group_commit`, its registry entry, `telemetryGroupWindow`,
+`run_memory_batch.go` (the run-memory window, tail cache and damaged-run
+marks), `internal/agentcore/tape_group_commit.go` and the planned-restart
+window stamp are deleted. A marker written by an older build with a failed
+drain under an open window is still read once, so that boot closes its runs.
+The opening and carried run-memory messages are one write at the call site.
+A guarded batch (`PutBatchConditional`, `PutBatchSegments` with conditions)
+takes the direct path through a context flag from `objectgraph`.
+
+Counters: `tape_events_by_family` counts an event once, under its writers'
+common family or `mixed`; `tape_ops_by_family` counts every writer's ops under
+that writer's own family (riding telemetry as `telemetry`), and sums to
+`tape_ops`. The run-memory key takes a reason only from a fixed list; any other
+is `<kind>/other`.
+
+Corpusd calls per event, by reading the code: the two head reads were one
+read used twice (bind, then `appendLockedInner`); the append reuses the bind
+read (`boundHead`). A head that moves between the bind and the CAS fails at the
+CAS, as the old read would have failed the reducer. The two pins stay: the
+payload pin receipt is bound into the request commitment, the event body holds
+that commitment, and the event pin carries the body, so the event pin cannot
+precede or merge with the payload pin; the host checks both receipts. One call
+per pin needs a corpusd endpoint that pins a payload and an event together.
+The finalize `payload` fetch (the sixth call on the sealed path, where the
+live plaintext cache of `AppendNewPayload` is not kept by
+`AppendNewPrivatePayload`) is a further saving this change does not take.
