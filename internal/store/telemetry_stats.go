@@ -415,8 +415,8 @@ func (s *Store) TelemetryStats() TelemetryStats {
 	b.CapacityFlushes = c.capacityFlushes.Load()
 	b.BootWatermarks = c.watermarkWrites.Load()
 	out.GroupCommit = s.groupCommitStats()
-	if t := s.projectionTape; t != nil && t.appender != nil {
-		out.AppenderRevalidations = t.appender.Revalidations()
+	if src := s.revalidationSource.Load(); src != nil {
+		out.AppenderRevalidations = (*src)()
 	}
 	return out
 }
