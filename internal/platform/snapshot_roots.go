@@ -68,7 +68,7 @@ type snapshotRootRequest struct {
 // recordSnapshotRoot declares a snapshot's chunks and prunes the computer's
 // rows (pruneSnapshotRoots): the newest snapshotRootRetention roots the tape
 // names (largeSnapshotRetention when the declared snapshot is large), plus the
-// newest root it does not yet name.
+// unnamed roots pruneSnapshotRoots keeps.
 // It is idempotent per (computer, root). It does not look at the chunks and
 // is unexported on purpose: production registers through
 // Service.RecordVerifiedSnapshotRoot. It bumps snapshotRootGen after the
@@ -97,7 +97,7 @@ func (s *Store) recordSnapshotRoot(ctx context.Context, computerID, root string,
 	if len(chunks) > largeSnapshotChunks {
 		retention = largeSnapshotRetention
 	}
-	if err := pruneSnapshotRoots(ctx, tx, computerID, retention); err != nil {
+	if err := pruneSnapshotRoots(ctx, tx, computerID, root, retention, time.Now().UTC()); err != nil {
 		return err
 	}
 	err = tx.Commit()
@@ -125,27 +125,53 @@ const snapshotRootNamedSQL = `EXISTS (SELECT 1 FROM computer_event_append_receip
 // snapshotRootOrder is the one order of roots: newest head first.
 const snapshotRootOrder = `ORDER BY r.head_sequence DESC, r.created_at DESC, r.root DESC`
 
-// pruneSnapshotRoots keeps, for one computer: the newest retention roots the
-// tape names, and the newest root it does not name when that root is above
-// the newest named one (an attempt whose append is still coming, or that is
-// retried under the same idempotency key). Every other row goes: an older
-// unnamed root belongs to an attempt that is over, because the producer runs
-// one capture at a time. Registration used to prune by head alone, so two
-// registrations whose appends failed evicted the newest root the tape names,
-// the only one a boot can restore (docs/problems/
-// unappended-snapshot-root-evicts-the-on-tape-root-2026-11-13.md). The rows
-// of a computer are few (retention + 1), so the prune reads them all.
-func pruneSnapshotRoots(ctx context.Context, tx *sql.Tx, computerID string, retention int) error {
-	rows, err := tx.QueryContext(ctx, `SELECT r.root, `+snapshotRootNamedSQL+` FROM computer_snapshot_roots r WHERE r.computer_id=? `+snapshotRootOrder, computerID)
+// snapshotRootInFlightWindow is how long an unnamed root may still be an
+// attempt whose snapshot_recorded append is coming: the producer's whole
+// capture budget (snapshotDefaultMaxDuration in internal/agentcore, 90
+// minutes, after which a capture aborts with nothing recorded) plus a
+// 30 minute margin for the registration, the append request and a retry. An
+// unnamed root older than this is a failed attempt and may be pruned.
+const snapshotRootInFlightWindow = 90*time.Minute + 30*time.Minute
+
+// snapshotRootMaxYoungUnnamed bounds the unnamed roots kept for the window
+// beyond the one just registered and the newest above the named roots:
+// attempts are 20 minutes apart at the least (the producer's backoff floor),
+// so two cover the window's overlap; more would only keep failures.
+const snapshotRootMaxYoungUnnamed = 2
+
+// pruneSnapshotRoots keeps, for one computer:
+//   - the newest retention roots the tape names;
+//   - the root just registered (justRoot), always: its append is about to run;
+//   - the newest unnamed root above the newest named one (a failed attempt
+//     stays until a newer root supersedes it);
+//   - up to snapshotRootMaxYoungUnnamed more unnamed roots registered within
+//     snapshotRootInFlightWindow, whatever their head order: an attempt whose
+//     append lands after a later registration (a guest that crashed or was
+//     cancelled while the host committed, then captured again) must still be
+//     a row when the tape names it, or its chunks go to the collector while
+//     the tape names a root the host does not keep.
+//
+// Every other row goes. The unnamed rows are bounded by 2 + the young cap,
+// the named rows by retention (plus one for a moment, when an unnamed root
+// becomes named before the next registration). Registration used to prune by
+// head alone, so two registrations whose appends failed evicted the newest
+// root the tape names, the only one a boot can restore (docs/problems/
+// unappended-snapshot-root-evicts-the-on-tape-root-2026-11-13.md). The
+// producer's tick mutex is per process; the host does not serialize
+// registrations, which is why the window exists.
+func pruneSnapshotRoots(ctx context.Context, tx *sql.Tx, computerID, justRoot string, retention int, now time.Time) error {
+	rows, err := tx.QueryContext(ctx, `SELECT r.root, r.created_at, `+snapshotRootNamedSQL+` FROM computer_snapshot_roots r WHERE r.computer_id=? `+snapshotRootOrder, computerID)
 	if err != nil {
 		return fmt.Errorf("snapshot root: prune read: %w", err)
 	}
 	var drop []string
-	named, keptUnnamed := 0, false
+	named, young := 0, 0
+	keptTop := false
 	for rows.Next() {
 		var root string
+		var created time.Time
 		var isNamed bool
-		if err := rows.Scan(&root, &isNamed); err != nil {
+		if err := rows.Scan(&root, &created, &isNamed); err != nil {
 			rows.Close()
 			return fmt.Errorf("snapshot root: prune scan: %w", err)
 		}
@@ -154,10 +180,13 @@ func pruneSnapshotRoots(ctx context.Context, tx *sql.Tx, computerID string, rete
 			named++
 		case isNamed:
 			drop = append(drop, root)
-		case named == 0 && !keptUnnamed:
-			// The newest unnamed root, above every named one (rows are in
-			// head order, and none is named yet).
-			keptUnnamed = true
+		case root == justRoot:
+			// Never prune the row just registered, whatever its head.
+			keptTop = keptTop || named == 0
+		case named == 0 && !keptTop:
+			keptTop = true
+		case young < snapshotRootMaxYoungUnnamed && now.Sub(created) < snapshotRootInFlightWindow:
+			young++
 		default:
 			drop = append(drop, root)
 		}
@@ -392,7 +421,7 @@ func validateSnapshotRootDeclaration(computerID, root string, headSequence int64
 }
 
 // LiveSnapshotRoots returns every snapshot root the computer keeps, newest
-// first. The prune bounds the rows at retention + 1, and a row that
+// first. The prune bounds the rows at retention + 2 + snapshotRootMaxYoungUnnamed, and a row that
 // bundle.Import added or a concurrent registration left is protected too:
 // reading more rows is the safe direction for the collector.
 func (s *Store) LiveSnapshotRoots(ctx context.Context, computerID string) ([]SnapshotRootRecord, error) {
