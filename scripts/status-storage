@@ -1,0 +1,234 @@
+#!/usr/bin/env python3
+"""status-storage: the hourly Node B storage report (storage mission S9).
+
+Read only against Node B: one ssh runs df, journalctl on the forecast unit,
+a grep over the growth meter's own ledger and one SELECT on the control
+database. No secret file is read. Fetching and computing are separate:
+fetch() returns raw text, compute() is pure, and --fixture FILE feeds
+compute() a JSON file of the same raw shape (scripts/test-status-scripts.sh).
+
+  status-storage [--json] [--fixture FILE] [--node HOST]
+
+Exit 0 when no flag is raised, 1 when any is, 2 when the fetch failed.
+
+Sources:
+  free space       df -Pm / (the Available column, MiB)
+  forecast lines   journalctl -u go-choir-disk-forecast (scripts/node-b-growth-meter --forecast)
+  drain 1 h, 6 h   the growth meter's hourly ledger, GROWTH_DIR/YYYY-MM.jsonl,
+                   key fs.root.avail: the row nearest to "newest minus window"
+                   (within 20 minutes) against the newest row; GiB an hour,
+                   positive = free space falling
+  paper footprint  ledger keys fs.artifacts.file-cas-chunks.<computer> and
+                   fs.vm-state.<vm>.data.img (heavy keys: the newest value
+                   among the last rows that carry them)
+  snapshot         control DB table computer_snapshot_roots
+"""
+import calendar
+import json
+import re
+import subprocess
+import sys
+import time
+
+NODE = "node-b"
+PAPER_COMPUTER = "computer-1355b83bced1613eb048ee28d66688a8"
+PAPER_VM = "vm-1669020adcece51c2f5ff9b6df399ef5"
+CHUNKS_KEY = "fs.artifacts.file-cas-chunks." + PAPER_COMPUTER
+IMG_KEY = "fs.vm-state.%s.data.img" % PAPER_VM
+GIB = 1 << 30
+
+FREE_FLAG_MIB = 65 * 1024     # the deploy floor is 60 GiB; flag with 5 GiB of notice
+DRAIN_FLAG_GIB_PER_H = 1.0    # over the 6 h window
+SNAPSHOT_MAX_AGE_H = 24
+DRAIN_WINDOW_SLACK_S = 20 * 60
+
+TS_RE = re.compile(r'"ts":\s*"([0-9T:Z-]+)"')
+AVAIL_RE = re.compile(r'"fs\.root\.avail":\s*([0-9]+)')
+
+
+def iso_epoch(s):
+    return calendar.timegm(time.strptime(s, "%Y-%m-%dT%H:%M:%SZ"))
+
+
+def parse_ledger(text):
+    """rows [(epoch, avail_bytes)] sorted, and the newest heavy-key values."""
+    rows, heavy = [], {}
+    for ln in text.splitlines():
+        t = TS_RE.search(ln)
+        a = AVAIL_RE.search(ln)
+        if not t:
+            continue
+        try:
+            ts = iso_epoch(t.group(1))
+        except ValueError:
+            continue
+        if a:
+            rows.append((ts, int(a.group(1))))
+        for key in (CHUNKS_KEY, IMG_KEY):
+            m = re.search(r'"%s":\s*([0-9]+)' % re.escape(key), ln)
+            if m:
+                heavy[key] = (ts, int(m.group(1)))
+    rows.sort()
+    return rows, {k: v[1] for k, v in heavy.items()}
+
+
+def drain(rows, hours):
+    """GiB per hour that free space fell over the window ending at the newest row."""
+    if len(rows) < 2:
+        return None
+    tcur, cur = rows[-1]
+    want = tcur - hours * 3600
+    t0, a0 = min(rows[:-1], key=lambda r: abs(r[0] - want))
+    if abs(t0 - want) > DRAIN_WINDOW_SLACK_S:
+        return None
+    return (a0 - cur) / GIB / ((tcur - t0) / 3600.0)
+
+
+def last_line(text, pattern):
+    """The newest journal line matching pattern, from the match on (this drops
+    the <N> priority prefix). The unit's own "Finished go-choir disk forecast
+    (days to ...)" line must not match "disk forecast"."""
+    found = None
+    for ln in text.splitlines():
+        m = re.search(pattern, ln)
+        if m:
+            found = ln[m.start():]
+    return found
+
+
+def parse_snapshot(text, now):
+    for ln in text.splitlines():
+        parts = ln.split("|")
+        if len(parts) >= 4 and parts[3].strip().isdigit():
+            created = int(parts[3])
+            return {"root": parts[0][:12], "head_sequence": int(parts[1]) if parts[1].isdigit() else None,
+                    "chunk_count": int(parts[2]) if parts[2].isdigit() else None,
+                    "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(created)),
+                    "age_h": (now - created) / 3600.0}
+    return None
+
+
+def compute(raw):
+    now = int(raw["now"])
+    free_mib = None
+    for ln in raw.get("df", "").splitlines():
+        p = ln.split()
+        if len(p) >= 6 and p[-1] == "/" and p[3].isdigit():
+            free_mib = int(p[3])
+    rows, heavy = parse_ledger(raw.get("ledger", ""))
+    fc = raw.get("forecast", "")
+    snap = parse_snapshot(raw.get("snapshot", ""), now)
+    d1, d6 = drain(rows, 1), drain(rows, 6)
+    rep = {
+        "now": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
+        "free_mib": free_mib,
+        "forecast": {"forecast": last_line(fc, r"disk forecast(?: ok| WARNING| ERROR|:)"), "fast_drain": last_line(fc, r"disk fast drain"),
+                     "growers": last_line(fc, r"disk growers")},
+        "drain_gib_per_h": {"1h": d1, "6h": d6},
+        "ledger_newest_age_h": ((now - rows[-1][0]) / 3600.0) if rows else None,
+        "paper": {"chunks_gib": heavy[CHUNKS_KEY] / GIB if CHUNKS_KEY in heavy else None,
+                  "data_img_gib": heavy[IMG_KEY] / GIB if IMG_KEY in heavy else None},
+        "snapshot": snap,
+        "flags": [],
+    }
+    f = rep["flags"]
+    if free_mib is not None and free_mib < FREE_FLAG_MIB:
+        f.append("free %.0f GiB under %d GiB" % (free_mib / 1024.0, FREE_FLAG_MIB // 1024))
+    if d6 is not None and d6 > DRAIN_FLAG_GIB_PER_H:
+        f.append("drain %.1f GiB/h over 6 h" % d6)
+    for key in ("forecast", "fast_drain"):   # the forecast unit's own warning or error
+        line = rep["forecast"][key] or ""
+        m = re.match(r"disk (forecast|fast drain) (WARNING|ERROR)", line)
+        if m:
+            f.append("forecast unit: %s %s" % (m.group(1), m.group(2)))
+    if snap is None:
+        f.append("no snapshot root for the paper")
+    elif snap["age_h"] > SNAPSHOT_MAX_AGE_H:
+        f.append("snapshot root %.0f h old" % snap["age_h"])
+    rep["text"] = render(rep)
+    return rep
+
+
+def g(x, fmt="%.1f"):
+    return "n/a" if x is None else fmt % x
+
+
+def render(r):
+    o = ["== storage, %s ==" % r["now"]]
+    o.append("Node B free: %s MiB (%s GiB)" % (r["free_mib"], g(None if r["free_mib"] is None else r["free_mib"] / 1024.0)))
+    for k in ("forecast", "fast_drain", "growers"):
+        o.append("  %s" % (r["forecast"][k] or "(no %s line in the forecast unit's journal)" % k))
+    o.append("drain, GiB/h (positive = falling): last 1 h %s, last 6 h %s; newest ledger row %s h old"
+             % (g(r["drain_gib_per_h"]["1h"], "%+.2f"), g(r["drain_gib_per_h"]["6h"], "%+.2f"),
+                g(r["ledger_newest_age_h"])))
+    o.append("paper footprint: chunks %s GiB + data image %s GiB"
+             % (g(r["paper"]["chunks_gib"]), g(r["paper"]["data_img_gib"])))
+    s = r["snapshot"]
+    if s:
+        o.append("paper snapshot root %s at %s (head_sequence %s, %s chunks), age %.1f h"
+                 % (s["root"], s["created_at"], s["head_sequence"], s["chunk_count"], s["age_h"]))
+    else:
+        o.append("paper snapshot root: none in the control DB")
+    o.append("FLAGS: " + ("; ".join(r["flags"]) if r["flags"] else "none"))
+    return "\n".join(o)
+
+
+REMOTE = r"""
+echo "##NOW $(date -u +%s)"
+echo "##DF"
+df -Pm / 2>/dev/null
+echo "##FORECAST"
+journalctl -u go-choir-disk-forecast -n 60 --no-pager -o cat 2>/dev/null
+echo "##LEDGER"
+cd /var/lib/go-choir/growth-meter 2>/dev/null && for f in $(ls [0-9]*.jsonl 2>/dev/null | tail -2); do tail -n 48 "$f"; done |
+  awk 'BEGIN { re = "\"(ts)\": ?\"[0-9T:Z-]+\"|\"fs[.]root[.]avail\": ?[0-9]+|\"@CHUNKS@\": ?[0-9]+|\"@IMG@\": ?[0-9]+" }
+       { out = ""; s = $0; while (match(s, re)) { out = out " " substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH) } print out }'
+echo "##SNAPSHOT"
+sudo -n -u postgres psql -d control -At -c "select left(root,12), head_sequence, coalesce(json_array_length(chunks::json),0), extract(epoch from created_at)::bigint from computer_snapshot_roots where computer_id = '@COMPUTER@' order by created_at desc limit 1" 2>/dev/null
+echo "##END"
+""".replace("@CHUNKS@", CHUNKS_KEY.replace(".", "[.]")).replace("@IMG@", IMG_KEY.replace(".", "[.]")).replace("@COMPUTER@", PAPER_COMPUTER)
+
+
+def sections(text):
+    out, cur = {}, None
+    for ln in text.splitlines():
+        if ln.startswith("##"):
+            parts = ln[2:].split(" ", 1)
+            cur = parts[0]
+            out[cur] = [parts[1]] if len(parts) > 1 else []
+        elif cur:
+            out[cur].append(ln)
+    return out
+
+
+def fetch(node):
+    p = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", node, REMOTE],
+                       capture_output=True, text=True, timeout=240)
+    s = sections(p.stdout)
+    if "NOW" not in s or "END" not in s:
+        raise RuntimeError("ssh %s failed or replied incompletely (rc=%d)" % (node, p.returncode))
+    return {"now": int(s["NOW"][0]), "df": "\n".join(s.get("DF", [])),
+            "forecast": "\n".join(s.get("FORECAST", [])), "ledger": "\n".join(s.get("LEDGER", [])),
+            "snapshot": "\n".join(s.get("SNAPSHOT", []))}
+
+
+def main(argv):
+    as_json = "--json" in argv
+    node = argv[argv.index("--node") + 1] if "--node" in argv else NODE
+    fixture = argv[argv.index("--fixture") + 1] if "--fixture" in argv else None
+    try:
+        if fixture:
+            with open(fixture) as f:
+                raw = json.load(f)
+        else:
+            raw = fetch(node)
+        rep = compute(raw)
+    except (OSError, RuntimeError, ValueError, KeyError, subprocess.SubprocessError) as e:
+        print("status-storage: unavailable: %s" % e, file=sys.stderr)
+        return 2
+    print(json.dumps(rep, sort_keys=True) if as_json else rep["text"])
+    return 1 if rep["flags"] else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

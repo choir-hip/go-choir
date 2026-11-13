@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+"""status-hourly: runs status-paper-usage and status-storage, prints both
+reports and ends with ONE line under 200 characters that leads with whatever
+needs action (storage mission S9; the combined hourly status tick).
+
+  status-hourly [--json] [--paper-fixture FILE] [--storage-fixture FILE] [--node HOST]
+
+Exit 0 when no flag is raised in either report and both fetched; non-zero
+otherwise (1 for a flag, 2 when a report was unavailable). --json prints one
+object {paper, storage, line, flags}. The fixture flags are for
+scripts/test-status-scripts.sh; they pass straight to the sub scripts.
+Read only against Node B (see the two scripts).
+"""
+import json
+import os
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+MAXLEN = 199
+
+
+def run(script, args):
+    p = subprocess.run([sys.executable, os.path.join(HERE, script), "--json"] + args,
+                       capture_output=True, text=True, timeout=600)
+    try:
+        return json.loads(p.stdout), None
+    except ValueError:
+        msg = (p.stderr.strip().splitlines() or ["no output"])[-1]
+        return None, msg[:80]
+
+
+def share(x):
+    return "n/a" if x is None else "%.0f%%" % (100 * x)
+
+
+def build_line(paper, storage, problems):
+    flags = list(problems)
+    for r in (paper, storage):
+        if r:
+            flags += r["flags"]
+    parts = []
+    if paper:
+        s = paper["shares"]
+        parts.append("Paper: %s swe-2-flash, %s free, %s Haiku. Bedrock $%.2f/20."
+                     % (share(s["devin"]), share(s["free"]), share(s["haiku"]), paper["bedrock"]["today_usd"]))
+    if storage:
+        d = storage["drain_gib_per_h"]["6h"]
+        free = "n/a" if storage["free_mib"] is None else "%.0f" % (storage["free_mib"] / 1024.0)
+        parts.append("Disk %s GiB, %s/h." % (free, "n/a" if d is None else "%+.1f" % -d))
+    if paper:
+        parts.append("Publishing." if paper["paper_lines_20m"] > 0 else "NOT publishing.")
+    body = " ".join(parts)
+    if not flags:
+        return (body + " OK")[:MAXLEN]
+    head = "ACTION: " + "; ".join(flags) + ". "
+    room = MAXLEN - len(head)
+    if room < 40:   # flags alone fill the line: keep the lead, drop the tail
+        return (head.rstrip() )[:MAXLEN - 3] + "..." if len(head) > MAXLEN else head.rstrip()
+    return head + (body if len(body) <= room else body[:room - 3] + "...")
+
+
+def main(argv):
+    def opt(name):
+        return argv[argv.index(name) + 1] if name in argv else None
+    p_args, s_args = [], []
+    if opt("--paper-fixture"):
+        p_args = ["--fixture", opt("--paper-fixture")]
+    if opt("--storage-fixture"):
+        s_args = ["--fixture", opt("--storage-fixture")]
+    if opt("--node"):
+        p_args += ["--node", opt("--node")]
+        s_args += ["--node", opt("--node")]
+    paper, perr = run("status-paper-usage", p_args)
+    storage, serr = run("status-storage", s_args)
+    problems = []
+    if perr:
+        problems.append("paper usage unavailable (%s)" % perr)
+    if serr:
+        problems.append("storage unavailable (%s)" % serr)
+    line = build_line(paper, storage, problems)
+    flagged = bool(problems) or any(r and r["flags"] for r in (paper, storage))
+    if "--json" in argv:
+        print(json.dumps({"paper": paper, "storage": storage, "line": line,
+                          "flags": problems + (paper["flags"] if paper else []) + (storage["flags"] if storage else [])},
+                         sort_keys=True))
+    else:
+        for r, err, name in ((paper, perr, "paper usage"), (storage, serr, "storage")):
+            print(r["text"] if r else "== %s: unavailable: %s ==" % (name, err))
+            print()
+        print(line)
+    if problems:
+        return 2
+    return 1 if flagged else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -2205,7 +2205,7 @@ in
   # the hourly ledger and prints journald-prefixed lines: days to the 60 GiB
   # deploy floor from the slope of daily free-space minima (warning under 7
   # days, error under 3), a fast-drain line (warning when free space fell
-  # more than 15 GiB in 6 hours) and the top five 24 hour growers by ledger
+  # more than 3 GiB in 6 hours) and the top five 24 hour growers by ledger
   # key. Read-only; always exits 0. Alarms:
   #   journalctl -u go-choir-disk-forecast -p warning
   # Rollback: remove this service and timer.
