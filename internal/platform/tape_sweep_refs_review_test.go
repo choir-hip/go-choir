@@ -180,10 +180,10 @@ var receiptTableName = regexp.MustCompile(`(?i)\bcomputer_event_append_receipts\
 
 // receiptMutation is a statement with a verb next to the table name. It is a
 // second check inside the files allowlisted as readers, not the trigger.
-var receiptMutation = regexp.MustCompile(`(?i)\b(UPDATE|DELETE\s+FROM|TRUNCATE(\s+TABLE)?|MERGE\s+INTO)\s+(ONLY\s+)?[\w."]*computer_event_append_receipts\b`)
+var receiptMutation = regexp.MustCompile(`(?i)\b(UPDATE|DELETE\s+FROM|TRUNCATE(\s+TABLE)?|MERGE\s+INTO)\s+(ONLY\s+)?[\w."]*computer_event_append_receipts\b|(?s)INSERT\s+INTO\s+[\w."]*computer_event_append_receipts\b[^;` + "`" + `]*DO\s+UPDATE`)
 
 func TestReceiptMutationMatchesWritersNotReaders(t *testing.T) {
-	for _, w := range []string{"UPDATE computer_event_append_receipts SET x=1", "delete\n from public.computer_event_append_receipts", "TRUNCATE TABLE computer_event_append_receipts"} {
+	for _, w := range []string{"UPDATE computer_event_append_receipts SET x=1", "delete\n from public.computer_event_append_receipts", "TRUNCATE TABLE computer_event_append_receipts", "INSERT INTO computer_event_append_receipts (a) VALUES (1) ON CONFLICT (computer_id, idempotency_key) DO UPDATE SET a=2"} {
 		if !receiptMutation.MatchString(w) {
 			t.Errorf("misses the writer %q", w)
 		}
@@ -233,17 +233,16 @@ func TestAppendReceiptRowWritersAreKnown(t *testing.T) {
 		"internal/platform/checkpoints.go":      "reader",
 		"internal/platform/verifier_key_pin.go": "reader",
 		"internal/platform/tape_sweep.go":       "reader",
-		"internal/platform/tape_sweep_refs.go":  "comments",
 		"internal/platform/snapshot_roots.go":   "reader: the named-root subquery; its DELETE targets computer_snapshot_roots",
 		"internal/bundle/import.go":             "inserts after the head, overlap refused",
 		"internal/bundle/store.go":              "reader",
 		"internal/bundle/follow.go":             "reader",
 		"internal/bundle/bundle.go":             "reader",
-		"nix/node-b.nix":                        "backup and growth-meter queries",
-		"scripts/off-host-restore-drill.sh":     "restore drill reads",
-		"scripts/test-node-b-growth-meter.sh":   "test fixture",
+		"nix/node-b.nix":                        "reader: a comment names the table",
+		"scripts/off-host-restore-drill.sh":     "reader: restore drill reads",
+		"scripts/test-node-b-growth-meter.sh":   "reader: test fixture",
 		"scripts/node-b-growth-meter":           "reader",
-		"scripts/chaos/s2-corpusd-crash.sh":     "chaos drill reads",
+		"scripts/chaos/s2-corpusd-crash.sh":     "reader: chaos drill reads",
 	}
 	root := filepath.Join("..", "..")
 	var hits []string
