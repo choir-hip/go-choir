@@ -351,28 +351,55 @@ above the root's head. Receipts and roots share the platform store's
 database. The idempotency key is the receipts table's primary key
 (`computer_events.go:40-54`), so the lookup is indexed.
 
-1. **Prune** (`recordSnapshotRoot`): keep a row if it is one of the newest
-   `retention` *named* roots. Also keep the newest *unnamed* root whose
-   head is above the newest named root's head; this is always the row just
-   inserted, whose append is about to run. Delete everything else,
-   including older unnamed roots: their attempts are over, because the
-   producer runs one capture at a time (`snapshot_producer.go:213`).
-   Retention counts are unchanged (4 and 2), so the contract test stands.
-2. **`RecoveryBase`**: return the newest *named* root. If there is none,
-   return `ErrNoWatermark` (404). vmctl already handles a missing
-   watermark (`recovery_admission.go:673-674`), and the boot then decides
-   from the tape alone.
-3. **`LiveSnapshotRoots`** (`snapshot_roots.go:338`) and the collector's
-   live check (`snapshot_roots.go:313-314`): drop `LIMIT
-   snapshotRootRetention` and read every row of the computer. The prune
-   already bounds the table at retention + 1. Without this change, a small
-   computer's oldest named root (the fifth row) would lose its protection.
-   Reading more rows is the safe direction for rows that `bundle.Import`
-   adds.
+**As built (lane A, branch `lane/s4-roots-prune`; lane B is separate).**
+
+1. **Prune** (`pruneSnapshotRoots`, in `recordSnapshotRoot`'s transaction)
+   keeps, per computer:
+   - the newest `retention` roots the tape names (4, or 2 for a store over
+     2,048 chunks), ordered by the sequence of the receipt that names them,
+     not by head: boot restore (`snapshot.Scan`) takes the newest
+     `snapshot_recorded` events and tries them newest first, and after a head
+     inversion (a point-in-time restore) the roots named last have the lower
+     heads;
+   - the root just registered, always, whatever its head and even when it is
+     already named;
+   - the newest other unnamed root above the named roots' heads, and up to
+     two more unnamed roots, each registered within
+     `snapshotRootInFlightWindow` (52 minutes: registration follows the
+     capture, so the gap is the append alone, at most four sequential
+     requests of 10 minutes plus the 3 minute refused-dial resend each);
+   - nothing else. Unnamed rows are at most four (the just-registered root,
+     the top one, two more), as many as the old newest-four-by-head rule kept
+     at the small retention; named rows are `retention`, plus one for a
+     moment when a root is named between registrations. A fifth concurrent
+     registration still drops the oldest unnamed row inside the window; the
+     producer runs one capture at a time and its append is one synchronous
+     request, so one append is in flight at most.
+2. **`RecoveryBase` is unchanged** (lane A leaves it, vmctl admission and
+   `recoveryplan` exactly as on main): it still answers the newest row by
+   head, named or not. The eviction does not depend on it: once a named root
+   cannot be evicted, the guest finds it on its tape whatever base the host
+   advertises. The remaining error is today's: the host can advertise an
+   unnamed root's head as the watermark. Advertising only named roots, and
+   the admission rule and stored-condition release that need, is lane B.
+3. **`LiveSnapshotRoots`** and the collector's live check read every row of
+   the computer (no `LIMIT`), so every kept row's chunks are protected,
+   including a row `bundle.Import` added.
+4. **The receipts tripwire** (`TestAppendReceiptRowWritersAreKnown`) triggers
+   on any non-test file naming `computer_event_append_receipts`, allowlists
+   each with a reason, and checks that a file allowlisted as a reader has no
+   statement with a verb next to the table name.
+
+Failure list as extended in review (tests `snapshot_root_named_test.go`, N1
+to N12), beyond the nine below: a late append after a newer registration; four
+registrations with one append in flight; failures at an unchanged head and at
+full retention; a head inversion; the root just registered pruned in its own
+transaction; a variable-built receipt writer the tripwire missed.
 
 No guest change. No schema change.
 
-Failure list (written before code):
+Failure list (written before code; items 3 and 5 are lane B, since lane A
+leaves `RecoveryBase` and vmctl as on main):
 1. Two or more failed appends evict a named root (the defect; a test with
    real receipts).
 2. The root just inserted is pruned (a test).
