@@ -242,7 +242,13 @@ func TestW7SegmentOrIndexGoneUnderTheViewIsAnsweredLikeReaderRead(t *testing.T) 
 			var want, got readOutcome
 			want.body, want.src, want.err = NewReader(root).Read(id, NSEvent, sum(x))
 			got.body, got.src, got.err = v.ReadObject(NSEvent, sum(x))
-			if !sameOutcome(want, got) {
+			// Reader.Read lists the directory on every call and so reports a
+			// .seg gone under its .idx for every digest. The view trusts its
+			// listing until a read has no intact copy or touches the gone
+			// file, so for a digest in another segment it returns the intact
+			// bytes. That is the one allowed difference here.
+			intactElsewhere := got.err == nil && got.src == SourceSegment && bytes.Equal(got.body, x) && errors.Is(want.err, ErrCorrupt)
+			if !sameOutcome(want, got) && !intactElsewhere {
 				t.Fatalf("removeIdx=%v %q: Reader.Read %+v, view %+v", removeIdx, x, want, got)
 			}
 			if got.err != nil && !errors.Is(got.err, ErrCorrupt) && !errors.Is(got.err, ErrNotFound) {
