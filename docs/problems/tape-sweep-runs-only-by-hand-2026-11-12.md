@@ -25,8 +25,16 @@ took more than three hours.
   2026-10-20).
 - The branch `lane/sweep-survives-restart` (commits 1 and 2) makes the
   references phase durable and incremental, which removes the reason a
-  scheduled dry-run could not finish. Nothing below needs a run longer than
-  the new events since the last sweep.
+  scheduled dry-run could not finish. A dry-run now walks the events since the
+  last sweep (plus the rows after the first unreadable event of a computer);
+  it still scans the three namespace directories and sorts the whole
+  reference set, so it is not free. A resumed sweep does not re-verify the
+  media of ranges its stored progress covers: a corrupt segment or a vanished
+  event file inside them does not raise the unreadable refusal that a
+  from-scratch walk would (references are unaffected, so nothing is wrongly
+  deleted). `chain_events_resumed` in the report says how much was not
+  re-read; run a from-scratch walk (delete `tape_sweep_ref_chunks`) when
+  media is in doubt.
 
 ## What the sweep guards today, and what each guard would mean unattended
 
