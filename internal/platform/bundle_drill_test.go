@@ -228,7 +228,7 @@ func (c *drillComputer) snapshot(n int) bundle.SnapshotRoot {
 	rootBytes := make([]byte, 32)
 	_, _ = rand.Read(rootBytes)
 	root := computerevent.DigestBytes(rootBytes)
-	if err := c.store.RecordSnapshotRoot(ctx, c.id, root, int64(head.Sequence), chunks); err != nil {
+	if err := c.store.recordSnapshotRoot(ctx, c.id, root, int64(head.Sequence), chunks); err != nil {
 		t.Fatal(err)
 	}
 	return bundle.SnapshotRoot{ComputerID: c.id, Root: root, HeadSequence: int64(head.Sequence), Chunks: chunks}

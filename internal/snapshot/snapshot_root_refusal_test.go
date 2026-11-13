@@ -29,8 +29,8 @@ func TestHTTPChunksRegisterSnapshotRootReportsTheHostsRefusal(t *testing.T) {
 	defer srv.Close()
 	h := HTTPChunks{BaseURL: srv.URL, ComputerID: testComputer}
 	err := h.RegisterSnapshotRoot(context.Background(), strings.Repeat("cd", 32), 7, []string{missing})
-	if !errors.Is(err, ErrSnapshotChunksMissing) {
-		t.Fatalf("err = %v, want ErrSnapshotChunksMissing", err)
+	if !errors.Is(err, ErrSnapshotChunkMissing) {
+		t.Fatalf("err = %v, want ErrSnapshotChunkMissing", err)
 	}
 	if !strings.Contains(err.Error(), missing) {
 		t.Fatalf("the host's reason is lost: %v", err)
@@ -40,15 +40,15 @@ func TestHTTPChunksRegisterSnapshotRootReportsTheHostsRefusal(t *testing.T) {
 type refusingChunks struct{ *memChunks }
 
 func (refusingChunks) RegisterSnapshotRoot(context.Context, string, uint64, []string) error {
-	return ErrSnapshotChunksMissing
+	return ErrSnapshotChunkMissing
 }
 
 func TestARefusedSnapshotRootAppendsNoSnapshotRecorded(t *testing.T) {
 	f := newFixture(t, ChunkSize)
 	f.cfg.Chunks = refusingChunks{f.chunks}
 	_, err := TakeSnapshot(context.Background(), f.cfg)
-	if !errors.Is(err, ErrSnapshotChunksMissing) {
-		t.Fatalf("err = %v, want ErrSnapshotChunksMissing", err)
+	if !errors.Is(err, ErrSnapshotChunkMissing) {
+		t.Fatalf("err = %v, want ErrSnapshotChunkMissing", err)
 	}
 	if len(f.tape.events) != 0 {
 		t.Fatalf("a refused root appended %d events", len(f.tape.events))
