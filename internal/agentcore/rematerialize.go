@@ -79,7 +79,13 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	rt.workspaceReplaceMu.Lock()
 	defer rt.workspaceReplaceMu.Unlock()
 	// The restore restages `current`: one writer at a time (PM13).
-	defer rt.lockCurrentRelease()()
+	unlockCurrent, holdErr := rt.lockCurrentRelease()
+	defer unlockCurrent()
+	if holdErr != nil {
+		// The restore swaps `current` and may swap back: without the hold a
+		// prune could remove the release it came from. Refuse before any change.
+		return report, fmt.Errorf("%w: %v", ErrRematerializeUnavailable, holdErr)
+	}
 	if rt.store == nil {
 		return report, fmt.Errorf("%w: runtime store is not configured", ErrRematerializeUnavailable)
 	}
@@ -590,7 +596,19 @@ func (rt *Runtime) ensureServingBaselineWith(ctx context.Context, computerID, ba
 	}
 	// `current` is read and, when missing, imported under one lock (PM13,
 	// PM26): a migration's swap cannot land between the read and the import.
-	defer rt.lockCurrentRelease()()
+	unlockCurrent, holdErr := rt.lockCurrentRelease()
+	defer unlockCurrent()
+	if holdErr != nil {
+		// No hold, so nothing may stage or swap: the boot surface may still
+		// read a `current` that verifies (no follow, no import), because a
+		// readable computer must boot; one that does not verify stays refused.
+		manifest, err := updater.VerifyCurrentRelease(rt.selfdevUpdaterRoot)
+		if err != nil || strings.TrimSpace(manifest.ComputerID) != computerID {
+			return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable (%v; current release: %v)", holdErr, err)
+		}
+		rt.recordStartupManifest(manifest)
+		return manifest, nil
+	}
 	manifest, err := updater.VerifyCurrentRelease(rt.selfdevUpdaterRoot)
 	if err == nil {
 		if strings.TrimSpace(manifest.ComputerID) != computerID {

@@ -2,10 +2,13 @@ package agentcore
 
 import (
 	"context"
+	"encoding/json"
 	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -17,13 +20,25 @@ import (
 // left for this long (the freeze to the operation row is seconds).
 const bundleGCGrace = 10 * time.Minute
 
-// collectSettledBundles removes the frozen bundles under the updater's
-// incoming/ that no open operation names. The updater cannot do this: which
-// operation owns a bundle is in this runtime's operation store, not in the
+// collectSettledBundles removes the frozen bundles and host builds under the
+// updater's incoming/ that nothing can still read. The updater cannot do this:
+// which operation owns one is in this runtime's operation store, not in the
 // updater's root (docs/problems/updater-directory-fills-the-data-volume-2026-11-13.md).
-// An applied, rejected, rolled back or failed operation is settled; its bundle
-// is evidence the reads of it already answer as gone ("the frozen bundle is no
-// longer retained on this computer", api_self_development_patch.go).
+//
+// A bundle is kept while an open operation names it, and while it is the bundle
+// of the operation behind a release that is still in releases/ (the current
+// release, its predecessor, a reachable pre-migration release, and the applied
+// operation under a rolled-back release: appliedOperationForRelease is the one
+// resolver). The readers of incoming/<bundle digest> that need that:
+// sourceProjectionInput and boundSourcePatch (the platform-update gate through
+// unmigratedPackageStackRefusal, migratePackageStack, the cast gate),
+// computeEffectiveTree and the effective release, runCleanRebase and
+// cleanRebaseBeforeNotice, offerRebasePatch, draftPackageRelease. The other
+// readers (the patch, screens, media and witness APIs, desk shots, consensus,
+// engineer lineage) read the bundle of an operation a person asks about and
+// already answer "no longer retained on this computer" (api_self_development_patch.go).
+// A host build is kept for the same operations: the shot pipeline reuses it
+// for its operation's lifetime.
 func (rt *Runtime) collectSettledBundles(ctx context.Context) {
 	if rt == nil || rt.selfdevOperations == nil || rt.selfdevComputerID == "" || rt.selfdevUpdaterRoot == "" {
 		return
@@ -38,6 +53,19 @@ func (rt *Runtime) collectSettledBundles(ctx context.Context) {
 			named[operation.BundleDigest] = true
 		}
 	}
+	releases, err := os.ReadDir(filepath.Join(rt.selfdevUpdaterRoot, "releases"))
+	if err != nil {
+		// What the surviving releases need is unknown: collect nothing.
+		return
+	}
+	for _, entry := range releases {
+		if !entry.IsDir() || !computerevent.IsSHA256(entry.Name()) {
+			continue
+		}
+		if operation, ok := rt.appliedOperationForRelease(ctx, entry.Name()); ok && operation.BundleDigest != "" {
+			named[operation.BundleDigest] = true
+		}
+	}
 	removed, bytes := removeUnnamedBundles(filepath.Join(rt.selfdevUpdaterRoot, "incoming"), named, time.Now(), bundleGCGrace)
 	if removed > 0 {
 		log.Printf("agentcore: bundle gc removed=%d bytes_freed=%d", removed, bytes)
@@ -45,8 +73,10 @@ func (rt *Runtime) collectSettledBundles(ctx context.Context) {
 }
 
 // removeUnnamedBundles removes each incoming/<digest> directory that carries a
-// bundle (bundle.json or bundle.draft.json), is not in named, and holds nothing
-// newer than grace. It returns the count and the apparent bytes removed.
+// bundle (bundle.json or bundle.draft.json) and each incoming/host-build-*
+// directory whose host-build.json names a bundle, when that bundle is not in
+// named and nothing in it is newer than grace. A host build whose record cannot
+// be read is judged by age alone. It returns the count and the allocated bytes.
 func removeUnnamedBundles(incoming string, named map[string]bool, now time.Time, grace time.Duration) (int, int64) {
 	entries, err := os.ReadDir(incoming)
 	if err != nil {
@@ -55,11 +85,28 @@ func removeUnnamedBundles(incoming string, named map[string]bool, now time.Time,
 	removed, freed := 0, int64(0)
 	for _, entry := range entries {
 		name := entry.Name()
-		if !entry.IsDir() || !computerevent.IsSHA256(name) || named[name] {
+		if !entry.IsDir() {
 			continue
 		}
 		dir := filepath.Join(incoming, name)
-		if !fileExists(filepath.Join(dir, "bundle.json")) && !fileExists(filepath.Join(dir, "bundle.draft.json")) {
+		switch {
+		case computerevent.IsSHA256(name):
+			if named[name] {
+				continue
+			}
+			if !fileExists(filepath.Join(dir, "bundle.json")) && !fileExists(filepath.Join(dir, "bundle.draft.json")) {
+				continue
+			}
+		case strings.HasPrefix(name, "host-build-"):
+			if raw, err := os.ReadFile(filepath.Join(dir, "host-build.json")); err == nil {
+				var record struct {
+					BundleDigest string `json:"bundle_digest"`
+				}
+				if json.Unmarshal(raw, &record) == nil && record.BundleDigest != "" && named[record.BundleDigest] {
+					continue
+				}
+			}
+		default:
 			continue
 		}
 		var size int64
@@ -73,7 +120,11 @@ func removeUnnamedBundles(incoming string, named map[string]bool, now time.Time,
 					newest = info.ModTime()
 				}
 				if info.Mode().IsRegular() {
-					size += info.Size()
+					if stat, ok := info.Sys().(*syscall.Stat_t); ok {
+						size += int64(stat.Blocks) * 512
+					} else {
+						size += info.Size()
+					}
 				}
 			}
 			return nil

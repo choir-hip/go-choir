@@ -492,7 +492,14 @@ func (rt *Runtime) migratePackageStack(ctx context.Context, trigger string) (*pa
 		return nil, nil
 	}
 	// PM13: `current` is read and written under one lock, held to the end.
-	defer rt.lockCurrentRelease()()
+	unlockCurrent, holdErr := rt.lockCurrentRelease()
+	defer unlockCurrent()
+	if holdErr != nil {
+		// The migration swaps `current` and may restore the snapshot: refuse
+		// before it changes anything; the next trigger retries.
+		rt.setPackageMigrationWaiting(holdErr.Error())
+		return nil, nil
+	}
 	in := rt.sourceProjectionInput(ctx)
 	top := in.Top
 	if top == nil || in.TopUnavailable != "" || len(top.Patch) == 0 || in.Pending {
@@ -993,7 +1000,11 @@ func (rt *Runtime) restorePackageMigration(ctx context.Context, rec *packageMigr
 func (rt *Runtime) rollbackPackageMigration(ctx context.Context, pair string) (*packageMigrationRecord, error) {
 	rt.packageMigrationMu.Lock()
 	defer rt.packageMigrationMu.Unlock()
-	defer rt.lockCurrentRelease()()
+	unlockCurrent, holdErr := rt.lockCurrentRelease()
+	defer unlockCurrent()
+	if holdErr != nil {
+		return nil, holdErr
+	}
 	rec, err := rt.loadPackageMigration(pair)
 	if err != nil {
 		return nil, err

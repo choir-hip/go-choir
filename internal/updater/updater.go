@@ -160,7 +160,15 @@ type Updater struct {
 	storeSchemaPath string
 	// pruneWG tracks the prunes a verified apply started (prune.go).
 	pruneWG sync.WaitGroup
+	// pruneBetween, when set, runs between two prune chunks, outside the
+	// updater's mutex (a test seam: a restore that starts mid-prune).
+	pruneBetween func()
 }
+
+// restagedOutcome marks the journal RestagePinnedRelease writes: a swap of
+// `current` that is no apply, recorded so the release it came from stays the
+// rollback predecessor.
+const restagedOutcome = "restaged"
 
 func New(root, computerID, realizationID string, service ServiceManager, health HealthProber, signer ReceiptSigner) (*Updater, error) {
 	return newUpdater(root, computerID, realizationID, service, health, signer, "")
@@ -296,6 +304,7 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 			return refuse(fmt.Errorf("updater: resolve booted base image digest: %w", digestErr).Error())
 		}
 		if booted != request.Manifest.BaseImageManifestDigest {
+			u.dropStagedSource(request.SourceDir)
 			return refuse(fmt.Sprintf("updater: release base %s does not match booted base %s", request.Manifest.BaseImageManifestDigest, booted))
 		}
 	}
@@ -306,6 +315,7 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 	// the vm-3dc68688 stale-binary failure class, caught pre-restart instead
 	// of by a post-mortem health probe.
 	if cerr := u.checkStateCompatibility(request.Manifest); cerr != nil {
+		u.dropStagedSource(request.SourceDir)
 		return refuse(cerr.Error())
 	}
 
@@ -322,6 +332,7 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 		}
 		request.SourceDir = sourceDir
 		if serr := u.stageRelease(request.SourceDir, releaseDir, request.Manifest); serr != nil {
+			u.dropStagedSource(request.SourceDir)
 			return refuse(serr.Error())
 		}
 		u.dropStagedSource(sourceDir)
@@ -331,6 +342,7 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 	// untouched and never publishes a restart — the running release keeps
 	// serving (fail-closed on the data path).
 	if serr := u.materializeReleaseClosure(releaseDir, request.Manifest); serr != nil {
+		u.dropStagedSource(request.SourceDir)
 		return refuse(serr.Error())
 	}
 	if !found {
@@ -852,6 +864,10 @@ func (u *Updater) ImportBaseline(request BaselineImportRequest) (ReleaseManifest
 	if u == nil {
 		return ReleaseManifest{}, fmt.Errorf("updater: invalid baseline import")
 	}
+	// It stages a release and swaps `current`: one writer at a time, with Apply
+	// and the prune's chunks.
+	u.mu.Lock()
+	defer u.mu.Unlock()
 	sourceDir := filepath.Clean(request.SourceDir)
 	trustedBaseline := strings.HasPrefix(sourceDir, "/nix/store/") || strings.HasPrefix(sourceDir, filepath.Join(u.root, "incoming")+string(os.PathSeparator))
 	if request.ComputerID != u.computerID || request.RealizationID != u.realizationID ||
@@ -967,7 +983,37 @@ func RestagePinnedRelease(root, releaseDigest string, storeSchemaPaths ...string
 		}
 	}
 	ensureReleaseEntrypoint(root, releaseDir, manifest)
+	recordRestage(root, releaseDigest)
 	return swapCurrentPointer(root, releaseDir)
+}
+
+// recordRestage journals a swap of `current` to releaseDigest that is no apply,
+// so the release it comes from stays the one rollback predecessor the prune
+// keeps (a boot frontend follow, a tape restore, a base restore, a package
+// migration). Best effort: a restage that cannot be recorded is still done.
+func recordRestage(root, releaseDigest string) {
+	prior, priorTarget, err := currentReleaseOf(root)
+	if err != nil || prior == "" || prior == releaseDigest {
+		return
+	}
+	suffix := make([]byte, 8)
+	if _, err := rand.Read(suffix); err != nil {
+		return
+	}
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	key := "restage-" + now.Format("20060102T150405.000000") + "-" + hex.EncodeToString(suffix)
+	journal := operationJournal{
+		Phase: "completed", PriorReleaseDigest: prior, PriorReleaseTarget: priorTarget,
+		TargetReleaseDigest: releaseDigest, StartedAt: now,
+		Result: ApplyResult{ReleaseDigest: releaseDigest, PriorReleaseDigest: prior, Outcome: restagedOutcome},
+	}
+	if err := os.MkdirAll(operationsDir(root), 0o700); err != nil {
+		log.Printf("updater: restage journal: %v", err)
+		return
+	}
+	if err := writeJournal(filepath.Join(operationsDir(root), safeName(key)+".json"), journal); err != nil {
+		log.Printf("updater: restage journal: %v", err)
+	}
 }
 
 // ensureReleaseEntrypoint backfills releaseDir/layering-entrypoint for a

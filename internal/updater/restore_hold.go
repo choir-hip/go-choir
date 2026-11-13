@@ -1,9 +1,11 @@
 package updater
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // A restore (tape restore, base restore, package migration, the boot baseline
@@ -34,29 +36,60 @@ func HoldRestore(root string) (release func(), err error) {
 		return nil, err
 	}
 	unlock, acquired, err := lockFile(f, true)
-	if err != nil || !acquired {
+	if err != nil {
 		f.Close()
 		return nil, err
+	}
+	if !acquired {
+		f.Close()
+		return nil, errors.New("updater: restore hold not acquired")
 	}
 	return func() { unlock(); f.Close() }, nil
 }
 
-// RestoreInFlight reports whether a restore holds root. A missing hold file or
-// an unreadable one that cannot be tested reads as held only when it exists
-// and cannot be opened (fail closed); a missing file is not held.
-func RestoreInFlight(root string) bool {
-	f, err := os.OpenFile(restoreHoldPath(filepath.Clean(strings.TrimSpace(root))), os.O_RDWR, 0)
-	if os.IsNotExist(err) {
-		return false
+// tryHoldRestore takes the hold without waiting, for the prune: it holds the
+// updater's mutex, and a restore holds the hold while it calls Apply, which
+// waits for that mutex, so the prune must never wait for the hold. acquired is
+// false when a restore holds it. When the hold file cannot be created because
+// the volume is full, no restore can take the hold either (each refuses
+// without it), so the prune goes ahead: it is what frees the space.
+func tryHoldRestore(root string) (release func(), acquired bool, err error) {
+	root = filepath.Clean(strings.TrimSpace(root))
+	f, err := os.OpenFile(restoreHoldPath(root), os.O_RDWR, 0)
+	if errors.Is(err, os.ErrNotExist) {
+		if mkErr := os.MkdirAll(operationsDir(root), 0o700); mkErr != nil {
+			return nil, false, mkErr
+		}
+		f, err = os.OpenFile(restoreHoldPath(root), os.O_CREATE|os.O_RDWR, 0o600)
+		if errors.Is(err, syscall.ENOSPC) || errors.Is(err, syscall.EDQUOT) {
+			return func() {}, true, nil
+		}
 	}
+	if err != nil {
+		return nil, false, err
+	}
+	unlock, got, err := lockFile(f, false)
+	if err != nil {
+		f.Close()
+		return nil, false, err
+	}
+	if !got {
+		f.Close()
+		return nil, false, nil
+	}
+	return func() { unlock(); f.Close() }, true, nil
+}
+
+// RestoreInFlight reports whether a restore holds root, for diagnostics; the
+// answer can be stale the moment it is returned, so nothing may act on it (the
+// prune uses tryHoldRestore). A missing hold file is not held.
+func RestoreInFlight(root string) bool {
+	release, acquired, err := tryHoldRestore(root)
 	if err != nil {
 		return true
 	}
-	defer f.Close()
-	unlock, acquired, err := lockFile(f, false)
-	if err != nil || !acquired {
-		return true
+	if acquired {
+		release()
 	}
-	unlock()
-	return false
+	return !acquired
 }
