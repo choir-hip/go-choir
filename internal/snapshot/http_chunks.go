@@ -124,6 +124,10 @@ func (h HTTPChunks) RegisterSnapshotRoot(ctx context.Context, root string, headS
 	defer resp.Body.Close()
 	reason, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
 	_, _ = io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode == http.StatusGone {
+		// The computer was destroyed: not retryable, and not a missing chunk.
+		return fmt.Errorf("%w (%s)", ErrSnapshotComputerDeleted, strings.TrimSpace(string(reason)))
+	}
 	if resp.StatusCode == http.StatusConflict {
 		// The host does not hold a chunk the root names: this attempt
 		// recorded nothing, and the next one re-probes and re-uploads it.
