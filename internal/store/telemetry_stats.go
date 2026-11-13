@@ -70,14 +70,22 @@ type telemetryCounters struct {
 	tapeEventsByAuthority map[string]int64
 	tapeOpsByKind         map[string]int64
 	tapeOpsByTable        map[string]int64
+	tapeWrites            tapeWriteMaps // tape_write_counters.go
 
 	appendedBatchable    atomic.Int64
 	appendedAcknowledged atomic.Int64
 	tapeEvents           atomic.Int64
 	tapeOps              atomic.Int64
-	tapeOpsHist          [opsHistogramBuckets]atomic.Int64
-	readsConsistent      atomic.Int64
-	readsRelaxed         atomic.Int64
+	tapeBytes            atomic.Int64
+	// The callers inside a tape write now, the depth each found on arrival
+	// (itself included) and the time a write call took, queue included.
+	appenderInflight  atomic.Int64
+	appenderDepthHist [opsHistogramBuckets]atomic.Int64
+	appenderCalls     atomic.Int64
+	appenderCallNanos atomic.Int64
+	tapeOpsHist       [opsHistogramBuckets]atomic.Int64
+	readsConsistent   atomic.Int64
+	readsRelaxed      atomic.Int64
 
 	recordsEnqueued       atomic.Int64
 	batchesSealed         atomic.Int64
@@ -154,12 +162,13 @@ func (c *telemetryCounters) recordAppend(kind types.EventKind, payloadBytes int)
 }
 
 // recordTapeEvent counts one accepted projection-batch tape event.
-func (c *telemetryCounters) recordTapeEvent(authority string, ops []computerevent.ProjectionOp) {
+func (c *telemetryCounters) recordTapeEvent(authority string, ops []computerevent.ProjectionOp, payloadBytes int) {
 	if c == nil {
 		return
 	}
 	c.tapeEvents.Add(1)
 	c.tapeOps.Add(int64(len(ops)))
+	c.tapeBytes.Add(int64(payloadBytes))
 	c.tapeOpsHist[opsBucket(len(ops))].Add(1)
 	c.mu.Lock()
 	if c.tapeEventsByAuthority == nil {
@@ -176,6 +185,7 @@ func (c *telemetryCounters) recordTapeEvent(authority string, ops []computereven
 			c.tapeOpsByTable[op.Table]++
 		}
 	}
+	c.tapeWrites.record(authority, ops, payloadBytes)
 	c.mu.Unlock()
 }
 
@@ -263,6 +273,26 @@ type TelemetryStats struct {
 
 	Batching BatchingStats `json:"batching"`
 
+	// The tape write counters (tape_write_counters.go): events and bytes by
+	// writer family, ops and bytes by object kind, run memory entries by kind,
+	// and the corpusd requests the guest has sent.
+	TapeBytes                int64            `json:"tape_bytes"`
+	TapeEventsByFamily       map[string]int64 `json:"tape_events_by_family"`
+	TapeBytesByFamily        map[string]int64 `json:"tape_bytes_by_family"`
+	TapeOpsByObjectKind      map[string]int64 `json:"tape_ops_by_object_kind"`
+	TapeOpBytesByObjectKind  map[string]int64 `json:"tape_op_bytes_by_object_kind"`
+	RunMemoryOpsByKind       map[string]int64 `json:"run_memory_ops_by_kind"`
+	CorpusdCalls             map[string]int64 `json:"corpusd_calls"`
+	CorpusdCallsPerTapeEvent float64          `json:"corpusd_calls_per_tape_event"`
+	// AppenderDepthAtEnter is the number of callers inside the tape write
+	// (dry run, queue for the appender, append) when a new one arrived, itself
+	// included: "1" arrived alone. Labels are the ops histogram's. The share at
+	// 3 and over predicts what coalescing the queued writers would save.
+	// AppenderCallMeanMS is the mean time a write call took, queue included.
+	AppenderDepthAtEnter map[string]int64 `json:"appender_depth_at_enter"`
+	AppenderInflight     int64            `json:"appender_inflight"`
+	AppenderCallMeanMS   float64          `json:"appender_call_mean_ms"`
+
 	// GroupCommit is tape.group_commit (tape_group_commit.go).
 	GroupCommit GroupCommitStats `json:"group_commit"`
 }
@@ -299,6 +329,7 @@ func (s *Store) TelemetryStats() TelemetryStats {
 	if len(c.tapeOpsByTable) > 0 {
 		out.TapeOpsByTable = copyCounts(c.tapeOpsByTable)
 	}
+	c.tapeWrites.copyInto(&out)
 	c.mu.Unlock()
 	out.EventTableWrites = s.EventTableWritesOn()
 	out.EventsAppendedBatchable = c.appendedBatchable.Load()
@@ -308,6 +339,21 @@ func (s *Store) TelemetryStats() TelemetryStats {
 	}
 	out.TapeEvents = c.tapeEvents.Load()
 	out.TapeOps = c.tapeOps.Load()
+	out.TapeBytes = c.tapeBytes.Load()
+	out.CorpusdCalls = s.corpusdCalls()
+	out.AppenderInflight = c.appenderInflight.Load()
+	out.AppenderDepthAtEnter = map[string]int64{}
+	for i := range c.appenderDepthHist {
+		if n := c.appenderDepthHist[i].Load(); n > 0 {
+			out.AppenderDepthAtEnter[opsBucketLabel(i)] = n
+		}
+	}
+	if n := c.appenderCalls.Load(); n > 0 {
+		out.AppenderCallMeanMS = float64(c.appenderCallNanos.Load()) / float64(n) / 1e6
+	}
+	if out.TapeEvents > 0 {
+		out.CorpusdCallsPerTapeEvent = float64(totalCount(out.CorpusdCalls)) / float64(out.TapeEvents)
+	}
 	out.OpsPerTapeEvent = map[string]int64{}
 	for i := range c.tapeOpsHist {
 		if n := c.tapeOpsHist[i].Load(); n > 0 {

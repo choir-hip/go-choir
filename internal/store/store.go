@@ -91,6 +91,10 @@ func sanitizeStoreText(value string) string {
 type Store struct {
 	db     *sql.DB
 	readDB *sql.DB
+	// corpusdSource reads the guest's corpusd request counts, and
+	// tapeSummary logs the hourly tape write summary (tape_write_counters.go).
+	corpusdSource atomic.Pointer[func() map[string]int64]
+	tapeSummary   tapeSummaryLoop
 	// runTerminal is told the id of every run the store persists in a
 	// terminal state (SetRunTerminalObserver); the lease service ends the
 	// run's leases through it (MA3.4), so no terminal path can forget to.
