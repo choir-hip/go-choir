@@ -86,9 +86,9 @@ That is today's behaviour, not a new one.
 
 The prune keeps the newest `retention` roots the tape names, ordered by the
 sequence of their naming receipt; the root just registered, always; and
-unnamed roots registered within a 52 minute window (the append bound: four
-sequential requests of at most 10 minutes plus a 3 minute dial resend), up to
-four unnamed rows. `LiveSnapshotRoots` and the collector read every row. The
+unnamed roots registered within the append-bound window (about 67 minutes,
+derived from the guest client's timeout, the five sequential append requests
+and the CAS re-send), up to four unnamed rows. `LiveSnapshotRoots` and the collector read every row. The
 receipts tripwire triggers on the table name and checks readers for a
 mutating statement. Design: Stage 0 of
 docs/design/snapshots-cost-the-change-2026-11-13.md.
@@ -96,8 +96,9 @@ docs/design/snapshots-cost-the-change-2026-11-13.md.
 Unchanged, so identical to main: `RecoveryBase` (still the newest row by head,
 named or not), vmctl admission and `recoveryplan`. A guest restore does not
 read `RecoveryBase`: `snapshot.Scan` and `Install` take the newest
-`snapshot_recorded` events from the tape, and lane A keeps those roots' rows
-and chunks (tests). The boot of a computer whose kept rows include unnamed
+`snapshot_recorded` events from the tape, and lane A keeps the rows and chunks
+of the newest `retention` of them (4, or 2 at a large store, where candidates
+three and four have no row protection, as before; tests). The boot of a computer whose kept rows include unnamed
 roots is therefore as on main.
 
 Still needing lane B: the host can advertise an unnamed root's head as the
