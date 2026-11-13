@@ -62,6 +62,8 @@ type Service struct {
 	// snapshotRootAfterVerify is a test hook run after a snapshot root's
 	// chunks are verified and before it commits.
 	snapshotRootAfterVerify func()
+	// snapshotRootRecheckQueries counts the collector's live-root queries.
+	snapshotRootRecheckQueries atomic.Int64
 	// tapeSweep is the tape sweep's run lock, policy, registry and jobs
 	// (tape_sweep.go).
 	tapeSweep tapeSweepState
