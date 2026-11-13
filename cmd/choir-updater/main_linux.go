@@ -63,6 +63,9 @@ func main() {
 	if strings.TrimSpace(storeSchemaPath) != "" {
 		engine.WithStoreSchemaPath(storeSchemaPath)
 	}
+	// Reclaim what earlier applies left behind; it waits for any apply and
+	// skips while one is unsettled.
+	go engine.Prune()
 	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
 		fatal("create socket directory: %v", err)
 	}

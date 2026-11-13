@@ -158,6 +158,8 @@ type Updater struct {
 	// release declaring a store schema window is refused before mutation if
 	// the persisted epoch falls outside it.
 	storeSchemaPath string
+	// pruneWG tracks the prunes a verified apply started (prune.go).
+	pruneWG sync.WaitGroup
 }
 
 func New(root, computerID, realizationID string, service ServiceManager, health HealthProber, signer ReceiptSigner) (*Updater, error) {
@@ -406,6 +408,9 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 			if err := writeJournal(journalPath, journal); err != nil {
 				return ApplyResult{}, err
 			}
+			// The release is verified and journaled: what no rollback or
+			// restore can still need may go, once this apply has returned.
+			u.pruneAfterApply()
 			return journal.Result, nil
 		}
 		journal.Phase = "recovering"
