@@ -51,8 +51,8 @@ func NewHTTPClient(baseURL string, client *http.Client, capability CapabilitySou
 	return &HTTPClient{baseURL: parsed, http: client, capability: capability}, nil
 }
 
-// CallCounts is the number of requests this client has sent to corpusd, by the
-// last segment of the endpoint path ("head", "pin", "append", ...). It counts
+// CallCounts is the number of requests this client has sent to corpusd, by a fixed
+// endpoint name ("head", "pin", "append", ... and "other"). It counts
 // every attempt, successful or not. Observability only: nothing branches on it
 // (storage solutions 2, S5: the calls a tape event costs).
 func (c *HTTPClient) CallCounts() map[string]int64 {
@@ -68,15 +68,34 @@ func (c *HTTPClient) CallCounts() map[string]int64 {
 	return out
 }
 
+// callLabels is the fixed set of corpusd endpoints that get their own count.
+// Every other path counts under "other": no string taken from a request (a
+// job id in a host-build status poll, say) can become a key, and the counts
+// are served on the observability endpoint. FetchBlobRaw sends its request
+// without doWithResponseLimit and is not counted.
+var callLabels = map[string]string{
+	"/internal/computers/events/head":    "head",
+	"/internal/computers/events/pin":     "pin",
+	"/internal/computers/events/append":  "append",
+	"/internal/computers/events/payload": "payload",
+	"/internal/computers/events/replay":  "replay",
+}
+
+// maxCallKeys is a backstop; the allowlist already bounds the keys.
+const maxCallKeys = 64
+
 func (c *HTTPClient) countCall(path string) {
 	path, _, _ = strings.Cut(path, "?")
-	label := path[strings.LastIndexByte(path, '/')+1:]
-	if label == "" {
-		label = "root"
+	label, ok := callLabels[path]
+	if !ok {
+		label = "other"
 	}
 	c.callsMu.Lock()
 	if c.calls == nil {
 		c.calls = map[string]int64{}
+	}
+	if _, seen := c.calls[label]; !seen && len(c.calls) >= maxCallKeys-1 {
+		label = "other"
 	}
 	c.calls[label]++
 	c.callsMu.Unlock()

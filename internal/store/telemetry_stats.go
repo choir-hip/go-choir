@@ -166,6 +166,7 @@ func (c *telemetryCounters) recordTapeEvent(authority string, ops []computereven
 	if c == nil {
 		return
 	}
+	tally := tallyTapeEvent(authority, ops, payloadBytes) // before any lock
 	c.tapeEvents.Add(1)
 	c.tapeOps.Add(int64(len(ops)))
 	c.tapeBytes.Add(int64(payloadBytes))
@@ -185,7 +186,7 @@ func (c *telemetryCounters) recordTapeEvent(authority string, ops []computereven
 			c.tapeOpsByTable[op.Table]++
 		}
 	}
-	c.tapeWrites.record(authority, ops, payloadBytes)
+	c.tapeWrites.add(tally)
 	c.mu.Unlock()
 }
 

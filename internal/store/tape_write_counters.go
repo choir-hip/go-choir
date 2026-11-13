@@ -1,8 +1,8 @@
 package store
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"sort"
@@ -43,7 +43,8 @@ func bumpKey(m *map[string]int64, key string, n int64) {
 	if *m == nil {
 		*m = map[string]int64{}
 	}
-	if _, ok := (*m)[key]; !ok && len(*m) >= maxCounterKeys {
+	// Leave room for "other" so len(*m) never exceeds maxCounterKeys.
+	if _, ok := (*m)[key]; !ok && key != "other" && len(*m) >= maxCounterKeys-1 {
 		key = "other"
 	}
 	(*m)[key] += n
@@ -51,7 +52,9 @@ func bumpKey(m *map[string]int64, key string, n int64) {
 
 // tapeFamily names the writer family of an event: the telemetry sealer by its
 // authority, otherwise the first op decides ("run_memory", "edge",
-// "object:<kind>" or the op kind).
+// "object:<kind>" or the op kind). It reads ops[0] only, which is right while
+// an event holds one writer's ops; it must change when coalescing puts ops of
+// several families (riding telemetry first) into one event.
 func tapeFamily(authority string, ops []computerevent.ProjectionOp) string {
 	if authority == telemetryProjectionAuthority {
 		return "telemetry"
@@ -82,31 +85,76 @@ func objectKindOf(canonicalID string) string {
 	return string(kind)
 }
 
-// record counts one accepted event. The caller holds telemetryCounters.mu.
-func (m *tapeWriteMaps) record(authority string, ops []computerevent.ProjectionOp, payloadBytes int) {
-	family := tapeFamily(authority, ops)
-	bumpKey(&m.eventsByFamily, family, 1)
-	bumpKey(&m.bytesByFamily, family, int64(payloadBytes))
+// tapeEventTally is what one accepted event adds to the counters, worked out
+// before any lock is taken.
+type tapeEventTally struct {
+	family       string
+	payloadBytes int64
+	objKinds     []string
+	objBytes     []int64
+	rmKeys       []string
+}
+
+// tallyTapeEvent classifies an event. It takes no lock and does no JSON decode.
+func tallyTapeEvent(authority string, ops []computerevent.ProjectionOp, payloadBytes int) tapeEventTally {
+	t := tapeEventTally{family: tapeFamily(authority, ops), payloadBytes: int64(payloadBytes)}
 	for _, op := range ops {
 		switch op.Kind {
 		case computerevent.ProjectionOpObject:
-			kind := objectKindOf(op.CanonicalID)
-			bumpKey(&m.opsByObjectKind, kind, 1)
-			bumpKey(&m.opBytesByObject, kind, int64(len(op.Body)))
+			t.objKinds = append(t.objKinds, objectKindOf(op.CanonicalID))
+			t.objBytes = append(t.objBytes, int64(len(op.Body)))
 		case computerevent.ProjectionOpRunMemoryEntry:
-			var head struct {
-				Kind   string `json:"kind"`
-				Reason string `json:"reason"`
-			}
-			key := "unknown"
-			if json.Unmarshal(op.Body, &head) == nil && head.Kind != "" {
-				key = head.Kind
-				if head.Reason != "" {
-					key += "/" + head.Reason
-				}
-			}
-			bumpKey(&m.runMemoryByKind, key, 1)
+			t.rmKeys = append(t.rmKeys, runMemoryKey(op.Body))
 		}
+	}
+	return t
+}
+
+var (
+	rmKindNeedle   = []byte(`"kind":"`)
+	rmReasonNeedle = []byte(`"reason":"`)
+)
+
+// runMemoryKey is "kind" or "kind/reason" of a run memory entry body, or
+// "unknown". The body is a flat object of strings and numbers (see
+// RunMemoryEntryProjection), so a quote inside any string value is escaped and
+// the unescaped needle `"kind":"` can only be the top-level key: a scan finds
+// it without decoding the multi-KB message and details strings. A value with
+// an escape, or an absurd length, is "unknown".
+func runMemoryKey(body []byte) string {
+	kind, ok := flatStringField(body, rmKindNeedle)
+	if !ok || kind == "" {
+		return "unknown"
+	}
+	if reason, ok := flatStringField(body, rmReasonNeedle); ok && reason != "" {
+		return kind + "/" + reason
+	}
+	return kind
+}
+
+func flatStringField(body, needle []byte) (string, bool) {
+	i := bytes.Index(body, needle)
+	if i < 0 {
+		return "", false
+	}
+	rest := body[i+len(needle):]
+	end := bytes.IndexByte(rest, '"')
+	if end < 0 || end > 64 || bytes.IndexByte(rest[:end], 92) >= 0 {
+		return "", false
+	}
+	return string(rest[:end]), true
+}
+
+// add counts one tallied event. The caller holds telemetryCounters.mu.
+func (m *tapeWriteMaps) add(t tapeEventTally) {
+	bumpKey(&m.eventsByFamily, t.family, 1)
+	bumpKey(&m.bytesByFamily, t.family, t.payloadBytes)
+	for i, kind := range t.objKinds {
+		bumpKey(&m.opsByObjectKind, kind, 1)
+		bumpKey(&m.opBytesByObject, kind, t.objBytes[i])
+	}
+	for _, key := range t.rmKeys {
+		bumpKey(&m.runMemoryByKind, key, 1)
 	}
 }
 
@@ -186,10 +234,13 @@ func (s *Store) tapeWriteTotals() tapeWriteTotals {
 // readings: events, ops, bytes, corpusd calls per event, then events by
 // family, largest first.
 func formatTapeWriteSummary(window time.Duration, prev, cur tapeWriteTotals) string {
-	events := cur.Events - prev.Events
+	// A reading can go backwards when the corpusd call source is replaced:
+	// clamp, so the line never shows a negative.
+	events := max(0, cur.Events-prev.Events)
+	calls := max(0, cur.Calls-prev.Calls)
 	callsPerEvent := 0.0
 	if events > 0 {
-		callsPerEvent = float64(cur.Calls-prev.Calls) / float64(events)
+		callsPerEvent = float64(calls) / float64(events)
 	}
 	type fam struct {
 		name string
@@ -209,7 +260,7 @@ func formatTapeWriteSummary(window time.Duration, prev, cur tapeWriteTotals) str
 	})
 	var b strings.Builder
 	fmt.Fprintf(&b, "tape write summary: window=%s events=%d ops=%d bytes=%d calls_per_event=%.2f by_family:",
-		window, events, cur.Ops-prev.Ops, cur.Bytes-prev.Bytes, callsPerEvent)
+		window, events, max(0, cur.Ops-prev.Ops), max(0, cur.Bytes-prev.Bytes), callsPerEvent)
 	for i, f := range fams {
 		if i >= 12 {
 			break
