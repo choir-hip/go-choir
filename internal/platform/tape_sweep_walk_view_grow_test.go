@@ -178,3 +178,70 @@ func TestX6IndexedWalkGivesTheSameRows(t *testing.T) {
 	t.Run("damaged older duplicate", TestX4WalkDoesNotStopOnADamagedOlderDuplicate)
 	t.Run("view cannot open", TestX5WalkOfAComputerWhoseViewCannotOpenUsesPerEventReads)
 }
+
+// X7: a references walk in several chunks shares one indexed view, and the
+// tape grows between chunks: the later chunks' events are appended to new
+// segments after the view was opened.
+func TestX7SharedIndexedViewAcrossRefChunksSeesTheGrowingTape(t *testing.T) {
+	old := tapeWalkIndexMinEvents
+	tapeWalkIndexMinEvents = 0
+	defer func() { tapeWalkIndexMinEvents = old }()
+	f := newTapeFixture(t)
+	f.live("live-1")
+	f.svc.tapeSweep.refChunkEvents = 2
+	c := f.chain("live-1", 10, tapeAged)
+	orphan := f.put(tapeNSPayload, []byte("orphan payload x7"), tapeAged)
+	app := tapestore.NewAppender(f.root)
+	appendEv := func(i int) {
+		p := f.path(tapeSweepRel(tapeNSEvent, c.seqs[i].event))
+		raw, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := app.Append("live-1", tapestore.Item{NS: tapestore.NSEvent, Body: raw}); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Remove(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 4; i++ {
+		appendEv(i)
+	}
+	if err := app.Seal("live-1"); err != nil {
+		t.Fatal(err)
+	}
+	var reloads, fallbacks uint64
+	var entries int
+	f.svc.tapeSweep.walkViewDone = func(_ string, v *tapestore.SegmentView) {
+		if v != nil {
+			reloads, fallbacks, entries = v.Reloads(), v.Fallbacks(), v.IndexEntries()
+		}
+	}
+	grown := false
+	f.svc.tapeSweep.afterRefChunk = func(_ string, end uint64) error {
+		if end == 2 && !grown {
+			grown = true
+			for i := 4; i < 8; i++ { // sealed new segment
+				appendEv(i)
+			}
+			if err := app.Seal("live-1"); err != nil {
+				t.Fatal(err)
+			}
+			for i := 8; i < 10; i++ { // open new segment
+				appendEv(i)
+			}
+		}
+		return nil
+	}
+	rep := f.dryRun(TapeSweepRequest{Sweeps: []string{TapeSweepOrphans}})
+	if rep.Orphans[tapeNSPayload].Refused != "" {
+		t.Fatalf("the walk refused: %s", rep.Orphans[tapeNSPayload].Refused)
+	}
+	if got := listedDigests(f.manifestItems(rep), TapeSweepOrphans); !got[orphan] || len(got) != 1 {
+		t.Fatalf("manifest lists %v, want only the orphan", got)
+	}
+	if entries == 0 || reloads == 0 || fallbacks != 0 {
+		t.Fatalf("index entries %d reloads %d fallbacks %d: want an index, a clean reload and no fallback", entries, reloads, fallbacks)
+	}
+}
