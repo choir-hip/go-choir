@@ -278,16 +278,29 @@ beyond the design:
 - **`telemetry_ridden`** is a lower bound: it counts records that rode a
   committed event only; a ride whose commit failed or whose outcome is unknown
   is counted under the seal failure counters instead.
-- **Settling a kept prepared row (`SettlePrepared`).** An unclear CAS keeps a
-  prepared row; one row can hold several runs' entries. A retried run-memory
-  write numbered itself from the committed table, which lacked those entries,
-  reused their (run, seq), and its finalize failed on the unique key (a tape
-  wedge). Rule: any failure or panic of a run-memory append sets a store-wide
-  latch (`Store.runMemorySettle`). While it is set, a run-memory writer takes
-  the settle mutex, re-checks, runs `ComputerEventAppender.SettlePrepared`
-  (the appender's own in-place recovery, under its mutex), and clears the latch
-  only if that returned nil. A failed settle leaves it set and returns the
-  error; a writer that arrives during a settle waits for it. With the latch
-  clear the writer takes no lock, so run-memory writers still queue behind the
-  in-flight append and coalesce. Lock order: run stripe, settle mutex,
-  appender mutex; nothing under the appender mutex takes either.
+- **A stale batch never reaches the CAS (the guard).** A batch is numbered
+  and dry-run against local state outside the appender mutex. An append whose
+  outcome was unknown can leave the host ahead of the local projection (a kept
+  prepared row, or a row discarded after a refused re-send and left to the
+  catch-up). Under the mutex, `appendLockedInner` then runs the in-place
+  recovery or catch-up, which can apply events the batch was numbered without:
+  a retried run-memory write then reused a landed entry's (run, seq), went to
+  the CAS, and its finalize failed on the unique key (a tape wedge). Rule: when
+  that recovery ran (heads differ, or the prepare failed on an orphan row) and
+  succeeded, and the heads are level again, the appender re-runs the
+  projection's dry run on the batch (`batchRevalidator`, under the mutex)
+  before it pins or prepares anything further; a refusal returns
+  `ErrBatchRefused` with nothing sent. If the recovery could not level the
+  heads, the append already refuses (`heads differ after in-place recovery`,
+  or the recovery's own error), and `recoveryFailedAt` keeps further writes
+  refusing for up to 30 s after a failed recovery: they get
+  `ErrNeedsProjectionRepair` and the wedge status shows it, the tape is not
+  poisoned. An append that needed no recovery runs no extra dry run and reads
+  the head once.
+  The run-memory writer has no latch and no internal retry: after an unclear
+  outcome its next call may be refused once (`ErrBatchRefused`, an error every
+  caller already handles as a failed append) and numbers from the caught-up
+  table on the attempt after. A refused group splits to singles as before, each
+  through the same guard. Covered by `TestAppendRevalidatesTheBatchAfterInPlaceRecovery`,
+  `TestAppendAfterADiscardedRowAndAFailedCatchUpDoesNotCommitAStaleBatch` and the
+  store-level `TestRunMemoryConcurrentRetriesAfterAnUnclearGroupNeverDuplicateSeq`.
