@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -170,21 +171,58 @@ func TestTapeSweepWatermarkSurvivesReceiptCompaction(t *testing.T) {
 	}
 }
 
+// receiptTableName is the tripwire's trigger: any non-test file that names the
+// receipts table. A statement-level match (a verb next to the name) misses a
+// writer built from a variable ("DELETE FROM "+table, a data-driven row spec
+// as tape_purge.go has), so the trigger is the name alone and every file that
+// names the table is allowlisted below with its reason, readers included.
+var receiptTableName = regexp.MustCompile(`(?i)\bcomputer_event_append_receipts\b`)
+
+// receiptMutation is a statement with a verb next to the table name. It is a
+// second check inside the files allowlisted as readers, not the trigger.
+var receiptMutation = regexp.MustCompile(`(?i)\b(UPDATE|DELETE\s+FROM|TRUNCATE(\s+TABLE)?|MERGE\s+INTO)\s+(ONLY\s+)?[\w."]*computer_event_append_receipts\b`)
+
+func TestReceiptMutationMatchesWritersNotReaders(t *testing.T) {
+	for _, w := range []string{"UPDATE computer_event_append_receipts SET x=1", "delete\n from public.computer_event_append_receipts", "TRUNCATE TABLE computer_event_append_receipts"} {
+		if !receiptMutation.MatchString(w) {
+			t.Errorf("misses the writer %q", w)
+		}
+	}
+	for _, r := range []string{"SELECT 1 FROM computer_event_append_receipts a; DELETE FROM computer_snapshot_roots", "INSERT INTO computer_event_append_receipts (a) VALUES (1) ON CONFLICT (a) DO NOTHING"} {
+		if receiptMutation.MatchString(r) {
+			t.Errorf("flags the reader %q", r)
+		}
+	}
+}
+
+// The trigger sees every way a writer can name the table, including the ones
+// a verb-adjacent match misses.
+func TestReceiptTableTriggerSeesIndirectWriters(t *testing.T) {
+	for _, src := range []string{
+		`db.Exec("DELETE FROM " + "computer_event_append_receipts")`,
+		`{name: "computer_event_append_receipts", where: "sequence<?"}`,
+		"fmt.Sprintf(`UPDATE %s SET x=1`, \"public.computer_event_append_receipts\")",
+		"update public.computer_event_append_receipts set x=1",
+	} {
+		if !receiptTableName.MatchString(src) {
+			t.Errorf("the trigger misses %q", src)
+		}
+	}
+}
+
 // V4: the invariant "receipt rows are never changed except losslessly" is
 // guarded by listing the writers. This is a TRIPWIRE, not a proof: it finds
-// files that name the table (schema-qualified or not) and also contain a
-// mutating SQL keyword, in non-test Go, nix/ and scripts/, and fails for any
-// file not on the allowlist. SQL built from pieces (the purge builds
-// "DELETE FROM "+table), a file that mutates through another name, or a
-// keyword in a different file can evade it. A new writer that is not lossless
+// every non-test file in Go, nix/ and scripts/ that names the table
+// (schema-qualified or not) and fails for any file not on the allowlist, which
+// lists readers too. A file that reaches the table through another name can
+// evade it. A new writer that is not lossless
 // must delete the computer's tape_sweep_ref_chunks, and be added here with
 // its reason and to receipt_compaction.go's C-list.
 func TestAppendReceiptRowWritersAreKnown(t *testing.T) {
-	table := regexp.MustCompile(`(?i)\bcomputer_event_append_receipts\b`)
-	mutates := regexp.MustCompile(`(?i)\b(UPDATE|DELETE|TRUNCATE|MERGE)\b|DO\s+UPDATE`)
+	table := receiptTableName
 	allowed := map[string]string{
 		"internal/platform/receipt_compaction.go": "the lossless rewrite (C2, C9)",
-		"internal/platform/tape_purge.go":         "deletes the chunks with the rows, same transaction",
+		"internal/platform/tape_purge.go":         "writer: deletes the destroyed computer's rows after the sweep has deleted its files (tape_sweep_apply.go), chunks first, rows in a later transaction",
 		// Readers and inserters whose text merely contains a keyword (comments,
 		// ON CONFLICT clauses, "updated_at"-style words, shell tools). Each was
 		// read when this list was made; none updates or deletes receipt rows.
@@ -196,6 +234,7 @@ func TestAppendReceiptRowWritersAreKnown(t *testing.T) {
 		"internal/platform/verifier_key_pin.go": "reader",
 		"internal/platform/tape_sweep.go":       "reader",
 		"internal/platform/tape_sweep_refs.go":  "comments",
+		"internal/platform/snapshot_roots.go":   "reader: the named-root subquery; its DELETE targets computer_snapshot_roots",
 		"internal/bundle/import.go":             "inserts after the head, overlap refused",
 		"internal/bundle/store.go":              "reader",
 		"internal/bundle/follow.go":             "reader",
@@ -226,7 +265,7 @@ func TestAppendReceiptRowWritersAreKnown(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if table.Match(raw) && mutates.Match(raw) {
+			if table.Match(raw) {
 				rel, _ := filepath.Rel(root, path)
 				hits = append(hits, filepath.ToSlash(rel))
 			}
@@ -236,12 +275,27 @@ func TestAppendReceiptRowWritersAreKnown(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if len(hits) < 5 {
+	if !slices.Contains(hits, "internal/platform/receipt_compaction.go") || len(hits) < 5 {
 		t.Fatalf("the scan found only %v; the repo root is wrong or the scan is vacuous", hits)
+	}
+	// A file allowlisted as a reader must not change the table: a statement
+	// with a verb next to the name (a variable-built writer is the trigger's
+	// and the allowlist reasons' job).
+	for _, rel := range hits {
+		reason, ok := allowed[rel]
+		if ok && strings.HasPrefix(reason, "reader") {
+			raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if receiptMutation.Match(raw) {
+				t.Errorf("%s is allowlisted as a reader but has a statement that changes computer_event_append_receipts", rel)
+			}
+		}
 	}
 	for _, rel := range hits {
 		if _, ok := allowed[rel]; !ok {
-			t.Errorf("%s names computer_event_append_receipts and a mutating keyword; if it rewrites or deletes receipt rows it must drop tape_sweep_ref_chunks for the computer (or be lossless) and be allowlisted here with a reason", rel)
+			t.Errorf("%s names computer_event_append_receipts; if it rewrites or deletes receipt rows it must drop tape_sweep_ref_chunks for the computer (or be lossless) and be allowlisted here with a reason", rel)
 		}
 	}
 }
