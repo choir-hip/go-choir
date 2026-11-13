@@ -29,6 +29,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/committer"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
+	"github.com/yusefmosiah/go-choir/internal/datavolume"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/eventtablegrant"
 	"github.com/yusefmosiah/go-choir/internal/guestmem"
@@ -515,6 +516,8 @@ type Runtime struct {
 	costWatchLast         map[string]time.Time
 	selfdevRouteDesktopID string
 	selfdevUpdaterRoot    string
+	// dataVolume runs the data volume walks one at a time and keeps the last.
+	dataVolume datavolume.Scanner
 	selfdevComputerID     string
 	selfdevRealizationID  string
 	selfdevStartupMarker  string
