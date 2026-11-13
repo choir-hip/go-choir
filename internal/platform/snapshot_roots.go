@@ -103,15 +103,21 @@ func (s *Store) recordSnapshotRoot(ctx context.Context, computerID, root string,
 	if hook := s.snapshotRootCommitResult; hook != nil {
 		err = hook(err)
 	}
-	if err != nil {
-		return err
-	}
+	// Bump whatever Commit returned, and never before it: an errored commit
+	// (a lost reply, a cancelled request, the deadline) is an unknown
+	// outcome, and the row may be durable. The caller clears the pending
+	// set only after this returns, so any unlink after that clear sees a
+	// changed generation and asks the database, which answers for whichever
+	// way the commit went. A rolled-back root needs no protection: its
+	// chunks are simply unrooted.
 	s.snapshotRootGen.Add(1)
-	return nil
+	return err
 }
 
-// snapshotRootCommitTimeout bounds the database part of a registration.
-const snapshotRootCommitTimeout = 30 * time.Second
+// snapshotRootDBDeadline bounds each database step the snapshot-root path
+// adds under a lock or a gate: the root commit and the collector's live-root
+// query.
+const snapshotRootDBDeadline = 30 * time.Second
 
 // snapshotChunkKey names one chunk of one computer, as the pending set keys it.
 func snapshotChunkKey(computerID, digest string) string { return computerID + "/" + digest }
@@ -165,8 +171,9 @@ var ErrSnapshotChunkMissing = errors.New("snapshot root names a chunk the host d
 // its tree is being or has been purged, and a new root would pin chunks the
 // purge removes. The tombstone set is an in-memory cache.
 //
-// The invariant against the artifact collector, whose only chunk unlink for a
-// live computer is unlinkIfStillUnreachable under the exclusive casReuseMu:
+// Against the artifact collector and the tape sweep's non-purge items (the
+// callers of unlinkIfStillUnreachable, under the exclusive casReuseMu; other
+// removals are the destroyed purge and operator tools):
 //
 //  1. Under the shared lock, every named chunk is stat'ed, and the digests
 //     are added to the in-memory pending set before the lock is released. An
@@ -175,13 +182,28 @@ var ErrSnapshotChunkMissing = errors.New("snapshot root names a chunk the host d
 //     chunk in the pending set and keeps it.
 //  2. The database commit runs after the lock is released (a slow commit
 //     must not queue event appends behind a waiting collector Lock; it is
-//     bounded by snapshotRootCommitTimeout). After it commits, the root
+//     bounded by snapshotRootDBDeadline). After it commits, the root
 //     generation is bumped, and only then is the pending set cleared. An
 //     unlink after the clear sees a changed generation (or a live-root
 //     query) and keeps the chunk through the committed root.
 //  3. A refused or failed registration clears its pending digests and
-//     records nothing; a failed commit leaves the chunks unrooted and
-//     subject to the grace as before.
+//     records nothing. A commit of unknown outcome is covered by the
+//     generation bump in recordSnapshotRoot.
+//  4. The tombstone is re-checked under tombstones.gate (shared), held
+//     through the commit, as CompareAndSwap does: applyDestroyedComputer
+//     writes the tombstone under gate.Lock, so a root either commits before
+//     the tombstone (the purge's row-count check then sees it and rolls the
+//     rows step back for a fresh dry run) or is refused (ErrComputerTapeDeleted).
+//
+// Lock order: tombstones.gate, then the pending mutex (a leaf). casReuseMu is
+// taken and released in step 1, before the gate, never nested with it, and
+// applyDestroyedComputer takes gate.Lock without casReuseMu, so there is no
+// inversion. The gate is now held across a database commit of up to
+// snapshotRootDBDeadline; the most that can stall is a destroy apply's
+// tombstone write (rare, operator-run, retryable) and, queued behind it, event
+// appends, which already wait on the same gate. The collector's guarantee is
+// as strong as these steps and the database are: a registration whose commit
+// hangs holds its chunks pending until the deadline.
 func (s *Service) RecordVerifiedSnapshotRoot(ctx context.Context, computerID, root string, headSequence int64, chunks []string) (string, error) {
 	if s == nil || s.store == nil {
 		return "", fmt.Errorf("snapshot root: store unavailable")
@@ -200,7 +222,15 @@ func (s *Service) RecordVerifiedSnapshotRoot(ctx context.Context, computerID, ro
 	if hook := s.snapshotRootAfterVerify; hook != nil {
 		hook()
 	}
-	commitCtx, cancel := context.WithTimeout(ctx, snapshotRootCommitTimeout)
+	s.store.tombstones.gate.RLock()
+	defer s.store.tombstones.gate.RUnlock()
+	if err := s.store.refuseTombstonedTape(ctx, computerID); err != nil {
+		return "", err
+	}
+	if hook := s.snapshotRootInCommit; hook != nil {
+		hook()
+	}
+	commitCtx, cancel := context.WithTimeout(ctx, snapshotRootDBDeadline)
 	defer cancel()
 	return "", s.store.recordSnapshotRoot(commitCtx, computerID, root, headSequence, chunks)
 }
@@ -275,7 +305,7 @@ func (s *Service) chunkProtectedBySnapshotRoot(ctx context.Context, c gcCandidat
 		return false, nil
 	}
 	s.snapshotRootRecheckQueries.Add(1)
-	qctx, cancel := context.WithTimeout(ctx, snapshotRootCommitTimeout)
+	qctx, cancel := context.WithTimeout(ctx, snapshotRootDBDeadline)
 	defer cancel()
 	var n int
 	// Digests are 64 hex characters, so the quoted needle has no pattern
@@ -357,7 +387,7 @@ func (h *Handler) HandleSnapshotRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if errors.Is(err, ErrComputerTapeDeleted) {
-		writeJSON(w, http.StatusConflict, apiError{Error: "snapshot root refused: " + err.Error()})
+		writeJSON(w, http.StatusGone, apiError{Error: "snapshot root refused: " + err.Error()})
 		return
 	}
 	if err != nil {

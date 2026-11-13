@@ -80,6 +80,16 @@ query on every candidate and 35 ms with the generation shortcut.
 Still open: a capture that spans hibernation (being closed by
 `lane/restart-cancels-capture`); shortening `fileCASChunkUploadGrace`, a later
 step that depends on this one being proved on staging; a read-only audit of
-the roots on Node B; a root registered in the instant before a purge's
-tombstone commits could strand one row. The generation counter is per process;
-a second process that wrote snapshot roots (none does) would not bump it.
+the roots on Node B.
+
+Named residuals: the generation counter and the pending set are per process.
+`bundle.Import` (internal/bundle/import.go, run by `cmd/choir-bundle`) does
+write `computer_snapshot_roots` from another process and cannot move them; its
+documented precondition (import.go, "run it with the target's corpusd stopped,
+or at least the computer idle") is what keeps it safe, and chunks it writes
+carry a fresh mtime. Each classified candidate can hold the exclusive lock up
+to 30 s during a database outage (follow-up: abort the namespace after the
+first live-check error). File-CAS root manifests (`file-cas-roots`) are not
+rechecked by the unlink. A root that commits between a purge's dry run and its
+rows step makes the rows step roll back on the count mismatch; the purge
+needs a fresh dry run.
