@@ -197,36 +197,11 @@ func (m *runMemoryManager) carryActorConversation(ctx context.Context, ownerID, 
 	// the source run: same summary, same TokensBefore (the number is in the
 	// rendered text), so message 0 is byte-equal at every hop.
 	checkpointTokens := latestRunMemoryCheckpointTokens(priorEntries)
-	if m.batchedAppends() {
-		// tape.group_commit: the checkpoint and the carried messages are one
-		// write instead of one tape event each.
-		var batch []types.RunMemoryEntry
-		if checkpoint != "" {
-			batch = append(batch, types.RunMemoryEntry{
-				RunID:        runID,
-				OwnerID:      ownerID,
-				AgentID:      agentID,
-				Kind:         types.RunMemoryEntryCompaction,
-				Summary:      checkpoint,
-				TokensBefore: checkpointTokens,
-				Reason:       "actor_rewarm",
-				Details: map[string]any{
-					"source_loop_id":    sourceRunID,
-					"carried_messages":  len(tail),
-					"checkpoint_status": "carried_actor_conversation",
-				},
-			})
-		}
-		for _, entry := range tail {
-			batch = append(batch, m.messageEntry(runMemoryMessageRole(entry.Message), entry.Message))
-		}
-		if _, err := m.store.AppendRunMemoryEntries(ctx, batch); err != nil {
-			return fmt.Errorf("carry actor conversation: %w", err)
-		}
-		return nil
-	}
+	// The checkpoint and the carried messages are one write, one tape
+	// event, durable before it returns (storage solutions 2, S5).
+	var batch []types.RunMemoryEntry
 	if checkpoint != "" {
-		if _, err := m.store.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{
+		batch = append(batch, types.RunMemoryEntry{
 			RunID:        runID,
 			OwnerID:      ownerID,
 			AgentID:      agentID,
@@ -239,14 +214,13 @@ func (m *runMemoryManager) carryActorConversation(ctx context.Context, ownerID, 
 				"carried_messages":  len(tail),
 				"checkpoint_status": "carried_actor_conversation",
 			},
-		}); err != nil {
-			return fmt.Errorf("carry actor checkpoint: %w", err)
-		}
+		})
 	}
 	for _, entry := range tail {
-		if err := m.appendMessage(ctx, runMemoryMessageRole(entry.Message), entry.Message); err != nil {
-			return fmt.Errorf("carry actor conversation: %w", err)
-		}
+		batch = append(batch, m.messageEntry(runMemoryMessageRole(entry.Message), entry.Message))
+	}
+	if _, err := m.store.AppendRunMemoryEntries(ctx, batch); err != nil {
+		return fmt.Errorf("carry actor conversation: %w", err)
 	}
 	return nil
 }
@@ -450,16 +424,10 @@ func (m *runMemoryManager) messageEntry(role string, msg json.RawMessage) types.
 	}
 }
 
-// batchedAppends reports whether a run's opening and carried messages are
-// written as one batch: only with tape.group_commit on (d@e first).
-func (m *runMemoryManager) batchedAppends() bool {
-	return m.store != nil && m.store.TapeGroupCommitOn()
-}
-
-// appendMessages appends the run's opening messages: one batch with
-// tape.group_commit on, one write each otherwise.
+// appendMessages appends the run's opening messages as one write: one tape
+// event, durable before it returns.
 func (m *runMemoryManager) appendMessages(ctx context.Context, msgs []json.RawMessage) error {
-	if len(msgs) > 1 && m.batchedAppends() {
+	if len(msgs) > 1 {
 		batch := make([]types.RunMemoryEntry, 0, len(msgs))
 		for _, msg := range msgs {
 			batch = append(batch, m.messageEntry(runMemoryMessageRole(msg), msg))

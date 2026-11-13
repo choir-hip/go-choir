@@ -149,15 +149,19 @@ func (t *projectionTape) appendOps(ctx context.Context, ops []computerevent.Proj
 	return t.appendOpsAs(ctx, ops, projectionAuthority)
 }
 
-// appendOpsAs writes ops as one acknowledged tape event, or, with
-// tape.group_commit on and every op an unconditional upsert, as a member of a
-// shared one (tape_group_commit.go). Either way it returns after the event is
-// durable.
+// appendOpsAs writes ops as one acknowledged tape event, or, when every op is
+// an unconditional upsert, as a member of a shared one (tape_group_commit.go):
+// the writers queued behind the append in flight go out in one event, in
+// arrival order. Either way it returns after the event is durable.
 func (t *projectionTape) appendOpsAs(ctx context.Context, ops []computerevent.ProjectionOp, authority string) error {
 	if t != nil && t.appender != nil && len(ops) > 0 {
 		defer t.stats.enterTapeWrite()()
 	}
-	if t != nil && t.appender != nil && authority == projectionAuthority && t.group != nil && t.group.on.Load() && groupableOps(ops) {
+	// A guarded batch (PutBatchConditional and its kin) never shares an event:
+	// its conditions were read from committed state before it got here, and
+	// the interceptor sees plain object ops, so only the context says it was
+	// guarded. It takes the direct path, alone in its event.
+	if t != nil && t.appender != nil && authority == projectionAuthority && t.group != nil && groupableOps(ops) && !objectgraph.ConditionalBatch(ctx) {
 		return t.appendGrouped(ctx, ops)
 	}
 	return t.appendDirect(ctx, ops, authority)
@@ -165,11 +169,27 @@ func (t *projectionTape) appendOpsAs(ctx context.Context, ops []computerevent.Pr
 
 // appendDirect writes ops as their own tape event.
 func (t *projectionTape) appendDirect(ctx context.Context, ops []computerevent.ProjectionOp, authority string) error {
+	return t.appendDirectParts(ctx, [][]computerevent.ProjectionOp{ops}, authority, false)
+}
+
+// appendDirectParts writes the parts' ops, in order, as one tape event. Each
+// part is one writer's ops (a group's members); firstIsTelemetry marks the
+// first part as telemetry that rode the event. The parts only matter to the
+// counters: the tape sees one flat op list.
+func (t *projectionTape) appendDirectParts(ctx context.Context, parts [][]computerevent.ProjectionOp, authority string, firstIsTelemetry bool) error {
 	if t == nil || t.appender == nil {
 		return fmt.Errorf("store: projection tape is not bound")
 	}
-	if len(ops) == 0 {
+	n := 0
+	for _, part := range parts {
+		n += len(part)
+	}
+	if n == 0 {
 		return nil
+	}
+	ops := make([]computerevent.ProjectionOp, 0, n)
+	for _, part := range parts {
+		ops = append(ops, part...)
 	}
 	eventID, err := computerevent.NewEventID()
 	if err != nil {
@@ -218,7 +238,7 @@ func (t *projectionTape) appendDirect(ctx context.Context, ops []computerevent.P
 	if err != nil {
 		return fmt.Errorf("store: append projection batch: %w", err)
 	}
-	t.stats.recordTapeEvent(event.AuthorityRef, ops, len(payload))
+	t.stats.recordTapeEvent(event.AuthorityRef, parts, firstIsTelemetry, len(payload))
 	return nil
 }
 

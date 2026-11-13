@@ -33,8 +33,6 @@ scn_pre() {
 	chaos_check "pre: d@e is active" eq active "$T_STATE"
 	case "$T_URL" in http://10.[0-9]*:[0-9]*) ;; *) [ "$CHAOS_DRY" = 1 ] || chaos_die 3 "REFUSED: guest url '$T_URL' is not a guest tap address" ;; esac
 	[ -n "$T_BUILD" ] || [ "$CHAOS_DRY" = 1 ] || chaos_die 1 "d@e reports no build commit to use as the refresh target"
-	S_GC=$(chaos_setting tape.group_commit)
-	chaos_event settings "tape.group_commit=$S_GC"
 	chaos_console_mark
 	chaos_save_open_runs
 	chaos_load_start "file"

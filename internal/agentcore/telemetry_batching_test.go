@@ -161,10 +161,10 @@ func TestDrainFailureStillWritesMarkerAndFlagsResume(t *testing.T) {
 // P1-F16: the crash boot says what was lost when batching is on, and its
 // record is byte-for-byte what it was when batching is off.
 func TestCrashCloseRecordNamesTheMissingWindow(t *testing.T) {
-	if got := string(crashClosePayload(false, false)); got != `{"fate":"interrupted_by_restart"}` {
+	if got := string(crashClosePayload(false)); got != `{"fate":"interrupted_by_restart"}` {
 		t.Fatalf("flag-off crash-close payload changed: %s", got)
 	}
-	on := crashClosePayload(true, false)
+	on := crashClosePayload(true)
 	var decoded map[string]string
 	if err := json.Unmarshal(on, &decoded); err != nil {
 		t.Fatal(err)

@@ -40,7 +40,6 @@ var heldDefaults = []string{
 	SettingResearchRelatedStory,  // its finish rule would bind every owner research desk
 	SettingEvidenceGraph,         // owner: measure the import on a paper copy first
 	SettingTelemetryPartitions,   // GC starvation; floor 5 on every computer
-	SettingTapeGroupCommit,       // owner ruled delete (crash-lossy window)
 	SettingEventTable,            // owner ruled delete; needs a host grant too
 	SettingIntakeEventWakes,      // failed its false-merge bar three times
 	// Experiment arms, not features: none held is the shipped behaviour and
