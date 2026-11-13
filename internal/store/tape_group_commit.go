@@ -30,9 +30,11 @@ const (
 	// write over the cap goes alone.
 	groupMaxOps   = 256
 	groupMaxBytes = 1 << 20
-	// groupCommitTimeout bounds one shared append, like the sealer's.
-	groupCommitTimeout = 30 * time.Second
 )
+
+// groupCommitTimeout bounds one shared append, like the sealer's. A variable
+// only so a test can shorten it; nothing sets it in production.
+var groupCommitTimeout = 30 * time.Second
 
 // groupCommit is the per-store group state; the zero value is ready.
 type groupCommit struct {
