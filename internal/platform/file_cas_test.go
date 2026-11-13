@@ -75,6 +75,7 @@ func TestFileCASHTTPFlowAndWatermarkMonotonicity(t *testing.T) {
 		root string
 		head int64
 	}{{newer, 12}, {older, 11}} {
+		nameRootRow(t, store, "computer-filecas", r.root, r.head) // the tape names the base
 		if err := store.recordSnapshotRoot(context.Background(), "computer-filecas", r.root, r.head, []string{strings.Repeat("d", 64)}); err != nil {
 			t.Fatal(err)
 		}
@@ -187,6 +188,7 @@ func TestProjectionBaseRoutesAreNotRegistered(t *testing.T) {
 			t.Fatalf("GET %s = %d, want 404 (route not registered)", path, code)
 		}
 	}
+	nameRootRow(t, store, "c", digest, 3)
 	if err := store.recordSnapshotRoot(context.Background(), "c", digest, 3, []string{digest}); err != nil {
 		t.Fatal(err)
 	}
