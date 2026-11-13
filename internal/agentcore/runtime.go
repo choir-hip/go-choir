@@ -59,6 +59,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 	"github.com/yusefmosiah/go-choir/internal/steptrace"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/storetables"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -518,6 +519,9 @@ type Runtime struct {
 	selfdevUpdaterRoot    string
 	// dataVolume runs the data volume walks one at a time and keeps the last.
 	dataVolume datavolume.Scanner
+	// storeTables runs the state file's per-table readings one at a time and
+	// keeps the last (internal/storetables).
+	storeTables storetables.Scanner
 	selfdevComputerID     string
 	selfdevRealizationID  string
 	selfdevStartupMarker  string
