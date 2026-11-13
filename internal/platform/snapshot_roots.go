@@ -164,6 +164,7 @@ func (s *Service) chunkNamedByLiveSnapshotRoot(rel string) (bool, error) {
 		return false, nil
 	}
 	computerID, digest := parts[2], parts[3]
+	s.snapshotRootRecheckQueries.Add(1)
 	var n int
 	// Digests are 64 hex characters, so the quoted needle has no pattern
 	// characters and matches only a whole JSON element.
