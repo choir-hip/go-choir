@@ -1,629 +1,663 @@
 # Snapshots that cost the change (2026-11-13)
 
+Status: revised after review round 1 (both seats REPAIR). The round-1
+dispositions are in section 10.
+
 Class: green (design record; nothing changed by this file). Station S4 of
 [choir-storage-solutions-2](../definitions/choir-storage-solutions-2-2026-11-12.md)
-("snapshots cost the change, keep two"), design record first, two seats for
-every red stage below. Inputs: `internal/snapshot/snapshot.go`,
+("snapshots cost the change, keep two"). Design record first, and two seats
+for every red stage below. Inputs: `internal/snapshot/snapshot.go`,
 `internal/filecas/filecas.go`, `internal/agentcore/snapshot_producer.go`,
 `internal/agentcore/restore_snapshot.go`, `internal/recoveryplan`,
-`internal/platform/snapshot_roots.go`, `internal/platform/artifact_gc.go`,
+`internal/platform/snapshot_roots.go`, `internal/platform/file_cas.go`,
+`internal/platform/artifact_gc.go`, `internal/bundle/store.go`,
 `internal/store/compact.go`, `internal/store/telemetry_retire.go`;
 [chunk drain trace](../evidence/paper-chunk-drain-trace-2026-11-12.md),
 [storage frame](storage-pressure-frame-2026-11-12.md),
-[append-clustered store](append-clustered-store-2026-10-31.md) (its
-section 6 holds the only page-level churn measurements we have),
+[append-clustered store](append-clustered-store-2026-10-31.md) (section 6
+of that note holds the only page-level churn measurements we have),
 [root check problem](../problems/snapshot-root-recorded-without-chunk-check-2026-11-12.md),
 [loop problem](../problems/snapshot-loop-blocks-its-own-fix-2026-11-12.md),
-the storage mission ledger.
+and the storage mission ledger.
 
-Tags: **[C]** read in code at the cited line on origin/main 77a2a8129;
-**[M]** measured, with its source; **[E]** estimate, arithmetic shown;
-**[?]** not known. Nothing marked [E] or [?] is a fact.
+Tags: **[C]** read in code at the cited line on origin/main b21cf284d;
+**[M]** measured, with its source; **[E]** estimate, with the arithmetic
+shown; **[I]** inferred; **[?]** not known. Nothing tagged [E], [I] or [?] is
+a fact.
 
 ## 0. The answer in brief
 
-1. **The brief's 25 GB a snapshot is stale.** It is the paper's first
-   snapshot of 2026-10-30, sealed before chunks were compressed (25.5 GB
-   sealed, data-system build ledger; zstd before sealing landed in
-   f1ebf0e4c and 8492760aa on 2026-10-31). The paper's latest snapshot
-   (2026-11-12 23:28Z, head 10,978,774) uploaded **5,858 of 10,524 chunks,
-   4.04 GB sealed**, from 44.1 GB of pages, in 25 min 51 s: witness 22 min
-   37 s, stream 3 min 02 s [M, storage mission ledger]. A completed
-   snapshot costs about 4 GB a day at one snapshot every 22 hours, not
-   25 GB. The 6 GiB an hour of 2026-11-12 was the failed-attempt loop, fixed
-   by 0d2f0bd46. The comments that still say 25 GB
-   (`snapshot_producer.go:62-69`, `snapshot_roots.go:37-41`) are stale.
-2. **Sealing is not the cause.** `filecas.SealChunk`
-   (`internal/filecas/filecas.go:184-215`) uses a synthetic nonce, HMAC-SHA256
-   of the plaintext under a key derived from the DEK and the computer ID
-   (`chunkNonce`, lines 234-248). Equal plaintext gives equal sealed bytes
-   and an equal digest. On the host, two roots taken at the same frozen head
-   share 10,510 of 10,510 chunks [M, drain trace section 1].
-3. **The cause is a 1,024-page cut over writes scattered across the whole
-   file.** `streamFile` sets `fs.pagesPerChunk = ChunkSize / pageSize`
-   (`internal/snapshot/snapshot.go:671`, `ChunkSize = 4 << 20` at line 66).
-   A 4 MiB range is new if any one of its 1,024 pages changed. If each page
-   changes with probability p between snapshots, and changes are spread
-   out, a range survives with probability (1 - p)^1024. For 88% of ranges
-   to change, p need only be about 0.2% (about 11,000 pages, 45 MB) [E]. The
-   paper's writes are spread out for four reasons, each in the code or
-   measured:
-   - inserts land on random leaves: the 136-byte canonical id is the last
-     column of 13 of the 16 `og_objects` secondary indexes [M, append-clustered
-     section 0];
-   - the paper's file has `auto_vacuum=INCREMENTAL` [M, 2026-10-31], so it
-     carries a pointer-map page every 820 pages or so, about 1.25 per 4 MiB
-     range. A pointer-map page is rewritten when any page in its range is
-     allocated, freed or gets a new parent. In the synthetic grown store,
-     1,000 inserts rewrote 1,287 pointer-map pages in 1,211 ranges [M,
-     append-clustered section 6.1];
-   - the daily retirement (`telemetry_retire.go:300-320`) deletes old rows
-     all over the file. `reclaimFreePages` (`compact.go:973-1012`) then
-     runs `PRAGMA incremental_vacuum`, which moves up to 250,000 pages
-     (`incrementalVacuumMaxPages`, `compact.go:105`) from the end of the
-     file into holes across it;
-   - a compaction swap (`prepareCompactCopy`, swapped at a planned restart)
-     renumbers every page. The snapshot after it is a full one, which is
-     expected and rare.
+1. **The brief's figure of 25 GB a snapshot is stale.** It is the size of
+   the paper's first snapshot on 2026-10-30, sealed before chunks were
+   compressed (f1ebf0e4c and 8492760aa turned compression on, 2026-10-31).
+   The paper's latest snapshot, at 2026-11-12 23:28Z, uploaded 5,858 of
+   10,524 chunks: 4.04 GB sealed out of 44.1 GB of pages. The witness took
+   22 min 37 s and the stream 3 min 02 s [M, storage mission ledger].
+   **A snapshot costs about 4 GB a day** (one every 22 hours). The host has
+   135 GiB free. The comments that still say 25 GB are stale
+   (`snapshot_producer.go:62-69`, `snapshot_roots.go:37-41`).
+2. **Sealing is not why chunks fail to dedupe.** The nonce is synthetic:
+   `filecas.SealChunk` (`filecas.go:184-215`, `chunkNonce` at 234-248)
+   derives it from the plaintext. Two roots taken at one frozen head shared
+   10,510 of 10,510 chunks [M].
+3. **The cause is a cut of 1,024 pages laid over writes that land all over
+   the file.** `streamFile` sets `fs.pagesPerChunk = ChunkSize / pageSize`
+   (`snapshot.go:671`, with `ChunkSize` at line 66). A chunk changes if any
+   one of its 1,024 pages changes. The writes are scattered for four
+   reasons:
+   - random index leaves (the canonical id key);
+   - the pointer map of `auto_vacuum=INCREMENTAL`, about one page in every
+     4 MiB range;
+   - the daily `incremental_vacuum`, which moves up to 250,000 pages
+     (`compact.go:105`, `telemetry_retire.go:315`);
+   - compaction swaps.
 
-   The page reads are not the cause either: `sqlite_dbpage` returns pages in
-   page-number order and the stream refuses anything else
-   (`snapshot.go:722-725`). SQLite pages do not move when rows are
-   inserted, so the cut points are already stable. Content-defined
-   chunking has no shifted content to find.
-4. **What we do not know decides the station:** how many distinct pages
-   change between two snapshots. Two readings disagree by about 70 times.
-   The 88% of ranges in 30 minutes needs only p ≈ 0.2%. The 2026-10-31
-   clone reading, 16% of blocks rewritten in 50 minutes, says p ≈ 16% [M,
-   append-clustered section 0]. At p = 0.2%, cutting at 64 pages would send
-   about 12% of the file instead of 88% [E]. At p = 16%, every cut size
-   above a few pages sends almost all of it. **The first stage is a meter
-   that measures p, plus a page root.** The page root makes the meter's
-   hashing do a second job: it checks restore and can later replace the
-   22-minute witness.
-5. **Recommendation:** S4.1 page root and dirty-page meter (red, guest).
-   S4.2 smaller content-keyed page groups for the state file, built only
-   if the meter shows they pay (red, guest, plus host limits only if the
-   group is under 128 pages). S4.3 the page root replaces the
-   in-transaction witness (red; an owner question). S4.4 the 3-hour
-   unrooted-chunk window and keep-two for every computer (red, host).
-   Section 5 has the stages.
+   Section 3(a) has the detail.
+4. **Stage 0 is a present-day recovery defect I confirmed while answering
+   review: the newest snapshot on the tape can lose its protection.**
+   `TakeSnapshot` registers the root before it appends `snapshot_recorded`.
+   Registering prunes the table at once, keeping the newest roots by head
+   and nothing else. Two failed appends in a row therefore evict the newest
+   root that is on the tape. Its chunks become collectable, and
+   `RecoveryBase` advertises a root that the tape never names. The
+   conditions occurred on the paper on 2026-11-12. Section 5, Stage 0, has
+   the code path and the fix.
+5. **Weighed against about 4 GB a day, most of the original station is not
+   worth building.** The full cost is in section 6. What I recommend:
+   - Stage 0, now;
+   - S4.1, a cheap meter (yellow and orange) that measures what a snapshot
+     could cost;
+   - S4.2, smaller page groups, only if the meter shows a saving of at
+     least 3 GB a snapshot.
+
+   **Dropped:**
+   - S4.3 (page root in place of the witness): the witness stays. Section
+     7 says why.
+   - The 3-hour unrooted window.
+   - Keep two roots for every computer.
+   - The replay-rate guard.
 
 ## 1. What a snapshot is for
 
-A snapshot is not a backup of information. Everything in it is already on
-the host: the tape holds every event, and the store is a projection of the
-tape (`docs/computer-ontology.md`, "Guest store"). A snapshot is a **cache
-of replay**: it bounds how much tape a rebuild must apply. The bound is
-`recoveryplan.MaxRecoveryTailEvents = 720000`
-(`internal/recoveryplan/recovery_plan.go:22`), about 40 minutes at the
-298 events a second measured on d@e. The producer fires at three quarters
-of it, `snapshotDefaultTailEvents` = 540,000 (`snapshot_producer.go:70`).
-That is about 22 hours on the paper at 24,000 events an hour.
+A snapshot adds no new information. The tape holds every event, and the
+store is a projection of the tape (`docs/computer-ontology.md`, "Guest
+store"). A snapshot is a **cache of replay**: it bounds how far a rebuild
+has to replay. The bound is `recoveryplan.MaxRecoveryTailEvents = 720000`
+(`recovery_plan.go:22`). The producer fires at 540,000 events
+(`snapshot_producer.go:70`), which is about 22 hours on the paper.
 
-Three things follow:
-
-- The marginal information in a snapshot is zero. Its cost is a price
-  paid for not replaying. Its floor is the bytes needed to state the store
-  at head N+T, given that the host holds the store at head N. That is the
-  pages that differ (section 4).
-- If snapshot k changes D(T) distinct pages over an interval of T, the
-  daily cost is (24 h / T) x D(T). D is concave, because a hot page
-  rewritten twice counts once. So **snapshots should be as far apart as the
-  recovery bound allows**. A trigger that fires earlier than the bound
-  requires costs more bytes, not fewer. "A replay-cost trigger" (S4.4)
-  belongs in this design only as a correctness guard: fire earlier when a
-  replay of the tail would be slower than the bound assumes.
-- A snapshot must be checkable on its own. A restore verifies before it
-  installs (`VerifySnapshotFile`, `restore_snapshot.go:173-186`), and the
-  newest usable candidate wins (`snapshot.Install`, `snapshot.go:868-890`).
+- Its floor is the bytes that state the store at head N+T, given the
+  store at head N: the pages that changed (section 4).
+- If T is the interval and D(T) the bytes of the pages that change in it,
+  the daily cost is (24 h / T) x D(T). D is concave, so **space snapshots
+  as far apart as the recovery bound allows**. A trigger that fires earlier
+  costs bytes.
+- A snapshot must be checkable before it is installed
+  (`VerifySnapshotFile`, `restore_snapshot.go:173-186`). It must also be
+  named on the tape: `snapshot.Scan` finds candidates only through
+  `snapshot_recorded` events (`snapshot.go:904-932`).
 
 ## 2. Today's snapshot, measured
 
 | Quantity | Value | Source |
 |---|---|---|
 | state.db | 22.38 GB, 4 KiB pages, about 5,337 chunks of 4 MiB | [M] drain trace section 1 |
-| telemetry partitions | about 21.7 GB, about 5,187 chunks; closed ones are stable bytes | [E] 44.1 GB of pages - 22.4 GB |
+| telemetry partitions | about 21.7 GB, about 5,187 chunks; a closed partition's bytes do not change | [E] 44.1 GB of pages less 22.4 GB |
 | chunks in the latest root | 10,524 | [M] ledger 2026-11-12T23:30Z |
 | uploaded at the latest snapshot | 5,858 chunks, 4.04 GB sealed (0.69 MB a chunk, about 6x compression) | [M] same |
-| held already | 4,666 | [M] same; the log does not split state from partitions |
-| witness | 22 min 37 s (22 to 35 min seen) | [M] same; `snapshot.go:563-573` |
-| stream | 3 min 02 s | [M] same |
-| read transaction (WAL pin) | 25 min 51 s; the WAL reached 3.7 GB in 30 min under load | [M] same; drain trace |
-| budget | 90 min (`snapshotDefaultMaxDuration`) | [C] `snapshot_producer.go:79` |
-| roots kept per computer | 2 when a root names over 2,048 chunks, else 4 | [C] `snapshot_roots.go:34-43`, prune at 98 |
-| unrooted-chunk window | 24 h from last write or claim (a HEAD claims) | [C] `artifact_gc.go:180`, cutoff at 677 |
-| collector | hourly, at most 50,000 files and 32 GiB a run | [C] `nix/node-b.nix` `PLATFORM_ARTIFACT_GC_*` |
+| already held | 4,666 | [M] same; the log does not split state chunks from partition chunks |
+| witness | 22 min 37 s (22 to 35 min seen) | [M]; `snapshot.go:563-573` |
+| stream | 3 min 02 s | [M] |
+| read transaction (holds the WAL) | 25 min 51 s; the WAL reached 3.7 GB in 30 min under load | [M] |
+| roots kept | 2 when a root names more than 2,048 chunks, else 4 | [C] `snapshot_roots.go:34-43`, prune at 98 |
+| window for unrooted chunks | 24 h from the last write or claim | [C] `artifact_gc.go:180`, 677 |
+| collector | hourly; at most 50,000 files and 32 GiB a run | [C] `nix/node-b.nix:1129-1134` |
 
-The previous root (19:18Z, head 10,914,341) was 64,433 events earlier, but
-a crash boot onto a new binary came between the two roots. So the 23:28Z
-reading is not a clean "64k events changes every range" measurement [?].
+The previous root (19:18Z, head 10,914,341) was 64,433 events earlier, with
+a crash boot onto a new binary in between. So this reading does not
+measure churn cleanly [?].
 
-**Superseded roots are already collected within about an hour.** A root
-leaves retention when the root after next is recorded. Its own chunks were
-last written or claimed when it was captured, about two intervals (about
-44 h) earlier. They are past the 24 h window, so the next hourly run takes
-them. The 24-hour window costs bytes only for **failed attempts**: chunks
-that no root names, held 24 h after upload. Since 0d2f0bd46 the witness
-runs before upload, so a budget abort uploads nothing. A failure after the
-upload (an append failure, or a 409 from the root check) still leaves
-about 4 GB for 24 h.
+**Superseded roots are collected within about an hour.** This holds for
+large roots (retention 2). A dropped root's own chunks were last claimed
+about two intervals before it is dropped, so they are already past the
+24-hour window. A small computer at retention 4 waits four intervals.
+Failed attempts are the case where the window does cost bytes. Since
+0d2f0bd46 a budget abort in the witness uploads nothing. A failed append
+leaves a *registered* root, so its chunks are rooted, not held by the
+window (Stage 0).
 
 ## 3. The options
 
-Costs are for the paper's state file. Partitions stay at 1,024 pages a
-chunk in every option: closed partitions never change. "Bytes" means new
-sealed bytes per snapshot. p is the share of pages changed between two
-snapshots; p_g is the share of g-page groups changed.
+Costs are for the paper's state file. Partitions stay at 1,024 pages a chunk
+because a closed partition never changes. p is the share of pages that
+changed between two snapshots. p_g is the share of g-page groups that
+changed. c_g is zstd's ratio at group size g.
 
 ### (a) Today: fixed 1,024-page ranges, deterministic sealing
 
-- Bytes: p_1024 x 22.4 GB / 6 ≈ 3.7 to 4.0 GB [M]; p_1024 ≈ 0.88 to 1.0.
-- Guest CPU and time: zstd plus XChaCha20 over 44 GB of pages on 4
-  workers, inside the 3-minute stream; HMAC-SHA256 per chunk for the nonce.
-- WAL pin: the whole read transaction, about 26 min (the witness is 87% of
-  it).
-- Restore: about 10.5k sequential GETs (`assemble`, `snapshot.go:1044-1082`),
-  then the witness again in `VerifySnapshotFile` (22 to 35 min) inside the
-  boot deadline, then up to 720k events of replay.
-- Code risk: none (it is today).
-- Why the dedupe is poor: section 0, item 3. Not sealing: the nonce is
-  synthetic (`filecas.go:187-199`). Not a volatile header: page 1 is in
-  chunk 0 only. Not page reordering: the stream is in page order. VACUUM
-  and incremental vacuum: yes, a real part, daily. Scattered B-tree and
-  pointer-map writes: yes, the main part.
-- One latent cause found while reading: the CAS digest is SHA-256 of the
-  *sealed* bytes (`sealChunkWithNonce`, `filecas.go:261`), and the sealed
-  bytes include zstd output. A `klauspost/compress` upgrade that changes
-  the encoder's output would re-key every chunk once [?, whether the
-  encoder's output is stable across versions is not checked]. One full
-  upload, then normal.
+- Bytes: p_1024 x 22.4 GB / 6 ≈ 3.7 to 4.0 GB [M].
+- Guest time: about 26 min (witness 87%). The WAL is held for the same
+  time. Restore: about 10.5k sequential GETs, the witness again, then
+  replay.
+- Why dedupe is poor:
+  - A range survives with probability (1 - p)^1024 if changes are spread
+    out. Then 88% of ranges changing needs only p ≈ 0.2%, about 11,000
+    pages [E].
+  - Index inserts land on random leaves: the 136-byte canonical id is the
+    last column of 13 of the 16 `og_objects` indexes [M, append-clustered
+    section 0].
+  - The pointer map has one page per about 820 pages, rewritten whenever a
+    page in its range is allocated, freed or re-parented. In the synthetic
+    store, 1,287 pointer-map pages in 1,211 ranges changed per 1,000
+    inserts [M, append-clustered 6.1].
+  - The daily `incremental_vacuum` moves up to 250,000 pages.
+  - A compaction swap renames a new file into place (`compact.go:373`) and
+    renumbers every page.
+  - Hot rows are updated in place.
+- Ruled out:
+  - Sealing (above).
+  - Page 1's header: it is in chunk 0 only.
+  - Page order: the stream *enforces* page order and fails loudly
+    otherwise. The query has no ORDER BY (`snapshot.go:695`, check at
+    722-725).
+- A latent cause: the digest is SHA-256 of the *sealed* bytes, zstd output
+  included (`filecas.go:261`). A zstd library upgrade that changes the
+  encoder's output re-keys every chunk once [?].
 
-### (b) Small fixed page groups keyed by content (g pages a chunk, g < 1,024)
+### (b) Smaller fixed page groups, keyed by content (g < 1,024 pages a chunk)
 
-Same format, same sealing, same CAS, same root check, same collector. Only
-`pagesPerChunk` changes, for the state file.
+Same format, sealing, CAS, root check and collector. Only `pagesPerChunk`
+changes, and only for the state file.
 
-- **Today's restore already reads it.** `restoreOne` accepts any
-  `PagesPerChunk` with `PageSize x PagesPerChunk <= 2 x ChunkSize` and a
-  chunk count equal to ceil(PageCount / PagesPerChunk)
-  (`snapshot.go:963-976`). `assemble` checks every chunk against
-  `PageSize x PagesPerChunk` and a whole number of pages
-  (`snapshot.go:1059-1065`). So a binary rolled back to today's main
-  restores the new snapshots: the rollback keeps every root restorable.
-- Bytes: p_g x 22.4 GB / c_g, where c_g is zstd's ratio at group size g
-  (lower than 6 for small groups [?]). If changes are spread out,
-  p_g ≈ 1 - (1 - p)^g. At p = 0.2% and g = 64, about 12% of the file
-  (about 0.45 GB sealed at c = 6) [E]. At p = 16%, nearly 100% (no gain).
-- Chunk count per root: 5.46 M pages / g, plus 5.2k for the partitions.
-  g = 128: about 48k. That fits today's host limits:
-  `maxSnapshotRootChunks` = 65,536 and `maxSnapshotRootBody` = 8 MiB at
-  about 67 bytes a digest, about 3.2 MB (`snapshot_roots.go:45-47`) [E].
-  g = 64: about 90k. That needs both limits raised. g = 16: about 340k,
-  with a 23 MB declaration and a 23 MB sealed record on the tape. Too big.
-- Guest CPU and time: the same seal work. More HEAD probes (one for every
-  chunk not repeated within the snapshot): about 48k at g = 128, roughly
-  0.5 to 1 minute on 4 workers at about 2 ms a round trip [E, latency not
-  measured].
-- Host: root registration stats every chunk under the CAS reuse lock.
-  10.5k chunks took 30 to 95 ms [M, root check problem], so 48k would take
-  about 0.15 to 0.45 s [E, linear]. The live-root `LIKE` query takes
-  2.3 ms against two 10.5k roots [M], so about 10 ms at 48k [E]; the
-  generation shortcut makes it rare. There are more files on btrfs (the
-  small-file metadata history is in the
-  [FP10 note](fp10-snapshot-levers-and-host-slab-2026-10-22.md)): about
-  48k files per paper root against 10.5k, and the hourly collector walks
-  them.
-- Tape: the sealed record carries the manifest, about 3 MB at g = 128
-  against about 0.7 MB today [E]. No cap on private payload size was found
-  in `computerevent` or `platform` [?, verify before S4.2].
-- Restore: about 48k sequential GETs. At about 2 ms each that is about
-  1.6 min plus transfer [E]. A prefetching `assemble` is a follow-up if
-  needed.
-- WAL pin: unchanged (the witness dominates).
-- Code risk: low. One parameter in `streamFile`, per-file geometry already
-  recorded, and the readers exist.
-- Confidentiality delta: the host learns which 512 KiB regions changed,
-  instead of which 4 MiB regions. The CAS already learns chunk equality
-  (`filecas.go:196-198`).
+- **Today's restore already reads this.** `restoreOne` accepts any
+  `PagesPerChunk` with `PageSize x PagesPerChunk <= 2 x ChunkSize` and
+  the matching chunk count (`snapshot.go:963-976`). `assemble` checks each
+  chunk against that size (`snapshot.go:1059-1065`). A rollback to the old
+  binary therefore still restores the new snapshots.
+- Bytes: p_g x 22.4 GB / c_g. If changes are spread out,
+  p_g ≈ 1 - (1 - p)^g. At p = 0.2%: p_128 ≈ 23%, about 0.86 GB at c = 6.
+  At p = 16%: about 100%, no gain [E].
+- Chunks per root: 5.46 M / g, plus 5.2k for partitions.
+  - g = 128: about 48k chunks. That fits `maxSnapshotRootChunks` = 65,536
+    and `maxSnapshotRootBody` = 8 MiB (about 3.2 MB at 67 bytes a digest).
+  - g = 64: about 90k chunks and 6.0 MB. That needs only
+    `maxSnapshotRootChunks` raised.
+  - g = 32: about 176k chunks and 11.8 MB. That needs both limits raised.
+    It also needs a benchmark of the root stat pass, the Postgres write
+    under the 30 s deadline, the `LIKE` live check and a sequential
+    restore of 176k GETs. (Seat 1 found these.)
+- Tape: the sealed record grows to about 3 MB at g = 128. The caps are
+  64 MiB: `MaxPrivatePlaintextBytes` (`privacy.go:51`),
+  `EventPayloadMaxResponseBytes` (`event.go:30`), `tapestore.MaxRecordBytes`
+  (`format.go:103`).
+- Restore at g = 128 is about 48k sequential GETs. It must be measured on
+  a paper-sized store (`snapshot_large_test.go` builds one), not on d@e.
+  `assemble` gets a prefetch if the time is long.
+- One full re-upload when the cut changes, and another on rollback.
+- The host learns which 512 KiB regions changed instead of which 4 MiB
+  regions. Equality leakage is already accepted (`filecas.go:196-198`).
+- Code risk: low.
 
-### (c) Content-defined chunking (rolling-hash boundaries)
+### (c) Content-defined chunking
 
-CDC finds shared content that has *shifted*. A SQLite file does not shift:
-an insert rewrites pages in place and appends pages at the end. With an
-average chunk size A, a changed page changes the one or two chunks around
-it, which is (b) with g ≈ A / 4 KiB, except that boundaries are not page
-aligned. The restore then loses its page checks, and the guest pays for a
-rolling hash over 44 GB. After a compaction pages are renumbered, and a
-B-tree page's bytes hold its children's page numbers, so the content
-itself differs and CDC does not help there either. **Rejected:** no gain
-over (b), and new code on the restore path.
+A SQLite file does not shift: pages are rewritten in place. CDC is (b) with
+boundaries that do not fall on pages, and with a rolling hash to pay for.
+After a compaction the bytes themselves change, because each page holds
+its children's page numbers. **Rejected.**
 
-### (d) Page-diff against the previous root
+### (d) Page diff against the previous root
 
-The guest sends only the changed pages, packed together, plus a page map.
-"Changed" comes from a page-hash table the guest keeps, or from SQLite.
-SQLite has no persistent per-page change tracking for the main database.
-The session extension tracks rows, not pages. Reading WAL frame headers
-before every checkpoint would give exact page numbers, but auto-checkpoints
-and the `CheckpointAfterLongRead` path make that fragile. A full hash scan
-is cheap because the stream already reads every page in 3 minutes.
+The guest sends only the changed pages, packed, with a page map. It costs
+the bound in bytes. The cost is in collection: a pack stays live while any
+live root names a page in it, so the host needs repacking or periodic full
+bases. That means a new restore and a log-structured store on the host.
+High risk. **Deferred:** worth it only if (b) cannot get under the S4.2
+threshold *and* the bytes matter, which section 6 argues they do not.
 
-- Bytes: at the bound (section 4). Packs compress better than single pages.
-- Restore: either a chain (base plus every diff) or a full page map whose
-  entries point into packs from many snapshots.
-- Collection: a pack stays live while any live root names any page in it.
-  "Keep two" then frees nothing until a pack's pages are all overwritten,
-  so the host needs repacking or a periodic full base. That means a new
-  record format, a new restore, and a log-structured store on the host,
-  all red.
-- Code risk: high.
-- **Deferred, not rejected.** It is worth building only if the meter shows
-  that (b)'s amplification p_g / p is above about 2 at every usable g
-  *and* the absolute bytes still matter. With the root check, the collector
-  and the backup all keyed on whole chunks, (b) gets most of the gain for
-  almost none of the risk.
+### (e) Not snapshotting the store
 
-### (e) Not snapshotting the store, and bounding replay some other way
+- Replay from genesis: more than 10.9 M events, which breaks the bound.
+- A host reflink of `data.img`: it sits on the same disk it protects,
+  nothing on the tape names it, it contradicts the ontology ("the host
+  keeps no projection bases"), and the copy is plaintext at rest.
+- Faster replay to allow a larger bound: the bound belongs to the owner.
+  **All rejected.**
+- Change the store's write locality instead: the append-clustered layout
+  plus a compaction cadence. Synthetic store: 83% to 88% of the 4 MiB
+  ranges of a compacted file survive 24 h, against 0% for a grown file
+  [M, append-clustered 6.1]. This is the strongest lever on the bound. It
+  belongs to the store's own work, not to S4.
 
-- Replay from genesis: the paper's tape is over 10.9 M events, about 10 h
-  at 298 events/s. Breaks the 720k bound. Rejected.
-- A host-side reflink copy of `data.img` (btrfs copy-on-write, so the cost
-  is the changed 4 KiB extents, the physical bound without compression).
-  It lives on the same disk as the image it protects, so it gives no
-  protection against losing that disk. It names nothing on the tape, and
-  it contradicts "the host keeps no projection bases: a guest recovers from
-  its own sealed snapshots plus the tape tail" (ontology). The image is
-  also not encrypted by the guest
-  ([data at rest](../problems/data-at-rest-snapshots-images-escrow-key-plaintext-2026-10-21.md)),
-  so the copy is plaintext at rest. Rejected: it is a doctrine change, not
-  a lever.
-- Faster replay, so the bound can grow and snapshots can be rarer: the
-  bound is the owner's (720k is preserved here). The paper's own replay
-  rate is unmeasured (`recovery_plan.go:18-21`: "Restate it when the
-  paper's own rate is measured"). Kept as an open question (section 7).
-- Lower the bound itself by changing the store's write locality: the
-  append-clustered layout (og_id keys, about half the pages per insert) and
-  a compaction cadence. In the synthetic store, 83% to 88% of 4 MiB ranges
-  of a compacted file were unchanged after 24 h, against 0% for a grown
-  file [M, append-clustered section 6.1]. That is the strongest lever on
-  the bound, and it is outside S4 (it is the store's own mission).
+### (f) Superseded roots and the unrooted window
 
-### (f) Collect superseded roots at once, and the shorter unrooted window
+- Superseded large roots are already collected within about an hour
+  (section 2). Collecting them "immediately" saves less than an hour of
+  bytes. **Rejected.**
+- A 3-hour unrooted window: since afe50a926 it is *safe*, because a
+  capture that outlives the window fails loudly with a 409. It is not
+  *worth* it:
+  - Its only beneficiary is an attempt that fails after upload and before
+    registration. That is rare now that the witness runs first.
+  - `snapshotBackoffCeiling` is 3 h (`snapshot_producer.go:89`). After the
+    fourth failure, each retry would find the previous attempt's chunks
+    collected and upload them again: more bytes sent, to save held bytes.
+    (Both seats found this.)
 
-- A superseded root's chunks are already collected within about an hour
-  (section 2). "Immediate" would mean deleting inside the root-recording
-  transaction. That saves under an hour of bytes and would put an unlink
-  under the reuse lock on the registration path. Rejected; hourly is enough.
-- The window that matters is `fileCASChunkUploadGrace` = 24 h for unrooted
-  chunks (`artifact_gc.go:180`). At 3 h, a failed attempt's bytes leave
-  in 3 to 4 h instead of 24 to 25 h, about 4 GB-days less for each failure
-  after upload [E].
-- What made 3 h unsafe was a root recorded for chunks already deleted
-  (silent). afe50a926 closed that: registration stats every chunk under the
-  lock and answers 409, and the collector keeps pending and live-root
-  chunks. So a capture that spans a hibernation longer than the window now
-  fails loudly. It takes the existing backoff and a retry re-uploads only
-  what is missing. That cost is a retry, not a bad root. The planned-restart
-  lane (`lane/restart-cancels-capture`, parked) is no longer a precondition
-  for the window. It remains the fix for the 90-minute refusal.
-- The window also serves file sync (a root at the end of each pass, every
-  15 min; `HandleFileCASRoot` refuses a missing chunk with 409, per the
-  root check problem record). 3 h covers a pass with 12x margin.
-- "Keep two": large roots (over 2,048 chunks) already keep 2, small ones
-  keep 4 (`snapshot_roots.go:34-43`). Under (b) every non-trivial store
-  passes 2,048 chunks, so the count test stops meaning "large". Keep two
-  for every computer, as the station says. Correct the comment on
-  `snapshot.MaxCandidates` (`snapshot.go:896-899`), which says the
-  platform keeps at least four.
+  **Dropped.** If the hourly status ever shows a large unrooted-in-window
+  total, revisit with the window set above the backoff ceiling.
+- Keep two for every computer: this breaks
+  `TestSnapshotRootRetentionCoversEveryRestoreCandidate`
+  (`snapshot_roots_test.go:115-124`), whose contract is retention >=
+  `snapshot.MaxCandidates` for small roots. It saves nothing for a store of
+  200 chunks. **Dropped.**
 
 ### Summary
 
-| Option | New bytes a snapshot (paper) | Guest time | WAL pin | Restore | Code risk |
+| Option | New bytes a snapshot (paper) | Guest time / WAL hold | Restore | Code risk | Verdict |
 |---|---|---|---|---|---|
-| (a) today | 3.7 to 4.0 GB [M] | 26 min | 26 min, 3 to 11 GB WAL | 10.5k GETs + witness 22 to 35 min | none |
-| (b) g = 128 | p_128 x 3.7 GB; about 0.85 GB (p = 0.2%) to 3.7 GB [E] | about 27 min | unchanged | 48k GETs + witness | low |
-| (b) + S4.3 page root | same | about 5 min [E] | about 5 min, under 1 GB [E] | 48k GETs + page root about 1 min + quick_check [?] | medium (evidence change) |
-| (c) CDC | as (b), worse alignment | + rolling hash | unchanged | new checks | medium, no gain |
-| (d) page-diff | at the bound | about 5 min | about 5 min | chain or map | high |
-| (e) no snapshot | 0 | 0 | 0 | breaks the 720k bound | rejected |
-| (f) 3 h window | -about 4 GB-days per failed attempt | 0 | 0 | 0 | low (host constant) |
+| (a) today | 3.7 to 4.0 GB [M] | 26 min | 10.5k GETs + witness | none | keep |
+| (b) g = 128 | 0.86 to 3.7 GB [E] | about 27 min | 48k GETs + witness | low | build only if the meter shows a saving of at least 3 GB |
+| (c) CDC | as (b), boundaries off the pages | + rolling hash | new checks | medium | rejected |
+| (d) page diff | the bound | about 26 min | chain or map | high | deferred |
+| (e) no snapshot | 0 | 0 | breaks the bound | n/a | rejected |
+| (f) 3 h window, keep two everywhere | small | 0 | 0 | low | dropped |
 
 ## 4. The physical bound
-
-The least a snapshot can cost is the compressed size of the pages that
-differ between it and the root before it:
 
     B(T) = sum over the distinct pages changed in (N, N+T] of |zstd(page)|
          ≈ p(T) x 22.4 GB / c_1
 
-where T is the snapshot interval (540k events, about 22 h on the paper),
-p(T) is the share of the state file's 5.46 M pages that differ, and c_1 is
-the compression ratio of pages sent as a pack (about 6 at 4 MiB [M]; a
-pack of changed pages should be similar [?]).
+T is about 22 h (540k events). c_1 is the ratio for changed pages packed
+together; it is about 6 at 4 MiB [M] and not known for packs [?].
 
-What we know about p(22 h): it is at least the share needed to make about
-88% of 4 MiB ranges change in 30 minutes (p ≈ 0.2% [E]). It is at most 1.
-One clone reading on 2026-10-31, at half today's event rate, saw 16% of
-blocks rewritten in 50 minutes. If that is representative, p(22 h) is
-probably above 50% [E: hot pages repeat, so it is not 26 x 16%]. **So B is
-somewhere between about 0.1 GB and 3.7 GB a snapshot, and today's cost is
-3.7 to 4.0 GB.** Today is at most about 40x the bound and possibly near
-it. Existing data cannot narrow this, which is why S4.1 measures it.
+- p(22 h) is at least about 0.2%: the share that alone makes about 88% of
+  the 4 MiB ranges change in 30 minutes [E].
+- p(22 h) is at most 1.
+- One clone reading from 2026-10-31, at half today's event rate, saw 16%
+  of blocks rewritten in 50 minutes. It is not known whether that counted
+  repeated checkpoint writes [?].
 
-How S4.1 measures it: the stream hashes every page it reads (SHA-256, in
-page order, in the reader goroutine). It keeps the first 8 bytes of each
-hash in a guest-local sidecar, `snapshot-pagehash` beside the store (5.46 M
-x 8 B = 44 MB). It compares against the previous sidecar while streaming,
-reading the old file in step, since pages arrive in order, so memory stays
-O(1). It logs: pages changed (p), groups changed at g in {8, 16, 32, 64,
-128, 256, 1024} (p_g), and the zstd ratio of a fixed sample of changed
-pages packed together and in g-groups (c_1, c_g). That one line gives B
-and the cost of every (b) variant against it.
+So **B lies between about 7.5 MB (p = 0.2%) and 3.7 GB (p = 1) per
+snapshot.** Today's 3.7 to 4.0 GB is between about 1x and about 500x the
+bound. That spread is the whole reason for S4.1's meter.
 
-How far the recommendation is from the bound: (b) costs
-(p_g / p) x (c_1 / c_g) x B. If the paper's changes are as spread out as
-the synthetic store's (about 2 pages per touched 4 MiB range per 1,000
-inserts [M, append-clustered 6.1]), then p_g / p ≈ g at small p: 128x the
-bound in pages, but with the absolute amount still small. If changes
-cluster, the ratio falls toward 1. S4.2 picks g by the rule in section 5
-so that (b) stays within 2x the bound wherever the bound is worth chasing.
-Below about 0.5 GB a snapshot (about 0.5 GB a day, under 0.5% of Node B's
-135 GiB free), chasing the bound further (option d) is past the point of
-diminishing returns.
+The distance of the recommendation from the bound is
+(p_128 / p) x (c_1 / c_128). With changes spread out at small p, p_128 / p
+is near 128. It falls toward 1 as changes cluster. That ratio no longer
+gates anything: S4.2 is gated on absolute bytes (section 5), because the
+bytes are what the disk pays.
 
-## 5. Recommended path
+## 5. Recommended stages
 
-One path, four stages. Each ships on, with no setting. Each has its own
-two-seat review and its own deployed proof. Acts on the paper are not
-allowed: its proof is reading its log and the host's tables after it boots
-a release in the normal way.
+Every stage ships on, with no setting. Acts on the paper are not allowed.
+The paper's proof is reading its log and the host's tables after it boots a
+release in the normal way.
 
-### S4.1 Page root and dirty-page meter (red: restore verification)
+### Stage 0: an unappended root never evicts a root on the tape (red: snapshot root custody, the recovery base advertised to vmctl)
 
-What: in `streamFile`, the reader hashes each page with SHA-256 as it is
-read. The hash comes from the `sql.RawBytes` before the bytes go into the
-chunk buffer, so it is independent of buffer reuse and chunk assembly. A
-file's page root is SHA-256(`"choir/snapshot/page-root/v1"`, page size,
-page count, the page hashes in order). `Record` gains `page_root`, and
-`PartitionEntry` gains `page_root` (both omitempty; old readers ignore
-them). `snapshot.Install` recomputes the root over the assembled file and
-each partition before `Verify`, and refuses on a mismatch (the next
-candidate is tried, as today). The meter and its sidecar as in section 4:
-written atomically after a recorded snapshot only. A missing or
-wrong-sized sidecar means "no reading this time". The sidecar is never on
-the correctness path. Stale comments are corrected: the 25 GB figures, the
-"no auto_vacuum" comment in `telemetry_retire.go:10`, and `MaxCandidates`.
+**Confirmed from the code.**
+
+- `TakeSnapshot` calls `RegisterSnapshotRoot` (`snapshot.go:335-343`)
+  before `AppendNewPrivatePayload` (`snapshot.go:364`). The event's
+  idempotency key is `"snapshot:" + manifest.Root` (`snapshot.go:358`).
+- `recordSnapshotRoot` inserts the root and, in the same transaction,
+  deletes every row of the computer except the newest `retention` by
+  `head_sequence` (`snapshot_roots.go:90-101`). Retention is 2 for any
+  root of more than 2,048 chunks (`snapshot_roots.go:41-43`), the paper's
+  case.
+- `RecoveryBase` returns the newest row by `head_sequence`
+  (`file_cas.go:80-92`). It is served as the watermark
+  (`file_cas_http.go:192`), and vmctl's empty-store admission reads it
+  (`vmctl/recovery_admission.go:668-689`).
+- Boot restore takes candidates only from the tape (`snapshot.Scan` in
+  `autoputer/projection_base.go:165`) and installs one through
+  `snapshot.Install` (`projection_base.go:187-198`).
+- A failed append keeps its root. Nothing withdraws it.
+
+So two failed appends in a row leave the two retained rows both off the
+tape. The newest on-tape snapshot is pruned, and after the window the
+collector takes the chunks it does not share. A lost disk would then fail
+twice: vmctl would admit an empty-store boot against a base the tape does
+not have, and `Install` would find no restorable candidate. With head
+10.9 M, far past the 720k bound, the boot would refuse.
+
+**It had its preconditions on the paper on 2026-11-12.**
+- At 16:11:59Z an append failed after the root was registered [M, drain
+  trace section 1, item 5].
+- Roots registered at 18:55:55Z and 19:18:21Z at head 10,914,341 were not
+  on the tape, because the store was wedged [M, same].
+- From then until the 23:28Z snapshot, both retained rows were probably
+  off the tape [I].
+- Whether the previous on-tape root's chunks were collected in that gap is
+  not established [?]. The 11-11 snapshot's chunks would have been past
+  the 24-hour window.
+
+Check, read only, on Node B:
+
+    SELECT r.computer_id, r.root, r.head_sequence,
+      EXISTS (SELECT 1 FROM computer_event_append_receipts a
+              WHERE a.computer_id = r.computer_id
+                AND a.idempotency_key = 'snapshot:' || r.root
+                AND a.event_kind = 'snapshot_recorded'
+                AND a.sequence > r.head_sequence) AS on_tape
+    FROM computer_snapshot_roots r
+    ORDER BY r.computer_id, r.head_sequence DESC;
+
+**The smallest correct fix is host only. It reuses a predicate that already
+exists.** `internal/bundle/store.go:86-104` (`readNamedSnapshotRoot`)
+already defines "a root the tape names": a `snapshot_recorded` receipt
+whose `idempotency_key` is `'snapshot:' || root` and whose sequence is
+above the root's head. Receipts and roots share the platform store's
+database. The idempotency key is the receipts table's primary key
+(`computer_events.go:40-54`), so the lookup is indexed.
+
+1. **Prune** (`recordSnapshotRoot`): keep a row if it is one of the newest
+   `retention` *named* roots. Also keep the newest *unnamed* root whose
+   head is above the newest named root's head; this is always the row just
+   inserted, whose append is about to run. Delete everything else,
+   including older unnamed roots: their attempts are over, because the
+   producer runs one capture at a time (`snapshot_producer.go:213`).
+   Retention counts are unchanged (4 and 2), so the contract test stands.
+2. **`RecoveryBase`**: return the newest *named* root. If there is none,
+   return `ErrNoWatermark` (404). vmctl already handles a missing
+   watermark (`recovery_admission.go:673-674`), and the boot then decides
+   from the tape alone.
+3. **`LiveSnapshotRoots`** (`snapshot_roots.go:338`) and the collector's
+   live check (`snapshot_roots.go:313-314`): drop `LIMIT
+   snapshotRootRetention` and read every row of the computer. The prune
+   already bounds the table at retention + 1. Without this change, a small
+   computer's oldest named root (the fifth row) would lose its protection.
+   Reading more rows is the safe direction for rows that `bundle.Import`
+   adds.
+
+No guest change. No schema change.
 
 Failure list (written before code):
-1. the hash is taken after the bytes enter a reused buffer, so a buffer
-   race goes unseen (take it from the row, before `append`);
-2. the root covers pages but not geometry, so a truncated file with a
-   matching prefix verifies (geometry is in the hash input);
-3. a record with no `page_root` (every existing root) is refused (absent
-   means not checked; the witness still runs);
-4. the sidecar is trusted for anything but the log line;
-5. the sidecar is written for a failed attempt, so the next reading
-   compares against a state that was never recorded;
-6. hashing in the reader slows the stream past the budget (SHA-256 at
-   about 0.5 to 1.5 GB/s on one core is 30 to 90 s over 44 GB [E]; the
-   stream's time is logged);
-7. the sidecar's 44 MB lands on a full data volume (it goes under the same
-   free-space floor as the WAL, `snapshotFreeFloor`);
-8. partitions are skipped by the root, so a wrong partition installs.
+1. Two or more failed appends evict a named root (the defect; a test with
+   real receipts).
+2. The root just inserted is pruned (a test).
+3. `RecoveryBase` advertises an unnamed root (a test).
+4. The stored receipt key is not `"snapshot:"+root` (a test through the
+   real append handler, not a hand-written row).
+5. A computer with no named root yet: its first attempt's append failed,
+   so `RecoveryBase` returns 404. vmctl and the boot must behave as they do
+   for a computer with no snapshot (a test in vmctl's admission suite).
+6. The collector misses a kept row because of the old LIMIT (a test with
+   retention 4 and one unnamed row).
+7. Roots that `bundle.Import` writes without matching receipts
+   (`bundle/import.go:460`) look unnamed and are pruned at the next
+   registration. Check that the import carries receipts
+   (`bundle/import.go:153` counts them) [?].
+8. Receipt compaction (`PLATFORM_RECEIPT_COMPACT_COMPUTERS`) removes rows
+   rather than bodies [?, read the compaction before landing].
+9. The prune query is slow: a few rows per computer, each lookup by
+   primary key.
 
-Deployed proof: d@e takes two snapshots. Its log shows the page root and a
-meter line. Then a rematerialize of d@e from its tape installs the newest
-snapshot, and the log shows the page root verified. That is the
-`rematerialize-from-tape` owner act
-(`cmd/choir/commands.go:443`); who runs it on d@e is the lead's to
-arrange [?]. A drill with a corrupted chunk is not needed: the AEAD already
-refuses one. A unit test truncates the assembled file and must be refused.
-The paper, read only: after it boots the release by a normal deploy
-refresh, its next "snapshot taken" line carries the meter. That is the
-first measurement of p(22 h).
+Proof:
+- Unit and integration tests in `internal/platform` against Postgres, as
+  the root-check lane ran.
+- Deployed: after the deploy, the read-only query above shows that every
+  computer's `RecoveryBase` root is named, and that each computer keeps at
+  least `min(retention, named snapshots taken)` named roots.
+- A d@e drill that makes an append fail after registration, only if a
+  fault seam exists on staging. I did not find one [?]. Otherwise the
+  proof is the tests plus the audit, and the report says so.
 
-Rollback: revert. Records with `page_root` stay readable by the old binary
-(an unknown JSON field). The sidecar stays on disk, harmless.
-Protected surfaces: snapshot record, restore path (red). Conjecture delta:
-none for content, plus a byte-level check at restore. Evidence class: a
-new byte-equality check added beside witness v3. Heresy delta: none.
+Rollback: revert. Rows keep their form, and the old prune resumes.
+Conjecture delta: retention counts only snapshots a restore can find.
+Evidence class: unchanged. Heresy delta: none.
 
-### S4.2 Content-keyed page groups for the state file (red: snapshot format and the host's root limits)
+### S4.1: per-file counts, then a dirty-page meter (yellow, then orange; restore path untouched)
 
-Gate: built only if S4.1's paper reading shows some g >= 32 with
-(p_g / p) x (c_1 / c_g) <= 2 and p_g <= 0.5. Otherwise the snapshot is
-already within about 2x of what a smaller cut can reach. The byte lever
-then moves to the store's layout (option e, last item), and S4 goes on to
-S4.3 and S4.4. That is a decision by measurement, not a switch.
-
-What: `streamFile` takes pages-per-chunk as an argument. The state file
-uses g, the largest value that meets the gate. Partitions stay at 1,024.
-If g < 128, the host's `maxSnapshotRootChunks` and `maxSnapshotRootBody`
-become byte bounds (256 GiB of plaintext at the smallest allowed g), and
-retention becomes "keep two" for every root (option f). No reader changes:
-section 3 (b) shows the existing restore reads it.
+1. **Yellow:** the "snapshot taken" line gets per-file counts. `addStats`
+   already accumulates per file (`snapshot.go:774-785`, `803-813`); only
+   the log line changes. It answers whether the state file or an open
+   partition makes up the 4 GB.
+2. **Orange, observation only, in `streamFile`:**
+   - The reader keeps the first 8 bytes of SHA-256 of each state-file page
+     in a guest-local sidecar, `snapshot-pagehash` beside the store
+     (5.46 M pages x 8 B = 44 MB).
+   - The sidecar header holds the state file's inode and device, its page
+     size and its page count. A compaction swap renames a new file into
+     place (`compact.go:373`), so a different inode marks the reading
+     "after a compaction" and it is excluded.
+   - The stream compares against the previous sidecar in step with the
+     pages, reading `min(old, new)` pages. Pages beyond the old count count
+     as changed.
+   - It logs p, p_g for g in {32, 64, 128, 256, 1024}, and c_1 and c_g
+     from a fixed sample of changed pages.
+   - The sidecar is written atomically, and only after
+     `AppendNewPrivatePayload` succeeds. It is never read for anything but
+     the log line.
+   - `Record` and the restore code are not touched.
 
 Failure list:
-1. the producer and an older restore disagree on geometry (covered by
-   today's checks; a test restores a g = 64 record with the
-   restore code at 77a2a8129);
-2. root registration exceeds the host's limits and every snapshot fails
-   (checked against the paper's real page count before landing, and the
-   host change lands first);
-3. the sealed record outgrows a payload limit on the tape (find any limit
-   first: none was found by grep [?]);
-4. registration holds the CAS reuse lock too long at 48k to 90k chunks
-   (measure on the build VM, as the root-check lane did for 10.5k);
-5. the first g-cut snapshot uploads the whole file once (expected:
-   about 4 GB, once; say so in the report);
-6. the collector's 50,000-file cap spreads a superseded root's deletions
-   over two runs (fine; noted);
-7. restore time grows past the boot deadline (measure the d@e restore;
-   add a prefetching `assemble` only if it is over).
+1. The sidecar is used for anything but the log line.
+2. It is written for a failed attempt.
+3. A change in page count throws away the reading.
+4. An interval that spans a compaction is reported as churn.
+5. Hashing slows the stream: SHA-256 on one core is about 30 to 90 s over
+   22 GB [E]. The stream's time is logged.
+6. The 44 MB sidecar lands on a volume that is nearly full. It falls under
+   `snapshotFreeFloor`.
 
-Deployed proof: d@e takes two snapshots, and the second shows held chunks
-in proportion to its meter reading. A rematerialize of d@e verifies witness
-and page root. The paper, read only: two consecutive snapshots, uploaded
-bytes against the meter's prediction, and on the host
-`computer_snapshot_roots` shows 2 roots with the new chunk counts.
+Proof:
+- d@e takes two snapshots and logs a meter line with plausible values.
+- On the paper (read only), its "snapshot taken" line after a normal
+  deploy refresh is the first measurement of p(22 h).
 
-Rollback: revert the guest. The old binary restores g-cut records. Revert
-the host limits only after no live root exceeds them. Protected surfaces:
-snapshot chunks and records, root registration (red). Evidence class:
-unchanged. Heresy delta: none. Confidentiality delta: finer change
-locality is visible to the host (owner question 3).
+Rollback: revert and leave the sidecar (harmless).
 
-### S4.3 The page root replaces the in-transaction witness (red: evidence class)
+### S4.2: page groups of g >= 128 for the state file (red: snapshot format), conditional
 
-What: `capture` stops computing witness v3 inside the read transaction
-(`snapshot.go:563-573`). The read transaction becomes the stream alone:
-about 3 to 5 minutes and under 1 GB of WAL [E, from 3.7 GB in 30 min].
-`Record.WitnessRoot` is left empty in new records. `VerifySnapshotFile`
-checks the page root, then `PRAGMA quick_check` [?, its time on 22 GB is
-not measured]. It computes witness v3 only when the record carries one, so
-old records verify as today. The budget `snapshotDefaultMaxDuration` falls
-from 90 min to a value set from the measured stream time (a deadline, not
-a switch). That also shortens the window in which a planned restart is
-refused.
+**Gate: absolute bytes.** Build only if S4.1's reading on the paper,
+outside a compaction interval, predicts p_128 x 22.4 GB / c_128 <= 1.0 GB
+sealed per snapshot. That saves at least about 3 GB a snapshot: about
+3 GB a day of host writes and backup volume, and about 6 GB held across
+the two kept roots. Use the largest g >= 128 that meets the threshold.
 
-Why it is safe: the only consumer of `WitnessRoot` is
-`VerifySnapshotFile` (grep: `restore_snapshot.go:183`). It proves that the
-restored file has the logical content the capture saw. The page root
-proves more for this purpose: the restored file is the captured pages,
-byte for byte, hashed from the rows as read. What the witness adds is an
-independent logical path that can catch a page stream that was internally
-consistent but not the database's state (for example a broken
-`sqlite_dbpage` read). `quick_check` covers the structural half of that.
-The logical half is the owner's call (question 1).
+- Below 128 the host limits and the restore must change; that is out of
+  scope.
+- If no g >= 128 meets the threshold, S4 stops here, and the byte lever
+  moves to the store's layout (option e).
 
-Failure list: an old record is refused (no); a new record restores without
-any content check (no: page root plus quick_check); the restore at boot
-still spends 22 to 35 min on the witness (no: new records carry none);
-`quick_check` is slower than the witness (measure on d@e and on a copy of
-a large synthetic store before landing).
+The gate is a build decision made from a measurement, not a switch.
 
-Deployed proof: d@e snapshot with read-transaction time logged; a
-rematerialize of d@e verifies; the paper (read only) logs the read
-transaction under 10 minutes and a WAL peak under 1.5 GB.
+What changes: `streamFile` takes pages per chunk as an argument; the state
+file uses g; partitions stay at 1,024. No host change and no reader change.
 
-Rollback: revert. The old binary refuses a record with an empty
-`WitnessRoot` (its `VerifySnapshotFile` compares unconditionally), so a
-rollback must also keep, or take again, one snapshot with a witness. The
-rollback is: revert, then the producer takes a fresh snapshot at its next
-due point. Until then the newest restorable base is the previous one, and
-the tail can approach the 720k bound. Protected surfaces: restore
-verification, evidence class (red; two seats; owner ruling first).
+Failure list:
+1. The producer and an older restore disagree. A test restores a g = 128
+   record with the restore code at b21cf284d.
+2. The paper's real page count at g pushes the root past 65,536 chunks or
+   8 MiB. Check it before landing.
+3. The root stat under the reuse lock at about 48k chunks takes too long.
+   Measure it on the build VM, as the root-check lane did for 10.5k.
+4. The first g-cut snapshot uploads the whole file once (expected; it is
+   reported).
+5. A superseded root's deletions span two collector runs (fine).
+6. Restore time on a paper-sized store (`snapshot_large_test.go`) grows
+   past the boot deadline. If it does, `assemble` gets a prefetch.
 
-### S4.4 The 3-hour window, keep two, and the replay guard (red: host collector)
+Proof:
+- d@e: two snapshots, and a rematerialize of d@e (the owner act at
+  `cmd/choir/commands.go:443`) verifies.
+- The paper, read only: two consecutive snapshots, with uploaded bytes
+  within 1.5x of the meter's prediction.
 
-What: `fileCASChunkUploadGrace` goes from 24 h to 3 h (option f).
-Snapshot retention becomes 2 for every computer. The producer's trigger
-stays at 540k events. A replay guard is added: the boot replay already
-counts its work (`restoreReplayObserver`). Its measured events per second
-are logged. If the estimated time to replay the tail at the computer's own
-measured rate would exceed the time the 720k bound assumes (about 40 min),
-the producer fires early. It only ever fires earlier, never later.
+Rollback: revert. The old binary restores g-cut records (section 3(b)).
+One re-upload follows. Protected surfaces: snapshot chunks and records.
 
-Failure list: a file sync's root is refused because its chunks were
-collected (a sync pass is 15 min, so 3 h is 12x; 409 is loud); a capture
-spans a hibernation over 3 h (it fails loudly and retries); a small
-computer that kept 4 roots now keeps 2 (restore tries 4 and finds 2, which
-is loud and has the same effect as today for large roots); the replay rate
-is noisy and fires snapshots too often (fire only on a rate measured over
-at least 10,000 events).
+### Dropped stages
 
-Deployed proof: on Node B (read only for the lead), the collector's
-report shows unrooted chunks older than 3 h being taken. d@e: a snapshot
-attempt that is made to fail after upload (a drill, d@e only) leaves
-chunks that the collector removes about 3 to 4 h later.
+- **S4.3, the page root in place of the witness.** The witness stays;
+  section 7 says why. With S4.3 gone, the page root has no job: the AEAD
+  and the manifest root already prove the restored bytes are the sealed
+  bytes. It is dropped from S4.1 as well.
+- **S4.4.** The 3-hour window and keep-two-everywhere are covered in 3(f).
+  The replay-rate guard is dropped because its premise is false. Normal
+  boot replay runs `appender.Reconstruct` with no observer
+  (`autoputer/run.go:849-851`). `restoreReplayObserver` is attached only in
+  `RematerializeFromTape` (`rematerialize.go:164-167`) and in the probe
+  (`replay_completeness.go:360`). Nothing persists a rate. A real guard
+  would need a durable rate that the producer reads; it fires only
+  earlier, which costs bytes; and nothing shows the paper's replay is
+  slower than the bound assumes. Recorded as a residual (section 9).
 
-Rollback: revert the constant. Protected surfaces: the collector (red; a
-wrong window deletes chunks a root is about to name, which the root check
-turns into a loud failure).
+## 6. Diminishing returns
 
-## 6. What must be preserved
+A completed snapshot costs about 4 GB a day of host writes and backup
+volume. It holds about 11 GB on the host: two roots of about 3.7 GB of
+state each, plus shared partitions [E]. Node B has 135 GiB free. Stage by
+stage:
 
-- **Restore correctness.** Every new record verifies at restore: the page
-  root from S4.1, witness v3 while the record carries one, and quick_check
-  after S4.3. `Install` keeps trying older candidates on a failure. No
-  stage writes a record that today's restore code cannot read, except
-  S4.3's empty witness, which its rollback note covers.
-- **The root-time chunk check (afe50a926).** Unchanged. Every root is a
-  full list of the chunks it needs (no chains). Registration stats them
-  all under the lock. The pending set and the generation counter protect
-  them from the collector. S4.2 only makes the list longer.
-- **Encryption at rest and key custody.** `SealChunk` and the computer's
-  DEK as today. No stage exports a key, adds a key, or moves plaintext off
-  the guest. The page root and the meter's sidecar stay on the guest. The
-  page root goes to the host only inside the sealed record. The host
-  learns finer change locality under S4.2 (owner question 3).
+- **Stage 0: yes, first.** It is a recovery-correctness defect, not a
+  saving.
+- **S4.1: yes.** It is small, it does not touch the restore path, and it
+  ends a 500x uncertainty about the bound. It also tells the store's own
+  work how much write locality is worth.
+- **S4.2: only behind its gate.** The most it can save is about 3 GB a
+  day and about 6 GB held. Each red stage costs review rounds (three for
+  afe50a926, five for the parked restart lane). Below the gate it is not
+  worth that.
+- **Not worth building:** S4.3, the 3-hour window, keep two everywhere,
+  and the replay guard. Option (d) only if S4.2 fails its gate and the
+  owner still wants the bytes.
+
+The real lever on the snapshot's floor is the store's write locality
+(option e), and the meter is what puts a number on it.
+
+## 7. Why the witness stays
+
+The witness is witness v3, computed by SQL inside the capture's read
+transaction (`snapshot.go:563-573`). It is recomputed over the restored
+file in `VerifySnapshotFile` (`restore_snapshot.go:173-186`). Its only
+consumer is that comparison (`restore_snapshot.go:183`).
+
+**What it proves that nothing cheaper does.** The page stream from
+`sqlite_dbpage` is the same logical state that the SQL reads saw at
+`HeadTx`, for every table that is not derived, non-indexed columns
+included. It is the only check that crosses from the page path to the row
+path.
+
+| Candidate | Catches | Misses | Cost |
+|---|---|---|---|
+| page root over the streamed bytes | transport and assembly faults (which the AEAD and manifest root already catch) | a stream at a different or mixed state: it hashes whatever `sqlite_dbpage` returned | about 1 min |
+| head row read from the restored file, compared with `StoreHeadSequence` / `StoreHead` | a whole snapshot at another head | a mix of pages from two states; wrong row content at the right head | seconds |
+| `PRAGMA quick_check` | broken B-tree structure | index-versus-table mismatches (`compact.go:63-66`); wrong values in a valid structure | not measured on 22 GB [?] |
+| `PRAGMA integrity_check` | quick_check plus index-versus-table | wrong values in non-indexed columns | **58 min on a 20.66 GB copy** (`compact.go:63-66`), more than the witness |
+| witness v3 | all of the above for state tables | derived tables (excluded on purpose, `restore_snapshot.go:189-200`) | 22 to 35 min |
+
+Nothing cheaper covers a stream that mixes pages from two states, or wrong
+content at the right head. Those are exactly the faults that would be
+silent: a restore would install a state that replay then builds on. The
+witness stays. Its costs are:
+
+- about 26 min of WAL hold (about 3 GB of WAL on the guest's volume);
+- a longer window in which a planned restart is refused (the parked
+  restart lane addresses that);
+- the same time again at restore.
+
+The owner may overrule. A witness-less format would then need the
+forward-compatible reader one release ahead, because two witness-less
+roots leave an old binary nothing it can restore (`restore_snapshot.go:183`
+compares unconditionally). Both seats found this.
+
+## 8. What must be preserved
+
+- **Restore correctness.** Witness v3 stays. S4.2 changes only the cut,
+  which today's readers already verify.
+- **The root-time chunk check (afe50a926).** Unchanged. Stage 0 changes
+  only which rows are kept and advertised.
+- **Encryption at rest and key custody.** `SealChunk` under the computer's
+  DEK, unchanged. The meter's sidecar holds truncated page hashes and stays
+  on the guest.
 - **The 720,000-event recovery bound.** Unchanged. The trigger stays at
-  540k, and S4.4's guard only fires earlier.
-- **Old roots restorable until superseded.** Every stage keeps the v1
-  record and its readers. Roots are self-contained, so superseding one
-  never breaks another.
-- **No switches.** No stage adds a setting. S4.2's gate is a build decision
-  made from a measurement.
+  540k.
+- **Old roots restorable until superseded.** Stage 0 strengthens this:
+  superseding now means by a root the tape names.
+- **No switches.** None added. S4.2's gate is a build decision.
 
-## 7. Owner questions, each with the conservative default
+## 9. Owner questions, each with its conservative default
 
-1. **May the page root plus `PRAGMA quick_check` replace witness v3 as a
-   snapshot's restore check (S4.3)?** This ends the 22 to 35 min WAL pin
-   and the same wait at restore. Default: no. S4.3 waits, the witness and
-   the 90-minute budget stay, and S4.1 to S4.2 go ahead.
-2. **The group size and the host's limits (S4.2).** Default: the largest g
-   that meets the gate, and no smaller than 128, which fits today's
-   `maxSnapshotRootChunks` and body limit for the paper. So there is no
-   host limit change unless the owner wants the extra gain from g = 64.
-3. **Finer change locality visible to the host (S4.2).** The CAS learns
-   which 512 KiB regions changed between snapshots, instead of which 4 MiB
-   ones. Default: accept, the same trade `filecas.go:196-198` already
-   records.
-4. **The 3-hour window before the planned-restart lane lands (S4.4).** A
-   capture that spans a long hibernation becomes a loud failed attempt.
-   Default: yes, after a read-only audit of the live roots against the
-   chunk store on Node B (the open residual of the root-check record)
-   shows no root naming a missing chunk.
-5. **If the meter shows the snapshot is already within about 2x of its
-   bound, stop S4 after S4.3 and S4.4, and put the byte lever in the
-   store's layout (append-clustered S2 to S5 and a compaction cadence)?**
-   Default: yes, with the reading recorded as evidence.
-6. **The paper's replay rate.** The 720k bound was set from d@e's rate. The
-   paper's own rate can only be measured on the paper (its payloads are
-   sealed under its key, so no off-guest replay). Default: S4.4's guard
-   logs it at the paper's next boot replay, and the bound is restated then
-   by a separate record.
+1. **Stage 0's rule: keep the newest unnamed root above the newest named
+   root, besides the named ones?** Default: yes. This is the attempt
+   whose append is about to run. Every older unnamed root is dropped.
+2. **S4.2's threshold of 1.0 GB sealed per snapshot.** Default: as stated.
+   Below it, S4 stops and the byte lever goes to the store's layout.
+3. **Finer change locality visible to the host under S4.2** (512 KiB
+   regions instead of 4 MiB). Default: accept, the same trade as
+   `filecas.go:196-198`.
+4. **The witness stays (section 7).** Default: stays. Overruling it means
+   a forward-compatible reader first.
+5. **The 24-hour unrooted window stays.** Default: stays. Revisit only
+   with the window above the backoff ceiling.
+6. **The paper's replay rate is unmeasured, so the 720k bound rests on
+   d@e's rate.** Default: a residual. Measuring it needs a durable rate
+   from a boot replay, which no code records today.
 
-## 8. Precommitted claim for S4.1
+## 10. Review round 1: dispositions
 
-To enter in `docs/calibration/claude-ledger.md` when S4.1's build starts
-(the next free id at the time):
+Seat 1 was Gemini 4 Hydrogen; seat 2 was DeepSeek v4.1 flash. I verified
+each finding against the code. A finding marked moot was confirmed but no
+longer applies, because the stage it was about has been dropped.
 
-- **Claim (landing):** S4.1 (page root and dirty-page meter) is accepted
-  by both seats within two review rounds, then lands and deploys with no
-  fix commit. On d@e two snapshots log a page root and a meter line, and a
-  rematerialize of d@e logs the page root verified. **Probability 0.40.**
-  Recent red lanes on this path needed three rounds (afe50a926, d6b88cd63)
-  or more (C64), and that sets the probability. Test: review outputs, CI
-  run, deploy receipt, d@e log lines. Settle by 2026-11-18T12:00Z.
-- **Claim (measurement, scored at the same time or at the paper's second
-  snapshot after it boots S4.1, whichever is later, by 2026-11-21T12:00Z):**
-  between two consecutive paper snapshots, the meter's p_128 is at most
-  0.5. **Probability 0.30.** I lean to "spread out and high", from the
-  16%-in-50-minutes clone reading and the daily incremental vacuum. Test:
-  the paper's "snapshot taken" line. If it is false, S4.2 is not built
-  (gate) and question 5 applies.
+| Finding | Disposition |
+|---|---|
+| S4.2's gate refuses its own win case (seat 2 B1) | Confirmed by the record's own arithmetic. The gate is now absolute bytes (section 5). |
+| Section 4's bound range is inconsistent at p = 0.2% (seat 2 B1) | Confirmed. Now 7.5 MB to 3.7 GB, so today is 1x to 500x the bound. |
+| S4.3's rollback is not executable (seat 1 B1, seat 2 B2) | Confirmed: `restore_snapshot.go:183` compares unconditionally and the paper keeps 2 (`snapshot_roots.go:43`). S4.3 dropped. |
+| quick_check skips index checks; the page root cannot see a stream at another head (seat 1 B2) | Confirmed (`compact.go:63-66`). Section 7: the witness stays. |
+| Register before append evicts the on-tape root (seat 1 B3, the coordinator) | Confirmed with file:line. Now Stage 0, built first. |
+| The replay guard rests on a false claim (seat 1 B4) | Confirmed (`run.go:849-851`, `rematerialize.go:164-167`). Dropped. |
+| Keep two breaks the MaxCandidates contract (seat 1 B5, seat 2 S4) | Confirmed (`snapshot_roots_test.go:115-124`). Dropped. |
+| A 3 h window equal to the 3 h backoff ceiling forces re-uploads (seat 2 S3, seat 1 nit 1) | Confirmed (`snapshot_producer.go:89`). The window change is dropped. |
+| The sidecar size rule loses readings (seat 1 S1) | Accepted: compare `min(old, new)` pages, and count growth as changed. |
+| A compaction swap contaminates the meter (seat 2 S5) | Confirmed (a rename at `compact.go:373`). The sidecar carries the inode, and such intervals are excluded. |
+| Partition page root after `RemoveAll` (seat 1 S2); the truncation test does not reach the page root (seat 1 S3); binary framing of the page root (seat 1 S6); S4.1's proof cannot fail (seat 2 S8); quick_check as a new refusal path (seat 2 S7); duplicate owner of the page-root check (seat 2 nit 13) | Moot: the page root is dropped. Each is correct about the earlier text. |
+| Bottlenecks below g = 128 (seat 1 S4) | Accepted: S4.2 is limited to g >= 128. Below that, the record names what a benchmark must cover. |
+| Payload caps of 64 MiB (seat 1 S4) | Verified (`privacy.go:51`, `event.go:30`, `format.go:103`). Replaces my [?]. |
+| The meter need not touch the restore path; store layout is the main lever (seat 1 S5) | Accepted. S4.1 is observation only, and section 6 says so. |
+| Restore proof on a paper-sized store (seat 2 S6) | Accepted (`snapshot_large_test.go`). |
+| Per-file counts first, as yellow (seat 2 nit 14) | Accepted: S4.1 step 1. |
+| g = 64 needs only the chunk limit (seat 2 nit 9) | Correct (6.0 MB < 8 MiB). Fixed. |
+| "Returns pages in order" should be "enforces" (seat 2 nit 10) | Correct. Fixed. |
+| "Collected within an hour" holds only at retention 2 (seat 2 nit 11, seat 1 nit 2) | Correct. Fixed. |
+| A re-upload on cut change and on rollback (seat 2 nit 12) | Accepted. Stated. |
+| `artifact_gc.go:678` and the 168 h run grace (seat 1 nit 4) | Verified: the 24 h chunk grace governs unrooted chunks. No change. |
+| Missed contributors: hot-row updates, smaller c_g (seat 1 S5) | Accepted. Added to 3(a). |
 
-## 9. Residuals
+No finding was rejected.
+
+## 11. Precommitted claim for the first stage (Stage 0)
+
+To be entered in `docs/calibration/claude-ledger.md` when Stage 0's build
+starts.
+
+- **Claim:**
+  - Stage 0 is accepted by both seats within two review rounds, lands, and
+    deploys with no fix commit.
+  - The read-only audit query in section 5, run on Node B after the
+    deploy and again after the paper's next recorded snapshot, shows every
+    computer's `RecoveryBase` root named on the tape.
+  - It also shows no computer with fewer named roots than
+    `min(retention, named snapshots taken)`.
+- **Probability: 0.45.** Red lanes on this path took three rounds
+  (afe50a926, d6b88cd63) or more (C64). The change is host only and
+  reuses an existing predicate, which helps.
+- **Test:** review outputs, CI run, deploy receipt, the audit query.
+- **Settle by:** 2026-11-17T12:00Z.
+
+## 12. Residuals
 
 - The split of the 5,858 uploaded chunks between the state file and the
-  partitions is not logged. S4.1's meter line adds per-file counts.
-- Whether zstd output is stable across `klauspost/compress` versions is
-  not checked (option a). A dependency bump should be read against it.
-- The 2026-10-31 "16% of blocks in 50 minutes" reading was of the file's
-  blocks on a clone. Whether it counted WAL checkpoint writes of the same
-  page more than once is not known [?].
-- `prepareHibernate` does not refuse on an in-flight capture
-  (`hibernate.go:354-366`, per the root-check record). Under S4.4 that
-  costs a retry, not a bad root.
+  partitions (S4.1 step 1 logs it).
+- Whether zstd's output is stable across `klauspost/compress` versions
+  [?].
+- Whether the 2026-10-31 reading of 16% in 50 minutes counted repeated
+  checkpoint writes [?].
+- The paper's replay rate is unmeasured, and the bound rests on d@e's
+  rate.
+- `prepareHibernate` does not refuse a capture in flight
+  (`hibernate.go:354-366`, per the root-check record). With the 24 h
+  window kept, this needs a hibernation of more than a day.
