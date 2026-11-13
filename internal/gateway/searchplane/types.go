@@ -76,4 +76,10 @@ type Outcome struct {
 	Results  int
 	Error    string
 	At       time.Time
+	// Uncapped marks a provider with nothing behind it: free tier, no quota
+	// that a failure could mean is gone. Its transient failures (error,
+	// server_error, timeout) are not a cooldown until
+	// TransientStrikesBeforeCooldown in a row; its real refusals (rate
+	// limit, quota, auth) back it off as for any provider.
+	Uncapped bool
 }

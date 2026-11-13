@@ -18,6 +18,30 @@ import (
 // (docs/archive/problems/search-plane-empty-result-benches-healthy-providers-2026-10-11.md).
 const EmptyStreakBeforeCooldown = 10
 
+// TransientStrikesBeforeCooldown is how many failures in a row (error,
+// server_error or timeout, no success between) bench a provider that has no
+// quota behind it (Outcome.Uncapped). One failure is the call's doing, not
+// the provider's: Keenable's single 404 after 6 s benched the only free
+// provider for five minutes and left 30 searches unanswered
+// (docs/problems/one-keenable-error-cools-the-only-uncapped-search-provider-2026-11-13.md).
+// Five: at Keenable's 8 calls a second pace a real outage reaches five in
+// under a second, while two or three scattered faults between successes
+// (one in 90 minutes on 2026-11-13) never do.
+const TransientStrikesBeforeCooldown = 5
+
+// TransientBackoff is the fixed bench after TransientStrikesBeforeCooldown
+// failures in a row. It does not grow: after it one probe call decides, and
+// a failing probe benches again for the same time. It is the provider
+// being down, not a quota, so a long bench would only hide its return; 30 s
+// is a fraction of the 2-minute server_error base, and one search's
+// request timeout.
+const TransientBackoff = 30 * time.Second
+
+// transientClass is a failure that says nothing about quota.
+func transientClass(c OutcomeClass) bool {
+	return c == OutcomeError || c == OutcomeServerError || c == OutcomeTimeout
+}
+
 // BackoffPolicy computes cooldown durations from outcome class and strike count.
 type BackoffPolicy struct {
 	BaseSeconds map[OutcomeClass]int64

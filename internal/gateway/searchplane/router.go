@@ -699,6 +699,7 @@ func (r *Router) call(ctx context.Context, provider Provider, query string, maxR
 			Results:  len(hits),
 			Error:    arrival.Error,
 			At:       now,
+			Uncapped: r.TierOf(name).Tier == TierFree,
 		})
 	}
 	return arrival
