@@ -210,6 +210,11 @@ type tapeHarness struct {
 	// finalize after the platform accepted the event: a crash between the CAS
 	// and the local commit.
 	finalizeFail *atomic.Bool
+	// hostChain, when set, makes the platform keep its own head, as the host
+	// does: a request whose previous head is not the host's is refused, and a
+	// commit whose reply is lost still moves the host's head (the local
+	// projection stays behind until it settles the prepared row).
+	hostChain *hostChain
 }
 
 // hookedProjection is the store as the appender's projection, with a scriptable
@@ -249,6 +254,9 @@ func newTapeHarness(t *testing.T) *tapeHarness {
 func (h *tapeHarness) bind() {
 	h.t.Helper()
 	var cas computerevent.HeadCAS = recordingCAS{liveTapeCAS: liveTapeCAS{signer: h.tape.signer, projection: h.store}, tape: h.tape}
+	if h.hostChain != nil {
+		cas = hostChainCAS{HeadCAS: cas, chain: h.hostChain, tape: h.tape, local: h.store}
+	}
 	if h.platformSkew != nil {
 		cas = skewedCAS{HeadCAS: cas, skew: h.platformSkew}
 	}
