@@ -33,6 +33,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/steptrace"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/storetables"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -954,6 +955,15 @@ type guestObservabilityResponse struct {
 	// listed second-level directory. A plain read shows the last walk.
 	// The volume root is the directory of the store path.
 	DataVolume *datavolume.Report `json:"data_volume,omitempty"`
+	// StoreTables is what fills state.db: the file's pages and free pages,
+	// and per table and index its pages, bytes, rows and rowid range, with
+	// each table's indexes rolled up. Only with ?store_tables=detail
+	// (optionally &store_tables_seconds=N, at most storetables.MaxBudget): a
+	// reading walks the file's pages through dbstat under a wall-time budget
+	// shared out by weight, one tree at a time, each in its own short read
+	// transaction. A tree cut at its share says partial and its numbers are
+	// a floor. A plain read shows the last reading, if any.
+	StoreTables *storetables.Report `json:"store_tables,omitempty"`
 	// ObjectGraphWriterGate is the object graph writer gate's mode and the
 	// violations it has seen since boot, keyed "kind|declared writer|reason"
 	// (ARCH-04): the gate's refusals, read here instead of over SSH. This process's counts only (corpusd keeps its own).
@@ -1069,6 +1079,16 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 	if h.rt.cfg.StorePath != "" {
 		report := h.rt.dataVolume.Read(r.Context(), filepath.Dir(filepath.Clean(h.rt.cfg.StorePath)), datavolume.DefaultLimits, r.URL.Query().Get("data_volume") == "detail")
 		resp.DataVolume = &report
+	}
+	if h.rt.store != nil {
+		var budget time.Duration
+		if secs, err := strconv.Atoi(r.URL.Query().Get("store_tables_seconds")); err == nil && secs > 0 {
+			budget = time.Duration(secs) * time.Second
+		}
+		report := h.rt.storeTables.Read(r.Context(), h.rt.store.ReadDB(), storetables.Limits{Budget: budget}, r.URL.Query().Get("store_tables") == "detail")
+		if report.Reading != nil || report.Busy {
+			resp.StoreTables = &report
+		}
 	}
 	if raw, err := os.ReadFile("/proc/meminfo"); err == nil {
 		resp.Memory = parseGuestMeminfo(string(raw))
