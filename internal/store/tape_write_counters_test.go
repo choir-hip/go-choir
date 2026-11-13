@@ -162,7 +162,11 @@ func TestTapeWriteCountersAppenderDepthAtEnter(t *testing.T) {
 	go func() {
 		done <- h.store.AppendEvent(context.Background(), h.event("depth-lead", "run-depth", "owner-1", types.EventRunCompleted, telemetryBase))
 	}()
-	<-gate.entered
+	select {
+	case <-gate.entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the lead write never reached the CAS")
+	}
 	for i, run := range distinctRunMemoryRuns(h.store, 3) {
 		run := run
 		id := fmt.Sprintf("depth-rm-%d", i)

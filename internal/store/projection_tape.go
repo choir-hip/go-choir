@@ -154,7 +154,7 @@ func (t *projectionTape) appendOps(ctx context.Context, ops []computerevent.Proj
 // shared one (tape_group_commit.go). Either way it returns after the event is
 // durable.
 func (t *projectionTape) appendOpsAs(ctx context.Context, ops []computerevent.ProjectionOp, authority string) error {
-	if t != nil {
+	if t != nil && t.appender != nil && len(ops) > 0 {
 		defer t.stats.enterTapeWrite()()
 	}
 	if t != nil && t.appender != nil && authority == projectionAuthority && t.group != nil && t.group.on.Load() && groupableOps(ops) {
