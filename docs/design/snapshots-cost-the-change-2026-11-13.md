@@ -359,9 +359,10 @@ database. The idempotency key is the receipts table's primary key
    producer runs one capture at a time (`snapshot_producer.go:213`).
    Retention counts are unchanged (4 and 2), so the contract test stands.
 2. **`RecoveryBase`**: return the newest *named* root. If there is none,
-   return `ErrNoWatermark` (404). vmctl already handles a missing
-   watermark (`recovery_admission.go:673-674`), and the boot then decides
-   from the tape alone.
+   return `ErrNoWatermark` (404). vmctl handles a missing
+   watermark (`recovery_admission.go:673-674`) by planning, and the planner
+   refuses an empty-store start with no base as `base_missing` (corrected
+   2026-11-13, see the problem record), as for a computer never snapshotted.
 3. **`LiveSnapshotRoots`** (`snapshot_roots.go:338`) and the collector's
    live check (`snapshot_roots.go:313-314`): drop `LIMIT
    snapshotRootRetention` and read every row of the computer. The prune

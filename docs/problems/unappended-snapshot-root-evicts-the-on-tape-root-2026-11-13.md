@@ -1,7 +1,7 @@
 # A snapshot root the tape never named can evict the one it did
 
-Date: 2026-11-13. Status: open; fix designed (Stage 0 of
-docs/design/snapshots-cost-the-change-2026-11-13.md), not built. Found by a
+Date: 2026-11-13. Status: fix built on lane/s4-stage0-roots, in review, not landed (Stage 0 of
+docs/design/snapshots-cost-the-change-2026-11-13.md). Found by a
 review seat reading the S4 design; confirmed in the code and on Node B.
 
 ## Problem
@@ -44,3 +44,22 @@ not established (the root-time chunk check, afe50a926, landed after it).
 Whether `bundle.Import` carries receipts with its roots, and whether receipt
 compaction can delete the naming receipt, must be checked before the fix
 lands.
+
+## Stage 0 build notes (2026-11-13)
+
+- Checked: `bundle.Import` carries the naming receipt with its root (verify
+  refuses a bundle whose root is not named, `bundle/verify.go:170`); receipt
+  compaction rewrites only the body column and no code deletes receipts except
+  the destroyed-computer purge, which deletes roots with them. Tests N9, N10.
+- Corrected: with no named root the watermark route answers 404, and vmctl
+  refuses an empty-store start as `base_missing` whatever the tape length
+  (`recoveryplan.PlanRecovery`), while `projection_base.go` could genesis-replay
+  a short chain. That mismatch is now the visible policy for the only-unnamed
+  case (it matches a computer never snapshotted). Open problem: decide
+  whether a short chain with no base should be admitted for genesis replay.
+- Added after review: unnamed roots registered within a 2 hour window (90
+  minute capture budget plus 30 minutes) are kept, at most 2 beside the
+  newest, so an append that lands after a newer registration still finds its
+  row. The just-registered root is never pruned in its own transaction.
+- Open: `bundle.Import` does not prune, so many imports leave many rows; the
+  collector reads every row's chunk list.
