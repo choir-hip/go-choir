@@ -33,8 +33,12 @@ import (
 // chunk of another format is discarded and its computer re-walked from 0.
 // Without the bump every stored chunk would silently lack the new
 // references and apply would delete files they name.
-// TestTapeRefExtractionGolden fails when the extraction changes under the
-// current number.
+// TestTapeRefExtractionGolden fails when tapeRowPrefixes (including a new
+// string field it reads, a slice offset or a pins index), digestPrefix, hex64RE
+// or the pins and event references of a fixed chain change under the current
+// number. It does not see a new receipt or event field that walkTapeChain
+// starts to read into PayloadPins or PayloadRefs from a source the fixed
+// chain does not exercise; whoever adds one bumps the constant.
 //
 // Why a resumed walk equals an uninterrupted one (the correctness argument).
 //
@@ -468,6 +472,8 @@ func (s *Service) compactTapeRefChunks(ctx context.Context, computerID string) e
 	var groups [][]tapeRefChunk
 	var cur []tapeRefChunk
 	var span uint64
+	// A chunk whose own span exceeds maxEvents (a walk chunk size above the
+	// cap, or a test) forms a group of one and stays alone.
 	for rows.Next() {
 		var c tapeRefChunk
 		if err := rows.Scan(&c.From, &c.To, &c.ReadEvents, &c.Anchor); err != nil {

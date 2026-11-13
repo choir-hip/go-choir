@@ -103,3 +103,16 @@ scheduled collector should not exist behind it. The conservative reading is
 to leave the setting as it is for the on-demand endpoint and add the
 scheduler without a new switch for the orphan sweep only, since it deletes
 nothing a chain names. Recorded as a residual; not decided here.
+
+## Named follow-ups in the reference walk (not built)
+
+Two behaviours of `internal/platform/tape_sweep_refs.go` that are safe but
+wasteful, found in review and left alone so the reviewed code stays frozen:
+
+- A transient error while reading a chunk's anchor (`tapeAnchorAt`) is treated
+  as a failed check and deletes the computer's progress, so a database blip
+  costs a full re-walk of that computer. A retry before deleting would keep it.
+- When the load itself errors (as opposed to a check failing), the walk starts
+  from 0 but leaves the stale interior chunks in place; they fail the tiling
+  check on the next sweep and cost one extra reset. Deleting them on the
+  fallback would save it.
