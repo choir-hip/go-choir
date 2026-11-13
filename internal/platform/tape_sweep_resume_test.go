@@ -368,8 +368,8 @@ func TestTapeSweepApplyPurgesStoredProgress(t *testing.T) {
 	f := newTapeFixture(t)
 	f.fullComputer("dead-1", 1)
 	dry := f.dryRun(destroyedReq(true))
-	if _, err := f.store.db.Exec(`INSERT INTO tape_sweep_ref_chunks (computer_id,from_sequence,to_sequence,read_events,anchor_event_digest,refs,refs_sha256,created_at) VALUES ('dead-1',0,1,true,repeat('a',64),decode('','hex'),repeat('b',64),now()) ON CONFLICT DO NOTHING`); err != nil {
-		t.Fatal(err)
+	if f.chunkCount("dead-1") == 0 {
+		t.Fatal("the dry-run left no chunks for the apply to purge; the test would prove nothing")
 	}
 	if _, err := f.apply(dry, destroyedReq(true)); err != nil {
 		t.Fatal(err)

@@ -1,13 +1,19 @@
 package platform
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io/fs"
 	"math/rand"
 	"os"
+	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -52,44 +58,99 @@ func TestTapeSweepChunkFromAnotherFormatRestarts(t *testing.T) {
 }
 
 // V2: bump tapeRefFormat (and this golden) whenever any of these change.
+//
+// The row is built by reflection over tapeChainRow: every string field and
+// every element of every []string field carries a distinct, non-uniform
+// 64-hex value (sha256 of the field's path), and each []string has three
+// elements. A new string field that tapeRowPrefixes starts reading, a changed
+// slice offset, a changed pins index or a changed digestPrefix width changes
+// the list below.
 func TestTapeRefExtractionGolden(t *testing.T) {
 	const goldenFormat = 1
 	if tapeRefFormat != goldenFormat {
 		t.Fatalf("tapeRefFormat = %d; the golden below is for %d. Update the golden only after deciding the old chunks are stale (the bump discards them)", tapeRefFormat, goldenFormat)
 	}
-	h := func(c string) string { return strings.Repeat(c, 64) }
-	row := tapeChainRow{EventDigest: h("a"), EventPin: h("b"), PayloadPins: []string{h("c")}, PayloadRefs: []string{h("d"), "short", strings.ToUpper(h("e"))}}
+	hexOf := func(path string) string {
+		sum := sha256.Sum256([]byte(path))
+		return hex.EncodeToString(sum[:])
+	}
+	var row tapeChainRow
+	rv := reflect.ValueOf(&row).Elem()
+	for i := 0; i < rv.NumField(); i++ {
+		name := rv.Type().Field(i).Name
+		switch rv.Field(i).Kind() {
+		case reflect.String:
+			rv.Field(i).SetString(hexOf(name))
+		case reflect.Slice:
+			if rv.Field(i).Type().Elem().Kind() == reflect.String {
+				vals := make([]string, 3)
+				for j := range vals {
+					vals[j] = hexOf(fmt.Sprintf("%s/%d", name, j))
+				}
+				rv.Field(i).Set(reflect.ValueOf(vals))
+			}
+		}
+	}
 	got := fmt.Sprint(tapeRowPrefixes(row))
-	want := "[12297829382473034410 13527612320720337851 14757395258967641292 15987178197214944733]"
+	want := "[12491266664376620606 11499817458892743072 8000223249922609663 17211481934802546154 6243759859604505432 12240792780506004608 1460053042699466875 11987051296110327409]"
 	if got != want {
 		t.Fatalf("extraction changed without a tapeRefFormat bump:\n got %s\nwant %s", got, want)
 	}
-	text := "x" + h("a") + "Y " + strings.ToUpper(h("b")) + " " + h("c")[:63]
-	if refs := tapeHexRefs(text); len(refs) != 1 || refs[0] != h("a") {
+	// Junk is skipped: short, upper case, and 63 hex.
+	junk := tapeChainRow{EventDigest: "short", EventPin: strings.ToUpper(hexOf("x")), PayloadPins: []string{hexOf("y")[:63]}}
+	if p := tapeRowPrefixes(junk); len(p) != 0 {
+		t.Fatalf("invalid digests extracted: %v", p)
+	}
+
+	// The regexp: a 128-hex run is two references, not one (hex64RE{64,}
+	// would make it one), upper case and 63 hex are none.
+	one, two := hexOf("one"), hexOf("two")
+	text := "x" + one + "Y " + strings.ToUpper(hexOf("up")) + " " + hexOf("short")[:63] + " " + one + two
+	wantRefs := []string{one, one, two}
+	if refs := tapeHexRefs(text); !reflect.DeepEqual(refs, wantRefs) {
 		t.Fatalf("tapeHexRefs changed without a tapeRefFormat bump: %v", refs)
 	}
-	if v, ok := digestPrefix(h("f")); !ok || v != 0xffffffffffffffff {
+	if v, ok := digestPrefix(one); !ok || v != mustPrefix(one) {
 		t.Fatalf("digestPrefix changed without a tapeRefFormat bump: %x %v", v, ok)
 	}
-	// A fixed chain through the real walker (pins from receipt bodies, refs
-	// from event files).
+
+	// The real walker, whose pins and event-file references come from
+	// hex64RE directly (not tapeHexRefs): one fixed chain, with a 128-hex run
+	// written into an event file.
 	f := newTapeFixture(t)
 	c := f.chain("golden-1", 2, tapeAged)
+	var rows []tapeChainRow
+	if err := f.svc.walkTapeChain(f.ctx, "golden-1", 0, 2, true, func(r tapeChainRow) error {
+		rows = append(rows, r)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for i, r := range rows {
+		s := c.seqs[i]
+		if !reflect.DeepEqual(r.PayloadPins, []string{s.payloadPin}) {
+			t.Fatalf("seq %d pins = %v, want [%s]; bump tapeRefFormat if the pin source changed on purpose", i+1, r.PayloadPins, s.payloadPin)
+		}
+		if !reflect.DeepEqual(r.PayloadRefs, []string{s.payload, s.payload}) {
+			t.Fatalf("seq %d event refs = %v, want the payload twice; bump tapeRefFormat if the extraction changed on purpose", i+1, r.PayloadRefs)
+		}
+	}
+	if got := hex64RE.FindAllString(`{"refs":"`+one+two+`"}`, -1); !reflect.DeepEqual(got, []string{one, two}) {
+		t.Fatalf("hex64RE on a 128-hex run = %v; bump tapeRefFormat if widened on purpose", got)
+	}
 	var set digestPrefixSet
 	if _, err := f.svc.walkTapeRefs(f.ctx, "golden-1", 2, true, true, &set, nil); err != nil {
 		t.Fatal(err)
 	}
 	set.seal()
-	for _, s := range c.seqs {
-		for _, d := range []string{s.event, s.eventPin, s.payload, s.payloadPin} {
-			if !set.has(d) {
-				t.Fatalf("walker dropped reference %s; bump tapeRefFormat if extraction changed on purpose", d)
-			}
-		}
-	}
 	if len(set.v) != 8 {
 		t.Fatalf("walker extracted %d unique prefixes from the fixed chain, want 8; bump tapeRefFormat if on purpose", len(set.v))
 	}
+}
+
+func mustPrefix(d string) uint64 {
+	v, _ := strconv.ParseUint(d[:16], 16, 64)
+	return v
 }
 
 // V3
@@ -110,29 +171,77 @@ func TestTapeSweepWatermarkSurvivesReceiptCompaction(t *testing.T) {
 }
 
 // V4: the invariant "receipt rows are never changed except losslessly" is
-// enforced by listing the writers. A new one must drop the chunks (or be
-// lossless), and be added here and to receipt_compaction.go's C-list.
+// guarded by listing the writers. This is a TRIPWIRE, not a proof: it finds
+// files that name the table (schema-qualified or not) and also contain a
+// mutating SQL keyword, in non-test Go, nix/ and scripts/, and fails for any
+// file not on the allowlist. SQL built from pieces (the purge builds
+// "DELETE FROM "+table), a file that mutates through another name, or a
+// keyword in a different file can evade it. A new writer that is not lossless
+// must delete the computer's tape_sweep_ref_chunks, and be added here with
+// its reason and to receipt_compaction.go's C-list.
 func TestAppendReceiptRowWritersAreKnown(t *testing.T) {
-	re := regexp.MustCompile(`(?i)(UPDATE|DELETE\s+FROM)\s+computer_event_append_receipts`)
-	allowed := map[string]bool{
-		"receipt_compaction.go": true, // lossless; chunks stay valid (V3)
-		"tape_purge.go":         true, // deletes the chunks in the same transaction
+	table := regexp.MustCompile(`(?i)\bcomputer_event_append_receipts\b`)
+	mutates := regexp.MustCompile(`(?i)\b(UPDATE|DELETE|TRUNCATE|MERGE)\b|DO\s+UPDATE`)
+	allowed := map[string]string{
+		"internal/platform/receipt_compaction.go": "the lossless rewrite (C2, C9)",
+		"internal/platform/tape_purge.go":         "deletes the chunks with the rows, same transaction",
+		// Readers and inserters whose text merely contains a keyword (comments,
+		// ON CONFLICT clauses, "updated_at"-style words, shell tools). Each was
+		// read when this list was made; none updates or deletes receipt rows.
+		"internal/platform/computer_events.go":  "append insert",
+		"internal/platform/clean_rebase.go":     "reader",
+		"internal/platform/checkpoint_list.go":  "reader",
+		"internal/platform/event_replay.go":     "reader",
+		"internal/platform/checkpoints.go":      "reader",
+		"internal/platform/verifier_key_pin.go": "reader",
+		"internal/platform/tape_sweep.go":       "reader",
+		"internal/platform/tape_sweep_refs.go":  "comments",
+		"internal/bundle/import.go":             "inserts after the head, overlap refused",
+		"internal/bundle/store.go":              "reader",
+		"internal/bundle/follow.go":             "reader",
+		"internal/bundle/bundle.go":             "reader",
+		"nix/node-b.nix":                        "backup and growth-meter queries",
+		"scripts/off-host-restore-drill.sh":     "restore drill reads",
+		"scripts/test-node-b-growth-meter.sh":   "test fixture",
+		"scripts/node-b-growth-meter":           "reader",
+		"scripts/chaos/s2-corpusd-crash.sh":     "chaos drill reads",
 	}
-	entries, err := os.ReadDir(".")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, e := range entries {
-		name := e.Name()
-		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		raw, err := os.ReadFile(name)
+	root := filepath.Join("..", "..")
+	var hits []string
+	for _, dir := range []string{"internal", "cmd", "nix", "scripts"} {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			name := d.Name()
+			if strings.HasSuffix(name, "_test.go") || strings.HasSuffix(name, ".md") {
+				return nil
+			}
+			if dir == "internal" || dir == "cmd" {
+				if !strings.HasSuffix(name, ".go") {
+					return nil
+				}
+			}
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			if table.Match(raw) && mutates.Match(raw) {
+				rel, _ := filepath.Rel(root, path)
+				hits = append(hits, filepath.ToSlash(rel))
+			}
+			return nil
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if re.Match(raw) && !allowed[name] {
-			t.Errorf("%s rewrites or deletes append-receipt rows; it must drop tape_sweep_ref_chunks for the computer (or be lossless) and be listed in this test", name)
+	}
+	if len(hits) < 5 {
+		t.Fatalf("the scan found only %v; the repo root is wrong or the scan is vacuous", hits)
+	}
+	for _, rel := range hits {
+		if _, ok := allowed[rel]; !ok {
+			t.Errorf("%s names computer_event_append_receipts and a mutating keyword; if it rewrites or deletes receipt rows it must drop tape_sweep_ref_chunks for the computer (or be lossless) and be allowlisted here with a reason", rel)
 		}
 	}
 }
@@ -151,7 +260,11 @@ func TestTapeSweepOneUnreadableEventKeepsTheVerifiedPrefix(t *testing.T) {
 	if first.Orphans[tapeNSPayload].Refused == "" {
 		t.Fatal("first run did not refuse")
 	}
+	baseline := itemKeys(f.manifestItems(first)) // from scratch: nothing was stored yet
 	second := f.dryRun(TapeSweepRequest{Sweeps: []string{TapeSweepOrphans}})
+	if !equalKeys(baseline, itemKeys(f.manifestItems(second))) {
+		t.Fatal("the manifest after a prefix resume differs from the from-scratch one")
+	}
 	if second.Orphans[tapeNSPayload].Refused == "" {
 		t.Fatal("the refusal was lost on the second run")
 	}
