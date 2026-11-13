@@ -293,6 +293,9 @@ type tapeSweepState struct {
 	order    []string
 	// beforeDelete is a test hook run before each item's locked unlink.
 	beforeDelete func(item tapeSweepItem)
+	// walkViewDone is a test hook run when a chain walk that reads events
+	// ends; view is nil when the computer's view could not be opened.
+	walkViewDone func(computerID string, view *tapestore.SegmentView)
 	// afterReferences is a test hook run after the dry-run's chain walk and
 	// before the append-receipt check, to simulate live appends during the walk.
 	afterReferences func()
@@ -760,9 +763,22 @@ type tapeChainRow struct {
 func (s *Service) walkTapeChain(ctx context.Context, computerID string, from, to uint64, readEvents bool, visit func(tapeChainRow) error) error {
 	var view *tapestore.SegmentView
 	if readEvents {
-		if v, err := s.tapeReader().OpenView(computerID); err == nil {
+		v, err := s.tapeReader().OpenView(computerID)
+		if err == nil {
 			view = v
+		} else {
+			log.Printf("tape sweep: computer %s: segment view not opened, reading events one by one: %v", computerID, err)
 		}
+		// A view holds no open files, so there is nothing to close; this
+		// reports what the walk cost on every return path.
+		defer func() {
+			if view != nil {
+				log.Printf("tape sweep: computer %s walk (%d,%d]: %d segments, %d probes, %d reloads, %d reader fallbacks", computerID, from, to, view.Segments(), view.Probes(), view.Reloads(), view.Fallbacks())
+			}
+			if s.tapeSweep.walkViewDone != nil {
+				s.tapeSweep.walkViewDone(computerID, view)
+			}
+		}()
 	}
 	for start := from + 1; start <= to; start += tapeSweepSeqChunk {
 		end := min(to, start+tapeSweepSeqChunk-1)
