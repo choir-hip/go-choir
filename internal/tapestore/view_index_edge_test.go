@@ -108,7 +108,9 @@ func TestI5IndexedViewMatchesPlainViewOnDamagedDuplicates(t *testing.T) {
 		} else if !errors.Is(got.err, ErrCorrupt) {
 			t.Fatalf("both damaged: %v", got.err)
 		}
-		if p := idx.Probes(); p < 2 && (dmg[0] || dmg[1]) {
+		// Candidates are probed in ordinal order: a damaged older copy forces
+		// the second probe; an intact older copy ends the search at once.
+		if p := idx.Probes(); p < 2 && dmg[0] {
 			t.Fatalf("damage %v: %d probes, want both candidates probed", dmg, p)
 		}
 	}
