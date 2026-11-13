@@ -252,6 +252,9 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 	if err := s.ensureTapeTombstoneSchema(ctx); err != nil {
 		return err
 	}
+	if err := s.ensureTapeRefChunksSchema(ctx); err != nil {
+		return err
+	}
 	if _, err := s.corpus().ExecContext(ctx, corpusSchemaDDL); err != nil {
 		return fmt.Errorf("platform store: bootstrap corpus schema: %w", err)
 	}
