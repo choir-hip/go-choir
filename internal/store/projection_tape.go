@@ -56,6 +56,8 @@ func (s *Store) BindProjectionTape(computerID string, appender *computerevent.Co
 		tape.sealer.Store(prior.sealer.Load()) // a rebind keeps the sealer
 	}
 	s.projectionTape = tape
+	revalidations := appender.Revalidations
+	s.revalidationSource.Store(&revalidations)
 	s.startTapeWriteSummary()
 	if sl := s.telemetry.Load(); sl != nil {
 		appender.SetAppendBarrier(sl.appendBarrier) // a rebind keeps the barrier
