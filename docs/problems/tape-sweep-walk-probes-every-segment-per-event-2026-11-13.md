@@ -1,6 +1,6 @@
 # The tape sweep's walk probes every segment for every event
 
-Date: 2026-11-13. Status: open; a repair lane is started.
+Date: 2026-11-13. Status: walk repaired (dd43ff6b1); open until a dry run finishes.
 
 ## Problem
 
@@ -72,3 +72,16 @@ index it builds a lookup from event digest prefix to segment, so a read
 probes only the segments that can hold the digest and an absent digest
 probes no sealed segment. About 10 to 12 bytes an event, 110 to 130 MB for
 the paper.
+
+## Update, 11:27Z: repaired
+
+Cause confirmed from the code: `internal/taperepack/join.go` appended legacy
+events one first-digest-byte bucket at a time, so consecutive events sit in
+unrelated segments. dd43ff6b1 (the digest lookup, both seats accepted on
+round 2) is deployed. Dry run ts-20261113T111247Z-a6fb14f1 writes a paper
+chunk row every 65 seconds, about 12 times faster; the remaining walk is
+about 3.5 hours if the rate holds. Status: repaired for the walk; open until
+a dry run finishes and its manifest is read. The count of absent or
+legacy-only events is printed when the paper's walk ends. `Reader.Read`
+itself still lists the directory and probes every segment for callers that
+do not use a view.

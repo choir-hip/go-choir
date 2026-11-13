@@ -176,15 +176,16 @@ entered below as lapsed, not scored.
 | C62 | 2026-11-13T06:00Z | true | landed as 0d2f0bd46 with no fix commit; the paper booted it at 22:53Z and recorded a snapshot at 23:28Z (root a12c1997b1f7, 10,524 chunks); Node B's free space rose 6.7 GiB over the six hours to 05:35Z (`scripts/status-storage`: last 6 h -1.12 GiB/h falling). Not covered by the claim: the fix could not reach the paper by a planned refresh, and the owner allowed one host stop to deliver it. Settled two hours after the settle-by time | 0.16 |
 | C63 | 2026-11-13T06:00Z | partial | both seats accepted on round 3 (the second of the two allowed); landed as d6b88cd63, CI run 43373203542 success and deployed at 05:55Z on the first attempt, no fix commit; the first `scripts/land` run timed out in the agentcore race suite on a build VM loaded by four builders and the rerun passed. `scripts/chaos/run s2-corpusd-crash --execute` on d@e passed every check (18 writes read back, 94 new receipts, no gap, no duplicate), but d@e's log shows no re-send or catch-up line, so the lost-reply path was not exercised on staging: the kill did not land between a commit and its reply. Scored as true on the landing, with the convergence clause unproved | 0.25 |
 | C65 | 2026-11-13T09:35Z | false | landed as f4276a0ba with no fix commit, CI 43398721472 success, deployed 09:18Z; but the paper's next chunk took 10 minutes (09:19 to 09:29Z) against 13.3, not 80 seconds. The walk's own log line: 1,789 segments, 46,733,852 probes for 50,000 events, about 935 an event, so the last-hit hint almost never points at the next event's segment. The 38x benchmark used an in-order fixture; I did not check that the paper's history is laid out in order before forecasting | 0.30 |
+| C66 | 2026-11-13T11:27Z | true | landed as dd43ff6b1 with no fix commit, CI 43413670436 success, deployed 11:12Z; dry run ts-20261113T111247Z-a6fb14f1 wrote the paper's first ten new chunk rows between 11:13:59 and 11:23:41Z, 65 seconds a row against 13.3 minutes (about 12 times). corpusd's own memory 0.68 GiB during the walk | 0.12 |
 
 ### Scorecard
 
-Second form: 29 claims open, 17 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
+Second form: 28 claims open, 18 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
 false, 1 partial), 7 lapsed.
 
 | band | claims settled | came true |
 |---|---|---|
 | 0.0 to 0.3 | 0 | n/a |
 | 0.3 to 0.6 | 6 | 1, and 1 partial |
-| 0.6 to 0.8 | 11 | 8, and 1 partial |
+| 0.6 to 0.8 | 12 | 9, and 1 partial |
 | 0.8 to 1.0 | 0 | n/a |
