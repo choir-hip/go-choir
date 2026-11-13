@@ -356,7 +356,9 @@ database. The idempotency key is the receipts table's primary key
 1. **Prune** (`pruneSnapshotRoots`, in `recordSnapshotRoot`'s transaction)
    keeps, per computer:
    - the newest `retention` roots the tape names (4, or 2 for a store over
-     2,048 chunks), ordered by the sequence of the receipt that names them,
+     2,048 chunks; a root is named by any `snapshot_recorded` receipt with key
+     `snapshot:<root>`, whatever head the row now carries, because the key is
+     unique), ordered by the sequence of the receipt that names them,
      not by head: boot restore (`snapshot.Scan`) takes the newest
      `snapshot_recorded` events and tries them newest first, and after a head
      inversion (a point-in-time restore) the roots named last have the lower
@@ -365,13 +367,18 @@ database. The idempotency key is the receipts table's primary key
      already named;
    - the newest other unnamed root above the named roots' heads, and up to
      two more unnamed roots, each registered within
-     `snapshotRootInFlightWindow` (52 minutes: registration follows the
-     capture, so the gap is the append alone, at most four sequential
-     requests of 10 minutes plus the 3 minute refused-dial resend each);
+     `snapshotRootInFlightWindow` (about 67 minutes: registration follows the
+     capture, so the gap is the append alone, five sequential requests of
+     `computerevent.GuestAttemptTimeout` plus the 3 minute refused-dial resend
+     each, the 30 second CAS re-send and a minute of margin; a test asserts
+     the window equals that formula). The window is the out-of-band guard:
+     the in-band guarantee is the producer's tick mutex, which spans
+     registration and append;
    - nothing else. Unnamed rows are at most four (the just-registered root,
      the top one, two more), as many as the old newest-four-by-head rule kept
-     at the small retention; named rows are `retention`, plus one for a
-     moment when a root is named between registrations. A fifth concurrent
+     at the small retention; named rows are `retention`, plus those named
+     since the last registration (a late-appended young root), so up to
+     `retention + 4` rows in all. A fifth concurrent
      registration still drops the oldest unnamed row inside the window; the
      producer runs one capture at a time and its append is one synchronous
      request, so one append is in flight at most.
@@ -385,10 +392,22 @@ database. The idempotency key is the receipts table's primary key
 3. **`LiveSnapshotRoots`** and the collector's live check read every row of
    the computer (no `LIMIT`), so every kept row's chunks are protected,
    including a row `bundle.Import` added.
+   **Accepted difference from main.** At retention 2 (a store over 2,048
+   chunks), with more than two named roots under a head inversion, main kept
+   the roots with the highest heads and so retained older restore candidates
+   this lane drops: the lane keeps the two newest by naming event, which are
+   the first two a guest restore tries. A restore has four candidates
+   (`snapshot.MaxCandidates`), so at retention 2 candidates three and four
+   have no row protection, as before the lane (pre-existing; the retention
+   and space decision is lane B's). Losing the two newest candidates and
+   needing the third is a compounded failure; the lane trades it for never
+   dropping the newest candidate to a root whose head is higher but which the
+   tape named earlier.
 4. **The receipts tripwire** (`TestAppendReceiptRowWritersAreKnown`) triggers
    on any non-test file naming `computer_event_append_receipts`, allowlists
    each with a reason, and checks that a file allowlisted as a reader has no
-   statement with a verb next to the table name.
+   UPDATE, DELETE FROM, TRUNCATE, MERGE INTO or INSERT ... DO UPDATE on the
+   table.
 
 Failure list as extended in review (tests `snapshot_root_named_test.go`, N1
 to N12), beyond the nine below: a late append after a newer registration; four
