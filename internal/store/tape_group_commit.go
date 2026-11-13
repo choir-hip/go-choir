@@ -99,18 +99,46 @@ func opsBytes(ops []computerevent.ProjectionOp) int {
 // outcome for this member.
 func (t *projectionTape) appendGrouped(ctx context.Context, ops []computerevent.ProjectionOp) error {
 	g := t.group
+	if err := ctx.Err(); err != nil {
+		g.cancelled.Add(1)
+		return err // a cancelled caller never leads a group or commits its own write
+	}
 	m := &groupMember{ops: ops, bytes: opsBytes(ops), start: time.Now(), done: make(chan struct{})}
 	g.mu.Lock()
 	g.pending = append(g.pending, m)
 	g.mu.Unlock()
 	token := g.leaderToken()
+	// cancelled settles a caller whose context ended: if its member was not
+	// taken, nothing of it is written and it returns ctx.Err(); if it was
+	// taken, its outcome is the group's.
+	cancelled := func() error {
+		g.mu.Lock()
+		if !m.taken {
+			for i, p := range g.pending {
+				if p == m {
+					g.pending = append(g.pending[:i:i], g.pending[i+1:]...)
+					break
+				}
+			}
+			g.mu.Unlock()
+			g.cancelled.Add(1)
+			return ctx.Err() // nothing of it was written
+		}
+		g.mu.Unlock()
+		<-m.done // taken: its outcome is the group's
+		return m.err
+	}
 	for {
+		if ctx.Err() != nil {
+			// select picks at random among ready cases: a cancelled caller
+			// must not win the token and commit its own write.
+			return cancelled()
+		}
 		select {
 		case <-m.done:
 			return m.err
 		case token <- struct{}{}:
-			t.leadGroup()
-			<-token
+			t.leadHolding(token)
 			select {
 			case <-m.done:
 				return m.err
@@ -118,23 +146,17 @@ func (t *projectionTape) appendGrouped(ctx context.Context, ops []computerevent.
 				// Not taken (the caps cut the group short): lead again.
 			}
 		case <-ctx.Done():
-			g.mu.Lock()
-			if !m.taken {
-				for i, p := range g.pending {
-					if p == m {
-						g.pending = append(g.pending[:i:i], g.pending[i+1:]...)
-						break
-					}
-				}
-				g.mu.Unlock()
-				g.cancelled.Add(1)
-				return ctx.Err() // nothing of it was written
-			}
-			g.mu.Unlock()
-			<-m.done // taken: its outcome is the group's
-			return m.err
+			return cancelled()
 		}
 	}
+}
+
+// leadHolding commits one group while the caller holds the leader token, and
+// frees the token even if the commit panics: a token left full would block
+// every later writer for ever.
+func (t *projectionTape) leadHolding(token chan struct{}) {
+	defer func() { <-token }()
+	t.leadGroup()
 }
 
 // takeGroup removes the next group from the pending list, oldest first, up to
@@ -165,6 +187,23 @@ func (t *projectionTape) leadGroup() {
 	if len(members) == 0 {
 		return
 	}
+	// A panic below must not leave taken members waiting for ever: they are
+	// answered with an error (nothing is acknowledged), and the panic goes on.
+	settled := false
+	defer func() {
+		if settled {
+			return
+		}
+		err := errors.New("store: group commit failed: the leader panicked; outcome unknown")
+		for _, m := range members {
+			select {
+			case <-m.done:
+			default:
+				m.err = err
+				g.finishMember(m)
+			}
+		}
+	}()
 	ctx, cancel := context.WithTimeout(computerevent.WithBarrierExemption(context.Background()), groupCommitTimeout)
 	defer cancel()
 
@@ -202,7 +241,11 @@ func (t *projectionTape) leadGroup() {
 		// and gets its own answer (F2).
 		g.refusedSplits.Add(1)
 		for _, m := range members {
-			m.err = t.appendDirect(ctx, m.ops, projectionAuthority)
+			// Each single gets its own deadline: a big group's elapsed time
+			// is not a member's.
+			mctx, mcancel := context.WithTimeout(computerevent.WithBarrierExemption(context.Background()), groupCommitTimeout)
+			m.err = t.appendDirect(mctx, m.ops, projectionAuthority)
+			mcancel()
 			g.finishMember(m)
 		}
 	default:
@@ -214,7 +257,10 @@ func (t *projectionTape) leadGroup() {
 	g.members.Add(int64(len(members)))
 	g.ops.Add(int64(len(memberOps)))
 	g.membersHist[opsBucket(len(members))].Add(1)
-	g.telemetryRidden.Add(int64(ridden))
+	if err == nil {
+		g.telemetryRidden.Add(int64(ridden)) // only records that rode a committed event
+	}
+	settled = true
 }
 
 func (g *groupCommit) finishMembers(members []*groupMember, err error) {

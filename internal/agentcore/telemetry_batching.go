@@ -22,6 +22,11 @@ import (
 // may be missing instead of inferring it from a sequence gap (design 5.2).
 const telemetryMissingWindowNote = "the last window of this run's trace may be missing"
 
+// runMemoryMissingWindowNote replaces it for the one boot that follows a marker
+// an older build wrote with a failed drain under an open run-memory window: the
+// run's newest memory messages waited in that window.
+const runMemoryMissingWindowNote = "the last window of this run's trace and run memory may be missing"
+
 // defaultTelemetryDrainDeadline bounds the planned-restart drain, like the
 // shutdown deadline: the restart is never held up by telemetry.
 const defaultTelemetryDrainDeadline = 10 * time.Second
@@ -181,14 +186,20 @@ func (rt *Runtime) releaseHostRestartTelemetryLocked() {
 // crashClosePayload is the event payload of a run closed by a crash boot. With
 // batching configured it also names the possible gap; without it the payload
 // is exactly what it was before batching existed.
-func crashClosePayload(telemetryBatching bool) json.RawMessage {
+func crashClosePayload(telemetryBatching, runMemoryWindow bool) json.RawMessage {
 	if !telemetryBatching {
 		return json.RawMessage(`{"fate":"interrupted_by_restart"}`)
 	}
-	raw, _ := json.Marshal(map[string]string{
-		"fate":      runFateInterruptedByRestart,
-		"telemetry": telemetryMissingWindowNote,
-	})
+	note := telemetryMissingWindowNote
+	fields := map[string]string{"fate": runFateInterruptedByRestart}
+	if runMemoryWindow {
+		// Additive: a reader keying on "run_memory" finds the run-memory
+		// sentence; "telemetry" keeps its old reader (the note covers both).
+		note = runMemoryMissingWindowNote
+		fields["run_memory"] = note
+	}
+	fields["telemetry"] = note
+	raw, _ := json.Marshal(fields)
 	return raw
 }
 

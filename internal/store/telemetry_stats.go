@@ -167,31 +167,29 @@ func (c *telemetryCounters) recordTapeEvent(authority string, parts [][]computer
 		return
 	}
 	tally := tallyTapeParts(authority, parts, firstIsTelemetry, payloadBytes) // before any lock
-	var ops []computerevent.ProjectionOp
-	if len(parts) == 1 {
-		ops = parts[0]
-	} else {
-		for _, part := range parts {
-			ops = append(ops, part...)
-		}
+	nOps := 0
+	for _, part := range parts {
+		nOps += len(part)
 	}
 	c.tapeEvents.Add(1)
-	c.tapeOps.Add(int64(len(ops)))
+	c.tapeOps.Add(int64(nOps))
 	c.tapeBytes.Add(int64(payloadBytes))
-	c.tapeOpsHist[opsBucket(len(ops))].Add(1)
+	c.tapeOpsHist[opsBucket(nOps)].Add(1)
 	c.mu.Lock()
 	if c.tapeEventsByAuthority == nil {
 		c.tapeEventsByAuthority = map[string]int64{}
 		c.tapeOpsByKind = map[string]int64{}
 	}
 	c.tapeEventsByAuthority[authority]++
-	for _, op := range ops {
-		c.tapeOpsByKind[string(op.Kind)]++
-		if op.Table != "" {
-			if c.tapeOpsByTable == nil {
-				c.tapeOpsByTable = map[string]int64{}
+	for _, part := range parts {
+		for _, op := range part {
+			c.tapeOpsByKind[string(op.Kind)]++
+			if op.Table != "" {
+				if c.tapeOpsByTable == nil {
+					c.tapeOpsByTable = map[string]int64{}
+				}
+				c.tapeOpsByTable[op.Table]++
 			}
-			c.tapeOpsByTable[op.Table]++
 		}
 	}
 	c.tapeWrites.add(tally)
