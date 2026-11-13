@@ -74,8 +74,10 @@ type tapePurgeTable struct {
 	derived bool
 }
 
-// tapePurgeTables lists every per-computer table except the kept ones. The
-// order is the delete order (approvals read requests, so they go first).
+// tapePurgeTables lists every per-computer table the purge deletes from; the
+// ones it keeps are in tapeKeptComputerTables. Derived tables are deleted but
+// never counted, listed in the manifest or archived. The order is the delete
+// order (approvals read requests, so they go first).
 var tapePurgeTables = []tapePurgeTable{
 	{name: "computer_event_append_receipts", where: "computer_id=?"},
 	{name: "computer_event_receipt_compaction", where: "computer_id=?"},
