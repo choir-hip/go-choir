@@ -19,11 +19,11 @@ func rmEntry(id, run string) types.RunMemoryEntry {
 
 // Two runs share a group whose CAS outcome is unknown after the host
 // committed: both fail, one kept prepared row holds both entries. The first
-// run's settle is blocked (the appender is held); the second run retries. It
-// must wait for the settle, then number itself from a table that has the
-// landed rows: no duplicate (run, seq) on the tape, no wedge, dense seqs
-// (review of 6a3a8e4b3: the latch was cleared before the settle finished).
-func TestRunMemoryRetryOfASecondRunWaitsForTheFirstRunsSettle(t *testing.T) {
+// run's retry is blocked at the appender (it is held); the second run retries.
+// Whatever the order they get the mutex in, the appender's head check refuses a
+// batch numbered before the landed rows surfaced: no duplicate (run, seq) on
+// the tape, no wedge, dense seqs after the callers retry.
+func TestRunMemoryRetriesOfTwoRunsAfterAnUnclearGroupWhileTheAppenderIsHeldNeverDuplicateSeq(t *testing.T) {
 	h := newTapeHarness(t)
 	h.hostChain = &hostChain{}
 	h.bind()
@@ -74,7 +74,7 @@ func TestRunMemoryRetryOfASecondRunWaitsForTheFirstRunsSettle(t *testing.T) {
 		t.Fatalf("%d members failed, want 2", failed)
 	}
 
-	// Hold the appender so the first settle cannot finish, then retry both.
+	// Hold the appender so neither retry can start, then retry both.
 	held, releaseHold := make(chan struct{}), make(chan struct{})
 	holdDone := make(chan struct{})
 	go func() {
@@ -86,7 +86,7 @@ func TestRunMemoryRetryOfASecondRunWaitsForTheFirstRunsSettle(t *testing.T) {
 		_, err := h.store.AppendRunMemoryEntry(ctx, rmEntry("a-2", a))
 		results <- writeResult{"a-2", err}
 	}()
-	time.Sleep(200 * time.Millisecond) // a-2 is inside its settle, blocked on the appender
+	time.Sleep(200 * time.Millisecond) // a-2 is blocked on the appender
 	go func() {
 		_, err := h.store.AppendRunMemoryEntry(ctx, rmEntry("b-2", b))
 		results <- writeResult{"b-2", err}
@@ -155,7 +155,7 @@ func assertDenseRuns(t *testing.T, h *tapeHarness, runs ...string) {
 
 // B2's interleaving: two runs, both with landed-unacknowledged entries (one
 // kept prepared row for the group), retry at the same time, repeatedly. With no
-// latch to erase, the appender's guard must keep every attempt either landed
+// a store-level latch that could be erased, the appender's head check must keep every attempt either landed
 // or refused: dense seqs, no wedge, no duplicate on the tape.
 func TestRunMemoryConcurrentRetriesAfterAnUnclearGroupNeverDuplicateSeq(t *testing.T) {
 	for round := 0; round < 6; round++ {
@@ -208,5 +208,52 @@ func TestRunMemoryConcurrentRetriesAfterAnUnclearGroupNeverDuplicateSeq(t *testi
 			}
 		}
 		assertDenseRuns(t, h, runs...)
+	}
+}
+
+// The production shape (sealed, the store dry-runs outside the appender mutex).
+// R numbers a run-memory entry and dry-runs it; before R takes the mutex another
+// writer lands an entry with the same (run, seq) and finalizes it. R finds the
+// heads level, runs no recovery of its own, and used to commit its stale batch
+// (a duplicate (run, seq) on the tape, then a finalize wedge). The appender
+// compares the head R validated against with the current one and refuses.
+func TestSealedRunMemoryWriterWhoseDryRunStraddledAnotherWritersFinalizeIsRefused(t *testing.T) {
+	h := newTapeHarness(t)
+	h.useSealing()
+	h.warm()
+	entered, release := make(chan struct{}), make(chan struct{})
+	var first atomic.Bool
+	h.store.projectionTape.afterDryRun = func() {
+		if first.CompareAndSwap(false, true) {
+			close(entered)
+			<-release
+		}
+	}
+	ctx := context.Background()
+	rDone := make(chan error, 1)
+	go func() {
+		_, err := h.store.AppendRunMemoryEntry(ctx, rmEntry("r-1", "run-straddle"))
+		rDone <- err
+	}()
+	<-entered // R has numbered seq 1 and passed the store's dry run
+	// (B goes straight to the appender: R holds the group leader token.)
+	if err := h.store.projectionTape.appendDirect(ctx, []computerevent.ProjectionOp{rmOp("b-1", "run-straddle", 1)}, projectionAuthority); err != nil {
+		t.Fatalf("B: %v", err)
+	}
+	close(release)
+	err := <-rDone
+	if !errors.Is(err, computerevent.ErrBatchRefused) {
+		t.Fatalf("R returned %v, want ErrBatchRefused", err)
+	}
+	if st := h.appender.WedgeStatus(); st.Active {
+		t.Fatalf("wedge tripped: %+v", st)
+	}
+	stats := h.store.TelemetryStats()
+	if stats.AppenderRevalidations < 1 || stats.TapeBatchesRefused < 1 {
+		t.Fatalf("revalidations=%d refused=%d, want both counted", stats.AppenderRevalidations, stats.TapeBatchesRefused)
+	}
+	// R's caller retries and numbers from the table that has B's entry.
+	if _, err := h.store.AppendRunMemoryEntry(ctx, rmEntry("r-2", "run-straddle")); err != nil {
+		t.Fatalf("the retry: %v", err)
 	}
 }
