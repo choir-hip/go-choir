@@ -26,7 +26,7 @@ func TestRepairKeptRowAtTheHostHeadWhoseResendIsRefused(t *testing.T) {
 			refusal := func() casStep {
 				return casStep{err: &CASError{Status: status, Definite: true, Err: fmt.Errorf("computer event client: corpusd returned %d: refused before the idempotency lookup", status)}}
 			}
-			rig.cas.script = []casStep{{commit: true, err: errReset}, refusal(), refusal(), refusal()}
+			rig.cas.script = []casStep{{commit: true, err: errReset}, refusal(), refusal()}
 			if _, err := rig.appendOne(rig.app); err == nil {
 				t.Fatal("fixture: an append with an unknown outcome reported success")
 			}

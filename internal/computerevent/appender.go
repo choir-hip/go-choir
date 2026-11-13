@@ -172,6 +172,9 @@ type ComputerEventAppender struct {
 	recoveryFailedAt time.Time
 	// catchUpPages overrides catchUpMaxPages when positive (tests).
 	catchUpPages int
+	// orphanPayloads are cached plaintexts of prepared rows the host has
+	// passed or contradicted: kept for one catch-up pass, then released.
+	orphanPayloads map[string]struct{}
 	// stop is the parent of every detached recovery, re-send, finalize and
 	// catch-up context (detached below). InterruptDetachedWork cancels it so a
 	// shutdown, a hibernate or a store close is not held for minutes by work
@@ -921,8 +924,15 @@ const (
 	// casResendTimeout bounds the re-send of a CAS whose outcome is unknown.
 	// It is a deadline, not a limit on calls; appends wait behind it under a.mu.
 	casResendTimeout = 30 * time.Second
-	// finalizeTimeout bounds verify and finalize once a receipt is in hand.
-	finalizeTimeout = time.Minute
+	// finalizeTimeout bounds verify and finalize once a receipt is in hand. It
+	// replaces the caller's context, which used to govern them, so it is sized
+	// from the worst payload: an event payload is at most
+	// EventPayloadMaxResponseBytes (64 MiB); fetched at a pessimistic 1 MiB/s
+	// across the host tap under load that is about 64 s, decode, decrypt and
+	// the SQLite apply of a batch add tens of seconds. Five minutes is more
+	// than three times that and stays half of the 10 minute bound of the
+	// guest's HTTP client.
+	finalizeTimeout = 5 * time.Minute
 )
 
 // detached returns a context that keeps ctx's values but not its cancellation,
@@ -993,9 +1003,11 @@ func (a *ComputerEventAppender) dropLivePayload(event Event) {
 // does not prove that the first send did not commit: the host runs
 // authorization and pin validation before it looks up the idempotency key, and
 // maps unclassified internal errors to 400. RecoverPrepared decides on the
-// next pass against the host's chain: it finalizes the row when the host's
-// head is that event, and discards it when the host holds another event at its
-// sequence or has not reached it. Only a definite refusal of the FIRST send
+// next pass against the host's chain: when the host's head is that event it
+// re-sends once more and finalizes, and if that re-send is refused too it
+// drops the row and the catch-up applies the event from the host's tape; it
+// discards the row when the host holds another event at its sequence or has
+// not reached it. Only a definite refusal of the FIRST send
 // discards at once.
 func (a *ComputerEventAppender) resendUnclearCASLocked(ctx context.Context, request CASRequest, first error) (Receipt, error) {
 	rctx, cancel := a.detached(ctx, casResendTimeout)
@@ -1095,7 +1107,18 @@ func (a *ComputerEventAppender) RecoverPrepared(ctx context.Context) error {
 		if platformHead != nil && platformHead.Sequence == request.Event.Sequence && platformHead.CanonicalEventHead == request.EventDigest {
 			receipt, err := a.cas.CompareAndSwap(ctx, request)
 			if err != nil {
-				return fmt.Errorf("computer event appender: recover durable receipt: %w", err)
+				// The head read already proves this event canonical, so a
+				// failed re-send cannot be left to wedge the recovery: the host
+				// runs authorization and pin validation before it looks up the
+				// idempotency key, and may refuse a re-send of a committed
+				// event. Drop the row and let the catch-up that follows apply
+				// the event from the host's tape with its signed receipt. The
+				// cached plaintext stays for that apply, which releases it.
+				log.Printf("computer event appender: seq=%d the re-send of a committed row failed (%v); resolving it from the host chain", request.Event.Sequence, err)
+				if derr := a.projection.DiscardPrepared(ctx, a.computerID, request.EventDigest); derr != nil {
+					return fmt.Errorf("computer event appender: recover durable receipt: %w (discard: %v)", err, derr)
+				}
+				continue
 			}
 			if err := a.verifier.VerifyEventHeadReceipt(ctx, receipt, request); err != nil {
 				return fmt.Errorf("computer event appender: verify recovery receipt: %w", err)
@@ -1121,9 +1144,17 @@ func (a *ComputerEventAppender) RecoverPrepared(ctx context.Context) error {
 			// very event (the row of an append whose outcome was unknown, and
 			// the chain moved on since), the catch-up applies it from the host's
 			// tape through the same step as the boot replay. Its cached
-			// plaintext stays for that.
+			// plaintext stays for that apply; whatever the pass does not use is
+			// released when the catch-up ends (orphanPayloads), since the host
+			// may hold a different event at that sequence.
 			if err := a.projection.DiscardPrepared(ctx, a.computerID, request.EventDigest); err != nil {
 				return fmt.Errorf("computer event appender: discard prepared projection the host has passed: %w", err)
+			}
+			if _, cached := a.livePayloads[request.Event.PayloadCommitment]; cached {
+				if a.orphanPayloads == nil {
+					a.orphanPayloads = map[string]struct{}{}
+				}
+				a.orphanPayloads[request.Event.PayloadCommitment] = struct{}{}
 			}
 			continue
 		}
@@ -1377,8 +1408,12 @@ type applyTimings struct{ reduce, verify, prepare, finalize time.Duration }
 // projection: reduce it against current, check the result against the head the
 // host committed, verify the host's receipt, prepare, and finalize. The boot
 // replay (reconstruct) and the in-place catch-up (catchUpLocked) both apply
-// events through this one step, so they cannot disagree about what applying
-// means. It never performs a CAS and never touches the host.
+// events through this one step: the reduce, the check against the committed
+// head, the receipt verification, the prepare and the finalize. They differ in
+// one respect: replay mode finalizes through FinalizeReplayBatch (which may
+// upcast a legacy deposit) and the catch-up through the strict live
+// FinalizeBatch, so an old event that only the upcast accepts is a poison for
+// the catch-up and waits for the boot. It never performs a CAS.
 func (a *ComputerEventAppender) applyDurableEvent(ctx context.Context, current *Head, record DurableEvent) (Head, applyTimings, error) {
 	var timings applyTimings
 	applyStarted := time.Now()
