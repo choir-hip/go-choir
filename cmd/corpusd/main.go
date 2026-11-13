@@ -224,8 +224,9 @@ func main() {
 	s := server.NewServer("corpusd", cfg.Port)
 	platform.RegisterRoutes(s, handler)
 	// A scheduled tape sweep is stopped at a batch boundary and waited for
-	// before the store closes under it (its tombstone counts are written per
-	// batch, so even an abandoned wait leaves them truthful).
+	// up to the shutdown deadline, before the store closes (its tombstone
+	// counts are written per batch, so a wait that runs out leaves them
+	// truthful: an under-count, the rest re-listed by the next dry run).
 	s.AddShutdownHook(func(ctx context.Context) {
 		cancelTapeSweep()
 		if err := tapeSweepSched.Wait(ctx); err != nil {
