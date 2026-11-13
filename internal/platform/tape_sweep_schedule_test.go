@@ -3,6 +3,8 @@ package platform
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"log"
 	"os"
 	"path/filepath"
@@ -113,7 +115,11 @@ func TestScheduledTapeSweepStopsWithoutProgress(t *testing.T) {
 	f.scheduleOpts(true)
 	f.svc.tapeSweep.schedMaxBytes = 1 // every file is larger: nothing fits
 	dead := f.chain("dead-1", 1, tapeAged)
+	buf := captureScheduleLog(t)
 	res := f.svc.RunScheduledTapeSweep(f.ctx)
+	if out := buf.String(); !strings.Contains(out, "computer=dead-1") || !strings.Contains(out, "exceeds max_bytes=1") {
+		t.Fatalf("the stall does not name the computer and size: %s", out)
+	}
 	if res.Outcome != TapeSweepPassStalled || res.Deleted != 0 || res.Rounds != 1 {
 		t.Fatalf("pass = %+v", res)
 	}
@@ -380,13 +386,22 @@ func TestScheduledTapeSweepRemovesSidecarlessArchives(t *testing.T) {
 	whole := mk("dead-2-ts-20261114T000000Z-cccccccc.tar.zst", 3*time.Hour)
 	mk("dead-2-ts-20261114T000000Z-cccccccc.tar.zst.json", 3*time.Hour)
 	fresh := mk("dead-3-ts-20261114T000000Z-dddddddd.tar.zst", 0)
+	// Not the sweep's own names: never touched.
+	backup := mk("backup.tar.zst", 3*time.Hour)
+	oddRun := mk("dead-4-ts-20261114-eeeeeeee.tar.zst", 3*time.Hour)
+	oddTmp := mk("notes.tar.zst.tmp", 3*time.Hour)
+	// A tombstone names this archive: kept even without its sidecar.
+	named := mk("dead-5-ts-20261114T000000Z-ffffffff.tar.zst", 3*time.Hour)
+	if err := f.store.putTapeTombstone(f.ctx, TapeTombstone{ComputerID: "dead-5", Status: tapeTombstoneDeleted, ArchivePath: named}); err != nil {
+		t.Fatal(err)
+	}
 	f.svc.RunScheduledTapeSweep(f.ctx)
 	for _, gone := range []string{stale, staleTmp} {
 		if _, err := os.Stat(gone); err == nil {
 			t.Fatalf("%s was kept", gone)
 		}
 	}
-	for _, kept := range []string{whole, fresh} {
+	for _, kept := range []string{whole, fresh, backup, oddRun, oddTmp, named} {
 		if _, err := os.Stat(kept); err != nil {
 			t.Fatalf("%s was removed", kept)
 		}
@@ -403,7 +418,7 @@ func TestTapeSweepCapReachedSkipsLaterComputersArchive(t *testing.T) {
 	f.chain("dead-1", 3, tapeAged) // 12 files: exactly the cap
 	dead2 := f.chain("dead-2", 3, tapeAged)
 	res := f.svc.RunScheduledTapeSweep(f.ctx)
-	if res.Outcome != TapeSweepPassRoundLimit || res.Deleted != 12 || len(res.Archives) != 1 {
+	if res.Outcome != TapeSweepPassRoundLimit || res.Deleted != 12 || len(res.Archives) != 1 || res.ComputersSkipped != 1 {
 		t.Fatalf("pass = %+v", res)
 	}
 	f.allExist(dead2, true)
@@ -466,4 +481,183 @@ func TestTapeSweepSchedulerOffModeDoesNotStart(t *testing.T) {
 		t.Fatal(err)
 	}
 	time.Sleep(50 * time.Millisecond)
+}
+
+func (f *tapeFixture) staleArchive() string {
+	f.t.Helper()
+	dir := filepath.Join(f.root, tapeSweepArchiveDirName)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		f.t.Fatal(err)
+	}
+	p := filepath.Join(dir, "dead-1-ts-20261114T000000Z-aaaaaaaa.tar.zst")
+	if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+		f.t.Fatal(err)
+	}
+	old := time.Now().Add(-3 * time.Hour)
+	_ = os.Chtimes(p, old, old)
+	return p
+}
+
+// Review 2 (1): dry-run mode unlinks nothing, the cleanup included.
+func TestScheduledTapeSweepCleanupOnlyInActiveMode(t *testing.T) {
+	f := newTapeFixture(t)
+	p := f.staleArchive()
+	f.svc.SetTapeSweepPolicy(TapeSweepPolicy{Mode: ArtifactGCModeDryRun})
+	f.svc.RunScheduledTapeSweep(f.ctx)
+	if _, err := os.Stat(p); err != nil {
+		t.Fatal("dry-run mode removed an archive")
+	}
+}
+
+// Review 2 (7b): the cleanup waits while a sweep job is running.
+func TestScheduledTapeSweepCleanupSkippedWhileAJobRuns(t *testing.T) {
+	f := newTapeFixture(t)
+	p := f.staleArchive()
+	f.svc.tapeSweep.mu.Lock()
+	f.svc.tapeSweep.running = true
+	f.svc.tapeSweep.mu.Unlock()
+	f.svc.RunScheduledTapeSweep(f.ctx)
+	if _, err := os.Stat(p); err != nil {
+		t.Fatal("the cleanup ran beside a running job")
+	}
+}
+
+// Review 2 (5): a cancelled pass is "interrupted" and runs again at the retry
+// delay; a refused pass retries too. Neither marks the day.
+func TestScheduledTapeSweepInterruptedAndRefusedRetry(t *testing.T) {
+	f := newTapeFixture(t)
+	f.scheduleOpts(true)
+	dead := f.chain("dead-1", 1, tapeAged)
+	ctx, cancel := context.WithCancel(f.ctx)
+	f.svc.tapeSweep.schedAfterDry = cancel
+	res := f.svc.RunScheduledTapeSweep(ctx)
+	if res.Outcome != TapeSweepPassInterrupted || res.Deleted != 0 {
+		t.Fatalf("pass = %+v", res)
+	}
+	f.allExist(dead, true)
+	for _, o := range []string{TapeSweepPassInterrupted, TapeSweepPassRefused} {
+		if d := f.svc.afterTapeSweepPass(TapeSweepPassResult{Outcome: o}, time.Now()); d != TapeSweepScheduleRetry {
+			t.Fatalf("%s: next in %v", o, d)
+		}
+	}
+	if _, err := os.Stat(f.svc.tapeSweepScheduleStatePath()); err == nil {
+		t.Fatal("an interrupted or refused pass marked the day")
+	}
+}
+
+// Review 2 (7a): a cancel during an apply stops at a batch boundary and the
+// tombstone says what was deleted.
+func TestTapeSweepApplyCancelStopsAtABatchBoundary(t *testing.T) {
+	f := newTapeFixture(t)
+	dead := f.chain("dead-1", 3, tapeAged) // 12 files
+	dry := f.dryRun(TapeSweepRequest{AcceptUnrecordedForkLineage: true, Sweeps: []string{TapeSweepDestroyed}})
+	ctx, cancel := context.WithCancel(f.ctx)
+	calls := 0
+	f.svc.tapeSweep.beforeDelete = func(tapeSweepItem) {
+		calls++
+		if calls == 5 { // first item of batch 2
+			cancel()
+		}
+	}
+	_, err := f.svc.RunTapeSweep(ctx, TapeSweepRequest{Action: TapeSweepActionApply, RunID: dry.RunID, ManifestSHA256: dry.ManifestSHA256, AcceptUnrecordedForkLineage: true, BatchSize: 4, Pause: "0s"})
+	if err == nil {
+		t.Fatal("a cancelled apply returned no error")
+	}
+	gone := 0
+	for ns, digests := range dead.files() {
+		for _, d := range digests {
+			if !f.exists(ns, d) {
+				gone++
+			}
+		}
+	}
+	if gone < 4 || gone > 8 {
+		t.Fatalf("%d files gone, want one or two batches", gone)
+	}
+	tomb, _, _ := f.store.TapeTombstone(f.ctx, "dead-1")
+	if tomb.FilesDeleted != int64(gone) || tomb.Status == tapeTombstoneDeleted {
+		t.Fatalf("tombstone = %+v, files gone %d", tomb, gone)
+	}
+}
+
+// Review 2 (4): archive write and verify stop on a cancelled context.
+func TestTapeArchiveWriteAndVerifyHonourContext(t *testing.T) {
+	f := newTapeFixture(t)
+	f.chain("dead-1", 1, tapeAged)
+	dry := f.dryRun(TapeSweepRequest{AcceptUnrecordedForkLineage: true, Sweeps: []string{TapeSweepDestroyed}})
+	rep, err := f.apply(dry, TapeSweepRequest{AcceptUnrecordedForkLineage: true})
+	if err != nil || len(rep.Apply.Archives) != 1 {
+		t.Fatalf("apply = %+v, %v", rep.Apply, err)
+	}
+	var sc TapeArchiveSidecar
+	raw, err := os.ReadFile(rep.Apply.Archives[0] + ".json")
+	if err != nil || json.Unmarshal(raw, &sc) != nil {
+		t.Fatalf("sidecar: %v", err)
+	}
+	if err := verifyTapeArchive(f.ctx, rep.Apply.Archives[0], sc); err != nil {
+		t.Fatal(err)
+	}
+	cancelled, cancel := context.WithCancel(f.ctx)
+	cancel()
+	if err := verifyTapeArchive(cancelled, rep.Apply.Archives[0], sc); !errors.Is(err, context.Canceled) {
+		t.Fatalf("verify with a cancelled context = %v", err)
+	}
+	run := &tapeSweepApplyRun{p: tapeSweepParams{runID: "ts-20261114T000000Z-aaaaaaaa"}}
+	items := []tapeSweepItem{{Path: "sha256/computer-event/aa/" + platformTestDigest('a'), Namespace: tapeNSEvent}}
+	out := filepath.Join(f.root, "x.tar.zst")
+	if _, err := f.svc.writeTapeArchive(cancelled, out, "x", run, items, nil); !errors.Is(err, context.Canceled) {
+		t.Fatalf("write with a cancelled context = %v", err)
+	}
+}
+
+// Review 2 (6): a tombstone already deleted with items still on disk is not
+// archived again and its archive record is not overwritten; the computer is
+// skipped and reported.
+func TestTapeSweepDeletedTombstoneWithItemsRemainingIsSkipped(t *testing.T) {
+	f := newTapeFixture(t)
+	dead := f.chain("dead-1", 1, tapeAged)
+	dry := f.dryRun(TapeSweepRequest{AcceptUnrecordedForkLineage: true, Sweeps: []string{TapeSweepDestroyed}})
+	orig := TapeTombstone{ComputerID: "dead-1", Status: tapeTombstoneDeleted, ArchivePath: "/original.tar.zst", ArchiveSHA256: "orig"}
+	if err := f.store.putTapeTombstone(f.ctx, orig); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := f.apply(dry, TapeSweepRequest{AcceptUnrecordedForkLineage: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Apply.ComputersSkipped != 1 || rep.Apply.Deleted != 0 || len(rep.Apply.Archives) != 0 {
+		t.Fatalf("apply = %+v", rep.Apply)
+	}
+	f.allExist(dead, true)
+	tomb, _, _ := f.store.TapeTombstone(f.ctx, "dead-1")
+	if tomb.ArchivePath != orig.ArchivePath || tomb.ArchiveSHA256 != orig.ArchiveSHA256 {
+		t.Fatalf("tombstone archive overwritten: %+v", tomb)
+	}
+}
+
+// Review 2 (7d): Wait while a pass is in flight blocks until its context ends
+// or the pass returns.
+func TestTapeSweepSchedulerWaitWhilePassInFlight(t *testing.T) {
+	f := newTapeFixture(t)
+	f.chain("live-1", 1, 0)
+	f.reg.owned["live-1"], f.reg.listed["live-1"] = true, true
+	entered, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	f.svc.tapeSweep.afterReferences = func() { once.Do(func() { close(entered) }); <-release }
+	sch := &TapeSweepScheduler{service: f.svc, first: func() time.Duration { return time.Millisecond }, next: func(TapeSweepPassResult) time.Duration { return time.Hour }}
+	ctx, cancel := context.WithCancel(context.Background())
+	sch.Start(ctx)
+	<-entered
+	cancel()
+	short, c2 := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer c2()
+	if err := sch.Wait(short); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("wait with a pass in flight = %v", err)
+	}
+	close(release)
+	long, c3 := context.WithTimeout(context.Background(), 30*time.Second)
+	defer c3()
+	if err := sch.Wait(long); err != nil {
+		t.Fatalf("wait after release = %v", err)
+	}
 }
