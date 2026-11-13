@@ -882,9 +882,23 @@ func (rt *Runtime) bootResumesWork() bool {
 	if !planned {
 		return false
 	}
-	if marker.TelemetryDrainFailed && marker.RunMemoryWindowOpen != nil && *marker.RunMemoryWindowOpen {
+	if markerWindowOpen(marker) {
 		log.Printf("runtime: planned restart whose telemetry drain failed, with the run-memory window open at drain time: closing pre-boot runs as after a crash")
 		return false
 	}
 	return true
+}
+
+// markerWindowOpen reports whether an older build's marker says its drain
+// failed under an open run-memory window.
+func markerWindowOpen(marker PlannedRestart) bool {
+	return marker.TelemetryDrainFailed && marker.RunMemoryWindowOpen != nil && *marker.RunMemoryWindowOpen
+}
+
+// crashCloseNamesRunMemory reports whether a crash-close note should name
+// possibly missing run memory: the planned marker that led to this close is an
+// older build's, with a failed drain under an open window.
+func (rt *Runtime) crashCloseNamesRunMemory() bool {
+	marker, planned := rt.BootWasPlannedRestart()
+	return planned && markerWindowOpen(marker)
 }
