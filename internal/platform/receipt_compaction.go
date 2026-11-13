@@ -33,7 +33,15 @@ package platform
 //      touched, and the parsed set is logged at start;
 //  C8. an idempotent retry, a replay page, a sweep walk, a checkpoint or a
 //      bundle reads a compact row differently from the full one: each is
-//      tested against the full-JSON baseline.
+//      tested against the full-JSON baseline;
+//  C9. a rewrite that is not lossless leaves the tape sweep's stored
+//      reference chunks (tape_sweep_ref_chunks, tape_sweep_refs.go) stale: a
+//      chunk's anchor is the event digest, which does not commit to the
+//      receipt body, so the sweep cannot see an edited pin. This pass is
+//      lossless (C2), so the chunks stay valid
+//      (TestTapeSweepWatermarkSurvivesReceiptCompaction). Any other writer
+//      that changes or deletes a receipt body must delete the computer's
+//      chunks and be added to TestAppendReceiptRowWritersAreKnown.
 
 import (
 	"bytes"

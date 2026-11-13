@@ -163,8 +163,11 @@ func TestTapeSweepRefChunkLoaderRefusals(t *testing.T) {
 			t.Fatal(err)
 		}
 		chunks, err := f.svc.loadTapeRefChunks(f.ctx, "dead-1", 9, true)
-		if err != nil || len(chunks) != 0 {
-			t.Fatalf("chunks=%d err=%v", len(chunks), err)
+		if err != nil || len(chunks) != 1 || chunks[0].To != 4 {
+			t.Fatalf("chunks=%v err=%v, want only the verified prefix (0,4]", chunks, err)
+		}
+		if f.chunkCount("dead-1") != 1 {
+			t.Fatalf("rows from the no-reads chunk on were kept: %d", f.chunkCount("dead-1"))
 		}
 	})
 	t.Run("progress without event reads serves a walk that does not read", func(t *testing.T) {
