@@ -750,7 +750,20 @@ type tapeChainRow struct {
 // indexed sequence point lookups (event_replay.go), reading each event file
 // when readEvents is set. A gap or an unreadable row is an error: a partial
 // chain must never pass for a complete one.
+//
+// Events are read through one tapestore view per walk: the directory is
+// listed and the indexes validated once, and each read probes from the
+// segment of the last hit (internal/tapestore/view.go), where the per-event
+// Reader.Read listed the directory and opened an index per segment on every
+// event. The rows are the ones the per-event reads gave. A computer whose
+// view cannot be opened is walked with the per-event reads.
 func (s *Service) walkTapeChain(ctx context.Context, computerID string, from, to uint64, readEvents bool, visit func(tapeChainRow) error) error {
+	var view *tapestore.SegmentView
+	if readEvents {
+		if v, err := s.tapeReader().OpenView(computerID); err == nil {
+			view = v
+		}
+	}
 	for start := from + 1; start <= to; start += tapeSweepSeqChunk {
 		end := min(to, start+tapeSweepSeqChunk-1)
 		args := []any{computerID}
@@ -800,7 +813,13 @@ func (s *Service) walkTapeChain(ctx context.Context, computerID string, from, to
 				// Segment first, legacy second. A corrupt segment is not
 				// "unreadable, no references": it stops the walk, so no
 				// caller can read it as an empty reference set.
-				raw, _, err := s.tapeReader().Read(computerID, tapestore.NSEvent, row.EventDigest)
+				var raw []byte
+				var err error
+				if view != nil {
+					raw, _, err = view.ReadObject(tapestore.NSEvent, row.EventDigest)
+				} else {
+					raw, _, err = s.tapeReader().Read(computerID, tapestore.NSEvent, row.EventDigest)
+				}
 				if errors.Is(err, tapestore.ErrCorrupt) {
 					return fmt.Errorf("tape sweep: chain %s sequence %d: %w", computerID, row.Sequence, err)
 				}
