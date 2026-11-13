@@ -636,36 +636,28 @@ func TestRecoveryAdmissionEscrowIsAKeySource(t *testing.T) {
 
 // A computer whose host holds no snapshot root the tape names answers the
 // watermark route with 404 (Stage 0 of docs/design/snapshots-cost-the-change-2026-11-13.md:
-// an unappended root is no base). Admission then plans from genesis, as for a
-// computer that never took a snapshot: a short tape boots, a tape past the
-// replay bound is refused as a missing base, never admitted on a base the boot
-// cannot use.
-func TestRecoveryAdmissionNoNamedSnapshotRootPlansFromGenesis(t *testing.T) {
-	short := &recoveryEvidenceFake{headSequence: 500, escrowed: true}
-	shortServer := httptest.NewServer(short)
-	t.Cleanup(shortServer.Close)
-	reg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), shortServer.URL)
-	mgr := &mockVMManager{}
-	reg.SetVMManager(mgr)
-	if _, err := reg.ResolveOrAssignDesktopContext(context.Background(), "user-no-base-short", PrimaryDesktopID); err != nil {
-		t.Fatalf("a short tape with no named root must boot: %v", err)
-	}
-	if len(mgr.boots) != 1 {
-		t.Fatalf("boots = %d, want 1", len(mgr.boots))
-	}
-
-	long := &recoveryEvidenceFake{headSequence: 10914341, escrowed: true}
-	longServer := httptest.NewServer(long)
-	t.Cleanup(longServer.Close)
-	longReg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), longServer.URL)
-	longMgr := &mockVMManager{}
-	longReg.SetVMManager(longMgr)
-	_, err := longReg.ResolveOrAssignDesktopContext(context.Background(), "user-no-base-long", PrimaryDesktopID)
-	refusal := requireRecoveryRefusal(t, err)
-	if refusal.Kind != RecoveryRefusalBaseMissing {
-		t.Fatalf("refusal kind = %s, want %s", refusal.Kind, RecoveryRefusalBaseMissing)
-	}
-	if len(longMgr.boots) != 0 {
-		t.Fatalf("a refused start booted %d times", len(longMgr.boots))
+// an unappended root is no base). Admission treats it exactly as a computer
+// that never took a snapshot: an empty-store start over an existing chain is
+// refused as a missing base, whatever the tape length (recoveryplan.PlanRecovery
+// requires a base to install). The design assumed "the boot decides from the
+// tape alone"; the planner refuses first. This is the same refusal a computer
+// without a snapshot gets today, and it replaces admitting against a base the
+// boot cannot restore.
+func TestRecoveryAdmissionNoNamedSnapshotRootIsAMissingBase(t *testing.T) {
+	for _, head := range []uint64{500, 10914341} {
+		corpusd := &recoveryEvidenceFake{headSequence: head, escrowed: true}
+		server := httptest.NewServer(corpusd)
+		t.Cleanup(server.Close)
+		reg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), server.URL)
+		mgr := &mockVMManager{}
+		reg.SetVMManager(mgr)
+		_, err := reg.ResolveOrAssignDesktopContext(context.Background(), "user-no-base", PrimaryDesktopID)
+		refusal := requireRecoveryRefusal(t, err)
+		if refusal.Kind != RecoveryRefusalBaseMissing {
+			t.Fatalf("head %d: refusal kind = %s, want %s", head, refusal.Kind, RecoveryRefusalBaseMissing)
+		}
+		if len(mgr.boots) != 0 {
+			t.Fatalf("head %d: a refused start booted %d times", head, len(mgr.boots))
+		}
 	}
 }
