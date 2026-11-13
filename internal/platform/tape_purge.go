@@ -70,6 +70,8 @@ type tapePurgeTable struct {
 	name   string
 	where  string
 	secret bool
+	// derived tables hold a cache of other rows; the archive does not dump them.
+	derived bool
 }
 
 // tapePurgeTables lists every per-computer table except the kept ones. The
@@ -77,6 +79,7 @@ type tapePurgeTable struct {
 var tapePurgeTables = []tapePurgeTable{
 	{name: "computer_event_append_receipts", where: "computer_id=?"},
 	{name: "computer_event_receipt_compaction", where: "computer_id=?"},
+	{name: "tape_sweep_ref_chunks", where: "computer_id=?", derived: true},
 	{name: "control_key_history", where: "computer_id=?"},
 	{name: "control_key_activations", where: "computer_id=?"},
 	{name: "computer_self_development_modes", where: "computer_id=?"},
@@ -204,6 +207,9 @@ func tapePurgeTableKnown(name string) bool {
 func (s *Service) tapePurgeRowCounts(ctx context.Context, computerID string) (map[string]int64, error) {
 	out := map[string]int64{}
 	for _, t := range tapePurgeTables {
+		if t.derived {
+			continue // a cache that changes between a dry-run and its apply; never listed
+		}
 		var n int64
 		if err := s.store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+t.name+` WHERE `+t.where, computerID).Scan(&n); err != nil {
 			return nil, fmt.Errorf("tape sweep: count %s rows of %s: %w", t.name, computerID, err)
@@ -333,7 +339,7 @@ type tapeArchiveExtra struct {
 func (s *Service) tapePurgeRowsDump(ctx context.Context, computerID string) ([]tapeArchiveExtra, error) {
 	var out []tapeArchiveExtra
 	for _, t := range tapePurgeTables {
-		if t.secret {
+		if t.secret || t.derived {
 			continue
 		}
 		rows, err := s.store.db.QueryContext(ctx, `SELECT row_to_json(t)::text FROM `+t.name+` t WHERE `+t.where, computerID)
@@ -438,14 +444,14 @@ func (s *Service) purgeComputerRows(ctx context.Context, run *tapeSweepApplyRun,
 		if err != nil {
 			return nil, err
 		}
-		if n > 0 {
+		if n > 0 && !t.derived {
 			affected[t.name] = n
 			total += n
 		}
 	}
 	if total > 0 {
 		for _, t := range tapePurgeTables {
-			if affected[t.name] != expected[t.name] {
+			if !t.derived && affected[t.name] != expected[t.name] {
 				return nil, fmt.Errorf("tape sweep: %s of %s: apply would remove %d rows, the manifest lists %d; rows kept", t.name, computerID, affected[t.name], expected[t.name])
 			}
 		}
