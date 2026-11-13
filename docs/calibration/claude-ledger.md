@@ -147,6 +147,7 @@ entered below as lapsed, not scored.
 | C64 | 2026-11-13T01:55Z | lead | landing | lane/restart-cancels-capture is accepted by both seats on its third review round (the round after tip ee60dd4d1), lands, passes CI and deploys on the first attempt, and on d@e a planned restart asked while a snapshot capture is in flight returns 200 within 20 seconds and the computer boots as planned. False if a fourth round is needed, a fix commit is needed after landing, or the d@e restart refuses or boots as a crash. | 0.45 | 2026-11-13T12:00Z | review outputs, CI run, deploy receipt, d@e restart proof |
 | C65 | 2026-11-13T09:05Z | lead | landing | lane/sweep-walk-one-view (tip 878a286a4, both seats accepted on round 2) lands through scripts/land, passes CI and deploys with no fix commit, and the next dry run walks the paper's tape at least 10 times faster than 13.3 minutes per 50,000 events (a paper chunk row at most every 80 seconds, averaged over its first ten new rows in `tape_sweep_ref_chunks`). False if the land, CI or deploy needs a fix commit or the rate is under 10 times. | 0.55 | 2026-11-13T14:00Z | land result, CI run, deploy receipt, chunk row timestamps on Node B |
 | C66 | 2026-11-13T10:40Z | lead | landing | lane/sweep-walk-digest-index (tip c6a7ff03b, both seats accepted on round 2) lands through scripts/land, passes CI and deploys with no fix commit, and the next dry run writes a paper chunk row at most every 80 seconds, averaged over its first ten new rows in `tape_sweep_ref_chunks` (ten times faster than 13.3 minutes per 50,000 events). False if a fix commit is needed or the rate is under 10 times. Checked this time: the fixture is scattered like the paper's tape, and the reviewers measured the absent-read cost separately. | 0.65 | 2026-11-13T15:00Z | land result, CI run, deploy receipt, chunk row timestamps and the walk's log line on Node B |
+| C67 | 2026-11-13T12:20Z | lead | experiment | Applying the destroyed-computer sweep from manifest ts-20261113T111247Z-a6fb14f1 (251 computers, 467,903 files, 26.9 GB, 363,605 rows; read and checked against the protected computers) and its follow-up rounds (the apply caps at 8 GiB) releases at least 20 GiB on Node B by 16:00Z with no failed apply, no protected computer touched, the paper publishing throughout and corpusd's own memory under 4 GiB. False if an apply fails or refuses, or under 20 GiB is released. | 0.60 | 2026-11-13T16:00Z | apply reports, df on Node B, scripts/status-hourly |
 
 ### Settlements
 
@@ -180,7 +181,7 @@ entered below as lapsed, not scored.
 
 ### Scorecard
 
-Second form: 28 claims open, 18 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
+Second form: 29 claims open, 18 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
 false, 1 partial), 7 lapsed.
 
 | band | claims settled | came true |
