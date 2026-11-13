@@ -71,7 +71,9 @@ func (s *Store) LatestFileRoots(ctx context.Context, computerID string, limit in
 }
 
 // RecoveryBase is the base a lost disk recovers from: the computer's newest
-// snapshot root that the tape names (its head sequence and manifest root).
+// snapshot root that the tape names, by the sequence of the event that names
+// it, which is the order boot restore tries them in (its head sequence and
+// manifest root).
 // A root registered before its snapshot_recorded append landed, or whose
 // append failed, is not a base: boot restore uses only roots the tape names,
 // so advertising one would admit a boot that cannot restore. The rows of
@@ -84,7 +86,7 @@ func (s *Store) RecoveryBase(ctx context.Context, computerID string) (seq int64,
 	if s == nil || s.db == nil || !safeFileCASComponent(computerID) {
 		return 0, "", fmt.Errorf("file cas: computer ID is required")
 	}
-	err = s.db.QueryRowContext(ctx, `SELECT r.head_sequence,r.root FROM computer_snapshot_roots r WHERE r.computer_id=? AND `+snapshotRootNamedSQL+` `+snapshotRootOrder+` LIMIT 1`, computerID).Scan(&seq, &root)
+	err = s.db.QueryRowContext(ctx, `SELECT r.head_sequence,r.root FROM computer_snapshot_roots r WHERE r.computer_id=? AND `+snapshotRootNamedSeqSQL+` IS NOT NULL ORDER BY `+snapshotRootNamedSeqSQL+` DESC, r.head_sequence DESC, r.created_at DESC, r.root DESC LIMIT 1`, computerID).Scan(&seq, &root)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, "", ErrNoWatermark
 	}

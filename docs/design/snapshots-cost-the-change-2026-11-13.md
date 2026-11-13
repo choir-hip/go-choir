@@ -362,7 +362,9 @@ database. The idempotency key is the receipts table's primary key
    return `ErrNoWatermark` (404). vmctl handles a missing
    watermark (`recovery_admission.go:673-674`) by planning, and the planner
    refuses an empty-store start with no base as `base_missing` (corrected
-   2026-11-13, see the problem record), as for a computer never snapshotted.
+   2026-11-13, see the problem record); vmctl therefore admits a chain the
+   guest can replay from genesis (at most 720,000 events) and refuses a longer
+   one.
 3. **`LiveSnapshotRoots`** (`snapshot_roots.go:338`) and the collector's
    live check (`snapshot_roots.go:313-314`): drop `LIMIT
    snapshotRootRetention` and read every row of the computer. The prune

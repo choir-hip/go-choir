@@ -51,15 +51,24 @@ lands.
   refuses a bundle whose root is not named, `bundle/verify.go:170`); receipt
   compaction rewrites only the body column and no code deletes receipts except
   the destroyed-computer purge, which deletes roots with them. Tests N9, N10.
-- Corrected: with no named root the watermark route answers 404, and vmctl
-  refuses an empty-store start as `base_missing` whatever the tape length
-  (`recoveryplan.PlanRecovery`), while `projection_base.go` could genesis-replay
-  a short chain. That mismatch is now the visible policy for the only-unnamed
-  case (it matches a computer never snapshotted). Open problem: decide
-  whether a short chain with no base should be admitted for genesis replay.
+- Corrected and closed: with no named root the watermark route answers 404,
+  and `recoveryplan.PlanRecovery` refuses an empty-store start with no base,
+  while `projection_base.go` (165-181) finds no candidate and replays a chain
+  of at most `MaxRecoveryTailEvents` (720,000) from genesis. The first version
+  of the fix let that refusal stand, which refused for good a boot that
+  completes (the computer cannot boot to take the snapshot that sets a base).
+  `deterministicEmptyStoreRefusal` now admits when there is no watermark and
+  the chain is within the bound, and refuses above it (the paper's
+  10,914,341 stays refused).
 - Added after review: unnamed roots registered within a 2 hour window (90
-  minute capture budget plus 30 minutes) are kept, at most 2 beside the
-  newest, so an append that lands after a newer registration still finds its
-  row. The just-registered root is never pruned in its own transaction.
+  minute capture budget plus 30 minutes) are kept: the root just registered
+  (never pruned in its own transaction), the newest above the named roots, and
+  2 more, so up to four unnamed rows, as many as main's newest-four rule at the
+  small store's retention. An append that lands after a newer registration
+  still finds its row. The named roots are ordered by the sequence of the
+  event that names them, not by head: boot restore tries the newest naming
+  event first, and after a head inversion (a point-in-time restore) the roots
+  named last have the lower heads. `RecoveryBase` uses the same order, for the
+  same reason.
 - Open: `bundle.Import` does not prune, so many imports leave many rows; the
   collector reads every row's chunk list.

@@ -559,6 +559,16 @@ func deterministicEmptyStoreRefusal(computerID, ownerID string, observed recover
 	if !observed.ChainExists || observed.TargetSequence == 0 {
 		return nil
 	}
+	// No advertised base (no snapshot root the tape names, or none at all) and
+	// a chain the guest can replay from genesis: the guest's own planner
+	// (autoputer projection_base.go, "no snapshot; bounded genesis replay")
+	// finds no candidate and replays up to MaxRecoveryTailEvents from sequence
+	// 1. Refusing here would refuse a boot that completes, forever, because the
+	// computer cannot boot to take the snapshot that would set a base. Above
+	// the bound the guest refuses too, so the refusal stays.
+	if !observed.HasWatermark && observed.TargetSequence <= recoveryplan.MaxRecoveryTailEvents {
+		return nil
+	}
 	plan, err := recoveryplan.PlanRecovery(true, 0, true, observed.WatermarkSequence, observed.TargetSequence)
 	if err == nil {
 		return nil

@@ -172,7 +172,7 @@ func (h *Handler) HandleFileCASRoot(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleFileCASWatermark reports the base a lost disk recovers from: the
-// computer's newest snapshot root, as watermark_sequence (its head) and
+// computer's newest snapshot root the tape names, as watermark_sequence (its head) and
 // base_ref (its manifest root). It is read-only: vmctl's empty-store
 // admission reads it as evidence.
 func (h *Handler) HandleFileCASWatermark(w http.ResponseWriter, r *http.Request) {
