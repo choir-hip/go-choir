@@ -17,8 +17,9 @@ package platform
 //      or pruned, or the prune after it misbehaves; and a root pruned by a
 //      newer registration whose append then lands (the tape names a root the
 //      host no longer keeps, its chunks collectable): the rows registered
-//      within snapshotRootInFlightWindow stay, up to
-//      snapshotRootMaxYoungUnnamed beyond the newest;
+//      within snapshotRootInFlightWindow stay: the one just registered, the
+//      newest above the named roots and snapshotRootMaxYoungUnnamed more, so
+//      four registrations (A, B, C, D) with A's append still in flight keep A;
 //  N6. unnamed roots accumulate without bound (young ones within the
 //      window, old ones past it);
 //  N12. the root just registered is pruned when its head is below a named
@@ -52,6 +53,10 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/bundle"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
+
+// maxUnnamedRows is the bound on unnamed rows the prune keeps: the root just
+// registered, the newest above the named roots, and the young ones.
+const maxUnnamedRows = 2 + snapshotRootMaxYoungUnnamed
 
 // registerRoot registers a root at the drill computer's head, as the host
 // does for the guest, with synthetic chunk digests (the collector is not
@@ -127,7 +132,7 @@ func TestUnappendedRegistrationsNeverEvictTheRootTheTapeNames(t *testing.T) {
 				// N2: the newest attempt stays beside the named root, and the
 				// unnamed rows stay bounded.
 				kept := c.keptRoots()
-				if !containsRoot(kept, last) || !containsRoot(kept, named) || len(kept) > 2+snapshotRootMaxYoungUnnamed {
+				if !containsRoot(kept, last) || !containsRoot(kept, named) || len(kept) > tc.retention+maxUnnamedRows {
 					t.Fatalf("kept %v after failure %d, want the newest attempt and the named root within the bound", short(kept), i)
 				}
 				requireBase(t, c, named, namedHead) // N3: never the unappended root
@@ -200,7 +205,7 @@ func (c *drillComputer) ageRoots(d time.Duration) {
 func TestUnnamedRootsDoNotAccumulate(t *testing.T) {
 	c := newDrillComputer(t, "computer-accumulate")
 	c.appendEvent(computerevent.EventGenesisImported, "", nil)
-	bound := 1 + snapshotRootMaxYoungUnnamed
+	bound := maxUnnamedRows
 	for i := 0; i < 30; i++ {
 		c.appendMixed(1, fmt.Sprintf("n%d", i))
 		c.registerRoot(fmt.Sprintf("none-%d", i), 3)
@@ -421,9 +426,164 @@ func (f *gcFixture) nameRoot(computer, root string, head int64) {
 
 func nameRootRow(t *testing.T, store *Store, computer, root string, head int64) {
 	t.Helper()
+	nameRootAt(t, store, computer, root, head+1)
+}
+
+// nameRootAt writes the naming receipt at an explicit sequence.
+func nameRootAt(t *testing.T, store *Store, computer, root string, seq int64) {
+	t.Helper()
 	now := time.Now().UTC()
 	if _, err := store.db.ExecContext(context.Background(), `INSERT INTO computer_event_append_receipts (computer_id,idempotency_key,request_commitment,sequence,event_kind,event_digest,event_pin_receipt_digest,event_head_receipt_id,event_head_receipt_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT (computer_id, idempotency_key) DO NOTHING`,
-		computer, "snapshot:"+root, platformTestDigest('a'), head+1, string(computerevent.EventSnapshotRecorded), gcDigest("event/"+root), platformTestDigest('b'), "receipt-"+root[:8], "{}", now); err != nil {
+		computer, "snapshot:"+root, platformTestDigest('a'), seq, string(computerevent.EventSnapshotRecorded), gcDigest("event/"+root), platformTestDigest('b'), "receipt-"+root[:8], "{}", now); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// N1 at full retention and at an unchanged head: every named slot filled, then
+// failed registrations at one head (the paper's 2026-11-12 condition: roots at
+// head 10,914,341 registered one after another with the store wedged).
+func TestFailuresAtAnUnchangedHeadKeepEveryNamedRootAtFullRetention(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		chunks    int
+		retention int
+	}{{"small", 3, snapshotRootRetention}, {"large", largeSnapshotChunks + 1, largeSnapshotRetention}} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := newDrillComputer(t, "computer-full-"+tc.name)
+			c.appendEvent(computerevent.EventGenesisImported, "", nil)
+			var named []string
+			for i := 0; i < tc.retention; i++ {
+				c.appendMixed(1, fmt.Sprintf("k%d", i))
+				root, _ := c.registerRoot(fmt.Sprintf("named-%d", i), tc.chunks)
+				c.appendSnapshotRecorded(root)
+				named = append(named, root)
+			}
+			newest := named[len(named)-1]
+			c.appendMixed(1, "wedged") // the head stops here: the store is wedged
+			wedgedHead := int64(c.head().Sequence)
+			for i := 0; i < 8; i++ {
+				c.registerRoot(fmt.Sprintf("wedged-%d", i), tc.chunks)
+				kept := c.keptRoots()
+				for _, root := range named {
+					if !containsRoot(kept, root) {
+						t.Fatalf("after %d failures at head %d the named root %.8s is gone: %v", i+1, wedgedHead, root, short(kept))
+					}
+				}
+				if len(kept) > tc.retention+maxUnnamedRows {
+					t.Fatalf("%d rows kept, bound %d", len(kept), tc.retention+maxUnnamedRows)
+				}
+				seq, base, err := c.store.RecoveryBase(context.Background(), c.id)
+				if err != nil || base != newest || seq >= wedgedHead {
+					t.Fatalf("recovery base = %d %.8s %v, want the newest named root %.8s below head %d", seq, base, err, newest, wedgedHead)
+				}
+			}
+		})
+	}
+}
+
+// S1: A, B, C, D registered while A's append is in flight (retention 4, none
+// named): the kept unnamed set is at least as protective as the newest four by
+// head, so A is still a row when its append lands, and is the recovery base.
+func TestFourRegistrationsWhileAnAppendIsInFlightKeepTheFirst(t *testing.T) {
+	c := newDrillComputer(t, "computer-four-in-flight")
+	c.appendEvent(computerevent.EventGenesisImported, "", nil)
+	roots := map[string]string{}
+	var aHead int64
+	for i, name := range []string{"a", "b", "c", "d"} {
+		c.appendMixed(1, name)
+		root, head := c.registerRoot(name, 3)
+		roots[name] = root
+		if i == 0 {
+			aHead = head
+		}
+	}
+	kept := c.keptRoots()
+	for _, name := range []string{"a", "b", "c", "d"} {
+		if !containsRoot(kept, roots[name]) {
+			t.Fatalf("root %s was pruned with four unappended registrations: kept %v", name, short(kept))
+		}
+	}
+	c.appendSnapshotRecorded(roots["a"])
+	requireBase(t, c, roots["a"], aHead)
+}
+
+// S3: the named roots are the newest N by the sequence of the event that names
+// them, not by head. After a head inversion (a point-in-time restore: the
+// next snapshots are taken at heads below the old ones) the roots the tape
+// named last are the ones kept and advertised, because boot restore tries the
+// newest naming event first.
+func TestNamedRootsAreOrderedByTheirNamingEventUnderAHeadInversion(t *testing.T) {
+	store, _ := openTestPlatformStore(t)
+	ctx := context.Background()
+	const computer = "computer-head-inversion"
+	register := func(name string, head int64) string {
+		root := gcDigest("inv/" + name)
+		if err := store.recordSnapshotRoot(ctx, computer, root, head, []string{gcDigest("c/" + name)}); err != nil {
+			t.Fatal(err)
+		}
+		return root
+	}
+	var old []string
+	for i := int64(0); i < 4; i++ {
+		root := register(fmt.Sprintf("old%d", i), 100+i)
+		nameRootAt(t, store, computer, root, 101+i)
+		old = append(old, root)
+	}
+	var fresh []string
+	for i := int64(0); i < 4; i++ {
+		root := register(fmt.Sprintf("fresh%d", i), 50+i) // registered, then named
+		nameRootAt(t, store, computer, root, 201+i)       // the tape names it after the old ones
+		fresh = append(fresh, root)
+	}
+	if _, base, err := store.RecoveryBase(ctx, computer); err != nil || base != fresh[3] {
+		t.Fatalf("recovery base = %.8s %v, want the root named last (head 53)", base, err)
+	}
+	next := register("fresh4", 54) // unappended
+	live, err := store.LiveSnapshotRoots(ctx, computer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, r := range live {
+		got[r.Root] = true
+	}
+	for _, root := range append(fresh, next) {
+		if !got[root] {
+			t.Fatalf("root %.8s was dropped; kept %d rows", root, len(live))
+		}
+	}
+	for _, root := range old {
+		if got[root] {
+			t.Fatalf("an old root %.8s named before the four fresh ones survived (four newest named kept)", root)
+		}
+	}
+}
+
+// A root that is already named and beyond the retention is still kept when the
+// host registers it again (a retried PUT): the root just registered is never
+// pruned in its own transaction.
+func TestRegisteringANamedRootAgainKeepsIt(t *testing.T) {
+	store, _ := openTestPlatformStore(t)
+	ctx := context.Background()
+	const computer = "computer-reregister"
+	var roots []string
+	for i := int64(1); i <= 5; i++ {
+		root := gcDigest(fmt.Sprintf("rr/%d", i))
+		nameRootAt(t, store, computer, root, i*10+1)
+		if err := store.recordSnapshotRoot(ctx, computer, root, i*10, []string{gcDigest("c/" + root)}); err != nil {
+			t.Fatal(err)
+		}
+		roots = append(roots, root)
+	}
+	if err := store.recordSnapshotRoot(ctx, computer, roots[0], 10, []string{gcDigest("c/" + roots[0])}); err != nil {
+		t.Fatal(err)
+	}
+	live, _ := store.LiveSnapshotRoots(ctx, computer)
+	found := false
+	for _, r := range live {
+		found = found || r.Root == roots[0]
+	}
+	if !found {
+		t.Fatal("the root registered again was pruned in its own transaction")
 	}
 }
