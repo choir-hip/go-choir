@@ -36,6 +36,9 @@ type Store struct {
 	// that verified and have not finished.
 	snapshotRootGen atomic.Uint64
 	snapshotPending snapshotRootPending
+	// snapshotRootCommitResult is a test hook that may replace the result of
+	// the root transaction's Commit (the row is durable either way).
+	snapshotRootCommitResult func(error) error
 	// retrieval times and counts every Store B retrieval call (corpusd
 	// /health "retrieval").
 	retrieval *RetrievalMetrics
