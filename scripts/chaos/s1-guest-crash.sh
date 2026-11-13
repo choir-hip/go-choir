@@ -3,9 +3,14 @@
 # d@e writes (file PUTs and Texture creates) and runs a prompt-bar run; its
 # firecracker process is SIGKILLed by exact pid; vmctl brings it back on the
 # next request. Contract (CLAUDE.md restarts; tape group commit design 9):
-# every acknowledged write survives; only queued telemetry and run-memory
-# messages may be missing, and the crash-closed run says so; open runs end
-# "interrupted_by_restart" and nothing resumes; replay is equivalent.
+# every acknowledged write survives, run-memory messages included (they are
+# acknowledged only after their CAS; the run-memory window is deleted); only
+# queued telemetry may be missing, and the crash-closed run says so; open runs
+# end "interrupted_by_restart" and nothing resumes; replay is equivalent. The
+# drill has no cheap read of a run's memory log, so an acknowledged run-memory
+# message surviving the kill is proved by the store tests
+# (TestRunMemoryMessageIsAcknowledgedOnlyAfterItsCAS) and by replay-completeness
+# below, not by a check of its own.
 SCN_NAME=s1-guest-crash
 SCN_FAULT="SIGKILL d@e's firecracker process (exact pid, mapped through ownerships.json) mid-write"
 
@@ -18,7 +23,7 @@ fault:  re-map on Node B and kill -KILL <pid> only if the mapping is unchanged
 wait:   up to ${CHAOS_S1_TIMEOUT:-300}s for d@e active and /api/runtime/observability 200 (the API wakes it)
 post:   acknowledged writes read back; Texture replays answer the same doc_id; the prompt-bar
         replay answers the same submission; open runs cancelled with interrupted_by_restart and
-        the 'may be missing' note (when the window is on); none active or restarted; one
+        the 'may be missing' note (telemetry, when batching is on); none active or restarted; one
         crash boot and no planned boot in the console; replay-completeness equivalent
 EOF
 }
