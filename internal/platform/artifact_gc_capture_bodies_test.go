@@ -83,7 +83,6 @@ func captureMeta(content, text, blocks string) string {
 	return `{"schema_version":"choir.web_capture.v1","content_blob_id":"sha256:` + content + `","extracted_text_blob_id":"sha256:` + text + `","blocks_blob_id":"sha256:` + blocks + `"}`
 }
 
-
 func (f *captureGCFixture) run(cfg ArtifactGCConfig) ArtifactGCReport {
 	f.t.Helper()
 	if cfg.Grace == 0 {

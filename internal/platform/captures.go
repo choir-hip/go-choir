@@ -93,6 +93,11 @@ func (s *CaptureBodyStore) PutBody(body []byte) (string, error) {
 	hash := hex.EncodeToString(sum[:])
 	path := s.path(hash)
 	if _, err := os.Stat(path); err == nil {
+		// A reused body is new to the collector (artifact_gc.go): it reads
+		// the capture rows before this capture's row lands, so only the
+		// body's mtime says it is wanted again.
+		now := time.Now()
+		_ = os.Chtimes(path, now, now)
 		return "sha256:" + hash, nil
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {

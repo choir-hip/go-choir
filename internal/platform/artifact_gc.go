@@ -113,16 +113,22 @@ var artifactGCNamespaces = []string{
 	"projection-base",
 	basemanifest.PartsNamespace,
 	"platform-update",
+	captureBodiesNamespace,
 	"file-cas-roots",
 	"file-cas-chunks",
 	"og",
 }
 
+// captureBodiesNamespace is the capture body store (captures.go). It is not
+// under sha256/: its bodies sit at capture-bodies/<2 hex>/<sha256>, and a
+// body is live while any choir.web_capture row in Store B names it.
+const captureBodiesNamespace = "capture-bodies"
+
 // DefaultArtifactGCActiveNamespaces is the deletion allowlist when
 // PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES is unset. og is excluded: the
 // pre-teardown corpus bodies are unreferenced since 2026-10-09 and their
 // collection is an explicit owner step (the corpus dump may still name them).
-var DefaultArtifactGCActiveNamespaces = []string{"projection-base", basemanifest.PartsNamespace, "platform-update", "file-cas-roots", "file-cas-chunks"}
+var DefaultArtifactGCActiveNamespaces = []string{"projection-base", basemanifest.PartsNamespace, "platform-update", captureBodiesNamespace, "file-cas-roots", "file-cas-chunks"}
 
 // ParseArtifactGCNamespaces reads a comma list. Empty selects the default
 // allowlist; "all" selects every swept namespace.
@@ -452,6 +458,15 @@ func (s *Service) artifactGCLiveSets(ctx context.Context) (map[string]map[string
 		live["platform-update"][d] = struct{}{}
 	}
 
+	// capture-bodies: every sha256 a choir.web_capture row names, tombstoned
+	// rows included (a body is evidence while any row names it). Any string
+	// value of the metadata shaped sha256:<64 hex> counts, so a blob field
+	// added later is protected before this list learns its name. A row whose
+	// metadata does not parse aborts the sweep: what it names is unprovable.
+	if err := s.captureBodyLiveSet(ctx, live[captureBodiesNamespace]); err != nil {
+		return nil, append(warnings, "capture-bodies live set: "+err.Error())
+	}
+
 	// og: exact body_ref reachability (basename of sha256/og/<digest>.bin).
 	// body_ref rows live in Store B (corpus) — reading Store A here made every
 	// externalized corpus body unreachable and the sweep mass-deleted live
@@ -462,6 +477,87 @@ func (s *Service) artifactGCLiveSets(ctx context.Context) (map[string]map[string
 		return nil, append(warnings, "og live set: "+err.Error())
 	}
 	return live, warnings
+}
+
+// captureBodyLiveSet adds to live the hash of every body any capture row
+// names. The rows are read from Store B, where the captures are written.
+func (s *Service) captureBodyLiveSet(ctx context.Context, live map[string]struct{}) error {
+	rows, err := s.store.corpus().QueryContext(ctx, `SELECT canonical_id, metadata FROM og_objects WHERE object_kind = 'choir.web_capture'`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, metadata string
+		if err := rows.Scan(&id, &metadata); err != nil {
+			return err
+		}
+		var doc map[string]any
+		if err := json.Unmarshal([]byte(metadata), &doc); err != nil {
+			return fmt.Errorf("capture %s: metadata does not parse: %w", id, err)
+		}
+		for _, v := range doc {
+			if str, ok := v.(string); ok && strings.HasPrefix(str, "sha256:") {
+				if h := strings.TrimPrefix(str, "sha256:"); validHexDigest(h) {
+					live[strings.ToLower(strings.TrimSpace(h))] = struct{}{}
+				}
+			}
+		}
+	}
+	return rows.Err()
+}
+
+// classifyCaptureBodies walks capture-bodies/<2 hex>/<sha256>. Only a regular
+// file named by a lowercase 64-hex digest is a body; a temp file or any
+// other name is never touched.
+func (s *Service) classifyCaptureBodies(ctx context.Context, live map[string]struct{}, cutoff time.Time, rep *ArtifactGCNamespaceReport) ([]gcCandidate, error) {
+	root := CaptureBodiesRoot(s.artifactsRoot)
+	shards, err := os.ReadDir(root)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out []gcCandidate
+	for _, shard := range shards {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if shard == nil || !shard.IsDir() || len(shard.Name()) != 2 {
+			continue
+		}
+		dir := filepath.Join(root, shard.Name())
+		entries, err := os.ReadDir(dir)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		for _, entry := range entries {
+			name := entry.Name()
+			if !entry.Type().IsRegular() || !hexDigestRE.MatchString(name) || !strings.HasPrefix(name, shard.Name()) {
+				continue
+			}
+			rep.Scanned++
+			if _, keep := live[name]; keep {
+				rep.Live++
+				continue
+			}
+			rep.Unreachable++
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+			if !info.ModTime().Before(cutoff) {
+				rep.InGrace++
+				continue
+			}
+			s.addCandidate(captureBodiesNamespace, filepath.Join(dir, name), info, rep, &out)
+		}
+	}
+	return out, nil
 }
 
 // scanStrings runs a one-column query and reports any query, scan or
@@ -570,6 +666,10 @@ func platformUpdateDigestFromURI(uri string) string {
 func (s *Service) classifyArtifactNamespace(ctx context.Context, ns string, live map[string]struct{}, cutoff time.Time, rep *ArtifactGCNamespaceReport) ([]gcCandidate, []string, error) {
 	if ns == "file-cas-chunks" {
 		return s.classifyFileCASChunks(ctx, cutoff, rep)
+	}
+	if ns == captureBodiesNamespace {
+		out, err := s.classifyCaptureBodies(ctx, live, cutoff, rep)
+		return out, nil, err
 	}
 	dir, err := s.artifactPath(filepath.Join("sha256", ns))
 	if err != nil {
