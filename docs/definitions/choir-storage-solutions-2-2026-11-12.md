@@ -164,7 +164,7 @@ stations:
     class: red, design record first
     review: two seats
     depends_on: [S2]
-    carrier: part 1 (always-on counters, the appender depth histogram, corpusd calls per event; design docs/evidence/tape-write-coalescing-design-2026-11-12.md) main e392ac824, one seat accepted on round 2, CI 43384729837 (third attempt), deployed 2026-11-13T07:54Z. Coalescing waits for a day of the paper's depth histogram
+    carrier: "part 1 (always-on counters, the appender depth histogram, corpusd calls per event; design docs/evidence/tape-write-coalescing-design-2026-11-12.md) main e392ac824, one seat accepted on round 2, CI 43384729837 (third attempt), deployed 2026-11-13T07:54Z. The paper over 5.4 hours to 2026-11-13T16:40Z: 90% of 147,466 appends entered at depth 3 or more (53% at 5 to 8), mean call 793 ms, 6.03 corpusd calls per event (two heads and two pins per append); coalescing is being built"
     status: working
   - id: S6
     name: receipts fold
@@ -266,7 +266,7 @@ observation_plan: >
 
 now:
   status: working
-  slice: background lanes S7 (read and apply the sweep manifest), S5 (read the paper's depth histogram, then coalescing) and S4 (the chunk window, snapshots that cost the change); the live station is Autoradio (docs/ACTIVE.md)
+  slice: "the live station again (owner, 2026-11-13: take them to the point of diminishing marginal returns). Lanes: S4 design (snapshots that cost the change, the chunk window), S5 build (coalescing, two calls fewer per event), S7 build (the sweep on a schedule), small guards"
   source_ref: origin/main dd43ff6b1
   deploy_identity: choir.news dd43ff6b11fe
   candidate:

@@ -11,7 +11,16 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
-## Live station (2026-11-13): Autoradio, with Autopaper
+## Live station (2026-11-13, from 16:40Z): storage solutions, part 2
+
+Owner, 2026-11-13: "Let's continue the storage solutions. Take them to the
+point of diminishing marginal returns. We will return to autoradio after we
+have a stronger foundation." Goal:
+[`definitions/choir-storage-solutions-2-2026-11-12.md`](definitions/choir-storage-solutions-2-2026-11-12.md).
+Lanes in motion: S4 (snapshots that cost the change), S5 (coalescing, fewer
+corpusd calls per event), S7 (the sweep on a schedule) and the small guards.
+
+## Next station: Autoradio, with Autopaper
 
 Owner, 2026-11-13 (overnight): "i want to move on back to autopaper,
 autoradio, tomorrow". Autoradio pass 1
@@ -20,7 +29,7 @@ is `blocked_incomplete` on three owner items: the install go, the TestFlight
 verdict and the River credential. The first act of the day is the owner's
 word on those; until then the work is what needs no phone.
 
-## Working behind the live station (2026-11-13): storage solutions, part 2
+## Storage solutions, part 2: history of the station
 
 **Goal:** [`definitions/choir-storage-solutions-2-2026-11-12.md`](definitions/choir-storage-solutions-2-2026-11-12.md)
 (`readiness: executable`, `now.status: working`; ledger

@@ -104,3 +104,8 @@ Append-only. One terse entry per pass.
   deleted, 497 referenced files kept, no errors. Node B free 88.8 to 117.9 GiB
   (the collector released another 6.7 GB at 12:29Z). Claim C67 true. S7 still
   lacks a scheduler.
+- 2026-11-13T16:40Z. Owner: storage is the live station again, to the point
+  of diminishing returns. The paper's snapshot is not late: it is due by tape
+  distance (540,000 events), about 22:00Z. Counters over 5.4 hours confirm
+  the first reading (90% of appends at depth 3 or more, 6.03 calls per
+  event). Lanes opened: S4 design, S5 coalescing, S7 scheduler, small guards.
