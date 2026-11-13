@@ -75,7 +75,14 @@ type Outcome struct {
 	Class    OutcomeClass
 	Results  int
 	Error    string
-	At       time.Time
+	// At is when the outcome was known (the call's completion): every
+	// cooldown that follows a failure is anchored here, so a 30 s timeout
+	// does not eat its own bench.
+	At time.Time
+	// StartedAt is when the call began (zero: At). A failure from a call
+	// that began before the bench in force was set is the same episode
+	// (sameEpisode).
+	StartedAt time.Time
 	// Uncapped marks a provider with nothing behind it: free tier, no quota
 	// that a failure could mean is gone. Its transient failures (error,
 	// server_error, timeout) are not a cooldown until
