@@ -190,7 +190,7 @@ func TestPruneRemovesStagedPayloadOnlyAfterItsReleaseExists(t *testing.T) {
 	}
 }
 
-func TestPruneRemovesOldHostBuildsAndTemporaries(t *testing.T) {
+func TestPruneRemovesOldTemporariesAndLeavesHostBuildsToTheRuntime(t *testing.T) {
 	u, root := newPruneUpdater(t)
 	digest := stageTestRelease(t, u, root, "r1", false)
 	setCurrent(t, root, digest)
@@ -199,13 +199,15 @@ func TestPruneRemovesOldHostBuildsAndTemporaries(t *testing.T) {
 		ageBy(t, filepath.Join(root, "incoming", name), old)
 	}
 	u.Prune()
-	for _, name := range []string{"host-build-abc", ".host-build-xyz", ".stage-123"} {
+	// A host build belongs to an operation the updater cannot see (the shot
+	// pipeline reuses it for the operation's lifetime): the runtime removes it.
+	if !exists(filepath.Join(root, "incoming", "host-build-abc")) {
+		t.Fatal("the updater removed a host build the runtime owns")
+	}
+	for _, name := range []string{".host-build-xyz", ".stage-123"} {
 		if exists(filepath.Join(root, "incoming", name)) {
 			t.Fatalf("old %s survived the prune", name)
 		}
-	}
-	if !exists(filepath.Join(root, "incoming")) {
-		t.Fatal("incoming itself must stay")
 	}
 }
 
@@ -222,9 +224,14 @@ func TestPruneLeavesBundlesToTheRuntimeAndKeepsInputsInTheirWindow(t *testing.T)
 	ageBy(t, draft, 90*24*time.Hour)
 	// A payload dir whose release is not staged, and a `<digest>` dir with no
 	// marker: the runtime owns every `<digest>` dir that is not a staged payload.
+	// A refused or aborted platform update leaves a markerless payload with no
+	// staged release: past the window it goes; inside it, it may still be written.
 	unstaged := filepath.Join(incoming, strings.Repeat("9", 64))
 	writeTestFile(t, filepath.Join(unstaged, "bin", "choir"), 100)
 	ageBy(t, unstaged, 90*24*time.Hour)
+	youngPayload := filepath.Join(incoming, strings.Repeat("8", 64))
+	writeTestFile(t, filepath.Join(youngPayload, "bin", "choir"), 100)
+	ageBy(t, youngPayload, time.Minute)
 	// A host build inside its window, and an old one with one fresh file (a
 	// download in progress).
 	young := filepath.Join(incoming, "host-build-young")
@@ -248,17 +255,17 @@ func TestPruneLeavesBundlesToTheRuntimeAndKeepsInputsInTheirWindow(t *testing.T)
 	ageBy(t, loose, old)
 
 	report := u.Prune()
-	for _, path := range []string{bundle, draft, unstaged, young, busy} {
+	for _, path := range []string{bundle, draft, youngPayload, young, busy} {
 		if !exists(path) {
 			t.Fatalf("%s was removed", path)
 		}
 	}
-	for _, path := range []string{unknown, loose} {
+	for _, path := range []string{unknown, loose, unstaged} {
 		if exists(path) {
 			t.Fatalf("%s survived", path)
 		}
 	}
-	if report.IncomingRemoved != 2 {
+	if report.IncomingRemoved != 3 {
 		t.Fatalf("report = %+v", report)
 	}
 }
@@ -432,37 +439,71 @@ func TestPruneLeavesTheStoreAloneWhenAKeptLayeredReleaseIsUnrooted(t *testing.T)
 	}
 }
 
-func TestPruneSkipsWhileAnApplyIsUnsettled(t *testing.T) {
+func TestPruneSkipsOnlyOnHeldKeysAndBrokenJournals(t *testing.T) {
 	u, root := newPruneUpdater(t)
 	digest := stageTestRelease(t, u, root, "r1", false)
 	setCurrent(t, root, digest)
-	old1 := filepath.Join(root, "incoming", "host-build-old")
-	writeTestFile(t, filepath.Join(old1, "f"), 100)
-	ageBy(t, old1, old)
-	open := operationJournal{Phase: "pointer_swapped", TargetReleaseDigest: digest}
-	if err := writeJournal(filepath.Join(root, "operations", safeName("open")+".json"), open); err != nil {
+	stale := filepath.Join(root, "incoming", ".stage-old")
+	writeTestFile(t, filepath.Join(stale, "f"), 100)
+	ageBy(t, stale, old)
+	// An unreadable journal: its release is unknown, so the prune stands down.
+	if err := os.WriteFile(filepath.Join(root, "operations", safeName("broken")+".json"), []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	report := u.Prune()
-	if !exists(old1) || report.Skipped == "" || report.BytesFreed != 0 {
-		t.Fatalf("pruned under an unsettled apply: %+v", report)
+	if !exists(stale) || report.Skipped == "" || report.BytesFreed != 0 {
+		t.Fatalf("pruned under an unreadable journal: %+v", report)
 	}
-	// A held apply key (an apply with no journal yet) skips too.
-	if err := os.Remove(filepath.Join(root, "operations", safeName("open")+".json")); err != nil {
+	if err := os.Remove(filepath.Join(root, "operations", safeName("broken")+".json")); err != nil {
 		t.Fatal(err)
 	}
+	// A held apply key (an apply running, or a settle) skips too.
 	unlock, acquired, err := lockApplyKey(root, "running", true)
 	if err != nil || !acquired {
 		t.Fatalf("lock: %v %v", acquired, err)
 	}
-	// Same-process flock on a second descriptor conflicts, as in the daemon.
 	report = u.Prune()
 	unlock()
-	if !exists(old1) || report.Skipped == "" {
+	if !exists(stale) || report.Skipped == "" {
 		t.Fatalf("pruned under a held apply key: %+v", report)
 	}
-	if report = u.Prune(); exists(old1) || report.Skipped != "" {
+	if report = u.Prune(); exists(stale) || report.Skipped != "" {
 		t.Fatalf("a settled updater did not prune: %+v", report)
+	}
+}
+
+// A platform update that crashed mid-apply is left pending on purpose
+// (platform_update.go resumes it): its journal has no result, nobody holds its
+// key. That must not disable the prune for good, and what its journal names
+// (the release it was installing and the one it restores to) must survive.
+func TestPruneIsNotDisabledByADeadJournalAndKeepsWhatItNames(t *testing.T) {
+	u, root := newPruneUpdater(t)
+	var digests []string
+	for _, name := range []string{"r0", "r1", "r2", "r3", "r4"} {
+		digests = append(digests, stageTestRelease(t, u, root, name, false))
+		ageBy(t, filepath.Join(root, "releases", digests[len(digests)-1]), 30*24*time.Hour)
+	}
+	for i := 1; i < 4; i++ {
+		writeTestJournal(t, root, "idem-"+digests[i], digests[i-1], digests[i], pruneNow.Add(time.Duration(i-10)*time.Hour), "applied")
+	}
+	setCurrent(t, root, digests[3])
+	// The dead journal: installing r4 over r3 died after the swap prepare.
+	dead := operationJournal{Phase: "prepared", PriorReleaseDigest: digests[3], PriorReleaseTarget: filepath.Join(root, "releases", digests[3]),
+		TargetReleaseDigest: digests[4], StartedAt: pruneNow.Add(-72 * time.Hour)}
+	if err := writeJournal(filepath.Join(root, "operations", safeName("dead")+".json"), dead); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(root, "incoming", ".stage-old")
+	writeTestFile(t, filepath.Join(stale, "f"), 100)
+	ageBy(t, stale, old)
+	report := u.Prune()
+	if report.Skipped != "" || exists(stale) {
+		t.Fatalf("a dead journal disabled the prune: %+v", report)
+	}
+	for i, want := range []bool{false, false, true, true, true} {
+		if exists(filepath.Join(root, "releases", digests[i])) != want {
+			t.Fatalf("release r%d kept=%v want %v", i, !want, want)
+		}
 	}
 }
 
@@ -549,8 +590,8 @@ func TestPruneLogsOneLineWithCountsAndBytes(t *testing.T) {
 	u, root := newPruneUpdater(t)
 	digest := stageTestRelease(t, u, root, "r1", false)
 	setCurrent(t, root, digest)
-	writeTestFile(t, filepath.Join(root, "incoming", "host-build-a", "f"), 4096)
-	ageBy(t, filepath.Join(root, "incoming", "host-build-a"), old)
+	writeTestFile(t, filepath.Join(root, "incoming", ".host-build-a", "f"), 4096)
+	ageBy(t, filepath.Join(root, "incoming", ".host-build-a"), old)
 	var buffer bytes.Buffer
 	log.SetOutput(&buffer)
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
@@ -577,7 +618,7 @@ func TestApplyPrunesAfterAVerifiedApplyOnly(t *testing.T) {
 	}
 	u.now = func() time.Time { return pruneNow }
 	makeStale := func() string {
-		stale := filepath.Join(root, "incoming", "host-build-stale")
+		stale := filepath.Join(root, "incoming", ".host-build-stale")
 		writeTestFile(t, filepath.Join(stale, "f"), 100)
 		ageBy(t, stale, old)
 		return stale
@@ -611,7 +652,7 @@ func TestPruneWaitsForAnApplyInFlight(t *testing.T) {
 	u, root := newPruneUpdater(t)
 	digest := stageTestRelease(t, u, root, "r1", false)
 	setCurrent(t, root, digest)
-	stale := filepath.Join(root, "incoming", "host-build-stale")
+	stale := filepath.Join(root, "incoming", ".host-build-stale")
 	writeTestFile(t, filepath.Join(stale, "f"), 100)
 	ageBy(t, stale, old)
 	u.mu.Lock() // Apply holds this for its whole run
@@ -728,19 +769,30 @@ func TestUpdaterRootIsBoundedOverManyApplies(t *testing.T) {
 	}
 	const applies = 12
 	var afterSecond [4]int
+	// A platform update that crashed mid-apply long ago: its journal has no
+	// result and nobody holds its key (it names releases that are not here).
+	dead := operationJournal{Phase: "prepared", PriorReleaseDigest: strings.Repeat("e", 64), TargetReleaseDigest: strings.Repeat("f", 64), StartedAt: pruneNow.Add(-90 * 24 * time.Hour)}
+	if err := writeJournal(filepath.Join(root, "operations", safeName("dead")+".json"), dead); err != nil {
+		t.Fatal(err)
+	}
 	for i := 1; i <= applies; i++ {
 		// Between applies the runtime leaves its usual residue: an old host
 		// build, an old payload of a release it staged, a candidate build's
 		// store object no release roots.
 		name := fmt.Sprintf("op-%02d", i)
 		if i > 1 {
-			residue := filepath.Join(root, "incoming", fmt.Sprintf("host-build-%02d", i))
+			residue := filepath.Join(root, "incoming", fmt.Sprintf(".host-build-%02d", i))
 			writeTestFile(t, filepath.Join(residue, "closure.nar"), 4096)
 			ageBy(t, residue, old)
 			orphan := filepath.Join(root, "store", fmt.Sprintf("orphan-%02d", i))
 			writeTestFile(t, filepath.Join(orphan, "f"), 1024)
 			ageBy(t, orphan, old)
 		}
+		// A refused or aborted platform update: its payload under
+		// incoming/<release digest>, no release staged, no bundle marker.
+		refused := filepath.Join(root, "incoming", fmt.Sprintf("%064x", i))
+		writeTestFile(t, filepath.Join(refused, "bin", "choir"), 2048)
+		ageBy(t, refused, old)
 		blob, entry := single, "0pvb33w34jr4243s1182511gxwrchf0c-payload.txt"
 		if i%2 == 0 {
 			blob, entry = dirBlob, dirPaths[0]
@@ -891,5 +943,193 @@ func TestRestoreToAPrunedReleaseRefusesCleanly(t *testing.T) {
 	}
 	if after, _ := os.Readlink(filepath.Join(root, "current")); after != before {
 		t.Fatalf("current moved from %s to %s", before, after)
+	}
+}
+
+// B1: the prune does not test the restore hold, it holds it. A restore that
+// starts between two chunks of a running prune makes the next chunk stand
+// down; the release the restore may swap back to survives. And S1: the updater
+// mutex is free between chunks, so an RPC never waits behind a long deletion.
+func TestPruneHoldsTheRestoreHoldAndYieldsTheUpdaterBetweenChunks(t *testing.T) {
+	u, root := newPruneUpdater(t)
+	var digests []string
+	for _, name := range []string{"r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7"} {
+		digests = append(digests, stageTestRelease(t, u, root, name, false))
+		ageBy(t, filepath.Join(root, "releases", digests[len(digests)-1]), 30*24*time.Hour)
+	}
+	for i := 1; i < len(digests); i++ {
+		writeTestJournal(t, root, "idem-"+digests[i], digests[i-1], digests[i], pruneNow.Add(time.Duration(i-20)*time.Hour), "applied")
+	}
+	setCurrent(t, root, digests[7])
+	for i := 0; i < 12; i++ {
+		temp := filepath.Join(root, "incoming", fmt.Sprintf(".stage-%02d", i))
+		writeTestFile(t, filepath.Join(temp, "f"), 100)
+		ageBy(t, temp, old)
+	}
+	chunks := 0
+	var release func()
+	u.pruneBetween = func() {
+		chunks++
+		if !u.mu.TryLock() {
+			t.Error("the updater mutex was held between two chunks of the prune")
+		} else {
+			u.mu.Unlock()
+		}
+		if chunks == 3 {
+			// A restore starts mid-prune: it holds the root, moves current to
+			// r6 without a journal and has r7 to swap back to.
+			var err error
+			if release, err = HoldRestore(root); err != nil {
+				t.Error(err)
+				return
+			}
+			if err := swapCurrentPointer(root, filepath.Join(root, "releases", digests[6])); err != nil {
+				t.Error(err)
+			}
+		}
+	}
+	report := u.Prune()
+	if release == nil {
+		t.Fatal("the hook never ran")
+	}
+	if report.Skipped == "" {
+		t.Fatalf("the prune did not stand down for a restore that started mid-run: %+v", report)
+	}
+	for _, d := range digests {
+		if !exists(filepath.Join(root, "releases", d)) {
+			t.Fatalf("a release was removed after a restore took the root")
+		}
+	}
+	if err := swapCurrentPointer(root, filepath.Join(root, "releases", digests[7])); err != nil {
+		t.Fatalf("swap-back: %v", err)
+	}
+	release()
+	u.pruneBetween = nil
+	if report := u.Prune(); report.Skipped != "" {
+		t.Fatalf("a settled updater did not prune: %+v", report)
+	}
+}
+
+// S3: the predecessor is the Prior of the newest apply (or restage) that
+// installed current, whatever order the directory lists journals in, and a
+// failed apply names no predecessor.
+func TestPruneKeepsThePredecessorAcrossFailedAndRepeatedApplies(t *testing.T) {
+	u, root := newPruneUpdater(t)
+	var d []string
+	for _, name := range []string{"r1", "r2", "r3"} {
+		d = append(d, stageTestRelease(t, u, root, name, false))
+		ageBy(t, filepath.Join(root, "releases", d[len(d)-1]), 30*24*time.Hour)
+	}
+	r1, r2, r3 := d[0], d[1], d[2]
+	// r1 -> r2 applied; r3 -> r2 failed and was restored to r3; later current is r2.
+	writeTestJournal(t, root, "a-r1-r2", r1, r2, pruneNow.Add(-10*time.Hour), "applied")
+	writeTestJournal(t, root, "b-r3-r2-failed", r3, r2, pruneNow.Add(-5*time.Hour), "failed")
+	setCurrent(t, root, r2)
+	u.Prune()
+	if !exists(filepath.Join(root, "releases", r1)) || exists(filepath.Join(root, "releases", r3)) {
+		t.Fatalf("a failed apply was taken for the predecessor: r1=%v r3=%v", exists(filepath.Join(root, "releases", r1)), exists(filepath.Join(root, "releases", r3)))
+	}
+	// r1 -> r2 -> r1: the newest apply installing r1 names r2.
+	u2, root2 := newPruneUpdater(t)
+	var e []string
+	for _, name := range []string{"r1", "r2", "r3"} {
+		e = append(e, stageTestRelease(t, u2, root2, name, false))
+		ageBy(t, filepath.Join(root2, "releases", e[len(e)-1]), 30*24*time.Hour)
+	}
+	writeTestJournal(t, root2, "z-first", e[2], e[0], pruneNow.Add(-30*time.Hour), "applied")
+	writeTestJournal(t, root2, "a-second", e[0], e[1], pruneNow.Add(-20*time.Hour), "applied")
+	writeTestJournal(t, root2, "m-third", e[1], e[0], pruneNow.Add(-10*time.Hour), "applied")
+	setCurrent(t, root2, e[0])
+	u2.Prune()
+	if !exists(filepath.Join(root2, "releases", e[1])) || exists(filepath.Join(root2, "releases", e[2])) {
+		t.Fatal("after r1 -> r2 -> r1 the predecessor must be r2 alone")
+	}
+}
+
+// S5: a restage swaps current with no apply. It records where it came from, so
+// the one predecessor survives a boot frontend follow or a tape restore.
+func TestRestagePinnedReleaseRecordsItsPredecessor(t *testing.T) {
+	u, root := newPruneUpdater(t)
+	r1 := stageTestRelease(t, u, root, "r1", false)
+	r2 := stageTestRelease(t, u, root, "r2", false)
+	r3 := stageTestRelease(t, u, root, "r3", false)
+	for _, d := range []string{r1, r2, r3} {
+		ageBy(t, filepath.Join(root, "releases", d), 30*24*time.Hour)
+	}
+	setCurrent(t, root, r1)
+	if err := RestagePinnedRelease(root, r2); err != nil {
+		t.Fatal(err)
+	}
+	u.Prune()
+	if !exists(filepath.Join(root, "releases", r1)) || exists(filepath.Join(root, "releases", r3)) {
+		t.Fatal("after a restage the release it came from must be the kept predecessor")
+	}
+	if name, unsettled := UnsettledApply(root); unsettled {
+		t.Fatalf("a restage record reads as an unsettled apply: %s", name)
+	}
+}
+
+// S4: ImportBaseline swaps current, so it takes the updater's mutex.
+func TestImportBaselineWaitsForTheUpdater(t *testing.T) {
+	u, _ := newPruneUpdater(t)
+	u.mu.Lock()
+	done := make(chan struct{})
+	go func() {
+		_, _ = u.ImportBaseline(BaselineImportRequest{})
+		close(done)
+	}()
+	select {
+	case <-done:
+		t.Fatal("ImportBaseline ran while an apply held the updater")
+	case <-time.After(100 * time.Millisecond):
+	}
+	u.mu.Unlock()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("ImportBaseline did not run after the updater was released")
+	}
+}
+
+// S7: bytes freed are allocated bytes (st_blocks), as the data_volume section
+// reports them: a sparse file of a megabyte frees almost nothing.
+func TestPruneReportsAllocatedBytes(t *testing.T) {
+	u, root := newPruneUpdater(t)
+	digest := stageTestRelease(t, u, root, "r1", false)
+	setCurrent(t, root, digest)
+	sparse := filepath.Join(root, "incoming", ".stage-sparse", "big")
+	if err := os.MkdirAll(filepath.Dir(sparse), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Create(sparse)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(1 << 20); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	ageBy(t, filepath.Dir(sparse), old)
+	if report := u.Prune(); report.BytesFreed >= 1<<20 {
+		t.Fatalf("a sparse file was counted by its apparent size: %+v", report)
+	}
+}
+
+// B4 at the source: an apply refused before it stages anything drops its
+// payload; the caller restages on a retry.
+func TestApplyDropsARefusedPayload(t *testing.T) {
+	baseManifestPath, _ := layeredTestBase(t)
+	u, root, _ := newApplyRig(t, baseManifestPath)
+	request := updaterRequestFixture(t, root, "computer-test", "realization-test", "op-refused", "idem-refused", "refused")
+	request.Manifest.BaseImageManifestDigest = strings.Repeat("0", 64)
+	request.Manifest.ClosureDigest = strings.Repeat("1", 64)
+	if err := refinalizeRequest(&request); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := u.Apply(context.Background(), request); err == nil {
+		t.Fatal("the mismatched base was accepted")
+	}
+	if exists(request.SourceDir) {
+		t.Fatal("a refused apply left its payload in incoming")
 	}
 }

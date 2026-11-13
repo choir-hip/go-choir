@@ -1,6 +1,9 @@
 package agentcore
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -16,7 +19,10 @@ func TestLockCurrentReleaseHoldsTheUpdaterRestoreHold(t *testing.T) {
 	if updater.RestoreInFlight(root) {
 		t.Fatal("nothing is held yet")
 	}
-	unlock := rt.lockCurrentRelease()
+	unlock, err := rt.lockCurrentRelease()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !updater.RestoreInFlight(root) {
 		t.Fatal("the restore hold is not taken while current is locked")
 	}
@@ -26,7 +32,34 @@ func TestLockCurrentReleaseHoldsTheUpdaterRestoreHold(t *testing.T) {
 	}
 	// Without an updater root (a test runtime) the lock still works.
 	bare := &Runtime{}
-	bare.lockCurrentRelease()()
+	bareUnlock, err := bare.lockCurrentRelease()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bareUnlock()
+}
+
+// B3: a hold that cannot be taken (a full or read-only volume) is reported, so
+// a restore that swaps refuses before it changes anything. The mutex is still
+// returned held, for the caller that may proceed read-only.
+func TestLockCurrentReleaseReportsAHoldItCannotTake(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rt := &Runtime{selfdevUpdaterRoot: filepath.Join(file, "updater")}
+	unlock, err := rt.lockCurrentRelease()
+	if err == nil || !errors.Is(err, errRestoreHoldUnavailable) {
+		t.Fatalf("err = %v, want errRestoreHoldUnavailable", err)
+	}
+	if rt.currentReleaseMu.TryLock() {
+		t.Fatal("the mutex was not held with the error")
+	}
+	unlock()
+	if !rt.currentReleaseMu.TryLock() {
+		t.Fatal("unlock did not release the mutex")
+	}
+	rt.currentReleaseMu.Unlock()
 }
 
 // The accepted price of a bounded updater root: a restore to a checkpoint whose
