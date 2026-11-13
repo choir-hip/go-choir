@@ -99,7 +99,11 @@ func (s *Store) recordSnapshotRoot(ctx context.Context, computerID, root string,
 		computerID, computerID, retention); err != nil {
 		return fmt.Errorf("snapshot root: prune: %w", err)
 	}
-	if err := tx.Commit(); err != nil {
+	err = tx.Commit()
+	if hook := s.snapshotRootCommitResult; hook != nil {
+		err = hook(err)
+	}
+	if err != nil {
 		return err
 	}
 	s.snapshotRootGen.Add(1)

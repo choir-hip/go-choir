@@ -169,3 +169,7 @@ func (h HTTPChunks) GetChunk(ctx context.Context, digest string) ([]byte, error)
 // ErrSnapshotChunkMissing is the host's refusal of a snapshot root whose
 // chunks it does not hold.
 var ErrSnapshotChunkMissing = errors.New("snapshot root refused: the host does not hold a chunk it names")
+
+// ErrSnapshotComputerDeleted is the host's refusal of a snapshot root for a
+// computer whose tape is archived or deleted: not retryable.
+var ErrSnapshotComputerDeleted = errors.New("snapshot root refused: the computer was destroyed")
