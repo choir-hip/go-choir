@@ -3,8 +3,11 @@ package platform
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -65,13 +68,11 @@ type snapshotRootRequest struct {
 // or largeSnapshotRetention when the declared snapshot is large.
 // It is idempotent per (computer, root).
 func (s *Store) RecordSnapshotRoot(ctx context.Context, computerID, root string, headSequence int64, chunks []string) error {
-	if s == nil || s.db == nil || !safeFileCASComponent(computerID) || !validFileCASDigest(root) || headSequence < 0 || len(chunks) == 0 || len(chunks) > maxSnapshotRootChunks {
+	if s == nil || s.db == nil {
 		return fmt.Errorf("snapshot root: invalid declaration")
 	}
-	for _, digest := range chunks {
-		if !validFileCASDigest(digest) {
-			return fmt.Errorf("snapshot root: invalid chunk digest")
-		}
+	if err := validateSnapshotRootDeclaration(computerID, root, headSequence, chunks); err != nil {
+		return err
 	}
 	encoded, err := json.Marshal(chunks)
 	if err != nil {
@@ -95,6 +96,95 @@ func (s *Store) RecordSnapshotRoot(ctx context.Context, computerID, root string,
 		return fmt.Errorf("snapshot root: prune: %w", err)
 	}
 	return tx.Commit()
+}
+
+// ErrSnapshotChunkMissing is returned (wrapped) when a snapshot root names a
+// chunk the host does not hold.
+var ErrSnapshotChunkMissing = errors.New("snapshot root names a chunk the host does not hold")
+
+// RecordVerifiedSnapshotRoot registers a snapshot root only if the computer's
+// namespace holds every chunk it names, and returns the first missing digest
+// (with ErrSnapshotChunkMissing) when it does not; a refusal records and
+// prunes nothing.
+//
+// It holds casReuseMu shared from the first stat to the commit. The artifact
+// collector unlinks a chunk only under the exclusive lock, and re-checks the
+// live snapshot roots inside it (unlinkIfStillUnreachable), so an unlink falls
+// either before the check (the chunk is missing and the root is refused) or
+// after the commit (the chunk is named by a live root and is kept). Nothing
+// falls between. The shared lock is the one every chunk writer already takes,
+// so registrations and uploads do not exclude each other.
+func (s *Service) RecordVerifiedSnapshotRoot(ctx context.Context, computerID, root string, headSequence int64, chunks []string) (string, error) {
+	if s == nil || s.store == nil {
+		return "", fmt.Errorf("snapshot root: store unavailable")
+	}
+	if err := validateSnapshotRootDeclaration(computerID, root, headSequence, chunks); err != nil {
+		return "", err
+	}
+	s.store.casReuseMu.RLock()
+	defer s.store.casReuseMu.RUnlock()
+	seen := make(map[string]struct{}, len(chunks))
+	for _, digest := range chunks {
+		if _, dup := seen[digest]; dup {
+			continue
+		}
+		seen[digest] = struct{}{}
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		ref, err := fileCASChunkRef(computerID, digest)
+		if err != nil {
+			return "", err
+		}
+		path, err := s.artifactPath(ref)
+		if err != nil {
+			return "", err
+		}
+		info, err := os.Stat(path)
+		if errors.Is(err, os.ErrNotExist) || (err == nil && (!info.Mode().IsRegular() || info.Size() == 0)) {
+			return digest, ErrSnapshotChunkMissing
+		}
+		if err != nil {
+			return "", fmt.Errorf("snapshot root: stat chunk: %w", err)
+		}
+	}
+	if hook := s.snapshotRootAfterVerify; hook != nil {
+		hook()
+	}
+	return "", s.store.RecordSnapshotRoot(ctx, computerID, root, headSequence, chunks)
+}
+
+// chunkNamedByLiveSnapshotRoot reports whether the chunk at rel
+// (sha256/file-cas-chunks/<computer>/<digest>) is named by one of the
+// computer's live snapshot roots. Any other path is not a chunk and is not
+// named. The caller holds casReuseMu exclusively.
+func (s *Service) chunkNamedByLiveSnapshotRoot(rel string) (bool, error) {
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	if len(parts) != 4 || parts[0] != "sha256" || parts[1] != "file-cas-chunks" || !safeFileCASComponent(parts[2]) || !validFileCASDigest(parts[3]) {
+		return false, nil
+	}
+	computerID, digest := parts[2], parts[3]
+	var n int
+	// Digests are 64 hex characters, so the quoted needle has no pattern
+	// characters and matches only a whole JSON element.
+	err := s.store.db.QueryRow(`SELECT COUNT(*) FROM (SELECT root, chunks FROM computer_snapshot_roots WHERE computer_id=? ORDER BY head_sequence DESC, created_at DESC, root DESC LIMIT ?) t WHERE chunks LIKE ?`,
+		computerID, snapshotRootRetention, `%"`+digest+`"%`).Scan(&n)
+	if err != nil {
+		return false, fmt.Errorf("snapshot root: live check: %w", err)
+	}
+	return n > 0, nil
+}
+
+func validateSnapshotRootDeclaration(computerID, root string, headSequence int64, chunks []string) error {
+	if !safeFileCASComponent(computerID) || !validFileCASDigest(root) || headSequence < 0 || len(chunks) == 0 || len(chunks) > maxSnapshotRootChunks {
+		return fmt.Errorf("snapshot root: invalid declaration")
+	}
+	for _, digest := range chunks {
+		if !validFileCASDigest(digest) {
+			return fmt.Errorf("snapshot root: invalid chunk digest")
+		}
+	}
+	return nil
 }
 
 // LiveSnapshotRoots returns the computer's newest snapshotRootRetention roots.
@@ -144,7 +234,16 @@ func (h *Handler) HandleSnapshotRoot(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "file storage unavailable"})
 		return
 	}
-	if err := h.service.store.RecordSnapshotRoot(r.Context(), strings.TrimSpace(input.ComputerID), input.Root, input.HeadSequence, input.Chunks); err != nil {
+	// A root that names a chunk the host does not hold would be a recovery
+	// base that cannot be restored, and recording it prunes a good older one.
+	// Refuse it; the guest takes the snapshot again (its probe finds the
+	// chunk missing and uploads it).
+	missing, err := h.service.RecordVerifiedSnapshotRoot(r.Context(), strings.TrimSpace(input.ComputerID), input.Root, input.HeadSequence, input.Chunks)
+	if errors.Is(err, ErrSnapshotChunkMissing) {
+		writeJSON(w, http.StatusConflict, apiError{Error: "snapshot root names chunk " + missing + ", which the host does not hold; take the snapshot again"})
+		return
+	}
+	if err != nil {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}

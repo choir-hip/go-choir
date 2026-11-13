@@ -875,6 +875,15 @@ func (s *Service) unlinkIfStillUnreachable(c gcCandidate, cutoff time.Time) (str
 	if !info.Mode().IsRegular() || !info.ModTime().Before(cutoff) {
 		return "kept_refreshed", info.Size(), nil
 	}
+	// The sweep's live set was read before this lock was taken. A snapshot
+	// root registered since (snapshot_roots.go registers under the shared
+	// lock, so it is committed or not started now) names this chunk live
+	// whatever its mtime. An unreadable answer keeps the chunk.
+	if live, err := s.chunkNamedByLiveSnapshotRoot(c.rel); err != nil {
+		return "error", 0, err
+	} else if live {
+		return "kept_refreshed", info.Size(), nil
+	}
 	if err := os.Remove(c.path); err != nil {
 		if os.IsNotExist(err) {
 			return "gone", 0, nil

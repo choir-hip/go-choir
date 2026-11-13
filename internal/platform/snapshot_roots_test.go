@@ -203,7 +203,8 @@ func TestSnapshotRootRejectsBadDeclarations(t *testing.T) {
 			t.Fatalf("%s accepted: %d", name, code)
 		}
 	}
-	// Idempotent redeclaration.
+	// Idempotent redeclaration (the host must hold the chunk it names).
+	f.writeAged("sha256/file-cas-chunks/c1/"+good, []byte("c"), time.Hour)
 	for i := 0; i < 2; i++ {
 		if code := putSnapshotRoot(t, handler, snapshotRootRequest{ComputerID: "c1", Root: root, HeadSequence: 1, Chunks: []string{good}}, true); code != http.StatusCreated {
 			t.Fatalf("declaration %d = %d", i, code)

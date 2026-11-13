@@ -122,7 +122,17 @@ func (h HTTPChunks) RegisterSnapshotRoot(ctx context.Context, root string, headS
 		return err
 	}
 	defer resp.Body.Close()
+	reason, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
 	_, _ = io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode == http.StatusConflict {
+		// The host does not hold a chunk the root names: this attempt
+		// recorded nothing, and the next one re-probes and re-uploads it.
+		var apiErr struct {
+			Error string `json:"error"`
+		}
+		_ = json.Unmarshal(reason, &apiErr)
+		return fmt.Errorf("%w: %s", ErrSnapshotChunksMissing, strings.TrimSpace(apiErr.Error))
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("status %d", resp.StatusCode)
 	}
