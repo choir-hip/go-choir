@@ -303,3 +303,47 @@ W tests with `run_memory_batch.go`. Add or re-aim:
    The change must say so. D8's default was "ship coalescing only on the owner's
    word"; the owner's reading in `owner_rulings` is yes, but the build should
    quote it.
+
+## First reading from the paper's counters (2026-11-13T11:30Z)
+
+Counters landed as e392ac824. Read from the paper's
+`/api/runtime/observability` about 17 minutes after its 11:13Z boot
+(4,785 tape events; one short window, not the day the design asks for).
+
+| measure | paper | d@e (07:54Z, 164 events) |
+|---|---|---|
+| appender depth at enter: 1 | 179 (4%) | 139 (84%) |
+| 2 | 314 (7%) | 24 |
+| 3 to 4 | 1,054 (22%) | 2 |
+| 5 to 8 | 2,790 (58%) | 0 |
+| 9 to 16 | 453 (9%) | 0 |
+| mean time in the appender call | 982 ms | 63 ms |
+| corpusd calls per tape event | 6.0 | 7.2 |
+| ops per tape event: exactly 1 | 4,155 of 4,785 (87%) | 109 of 164 |
+
+What it says:
+
+- On the paper a writer almost always arrives behind others: 89% of appends
+  enter at depth 3 or more, most at 5 to 8, and each waits about a second.
+  Coalescing the writers already queued would cut the paper's event count
+  several-fold, which is what claim C57 forecast from the census. On d@e the
+  queue is empty, so d@e cannot measure the gain; the proof has to read the
+  paper.
+- Each tape event costs six corpusd calls: one append, one payload, two head
+  reads and two pins (9,663 heads and 9,659 pins for 4,829 appends). The two
+  heads and two pins per append are a second saving, independent of
+  coalescing.
+- 2,292 of the run-memory ops are `message` and 245 are
+  `cell_fate/tray committed`.
+
+Two defects the counters exposed:
+
+- The run-memory key carries free text from the entry's reason: the paper
+  shows `cell_fate/reflect: call of reflect.Value.IsNil on string Value` and
+  `cell_fate/reflect: slice index out of range`. The key should come from a
+  fixed list (the review of e392ac824 noted the reason is not bounded).
+- Those two keys are reflect panics inside a cell on the paper. Not traced
+  here; an Autopaper finding.
+
+Remaining error: one 17-minute window just after a boot, when queues may be
+deeper than in steady state. Read again after a day before fixing the shape.

@@ -180,7 +180,7 @@ stations:
     class: red
     review: two seats
     depends_on: [S0]
-    carrier: sweep progress that survives a restart, main 421288af7, both seats accepted on round 2, CI 43376520250, deployed 2026-11-13T06:15Z. The walk is too slow to finish on the paper (docs/problems/tape-sweep-walk-probes-every-segment-per-event-2026-11-13.md); repair in lane/sweep-walk-one-view. No scheduler yet
+    carrier: sweep progress that survives a restart, main 421288af7, both seats accepted on round 2, CI 43376520250, deployed 2026-11-13T06:15Z. The walk is too slow to finish on the paper (docs/problems/tape-sweep-walk-probes-every-segment-per-event-2026-11-13.md); repaired by f4276a0ba and dd43ff6b1 (a digest lookup in the view, 12 times faster on the paper, claim C66). No finished dry run and no scheduler yet
     status: working
   - id: S8
     name: a smaller store, and the archive half of cold tape
@@ -266,12 +266,12 @@ observation_plan: >
 
 now:
   status: working
-  slice: background lanes S7 (the sweep walk, lane/sweep-walk-one-view), S5 (read the paper's depth histogram, then coalescing) and S4 (the chunk window, snapshots that cost the change); the live station is Autoradio (docs/ACTIVE.md)
-  source_ref: origin/main e392ac824
-  deploy_identity: choir.news e392ac824dbf
+  slice: background lanes S7 (read and apply the sweep manifest), S5 (read the paper's depth histogram, then coalescing) and S4 (the chunk window, snapshots that cost the change); the live station is Autoradio (docs/ACTIVE.md)
+  source_ref: origin/main dd43ff6b1
+  deploy_identity: choir.news dd43ff6b11fe
   candidate:
-    id: lane/sweep-walk-one-view
-    state: in build
+    id: none
+    state: none
   conjecture:
     id: SS2-C1
     calibration_claim: C61
@@ -307,22 +307,24 @@ now:
       unrooted paper chunks age out from 2026-11-13T08:40Z, and the destroyed
       computers' tape waits for a sweep that can finish.
     main_uncertainty: >
-      whether the paper's appender depth is deep enough for coalescing to pay
-      (on d@e it is 1 for 139 of 165 appends, and corpusd takes 7 calls per
-      tape event); whether the sweep walk's cost is only the per-event
-      segment probe; how many guest releases the host keeps
-    next_observation: the collector's first pass after 08:40Z (do the unrooted chunks go); the paper's depth histogram after a day; the sweep-walk lane's measured speedup
+      whether the paper's appender depth in steady state matches its first
+      reading (89% of appends enter at depth 3 or more, most at 5 to 8, about
+      a second each; six corpusd calls per tape event); how many of the
+      paper's events are in no segment; how many guest releases the host
+      keeps
+    next_observation: the manifest of dry run ts-20261113T111247Z-a6fb14f1 (about 15:00Z); the paper's depth histogram after a day; the collector's passes as the unrooted chunks age out (about 3 GiB a pass since 09:00Z)
   blocker_or_risk: >
-    The sweep walks the paper's tape at about 60 events a second, so no
-    manifest exists and nothing of the destroyed computers has been released.
+    No sweep manifest exists yet, so nothing of the destroyed computers has
+    been released; the walk is repaired (dd43ff6b1, 12 times faster) and a
+    dry run is in flight, which any corpusd restart ends.
     lane/restart-cancels-capture is parked after five review rounds (a deploy
     still waits out a capture, now rare). The lost-reply path of the wedge fix
     has not run on staging. The failed-attempt path of the snapshot fix has
     not been seen on the paper.
   next_action: >
-    Review (two seats) and land lane/sweep-walk-one-view, rerun the dry run,
-    read the manifest and apply it. Read the paper's appender depth after a
-    day and decide coalescing's shape. Design S4's shorter chunk window. The
+    Read the dry run's manifest and apply it. Read the paper's appender
+    depth after a day, then build coalescing and remove the second head read
+    and pin per append. Design S4's shorter chunk window. The
     hourly status script is the tripwire while Autoradio is the live station.
 
 receipts: []

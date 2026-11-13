@@ -87,3 +87,15 @@ Append-only. One terse entry per pass.
 - 2026-11-13T08:00Z. Station change, as told to the owner overnight: Autoradio
   is the live station; S7, S5 and S4 continue behind it; scripts/status-hourly
   is the tripwire.
+- 2026-11-13T11:30Z. The sweep walk is repaired in two landings. f4276a0ba
+  (one view per walk) did nothing on the paper: 935 probes an event, because
+  the repack laid history out by digest bucket (C65 false). dd43ff6b1 (a
+  digest lookup in the view; both seats on round 2) is deployed and dry run
+  ts-20261113T111247Z-a6fb14f1 writes a paper chunk every 65 seconds, 12
+  times faster (C66 true); about 3.5 hours remain. The collector began
+  releasing the aged unrooted chunks at 09:00Z, about 3 GiB a pass.
+- 2026-11-13T11:30Z. First counters from the paper: 89% of appends enter the
+  appender at depth 3 or more (most at 5 to 8) and wait about a second; six
+  corpusd calls per tape event (two heads, two pins). Coalescing pays on the
+  paper and cannot be measured on d@e
+  (docs/evidence/tape-write-coalescing-design-2026-11-12.md).
