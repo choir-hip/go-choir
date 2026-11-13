@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/hostlink"
 )
 
@@ -120,33 +121,47 @@ func (s *Store) recordSnapshotRoot(ctx context.Context, computerID, root string,
 
 // snapshotRootNamedSeqSQL is the sequence of the receipt that names this
 // row, NULL when the tape does not: a snapshot_recorded receipt whose
-// idempotency key is 'snapshot:'||root and whose sequence is above the root's
-// head (internal/bundle readNamedSnapshotRoot says the same; internal/snapshot
-// Take registers the root, then appends that event). Boot restore uses only
-// roots the tape names, newest naming event first (snapshot.Scan), so the
-// naming sequence, not the head, is the order of the named roots. r is the
-// roots table's alias.
-const snapshotRootNamedSeqSQL = `(SELECT MAX(a.sequence) FROM computer_event_append_receipts a WHERE a.computer_id=r.computer_id AND a.idempotency_key='snapshot:' || r.root AND a.event_kind='snapshot_recorded' AND a.sequence>r.head_sequence)`
+// idempotency key is 'snapshot:'||root. The key is unique per root (the
+// receipts table's primary key), so no further condition is needed: a receipt
+// with that key names the root whatever head the row now carries (the PUT
+// upserts head_sequence). internal/bundle readNamedSnapshotRoot adds "after
+// the snapshot's head", which a verifier needs and which stays there. Boot
+// restore uses only roots the tape names, newest naming event first
+// (snapshot.Scan), so the naming sequence, not the head, is the order of the
+// named roots. r is the roots table's alias.
+const snapshotRootNamedSeqSQL = `(SELECT MAX(a.sequence) FROM computer_event_append_receipts a WHERE a.computer_id=r.computer_id AND a.idempotency_key='snapshot:' || r.root AND a.event_kind='snapshot_recorded')`
 
 // snapshotRootOrder is the order of roots by head, newest first (unnamed
 // roots, whose attempt order is their head order).
 const snapshotRootOrder = `ORDER BY r.head_sequence DESC, r.created_at DESC, r.root DESC`
 
 // snapshotRootInFlightWindow is how long an unnamed root may still be an
-// attempt whose snapshot_recorded append is coming. The guest registers a
-// root after the capture is done (internal/snapshot TakeSnapshot: capture,
-// then RegisterSnapshotRoot, then AppendNewPrivatePayload), so the gap is the
-// append alone, never the 90 minute capture budget. The append is at most four
-// sequential host requests (bind the head, pin the payload, pin the event,
-// compare-and-swap the head: internal/computerevent appender.go), each bounded
-// by the guest client's 10 minute attempt timeout (http_client.go
-// NewGuestHTTPClient) plus the 3 minutes a refused dial is resent across a
-// host restart (hostlink.RestartWait); the handler does not detach from a
-// cancelled request, so a cancelled append cannot commit later. 4 x 13
-// minutes is 52 minutes. An unnamed root older than this is a failed attempt
-// and may be pruned. The 10 minutes and the count are restated here; they are
-// not importable.
-const snapshotRootInFlightWindow = 4 * (10*time.Minute + hostlink.RestartWait)
+// attempt whose snapshot_recorded append is coming. It is the out-of-band
+// guard, not a proof. In band, the producer's tick mutex spans the
+// registration and the append (internal/agentcore snapshot_producer.go), so
+// no second registration runs while an append is in flight. The window covers
+// what that does not: a registration from another process, or an append that
+// outlives its caller.
+//
+// The guest registers a root after the capture is done (internal/snapshot
+// TakeSnapshot: capture, RegisterSnapshotRoot, AppendNewPrivatePayload), so
+// the gap is the append alone, never the capture budget. The append makes
+// computerevent.AppendSequentialRequests requests in sequence, each bounded by
+// the guest client's attempt timeout (computerevent.GuestAttemptTimeout, which
+// NewGuestHTTPClient uses) plus the time a refused dial is resent across a host
+// restart (hostlink.RestartWait); an unclear compare-and-swap is re-sent once,
+// detached, for computerevent.CASResendTimeout; and the host stamps the row
+// when it registers it, before the guest's response returns, which
+// snapshotRootWindowMargin covers. A request that the handler's context
+// cancels rolls back; the re-send is the one detached commit. An unnamed root
+// older than the window is a failed attempt and may be pruned; if its append
+// lands later, the tape names a root the host no longer keeps, and a restore
+// falls back to the roots kept before it.
+const snapshotRootInFlightWindow = computerevent.AppendSequentialRequests*(computerevent.GuestAttemptTimeout+hostlink.RestartWait) + computerevent.CASResendTimeout + snapshotRootWindowMargin
+
+// snapshotRootWindowMargin covers the registration's response latency and
+// clock stamping before the append starts.
+const snapshotRootWindowMargin = time.Minute
 
 // snapshotRootMaxYoungUnnamed is how many unnamed roots registered within
 // snapshotRootInFlightWindow are kept beyond the one just registered and the
@@ -213,8 +228,8 @@ func pruneSnapshotRoots(ctx context.Context, tx *sql.Tx, computerID, justRoot st
 	rows.Close()
 
 	keep := map[string]bool{justRoot: true}
-	// Named roots, newest naming event first (head order breaks ties: the
-	// rows arrive in it and the sort is stable).
+	// Named roots, newest naming event first (receipt sequences are unique
+	// per computer, so there are no ties).
 	sort.SliceStable(named, func(i, j int) bool { return named[i].namedSeq.Int64 > named[j].namedSeq.Int64 })
 	var namedHead int64 = -1
 	for i, row := range named {
@@ -469,7 +484,8 @@ func validateSnapshotRootDeclaration(computerID, root string, headSequence int64
 }
 
 // LiveSnapshotRoots returns every snapshot root the computer keeps, newest
-// first. The prune bounds the rows at retention + 1 + 2 + snapshotRootMaxYoungUnnamed, and a row that
+// first. The prune bounds the rows at retention + 4 (retention named, one more
+// named for a moment, and up to four unnamed), and a row that
 // bundle.Import added or a concurrent registration left is protected too:
 // reading more rows is the safe direction for the collector.
 func (s *Store) LiveSnapshotRoots(ctx context.Context, computerID string) ([]SnapshotRootRecord, error) {
