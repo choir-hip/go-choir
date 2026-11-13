@@ -446,7 +446,8 @@ func (a *ComputerEventAppender) AppendNew(ctx context.Context, event Event, inpu
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if err := a.bindCurrentHeadLocked(ctx, &event); err != nil {
+	bound, err := a.bindCurrentHeadLocked(ctx, &event)
+	if err != nil {
 		return Receipt{}, err
 	}
 	event.RequestCommitment = ZeroHead
@@ -458,7 +459,7 @@ func (a *ComputerEventAppender) AppendNew(ctx context.Context, event Event, inpu
 	if err != nil {
 		return Receipt{}, fmt.Errorf("computer event appender: compute new request commitment: %w", err)
 	}
-	return a.appendLocked(ctx, event, input, payloadPinReceiptDigests)
+	return a.appendBoundLocked(ctx, event, input, payloadPinReceiptDigests, bound)
 }
 
 // AppendNewPayload content-addresses and pins one non-private payload before
@@ -473,7 +474,8 @@ func (a *ComputerEventAppender) AppendNewPayload(ctx context.Context, event Even
 	if !ok {
 		return Receipt{}, "", fmt.Errorf("computer event appender: non-private payload pinning unavailable")
 	}
-	if err := a.bindCurrentHeadLocked(ctx, &event); err != nil {
+	bound, err := a.bindCurrentHeadLocked(ctx, &event)
+	if err != nil {
 		return Receipt{}, "", err
 	}
 	payloadDigest := DigestBytes(payload)
@@ -522,7 +524,7 @@ func (a *ComputerEventAppender) AppendNewPayload(ctx context.Context, event Even
 		a.livePayloads = map[string][]byte{}
 	}
 	a.livePayloads[payloadDigest] = append([]byte(nil), payload...)
-	receipt, err := a.appendLocked(ctx, event, input, []string{payloadReceiptDigest})
+	receipt, err := a.appendBoundLocked(ctx, event, input, []string{payloadReceiptDigest}, bound)
 	if err == nil {
 		// Finalized: drop the cached plaintext, or every payload this process
 		// ever appended stays on the heap (docs/problems/guest-appender-
@@ -560,7 +562,8 @@ func (a *ComputerEventAppender) AppendNewPrivatePayload(ctx context.Context, eve
 	if !ok || cipher == nil {
 		return Receipt{}, "", fmt.Errorf("computer event appender: private payload authority unavailable")
 	}
-	if err := a.bindCurrentHeadLocked(ctx, &event); err != nil {
+	bound, err := a.bindCurrentHeadLocked(ctx, &event)
+	if err != nil {
 		return Receipt{}, "", err
 	}
 	envelope, sealedMeta, err := pinner.PreparePrivatePayload(ctx, cipher, a.computerID, event.EventID, mediaType, plaintext)
@@ -619,7 +622,7 @@ func (a *ComputerEventAppender) AppendNewPrivatePayload(ctx context.Context, eve
 	if err != nil {
 		return Receipt{}, "", fmt.Errorf("computer event appender: compute private payload request commitment: %w", err)
 	}
-	receipt, err := a.appendLocked(ctx, event, input, []string{payloadReceiptDigest})
+	receipt, err := a.appendBoundLocked(ctx, event, input, []string{payloadReceiptDigest}, bound)
 	return receipt, payloadDigest, err
 }
 
@@ -647,7 +650,8 @@ func (a *ComputerEventAppender) AppendNewPayloadSet(ctx context.Context, event E
 	if len(payloads) == 0 {
 		return Receipt{}, nil, fmt.Errorf("computer event appender: payload set is empty")
 	}
-	if err := a.bindCurrentHeadLocked(ctx, &event); err != nil {
+	bound, err := a.bindCurrentHeadLocked(ctx, &event)
+	if err != nil {
 		return Receipt{}, nil, err
 	}
 	type preparedPayload struct {
@@ -731,14 +735,31 @@ func (a *ComputerEventAppender) AppendNewPayloadSet(ctx context.Context, event E
 	if err != nil {
 		return Receipt{}, nil, fmt.Errorf("computer event appender: compute payload set request commitment: %w", err)
 	}
-	receipt, err := a.appendLocked(ctx, event, input, receiptDigests)
+	receipt, err := a.appendBoundLocked(ctx, event, input, receiptDigests, bound)
 	return receipt, artifactDigests, err
 }
 
-func (a *ComputerEventAppender) bindCurrentHeadLocked(ctx context.Context, event *Event) error {
+// boundHead is the platform head a new event was bound to, read once under
+// the appender mutex. appendLockedInner reuses it as the platform head for the
+// embedded-head comparison and the reducer instead of reading it again: two
+// reads per append were two of the six corpusd calls each tape event cost.
+//
+// The reuse is safe because the head is a guess the CAS checks. The event
+// carries the bound head as its previous head and the host's compare-and-swap
+// refuses a request whose previous head is not the host's (definitely, so the
+// prepared row is discarded); the reducer refuses it earlier when a recovery
+// moved the head. A head that moves between the bind and the CAS (a host-side
+// event during the payload pin) used to be seen by the second read and now
+// fails at the CAS, and the next append's bind reads the new head and the
+// embedded-head comparison repairs the gap, as it does for any host-side
+// event (heads_differ recovery). Nothing is committed on a stale head either
+// way (TestAppendNewPayloadHeadMovedDuringPinIsRefused).
+type boundHead struct{ head *Head }
+
+func (a *ComputerEventAppender) bindCurrentHeadLocked(ctx context.Context, event *Event) (*boundHead, error) {
 	head, err := a.cas.Head(ctx, a.computerID)
 	if err != nil {
-		return fmt.Errorf("computer event appender: resolve head for new event: %w", err)
+		return nil, fmt.Errorf("computer event appender: resolve head for new event: %w", err)
 	}
 	if event.RequireExpectedHead {
 		expectedDesiredEventHead, expectedEffectiveEventHead := ZeroHead, ZeroHead
@@ -759,7 +780,7 @@ func (a *ComputerEventAppender) bindCurrentHeadLocked(ctx context.Context, event
 			{"effective state commitment", event.ExpectedEffectiveStateCommitment, expectedEffectiveStateCommitment},
 		} {
 			if binding.supplied != binding.current {
-				return fmt.Errorf("computer event appender: expected %s changed", binding.name)
+				return nil, fmt.Errorf("computer event appender: expected %s changed", binding.name)
 			}
 		}
 	}
@@ -771,7 +792,7 @@ func (a *ComputerEventAppender) bindCurrentHeadLocked(ctx context.Context, event
 		event.ExpectedPendingTransitionRef = ""
 		event.ExpectedDesiredStateCommitment = ZeroHead
 		event.ExpectedEffectiveStateCommitment = ZeroHead
-		return nil
+		return &boundHead{head: head}, nil
 	}
 	event.Sequence = head.Sequence + 1
 	event.PreviousHead = head.CanonicalEventHead
@@ -780,16 +801,23 @@ func (a *ComputerEventAppender) bindCurrentHeadLocked(ctx context.Context, event
 	event.ExpectedPendingTransitionRef = head.PendingTransitionRef
 	event.ExpectedDesiredStateCommitment = head.DesiredStateCommitment
 	event.ExpectedEffectiveStateCommitment = head.EffectiveStateCommitment
-	return nil
+	return &boundHead{head: head}, nil
 }
 
 func (a *ComputerEventAppender) appendLocked(ctx context.Context, event Event, input TransitionInput, payloadPinReceiptDigests []string) (Receipt, error) {
-	receipt, err := a.appendLockedInner(ctx, event, input, payloadPinReceiptDigests)
+	return a.appendBoundLocked(ctx, event, input, payloadPinReceiptDigests, nil)
+}
+
+// appendBoundLocked is appendLocked for an event bindCurrentHeadLocked just
+// bound: bound carries the platform head that bind read, so the append does
+// not read it a second time. A nil bound reads it.
+func (a *ComputerEventAppender) appendBoundLocked(ctx context.Context, event Event, input TransitionInput, payloadPinReceiptDigests []string, bound *boundHead) (Receipt, error) {
+	receipt, err := a.appendLockedInner(ctx, event, input, payloadPinReceiptDigests, bound)
 	a.noteAppendResult(err)
 	return receipt, err
 }
 
-func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Event, input TransitionInput, payloadPinReceiptDigests []string) (Receipt, error) {
+func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Event, input TransitionInput, payloadPinReceiptDigests []string, bound *boundHead) (Receipt, error) {
 	if event.ComputerID != a.computerID {
 		return Receipt{}, fmt.Errorf("computer event appender: wrong computer")
 	}
@@ -813,8 +841,10 @@ func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Eve
 	if event.RequestCommitment != requestCommitment {
 		return Receipt{}, fmt.Errorf("computer event appender: request commitment mismatch")
 	}
-	platformHead, err := a.cas.Head(ctx, a.computerID)
-	if err != nil {
+	var platformHead *Head
+	if bound != nil {
+		platformHead = bound.head
+	} else if platformHead, err = a.cas.Head(ctx, a.computerID); err != nil {
 		return Receipt{}, fmt.Errorf("computer event appender: resolve canonical head: %w", err)
 	}
 	embeddedHead, err := a.projection.Head(ctx, a.computerID)

@@ -37,8 +37,10 @@ func newHeadCountAppender(t *testing.T) (*ComputerEventAppender, *memoryCAS) {
 }
 
 func TestAppendNewPayloadReadsThePlatformHeadOnce(t *testing.T) {
-	appender, cas := newHeadCountAppender(t)
+	// One batch per appender: the batch projection double here does not move
+	// its embedded head, so a second append would start from a gap.
 	for i := 0; i < 3; i++ {
+		appender, cas := newHeadCountAppender(t)
 		cas.mu.Lock()
 		before := cas.headCalls
 		cas.mu.Unlock()
