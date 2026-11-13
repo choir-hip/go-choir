@@ -36,6 +36,9 @@ type SegmentView struct {
 	dir      string
 	segs     []segFiles
 	sealed   map[uint64]*sealedSeg
+
+	hint   int    // index into segs of the last ReadObject hit
+	probes uint64 // segment lookups made by ReadObject
 }
 
 // OpenView lists the computer's segments and validates every sealed index
@@ -44,26 +47,137 @@ type SegmentView struct {
 // segment, or an unsealed segment below the highest one (a state the writer
 // refuses to extend) is ErrCorrupt.
 func (r *Reader) OpenView(computerID string) (*SegmentView, error) {
-	dir, segs, err := r.list(computerID)
-	if err != nil {
+	v := &SegmentView{r: r, computer: computerID}
+	if err := v.load(); err != nil {
 		return nil, err
 	}
-	v := &SegmentView{r: r, computer: computerID, dir: dir, segs: segs, sealed: map[uint64]*sealedSeg{}}
+	return v, nil
+}
+
+// load lists the computer's directory and validates every sealed index. The
+// reader's sealed-index cache makes a reload cost the listing plus the
+// indexes not seen before.
+func (v *SegmentView) load() error {
+	r, computerID := v.r, v.computer
+	dir, segs, err := r.list(computerID)
+	if err != nil {
+		return err
+	}
+	sealed := map[uint64]*sealedSeg{}
 	r.retireSealed(dir, segs)
 	for i, f := range segs {
 		if f.hasIdx {
 			s, err := r.loadSealed(dir, computerID, f.segno)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			v.sealed[f.segno] = s
+			sealed[f.segno] = s
 			continue
 		}
 		if i != len(segs)-1 {
-			return nil, corruptf("computer %s: segment %d is unsealed below the highest segment %d", computerID, f.segno, segs[len(segs)-1].segno)
+			return corruptf("computer %s: segment %d is unsealed below the highest segment %d", computerID, f.segno, segs[len(segs)-1].segno)
 		}
 	}
-	return v, nil
+	v.dir, v.segs, v.sealed = dir, segs, sealed
+	if v.hint >= len(segs) {
+		v.hint = 0
+	}
+	return nil
+}
+
+// Probes is the number of segment lookups ReadObject has made: one per
+// segment index consulted or open segment rescanned.
+func (v *SegmentView) Probes() uint64 { return v.probes }
+
+// ReadObject is Reader.Read for one object of this computer: the same
+// segment-then-legacy order, digest check, counters and legacy fallback on a
+// segment error, but the segments come from the view's listing and validated
+// indexes, probed from the segment of the last hit. Events are appended in
+// order, so a walk in order finds the next one in the same or the next
+// segment. A miss there falls back to every segment newest first, so an
+// object any segment holds is found. Where a digest sits in two segments the
+// copy found first is returned (both are checked against the digest and the
+// record crc), so a damaged copy in a newer segment than the hit is not
+// looked at. When every segment misses, the directory is listed again and,
+// if it changed (a segment created or sealed since the view loaded), the
+// view reloads and probes again, so a walk that runs while the tape grows
+// sees what Reader.Read would. If that reload fails, the per-call Reader
+// path answers. A view is not safe for concurrent use.
+func (v *SegmentView) ReadObject(ns NS, digest string) ([]byte, Source, error) {
+	if !ns.valid() {
+		return nil, 0, fmt.Errorf("tapestore: invalid namespace %d", uint8(ns))
+	}
+	if !ValidDigest(digest) {
+		return nil, 0, fmt.Errorf("tapestore: invalid digest %q", digest)
+	}
+	return v.r.readWith(v.computer, ns, digest, v.lookup)
+}
+
+func (v *SegmentView) lookup(ns NS, digest string) ([]byte, bool, error) {
+	var want [32]byte
+	if err := decodeHex32(&want, digest); err != nil {
+		return nil, false, err
+	}
+	for pass := 0; pass < 2; pass++ {
+		first, second := v.hint, v.hint+1
+		for _, i := range [2]int{first, second} {
+			if i >= len(v.segs) {
+				continue
+			}
+			if body, found, err := v.probe(i, ns, want); err != nil || found {
+				if found {
+					v.hint = i
+				}
+				return body, found, err
+			}
+		}
+		for i := len(v.segs) - 1; i >= 0; i-- {
+			if i == first || i == second {
+				continue
+			}
+			if body, found, err := v.probe(i, ns, want); err != nil || found {
+				if found {
+					v.hint = i
+				}
+				return body, found, err
+			}
+		}
+		if pass == 1 {
+			break
+		}
+		// Every segment missed: has the tape grown since the view loaded?
+		_, now, err := v.r.list(v.computer)
+		if err != nil || sameSegFiles(now, v.segs) {
+			return nil, false, err
+		}
+		if err := v.load(); err != nil {
+			return v.r.readSegment(v.computer, ns, digest)
+		}
+	}
+	return nil, false, nil
+}
+
+func sameSegFiles(a, b []segFiles) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// probe looks (ns, want) up in segment i of the view.
+func (v *SegmentView) probe(i int, ns NS, want [32]byte) ([]byte, bool, error) {
+	v.probes++
+	f := v.segs[i]
+	if f.hasIdx {
+		return v.sealed[f.segno].read(ns, want)
+	}
+	o := v.r.openFor(filepath.Join(v.dir, SegmentFileName(f.segno)), f.segno)
+	return o.read(v.computer, i == len(v.segs)-1, ns, want)
 }
 
 // Segments is the number of segments listed.
