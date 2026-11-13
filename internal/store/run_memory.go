@@ -203,17 +203,14 @@ func (s *Store) AppendRunMemoryEntries(ctx context.Context, entries []types.RunM
 // ruling D8, 2026-11-12; the run-memory window of 2026-10-31 is deleted).
 // Writers of other runs that wait behind the in-flight append share an event
 // with this one (tape_group_commit.go).
+//
+// Numbering reads the committed table, which can lag the host after an append
+// whose outcome was unknown. That is safe because the appender re-validates
+// the batch under its mutex after any in-place recovery or catch-up, and
+// refuses it (ErrBatchRefused, nothing sent) if a landed entry now collides.
+// The caller sees that as an ordinary failed append; its next attempt numbers
+// from the caught-up table. There is no retry inside this function.
 func (s *Store) appendRunMemoryTapeLocked(ctx context.Context, runID string, items []normalizedRunMemory) ([]types.RunMemoryEntry, error) {
-	// An earlier run-memory append that failed may have left a prepared row (an
-	// unclear CAS keeps it): settle it before numbering from the table, or this
-	// write reuses its (run, seq) and the finalize fails on the unique key.
-	// The latch is read without a lock so that, with no failure, a run-memory
-	// writer queues behind the in-flight append like any other.
-	if s.runMemorySettle.Load() {
-		if err := s.settleRunMemory(ctx); err != nil {
-			return nil, fmt.Errorf("settle prepared run memory append: %w", err)
-		}
-	}
 	var tail runMemoryTail
 	haveTail := false
 	acked := make([]computerevent.ProjectionOp, 0, len(items))
@@ -256,42 +253,11 @@ func (s *Store) appendRunMemoryTapeLocked(ctx context.Context, runID string, ite
 		// Run memory is not telemetry and is not ordered against it: it is the
 		// one exemption from the telemetry append barrier (design 4.3). A
 		// source-scan test allows exactly three WithBarrierExemption callers.
-		if err := s.appendRunMemoryOps(ctx, acked); err != nil {
+		if err := s.projectionTape.appendOps(computerevent.WithBarrierExemption(ctx), acked); err != nil {
 			return nil, fmt.Errorf("append projected run memory entry: %w", err)
 		}
 	}
 	return out, nil
-}
-
-// appendRunMemoryOps appends the ops and sets the settle latch unless the
-// append returned nil: an error, or a panic, may have left a prepared row.
-func (s *Store) appendRunMemoryOps(ctx context.Context, ops []computerevent.ProjectionOp) (err error) {
-	succeeded := false
-	defer func() {
-		if !succeeded {
-			s.runMemorySettle.Store(true)
-		}
-	}()
-	err = s.projectionTape.appendOps(computerevent.WithBarrierExemption(ctx), ops)
-	succeeded = err == nil
-	return err
-}
-
-// settleRunMemory settles a kept prepared row, serialised, and clears the
-// latch only after the settle returned nil: a settle that failed (cancelled
-// caller, appender error) leaves it set for the next writer, and a writer that
-// arrives while a settle is in progress waits for it.
-func (s *Store) settleRunMemory(ctx context.Context) error {
-	s.runMemorySettleMu.Lock()
-	defer s.runMemorySettleMu.Unlock()
-	if !s.runMemorySettle.Load() {
-		return nil // another writer settled while this one waited
-	}
-	if err := s.projectionTape.appender.SettlePrepared(ctx); err != nil {
-		return err
-	}
-	s.runMemorySettle.Store(false)
-	return nil
 }
 
 // runMemoryTail is a run's last entry: the seq and parent of the next one.
