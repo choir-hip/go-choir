@@ -205,10 +205,12 @@ func (s *Store) AppendRunMemoryEntries(ctx context.Context, entries []types.RunM
 // with this one (tape_group_commit.go).
 //
 // Numbering reads the committed table, which can lag the host after an append
-// whose outcome was unknown. That is safe because the appender re-validates
-// the batch under its mutex after any in-place recovery or catch-up, and
-// refuses it (ErrBatchRefused, nothing sent) if a landed entry now collides.
-// The caller sees that as an ordinary failed append; its next attempt numbers
+// whose outcome was unknown. That is safe by the head invariant: the table and
+// the projection head commit in one transaction, the store's dry run reports
+// the head it validated against, and the appender compares it with the local
+// head under its mutex before anything is sent, validating again (and refusing
+// with ErrBatchRefused, nothing sent) if the head moved for any reason. The
+// caller sees a refusal as an ordinary failed append; its next attempt numbers
 // from the caught-up table. There is no retry inside this function.
 func (s *Store) appendRunMemoryTapeLocked(ctx context.Context, runID string, items []normalizedRunMemory) ([]types.RunMemoryEntry, error) {
 	var tail runMemoryTail

@@ -13,12 +13,20 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+const (
+	costGrouped = iota
+	costDirect
+	costMixed
+)
+
 // What the head check costs under load, on the production shape (sealed
-// batches, the store dry-runs outside the appender mutex). The harness counts
-// every dry run the appender makes through its projection: with the sealed
-// path the store's own dry run does not pass through it, so each count here is
-// a revalidation (a second dry run under the mutex).
-func measureRevalidations(t *testing.T, direct bool) (appends int64, revalidations int64) {
+// batches). A grouped append is dry-run by the store outside the appender mutex
+// (the leader's dry run and its turn are adjacent); the appender repeats the
+// dry run only if the head moved: those are revalidations
+// (TelemetryStats.AppenderRevalidations). A direct append is dry-run once, by
+// the appender, under its mutex. The harness counts every dry run that passes
+// through the appender's projection.
+func measureRevalidations(t *testing.T, mode int) (events, appenderDryRuns, revalidations int64) {
 	h := newTapeHarness(t)
 	h.useSealing()
 	var dry atomic.Int64
@@ -37,7 +45,7 @@ func measureRevalidations(t *testing.T, direct bool) (appends int64, revalidatio
 				id := fmt.Sprintf("cost-%d-%d", w, i)
 				var err error
 				switch {
-				case direct:
+				case mode == costDirect || (mode == costMixed && w%2 == 0):
 					now := time.Now().UTC()
 					obj, oerr := lifecycleObject(ogKindMigrationMarker, "owner-1", h.computerID, id, map[string]string{"x": "y"}, map[string]any{}, now, now)
 					if oerr != nil {
@@ -58,24 +66,39 @@ func measureRevalidations(t *testing.T, direct bool) (appends int64, revalidatio
 		}(w)
 	}
 	wg.Wait()
-	events := h.store.TelemetryStats().TapeEvents - before
-	return events, dry.Load()
+	stats := h.store.TelemetryStats()
+	return stats.TapeEvents - before, dry.Load(), stats.AppenderRevalidations
 }
 
 func TestRevalidationsPerAppendStayNearZeroGrouped(t *testing.T) {
-	events, reval := measureRevalidations(t, false)
-	ratio := float64(reval) / float64(events)
-	t.Logf("grouped: %d tape events, %d revalidations, %.3f per event", events, reval, ratio)
-	if events == 0 || ratio > 0.1 {
-		t.Fatalf("revalidations per grouped append = %.3f over %d events, want near zero", ratio, events)
+	events, dry, reval := measureRevalidations(t, costGrouped)
+	t.Logf("grouped: %d tape events, %d dry runs under the mutex, %d revalidations (%.3f per event)", events, dry, reval, float64(reval)/float64(events))
+	if events == 0 || float64(reval)/float64(events) > 0.1 {
+		t.Fatalf("revalidations per grouped event = %d/%d, want near zero", reval, events)
+	}
+	if dry != reval {
+		t.Fatalf("%d dry runs under the mutex but %d revalidations: a grouped append is dry-run outside it", dry, reval)
 	}
 }
 
-func TestRevalidationsPerAppendDirect(t *testing.T) {
-	events, reval := measureRevalidations(t, true)
-	ratio := float64(reval) / float64(events)
-	t.Logf("direct: %d tape events, %d revalidations, %.3f per event", events, reval, ratio)
-	if events == 0 || ratio > 0.1 {
-		t.Fatalf("revalidations per direct append = %.3f over %d events, want near zero", ratio, events)
+// A direct append is dry-run once, under the mutex: no repeat, one dry run an
+// event.
+func TestDirectAppendsAreDryRunOnceUnderTheMutex(t *testing.T) {
+	events, dry, reval := measureRevalidations(t, costDirect)
+	t.Logf("direct: %d tape events, %d dry runs under the mutex, %d revalidations", events, dry, reval)
+	if events == 0 || reval != 0 || dry != events {
+		t.Fatalf("direct: %d events, %d dry runs under the mutex, %d revalidations; want one dry run per event and no revalidation", events, dry, reval)
+	}
+}
+
+// Grouped and direct writers at once, as production has them (direct appends
+// are the minority there; here half the workers). A direct writer can take the
+// mutex between a leader's dry run and its turn, which is when a revalidation
+// happens. The ratio is logged and loosely bounded.
+func TestRevalidationsWithGroupedAndDirectWritersMixed(t *testing.T) {
+	events, dry, reval := measureRevalidations(t, costMixed)
+	t.Logf("mixed: %d tape events, %d dry runs under the mutex, %d revalidations (%.3f per event)", events, dry, reval, float64(reval)/float64(events))
+	if events == 0 || float64(reval)/float64(events) > 0.5 {
+		t.Fatalf("revalidations per event = %d/%d under a mixed load", reval, events)
 	}
 }

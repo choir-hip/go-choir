@@ -73,6 +73,29 @@ type BatchDryRunner interface {
 	DryRunProjectionBatch(ctx context.Context, computerID string, batch *ProjectionBatch) error
 }
 
+// BatchHeadDryRunner is a BatchDryRunner that also reports the projection head
+// sequence its dry run validated against (the store's dry run reads it in the
+// same transaction that applies the batch to roll it back). The head and the
+// projected rows commit together, so a batch validated at head N is still
+// valid while the local head is N; the appender compares instead of guessing
+// which event might have changed the state.
+type BatchHeadDryRunner interface {
+	DryRunProjectionBatchAt(ctx context.Context, computerID string, batch *ProjectionBatch) (headSequence uint64, err error)
+}
+
+type validatedHeadKey struct{}
+
+// WithValidatedHead tells an append that its batch was dry-run (outside the
+// appender mutex) against the local projection at head sequence seq.
+func WithValidatedHead(ctx context.Context, seq uint64) context.Context {
+	return context.WithValue(ctx, validatedHeadKey{}, seq)
+}
+
+func validatedHeadFrom(ctx context.Context) (uint64, bool) {
+	seq, ok := ctx.Value(validatedHeadKey{}).(uint64)
+	return seq, ok
+}
+
 // ReplayDurability relaxes per-commit durability for a bounded replay. Each
 // replayed event commits at least twice, and at synchronous=FULL each commit
 // syncs the WAL: about 2.7 ms an event on d@e (2026-10-30). The replayed
@@ -170,6 +193,9 @@ type ComputerEventAppender struct {
 	// recoveryFailedAt bounds a recovery that keeps failing (a poison
 	// finalize): appends refuse fast for inPlaceRecoveryCooldown after it.
 	recoveryFailedAt time.Time
+	// revalidations counts dry runs repeated under the mutex because the local
+	// head moved since the caller's dry run (see batchGuard).
+	revalidations atomic.Int64
 	// catchUpPages overrides catchUpMaxPages when positive (tests).
 	catchUpPages int
 	// orphanPayloads are cached plaintexts of prepared rows the host has
@@ -203,11 +229,13 @@ type ReplayObserver interface {
 	CheckpointCommitted(sequence uint64)
 }
 
-// ErrBatchRefused marks a projection batch refused before anything was pinned
-// or appended: it did not decode, or the projection's dry run rejected it.
-// Nothing about the batch is on the tape or in the artifact store, so a caller
-// that built it from separable records may safely split it and write the
-// pieces. Any other AppendNewPayload failure may have an unknown outcome.
+// ErrBatchRefused marks a projection batch refused before it was sent to the
+// host: it did not decode, or the projection's dry run rejected it (at the
+// caller, or again under the appender mutex after the local state moved).
+// Nothing of it is canonical: it is not on the tape, and the host never saw the
+// event (a payload or event pin may exist, which is storage and not canon). A
+// caller that built it from separable records may safely split it and write
+// the pieces. Any other AppendNewPayload failure may have an unknown outcome.
 var ErrBatchRefused = errors.New("computer event appender: projection batch refused")
 
 // batchRefusedError carries the original message unchanged and matches
@@ -286,31 +314,88 @@ func (a *ComputerEventAppender) HeadsAligned(ctx context.Context) error {
 	return nil
 }
 
-// batchRevalidator returns the guard appendLockedInner runs after an in-place
-// recovery or catch-up: it dry-runs the batch again, under the appender mutex,
-// against the local state as it now is, and refuses it with ErrBatchRefused if
-// that state no longer accepts it. It is nil for anything but a projection
-// batch, and when the projection cannot dry-run. It is not called on an append
-// that needed no recovery, so that path pays nothing.
-func (a *ComputerEventAppender) batchRevalidator(mediaType string, payload []byte) func(context.Context) error {
+// batchGuard keeps a projection batch from reaching the CAS after the local
+// state it was validated against has moved. It records the local head sequence
+// the batch's last dry run saw (the store's dry run reads it in the same
+// transaction that would apply the batch; head and projected rows commit
+// together, so an unchanged head means unchanged state). Under the appender
+// mutex, before the event is pinned or prepared and again after any in-place
+// recovery, check compares that sequence with the current local head: equal
+// costs one comparison; different, for any reason (this append's recovery,
+// another writer's recovery or ordinary finalize), it re-runs the dry run
+// against the current state and refuses the batch (ErrBatchRefused) if the
+// state no longer accepts it. It replaces a "did a recovery happen in this
+// append" trigger, which missed every other writer's head move.
+type batchGuard struct {
+	a       *ComputerEventAppender
+	payload []byte // the bytes dry-run: what finalize and replay read
+	seq     uint64 // local head sequence the last dry run validated against
+	known   bool   // the dry run reported a head (a projection without one never does)
+}
+
+// newBatchGuard is nil for anything but a projection batch, and when the
+// projection cannot dry-run.
+func (a *ComputerEventAppender) newBatchGuard(mediaType string, payload []byte) *batchGuard {
 	if strings.TrimSpace(mediaType) != ProjectionBatchMediaType {
 		return nil
 	}
+	if _, ok := a.projection.(BatchDryRunner); !ok {
+		return nil
+	}
+	return &batchGuard{a: a, payload: payload}
+}
+
+// dryRunBatch dry-runs a decoded batch through the projection, reporting the
+// head it validated against when the projection can.
+func (a *ComputerEventAppender) dryRunBatch(ctx context.Context, batch *ProjectionBatch) (seq uint64, known bool, err error) {
+	if runner, ok := a.projection.(BatchHeadDryRunner); ok {
+		seq, err = runner.DryRunProjectionBatchAt(ctx, a.computerID, batch)
+		return seq, err == nil, err
+	}
 	runner, ok := a.projection.(BatchDryRunner)
 	if !ok {
-		return nil
+		return 0, false, nil
 	}
-	return func(ctx context.Context) error {
-		batch, err := DecodeProjectionBatch(payload)
-		if err != nil {
-			return batchRefused(fmt.Errorf("computer event appender: projection dry-run decode after recovery: %w", err))
-		}
-		if err := runner.DryRunProjectionBatch(ctx, a.computerID, &batch); err != nil {
-			return batchRefused(fmt.Errorf("computer event appender: projection dry-run refused batch after recovery applied events it was not numbered against: %w", err))
-		}
-		return nil
+	return 0, false, runner.DryRunProjectionBatch(ctx, a.computerID, batch)
+}
+
+// record notes the head a dry run just validated against.
+func (g *batchGuard) record(seq uint64, known bool) {
+	if g != nil {
+		g.seq, g.known = seq, known
 	}
 }
+
+// check is called under the appender mutex with the current local head. force
+// re-validates when the dry run never reported a head (after a recovery, when
+// the state may have moved and there is nothing to compare).
+func (g *batchGuard) check(ctx context.Context, local *Head, force bool) error {
+	if g == nil {
+		return nil
+	}
+	if g.known {
+		if headSeq(local) == g.seq {
+			return nil
+		}
+	} else if !force {
+		return nil
+	}
+	g.a.revalidations.Add(1)
+	batch, err := DecodeProjectionBatch(g.payload)
+	if err != nil {
+		return batchRefused(fmt.Errorf("computer event appender: projection dry-run decode after the local head moved: %w", err))
+	}
+	seq, known, err := g.a.dryRunBatch(ctx, &batch)
+	if err != nil {
+		return batchRefused(fmt.Errorf("computer event appender: projection dry-run refused batch after the local head moved since it was validated: %w", err))
+	}
+	g.record(seq, known)
+	return nil
+}
+
+// Revalidations is how many dry runs this appender repeated under its mutex
+// because the local head had moved since the caller's dry run.
+func (a *ComputerEventAppender) Revalidations() int64 { return a.revalidations.Load() }
 
 // HoldAppends runs fn while no event can be appended. Every append and its
 // live projection run under the same lock, so fn sees a head and a projection
@@ -519,15 +604,18 @@ func (a *ComputerEventAppender) AppendNewPayload(ctx context.Context, event Even
 	if err != nil {
 		return Receipt{}, "", fmt.Errorf("computer event appender: compute payload pin intent: %w", err)
 	}
+	var guard *batchGuard
 	if strings.TrimSpace(mediaType) == ProjectionBatchMediaType {
-		if runner, ok := a.projection.(BatchDryRunner); ok {
+		if guard = a.newBatchGuard(mediaType, payload); guard != nil {
 			batch, derr := DecodeProjectionBatch(payload)
 			if derr != nil {
 				return Receipt{}, "", batchRefused(fmt.Errorf("computer event appender: projection dry-run decode: %w", derr))
 			}
-			if derr = runner.DryRunProjectionBatch(ctx, a.computerID, &batch); derr != nil {
+			seq, known, derr := a.dryRunBatch(ctx, &batch)
+			if derr != nil {
 				return Receipt{}, "", batchRefused(fmt.Errorf("computer event appender: projection dry-run refused batch: %w", derr))
 			}
+			guard.record(seq, known)
 		}
 	}
 	pin, err := pinner.PinNonPrivatePayload(ctx, a.computerID, payload, mediaType, privacyClass, pinIntentCommitment)
@@ -550,7 +638,7 @@ func (a *ComputerEventAppender) AppendNewPayload(ctx context.Context, event Even
 		a.livePayloads = map[string][]byte{}
 	}
 	a.livePayloads[payloadDigest] = append([]byte(nil), payload...)
-	receipt, err := a.appendBoundLocked(ctx, event, input, []string{payloadReceiptDigest}, bound, a.batchRevalidator(mediaType, payload))
+	receipt, err := a.appendBoundLocked(ctx, event, input, []string{payloadReceiptDigest}, bound, guard)
 	if err == nil {
 		// Finalized: drop the cached plaintext, or every payload this process
 		// ever appended stays on the heap (docs/problems/guest-appender-
@@ -596,7 +684,25 @@ func (a *ComputerEventAppender) AppendNewPrivatePayload(ctx context.Context, eve
 	if err != nil {
 		return Receipt{}, "", fmt.Errorf("computer event appender: encrypt private payload: %w", err)
 	}
-	validated := plaintext // the bytes a revalidation dry-runs: what replay will read
+	// The store dry-ran this batch before sealing and says against which local
+	// head (the context value); check compares it under the mutex.
+	guard := a.newBatchGuard(mediaType, plaintext)
+	if seq, ok := validatedHeadFrom(ctx); ok && guard != nil {
+		guard.record(seq, true)
+	} else if guard != nil {
+		// The caller did not validate the batch (a direct append: no leader
+		// adjacency to make an outside dry run worth it): validate it here,
+		// once, under the mutex, against the head it will be appended on.
+		batch, derr := DecodeProjectionBatch(plaintext)
+		if derr != nil {
+			return Receipt{}, "", batchRefused(fmt.Errorf("computer event appender: projection dry-run decode: %w", derr))
+		}
+		seq, known, derr := a.dryRunBatch(ctx, &batch)
+		if derr != nil {
+			return Receipt{}, "", batchRefused(fmt.Errorf("computer event appender: projection dry-run refused batch: %w", derr))
+		}
+		guard.record(seq, known)
+	}
 	if strings.TrimSpace(mediaType) == ProjectionBatchMediaType && len(sealedMeta.SecretHandles) > 0 {
 		// The caller dry-ran the batch before sealing; redaction changed it
 		// (it named handles; with none the sealed bytes are the caller's).
@@ -608,15 +714,19 @@ func (a *ComputerEventAppender) AppendNewPrivatePayload(ctx context.Context, eve
 		if err != nil {
 			return Receipt{}, "", batchRefused(fmt.Errorf("computer event appender: open sealed batch: %w", err))
 		}
-		validated = sealed
+		if guard != nil {
+			guard.payload = sealed // what finalize and replay read
+		}
 		batch, err := DecodeProjectionBatch(sealed)
 		if err != nil {
 			return Receipt{}, "", batchRefused(fmt.Errorf("computer event appender: sealed batch decode: %w", err))
 		}
-		if runner, ok := a.projection.(BatchDryRunner); ok {
-			if err := runner.DryRunProjectionBatch(ctx, a.computerID, &batch); err != nil {
+		if guard != nil {
+			seq, known, err := a.dryRunBatch(ctx, &batch)
+			if err != nil {
 				return Receipt{}, "", batchRefused(fmt.Errorf("computer event appender: projection dry-run refused sealed batch: %w", err))
 			}
+			guard.record(seq, known)
 		}
 	}
 	payloadDigest := DigestBytes(envelope)
@@ -650,7 +760,7 @@ func (a *ComputerEventAppender) AppendNewPrivatePayload(ctx context.Context, eve
 	if err != nil {
 		return Receipt{}, "", fmt.Errorf("computer event appender: compute private payload request commitment: %w", err)
 	}
-	receipt, err := a.appendBoundLocked(ctx, event, input, []string{payloadReceiptDigest}, bound, a.batchRevalidator(mediaType, validated))
+	receipt, err := a.appendBoundLocked(ctx, event, input, []string{payloadReceiptDigest}, bound, guard)
 	return receipt, payloadDigest, err
 }
 
@@ -840,16 +950,16 @@ func (a *ComputerEventAppender) appendLocked(ctx context.Context, event Event, i
 // bound: bound carries the platform head that bind read, so the append does
 // not read it a second time. A nil bound reads it.
 //
-// revalidate, when set, re-checks a projection batch against the local state as
-// it is after an in-place recovery or catch-up applied events under this
-// mutex (see appendLockedInner); nil for events that carry no batch.
-func (a *ComputerEventAppender) appendBoundLocked(ctx context.Context, event Event, input TransitionInput, payloadPinReceiptDigests []string, bound *boundHead, revalidate func(context.Context) error) (Receipt, error) {
-	receipt, err := a.appendLockedInner(ctx, event, input, payloadPinReceiptDigests, bound, revalidate)
+// guard, when set, keeps a projection batch from reaching the CAS after the
+// local state it was validated against has moved (see batchGuard); nil for
+// events that carry no batch.
+func (a *ComputerEventAppender) appendBoundLocked(ctx context.Context, event Event, input TransitionInput, payloadPinReceiptDigests []string, bound *boundHead, guard *batchGuard) (Receipt, error) {
+	receipt, err := a.appendLockedInner(ctx, event, input, payloadPinReceiptDigests, bound, guard)
 	a.noteAppendResult(err)
 	return receipt, err
 }
 
-func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Event, input TransitionInput, payloadPinReceiptDigests []string, bound *boundHead, revalidate func(context.Context) error) (Receipt, error) {
+func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Event, input TransitionInput, payloadPinReceiptDigests []string, bound *boundHead, guard *batchGuard) (Receipt, error) {
 	if event.ComputerID != a.computerID {
 		return Receipt{}, fmt.Errorf("computer event appender: wrong computer")
 	}
@@ -884,6 +994,12 @@ func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Eve
 		return Receipt{}, fmt.Errorf("computer event appender: resolve embedded head: %w", err)
 	}
 	a.noteHeads(headSeq(embeddedHead), headSeq(platformHead))
+	// The batch was validated against some local head; if the local head is
+	// not that one, another writer (or a recovery) changed the state since:
+	// validate it again now, under the mutex, before anything else is sent.
+	if err := guard.check(ctx, embeddedHead, false); err != nil {
+		return Receipt{}, err
+	}
 	if !sameHead(platformHead, embeddedHead) {
 		// A prepared row a failed earlier append left behind (a post-CAS
 		// finalize, or a discard that never ran) wedged the running computer
@@ -902,14 +1018,10 @@ func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Eve
 			return Receipt{}, &wedgeError{kind: "heads differ after in-place recovery", err: ErrNeedsProjectionRepair}
 		}
 		// The recovery may have applied events (a landed row finalized, a
-		// catch-up from the host's tape) that the caller's batch was numbered
-		// and dry-run without: its dry run ran against the local state as it
-		// was before. Nothing is pinned yet; refuse a batch the current state
-		// refuses, so a stale batch can never reach the CAS.
-		if revalidate != nil {
-			if err := revalidate(ctx); err != nil {
-				return Receipt{}, err
-			}
+		// catch-up from the host's tape) that the batch was validated without:
+		// compare heads again (forced when the dry run could not report one).
+		if err := guard.check(ctx, embeddedHead, true); err != nil {
+			return Receipt{}, err
 		}
 	}
 	next, err := Reduce(platformHead, event, input)
@@ -949,15 +1061,20 @@ func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Eve
 	if err := a.projection.Prepare(ctx, request); err != nil {
 		// An orphaned prepared row at this sequence fails the insert on the
 		// index's (computer_id, sequence) key; clear it and retry once.
-		if _, rerr := a.recoverPreparedInPlaceLocked(ctx, "prepare failed: "+err.Error()); rerr != nil {
+		recovered, rerr := a.recoverPreparedInPlaceLocked(ctx, "prepare failed: "+err.Error())
+		if rerr != nil {
 			return Receipt{}, &wedgeError{kind: prepareKind(err), err: fmt.Errorf("computer event appender: prepare embedded projection: %w (recovery: %v)", err, rerr)}
+		}
+		if headSeq(recovered)+1 != event.Sequence {
+			// The recovery moved the local head (a catch-up applied events at
+			// or past this event's sequence): the bound event is stale. Refuse
+			// it cleanly; the next append binds to the head as it is now.
+			return Receipt{}, fmt.Errorf("computer event appender: the local head moved to %d during prepare recovery; event bound at sequence %d not appended", headSeq(recovered), event.Sequence)
 		}
 		// Same guard as after the heads-differ recovery. The event and payload
 		// are pinned by now (a pin is storage, not canon): refuse, send nothing.
-		if revalidate != nil {
-			if rerr := revalidate(ctx); rerr != nil {
-				return Receipt{}, rerr
-			}
+		if gerr := guard.check(ctx, recovered, true); gerr != nil {
+			return Receipt{}, gerr
 		}
 		if err := a.projection.Prepare(ctx, request); err != nil {
 			return Receipt{}, &wedgeError{kind: prepareKind(err), err: fmt.Errorf("computer event appender: prepare embedded projection: %w", err)}

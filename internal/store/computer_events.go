@@ -162,29 +162,40 @@ func (s *Store) FinalizeReplayBatch(ctx context.Context, computerID, eventDigest
 // Live guards remain authoritative: state that changes between dry-run and
 // finalize can still fail closed at finalize time.
 func (s *Store) DryRunProjectionBatch(ctx context.Context, computerID string, batch *computerevent.ProjectionBatch) error {
+	_, err := s.DryRunProjectionBatchAt(ctx, computerID, batch)
+	return err
+}
+
+// DryRunProjectionBatchAt is DryRunProjectionBatch that also reports the
+// projection head sequence it validated against. The head row and the
+// projected rows are written by one transaction (finalizeBatch), and this dry
+// run reads the head in the same transaction that applies the batch to roll it
+// back, so a batch validated at head N is still valid while the head is N.
+func (s *Store) DryRunProjectionBatchAt(ctx context.Context, computerID string, batch *computerevent.ProjectionBatch) (uint64, error) {
 	if s == nil || s.db == nil {
-		return fmt.Errorf("computer event projection: nil store")
+		return 0, fmt.Errorf("computer event projection: nil store")
 	}
 	if batch == nil {
-		return fmt.Errorf("computer event projection: dry-run batch is required")
+		return 0, fmt.Errorf("computer event projection: dry-run batch is required")
 	}
 	// Validation must see the same deposit view finalize will apply. The
 	// dry-run is side-effect free: it never registers aliases.
 	if err := s.upcastProjectionDeposit(batch, false, false, false); err != nil {
-		return err
+		return 0, err
 	}
 	// Prepared before the transaction: the write pool's one connection is the
 	// transaction's once it begins, so a first prepare inside it would wait forever.
 	stmts := s.projectionStmts(ctx)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("computer event projection: dry-run begin: %w", err)
+		return 0, fmt.Errorf("computer event projection: dry-run begin: %w", err)
 	}
 	defer tx.Rollback()
 	pos, err := dryRunTapePosition(ctx, tx, computerID)
 	if err != nil {
-		return err
+		return 0, err
 	}
+	headSequence := pos - 1 // the position is the head's next sequence
 	if s.dryRunPositionHook != nil {
 		s.dryRunPositionHook(pos)
 	}
@@ -192,7 +203,7 @@ func (s *Store) DryRunProjectionBatch(ctx context.Context, computerID string, ba
 	// applying it to roll it back would pay the delete twice, under the lock
 	// a retirement is bounded to keep short (object_retire.go).
 	if err := batch.Validate(); err != nil {
-		return err
+		return headSequence, err
 	}
 	dry := *batch
 	dry.Ops = make([]computerevent.ProjectionOp, 0, len(batch.Ops))
@@ -202,9 +213,9 @@ func (s *Store) DryRunProjectionBatch(ctx context.Context, computerID string, ba
 		}
 	}
 	if len(dry.Ops) == 0 {
-		return nil
+		return headSequence, nil
 	}
-	return projectBatch(ctx, tx, dry, pos, nil, stmts, s.newPartitionBatch(true))
+	return headSequence, projectBatch(ctx, tx, dry, pos, nil, stmts, s.newPartitionBatch(true))
 }
 
 func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest string, receipt computerevent.Receipt, batch *computerevent.ProjectionBatch, allowLegacyTextureBootstrap bool) error {

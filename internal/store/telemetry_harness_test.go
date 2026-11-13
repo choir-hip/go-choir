@@ -237,6 +237,17 @@ func (p hookedProjection) DryRunProjectionBatch(ctx context.Context, computerID 
 	return p.Store.DryRunProjectionBatch(ctx, computerID, batch)
 }
 
+// DryRunProjectionBatchAt keeps the hook on the path the appender uses (the
+// embedded store's own At would skip it).
+func (p hookedProjection) DryRunProjectionBatchAt(ctx context.Context, computerID string, batch *computerevent.ProjectionBatch) (uint64, error) {
+	if fn := p.hook(); fn != nil {
+		if err := fn(batch); err != nil {
+			return 0, err
+		}
+	}
+	return p.Store.DryRunProjectionBatchAt(ctx, computerID, batch)
+}
+
 func newTapeHarness(t *testing.T) *tapeHarness {
 	t.Helper()
 	path := testStorePath(t)
