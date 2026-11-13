@@ -48,9 +48,12 @@ type digestIndex struct {
 
 // OpenIndexedView is OpenView for a reader that will look up many objects of
 // one namespace: it also builds the digest index of that namespace (see the
-// comment above). If the tape has more than a million sealed segments the
+// comment above). If the tape has more than 1,048,576 sealed segments the
 // view is returned without the index and reads as OpenView's view does.
 func (r *Reader) OpenIndexedView(computerID string, ns NS) (*SegmentView, error) {
+	if !ns.valid() {
+		return nil, fmt.Errorf("tapestore: invalid namespace %d", uint8(ns))
+	}
 	v := &SegmentView{r: r, computer: computerID, index: &digestIndex{ns: ns, ords: map[uint64]uint32{}}}
 	if err := v.load(); err != nil {
 		return nil, err
@@ -127,14 +130,21 @@ func (v *SegmentView) commitIndex(add *indexAddition) {
 		ix.ords[s] = uint32(len(ix.segnos))
 		ix.segnos = append(ix.segnos, s)
 	}
-	ix.keys = append(ix.keys, add.keys...)
+	if ix.keys == nil {
+		ix.keys = add.keys // the first build: no second copy
+	} else {
+		ix.keys = append(ix.keys, add.keys...)
+	}
 	slices.Sort(ix.keys)
 }
 
 // sealedPrefixes reads a sealed index file and returns the 44-bit digest
-// prefix of every entry of the namespace. The file was validated by
-// openSealed; the size and crc are checked again because the bytes are read
-// again.
+// prefix of every entry of the namespace. The file was validated end to end
+// (magic, version, segment number, computer, fanout, sort order) by
+// openSealed when the sealedSeg was loaded or cached. An index file never
+// changes after sealing (compaction rewrites only the .seg, byte for byte,
+// and leaves the .idx), so the validation still holds; the size and crc are
+// checked again only because the bytes are read again.
 func sealedPrefixes(s *sealedSeg, ns NS) ([]uint64, error) {
 	raw, err := os.ReadFile(s.idxPath)
 	if err != nil {
@@ -163,11 +173,15 @@ func sealedPrefixes(s *sealedSeg, ns NS) ([]uint64, error) {
 // index holds an entry with the digest's prefix.
 func (v *SegmentView) candidates(want [32]byte) []int {
 	ix := v.index
-	lo := binary.BigEndian.Uint64(want[0:8]) >> digestIndexOrdBits << digestIndexOrdBits
-	hi := lo + 1<<digestIndexOrdBits
-	i := sort.Search(len(ix.keys), func(k int) bool { return ix.keys[k] >= lo })
+	// Compare prefixes, not a computed upper bound: for the top prefix (44
+	// ones) lo+2^20 wraps to 0.
+	prefix := binary.BigEndian.Uint64(want[0:8]) >> digestIndexOrdBits
+	i := sort.Search(len(ix.keys), func(k int) bool { return ix.keys[k]>>digestIndexOrdBits >= prefix })
 	var out []int
-	for ; i < len(ix.keys) && ix.keys[i] < hi; i++ {
+	for ; i < len(ix.keys) && ix.keys[i]>>digestIndexOrdBits == prefix; i++ {
+		if i > 0 && ix.keys[i] == ix.keys[i-1] { // two entries of one segment under one prefix
+			continue
+		}
 		segno := ix.segnos[ix.keys[i]&digestIndexOrdMask]
 		if at, ok := v.segAt[segno]; ok {
 			out = append(out, at)
