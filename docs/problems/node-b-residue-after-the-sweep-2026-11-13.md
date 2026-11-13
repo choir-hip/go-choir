@@ -42,3 +42,27 @@ The images were measured from the host only. The share of capture bodies
 that nothing references is unknown. One index on the receipts table
 (`receipt_id_idx`, 2.2 GiB, 2,184 scans) may be droppable; its readers are
 not yet identified.
+
+## Update, 2026-11-13T18:00Z
+
+- Capture bodies are nearly all referenced by a capture row (36 unreferenced
+  files, 5.7 MB, at the 2026-10-29 accounting; every reader goes through the
+  row). A collector would release megabytes, so `lane/capture-bodies-gc` is
+  parked, not landed. A bound needs an owner retention ruling on capture rows.
+  The filesystem already compresses (zstd:3; a 200-file sample compresses to
+  31%), so `du`'s 24 GiB overstates the disk used.
+- The data images are not a trim failure. Host allocation sits 0.3 to 2.5 GiB
+  above what each guest's filesystem reports as used. The volume holds about
+  27 GiB beside the store on both the paper and d@e, and no surface says
+  which directories. Unpruned by any code found: the updater's release
+  closures and store, the Go module cache, the Go build cache (its own 5 day
+  trim only), the seeded source checkout.
+- New problem: d@e's data volume is 95.5% used, 1.5 GB available (compute
+  status, 17:50Z), under the 4 GiB capsule admission floor. Capsules there may
+  already be refused. Not verified.
+- A paper snapshot costs about 4 GB, not 25 (5,858 new chunks of 10,524 on
+  2026-11-12); the 25 GB in two code comments is from before chunk
+  compression. Design: docs/design/snapshots-cost-the-change-2026-11-13.md.
+
+Next: a `data_volume` section in guest observability (statfs and allocated
+bytes per top-level directory), then prune what it names.
