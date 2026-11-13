@@ -154,12 +154,18 @@ func (s *Scanner) Read(ctx context.Context, root string, lim Limits, wantWalk bo
 	s.running = true
 	s.mu.Unlock()
 
-	w := s.walk(ctx, root, lim)
-
-	s.mu.Lock()
-	s.running = false
-	s.last, s.lastRoot = w, root
-	s.mu.Unlock()
+	var w *Walk
+	defer func() {
+		s.mu.Lock()
+		s.running = false
+		// A walk cut short by the request's own cancellation does not
+		// replace a result that others may read.
+		if w != nil && (ctx.Err() == nil || s.lastRoot != root || s.last == nil) {
+			s.last, s.lastRoot = w, root
+		}
+		s.mu.Unlock()
+	}()
+	w = s.walk(ctx, root, lim)
 	rep.Walk = w
 	return rep
 }
@@ -188,9 +194,9 @@ func fixed(names ...string) labeler {
 	}
 }
 
-// fixedOrTemp is fixed that also names a leftover temp tree of the program's
+// fixedTemp is fixed that also names a leftover temp tree of the program's
 // own making. Only for directories a program writes, never a user's.
-func fixedOrTemp(names ...string) labeler {
+func fixedTemp(names ...string) labeler {
 	f := fixed(names...)
 	return func(name string) string {
 		if l := f(name); l != "" {
@@ -318,7 +324,7 @@ func (s *Scanner) walk(ctx context.Context, root string, lim Limits) *Walk {
 	}
 	w := &walker{s: s, dev: uint64(rootSt.Dev), seen: map[inodeKey]struct{}{}, ctx: ctx, groups: map[string]map[string]*row{}}
 	deadline := start.Add(lim.Budget)
-	names := listNames(root)
+	names, listErr := listNames(root)
 	top := map[string]*row{}
 	for i, name := range names {
 		remaining := len(names) - i
@@ -328,7 +334,7 @@ func (s *Scanner) walk(ctx context.Context, root string, lim Limits) *Walk {
 		if uint64(lim.MaxEntries) > w.examined {
 			left = uint64(lim.MaxEntries) - w.examined
 		}
-		w.entryCap = w.examined + left/uint64(remaining)
+		w.entryCap = w.examined + (left+uint64(remaining)-1)/uint64(remaining)
 		w.deadline = time.Now().Add(deadline.Sub(time.Now()) / time.Duration(remaining))
 		w.stopped = false
 		label := name
@@ -348,6 +354,14 @@ func (s *Scanner) walk(ctx context.Context, root string, lim Limits) *Walk {
 		r.members++
 		out.Truncated = out.Truncated || t.truncated
 	}
+	if listErr != nil {
+		r := top[OtherName]
+		if r == nil {
+			r = &row{}
+			top[OtherName] = r
+		}
+		r.t.errs++
+	}
 	out.EntriesExamined = w.examined
 	out.Top = rows(top, 0)
 	for _, p := range DetailPaths() {
@@ -358,15 +372,15 @@ func (s *Scanner) walk(ctx context.Context, root string, lim Limits) *Walk {
 	return out
 }
 
-func listNames(dir string) []string {
+func listNames(dir string) ([]string, error) {
 	f, err := os.Open(dir)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	defer f.Close()
-	names, _ := f.Readdirnames(-1)
+	names, err := f.Readdirnames(-1)
 	sort.Strings(names)
-	return names
+	return names, err
 }
 
 // rows turns accumulated rows into a list, largest allocated first, with
@@ -477,6 +491,10 @@ func (w *walker) account(full, rel string, st *syscall.Stat_t) (totals, bool) {
 			w.s.testHook(full)
 		}
 		for _, e := range entries {
+			if w.stop() {
+				t.truncated = true
+				break
+			}
 			ct, ok := w.visit(full, e.Name(), rel+"/"+e.Name())
 			if !ok {
 				continue
