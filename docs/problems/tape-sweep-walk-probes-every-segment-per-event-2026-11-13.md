@@ -1,6 +1,6 @@
 # The tape sweep's walk probes every segment for every event
 
-Date: 2026-11-13. Status: walk repaired (dd43ff6b1); open until a dry run finishes.
+Date: 2026-11-13. Status: closed 2026-11-13T12:35Z (walk repaired by dd43ff6b1; the dry run finished and was applied).
 
 ## Problem
 
@@ -85,3 +85,12 @@ a dry run finishes and its manifest is read. The count of absent or
 legacy-only events is printed when the paper's walk ends. `Reader.Read`
 itself still lists the directory and probes every segment for callers that
 do not use a view.
+
+## Closed, 2026-11-13T12:35Z
+
+Dry run ts-20261113T111247Z-a6fb14f1 finished in 57 minutes; later dry runs
+took about a minute each because the walk's progress is stored. Five capped
+applies between 12:12Z and 12:29Z removed all 251 destroyed computers
+(467,913 files, 26.89 GB, no errors; claim C67). Remaining error: `Reader.Read`
+still lists the directory and probes every segment for callers that do not
+use a view, and the count of the paper's absent or legacy-only events was 0.

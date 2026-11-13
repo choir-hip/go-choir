@@ -180,7 +180,7 @@ stations:
     class: red
     review: two seats
     depends_on: [S0]
-    carrier: sweep progress that survives a restart, main 421288af7, both seats accepted on round 2, CI 43376520250, deployed 2026-11-13T06:15Z. The walk is too slow to finish on the paper (docs/problems/tape-sweep-walk-probes-every-segment-per-event-2026-11-13.md); repaired by f4276a0ba and dd43ff6b1 (a digest lookup in the view, 12 times faster on the paper, claim C66). No finished dry run and no scheduler yet
+    carrier: sweep progress that survives a restart, main 421288af7, both seats accepted on round 2, CI 43376520250, deployed 2026-11-13T06:15Z. The walk is too slow to finish on the paper (docs/problems/tape-sweep-walk-probes-every-segment-per-event-2026-11-13.md); repaired by f4276a0ba and dd43ff6b1 (a digest lookup in the view, 12 times faster on the paper, claim C66). Applied 2026-11-13T12:12Z to 12:29Z in five capped rounds: all 251 destroyed computers removed, 467,913 files and 26.89 GB deleted, no errors (claim C67 true). No scheduler yet, so the collector does not reap by itself
     status: working
   - id: S8
     name: a smaller store, and the archive half of cold tape
@@ -299,30 +299,31 @@ now:
   belief:
     believed_state: >
       The drain has stopped: the paper's chunks are flat at 49.3 GiB and its
-      last snapshot (23:28Z) stands. Node B has about 69 GiB free; what moves
-      it now is deploys (about 5 GiB transient each, and 3.8 GiB guest
+      last snapshot (23:28Z) stands. What moves Node B's free space
+      now is deploys (about 5 GiB transient each, and 3.8 GiB guest
       releases held for a while). The wedge fix, the root-time chunk check,
       restart-surviving sweep progress, the counters and the status scripts
       are deployed. The footprint itself has not shrunk: about 45 GiB of
       unrooted paper chunks age out from 2026-11-13T08:40Z, and the destroyed
-      computers' tape waits for a sweep that can finish.
+      computers are gone: the sweep applied on 2026-11-13 (251 computers,
+      26.89 GB), and Node B has 117.9 GiB free.
     main_uncertainty: >
       whether the paper's appender depth in steady state matches its first
       reading (89% of appends enter at depth 3 or more, most at 5 to 8, about
       a second each; six corpusd calls per tape event); how many of the
       paper's events are in no segment; how many guest releases the host
       keeps
-    next_observation: the manifest of dry run ts-20261113T111247Z-a6fb14f1 (about 15:00Z); the paper's depth histogram after a day; the collector's passes as the unrooted chunks age out (about 3 GiB a pass since 09:00Z)
+    next_observation: the paper's depth histogram after a day; the collector's passes as the unrooted chunks age out (about 3 GiB a pass since 09:00Z)
   blocker_or_risk: >
-    No sweep manifest exists yet, so nothing of the destroyed computers has
-    been released; the walk is repaired (dd43ff6b1, 12 times faster) and a
-    dry run is in flight, which any corpusd restart ends.
+    The sweep runs only when someone calls it; no scheduler exists, so newly
+    destroyed computers wait. Each apply writes a small orphan archive on Node B
+    even with no_archive set (0.6 MB so far).
     lane/restart-cancels-capture is parked after five review rounds (a deploy
     still waits out a capture, now rare). The lost-reply path of the wedge fix
     has not run on staging. The failed-attempt path of the snapshot fix has
     not been seen on the paper.
   next_action: >
-    Read the dry run's manifest and apply it. Read the paper's appender
+    Read the paper's appender
     depth after a day, then build coalescing and remove the second head read
     and pin per append. Design S4's shorter chunk window. The
     hourly status script is the tripwire while Autoradio is the live station.

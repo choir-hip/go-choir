@@ -99,3 +99,8 @@ Append-only. One terse entry per pass.
   corpusd calls per tape event (two heads, two pins). Coalescing pays on the
   paper and cannot be measured on d@e
   (docs/evidence/tape-write-coalescing-design-2026-11-12.md).
+- 2026-11-13T12:35Z. The destroyed-computer sweep applied in five capped
+  rounds (12:12Z to 12:29Z): 251 computers removed, 467,913 files and 26.89 GB
+  deleted, 497 referenced files kept, no errors. Node B free 88.8 to 117.9 GiB
+  (the collector released another 6.7 GB at 12:29Z). Claim C67 true. S7 still
+  lacks a scheduler.
