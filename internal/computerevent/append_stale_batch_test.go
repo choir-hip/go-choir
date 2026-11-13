@@ -21,6 +21,17 @@ import (
 type stalenessProjection struct {
 	*memoryProjection
 	dryRuns int
+	// onPrepare, when set, runs once at the next Prepare, which then fails.
+	onPrepare func()
+}
+
+func (p *stalenessProjection) Prepare(ctx context.Context, request CASRequest) error {
+	if hook := p.onPrepare; hook != nil {
+		p.onPrepare = nil
+		hook()
+		return errors.New("injected prepare failure")
+	}
+	return p.memoryProjection.Prepare(ctx, request)
 }
 
 func (p *stalenessProjection) DryRunProjectionBatch(_ context.Context, _ string, batch *ProjectionBatch) error {
@@ -41,6 +52,11 @@ func (p *stalenessProjection) DryRunProjectionBatch(_ context.Context, _ string,
 		return errors.New("stale numbering: the local head moved since the batch was numbered")
 	}
 	return nil
+}
+
+func (p *stalenessProjection) DryRunProjectionBatchAt(ctx context.Context, computerID string, batch *ProjectionBatch) (uint64, error) {
+	err := p.DryRunProjectionBatch(ctx, computerID, batch)
+	return headSeq(p.memoryProjection.head), err
 }
 
 func (p *stalenessProjection) FinalizeBatch(ctx context.Context, computerID, digest string, receipt Receipt, _ *ProjectionBatch) error {
@@ -124,7 +140,7 @@ func TestAppendRevalidatesTheBatchAfterInPlaceRecovery(t *testing.T) {
 
 // U2 (B1): the re-send of the committed row is refused, so the row is
 // discarded and its application is left to the catch-up; the catch-up fails
-// once. No settle step can see a row any more. The next write must still be
+// once. Nothing is left to settle by looking at prepared rows. The next write must still be
 // refused, not committed over the landed entry, and must not wedge the tape.
 func TestAppendAfterADiscardedRowAndAFailedCatchUpDoesNotCommitAStaleBatch(t *testing.T) {
 	rig := newStaleRig(t)
@@ -211,7 +227,7 @@ func (r *staleRig) appendAny() error {
 // a writer R dry-runs, another writer B takes the mutex and moves the local
 // head (its own recovery, or an ordinary finalize), then R takes the mutex with
 // the heads level: no recovery of its own, yet its batch is stale.
-func (r *staleRig) sealedAppend(batch []byte, eventID string) error {
+func (r *staleRig) sealedAppend(batch []byte, eventID string, validatedAt uint64) error {
 	r.t.Helper()
 	cipher, err := NewPrivateArtifactCipher(testComputerID, make([]byte, 32))
 	if err != nil {
@@ -223,7 +239,7 @@ func (r *staleRig) sealedAppend(batch []byte, eventID string) error {
 	event := testEvent(r.t, nil, EventProjectionBatchRecorded)
 	event.EventID = eventID
 	event.IdempotencyKey = "idem-" + eventID
-	_, _, err = r.app.AppendNewPrivatePayload(context.Background(), event, TransitionInput{}, batch, ProjectionBatchMediaType, cipher)
+	_, _, err = r.app.AppendNewPrivatePayload(WithValidatedHead(context.Background(), validatedAt), event, TransitionInput{}, batch, ProjectionBatchMediaType, cipher)
 	return err
 }
 
@@ -248,7 +264,7 @@ func TestSealedAppendWhoseDryRunStraddledAnotherWritersRecoveryIsRefused(t *test
 	}
 	rig.requireAligned("after B", 3)
 	records := len(rig.cas.records)
-	err := rig.sealedAppend(stale, rID)
+	err := rig.sealedAppend(stale, rID, 1)
 	if !errors.Is(err, ErrBatchRefused) {
 		t.Fatalf("R returned %v, want ErrBatchRefused: its batch was validated before B moved the local head", err)
 	}
@@ -266,11 +282,29 @@ func TestSealedAppendWhoseDryRunStraddledAnOrdinaryFinalizeIsRefused(t *testing.
 		t.Fatalf("B: %v", err)
 	}
 	records := len(rig.cas.records)
-	err := rig.sealedAppend(stale, rID)
+	err := rig.sealedAppend(stale, rID, 1)
 	if !errors.Is(err, ErrBatchRefused) {
 		t.Fatalf("R returned %v, want ErrBatchRefused", err)
 	}
 	if got := len(rig.cas.records); got != records {
 		t.Fatalf("the host holds %d events, want %d", got, records)
+	}
+}
+
+// After a prepare failure the in-place recovery may catch the local head up
+// past the sequence the event was bound at (the host moved). The retry used
+// the stale request, and its refusal counted as a wedge. It is refused cleanly.
+func TestPrepareRecoveryThatMovedTheHeadRefusesTheBoundEventCleanly(t *testing.T) {
+	rig := newStaleRig(t)
+	rig.proj2.onPrepare = func() { rig.hostAhead(1) }
+	err := func() error { _, err := rig.appendBatch(); return err }()
+	if err == nil {
+		t.Fatal("an event bound before the host moved was appended")
+	}
+	if st := rig.app.WedgeStatus(); st.Active {
+		t.Fatalf("a clean refusal tripped the wedge counter: %+v", st)
+	}
+	if _, err := rig.appendBatch(); err != nil {
+		t.Fatalf("the next append binds to the head as it is now: %v", err)
 	}
 }

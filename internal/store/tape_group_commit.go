@@ -42,8 +42,8 @@ type groupCommit struct {
 	// so a test can set it while leaders run.
 	timeoutNanos atomic.Int64
 	// afterToken, when set, runs right after a caller wins the leader token
-	// (a test seam; set before any writer starts).
-	afterToken func()
+	// (a test seam; atomic so a test may set it while writers run).
+	afterToken atomic.Pointer[func()]
 
 	mu      sync.Mutex // leaf: protects pending
 	pending []*groupMember
@@ -146,8 +146,8 @@ func (t *projectionTape) appendGrouped(ctx context.Context, ops []computerevent.
 		case <-m.done:
 			return m.err
 		case token <- struct{}{}:
-			if g.afterToken != nil {
-				g.afterToken()
+			if hook := g.afterToken.Load(); hook != nil {
+				(*hook)()
 			}
 			if ctx.Err() != nil {
 				// The caller was cancelled between the check above and the
@@ -253,7 +253,7 @@ func (t *projectionTape) leadGroup() {
 		for _, m := range members {
 			parts = append(parts, m.ops)
 		}
-		return t.appendDirectParts(ctx, parts, projectionAuthority, len(teleOps) > 0)
+		return t.appendDirectParts(ctx, parts, projectionAuthority, len(teleOps) > 0, true)
 	}
 	var err error
 	ridden := 0

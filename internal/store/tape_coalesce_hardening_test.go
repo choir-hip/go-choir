@@ -236,7 +236,7 @@ func TestCoalesceMemberCancelledAfterTakenReturnsTheGroupOutcome(t *testing.T) {
 }
 
 // An unclear CAS leaves a prepared row. A retried run-memory write must not
-// number itself from the committed table before that row is settled: it would
+// number itself from the committed table before the appender has applied that row: it would
 // reuse the (run, seq) of the first event, commit a second event, and fail its
 // finalize on the unique key (review: gemini should-fix 4).
 func TestRunMemoryRetryAfterUnclearCASDoesNotDuplicateSeq(t *testing.T) {
@@ -360,8 +360,9 @@ func TestCoalesceCancelAfterWinningTheTokenWritesNothing(t *testing.T) {
 	h := newTapeHarness(t)
 	h.warm()
 	ctx, cancel := context.WithCancel(context.Background())
-	h.store.tapeGroup.afterToken = func() { cancel() }
-	defer func() { h.store.tapeGroup.afterToken = nil }()
+	cancelHook := func() { cancel() }
+	h.store.tapeGroup.afterToken.Store(&cancelHook)
+	defer h.store.tapeGroup.afterToken.Store(nil)
 	err := h.store.projectionTape.appendOps(ctx, []computerevent.ProjectionOp{rmOp("rm-late-cancel", "run-late-cancel", 1)})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("returned %v, want context.Canceled", err)
@@ -369,7 +370,7 @@ func TestCoalesceCancelAfterWinningTheTokenWritesNothing(t *testing.T) {
 	if got := h.eventsHolding("run_memory:rm-late-cancel"); len(got) != 0 {
 		t.Fatal("a caller cancelled after winning the token committed its own write")
 	}
-	h.store.tapeGroup.afterToken = nil
+	h.store.tapeGroup.afterToken.Store(nil)
 	if err := h.store.AppendEvent(context.Background(), h.event("after", "run-after", "owner-1", types.EventRunCompleted, telemetryBase)); err != nil {
 		t.Fatalf("the token was not handed back: %v", err)
 	}

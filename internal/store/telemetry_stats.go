@@ -82,10 +82,13 @@ type telemetryCounters struct {
 	appenderInflight  atomic.Int64
 	appenderDepthHist [opsHistogramBuckets]atomic.Int64
 	appenderCalls     atomic.Int64
-	appenderCallNanos atomic.Int64
-	tapeOpsHist       [opsHistogramBuckets]atomic.Int64
-	readsConsistent   atomic.Int64
-	readsRelaxed      atomic.Int64
+	// tapeBatchesRefused counts projection batches refused before the host saw
+	// them (the store's dry run, or the appender's under its mutex).
+	tapeBatchesRefused atomic.Int64
+	appenderCallNanos  atomic.Int64
+	tapeOpsHist        [opsHistogramBuckets]atomic.Int64
+	readsConsistent    atomic.Int64
+	readsRelaxed       atomic.Int64
 
 	recordsEnqueued       atomic.Int64
 	batchesSealed         atomic.Int64
@@ -300,6 +303,12 @@ type TelemetryStats struct {
 	AppenderDepthAtEnter map[string]int64 `json:"appender_depth_at_enter"`
 	AppenderInflight     int64            `json:"appender_inflight"`
 	AppenderCallMeanMS   float64          `json:"appender_call_mean_ms"`
+	// TapeBatchesRefused counts batches refused before the host saw them, and
+	// AppenderRevalidations the dry runs the appender repeated under its mutex
+	// because the local head moved since the store's dry run. A refusal storm
+	// or a revalidation rate that climbs shows here.
+	TapeBatchesRefused    int64 `json:"tape_batches_refused"`
+	AppenderRevalidations int64 `json:"appender_revalidations"`
 
 	// GroupCommit is the coalescing of queued tape writers (tape_group_commit.go).
 	GroupCommit GroupCommitStats `json:"group_commit"`
@@ -356,6 +365,7 @@ func (s *Store) TelemetryStats() TelemetryStats {
 			out.AppenderDepthAtEnter[opsBucketLabel(i)] = n
 		}
 	}
+	out.TapeBatchesRefused = c.tapeBatchesRefused.Load()
 	if n := c.appenderCalls.Load(); n > 0 {
 		out.AppenderCallMeanMS = float64(c.appenderCallNanos.Load()) / float64(n) / 1e6
 	}
@@ -405,5 +415,8 @@ func (s *Store) TelemetryStats() TelemetryStats {
 	b.CapacityFlushes = c.capacityFlushes.Load()
 	b.BootWatermarks = c.watermarkWrites.Load()
 	out.GroupCommit = s.groupCommitStats()
+	if t := s.projectionTape; t != nil && t.appender != nil {
+		out.AppenderRevalidations = t.appender.Revalidations()
+	}
 	return out
 }
