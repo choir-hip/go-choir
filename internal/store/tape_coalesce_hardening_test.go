@@ -269,9 +269,9 @@ func TestRunMemoryRetryAfterUnclearCASDoesNotDuplicateSeq(t *testing.T) {
 		t.Fatal("fixture: the second append should have failed with an unknown outcome")
 	}
 	// The retry, with a new entry id, as a caller does.
-	if _, err := h.store.AppendRunMemoryEntry(ctx, msg("rm-third")); err != nil {
-		t.Fatalf("retry after an unclear CAS: %v", err)
-	}
+	// A retry numbered before the landed row surfaced is refused by the
+	// appender (ErrBatchRefused, nothing sent); the next attempt lands.
+	retryRunMemory(t, h, "rm-third", "run-retry")
 	entries, err := h.store.ListRunMemoryEntries(ctx, "owner-1", "run-retry")
 	if err != nil {
 		t.Fatal(err)
@@ -290,8 +290,9 @@ func TestRunMemoryRetryAfterUnclearCASDoesNotDuplicateSeq(t *testing.T) {
 
 // hostChain is the host's own head for the harness (see tapeHarness.hostChain).
 type hostChain struct {
-	mu   sync.Mutex
-	head *computerevent.Head
+	mu     sync.Mutex
+	head   *computerevent.Head
+	events []computerevent.DurableEvent // committed requests with a receipt, in order
 }
 
 type hostChainCAS struct {
@@ -342,8 +343,12 @@ func (c hostChainCAS) CompareAndSwap(ctx context.Context, request computerevent.
 	}
 	if committed && !known {
 		next := request.Next
+		// The host's own signed receipt, for a catch-up that applies the event
+		// from the host's tape (the caller's reply may have been lost).
+		hostReceipt, _ := liveTapeCAS{signer: c.tape.signer}.CompareAndSwap(ctx, request)
 		c.chain.mu.Lock()
 		c.chain.head = &next
+		c.chain.events = append(c.chain.events, computerevent.DurableEvent{Request: request, Receipt: hostReceipt})
 		c.chain.mu.Unlock()
 	}
 	return receipt, err
@@ -368,4 +373,18 @@ func TestCoalesceCancelAfterWinningTheTokenWritesNothing(t *testing.T) {
 	if err := h.store.AppendEvent(context.Background(), h.event("after", "run-after", "owner-1", types.EventRunCompleted, telemetryBase)); err != nil {
 		t.Fatalf("the token was not handed back: %v", err)
 	}
+}
+
+// Events makes the harness host an EventSource, so an in-place catch-up really
+// applies a landed event (without it the catch-up does nothing and hid a bug).
+func (c hostChainCAS) Events(_ context.Context, _ string, after uint64) ([]computerevent.DurableEvent, error) {
+	c.chain.mu.Lock()
+	defer c.chain.mu.Unlock()
+	var out []computerevent.DurableEvent
+	for _, e := range c.chain.events {
+		if e.Request.Event.Sequence > after {
+			out = append(out, e)
+		}
+	}
+	return out, nil
 }
