@@ -79,8 +79,7 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	rt.workspaceReplaceMu.Lock()
 	defer rt.workspaceReplaceMu.Unlock()
 	// The restore restages `current`: one writer at a time (PM13).
-	rt.currentReleaseMu.Lock()
-	defer rt.currentReleaseMu.Unlock()
+	defer rt.lockCurrentRelease()()
 	if rt.store == nil {
 		return report, fmt.Errorf("%w: runtime store is not configured", ErrRematerializeUnavailable)
 	}
@@ -591,8 +590,7 @@ func (rt *Runtime) ensureServingBaselineWith(ctx context.Context, computerID, ba
 	}
 	// `current` is read and, when missing, imported under one lock (PM13,
 	// PM26): a migration's swap cannot land between the read and the import.
-	rt.currentReleaseMu.Lock()
-	defer rt.currentReleaseMu.Unlock()
+	defer rt.lockCurrentRelease()()
 	manifest, err := updater.VerifyCurrentRelease(rt.selfdevUpdaterRoot)
 	if err == nil {
 		if strings.TrimSpace(manifest.ComputerID) != computerID {

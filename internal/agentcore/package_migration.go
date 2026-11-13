@@ -492,8 +492,7 @@ func (rt *Runtime) migratePackageStack(ctx context.Context, trigger string) (*pa
 		return nil, nil
 	}
 	// PM13: `current` is read and written under one lock, held to the end.
-	rt.currentReleaseMu.Lock()
-	defer rt.currentReleaseMu.Unlock()
+	defer rt.lockCurrentRelease()()
 	in := rt.sourceProjectionInput(ctx)
 	top := in.Top
 	if top == nil || in.TopUnavailable != "" || len(top.Patch) == 0 || in.Pending {
@@ -994,8 +993,7 @@ func (rt *Runtime) restorePackageMigration(ctx context.Context, rec *packageMigr
 func (rt *Runtime) rollbackPackageMigration(ctx context.Context, pair string) (*packageMigrationRecord, error) {
 	rt.packageMigrationMu.Lock()
 	defer rt.packageMigrationMu.Unlock()
-	rt.currentReleaseMu.Lock()
-	defer rt.currentReleaseMu.Unlock()
+	defer rt.lockCurrentRelease()()
 	rec, err := rt.loadPackageMigration(pair)
 	if err != nil {
 		return nil, err

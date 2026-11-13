@@ -57,7 +57,9 @@ import (
 //
 // It runs under the updater's mutex, so never inside an Apply, and skips
 // entirely while any apply is unsettled or any apply key is held
-// (UnsettledApply), which is what an in-flight operation's inputs are tied to.
+// (UnsettledApply), which is what an in-flight operation's inputs are tied to,
+// and while a restore holds the root (HoldRestore, restore_hold.go): a restore
+// swaps `current` with no journal and may swap back to the release it came from.
 // A release is renamed out of releases/ before it is deleted, so a crash leaves
 // either the release or an invisible leftover the next run removes; `current`
 // and its predecessor are never touched.
@@ -114,6 +116,10 @@ func (u *Updater) prune() PruneReport {
 	var report PruneReport
 	if name, unsettled := UnsettledApply(u.root); unsettled {
 		report.Skipped = "an apply is unsettled or in flight (" + name + ")"
+		return report
+	}
+	if RestoreInFlight(u.root) {
+		report.Skipped = "a restore holds the updater root"
 		return report
 	}
 	cutoff := u.now().Add(-pruneInputGrace)

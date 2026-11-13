@@ -56,11 +56,11 @@ func (rt *Runtime) baseRestoreSelfDevelopmentOperation(ctx context.Context, oper
 		return rt.settleSelfDevelopmentRefusal(ctx, operation, fmt.Errorf("%w: the booted base changed since the revert opened (%s, now %s)", updater.ErrApplyRefused, shortDigest(operation.ReleaseDigest), shortDigest(target.ContentDigest)))
 	}
 	note := ""
-	rt.currentReleaseMu.Lock()
+	unlockCurrent := rt.lockCurrentRelease()
 	current, currentErr := readCurrentManifestIdentity(rt.selfdevUpdaterRoot)
 	if currentErr != nil || current.ContentDigest != target.ContentDigest {
 		if afterCrash {
-			rt.currentReleaseMu.Unlock()
+			unlockCurrent()
 			return rt.settleSelfDevelopmentRefusal(ctx, operation, fmt.Errorf("%w: interrupted by a restart before the base release was restored", updater.ErrApplyRefused))
 		}
 		if currentErr == nil && current.LayeringEntrypoint != "" {
@@ -72,7 +72,7 @@ func (rt *Runtime) baseRestoreSelfDevelopmentOperation(ctx context.Context, oper
 			swapErr = updater.RestagePinnedRelease(rt.selfdevUpdaterRoot, target.ContentDigest, floor)
 		}
 		if swapErr != nil {
-			rt.currentReleaseMu.Unlock()
+			unlockCurrent()
 			if errors.Is(swapErr, updater.ErrStoreFloorRefused) || errors.Is(swapErr, updater.ErrPinnedReleaseCorrupt) {
 				return rt.settleSelfDevelopmentRefusal(ctx, operation, fmt.Errorf("%w: the booted base cannot be served: %v", updater.ErrApplyRefused, swapErr))
 			}
@@ -80,7 +80,7 @@ func (rt *Runtime) baseRestoreSelfDevelopmentOperation(ctx context.Context, oper
 		}
 		rt.recordStartupManifest(target)
 	}
-	rt.currentReleaseMu.Unlock()
+	unlockCurrent()
 
 	result := baseRestoreResult{
 		Schema: baseRestoreSchema, Outcome: "applied", OperationID: operation.OperationID,
