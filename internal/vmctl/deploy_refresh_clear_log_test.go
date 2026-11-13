@@ -31,8 +31,9 @@ func TestTheHostsClearLogsAGuestRefusalAndAKeptAnswer(t *testing.T) {
 			}))
 			defer srv.Close()
 			var buf bytes.Buffer
+			previous := log.Writer()
 			log.SetOutput(&buf)
-			defer log.SetOutput(log.Writer())
+			defer log.SetOutput(previous)
 			httpGuestMarker{client: srv.Client()}.clear(context.Background(), VMOwnership{VMID: "vm-clear-log", ComputerURL: srv.URL})
 			out := buf.String()
 			if tc.want == "" {

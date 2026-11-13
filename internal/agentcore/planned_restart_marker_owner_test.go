@@ -3,6 +3,7 @@ package agentcore
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -31,14 +32,18 @@ func TestPlannedRestartMarkerIsTouchedOnlyThroughItsOwner(t *testing.T) {
 	const owner = "planned_restart_marker.go"
 	forbidden := []string{
 		"PlannedRestartMarkerPath(", // the path, outside the owner
-		`.planned-restart"`,         // a second spelling of the path
+		".planned-restart",          // any spelling of the path (raw strings, concatenation)
 		"writePlannedRestartMarkerLocked(",
 		"clearPlannedRestartMarkerLocked(",
 	}
 	var offenders []string
+	scanned := 0
 	for _, root := range []string{"../../internal", "../../cmd"} {
-		_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-			if err != nil || info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+		walkErr := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 				return nil
 			}
 			if filepath.Base(path) == owner && strings.Contains(filepath.ToSlash(path), "internal/agentcore/") {
@@ -46,8 +51,9 @@ func TestPlannedRestartMarkerIsTouchedOnlyThroughItsOwner(t *testing.T) {
 			}
 			raw, rerr := os.ReadFile(path)
 			if rerr != nil {
-				return nil
+				return rerr
 			}
+			scanned++
 			for _, word := range forbidden {
 				if bytes.Contains(raw, []byte(word)) {
 					offenders = append(offenders, path+" uses "+word)
@@ -55,9 +61,58 @@ func TestPlannedRestartMarkerIsTouchedOnlyThroughItsOwner(t *testing.T) {
 			}
 			return nil
 		})
+		if walkErr != nil {
+			t.Fatalf("scanning %s: %v", root, walkErr)
+		}
+	}
+	if scanned < 100 {
+		t.Fatalf("scanned only %d files; the scan is not looking where it thinks", scanned)
 	}
 	if len(offenders) > 0 {
 		t.Fatalf("the planned-restart marker is touched outside %s (one owner, one mutex):\n%s", owner, strings.Join(offenders, "\n"))
+	}
+}
+
+// Rule 2: nothing that protects a coming kill is released except through the
+// one function (planned_restart_release.go), which releases only while no
+// marker is on disk. The individual release calls appear nowhere else.
+func TestRestartProtectionsAreReleasedOnlyThroughTheOneFunction(t *testing.T) {
+	const allowed = "planned_restart_release.go"
+	calls := []string{
+		"clearRestartBlock(",
+		"clearRefreshHold(",
+		"unpauseAllCapsules(",
+		"releaseHostRestartTelemetryLocked(",
+		"releaseHostRestartTelemetryIfNoMarker(",
+		"releaseHostRestartTelemetryIfNoMarkerLocked(",
+	}
+	files, err := filepath.Glob("*.go")
+	if err != nil || len(files) < 50 {
+		t.Fatalf("glob: %d files, %v", len(files), err)
+	}
+	var offenders []string
+	for _, path := range files {
+		if strings.HasSuffix(path, "_test.go") || path == allowed {
+			continue
+		}
+		raw, rerr := os.ReadFile(path)
+		if rerr != nil {
+			t.Fatal(rerr)
+		}
+		for i, line := range strings.Split(string(raw), "\n") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "func ") {
+				continue // comments and the definitions themselves
+			}
+			for _, call := range calls {
+				if strings.Contains(line, call) {
+					offenders = append(offenders, fmt.Sprintf("%s:%d calls %s", path, i+1, call))
+				}
+			}
+		}
+	}
+	if len(offenders) > 0 {
+		t.Fatalf("restart protections released outside %s:\n%s", allowed, strings.Join(offenders, "\n"))
 	}
 }
 
@@ -88,5 +143,8 @@ func TestCallerGoneKeepsTheHoldsWhileAnEarlierRequestsMarkerIsDurable(t *testing
 	f.rt.snapshots.mu.Unlock()
 	if !blocked {
 		t.Fatal("the producer's block was lifted although a marker is durable")
+	}
+	if !f.fake.IsPaused(f.capsuleID) {
+		t.Fatal("a capsule was thawed although a durable marker announces a kill")
 	}
 }
