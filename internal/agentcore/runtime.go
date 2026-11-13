@@ -538,9 +538,6 @@ type Runtime struct {
 	hostRestartTelemetryMu      sync.Mutex
 	hostRestartTelemetryRestore func()
 	hostRestartDrainFailed      bool
-	// hostRestartWindowWasOpen: the failed drain held records under an open
-	// run-memory window (kept across repeated requests like the failure).
-	hostRestartWindowWasOpen bool
 	// restartDrainHook is a test seam called when the planned-restart drain
 	// has returned.
 	restartDrainHook func()
@@ -1285,8 +1282,6 @@ func (rt *Runtime) Start(ctx context.Context) {
 	rt.configureEventTable(ctx)
 	// And the telemetry partition writer (store.telemetry_partitions).
 	rt.configureTelemetryPartitions(ctx)
-	// And tape group commit (tape.group_commit).
-	rt.configureTapeGroupCommit(ctx)
 	if rt.maintenanceHeld() {
 		log.Printf("runtime: maintenance hold active (RUNTIME_MAINTENANCE_HOLD=1); refusing run admission + agent rewake while held")
 		return
@@ -3075,7 +3070,7 @@ func (rt *Runtime) closePreBootRunsAfterCrash(ctx context.Context) {
 			}
 		}
 		rt.emitEvent(ctx, rec, types.EventRunCancelled, events.CauseSupervisorRecovery,
-			crashClosePayload(rt.store.TelemetryBatchingConfigured(), rt.crashCloseNamesRunMemory()))
+			crashClosePayload(rt.store.TelemetryBatchingConfigured()))
 		rt.bootTally.add(deskOfRun(rec))
 		log.Printf("runtime: closed run %s (was %s) after a crash restart", rec.RunID, was)
 		return true
@@ -4320,10 +4315,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	text, usage, err := toolregistry.RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, injectUserTurns, toolLoopOptions...)
 	if err != nil {
 		if errors.Is(err, toolregistry.ErrToolLoopPassivated) {
-			if lossErr := rt.runMemoryLossErr(rec); lossErr != nil {
-				rt.handleExecutionError(ctx, rec, lossErr)
-				return
-			}
 			rt.passivateIdleToolLoopRun(context.Background(), rec, text, usage, err)
 			return
 		}
@@ -4332,13 +4323,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		} else {
 			rt.handleExecutionError(ctx, rec, err)
 		}
-		return
-	}
-	// A run whose run memory lost a queued entry after its last append would
-	// complete clean and seed the next run from a log with a hole (the damage
-	// mark does not survive a restart): fail it, so the fate is durable.
-	if lossErr := rt.runMemoryLossErr(rec); lossErr != nil {
-		rt.handleExecutionError(ctx, rec, lossErr)
 		return
 	}
 	// Transition to completed.
@@ -4600,11 +4584,6 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 		return
 	}
 	rec.Result = execRec.Result
-
-	if lossErr := rt.runMemoryLossErr(rec); lossErr != nil {
-		rt.handleExecutionError(ctx, rec, lossErr)
-		return
-	}
 
 	// Transition to completed.
 	now := time.Now().UTC()
@@ -5500,20 +5479,6 @@ func (rt *Runtime) activeRunByAgent(ctx context.Context, ownerID, agentID string
 		return types.RunRecord{}, false, nil
 	}
 	return rec, true, nil
-}
-
-// runMemoryLossErr names a run whose run-memory window lost a queued entry.
-func (rt *Runtime) runMemoryLossErr(rec *types.RunRecord) error {
-	if rt == nil || rt.store == nil || rec == nil {
-		return nil
-	}
-	// Seal first: a queued entry whose seal fails marks the run damaged now,
-	// while the run can still be failed.
-	rt.store.SealRunMemory(rec.RunID)
-	if !rt.store.RunMemoryDamaged(rec.RunID) {
-		return nil
-	}
-	return fmt.Errorf("run %s: %w", rec.RunID, store.ErrRunMemoryLost)
 }
 
 // defaultOpenTextureDecision is the conductor's fallback decision when the

@@ -162,11 +162,19 @@ func (c *telemetryCounters) recordAppend(kind types.EventKind, payloadBytes int)
 }
 
 // recordTapeEvent counts one accepted projection-batch tape event.
-func (c *telemetryCounters) recordTapeEvent(authority string, ops []computerevent.ProjectionOp, payloadBytes int) {
+func (c *telemetryCounters) recordTapeEvent(authority string, parts [][]computerevent.ProjectionOp, firstIsTelemetry bool, payloadBytes int) {
 	if c == nil {
 		return
 	}
-	tally := tallyTapeEvent(authority, ops, payloadBytes) // before any lock
+	tally := tallyTapeParts(authority, parts, firstIsTelemetry, payloadBytes) // before any lock
+	var ops []computerevent.ProjectionOp
+	if len(parts) == 1 {
+		ops = parts[0]
+	} else {
+		for _, part := range parts {
+			ops = append(ops, part...)
+		}
+	}
 	c.tapeEvents.Add(1)
 	c.tapeOps.Add(int64(len(ops)))
 	c.tapeBytes.Add(int64(payloadBytes))
@@ -279,6 +287,7 @@ type TelemetryStats struct {
 	// and the corpusd requests the guest has sent.
 	TapeBytes                int64            `json:"tape_bytes"`
 	TapeEventsByFamily       map[string]int64 `json:"tape_events_by_family"`
+	TapeOpsByFamily          map[string]int64 `json:"tape_ops_by_family"`
 	TapeBytesByFamily        map[string]int64 `json:"tape_bytes_by_family"`
 	TapeOpsByObjectKind      map[string]int64 `json:"tape_ops_by_object_kind"`
 	TapeOpBytesByObjectKind  map[string]int64 `json:"tape_op_bytes_by_object_kind"`
@@ -294,7 +303,7 @@ type TelemetryStats struct {
 	AppenderInflight     int64            `json:"appender_inflight"`
 	AppenderCallMeanMS   float64          `json:"appender_call_mean_ms"`
 
-	// GroupCommit is tape.group_commit (tape_group_commit.go).
+	// GroupCommit is the coalescing of queued tape writers (tape_group_commit.go).
 	GroupCommit GroupCommitStats `json:"group_commit"`
 }
 
