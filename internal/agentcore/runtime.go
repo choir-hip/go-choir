@@ -539,7 +539,10 @@ type Runtime struct {
 	// plannedRestartReqMu serialises the host's planned-restart requests with
 	// its withdrawals (DELETE), so a withdrawal cannot land before the marker
 	// of a mark it was meant to undo.
-	plannedRestartReqMu sync.Mutex
+	plannedRestartReqMu ctxMutex
+	// beforeMarkerWriteHook is a test seam called just before the host's
+	// marker is written.
+	beforeMarkerWriteHook func()
 	hostRestartTelemetryRestore func()
 	hostRestartDrainFailed      bool
 	// hostRestartWindowWasOpen: the failed drain held records under an open

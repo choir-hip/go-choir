@@ -391,6 +391,50 @@ func clearGuestAttempt(storePath, reason, target string) error {
 	return writeGuestAttempts(path, counts)
 }
 
+// refundGuestAttempt gives back one counted start of reason and target (the
+// key goes when it reaches zero). A count at or over limit is left alone: a
+// closed cadence stays closed.
+func refundGuestAttempt(storePath, reason, target string, limit int) error {
+	path := GuestApplyAttemptsPath(storePath)
+	if path == "" {
+		return nil
+	}
+	counts, err := readGuestAttempts(path)
+	if err != nil {
+		return err
+	}
+	key := reason + " " + target
+	n := counts[key]
+	if n <= 0 || n >= limit {
+		return nil
+	}
+	if n == 1 {
+		delete(counts, key)
+	} else {
+		counts[key] = n - 1
+	}
+	return writeGuestAttempts(path, counts)
+}
+
+// hostPlannedRestartMarkerIsForeign reports a marker on disk that the host did
+// not write: one of the guest's own (platform_update, self-development apply
+// or restore). The host's withdrawal leaves it alone.
+func hostPlannedRestartMarkerIsForeign(storePath string) (reason string, foreign bool) {
+	path := PlannedRestartMarkerPath(storePath)
+	if path == "" {
+		return "", false
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	var marker PlannedRestart
+	if json.Unmarshal(raw, &marker) != nil {
+		return "", false
+	}
+	return marker.Reason, marker.Reason != PlannedRestartPlatformRefresh
+}
+
 func readGuestAttempts(path string) (map[string]int, error) {
 	counts := map[string]int{}
 	raw, err := os.ReadFile(path)
@@ -758,8 +802,17 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 	if r.Method == http.MethodDelete {
 		// A mark still in flight finishes first: its marker would otherwise
 		// be written after this withdrawal.
-		h.rt.plannedRestartReqMu.Lock()
-		defer h.rt.plannedRestartReqMu.Unlock()
+		if !h.rt.plannedRestartReqMu.lock(r.Context()) {
+			writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "a planned-restart request is still in flight; withdrawal not applied"})
+			return
+		}
+		defer h.rt.plannedRestartReqMu.unlock()
+		// A marker the guest wrote for itself (platform_update, a
+		// self-development apply or restore) is not the host's to withdraw.
+		if reason, foreign := hostPlannedRestartMarkerIsForeign(storePath); foreign {
+			writeAPIJSON(w, http.StatusOK, map[string]string{"status": "kept", "reason": "a planned-restart marker for " + reason + " is not the host's refresh"})
+			return
+		}
 		// The host did not restart after all: telemetry queues again once
 		// the marker is gone.
 		if err := h.rt.clearHostPlannedRestartMarker(storePath); err != nil {
@@ -791,8 +844,11 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 		return
 	}
 	// One mark at a time, and a withdrawal waits for it (above).
-	h.rt.plannedRestartReqMu.Lock()
-	defer h.rt.plannedRestartReqMu.Unlock()
+	if !h.rt.plannedRestartReqMu.lock(r.Context()) {
+		writeAPIJSON(w, http.StatusConflict, plannedRestartBusyResponse{Error: "the caller gave up while another planned-restart request was in flight", Outcome: "busy"})
+		return
+	}
+	defer h.rt.plannedRestartReqMu.unlock()
 	// The mark is one work occurrence through the hibernate fence, taken
 	// without waiting (D2 S5): a closed fence refuses it before anything is
 	// written, and an open fence cannot close until the marker write returns.
@@ -875,7 +931,7 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 			return cerr
 		}
 		var markErr error
-		marker, markErr = h.rt.writeHostPlannedRestartMarker(storePath, PlannedRestart{Reason: PlannedRestartPlatformRefresh, Target: target, RequestedAt: time.Now().UTC()})
+		marker, markErr = h.rt.writeHostPlannedRestartMarkerCtx(r.Context(), storePath, PlannedRestart{Reason: PlannedRestartPlatformRefresh, Target: target, RequestedAt: time.Now().UTC()})
 		if markErr != nil {
 			return markErr
 		}
@@ -910,6 +966,15 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 	}
 	if err != nil {
 		h.rt.snapshots.clearRestartBlock()
+		// Capsules this request paused and acked thaw: no marker follows.
+		h.rt.unpauseAllCapsules()
+		if errors.Is(err, errPlannedRestartCallerGone) {
+			// The host gave up on this request: nothing was written, so no
+			// hold stays behind either.
+			h.rt.clearRefreshHold()
+			writeAPIJSON(w, http.StatusConflict, plannedRestartBusyResponse{Error: err.Error(), Outcome: "busy", AllowBusy: allowBusy})
+			return
+		}
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
 		return
 	}

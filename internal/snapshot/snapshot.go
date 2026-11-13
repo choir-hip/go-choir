@@ -347,6 +347,10 @@ func TakeSnapshot(ctx context.Context, cfg Config) (Ref, error) {
 	if cfg.FileTreeRoot != nil {
 		root, err := cfg.FileTreeRoot(ctx)
 		if err != nil {
+			if ctx.Err() != nil {
+				// A cancel is not a failure: keep the caller's cause.
+				err = context.Cause(ctx)
+			}
 			return Ref{}, fmt.Errorf("snapshot: file tree root: %w", err)
 		}
 		record.FileTreeRoot = root

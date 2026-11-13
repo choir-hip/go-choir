@@ -123,6 +123,18 @@ func (rt *Runtime) drainTelemetryForRestart() (failed bool, restore func()) {
 // earlier drain failure, whose records are lost whatever the second drain
 // does. Holding and writing are serialized with the releases below.
 func (rt *Runtime) writeHostPlannedRestartMarker(storePath string, marker PlannedRestart) (PlannedRestart, error) {
+	return rt.writeHostPlannedRestartMarkerCtx(context.Background(), storePath, marker)
+}
+
+// errPlannedRestartCallerGone refuses a mark whose caller gave up before the
+// marker was written: the host will not kill on this answer, and a marker
+// written now would read a later crash as planned.
+var errPlannedRestartCallerGone = errors.New("the caller gave up on the planned-restart request; no marker written")
+
+// writeHostPlannedRestartMarkerCtx is writeHostPlannedRestartMarker for a
+// caller with a context: it is checked immediately before the marker is
+// written, after the drain, which is the long step.
+func (rt *Runtime) writeHostPlannedRestartMarkerCtx(ctx context.Context, storePath string, marker PlannedRestart) (PlannedRestart, error) {
 	rt.hostRestartTelemetryMu.Lock()
 	defer rt.hostRestartTelemetryMu.Unlock()
 	wasOpen := rt.store != nil && rt.store.TapeGroupCommitOn() // before the drain
@@ -144,6 +156,13 @@ func (rt *Runtime) writeHostPlannedRestartMarker(storePath string, marker Planne
 	}
 	if marker.TelemetryDrainFailed && markerWindowOpen(marker) {
 		rt.hostRestartWindowWasOpen = true
+	}
+	if rt.beforeMarkerWriteHook != nil {
+		rt.beforeMarkerWriteHook() // test seam: the caller may give up here
+	}
+	if ctx.Err() != nil {
+		rt.releaseHostRestartTelemetryIfNoMarkerLocked(storePath)
+		return marker, errPlannedRestartCallerGone
 	}
 	if err := WritePlannedRestartMarker(storePath, marker); err != nil {
 		// The write can fail after the rename: only an empty marker path

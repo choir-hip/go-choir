@@ -1,6 +1,6 @@
 # A snapshot root can be recorded for chunks the collector already deleted
 
-Date: 2026-11-12. Status: open, not yet reproduced. Found by review (seat 1,
+Date: 2026-11-12. Status: open, not yet reproduced; the hibernate path (a capture spanning a pause) is closed by `lane/restart-cancels-capture`, which cancels an in-flight capture before the pause and keeps new ones from starting while the fence is closed (unmerged); a missing chunk check at registration is not addressed. Found by review (seat 1,
 Gemini 4 Hydrogen) of `lane/snapshot-loop`, read from the code.
 
 ## Problem

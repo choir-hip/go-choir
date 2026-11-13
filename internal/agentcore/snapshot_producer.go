@@ -142,6 +142,17 @@ var (
 // wrote after the host gave up). A capture that does not end in the bound
 // refuses the restart (snapshot_not_unwound); the host asks again. A
 // deadline, not a switch. A var so tests can shorten it.
+//
+// The host's side of a give-up: it asks the guest to clear a marker it may
+// have written late, for up to guestMarkClearTimeout (5 s). So on the
+// operator's restart the longest the verb can take on a wedged guest is
+// 3 s (probe) + 10 s (mark) + 5 s (clear) = 18 s, and on the deploy path
+// 20 s + 5 s = 25 s. A named residual: the telemetry drain's own 10 s
+// deadline, run after this wait, still exceeds the operator's 10 s budget
+// when it is spent; that was true before this change and is not made
+// better here. The guest does not write a marker for a caller that has gone
+// (errPlannedRestartCallerGone) and a withdrawal waits behind a mark only as
+// long as its own request does.
 var snapshotCancelUnwindBound = 3 * time.Second
 
 // snapshotRestartBlock is how long, after a restart cancelled the capture, the
@@ -635,11 +646,16 @@ func checkpointContext(ctx context.Context) (context.Context, context.CancelFunc
 	return context.WithTimeout(context.WithoutCancel(ctx), snapshotCheckpointBound)
 }
 
-// settleSnapshotAttemptAtBoot clears the producer's crash-attempt count on a
-// planned boot. A capture the host's kill cut never returned, so its start
-// was never cleared; a planned kill is not a crash, and three of them must
-// not close the producer for good. A crash boot keeps the count: that is what
-// it exists for.
+// settleSnapshotAttemptAtBoot refunds at most ONE counted attempt on a planned
+// boot, and none from a producer the limit has closed. A capture the host's
+// kill cut (a platform_update or self-development apply, which do not go
+// through the cancel) never returned, so its start was never cleared; a
+// planned kill is not a crash. But the marker does not say whether a capture
+// was in flight (that would need a marker format change, not made here), so
+// the refund is the simple rule: a planned restart cannot wipe real crashes
+// or reopen a closed producer, and a crashing capture cannot hide behind
+// planned restarts for more than one attempt each. A crash boot keeps the
+// count.
 func (rt *Runtime) settleSnapshotAttemptAtBoot() {
 	if rt == nil {
 		return
@@ -647,8 +663,8 @@ func (rt *Runtime) settleSnapshotAttemptAtBoot() {
 	if _, planned := rt.BootWasPlannedRestart(); !planned {
 		return
 	}
-	if err := clearGuestAttempt(rt.cfg.StorePath, snapshotAttemptKey, strings.TrimSpace(rt.cfg.ComputerID)); err != nil {
-		log.Printf("runtime: snapshot attempt guard not cleared at a planned boot: %v", err)
+	if err := refundGuestAttempt(rt.cfg.StorePath, snapshotAttemptKey, strings.TrimSpace(rt.cfg.ComputerID), snapshotAttemptLimit); err != nil {
+		log.Printf("runtime: snapshot attempt guard not refunded at a planned boot: %v", err)
 	}
 }
 

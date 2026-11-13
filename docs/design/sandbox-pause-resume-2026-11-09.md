@@ -48,7 +48,7 @@ implausible (userns/netns, broker socket peer, 150 MiB-2 GiB RSS).
    counting a paused capsule as live.
 
    **The gate's two halves (r2 F1).** `unsafe()` is `SelfdevActive > 0 ||
-   LiveCapsules > 0 || SnapshotInFlight`, and a bound implementation
+   LiveCapsules > 0` (it also counted `SnapshotInFlight` until `lane/restart-cancels-capture`, which cancels the capture instead of refusing), and a bound implementation
    assignment is itself a self-development operation in `executing` for the
    whole round (`assignmentOperation`, by freeze key). For the deploy-refresh
    mark only, both halves exclude an assignment whose capsule carries a
@@ -183,7 +183,7 @@ implausible (userns/netns, broker socket peer, 150 MiB-2 GiB RSS).
     without it.
 
 **Not paused (refusals stay):** a self-development apply in flight, a frozen
-or awaiting-decision candidate, a snapshot in flight, a verifier-slot capsule
+or awaiting-decision candidate, a verifier-slot capsule
 (implementation slot only), a capsule that cannot drain within its bound.
 
 ## r3 additions (Devin r3 F1-F2, Sonnet r1 B1-B4 and N1-N9)
