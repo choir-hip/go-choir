@@ -54,3 +54,21 @@ red: the reference set decides which tape is deleted.
 - No profile was taken; a second cost may sit under the first.
 - Until the repair lands, the sweep advances only while a hand-started run is
   alive between deploys.
+
+## Update, 09:35Z: the first repair did not help on the paper
+
+f4276a0ba (one view per walk, probe from the last hit) is deployed. On the
+paper the walk's log line for events 450,000 to 500,000 reads 1,789 segments
+and 46,733,852 probes, about 935 an event, and the chunk took 10 minutes
+against 13.3. The directory is listed once now, but the hint almost never
+points at the next event's segment: either the early history was repacked
+into segments in an order unrelated to sequence, or about half the events
+are in no segment and take a full miss. The benchmark that showed 38 times
+used a fixture laid out in order. The belief above that the rate improves
+toward newer events is therefore also unsupported.
+
+Next repair (lane/sweep-walk-digest-index): while the view validates each
+index it builds a lookup from event digest prefix to segment, so a read
+probes only the segments that can hold the digest and an absent digest
+probes no sealed segment. About 10 to 12 bytes an event, 110 to 130 MB for
+the paper.
