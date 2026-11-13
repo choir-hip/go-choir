@@ -58,6 +58,20 @@ import (
 // anchor checks catch the first, the purge deletes the chunks with the
 // computer's other rows, and the checksum and anchor catch the rest.
 //
+// The watermark. Chunks are kept after the dry-run completes: they are a
+// per-computer watermark, "rows 1..k are walked and these are their
+// references", and the next sweep walks only k+1..head. The rule for when a
+// watermark is invalid is the verification above; in the platform's own
+// terms (docs/computer-ontology.md): a fork is a sibling with its own
+// ComputerID and chain, so it starts at genesis and never inherits a parent's
+// chunks; a rollback or restore of a computer appends events (it selects a
+// prior checkpoint and rematerializes it), it does not edit rows, so the
+// watermark stays valid; a restored control database is a head below the
+// watermark or an anchor that differs, and the chunks are dropped; a purge
+// removes the chunks with the computer's rows; a rewritten row at a chunk end
+// fails the anchor. Every case that fails restarts that computer at 0.
+// Chunks are compacted past a count so a load stays a few rows per computer.
+//
 // A restarted corpusd does NOT resume a sweep by itself: a restart never
 // resumes work (CLAUDE.md, Restarts). The caller issues the dry-run again and
 // it finds the chunks.
@@ -66,6 +80,12 @@ const (
 	// defaultTapeRefChunkEvents is the events walked per persisted chunk:
 	// about a minute of walking on the paper, a few MB of prefixes.
 	defaultTapeRefChunkEvents = 50_000
+
+	// defaultTapeRefCompactAfter is the chunk count per computer past which
+	// the chunks are merged; tapeRefCompactMaxEvents caps a merged chunk's
+	// range (a merged chunk of 1M events holds a few tens of MB of prefixes).
+	defaultTapeRefCompactAfter = 32
+	tapeRefCompactMaxEvents    = 1_000_000
 
 	tapeRefChunksSchemaDDL = `
 CREATE TABLE IF NOT EXISTS tape_sweep_ref_chunks (
@@ -257,6 +277,7 @@ func (s *Service) walkTapeRefs(ctx context.Context, computerID string, head uint
 		chunks = nil
 	}
 	pos := uint64(0)
+	all := chunks
 	for _, c := range chunks {
 		for _, v := range c.Refs {
 			set.addPrefix(v)
@@ -310,6 +331,7 @@ func (s *Service) walkTapeRefs(ctx context.Context, computerID string, head uint
 		if err := s.store.saveTapeRefChunk(ctx, computerID, chunk); err != nil {
 			return out, &tapeRefPersistError{err}
 		}
+		all = append(all, chunk)
 		if hook := s.tapeSweep.afterRefChunk; hook != nil {
 			if err := hook(computerID, end); err != nil {
 				return out, &tapeRefPersistError{err}
@@ -317,5 +339,68 @@ func (s *Service) walkTapeRefs(ctx context.Context, computerID string, head uint
 		}
 		pos = end
 	}
+	after := defaultTapeRefCompactAfter
+	if n := s.tapeSweep.refCompactAfter; n > 0 {
+		after = n
+	}
+	if len(all) > after {
+		if err := s.store.compactTapeRefChunks(ctx, computerID, all); err != nil {
+			// Compaction is housekeeping; the chunks it did not replace stay valid.
+			log.Printf("tape sweep: computer=%s compact reference chunks: %v", computerID, err)
+		}
+	}
 	return out, nil
+}
+
+// compactTapeRefChunks merges runs of adjacent chunks (each already verified
+// or just written by this walk) into chunks of at most
+// tapeRefCompactMaxEvents rows, in one transaction. The merged chunk's
+// anchor is the last chunk's, and it counts as walked with reads only if
+// every merged chunk was.
+func (s *Store) compactTapeRefChunks(ctx context.Context, computerID string, chunks []tapeRefChunk) error {
+	var groups [][]tapeRefChunk
+	var cur []tapeRefChunk
+	var rows uint64
+	for _, c := range chunks {
+		if len(cur) > 0 && rows+(c.To-c.From) > tapeRefCompactMaxEvents {
+			groups = append(groups, cur)
+			cur, rows = nil, 0
+		}
+		cur = append(cur, c)
+		rows += c.To - c.From
+	}
+	if len(cur) > 0 {
+		groups = append(groups, cur)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, g := range groups {
+		if len(g) < 2 {
+			continue
+		}
+		merged := tapeRefChunk{From: g[0].From, To: g[len(g)-1].To, ReadEvents: true, Anchor: g[len(g)-1].Anchor}
+		var refs []uint64
+		for _, c := range g {
+			merged.ReadEvents = merged.ReadEvents && c.ReadEvents
+			refs = append(refs, c.Refs...)
+		}
+		sort.Slice(refs, func(i, j int) bool { return refs[i] < refs[j] })
+		for i, v := range refs {
+			if i == 0 || v != refs[i-1] {
+				merged.Refs = append(merged.Refs, v)
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM tape_sweep_ref_chunks WHERE computer_id=? AND from_sequence>=? AND from_sequence<?`, computerID, merged.From, merged.To); err != nil {
+			return err
+		}
+		blob := encodeTapeRefs(merged.Refs)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO tape_sweep_ref_chunks (computer_id,from_sequence,to_sequence,read_events,anchor_event_digest,refs,refs_sha256,created_at) VALUES (?,?,?,?,?,?,?,?)`,
+			computerID, merged.From, merged.To, merged.ReadEvents, merged.Anchor, blob, tapeRefsSum(blob), time.Now().UTC()); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
