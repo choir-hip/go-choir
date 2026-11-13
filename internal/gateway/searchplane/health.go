@@ -118,13 +118,17 @@ func normalizeExpiredLocked(rec ProviderHealth, now time.Time) ProviderHealth {
 // concurrency (Parallel: three strikes, 96 h, from one 402;
 // docs/archive/problems/search-providers-cooling-most-of-the-time-2026-10-14.md).
 func sameEpisode(rec ProviderHealth, outcome Outcome) bool {
-	if outcome.At.IsZero() || rec.CooldownUntil == nil {
+	started := outcome.StartedAt
+	if started.IsZero() {
+		started = outcome.At
+	}
+	if started.IsZero() || rec.CooldownUntil == nil {
 		return false
 	}
 	if rec.State != StateCoolingDown && rec.State != StateDisabled {
 		return false
 	}
-	return rec.CooldownUntil.After(outcome.At)
+	return rec.CooldownUntil.After(started)
 }
 
 func applyOutcome(rec *ProviderHealth, outcome Outcome, policy BackoffPolicy, now time.Time) {
@@ -141,6 +145,16 @@ func applyOutcome(rec *ProviderHealth, outcome Outcome, policy BackoffPolicy, no
 	case OutcomeSkippedCoolingDown:
 		return
 	default:
+		// An empty-result streak and a failure run are separate counts: a
+		// change between them restarts the count, so nine empties and one
+		// error are one error, and five errors and five empties are five
+		// empties. A transient failure of an uncapped provider also counts
+		// only against earlier transient failures, not refusals.
+		prev := OutcomeClass(rec.LastFailureClass)
+		if (outcome.Class == OutcomeSuccessEmpty) != (prev == OutcomeSuccessEmpty) ||
+			(outcome.Uncapped && transientClass(outcome.Class) && !transientClass(prev)) {
+			rec.StrikeCount = 0
+		}
 		rec.StrikeCount++
 		rec.LastFailureClass = string(outcome.Class)
 		rec.LastErrorSummary = truncateSummary(outcome.Error)

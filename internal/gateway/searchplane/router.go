@@ -25,6 +25,12 @@ type Router struct {
 	config    Config
 	pace      *pacer
 	now       func() time.Time
+
+	// probing holds the uncapped providers with a probe call out: after a
+	// bench for a run of transient failures ends, one search calls the
+	// provider and the others skip it until that call returns.
+	probeMu sync.Mutex
+	probing map[string]bool
 }
 
 // NewRouter creates a search router.
@@ -66,7 +72,7 @@ func NewRouter(providers []Provider, store HealthStore, config Config) *Router {
 	if !ok {
 		counter = newMemoryCallCounter()
 	}
-	return &Router{providers: providers, store: store, counter: counter, config: config, pace: &pacer{next: map[string]time.Time{}}, now: time.Now}
+	return &Router{providers: providers, store: store, counter: counter, config: config, pace: &pacer{next: map[string]time.Time{}}, now: time.Now, probing: map[string]bool{}}
 }
 
 // HealthStore exposes the underlying store for ops endpoints.
@@ -336,8 +342,35 @@ type launch struct {
 	provider Provider
 	slot     time.Time
 	paid     bool
+	// probe: this call is the one probe after a bench (releaseProbe when it
+	// returns).
+	probe bool
 	// at is the start time recorded with the call's outcome (sameEpisode).
 	at time.Time
+}
+
+// needsProbe reports whether rec is an uncapped provider whose run of
+// transient failures has benched it (the bench may have ended since).
+func (r *Router) needsProbe(rec ProviderHealth) bool {
+	return r.TierOf(rec.Provider).Tier == TierFree &&
+		rec.StrikeCount >= TransientStrikesBeforeCooldown && transientClass(OutcomeClass(rec.LastFailureClass))
+}
+
+// claimProbe books the one probe call after a bench; false when one is out.
+func (r *Router) claimProbe(name string) bool {
+	r.probeMu.Lock()
+	defer r.probeMu.Unlock()
+	if r.probing[name] {
+		return false
+	}
+	r.probing[name] = true
+	return true
+}
+
+func (r *Router) releaseProbe(name string) {
+	r.probeMu.Lock()
+	defer r.probeMu.Unlock()
+	delete(r.probing, name)
 }
 
 // admit paces and counts one call to p. It returns the call, or the reason
@@ -427,11 +460,23 @@ func (r *Router) StartRequest(ctx context.Context, req Request) (*Stream, error)
 			reserve = append(reserve, p)
 			continue
 		}
+		probe := false
+		if r.needsProbe(rec) {
+			if !r.claimProbe(name) {
+				stream.Cooling = append(stream.Cooling, Cooling{Provider: name, State: StateCoolingDown, Reason: "probing"})
+				continue
+			}
+			probe = true
+		}
 		l, skip := r.admit(p, now, route)
 		if skip != nil {
+			if probe {
+				r.releaseProbe(name)
+			}
 			stream.Cooling = append(stream.Cooling, *skip)
 			continue
 		}
+		l.probe = probe
 		launches = append(launches, l)
 	}
 	// Cheapest first: paid by cost, constrained last; ties keep
@@ -521,6 +566,9 @@ func (co *coordinator) start(l launch) {
 	co.step[l.provider.Name()] = true
 	co.route.noteStarted(l.provider.Name(), l.paid)
 	go func() {
+		if l.probe {
+			defer co.r.releaseProbe(l.provider.Name())
+		}
 		co.in <- co.r.call(co.ctx, l.provider, co.req.Query, co.req.MaxResults, l.at, l.slot)
 	}()
 }
@@ -694,12 +742,13 @@ func (r *Router) call(ctx context.Context, provider Provider, query string, maxR
 		// call benched the provider is the same episode and adds no strike
 		// (sameEpisode).
 		_, _ = r.store.RecordOutcome(Outcome{
-			Provider: name,
-			Class:    class,
-			Results:  len(hits),
-			Error:    arrival.Error,
-			At:       now,
-			Uncapped: r.TierOf(name).Tier == TierFree,
+			Provider:  name,
+			Class:     class,
+			Results:   len(hits),
+			Error:     arrival.Error,
+			At:        r.now(),
+			StartedAt: now,
+			Uncapped:  r.TierOf(name).Tier == TierFree,
 		})
 	}
 	return arrival

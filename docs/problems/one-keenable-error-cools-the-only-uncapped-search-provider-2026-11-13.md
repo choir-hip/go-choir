@@ -75,7 +75,28 @@ unchanged. No retry of the failing request: the search that hit the error
 still escalates to a paid provider if short (`EscalateFailed`), and the next
 search calls Keenable again.
 
+The free tier is {keenable, searxng, brave} (`DefaultProviderTiers`), so the
+rule covers all three; brave's rate and quota refusals (429, "run out")
+still bench it as before, because those classes are not transient.
+
+Repair after review of c2de94dd4:
+
+- A bench is anchored at the call's completion (`Outcome.At`); the call's
+  start is `Outcome.StartedAt` and serves only the same-episode test. Before,
+  every bench was anchored at the start, so a 30 s timeout used up a 30 s
+  bench before it was set. The same flaw cost metered providers the call's
+  duration too (a 2-minute server_error bench after a 30 s timeout lasted
+  90 s); the same anchor fixes both.
+- The empty-result streak and the failure run are separate counts: a change
+  between them restarts the count (before, nine empties and one 404 were ten
+  strikes). An uncapped provider's transient run counts only earlier
+  transient failures.
+- After a bench for a transient run ends, one search probes the provider and
+  the others skip it (`probing`) until that call returns; this follows a real
+  failure streak and holds no call otherwise. It is one map in the router.
+
 Remaining error: why Keenable answered 404 after 6.3 s; whether 5 and 30 s
 are right for a real Keenable outage (no outage has been observed; the
 numbers come from the 8 calls a second pace and the 2 minute server_error
-base).
+base). The 404 itself is classified `error` by `ClassifyCall`; its status and
+stage stay in the log line.
