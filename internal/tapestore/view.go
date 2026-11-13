@@ -43,6 +43,10 @@ type SegmentView struct {
 	probes uint64 // segment lookups made by ReadObject
 
 	reloads, fallbacks uint64
+	sealedProbes       uint64
+
+	index *digestIndex // nil unless OpenIndexedView
+	segAt map[uint64]int
 }
 
 // OpenView lists the computer's segments and validates every sealed index
@@ -82,7 +86,16 @@ func (v *SegmentView) load() error {
 			return corruptf("computer %s: segment %d is unsealed below the highest segment %d", computerID, f.segno, segs[len(segs)-1].segno)
 		}
 	}
+	add, err := v.indexAdditions(segs, sealed)
+	if err != nil {
+		return err
+	}
+	v.commitIndex(add)
 	v.dir, v.segs, v.sealed = dir, segs, sealed
+	v.segAt = make(map[uint64]int, len(segs))
+	for i, f := range segs {
+		v.segAt[f.segno] = i
+	}
 	if v.hint >= len(segs) {
 		v.hint = 0
 	}
@@ -116,7 +129,13 @@ func (v *SegmentView) Fallbacks() uint64 { return v.fallbacks }
 // digest stored twice, the newer copy damaged and an older copy intact.
 // Reader.Read reports the damage; the view returns the intact copy, checked
 // against the digest and the record crc, so the bytes are the object's.
-// Damage with no intact copy anywhere still stops the walk.
+// Damage with no intact copy anywhere still stops the walk. A copy in a
+// format this binary does not know (ErrUnsupportedVersion) counts as damage
+// here: a newer copy in an unsupported format is skipped for an intact older
+// copy, where Reader.Read refuses; with no intact copy the error is returned.
+// A view from OpenIndexedView probes, for its namespace, only the segments
+// the digest index names plus the open segment; the answer is the same (see
+// view_index.go for why an absence is still proof).
 //
 // When no intact copy is found, the directory is listed again; if it changed
 // (a segment created or sealed since the view loaded) the view reloads and
@@ -148,7 +167,14 @@ func (v *SegmentView) lookup(ns NS, digest string) ([]byte, bool, error) {
 		return nil, false, err
 	}
 	for pass := 0; pass < 2; pass++ {
-		body, found, err := v.search(ns, want)
+		var body []byte
+		var found bool
+		var err error
+		if v.index != nil && ns == v.index.ns {
+			body, found, err = v.searchIndexed(ns, want)
+		} else {
+			body, found, err = v.search(ns, want)
+		}
 		if found {
 			return body, true, nil
 		}
@@ -237,6 +263,9 @@ func sameSegFiles(a, b []segFiles) bool {
 // probe looks (ns, want) up in segment i of the view.
 func (v *SegmentView) probe(i int, ns NS, want [32]byte) ([]byte, bool, error) {
 	v.probes++
+	if v.segs[i].hasIdx {
+		v.sealedProbes++
+	}
 	f := v.segs[i]
 	if f.hasIdx {
 		return v.sealed[f.segno].read(ns, want)

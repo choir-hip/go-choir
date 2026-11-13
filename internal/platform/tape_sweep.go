@@ -754,31 +754,70 @@ type tapeChainRow struct {
 // when readEvents is set. A gap or an unreadable row is an error: a partial
 // chain must never pass for a complete one.
 //
-// Events are read through one tapestore view per walk: the directory is
-// listed and the indexes validated once, and each read probes from the
-// segment of the last hit (internal/tapestore/view.go), where the per-event
-// Reader.Read listed the directory and opened an index per segment on every
-// event. The rows are the ones the per-event reads gave. A computer whose
-// view cannot be opened is walked with the per-event reads.
+// Events are read through one tapestore view per computer walk: the directory
+// is listed and the indexes validated once, and, when the walk reads at least
+// tapeWalkIndexMinEvents events, the view also holds a digest index of the
+// event namespace, so a read probes the one or two segments that hold the
+// digest, wherever they are, and none for an absent one (the repack scatters
+// a chain across segments by digest byte). The rows are the ones the
+// per-event Reader.Read gave. A computer whose view cannot be opened is
+// walked with the per-event reads.
 func (s *Service) walkTapeChain(ctx context.Context, computerID string, from, to uint64, readEvents bool, visit func(tapeChainRow) error) error {
-	var view *tapestore.SegmentView
+	var wv *tapeWalkView
 	if readEvents {
-		v, err := s.tapeReader().OpenView(computerID)
-		if err == nil {
-			view = v
-		} else {
-			log.Printf("tape sweep: computer %s: segment view not opened, reading events one by one: %v", computerID, err)
-		}
-		// A view holds no open files, so there is nothing to close; this
-		// reports what the walk cost on every return path.
-		defer func() {
-			if view != nil {
-				log.Printf("tape sweep: computer %s walk (%d,%d]: %d segments, %d probes, %d reloads, %d reader fallbacks", computerID, from, to, view.Segments(), view.Probes(), view.Reloads(), view.Fallbacks())
-			}
-			if s.tapeSweep.walkViewDone != nil {
-				s.tapeSweep.walkViewDone(computerID, view)
-			}
-		}()
+		wv = s.openTapeWalkView(computerID, to-from)
+		defer wv.finish(from, to)
+	}
+	return s.walkTapeChainWith(ctx, wv, computerID, from, to, readEvents, visit)
+}
+
+// tapeWalkIndexMinEvents is the walk length from which the view builds its
+// digest index: building it reads every sealed index file once (about the
+// cost of probing a few hundred scattered events), so a short walk (the
+// apply pass's delta) does not.
+var tapeWalkIndexMinEvents uint64 = 1000
+
+// tapeWalkView is the view of one computer shared by the chunks of one walk.
+// A nil *tapeWalkView, or one without a view, reads events one by one.
+type tapeWalkView struct {
+	s    *Service
+	id   string
+	view *tapestore.SegmentView
+}
+
+func (s *Service) openTapeWalkView(computerID string, events uint64) *tapeWalkView {
+	var v *tapestore.SegmentView
+	var err error
+	if events >= tapeWalkIndexMinEvents {
+		v, err = s.tapeReader().OpenIndexedView(computerID, tapestore.NSEvent)
+	} else {
+		v, err = s.tapeReader().OpenView(computerID)
+	}
+	if err != nil {
+		log.Printf("tape sweep: computer %s: segment view not opened, reading events one by one: %v", computerID, err)
+		v = nil
+	}
+	return &tapeWalkView{s: s, id: computerID, view: v}
+}
+
+// finish reports what the walk cost. A view holds no open files, so there is
+// nothing to close.
+func (w *tapeWalkView) finish(from, to uint64) {
+	if w == nil {
+		return
+	}
+	if v := w.view; v != nil {
+		log.Printf("tape sweep: computer %s walk (%d,%d]: %d segments, %d probes (%d sealed), %d reloads, %d reader fallbacks, digest index %d entries (%d bytes)", w.id, from, to, v.Segments(), v.Probes(), v.SealedProbes(), v.Reloads(), v.Fallbacks(), v.IndexEntries(), v.IndexBytes())
+	}
+	if w.s.tapeSweep.walkViewDone != nil {
+		w.s.tapeSweep.walkViewDone(w.id, w.view)
+	}
+}
+
+func (s *Service) walkTapeChainWith(ctx context.Context, wv *tapeWalkView, computerID string, from, to uint64, readEvents bool, visit func(tapeChainRow) error) error {
+	var view *tapestore.SegmentView
+	if wv != nil {
+		view = wv.view
 	}
 	for start := from + 1; start <= to; start += tapeSweepSeqChunk {
 		end := min(to, start+tapeSweepSeqChunk-1)
