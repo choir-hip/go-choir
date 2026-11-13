@@ -182,15 +182,16 @@ entered below as lapsed, not scored.
 | C65 | 2026-11-13T09:35Z | false | landed as f4276a0ba with no fix commit, CI 43398721472 success, deployed 09:18Z; but the paper's next chunk took 10 minutes (09:19 to 09:29Z) against 13.3, not 80 seconds. The walk's own log line: 1,789 segments, 46,733,852 probes for 50,000 events, about 935 an event, so the last-hit hint almost never points at the next event's segment. The 38x benchmark used an in-order fixture; I did not check that the paper's history is laid out in order before forecasting | 0.30 |
 | C66 | 2026-11-13T11:27Z | true | landed as dd43ff6b1 with no fix commit, CI 43413670436 success, deployed 11:12Z; dry run ts-20261113T111247Z-a6fb14f1 wrote the paper's first ten new chunk rows between 11:13:59 and 11:23:41Z, 65 seconds a row against 13.3 minutes (about 12 times). corpusd's own memory 0.68 GiB during the walk | 0.12 |
 | C67 | 2026-11-13T12:35Z | true | five applies between 12:12Z and 12:29Z (the first from the 11:12Z manifest, four from fresh dry runs, each audited before its apply) deleted 467,913 files and 26.89 GB (25.0 GiB) and removed all 251 destroyed computers, with 0 errors and 0 unverified in every report; 497 files that something still referenced were kept. Node B's free space went from 88.8 GiB to 117.9 GiB (the collector released a further 6.7 GB at 12:29Z). No protected computer appeared after a manifest's header; their tape directories are intact; the paper logged 1,643 lines in the 20 minutes to 12:31Z; corpusd's own memory 0.27 GiB. My first audit rule stopped one round wrongly (it refused computers the previous apply had already removed, which hold no files) | 0.16 |
+| C70 | 2026-11-13T18:50Z | false | sent back on rounds 1, 2 and 3 by one seat (the other accepted each time), so not accepted within two rounds and not landed. Each repair opened a new surface, the last two in vmctl admission; the lane is split (docs/problems/unappended-snapshot-root-evicts-the-on-tape-root-2026-11-13.md). I priced a host-only prune change and did not see that advertising only named roots drags in admission policy | 0.20 |
 
 ### Scorecard
 
-Second form: 31 claims open, 19 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
+Second form: 30 claims open, 20 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
 false, 1 partial), 7 lapsed.
 
 | band | claims settled | came true |
 |---|---|---|
 | 0.0 to 0.3 | 0 | n/a |
-| 0.3 to 0.6 | 6 | 1, and 1 partial |
+| 0.3 to 0.6 | 7 | 1, and 1 partial |
 | 0.6 to 0.8 | 13 | 10, and 1 partial |
 | 0.8 to 1.0 | 0 | n/a |

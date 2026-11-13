@@ -44,3 +44,40 @@ not established (the root-time chunk check, afe50a926, landed after it).
 Whether `bundle.Import` carries receipts with its roots, and whether receipt
 compaction can delete the naming receipt, must be checked before the fix
 lands.
+
+## Structural assessment after three review rounds, 2026-11-13T18:50Z
+
+`lane/s4-stage0-roots` went to review three times (tips d45f020d0,
+32113c79a, f2744bb36). One seat accepted every round; the other sent every
+round back. The rounds did not repeat a finding, but each repair opened a new
+surface:
+
+| round | blocking finding | where |
+|---|---|---|
+| 1 | the package suite failed on a receipt-writer tripwire; a late append named a root the prune had dropped | the prune, a test gate |
+| 2 | a fresh start with no named root was refused forever | vmctl recovery admission |
+| 3 | a computer already holding a stored `base_missing` condition stays refused | vmctl condition re-evaluation |
+
+What every round accepted: the prune keeps the roots the tape names; the
+collector protects every kept row; imports and purges stay consistent.
+
+What kept failing: the lane also changed what the host advertises as the
+recovery base (named roots only), and that forced changes to vmctl's
+admission policy, a different subsystem with its own stored state. Rounds 2
+and 3 are both admission-policy defects. The eviction, which is the data-loss
+risk, does not need that change: once a named root can no longer be evicted,
+the guest finds it on its tape whatever base the host advertises.
+
+Decision: split the lane.
+
+- Lane A, built first: the prune rule, the collector's live set, the
+  tripwire, the in-flight window (shortened to the append bound, since
+  registration follows the capture). `RecoveryBase` and vmctl admission stay
+  exactly as on main.
+- Lane B, later and on its own: advertise only named roots, with the
+  admission rule and the stored-condition release designed together.
+
+Remaining error on main after lane A: the host can still advertise an
+unnamed root's head as the watermark, so vmctl's tail estimate can be too
+optimistic for a computer whose newest registration never reached the tape.
+That is today's behaviour, not a new one.
