@@ -180,7 +180,7 @@ stations:
     class: red
     review: two seats
     depends_on: [S0]
-    carrier: sweep progress that survives a restart, main 421288af7, both seats accepted on round 2, CI 43376520250, deployed 2026-11-13T06:15Z. The walk is too slow to finish on the paper (docs/problems/tape-sweep-walk-probes-every-segment-per-event-2026-11-13.md); repaired by f4276a0ba and dd43ff6b1 (a digest lookup in the view, 12 times faster on the paper, claim C66). Applied 2026-11-13T12:12Z to 12:29Z in five capped rounds: all 251 destroyed computers removed, 467,913 files and 26.89 GB deleted, no errors (claim C67 true). No scheduler yet, so the collector does not reap by itself
+    carrier: "sweep progress that survives a restart, main 421288af7, both seats accepted on round 2, CI 43376520250, deployed 2026-11-13T06:15Z. The walk is too slow to finish on the paper (docs/problems/tape-sweep-walk-probes-every-segment-per-event-2026-11-13.md); repaired by f4276a0ba and dd43ff6b1 (a digest lookup in the view, 12 times faster on the paper, claim C66). Applied 2026-11-13T12:12Z to 12:29Z in five capped rounds: all 251 destroyed computers removed, 467,913 files and 26.89 GB deleted, no errors (claim C67 true). No scheduler yet, so the collector does not reap by itself"
     status: working
   - id: S8
     name: a smaller store, and the archive half of cold tape
