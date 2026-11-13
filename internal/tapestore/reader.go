@@ -84,7 +84,15 @@ func (r *Reader) Read(computerID string, ns NS, digest string) ([]byte, Source, 
 	if !ValidDigest(digest) {
 		return nil, 0, fmt.Errorf("tapestore: invalid digest %q", digest)
 	}
-	body, found, err := r.readSegment(computerID, ns, digest)
+	return r.readWith(computerID, ns, digest, func(ns NS, digest string) ([]byte, bool, error) {
+		return r.readSegment(computerID, ns, digest)
+	})
+}
+
+// readWith is Read over a segment lookup: the per-call listing of
+// readSegment, or a SegmentView's.
+func (r *Reader) readWith(computerID string, ns NS, digest string, segment func(NS, string) ([]byte, bool, error)) ([]byte, Source, error) {
+	body, found, err := segment(ns, digest)
 	if err != nil {
 		if errors.Is(err, ErrDigestMismatch) {
 			r.digestMismatch.Add(1)
