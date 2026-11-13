@@ -746,7 +746,7 @@ func (s *Service) fileCASReachableChunks(ctx context.Context, computerID string,
 	if err != nil {
 		return nil, "", err
 	}
-	// Snapshot roots (guest snapshots, internal/snapshot): the newest few
+	// Snapshot roots (guest snapshots, internal/snapshot): every kept row (the newest few the tape names, plus unnamed attempts in flight)
 	// stay live. The guest declares them because their manifest is sealed.
 	snapshots, err := s.store.LiveSnapshotRoots(ctx, computerID)
 	if err != nil {
