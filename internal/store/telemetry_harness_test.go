@@ -215,6 +215,10 @@ type tapeHarness struct {
 	// commit whose reply is lost still moves the host's head (the local
 	// projection stays behind until it settles the prepared row).
 	hostChain *hostChain
+	// sealed, when set, makes the harness the production shape: batches are
+	// sealed under a computer key, and the store dry-runs them before the
+	// appender mutex (appendDirectParts).
+	sealed *sealedKit
 }
 
 // hookedProjection is the store as the appender's projection, with a scriptable
@@ -264,9 +268,13 @@ func (h *tapeHarness) bind() {
 	if h.finalizeFail != nil {
 		projection = finalizeFailingProjection{ProjectionStore: projection, store: h.store, fail: h.finalizeFail}
 	}
+	var pinner computerevent.ArtifactPinner = recordingPinner{liveTapePinner: liveTapePinner{signer: h.tape.signer}, tape: h.tape}
+	if h.sealed != nil {
+		pinner = sealedHarnessPinner{recordingPinner: pinner.(recordingPinner), kit: h.sealed}
+	}
 	appender, err := computerevent.NewComputerEventAppender(
 		h.computerID,
-		recordingPinner{liveTapePinner: liveTapePinner{signer: h.tape.signer}, tape: h.tape},
+		pinner,
 		projection,
 		cas,
 		liveTapeVerifier{},
@@ -274,8 +282,16 @@ func (h *tapeHarness) bind() {
 	if err != nil {
 		h.t.Fatal(err)
 	}
+	if h.sealed != nil {
+		appender.SetPayloadResolver(h.sealed.reader, h.sealed.cipher)
+	}
 	if err := h.store.BindProjectionTape(h.computerID, appender); err != nil {
 		h.t.Fatal(err)
+	}
+	if h.sealed != nil {
+		if err := h.store.SetProjectionSealer(h.sealed.cipher); err != nil {
+			h.t.Fatal(err)
+		}
 	}
 	h.appender = appender
 }
@@ -380,4 +396,40 @@ func waitFor(t *testing.T, what string, timeout time.Duration, cond func() bool)
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("timed out after %s waiting for %s", timeout, what)
+}
+
+// sealedKit is what a sealed harness needs: the computer key and a reader
+// holding every pinned envelope (the host's artifact store).
+type sealedKit struct {
+	cipher *computerevent.PrivateArtifactCipher
+	reader *computerevent.MemoryArtifactReader
+}
+
+// useSealing makes the harness seal every projection batch, as production
+// does. Call it before the first write; it rebinds the appender.
+func (h *tapeHarness) useSealing() {
+	h.t.Helper()
+	cipher, err := computerevent.NewPrivateArtifactCipher(h.computerID, make([]byte, 32))
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	h.sealed = &sealedKit{cipher: cipher, reader: computerevent.NewMemoryArtifactReader()}
+	h.bind()
+}
+
+type sealedHarnessPinner struct {
+	recordingPinner
+	kit *sealedKit
+}
+
+func (p sealedHarnessPinner) PreparePrivatePayload(ctx context.Context, cipher *computerevent.PrivateArtifactCipher, computerID, eventID, mediaType string, plaintext []byte) ([]byte, computerevent.PrivateArtifactMetadata, error) {
+	return cipher.Encrypt(ctx, computerID, eventID, mediaType, "private", plaintext)
+}
+
+func (p sealedHarnessPinner) PinPrivatePayload(ctx context.Context, cipher *computerevent.PrivateArtifactCipher, computerID, eventID string, envelope []byte, intent string) (computerevent.PinResult, error) {
+	if _, _, err := cipher.Decrypt(ctx, envelope, computerID, eventID); err != nil {
+		return computerevent.PinResult{}, err
+	}
+	p.kit.reader.Put(envelope)
+	return p.recordingPinner.liveTapePinner.PinNonPrivatePayload(ctx, computerID, envelope, computerevent.PrivateArtifactMediaType, "private", intent)
 }
