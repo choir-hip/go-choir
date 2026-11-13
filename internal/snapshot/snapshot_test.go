@@ -43,6 +43,8 @@ type memChunks struct {
 	puts   []string
 	probes int
 	roots  [][]string
+	// registerHook, when set, runs first in RegisterSnapshotRoot.
+	registerHook func(ctx context.Context) error
 }
 
 func newMemChunks() *memChunks { return &memChunks{chunks: map[string][]byte{}} }
@@ -64,7 +66,16 @@ func (m *memChunks) HasChunk(_ context.Context, digest string) (bool, error) {
 	return ok, nil
 }
 
-func (m *memChunks) RegisterSnapshotRoot(_ context.Context, _ string, _ uint64, chunks []string) error {
+func (m *memChunks) RegisterSnapshotRoot(ctx context.Context, _ string, _ uint64, chunks []string) error {
+	// A real host call honours its context.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if m.registerHook != nil {
+		if err := m.registerHook(ctx); err != nil {
+			return err
+		}
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.roots = append(m.roots, append([]string(nil), chunks...))
@@ -103,6 +114,10 @@ func (f *fakeTape) HoldAppends(fn func() error) error {
 }
 
 func (f *fakeTape) AppendNewPrivatePayload(ctx context.Context, event computerevent.Event, _ computerevent.TransitionInput, plaintext []byte, mediaType string, cipher *computerevent.PrivateArtifactCipher) (computerevent.Receipt, string, error) {
+	// A real append honours its context.
+	if err := ctx.Err(); err != nil {
+		return computerevent.Receipt{}, "", err
+	}
 	envelope, _, err := cipher.Encrypt(ctx, event.ComputerID, event.EventID, mediaType, "private", plaintext)
 	if err != nil {
 		return computerevent.Receipt{}, "", err
