@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -119,8 +120,15 @@ func TestWalkCountsAllocatedApparentAndFiles(t *testing.T) {
 	if g.ApparentBytes < (1<<30)+15000 {
 		t.Fatalf("apparent = %d, want the sparse size counted", g.ApparentBytes)
 	}
-	if g.AllocatedBytes < 15000 || g.AllocatedBytes >= 1<<26 {
-		t.Fatalf("allocated = %d, want about the data actually held, not the sparse size", g.AllocatedBytes)
+	var want uint64
+	filepath.Walk(filepath.Join(root, "go"), func(p string, info os.FileInfo, err error) error {
+		if err == nil {
+			want += uint64(info.Sys().(*syscall.Stat_t).Blocks) * 512
+		}
+		return nil
+	})
+	if g.AllocatedBytes != want {
+		t.Fatalf("allocated = %d, want exactly st_blocks*512 summed = %d", g.AllocatedBytes, want)
 	}
 	if g.AllocatedBytes%512 != 0 {
 		t.Fatalf("allocated %d is not a multiple of the 512-byte block unit", g.AllocatedBytes)
@@ -224,14 +232,14 @@ func TestVanishingFilesAreTolerated(t *testing.T) {
 func TestEntryBoundTruncatesAndSaysSo(t *testing.T) {
 	root := t.TempDir()
 	for i := 0; i < 200; i++ {
-		write(t, filepath.Join(root, "go-build-cache", "00", string(rune('a'+i%26))+string(rune('a'+i/26))), 10)
+		write(t, filepath.Join(root, "aaa-huge", "00", string(rune('a'+i%26))+string(rune('a'+i/26))), 10)
 	}
 	write(t, filepath.Join(root, "files", "x"), 10)
 	w := scan(t, root, Limits{Budget: time.Minute, MaxEntries: 40})
 	if !w.Truncated {
 		t.Fatal("walk is not marked truncated")
 	}
-	if !topByName(t, w, "go-build-cache").Truncated {
+	if !topByName(t, w, "aaa-huge").Truncated {
 		t.Fatal("the cut entry is not marked truncated")
 	}
 	if got := topByName(t, w, "files"); got.Truncated || got.Files != 1 {
@@ -412,4 +420,116 @@ func scanWith(t *testing.T, root string, lim Limits, hook func(path string)) *Wa
 		t.Fatalf("no walk: %+v", rep)
 	}
 	return rep.Walk
+}
+
+func TestMidWalkDeadlineTruncatesOneEntryAndSparesTheNext(t *testing.T) {
+	root := t.TempDir()
+	for i := 0; i < 300; i++ {
+		write(t, filepath.Join(root, "aaa-slow", "d", string(rune('a'+i%26))+string(rune('a'+i/26%26))+string(rune('a'+i/676))), 1)
+	}
+	write(t, filepath.Join(root, "zzz-small", "x"), 1)
+	var once sync.Once
+	w := scanWith(t, root, Limits{Budget: 400 * time.Millisecond, MaxEntries: 1 << 30}, func(path string) {
+		if strings.HasSuffix(path, "/d") {
+			once.Do(func() { time.Sleep(250 * time.Millisecond) })
+		}
+	})
+	if !topByName(t, w, "aaa-slow").Truncated {
+		t.Fatal("the entry that ran past its share of the deadline is not truncated")
+	}
+	if z := topByName(t, w, "zzz-small"); z.Truncated || z.Files != 1 {
+		t.Fatalf("the next entry was starved: %+v", z)
+	}
+}
+
+func TestCancelledRequestStopsTheWalkAndKeepsTheCompleteResult(t *testing.T) {
+	root := t.TempDir()
+	for i := 0; i < 300; i++ {
+		write(t, filepath.Join(root, "go", string(rune('a'+i%26)), string(rune('a'+i/26))), 1)
+	}
+	var s Scanner
+	first := s.Read(context.Background(), root, DefaultLimits, true)
+	if first.Walk == nil || first.Walk.Truncated {
+		t.Fatalf("first walk: %+v", first.Walk)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	done := make(chan Report)
+	go func() { done <- s.Read(ctx, root, DefaultLimits, true) }()
+	select {
+	case rep := <-done:
+		if rep.Walk == nil || !rep.Walk.Truncated {
+			t.Fatalf("a cancelled walk is not reported truncated: %+v", rep.Walk)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a cancelled walk did not stop")
+	}
+	again := s.Read(context.Background(), root, DefaultLimits, false)
+	if again.Walk == nil || !again.Walk.ReadAt.Equal(first.Walk.ReadAt) || again.Walk.Truncated {
+		t.Fatalf("a cancelled walk replaced the complete one: %+v", again.Walk)
+	}
+	// running was cleared: the next walk runs.
+	if next := s.Read(context.Background(), root, DefaultLimits, true); next.Busy {
+		t.Fatal("running stayed set after a cancelled walk")
+	}
+}
+
+func TestUnreadableDirectoryCountsAnErrorAndTheWalkContinues(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads any directory")
+	}
+	root := t.TempDir()
+	write(t, filepath.Join(root, "go", "locked", "a"), 10)
+	write(t, filepath.Join(root, "go", "open", "b"), 10)
+	locked := filepath.Join(root, "go", "locked")
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(locked, 0o755)
+	g := topByName(t, scan(t, root, DefaultLimits), "go")
+	if g.Errors != 1 || g.Files != 1 {
+		t.Fatalf("go = %+v, want 1 error and the open file counted", g)
+	}
+}
+
+func TestUnreadableRootIsAnError(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads any directory")
+	}
+	root := t.TempDir()
+	write(t, filepath.Join(root, "go", "a"), 1)
+	if err := os.Chmod(root, 0o111); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(root, 0o755)
+	w := scan(t, root, DefaultLimits)
+	if len(w.Top) != 1 || w.Top[0].Errors == 0 {
+		t.Fatalf("an unreadable root reads as an empty volume: %+v", w.Top)
+	}
+}
+
+func TestStoppedWalkEmitsNoRowsForEntriesNeverExamined(t *testing.T) {
+	root := t.TempDir()
+	for i := 0; i < 300; i++ {
+		write(t, filepath.Join(root, "choir-updater", "releases", strings.Repeat("a", 60)+string(rune('a'+i%6))+string(rune('a'+i/6%6))+string(rune('a'+i/36%6))+string(rune('a'+i/216))), 1)
+	}
+	w := scan(t, root, Limits{Budget: time.Minute, MaxEntries: 50})
+	var members int
+	for _, c := range groupByPath(t, w, "choir-updater/releases").Children {
+		members += max(c.Members, 1)
+	}
+	if uint64(members) > w.EntriesExamined {
+		t.Fatalf("%d rows for %d examined entries: rows were made for entries never stat'd", members, w.EntriesExamined)
+	}
+}
+
+func TestSmallEntryBoundStillExaminesTheFirstEntries(t *testing.T) {
+	root := t.TempDir()
+	for _, n := range []string{"a", "b", "c", "d", "e"} {
+		write(t, filepath.Join(root, n), 1)
+	}
+	w := scan(t, root, Limits{Budget: time.Minute, MaxEntries: 2})
+	if a := topByName(t, w, "a"); a.Truncated || a.Files != 1 {
+		t.Fatalf("the first entry got a zero share: %+v", a)
+	}
 }
