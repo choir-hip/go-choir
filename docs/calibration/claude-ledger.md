@@ -151,6 +151,7 @@ entered below as lapsed, not scored.
 | C68 | 2026-11-13T16:45Z | lead | landing | S5 coalescing (queued writers share one tape event, losslessly, no setting) plus one head read and one pin per append lands accepted by both seats, deploys, and over a full hour on the paper after it boots the build, tape events per hour fall at least 3-fold against the 27,000 an hour of 2026-11-13 and corpusd calls per original store write fall at least 4-fold. False if either ratio is missed or the lane is not deployed by the settle time. | 0.45 | 2026-11-15T12:00Z | paper observability counters, control DB event rate |
 | C69 | 2026-11-13T16:45Z | lead | landing | The scheduled destroyed-computer sweep (S7) is accepted by both seats within two review rounds, lands and deploys on the first CI attempt, and its first scheduled run on Node B finishes with a report and no error. | 0.50 | 2026-11-14T18:00Z | review outputs, CI run, corpusd journal |
 | C70 | 2026-11-13T17:30Z | lead | landing | Stage 0 of the S4 design (the prune and RecoveryBase count only roots the tape names; an unappended root never evicts one) is accepted by both seats within two review rounds, lands and deploys with no fix commit, and the audit query on Node B then shows every computer's advertised recovery base named by its tape. | 0.45 | 2026-11-17T12:00Z | review outputs, CI run, deploy receipt, the audit query |
+| C71 | 2026-11-13T20:05Z | lead | diagnosis | Nothing prunes the updater's `incoming`, `store` and `releases` directories; a prune that keeps the current release and its rollback predecessor frees at least 12 GiB on d@e's data volume when it deploys (20.1 GiB held at 20:02Z). | 0.60 | 2026-11-15T18:00Z | the `data_volume` reading on d@e before and after |
 
 ### Settlements
 
@@ -186,7 +187,7 @@ entered below as lapsed, not scored.
 
 ### Scorecard
 
-Second form: 30 claims open, 20 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
+Second form: 31 claims open, 20 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
 false, 1 partial), 7 lapsed.
 
 | band | claims settled | came true |
