@@ -212,36 +212,40 @@ type TapeSweepNamespaceCounts struct {
 
 // TapeSweepReport is the receipt for one dry-run or apply.
 type TapeSweepReport struct {
-	RunID                       string                              `json:"run_id"`
-	Action                      string                              `json:"action"`
-	Mode                        string                              `json:"mode"`
-	Grace                       string                              `json:"grace"`
-	Quiet                       string                              `json:"quiet,omitempty"`
-	Sweeps                      []string                            `json:"sweeps"`
-	AcceptUnrecordedForkLineage bool                                `json:"accept_unrecorded_fork_lineage"`
-	ManifestPath                string                              `json:"manifest_path,omitempty"`
-	ManifestSHA256              string                              `json:"manifest_sha256,omitempty"`
-	ReportPath                  string                              `json:"report_path,omitempty"`
-	Computers                   int                                 `json:"computers"`
-	ChainEvents                 uint64                              `json:"chain_events"`
-	Orphans                     map[string]TapeSweepNamespaceCounts `json:"orphans,omitempty"`
-	OrphanFiles                 int                                 `json:"orphan_files"`
-	OrphanBytes                 int64                               `json:"orphan_bytes"`
-	OrphansRefused              string                              `json:"orphans_refused,omitempty"`
-	DestroyedRefused            string                              `json:"destroyed_refused,omitempty"`
-	DestroyedComputers          int                                 `json:"destroyed_computers"`
-	DestroyedBlockedByLineage   int                                 `json:"destroyed_blocked_by_fork_lineage"`
-	DestroyedListed             int                                 `json:"destroyed_listed"`
-	DestroyedFiles              int                                 `json:"destroyed_files"`
-	DestroyedBytes              int64                               `json:"destroyed_bytes"`
-	DestroyedRows               int64                               `json:"destroyed_rows"`
-	DestroyedClasses            map[string]TapeSweepClassCounts     `json:"destroyed_classes,omitempty"`
-	NoArchive                   bool                                `json:"no_archive,omitempty"`
-	DestroyedProofs             []TapeSweepComputerProof            `json:"destroyed_proofs,omitempty"`
-	Apply                       *TapeSweepApplyCounts               `json:"apply,omitempty"`
-	Warnings                    []string                            `json:"warnings,omitempty"`
-	StartedAt                   time.Time                           `json:"started_at"`
-	DurationMs                  int64                               `json:"duration_ms"`
+	RunID                       string   `json:"run_id"`
+	Action                      string   `json:"action"`
+	Mode                        string   `json:"mode"`
+	Grace                       string   `json:"grace"`
+	Quiet                       string   `json:"quiet,omitempty"`
+	Sweeps                      []string `json:"sweeps"`
+	AcceptUnrecordedForkLineage bool     `json:"accept_unrecorded_fork_lineage"`
+	ManifestPath                string   `json:"manifest_path,omitempty"`
+	ManifestSHA256              string   `json:"manifest_sha256,omitempty"`
+	ReportPath                  string   `json:"report_path,omitempty"`
+	Computers                   int      `json:"computers"`
+	ChainEvents                 uint64   `json:"chain_events"`
+	// ChainEventsResumed are chain rows whose references came from stored
+	// progress; ChainEventsWalked are rows read from the chain this run.
+	ChainEventsResumed        uint64                              `json:"chain_events_resumed"`
+	ChainEventsWalked         uint64                              `json:"chain_events_walked"`
+	Orphans                   map[string]TapeSweepNamespaceCounts `json:"orphans,omitempty"`
+	OrphanFiles               int                                 `json:"orphan_files"`
+	OrphanBytes               int64                               `json:"orphan_bytes"`
+	OrphansRefused            string                              `json:"orphans_refused,omitempty"`
+	DestroyedRefused          string                              `json:"destroyed_refused,omitempty"`
+	DestroyedComputers        int                                 `json:"destroyed_computers"`
+	DestroyedBlockedByLineage int                                 `json:"destroyed_blocked_by_fork_lineage"`
+	DestroyedListed           int                                 `json:"destroyed_listed"`
+	DestroyedFiles            int                                 `json:"destroyed_files"`
+	DestroyedBytes            int64                               `json:"destroyed_bytes"`
+	DestroyedRows             int64                               `json:"destroyed_rows"`
+	DestroyedClasses          map[string]TapeSweepClassCounts     `json:"destroyed_classes,omitempty"`
+	NoArchive                 bool                                `json:"no_archive,omitempty"`
+	DestroyedProofs           []TapeSweepComputerProof            `json:"destroyed_proofs,omitempty"`
+	Apply                     *TapeSweepApplyCounts               `json:"apply,omitempty"`
+	Warnings                  []string                            `json:"warnings,omitempty"`
+	StartedAt                 time.Time                           `json:"started_at"`
+	DurationMs                int64                               `json:"duration_ms"`
 }
 
 // TapeSweepApplyCounts are the apply outcomes, by the GC log's op names.
@@ -295,6 +299,12 @@ type tapeSweepState struct {
 	// beforeRowsDelete is a test hook run before a computer's rows
 	// transaction; an error stands in for a crash between files and rows.
 	beforeRowsDelete func(computerID string) error
+	// refChunkEvents is the events per persisted reference chunk; 0 means
+	// defaultTapeRefChunkEvents. Test-only.
+	refChunkEvents int
+	// afterRefChunk is a test hook run after each reference chunk is
+	// persisted; an error stands in for a restart at that point.
+	afterRefChunk func(computerID string, to uint64) error
 	// extraRefsMax caps the unique digests the extra-refs route holds and
 	// answers; 0 means defaultTapeExtraRefsMax. Test-only: set before the
 	// route is called and never written in production, so it is read without
@@ -1038,21 +1048,18 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 			// walk and nothing of it to reference (not a gap).
 			continue
 		}
-		err = s.walkTapeChain(ctx, id, 0, h.Sequence, readEvents || deletable(id), func(row tapeChainRow) error {
-			walkedRows[id]++
-			set.add(row.EventDigest)
-			set.add(row.EventPin)
-			for _, d := range row.PayloadPins {
-				set.add(d)
-			}
-			for _, d := range row.PayloadRefs {
-				set.add(d)
-			}
-			if readEvents && !row.EventReadable && orphansIncomplete == "" {
+		walk, err := s.walkTapeRefs(ctx, id, h.Sequence, readEvents || deletable(id), readEvents, set, func(row tapeChainRow) {
+			if orphansIncomplete == "" {
 				orphansIncomplete = fmt.Sprintf("event %s (computer %s sequence %d) is unreadable; its payload references are unknown", row.EventDigest, id, row.Sequence)
 			}
-			return nil
 		})
+		walkedRows[id] = walk.Resumed + walk.Walked
+		report.ChainEventsResumed += walk.Resumed
+		report.ChainEventsWalked += walk.Walked
+		var persistErr *tapeRefPersistError
+		if errors.As(err, &persistErr) || ctx.Err() != nil {
+			return report, err
+		}
 		if err != nil {
 			report.OrphansRefused = err.Error()
 			report.Warnings = append(report.Warnings, err.Error())
@@ -1221,6 +1228,11 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 	report.DurationMs = time.Since(started).Milliseconds()
 	if err := writeJSONFileSync(report.ReportPath, report); err != nil {
 		return report, err
+	}
+	// The run finished: its progress has served. (Dropped here until the
+	// per-computer watermark keeps it.)
+	if _, err := s.store.db.ExecContext(ctx, `DELETE FROM tape_sweep_ref_chunks`); err != nil {
+		report.Warnings = append(report.Warnings, "drop reference progress: "+err.Error())
 	}
 	log.Printf("tape sweep: dry-run run=%s manifest_sha256=%s computers=%d destroyed=%d listed=%d blocked_by_fork_lineage=%d destroyed_files=%d destroyed_bytes=%d orphan_files=%d orphan_bytes=%d tombstoned=%d warnings=%d",
 		jobID, digest, report.Computers, report.DestroyedComputers, report.DestroyedListed, report.DestroyedBlockedByLineage, report.DestroyedFiles, report.DestroyedBytes, report.OrphanFiles, report.OrphanBytes, tombstoned, len(report.Warnings))
