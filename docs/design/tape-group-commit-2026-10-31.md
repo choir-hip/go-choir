@@ -278,29 +278,49 @@ beyond the design:
 - **`telemetry_ridden`** is a lower bound: it counts records that rode a
   committed event only; a ride whose commit failed or whose outcome is unknown
   is counted under the seal failure counters instead.
-- **A stale batch never reaches the CAS (the guard).** A batch is numbered
-  and dry-run against local state outside the appender mutex. An append whose
-  outcome was unknown can leave the host ahead of the local projection (a kept
-  prepared row, or a row discarded after a refused re-send and left to the
-  catch-up). Under the mutex, `appendLockedInner` then runs the in-place
-  recovery or catch-up, which can apply events the batch was numbered without:
-  a retried run-memory write then reused a landed entry's (run, seq), went to
-  the CAS, and its finalize failed on the unique key (a tape wedge). Rule: when
-  that recovery ran (heads differ, or the prepare failed on an orphan row) and
-  succeeded, and the heads are level again, the appender re-runs the
-  projection's dry run on the batch (`batchRevalidator`, under the mutex)
-  before it pins or prepares anything further; a refusal returns
-  `ErrBatchRefused` with nothing sent. If the recovery could not level the
-  heads, the append already refuses (`heads differ after in-place recovery`,
-  or the recovery's own error), and `recoveryFailedAt` keeps further writes
-  refusing for up to 30 s after a failed recovery: they get
-  `ErrNeedsProjectionRepair` and the wedge status shows it, the tape is not
-  poisoned. An append that needed no recovery runs no extra dry run and reads
-  the head once.
+- **A stale batch never reaches the CAS (the head check).** A batch is
+  numbered from, and dry-run against, local state; an append whose outcome was
+  unknown can leave the host ahead of the local projection, and any other
+  writer's finalize or recovery moves the local head between a writer's dry run
+  and its turn under the appender mutex. A retried run-memory write that reused
+  a landed entry's (run, seq) reached the CAS and wedged the tape on
+  UNIQUE(loop_id, seq). Three mechanisms that tried to detect the event that
+  makes a batch stale (a latch, a settle, "this append recovered") each missed
+  another such event
+  (`docs/problems/stale-batch-after-unclear-append-structural-assessment-2026-11-13.md`).
+  The rule now asks whether the state is still the state the batch was
+  validated against: the store's dry run reports the projection head sequence
+  it validated against (`DryRunProjectionBatchAt`; the store carries it into the
+  append in the context, `computerevent.WithValidatedHead`). Under the appender
+  mutex, before the event is pinned or prepared, and again after any in-place
+  recovery at either site, `batchGuard.check` compares it with the current local
+  head. Equal: nothing more. Different, for any reason: the dry run is repeated
+  against the current state (`Revalidations()`) and the batch is refused with
+  `ErrBatchRefused` if the state no longer accepts it (counted in
+  `tape_batches_refused`). A projection that cannot report a head is
+  re-validated after a recovery only (the earlier rule). If a recovery cannot
+  level the heads the append already refuses, and `recoveryFailedAt` keeps
+  further writes refusing for up to 30 s after a failed recovery with
+  `ErrNeedsProjectionRepair`; the tape is not poisoned.
+  Why equal head means unchanged state: the head row and the projected rows are
+  written by one transaction (`finalizeBatch`), and the dry run reads the head
+  in the same transaction that applies the batch to roll it back. The only
+  writers of run-memory or object rows outside `finalizeBatch` are the unbound
+  test seam (`s.projectionTape == nil`) and run-memory retirement, which is a
+  tape op that goes through `finalizeBatch` too.
+  Where the dry run runs: a group leader dry-runs outside the mutex (it holds
+  the leader token, so its dry run and its turn are adjacent); every other
+  append is dry-run once, under the mutex, by the appender (writers queue on
+  the mutex after validating, so an outside dry run would be repeated nearly
+  every time: measured 0.995 revalidations per direct append). Measured on the
+  sealed harness, 8 writers: grouped 0.000 revalidations per tape event
+  (50 events); direct 0 (200 events, one dry run each under the mutex); half the
+  writers direct, half grouped: 0.17 per tape event (26 in 150), about half of
+  the grouped events.
   The run-memory writer has no latch and no internal retry: after an unclear
   outcome its next call may be refused once (`ErrBatchRefused`, an error every
   caller already handles as a failed append) and numbers from the caught-up
-  table on the attempt after. A refused group splits to singles as before, each
-  through the same guard. Covered by `TestAppendRevalidatesTheBatchAfterInPlaceRecovery`,
-  `TestAppendAfterADiscardedRowAndAFailedCatchUpDoesNotCommitAStaleBatch` and the
-  store-level `TestRunMemoryConcurrentRetriesAfterAnUnclearGroupNeverDuplicateSeq`.
+  table on the attempt after. A refused group splits to singles, each through
+  the same check. After a prepare-failure recovery that moved the local head
+  past the event's bound sequence the append is refused cleanly (not counted as
+  a wedge) and the next append binds to the head as it is now.
