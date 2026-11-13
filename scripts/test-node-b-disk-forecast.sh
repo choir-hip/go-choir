@@ -11,8 +11,9 @@
 #   D3  a flat or rising disk is a warning
 #   D4  one transient dip that recovers (a deploy) is read as a trend: the
 #       daily minimum slope must stay near zero
-#   D5  a fall of more than 15 GiB in 6 hours is not a fast-drain warning, or
-#       a fall of 10 GiB is
+#   D5  a fall of more than 3 GiB in 6 hours is not a fast-drain warning, or
+#       a fall of 3 GiB or less is (the 2026-11-12 fall of 14 GiB in 6 h read
+#       "ok" under the old 15 GiB line)
 #   D6  the top growers are not the five largest 24 h increases by ledger
 #       key, largest first, or list more than five, or list a shrinking key,
 #       or count fs.root.* / .excl / .shared
@@ -77,13 +78,18 @@ check "D3 rising disk: ok, not declining" 'grep -q "^<6>disk forecast ok: .*not 
 gen '70 if 72 <= (168 - h) < 96 else 140' 168; forecast
 check "D4 a recovered dip is not a trend" 'grep -q "^<6>disk forecast ok" "$root/out" && ! grep -q "^<[34]>disk forecast" "$root/out"'
 
-# D5: fast drain
+# D5: fast drain. The line is 3 GiB in 6 h (the mission's acceptance is 3 GiB
+# a day; see FAST_DRAIN_BYTES in the script).
 gen '140 - (20 if h < 6 else 0)' 168; forecast
 check "D5 20 GiB in 6 h: fast-drain warning" 'grep -q "^<4>disk fast drain WARNING: free fell 20\.0 GiB in 6\.0 h" "$root/out"'
-gen '140 - (10 if h < 6 else 0)' 168; forecast
-check "D5 10 GiB in 6 h: no fast-drain warning" '! grep -q "fast drain WARNING" "$root/out" && grep -q "^<6>disk fast drain ok" "$root/out"'
-gen '140 - (15 if h < 6 else 0)' 168; forecast
-check "D5 exactly 15 GiB: no warning" '! grep -q "fast drain WARNING" "$root/out"'
+gen '140 - (14 if h < 6 else 0)' 168; forecast
+check "D5 14 GiB in 6 h (the 2026-11-12 fall): fast-drain warning" 'grep -q "^<4>disk fast drain WARNING: free fell 14\.0 GiB" "$root/out"'
+gen '140 - (4 if h < 6 else 0)' 168; forecast
+check "D5 4 GiB in 6 h: fast-drain warning" 'grep -q "^<4>disk fast drain WARNING: free fell 4\.0 GiB" "$root/out"'
+gen '140 - (2 if h < 6 else 0)' 168; forecast
+check "D5 2 GiB in 6 h: no fast-drain warning" '! grep -q "fast drain WARNING" "$root/out" && grep -q "^<6>disk fast drain ok" "$root/out"'
+gen '140 - (3 if h < 6 else 0)' 168; forecast
+check "D5 exactly 3 GiB: no warning" '! grep -q "fast drain WARNING" "$root/out"'
 
 # D6: growers. 49 hourly rows; every key is flat until the row 24 h before
 # the newest, then grows linearly by its delta.

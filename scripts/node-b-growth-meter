@@ -998,7 +998,13 @@ def report():
 FORECAST_FLOOR = float(ENV("FORECAST_FLOOR_GIB", "60")) * GIB
 FORECAST_WARN_DAYS = float(ENV("FORECAST_WARN_DAYS", "7"))
 FORECAST_ERR_DAYS = float(ENV("FORECAST_ERR_DAYS", "3"))
-FAST_DRAIN_BYTES = float(ENV("FORECAST_FAST_DRAIN_GIB", "15")) * GIB
+# Fast drain: free space falling more than 3 GiB in 6 hours. The storage
+# mission's acceptance is at most 3 GiB lost a day; 3 GiB in 6 h is four times
+# that pace (12 GiB a day), loose enough that a deploy, a nix build or one
+# snapshot burst does not warn every day, tight enough that a real leak is seen
+# within one window. The old 15 GiB line printed "ok" for the 14 GiB fall of
+# 2026-11-12, a pace of 56 GiB a day.
+FAST_DRAIN_BYTES = float(ENV("FORECAST_FAST_DRAIN_GIB", "3")) * GIB
 FAST_DRAIN_HOURS = 6
 STALE_HOURS = 3
 
