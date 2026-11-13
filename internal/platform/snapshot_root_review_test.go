@@ -55,8 +55,8 @@ func TestSnapshotRootForATombstonedComputerIsRefused(t *testing.T) {
 	if err := f.store.putTapeTombstone(f.ctx, TapeTombstone{ComputerID: snapVerifyComputer, Status: tapeTombstoneArchived, HeadSequence: 5, CanonicalEventHead: platformTestDigest('1'), ManifestRun: "ts-x", ManifestSHA256: platformTestDigest('2'), ArchivePath: "/archive/x.tar.zst", ProofJSON: "{}"}); err != nil {
 		t.Fatal(err)
 	}
-	if code := f.snapDeclare(h, "r", 1, d); code != http.StatusConflict {
-		t.Fatalf("root for a tombstoned computer = %d, want 409", code)
+	if code := f.snapDeclare(h, "r", 1, d); code != http.StatusGone {
+		t.Fatalf("root for a tombstoned computer = %d, want 410", code)
 	}
 	if n := len(f.snapRootNames()); n != 0 {
 		t.Fatalf("a root was recorded for a tombstoned computer: %d", n)

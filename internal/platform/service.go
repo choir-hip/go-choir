@@ -64,6 +64,9 @@ type Service struct {
 	snapshotRootAfterVerify func()
 	// snapshotRootRecheckQueries counts the collector's live-root queries.
 	snapshotRootRecheckQueries atomic.Int64
+	// snapshotRootInCommit is a test hook run once the registration holds the
+	// tombstone gate and before it commits.
+	snapshotRootInCommit func()
 	// tapeSweep is the tape sweep's run lock, policy, registry and jobs
 	// (tape_sweep.go).
 	tapeSweep tapeSweepState
