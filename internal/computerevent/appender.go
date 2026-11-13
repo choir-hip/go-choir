@@ -286,6 +286,29 @@ func (a *ComputerEventAppender) HeadsAligned(ctx context.Context) error {
 	return nil
 }
 
+// SettlePrepared settles a prepared row an earlier append left behind (an
+// unclear CAS keeps it) before the caller reads committed local state to number
+// its next write. Without it a retried write reads the table before the first
+// event is finalized, reuses its (run, seq), and commits a second event whose
+// finalize fails on the unique key. With no prepared row it is one local read
+// and no corpusd call. It takes the appender mutex, like an append.
+func (a *ComputerEventAppender) SettlePrepared(ctx context.Context) error {
+	if a == nil {
+		return nil
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	prepared, err := a.projection.Prepared(ctx, a.computerID)
+	if err != nil {
+		return fmt.Errorf("computer event appender: read prepared rows: %w", err)
+	}
+	if len(prepared) == 0 {
+		return nil
+	}
+	_, err = a.recoverPreparedInPlaceLocked(ctx, "before a write that numbers itself from local state")
+	return err
+}
+
 // HoldAppends runs fn while no event can be appended. Every append and its
 // live projection run under the same lock, so fn sees a head and a projection
 // that belong together. Keep fn short: every writer waits for it.
