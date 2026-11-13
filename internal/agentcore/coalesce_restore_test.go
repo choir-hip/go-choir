@@ -54,3 +54,31 @@ func TestAppendMessagesWritesAnOpeningAsOneTapeEvent(t *testing.T) {
 		t.Fatalf("opening entries = %+v (%v)", entries, err)
 	}
 }
+
+// The boot that follows an old build's failed drain under an open window closes
+// its runs with a note that names run memory; every other crash-close note
+// names telemetry only.
+func TestCrashCloseNoteNamesRunMemoryOnlyForAnOldWindowMarker(t *testing.T) {
+	rt := telemetryRuntime(t, "computer-old-marker-note")
+	open, closed := true, false
+	for _, c := range []struct {
+		name    string
+		marker  PlannedRestart
+		planned bool
+		want    bool
+	}{
+		{"open window, failed drain", PlannedRestart{TelemetryDrainFailed: true, RunMemoryWindowOpen: &open}, true, true},
+		{"closed window", PlannedRestart{TelemetryDrainFailed: true, RunMemoryWindowOpen: &closed}, true, false},
+		{"no stamp", PlannedRestart{TelemetryDrainFailed: true}, true, false},
+		{"crash", PlannedRestart{}, false, false},
+	} {
+		rt.bootRestart, rt.bootRestartPlanned = c.marker, c.planned
+		if got := rt.crashCloseNamesRunMemory(); got != c.want {
+			t.Errorf("%s: crashCloseNamesRunMemory = %v, want %v", c.name, got, c.want)
+		}
+	}
+	var on map[string]string
+	if err := json.Unmarshal(crashClosePayload(true, true), &on); err != nil || on["telemetry"] != runMemoryMissingWindowNote || on["run_memory"] != runMemoryMissingWindowNote {
+		t.Fatalf("crash-close payload for an old window marker = %v (%v)", on, err)
+	}
+}
