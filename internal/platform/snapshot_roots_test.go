@@ -143,7 +143,7 @@ func TestSnapshotRootsOfALargeStoreKeepTwo(t *testing.T) {
 		return len(roots)
 	}
 	for seq := int64(1); seq <= 4; seq++ {
-		if err := store.RecordSnapshotRoot(ctx, "computer-large", gcDigest("large root"+string(rune('0'+seq))), seq, chunks(largeSnapshotChunks+1, string(rune('0'+seq)))); err != nil {
+		if err := store.recordSnapshotRoot(ctx, "computer-large", gcDigest("large root"+string(rune('0'+seq))), seq, chunks(largeSnapshotChunks+1, string(rune('0'+seq)))); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -151,7 +151,7 @@ func TestSnapshotRootsOfALargeStoreKeepTwo(t *testing.T) {
 		t.Fatalf("a large store keeps %d roots, want %d", got, largeSnapshotRetention)
 	}
 	for seq := int64(5); seq <= 8; seq++ {
-		if err := store.RecordSnapshotRoot(ctx, "computer-large", gcDigest("small root"+string(rune('0'+seq))), seq, chunks(3, string(rune('0'+seq)))); err != nil {
+		if err := store.recordSnapshotRoot(ctx, "computer-large", gcDigest("small root"+string(rune('0'+seq))), seq, chunks(3, string(rune('0'+seq)))); err != nil {
 			t.Fatal(err)
 		}
 	}

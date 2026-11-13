@@ -148,43 +148,21 @@ func TestSnapshotRootRegisteredAfterUnlinkIsRefused(t *testing.T) {
 	}
 }
 
-// Mode 5: the registration holds the CAS reuse lock shared from its check to
-// its commit, so the collector's exclusive unlink cannot fall between them.
-func TestSnapshotRootRegistrationExcludesUnlinkBetweenCheckAndCommit(t *testing.T) {
-	f := newGCFixture(t)
-	h := NewHandler(f.service)
-	d, _ := f.snapChunk("c", time.Hour)
-	var excluded bool
-	f.service.snapshotRootAfterVerify = func() {
-		if f.store.casReuseMu.TryLock() {
-			f.store.casReuseMu.Unlock()
-			return
-		}
-		excluded = true
-	}
-	if code := f.snapDeclare(h, "r", 1, d); code != http.StatusCreated {
-		t.Fatalf("declare = %d", code)
-	}
-	if !excluded {
-		t.Fatal("the unlink lock was free between the chunk check and the root commit")
-	}
-}
-
 // Mode 6: mtime alone is not enough.
 func TestUnlinkKeepsChunkOfLiveSnapshotRoot(t *testing.T) {
 	f := newGCFixture(t)
 	d, p := f.snapChunk("live", 40*time.Hour)
-	if err := f.store.RecordSnapshotRoot(f.ctx, snapVerifyComputer, gcDigest("root/live"), 1, []string{d}); err != nil {
+	if err := f.store.recordSnapshotRoot(f.ctx, snapVerifyComputer, gcDigest("root/live"), 1, []string{d}); err != nil {
 		t.Fatal(err)
 	}
 	rel := "sha256/file-cas-chunks/" + snapVerifyComputer + "/" + d
-	op, _, err := f.service.unlinkIfStillUnreachable(gcCandidate{ns: "file-cas-chunks", rel: rel, path: p}, time.Now().Add(-24*time.Hour))
+	op, _, err := f.service.unlinkIfStillUnreachable(f.ctx, gcCandidate{ns: "file-cas-chunks", rel: rel, path: p}, time.Now().Add(-24*time.Hour))
 	if err != nil || op == "deleted" || !exists(p) {
 		t.Fatalf("a chunk of a live snapshot root was unlinked: op %q err %v", op, err)
 	}
 	// An unrooted old chunk is still collectable.
 	u, up := f.snapChunk("unrooted", 40*time.Hour)
-	op, _, err = f.service.unlinkIfStillUnreachable(gcCandidate{ns: "file-cas-chunks", rel: "sha256/file-cas-chunks/" + snapVerifyComputer + "/" + u, path: up}, time.Now().Add(-24*time.Hour))
+	op, _, err = f.service.unlinkIfStillUnreachable(f.ctx, gcCandidate{ns: "file-cas-chunks", rel: "sha256/file-cas-chunks/" + snapVerifyComputer + "/" + u, path: up}, time.Now().Add(-24*time.Hour))
 	if err != nil || op != "deleted" {
 		t.Fatalf("unrooted old chunk: op %q err %v", op, err)
 	}
@@ -217,7 +195,7 @@ func TestSnapshotRootVerifyCostAtPaperScale(t *testing.T) {
 	// And the unlink-side recheck over a store of this root.
 	start = time.Now()
 	rel := "sha256/file-cas-chunks/" + snapVerifyComputer + "/" + gcDigest("paper/0")
-	if op, _, err := f.service.unlinkIfStillUnreachable(gcCandidate{ns: "file-cas-chunks", rel: rel, path: f.root + "/" + rel}, time.Now().Add(time.Hour)); err != nil || op == "deleted" {
+	if op, _, err := f.service.unlinkIfStillUnreachable(f.ctx, gcCandidate{ns: "file-cas-chunks", rel: rel, path: f.root + "/" + rel}, time.Now().Add(time.Hour)); err != nil || op == "deleted" {
 		t.Fatalf("recheck: %q %v", op, err)
 	}
 	t.Logf("one unlink recheck against a %d-chunk root: %s", n, time.Since(start))

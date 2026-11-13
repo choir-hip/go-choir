@@ -132,7 +132,7 @@ func TestAnUnlinkDuringABlockedRootCommitKeepsTheChunkWithoutHoldingTheLock(t *t
 			return
 		}
 		f.store.casReuseMu.Unlock()
-		op, _, err := f.service.unlinkIfStillUnreachable(cand, time.Now().Add(-24*time.Hour))
+		op, _, err := f.service.unlinkIfStillUnreachable(f.ctx, cand, time.Now().Add(-24*time.Hour))
 		if err != nil || op == "deleted" || !exists(p) {
 			t.Errorf("an unlink during the pending commit deleted the chunk: %q %v", op, err)
 		}
@@ -141,7 +141,7 @@ func TestAnUnlinkDuringABlockedRootCommitKeepsTheChunkWithoutHoldingTheLock(t *t
 		t.Fatalf("declare = %d", code)
 	}
 	f.service.snapshotRootAfterVerify = nil
-	op, _, err := f.service.unlinkIfStillUnreachable(cand, time.Now().Add(-24*time.Hour))
+	op, _, err := f.service.unlinkIfStillUnreachable(f.ctx, cand, time.Now().Add(-24*time.Hour))
 	if err != nil || op == "deleted" || !exists(p) {
 		t.Fatalf("an unlink after the commit deleted the chunk: %q %v", op, err)
 	}

@@ -20,7 +20,7 @@ func TestHTTPChunksRegisterSnapshotRootNonJSONRefusalHasNoDanglingColon(t *testi
 	defer srv.Close()
 	h := HTTPChunks{BaseURL: srv.URL, ComputerID: testComputer}
 	err := h.RegisterSnapshotRoot(context.Background(), strings.Repeat("cd", 32), 7, []string{strings.Repeat("ab", 32)})
-	if !errors.Is(err, ErrSnapshotChunksMissing) {
+	if !errors.Is(err, ErrSnapshotChunkMissing) {
 		t.Fatalf("err = %v", err)
 	}
 	if strings.HasSuffix(strings.TrimSpace(err.Error()), ":") {
