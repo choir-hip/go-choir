@@ -67,7 +67,7 @@ not yet identified.
 Next: a `data_volume` section in guest observability (statfs and allocated
 bytes per top-level directory), then prune what it names.
 
-## Host survey, 2026-11-14T00:10Z (read-only)
+## Host survey, 2026-11-13T23:50Z (read-only)
 
 A second pass over every directory above 0.2 GiB found no unaccounted
 consumer on the host. Corrections and additions to the survey above:

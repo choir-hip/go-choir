@@ -1,6 +1,6 @@
 # Structural assessment: a stale batch after an unclear append
 
-Written 2026-11-13T23:10Z, after three review rounds on one mechanism did
+Written 2026-11-13T23:06Z, after three review rounds on one mechanism did
 not converge (contract, "Before you change anything", rule 7).
 
 ## The defect
