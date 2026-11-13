@@ -302,6 +302,9 @@ type tapeSweepState struct {
 	// refChunkEvents is the events per persisted reference chunk; 0 means
 	// defaultTapeRefChunkEvents. Test-only.
 	refChunkEvents int
+	// refCompactAfter is the chunk count that triggers compaction; 0 means
+	// defaultTapeRefCompactAfter. Test-only.
+	refCompactAfter int
 	// afterRefChunk is a test hook run after each reference chunk is
 	// persisted; an error stands in for a restart at that point.
 	afterRefChunk func(computerID string, to uint64) error
@@ -1228,11 +1231,6 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 	report.DurationMs = time.Since(started).Milliseconds()
 	if err := writeJSONFileSync(report.ReportPath, report); err != nil {
 		return report, err
-	}
-	// The run finished: its progress has served. (Dropped here until the
-	// per-computer watermark keeps it.)
-	if _, err := s.store.db.ExecContext(ctx, `DELETE FROM tape_sweep_ref_chunks`); err != nil {
-		report.Warnings = append(report.Warnings, "drop reference progress: "+err.Error())
 	}
 	log.Printf("tape sweep: dry-run run=%s manifest_sha256=%s computers=%d destroyed=%d listed=%d blocked_by_fork_lineage=%d destroyed_files=%d destroyed_bytes=%d orphan_files=%d orphan_bytes=%d tombstoned=%d warnings=%d",
 		jobID, digest, report.Computers, report.DestroyedComputers, report.DestroyedListed, report.DestroyedBlockedByLineage, report.DestroyedFiles, report.DestroyedBytes, report.OrphanFiles, report.OrphanBytes, tombstoned, len(report.Warnings))
