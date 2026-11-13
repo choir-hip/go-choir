@@ -145,6 +145,14 @@ func applyOutcome(rec *ProviderHealth, outcome Outcome, policy BackoffPolicy, no
 		rec.LastFailureClass = string(outcome.Class)
 		rec.LastErrorSummary = truncateSummary(outcome.Error)
 		d := policy.CooldownDuration(outcome.Class, rec.StrikeCount)
+		if outcome.Uncapped && transientClass(outcome.Class) {
+			// Nothing behind this provider: a transient failure is not an
+			// exhausted quota. Bench it only after a run of them, briefly.
+			d = 0
+			if rec.StrikeCount >= TransientStrikesBeforeCooldown {
+				d = TransientBackoff
+			}
+		}
 		if d > 0 {
 			rec.State = StateCoolingDown
 			until := now.Add(d)
