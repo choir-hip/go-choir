@@ -3073,7 +3073,7 @@ func (rt *Runtime) closePreBootRunsAfterCrash(ctx context.Context) {
 			}
 		}
 		rt.emitEvent(ctx, rec, types.EventRunCancelled, events.CauseSupervisorRecovery,
-			crashClosePayload(rt.store.TelemetryBatchingConfigured()))
+			crashClosePayload(rt.store.TelemetryBatchingConfigured(), rt.crashCloseNamesRunMemory()))
 		rt.bootTally.add(deskOfRun(rec))
 		log.Printf("runtime: closed run %s (was %s) after a crash restart", rec.RunID, was)
 		return true
