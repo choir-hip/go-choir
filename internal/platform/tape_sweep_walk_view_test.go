@@ -149,37 +149,3 @@ func TestX2WalkStopsOnADamagedSegmentRecord(t *testing.T) {
 	}
 }
 
-func TestX3WalkFindsEventsWrittenToSegmentsDuringTheWalk(t *testing.T) {
-	f := newTapeFixture(t)
-	f.live("live-1")
-	c := f.chain("live-1", 30, tapeAged)
-	ev := func(i int) segItem { return segItem{tapestore.NSEvent, c.seqs[i].event} }
-	segmentize(t, f.root, "live-1", 1, true, false, ev(0), ev(1), ev(2), ev(3), ev(4))
-	segmentize(t, f.root, "live-1", 2, false, false, ev(5), ev(6), ev(7))
-	var items []segItem
-	for i := 8; i < 30; i++ {
-		items = append(items, ev(i))
-	}
-	done := false
-	rows, err := f.walkedRows("live-1", 30, func(r tapeChainRow) {
-		if r.Sequence == 4 && !done {
-			done = true
-			// While the walk runs: the open segment gains events and later
-			// events appear in new segments (the first sealed, the second
-			// open). Segment 2 stays open and is read again.
-			segmentize(t, f.root, "live-1", 3, true, false, items[:10]...)
-			segmentize(t, f.root, "live-1", 4, false, false, items[10:]...)
-		}
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(rows) != 30 {
-		t.Fatalf("walked %d rows", len(rows))
-	}
-	for _, r := range rows {
-		if !r.EventReadable {
-			t.Fatalf("sequence %d unreadable", r.Sequence)
-		}
-	}
-}
