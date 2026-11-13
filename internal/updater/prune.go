@@ -44,7 +44,8 @@ import (
 //     wrapper overlays store/ on /nix/store, so a surviving layered release's
 //     entrypoint must be rooted or the collection does not run.
 //   - incoming/: staged inputs. Apply deletes its own source once the release
-//     is verified and staged (dropStagedSource), and does not need it again
+//     is verified and staged (dropStagedSource; a host build is the exception,
+//     it ages out below), and does not need it again
 //     (a resumed apply of a staged release skips the source). So a payload
 //     `<release digest>` whose release is staged is removed here at once. A
 //     `<digest>` directory that is not a staged payload is a self-development
@@ -459,6 +460,13 @@ func (u *Updater) dropStagedSource(sourceDir string) {
 		return
 	}
 	if pathExists(filepath.Join(sourceDir, "bundle.json")) || pathExists(filepath.Join(sourceDir, "bundle.draft.json")) {
+		return
+	}
+	// A host build stays for its own window: the runtime reuses it on a resumed
+	// pass (a re-fetch must not change the minted manifest) and reads its job
+	// record while the operation settles; the prune removes it once the window
+	// has passed and no apply is unsettled.
+	if strings.HasPrefix(relative, "host-build-") {
 		return
 	}
 	if err := removeTree(sourceDir); err != nil {
