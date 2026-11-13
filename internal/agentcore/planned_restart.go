@@ -756,6 +756,10 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 	}
 	storePath := h.rt.cfg.StorePath
 	if r.Method == http.MethodDelete {
+		// A mark still in flight finishes first: its marker would otherwise
+		// be written after this withdrawal.
+		h.rt.plannedRestartReqMu.Lock()
+		defer h.rt.plannedRestartReqMu.Unlock()
 		// The host did not restart after all: telemetry queues again once
 		// the marker is gone.
 		if err := h.rt.clearHostPlannedRestartMarker(storePath); err != nil {
@@ -786,6 +790,9 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "target is required"})
 		return
 	}
+	// One mark at a time, and a withdrawal waits for it (above).
+	h.rt.plannedRestartReqMu.Lock()
+	defer h.rt.plannedRestartReqMu.Unlock()
 	// The mark is one work occurrence through the hibernate fence, taken
 	// without waiting (D2 S5): a closed fence refuses it before anything is
 	// written, and an open fence cannot close until the marker write returns.
@@ -834,26 +841,9 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 			Reason:      reason,
 			AllowBusy:   allowBusy,
 			RunningRuns: work.Running, SelfdevActiveOps: work.SelfdevActive, LiveCapsules: work.LiveCapsules,
+			SnapshotInFlight:        work.SnapshotInFlight,
 			SelfdevAwaitingDecision: work.SelfdevAwaitingDecision, HeldOperations: work.HeldOperations,
 			HoldsNewWork: pausing || h.rt.refreshHoldsNewWork(askedAt),
-		})
-		return
-	}
-	// A streaming snapshot is not work a restart destroys: nothing is recorded
-	// until the capture ends, and it can be taken again. Cancel it and wait
-	// for it to unwind (the read transaction, the WAL, the upload workers, the
-	// attempt guard) before the marker is written. A capture already
-	// registering its root is let finish instead (snapshot.Config.BeforeCommit).
-	// One that does not end inside the bound refuses the restart, with a
-	// reason that says so: a correctness refusal, not a switch. This runs
-	// after every refusal above, so a refused restart never cuts a capture.
-	if err := h.rt.snapshots.cancelInFlight(r.Context(), errSnapshotCancelledForRestart, snapshotCancelUnwindBound, snapshotRestartBlock); err != nil {
-		h.rt.releaseHostRestartTelemetryIfNoMarker(storePath)
-		writeAPIJSON(w, http.StatusConflict, plannedRestartBusyResponse{
-			Error:   err.Error() + "; restart deferred to the host's next ask",
-			Outcome: "busy", Reason: "snapshot_not_unwound", AllowBusy: allowBusy,
-			RunningRuns: work.Running, SnapshotInFlight: true,
-			HoldsNewWork: h.rt.refreshHoldsNewWork(askedAt),
 		})
 		return
 	}
@@ -867,7 +857,23 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 	// capsule's mutex (sandbox pause design, r3: the ack is atomic against
 	// the pre-ack TTL unpause).
 	var marker PlannedRestart
+	var notUnwound error
 	refusal, err := h.rt.ackPausedCapsules(r.Context(), allowBusy, func() error {
+		// A streaming snapshot is not work a restart destroys: nothing is
+		// recorded until the capture ends, and it can be taken again. So the
+		// last step before the marker, after every refusal above and after the
+		// capsule acks (this callback runs once both have passed), cancels it
+		// and waits for it to unwind (the read transaction, the WAL, the
+		// upload workers, the attempt guard). A capture already registering
+		// its root is let finish instead (snapshot.Config.BeforeCommit). One
+		// that does not end inside the bound refuses the restart with a reason
+		// that says so, a correctness refusal and not a switch. That refusal
+		// has by then cut a non-committing capture, and the capsules this
+		// request paused are thawed again below.
+		if cerr := h.rt.snapshots.cancelInFlight(r.Context(), errSnapshotCancelledForRestart, snapshotCancelUnwindBound, snapshotRestartBlock); cerr != nil {
+			notUnwound = cerr
+			return cerr
+		}
 		var markErr error
 		marker, markErr = h.rt.writeHostPlannedRestartMarker(storePath, PlannedRestart{Reason: PlannedRestartPlatformRefresh, Target: target, RequestedAt: time.Now().UTC()})
 		if markErr != nil {
@@ -881,6 +887,17 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 		syncFilesystems()
 		return nil
 	})
+	if notUnwound != nil {
+		h.rt.releaseHostRestartTelemetryIfNoMarker(storePath)
+		h.rt.unpauseAllCapsules()
+		writeAPIJSON(w, http.StatusConflict, plannedRestartBusyResponse{
+			Error:   notUnwound.Error() + "; restart deferred to the host's next ask",
+			Outcome: "busy", Reason: "snapshot_not_unwound", AllowBusy: allowBusy,
+			RunningRuns: work.Running, SnapshotInFlight: h.rt.snapshots.inFlight.Load(),
+			HoldsNewWork: h.rt.refreshHoldsNewWork(askedAt),
+		})
+		return
+	}
 	if refusal != "" {
 		h.rt.snapshots.clearRestartBlock()
 		h.rt.releaseHostRestartTelemetryIfNoMarker(storePath)

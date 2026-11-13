@@ -140,9 +140,13 @@ func TestAFailedWaitDoesNotLiftALaterRequestsHold(t *testing.T) {
 
 	bDone := make(chan error, 1)
 	aDone := make(chan error, 1)
-	go func() { aDone <- p.cancelInFlight(context.Background(), errSnapshotCancelledForRestart, 400*time.Millisecond, time.Minute) }()
+	go func() {
+		aDone <- p.cancelInFlight(context.Background(), errSnapshotCancelledForRestart, 400*time.Millisecond, time.Minute)
+	}()
 	time.Sleep(100 * time.Millisecond)
-	go func() { bDone <- p.cancelInFlight(context.Background(), errSnapshotCancelledForRestart, 3*time.Second, time.Minute) }()
+	go func() {
+		bDone <- p.cancelInFlight(context.Background(), errSnapshotCancelledForRestart, 3*time.Second, time.Minute)
+	}()
 	if err := <-aDone; err == nil {
 		t.Fatal("A's wait should have failed")
 	}

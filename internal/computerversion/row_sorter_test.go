@@ -1,6 +1,7 @@
 package computerversion
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -43,7 +44,7 @@ func TestRowSorterSpilledDigestMatchesInMemory(t *testing.T) {
 				t.Fatalf("limit %d: add: %v", limit, err)
 			}
 		}
-		got, err := s.Sum()
+		got, err := s.Sum(context.Background())
 		if err != nil {
 			t.Fatalf("limit %d: sum: %v", limit, err)
 		}
@@ -61,7 +62,7 @@ func TestRowSorterSpilledDigestMatchesInMemory(t *testing.T) {
 func TestRowSorterEmptyTable(t *testing.T) {
 	s := newRowSorter(t.TempDir(), 16)
 	defer s.Close()
-	got, err := s.Sum()
+	got, err := s.Sum(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

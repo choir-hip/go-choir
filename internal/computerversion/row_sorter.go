@@ -3,6 +3,7 @@ package computerversion
 import (
 	"bufio"
 	"container/heap"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -76,12 +77,25 @@ func (s *rowSorter) spill() error {
 	return nil
 }
 
-// Sum returns the digest. It consumes the sorter.
-func (s *rowSorter) Sum() (string, error) {
+// sorterCtxEvery is how many rows Sum hashes between looks at its context. A
+// planned restart cancels the snapshot's witness, and a table without a
+// primary key spends its time here, after the scan, where the driver's own
+// interrupt does not reach. The in-memory sort before it is bounded by
+// witnessSpillBytes and is not interruptible.
+const sorterCtxEvery = 1024
+
+// Sum returns the digest, or ctx's error if it ends first. It consumes the
+// sorter.
+func (s *rowSorter) Sum(ctx context.Context) (string, error) {
 	hasher := sha256.New()
 	if len(s.runs) == 0 {
 		sort.Strings(s.buf)
-		for _, r := range s.buf {
+		for i, r := range s.buf {
+			if i%sorterCtxEvery == 0 {
+				if err := ctx.Err(); err != nil {
+					return "", err
+				}
+			}
 			io.WriteString(hasher, r)
 			hasher.Write([]byte("\n"))
 		}
@@ -118,7 +132,12 @@ func (s *rowSorter) Sum() (string, error) {
 			heap.Push(h, r)
 		}
 	}
-	for h.Len() > 0 {
+	for n := 0; h.Len() > 0; n++ {
+		if n%sorterCtxEvery == 0 {
+			if err := ctx.Err(); err != nil {
+				return "", err
+			}
+		}
 		r := h.items[0]
 		io.WriteString(hasher, r.cur)
 		hasher.Write([]byte("\n"))

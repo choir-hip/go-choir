@@ -36,6 +36,10 @@ import (
 // boot). The guest still refuses while a self-development apply is in
 // flight or a capsule is live.
 
+// guestMarkClearTimeout bounds the clear the host sends after it gave up on a
+// planned-restart request.
+const guestMarkClearTimeout = 5 * time.Second
+
 const plannedRestartGuestPath = "/internal/runtime/planned-restart"
 
 type guestMarkOutcome int
@@ -547,6 +551,16 @@ func (h *Handler) deployRefreshWith(ctx context.Context, req deployRefreshReques
 			return reply(deployRefreshDeferred, "busy (guest predates planned-restart; /health reports work or did not answer)", http.StatusConflict)
 		}
 	default:
+		// The guest did not answer in time, but it may still be working on the
+		// request and write its marker after we gave up (a cancelled snapshot
+		// capture makes that slower). A marker nobody expects keeps the
+		// guest's refresh hold up for 15 minutes and turns a crash in that
+		// window into a planned boot that resumes work, or the markerless
+		// restart below into a planned one. Ask it to clear; the clear waits
+		// for the request in flight on the guest, and is bounded here.
+		clearCtx, cancelClear := context.WithTimeout(context.WithoutCancel(ctx), guestMarkClearTimeout)
+		marker.clear(clearCtx, own)
+		cancelClear()
 		// The operator's restart of a computer that cannot take the marker (a
 		// wedged guest) still happens, markerless: a crash boot that closes
 		// open work. When the guest does answer, its refusals above hold.

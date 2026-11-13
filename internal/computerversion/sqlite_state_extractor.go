@@ -496,7 +496,7 @@ func (e SQLiteStateExtractor) queryDigest(ctx context.Context, tx *sql.Tx, table
 		return "", fmt.Errorf("iterate rows from %s: %w", table, err)
 	}
 	if sorter != nil && count > 0 {
-		sum, err := sorter.Sum()
+		sum, err := sorter.Sum(ctx)
 		if err != nil {
 			return "", err
 		}

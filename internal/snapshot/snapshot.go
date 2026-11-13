@@ -254,12 +254,15 @@ type Config struct {
 	// BeforeCommit, when set, is asked once, after the capture and before the
 	// root is registered with the host. An error ends the attempt with
 	// nothing registered or appended. A nil answer is the point of no return:
-	// registering the root and appending snapshot_recorded then run to the
-	// end on a context the caller's cancel cannot reach, bounded by
-	// CommitTimeout, so the host never holds a root the tape does not know
-	// and the tape never names a root the host does not hold. A planned
-	// restart cancels the capture through ctx; this is where it stops being
-	// cancellable.
+	// registering the root and appending snapshot_recorded then run on a
+	// context the caller's cancel cannot reach, bounded by CommitTimeout. This
+	// removes a caller's cancel as a way to leave a root registered with no
+	// event after it. It does not remove a failure of the append itself (or
+	// CommitTimeout expiring between the two): the host may then hold a root
+	// the tape does not know, as it could before. What is guaranteed is the
+	// other direction: the tape never names a root the host does not hold. A
+	// planned restart cancels the capture through ctx; this is where it stops
+	// being cancellable.
 	BeforeCommit func() error
 	// CommitTimeout bounds the committed steps (default DefaultCommitTimeout).
 	CommitTimeout time.Duration

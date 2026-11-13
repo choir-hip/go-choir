@@ -368,9 +368,11 @@ func (rt *Runtime) prepareHibernate(ctx context.Context) (int, hibernatePrepareR
 	// collector deleted meanwhile
 	// (docs/problems/snapshot-root-recorded-without-chunk-check-2026-11-12.md),
 	// and its read transaction would sit frozen in the paused VM. Cancel it
-	// before the pause; the closed fence keeps the producer from starting
-	// another (snapshotsMayStart). A capture that will not unwind keeps the
-	// guest awake.
+	// before the pause. The fence was closed above, before this call takes the
+	// producer's lock, and begin asks the fence under that same lock
+	// (snapshotsMayStart), so a capture is either found here or refuses to
+	// start: there is no gap for one to slip through. A capture that will not
+	// unwind keeps the guest awake.
 	if err := rt.snapshots.cancelInFlight(ctx, errSnapshotCancelledForHibernate, snapshotCancelUnwindBound, 0); err != nil {
 		rt.hibernate.lift()
 		return http.StatusConflict, hibernatePrepareResponse{

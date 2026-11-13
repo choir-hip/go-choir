@@ -536,6 +536,10 @@ type Runtime struct {
 	// host's planned-restart request took; nil when no host request holds it.
 	// hostRestartDrainFailed records that the hold's drain lost records.
 	hostRestartTelemetryMu      sync.Mutex
+	// plannedRestartReqMu serialises the host's planned-restart requests with
+	// its withdrawals (DELETE), so a withdrawal cannot land before the marker
+	// of a mark it was meant to undo.
+	plannedRestartReqMu sync.Mutex
 	hostRestartTelemetryRestore func()
 	hostRestartDrainFailed      bool
 	// hostRestartWindowWasOpen: the failed drain held records under an open

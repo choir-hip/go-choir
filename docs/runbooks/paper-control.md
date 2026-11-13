@@ -39,12 +39,16 @@ self-development apply, with a live engineering capsule, for a held or
 not-active computer, while a refresh is in flight, or while the ring has not
 opened. A snapshot capture in flight does not refuse it: the guest cancels the
 capture (nothing is recorded until a capture ends; the producer takes another
-after the boot) and goes on. Two bounded exceptions refuse with reason
-`snapshot_not_unwound` and the host asks again: a capture that does not unwind
-within 10 s, and a capture already registering its root, which is let finish
-(at most a minute) so the host never holds a root the tape does not know. A
-guest still on the build from before this change refuses with
-`snapshot_in_flight` until its next restart. There is no force; it never stops and starts
+after the boot) and goes on. A capture that is already registering its root is
+not cancelled (that would risk a root registered with no event after it); the
+restart waits for it. Either way the guest waits at most 3 s, and past that
+refuses with reason `snapshot_not_unwound` (the host asks again; a
+non-committing capture has by then been cut). The `restart` verb's marker call
+has a 10 s budget; if the guest's whole answer does not fit it, the verb
+restarts markerless as it does for any wedged guest, and the host first asks
+the guest to clear a marker it may have written late. A guest still on the
+build from before this change refuses with `snapshot_in_flight` until its
+next restart. There is no force; it never stops and starts
 the computer the plain way. The paper (public_platform) takes the refresh while
 busy and resumes its work. The answer's `receipt` records the ask, not the
 outcome.
