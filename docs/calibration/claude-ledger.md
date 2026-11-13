@@ -143,6 +143,8 @@ entered below as lapsed, not scored.
 | C60 | 2026-11-12T21:00Z | lead | landing | lane/storage-guards (three commits, head 7a6557548) lands through scripts/land, passes CI and deploys to staging on the first attempt, and the first `go-choir-disk-forecast` run on Node B exits 0 and prints a days-to-floor line and a 6-hour drain line. False if the land, CI, deploy or first forecast run fails or needs a fix commit. | 0.65 | 2026-11-13T02:00Z | scripts/land output, CI run, deploy receipt, journal of the forecast unit |
 | C61 | 2026-11-12T21:40Z | lead | estimate | Storage mission conjecture SS2-C1: after stations S4 to S6 land, the paper's image, tape, receipts and chunks on Node B sum to at most 90 GiB (196 on 2026-11-12) with no tape moved off the host, and Node B's free space falls by at most 3 GiB a day over seven days with no hand release. False if either reading misses. | 0.45 | 2026-12-10T00:00Z | Node B du and pg_total_relation_size; the hourly growth ledger |
 | C62 | 2026-11-12T21:35Z | lead | landing | lane/snapshot-loop (tip 67288e86d: backoff from the attempt's end, witness before pages, 90 minute budget, free-space guard) lands, deploys, and within 3 hours of the paper's refresh either the paper records one snapshot (`snapshot_recorded` after the deploy) or its failed attempt uploads under 200 MiB of new chunks and the next attempt waits at least 20 minutes; and Node B's 6-hour drain measured from one hour after the refresh is under 1 GiB an hour. False if the paper keeps uploading chunks at more than 1 GiB an hour, or a fix commit is needed. | 0.60 | 2026-11-13T04:00Z | deploy receipt, the paper's observability and gateway/corpusd logs, the forecast unit's fast-drain line |
+| C63 | 2026-11-13T01:55Z | lead | landing | lane/appender-wedge (tip f191b735c or its accepted successor: same-key re-send of an unclear CAS, in-place catch-up from the host chain) is accepted by both review seats within two more rounds, lands through scripts/land, passes CI and deploys on the first attempt, and a lost-reply fault on d@e converges without a reboot (the next append succeeds and local head equals host head). False if a third review round is needed after this one, the land, CI or deploy needs a fix commit, or the d@e fault does not converge. | 0.50 | 2026-11-13T12:00Z | review outputs, CI run, deploy receipt, d@e fault proof output |
+| C64 | 2026-11-13T01:55Z | lead | landing | lane/restart-cancels-capture is accepted by both seats on its third review round (the round after tip ee60dd4d1), lands, passes CI and deploys on the first attempt, and on d@e a planned restart asked while a snapshot capture is in flight returns 200 within 20 seconds and the computer boots as planned. False if a fourth round is needed, a fix commit is needed after landing, or the d@e restart refuses or boots as a crash. | 0.45 | 2026-11-13T12:00Z | review outputs, CI run, deploy receipt, d@e restart proof |
 
 ### Settlements
 
@@ -171,7 +173,7 @@ entered below as lapsed, not scored.
 
 ### Scorecard
 
-Second form: 29 claims open, 13 settled (recounted 2026-11-12). First form: 12 settled (7 true, 4
+Second form: 31 claims open, 13 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
 false, 1 partial), 7 lapsed.
 
 | band | claims settled | came true |
