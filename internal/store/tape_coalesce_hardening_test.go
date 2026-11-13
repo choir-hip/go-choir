@@ -116,8 +116,6 @@ func TestCoalesceCancelledCallerNeverCommitsItsOwnWrite(t *testing.T) {
 // The split after a refusal gives every member its own deadline: members late
 // in a big group must not inherit the group's elapsed time.
 func TestCoalesceRefusalSplitGivesEachMemberItsOwnDeadline(t *testing.T) {
-	old := groupCommitTimeout
-	defer func() { groupCommitTimeout = old }()
 	h := newTapeHarness(t)
 	h.warm()
 	h.dryRunHook = func(batch *computerevent.ProjectionBatch) error {
@@ -135,7 +133,7 @@ func TestCoalesceRefusalSplitGivesEachMemberItsOwnDeadline(t *testing.T) {
 		results <- writeResult{"lead", err}
 	}()
 	<-gate.entered
-	groupCommitTimeout = 600 * time.Millisecond
+	h.store.tapeGroup.timeoutNanos.Store(int64(600 * time.Millisecond))
 	const n = 8
 	runs := distinctRunMemoryRuns(h.store, n)
 	for i := 0; i < n; i++ {
@@ -349,4 +347,25 @@ func (c hostChainCAS) CompareAndSwap(ctx context.Context, request computerevent.
 		c.chain.mu.Unlock()
 	}
 	return receipt, err
+}
+
+// A cancellation that lands after a caller won the leader token must not let it
+// commit its own write: the token goes back and the caller returns ctx.Err().
+func TestCoalesceCancelAfterWinningTheTokenWritesNothing(t *testing.T) {
+	h := newTapeHarness(t)
+	h.warm()
+	ctx, cancel := context.WithCancel(context.Background())
+	h.store.tapeGroup.afterToken = func() { cancel() }
+	defer func() { h.store.tapeGroup.afterToken = nil }()
+	err := h.store.projectionTape.appendOps(ctx, []computerevent.ProjectionOp{rmOp("rm-late-cancel", "run-late-cancel", 1)})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("returned %v, want context.Canceled", err)
+	}
+	if got := h.eventsHolding("run_memory:rm-late-cancel"); len(got) != 0 {
+		t.Fatal("a caller cancelled after winning the token committed its own write")
+	}
+	h.store.tapeGroup.afterToken = nil
+	if err := h.store.AppendEvent(context.Background(), h.event("after", "run-after", "owner-1", types.EventRunCompleted, telemetryBase)); err != nil {
+		t.Fatalf("the token was not handed back: %v", err)
+	}
 }

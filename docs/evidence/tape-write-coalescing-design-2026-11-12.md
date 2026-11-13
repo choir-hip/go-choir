@@ -383,3 +383,6 @@ per pin needs a corpusd endpoint that pins a payload and an event together.
 The finalize `payload` fetch (the sixth call on the sealed path, where the
 live plaintext cache of `AppendNewPayload` is not kept by
 `AppendNewPrivatePayload`) is a further saving this change does not take.
+
+`telemetry_ridden` (in `group_commit`) is a lower bound on the telemetry that
+rode: it counts only records whose carrying event committed.

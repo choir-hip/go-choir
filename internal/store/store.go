@@ -153,9 +153,15 @@ type Store struct {
 	// one run's seq and parent come from its previous entry, and different
 	// runs' entries may share a grouped tape event (tape_group_commit.go).
 	runMemoryMu [runMemoryStripes]sync.Mutex
-	// runMemorySettle is set when a run-memory append fails: the next one
+	// runMemorySettle is set when a run-memory append fails (or panics) and
+	// cleared only after a settle succeeded: until then every run-memory write
 	// settles a kept prepared row before it numbers itself (run_memory.go).
+	// Store-wide, not per run: one prepared row can hold several runs' entries.
 	runMemorySettle atomic.Bool
+	// runMemorySettleMu serialises the settle itself: writers that see the
+	// latch set wait here, so nobody numbers while a settle is needed or in
+	// progress. Lock order: run stripe, then this, then the appender mutex.
+	runMemorySettleMu sync.Mutex
 	// runMemoryAgentList counts and observes ListRunMemoryEntriesForAgent
 	// (run_memory_observe.go).
 	runMemoryAgentList runMemoryAgentListObserver
