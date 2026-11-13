@@ -448,6 +448,7 @@ func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run 
 	// be deleted from this run. The next dry run lists it again.
 	if len(items) > 0 && (run.deletes >= run.p.maxDeletes || run.bytes >= run.p.maxBytes) {
 		run.counts.DeferredByCap += len(items)
+		run.counts.ComputersSkipped++
 		return nil
 	}
 	id := proof.ComputerID
@@ -465,6 +466,13 @@ func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run 
 	if reason := s.reproveDestroyed(ctx, run, proof); reason != "" {
 		dropTomb()
 		s.tapeSweepSkipComputer(run, proof, items, reason)
+		return nil
+	}
+	// A computer already recorded as deleted whose files are on disk again
+	// is not archived a second time, and its archive record is not
+	// overwritten: it is skipped and reported for a person to look at.
+	if hasTomb && existing.Status == tapeTombstoneDeleted && s.anyTapeItemOnDisk(items) {
+		s.tapeSweepSkipComputer(run, proof, items, "tombstone already deleted; files remain")
 		return nil
 	}
 	s.setTapeSweepPhase(jobID, "destroyed "+id)
@@ -502,7 +510,7 @@ func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run 
 		extras, err := s.tapePurgeRowsDump(ctx, id)
 		var archive TapeArchiveSidecar
 		if err == nil {
-			archive, err = s.ensureTapeArchive(run, id, items, extras...)
+			archive, err = s.ensureTapeArchive(ctx, run, id, items, extras...)
 		}
 		if err != nil {
 			run.counts.Errors++
@@ -593,7 +601,7 @@ func (s *Service) applyOrphans(ctx context.Context, jobID string, run *tapeSweep
 	if len(keep) == 0 {
 		return nil
 	}
-	archive, err := s.ensureTapeArchive(run, "orphans", keep)
+	archive, err := s.ensureTapeArchive(ctx, run, "orphans", keep)
 	if err != nil {
 		run.counts.Errors++
 		run.log.record(tapeSweepLogRecord{Op: "error", Sweep: TapeSweepOrphans, Error: "archive: " + err.Error()})
@@ -628,6 +636,9 @@ func (s *Service) deleteTapeItems(ctx context.Context, run *tapeSweepApplyRun, i
 				continue
 			}
 			if run.deletes+1 > run.p.maxDeletes || run.bytes+it.Size > run.p.maxBytes {
+				if it.Size > run.p.maxBytes {
+					log.Printf("tape sweep: computer=%s item %s size=%d exceeds max_bytes=%d; it can never fit one apply", it.Computer, it.Path, it.Size, run.p.maxBytes)
+				}
 				run.counts.DeferredByCap++
 				complete = false
 				continue
@@ -714,7 +725,7 @@ const tapeArchiveManifestName = "MANIFEST.jsonl"
 
 // ensureTapeArchive returns a verified archive of the items present on disk,
 // reusing this run's archive when its sidecar verifies (a resumed apply).
-func (s *Service) ensureTapeArchive(run *tapeSweepApplyRun, scope string, items []tapeSweepItem, extras ...tapeArchiveExtra) (TapeArchiveSidecar, error) {
+func (s *Service) ensureTapeArchive(ctx context.Context, run *tapeSweepApplyRun, scope string, items []tapeSweepItem, extras ...tapeArchiveExtra) (TapeArchiveSidecar, error) {
 	if err := os.MkdirAll(run.archiveDir, 0o700); err != nil {
 		return TapeArchiveSidecar{}, err
 	}
@@ -722,17 +733,17 @@ func (s *Service) ensureTapeArchive(run *tapeSweepApplyRun, scope string, items 
 	if raw, err := os.ReadFile(path + ".json"); err == nil {
 		var sc TapeArchiveSidecar
 		if json.Unmarshal(raw, &sc) == nil && sc.Archive == path {
-			if err := verifyTapeArchive(path, sc); err == nil {
+			if err := verifyTapeArchive(ctx, path, sc); err == nil {
 				return sc, nil
 			}
 		}
 	}
-	sc, err := s.writeTapeArchive(path, scope, run, items, extras)
+	sc, err := s.writeTapeArchive(ctx, path, scope, run, items, extras)
 	if err != nil {
 		_ = os.Remove(path + ".tmp")
 		return TapeArchiveSidecar{}, err
 	}
-	if err := verifyTapeArchive(path, sc); err != nil {
+	if err := verifyTapeArchive(ctx, path, sc); err != nil {
 		return TapeArchiveSidecar{}, err
 	}
 	if err := writeJSONFileSync(path+".json", sc); err != nil {
@@ -742,7 +753,7 @@ func (s *Service) ensureTapeArchive(run *tapeSweepApplyRun, scope string, items 
 	return sc, run.log.flush()
 }
 
-func (s *Service) writeTapeArchive(path, scope string, run *tapeSweepApplyRun, items []tapeSweepItem, extras []tapeArchiveExtra) (TapeArchiveSidecar, error) {
+func (s *Service) writeTapeArchive(ctx context.Context, path, scope string, run *tapeSweepApplyRun, items []tapeSweepItem, extras []tapeArchiveExtra) (TapeArchiveSidecar, error) {
 	tmp := path + ".tmp"
 	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
@@ -758,6 +769,9 @@ func (s *Service) writeTapeArchive(path, scope string, run *tapeSweepApplyRun, i
 	var manifest bytes.Buffer
 	sc := TapeArchiveSidecar{Archive: path, Scope: scope, RunID: run.p.runID, RunManifest: run.manifestSH, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	for _, it := range items {
+		if err := ctx.Err(); err != nil {
+			return sc, err
+		}
 		full := filepath.Join(s.artifactsRoot, filepath.FromSlash(it.Path))
 		raw, err := os.ReadFile(full)
 		if os.IsNotExist(err) {
@@ -822,7 +836,7 @@ func (s *Service) writeTapeArchive(path, scope string, run *tapeSweepApplyRun, i
 // verifyTapeArchive re-reads the archive: its hash must match the sidecar,
 // every entry must hash to its MANIFEST.jsonl line, and every tape entry's
 // content must hash to its content-addressed name.
-func verifyTapeArchive(path string, sc TapeArchiveSidecar) error {
+func verifyTapeArchive(ctx context.Context, path string, sc TapeArchiveSidecar) error {
 	digest, err := sha256File(path)
 	if err != nil {
 		return err
@@ -844,6 +858,9 @@ func verifyTapeArchive(path string, sc TapeArchiveSidecar) error {
 	seen := map[string]string{}
 	var manifest []byte
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		hdr, err := tr.Next()
 		if err == io.EOF {
 			break
@@ -946,4 +963,14 @@ func (s *Service) pruneTapeSweepArchives(p tapeSweepParams) (TapeSweepReport, er
 		log.Printf("tape sweep: pruned archive %s bytes=%d", path, info.Size())
 	}
 	return report, nil
+}
+
+// anyTapeItemOnDisk reports whether any listed item still exists.
+func (s *Service) anyTapeItemOnDisk(items []tapeSweepItem) bool {
+	for _, it := range items {
+		if _, err := os.Lstat(filepath.Join(s.artifactsRoot, filepath.FromSlash(it.Path))); err == nil {
+			return true
+		}
+	}
+	return false
 }

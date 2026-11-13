@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -57,14 +58,17 @@ const (
 
 // Pass outcomes.
 const (
-	TapeSweepPassOff        = "off"
-	TapeSweepPassBusy       = "busy"
-	TapeSweepPassError      = "error"
-	TapeSweepPassRefused    = "refused"
-	TapeSweepPassBlocked    = "blocked_by_fork_lineage"
-	TapeSweepPassNothing    = "nothing"
-	TapeSweepPassDryRunOnly = "dry_run_only"
-	TapeSweepPassDone       = "done"
+	TapeSweepPassOff   = "off"
+	TapeSweepPassBusy  = "busy"
+	TapeSweepPassError = "error"
+	// TapeSweepPassInterrupted: the context ended (a shutdown) mid-pass. Not a
+	// failure; the pass runs again at the retry delay.
+	TapeSweepPassInterrupted = "interrupted"
+	TapeSweepPassRefused     = "refused"
+	TapeSweepPassBlocked     = "blocked_by_fork_lineage"
+	TapeSweepPassNothing     = "nothing"
+	TapeSweepPassDryRunOnly  = "dry_run_only"
+	TapeSweepPassDone        = "done"
 	// TapeSweepPassSkipped: computers were listed but apply deleted nothing
 	// and skipped them (a refusal or a re-proof failure). Not "done".
 	TapeSweepPassSkipped    = "skipped_by_apply"
@@ -123,7 +127,9 @@ func (s *Service) runScheduledTapeSweep(ctx context.Context) TapeSweepPassResult
 		return res
 	}
 	defer s.tapeSweep.passMu.Unlock()
-	s.removeUnsealedTapeArchives(policy.ArchiveDir, time.Now())
+	if policy.Mode == ArtifactGCModeActive {
+		s.removeUnsealedTapeArchives(ctx, policy.ArchiveDir, time.Now())
+	}
 
 	s.tapeSweep.mu.Lock()
 	ack, maxDeletes, maxBytes, maxRounds := s.tapeSweep.schedForkAck, s.tapeSweep.schedMaxDeletes, s.tapeSweep.schedMaxBytes, s.tapeSweep.schedMaxRounds
@@ -134,6 +140,8 @@ func (s *Service) runScheduledTapeSweep(ctx context.Context) TapeSweepPassResult
 	fail := func(err error) TapeSweepPassResult {
 		if errors.Is(err, errTapeSweepBusy) {
 			res.Outcome = TapeSweepPassBusy
+		} else if ctx.Err() != nil || errors.Is(err, context.Canceled) {
+			res.Outcome = TapeSweepPassInterrupted
 		} else {
 			res.Outcome, res.Err = TapeSweepPassError, err.Error()
 		}
@@ -231,7 +239,7 @@ func (s *Service) tapeSweepScheduleStatePath() string {
 // markTapeSweepPass records that a pass finished at t, so a restart does not
 // restart the day.
 func (s *Service) markTapeSweepPass(t time.Time) {
-	if err := os.MkdirAll(s.tapeSweepLogDir(), 0o750); err != nil {
+	if err := os.MkdirAll(s.tapeSweepLogDir(), 0o700); err != nil {
 		log.Printf("tape sweep schedule: state dir: %v", err)
 		return
 	}
@@ -265,21 +273,28 @@ func (s *Service) tapeSweepScheduleDelay(now time.Time) time.Duration {
 // afterTapeSweepPass marks a finished pass and returns the wait before the
 // next. A busy or failed pass is not marked and is retried sooner.
 func (s *Service) afterTapeSweepPass(res TapeSweepPassResult, now time.Time) time.Duration {
-	if res.Outcome == TapeSweepPassBusy || res.Outcome == TapeSweepPassError {
+	switch res.Outcome {
+	case TapeSweepPassBusy, TapeSweepPassError, TapeSweepPassInterrupted, TapeSweepPassRefused:
 		return TapeSweepScheduleRetry
 	}
 	s.markTapeSweepPass(now)
 	return TapeSweepScheduleInterval
 }
 
+// tapeSweepArchiveNameRE is the sweep's own archive name: <scope>-<runID>
+// with .tar.zst, or .tar.zst.tmp while it is being written.
+var tapeSweepArchiveNameRE = regexp.MustCompile(`-ts-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}\.tar\.zst(\.tmp)?$`)
+
 // removeUnsealedTapeArchives removes what a killed apply left in the archive
-// directory: a .tar.zst with no .json sidecar, and a stray .tmp, each older
-// than an hour. They are removed, not kept, because apply unlinks nothing
-// before the sidecar of a verified archive exists, so such a file backs no
-// deletion: every file it holds is still on disk and the next dry run lists
-// it again. The age bound and the no-run-in-progress check keep a hand job's
-// archive in the middle of being written.
-func (s *Service) removeUnsealedTapeArchives(dir string, now time.Time) {
+// directory: a sweep-named .tar.zst with no .json sidecar, and a stray
+// sweep-named .tmp, each older than an hour. Only the sweep's own names are
+// touched, and never a path a tombstone names. They are removed, not kept,
+// because apply unlinks nothing before the sidecar of a verified archive
+// exists, so such a file backs no deletion: every file it holds is still on
+// disk and the next dry run lists it again. The age bound and the
+// no-run-in-progress check keep a hand job's archive in the middle of being
+// written. It runs in active mode only: dry-run mode unlinks nothing.
+func (s *Service) removeUnsealedTapeArchives(ctx context.Context, dir string, now time.Time) {
 	s.tapeSweep.mu.Lock()
 	running := s.tapeSweep.running
 	s.tapeSweep.mu.Unlock()
@@ -290,23 +305,28 @@ func (s *Service) removeUnsealedTapeArchives(dir string, now time.Time) {
 	if err != nil {
 		return
 	}
+	named, err := s.store.tapeTombstoneArchivePaths(ctx)
+	if err != nil {
+		return
+	}
 	for _, e := range entries {
 		name := e.Name()
-		if !e.Type().IsRegular() {
+		if !e.Type().IsRegular() || !tapeSweepArchiveNameRE.MatchString(name) {
 			continue
 		}
-		stray := strings.HasSuffix(name, ".tar.zst.tmp")
-		if !stray && strings.HasSuffix(name, ".tar.zst") {
-			_, serr := os.Stat(filepath.Join(dir, name+".json"))
-			stray = os.IsNotExist(serr)
-		}
-		if !stray {
+		path := filepath.Join(dir, name)
+		if named[path] || named[strings.TrimSuffix(path, ".tmp")] {
 			continue
+		}
+		if !strings.HasSuffix(name, ".tmp") {
+			if _, serr := os.Stat(path + ".json"); !os.IsNotExist(serr) {
+				continue
+			}
 		}
 		if info, err := e.Info(); err != nil || now.Sub(info.ModTime()) < time.Hour {
 			continue
 		}
-		if err := os.Remove(filepath.Join(dir, name)); err == nil {
+		if err := os.Remove(path); err == nil {
 			log.Printf("tape sweep schedule: removed unsealed archive %s (no sidecar; nothing was deleted on its strength)", name)
 		}
 	}
