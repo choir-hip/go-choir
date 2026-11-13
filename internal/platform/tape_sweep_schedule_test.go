@@ -56,12 +56,13 @@ func TestScheduledTapeSweepReapsDestroyedAndLeavesProtected(t *testing.T) {
 	routed := f.chain("routed-1", 1, tapeAged)
 	f.insertClosure("code-r", platformTestDigest('9'), "routed-1")
 	recent := f.chain("recent-1", 1, 2*24*time.Hour)
+	paper := f.chain("computer-1355b83bced1613eb048ee28d66688a8", 1, tapeAged) // the hard-protected paper
 	res := f.svc.RunScheduledTapeSweep(f.ctx)
 	if res.Outcome != TapeSweepPassDone || res.Deleted != 8 || res.ComputersDeleted != 1 {
 		t.Fatalf("pass = %+v", res)
 	}
 	f.allExist(dead, false)
-	for _, c := range []*tapeChain{listed, owned, routed, recent} {
+	for _, c := range []*tapeChain{listed, owned, routed, recent, paper} {
 		f.allExist(c, true)
 	}
 	// The default archive stays on: the scheduled pass never uses no_archive.
@@ -279,7 +280,190 @@ func TestTapeSweepSchedulerRetriesBusyAndErrorPasses(t *testing.T) {
 			t.Fatalf("%s: retry in %v", o, d)
 		}
 	}
+	if _, err := os.Stat(f.svc.tapeSweepScheduleStatePath()); err == nil {
+		t.Fatal("a busy or failed pass was marked as finished")
+	}
 	if d := f.svc.afterTapeSweepPass(TapeSweepPassResult{Outcome: TapeSweepPassDone}, now); d != TapeSweepScheduleInterval {
 		t.Fatalf("done: next in %v", d)
 	}
+	if _, err := os.Stat(f.svc.tapeSweepScheduleStatePath()); err != nil {
+		t.Fatalf("a finished pass was not marked: %v", err)
+	}
+	// A record from the future (a clock step) never waits longer than a day.
+	f.svc.markTapeSweepPass(now.Add(72 * time.Hour))
+	if d := f.svc.tapeSweepScheduleDelay(now); d != TapeSweepScheduleInterval {
+		t.Fatalf("future record: %v", d)
+	}
+}
+
+// B1: an apply with errors is never "done", whatever the cap says; the pass is
+// retried at the retry interval, not after a day.
+func TestScheduledTapeSweepApplyErrorsAreNotDone(t *testing.T) {
+	f := newTapeFixture(t)
+	f.scheduleOpts(true)
+	blocker := filepath.Join(f.root, "not-a-dir")
+	if err := os.WriteFile(blocker, []byte("x"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	f.svc.SetTapeSweepPolicy(TapeSweepPolicy{Mode: ArtifactGCModeActive, ArchiveDir: blocker}) // the archive cannot be written
+	dead := f.chain("dead-1", 1, tapeAged)
+	res := f.svc.RunScheduledTapeSweep(f.ctx)
+	if res.Outcome != TapeSweepPassError || res.Errors == 0 || res.Deleted != 0 || res.Err == "" {
+		t.Fatalf("pass = %+v", res)
+	}
+	f.allExist(dead, true)
+	if d := f.svc.afterTapeSweepPass(res, time.Now()); d != TapeSweepScheduleRetry {
+		t.Fatalf("next pass in %v, want the retry interval", d)
+	}
+}
+
+// B3: listed computers that apply refused (here: revived between the dry run
+// and the apply, the same path an absent acknowledgement takes) are not "done".
+func TestScheduledTapeSweepSkippedApplyHasItsOwnOutcome(t *testing.T) {
+	f := newTapeFixture(t)
+	f.scheduleOpts(true)
+	f.svc.tapeSweep.schedAfterDry = func() { f.reg.owned["dead-1"] = true }
+	dead := f.chain("dead-1", 1, tapeAged)
+	res := f.svc.RunScheduledTapeSweep(f.ctx)
+	if res.Outcome != TapeSweepPassSkipped || res.Listed != 1 || res.Deleted != 0 || res.ComputersSkipped != 1 {
+		t.Fatalf("pass = %+v", res)
+	}
+	f.allExist(dead, true)
+}
+
+// B2: the tombstone's counts are written per batch, so an apply that is
+// killed mid-computer leaves a tombstone that says what was deleted.
+func TestTapeSweepApplyPersistsTombstoneCountsPerBatch(t *testing.T) {
+	f := newTapeFixture(t)
+	dead := f.chain("dead-1", 3, tapeAged) // 12 files
+	dry := f.dryRun(TapeSweepRequest{AcceptUnrecordedForkLineage: true, Sweeps: []string{TapeSweepDestroyed}})
+	seen, calls := map[int]int64{}, 0
+	f.svc.tapeSweep.beforeDelete = func(tapeSweepItem) {
+		calls++
+		tomb, _, _ := f.store.TapeTombstone(f.ctx, "dead-1")
+		seen[calls] = tomb.FilesDeleted
+	}
+	if _, err := f.apply(dry, TapeSweepRequest{AcceptUnrecordedForkLineage: true, BatchSize: 4}); err != nil {
+		t.Fatal(err)
+	}
+	// Before the first item of batch 2 (call 5) and batch 3 (call 9) the
+	// tombstone already counts the batches before it.
+	if seen[1] != 0 || seen[5] != 4 || seen[9] != 8 {
+		t.Fatalf("tombstone files_deleted seen before items: %v", seen)
+	}
+	f.allExist(dead, false)
+	tomb, _, _ := f.store.TapeTombstone(f.ctx, "dead-1")
+	if tomb.FilesDeleted != 12 {
+		t.Fatalf("final tombstone = %+v", tomb)
+	}
+}
+
+// B2: an archive left without its sidecar (a killed apply) is removed at the
+// next pass start; verified archives and fresh ones are kept.
+func TestScheduledTapeSweepRemovesSidecarlessArchives(t *testing.T) {
+	f := newTapeFixture(t)
+	dir := filepath.Join(f.root, tapeSweepArchiveDirName)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	mk := func(name string, age time.Duration) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		when := time.Now().Add(-age)
+		_ = os.Chtimes(p, when, when)
+		return p
+	}
+	stale := mk("dead-1-ts-20261114T000000Z-aaaaaaaa.tar.zst", 3*time.Hour)
+	staleTmp := mk("dead-1-ts-20261114T000000Z-bbbbbbbb.tar.zst.tmp", 3*time.Hour)
+	whole := mk("dead-2-ts-20261114T000000Z-cccccccc.tar.zst", 3*time.Hour)
+	mk("dead-2-ts-20261114T000000Z-cccccccc.tar.zst.json", 3*time.Hour)
+	fresh := mk("dead-3-ts-20261114T000000Z-dddddddd.tar.zst", 0)
+	f.svc.RunScheduledTapeSweep(f.ctx)
+	for _, gone := range []string{stale, staleTmp} {
+		if _, err := os.Stat(gone); err == nil {
+			t.Fatalf("%s was kept", gone)
+		}
+	}
+	for _, kept := range []string{whole, fresh} {
+		if _, err := os.Stat(kept); err != nil {
+			t.Fatalf("%s was removed", kept)
+		}
+	}
+}
+
+// F2: a capped round does not tombstone or archive a computer it cannot
+// delete from.
+func TestTapeSweepCapReachedSkipsLaterComputersArchive(t *testing.T) {
+	f := newTapeFixture(t)
+	f.scheduleOpts(true)
+	f.svc.tapeSweep.schedMaxDeletes = 12
+	f.svc.tapeSweep.schedMaxRounds = 1
+	f.chain("dead-1", 3, tapeAged) // 12 files: exactly the cap
+	dead2 := f.chain("dead-2", 3, tapeAged)
+	res := f.svc.RunScheduledTapeSweep(f.ctx)
+	if res.Outcome != TapeSweepPassRoundLimit || res.Deleted != 12 || len(res.Archives) != 1 {
+		t.Fatalf("pass = %+v", res)
+	}
+	f.allExist(dead2, true)
+	if _, ok, _ := f.store.TapeTombstone(f.ctx, "dead-2"); ok {
+		t.Fatal("dead-2 was tombstoned with the cap already spent")
+	}
+}
+
+func TestScheduledTapeSweepNilService(t *testing.T) {
+	var s *Service
+	if res := s.RunScheduledTapeSweep(context.Background()); res.Outcome != TapeSweepPassError {
+		t.Fatalf("pass = %+v", res)
+	}
+}
+
+// B4: the production entry runs a pass after the first delay, again after the
+// next, logs each, and stops on cancel (Wait returns).
+func TestTapeSweepSchedulerStartRunsPassesAndStops(t *testing.T) {
+	f := newTapeFixture(t)
+	buf := captureScheduleLog(t)
+	passes := make(chan TapeSweepPassResult, 16)
+	sch := &TapeSweepScheduler{
+		service:   f.svc,
+		first:     func() time.Duration { return 20 * time.Millisecond },
+		next:      func(TapeSweepPassResult) time.Duration { return 20 * time.Millisecond },
+		afterPass: func(r TapeSweepPassResult) { passes <- r },
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	sch.Start(ctx)
+	for i := 0; i < 2; i++ {
+		select {
+		case r := <-passes:
+			if r.Outcome != TapeSweepPassNothing {
+				t.Fatalf("pass %d = %+v", i, r)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatalf("pass %d never ran", i)
+		}
+	}
+	cancel()
+	wctx, wcancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer wcancel()
+	if err := sch.Wait(wctx); err != nil {
+		t.Fatalf("wait: %v", err)
+	}
+	n := strings.Count(buf.String(), "tape sweep schedule:")
+	time.Sleep(100 * time.Millisecond)
+	if m := strings.Count(buf.String(), "tape sweep schedule:"); m != n || n < 2 {
+		t.Fatalf("schedule lines before/after cancel: %d, %d", n, m)
+	}
+}
+
+// B4: a scheduler in mode off does not start at all.
+func TestTapeSweepSchedulerOffModeDoesNotStart(t *testing.T) {
+	f := newTapeFixture(t)
+	f.svc.SetTapeSweepPolicy(TapeSweepPolicy{Mode: ArtifactGCModeOff})
+	sch := &TapeSweepScheduler{service: f.svc, first: func() time.Duration { return time.Millisecond }, next: func(TapeSweepPassResult) time.Duration { return time.Millisecond }, afterPass: func(TapeSweepPassResult) { t.Error("a pass ran in mode off") }}
+	sch.Start(context.Background())
+	if err := sch.Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
 }
