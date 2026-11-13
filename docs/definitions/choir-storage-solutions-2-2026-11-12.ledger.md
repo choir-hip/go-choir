@@ -64,3 +64,26 @@ Append-only. One terse entry per pass.
   the snapshot's upload. The paper published a story at 23:20Z; its call
   rate after the boot is being watched. Sweep dry run still in references
   after 58 minutes.
+- 2026-11-13T08:00Z. Overnight landings, each its own deploy. S9 status
+  scripts 29666dc47 (02:07Z). S2 wedge fix d6b88cd63 (05:55Z; both seats on
+  round 3; the first land run timed out on a loaded build VM, the rerun
+  passed); the corpusd-crash drill on d@e passed with no re-send or catch-up
+  line in the guest's log, so the lost-reply path did not run on staging
+  (C63 partial). S7 sweep progress 421288af7 (06:15Z). S4 part 1 root-time
+  chunk check afe50a926 (06:54Z; both seats on round 3). S5 part 1 counters
+  e392ac824 (07:54Z; CI needed three attempts: a timing test in
+  internal/toolregistry failed once, then a partial rerun tripped the SBOM
+  acceptance job). C62 true: free space rose 6.7 GiB in the six hours to
+  05:35Z. lane/restart-cancels-capture parked after five rounds (C64 false;
+  assessment in docs/problems/snapshot-loop-blocks-its-own-fix-2026-11-12.md).
+- 2026-11-13T08:00Z. The sweep cannot finish: dry run
+  ts-20261113T065544Z-903217d8 walked the paper at 13.3 minutes per 50,000
+  events; the reader probes every segment for every event
+  (docs/problems/tape-sweep-walk-probes-every-segment-per-event-2026-11-13.md).
+  Repair in lane/sweep-walk-one-view. Dry run ts-20261113T075407Z-73f33629
+  keeps adding progress meanwhile. First counters on d@e: 7.2 corpusd calls
+  per tape event (two heads and two pins per append), appender depth 1 for
+  139 of 165 appends.
+- 2026-11-13T08:00Z. Station change, as told to the owner overnight: Autoradio
+  is the live station; S7, S5 and S4 continue behind it; scripts/status-hourly
+  is the tripwire.

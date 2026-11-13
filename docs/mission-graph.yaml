@@ -1377,7 +1377,7 @@ nodes:
     title: Storage solutions, part 2 — stop the snapshot drain, then snapshots that cost the change, group commit on the tape, folded receipts, a collector that reaps by itself
     path: docs/definitions/choir-storage-solutions-2-2026-11-12.md
     ledger: docs/definitions/choir-storage-solutions-2-2026-11-12.ledger.md
-    status: working  # 2026-11-12, live station
+    status: working  # 2026-11-12 live station; 2026-11-13 behind the live station (Autoradio), drain stopped
     kind: station
     entrypoint: true
     depends_on: []

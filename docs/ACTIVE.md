@@ -11,21 +11,32 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
-## Live station (2026-11-12): storage solutions, part 2
+## Live station (2026-11-13): Autoradio, with Autopaper
+
+Owner, 2026-11-13 (overnight): "i want to move on back to autopaper,
+autoradio, tomorrow". Autoradio pass 1
+([`definitions/choir-autoradio-pass1-2026-11-10.md`](definitions/choir-autoradio-pass1-2026-11-10.md))
+is `blocked_incomplete` on three owner items: the install go, the TestFlight
+verdict and the River credential. The first act of the day is the owner's
+word on those; until then the work is what needs no phone.
+
+## Working behind the live station (2026-11-13): storage solutions, part 2
 
 **Goal:** [`definitions/choir-storage-solutions-2-2026-11-12.md`](definitions/choir-storage-solutions-2-2026-11-12.md)
 (`readiness: executable`, `now.status: working`; ledger
 [`definitions/choir-storage-solutions-2-2026-11-12.ledger.md`](definitions/choir-storage-solutions-2-2026-11-12.ledger.md)).
 Run it with `/goal docs/definitions/choir-storage-solutions-2-2026-11-12.md`.
 
-Owner, 2026-11-12: "Let's make a storage solutions mission (part 2) as our
-next priority. We can return to autoradio after we do that." Node B was
-81 GiB free and draining 6 GiB an hour. Frame:
+The drain that made it the live station on 2026-11-12 has stopped (Node B
+gained 6.7 GiB in the six hours to 05:35Z on 2026-11-13). Landed and deployed
+overnight: the appender wedge fix, the root-time chunk check, sweep progress
+that survives a restart, the tape write counters and the status scripts. The
+footprint has not shrunk yet. Three lanes continue in the background: the
+sweep walk (S7), coalescing after a day of counters (S5), and the chunk window
+and cheaper snapshots (S4). `scripts/status-hourly` is the tripwire: a
+fast-drain warning that is not a deploy, or a failed paper snapshot, makes
+storage the live station again. Frame:
 [`design/storage-pressure-frame-2026-11-12.md`](design/storage-pressure-frame-2026-11-12.md).
-Autoradio pass 1
-([`definitions/choir-autoradio-pass1-2026-11-10.md`](definitions/choir-autoradio-pass1-2026-11-10.md))
-stays `blocked_incomplete` on the owner's install go and resumes after this
-mission.
 
 ## Earlier station (2026-11-09 evening): Autopaper improvement, then one merged overnight mission
 

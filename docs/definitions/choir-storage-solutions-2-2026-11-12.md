@@ -124,8 +124,8 @@ stations:
     class: red; the sweep apply is black, owner go given 2026-11-12
     review: two seats
     depends_on: []
-    carrier: main 0d2f0bd46, deployed 2026-11-12T22:31Z, on the paper since 22:53Z, snapshot recorded 23:28Z; sweep dry run ts-20261112T223140Z-d1a3ccd3 not yet applied
-    status: landed
+    carrier: "main 0d2f0bd46, deployed 2026-11-12T22:31Z, on the paper since 22:53Z, snapshot recorded 23:28Z; the drain stopped (claim C62 true, free space rose 6.7 GiB in the six hours to 2026-11-13T05:35Z). The sweep apply moved to S7: no dry run has finished"
+    status: proved
   - id: S1
     name: guards
     scope: metadata balance, hourly forecast with a fast-drain line, meter coverage of capture bodies and platform updates, swap 16 to 4 GiB
@@ -140,8 +140,8 @@ stations:
     class: red
     review: two seats
     depends_on: []
-    carrier: lane/appender-wedge (in build)
-    status: working
+    carrier: main d6b88cd63 (both seats accepted on round 3), CI 43373203542, deployed 2026-11-13T05:55Z; scripts/chaos/run s2-corpusd-crash on d@e passed, but no re-send or catch-up ran on staging, so the lost-reply path is proved by the fault tests only (claim C63 partial)
+    status: landed
   - id: S3
     name: measure
     scope: the write census (done); waiters at the appender; a table census of the paper's store; the image's unexplained 28 GiB; capture-body repetition
@@ -156,16 +156,16 @@ stations:
     class: red, design record first
     review: two seats
     depends_on: [S0]
-    carrier: none yet
-    status: pending
+    carrier: part 1 (the host refuses a root whose chunks it does not hold; the collector keeps a chunk a live root names) main afe50a926, both seats accepted on round 3, CI 43379521482, deployed 2026-11-13T06:54Z. Not started, the shorter chunk window and snapshots that cost the change
+    status: working
   - id: S5
     name: fewer events for the same record
     scope: counters (ops and bytes per kind, waiters at the appender); delete tape.group_commit and both loss windows; run-memory writes batched at the call site; lossless coalescing of queued writers with no setting (ruling D8); then the four calls per event
     class: red, design record first
     review: two seats
     depends_on: [S2]
-    carrier: none yet
-    status: pending
+    carrier: part 1 (always-on counters, the appender depth histogram, corpusd calls per event; design docs/evidence/tape-write-coalescing-design-2026-11-12.md) main e392ac824, one seat accepted on round 2, CI 43384729837 (third attempt), deployed 2026-11-13T07:54Z. Coalescing waits for a day of the paper's depth histogram
+    status: working
   - id: S6
     name: receipts fold
     scope: one signed root per sealed segment past a verified checkpoint; per-event receipts go to the archive
@@ -180,8 +180,8 @@ stations:
     class: red
     review: two seats
     depends_on: [S0]
-    carrier: none yet
-    status: pending
+    carrier: sweep progress that survives a restart, main 421288af7, both seats accepted on round 2, CI 43376520250, deployed 2026-11-13T06:15Z. The walk is too slow to finish on the paper (docs/problems/tape-sweep-walk-probes-every-segment-per-event-2026-11-13.md); repair in lane/sweep-walk-one-view. No scheduler yet
+    status: working
   - id: S8
     name: a smaller store, and the archive half of cold tape
     scope: column compression after the table census; the floor recomputed from measured peaks; archive and verify cold tape off-host, dropping nothing locally (ruling D1)
@@ -196,8 +196,8 @@ stations:
     class: yellow
     review: none
     depends_on: [S0, S1]
-    carrier: none yet
-    status: pending
+    carrier: main 29666dc47 (scripts/status-paper-usage, scripts/status-storage, scripts/status-hourly; tests in scripts/gates); used for every hourly tick since 2026-11-13T04:35Z
+    status: proved
 
 owner_rulings:
   - on: 2026-11-12
@@ -266,12 +266,12 @@ observation_plan: >
 
 now:
   status: working
-  slice: S0 (snapshot lane in build, sweep dry run re-running) with S2 in build and S1 awaiting its first forecast run
-  source_ref: origin/main 0d0c4f164
-  deploy_identity: choir.news cca135073607
+  slice: background lanes S7 (the sweep walk, lane/sweep-walk-one-view), S5 (read the paper's depth histogram, then coalescing) and S4 (the chunk window, snapshots that cost the change); the live station is Autoradio (docs/ACTIVE.md)
+  source_ref: origin/main e392ac824
+  deploy_identity: choir.news e392ac824dbf
   candidate:
-    id: none
-    state: none
+    id: lane/sweep-walk-one-view
+    state: in build
   conjecture:
     id: SS2-C1
     calibration_claim: C61
@@ -285,8 +285,8 @@ now:
     edge: missing_oracle
     delta_o: >
       per-writer batch counts and the waiters-at-enter histogram in the
-      guest's observability; chunk, capture and update trees in the growth
-      meter (landed with S1)
+      guest's observability (landed with e392ac824); chunk, capture and update
+      trees in the growth meter (landed with S1)
     scope_if_supported: cold-tape tiering becomes an optimisation, not a rescue
     status: active
     evidence_refs: [docs/design/storage-pressure-frame-2026-11-12.md, docs/evidence/tape-write-census-2026-11-12.md]
@@ -298,25 +298,32 @@ now:
     owner_ratification_ref: owner_rulings, 2026-11-12, D1 to D8
   belief:
     believed_state: >
-      The drain continues at about 6 GiB an hour until the snapshot fix
-      deploys. Free space is 84.7 GiB after the swap file was resized by
-      hand at 20:54Z. The guards are deployed. Moving state off the tape is
-      not the lever (C58 false); the event count is.
+      The drain has stopped: the paper's chunks are flat at 49.3 GiB and its
+      last snapshot (23:28Z) stands. Node B has about 69 GiB free; what moves
+      it now is deploys (about 5 GiB transient each, and 3.8 GiB guest
+      releases held for a while). The wedge fix, the root-time chunk check,
+      restart-surviving sweep progress, the counters and the status scripts
+      are deployed. The footprint itself has not shrunk: about 45 GiB of
+      unrooted paper chunks age out from 2026-11-13T08:40Z, and the destroyed
+      computers' tape waits for a sweep that can finish.
     main_uncertainty: >
-      how many writers queue at the appender (the group size); whether a
-      page-diff snapshot keeps the witness sound; what else is in the
-      paper's image
-    next_observation: the sweep manifest; the forecast unit's first run at 21:25Z; the snapshot and wedge lane reports
+      whether the paper's appender depth is deep enough for coalescing to pay
+      (on d@e it is 1 for 139 of 165 appends, and corpusd takes 7 calls per
+      tape event); whether the sweep walk's cost is only the per-event
+      segment probe; how many guest releases the host keeps
+    next_observation: the collector's first pass after 08:40Z (do the unrooted chunks go); the paper's depth histogram after a day; the sweep-walk lane's measured speedup
   blocker_or_risk: >
-    The sweep dry run has not finished after an hour in its references phase.
-    A planned restart still refuses while a snapshot streams, now for up to
-    90 minutes. The failed-attempt path of the fix (upload nothing, back off)
-    has not been seen on the paper, because its first attempt succeeded.
+    The sweep walks the paper's tape at about 60 events a second, so no
+    manifest exists and nothing of the destroyed computers has been released.
+    lane/restart-cancels-capture is parked after five review rounds (a deploy
+    still waits out a capture, now rare). The lost-reply path of the wedge fix
+    has not run on staging. The failed-attempt path of the snapshot fix has
+    not been seen on the paper.
   next_action: >
-    Confirm the paper keeps publishing and the 6-hour drain falls under
-    1 GiB an hour (claim C62). Read the sweep manifest and apply it. Then
-    review and land lane/appender-wedge (S2), the planned-restart change
-    (cancel an in-flight capture), lane/ci-docs-like and lane/goal-file-check.
+    Review (two seats) and land lane/sweep-walk-one-view, rerun the dry run,
+    read the manifest and apply it. Read the paper's appender depth after a
+    day and decide coalescing's shape. Design S4's shorter chunk window. The
+    hourly status script is the tripwire while Autoradio is the live station.
 
 receipts: []
 
