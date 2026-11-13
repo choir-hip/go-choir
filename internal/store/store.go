@@ -153,6 +153,9 @@ type Store struct {
 	// one run's seq and parent come from its previous entry, and different
 	// runs' entries may share a grouped tape event (tape_group_commit.go).
 	runMemoryMu [runMemoryStripes]sync.Mutex
+	// runMemorySettle is set when a run-memory append fails: the next one
+	// settles a kept prepared row before it numbers itself (run_memory.go).
+	runMemorySettle atomic.Bool
 	// runMemoryAgentList counts and observes ListRunMemoryEntriesForAgent
 	// (run_memory_observe.go).
 	runMemoryAgentList runMemoryAgentListObserver

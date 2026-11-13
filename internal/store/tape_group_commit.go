@@ -151,6 +151,12 @@ func (t *projectionTape) appendGrouped(ctx context.Context, ops []computerevent.
 	}
 }
 
+// groupContext is the context of one shared append: barrier-exempt (the leader
+// has itself done what the barrier does) and bounded by groupCommitTimeout.
+func groupContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(computerevent.WithBarrierExemption(context.Background()), groupCommitTimeout)
+}
+
 // leadHolding commits one group while the caller holds the leader token, and
 // frees the token even if the commit panics: a token left full would block
 // every later writer for ever.
@@ -204,7 +210,7 @@ func (t *projectionTape) leadGroup() {
 			}
 		}
 	}()
-	ctx, cancel := context.WithTimeout(computerevent.WithBarrierExemption(context.Background()), groupCommitTimeout)
+	ctx, cancel := groupContext()
 	defer cancel()
 
 	var memberOps []computerevent.ProjectionOp
@@ -243,7 +249,7 @@ func (t *projectionTape) leadGroup() {
 		for _, m := range members {
 			// Each single gets its own deadline: a big group's elapsed time
 			// is not a member's.
-			mctx, mcancel := context.WithTimeout(computerevent.WithBarrierExemption(context.Background()), groupCommitTimeout)
+			mctx, mcancel := groupContext()
 			m.err = t.appendDirect(mctx, m.ops, projectionAuthority)
 			mcancel()
 			g.finishMember(m)
