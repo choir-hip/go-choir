@@ -170,15 +170,16 @@ entered below as lapsed, not scored.
 | C59 | 2026-11-12T20:30Z | partial | the chunks are whole-store snapshot attempts that do not dedupe on a live store (fixed 4 MiB cut, 88% of chunks differ after 30 minutes), as claimed; but the cadence is a retry loop of failed attempts (budget abort in the witness, no backoff), not a 23-minute schedule of good snapshots (docs/evidence/paper-chunk-drain-trace-2026-11-12.md) | 0.16 |
 | C58 | 2026-11-12T20:50Z | false | the write census: acknowledged run-memory writes are about 62% of events and are agent record; telemetry batches are 12% and pure ephemeral writers (in-flight marks, poll and wake pairs) 2 to 4%, so about 15% by count, under the 30% bar (docs/evidence/tape-write-census-2026-11-12.md) | 0.25 |
 | C60 | 2026-11-12T21:26Z | true | landed as cca135073 (CI success, deployed 20:53Z); the forecast unit's first run at 21:25Z exited 0 and printed the days-to-floor line (1.4 days, slope -12.2 GiB a day) and the 6-hour drain line. No fix commit. The first `scripts/land` run failed because the lead ran a copy of the script outside the worktree, not because of the lane | 0.12 |
+| C64 | 2026-11-13T04:25Z | false | both seats sent round 3 back (the planned-restart marker had more than one writer; a caller-gone branch cleared holds it did not own), so a fourth round is needed. I forecast acceptance from a narrowing finding list while each round was finding a new interleaving on the same marker file; the approach changed to one marker owner (review outputs, rounds 1 to 3) | 0.20 |
 
 ### Scorecard
 
-Second form: 31 claims open, 13 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
+Second form: 30 claims open, 14 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
 false, 1 partial), 7 lapsed.
 
 | band | claims settled | came true |
 |---|---|---|
 | 0.0 to 0.3 | 0 | n/a |
-| 0.3 to 0.6 | 3 | 1 |
+| 0.3 to 0.6 | 4 | 1 |
 | 0.6 to 0.8 | 10 | 7, and 1 partial |
 | 0.8 to 1.0 | 0 | n/a |
