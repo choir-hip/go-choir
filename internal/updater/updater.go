@@ -310,14 +310,21 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 	}
 
 	releaseDigest := request.Manifest.ContentDigest
-	sourceDir, serr := u.trustedSourceDir(request.SourceDir, releaseDigest)
-	if serr != nil {
-		return refuse(serr.Error())
-	}
-	request.SourceDir = sourceDir
 	releaseDir := filepath.Join(u.root, "releases", releaseDigest)
-	if serr := u.stageRelease(request.SourceDir, releaseDir, request.Manifest); serr != nil {
-		return refuse(serr.Error())
+	// A release already staged and verified needs no source: a resumed apply
+	// (its source was dropped when it first staged) and a replay both land
+	// here. Otherwise the source must be trusted, and once the release is
+	// verified and staged the source is dropped (prune.go).
+	if verifyManifest(releaseDir, request.Manifest) != nil {
+		sourceDir, serr := u.trustedSourceDir(request.SourceDir, releaseDigest)
+		if serr != nil {
+			return refuse(serr.Error())
+		}
+		request.SourceDir = sourceDir
+		if serr := u.stageRelease(request.SourceDir, releaseDir, request.Manifest); serr != nil {
+			return refuse(serr.Error())
+		}
+		u.dropStagedSource(sourceDir)
 	}
 	// Layered release: replay the app-layer narchive into the private store
 	// and GC-root it before the pointer swap. A failure here leaves `current`
