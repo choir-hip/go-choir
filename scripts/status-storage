@@ -21,6 +21,10 @@ Sources:
   paper footprint  ledger keys fs.artifacts.file-cas-chunks.<computer> and
                    fs.vm-state.<vm>.data.img (heavy keys: the newest value
                    among the last rows that carry them)
+  receipts         ledger key pg.control.receipts_since_last.<paper computer>, the
+                   newest row that carries it; zero is a flag
+  wedge lines      guest console.log* under vm-state/<paper vm> (sudo grep -a):
+                   "computer event appender: wedge began|continues|cleared"
   snapshot         control DB table computer_snapshot_roots
 """
 import calendar
@@ -34,12 +38,14 @@ NODE = "node-b"
 PAPER_COMPUTER = "computer-1355b83bced1613eb048ee28d66688a8"
 PAPER_VM = "vm-1669020adcece51c2f5ff9b6df399ef5"
 CHUNKS_KEY = "fs.artifacts.file-cas-chunks." + PAPER_COMPUTER
+RECEIPTS_KEY = "pg.control.receipts_since_last." + PAPER_COMPUTER
 IMG_KEY = "fs.vm-state.%s.data.img" % PAPER_VM
 GIB = 1 << 30
 
 FREE_FLAG_MIB = 65 * 1024     # the deploy floor is 60 GiB; flag with 5 GiB of notice
 DRAIN_FLAG_GIB_PER_H = 1.0    # over the 6 h window
 SNAPSHOT_MAX_AGE_H = 24
+FORECAST_STALE_GIB = 10       # a forecast free figure this far from the live df is stale
 DRAIN_WINDOW_SLACK_S = 20 * 60
 
 TS_RE = re.compile(r'"ts":\s*"([0-9T:Z-]+)"')
@@ -64,12 +70,34 @@ def parse_ledger(text):
             continue
         if a:
             rows.append((ts, int(a.group(1))))
-        for key in (CHUNKS_KEY, IMG_KEY):
+        for key in (CHUNKS_KEY, IMG_KEY, RECEIPTS_KEY):
             m = re.search(r'"%s":\s*([0-9]+)' % re.escape(key), ln)
             if m:
                 heavy[key] = (ts, int(m.group(1)))
     rows.sort()
     return rows, {k: v[1] for k, v in heavy.items()}
+
+
+def parse_wedge(text):
+    """Counts of the guest's wedge began|continues|cleared lines from the
+    "COUNT line" output of the remote grep; None when the grep did not run."""
+    if not re.search(r"^rc=[01]$", text, re.M):   # sudo or grep failed
+        return None
+    c = {"began": 0, "continues": 0, "cleared": 0}
+    for ln in text.splitlines():
+        m = re.match(r"\s*(\d+)\s+computer event appender: wedge (began|continues|cleared)", ln)
+        if m:
+            c[m.group(2)] += int(m.group(1))
+    return c
+
+
+def forecast_free_gib(line, key):
+    """The free figure inside a forecast-unit line, GiB: "free N GiB" in the
+    forecast line, the end of "(A GiB -> B GiB)" in the fast drain line."""
+    if not line:
+        return None
+    m = re.search(r"free (\d+(?:\.\d+)?) GiB", line) if key == "forecast" else re.search(r"-> (\d+(?:\.\d+)?) GiB\)", line)
+    return float(m.group(1)) if m else None
 
 
 def drain(rows, hours):
@@ -129,6 +157,8 @@ def compute(raw):
         "paper": {"chunks_gib": heavy[CHUNKS_KEY] / GIB if CHUNKS_KEY in heavy else None,
                   "data_img_gib": heavy[IMG_KEY] / GIB if IMG_KEY in heavy else None},
         "snapshot": snap,
+        "receipts_since_last": heavy.get(RECEIPTS_KEY),
+        "wedge": parse_wedge(raw.get("wedge", "")),
         "flags": [],
     }
     f = rep["flags"]
@@ -136,11 +166,20 @@ def compute(raw):
         f.append("free %.0f GiB under %d GiB" % (free_mib / 1024.0, FREE_FLAG_MIB // 1024))
     if d6 is not None and d6 > DRAIN_FLAG_GIB_PER_H:
         f.append("drain %.1f GiB/h over 6 h" % d6)
+    rep["forecast_stale"] = {}
     for key in ("forecast", "fast_drain"):   # the forecast unit's own warning or error
         line = rep["forecast"][key] or ""
         m = re.match(r"disk (forecast|fast drain) (WARNING|ERROR)", line)
-        if m:
+        ff = forecast_free_gib(line, key)
+        if ff is not None and free_mib is not None and abs(ff - free_mib / 1024.0) > FORECAST_STALE_GIB:
+            rep["forecast_stale"][key] = ff   # older than the live df: not a flag
+        elif m:
             f.append("forecast unit: %s %s" % (m.group(1), m.group(2)))
+    if rep["receipts_since_last"] == 0:
+        f.append("paper receipts_since_last is 0")
+    w = rep["wedge"]
+    if w and w["began"] > w["cleared"]:
+        f.append("paper wedge began %d, cleared %d" % (w["began"], w["cleared"]))
     if snap is None:
         f.append("no snapshot root for the paper")
     elif snap["age_h"] > SNAPSHOT_MAX_AGE_H:
@@ -158,11 +197,19 @@ def render(r):
     o.append("Node B free: %s MiB (%s GiB)" % (r["free_mib"], g(None if r["free_mib"] is None else r["free_mib"] / 1024.0)))
     for k in ("forecast", "fast_drain", "growers"):
         o.append("  %s" % (r["forecast"][k] or "(no %s line in the forecast unit's journal)" % k))
+    for k, ff in sorted(r["forecast_stale"].items()):
+        o.append("  forecast stale: the %s line says free %.0f GiB, live df differs by over %d GiB (status word ignored)"
+                 % (k.replace("_", " "), ff, FORECAST_STALE_GIB))
     o.append("drain, GiB/h (positive = falling): last 1 h %s, last 6 h %s; newest ledger row %s h old"
              % (g(r["drain_gib_per_h"]["1h"], "%+.2f"), g(r["drain_gib_per_h"]["6h"], "%+.2f"),
                 g(r["ledger_newest_age_h"])))
     o.append("paper footprint: chunks %s GiB + data image %s GiB"
              % (g(r["paper"]["chunks_gib"]), g(r["paper"]["data_img_gib"])))
+    rc = r["receipts_since_last"]
+    w = r["wedge"]
+    o.append("paper receipts_since_last (newest ledger row): %s; guest wedge lines in console.log*: %s"
+             % ("n/a" if rc is None else rc,
+                "unreadable (no sudo or no console.log)" if w is None else "began %d, continues %d, cleared %d" % (w["began"], w["continues"], w["cleared"])))
     s = r["snapshot"]
     if s:
         o.append("paper snapshot root %s at %s (head_sequence %s, %s chunks), age %.1f h"
@@ -181,12 +228,15 @@ echo "##FORECAST"
 journalctl -u go-choir-disk-forecast -n 60 --no-pager -o cat 2>/dev/null
 echo "##LEDGER"
 cd /var/lib/go-choir/growth-meter 2>/dev/null && for f in $(ls [0-9]*.jsonl 2>/dev/null | tail -2); do tail -n 48 "$f"; done |
-  awk 'BEGIN { re = "\"(ts)\": ?\"[0-9T:Z-]+\"|\"fs[.]root[.]avail\": ?[0-9]+|\"@CHUNKS@\": ?[0-9]+|\"@IMG@\": ?[0-9]+" }
+  awk 'BEGIN { re = "\"(ts)\": ?\"[0-9T:Z-]+\"|\"fs[.]root[.]avail\": ?[0-9]+|\"@CHUNKS@\": ?[0-9]+|\"@IMG@\": ?[0-9]+|\"@RECEIPTS@\": ?[0-9]+" }
        { out = ""; s = $0; while (match(s, re)) { out = out " " substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH) } print out }'
+echo "##WEDGE"
+sudo -n sh -c 'grep -a -h -o "computer event appender: wedge [a-z]*" /var/lib/go-choir/vm-state/@VM@/console.log*; echo "rc=$?"' 2>/dev/null |
+  awk '/^rc=/ { print; next } { c[$0]++ } END { for (k in c) print c[k], k }'
 echo "##SNAPSHOT"
 sudo -n -u postgres psql -d control -At -c "select left(root,12), head_sequence, coalesce(json_array_length(chunks::json),0), extract(epoch from created_at)::bigint from computer_snapshot_roots where computer_id = '@COMPUTER@' order by created_at desc limit 1" 2>/dev/null
 echo "##END"
-""".replace("@CHUNKS@", CHUNKS_KEY.replace(".", "[.]")).replace("@IMG@", IMG_KEY.replace(".", "[.]")).replace("@COMPUTER@", PAPER_COMPUTER)
+""".replace("@CHUNKS@", CHUNKS_KEY.replace(".", "[.]")).replace("@RECEIPTS@", RECEIPTS_KEY.replace(".", "[.]")).replace("@VM@", PAPER_VM).replace("@IMG@", IMG_KEY.replace(".", "[.]")).replace("@COMPUTER@", PAPER_COMPUTER)
 
 
 def sections(text):
@@ -209,7 +259,7 @@ def fetch(node):
         raise RuntimeError("ssh %s failed or replied incompletely (rc=%d)" % (node, p.returncode))
     return {"now": int(s["NOW"][0]), "df": "\n".join(s.get("DF", [])),
             "forecast": "\n".join(s.get("FORECAST", [])), "ledger": "\n".join(s.get("LEDGER", [])),
-            "snapshot": "\n".join(s.get("SNAPSHOT", []))}
+            "wedge": "\n".join(s.get("WEDGE", [])), "snapshot": "\n".join(s.get("SNAPSHOT", []))}
 
 
 def main(argv):

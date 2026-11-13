@@ -47,12 +47,16 @@ FREE_MODELS = ("iceman", "beam", "flint", "nemotron")
 BEDROCK_DAILY_LIMIT = 20.0   # flag line for the projected day, USD
 RIVER_DAILY_LIMIT = 1.0      # flag line for River today, USD
 DEVIN_SHARE_MIN = 0.5
+PAID_SEARCH = ("tavily", "brave", "parallel", "serper", "serpapi")   # the paid search providers
+SEARCH_QUOTA_SHARE = 0.8     # flag when every paid provider is quota_limited in more lines than this
 PUBLISHING_WINDOW_MIN = 20
 
 LINE_RE = re.compile(
     r"^(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d) .*?inference succeeded for autoputer (\S+) "
     r"\(provider=(\S+) tokens=(\d+)\+(\d+) cached=(\d+)"
     r"(?: text_len=\d+)?(?: cache_write=(\d+))?(?: cache_write_1h=(\d+))?(?: model=([^\s)]+))?")
+PACER_RE = re.compile(r"devin pacing hour=(\S+) .*?shed_share=(\d+)% shed_calls=(\d+) of (\d+) trips=(\d+)")
+SEARCH_RE = re.compile(r"answered (\d+) of (\d+) providers.*?skipped=\[([^\]]*)\]")
 STAMP_RE = re.compile(r"^(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d) ")
 ERROR_KINDS = (("429", re.compile(r"\b429\b")), ("quota", re.compile(r"quota", re.I)),
                ("hold", re.compile(r"\bhold", re.I)), ("error", re.compile(r"error", re.I)))
@@ -115,19 +119,54 @@ def window_report(calls, lo, hi):
 
 
 def shares(rep):
+    """Fractions of the paper's calls; devin, free, haiku, luna and other sum to 1."""
     n = rep["total"]
     if not n:
-        return {"devin": None, "free": None, "haiku": None}
-    devin = free = haiku = 0
+        return {"devin": None, "free": None, "haiku": None, "luna": None, "other": None}
+    devin = free = haiku = luna = 0
     for k, c in rep["by"].items():
         prov, model = k.split("/", 1)
         if prov == "devin":
             devin += c
         elif prov == "bedrock" and "haiku-5" in model:
             haiku += c
+        elif "luna" in model:
+            luna += c
         elif any(f in model for f in FREE_MODELS):
             free += c
-    return {"devin": devin / n, "free": free / n, "haiku": haiku / n}
+    other = n - devin - free - haiku - luna
+    return {"devin": devin / n, "free": free / n, "haiku": haiku / n, "luna": luna / n, "other": other / n}
+
+
+def pacer(text):
+    """The newest hourly 'devin pacing hour=' line, or None."""
+    found = None
+    for ln in text.splitlines():
+        m = PACER_RE.search(ln)
+        if m:
+            found = {"hour": m.group(1), "shed_share": int(m.group(2)) / 100.0,
+                     "shed_calls": int(m.group(3)), "calls": int(m.group(4)), "trips": int(m.group(5))}
+    return found
+
+
+def search_health(text):
+    """Requests in the window, those answered by zero providers, and per
+    provider counts of quota_limited, capped and error among skipped=[...]."""
+    req = zero = 0
+    by = {}
+    for ln in text.splitlines():
+        m = SEARCH_RE.search(ln)
+        if not m:
+            continue
+        req += 1
+        if int(m.group(1)) == 0:
+            zero += 1
+        for item in m.group(3).split():
+            name, _, reason = item.partition("=")
+            if reason in ("quota_limited", "capped", "error"):
+                d = by.setdefault(name, {"quota_limited": 0, "capped": 0, "error": 0})
+                d[reason] += 1
+    return {"requests": req, "zero": zero, "zero_share": (zero / req) if req else None, "by": by}
 
 
 def devin_errors(text, now):
@@ -170,6 +209,8 @@ def compute(raw):
                   "unpriced_calls_today": today["river_unpriced"]},
         "synthetic": {"hour_calls": hour["synthetic_calls"], "today_calls": today["synthetic_calls"]},
         "devin_errors": devin_errors(raw.get("devin_lines", ""), now),
+        "pacer": pacer(raw.get("pacer_lines", "")),
+        "search": search_health(raw.get("search_lines", "")),
         "paper_lines_20m": lines20,
         "flags": [],
     }
@@ -180,6 +221,15 @@ def compute(raw):
         f.append("river over $%d ($%.2f today)" % (RIVER_DAILY_LIMIT, today["river_usd"]))
     if sh["devin"] is not None and sh["devin"] < DEVIN_SHARE_MIN:
         f.append("devin share %.0f%% under half" % (100 * sh["devin"]))
+    pc = rep["pacer"]
+    if pc and pc["trips"] > 0:
+        f.append("pacer tripped %d times in hour %s" % (pc["trips"], pc["hour"]))
+    sr = rep["search"]
+    if sr["zero"]:
+        f.append("search: %d of %d requests answered by 0 providers" % (sr["zero"], sr["requests"]))
+    if sr["requests"] and all(sr["by"].get(n, {}).get("quota_limited", 0) > SEARCH_QUOTA_SHARE * sr["requests"]
+                              for n in PAID_SEARCH):
+        f.append("search: every paid provider quota_limited in over 80% of requests")
     if lines20 == 0:
         f.append("paper not publishing (0 lines in %d min)" % PUBLISHING_WINDOW_MIN)
     if today["synthetic_calls"]:
@@ -202,8 +252,8 @@ def render(r):
         for k, n in sorted(c["by"].items(), key=lambda kv: (-kv[1], kv[0])):
             o.append("    %-52s %6d" % (k, n))
     s = r["shares"]
-    o.append("shares (last hour): devin/swe-2-flash %s, free fallbacks %s, bedrock haiku %s"
-             % (pct(s["devin"]), pct(s["free"]), pct(s["haiku"])))
+    o.append("shares (last hour): devin/swe-2-flash %s, luna %s, free fallbacks %s, bedrock haiku %s, other %s"
+             % (pct(s["devin"]), pct(s["luna"]), pct(s["free"]), pct(s["haiku"]), pct(s["other"])))
     b = r["bedrock"]
     o.append("bedrock $: last hour %.2f, today %.2f, projected to end of UTC day %.2f%s"
              % (b["hour_usd"], b["today_usd"], b["projected_usd"],
@@ -217,6 +267,21 @@ def render(r):
     e = r["devin_errors"]
     o.append("devin error|quota|429|hold lines, last hour: %d%s" % (
         e["total"], " (%s)" % ", ".join("%s %d" % kv for kv in sorted(e["by_kind"].items())) if e["by_kind"] else ""))
+    pc = r["pacer"]
+    if pc:
+        o.append("devin pacer, hour %s: shed %.0f%% (%d of %d calls), trips %d"
+                 % (pc["hour"], 100 * pc["shed_share"], pc["shed_calls"], pc["calls"], pc["trips"]))
+    else:
+        o.append("devin pacer: (no hourly pacing line in the last 2 h)")
+    sr = r["search"]
+    if sr["requests"]:
+        o.append("search, last hour: %d requests, %d answered by 0 providers (%.1f%%)"
+                 % (sr["requests"], sr["zero"], 100 * sr["zero_share"]))
+        for n in sorted(sr["by"]):
+            d = sr["by"][n]
+            o.append("    %-10s quota_limited %5d  capped %5d  error %5d" % (n, d["quota_limited"], d["capped"], d["error"]))
+    else:
+        o.append("search, last hour: no requests")
     o.append("paper lines, last %d min: %d" % (PUBLISHING_WINDOW_MIN, r["paper_lines_20m"]))
     o.append("FLAGS: " + ("; ".join(r["flags"]) if r["flags"] else "none"))
     return "\n".join(o)
@@ -230,6 +295,10 @@ echo "##SUCCESS"
 journalctl -u go-choir-gateway --since "$day 00:00:00" --no-pager -o cat --utc 2>/dev/null | grep -a 'inference succeeded for autoputer'
 echo "##DEVIN"
 journalctl -u go-choir-gateway --since '-61 min' --no-pager -o cat --utc 2>/dev/null | grep -a 'provider=devin' | grep -a -v 'inference succeeded\|inference request from' | grep -a -iE 'error|quota|429|hold'
+echo "##PACER"
+journalctl -u go-choir-gateway --since '-2 hours' --no-pager -o cat --utc 2>/dev/null | grep -a 'devin pacing hour=' | tail -n 1
+echo "##SEARCH"
+journalctl -u go-choir-gateway --since '-60 min' --no-pager -o cat --utc 2>/dev/null | grep -a 'search for autoputer' | grep -a -o 'answered [0-9]* of [0-9]* providers.*skipped=\[[^]]*\]'
 echo "##PAPER20"
 journalctl -u go-choir-gateway --since '-20 min' --no-pager -o cat --utc 2>/dev/null | grep -a -c '@VM@'
 echo "##END"
@@ -261,7 +330,8 @@ def fetch(node):
     except ValueError:
         lines20 = 0
     return {"now": int(s["NOW"][0]), "success_lines": "\n".join(s.get("SUCCESS", [])),
-            "devin_lines": "\n".join(s.get("DEVIN", [])), "paper_lines_20m": lines20}
+            "devin_lines": "\n".join(s.get("DEVIN", [])),
+            "pacer_lines": "\n".join(s.get("PACER", [])), "search_lines": "\n".join(s.get("SEARCH", [])), "paper_lines_20m": lines20}
 
 
 def main(argv):
