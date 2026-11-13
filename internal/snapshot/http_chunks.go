@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -152,3 +153,7 @@ func (h HTTPChunks) GetChunk(ctx context.Context, digest string) ([]byte, error)
 	}
 	return data, nil
 }
+
+// ErrSnapshotChunksMissing is the host's refusal of a snapshot root whose
+// chunks it does not hold.
+var ErrSnapshotChunksMissing = errors.New("snapshot root refused: the host does not hold a chunk it names")

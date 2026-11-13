@@ -59,6 +59,9 @@ type Service struct {
 	artifactGCPolicy   *ArtifactGCConfig
 	// artifactGCBeforeUnlink is a test hook run before each locked unlink.
 	artifactGCBeforeUnlink func(rel string)
+	// snapshotRootAfterVerify is a test hook run after a snapshot root's
+	// chunks are verified and before it commits.
+	snapshotRootAfterVerify func()
 	// tapeSweep is the tape sweep's run lock, policy, registry and jobs
 	// (tape_sweep.go).
 	tapeSweep tapeSweepState
