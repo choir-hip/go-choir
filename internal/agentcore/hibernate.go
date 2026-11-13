@@ -364,6 +364,19 @@ func (rt *Runtime) prepareHibernate(ctx context.Context) (int, hibernatePrepareR
 			RunningRuns: running, SelfdevActiveOps: selfdevActive,
 		}
 	}
+	// A capture that spans the pause can record a root whose chunks the
+	// collector deleted meanwhile
+	// (docs/problems/snapshot-root-recorded-without-chunk-check-2026-11-12.md),
+	// and its read transaction would sit frozen in the paused VM. Cancel it
+	// before the pause; the closed fence keeps the producer from starting
+	// another (snapshotsMayStart). A capture that will not unwind keeps the
+	// guest awake.
+	if err := rt.snapshots.cancelInFlight(ctx, errSnapshotCancelledForHibernate, snapshotCancelUnwindBound, 0); err != nil {
+		rt.hibernate.lift()
+		return http.StatusConflict, hibernatePrepareResponse{
+			Outcome: "busy", Reason: "snapshot_not_unwound", Error: "hibernate deferred: " + err.Error(),
+		}
+	}
 	resp := hibernatePrepareResponse{Status: "prepared", GuestBuild: buildinfo.Commit, CredentialResume: rt.hibernateResumeCredential() != nil}
 	if credential := rt.hibernateCredential(); credential != nil {
 		renewCtx, cancel := context.WithTimeout(ctx, hibernateRenewTimeout)

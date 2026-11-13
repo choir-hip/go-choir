@@ -518,9 +518,11 @@ type plannedRestartWork struct {
 	Running       int
 	SelfdevActive int
 	LiveCapsules  int
-	// SnapshotInFlight is a snapshot streaming: a restart would discard it
-	// and the next attempt would read the whole store again, so on a busy
-	// computer that restarts at every deploy no snapshot would finish.
+	// SnapshotInFlight is a snapshot streaming. It is not unsafe(): nothing is
+	// recorded until a capture ends, so a planned restart cancels it
+	// (snapshotProducer.cancelInFlight) and goes on. Other readers of this
+	// struct (cache return, clean rebase, the restore restart) still treat it
+	// as busy.
 	SnapshotInFlight bool
 	// SelfdevAwaitingDecision counts candidates frozen, verified or awaiting
 	// their decision inside the hold bounds (selfdevDecisionHeld); HeldOperations
@@ -569,7 +571,7 @@ func selfdevDecisionHeld(operation selfdev.Operation, now time.Time) bool {
 
 // unsafe reports work no restart may cut, whatever the host asks.
 func (w plannedRestartWork) unsafe() bool {
-	return w.SelfdevActive > 0 || w.LiveCapsules > 0 || w.SnapshotInFlight
+	return w.SelfdevActive > 0 || w.LiveCapsules > 0
 }
 
 // plannedRestartBusy counts the work a restart would cut; countCapsules adds
@@ -763,6 +765,8 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 		// The host withdrew the refresh: new engineering need not wait for
 		// it. Cleared only once the marker is gone (review 1).
 		h.rt.clearRefreshHold()
+		// A capture cancelled for the restart may start again.
+		h.rt.snapshots.clearRestartBlock()
 		// Nothing restarts after all: capsules this process paused for the
 		// restart thaw and their runs continue (sandbox pause design,
 		// Decision 5; the unpause retries until it succeeds).
@@ -819,7 +823,7 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 			why = "live capsules are pausing for the restart; the mark completes once every pause is committed"
 			reason = capsulePauseRefusalPausing
 		case work.unsafe():
-			why = "a self-development operation, a live capsule or a streaming snapshot would not survive a restart; restart deferred until it settles"
+			why = "a self-development operation or a live capsule would not survive a restart; restart deferred until it settles"
 		case held:
 			why = fmt.Sprintf("a self-development candidate is frozen, verified or awaiting its decision; a refresh would boot a newer base under it; restart deferred until it is decided, %s pass since its last update, or %s since it was created", selfdevDecisionHoldCap, selfdevDecisionHoldLifetime)
 			reason = "selfdev_awaiting_decision"
@@ -830,9 +834,26 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 			Reason:      reason,
 			AllowBusy:   allowBusy,
 			RunningRuns: work.Running, SelfdevActiveOps: work.SelfdevActive, LiveCapsules: work.LiveCapsules,
-			SnapshotInFlight:        work.SnapshotInFlight,
 			SelfdevAwaitingDecision: work.SelfdevAwaitingDecision, HeldOperations: work.HeldOperations,
 			HoldsNewWork: pausing || h.rt.refreshHoldsNewWork(askedAt),
+		})
+		return
+	}
+	// A streaming snapshot is not work a restart destroys: nothing is recorded
+	// until the capture ends, and it can be taken again. Cancel it and wait
+	// for it to unwind (the read transaction, the WAL, the upload workers, the
+	// attempt guard) before the marker is written. A capture already
+	// registering its root is let finish instead (snapshot.Config.BeforeCommit).
+	// One that does not end inside the bound refuses the restart, with a
+	// reason that says so: a correctness refusal, not a switch. This runs
+	// after every refusal above, so a refused restart never cuts a capture.
+	if err := h.rt.snapshots.cancelInFlight(r.Context(), errSnapshotCancelledForRestart, snapshotCancelUnwindBound, snapshotRestartBlock); err != nil {
+		h.rt.releaseHostRestartTelemetryIfNoMarker(storePath)
+		writeAPIJSON(w, http.StatusConflict, plannedRestartBusyResponse{
+			Error:   err.Error() + "; restart deferred to the host's next ask",
+			Outcome: "busy", Reason: "snapshot_not_unwound", AllowBusy: allowBusy,
+			RunningRuns: work.Running, SnapshotInFlight: true,
+			HoldsNewWork: h.rt.refreshHoldsNewWork(askedAt),
 		})
 		return
 	}
@@ -861,6 +882,7 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 		return nil
 	})
 	if refusal != "" {
+		h.rt.snapshots.clearRestartBlock()
 		h.rt.releaseHostRestartTelemetryIfNoMarker(storePath)
 		writeAPIJSON(w, http.StatusConflict, plannedRestartBusyResponse{
 			Error:   "a paused capsule is not yet acknowledgeable for the restart; the host asks again",
@@ -870,6 +892,7 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 		return
 	}
 	if err != nil {
+		h.rt.snapshots.clearRestartBlock()
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
 		return
 	}

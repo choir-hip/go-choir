@@ -35,9 +35,16 @@ staging): each start, stop and restart records a
 paper's tape before it acts, and the answer prints the receipt id. A schedule
 start takes a registry source only (no feed URL). `restart` is vmctl's planned,
 marker-backed owner update: it is refused, with a reason code and exit 1, mid
-self-development apply, with a live engineering capsule or a snapshot in
-flight, for a held or not-active computer, while a refresh is in flight, or
-while the ring has not opened. There is no force; it never stops and starts
+self-development apply, with a live engineering capsule, for a held or
+not-active computer, while a refresh is in flight, or while the ring has not
+opened. A snapshot capture in flight does not refuse it: the guest cancels the
+capture (nothing is recorded until a capture ends; the producer takes another
+after the boot) and goes on. Two bounded exceptions refuse with reason
+`snapshot_not_unwound` and the host asks again: a capture that does not unwind
+within 10 s, and a capture already registering its root, which is let finish
+(at most a minute) so the host never holds a root the tape does not know. A
+guest still on the build from before this change refuses with
+`snapshot_in_flight` until its next restart. There is no force; it never stops and starts
 the computer the plain way. The paper (public_platform) takes the refresh while
 busy and resumes its work. The answer's `receipt` records the ask, not the
 outcome.

@@ -143,13 +143,14 @@ func TestRestartRefusesWhenTheCaptureDoesNotUnwindInTheBound(t *testing.T) {
 // U4: once a cancel is requested the commit gate says no.
 func TestTheCommitGateRefusesAfterACancelWasRequested(t *testing.T) {
 	var p snapshotProducer
-	gateSeen := make(chan func() error, 1)
-	release := make(chan struct{})
+	started := make(chan struct{})
+	gateAnswer := make(chan error, 1)
 	deps := newProducerHarness(t).deps
 	deps.Take = func(ctx context.Context, _ time.Duration) (snapshot.Ref, error) {
-		gateSeen <- snapshotCommitGate(ctx)
+		close(started)
 		<-ctx.Done()
-		<-release
+		err := snapshotCommitGate(ctx)()
+		gateAnswer <- err
 		return snapshot.Ref{}, context.Cause(ctx)
 	}
 	done := make(chan captureResult, 1)
@@ -157,16 +158,13 @@ func TestTheCommitGateRefusesAfterACancelWasRequested(t *testing.T) {
 		o, d := p.run(context.Background(), deps, snapshotSettings{Interval: time.Hour, MaxDuration: time.Hour}, time.Now())
 		done <- captureResult{o, d}
 	}()
-	gate := <-gateSeen
-	go func() { _ = p.cancelInFlight(context.Background(), errSnapshotCancelledForRestart, time.Second, 0) }()
-	deadline := time.Now().Add(5 * time.Second)
-	for gate() == nil {
-		if time.Now().After(deadline) {
-			t.Fatal("the gate still says yes after a cancel was requested")
-		}
-		time.Sleep(10 * time.Millisecond)
+	<-started
+	if err := p.cancelInFlight(context.Background(), errSnapshotCancelledForRestart, 5*time.Second, 0); err != nil {
+		t.Fatal(err)
 	}
-	close(release)
+	if got := <-gateAnswer; got == nil {
+		t.Fatal("the gate still says yes after a cancel was requested")
+	}
 	waitResult(t, done)
 }
 

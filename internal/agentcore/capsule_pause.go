@@ -244,7 +244,7 @@ func (rt *Runtime) plannedRestartGate(ctx context.Context, allowBusy bool) (work
 	if err != nil || !work.unsafe() || !allowBusy {
 		return work, false, err
 	}
-	if work.SnapshotInFlight || work.SelfdevAwaitingDecision > 0 {
+	if work.SelfdevAwaitingDecision > 0 {
 		return work, false, nil
 	}
 	var candidates []types.EngineeringAssignment

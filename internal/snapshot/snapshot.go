@@ -251,6 +251,18 @@ type Config struct {
 	// uploads (a long read pins the WAL). The stream aborts with
 	// ErrTimeBudget, which leaves no root and no event.
 	MaxDuration time.Duration
+	// BeforeCommit, when set, is asked once, after the capture and before the
+	// root is registered with the host. An error ends the attempt with
+	// nothing registered or appended. A nil answer is the point of no return:
+	// registering the root and appending snapshot_recorded then run to the
+	// end on a context the caller's cancel cannot reach, bounded by
+	// CommitTimeout, so the host never holds a root the tape does not know
+	// and the tape never names a root the host does not hold. A planned
+	// restart cancels the capture through ctx; this is where it stops being
+	// cancellable.
+	BeforeCommit func() error
+	// CommitTimeout bounds the committed steps (default DefaultCommitTimeout).
+	CommitTimeout time.Duration
 	// FreeSpace, when set, is checked every FreeSpaceEvery (default a minute)
 	// while the capture runs: the read transaction pins the WAL, which grows
 	// on the guest's disk. A non-nil result ends the capture with that error
@@ -278,6 +290,10 @@ func (c Config) validate() error {
 	}
 	return nil
 }
+
+// DefaultCommitTimeout bounds registering the root and appending the event
+// once BeforeCommit has said yes. A deadline, not a switch.
+const DefaultCommitTimeout = time.Minute
 
 // TakeSnapshot streams the store's pages from one read snapshot on the read
 // pool, seals and stores the chunks the host does not already hold, and
@@ -332,12 +348,26 @@ func TakeSnapshot(ctx context.Context, cfg Config) (Ref, error) {
 		}
 		record.FileTreeRoot = root
 	}
+	// The point of no return (Config.BeforeCommit).
+	commitCtx := ctx
+	if cfg.BeforeCommit != nil {
+		if err := cfg.BeforeCommit(); err != nil {
+			return Ref{}, err
+		}
+		timeout := cfg.CommitTimeout
+		if timeout <= 0 {
+			timeout = DefaultCommitTimeout
+		}
+		var stop context.CancelFunc
+		commitCtx, stop = context.WithTimeout(context.WithoutCancel(ctx), timeout)
+		defer stop()
+	}
 	if registrar, ok := cfg.Chunks.(RootRegistrar); ok {
 		chunks := append([]string(nil), manifest.Files[0].Chunks...)
 		for _, part := range got.partitions {
 			chunks = append(chunks, part.Chunks...)
 		}
-		if err := registrar.RegisterSnapshotRoot(ctx, manifest.Root, record.StoreHeadSequence, chunks); err != nil {
+		if err := registrar.RegisterSnapshotRoot(commitCtx, manifest.Root, record.StoreHeadSequence, chunks); err != nil {
 			return Ref{}, fmt.Errorf("snapshot: register snapshot root: %w", err)
 		}
 	}
@@ -361,7 +391,7 @@ func TakeSnapshot(ctx context.Context, cfg Config) (Ref, error) {
 		PrivacyClass:   "private",
 		ReducerVersion: computerevent.ReducerVersionV1,
 	}
-	_, artifactDigest, err := cfg.Appender.AppendNewPrivatePayload(ctx, event, computerevent.TransitionInput{}, plaintext, RecordMediaType, cfg.Cipher)
+	_, artifactDigest, err := cfg.Appender.AppendNewPrivatePayload(commitCtx, event, computerevent.TransitionInput{}, plaintext, RecordMediaType, cfg.Cipher)
 	if err != nil {
 		return Ref{}, fmt.Errorf("snapshot: append snapshot_recorded: %w", err)
 	}

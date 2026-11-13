@@ -1,6 +1,8 @@
 # The paper cannot take the snapshot loop fix, because the loop refuses every planned restart
 
-Date: 2026-11-12, 22:35Z. Status: the paper is unblocked (host stop at 22:52Z on the owner's word, booted on 0d2f0bd46, snapshot recorded 23:28Z); the fix direction below is still open.
+Date: 2026-11-12, 22:35Z. Status: the paper is unblocked (host stop at 22:52Z on the owner's word, booted on 0d2f0bd46, snapshot recorded 23:28Z); the fix is in `lane/restart-cancels-capture` (a planned restart and a
+hibernate cancel an in-flight capture and proceed; a capture already
+registering its root finishes first, bounded; unmerged and not deployed).
 
 ## Problem
 

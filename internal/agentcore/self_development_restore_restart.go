@@ -123,7 +123,7 @@ func (rt *Runtime) restoreRestartBusy(ctx context.Context) string {
 	switch {
 	case err != nil:
 		return "busy: self-development operations are unreadable: " + err.Error()
-	case work.Running > 0 || work.unsafe():
+	case work.Running > 0 || work.unsafe() || work.SnapshotInFlight:
 		return fmt.Sprintf("busy: %d running runs, %d self-development operations mid-transaction, %d live capsules, snapshot streaming %t", work.Running, work.SelfdevActive, work.LiveCapsules, work.SnapshotInFlight)
 	}
 	return ""

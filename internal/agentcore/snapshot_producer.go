@@ -111,7 +111,69 @@ const (
 	snapshotSkipped snapshotOutcome = "skipped"
 	// snapshotBackoff: due, but waiting out the backoff after a failure.
 	snapshotBackoff snapshotOutcome = "backoff"
+	// snapshotCancelled: a planned restart or a hibernate cancelled the
+	// capture. Not a failure: nothing was recorded, the backoff is untouched
+	// and the crash-attempt guard is cleared, as for any attempt that returns.
+	snapshotCancelled snapshotOutcome = "cancelled"
 )
+
+var (
+	errSnapshotCancelledForRestart   = errors.New("snapshot capture cancelled for a planned restart")
+	errSnapshotCancelledForHibernate = errors.New("snapshot capture cancelled for a hibernate")
+)
+
+// snapshotCancelUnwindBound is how long a planned restart or a hibernate waits
+// for a cancelled capture to unwind (the read transaction rolled back, the
+// WAL released, the upload workers stopped, the attempt guard cleared). The
+// host's planned-restart request times out at 20 s (deploy_refresh.go), and a
+// marker written after the host gave up is a restart nobody asked for, so the
+// bound sits well inside it. A deadline, not a switch: past it the restart is
+// refused with a reason that says so. A var so tests can shorten it.
+var snapshotCancelUnwindBound = 10 * time.Second
+
+// snapshotRestartBlock is how long, after a restart cancelled the capture, the
+// producer starts no new one: a capture started between the cancel and the
+// host's kill would be cut for nothing and would leave its crash-attempt
+// guard spent. The restart being withdrawn (DELETE) lifts it at once; the
+// expiry covers a host that never answers.
+const snapshotRestartBlock = 5 * time.Minute
+
+// snapshotAttempt is one attempt's cancel handle, guarded by the producer's mu.
+type snapshotAttempt struct {
+	cancel     context.CancelCauseFunc
+	cause      error
+	cancelled  bool
+	committing bool
+	// done closes when the attempt has fully ended: the capture returned, the
+	// in-flight flag is down and the attempt guard is settled.
+	done chan struct{}
+}
+
+// snapshotNotUnwoundError is the refusal when a capture did not end inside the
+// bound. committing says it was past its point of no return.
+type snapshotNotUnwoundError struct {
+	committing bool
+	bound      time.Duration
+}
+
+func (e *snapshotNotUnwoundError) Error() string {
+	if e.committing {
+		return fmt.Sprintf("a snapshot is recording its root and did not finish within %s; it cannot be cancelled without leaving a root the tape does not know", e.bound)
+	}
+	return fmt.Sprintf("a snapshot capture was cancelled but did not unwind within %s", e.bound)
+}
+
+type snapshotCommitGateKey struct{}
+
+// snapshotCommitGate is the capture's point of no return, carried on the
+// context given to Take (snapshot.Config.BeforeCommit). A context without one
+// (a test seam) always says yes.
+func snapshotCommitGate(ctx context.Context) func() error {
+	if gate, ok := ctx.Value(snapshotCommitGateKey{}).(func() error); ok {
+		return gate
+	}
+	return func() error { return nil }
+}
 
 // snapshotSettings are the producer's tunables, read from the environment.
 type snapshotSettings struct {
@@ -175,12 +237,17 @@ type snapshotDeps struct {
 
 type snapshotProducer struct {
 	tick sync.Mutex // one snapshot at a time
-	// inFlight is true while a snapshot streams. A restart would cut it and
-	// the next attempt would repeat the whole read, so a planned restart
-	// waits for it (plannedRestartWork.SnapshotInFlight); its time budget
-	// bounds the wait. A restart asked for in the instant before a stream
-	// starts still cuts it: that costs one attempt, never state.
+	// inFlight is true while a snapshot streams. A planned restart or a
+	// hibernate cancels the capture (cancelInFlight) and waits for it to
+	// unwind; nothing is recorded until the capture ends, so the cost is the
+	// time spent. A restart asked for in the instant before a stream starts
+	// still cuts it: that costs one attempt, never state.
 	inFlight atomic.Bool
+
+	// cur is the running attempt; blockUntil holds new attempts back after a
+	// restart cancelled one (snapshotRestartBlock).
+	cur        *snapshotAttempt
+	blockUntil time.Time
 
 	mu       sync.Mutex
 	stop     chan struct{}
@@ -203,6 +270,89 @@ func snapshotBackoffWait(n int) time.Duration {
 		wait *= 2
 	}
 	return min(wait, snapshotBackoffCeiling)
+}
+
+// begin registers a new attempt unless a cancelled restart holds the
+// producer back.
+func (p *snapshotProducer) begin(ctx context.Context) (*snapshotAttempt, context.Context, bool) {
+	capCtx, cancel := context.WithCancelCause(ctx)
+	cp := &snapshotAttempt{cancel: cancel, done: make(chan struct{})}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if time.Now().Before(p.blockUntil) {
+		cancel(nil)
+		return nil, nil, false
+	}
+	p.cur = cp
+	gate := func() error {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		if cp.cancelled {
+			return cp.cause
+		}
+		cp.committing = true
+		return nil
+	}
+	return cp, context.WithValue(capCtx, snapshotCommitGateKey{}, gate), true
+}
+
+// end settles an attempt: it is no longer current and cancelInFlight's wait
+// is released.
+func (p *snapshotProducer) end(cp *snapshotAttempt) (cancelled bool) {
+	cp.cancel(nil)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.cur == cp {
+		p.cur = nil
+	}
+	close(cp.done)
+	return cp.cancelled
+}
+
+// cancelInFlight cancels the running capture with cause and waits up to bound
+// for it to end. A capture past its point of no return (it is registering its
+// root and appending the event) is not cancelled: the wait is for it to
+// finish. blockFor, when positive, holds new attempts back for that long
+// (cleared again if the wait fails, since the caller then refuses). It
+// returns nil when no capture is left running.
+func (p *snapshotProducer) cancelInFlight(ctx context.Context, cause error, bound, blockFor time.Duration) error {
+	p.mu.Lock()
+	if blockFor > 0 {
+		p.blockUntil = time.Now().Add(blockFor)
+	}
+	cp := p.cur
+	if cp == nil {
+		p.mu.Unlock()
+		return nil
+	}
+	committing := cp.committing
+	if !committing {
+		cp.cancelled, cp.cause = true, cause
+		cp.cancel(cause)
+	}
+	p.mu.Unlock()
+	timer := time.NewTimer(bound)
+	defer timer.Stop()
+	select {
+	case <-cp.done:
+		return nil
+	case <-timer.C:
+	case <-ctx.Done():
+	}
+	if blockFor > 0 {
+		p.mu.Lock()
+		p.blockUntil = time.Time{}
+		p.mu.Unlock()
+	}
+	return &snapshotNotUnwoundError{committing: committing, bound: bound}
+}
+
+// clearRestartBlock lets the producer start captures again: the restart that
+// cancelled one was withdrawn or refused after the cancel.
+func (p *snapshotProducer) clearRestartBlock() {
+	p.mu.Lock()
+	p.blockUntil = time.Time{}
+	p.mu.Unlock()
 }
 
 // run is one evaluation: take a snapshot if one is due and nothing refuses.
@@ -284,9 +434,16 @@ func (p *snapshotProducer) run(ctx context.Context, d snapshotDeps, set snapshot
 		return snapshotRefused, fmt.Sprintf("free space %d bytes on the data volume is under the %d-byte floor the WAL needs while the stream reads", free, snapshotFreeFloor)
 	}
 
+	// A restart that cancelled a capture holds new ones back until the VM is
+	// gone or the restart is withdrawn.
+	cp, capCtx, ok := p.begin(ctx)
+	if !ok {
+		return snapshotSkipped, "a planned restart cancelled the last capture and is pending"
+	}
 	// A snapshot that crashes the computer is not retried forever.
 	if d.StorePath != "" {
 		if err := spendGuestAttempt(d.StorePath, snapshotAttemptKey, d.ComputerID, snapshotAttemptLimit); err != nil {
+			p.end(cp)
 			return snapshotRefused, "closed after crashing the computer: " + err.Error()
 		}
 	}
@@ -296,10 +453,17 @@ func (p *snapshotProducer) run(ctx context.Context, d snapshotDeps, set snapshot
 	p.inFlight.Store(true)
 	ref, err := func() (snapshot.Ref, error) {
 		defer p.inFlight.Store(false)
-		return d.Take(ctx, set.MaxDuration)
+		return d.Take(capCtx, set.MaxDuration)
 	}()
+	// Returned, so it did not crash the guest: forget the counted start. A
+	// capture cancelled for a restart returns too, so it never counts toward
+	// snapshotAttemptLimit.
 	if d.StorePath != "" {
 		_ = clearGuestAttempt(d.StorePath, snapshotAttemptKey, d.ComputerID)
+	}
+	cancelled := p.end(cp)
+	if err != nil && cancelled {
+		return snapshotCancelled, fmt.Sprintf("%v after %s with nothing recorded; not a failed attempt", context.Cause(capCtx), time.Since(started).Round(time.Second))
 	}
 	if err != nil {
 		p.mu.Lock()
@@ -379,9 +543,7 @@ func (rt *Runtime) snapshotDepsForRuntime() (snapshotDeps, bool) {
 			return "", nil
 		},
 		FreeBytes: freeBytesOnVolume,
-		Ready: func() bool {
-			return !rt.bootInProgress.Load() && !rt.maintenanceHeld()
-		},
+		Ready:     rt.snapshotsMayStart,
 		Take: func(ctx context.Context, maxDuration time.Duration) (snapshot.Ref, error) {
 			// The capture's read transaction pinned the WAL for its whole
 			// stream; the bound backfills it as soon as the read ends.
@@ -410,14 +572,24 @@ func (rt *Runtime) snapshotDepsForRuntime() (snapshotDeps, bool) {
 					}
 					return nil
 				},
-				Partitions:  telemetryPartitionSource(store),
-				Cipher:      rt.privateArtifactCipher,
-				Chunks:      chunks,
-				Appender:    rt.eventAppender,
-				MaxDuration: maxDuration,
+				// The point of no return: past it a cancel waits for the
+				// root and the event, so the host and the tape agree.
+				BeforeCommit: snapshotCommitGate(ctx),
+				Partitions:   telemetryPartitionSource(store),
+				Cipher:       rt.privateArtifactCipher,
+				Chunks:       chunks,
+				Appender:     rt.eventAppender,
+				MaxDuration:  maxDuration,
 			})
 		},
 	}, true
+}
+
+// snapshotsMayStart is false while boot is settling, under a maintenance hold
+// and while the hibernate fence is closed (a capture across a hibernation can
+// record a root whose chunks were collected during the pause).
+func (rt *Runtime) snapshotsMayStart() bool {
+	return !rt.bootInProgress.Load() && !rt.maintenanceHeld() && !rt.hibernate.closed()
 }
 
 // snapshotProducerTick is one tick on the runtime, with its logging.
@@ -431,6 +603,8 @@ func (rt *Runtime) snapshotProducerTick(ctx context.Context, now time.Time) {
 	switch outcome {
 	case snapshotTaken:
 		log.Printf("runtime: snapshot taken: %s", detail)
+	case snapshotCancelled:
+		log.Printf("runtime: snapshot capture cancelled: %s", detail)
 	case snapshotRefused, snapshotFailed, snapshotBackoff:
 		// A refusal repeats at every tick until it clears; say it when it
 		// changes so the log stays readable.
