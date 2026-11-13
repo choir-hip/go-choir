@@ -14,8 +14,17 @@ package platform
 //      TestSnapshotRecordedKeyIsTheRegisteredRootTheHostMatches; here the
 //      receipts come through the real append path of the drill computer);
 //  N5. an append that lands late under the same key leaves the root unnamed
-//      or pruned, or the prune after it misbehaves;
-//  N6. old unnamed roots accumulate without bound;
+//      or pruned, or the prune after it misbehaves; and a root pruned by a
+//      newer registration whose append then lands (the tape names a root the
+//      host no longer keeps, its chunks collectable): the rows registered
+//      within snapshotRootInFlightWindow stay, up to
+//      snapshotRootMaxYoungUnnamed beyond the newest;
+//  N6. unnamed roots accumulate without bound (young ones within the
+//      window, old ones past it);
+//  N12. the root just registered is pruned when its head is below a named
+//      root's (a head inversion after a restore);
+//  N13. receipt tripwire (TestAppendReceiptRowWritersAreKnown) flags a file
+//      that merely reads the receipts table beside an unrelated DELETE.
 //  N7. the collector (the sweep's live set or the root-time check) misses a
 //      kept row, because of the old LIMIT retention (a test with 4 named
 //      and 1 unnamed row);
@@ -115,8 +124,13 @@ func TestUnappendedRegistrationsNeverEvictTheRootTheTapeNames(t *testing.T) {
 			for i := 0; i < tc.retention+3; i++ {
 				c.appendMixed(1, fmt.Sprintf("gap%d", i))
 				last, _ = c.registerRoot(fmt.Sprintf("failed-%d", i), tc.chunks) // its append never runs
-				requireKept(t, c, last, named)                                   // N2: the newest attempt stays
-				requireBase(t, c, named, namedHead)                              // N3: never the unappended root
+				// N2: the newest attempt stays beside the named root, and the
+				// unnamed rows stay bounded.
+				kept := c.keptRoots()
+				if !containsRoot(kept, last) || !containsRoot(kept, named) || len(kept) > 2+snapshotRootMaxYoungUnnamed {
+					t.Fatalf("kept %v after failure %d, want the newest attempt and the named root within the bound", short(kept), i)
+				}
+				requireBase(t, c, named, namedHead) // N3: never the unappended root
 			}
 		})
 	}
@@ -164,16 +178,35 @@ func TestALateAppendMakesAnUnappendedRootAnOrdinaryKeptRoot(t *testing.T) {
 	requireKept(t, c, e, d, b) // a is now the third named root
 }
 
-// N6.
-func TestOldUnappendedRootsDoNotAccumulate(t *testing.T) {
+func containsRoot(roots []string, root string) bool {
+	for _, r := range roots {
+		if r == root {
+			return true
+		}
+	}
+	return false
+}
+
+// ageRoots moves every row's registration time back by d, as if the
+// attempts had been made d ago.
+func (c *drillComputer) ageRoots(d time.Duration) {
+	c.t.Helper()
+	if _, err := c.store.db.ExecContext(context.Background(), `UPDATE computer_snapshot_roots SET created_at=created_at - (? * interval '1 second') WHERE computer_id=?`, int64(d.Seconds()), c.id); err != nil {
+		c.t.Fatal(err)
+	}
+}
+
+// N6: young unnamed rows are bounded; old ones go at the next registration.
+func TestUnnamedRootsDoNotAccumulate(t *testing.T) {
 	c := newDrillComputer(t, "computer-accumulate")
 	c.appendEvent(computerevent.EventGenesisImported, "", nil)
+	bound := 1 + snapshotRootMaxYoungUnnamed
 	for i := 0; i < 30; i++ {
 		c.appendMixed(1, fmt.Sprintf("n%d", i))
 		c.registerRoot(fmt.Sprintf("none-%d", i), 3)
-	}
-	if got := len(c.keptRoots()); got != 1 {
-		t.Fatalf("%d rows after 30 unappended registrations with none named, want 1", got)
+		if got := len(c.keptRoots()); got > bound {
+			t.Fatalf("%d rows after %d unappended registrations with none named, bound %d", got, i+1, bound)
+		}
 	}
 	c.appendMixed(1, "m")
 	named, _ := c.registerRoot("named", 3)
@@ -181,15 +214,74 @@ func TestOldUnappendedRootsDoNotAccumulate(t *testing.T) {
 	for i := 0; i < 30; i++ {
 		c.appendMixed(1, fmt.Sprintf("m%d", i))
 		c.registerRoot(fmt.Sprintf("more-%d", i), 3)
+		if got := len(c.keptRoots()); got > 1+bound {
+			t.Fatalf("%d rows with one named root after %d failures, bound %d", got, i+1, 1+bound)
+		}
 	}
-	if got := len(c.keptRoots()); got != 2 {
-		t.Fatalf("%d rows with one named root and 30 failures, want 2", got)
+	// Past the window the failed attempts are gone; the next registration
+	// leaves the named root and itself.
+	c.ageRoots(snapshotRootInFlightWindow + time.Minute)
+	c.appendMixed(1, "late")
+	last, _ := c.registerRoot("after-window", 3)
+	requireKept(t, c, last, named)
+}
+
+// N5 (the pruned variant): A registers, B registers at a higher head, then A's
+// snapshot_recorded lands. A's row must still be there, so the tape's root is
+// protected from the collector and is the recovery base.
+func TestAnAppendThatLandsAfterANewerRegistrationFindsItsRow(t *testing.T) {
+	c := newDrillComputer(t, "computer-late-after")
+	c.appendEvent(computerevent.EventGenesisImported, "", nil)
+	c.appendMixed(2, "pre")
+	a, aHead := c.registerRoot("a", largeSnapshotChunks+1)
+	c.appendMixed(1, "x")
+	b, _ := c.registerRoot("b", largeSnapshotChunks+1)
+	if !containsRoot(c.keptRoots(), a) {
+		t.Fatalf("A was pruned by B's registration: kept %v", short(c.keptRoots()))
+	}
+	c.appendSnapshotRecorded(a) // lands after B registered
+	requireBase(t, c, a, aHead)
+	_ = b
+	// Past the window an attempt that never landed is pruned.
+	c.ageRoots(snapshotRootInFlightWindow + time.Minute)
+	c.appendMixed(1, "y")
+	d, _ := c.registerRoot("d", largeSnapshotChunks+1)
+	requireKept(t, c, d, a)
+}
+
+// N12: a root registered at a head below the newest named root's is kept,
+// whatever its head.
+func TestTheRootJustRegisteredIsNeverPruned(t *testing.T) {
+	store, _ := openTestPlatformStore(t)
+	ctx := context.Background()
+	const computer = "computer-inversion"
+	for i, head := range []int64{50, 60} {
+		root := gcDigest(fmt.Sprintf("named/%d", i))
+		nameRootRow(t, store, computer, root, head)
+		if err := store.recordSnapshotRoot(ctx, computer, root, head, []string{gcDigest("c/" + root)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	low := gcDigest("low")
+	if err := store.recordSnapshotRoot(ctx, computer, low, 10, []string{gcDigest("c/low")}); err != nil {
+		t.Fatal(err)
+	}
+	live, err := store.LiveSnapshotRoots(ctx, computer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, r := range live {
+		found = found || r.Root == low
+	}
+	if !found {
+		t.Fatalf("the root just registered at head 10 was pruned in its own transaction: %d rows", len(live))
 	}
 }
 
 // A named root below the head of an older unappended one is still named; an
 // unappended root BELOW the newest named root is dropped, not kept.
-func TestAnUnappendedRootBelowTheNewestNamedRootIsDropped(t *testing.T) {
+func TestAnOldUnappendedRootBelowTheNewestNamedRootIsDropped(t *testing.T) {
 	c := newDrillComputer(t, "computer-below")
 	c.appendEvent(computerevent.EventGenesisImported, "", nil)
 	c.appendMixed(1, "a")
@@ -197,7 +289,9 @@ func TestAnUnappendedRootBelowTheNewestNamedRootIsDropped(t *testing.T) {
 	c.appendMixed(1, "b")
 	named, _ := c.registerRoot("named", 3)
 	c.appendSnapshotRecorded(named)
-	// The next registration prunes: old sits below named and is gone.
+	// Past the in-flight window, the next registration prunes: old sits below
+	// named and is gone.
+	c.ageRoots(snapshotRootInFlightWindow + time.Minute)
 	c.appendMixed(1, "c")
 	newest, _ := c.registerRoot("newest", 3)
 	got := c.keptRoots()
@@ -291,10 +385,13 @@ func TestEveryKeptSnapshotRootRowIsProtectedFromTheCollector(t *testing.T) {
 		name := fmt.Sprintf("n%d", i+1)
 		digests[name], paths[name] = register(name, head, true)
 	}
+	// A young unnamed root below the named heads (an attempt whose append
+	// lands after a newer registration), then the newest unnamed one.
+	digests["y"], paths["y"] = register("y", 15, false)
 	digests["u"], paths["u"] = register("u", 50, false)
 	live, err := f.store.LiveSnapshotRoots(f.ctx, computer)
-	if err != nil || len(live) != snapshotRootRetention+1 {
-		t.Fatalf("kept %d rows, %v; want four named and one unnamed", len(live), err)
+	if err != nil || len(live) != snapshotRootRetention+2 {
+		t.Fatalf("kept %d rows, %v; want four named and two unnamed", len(live), err)
 	}
 	report := f.run(activeWindow())
 	for name, p := range paths {
