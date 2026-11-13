@@ -44,6 +44,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/bundle"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/hostlink"
 	"github.com/yusefmosiah/go-choir/internal/snapshot"
 )
 
@@ -605,4 +606,76 @@ func TestRegisteringANamedRootAgainKeepsIt(t *testing.T) {
 	if !found {
 		t.Fatal("the root registered again was pruned in its own transaction")
 	}
+}
+
+// A named root registered again at a head at or above its naming receipt (the
+// PUT upserts head_sequence) stays named: the key snapshot:<root> is unique,
+// so the receipt names the root whatever head the row now carries. Past the
+// window the next registration must still keep it.
+func TestReRegisteringANamedRootAtAHigherHeadKeepsItNamed(t *testing.T) {
+	store, _ := openTestPlatformStore(t)
+	ctx := context.Background()
+	const computer = "computer-rereg-higher"
+	root := gcDigest("rereg/named")
+	nameRootAt(t, store, computer, root, 11)
+	for _, head := range []int64{10, 20} { // the second is above the receipt's sequence
+		if err := store.recordSnapshotRoot(ctx, computer, root, head, []string{gcDigest("c/named")}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := store.db.ExecContext(ctx, `UPDATE computer_snapshot_roots SET created_at=created_at - (? * interval '1 second') WHERE computer_id=?`, int64((snapshotRootInFlightWindow + time.Minute).Seconds()), computer); err != nil {
+		t.Fatal(err)
+	}
+	other := gcDigest("rereg/other")
+	if err := store.recordSnapshotRoot(ctx, computer, other, 30, []string{gcDigest("c/other")}); err != nil {
+		t.Fatal(err)
+	}
+	live, err := store.LiveSnapshotRoots(ctx, computer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, r := range live {
+		got[r.Root] = true
+	}
+	if !got[root] {
+		t.Fatalf("a named root re-registered at head 20 (receipt at 11) was pruned: kept %d rows", len(live))
+	}
+}
+
+// The in-flight window is derived, not typed: it covers every sequential
+// request of the append, each at the guest client's attempt timeout plus the
+// refused-dial resend, plus the CAS re-send and a margin for the
+// registration's own latency. The in-band guarantee is the producer's tick
+// mutex, which spans register and append; the window is the out-of-band guard.
+func TestTheInFlightWindowIsDerivedFromTheAppendBound(t *testing.T) {
+	want := computerevent.AppendSequentialRequests*(computerevent.GuestAttemptTimeout+hostlink.RestartWait) + computerevent.CASResendTimeout + snapshotRootWindowMargin
+	if snapshotRootInFlightWindow != want {
+		t.Fatalf("window = %s, want %s", snapshotRootInFlightWindow, want)
+	}
+	if computerevent.AppendSequentialRequests < 5 {
+		t.Fatalf("the append makes at least five sequential requests (bind head, pin payload, head read, pin event, CAS); constant is %d", computerevent.AppendSequentialRequests)
+	}
+}
+
+// The accepted residual: an append that lands after the window, once a newer
+// registration pruned its row. The tape names a root the host no longer keeps;
+// the roots the tape named before it stay kept, so a restore falls back to
+// them.
+func TestAnAppendAfterTheWindowLeavesTheOlderNamedRootsKept(t *testing.T) {
+	c := newDrillComputer(t, "computer-after-window")
+	c.appendEvent(computerevent.EventGenesisImported, "", nil)
+	c.appendMixed(2, "pre")
+	older, _ := c.registerRoot("older", 3)
+	c.appendSnapshotRecorded(older)
+	c.appendMixed(1, "x")
+	late, _ := c.registerRoot("late", 3) // its append is delayed past the window
+	c.ageRoots(snapshotRootInFlightWindow + time.Minute)
+	c.appendMixed(1, "y")
+	c.registerRoot("newer", 3)
+	if containsRoot(c.keptRoots(), late) {
+		t.Fatal("a failed attempt past the window was kept")
+	}
+	c.appendSnapshotRecorded(late) // lands now
+	requireNamedKept(t, c, older)
 }
