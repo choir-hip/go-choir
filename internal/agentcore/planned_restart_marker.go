@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +22,21 @@ import (
 // touches it (TestPlannedRestartMarkerIsTouchedOnlyThroughItsOwner fails the
 // build if any does).
 //
+// The owner enforces what a marker MEANS, not only who may touch the file:
+//
+//	Rule 1, the marker belongs to whoever wrote it. Clear is reason-scoped
+//	(clearPlannedRestartMarkerIfReason): a guest cleanup clears only its own
+//	reason, the host's withdrawal only PlannedRestartPlatformRefresh. Write
+//	needs a reason, and the host's write never lands over a guest marker (a
+//	guest restart is already coming; errGuestRestartPending). The guest's
+//	write may replace the host's: the guest's restart is the one that
+//	happens, and the boot is planned either way, so no crash boot results
+//	(refusing it would leave the guest's own apply without a marker, which
+//	is one). There is no unconditional clear outside the boot's consume.
+//
+//	Rule 2, nothing that protects a coming kill is released while a marker is
+//	on disk. That is releaseRestartProtections (planned_restart_release.go).
+//
 // Lock order, stated once and followed everywhere:
 //
 //	plannedRestartReqMu (the host's request/withdrawal)
@@ -32,9 +48,9 @@ import (
 // alone, which is always safe because it is last.
 var plannedRestartMarkerMu sync.Mutex
 
-// plannedRestartMarkerCheckedHook is a test seam: called, with the marker mutex
-// held, between clearHostPlannedRestartMarkerIfHosts' reason check and its
-// delete.
+// plannedRestartMarkerCheckedHook is a test-only seam, not parallel-safe (a
+// package global): called, with the marker mutex held, between
+// clearPlannedRestartMarkerIfReason's reason check and its delete.
 var plannedRestartMarkerCheckedHook func()
 
 // PlannedRestartMarkerPath is the marker beside the runtime store, on the
@@ -48,57 +64,99 @@ func PlannedRestartMarkerPath(storePath string) string {
 }
 
 // WritePlannedRestartMarker durably records that the next boot is planned.
+//
+// It refuses a marker without a reason, and the host's marker
+// (PlannedRestartPlatformRefresh) while a guest marker is on disk
+// (errGuestRestartPending).
 func WritePlannedRestartMarker(storePath string, marker PlannedRestart) error {
+	if strings.TrimSpace(marker.Reason) == "" {
+		return errors.New("planned restart marker: a reason is required")
+	}
 	plannedRestartMarkerMu.Lock()
 	defer plannedRestartMarkerMu.Unlock()
+	if marker.Reason == PlannedRestartPlatformRefresh {
+		if m, ok := readFreshMarkerLocked(storePath, time.Now()); ok && m.Reason != "" && m.Reason != PlannedRestartPlatformRefresh {
+			return fmt.Errorf("%w (%s)", errGuestRestartPending, m.Reason)
+		}
+	}
 	return writePlannedRestartMarkerLocked(storePath, marker)
 }
 
-// ClearPlannedRestartMarker removes the marker, e.g. when the restart it
-// announced did not happen.
-func ClearPlannedRestartMarker(storePath string) error {
-	plannedRestartMarkerMu.Lock()
-	defer plannedRestartMarkerMu.Unlock()
-	return clearPlannedRestartMarkerLocked(storePath)
+// errGuestRestartPending refuses the host's marker while a marker the guest
+// wrote for its own restart is on disk.
+var errGuestRestartPending = errors.New("guest_restart_pending: the guest has a restart of its own pending")
+
+// unnamedMarkerReason is what a marker without a reason (one from before the
+// write refused them) is reported as when it is kept.
+const unnamedMarkerReason = "(unnamed)"
+
+// readFreshMarkerLocked returns the marker on disk if it is readable and could
+// still plan a boot. The caller holds plannedRestartMarkerMu.
+func readFreshMarkerLocked(storePath string, now time.Time) (PlannedRestart, bool) {
+	path := PlannedRestartMarkerPath(storePath)
+	if path == "" {
+		return PlannedRestart{}, false
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return PlannedRestart{}, false
+	}
+	var marker PlannedRestart
+	if json.Unmarshal(raw, &marker) != nil || marker.RequestedAt.IsZero() {
+		return PlannedRestart{}, false
+	}
+	if now.Sub(marker.RequestedAt) > plannedRestartMaxAge {
+		return PlannedRestart{}, false
+	}
+	return marker, true
 }
 
-// clearPlannedRestartMarkerIfHosts removes the marker only if it is the host's
-// own platform-refresh marker (or unreadable, which nobody owns), as one
-// atomic step. For a marker the guest wrote for itself (platform_update, a
-// self-development apply or restore) it removes nothing and returns that
-// marker's reason as keptReason.
-func clearPlannedRestartMarkerIfHosts(storePath string) (keptReason string, err error) {
+// guestRestartPendingReason names the guest marker on disk that the host's
+// mark must not replace, or "".
+func guestRestartPendingReason(storePath string) string {
 	plannedRestartMarkerMu.Lock()
 	defer plannedRestartMarkerMu.Unlock()
-	if path := PlannedRestartMarkerPath(storePath); path != "" {
-		if raw, rerr := os.ReadFile(path); rerr == nil {
-			var marker PlannedRestart
-			if json.Unmarshal(raw, &marker) == nil && marker.Reason != PlannedRestartPlatformRefresh {
-				if plannedRestartMarkerCheckedHook != nil {
-					plannedRestartMarkerCheckedHook()
-				}
-				return marker.Reason, nil
-			}
-		}
+	if m, ok := readFreshMarkerLocked(storePath, time.Now()); ok && m.Reason != "" && m.Reason != PlannedRestartPlatformRefresh {
+		return m.Reason
 	}
-	if plannedRestartMarkerCheckedHook != nil {
-		plannedRestartMarkerCheckedHook()
-	}
-	return "", clearPlannedRestartMarkerLocked(storePath)
+	return ""
 }
 
-// plannedRestartMarkerExists reports whether a marker file is on disk (it may
-// be unreadable or stale), for the callers that undo a request's hold only
-// when no marker could still plan a boot.
-func plannedRestartMarkerExists(storePath string) bool {
+// clearPlannedRestartMarkerIfReason removes the marker only if its reason is
+// one of reasons, as one atomic step with the read. cleared reports that the
+// file was removed; keptReason names the marker left in place (the reason, or
+// unnamedMarkerReason for one without), so "removed" and "kept" are never
+// confused. No marker is (false, "", nil). A marker that cannot be read or
+// parsed belongs to nobody and is removed.
+func clearPlannedRestartMarkerIfReason(storePath string, reasons ...string) (cleared bool, keptReason string, err error) {
 	plannedRestartMarkerMu.Lock()
 	defer plannedRestartMarkerMu.Unlock()
 	path := PlannedRestartMarkerPath(storePath)
 	if path == "" {
-		return false
+		return false, "", nil
 	}
-	_, err := os.Lstat(path)
-	return !errors.Is(err, os.ErrNotExist)
+	raw, rerr := os.ReadFile(path)
+	if errors.Is(rerr, os.ErrNotExist) {
+		return false, "", nil
+	}
+	if rerr == nil {
+		var marker PlannedRestart
+		if json.Unmarshal(raw, &marker) == nil {
+			if plannedRestartMarkerCheckedHook != nil {
+				plannedRestartMarkerCheckedHook()
+			}
+			if !slices.Contains(reasons, marker.Reason) || marker.Reason == "" {
+				if marker.Reason == "" {
+					return false, unnamedMarkerReason, nil
+				}
+				return false, marker.Reason, nil
+			}
+		}
+	}
+	if err := clearPlannedRestartMarkerLocked(storePath); err != nil {
+		return false, "", err
+	}
+	return true, "", nil
 }
 
 func writePlannedRestartMarkerLocked(storePath string, marker PlannedRestart) error {

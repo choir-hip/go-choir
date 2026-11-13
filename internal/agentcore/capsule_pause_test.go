@@ -1070,6 +1070,9 @@ func TestPlannedRestartSparesPausedCapsulesIsReasonAware(t *testing.T) {
 		"future-dated":    {PlannedRestart{Reason: PlannedRestartPlatformRefresh, RequestedAt: now.Add(time.Hour)}, false},
 		"other reason":    {PlannedRestart{Reason: "something else", RequestedAt: now.Add(-time.Minute)}, false},
 	} {
+		// Each case is a fresh marker: the host's write refuses to land over a
+		// guest's, so clear the previous case's first.
+		_ = ClearPlannedRestartMarker(store)
 		if err := WritePlannedRestartMarker(store, tc.marker); err != nil {
 			t.Fatal(err)
 		}

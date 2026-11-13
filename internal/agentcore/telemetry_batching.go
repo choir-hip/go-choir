@@ -161,65 +161,38 @@ func (rt *Runtime) writeHostPlannedRestartMarkerCtx(ctx context.Context, storePa
 		rt.beforeMarkerWriteHook() // test seam: the caller may give up here
 	}
 	if ctx.Err() != nil {
-		rt.releaseHostRestartTelemetryIfNoMarkerLocked(storePath)
+		rt.releaseRestartProtections(storePath, relTelemetry, true)
 		return marker, errPlannedRestartCallerGone
 	}
 	if err := WritePlannedRestartMarker(storePath, marker); err != nil {
 		// The write can fail after the rename: only an empty marker path
 		// proves nothing will boot as planned on it.
-		rt.releaseHostRestartTelemetryIfNoMarkerLocked(storePath)
+		rt.releaseRestartProtections(storePath, relTelemetry, true)
 		return marker, err
 	}
 	return marker, nil
 }
 
-// clearHostPlannedRestartMarker is the host's marker clear after a refresh
-// that did not happen. The hold is released only once the clear succeeded; a
-// failed clear may leave the marker durable, so the queue stays closed.
-func (rt *Runtime) clearHostPlannedRestartMarker(storePath string) error {
+// clearOwnPlannedRestartMarker removes the marker if its reason is reason (the
+// host's withdrawal passes PlannedRestartPlatformRefresh, the restore
+// restart's cleanup its own), atomically with the check, and then releases the
+// telemetry hold if no marker remains. A marker of another reason is left in
+// place: it announces a restart, and the hold ends with it. (The hold is a
+// performance cost only, and the next boot or the next host request releases
+// it.)
+func (rt *Runtime) clearOwnPlannedRestartMarker(storePath, reason string) (cleared bool, keptReason string, err error) {
 	rt.hostRestartTelemetryMu.Lock()
 	defer rt.hostRestartTelemetryMu.Unlock()
-	if err := ClearPlannedRestartMarker(storePath); err != nil {
-		return err
+	cleared, keptReason, err = clearPlannedRestartMarkerIfReason(storePath, reason)
+	if err != nil {
+		return false, "", err
 	}
-	rt.releaseHostRestartTelemetryLocked()
-	return nil
+	rt.releaseRestartProtections(storePath, relTelemetry, true)
+	return cleared, keptReason, nil
 }
 
-// releaseHostRestartTelemetryIfNoMarker is the busy refusal's undo: a refused
-// request restarts nothing, but an earlier request's durable marker may still
-// be followed by the host's kill, so the hold is kept while any marker is on
-// disk (or its presence cannot be read).
-// clearHostPlatformRefreshMarker is the host's withdrawal: it removes the
-// marker only if it is the host's own, atomically with the check (see the
-// marker's owner). A marker the guest wrote for itself is left in place and
-// its reason returned; the telemetry hold stays with it.
-func (rt *Runtime) clearHostPlatformRefreshMarker(storePath string) (keptReason string, err error) {
-	rt.hostRestartTelemetryMu.Lock()
-	defer rt.hostRestartTelemetryMu.Unlock()
-	kept, err := clearPlannedRestartMarkerIfHosts(storePath)
-	if err != nil || kept != "" {
-		return kept, err
-	}
-	rt.releaseHostRestartTelemetryLocked()
-	return "", nil
-}
-
-func (rt *Runtime) releaseHostRestartTelemetryIfNoMarker(storePath string) {
-	if rt == nil {
-		return
-	}
-	rt.hostRestartTelemetryMu.Lock()
-	defer rt.hostRestartTelemetryMu.Unlock()
-	rt.releaseHostRestartTelemetryIfNoMarkerLocked(storePath)
-}
-
-func (rt *Runtime) releaseHostRestartTelemetryIfNoMarkerLocked(storePath string) {
-	if !plannedRestartMarkerExists(storePath) {
-		rt.releaseHostRestartTelemetryLocked()
-	}
-}
-
+// releaseHostRestartTelemetryLocked ends the host's synchronous telemetry
+// hold. Only releaseRestartProtections calls it.
 func (rt *Runtime) releaseHostRestartTelemetryLocked() {
 	if restore := rt.hostRestartTelemetryRestore; restore != nil {
 		rt.hostRestartTelemetryRestore, rt.hostRestartDrainFailed, rt.hostRestartWindowWasOpen = nil, false, false

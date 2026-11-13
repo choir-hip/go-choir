@@ -346,9 +346,14 @@ func (rt *Runtime) markPlannedRestart(reason, target string) (func(applyErr erro
 	}
 	return func(error) {
 		restoreTelemetry()
-		if err := ClearPlannedRestartMarker(storePath); err != nil {
+		// Only its own: a host marker that replaced this one is not ours to
+		// delete.
+		if _, _, err := clearPlannedRestartMarkerIfReason(storePath, reason); err != nil {
 			log.Printf("runtime: clear planned restart marker after apply returned: %v", err)
 		}
+		// With no marker left, a host hold stranded by this marker replacing
+		// the host's own ends too.
+		rt.releaseRestartProtections(storePath, relTelemetry, false)
 	}, nil
 }
 
@@ -616,12 +621,10 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 			return
 		}
 		defer h.rt.plannedRestartReqMu.unlock()
-		// The host did not restart after all: telemetry queues again once
-		// the marker is gone.
 		// The reason check and the delete are one atomic step in the marker's
 		// owner: a marker the guest wrote for itself (platform_update, a
 		// self-development apply or restore) is not the host's to withdraw.
-		kept, err := h.rt.clearHostPlatformRefreshMarker(storePath)
+		cleared, kept, err := h.rt.clearOwnPlannedRestartMarker(storePath, PlannedRestartPlatformRefresh)
 		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
 			return
@@ -630,15 +633,14 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 			writeAPIJSON(w, http.StatusOK, map[string]string{"status": "kept", "reason": "a planned-restart marker for " + kept + " is not the host's refresh"})
 			return
 		}
-		// The host withdrew the refresh: new engineering need not wait for
-		// it. Cleared only once the marker is gone (review 1).
-		h.rt.clearRefreshHold()
-		// A capture cancelled for the restart may start again.
-		h.rt.snapshots.clearRestartBlock()
-		// Nothing restarts after all: capsules this process paused for the
-		// restart thaw and their runs continue (sandbox pause design,
-		// Decision 5; the unpause retries until it succeeds).
-		h.rt.unpauseAllCapsules()
+		_ = cleared // nothing on disk is the same outcome for the host: nothing to withdraw
+		// The host did not restart after all: new engineering need not wait
+		// for it, a capture cancelled for the restart may start again, and
+		// capsules this process paused for the restart thaw and their runs
+		// continue (sandbox pause design, Decision 5; the unpause retries until
+		// it succeeds). All of it through the one release function, which
+		// releases nothing while a marker is on disk.
+		h.rt.releaseRestartProtections(storePath, relBlock|relRefreshHold|relTelemetry|relThaw, false)
 		writeAPIJSON(w, http.StatusOK, map[string]string{"status": "cleared"})
 		return
 	}
@@ -678,6 +680,17 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 	// is refused or the restart follows.
 	askedAt := h.rt.refreshHoldNow()
 	h.rt.noteRefreshAsked(target, askedAt)
+	// A restart of the guest's own is already coming (a restore, a platform
+	// update, a self-development apply): the host's marker would replace it.
+	if pending := guestRestartPendingReason(storePath); pending != "" {
+		h.rt.releaseRestartProtections(storePath, relTelemetry, false)
+		writeAPIJSON(w, http.StatusConflict, plannedRestartBusyResponse{
+			Error:   "the guest has a restart of its own pending (" + pending + "); the host asks again",
+			Outcome: "busy", Reason: "guest_restart_pending", AllowBusy: allowBusy,
+			HoldsNewWork: true,
+		})
+		return
+	}
 	work, pausing, err := h.rt.plannedRestartGate(r.Context(), allowBusy)
 	if err != nil {
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "planned restart: " + err.Error()})
@@ -690,7 +703,7 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 	if work.unsafe() || held || pausing || (work.Running > 0 && !allowBusy) {
 		// A refused request restarts nothing: an earlier request's
 		// synchronous mode is undone unless its marker is still durable.
-		h.rt.releaseHostRestartTelemetryIfNoMarker(storePath)
+		h.rt.releaseRestartProtections(storePath, relTelemetry, false)
 		why, reason := "guest is busy; restart deferred to its next idle moment", ""
 		switch {
 		case pausing && !held:
@@ -755,8 +768,11 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 		return nil
 	})
 	if notUnwound != nil {
-		h.rt.releaseHostRestartTelemetryIfNoMarker(storePath)
-		h.rt.unpauseAllCapsules()
+		rel := relTelemetry | relThaw
+		if r.Context().Err() != nil {
+			rel |= relRefreshHold // the host gave up: nothing will ask again on this request
+		}
+		h.rt.releaseRestartProtections(storePath, rel, false)
 		writeAPIJSON(w, http.StatusConflict, plannedRestartBusyResponse{
 			Error:   notUnwound.Error() + "; restart deferred to the host's next ask",
 			Outcome: "busy", Reason: "snapshot_not_unwound", AllowBusy: allowBusy,
@@ -766,8 +782,7 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 		return
 	}
 	if refusal != "" {
-		h.rt.snapshots.clearRestartBlock()
-		h.rt.releaseHostRestartTelemetryIfNoMarker(storePath)
+		h.rt.releaseRestartProtections(storePath, relBlock|relTelemetry, false)
 		writeAPIJSON(w, http.StatusConflict, plannedRestartBusyResponse{
 			Error:   "a paused capsule is not yet acknowledgeable for the restart; the host asks again",
 			Outcome: "busy", Reason: refusal, AllowBusy: allowBusy,
@@ -776,21 +791,25 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 		return
 	}
 	if err != nil {
-		// Capsules this request paused and acked thaw: no marker follows.
-		h.rt.unpauseAllCapsules()
-		// The holds go only if no marker is durable: an earlier request's
-		// marker means the host's kill is coming, and the producer must not
-		// start a capture nor new engineering enter into it.
-		markerPending := plannedRestartMarkerExists(storePath)
-		if !markerPending {
-			h.rt.snapshots.clearRestartBlock()
-		}
+		// Nothing was written (or a marker is on disk that is not this
+		// request's): the protections go only if no marker is durable. An
+		// earlier request's marker means the host's kill is coming, and its
+		// capsules stay frozen, the producer blocked, new engineering held.
+		rel := relBlock | relThaw | relTelemetry
 		if errors.Is(err, errPlannedRestartCallerGone) {
-			// The host gave up on this request: nothing was written.
-			if !markerPending {
-				h.rt.clearRefreshHold()
-			}
+			rel |= relRefreshHold // the host gave up on this request
+			h.rt.releaseRestartProtections(storePath, rel, false)
 			writeAPIJSON(w, http.StatusConflict, plannedRestartBusyResponse{Error: err.Error(), Outcome: "busy", AllowBusy: allowBusy})
+			return
+		}
+		h.rt.releaseRestartProtections(storePath, rel, false)
+		if errors.Is(err, errGuestRestartPending) {
+			// A guest marker landed between the early check and the write.
+			writeAPIJSON(w, http.StatusConflict, plannedRestartBusyResponse{
+				Error:   err.Error() + "; the host asks again",
+				Outcome: "busy", Reason: "guest_restart_pending", AllowBusy: allowBusy,
+				HoldsNewWork: true,
+			})
 			return
 		}
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})

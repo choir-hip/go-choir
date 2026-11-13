@@ -250,14 +250,17 @@ func TestHostAndApplyHoldsAreIndependent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if code, body := postPlannedRestartURL(t, handler, "/internal/runtime/planned-restart?allow_busy=1", `{"target":"761d94c5"}`); code != http.StatusOK {
-		t.Fatalf("status=%d body=%s", code, body)
+	// The guest's own restart is already coming: the host's mark is refused,
+	// not written over it (round 4), and the apply's undo ends its own hold.
+	if code, body := postPlannedRestartURL(t, handler, "/internal/runtime/planned-restart?allow_busy=1", `{"target":"761d94c5"}`); code != http.StatusConflict || !strings.Contains(body, "guest_restart_pending") {
+		t.Fatalf("status=%d body=%s, want 409 guest_restart_pending", code, body)
 	}
-	// The apply returns (its own cleanup clears the shared marker file) while
-	// the host's kill is still coming: the host's hold keeps the queue closed.
-	done(nil)
 	if !synchronous(rt) {
-		t.Fatal("the apply's undo released the host's hold")
+		t.Fatal("the refused host mark released the apply's hold")
+	}
+	done(nil)
+	if !rt.store.TelemetryBatchingEnabled() {
+		t.Fatal("the apply's undo left synchronous mode on")
 	}
 	// Host/host: a second host request (deploy refresh after store compaction)
 	// is still one marker, so one clear releases it.
@@ -270,19 +273,22 @@ func TestHostAndApplyHoldsAreIndependent(t *testing.T) {
 	if !rt.store.TelemetryBatchingEnabled() {
 		t.Fatal("after every holder released, synchronous mode is still on")
 	}
-	// The reverse order: the host clears first, the apply still holds.
+	// The reverse order: the host's mark first, then the apply replaces it
+	// (the guest's restart is the one that happens). The host's withdrawal then
+	// keeps the apply's marker and both holds; the apply's undo clears its own
+	// marker, and with no marker left the stranded host hold goes too.
+	if code, body := postPlannedRestartURL(t, handler, "/internal/runtime/planned-restart?allow_busy=1", `{"target":"9c3d"}`); code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", code, body)
+	}
 	done2, err := rt.markPlannedRestart("self-development apply", "u-overlap-2")
 	if err != nil {
 		t.Fatal(err)
-	}
-	if code, body := postPlannedRestartURL(t, handler, "/internal/runtime/planned-restart?allow_busy=1", `{"target":"9c3d"}`); code != http.StatusOK {
-		t.Fatalf("status=%d body=%s", code, body)
 	}
 	if code := deletePlannedRestart(t, handler); code != http.StatusOK {
 		t.Fatalf("clear: status=%d", code)
 	}
 	if !synchronous(rt) {
-		t.Fatal("the host's clear released the apply's hold")
+		t.Fatal("the host's withdrawal released the apply's hold")
 	}
 	done2(nil)
 	if !rt.store.TelemetryBatchingEnabled() {

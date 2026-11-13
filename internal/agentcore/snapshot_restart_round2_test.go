@@ -153,10 +153,13 @@ func TestAMarkerWriteFailureAfterTheAckThawsThePausedCapsule(t *testing.T) {
 		t.Fatalf("phase 1: %d %s", code, body)
 	}
 	f.rt.waitCapsulePauses()
-	if err := os.MkdirAll(PlannedRestartMarkerPath(f.rt.cfg.StorePath), 0o700); err != nil {
+	// The marker's temp file path is a directory: the write fails before any
+	// marker exists, so nothing announces a kill and the capsule thaws.
+	tmp := PlannedRestartMarkerPath(f.rt.cfg.StorePath) + ".tmp"
+	if err := os.MkdirAll(tmp, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(PlannedRestartMarkerPath(f.rt.cfg.StorePath)) })
+	t.Cleanup(func() { _ = os.RemoveAll(tmp) })
 	code, body := f.mark(t, "?allow_busy=1")
 	if code != http.StatusInternalServerError {
 		t.Fatalf("phase 2 over an unwritable marker: %d %s, want 500", code, body)

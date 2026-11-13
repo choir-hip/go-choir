@@ -92,7 +92,7 @@ func (rt *Runtime) writeRestoreRestartMarker(target string) error {
 }
 
 func (rt *Runtime) clearRestoreRestartMarker() {
-	if err := rt.clearHostPlannedRestartMarker(rt.cfg.StorePath); err != nil {
+	if _, _, err := rt.clearOwnPlannedRestartMarker(rt.cfg.StorePath, PlannedRestartSelfDevelopmentRestore); err != nil {
 		log.Printf("restore: clear planned restart marker: %v", err)
 	}
 }
