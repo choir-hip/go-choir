@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -93,20 +94,50 @@ func TestRunMemoryRetryOfASecondRunWaitsForTheFirstRunsSettle(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	close(releaseHold)
 	<-holdDone
+	refused := map[string]string{}
 	for i := 0; i < 2; i++ {
 		select {
 		case r := <-results:
-			if r.err != nil {
+			// A retry numbered before the landed rows surfaced may be refused
+			// (ErrBatchRefused, nothing sent); its next attempt succeeds.
+			if r.err != nil && !errors.Is(r.err, computerevent.ErrBatchRefused) {
 				t.Fatalf("%s: %v", r.id, r.err)
+			} else if r.err != nil {
+				refused[r.id] = map[string]string{"a-2": a, "b-2": b}[r.id]
 			}
 		case <-time.After(20 * time.Second):
 			t.Fatal("a retry never returned")
 		}
 	}
+	for id, run := range refused {
+		retryRunMemory(t, h, id, run)
+	}
+	assertDenseRuns(t, h, a, b)
+}
+
+// retryRunMemory appends the entry, retrying while the appender refuses a
+// batch numbered before landed rows surfaced (at most four attempts).
+func retryRunMemory(t *testing.T, h *tapeHarness, id, run string) {
+	t.Helper()
+	var err error
+	for attempt := 0; attempt < 4; attempt++ {
+		entryID := fmt.Sprintf("%s-try%d", id, attempt)
+		if _, err = h.store.AppendRunMemoryEntry(context.Background(), rmEntry(entryID, run)); err == nil || !errors.Is(err, computerevent.ErrBatchRefused) {
+			break
+		}
+	}
+	if err != nil {
+		t.Fatalf("%s: %v", id, err)
+	}
+}
+
+func assertDenseRuns(t *testing.T, h *tapeHarness, runs ...string) {
+	t.Helper()
+	ctx := context.Background()
 	if st := h.appender.WedgeStatus(); st.Active {
 		t.Fatalf("wedge tripped: %+v", st)
 	}
-	for _, run := range []string{a, b} {
+	for _, run := range runs {
 		entries, err := h.store.ListRunMemoryEntries(ctx, "owner-1", run)
 		if err != nil {
 			t.Fatal(err)
@@ -122,20 +153,61 @@ func TestRunMemoryRetryOfASecondRunWaitsForTheFirstRunsSettle(t *testing.T) {
 	}
 }
 
-// A panic through the append must leave the settle latch set, like an error:
-// the panic may have left a prepared row.
-func TestRunMemoryAppendPanicSetsTheSettleLatch(t *testing.T) {
-	h := newTapeHarness(t)
-	h.warm()
-	h.tape.mu.Lock()
-	h.tape.casErr = func(computerevent.CASRequest) error { panic("injected panic in the append") }
-	h.tape.mu.Unlock()
-	func() {
-		defer func() { _ = recover() }()
-		_, _ = h.store.AppendRunMemoryEntry(context.Background(), rmEntry("rm-panic", "run-panic"))
-		t.Fatal("fixture: the append did not panic")
-	}()
-	if !h.store.runMemorySettle.Load() {
-		t.Fatal("the settle latch is not set after a panic through the append")
+
+// B2's interleaving: two runs, both with landed-unacknowledged entries (one
+// kept prepared row for the group), retry at the same time, repeatedly. With no
+// latch to erase, the appender's guard must keep every attempt either landed
+// or refused: dense seqs, no wedge, no duplicate on the tape.
+func TestRunMemoryConcurrentRetriesAfterAnUnclearGroupNeverDuplicateSeq(t *testing.T) {
+	for round := 0; round < 6; round++ {
+		h := newTapeHarness(t)
+		h.hostChain = &hostChain{}
+		h.bind()
+		h.warm()
+		ctx := context.Background()
+		runs := distinctRunMemoryRuns(h.store, 2)
+		gate := h.holdNextCAS()
+		results := make(chan writeResult, 8)
+		go func() {
+			results <- writeResult{"lead", h.store.AppendEvent(ctx, h.event("lead", "run-lead", "owner-1", types.EventRunCompleted, telemetryBase))}
+		}()
+		<-gate.entered
+		for i, run := range runs {
+			id, run := fmt.Sprintf("r%d-1", i), run
+			go func() {
+				_, err := h.store.AppendRunMemoryEntry(ctx, rmEntry(id, run))
+				results <- writeResult{id, err}
+			}()
+			waitFor(t, id+" pending", 5*time.Second, func() bool { return h.pendingMembers() >= i+1 })
+		}
+		var calls atomic.Int32
+		h.tape.mu.Lock()
+		h.tape.casAfter = func(computerevent.CASRequest) error {
+			if n := calls.Add(1); n == 2 || n == 3 {
+				return errors.New("reply lost")
+			}
+			return nil
+		}
+		h.tape.mu.Unlock()
+		close(gate.release)
+		for i := 0; i < 3; i++ {
+			<-results
+		}
+		done := make(chan struct{}, 2)
+		for i, run := range runs {
+			id, run := fmt.Sprintf("r%d-2", i), run
+			go func() {
+				defer func() { done <- struct{}{} }()
+				retryRunMemory(t, h, id, run)
+			}()
+		}
+		for i := 0; i < 2; i++ {
+			select {
+			case <-done:
+			case <-time.After(30 * time.Second):
+				t.Fatal("a retry never returned")
+			}
+		}
+		assertDenseRuns(t, h, runs...)
 	}
 }
