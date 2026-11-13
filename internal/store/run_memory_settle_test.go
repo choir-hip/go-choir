@@ -153,7 +153,6 @@ func assertDenseRuns(t *testing.T, h *tapeHarness, runs ...string) {
 	}
 }
 
-
 // B2's interleaving: two runs, both with landed-unacknowledged entries (one
 // kept prepared row for the group), retry at the same time, repeatedly. With no
 // latch to erase, the appender's guard must keep every attempt either landed

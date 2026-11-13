@@ -35,7 +35,6 @@ var nonAppendMethods = map[string]string{
 	"SetReplayCheckpointPolicy": "sets replay checkpoint policy",
 	"SetPayloadResolver":        "installs the payload reader",
 	"RecoverPrepared":           "settles prepared events at boot, before the sealer has a queue",
-	"SettlePrepared":            "settles a kept prepared row before a write numbers itself; appends no event of its own, and the caller holds no sealer lock",
 	"ReconstructThrough":        "replay from the canonical tape",
 	"ReconstructInto":           "replay from the canonical tape",
 	"ReconstructThroughTarget":  "replay from the canonical tape",
