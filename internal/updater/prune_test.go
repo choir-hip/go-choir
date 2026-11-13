@@ -10,12 +10,19 @@ package updater
 //      forever after its release is staged (TestPruneRemovesStagedPayloadOnlyAfterItsReleaseExists)
 //  F2  a finished host build under incoming/host-build-<job> stays forever
 //      (TestPruneRemovesOldHostBuildsAndTemporaries)
+//  F12 Apply leaves its source in incoming/ after the release is staged
+//      (TestApplyDropsItsStagedSource); a resumed apply of a staged release
+//      must not need that source (TestApplyResumesAStagedReleaseWithoutItsSource)
+//  F13 the root grows with the number of applies, not with what one leaves
+//      (TestUpdaterRootIsBoundedOverManyApplies); rollback still works after
+//      (TestRollbackStillWorksAfterThePrune)
 //  F3  a prune must never take a bundle (bundle.json: operation evidence the
 //      updater cannot judge), an entry it does not recognise, a payload whose
 //      release is not staged yet, or anything younger than the grace period
 //      (a stage or a host build in progress)
-//      (TestPruneKeepsBundlesUnknownEntriesUnstagedPayloadsAndYoungEntries)
-//  F4  every release ever applied stays (TestPruneKeepsCurrentItsPredecessorAndTheRecentWindow)
+//      (TestPruneLeavesBundlesToTheRuntimeAndKeepsInputsInTheirWindow)
+//  F4  every release ever applied stays (TestPruneKeepsOnlyCurrentAndItsRecordedPredecessor,
+//      TestPruneKeepsThePreMigrationReleaseOfAReachableRollbackOnly)
 //  F5  a deleted release's gc-roots and its exclusively-held store objects
 //      stay; a store object a kept release still roots must not go
 //      (TestPruneCollectsStoreObjectsNoKeptReleaseRoots)
@@ -35,6 +42,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -46,7 +54,10 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
-var pruneNow = time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+// pruneNow is the updater's clock in these tests: an hour after the wall
+// clock, so releases and store objects the real code just wrote are older than
+// the input window, and ageBy can place a file inside or outside it.
+var pruneNow = time.Now().UTC().Add(time.Hour)
 
 func newPruneUpdater(t *testing.T) (*Updater, string) {
 	t.Helper()
@@ -197,7 +208,7 @@ func TestPruneRemovesOldHostBuildsAndTemporaries(t *testing.T) {
 	}
 }
 
-func TestPruneKeepsBundlesUnknownEntriesUnstagedPayloadsAndYoungEntries(t *testing.T) {
+func TestPruneLeavesBundlesToTheRuntimeAndKeepsInputsInTheirWindow(t *testing.T) {
 	u, root := newPruneUpdater(t)
 	digest := stageTestRelease(t, u, root, "r1", false)
 	setCurrent(t, root, digest)
@@ -205,20 +216,19 @@ func TestPruneKeepsBundlesUnknownEntriesUnstagedPayloadsAndYoungEntries(t *testi
 	bundle := filepath.Join(incoming, strings.Repeat("b", 64))
 	writeTestFile(t, filepath.Join(bundle, "bundle.json"), 100)
 	ageBy(t, bundle, 90*24*time.Hour)
-	unknown := filepath.Join(incoming, "operation-7")
-	writeTestFile(t, filepath.Join(unknown, "f"), 100)
-	ageBy(t, unknown, old)
-	loose := filepath.Join(incoming, "loose-file")
-	writeTestFile(t, loose, 100)
-	ageBy(t, loose, old)
-	// Young: a host build and a staged payload from a minute ago, and an old
-	// host build with one fresh file inside (a download in progress).
+	draft := filepath.Join(incoming, strings.Repeat("d", 64))
+	writeTestFile(t, filepath.Join(draft, "bundle.draft.json"), 100)
+	ageBy(t, draft, 90*24*time.Hour)
+	// A payload dir whose release is not staged, and a `<digest>` dir with no
+	// marker: the runtime owns every `<digest>` dir that is not a staged payload.
+	unstaged := filepath.Join(incoming, strings.Repeat("9", 64))
+	writeTestFile(t, filepath.Join(unstaged, "bin", "choir"), 100)
+	ageBy(t, unstaged, 90*24*time.Hour)
+	// A host build inside its window, and an old one with one fresh file (a
+	// download in progress).
 	young := filepath.Join(incoming, "host-build-young")
 	writeTestFile(t, filepath.Join(young, "closure.nar"), 100)
 	ageBy(t, young, time.Minute)
-	youngPayload := filepath.Join(incoming, digest)
-	writeTestFile(t, filepath.Join(youngPayload, "bin", "choir"), 100)
-	ageBy(t, youngPayload, time.Minute)
 	busy := filepath.Join(incoming, "host-build-busy")
 	writeTestFile(t, filepath.Join(busy, "old"), 100)
 	writeTestFile(t, filepath.Join(busy, "deep", "fresh"), 100)
@@ -227,26 +237,37 @@ func TestPruneKeepsBundlesUnknownEntriesUnstagedPayloadsAndYoungEntries(t *testi
 	if err := os.Chtimes(filepath.Join(busy, "deep", "fresh"), pruneNow, pruneNow); err != nil {
 		t.Fatal(err)
 	}
+	// Unrecognised entries are not an unbounded bucket: nothing writes them, so
+	// once outside the window they go.
+	unknown := filepath.Join(incoming, "operation-7")
+	writeTestFile(t, filepath.Join(unknown, "f"), 100)
+	ageBy(t, unknown, old)
+	loose := filepath.Join(incoming, "loose-file")
+	writeTestFile(t, loose, 100)
+	ageBy(t, loose, old)
 
 	report := u.Prune()
-	for _, path := range []string{bundle, unknown, loose, young, youngPayload, busy} {
+	for _, path := range []string{bundle, draft, unstaged, young, busy} {
 		if !exists(path) {
 			t.Fatalf("%s was removed", path)
 		}
 	}
-	if report.IncomingRemoved != 0 {
+	for _, path := range []string{unknown, loose} {
+		if exists(path) {
+			t.Fatalf("%s survived", path)
+		}
+	}
+	if report.IncomingRemoved != 2 {
 		t.Fatalf("report = %+v", report)
 	}
 }
 
-func TestPruneKeepsCurrentItsPredecessorAndTheRecentWindow(t *testing.T) {
+func TestPruneKeepsOnlyCurrentAndItsRecordedPredecessor(t *testing.T) {
 	u, root := newPruneUpdater(t)
 	var digests []string
 	for _, name := range []string{"r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7"} {
 		digests = append(digests, stageTestRelease(t, u, root, name, false))
 	}
-	// r0 -> r1 -> ... -> r7 applied in order; r7 is current. An older release
-	// was rolled to once, recently (r2 is the most recent use of an old one).
 	for i := 1; i < len(digests); i++ {
 		writeTestJournal(t, root, "idem-"+digests[i], digests[i-1], digests[i], pruneNow.Add(time.Duration(i-10)*time.Hour), "applied")
 	}
@@ -254,39 +275,76 @@ func TestPruneKeepsCurrentItsPredecessorAndTheRecentWindow(t *testing.T) {
 	for _, d := range digests {
 		ageBy(t, filepath.Join(root, "releases", d), 30*24*time.Hour)
 	}
+	// A release staged a minute ago, waiting for its swap (a baseline), is inside its window.
+	staged := stageTestRelease(t, u, root, "baseline", false)
+	ageBy(t, filepath.Join(root, "releases", staged), time.Minute)
 
 	report := u.Prune()
-	kept := map[string]bool{}
-	for _, d := range digests[4:] { // r4 r5 r6 r7: current, its predecessor, and the two most recent others
-		kept[d] = true
-	}
-	// The window is the current release, its predecessor and the three most
-	// recently used others: r7, r6, r5, r4, r3.
-	kept[digests[3]] = true
 	for i, d := range digests {
-		if kept[d] != exists(filepath.Join(root, "releases", d)) {
-			t.Fatalf("release r%d kept=%v want %v", i, exists(filepath.Join(root, "releases", d)), kept[d])
+		want := i >= 6
+		if exists(filepath.Join(root, "releases", d)) != want {
+			t.Fatalf("release r%d kept=%v want %v", i, !want, want)
 		}
 	}
-	if report.ReleasesRemoved != 3 {
+	if !exists(filepath.Join(root, "releases", staged)) {
+		t.Fatal("a release staged a minute ago, awaiting its swap, was removed")
+	}
+	if report.ReleasesRemoved != 6 {
 		t.Fatalf("report = %+v", report)
 	}
 	if got, _, err := currentReleaseOf(root); err != nil || got != digests[7] {
 		t.Fatalf("current = %q, %v", got, err)
 	}
 	if _, err := ReadCurrentManifest(root); err != nil {
-		t.Fatalf("current release no longer verifies: %v", err)
+		t.Fatalf("current release no longer reads: %v", err)
 	}
-	// The recorded predecessor the rollback restores to is still on disk.
-	if !exists(filepath.Join(root, "releases", digests[6], "release-manifest.json")) {
-		t.Fatal("the rollback predecessor is gone")
+	if _, _, err := ReadPinnedManifest(root, digests[6]); err != nil {
+		t.Fatalf("the rollback predecessor is gone: %v", err)
 	}
-	// Nothing hidden is left behind.
 	entries, _ := os.ReadDir(filepath.Join(root, "releases"))
 	for _, entry := range entries {
 		if strings.HasPrefix(entry.Name(), ".") {
 			t.Fatalf("leftover %s in releases", entry.Name())
 		}
+	}
+}
+
+func TestPruneKeepsThePreMigrationReleaseOfAReachableRollbackOnly(t *testing.T) {
+	u, root := newPruneUpdater(t)
+	pre := stageTestRelease(t, u, root, "pre", false)
+	done := stageTestRelease(t, u, root, "migrated", false)
+	rolled := stageTestRelease(t, u, root, "oldpre", false)
+	for _, d := range []string{pre, done, rolled} {
+		ageBy(t, filepath.Join(root, "releases", d), 30*24*time.Hour)
+	}
+	setCurrent(t, root, done)
+	record := func(name, outcome, pre string) {
+		if err := os.MkdirAll(filepath.Join(root, "package-migration"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		raw := `{"attempts":[{"outcome":"` + outcome + `","pre_release_digest":"` + pre + `","served_release_digest":"` + done + `"}]}`
+		if err := os.WriteFile(filepath.Join(root, "package-migration", name+".json"), []byte(raw), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	record("a", "done", pre)
+	record("b", "rolled_back", rolled)
+	u.Prune()
+	if !exists(filepath.Join(root, "releases", pre)) {
+		t.Fatal("the pre-migration release of a reachable rollback was removed")
+	}
+	if exists(filepath.Join(root, "releases", rolled)) {
+		t.Fatal("the release of a rolled-back migration survived")
+	}
+	// An unreadable record means no pin is known: nothing is removed.
+	extra := stageTestRelease(t, u, root, "extra", false)
+	ageBy(t, filepath.Join(root, "releases", extra), 30*24*time.Hour)
+	if err := os.WriteFile(filepath.Join(root, "package-migration", "c.json"), []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	u.Prune()
+	if !exists(filepath.Join(root, "releases", extra)) {
+		t.Fatal("a release was removed although a migration record could not be read")
 	}
 }
 
@@ -303,6 +361,9 @@ func TestPruneCollectsStoreObjectsNoKeptReleaseRoots(t *testing.T) {
 	// r0 (to be deleted) roots "only-old" and "shared"; r5 (kept) roots "shared" and "only-new".
 	rootStoreObjects(t, root, digests[0], "only-old", "shared")
 	rootStoreObjects(t, root, digests[5], "shared", "only-new")
+	// The kept predecessor (r4) roots its own object.
+	rootStoreObjects(t, root, digests[4], "pred-only")
+	ageBy(t, filepath.Join(root, "store", "pred-only"), old)
 	// An unrooted old object, an unrooted young one (a candidate build in use),
 	// and a stale staging dir.
 	writeTestFile(t, filepath.Join(root, "store", "orphan-old", "f"), 700)
@@ -332,7 +393,7 @@ func TestPruneCollectsStoreObjectsNoKeptReleaseRoots(t *testing.T) {
 			t.Fatalf("store/%s survived", gone)
 		}
 	}
-	for _, kept := range []string{"shared", "only-new", "orphan-young"} {
+	for _, kept := range []string{"shared", "only-new", "pred-only", "orphan-young"} {
 		if !exists(filepath.Join(root, "store", kept)) {
 			t.Fatalf("store/%s was collected", kept)
 		}
@@ -438,6 +499,9 @@ func TestPruneFinishesACrashedPruneAndIsIdempotent(t *testing.T) {
 		writeTestJournal(t, root, "idem-"+digests[i], digests[i-1], digests[i], pruneNow.Add(time.Duration(i-20)*time.Hour), "applied")
 	}
 	setCurrent(t, root, digests[7])
+	for _, d := range digests {
+		ageBy(t, filepath.Join(root, "releases", d), 30*24*time.Hour)
+	}
 	rootStoreObjects(t, root, digests[0], "old-only")
 	ageBy(t, filepath.Join(root, "store", "old-only"), old)
 	// The crash: r0 was renamed out of releases/ and the process died; its
@@ -462,6 +526,17 @@ func TestPruneFinishesACrashedPruneAndIsIdempotent(t *testing.T) {
 	u.Prune()
 	if exists(hidden) || exists(filepath.Join(root, "gc-roots", digests[0])) || exists(filepath.Join(root, "store", "old-only")) {
 		t.Fatal("the next run did not finish the crashed prune")
+	}
+	for i, d := range digests {
+		if exists(filepath.Join(root, "releases", d)) != (i >= 6) {
+			t.Fatalf("after the finished prune, release r%d kept=%v", i, !(i >= 6))
+		}
+	}
+	if _, err := ReadCurrentManifest(root); err != nil {
+		t.Fatalf("current unreadable after the finished prune: %v", err)
+	}
+	if _, _, err := ReadPinnedManifest(root, digests[6]); err != nil {
+		t.Fatalf("the predecessor is gone after the finished prune: %v", err)
 	}
 	second := u.Prune()
 	if second.BytesFreed != 0 || second.ReleasesRemoved+second.IncomingRemoved+second.StoreRemoved+second.GCRootsRemoved != 0 {
@@ -550,5 +625,184 @@ func TestPruneWaitsForAnApplyInFlight(t *testing.T) {
 	wg.Wait()
 	if exists(stale) {
 		t.Fatal("the prune did not run after the apply released the updater")
+	}
+}
+
+func newApplyRig(t *testing.T, base string) (*Updater, string, *fakeHealthProber) {
+	t.Helper()
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(t.TempDir(), "updater")
+	t.Cleanup(func() { makeTreeWritable(root) })
+	prober := &fakeHealthProber{}
+	u, err := NewWithBase(root, "computer-test", "realization-test", &fakeServiceManager{}, prober,
+		testReceiptSigner{key: computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"}, PrivateKey: privateKey}}, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u.now = func() time.Time { return pruneNow }
+	return u, root, prober
+}
+
+func TestApplyDropsItsStagedSource(t *testing.T) {
+	u, root, _ := newApplyRig(t, "")
+	request := updaterRequestFixture(t, root, "computer-test", "realization-test", "op-1", "idem-1", "one")
+	if _, err := u.Apply(context.Background(), request); err != nil {
+		t.Fatal(err)
+	}
+	u.WaitPrune()
+	if exists(request.SourceDir) {
+		t.Fatal("the staged source stayed in incoming after the release was staged")
+	}
+	// A pinned release used as the source (a rollback to it) is never dropped.
+	pinned := filepath.Join(root, "releases", request.Manifest.ContentDigest)
+	if !exists(filepath.Join(pinned, "release-manifest.json")) {
+		t.Fatal("the release itself was dropped")
+	}
+	// A bundle directory is never an apply source and is never dropped.
+	bundle := filepath.Join(root, "incoming", strings.Repeat("c", 64))
+	writeTestFile(t, filepath.Join(bundle, "bundle.json"), 10)
+	u.dropStagedSource(bundle)
+	if !exists(bundle) {
+		t.Fatal("dropStagedSource removed a bundle")
+	}
+}
+
+func TestApplyResumesAStagedReleaseWithoutItsSource(t *testing.T) {
+	u, root, _ := newApplyRig(t, "")
+	request := updaterRequestFixture(t, root, "computer-test", "realization-test", "op-1", "idem-1", "one")
+	// The first run staged the release, swapped, and died before the probe;
+	// its source was dropped when it staged.
+	if err := u.stageRelease(request.SourceDir, filepath.Join(root, "releases", request.Manifest.ContentDigest), request.Manifest); err != nil {
+		t.Fatal(err)
+	}
+	if err := swapCurrentPointer(root, filepath.Join(root, "releases", request.Manifest.ContentDigest)); err != nil {
+		t.Fatal(err)
+	}
+	journal := operationJournal{RequestCommitment: request.RequestCommitment, Phase: "pointer_swapped", TargetReleaseDigest: request.Manifest.ContentDigest,
+		RestartPublished: true, StartedAt: pruneNow}
+	if err := writeJournal(filepath.Join(root, "operations", safeName("idem-1")+".json"), journal); err != nil {
+		t.Fatal(err)
+	}
+	makeTreeWritable(request.SourceDir)
+	if err := os.RemoveAll(request.SourceDir); err != nil {
+		t.Fatal(err)
+	}
+	result, err := u.Apply(context.Background(), request)
+	if err != nil || result.Outcome != "applied" {
+		t.Fatalf("a resumed apply of a staged release without its source = %+v, %v", result, err)
+	}
+	u.WaitPrune()
+}
+
+// The root's size must not depend on how many updates were applied: after the
+// last settled apply it holds current and its predecessor, what they root, and
+// nothing else (owner ruling 2026-11-13).
+func TestUpdaterRootIsBoundedOverManyApplies(t *testing.T) {
+	single, err := os.ReadFile(filepath.Join("testdata", "closure-single.nar"))
+	if err != nil {
+		t.Skipf("closure fixture absent: %v", err)
+	}
+	dirBlob, err := os.ReadFile(filepath.Join("testdata", "closure-dir.nar"))
+	if err != nil {
+		t.Skipf("closure fixture absent: %v", err)
+	}
+	baseManifestPath, bootedDigest := layeredTestBase(t)
+	u, root, _ := newApplyRig(t, baseManifestPath)
+	dirPaths, err := MaterializeClosure(dirBlob, filepath.Join(t.TempDir(), "probe-store"))
+	if err != nil || len(dirPaths) != 1 {
+		t.Fatalf("dir fixture: %v %v", dirPaths, err)
+	}
+	t.Cleanup(func() { makeTreeWritable(filepath.Dir(root)) })
+	census := func() (releases, incoming, gcRoots, store int) {
+		count := func(dir string) int {
+			entries, _ := os.ReadDir(filepath.Join(root, dir))
+			return len(entries)
+		}
+		return count("releases"), count("incoming"), count("gc-roots"), count("store")
+	}
+	const applies = 12
+	var afterSecond [4]int
+	for i := 1; i <= applies; i++ {
+		// Between applies the runtime leaves its usual residue: an old host
+		// build, an old payload of a release it staged, a candidate build's
+		// store object no release roots.
+		name := fmt.Sprintf("op-%02d", i)
+		if i > 1 {
+			residue := filepath.Join(root, "incoming", fmt.Sprintf("host-build-%02d", i))
+			writeTestFile(t, filepath.Join(residue, "closure.nar"), 4096)
+			ageBy(t, residue, old)
+			orphan := filepath.Join(root, "store", fmt.Sprintf("orphan-%02d", i))
+			writeTestFile(t, filepath.Join(orphan, "f"), 1024)
+			ageBy(t, orphan, old)
+		}
+		blob, entry := single, "0pvb33w34jr4243s1182511gxwrchf0c-payload.txt"
+		if i%2 == 0 {
+			blob, entry = dirBlob, dirPaths[0]
+		}
+		request := layeredRequestFixture(t, root, "computer-test", "realization-test", name, bootedDigest, blob, entry)
+		if result, err := u.Apply(context.Background(), request); err != nil || result.Outcome != "applied" {
+			t.Fatalf("apply %d = %+v, %v", i, result, err)
+		}
+		u.WaitPrune()
+		if i == 2 {
+			afterSecond[0], afterSecond[1], afterSecond[2], afterSecond[3] = census()
+		}
+	}
+	releases, incoming, gcRoots, store := census()
+	if releases != 2 || incoming != 0 || gcRoots != 2 || store != 2 {
+		t.Fatalf("after %d applies: releases=%d incoming=%d gc-roots=%d store=%d; want 2/0/2/2", applies, releases, incoming, gcRoots, store)
+	}
+	if got := [4]int{releases, incoming, gcRoots, store}; got != afterSecond {
+		t.Fatalf("the root after %d applies %v differs from after 2 applies %v", applies, got, afterSecond)
+	}
+}
+
+func TestRollbackStillWorksAfterThePrune(t *testing.T) {
+	single, err := os.ReadFile(filepath.Join("testdata", "closure-single.nar"))
+	if err != nil {
+		t.Skipf("closure fixture absent: %v", err)
+	}
+	dirBlob, err := os.ReadFile(filepath.Join("testdata", "closure-dir.nar"))
+	if err != nil {
+		t.Skipf("closure fixture absent: %v", err)
+	}
+	baseManifestPath, bootedDigest := layeredTestBase(t)
+	u, root, prober := newApplyRig(t, baseManifestPath)
+	dirPaths, err := MaterializeClosure(dirBlob, filepath.Join(t.TempDir(), "probe-store"))
+	if err != nil || len(dirPaths) != 1 {
+		t.Fatalf("dir fixture: %v %v", dirPaths, err)
+	}
+	var last ApplyRequest
+	for i := 1; i <= 4; i++ {
+		blob, entry := single, "0pvb33w34jr4243s1182511gxwrchf0c-payload.txt"
+		if i%2 == 0 {
+			blob, entry = dirBlob, dirPaths[0]
+		}
+		last = layeredRequestFixture(t, root, "computer-test", "realization-test", fmt.Sprintf("op-%d", i), bootedDigest, blob, entry)
+		if result, err := u.Apply(context.Background(), last); err != nil || result.Outcome != "applied" {
+			t.Fatalf("apply %d = %+v, %v", i, result, err)
+		}
+		u.WaitPrune()
+	}
+	wantEntry := currentEntrypoint(t, root)
+	// The next apply fails its probe: recovery restores the predecessor the
+	// prune kept, with its store object and its entrypoint.
+	bad := layeredRequestFixture(t, root, "computer-test", "realization-test", "op-bad", bootedDigest, single, "0pvb33w34jr4243s1182511gxwrchf0c-payload.txt")
+	prober.failDigest = bad.Manifest.ContentDigest
+	result, err := u.Apply(context.Background(), bad)
+	if err == nil || result.Outcome != "failed" || result.RecoveryReceipt == nil {
+		t.Fatalf("failed apply = %+v, %v", result, err)
+	}
+	if got := currentEntrypoint(t, root); got != wantEntry {
+		t.Fatalf("entrypoint after recovery = %q, want %q", got, wantEntry)
+	}
+	if _, err := os.Stat(wantEntry); err != nil {
+		t.Fatalf("the restored release's store object is gone: %v", err)
+	}
+	if got, _, err := currentReleaseOf(root); err != nil || got != last.Manifest.ContentDigest {
+		t.Fatalf("current after recovery = %q, %v", got, err)
 	}
 }
