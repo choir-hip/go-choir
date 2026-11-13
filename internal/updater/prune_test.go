@@ -42,6 +42,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -808,5 +809,87 @@ func TestRollbackStillWorksAfterThePrune(t *testing.T) {
 	}
 	if got, _, err := currentReleaseOf(root); err != nil || got != last.Manifest.ContentDigest {
 		t.Fatalf("current after recovery = %q, %v", got, err)
+	}
+}
+
+// A restore swaps `current` to an older release and, when it fails, back to the
+// release it came from. Nothing in the journals says so (it is no apply), so
+// the prune must honour the restore's own hold: with it held, the release the
+// restore may swap back to survives.
+func TestPruneSkipsWhileARestoreHoldsTheUpdaterRoot(t *testing.T) {
+	u, root := newPruneUpdater(t)
+	var digests []string
+	for _, name := range []string{"r0", "r1", "r2", "r3"} {
+		digests = append(digests, stageTestRelease(t, u, root, name, false))
+	}
+	for i := 1; i < len(digests); i++ {
+		writeTestJournal(t, root, "idem-"+digests[i], digests[i-1], digests[i], pruneNow.Add(time.Duration(i-10)*time.Hour), "applied")
+	}
+	for _, d := range digests {
+		ageBy(t, filepath.Join(root, "releases", d), 30*24*time.Hour)
+	}
+	setCurrent(t, root, digests[3])
+	if RestoreInFlight(root) {
+		t.Fatal("no restore is in flight")
+	}
+	release, err := HoldRestore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !RestoreInFlight(root) {
+		t.Fatal("a held restore is not seen")
+	}
+	// The restore moves current to the predecessor; the release it came from
+	// (r3) is now neither current nor journal-recorded predecessor of r2's
+	// install... r1 is. Only the hold keeps r3.
+	if err := RestagePinnedRelease(root, digests[2]); err != nil {
+		t.Fatal(err)
+	}
+	report := u.Prune()
+	if report.Skipped == "" || !exists(filepath.Join(root, "releases", digests[3])) {
+		t.Fatalf("pruned under a restore: %+v", report)
+	}
+	// The swap-back succeeds.
+	if err := RestagePinnedRelease(root, digests[3]); err != nil {
+		t.Fatalf("swap-back to the prior release: %v", err)
+	}
+	release()
+	if RestoreInFlight(root) {
+		t.Fatal("a released restore is still seen")
+	}
+	if report := u.Prune(); report.Skipped != "" {
+		t.Fatalf("a settled updater did not prune: %+v", report)
+	}
+}
+
+// The accepted price of a bounded root: a restore to a release the prune
+// removed refuses cleanly, names why, and changes nothing.
+func TestRestoreToAPrunedReleaseRefusesCleanly(t *testing.T) {
+	u, root := newPruneUpdater(t)
+	var digests []string
+	for _, name := range []string{"r0", "r1", "r2", "r3"} {
+		digests = append(digests, stageTestRelease(t, u, root, name, false))
+	}
+	for i := 1; i < len(digests); i++ {
+		writeTestJournal(t, root, "idem-"+digests[i], digests[i-1], digests[i], pruneNow.Add(time.Duration(i-10)*time.Hour), "applied")
+	}
+	for _, d := range digests {
+		ageBy(t, filepath.Join(root, "releases", d), 30*24*time.Hour)
+	}
+	setCurrent(t, root, digests[3])
+	u.Prune()
+	if exists(filepath.Join(root, "releases", digests[0])) {
+		t.Fatal("r0 should be pruned")
+	}
+	before, _ := os.Readlink(filepath.Join(root, "current"))
+	err := RestagePinnedRelease(root, digests[0])
+	if !errors.Is(err, ErrPinnedReleaseUnavailable) {
+		t.Fatalf("restage of a pruned release = %v, want ErrPinnedReleaseUnavailable", err)
+	}
+	if _, _, err := ReadPinnedManifest(root, digests[0]); !errors.Is(err, ErrPinnedReleaseUnavailable) {
+		t.Fatalf("ReadPinnedManifest = %v", err)
+	}
+	if after, _ := os.Readlink(filepath.Join(root, "current")); after != before {
+		t.Fatalf("current moved from %s to %s", before, after)
 	}
 }
