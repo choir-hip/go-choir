@@ -43,6 +43,8 @@ type SegmentView struct {
 	probes uint64 // segment lookups made by ReadObject
 
 	reloads, fallbacks uint64
+	absent, skipped    uint64   // reads with no intact copy; of those, listings skipped
+	names              []string // raw directory names at the last listing
 	sealedProbes       uint64
 
 	index *digestIndex // nil unless OpenIndexedView
@@ -67,7 +69,7 @@ func (r *Reader) OpenView(computerID string) (*SegmentView, error) {
 // indexes not seen before.
 func (v *SegmentView) load() error {
 	r, computerID := v.r, v.computer
-	dir, segs, err := r.list(computerID)
+	dir, segs, names, err := r.listNames(computerID)
 	if err != nil {
 		return err
 	}
@@ -91,10 +93,12 @@ func (v *SegmentView) load() error {
 		return err
 	}
 	v.commitIndex(add)
-	v.dir, v.segs, v.sealed = dir, segs, sealed
-	v.segAt = make(map[uint64]int, len(segs))
-	for i, f := range segs {
-		v.segAt[f.segno] = i
+	v.dir, v.segs, v.sealed, v.names = dir, segs, sealed, names
+	if v.index != nil {
+		v.segAt = make(map[uint64]int, len(segs))
+		for i, f := range segs {
+			v.segAt[f.segno] = i
+		}
 	}
 	if v.hint >= len(segs) {
 		v.hint = 0
@@ -185,11 +189,25 @@ func (v *SegmentView) lookup(ns NS, digest string) ([]byte, bool, error) {
 			return nil, false, err
 		}
 		// No intact copy: has the tape grown since the view loaded?
-		_, now, lerr := v.r.list(v.computer)
+		// Raw names equal to those of the listing the view was built from
+		// mean the same files, so the same parsed listing; any difference
+		// (a segment, a compaction temp file) takes the full compare.
+		if v.namesUnchanged() {
+			if err == nil {
+				v.absent++
+			}
+			v.skipped++
+			return nil, false, err
+		}
+		_, now, names, lerr := v.r.listNames(v.computer)
 		if lerr != nil {
 			return nil, false, lerr
 		}
 		if sameSegFiles(now, v.segs) {
+			v.names = names
+			if err == nil {
+				v.absent++
+			}
 			return nil, false, err
 		}
 		if v.load() != nil {
@@ -199,6 +217,29 @@ func (v *SegmentView) lookup(ns NS, digest string) ([]byte, bool, error) {
 	}
 	return nil, false, nil
 }
+
+// namesUnchanged reports whether the directory holds exactly the entries the
+// last listing saw, by name, without parsing or allocating per entry beyond
+// what os.ReadDir does.
+func (v *SegmentView) namesUnchanged() bool {
+	entries, err := readSegDir(v.dir)
+	if err != nil || len(entries) != len(v.names) {
+		return false
+	}
+	for i, e := range entries {
+		if e.Name() != v.names[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// Absent is the number of reads that found no intact copy in any segment and
+// no change of the directory (they go on to the legacy file); ListingsSkipped
+// how many of those, and of reads that found only damage, were settled by the
+// raw name compare instead of a full listing.
+func (v *SegmentView) Absent() uint64          { return v.absent }
+func (v *SegmentView) ListingsSkipped() uint64 { return v.skipped }
 
 // fallback answers one read with the per-call Reader path, and refreshes the
 // view if it can.

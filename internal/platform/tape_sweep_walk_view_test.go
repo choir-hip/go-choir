@@ -148,4 +148,3 @@ func TestX2WalkStopsOnADamagedSegmentRecord(t *testing.T) {
 		t.Fatalf("walk over a damaged segment: %v, want ErrCorrupt", err)
 	}
 }
-

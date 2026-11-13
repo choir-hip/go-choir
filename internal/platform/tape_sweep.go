@@ -765,7 +765,11 @@ type tapeChainRow struct {
 func (s *Service) walkTapeChain(ctx context.Context, computerID string, from, to uint64, readEvents bool, visit func(tapeChainRow) error) error {
 	var wv *tapeWalkView
 	if readEvents {
-		wv = s.openTapeWalkView(computerID, to-from)
+		var events uint64
+		if to > from {
+			events = to - from
+		}
+		wv = s.openTapeWalkView(computerID, events)
 		defer wv.finish(from, to)
 	}
 	return s.walkTapeChainWith(ctx, wv, computerID, from, to, readEvents, visit)
@@ -807,7 +811,7 @@ func (w *tapeWalkView) finish(from, to uint64) {
 		return
 	}
 	if v := w.view; v != nil {
-		log.Printf("tape sweep: computer %s walk (%d,%d]: %d segments, %d probes (%d sealed), %d reloads, %d reader fallbacks, digest index %d entries (%d bytes)", w.id, from, to, v.Segments(), v.Probes(), v.SealedProbes(), v.Reloads(), v.Fallbacks(), v.IndexEntries(), v.IndexBytes())
+		log.Printf("tape sweep: computer %s walk (%d,%d]: %d segments, %d probes (%d sealed), %d reloads, %d reader fallbacks, %d absent or legacy-only reads (%d listings skipped), digest index %d entries (%d bytes)", w.id, from, to, v.Segments(), v.Probes(), v.SealedProbes(), v.Reloads(), v.Fallbacks(), v.Absent(), v.ListingsSkipped(), v.IndexEntries(), v.IndexBytes())
 	}
 	if w.s.tapeSweep.walkViewDone != nil {
 		w.s.tapeSweep.walkViewDone(w.id, w.view)

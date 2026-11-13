@@ -187,16 +187,28 @@ type segFiles struct {
 // id that cannot name one) has no segments. An index whose segment neither
 // the listing nor the segment's own path shows is corruption.
 func (r *Reader) list(computerID string) (string, []segFiles, error) {
+	dir, segs, _, err := r.listNames(computerID)
+	return dir, segs, err
+}
+
+// listNames is list, and also returns the raw names of the directory's entries
+// in the order read (os.ReadDir sorts them), so a view can later tell by name
+// alone that nothing was added or removed.
+func (r *Reader) listNames(computerID string) (string, []segFiles, []string, error) {
 	if !ValidComputerID(computerID) {
-		return "", nil, nil
+		return "", nil, nil, nil
 	}
 	dir := filepath.Join(r.root, SegDirName, computerID)
 	entries, err := readSegDir(dir)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return dir, nil, nil
+			return dir, nil, nil, nil
 		}
-		return dir, nil, fmt.Errorf("tapestore: list %s: %w", computerID, err)
+		return dir, nil, nil, fmt.Errorf("tapestore: list %s: %w", computerID, err)
+	}
+	names := make([]string, len(entries))
+	for i, entry := range entries {
+		names[i] = entry.Name()
 	}
 	byNo := map[uint64]*segFiles{}
 	for _, entry := range entries {
@@ -231,17 +243,17 @@ func (r *Reader) list(computerID string) (string, []segFiles, error) {
 			// corruption.
 			present, err := segmentPresent(filepath.Join(dir, SegmentFileName(f.segno)))
 			if err != nil {
-				return dir, nil, fmt.Errorf("tapestore: stat segment %d of %s: %w", f.segno, computerID, err)
+				return dir, nil, nil, fmt.Errorf("tapestore: stat segment %d of %s: %w", f.segno, computerID, err)
 			}
 			if !present {
-				return dir, nil, corruptf("computer %s: index %s has no segment file", computerID, IndexFileName(f.segno))
+				return dir, nil, nil, corruptf("computer %s: index %s has no segment file", computerID, IndexFileName(f.segno))
 			}
 			f.hasSeg = true
 		}
 		segs = append(segs, *f)
 	}
 	sort.Slice(segs, func(i, j int) bool { return segs[i].segno < segs[j].segno })
-	return dir, segs, nil
+	return dir, segs, names, nil
 }
 
 // readSegDir lists a segment directory; a test seam stands in a listing that
