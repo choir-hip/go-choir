@@ -921,9 +921,9 @@ func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Eve
 }
 
 const (
-	// casResendTimeout bounds the re-send of a CAS whose outcome is unknown.
+	// casResendTimeout (CASResendTimeout) bounds the re-send of a CAS whose outcome is unknown.
 	// It is a deadline, not a limit on calls; appends wait behind it under a.mu.
-	casResendTimeout = 30 * time.Second
+	casResendTimeout = CASResendTimeout
 	// finalizeTimeout bounds verify and finalize once a receipt is in hand. It
 	// replaces the caller's context, which used to govern them, so it is sized
 	// from the worst payload: an event payload is at most
@@ -1645,3 +1645,19 @@ func sameHead(left, right *Head) bool {
 	}
 	return *left == *right
 }
+
+// GuestAttemptTimeout is the guest HTTP client's per-attempt timeout
+// (NewGuestHTTPClient): the bound on one request of an append to the host.
+const GuestAttemptTimeout = 10 * time.Minute
+
+// CASResendTimeout bounds the detached re-send of a compare-and-swap whose
+// outcome is unknown.
+const CASResendTimeout = 30 * time.Second
+
+// AppendSequentialRequests is how many host requests AppendNewPrivatePayload
+// makes in sequence on its normal path: bind the head, pin the private
+// payload, read the head again (appendLockedInner), pin the event, and the
+// compare-and-swap. The host derives how long an appended snapshot root may
+// stay unnamed from it (internal/platform snapshotRootInFlightWindow). A change
+// to the number of requests must change this constant.
+const AppendSequentialRequests = 5

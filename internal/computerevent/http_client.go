@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/hostlink"
 )
@@ -483,7 +482,7 @@ func NewGuestHTTPClient(baseURL string, capability CapabilitySource) (*HTTPClien
 		// Host-tap traffic is fast, but a ~150MB blob fetch can exceed a tight
 		// deadline under load; the request context remains the real bound.
 		// hostlink resends a refused dial across a host restart.
-		http:       hostlink.NewClient(10 * time.Minute),
+		http:       hostlink.NewClient(GuestAttemptTimeout),
 		capability: capability,
 	}, nil
 }
