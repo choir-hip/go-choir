@@ -67,7 +67,7 @@ func fill(t *testing.T, db *sql.DB, rows int) {
 		if _, err := tx.Exec(`INSERT INTO og_objects(obj_id, canonical_id, kind, updated_at) VALUES (?,?,?,?)`, i, id, fmt.Sprintf("k%d", i%5), fmt.Sprintf("2026-11-%02d", i%28+1)); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := tx.Exec(`INSERT INTO og_bodies(obj_id, body) VALUES (?,?)`, i, []byte(strings.Repeat("x", 3000+i%7))); err != nil {
+		if _, err := tx.Exec(`INSERT INTO og_bodies(obj_id, body) VALUES (?,?)`, i, []byte(strings.Repeat("x", 6000+i%7))); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := tx.Exec(`INSERT INTO og_key_index VALUES (?,?)`, id, "k"); err != nil {
@@ -291,10 +291,10 @@ func TestTheReadingWritesNothing(t *testing.T) {
 	db := openTestDB(t)
 	fill(t, db.Write, 100)
 	var before, after int64
-	_ = db.Read.QueryRow(`PRAGMA data_version`).Scan(&before)
+	_ = db.Write.QueryRow(`PRAGMA data_version`).Scan(&before)
 	var sc Scanner
 	sc.Read(context.Background(), db.Read, DefaultLimits, true)
-	_ = db.Read.QueryRow(`PRAGMA data_version`).Scan(&after)
+	_ = db.Write.QueryRow(`PRAGMA data_version`).Scan(&after)
 	if before != after {
 		t.Fatalf("data_version moved %d -> %d: the reading changed the file", before, after)
 	}
