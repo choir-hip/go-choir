@@ -66,6 +66,7 @@ func (a *ComputerEventAppender) catchUpLocked(ctx context.Context, local *Head) 
 	if platform == nil || headSeq(local) >= platform.Sequence {
 		// Equal heads need nothing; a local head at or past the host's is a
 		// rewind or a fork, which no catch-up may repair.
+		a.releaseOrphanPayloads()
 		return local, nil
 	}
 	source, ok := a.cas.(EventSource)
@@ -164,7 +165,17 @@ func (a *ComputerEventAppender) catchUpLocked(ctx context.Context, local *Head) 
 		}
 		return nil, incomplete("stopped by its page bound")
 	}
+	a.releaseOrphanPayloads()
 	hctx, hcancel := a.detached(ctx, catchUpHeadTimeout)
 	defer hcancel()
 	return a.projection.Head(hctx, a.computerID)
+}
+
+// releaseOrphanPayloads drops the cached plaintexts of rows the host passed or
+// contradicted, once the catch-up that could have used them has finished.
+func (a *ComputerEventAppender) releaseOrphanPayloads() {
+	for digest := range a.orphanPayloads {
+		delete(a.livePayloads, digest)
+	}
+	a.orphanPayloads = nil
 }
