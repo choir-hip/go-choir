@@ -146,6 +146,7 @@ entered below as lapsed, not scored.
 | C63 | 2026-11-13T01:55Z | lead | landing | lane/appender-wedge (tip f191b735c or its accepted successor: same-key re-send of an unclear CAS, in-place catch-up from the host chain) is accepted by both review seats within two more rounds, lands through scripts/land, passes CI and deploys on the first attempt, and a lost-reply fault on d@e converges without a reboot (the next append succeeds and local head equals host head). False if a third review round is needed after this one, the land, CI or deploy needs a fix commit, or the d@e fault does not converge. | 0.50 | 2026-11-13T12:00Z | review outputs, CI run, deploy receipt, d@e fault proof output |
 | C64 | 2026-11-13T01:55Z | lead | landing | lane/restart-cancels-capture is accepted by both seats on its third review round (the round after tip ee60dd4d1), lands, passes CI and deploys on the first attempt, and on d@e a planned restart asked while a snapshot capture is in flight returns 200 within 20 seconds and the computer boots as planned. False if a fourth round is needed, a fix commit is needed after landing, or the d@e restart refuses or boots as a crash. | 0.45 | 2026-11-13T12:00Z | review outputs, CI run, deploy receipt, d@e restart proof |
 | C65 | 2026-11-13T09:05Z | lead | landing | lane/sweep-walk-one-view (tip 878a286a4, both seats accepted on round 2) lands through scripts/land, passes CI and deploys with no fix commit, and the next dry run walks the paper's tape at least 10 times faster than 13.3 minutes per 50,000 events (a paper chunk row at most every 80 seconds, averaged over its first ten new rows in `tape_sweep_ref_chunks`). False if the land, CI or deploy needs a fix commit or the rate is under 10 times. | 0.55 | 2026-11-13T14:00Z | land result, CI run, deploy receipt, chunk row timestamps on Node B |
+| C66 | 2026-11-13T10:40Z | lead | landing | lane/sweep-walk-digest-index (tip c6a7ff03b, both seats accepted on round 2) lands through scripts/land, passes CI and deploys with no fix commit, and the next dry run writes a paper chunk row at most every 80 seconds, averaged over its first ten new rows in `tape_sweep_ref_chunks` (ten times faster than 13.3 minutes per 50,000 events). False if a fix commit is needed or the rate is under 10 times. Checked this time: the fixture is scattered like the paper's tape, and the reviewers measured the absent-read cost separately. | 0.65 | 2026-11-13T15:00Z | land result, CI run, deploy receipt, chunk row timestamps and the walk's log line on Node B |
 
 ### Settlements
 
@@ -178,7 +179,7 @@ entered below as lapsed, not scored.
 
 ### Scorecard
 
-Second form: 28 claims open, 17 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
+Second form: 29 claims open, 17 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
 false, 1 partial), 7 lapsed.
 
 | band | claims settled | came true |
