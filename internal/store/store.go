@@ -223,6 +223,9 @@ type Store struct {
 	// on in this process (telemetry_sealer.go).
 	telemetryStats telemetryCounters
 	telemetry      atomic.Pointer[telemetrySealer]
+	// revalidationSource reads the bound appender's revalidation count; atomic
+	// because the hourly summary goroutine reads stats while a rebind may run.
+	revalidationSource atomic.Pointer[func() int64]
 	// tapeGroup is the coalescing state of queued tape writers (tape_group_commit.go).
 	tapeGroup groupCommit
 	// eventTableWrites is store.event_table as the runtime applied it: the
