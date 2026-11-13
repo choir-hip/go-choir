@@ -167,7 +167,7 @@ func rootStoreObjects(t *testing.T, root, digest string, bases ...string) {
 
 const old = 48 * time.Hour
 
-func TestPruneRemovesStagedPayloadOnlyAfterItsReleaseExists(t *testing.T) {
+func TestPruneRemovesStagedPayloadsAtOnceAndUnstagedOnesPastTheWindow(t *testing.T) {
 	u, root := newPruneUpdater(t)
 	digest := stageTestRelease(t, u, root, "r1", false)
 	setCurrent(t, root, digest)
@@ -177,15 +177,21 @@ func TestPruneRemovesStagedPayloadOnlyAfterItsReleaseExists(t *testing.T) {
 	unstaged := filepath.Join(root, "incoming", strings.Repeat("9", 64))
 	writeTestFile(t, filepath.Join(unstaged, "bin", "choir"), 1000)
 	ageBy(t, unstaged, old)
+	inWindow := filepath.Join(root, "incoming", strings.Repeat("8", 64))
+	writeTestFile(t, filepath.Join(inWindow, "bin", "choir"), 1000)
+	ageBy(t, inWindow, time.Minute)
 
 	report := u.Prune()
 	if exists(staged) {
 		t.Fatal("the payload of a staged release survived the prune")
 	}
-	if !exists(unstaged) {
-		t.Fatal("a payload with no staged release (its apply has not run) was removed")
+	if exists(unstaged) {
+		t.Fatal("a refused or aborted payload survived past the window")
 	}
-	if report.BytesFreed < 1000 || report.IncomingRemoved != 1 {
+	if !exists(inWindow) {
+		t.Fatal("a payload inside its window (its apply has not run) was removed")
+	}
+	if report.BytesFreed < 1000 || report.IncomingRemoved != 2 {
 		t.Fatalf("report = %+v", report)
 	}
 }
