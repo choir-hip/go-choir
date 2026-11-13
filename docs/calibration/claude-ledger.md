@@ -150,6 +150,7 @@ entered below as lapsed, not scored.
 | C67 | 2026-11-13T12:20Z | lead | experiment | Applying the destroyed-computer sweep from manifest ts-20261113T111247Z-a6fb14f1 (251 computers, 467,903 files, 26.9 GB, 363,605 rows; read and checked against the protected computers) and its follow-up rounds (the apply caps at 8 GiB) releases at least 20 GiB on Node B by 16:00Z with no failed apply, no protected computer touched, the paper publishing throughout and corpusd's own memory under 4 GiB. False if an apply fails or refuses, or under 20 GiB is released. | 0.60 | 2026-11-13T16:00Z | apply reports, df on Node B, scripts/status-hourly |
 | C68 | 2026-11-13T16:45Z | lead | landing | S5 coalescing (queued writers share one tape event, losslessly, no setting) plus one head read and one pin per append lands accepted by both seats, deploys, and over a full hour on the paper after it boots the build, tape events per hour fall at least 3-fold against the 27,000 an hour of 2026-11-13 and corpusd calls per original store write fall at least 4-fold. False if either ratio is missed or the lane is not deployed by the settle time. | 0.45 | 2026-11-15T12:00Z | paper observability counters, control DB event rate |
 | C69 | 2026-11-13T16:45Z | lead | landing | The scheduled destroyed-computer sweep (S7) is accepted by both seats within two review rounds, lands and deploys on the first CI attempt, and its first scheduled run on Node B finishes with a report and no error. | 0.50 | 2026-11-14T18:00Z | review outputs, CI run, corpusd journal |
+| C70 | 2026-11-13T19:15Z | lead | landing | Stage 0 of the S4 design (the prune and RecoveryBase count only roots the tape names; an unappended root never evicts one) is accepted by both seats within two review rounds, lands and deploys with no fix commit, and the audit query on Node B then shows every computer's advertised recovery base named by its tape. | 0.45 | 2026-11-17T12:00Z | review outputs, CI run, deploy receipt, the audit query |
 
 ### Settlements
 
@@ -184,7 +185,7 @@ entered below as lapsed, not scored.
 
 ### Scorecard
 
-Second form: 30 claims open, 19 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
+Second form: 31 claims open, 19 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
 false, 1 partial), 7 lapsed.
 
 | band | claims settled | came true |
