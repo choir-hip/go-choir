@@ -184,10 +184,11 @@ entered below as lapsed, not scored.
 | C66 | 2026-11-13T11:27Z | true | landed as dd43ff6b1 with no fix commit, CI 43413670436 success, deployed 11:12Z; dry run ts-20261113T111247Z-a6fb14f1 wrote the paper's first ten new chunk rows between 11:13:59 and 11:23:41Z, 65 seconds a row against 13.3 minutes (about 12 times). corpusd's own memory 0.68 GiB during the walk | 0.12 |
 | C67 | 2026-11-13T12:35Z | true | five applies between 12:12Z and 12:29Z (the first from the 11:12Z manifest, four from fresh dry runs, each audited before its apply) deleted 467,913 files and 26.89 GB (25.0 GiB) and removed all 251 destroyed computers, with 0 errors and 0 unverified in every report; 497 files that something still referenced were kept. Node B's free space went from 88.8 GiB to 117.9 GiB (the collector released a further 6.7 GB at 12:29Z). No protected computer appeared after a manifest's header; their tape directories are intact; the paper logged 1,643 lines in the 20 minutes to 12:31Z; corpusd's own memory 0.27 GiB. My first audit rule stopped one round wrongly (it refused computers the previous apply had already removed, which hold no files) | 0.16 |
 | C70 | 2026-11-13T18:50Z | false | sent back on rounds 1, 2 and 3 by one seat (the other accepted each time), so not accepted within two rounds and not landed. Each repair opened a new surface, the last two in vmctl admission; the lane is split (docs/problems/unappended-snapshot-root-evicts-the-on-tape-root-2026-11-13.md). I priced a host-only prune change and did not see that advertising only named roots drags in admission policy | 0.20 |
+| C69 | 2026-11-13T20:33Z | false | two of three conditions held: both seats accepted on round 2, and the first scheduled run on Node B at 20:33:20Z reported `outcome=nothing errors=0` over 266 computers (251 destroyed, 0 listed) in 182 s. The deploy did not go out on the first CI attempt: run 43488183830 failed once on `TestGvisorAdmissionDeadlineRefusesByName`, a timing test the change does not touch, and passed on a full rerun. The claim was a conjunction, so it is false; the lesson is that a first-attempt CI condition is a bet on the suite's flake rate, not on the change. |
 
 ### Scorecard
 
-Second form: 31 claims open, 20 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
+Second form: 30 claims open, 21 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
 false, 1 partial), 7 lapsed.
 
 | band | claims settled | came true |
