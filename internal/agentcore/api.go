@@ -23,6 +23,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/disclosure"
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/datavolume"
 	"github.com/yusefmosiah/go-choir/internal/guestmem"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -946,6 +947,13 @@ type guestObservabilityResponse struct {
 	// store versus the shared nix store (SDC RES-07, launch checklist
 	// L1-02). Bounded to a few seconds; it takes no lock.
 	MemoryDetail *guestmem.Detail `json:"memory_detail,omitempty"`
+	// DataVolume is the persistent data volume: its statfs on every read
+	// (total, free, available to unprivileged, so the reserved blocks show),
+	// and with ?data_volume=detail a bounded read-only walk of allocated
+	// bytes, apparent bytes and file count per top-level directory and per
+	// listed second-level directory. A plain read shows the last walk.
+	// The volume root is the directory of the store path.
+	DataVolume *datavolume.Report `json:"data_volume,omitempty"`
 	// ObjectGraphWriterGate is the object graph writer gate's mode and the
 	// violations it has seen since boot, keyed "kind|declared writer|reason"
 	// (ARCH-04): the gate's refusals, read here instead of over SSH. This process's counts only (corpusd keeps its own).
@@ -1057,6 +1065,10 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 			{Label: "store", Root: store.StateDBPath(h.rt.cfg.StorePath)},
 			{Label: "nix_store", Root: "/nix/store"},
 		}, guestmem.DefaultLimits)
+	}
+	if h.rt.cfg.StorePath != "" {
+		report := h.rt.dataVolume.Read(r.Context(), filepath.Dir(filepath.Clean(h.rt.cfg.StorePath)), datavolume.DefaultLimits, r.URL.Query().Get("data_volume") == "detail")
+		resp.DataVolume = &report
 	}
 	if raw, err := os.ReadFile("/proc/meminfo"); err == nil {
 		resp.Memory = parseGuestMeminfo(string(raw))
