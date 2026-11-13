@@ -32,12 +32,19 @@ const (
 	groupMaxBytes = 1 << 20
 )
 
-// groupCommitTimeout bounds one shared append, like the sealer's. A variable
-// only so a test can shorten it; nothing sets it in production.
-var groupCommitTimeout = 30 * time.Second
+// defaultGroupCommitTimeout bounds one shared append, like the sealer's.
+// groupCommit.timeoutNanos overrides it (tests only).
+const defaultGroupCommitTimeout = 30 * time.Second
 
 // groupCommit is the per-store group state; the zero value is ready.
 type groupCommit struct {
+	// timeoutNanos, when positive, replaces defaultGroupCommitTimeout; atomic
+	// so a test can set it while leaders run.
+	timeoutNanos atomic.Int64
+	// afterToken, when set, runs right after a caller wins the leader token
+	// (a test seam; set before any writer starts).
+	afterToken func()
+
 	mu      sync.Mutex // leaf: protects pending
 	pending []*groupMember
 
@@ -101,7 +108,7 @@ func (t *projectionTape) appendGrouped(ctx context.Context, ops []computerevent.
 	g := t.group
 	if err := ctx.Err(); err != nil {
 		g.cancelled.Add(1)
-		return err // a cancelled caller never leads a group or commits its own write
+		return err // a caller already cancelled writes nothing
 	}
 	m := &groupMember{ops: ops, bytes: opsBytes(ops), start: time.Now(), done: make(chan struct{})}
 	g.mu.Lock()
@@ -130,14 +137,27 @@ func (t *projectionTape) appendGrouped(ctx context.Context, ops []computerevent.
 	}
 	for {
 		if ctx.Err() != nil {
-			// select picks at random among ready cases: a cancelled caller
-			// must not win the token and commit its own write.
+			// select picks at random among ready cases: do not even try for
+			// the token once cancelled (a cancellation that lands after this
+			// check is caught after the token is won, below).
 			return cancelled()
 		}
 		select {
 		case <-m.done:
 			return m.err
 		case token <- struct{}{}:
+			if g.afterToken != nil {
+				g.afterToken()
+			}
+			if ctx.Err() != nil {
+				// The caller was cancelled between the check above and the
+				// select: hand the token back without leading, so a cancelled
+				// caller never commits its own write. If its member was
+				// already taken by an earlier leader, its outcome is that
+				// group's.
+				<-token
+				return cancelled()
+			}
 			t.leadHolding(token)
 			select {
 			case <-m.done:
@@ -152,9 +172,13 @@ func (t *projectionTape) appendGrouped(ctx context.Context, ops []computerevent.
 }
 
 // groupContext is the context of one shared append: barrier-exempt (the leader
-// has itself done what the barrier does) and bounded by groupCommitTimeout.
-func groupContext() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(computerevent.WithBarrierExemption(context.Background()), groupCommitTimeout)
+// has itself done what the barrier does) and bounded by the group timeout.
+func (g *groupCommit) groupContext() (context.Context, context.CancelFunc) {
+	d := defaultGroupCommitTimeout
+	if n := g.timeoutNanos.Load(); n > 0 {
+		d = time.Duration(n)
+	}
+	return context.WithTimeout(computerevent.WithBarrierExemption(context.Background()), d)
 }
 
 // leadHolding commits one group while the caller holds the leader token, and
@@ -193,8 +217,9 @@ func (t *projectionTape) leadGroup() {
 	if len(members) == 0 {
 		return
 	}
-	// A panic below must not leave taken members waiting for ever: they are
-	// answered with an error (nothing is acknowledged), and the panic goes on.
+	// A panic below must not leave taken members waiting for ever: each gets an
+	// error (never an acknowledgement; the append may or may not have landed,
+	// so its outcome is unknown), and the panic goes on.
 	settled := false
 	defer func() {
 		if settled {
@@ -210,7 +235,7 @@ func (t *projectionTape) leadGroup() {
 			}
 		}
 	}()
-	ctx, cancel := groupContext()
+	ctx, cancel := g.groupContext()
 	defer cancel()
 
 	var memberOps []computerevent.ProjectionOp
@@ -249,7 +274,7 @@ func (t *projectionTape) leadGroup() {
 		for _, m := range members {
 			// Each single gets its own deadline: a big group's elapsed time
 			// is not a member's.
-			mctx, mcancel := groupContext()
+			mctx, mcancel := g.groupContext()
 			m.err = t.appendDirect(mctx, m.ops, projectionAuthority)
 			mcancel()
 			g.finishMember(m)

@@ -258,3 +258,36 @@ agentcore, textureowner). With the switch forced on for every store (a local,
 uncommitted switch), textureowner passes whole and agentcore fails only two
 tests that assume the switch off or the 1 s window; the store failures are the
 section 8 set, all shape assertions.
+
+## As built after owner ruling D8 (2026-11-13, lane/s5-coalesce)
+
+Everything above about the setting, the 10 s telemetry window and the
+run-memory window is superseded: coalescing is always on, there is no setting,
+and run-memory messages are acknowledged after their CAS. What the build adds
+beyond the design:
+
+- **Leader panic.** The leader token is freed by a defer. If a leader panics,
+  every member it took gets an error (never an acknowledgement; the append may
+  or may not have landed) and the panic goes on.
+- **Cancelled callers.** A caller whose context is cancelled at entry, before it
+  tries for the token, or right after it wins the token (the token is handed
+  back) returns `ctx.Err()` and writes nothing. A member already taken returns
+  its group's outcome.
+- **Refusal split.** Each single gets its own deadline, not what is left of the
+  group's.
+- **`telemetry_ridden`** is a lower bound: it counts records that rode a
+  committed event only; a ride whose commit failed or whose outcome is unknown
+  is counted under the seal failure counters instead.
+- **Settling a kept prepared row (`SettlePrepared`).** An unclear CAS keeps a
+  prepared row; one row can hold several runs' entries. A retried run-memory
+  write numbered itself from the committed table, which lacked those entries,
+  reused their (run, seq), and its finalize failed on the unique key (a tape
+  wedge). Rule: any failure or panic of a run-memory append sets a store-wide
+  latch (`Store.runMemorySettle`). While it is set, a run-memory writer takes
+  the settle mutex, re-checks, runs `ComputerEventAppender.SettlePrepared`
+  (the appender's own in-place recovery, under its mutex), and clears the latch
+  only if that returned nil. A failed settle leaves it set and returns the
+  error; a writer that arrives during a settle waits for it. With the latch
+  clear the writer takes no lock, so run-memory writers still queue behind the
+  in-flight append and coalesce. Lock order: run stripe, settle mutex,
+  appender mutex; nothing under the appender mutex takes either.
