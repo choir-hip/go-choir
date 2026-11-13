@@ -29,8 +29,12 @@ func (p *stalenessProjection) DryRunProjectionBatch(_ context.Context, _ string,
 	for _, op := range batch.Ops {
 		var body struct {
 			NumberedAt uint64 `json:"numbered_at"`
+			Any        bool   `json:"any"`
 		}
 		_ = json.Unmarshal(op.Body, &body)
+		if body.Any {
+			return nil
+		}
 		numberedAt = body.NumberedAt
 	}
 	if numberedAt != headSeq(p.memoryProjection.head) {
@@ -179,5 +183,94 @@ func TestAppendWithoutRecoveryPaysNoExtraDryRunOrHeadRead(t *testing.T) {
 		if heads != 1 {
 			t.Fatalf("append %d read the host head %d times, want 1", i, heads)
 		}
+	}
+}
+
+// anyBatch is a batch no staleness can refuse.
+func (r *staleRig) anyBatch(eventID string) []byte {
+	raw, err := json.Marshal(ProjectionBatch{
+		Version: ProjectionBatchV2, ProjectorVersion: ProjectorVersionV2,
+		ComputerID: testComputerID, EventID: eventID,
+		Ops: []ProjectionOp{{Kind: ProjectionOpDesktopState, Body: json.RawMessage(`{"any":true}`)}},
+	})
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	return raw
+}
+
+func (r *staleRig) appendAny() error {
+	r.t.Helper()
+	event := testEvent(r.t, nil, EventProjectionBatchRecorded)
+	_, _, err := r.app.AppendNewPayload(context.Background(), event, TransitionInput{}, r.anyBatch(event.EventID), ProjectionBatchMediaType, "owner")
+	return err
+}
+
+// sealedRig is the production shape: the batch is sealed, and the store (here
+// the test) dry-runs it OUTSIDE the appender mutex before the append. Round 3:
+// a writer R dry-runs, another writer B takes the mutex and moves the local
+// head (its own recovery, or an ordinary finalize), then R takes the mutex with
+// the heads level: no recovery of its own, yet its batch is stale.
+func (r *staleRig) sealedAppend(batch []byte, eventID string) error {
+	r.t.Helper()
+	cipher, err := NewPrivateArtifactCipher(testComputerID, make([]byte, 32))
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	reader := NewMemoryArtifactReader()
+	r.app.pins = sealedPinner{memoryPinner: memoryPinner{signer: r.signer}, reader: reader}
+	r.app.SetPayloadResolver(reader, cipher)
+	event := testEvent(r.t, nil, EventProjectionBatchRecorded)
+	event.EventID = eventID
+	event.IdempotencyKey = "idem-" + eventID
+	_, _, err = r.app.AppendNewPrivatePayload(context.Background(), event, TransitionInput{}, batch, ProjectionBatchMediaType, cipher)
+	return err
+}
+
+type sealedPinner struct {
+	memoryPinner
+	reader *MemoryArtifactReader
+}
+
+func (p sealedPinner) PinPrivatePayload(ctx context.Context, cipher *PrivateArtifactCipher, computerID, eventID string, envelope []byte, intent string) (PinResult, error) {
+	p.reader.Put(envelope)
+	return p.memoryPinner.PinPrivatePayload(ctx, cipher, computerID, eventID, envelope, intent)
+}
+
+// R3a: R's dry run happened before B recovered a landed row under the mutex.
+func TestSealedAppendWhoseDryRunStraddledAnotherWritersRecoveryIsRefused(t *testing.T) {
+	rig := newStaleRig(t)
+	rig.landUnacknowledged() // host seq 2, local 1, one kept prepared row
+	rID, _ := NewEventID()
+	stale := rig.batchAt(rID)               // R numbered and dry-ran at local head 1
+	if err := rig.appendAny(); err != nil { // B recovers the landed row and appends
+		t.Fatalf("B: %v", err)
+	}
+	rig.requireAligned("after B", 3)
+	records := len(rig.cas.records)
+	err := rig.sealedAppend(stale, rID)
+	if !errors.Is(err, ErrBatchRefused) {
+		t.Fatalf("R returned %v, want ErrBatchRefused: its batch was validated before B moved the local head", err)
+	}
+	if got := len(rig.cas.records); got != records {
+		t.Fatalf("the host holds %d events, want %d: R's stale batch reached the CAS", got, records)
+	}
+}
+
+// R3b: R's dry run happened before another writer's ordinary finalize.
+func TestSealedAppendWhoseDryRunStraddledAnOrdinaryFinalizeIsRefused(t *testing.T) {
+	rig := newStaleRig(t)
+	rID, _ := NewEventID()
+	stale := rig.batchAt(rID)
+	if err := rig.appendAny(); err != nil { // B: an ordinary append, no recovery
+		t.Fatalf("B: %v", err)
+	}
+	records := len(rig.cas.records)
+	err := rig.sealedAppend(stale, rID)
+	if !errors.Is(err, ErrBatchRefused) {
+		t.Fatalf("R returned %v, want ErrBatchRefused", err)
+	}
+	if got := len(rig.cas.records); got != records {
+		t.Fatalf("the host holds %d events, want %d", got, records)
 	}
 }
