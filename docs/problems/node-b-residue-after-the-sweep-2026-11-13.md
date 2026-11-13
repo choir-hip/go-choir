@@ -43,7 +43,7 @@ that nothing references is unknown. One index on the receipts table
 (`receipt_id_idx`, 2.2 GiB, 2,184 scans) may be droppable; its readers are
 not yet identified.
 
-## Update, 2026-11-13T18:00Z
+## Update, 2026-11-13T17:15Z
 
 - Capture bodies are nearly all referenced by a capture row (36 unreferenced
   files, 5.7 MB, at the 2026-10-29 accounting; every reader goes through the
@@ -58,7 +58,7 @@ not yet identified.
   closures and store, the Go module cache, the Go build cache (its own 5 day
   trim only), the seeded source checkout.
 - New problem: d@e's data volume is 95.5% used, 1.5 GB available (compute
-  status, 17:50Z), under the 4 GiB capsule admission floor. Capsules there may
+  status, about 17:05Z), under the 4 GiB capsule admission floor. Capsules there may
   already be refused. Not verified.
 - A paper snapshot costs about 4 GB, not 25 (5,858 new chunks of 10,524 on
   2026-11-12); the 25 GB in two code comments is from before chunk

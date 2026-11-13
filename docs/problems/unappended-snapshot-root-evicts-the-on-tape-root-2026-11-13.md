@@ -21,7 +21,7 @@ the 720,000-event recovery bound refuses for the paper.
 
 ## Evidence
 
-Node B, 2026-11-13T19:10Z, read-only (each kept root, and whether a
+Node B, 2026-11-13T17:25Z, read-only (each kept root, and whether a
 `snapshot_recorded` receipt names it): 22 of 23 kept roots are on the tape.
 The exception is the paper's second root, 4861382b769b (head 10,914,341,
 2026-11-12T19:18Z): registered, never appended. So the paper holds exactly
