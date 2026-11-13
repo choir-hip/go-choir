@@ -1,8 +1,11 @@
 # Lossless coalescing of tape writes: design record (2026-11-12)
 
 Station S5 of [storage solutions part 2](../definitions/choir-storage-solutions-2-2026-11-12.md),
-after owner ruling D8. Design only: nothing here is built, and
-`tape.group_commit` is untouched. Inputs: the
+after owner ruling D8. Built on `lane/s5-coalesce` (2026-11-13; see "Built"
+at the end): the setting `tape.group_commit` and both loss windows are deleted
+and coalescing is always on. The text below is the design as written on
+2026-11-12, kept as the record; where it speaks of the setting or of
+`run_memory_batch.go` as present, they are gone. Inputs: the
 [write census](tape-write-census-2026-11-12.md), the
 [group commit design of 2026-10-31](../design/tape-group-commit-2026-10-31.md),
 the [switch audit](switch-audit-2026-11-03.md) and
@@ -184,7 +187,10 @@ event (four to two, census row 3) is the better lever. Read the histogram for
 a full day on the paper before building.
 
 Evidence classes for the after-measure (CLAUDE.md "Proof"): events per day from
-the host receipts table (metadata) and `tape_events_by_family`; write-pool wait
+the host receipts table (metadata) and `tape_events`; per-family volume from
+`tape_ops_by_family` (an event that carries riding telemetry or several
+writers' families is counted once under `mixed` in `tape_events_by_family`,
+so that map no longer reads as a per-family event count); write-pool wait
 count and time from `store_pools`; `appender_call_mean_ms`; snapshot spacing
 from `snapshot_recorded`; replay seconds per event before and after. Enter the
 calibration claims (P(median depth at enter >= 3) = 0.75; P(events a day under
