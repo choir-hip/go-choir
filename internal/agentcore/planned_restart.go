@@ -55,181 +55,9 @@ type PlannedRestart struct {
 	RunMemoryWindowOpen *bool `json:"run_memory_window_open,omitempty"`
 }
 
-// plannedRestartMarkerPending reports whether a marker that could still plan a
-// boot is on disk: present and no older than plannedRestartMaxAge. A marker
-// that cannot be read or parsed counts by its file time (fail closed while it
-// is fresh). No store path, or no marker, is not pending.
-func plannedRestartMarkerPending(storePath string, now time.Time) bool {
-	path := PlannedRestartMarkerPath(storePath)
-	if path == "" {
-		return false
-	}
-	raw, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return false
-	}
-	if err == nil {
-		var marker PlannedRestart
-		if json.Unmarshal(raw, &marker) == nil && !marker.RequestedAt.IsZero() {
-			return now.Sub(marker.RequestedAt) <= plannedRestartMaxAge
-		}
-	}
-	if info, statErr := os.Stat(path); statErr == nil {
-		return now.Sub(info.ModTime()) <= plannedRestartMaxAge
-	}
-	return true
-}
-
-// PlannedRestartMarkerPending reports, before anything consumes it, whether
-// this boot is planned: a marker no older than plannedRestartMaxAge at now.
-// Boot uses it to swap in a staged compact copy before the store opens
-// (store.RebaseOntoCompactCopy).
-func PlannedRestartMarkerPending(storePath string, now time.Time) bool {
-	return plannedRestartMarkerPending(storePath, now)
-}
-
-// PlannedRestartSparesPausedCapsules reports, without consuming the marker,
-// whether this boot follows a planned restart whose reason is a platform
-// update and may resume paused capsules (sandbox pause design, Decision 6
-// and the r3 reason-aware spare). It is evaluated at processStartedAt, the
-// instant ConsumePlannedRestartMarker judges the marker at, and answers
-// exactly as that consumption will: a readable marker of this binary's
-// work-state epoch, no older than plannedRestartMaxAge, with the platform
-// update reason. A restore-reason marker (PlannedRestartSelfDevelopmentRestore),
-// a crash, an unreadable marker or a stale one spares nothing.
-func PlannedRestartSparesPausedCapsules(storePath string, now time.Time) bool {
-	path := PlannedRestartMarkerPath(storePath)
-	if path == "" {
-		return false
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return false
-	}
-	var marker PlannedRestart
-	if json.Unmarshal(raw, &marker) != nil || marker.RequestedAt.IsZero() {
-		return false
-	}
-	if marker.WorkStateEpoch != CurrentWorkStateEpoch {
-		return false
-	}
-	if age := now.Sub(marker.RequestedAt); age < 0 || age > plannedRestartMaxAge {
-		return false
-	}
-	return marker.Reason == PlannedRestartPlatformRefresh
-}
-
 // errHibernateFenced refuses a planned-restart mark while the hibernate fence
 // is closed: the marker would be written into the snapshot being taken.
 var errHibernateFenced = errors.New("hibernate_fenced: the guest is being hibernated; a planned restart cannot be marked now")
-
-// PlannedRestartMarkerPath is the marker beside the runtime store, on the
-// same durable volume.
-func PlannedRestartMarkerPath(storePath string) string {
-	storePath = strings.TrimSpace(storePath)
-	if storePath == "" {
-		return ""
-	}
-	return filepath.Clean(storePath) + ".planned-restart"
-}
-
-// WritePlannedRestartMarker durably records that the next boot is planned.
-func WritePlannedRestartMarker(storePath string, marker PlannedRestart) error {
-	path := PlannedRestartMarkerPath(storePath)
-	if path == "" {
-		return errors.New("planned restart marker: store path is empty")
-	}
-	if marker.RequestedAt.IsZero() {
-		marker.RequestedAt = time.Now().UTC()
-	}
-	marker.WorkStateEpoch = CurrentWorkStateEpoch
-	raw, err := json.Marshal(marker)
-	if err != nil {
-		return fmt.Errorf("planned restart marker: encode: %w", err)
-	}
-	tmp := path + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
-	if err != nil {
-		return fmt.Errorf("planned restart marker: create: %w", err)
-	}
-	if _, err := f.Write(raw); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("planned restart marker: write: %w", err)
-	}
-	if err := f.Sync(); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("planned restart marker: sync: %w", err)
-	}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("planned restart marker: close: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return fmt.Errorf("planned restart marker: install: %w", err)
-	}
-	return syncParentDir(path)
-}
-
-// ClearPlannedRestartMarker removes the marker, e.g. when the restart it
-// announced did not happen.
-func ClearPlannedRestartMarker(storePath string) error {
-	path := PlannedRestartMarkerPath(storePath)
-	if path == "" {
-		return nil
-	}
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("planned restart marker: remove: %w", err)
-	}
-	return syncParentDir(path)
-}
-
-// ConsumePlannedRestartMarker reads and removes the marker. It reports a
-// planned restart only for a readable marker younger than
-// plannedRestartMaxAge at now; anything else is a crash boot. The boot passes
-// its process start as now, so slow boot phases before consumption do not
-// count against the age. The marker is removed
-// before the caller resumes work, so a resume that crashes the guest leads to
-// a markerless (crash) boot: one resume per planned restart.
-func ConsumePlannedRestartMarker(storePath string, now time.Time) (PlannedRestart, bool) {
-	path := PlannedRestartMarkerPath(storePath)
-	if path == "" {
-		return PlannedRestart{}, false
-	}
-	raw, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return PlannedRestart{}, false
-	}
-	if clearErr := ClearPlannedRestartMarker(storePath); clearErr != nil {
-		// A marker that cannot be removed could be reused by a later crash;
-		// treat this boot as a crash rather than risk a resume loop.
-		log.Printf("agentcore: %v; treating boot as a crash", clearErr)
-		return PlannedRestart{}, false
-	}
-	if err != nil {
-		log.Printf("agentcore: planned restart marker unreadable: %v; treating boot as a crash", err)
-		return PlannedRestart{}, false
-	}
-	var marker PlannedRestart
-	if err := json.Unmarshal(raw, &marker); err != nil || marker.RequestedAt.IsZero() {
-		log.Printf("agentcore: planned restart marker invalid; treating boot as a crash")
-		return PlannedRestart{}, false
-	}
-	if marker.WorkStateEpoch != CurrentWorkStateEpoch {
-		log.Printf("agentcore: planned restart marker has work-state epoch %d, this binary reads %d; treating boot as a crash", marker.WorkStateEpoch, CurrentWorkStateEpoch)
-		return PlannedRestart{}, false
-	}
-	if age := now.Sub(marker.RequestedAt); age < 0 || age > plannedRestartMaxAge {
-		log.Printf("agentcore: planned restart marker from %s is stale; treating boot as a crash", marker.RequestedAt.Format(time.RFC3339))
-		return PlannedRestart{}, false
-	}
-	return marker, true
-}
-
-func syncParentDir(path string) error {
-	if err := syncPath(filepath.Dir(path)); err != nil {
-		return fmt.Errorf("planned restart marker: sync dir: %w", err)
-	}
-	return nil
-}
 
 // RestartWorkKinds start or resume work: after a crash boot, an occurrence
 // of one of these kinds recorded before the boot is interrupted_by_restart,
@@ -414,25 +242,6 @@ func refundGuestAttempt(storePath, reason, target string, limit int) error {
 		counts[key] = n - 1
 	}
 	return writeGuestAttempts(path, counts)
-}
-
-// hostPlannedRestartMarkerIsForeign reports a marker on disk that the host did
-// not write: one of the guest's own (platform_update, self-development apply
-// or restore). The host's withdrawal leaves it alone.
-func hostPlannedRestartMarkerIsForeign(storePath string) (reason string, foreign bool) {
-	path := PlannedRestartMarkerPath(storePath)
-	if path == "" {
-		return "", false
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return "", false
-	}
-	var marker PlannedRestart
-	if json.Unmarshal(raw, &marker) != nil {
-		return "", false
-	}
-	return marker.Reason, marker.Reason != PlannedRestartPlatformRefresh
 }
 
 func readGuestAttempts(path string) (map[string]int, error) {
@@ -807,16 +616,18 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 			return
 		}
 		defer h.rt.plannedRestartReqMu.unlock()
-		// A marker the guest wrote for itself (platform_update, a
-		// self-development apply or restore) is not the host's to withdraw.
-		if reason, foreign := hostPlannedRestartMarkerIsForeign(storePath); foreign {
-			writeAPIJSON(w, http.StatusOK, map[string]string{"status": "kept", "reason": "a planned-restart marker for " + reason + " is not the host's refresh"})
-			return
-		}
 		// The host did not restart after all: telemetry queues again once
 		// the marker is gone.
-		if err := h.rt.clearHostPlannedRestartMarker(storePath); err != nil {
+		// The reason check and the delete are one atomic step in the marker's
+		// owner: a marker the guest wrote for itself (platform_update, a
+		// self-development apply or restore) is not the host's to withdraw.
+		kept, err := h.rt.clearHostPlatformRefreshMarker(storePath)
+		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+			return
+		}
+		if kept != "" {
+			writeAPIJSON(w, http.StatusOK, map[string]string{"status": "kept", "reason": "a planned-restart marker for " + kept + " is not the host's refresh"})
 			return
 		}
 		// The host withdrew the refresh: new engineering need not wait for
@@ -965,13 +776,20 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 		return
 	}
 	if err != nil {
-		h.rt.snapshots.clearRestartBlock()
 		// Capsules this request paused and acked thaw: no marker follows.
 		h.rt.unpauseAllCapsules()
+		// The holds go only if no marker is durable: an earlier request's
+		// marker means the host's kill is coming, and the producer must not
+		// start a capture nor new engineering enter into it.
+		markerPending := plannedRestartMarkerExists(storePath)
+		if !markerPending {
+			h.rt.snapshots.clearRestartBlock()
+		}
 		if errors.Is(err, errPlannedRestartCallerGone) {
-			// The host gave up on this request: nothing was written, so no
-			// hold stays behind either.
-			h.rt.clearRefreshHold()
+			// The host gave up on this request: nothing was written.
+			if !markerPending {
+				h.rt.clearRefreshHold()
+			}
 			writeAPIJSON(w, http.StatusConflict, plannedRestartBusyResponse{Error: err.Error(), Outcome: "busy", AllowBusy: allowBusy})
 			return
 		}

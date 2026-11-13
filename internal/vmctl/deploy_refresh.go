@@ -140,7 +140,14 @@ func (m httpGuestMarker) clear(ctx context.Context, own VMOwnership) {
 		log.Printf("vmctl: deploy refresh: clear planned-restart marker on %s: %v (it expires on its own)", own.VMID, err)
 		return
 	}
-	_ = resp.Body.Close()
+	defer resp.Body.Close()
+	detail := strings.TrimSpace(string(mustReadLimited(resp.Body, 4<<10)))
+	switch {
+	case resp.StatusCode < 200 || resp.StatusCode > 299:
+		log.Printf("vmctl: deploy refresh: clear planned-restart marker on %s: guest answered %d: %s (it expires on its own)", own.VMID, resp.StatusCode, detail)
+	case strings.Contains(detail, `"kept"`):
+		log.Printf("vmctl: deploy refresh: clear planned-restart marker on %s: the guest kept a marker of its own: %s", own.VMID, detail)
+	}
 }
 
 // guestRefusalHoldsNewWork reads holds_new_work from a guest's busy refusal.

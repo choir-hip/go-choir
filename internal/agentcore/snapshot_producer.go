@@ -127,10 +127,11 @@ var (
 // WAL released, the upload workers stopped, the attempt guard cleared).
 //
 // The arithmetic. The host gives the planned-restart request its caller's
-// budget: 20 s on the deploy refresh (httpGuestMarker's client) and 10 s on
-// the operator and owner restart (restartMarkTimeout, owner_update.go; the
+// budget: 20 s on the deploy refresh and the owner's update-now
+// (httpGuestMarker's client) and 10 s on the operator's restart in place
+// (restartMarkTimeout, owner_update.go, applies to RestartInPlace only; the
 // same context cancels the request), and a timeout there is a markerless,
-// crash-booting refresh for the operator's verb. After this wait the handler
+// crash-booting refresh for that verb. After this wait the handler
 // still drains queued telemetry (milliseconds; its own deadline is 10 s,
 // telemetry_batching.go), acks paused capsules, writes and fsyncs the marker
 // and syncs the filesystems. So this wait is the one cost this change adds,
@@ -653,9 +654,17 @@ func checkpointContext(ctx context.Context) (context.Context, context.CancelFunc
 // planned kill is not a crash. But the marker does not say whether a capture
 // was in flight (that would need a marker format change, not made here), so
 // the refund is the simple rule: a planned restart cannot wipe real crashes
-// or reopen a closed producer, and a crashing capture cannot hide behind
-// planned restarts for more than one attempt each. A crash boot keeps the
-// count.
+// or reopen a closed producer. A crash boot keeps the count.
+//
+// An unbounded residual, named: a capture that crashes the guest is refunded
+// one attempt by each planned boot between its crashes (crash: count 1; a
+// deploy refresh and its planned boot: back to 0; the next due capture
+// crashes again), so such a capture can loop indefinitely behind a steady
+// stream of planned restarts. The structural remedy is a follow-up, not built
+// here: the guest's own planned-kill paths (platform_update and the
+// self-development apply, which do not go through the endpoint) cancel the
+// capture the way the endpoint does, after which a planned kill never leaves
+// a counted start behind and no refund is needed at all.
 func (rt *Runtime) settleSnapshotAttemptAtBoot() {
 	if rt == nil {
 		return

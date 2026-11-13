@@ -190,6 +190,21 @@ func (rt *Runtime) clearHostPlannedRestartMarker(storePath string) error {
 // request restarts nothing, but an earlier request's durable marker may still
 // be followed by the host's kill, so the hold is kept while any marker is on
 // disk (or its presence cannot be read).
+// clearHostPlatformRefreshMarker is the host's withdrawal: it removes the
+// marker only if it is the host's own, atomically with the check (see the
+// marker's owner). A marker the guest wrote for itself is left in place and
+// its reason returned; the telemetry hold stays with it.
+func (rt *Runtime) clearHostPlatformRefreshMarker(storePath string) (keptReason string, err error) {
+	rt.hostRestartTelemetryMu.Lock()
+	defer rt.hostRestartTelemetryMu.Unlock()
+	kept, err := clearPlannedRestartMarkerIfHosts(storePath)
+	if err != nil || kept != "" {
+		return kept, err
+	}
+	rt.releaseHostRestartTelemetryLocked()
+	return "", nil
+}
+
 func (rt *Runtime) releaseHostRestartTelemetryIfNoMarker(storePath string) {
 	if rt == nil {
 		return
@@ -200,7 +215,7 @@ func (rt *Runtime) releaseHostRestartTelemetryIfNoMarker(storePath string) {
 }
 
 func (rt *Runtime) releaseHostRestartTelemetryIfNoMarkerLocked(storePath string) {
-	if _, err := os.Lstat(PlannedRestartMarkerPath(storePath)); errors.Is(err, os.ErrNotExist) {
+	if !plannedRestartMarkerExists(storePath) {
 		rt.releaseHostRestartTelemetryLocked()
 	}
 }
