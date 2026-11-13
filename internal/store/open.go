@@ -449,6 +449,7 @@ func (s *Store) Reopen(path string) error {
 	// (docs/problems/selfdev-operations-replay-not-equivalent-2026-10-23.md).
 	if s.projectionTape != nil {
 		live.ogStore.SetMutationInterceptor(s.projectionTape.interceptOG)
+		s.startTapeWriteSummary() // Close stopped it; no-op if running
 	}
 	// Open bound the adopted store's write validator to live, and *live is
 	// zeroed below, so the vocabulary fence would read a zeroed vocabCutover
@@ -532,6 +533,7 @@ func (s *Store) Close() error {
 		_, _ = conn.ExecContext(pinCtx, `PRAGMA wal_checkpoint(TRUNCATE)`)
 		pinned = conn
 	}
+	s.stopTapeWriteSummary() // reads counters only; a failed close above keeps it running
 	s.closedOK = true
 	var err error
 	if closeErr := s.closeDepositUpcastLedger(); closeErr != nil {

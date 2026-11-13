@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/hostlink"
@@ -25,6 +26,10 @@ type HTTPClient struct {
 	baseURL    *url.URL
 	http       *http.Client
 	capability CapabilitySource
+
+	// calls counts requests sent to corpusd by endpoint (CallCounts).
+	callsMu sync.Mutex
+	calls   map[string]int64
 }
 
 func NewHTTPClient(baseURL string, client *http.Client, capability CapabilitySource, allowInsecureLoopback bool) (*HTTPClient, error) {
@@ -45,6 +50,38 @@ func NewHTTPClient(baseURL string, client *http.Client, capability CapabilitySou
 	}
 	return &HTTPClient{baseURL: parsed, http: client, capability: capability}, nil
 }
+
+// CallCounts is the number of requests this client has sent to corpusd, by the
+// last segment of the endpoint path ("head", "pin", "append", ...). It counts
+// every attempt, successful or not. Observability only: nothing branches on it
+// (storage solutions 2, S5: the calls a tape event costs).
+func (c *HTTPClient) CallCounts() map[string]int64 {
+	if c == nil {
+		return nil
+	}
+	c.callsMu.Lock()
+	defer c.callsMu.Unlock()
+	out := make(map[string]int64, len(c.calls))
+	for k, v := range c.calls {
+		out[k] = v
+	}
+	return out
+}
+
+func (c *HTTPClient) countCall(path string) {
+	path, _, _ = strings.Cut(path, "?")
+	label := path[strings.LastIndexByte(path, '/')+1:]
+	if label == "" {
+		label = "root"
+	}
+	c.callsMu.Lock()
+	if c.calls == nil {
+		c.calls = map[string]int64{}
+	}
+	c.calls[label]++
+	c.callsMu.Unlock()
+}
+
 func (c *HTTPClient) BaseURL() string {
 	if c == nil || c.baseURL == nil {
 		return ""
@@ -339,6 +376,7 @@ func (c *HTTPClient) do(ctx context.Context, method, path string, body any, resp
 // payload envelopes to be read in full. A response that crosses that bound is
 // rejected before JSON decoding, so truncation cannot masquerade as valid data.
 func (c *HTTPClient) doWithResponseLimit(ctx context.Context, method, path string, body any, response any, maxResponseBytes int) (int, error) {
+	c.countCall(path)
 	var encoded []byte
 	if body != nil {
 		var err error
