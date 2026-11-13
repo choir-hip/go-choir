@@ -157,6 +157,13 @@ type gcCandidate struct {
 	// cutoff, when set, is this candidate's own mtime cutoff (a file-CAS
 	// chunk's upload grace); zero means the run's cutoff.
 	cutoff time.Time
+	// rootGen is the store's snapshot-root generation read before this
+	// candidate's computer's live set; rootGenSet says it was read.
+	rootGen    uint64
+	rootGenSet bool
+	// destroyedPurge marks an item of a destroyed computer's purge: its
+	// snapshot roots are being deleted with it, so they protect nothing.
+	destroyedPurge bool
 }
 
 // fileCASChunkUploadGrace is how long a chunk no root names is kept from its
@@ -661,6 +668,10 @@ func (s *Service) classifyFileCASChunks(ctx context.Context, cutoff time.Time, r
 	var out []gcCandidate
 	var warnings []string
 	rootless := 0
+	// Read before any live root: a root that commits after this read bumps the
+	// generation, so an unlink that finds it unchanged knows no root was
+	// committed since the live sets below were read.
+	rootGen := s.store.snapshotRootGen.Load()
 	// Roots stay live by the run's cutoff; an unnamed chunk waits only for
 	// the upload grace (or the run's, when an operator asks for less).
 	chunkCutoff := time.Now().UTC().Add(-fileCASChunkUploadGrace)
@@ -715,6 +726,9 @@ func (s *Service) classifyFileCASChunks(ctx context.Context, cutoff time.Time, r
 		if walkErr != nil && !os.IsNotExist(walkErr) {
 			return nil, warnings, walkErr
 		}
+	}
+	for i := range out {
+		out[i].rootGen, out[i].rootGenSet = rootGen, true
 	}
 	if rootless > 0 {
 		warnings = append(warnings, fmt.Sprintf("file-cas-chunks: %d computers have chunks but no recorded root; their chunks are kept", rootless))
@@ -833,7 +847,7 @@ func (s *Service) deleteArtifactCandidates(ctx context.Context, started time.Tim
 				_ = flush()
 				return err
 			}
-			op, size, unlinkErr := s.unlinkIfStillUnreachable(c, cutoff)
+			op, size, unlinkErr := s.unlinkIfStillUnreachable(ctx, c, cutoff)
 			rec := artifactGCLogRecord{Op: op, Namespace: c.ns, Path: c.rel, Bytes: size}
 			nsRep := report.Namespaces[c.ns]
 			switch op {
@@ -856,10 +870,12 @@ func (s *Service) deleteArtifactCandidates(ctx context.Context, started time.Tim
 	return nil
 }
 
-// unlinkIfStillUnreachable re-checks a candidate under the CAS reuse lock and
+// unlinkIfStillUnreachable (the artifact collector's and the tape sweep's
+// unlink of one candidate; the destroyed purge also removes directories in
+// tape_purge.go) re-checks a candidate under the CAS reuse lock and
 // removes it only if it is still a regular file older than the cutoff. A
 // writer that reused (refreshed) it since classification wins.
-func (s *Service) unlinkIfStillUnreachable(c gcCandidate, cutoff time.Time) (string, int64, error) {
+func (s *Service) unlinkIfStillUnreachable(ctx context.Context, c gcCandidate, cutoff time.Time) (string, int64, error) {
 	if !c.cutoff.IsZero() {
 		cutoff = c.cutoff
 	}
@@ -876,13 +892,19 @@ func (s *Service) unlinkIfStillUnreachable(c gcCandidate, cutoff time.Time) (str
 		return "kept_refreshed", info.Size(), nil
 	}
 	// The sweep's live set was read before this lock was taken. A snapshot
-	// root registered since (snapshot_roots.go registers under the shared
-	// lock, so it is committed or not started now) names this chunk live
-	// whatever its mtime. An unreadable answer keeps the chunk.
-	if live, err := s.chunkNamedByLiveSnapshotRoot(c.rel); err != nil {
-		return "error", 0, err
-	} else if live {
-		return "kept_refreshed", info.Size(), nil
+	// root registered since names this chunk live whatever its mtime: either
+	// its registration is still pending, or it committed and bumped the root
+	// generation, and the live roots are asked (snapshot_roots.go,
+	// chunkProtectedBySnapshotRoot). The destroyed-computer purge skips this:
+	// it deletes the computer's roots with its chunks, behind a tombstone and
+	// an archive, and registration refuses a tombstoned computer. An
+	// unreadable answer keeps the chunk.
+	if !c.destroyedPurge {
+		if live, err := s.chunkProtectedBySnapshotRoot(ctx, c); err != nil {
+			return "error", 0, err
+		} else if live {
+			return "kept_refreshed", info.Size(), nil
+		}
 	}
 	if err := os.Remove(c.path); err != nil {
 		if os.IsNotExist(err) {

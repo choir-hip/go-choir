@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -63,11 +64,14 @@ type snapshotRootRequest struct {
 	Chunks       []string `json:"chunks"`
 }
 
-// RecordSnapshotRoot declares a snapshot's chunks and keeps only the newest
+// recordSnapshotRoot declares a snapshot's chunks and keeps only the newest
 // snapshotRootRetention rows (by head sequence, then time) for the computer,
 // or largeSnapshotRetention when the declared snapshot is large.
-// It is idempotent per (computer, root).
-func (s *Store) RecordSnapshotRoot(ctx context.Context, computerID, root string, headSequence int64, chunks []string) error {
+// It is idempotent per (computer, root). It does not look at the chunks and
+// is unexported on purpose: production registers through
+// Service.RecordVerifiedSnapshotRoot. It bumps snapshotRootGen after the
+// commit.
+func (s *Store) recordSnapshotRoot(ctx context.Context, computerID, root string, headSequence int64, chunks []string) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("snapshot root: invalid declaration")
 	}
@@ -95,7 +99,53 @@ func (s *Store) RecordSnapshotRoot(ctx context.Context, computerID, root string,
 		computerID, computerID, retention); err != nil {
 		return fmt.Errorf("snapshot root: prune: %w", err)
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.snapshotRootGen.Add(1)
+	return nil
+}
+
+// snapshotRootCommitTimeout bounds the database part of a registration.
+const snapshotRootCommitTimeout = 30 * time.Second
+
+// snapshotChunkKey names one chunk of one computer, as the pending set keys it.
+func snapshotChunkKey(computerID, digest string) string { return computerID + "/" + digest }
+
+// snapshotRootPending is the set of chunks whose snapshot root has been
+// verified but not yet committed (and its generation bumped).
+type snapshotRootPending struct {
+	mu sync.Mutex
+	n  map[string]int
+}
+
+func (p *snapshotRootPending) add(keys []string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.n == nil {
+		p.n = make(map[string]int)
+	}
+	for _, k := range keys {
+		p.n[k]++
+	}
+}
+
+func (p *snapshotRootPending) remove(keys []string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, k := range keys {
+		if p.n[k] <= 1 {
+			delete(p.n, k)
+		} else {
+			p.n[k]--
+		}
+	}
+}
+
+func (p *snapshotRootPending) has(key string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.n[key] > 0
 }
 
 // ErrSnapshotChunkMissing is returned (wrapped) when a snapshot root names a
@@ -107,13 +157,27 @@ var ErrSnapshotChunkMissing = errors.New("snapshot root names a chunk the host d
 // (with ErrSnapshotChunkMissing) when it does not; a refusal records and
 // prunes nothing.
 //
-// It holds casReuseMu shared from the first stat to the commit. The artifact
-// collector unlinks a chunk only under the exclusive lock, and re-checks the
-// live snapshot roots inside it (unlinkIfStillUnreachable), so an unlink falls
-// either before the check (the chunk is missing and the root is refused) or
-// after the commit (the chunk is named by a live root and is kept). Nothing
-// falls between. The shared lock is the one every chunk writer already takes,
-// so registrations and uploads do not exclude each other.
+// A computer holding a deletion tombstone is refused (ErrComputerTapeDeleted):
+// its tree is being or has been purged, and a new root would pin chunks the
+// purge removes. The tombstone set is an in-memory cache.
+//
+// The invariant against the artifact collector, whose only chunk unlink for a
+// live computer is unlinkIfStillUnreachable under the exclusive casReuseMu:
+//
+//  1. Under the shared lock, every named chunk is stat'ed, and the digests
+//     are added to the in-memory pending set before the lock is released. An
+//     unlink serialised before this section removed the chunk, so the stat
+//     fails and the root is refused; an unlink serialised after it sees the
+//     chunk in the pending set and keeps it.
+//  2. The database commit runs after the lock is released (a slow commit
+//     must not queue event appends behind a waiting collector Lock; it is
+//     bounded by snapshotRootCommitTimeout). After it commits, the root
+//     generation is bumped, and only then is the pending set cleared. An
+//     unlink after the clear sees a changed generation (or a live-root
+//     query) and keeps the chunk through the committed root.
+//  3. A refused or failed registration clears its pending digests and
+//     records nothing; a failed commit leaves the chunks unrooted and
+//     subject to the grace as before.
 func (s *Service) RecordVerifiedSnapshotRoot(ctx context.Context, computerID, root string, headSequence int64, chunks []string) (string, error) {
 	if s == nil || s.store == nil {
 		return "", fmt.Errorf("snapshot root: store unavailable")
@@ -121,6 +185,26 @@ func (s *Service) RecordVerifiedSnapshotRoot(ctx context.Context, computerID, ro
 	if err := validateSnapshotRootDeclaration(computerID, root, headSequence, chunks); err != nil {
 		return "", err
 	}
+	if err := s.store.refuseTombstonedTape(ctx, computerID); err != nil {
+		return "", err
+	}
+	keys := make([]string, 0, len(chunks))
+	if missing, err := s.verifyAndPinSnapshotChunks(ctx, computerID, chunks, &keys); err != nil {
+		return missing, err
+	}
+	defer s.store.snapshotPending.remove(keys)
+	if hook := s.snapshotRootAfterVerify; hook != nil {
+		hook()
+	}
+	commitCtx, cancel := context.WithTimeout(ctx, snapshotRootCommitTimeout)
+	defer cancel()
+	return "", s.store.recordSnapshotRoot(commitCtx, computerID, root, headSequence, chunks)
+}
+
+// verifyAndPinSnapshotChunks stats every distinct chunk under the shared CAS
+// reuse lock and, if all exist, adds them to the pending set before the lock
+// is released. keys receives the pinned keys (nil on failure).
+func (s *Service) verifyAndPinSnapshotChunks(ctx context.Context, computerID string, chunks []string, keys *[]string) (string, error) {
 	s.store.casReuseMu.RLock()
 	defer s.store.casReuseMu.RUnlock()
 	seen := make(map[string]struct{}, len(chunks))
@@ -147,28 +231,52 @@ func (s *Service) RecordVerifiedSnapshotRoot(ctx context.Context, computerID, ro
 		if err != nil {
 			return "", fmt.Errorf("snapshot root: stat chunk: %w", err)
 		}
+		*keys = append(*keys, snapshotChunkKey(computerID, digest))
 	}
-	if hook := s.snapshotRootAfterVerify; hook != nil {
-		hook()
-	}
-	return "", s.store.RecordSnapshotRoot(ctx, computerID, root, headSequence, chunks)
+	s.store.snapshotPending.add(*keys)
+	return "", nil
 }
 
-// chunkNamedByLiveSnapshotRoot reports whether the chunk at rel
-// (sha256/file-cas-chunks/<computer>/<digest>) is named by one of the
-// computer's live snapshot roots. Any other path is not a chunk and is not
-// named. The caller holds casReuseMu exclusively.
-func (s *Service) chunkNamedByLiveSnapshotRoot(rel string) (bool, error) {
+// parseFileCASChunkRel splits sha256/file-cas-chunks/<computer>/<digest>.
+func parseFileCASChunkRel(rel string) (computerID, digest string, ok bool) {
 	parts := strings.Split(filepath.ToSlash(rel), "/")
 	if len(parts) != 4 || parts[0] != "sha256" || parts[1] != "file-cas-chunks" || !safeFileCASComponent(parts[2]) || !validFileCASDigest(parts[3]) {
+		return "", "", false
+	}
+	return parts[2], parts[3], true
+}
+
+// chunkProtectedBySnapshotRoot reports whether the chunk at rel must survive
+// an unlink the collector is about to make. The caller holds casReuseMu
+// exclusively. In order:
+//
+//   - a chunk of a registration that verified but has not finished (pending
+//     set) is kept;
+//   - if the candidate carries the root generation read before the sweep read
+//     its live roots, and no root has committed since, the sweep's live set
+//     already covered every root, and no query is needed;
+//   - otherwise the computer's newest snapshot roots are asked for the digest
+//     (the query is bound to ctx and a deadline; any error keeps the chunk).
+//
+// Any path that is not a file-CAS chunk is not protected.
+func (s *Service) chunkProtectedBySnapshotRoot(ctx context.Context, c gcCandidate) (bool, error) {
+	computerID, digest, ok := parseFileCASChunkRel(c.rel)
+	if !ok {
 		return false, nil
 	}
-	computerID, digest := parts[2], parts[3]
+	if s.store.snapshotPending.has(snapshotChunkKey(computerID, digest)) {
+		return true, nil
+	}
+	if c.rootGenSet && s.store.snapshotRootGen.Load() == c.rootGen {
+		return false, nil
+	}
 	s.snapshotRootRecheckQueries.Add(1)
+	qctx, cancel := context.WithTimeout(ctx, snapshotRootCommitTimeout)
+	defer cancel()
 	var n int
 	// Digests are 64 hex characters, so the quoted needle has no pattern
 	// characters and matches only a whole JSON element.
-	err := s.store.db.QueryRow(`SELECT COUNT(*) FROM (SELECT root, chunks FROM computer_snapshot_roots WHERE computer_id=? ORDER BY head_sequence DESC, created_at DESC, root DESC LIMIT ?) t WHERE chunks LIKE ?`,
+	err := s.store.db.QueryRowContext(qctx, `SELECT COUNT(*) FROM (SELECT root, chunks FROM computer_snapshot_roots WHERE computer_id=? ORDER BY head_sequence DESC, created_at DESC, root DESC LIMIT ?) t WHERE chunks LIKE ?`,
 		computerID, snapshotRootRetention, `%"`+digest+`"%`).Scan(&n)
 	if err != nil {
 		return false, fmt.Errorf("snapshot root: live check: %w", err)
@@ -242,6 +350,10 @@ func (h *Handler) HandleSnapshotRoot(w http.ResponseWriter, r *http.Request) {
 	missing, err := h.service.RecordVerifiedSnapshotRoot(r.Context(), strings.TrimSpace(input.ComputerID), input.Root, input.HeadSequence, input.Chunks)
 	if errors.Is(err, ErrSnapshotChunkMissing) {
 		writeJSON(w, http.StatusConflict, apiError{Error: "snapshot root names chunk " + missing + ", which the host does not hold; take the snapshot again"})
+		return
+	}
+	if errors.Is(err, ErrComputerTapeDeleted) {
+		writeJSON(w, http.StatusConflict, apiError{Error: "snapshot root refused: " + err.Error()})
 		return
 	}
 	if err != nil {

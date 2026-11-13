@@ -570,7 +570,7 @@ func TestArtifactGCFileChunksWaitTheUploadGraceNotTheWeek(t *testing.T) {
 	fileRoot("computer-g", time.Now().Add(-2*24*time.Hour), history)
 	fileRoot("computer-g", time.Now().Add(-time.Minute), latest)
 	snap, snapPath := chunk("computer-g", "live snapshot", 30*time.Hour)
-	if err := f.store.RecordSnapshotRoot(f.ctx, "computer-g", gcDigest("snapshot root"), 7, []string{snap}); err != nil {
+	if err := f.store.recordSnapshotRoot(f.ctx, "computer-g", gcDigest("snapshot root"), 7, []string{snap}); err != nil {
 		t.Fatal(err)
 	}
 	_, discardedPath := chunk("computer-g", "discarded attempt", 30*time.Hour)

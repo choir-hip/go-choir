@@ -130,8 +130,10 @@ func (h HTTPChunks) RegisterSnapshotRoot(ctx context.Context, root string, headS
 		var apiErr struct {
 			Error string `json:"error"`
 		}
-		_ = json.Unmarshal(reason, &apiErr)
-		return fmt.Errorf("%w: %s", ErrSnapshotChunksMissing, strings.TrimSpace(apiErr.Error))
+		if _ = json.Unmarshal(reason, &apiErr); strings.TrimSpace(apiErr.Error) != "" {
+			return fmt.Errorf("%w: %s", ErrSnapshotChunkMissing, strings.TrimSpace(apiErr.Error))
+		}
+		return fmt.Errorf("%w (the host answered 409 without a reason)", ErrSnapshotChunkMissing)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("status %d", resp.StatusCode)
@@ -164,6 +166,6 @@ func (h HTTPChunks) GetChunk(ctx context.Context, digest string) ([]byte, error)
 	return data, nil
 }
 
-// ErrSnapshotChunksMissing is the host's refusal of a snapshot root whose
+// ErrSnapshotChunkMissing is the host's refusal of a snapshot root whose
 // chunks it does not hold.
-var ErrSnapshotChunksMissing = errors.New("snapshot root refused: the host does not hold a chunk it names")
+var ErrSnapshotChunkMissing = errors.New("snapshot root refused: the host does not hold a chunk it names")

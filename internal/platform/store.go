@@ -30,6 +30,12 @@ type Store struct {
 	// and unlink one candidate, so a reused object is never deleted between
 	// the sweep's live-set read and the writer's reference commit.
 	casReuseMu sync.RWMutex
+	// snapshotRootGen counts committed snapshot roots in this process; the
+	// collector compares it with the value it read before classifying
+	// (snapshot_roots.go). snapshotPending holds the chunks of registrations
+	// that verified and have not finished.
+	snapshotRootGen atomic.Uint64
+	snapshotPending snapshotRootPending
 	// retrieval times and counts every Store B retrieval call (corpusd
 	// /health "retrieval").
 	retrieval *RetrievalMetrics

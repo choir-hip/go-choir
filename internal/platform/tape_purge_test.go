@@ -132,7 +132,7 @@ func (f *tapeFixture) ownRows(id string) {
 	// The root names a chunk file the computer really holds (ownTree's first),
 	// as a real snapshot root does; a dummy digest hid the live-root recheck.
 	chunk := sha256.Sum256([]byte(fmt.Sprintf("sealed chunk %s %d", id, 0)))
-	if err := f.store.RecordSnapshotRoot(f.ctx, id, platformTestDigest('b'), 1, []string{hex.EncodeToString(chunk[:])}); err != nil {
+	if err := f.store.recordSnapshotRoot(f.ctx, id, platformTestDigest('b'), 1, []string{hex.EncodeToString(chunk[:])}); err != nil {
 		f.t.Fatal(err)
 	}
 	if _, err := f.store.db.Exec(`INSERT INTO computer_replay_watermarks (computer_id, watermark_sequence, base_ref, updated_at) VALUES (?,?,?,?)`, id, 1, "base", now); err != nil {

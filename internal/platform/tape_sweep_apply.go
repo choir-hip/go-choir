@@ -631,7 +631,7 @@ func (s *Service) deleteTapeItems(ctx context.Context, run *tapeSweepApplyRun, i
 				hook(it)
 			}
 			path := filepath.Join(s.artifactsRoot, filepath.FromSlash(it.Path))
-			op, size, uerr := s.unlinkIfStillUnreachable(gcCandidate{ns: it.Namespace, rel: it.Path, path: path, size: it.Size}, run.cutoff)
+			op, size, uerr := s.unlinkIfStillUnreachable(ctx, gcCandidate{ns: it.Namespace, rel: it.Path, path: path, size: it.Size, destroyedPurge: isPurgeNamespace(it.Namespace)}, run.cutoff)
 			errText := ""
 			switch op {
 			case "deleted":
