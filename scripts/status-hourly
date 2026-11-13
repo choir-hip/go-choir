@@ -42,8 +42,12 @@ def build_line(paper, storage, problems):
     parts = []
     if paper:
         s = paper["shares"]
-        parts.append("Paper: %s swe-2-flash, %s free, %s Haiku. Bedrock $%.2f/20."
-                     % (share(s["devin"]), share(s["free"]), share(s["haiku"]), paper["bedrock"]["today_usd"]))
+        luna = " %s luna," % share(s["luna"]) if s.get("luna") else ""
+        parts.append("Paper: %s swe-2-flash,%s %s free, %s Haiku. Bedrock $%.2f/20."
+                     % (share(s["devin"]), luna, share(s["free"]), share(s["haiku"]), paper["bedrock"]["today_usd"]))
+        pc = paper.get("pacer")
+        if pc:
+            parts.append("Shed %.0f%%." % (100 * pc["shed_share"]))
     if storage:
         d = storage["drain_gib_per_h"]["6h"]
         free = "n/a" if storage["free_mib"] is None else "%.0f" % (storage["free_mib"] / 1024.0)
