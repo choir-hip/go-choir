@@ -305,6 +305,9 @@ type tapeSweepState struct {
 	// refCompactAfter is the chunk count that triggers compaction; 0 means
 	// defaultTapeRefCompactAfter. Test-only.
 	refCompactAfter int
+	// refCompactMaxEvents caps a merged chunk's rows; 0 means
+	// defaultTapeRefCompactMaxEvents. Test-only.
+	refCompactMaxEvents int
 	// afterRefChunk is a test hook run after each reference chunk is
 	// persisted; an error stands in for a restart at that point.
 	afterRefChunk func(computerID string, to uint64) error
