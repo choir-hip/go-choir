@@ -2,6 +2,7 @@ package tapestore
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,9 +27,10 @@ type SegLoc struct {
 // entries of the open segment, so a join over 256 buckets holds about 1/256
 // of the records at a time. Read verifies a located record completely.
 //
-// A view never writes. It is a snapshot of the file list: a segment created
-// after OpenView is not seen, and the open segment is rescanned by every
-// Bucket call, so records appended later are. It is not safe for concurrent
+// A view never writes. Bucket and SegmentLocs use the file list as of OpenView:
+// a segment created after it is not seen, and the open segment is rescanned
+// by every Bucket call, so records appended later are. ReadObject re-lists
+// when a read finds no intact copy (see there). It is not safe for concurrent
 // use.
 type SegmentView struct {
 	r        *Reader
@@ -39,6 +41,8 @@ type SegmentView struct {
 
 	hint   int    // index into segs of the last ReadObject hit
 	probes uint64 // segment lookups made by ReadObject
+
+	reloads, fallbacks uint64
 }
 
 // OpenView lists the computer's segments and validates every sealed index
@@ -89,20 +93,39 @@ func (v *SegmentView) load() error {
 // segment index consulted or open segment rescanned.
 func (v *SegmentView) Probes() uint64 { return v.probes }
 
+// Reloads is the number of times a read found the directory changed and
+// reloaded the view; Fallbacks the number of reads the per-call Reader path
+// answered because the view could not (a reload failed, or a segment file the
+// view listed was gone).
+func (v *SegmentView) Reloads() uint64   { return v.reloads }
+func (v *SegmentView) Fallbacks() uint64 { return v.fallbacks }
+
 // ReadObject is Reader.Read for one object of this computer: the same
 // segment-then-legacy order, digest check, counters and legacy fallback on a
 // segment error, but the segments come from the view's listing and validated
-// indexes, probed from the segment of the last hit. Events are appended in
-// order, so a walk in order finds the next one in the same or the next
-// segment. A miss there falls back to every segment newest first, so an
-// object any segment holds is found. Where a digest sits in two segments the
-// copy found first is returned (both are checked against the digest and the
-// record crc), so a damaged copy in a newer segment than the hit is not
-// looked at. When every segment misses, the directory is listed again and,
-// if it changed (a segment created or sealed since the view loaded), the
-// view reloads and probes again, so a walk that runs while the tape grows
-// sees what Reader.Read would. If that reload fails, the per-call Reader
-// path answers. A view is not safe for concurrent use.
+// indexes, probed from the segment of the last hit and the next one, then
+// every segment newest first. Events are appended in order, so a walk in
+// order finds the next one in the same or the next segment.
+//
+// The outcome never depends on the hint or the walk order. For a digest, the
+// view returns the verified bytes if any segment holds an intact copy;
+// otherwise the error of the newest damaged copy (ErrCorrupt, as
+// Reader.Read); otherwise absent, and then the legacy file as Reader.Read
+// does. Reader.Read decides by the newest copy alone, which would need a
+// probe of every newer segment on every read. The two differ in one case: a
+// digest stored twice, the newer copy damaged and an older copy intact.
+// Reader.Read reports the damage; the view returns the intact copy, checked
+// against the digest and the record crc, so the bytes are the object's.
+// Damage with no intact copy anywhere still stops the walk.
+//
+// When no intact copy is found, the directory is listed again; if it changed
+// (a segment created or sealed since the view loaded) the view reloads and
+// probes again, so a walk that runs while the tape grows sees what
+// Reader.Read would. A reload that fails, or an error that is not damage (a
+// segment or index file the view listed is gone), is answered by
+// Reader.readSegment on a fresh listing, exactly as Reader.Read answers. A
+// view holds no files open and needs no Close. It is not safe for concurrent
+// use.
 func (v *SegmentView) ReadObject(ns NS, digest string) ([]byte, Source, error) {
 	if !ns.valid() {
 		return nil, 0, fmt.Errorf("tapestore: invalid namespace %d", uint8(ns))
@@ -113,48 +136,90 @@ func (v *SegmentView) ReadObject(ns NS, digest string) ([]byte, Source, error) {
 	return v.r.readWith(v.computer, ns, digest, v.lookup)
 }
 
+// isDamage reports a segment error that is a verdict on the store (as
+// opposed to a path error from a stale listing).
+func isDamage(err error) bool {
+	return errors.Is(err, ErrCorrupt) || errors.Is(err, ErrUnsupportedVersion) || errors.Is(err, ErrDigestMismatch)
+}
+
 func (v *SegmentView) lookup(ns NS, digest string) ([]byte, bool, error) {
 	var want [32]byte
 	if err := decodeHex32(&want, digest); err != nil {
 		return nil, false, err
 	}
 	for pass := 0; pass < 2; pass++ {
-		first, second := v.hint, v.hint+1
-		for _, i := range [2]int{first, second} {
-			if i >= len(v.segs) {
-				continue
-			}
-			if body, found, err := v.probe(i, ns, want); err != nil || found {
-				if found {
-					v.hint = i
-				}
-				return body, found, err
-			}
+		body, found, err := v.search(ns, want)
+		if found {
+			return body, true, nil
 		}
-		for i := len(v.segs) - 1; i >= 0; i-- {
-			if i == first || i == second {
-				continue
-			}
-			if body, found, err := v.probe(i, ns, want); err != nil || found {
-				if found {
-					v.hint = i
-				}
-				return body, found, err
-			}
+		if err != nil && !isDamage(err) {
+			return v.fallback(ns, digest)
 		}
 		if pass == 1 {
-			break
-		}
-		// Every segment missed: has the tape grown since the view loaded?
-		_, now, err := v.r.list(v.computer)
-		if err != nil || sameSegFiles(now, v.segs) {
 			return nil, false, err
 		}
-		if err := v.load(); err != nil {
-			return v.r.readSegment(v.computer, ns, digest)
+		// No intact copy: has the tape grown since the view loaded?
+		_, now, lerr := v.r.list(v.computer)
+		if lerr != nil {
+			return nil, false, lerr
 		}
+		if sameSegFiles(now, v.segs) {
+			return nil, false, err
+		}
+		if v.load() != nil {
+			return v.fallback(ns, digest)
+		}
+		v.reloads++
 	}
 	return nil, false, nil
+}
+
+// fallback answers one read with the per-call Reader path, and refreshes the
+// view if it can.
+func (v *SegmentView) fallback(ns NS, digest string) ([]byte, bool, error) {
+	v.fallbacks++
+	_ = v.load()
+	return v.r.readSegment(v.computer, ns, digest)
+}
+
+// search probes the hinted segment and the next, then every segment newest
+// first. An intact copy is returned at once. Damage is remembered and the
+// search goes on; with no intact copy it returns the newest damaged
+// segment's error. A path error is returned at once.
+func (v *SegmentView) search(ns NS, want [32]byte) ([]byte, bool, error) {
+	var damage error
+	damageAt := -1
+	try := func(i int) ([]byte, bool, error, bool) {
+		body, found, err := v.probe(i, ns, want)
+		switch {
+		case found:
+			v.hint = i
+			return body, true, nil, true
+		case err != nil && !isDamage(err):
+			return nil, false, err, true
+		case err != nil && i > damageAt:
+			damage, damageAt = err, i
+		}
+		return nil, false, nil, false
+	}
+	first := v.hint
+	for i := first; i <= first+1; i++ {
+		if i >= len(v.segs) {
+			continue
+		}
+		if body, found, err, done := try(i); done {
+			return body, found, err
+		}
+	}
+	for i := len(v.segs) - 1; i >= 0; i-- {
+		if i == first || i == first+1 {
+			continue
+		}
+		if body, found, err, done := try(i); done {
+			return body, found, err
+		}
+	}
+	return nil, false, damage
 }
 
 func sameSegFiles(a, b []segFiles) bool {
