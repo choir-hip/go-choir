@@ -107,7 +107,11 @@ func TestWithdrawalWaitingBehindAMarkRespectsItsOwnContext(t *testing.T) {
 	capture := h.stubbornCapture(false)
 	done := h.startRun(&rt.snapshots)
 	waitEntered(t, capture)
-	go postPlannedRestartURL(t, &APIHandler{rt: rt}, "/internal/runtime/planned-restart?allow_busy=1", `{"target":"761d94c5"}`)
+	postFinished := make(chan struct{})
+	go func() {
+		defer close(postFinished)
+		postPlannedRestartURL(t, &APIHandler{rt: rt}, "/internal/runtime/planned-restart?allow_busy=1", `{"target":"761d94c5"}`)
+	}()
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		rt.snapshots.mu.Lock()
@@ -128,11 +132,18 @@ func TestWithdrawalWaitingBehindAMarkRespectsItsOwnContext(t *testing.T) {
 	rec := httptest.NewRecorder()
 	start := time.Now()
 	(&APIHandler{rt: rt}).HandleInternalPlannedRestart(rec, req)
-	if took := time.Since(start); took > time.Second || rec.Code == http.StatusOK {
-		t.Fatalf("the withdrawal took %s and answered %d, want a prompt refusal when its own context ends", took, rec.Code)
+	if took := time.Since(start); took > time.Second || rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("the withdrawal took %s and answered %d, want a prompt 503 when its own context ends", took, rec.Code)
 	}
 	close(capture.release)
 	waitResult(t, done)
+	// The mark finishes before the test returns, so it cannot write into a
+	// directory the test has already cleaned up.
+	select {
+	case <-postFinished:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the mark never finished")
+	}
 }
 
 // T1: the marker write fails after the ack (the marker path is a directory).
