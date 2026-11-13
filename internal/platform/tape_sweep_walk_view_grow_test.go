@@ -165,3 +165,16 @@ func TestX5WalkOfAComputerWhoseViewCannotOpenUsesPerEventReads(t *testing.T) {
 		}
 	}
 }
+
+// X6: the same fixtures walked with the digest index on (the fixtures are
+// shorter than tapeWalkIndexMinEvents, so the index is forced).
+func TestX6IndexedWalkGivesTheSameRows(t *testing.T) {
+	old := tapeWalkIndexMinEvents
+	tapeWalkIndexMinEvents = 0
+	defer func() { tapeWalkIndexMinEvents = old }()
+	t.Run("rows", TestX1WalkReadsThroughOneViewWithTheSameRows)
+	t.Run("corrupt stop", TestX2WalkStopsOnADamagedSegmentRecord)
+	t.Run("growth", TestX3WalkFindsEventsWrittenToSegmentsDuringTheWalk)
+	t.Run("damaged older duplicate", TestX4WalkDoesNotStopOnADamagedOlderDuplicate)
+	t.Run("view cannot open", TestX5WalkOfAComputerWhoseViewCannotOpenUsesPerEventReads)
+}

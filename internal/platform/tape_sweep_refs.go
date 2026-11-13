@@ -400,13 +400,19 @@ func (s *Service) walkTapeRefs(ctx context.Context, computerID string, head uint
 
 	size := s.tapeRefChunkEvents()
 	written := len(chunks)
+	// One view for every chunk of this walk: the digest index is built once.
+	var wv *tapeWalkView
+	if needReads && pos < head {
+		wv = s.openTapeWalkView(computerID, head-pos)
+		defer wv.finish(pos, head)
+	}
 	for pos < head {
 		end := min(head, pos+size)
 		local := map[uint64]struct{}{}
 		allReadable := needReads
 		anchor := ""
 		visited := uint64(0)
-		err := s.walkTapeChain(ctx, computerID, pos, end, needReads, func(row tapeChainRow) error {
+		err := s.walkTapeChainWith(ctx, wv, computerID, pos, end, needReads, func(row tapeChainRow) error {
 			visited++
 			for _, v := range tapeRowPrefixes(row) {
 				set.addPrefix(v)
