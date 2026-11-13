@@ -171,15 +171,17 @@ entered below as lapsed, not scored.
 | C58 | 2026-11-12T20:50Z | false | the write census: acknowledged run-memory writes are about 62% of events and are agent record; telemetry batches are 12% and pure ephemeral writers (in-flight marks, poll and wake pairs) 2 to 4%, so about 15% by count, under the 30% bar (docs/evidence/tape-write-census-2026-11-12.md) | 0.25 |
 | C60 | 2026-11-12T21:26Z | true | landed as cca135073 (CI success, deployed 20:53Z); the forecast unit's first run at 21:25Z exited 0 and printed the days-to-floor line (1.4 days, slope -12.2 GiB a day) and the 6-hour drain line. No fix commit. The first `scripts/land` run failed because the lead ran a copy of the script outside the worktree, not because of the lane | 0.12 |
 | C64 | 2026-11-13T04:25Z | false | both seats sent round 3 back (the planned-restart marker had more than one writer; a caller-gone branch cleared holds it did not own), so a fourth round is needed. I forecast acceptance from a narrowing finding list while each round was finding a new interleaving on the same marker file; the approach changed to one marker owner (review outputs, rounds 1 to 3) | 0.20 |
+| C62 | 2026-11-13T06:00Z | true | landed as 0d2f0bd46 with no fix commit; the paper booted it at 22:53Z and recorded a snapshot at 23:28Z (root a12c1997b1f7, 10,524 chunks); Node B's free space rose 6.7 GiB over the six hours to 05:35Z (`scripts/status-storage`: last 6 h -1.12 GiB/h falling). Not covered by the claim: the fix could not reach the paper by a planned refresh, and the owner allowed one host stop to deliver it. Settled two hours after the settle-by time | 0.16 |
+| C63 | 2026-11-13T06:00Z | partial | both seats accepted on round 3 (the second of the two allowed); landed as d6b88cd63, CI run 43373203542 success and deployed at 05:55Z on the first attempt, no fix commit; the first `scripts/land` run timed out in the agentcore race suite on a build VM loaded by four builders and the rerun passed. `scripts/chaos/run s2-corpusd-crash --execute` on d@e passed every check (18 writes read back, 94 new receipts, no gap, no duplicate), but d@e's log shows no re-send or catch-up line, so the lost-reply path was not exercised on staging: the kill did not land between a commit and its reply. Scored as true on the landing, with the convergence clause unproved | 0.25 |
 
 ### Scorecard
 
-Second form: 30 claims open, 14 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
+Second form: 28 claims open, 16 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
 false, 1 partial), 7 lapsed.
 
 | band | claims settled | came true |
 |---|---|---|
 | 0.0 to 0.3 | 0 | n/a |
-| 0.3 to 0.6 | 4 | 1 |
-| 0.6 to 0.8 | 10 | 7, and 1 partial |
+| 0.3 to 0.6 | 5 | 1, and 1 partial |
+| 0.6 to 0.8 | 11 | 8, and 1 partial |
 | 0.8 to 1.0 | 0 | n/a |
