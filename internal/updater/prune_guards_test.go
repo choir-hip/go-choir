@@ -120,19 +120,20 @@ func TestPruneFreesSpaceInPlaceWhenARenameFailsWithENOSPC(t *testing.T) {
 	if left := hiddenLeftovers(t, root); len(left) != 0 {
 		t.Fatalf("leftovers: %v", left)
 	}
-	// Total ENOSPC: nothing can be renamed. Everything is still freed, in place.
+	// Total ENOSPC: nothing can be renamed. Everything in incoming/ is still
+	// freed, in place.
 	u2, root2 := newPruneUpdater(t)
 	d2 := stageTestRelease(t, u2, root2, "r1", false)
 	setCurrent(t, root2, d2)
 	for i := 0; i < 3; i++ {
-		dir := filepath.Join(root2, "store", fmt.Sprintf("orphan-%d", i))
+		dir := filepath.Join(root2, "incoming", fmt.Sprintf(".stage-%d", i))
 		writeTestFile(t, filepath.Join(dir, "bin", "tool"), 5000)
 		ageBy(t, dir, old)
 	}
 	always := &renameFailer{enospcFor: func(string, int) bool { return true }}
 	report = Prune(fullVolumeOptions(root2, always))
-	entries, _ := os.ReadDir(filepath.Join(root2, "store"))
-	if len(entries) != 0 || report.StoreRemoved != 3 || report.Errors != 0 || report.BytesFreed < 3*5000 {
+	entries, _ := os.ReadDir(filepath.Join(root2, "incoming"))
+	if len(entries) != 0 || report.IncomingRemoved != 3 || report.Errors != 0 || report.BytesFreed < 3*5000 {
 		t.Fatalf("report = %+v entries = %v", report, entries)
 	}
 	if _, err := ReadCurrentManifest(root2); err != nil {

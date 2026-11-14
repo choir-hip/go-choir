@@ -154,6 +154,10 @@ type PruneReport struct {
 	Hidden int
 	// Errors is the deletions that failed.
 	Errors int
+	// ENOSPCSkipped is the store entries whose rename failed for want of space
+	// and that were left for a boot with room: a store object is never freed in
+	// place (it has no marker, and MaterializeClosure trusts an existing one).
+	ENOSPCSkipped int
 	// DeadJournals is the journals with no result that pin what they name.
 	DeadJournals int
 	// BudgetExhausted is set when the budget stopped the deleting.
@@ -173,13 +177,14 @@ func (r PruneReport) Line() string {
 	var b strings.Builder
 	b.WriteString("updater: prune")
 	if r.Skipped != "" {
-		b.WriteString(" skipped (" + r.Skipped + ")")
+		// A run that stood down measured nothing: no counters.
+		return fmt.Sprintf("updater: prune skipped (%s): elapsed=%s", r.Skipped, r.Elapsed.Round(time.Millisecond))
 	}
 	if r.BudgetExhausted {
 		b.WriteString(" budget exhausted, the next boot continues")
 	}
-	fmt.Fprintf(&b, ": releases_kept=%d entries_deleted=%d incoming=%d releases=%d gc_roots=%d store=%d bytes_freed=%d hidden_left=%d errors=%d dead_journals=%d elapsed=%s",
-		r.ReleasesKept, r.Entries(), r.IncomingRemoved, r.ReleasesRemoved, r.GCRootsRemoved, r.StoreRemoved, r.BytesFreed, r.Hidden, r.Errors, r.DeadJournals, r.Elapsed.Round(time.Millisecond))
+	fmt.Fprintf(&b, ": releases_kept=%d entries_deleted=%d incoming=%d releases=%d gc_roots=%d store=%d bytes_freed=%d hidden_left=%d errors=%d enospc_skipped=%d dead_journals=%d elapsed=%s",
+		r.ReleasesKept, r.Entries(), r.IncomingRemoved, r.ReleasesRemoved, r.GCRootsRemoved, r.StoreRemoved, r.BytesFreed, r.Hidden, r.Errors, r.ENOSPCSkipped, r.DeadJournals, r.Elapsed.Round(time.Millisecond))
 	return b.String()
 }
 
@@ -207,7 +212,14 @@ func Prune(opts PruneOptions) PruneReport {
 	}
 	start := p.clock()
 	p.deadline = start.Add(budget)
-	p.run()
+	if info, err := os.Stat(p.root); err != nil || !info.IsDir() {
+		p.report.Skipped = "no root: " + p.root
+	} else {
+		p.run()
+	}
+	if p.report.Skipped == "" {
+		p.report.ReleasesKept = countReleaseDirs(p.root)
+	}
 	p.report.Elapsed = p.clock().Sub(start)
 	return p.report
 }
@@ -253,15 +265,22 @@ func (p *pruner) run() {
 		return
 	}
 	cutoff := p.now().Add(-pruneInputGrace)
-	// Decide everything next: each decision is a rename. The order matters
-	// only in that incoming/ is judged against the releases as they were, and
-	// that incoming goes first, so a full volume frees the most expendable
-	// bytes first.
+	// Decide in phases, expendable bytes first. Each decision is a rename; the
+	// renames of a directory are made durable once, after its phase (a rename
+	// lost to a crash only means the entry is decided again at the next boot,
+	// and an entry renamed but not yet deleted is invisible either way).
+	// incoming/ is judged against the releases as they were.
 	p.hideIncoming(cutoff)
 	p.hideReleases(cutoff)
+	// Delete incoming/ and releases/ before the gc-roots and store/ entries are
+	// hidden: on a full volume those gigabytes must exist before the many store
+	// renames need directory blocks.
+	p.sweep(filepath.Join(p.root, "incoming"), &p.report.IncomingRemoved)
+	p.sweep(filepath.Join(p.root, "releases"), &p.report.ReleasesRemoved)
+	if p.report.BudgetExhausted {
+		return
+	}
 	p.hideGCRootsAndStore(cutoff)
-	p.report.ReleasesKept = countReleaseDirs(p.root)
-	// Then delete what is hidden.
 	p.sweepAll()
 }
 
@@ -325,7 +344,7 @@ func pruneBlocked(root string) string {
 // suffix. A rename can fail for want of space on a full volume, exactly where
 // the prune is needed; then the entry is freed in place (freeInPlace) and
 // counted in kind.
-func (p *pruner) hide(path string, kind *int) {
+func (p *pruner) hide(path string, kind *int, inPlaceOK bool) {
 	dir, name := filepath.Split(path)
 	hidden := filepath.Join(dir, pruneHiddenPrefix+name)
 	if pathExists(hidden) {
@@ -333,12 +352,19 @@ func (p *pruner) hide(path string, kind *int) {
 	}
 	err := p.rename(path, hidden)
 	if err == nil {
-		_ = syncDir(filepath.Clean(dir))
 		return
 	}
 	if !errors.Is(err, syscall.ENOSPC) {
 		log.Printf("updater: prune hide %s: %v", name, err)
 		p.report.Errors++
+		return
+	}
+	if !inPlaceOK {
+		// A store object has no marker and MaterializeClosure trusts an existing
+		// one as whole, so it is never half deleted under its real name: it
+		// waits for a boot with room.
+		log.Printf("updater: prune hide %s: no space to rename; left for a later boot", name)
+		p.report.ENOSPCSkipped++
 		return
 	}
 	p.freeInPlace(path, hidden, kind)
@@ -352,13 +378,15 @@ func (p *pruner) hide(path string, kind *int) {
 //     boot follow and every restore read it, and a release directory without
 //     one is a corpse that the next run removes whatever its age
 //     (hideReleases); Apply restages from its source, never from a corpse;
-//   - a store object has no such marker. incoming/ is hidden first, so a
-//     computer normally frees gigabytes there before a store object is ever
-//     reached, and a store object is only freed in place when the volume is so
-//     full that nothing could be renamed. After every freeChunk bytes freed it
-//     syncs (ext4 returns freed blocks to the allocator at commit) and retries
-//     the rename, so the partial tree under its real name lasts for one chunk
-//     of one run; a kill inside that window is the named residual.
+//   - a store object is never freed in place (hide refuses it): it has no
+//     marker, and MaterializeClosure trusts an existing object as whole, so a
+//     kill inside an in-place delete would leave a partial object that is
+//     reused. A store rename that fails for want of space is counted
+//     (ENOSPCSkipped) and left for a boot with room; incoming/ and releases/
+//     are deleted before the store is touched, which is what makes the room.
+//
+// After each MiB freed it syncs (ext4 returns freed blocks to the allocator at
+// commit) and retries the rename, so only the remainder is hidden.
 func (p *pruner) freeInPlace(path, hidden string, kind *int) {
 	info, err := os.Lstat(path)
 	if err != nil {
@@ -383,6 +411,9 @@ func (p *pruner) freeInPlace(path, hidden string, kind *int) {
 		})
 		var freed int64
 		for _, file := range files {
+			if p.expired() {
+				return
+			}
 			fi, err := os.Lstat(file)
 			if err != nil {
 				continue
@@ -401,13 +432,12 @@ func (p *pruner) freeInPlace(path, hidden string, kind *int) {
 				syncFilesystems()
 				freed = 0
 				if p.rename(path, hidden) == nil {
-					_ = syncDir(filepath.Dir(path))
 					return // what is left is hidden; the sweep finishes it
 				}
 			}
 		}
 	}
-	if p.removeTree(path, false) {
+	if p.removeTree(path, true) {
 		*kind++
 	}
 }
@@ -418,7 +448,11 @@ func (p *pruner) hideIncoming(cutoff time.Time) {
 	if err != nil {
 		return
 	}
+	defer func() { _ = syncDir(incoming) }()
 	for _, entry := range entries {
+		if p.expired() {
+			return
+		}
 		name := entry.Name()
 		if strings.HasPrefix(name, pruneHiddenPrefix) {
 			continue
@@ -445,7 +479,7 @@ func (p *pruner) hideIncoming(cutoff time.Time) {
 				continue
 			}
 		}
-		p.hide(path, &p.report.IncomingRemoved)
+		p.hide(path, &p.report.IncomingRemoved, true)
 	}
 }
 
@@ -455,10 +489,14 @@ func (p *pruner) hideReleases(cutoff time.Time) {
 	if err != nil {
 		return
 	}
+	defer func() { _ = syncDir(releasesDir) }()
 	// Stage temporaries are invisible to every reader; old ones go. So does
 	// anything in releases/ that is not a directory (a symlink or a file:
 	// nothing writes one there).
 	for _, entry := range entries {
+		if p.expired() {
+			return
+		}
 		name := entry.Name()
 		if strings.HasPrefix(name, pruneHiddenPrefix) {
 			continue
@@ -466,13 +504,13 @@ func (p *pruner) hideReleases(cutoff time.Time) {
 		path := filepath.Join(releasesDir, name)
 		if !entry.IsDir() {
 			if info, err := os.Lstat(path); err == nil && !info.ModTime().After(cutoff) {
-				p.hide(path, &p.report.ReleasesRemoved)
+				p.hide(path, &p.report.ReleasesRemoved, true)
 			}
 			continue
 		}
 		if strings.HasPrefix(name, ".stage-") {
 			if _, newest := treeStat(path); !newest.After(cutoff) {
-				p.hide(path, &p.report.ReleasesRemoved)
+				p.hide(path, &p.report.ReleasesRemoved, true)
 			}
 		}
 	}
@@ -487,6 +525,9 @@ func (p *pruner) hideReleases(cutoff time.Time) {
 		return
 	}
 	for _, entry := range entries {
+		if p.expired() {
+			return
+		}
 		name := entry.Name()
 		if !entry.IsDir() || !computerevent.IsSHA256(name) || keep[name] {
 			continue
@@ -504,7 +545,7 @@ func (p *pruner) hideReleases(cutoff time.Time) {
 			// Young: a baseline staged and waiting for its swap.
 			continue
 		}
-		p.hide(path, &p.report.ReleasesRemoved)
+		p.hide(path, &p.report.ReleasesRemoved, true)
 	}
 }
 
@@ -661,14 +702,18 @@ func (p *pruner) hideGCRootsAndStore(cutoff time.Time) {
 	live := map[string]bool{}
 	rooted := map[string]bool{}
 	if entries, err := os.ReadDir(gcRoots); err == nil {
+		defer func() { _ = syncDir(gcRoots) }()
 		for _, entry := range entries {
+			if p.expired() {
+				return // the live set is incomplete: the store waits for the next boot
+			}
 			name := entry.Name()
 			path := filepath.Join(gcRoots, name)
 			if strings.HasPrefix(name, pruneHiddenPrefix) {
 				continue
 			}
 			if _, ok := surviving[name]; !ok {
-				p.hide(path, &p.report.GCRootsRemoved)
+				p.hide(path, &p.report.GCRootsRemoved, true)
 				continue
 			}
 			links, err := os.ReadDir(path)
@@ -711,7 +756,11 @@ func (p *pruner) hideGCRootsAndStore(cutoff time.Time) {
 	if err != nil {
 		return
 	}
+	defer func() { _ = syncDir(storeDir) }()
 	for _, entry := range storeEntries {
+		if p.expired() {
+			return
+		}
 		name := entry.Name()
 		if strings.HasPrefix(name, ".") && !strings.HasPrefix(name, ".staging-") {
 			continue
@@ -732,7 +781,7 @@ func (p *pruner) hideGCRootsAndStore(cutoff time.Time) {
 		if _, newest := treeStat(path); newest.After(cutoff) {
 			continue
 		}
-		p.hide(path, &p.report.StoreRemoved)
+		p.hide(path, &p.report.StoreRemoved, false)
 	}
 }
 

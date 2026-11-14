@@ -1238,7 +1238,10 @@ EOF
       RUNTIME_LLM_REASONING_EFFORT = "low";
     };
     serviceConfig = {
-      ExecStartPre = "";
+      # The runtime marks itself entered too (the same marker the updater unit
+      # writes), so a failed updater unit cannot leave the runtime live with no
+      # marker for the boot prune's condition. "-": it never blocks the runtime.
+      ExecStartPre = "-${pkgs.coreutils}/bin/install -m 0600 /dev/null /run/choir/updater-unit-entered";
       ExecStart = "${autoputerRuntimeExec}";
       Restart = "on-failure";
       RestartSec = 1;

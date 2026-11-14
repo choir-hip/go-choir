@@ -128,4 +128,3 @@ func TestPruneSkippedLineIsNotAMeasurement(t *testing.T) {
 		t.Fatalf("a non-directory root: %+v", got)
 	}
 }
-
