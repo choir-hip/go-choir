@@ -48,7 +48,32 @@ func startAndDrain(t *testing.T, r *Router) (*Stream, []Arrival) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return stream, drain(t, stream)
+	got := drain(t, stream)
+	waitProbesReleased(t, r)
+	return stream, got
+}
+
+// waitProbesReleased waits for the probe claims of a finished search to be
+// released. A probe call delivers its arrival and only then runs its deferred
+// releaseProbe (router.go, coordinator.start), so the stream can close, and
+// the next search can start, while the claim is still held; that search then
+// skips the provider as "probing" and has no arrivals. The claim is the
+// event, so wait on it rather than on a delay.
+func waitProbesReleased(t *testing.T, r *Router) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		r.probeMu.Lock()
+		out := len(r.probing)
+		r.probeMu.Unlock()
+		if out == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d probe claims never released", out)
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 // Failure mode 1, end to end: every paid provider is out of quota, Keenable
