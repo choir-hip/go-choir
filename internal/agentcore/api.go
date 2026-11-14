@@ -882,6 +882,9 @@ type guestObservabilityResponse struct {
 	// per-kind event counts and tape batch sizes that price batching, and the
 	// sealer's counters when it is on. Read-only.
 	TelemetryBatching *store.TelemetryStats `json:"telemetry_batching,omitempty"`
+	// RunMemoryCarry counts the carried conversation against new messages
+	// (run_memory_carry_counters.go). Always present.
+	RunMemoryCarry RunMemoryCarryStats `json:"run_memory_carry"`
 	// StreamSeqLease is the stream_seq lease: state, the durable block,
 	// whether the lease was trusted and why not, how the process seeded and
 	// how long it took (docs/problems/stream-seq-high-water-mark-design-2026-10-23.md,
@@ -1075,6 +1078,7 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		resp.MemCachedBytes = guestmem.Meminfo(string(raw))["Cached"]
 	}
 	resp.ToolLayerTimer = toolLayerTimer()
+	resp.RunMemoryCarry = runMemoryCarry.snapshot()
 	if layers, ok := boundedObservabilityRead(toolLayerReadBudget+time.Second, func() []toolLayerObservability {
 		return readToolLayers(r.Context(), "/nix", "/proc", "/run/choir-tool-evict")
 	}); ok {
