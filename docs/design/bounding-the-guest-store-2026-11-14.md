@@ -70,22 +70,29 @@ The only delete is `ProjectionOpRunMemoryRetire`
 IN (...) AND kind NOT IN ('rlm_inbox_cursor')`. The daily job that appends it
 is `StartTelemetryRetirement` (`telemetry_retire.go:275-331`).
 
-Which rows are eligible (`SelectRunMemoryRetirements`,
-`run_memory_retire.go:123-208`). A run's rows are retired only when all hold:
+Which rows are eligible (`selectRunMemoryPlan`, `run_memory_retire.go`; the
+rule after R-1, docs/problems/run-memory-retirement-keeps-nearly-everything-
+2026-11-14.md). A run's rows are retired only when all hold:
 
-1. The run has at least one entry that is not `rlm_inbox_cursor` (`:179`).
-2. Its newest entry is older than 7 days (`runMemoryRetireWindow`, `:46`;
-   `:179`).
-3. It is not one of the newest 2 runs of its owner and agent by newest entry
-   (`runMemoryKeepPerAgent = 2`, `:49`; `:165-171`). A run with no agent id is
-   never protected by this rule (`:159`) but is still subject to the rest.
-4. The run record is found (`GetRunByOwnerOG`; a `ErrNotFound` run is skipped
-   forever, `:185-190`).
-5. The run's state is `completed`, `failed` or `cancelled` (`:192-196`). A
-   `passivated`, `blocked`, `pending` or `running` run is never retired, however
-   old.
-6. The run's finish time (`FinishedAt`, else `UpdatedAt`) is older than 7 days
-   (`:197-203`).
+1. The run has at least one entry that is not `rlm_inbox_cursor`.
+2. Its newest entry is older than 7 days (`runMemoryRetireWindow`).
+3. It is not a carry source: for each owner's document custodian agent
+   (`deskmanifest.IsDocumentInbox`), the newest `runMemoryKeepPerAgent = 2`
+   runs whose record is `completed` or `passivated`, ordered by `FinishedAt`
+   else `UpdatedAt` as `LatestActorRunMemoryEntries` orders them, keep their
+   entries whatever their age. A failed, cancelled or record-less run takes no
+   slot; a record that does not decode is protected. No other agent's run is
+   protected: nothing reads it.
+4. The run record is read through the read pool by its owner-scoped id and by
+   its `run_id` metadata (lifecycle runs live under a computer-scoped id the
+   owner-scoped read cannot build). A run with a record is judged by rules 5
+   and 6. A run with no record retires when its newest entry is older than 30
+   days (`runMemoryRetireNoRecordWindow`; the design asked two windows, this
+   is the longer hold until a census on the paper shows what remains). A
+   record that does not decode keeps the run.
+5. The run's state is `completed`, `failed` or `cancelled`. A `passivated`,
+   `blocked`, `pending` or `running` run is never retired, however old.
+6. The run's finish time (`FinishedAt`, else `UpdatedAt`) is older than 7 days.
 
 Rows of kind `rlm_inbox_cursor` are never deleted (`:53`).
 
@@ -351,10 +358,11 @@ lead can run before building.
   to the selection, each independent: retire `passivated` and `blocked` runs
   whose last entry and last update are older than the window and which are
   not the newest `completed` or `passivated` run of their agent (the one the
-  Texture reader takes, `run_memory.go:329`); stop the keep-newest-2 rule at
-  an age (30 days is a candidate) and apply it only to the document custodian,
-  the only desk that inherits a prior run (`run_memory.go:136-146`); retire
-  runs whose record is not found after two windows by entry age alone.
+  Texture reader takes, `run_memory.go:329`) (not built); protect only the
+  document custodian's newest completed or passivated runs, the only desk that
+  inherits a prior run (`run_memory.go:136-146`) (built, R-1); retire runs
+  whose record is not found after a longer hold by entry age alone (built, R-1:
+  the lookup was the defect, and the hold is 30 days).
 - GB now: about 6 to 12 GB. Lower bound: 13.7 GB (table floor plus indexes)
   minus the 7-day steady state of about 7.6 GB, if the hour's rate holds.
   Upper bound: the 29.9 GB left for the two cut tables, less the 12.4 GB floor
@@ -558,7 +566,7 @@ tables of `state.db` are small or windowed.
 | Table (with indexes) | Row holds | Per row, with indexes [E from M] | Writer | Delete path |
 |---|---|---|---|---|
 | `og_objects` header (`sql_store.go:230`) + `og_bodies` (`:257`), 17 indexes (`:195-215`) | one object: id (about 140 B, in 13 of 17 indexes), kind, owner, metadata JSON, times, body BLOB | 2.2 KB logical, 4.8 KB physical [M: 16.05 GB / 3.34 M] | the tape projector (`ProjectionOpObject`), every kind including `choir.event` | `ProjectionOpObjectRetire` only: `choir.event` rows of named kinds (`computerevent/projection_batch.go:206-209`, validated at `:267`); other kinds are never deleted except by a tombstone-and-supersede on the same row |
-| `run_memory_entries` + `idx_run_memory_entries_parent`, `_kind`, `_loop_retire` (`schema.go:94-357`) | one message of a run's conversation: `message_json` (2.2 KB average), role, kind, details_json | 2.45 KB [M] | `ProjectionOpRunMemoryEntry` | `ProjectionOpRunMemoryRetire` (`run_memory_retire.go:216`): whole runs, terminal and last written over 7 days ago, not one of the newest 2 per agent, at most 5,000 runs a day (`:44-52`, `:155`) |
+| `run_memory_entries` + `idx_run_memory_entries_parent`, `_kind`, `_loop_retire` (`schema.go:94-357`) | one message of a run's conversation: `message_json` (2.2 KB average), role, kind, details_json | 2.45 KB [M] | `ProjectionOpRunMemoryEntry` | `ProjectionOpRunMemoryRetire` (`run_memory_retire.go:216`): whole runs, terminal and last written over 7 days ago, not a document custodian's newest 2 completed or passivated runs, 5,000 runs a pass and up to 32 passes a day (`run_memory_retire.go`) |
 | `og_key_index` + 2 indexes (`derived_keys.go:72`) | derived key per object | 0.9 KB [M] | the same projector | dropped with its object (`retireDropBatch`) |
 | `og_edges` + 3 indexes | edge | 0.9 KB | projector | none that I found |
 | `choir_events` + `choir_event_bodies` (`schema.go:33`) | the event table | not in use: `store.event_table` is off and `choir_events` holds 0 rows (`store.split.summary`) | none | n/a |
