@@ -194,3 +194,104 @@ boot DDL would build both old indexes without `CONCURRENTLY` inside a 60 s open
   are named in `PLATFORM_RECEIPT_COMPACT_COMPUTERS`.
 - Only receipts of kind EventHeadReceipt with this issuer are handled; a row of
   another spelling still stays full, as before.
+
+## Procedure: the supervised swap of the live table's indexes
+
+Owner's ruling N3: the indexes may be rebuilt or dropped on the live table
+overnight, after review, one at a time, concurrently, stopping if the paper's
+append times rise. That is a permission for an act an operator performs, once,
+on one table, on one host, watching one number (see
+`receipts-step2-three-rounds-structural-assessment-2026-11-14.md`). The act is
+`scripts/receipts-index-swap`, which runs on Node B through local psql and reads
+no secret. It needs step 1 and step 2a deployed (every reader works with either
+set of indexes; corpusd logs the append timing line a minute).
+
+**Before.**
+1. The script is on Node B at the running deploy's commit: a docs-like push does
+   not deploy, and the script is not in a closure; it is in the checkout the
+   deploy resets to the deployed SHA (`/opt/go-choir`,
+   `.github/scripts/node-b-ci-deploy`). Check that `git -C /opt/go-choir
+   rev-parse HEAD` is the staging SHA and that `scripts/receipts-index-swap
+   status` runs and reads sanely (both old indexes valid and ready, the table's
+   sizes, no build running). The script lands in the same push as step 2a so it
+   arrives with the deploy that has the timing line.
+2. No deploy in flight and none planned for the night; no restart of corpusd
+   since the pre-build reading (the append ring is in memory: after any restart,
+   take the reading again).
+3. The disk gate is the operator's `df` on the volume of PostgreSQL's data
+   directory (the walk's own check measures the artifacts root, because the
+   deployed role cannot read `data_directory`). Compute the floor from `status`:
+   the build writes a new index of about the size of the rows it covers (the
+   partial index, a few tens of MB on the paper) plus WAL of the order of that
+   index and of the pages it reads (take twice the table's `heap_bytes` as a
+   ceiling for a first look at WAL volume, not a prediction); with the walk
+   running, add its estimate (about 11 GB) as the record above does. Proceed
+   only if free space is above the floor by a wide margin; `status` prints
+   `table_total_bytes`, `heap_bytes` and `indexes_bytes`, the numbers to use,
+   not a constant from this record.
+4. `scripts/receipts-index-swap watch` in a second terminal.
+
+**The walk.** Step 2a's walk steps aside by itself while another session holds
+the table for an index build or drop (it watches `pg_locks`); it logs
+`receipt compaction deferred: an index build or other maintenance holds the
+receipt table...` and `receipt compaction resumes` when it clears. After the
+build starts, confirm the `deferred` line in the corpusd journal before relying
+on a reading: until it appears the walk may still be writing and its I/O is in
+the append times. Name the walk's state when taking the pre-build reading
+(running mid-pass, or deferred, or finished: its last `receipt compaction load`
+line). To take the swap with the walk out of the picture entirely, run it before
+the first pass starts (two minutes after a boot) or after the walk is done
+(`receipt compaction ... done=true` for the paper); either is cleaner than
+reading the build's effect through the walk's.
+
+**The pre-build reading.** From the timing line
+`corpusd append timing: 1m busiest=<id> ...; 10m busiest=<id> ...[; 1m of <id> ...]`:
+the paper's computer id is the one the rule is about. Read the 10-minute figure
+three times a minute apart; the lowest p95 is the pre-build reading P, and its
+computer id is written down. Every later reading must be for the same computer
+id: take it from `1m busiest=<id>` when that is the id, and otherwise from
+`1m of <id>` (the line gives the ten-minute computer's own last minute); if
+neither names it, take another reading a minute later. The cancel rule: that
+computer's p95 over the last minute above the larger of 2 x P and P + 250 ms, on
+two consecutive readings a minute apart.
+
+**Order, one statement at a time.**
+1. `build`: `CREATE INDEX CONCURRENTLY computer_event_append_kind_partial_idx ...`
+   (the exact definition step 1's readers expect; a valid index of that name with
+   another definition is refused with exit 6, nothing is changed). Expected 3 to
+   10 minutes: two scans of the table's heap and a small index (the 0.8% of rows
+   that are not projection batches). Watch the timing line and `status` (the
+   build's phase and blocks).
+2. When the partial index reads valid and ready and the paper's p95 is back at P
+   (two readings a minute apart), `drop-kind-seq` (about 1.9 GB, seconds to a
+   minute; it waits for transactions that can see the index).
+3. Again two readings, then `drop-receipt-id` (about 2.3 GB). Both drops refuse
+   (exit 3) unless the partial index is valid, ready and defined as expected.
+   Dropped index files go back to the operating system at once.
+
+**Cancel.** If the rule fires during a statement, run `cancel`. It signals only
+an active backend running this script's create or drop on this table and says how
+many signals it sent (zero is exit 1); a cancelled build leaves the partial index
+INVALID, which every reader ignores and which the next `build` drops first.
+**After a cancel**, wait until two readings a minute apart, for the same computer
+id as P, are back under the rule, then run `build` again. At most three attempts
+in a night; after the third, stop, leave the old indexes, and record the attempts
+and the readings here. A restart of Postgres or a crash mid-build has the same
+result as a cancel; a restart of corpusd does not touch the build (it is the
+database's) but empties the timing ring, so take the pre-build reading again.
+
+**Rollback.** Before the drops: nothing to undo (drop the invalid leftover with
+`build`'s first step, or leave it). After a drop, if anything wants the old
+index: `restore-old` recreates both concurrently with the definitions main's
+Bootstrap gave them (the receipt id index first); no reader of step 1 or step 2a
+needs them, so this is for a revert past step 1 only, and it takes a few minutes
+each.
+
+**What the script does not do.** It does not read or print the psql command, any
+connection string or env file; it does not run two heavy statements at once; it
+does not watch the timing for you. psql runs with `ON_ERROR_STOP` and every read
+is checked, so a failing statement is exit 4 or 5, never a quiet success. Its
+self-test, `scripts/receipts-index-swap-test`, runs against a throwaway
+PostgreSQL and runs in CI (the `Receipts Index Swap Script` job, selected when
+the script, its test, the workflow or the index definitions change); the script
+and its test are not docs-like and not a deploy by themselves.

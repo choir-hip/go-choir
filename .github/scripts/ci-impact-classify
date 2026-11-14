@@ -60,6 +60,7 @@ sbom=false
 flakehub=false
 high_risk_race=false
 ci=false
+receipts_swap=false
 
 # is_docs_like_path: docs, skill text and developer-side scripts need no CI
 # lane (owner, 2026-11-12); they ship with the next push that does run.
@@ -85,6 +86,7 @@ if [[ "${CI_FORCE_ALL:-false}" == "true" ]]; then
   flakehub=true
   high_risk_race=true
   ci=true
+  receipts_swap=true
   explanations+=("manual/recovery run -> all CI lanes")
 else
   for path in "${changed[@]}"; do
@@ -95,6 +97,15 @@ else
     if ! is_docs_path "$path" && [[ "$path" != .github/* ]]; then
       flakehub=true
     fi
+
+    # The operator's index-swap script runs DDL on the live receipt table; its
+    # self-test (a throwaway PostgreSQL) runs whenever it, its test, the workflow
+    # that wires it or the receipt index definitions it mirrors change.
+    case "$path" in
+      scripts/receipts-index-swap|scripts/receipts-index-swap-test|.github/workflows/ci.yml|internal/platform/receipt_indexes.go|internal/platform/computer_events.go)
+        mark receipts_swap "$path -> receipts index swap script self-test"
+        ;;
+    esac
 
     case "$path" in
       .github/*|scripts/ci-find-green-pr-run)
@@ -194,6 +205,7 @@ sbom=${sbom}
 flakehub=${flakehub}
 high_risk_race=${high_risk_race}
 ci=${ci}
+receipts_swap=${receipts_swap}
 sampled_race=${sampled_race}
 sample_bucket=${sample_bucket}
 EOF
