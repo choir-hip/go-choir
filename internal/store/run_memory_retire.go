@@ -205,10 +205,11 @@ func (s *Store) selectRunMemory(ctx context.Context, now time.Time) ([]string, R
 
 // runRecordMemo reads each carry candidate's record once per pass (the slot
 // pre-pass and the main loop both need it). A record of any other run is read
-// once and not kept: a pass holds at most the document agents' runs. Across the
-// passes of one wake the store's wake memo holds the records already read, so a
-// run kept in pass 1 is not read again in pass 2; only successful reads are
-// kept there, never an error or an absence.
+// once and not kept: a pass holds at most the document agents' runs. Nothing is
+// kept across passes: a run's state changes while a wake runs (a passivated run
+// is reactivated, a run is cancelled) and a delete is irreversible, so every
+// pass reads every record fresh. The cost of that is counted (record_reads) and
+// measured on the paper's first wake.
 type runRecordMemo struct {
 	s *Store
 	m map[string]runRecordResult
@@ -217,17 +218,9 @@ type runRecordMemo struct {
 type runRecordResult struct {
 	rec types.RunRecord
 	err error
-	// computerDisagree is set when the run's live copies name more than one computer.
-	computerDisagree bool
-}
-
-// runRecordWakeMemo is a wake's record cache.
-type runRecordWakeMemo struct {
-	m map[string]runRecordResult
-}
-
-func newRunRecordWakeMemo() *runRecordWakeMemo {
-	return &runRecordWakeMemo{m: map[string]runRecordResult{}}
+	// copiesDisagree is set when the run's live copies name more than one
+	// computer or more than one agent.
+	copiesDisagree bool
 }
 
 // get returns the run's record result; reads counts the lookups actually made.
@@ -236,22 +229,11 @@ func (m *runRecordMemo) get(ctx context.Context, g *runMemoryGroup, keep bool, r
 	if r, ok := m.m[key]; ok {
 		return r
 	}
-	if w := m.s.runMemoryWake; w != nil {
-		if r, ok := w.m[key]; ok {
-			if keep {
-				m.m[key] = r
-			}
-			return r
-		}
-	}
 	*reads++
 	rec, disagree, err := m.s.runRecordCopiesForRetirement(ctx, g.ownerID, g.runID)
 	r := runRecordResult{rec, err, disagree}
 	if keep {
 		m.m[key] = r
-	}
-	if err == nil && m.s.runMemoryWake != nil {
-		m.s.runMemoryWake.m[key] = r
 	}
 	return r
 }
@@ -346,7 +328,7 @@ func (s *Store) selectRunMemoryPlan(ctx context.Context, now time.Time) (plan ru
 		r := memo.get(ctx, g, true, &census.RecordReads.SlotPrePass)
 		switch {
 		case r.err == nil:
-			if r.rec.AgentID != g.agentID || r.computerDisagree {
+			if r.rec.AgentID != g.agentID || r.copiesDisagree {
 				protected[g.ownerID+"\x00"+g.runID] = true // fail closed
 				continue
 			}
@@ -442,9 +424,10 @@ func (s *Store) selectRunMemoryPlan(ctx context.Context, now time.Time) (plan ru
 			continue
 		}
 		run := r.rec
-		if r.computerDisagree {
-			// Live copies of the run sit on more than one computer; the reader
-			// reads one computer's, so which copy decides is not known.
+		if r.copiesDisagree {
+			// Live copies of the run name more than one computer or agent; the
+			// reader reads one computer's by one agent, so which copy decides is
+			// not known.
 			census.add("kept_run_copies_disagree", *g)
 			continue
 		}
@@ -497,10 +480,11 @@ func (s *Store) runRecordForRetirement(ctx context.Context, ownerID, runID strin
 }
 
 // runRecordCopiesForRetirement is runRecordForRetirement and whether the run's
-// live copies name more than one computer.
+// live copies name more than one computer or more than one agent (the reader
+// reads by both, so which copy decides is not known).
 func (s *Store) runRecordCopiesForRetirement(ctx context.Context, ownerID, runID string) (types.RunRecord, bool, error) {
-	if runRecordLookupHook != nil {
-		if err := runRecordLookupHook(ownerID, runID); err != nil {
+	if hook := runRecordLookupHook; hook != nil {
+		if err := hook(ownerID, runID); err != nil {
 			return types.RunRecord{}, false, err
 		}
 	}
@@ -542,7 +526,7 @@ func (s *Store) runRecordCopiesForRetirement(ctx context.Context, ownerID, runID
 	seen := map[string]bool{}
 	var best types.RunRecord
 	found, disagree := false, false
-	computer := ""
+	computer, agent := "", ""
 	for _, obj := range copies {
 		if seen[obj.CanonicalID] {
 			continue
@@ -558,10 +542,10 @@ func (s *Store) runRecordCopiesForRetirement(ctx context.Context, ownerID, runID
 		if r.RunID != runID {
 			continue
 		}
-		if found && r.ComputerID != computer {
+		if found && (r.ComputerID != computer || r.AgentID != agent) {
 			disagree = true
 		}
-		computer = r.ComputerID
+		computer, agent = r.ComputerID, r.AgentID
 		best, found = resolveRunCopies(best, found, r), true
 	}
 	if !found {
@@ -676,11 +660,8 @@ func (s *Store) RetireRunMemoryBacklog(ctx context.Context, now time.Time, gap t
 		return 0, 0, nil
 	}
 	s.runMemoryCensus.beginWake()
-	// The records read in one pass stay known for the rest of the wake.
-	s.runMemoryWake = newRunRecordWakeMemo()
 	wakeStarted := time.Now()
 	defer func() {
-		s.runMemoryWake = nil
 		s.runMemoryCensus.endWake()
 		// One census in the log per wake: the last pass's, and the wake's totals
 		// (a catch-up of 22 passes would log 300 lines otherwise).

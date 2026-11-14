@@ -186,16 +186,30 @@ the same store either way.
 - Mixed owners: a run whose document-agent rows name two owners is kept
   (`kept_mixed_owner_rows`); the record cannot be read under one owner and the
   delete is by loop id.
-- Copies: `runCopyBetter` is a total order (not terminal, later finish,
+- Copies: live copies of a run that name different computers or different
+  agents keep the run (`kept_run_copies_disagree`). `runCopyBetter` is a total order (not terminal, later finish,
   carry-source state, state name, computer id); copies on two computers keep the
   run (`kept_run_copies_disagree`). A record with no computer id is invisible to
   the reader and takes a slot of its own, so it never evicts a real source.
 - A loop id the op would refuse (blank or padded) is skipped and counted
   (`kept_loop_id_invalid`), never trimmed; it no longer stops every pass.
 - Record reads are counted per pass (`record_reads`: slot pre-pass and
-  selection) and per wake; a wake memo keeps the records already read, so a run
-  kept in pass 1 is not read in pass 2 (an error or an absence is never kept).
-  The wake log line carries its duration and the read counts.
+  selection) and per wake, and the wake log line carries its duration and the
+  read counts. Nothing is cached across passes: a wake memo was built and then
+  deleted (round 4), because a record kept from pass 1 can go stale before pass
+  N (a passivated run reactivated or cancelled writes no run memory entry) and a
+  stale slot-holder retires a run a fresh read protects. An irreversible delete
+  does not get a cache whose safety rests on an argument.
+  `TestWakeSlotsFollowTheStateOfEveryPass` (three transitions between passes)
+  and `TestWakeRereadsRecordsInEveryPass` pin it.
+- **Cost, unmitigated and to be measured.** Every pass reads every record
+  again: up to two indexed reads (the owner-scoped point read and one
+  `run_id` metadata page) for each document-agent run with something to carry,
+  and for each older non-protected run the selection reaches before the pass
+  cap. Both seats estimated up to about 215,000 reads a pass on the read pool
+  (107,719 candidate runs at the paper's census) and up to 32 passes a wake. The
+  paper's first wake gives the measured number (`record_reads` and the wake
+  duration). If it is too high, a fix is a separate change.
 - `carryActorConversation` also reads the run named by
   `actor_rewarm_source_loop_id` (`agentcore/run_memory.go:166-173`) before it
   asks `LatestActorRunMemoryEntries`. It is covered: the name is set from that
