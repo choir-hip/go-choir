@@ -47,9 +47,8 @@ type RunMemoryNewestTwo struct {
 	Over30d    RunMemoryTally `json:"newest_entry_over_30d"`
 }
 
-// RunMemoryRecordReads counts the run record lookups a pass made (a record
-// already known to the wake is not a lookup): the slot pre-pass and the
-// selection apart.
+// RunMemoryRecordReads counts the run record lookups a pass made (every pass
+// reads every record fresh): the slot pre-pass and the selection apart.
 type RunMemoryRecordReads struct {
 	SlotPrePass int64 `json:"slot_pre_pass"`
 	Selection   int64 `json:"selection"`
