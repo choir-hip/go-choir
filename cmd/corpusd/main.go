@@ -62,6 +62,9 @@ func main() {
 	// serves on the old query shapes until each one reports live
 	// (docs/archive/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md).
 	store.StartRetrievalMigrations(context.Background(), 10*time.Minute)
+	// The receipt table's index swap is its own goroutine: it takes minutes on
+	// the host's 19 GB table and must not hold the retrieval steps back.
+	store.StartReceiptIndexMigration(context.Background())
 
 	svc := platform.NewService(store, cfg.ArtifactsRoot, cfg.SigningKeyPath)
 	// Published versions' check overlay reads quote checks and support

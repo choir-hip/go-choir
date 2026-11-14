@@ -55,6 +55,10 @@ func openTestPlatformStore(t *testing.T) (*Store, string) {
 	if err := s.MigrateRetrieval(context.Background()); err != nil {
 		t.Fatalf("migrate retrieval: %v", err)
 	}
+	// The receipt table's indexes are built by their own migration.
+	if err := s.ensureReceiptIndexes(context.Background()); err != nil {
+		t.Fatalf("receipt indexes: %v", err)
+	}
 	t.Cleanup(func() { _ = s.Close() })
 	return s, root
 }

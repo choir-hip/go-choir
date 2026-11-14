@@ -200,7 +200,6 @@ func (s *Store) MigrateRetrieval(ctx context.Context) error {
 			}
 		}
 	}
-	note("receipt_indexes", s.ensureReceiptIndexes(ctx))
 	note("objects_kind_owner_computer_updated", s.ensureCorpusIndex(ctx, "og_objects", idxObjectsKindOwnerComputerUpdated, "object_kind, owner_id, computer_id, updated_at"))
 	note("edges_to_kind", s.ensureCorpusIndex(ctx, "og_edges", idxEdgesToKind, "to_id, kind"))
 	note("lookup_keys", s.ensureLookupKeys(ctx))

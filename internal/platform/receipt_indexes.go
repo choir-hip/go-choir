@@ -77,6 +77,32 @@ const (
 	receiptIndexLockKey = 7330212470801
 )
 
+// StartReceiptIndexMigration runs ensureReceiptIndexes beside the listener,
+// retrying with backoff until it succeeds. It returns at once.
+func (s *Store) StartReceiptIndexMigration(ctx context.Context) {
+	if s == nil {
+		return
+	}
+	go func() {
+		backoff := 30 * time.Second
+		for {
+			err := s.ensureReceiptIndexes(ctx)
+			if err == nil {
+				return
+			}
+			log.Printf("corpusd receipt indexes: %v", err)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+			if backoff < 10*time.Minute {
+				backoff *= 2
+			}
+		}
+	}()
+}
+
 // ensureReceiptIndexes builds the partial kind index and then drops the full
 // one. Idempotent; safe to run beside appends (CONCURRENTLY, no transaction).
 func (s *Store) ensureReceiptIndexes(ctx context.Context) error {
