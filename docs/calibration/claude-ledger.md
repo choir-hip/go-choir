@@ -155,6 +155,10 @@ entered below as lapsed, not scored.
 | C72 | 2026-11-14T00:07Z | lead | diagnosis | On the paper, more than 35% of tape bytes are whole-object rewrites of content that did not change (`choir.run`, `choir.texture_document`, `choir.commitment_record`, `choir.capture_label`, `choir.lifecycle_command`): read from per-kind writes-per-object and op-size counters once they exist. | 0.65 | 2026-11-17T12:00Z | the R1 counters in `telemetry_batching` on the paper |
 | C73 | 2026-11-14T00:07Z | lead | diagnosis | Run-memory entries and `choir.event` rows together hold more than 60% of the paper's 43.8 GiB guest store (table and index pages), by the per-table reading. | 0.55 | 2026-11-16T12:00Z | the `store_tables` reading on the paper |
 | C74 | 2026-11-14T01:30Z | lead | diagnosis | On the paper, more than half of run-memory entry bytes written to the tape are carried entries (copies of an earlier run's messages made by `carryActorConversation`), read from the per-op counters split by carried and new. | 0.60 | 2026-11-17T12:00Z | the per-op counters in `telemetry_batching` on the paper |
+| C75 | 2026-11-14T01:37Z | lead | landing | Thirty days from now the paper's tape grows under 1 GB a day over a day of ordinary work (3.6 at 2026-11-13), with coalescing and carry by reference deployed. | 0.40 | 2026-12-14T12:00Z | Node B du of the paper's tape, a day apart |
+| C76 | 2026-11-14T01:37Z | lead | landing | Thirty days from now the paper's guest store is under 10 GiB and flat within 10% over seven days (43.8 GiB and rising at 2026-11-13). | 0.30 | 2026-12-14T12:00Z | `store_tables` on the paper, seven days apart |
+| C77 | 2026-11-14T01:37Z | lead | landing | Thirty days from now the paper's receipts are under 2 GB (about 14 GB at 2026-11-13). | 0.35 | 2026-12-14T12:00Z | row count times row width for the paper in the control database |
+| C78 | 2026-11-14T01:37Z | lead | landing | Within seven days d@e's updater directory is under 2 GiB and holds at most three releases (20.5 GiB at 2026-11-13). | 0.75 | 2026-11-21T12:00Z | `data_volume=detail` on d@e |
 
 ### Settlements
 

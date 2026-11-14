@@ -55,7 +55,7 @@ finish:
       proves: under 2 GB (about 14 GB at the start; the restore window alone is about 1.7 GB at today's row width, so this needs the slim row)
       evidence_class: deployed, host metadata (pg_total_relation_size)
     - action: sum the paper's daily growth on Node B across tape, store image, chunks and receipts over seven days
-      proves: under 1.5 GB a day (about 7 at the start); and everything but the tape (store image, chunks, receipts) is under 25 GiB (about 95 at the start). The tape already written stays: 72.9 GiB is not rewritten or dropped
+      proves: under 1.5 GB a day (about 7 at the start); and everything but the tape (store image, chunks, receipts) is under 25 GiB (about 95 at the start). The 72.9 GiB of tape already written stays, neither rewritten nor dropped
       evidence_class: deployed, the hourly growth ledger on Node B
     - action: time the paper's snapshot after T3
       proves: under 10 minutes (37 at the start)
