@@ -205,6 +205,48 @@ The test names below are the real ones; a name that matches no test makes
    (`TestFailedTurnReadLeavesTheMutationPendingNotStale`; each guard and the
    error chain was removed in turn and the test failed each time.)
 
+7. A caller maps `ErrLifecycleStoredRevisionUnavailable` to a client error:
+   `HandleTextureLifecycleCreate` and `forkDocument` answered 400.
+   (`TestCreateReplayWithAnUnreadableNamedRevisionAnswers500`,
+   `TestEveryMappingOfAStoreErrorTreatsAnUnavailableStoredRevisionAsServerFault`;
+   both failed first.)
+8. A create re-submit proves nothing about the stored revision because the
+   handler echoed a locally derived revision id.
+   (`TestCreateReplayWhoseCommandNamesAnotherRevisionAnswers500`, failed
+   first with 201.) Decision: yes, the handler verifies the revision the store
+   returns against the derived id (a mismatch is a 500). The id is a pure
+   function of the client request id and the command id is too, so any other
+   revision from the same command means the stored result does not name this
+   create's revision, which is the invariant the check exists for.
+
+## Every path that can receive the error
+
+The error comes from `lifecycleStoredRevision`, reached by any command replay
+whose stored result names a revision (`replayLifecycleCommand`,
+`GetAppliedTextureTurnByCallerRun`). Only commands whose batch writes a
+revision are slim: start, commit-head, apply-update, apply-turn.
+
+| Caller | Where | What it maps to |
+| --- | --- | --- |
+| `GET`/`POST` lifecycle routes using `writeLifecycleAPIError` | `internal/agentcore/api_trajectory.go` | 500 `lifecycle invariant broken` |
+| create `POST /api/texture/lifecycle-documents` | `internal/textureowner/texture_lifecycle_create.go` (`HandleTextureLifecycleCreate`) | 500 (was 400); also a derived-id mismatch |
+| fork `POST /api/texture/fork` | `revise_fork.go` `forkStartFailure` | 500 (was 400) |
+| owner revise `POST /api/texture/documents/{id}/revise` commit | `texture_agent_revision.go` (`refuseCommit`) | 500 naming it |
+| revise with sources/take/merge commit | `revise_edit.go` (`refuseCommit`) | 500 naming it |
+| prompt bar and ask-story submit | `prompt_bar.go` `promptBarSubmitFailure` (via `EnsureTextureHandoff`, the conductor start in `texture_handoff.go` and the coagent route start in `coagent_route.go`) | 500 naming it (was a generic 500) |
+| prompt eval | `api_texture_prompt_eval.go` | 500 `failed to prepare texture prompt eval` |
+| Texture cell tools: atomic turn and Write | `texture_cell_author.go`, `texture_turn_runtime.go` | a tool-result error whose text carries the error (no HTTP) |
+| evidence embed | `texture_evidence_embed.go` | a tool-result error, not retried |
+| run completion and idle passivation | `internal/agentcore/runtime.go` | the mutation stays pending; logged |
+| `SleepAgentMutationAfterTextureTurn` | `internal/store/texture.go` | the error is returned to the two callers above |
+| `ArchiveLifecycleArtifact` | `internal/store/texture.go` | an archive command embeds its head, so it is never slim |
+| `ContinueLifecycleDocument` | `revise_sources.go`, `texture_agent_revision.go` | 409 (the command embeds its head and cannot be slim today) |
+
+The owner revise and the prompt-bar replays are answered before the store's
+command replay is reached (revise reads its revision by its derived id; the
+prompt bar replays by run), so a broken command cannot be driven through them
+over HTTP; their mappings are covered by the table-driven mapping test.
+
 ## What the replay and restore tests do, and do not, prove
 
 They rewrite command objects in place in a store and copy the store's
@@ -222,6 +264,14 @@ previous release without step 1 reads a slim command as a command with no
 revision and no error. Landing both in one train makes that previous release
 the one before step 1. Step 2 must never be reverted past step 1 once
 deployed.
+
+Step 2 cannot be staged on d@e by a normal landing: the deploy auto-expedites
+any release that touches `internal/agentcore/` (it does here), and the ring
+soak floors are zero (`internal/vmctl/ring_walk.go`,
+`.github/scripts/node-b-ci-deploy` lines 639 to 646), so a landed release
+reaches every ring at once. The d@e proof therefore has to happen before the
+merge. The route (a branch build on d@e only, or another) is the owner's
+decision and is open.
 
 ## The d@e proof for step 2 (operator procedure)
 
@@ -242,26 +292,54 @@ counters and must be run before step 2 reaches the paper.
    bytes = bytes / ops), and `lifecycle_command_forms` (absent before step 2).
    Record `GET /api/computers/<d@e>/self-development/replay-completeness`
    `.result.status`.
-2. **After the deploy, drive Texture writes.** Create and revise at least
-   three Texture lifecycle documents through the product API
-   (`POST /api/texture/lifecycle-documents`, then prompt-bar revisions), as
-   the chaos harness does, and keep each `client_request_id` and `doc_id`, and
-   the head revision id and `content` hash of each document.
+2. **After the deploy, drive Texture writes.** Create at least three
+   documents: `POST /api/texture/lifecycle-documents` with `{client_request_id,
+   title, initial_content}` (201, `doc_id`, `revision_id`). Revise each at
+   least once: `POST /api/texture/documents/{doc_id}/revise` with
+   `{client_request_id, prompt, expected_head_revision_id}` (202,
+   `revision_id`; the head id is `current_revision_id` of
+   `GET /api/texture/documents/{doc_id}`). Keep every request body and every
+   response. For each document record `current_revision_id` from the document
+   read and the revision's `content` from `GET /api/texture/revisions/{id}`
+   (the export's `content_hash` also works). The prompt bar does not revise
+   these documents unless it is focused on them.
 3. **Counters, what must read.** `lifecycle_command_forms.slim` increased by
    the number of Texture commands written (one start per document plus one per
-   revision turn). `embedded_mismatch` must stay 0: any nonzero value means
+   owner revise, plus one per Texture revision turn the desk then writes: read
+   the count of Texture commands from the run records, not from the number of
+   requests you sent). `embedded_mismatch` must stay 0: any nonzero value means
    the byte check refused a batch and the saving is silently lost for it, so
    stop. `embedded_head` and `no_revision` may rise (settlements, work
    commands). The mean `choir.lifecycle_command` op bytes must fall against
    step 1's baseline by about the revision body size per Texture command; if
    it did not fall while `slim` rose, the counter or the op accounting is
    wrong.
-4. **Replay comparison.** For every document from step 2, re-submit its create
-   with the same `client_request_id`: the response must be the same `doc_id`
-   and the same head revision id (idempotent re-submit rebuilds the revision
-   by id). Then write one further revision to one document and re-submit the
-   earlier create again: the response must still name the original revision,
-   not the later one. Any difference fails the drill.
+4. **Replay comparison. Each check names what fails it.**
+   a. *Create re-submit.* Re-send each create body unchanged (same
+      `client_request_id`, title and content). Pass: 201 with `replay: true`
+      and the same `doc_id` and `revision_id` as the first response. This
+      check has teeth because `startLifecycleTextureDocument` now compares the
+      revision the store rebuilt for the command with the id derived from the
+      request: a replay whose command names no revision, another revision or
+      an unreadable one answers 500 `lifecycle invariant broken: stored
+      revision unavailable`. Fails: any non-201, `replay: false`, a different
+      id, or any 500.
+   b. *Later revision does not leak.* Revise one document once more (a new
+      `client_request_id`), then re-send its original create body. Pass: 201,
+      `replay: true`, the original `revision_id` (not the new head). Fails: any
+      other id, any 500.
+   c. *Revise re-submit.* For a document's latest revise, re-send the same
+      body (same `client_request_id`, `prompt`, `expected_head_revision_id`)
+      while that revise's revision is still the head. Pass: 202, `replay:
+      true`, `revision_id` equal to the first response. Fails: a different
+      `revision_id`, a 409 `document head changed` (the head moved: redo it
+      while it is the head), or any 500. This reads the revision by its
+      derived id; the command replay path itself is exercised by (a) and by
+      the unit tests, and the record says so rather than claiming (c) proves
+      it.
+   d. *Rebuilt revision bytes.* For each document, `GET
+      /api/texture/revisions/{id}` for the first and the latest revision: the
+      `content` equals what step 2 recorded. Fails: any difference or 404.
 5. **Replay completeness.** `replay-completeness` `.result.status` must be
    `equivalent`, `.eligibility.unknown_tables` empty. Anything else fails it.
 6. **Crash and planned restart.** `scripts/chaos/run s1-guest-crash --execute`
@@ -286,12 +364,16 @@ counters and must be run before step 2 reaches the paper.
    e. Rebuild from the tape alone: `choir computer rematerialize-from-tape
       --computer $D --checkpoint-file ckpt.json` (the same artifact), and
       wait for `choir computer status --computer $D` to read active.
-   f. After d and again after e: repeat steps 4 and 5. Every document written
-      before the checkpoint returns its step 2 head revision id and `content`
-      hash; the post-checkpoint revision is absent after d. A re-submit that
-      returns no revision, a 500, a `stored revision unavailable` reason, or a
-      differing hash fails the drill. The `slim` counter restarts from the
-      restored process, so compare documents, not the counter.
+   f. After d and again after e, repeat 4a, 4c, 4d and step 5. Pass: every
+      document written before the checkpoint answers its create re-submit 201
+      `replay: true` with its step 2 `revision_id`, its revise re-submit 202
+      `replay: true` with its step 2 `revision_id`, and the same `content`;
+      replay-completeness `equivalent`. After d only, the revision written
+      after the checkpoint must be absent (`GET /api/texture/revisions/{id}`
+      404). Fails: any 500 or a `stored revision unavailable` body; a `revision_id`
+      or `content` that differs from step 2; a post-checkpoint revision still
+      present after d. The `slim` counter restarts with the restored process
+      (do not compare it); compare documents.
    Byte-level restore of the host's stores, if wanted, is
    `scripts/off-host-restore-drill.sh <snapshot> tape` on Node B under the
    memory cap in its header. I have not run any of this.
