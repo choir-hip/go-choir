@@ -807,3 +807,40 @@ func TestManagementReportOutcomeDoesNotDependOnRetiredRunMemory(t *testing.T) {
 		t.Fatalf("report outcome changed with the producer's memory retired: before=%v after=%v", before, after)
 	}
 }
+
+// RR2-B2: the reader skips a tombstoned record (the selector does).
+func TestCarryReaderSkipsATombstonedRecord(t *testing.T) {
+	ctx := context.Background()
+	h := newTapeHarness(t)
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	day := 24 * time.Hour
+	memSeedLifecycle(t, h, "owner-1", "tb-live", docAgent("tb"), types.RunCompleted, 40*day, 40*day, now)
+	fin := now.Add(-20 * day)
+	rec := types.RunRecord{RunID: "tb-gone", AgentID: docAgent("tb"), OwnerID: "owner-1", ComputerID: "computer-1", State: types.RunCompleted, CreatedAt: fin, UpdatedAt: fin, FinishedAt: &fin}
+	obj, err := lifecycleObject(ogKindRun, "owner-1", "computer-1", "tb-gone", rec, lifecycleMetadataAgent("tb-gone", docAgent("tb")), fin, fin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj.Tombstone = true
+	if err := h.store.ogStore.PutBatch(ctx, objectgraph.Batch{Objects: []objectgraph.Object{obj}}); err != nil {
+		t.Fatal(err)
+	}
+	memSeedEntries(t, h, "tb-gone", docAgent("tb"), entryKinds, 20*day, now)
+	runID, _, err := h.store.LatestActorRunMemoryEntries(ctx, "owner-1", "computer-1", docAgent("tb"), "")
+	if err != nil || runID != "tb-live" {
+		t.Fatalf("carry source = %q, %v; want tb-live (tb-gone is tombstoned)", runID, err)
+	}
+}
+
+// RR2-S1: a run whose rows and record disagree about the agent takes no slot.
+func TestDisagreeingRunTakesNoCarrySlot(t *testing.T) {
+	h := newTapeHarness(t)
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	day := 24 * time.Hour
+	memPutLifecycleRecord(t, h, "owner-1", "dg-new", docAgent("other"), types.RunCompleted, 30*day, now)
+	memSeedEntries(t, h, "dg-new", docAgent("dg"), entryKinds, 30*day, now)
+	for i, id := range []string{"dg-a", "dg-b", "dg-c"} {
+		memSeedLifecycle(t, h, "owner-1", id, docAgent("dg"), types.RunCompleted, time.Duration(35+i)*day, time.Duration(35+i)*day, now)
+	}
+	wantSelected(t, h, now, "dg-c")
+}
