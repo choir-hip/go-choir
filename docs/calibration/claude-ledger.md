@@ -211,6 +211,7 @@ entered below as lapsed, not scored.
 | C83 | 2026-11-14T14:36Z | true | Landed 12:46Z as a1ec394fe, b2494ce52, d90131351; CI 43596488443 failed first on two unrelated timing tests (searchplane `TestKeenableTimeoutOutageIsBenchedFromCompletion`, toolregistry `TestToolBatchWaitsAreBounded`), rerun green; deployed 13:12Z, no revert. 13:12Z to 14:35Z: the paper's console log has no "stored revision" line and no stale line; corpusd journal has no panic and no "revision unavailable". Paper publishing at 14:35Z (678 lines in 20 minutes). Brier 0.02. |
 | C84 | 2026-11-14T21:09Z | true | Landed 13:16Z (7abf6494a, 4a8d80a2a, a810c61cc, 40ce2fb07, 61c92229b), CI 43598955268 success, deployed 13:33Z, no revert. The walk reached the paper about 14:04Z and passed the end of its old rows by 20:34Z (through=5,170,000; 1,609,221 rewritten since the 18:2xZ restart, 41,279 already format 2); from 20:3xZ its load lines show rewritten=0. corpusd timing lines 13:33Z to 21:09Z: the paper's worst ten-minute append p95 is 16.6 ms and no line reads in seconds. Paper publishing at every hourly tick. The table grew about 3.5 GB; autovacuum ran. Brier 0.06. |
 | C88 | 2026-11-14T22:14Z | true | build 22:04:31Z to under a minute, first attempt, partial index 9.4 MB valid and ready; drop-kind-seq 22:07:54Z and drop-receipt-id 22:11:01Z, each exit 0; cancel rule never near (paper one-minute p95 at most 5.9 ms against 253 ms; P 3.33 ms); `indexes_bytes` 12,429,336,576 to 7,403,438,080 (5.03 GB less); ten-minute p95 3.56 ms at 22:14Z | 0.09 |
+| C86 | 2026-11-14T22:36Z | true | landed 20:21Z (fdbe766d6), CI 43637074875, deployed 20:35Z, no revert; paper at 22:36Z: 144 `choir.lifecycle_command` ops, 828,038 bytes, 5.75 KB per op against 31.1 KB (counters since the 21:31Z restart; 5.6 KB over 35 ops before it); no "stored revision" line in the paper's console log; publishing (1,215 calls in the hour); d@e create and editor-save re-submits answered with the recorded revision ids before and after a restart | 0.04 |
 
 ### Scorecard
 
@@ -221,5 +222,5 @@ false, 1 partial), 7 lapsed.
 |---|---|---|
 | 0.0 to 0.3 | 0 | n/a |
 | 0.3 to 0.6 | 8 | 1, and 1 partial |
-| 0.6 to 0.8 | 14 | 10, and 1 partial |
+| 0.6 to 0.8 | 16 | 12, and 1 partial |
 | 0.8 to 1.0 | 0 | n/a |
