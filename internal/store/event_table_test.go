@@ -911,7 +911,7 @@ func TestEventTableBootLeavesObjectGraphAlone(t *testing.T) {
 		if _, err := objectgraph.WriteObjectTx(context.Background(), tx, objectgraph.Object{
 			CanonicalID: fmt.Sprintf("obj:choir.event:o1:key-%06d", i), ObjectKind: "choir.event", OwnerID: "o1",
 			ContentHash: fmt.Sprintf("h-%d", i), Body: []byte(fmt.Sprintf(`{"run_id":"r%d","seq":%d}`, i%10, i)),
-			Metadata: []byte(fmt.Sprintf(`{"run_id":"r%d","seq":%d,"stream_seq":%d}`, i%10, i, i)),
+			Metadata:  []byte(fmt.Sprintf(`{"run_id":"r%d","seq":%d,"stream_seq":%d}`, i%10, i, i)),
 			CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
 		}); err != nil {
 			t.Fatal(err)

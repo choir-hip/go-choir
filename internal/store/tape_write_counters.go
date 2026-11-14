@@ -38,6 +38,7 @@ type tapeWriteMaps struct {
 	opsByObjectKind map[string]int64
 	opBytesByObject map[string]int64
 	runMemoryByKind map[string]int64
+	rewrites        map[string]*rewriteKind // object_rewrite_counters.go
 }
 
 func bumpKey(m *map[string]int64, key string, n int64) {
@@ -99,6 +100,7 @@ type tapeEventTally struct {
 	payloadBytes int64
 	objKinds     []string
 	objBytes     []int64
+	objHashes    []uint64 // of the canonical ids, parallel to objKinds
 	rmKeys       []string
 }
 
@@ -133,6 +135,7 @@ func tallyTapeParts(authority string, parts [][]computerevent.ProjectionOp, firs
 			case computerevent.ProjectionOpObject:
 				t.objKinds = append(t.objKinds, objectKindOf(op.CanonicalID))
 				t.objBytes = append(t.objBytes, int64(len(op.Body)))
+				t.objHashes = append(t.objHashes, hashID(op.CanonicalID))
 			case computerevent.ProjectionOpRunMemoryEntry:
 				t.rmKeys = append(t.rmKeys, runMemoryKey(op.Body))
 			}
@@ -208,6 +211,12 @@ func (m *tapeWriteMaps) add(t tapeEventTally) {
 	for i, kind := range t.objKinds {
 		bumpKey(&m.opsByObjectKind, kind, 1)
 		bumpKey(&m.opBytesByObject, kind, t.objBytes[i])
+		var h uint64
+		hasHash := i < len(t.objHashes)
+		if hasHash {
+			h = t.objHashes[i]
+		}
+		m.addRewrite(kind, t.objBytes[i], h, hasHash)
 	}
 	for _, key := range t.rmKeys {
 		bumpKey(&m.runMemoryByKind, key, 1)
@@ -222,6 +231,7 @@ func (m *tapeWriteMaps) copyInto(out *TelemetryStats) {
 	out.TapeOpsByObjectKind = copyCounts(m.opsByObjectKind)
 	out.TapeOpBytesByObjectKind = copyCounts(m.opBytesByObject)
 	out.RunMemoryOpsByKind = copyCounts(m.runMemoryByKind)
+	out.ObjectRewrites = m.rewriteStats()
 }
 
 // enterTapeWrite counts a caller entering a tape write and returns the func

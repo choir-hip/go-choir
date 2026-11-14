@@ -28,11 +28,11 @@ func TestTextureTurnCastsResearchAndReadsItsReportByCursor(t *testing.T) {
 	req.CommandID = "texture-turn-records-cast"
 	req.InboxRecords = []types.CommitmentRecord{{
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "cell-1:cast:tray-1", Kind: types.CommitmentKindDirective,
-		Directive:   &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "cover chips", Body: `{"kind":"question","summary":"chips"}`},
-		Cast:        &types.CommitmentCast{Hypotheses: []types.CastHypothesis{{Statement: "a new chip shipped", Probability: 0.6}}},
-		Inbox:       researchInbox, SenderInbox: textureInbox, Addressee: researchInbox,
+		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "cover chips", Body: `{"kind":"question","summary":"chips"}`},
+		Cast:      &types.CommitmentCast{Hypotheses: []types.CastHypothesis{{Statement: "a new chip shipped", Probability: 0.6}}},
+		Inbox:     researchInbox, SenderInbox: textureInbox, Addressee: researchInbox,
 		EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved,
-		Provenance:  types.CommitmentProvenance{AgentID: textureInbox},
+		Provenance: types.CommitmentProvenance{AgentID: textureInbox},
 	}}
 	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
 	result, err := s.ApplyTextureTurn(ctx, req)
@@ -67,7 +67,7 @@ func TestTextureTurnCastsResearchAndReadsItsReportByCursor(t *testing.T) {
 			Report:     &types.CommitmentReport{Claims: []types.ReportClaim{{Text: "it shipped"}}, StopReason: "completed"},
 			Final:      true, Inbox: textureInbox, SenderInbox: researchInbox, Addressee: textureInbox,
 			EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved,
-			Provenance:  types.CommitmentProvenance{AgentID: researchInbox},
+			Provenance: types.CommitmentProvenance{AgentID: researchInbox},
 		}},
 		Cursor: &types.InboxCursorAdvance{ReaderAgentID: researchInbox, Inbox: researchInbox, ExpectedSeq: 0, Seq: 1},
 	}
@@ -114,7 +114,7 @@ func TestTextureTurnWithoutWorkItemCommitsOnRecords(t *testing.T) {
 	seed := types.CommitInboxRecordsRequest{OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "seed-no-work", Records: []types.CommitmentRecord{{
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "mgmt:note:no-work", Kind: types.CommitmentKindDirective,
 		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNotice, Body: "fyi"},
-		Inbox: textureInbox, SenderInbox: "management:" + start.OwnerID, Addressee: textureInbox,
+		Inbox:     textureInbox, SenderInbox: "management:" + start.OwnerID, Addressee: textureInbox,
 		EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved,
 		Provenance: types.CommitmentProvenance{AgentID: "management:" + start.OwnerID},
 	}}}

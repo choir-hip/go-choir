@@ -484,7 +484,9 @@ var errSimulatedCrash = &simulatedCrash{}
 
 type simulatedCrash struct{}
 
-func (*simulatedCrash) Error() string { return "simulated crash between the partition and the state commit" }
+func (*simulatedCrash) Error() string {
+	return "simulated crash between the partition and the state commit"
+}
 
 // T5: a retired partition whose file outlived a crash is not read again; a
 // WAL left by a cut-short deletion is removed; a staged compact copy holds
