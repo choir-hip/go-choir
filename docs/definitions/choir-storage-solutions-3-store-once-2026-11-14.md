@@ -46,14 +46,20 @@ finish:
     measured value beside each line.
   acceptance:
     - action: read the paper's per-op tape counters over a day of ordinary work after T1 and T2 are deployed
-      proves: carried and duplicated bytes are under 5% of payload bytes, no kind writes more than twice its changed bytes, and tape growth is under a number precommitted in the calibration ledger from the T0 counters (3.6 GB a day at the start)
+      proves: carried and duplicated bytes are under 5% of payload bytes, no kind writes more than twice its changed bytes, and tape growth is under 1 GB a day (3.6 at the start)
       evidence_class: deployed, the guest's observability counters and Node B du
     - action: read the paper's store by table after T3 is deployed, seven days apart
-      proves: the second reading is within 10% of the first, and every table over 1 GiB has a named retirement rule or a named reason to stay (43.8 GiB and rising at the start; the size target is precommitted from the T0 reading)
+      proves: the store is under 10 GiB, the second reading is within 10% of the first, and every table over 1 GiB has a named retirement rule or a named reason to stay (43.8 GiB and rising at the start)
       evidence_class: deployed, store_tables detail
     - action: count the paper's receipt rows and bytes after T4
-      proves: under the number precommitted from the retained set (about 14 GB at the start)
+      proves: under 2 GB (about 14 GB at the start; the restore window alone is about 1.7 GB at today's row width, so this needs the slim row)
       evidence_class: deployed, host metadata (pg_total_relation_size)
+    - action: sum the paper's daily growth on Node B across tape, store image, chunks and receipts over seven days
+      proves: under 1.5 GB a day (about 7 at the start); and everything but the tape (store image, chunks, receipts) is under 25 GiB (about 95 at the start). The tape already written stays: 72.9 GiB is not rewritten or dropped
+      evidence_class: deployed, the hourly growth ledger on Node B
+    - action: time the paper's snapshot after T3
+      proves: under 10 minutes (37 at the start)
+      evidence_class: deployed, snapshot_recorded events
     - action: on d@e, after every change to what an op carries or to retention, destroy the guest disk and restore from the latest snapshot plus the tape tail; then replay the whole tape into an empty store
       proves: the restore address works, the local head equals the platform head, and replay of old and new ops yields the same objects and content hashes
       evidence_class: deployed drill on d@e
@@ -247,6 +253,14 @@ now:
   next_action: land coalescing and the store reading, read both computers by table, land the per-op counters, re-rank.
 
 receipts: []
+
+targets_note: >
+  The size numbers in acceptance are targets set by the owner's instruction
+  to be safely aggressive (2026-11-14), not forecasts. They say what a
+  computer should cost; the mechanisms to reach them are ranked after T0's
+  counters. Each has a calibration claim with a probability (C75 to C78).
+  A target that the measured numbers show to be unreachable is reported with
+  the number that is reachable, not quietly lowered.
 
 weak_measures:
   - name: Node B free space
