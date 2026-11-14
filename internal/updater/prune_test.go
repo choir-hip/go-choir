@@ -33,7 +33,7 @@ package updater
 //      TestPruneLeavesReleasesAloneWhenCurrentIsUnreadable)
 //  F8  a crash mid-prune leaves a bootable, rollback-capable computer, and the
 //      next run finishes the job (TestPruneFinishesACrashedPruneAndIsIdempotent,
-//      TestPruneNeverLeavesAHalfDeletedObjectUnderItsRealName)
+//      TestPruneNeverLeavesAPartialStoreObjectUnderItsRealName)
 //  F9  the budget stops the deleting between files and a second run finishes
 //      (TestPruneStopsAtItsBudgetAndTheNextRunFinishes)
 //  F10 one log line with counts, bytes and why it skipped (TestPruneReportLine)
@@ -1144,7 +1144,7 @@ func TestPruneStopsAtItsBudgetAndTheNextRunFinishes(t *testing.T) {
 // half-deleted one under its real name would be reused as whole. Every deletion
 // is a rename first; a prune killed or stopped at any point leaves the name
 // absent.
-func TestPruneNeverLeavesAHalfDeletedObjectUnderItsRealName(t *testing.T) {
+func TestPruneNeverLeavesAPartialStoreObjectUnderItsRealName(t *testing.T) {
 	u, root := newPruneUpdater(t)
 	digest := stageTestRelease(t, u, root, "r1", false)
 	setCurrent(t, root, digest)

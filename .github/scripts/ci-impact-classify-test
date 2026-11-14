@@ -23,7 +23,7 @@ assert_output() {
 }
 
 assert_output docs-only $'docs/README.md\nAGENTS.md\n' \
-  'docs_only=true' 'non_docs=false' 'go=false' 'sbom=false' 'flakehub=false'
+  'docs_only=true' 'non_docs=false' 'go=false' 'sbom=false' 'flakehub=false' 'guest_unit=false'
 
 assert_output auth-change $'internal/auth/service.go\ninternal/auth/service_test.go\n' \
   'docs_only=false' 'go=true' 'sbom=true' 'flakehub=true' 'high_risk_race=false'
@@ -63,6 +63,21 @@ assert_output sbom-helper $'.github/scripts/build-sboms-differential\n' \
 
 assert_output sbom-verifier $'.github/scripts/verify-sbom-candidate\n' \
   'go=false' 'sbom=true' 'flakehub=false' 'ci=true'
+
+# The boot prune's unit test (scripts/updater-prune-unit-nix-test.sh) guards
+# the ordering line in nix/autoputer-vm.nix: it must run when any nix module
+# changes and when the script or the workflow does, and not for docs.
+assert_output nix-module-only $'nix/autoputer-vm.nix\n' \
+  'docs_only=false' 'non_docs=true' 'guest_unit=true' 'go=false' 'sbom=false'
+
+assert_output nix-unit-test-script-only $'scripts/updater-prune-unit-nix-test.sh\n' \
+  'docs_only=false' 'non_docs=true' 'guest_unit=true' 'go=false'
+
+assert_output nix-workflow-wiring $'.github/workflows/ci.yml\n' \
+  'guest_unit=true'
+
+assert_output nix-docs-and-dev-scripts-do-not-select-it $'docs/problems/x.md\nscripts/land\nskills/throughline/SKILL.md\n' \
+  'docs_only=true' 'guest_unit=false'
 
 # Docs-like paths (owner, 2026-11-12): skill text and developer-side scripts.
 assert_output skills-text-only $'skills/throughline/SKILL.md\nskills/throughline/references/format.md\nskills/agentic-consensus/agentic-consensus-runner.sh\n' \
