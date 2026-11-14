@@ -38,7 +38,13 @@ func TestObservabilityServesTheTapeWriteCounters(t *testing.T) {
 // and the estimated flag.
 func TestObservabilityServesTheObjectRewriteCounters(t *testing.T) {
 	rt := telemetryRuntime(t, "computer-rewrite-counters-obs")
-	queueTelemetry(t, rt, 2)
+	queueTelemetry(t, rt, 2) // each event is one object op of kind choir.event
+	const kind = "choir.event"
+	wantOps := rt.store.TelemetryStats().TapeOpsByObjectKind[kind]
+	wantBytes := rt.store.TelemetryStats().TapeOpBytesByObjectKind[kind]
+	if wantOps < 2 || wantBytes <= 0 {
+		t.Fatalf("setup: the tape counted %d %s ops and %d bytes, want at least 2 and some bytes", wantOps, kind, wantBytes)
+	}
 	req := httptest.NewRequest(http.MethodGet, "/api/runtime/observability", nil)
 	req.Header.Set("X-Authenticated-User", "owner-telemetry")
 	rec := httptest.NewRecorder()
@@ -51,14 +57,24 @@ func TestObservabilityServesTheObjectRewriteCounters(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &obs); err != nil {
 		t.Fatalf("observability = %d %s", rec.Code, rec.Body.String())
 	}
-	if obs.TelemetryBatching.ObjectRewrites == nil {
-		t.Fatalf("object_rewrites is absent or null: %s", rec.Body.String())
+	served := obs.TelemetryBatching.ObjectRewrites
+	if len(served) == 0 {
+		t.Fatalf("object_rewrites is empty or absent: %s", rec.Body.String())
 	}
-	for kind, fields := range obs.TelemetryBatching.ObjectRewrites {
-		for _, key := range []string{"ops", "bytes", "mean_bytes_per_op", "distinct_objects", "writes_per_object", "estimated"} {
-			if _, ok := fields[key]; !ok {
-				t.Errorf("object_rewrites[%s] lacks %q", kind, key)
-			}
+	fields, ok := served[kind]
+	if !ok {
+		t.Fatalf("object_rewrites lacks %s: %s", kind, rec.Body.String())
+	}
+	for _, key := range []string{"ops", "bytes", "mean_bytes_per_op", "distinct_objects", "writes_per_object", "estimated"} {
+		if _, ok := fields[key]; !ok {
+			t.Errorf("object_rewrites[%s] lacks %q", kind, key)
 		}
+	}
+	var ops, bytes int64
+	if err := json.Unmarshal(fields["ops"], &ops); err != nil || ops != wantOps {
+		t.Errorf("served ops = %s, want %d", fields["ops"], wantOps)
+	}
+	if err := json.Unmarshal(fields["bytes"], &bytes); err != nil || bytes != wantBytes {
+		t.Errorf("served bytes = %s, want %d", fields["bytes"], wantBytes)
 	}
 }
