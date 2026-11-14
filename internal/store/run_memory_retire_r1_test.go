@@ -7,6 +7,7 @@ package store
 import (
 	"context"
 	"reflect"
+	"sort"
 	"strconv"
 	"testing"
 	"time"
@@ -26,7 +27,7 @@ func memSeedLifecycle(t *testing.T, h *tapeHarness, ownerID, runID, agentID stri
 	if state.Terminal() {
 		rec.FinishedAt = &fin
 	}
-	obj, err := lifecycleObject(ogKindRun, ownerID, "computer-1", runID, rec, lifecycleMetadata("run_id", runID, "computer-1", "trajectory-1", 1), rec.CreatedAt, rec.UpdatedAt)
+	obj, err := lifecycleObject(ogKindRun, ownerID, "computer-1", runID, rec, lifecycleMetadataAgent(runID, agentID), rec.CreatedAt, rec.UpdatedAt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,6 +38,12 @@ func memSeedLifecycle(t *testing.T, h *tapeHarness, ownerID, runID, agentID stri
 		t.Fatalf("fixture %s is readable by the owner-scoped id; it must be lifecycle-only", runID)
 	}
 	memSeedEntries(t, h, runID, agentID, []types.RunMemoryEntryKind{"message", "message", "rlm_inbox_cursor"}, entryAgo, now)
+}
+
+func lifecycleMetadataAgent(runID, agentID string) map[string]any {
+	m := lifecycleMetadata("run_id", runID, "computer-1", "trajectory-1", 1)
+	m["agent_id"] = agentID
+	return m
 }
 
 func r1Script(t *testing.T, h *tapeHarness, now time.Time) {
@@ -51,7 +58,6 @@ func r1Script(t *testing.T, h *tapeHarness, now time.Time) {
 	memSeedLifecycle(t, h, "owner-1", "l-fresh", "worker-6", types.RunCompleted, 2*day, 30*day, now)
 	// L2: a record of the same run id under another owner is not this run's.
 	memSeedLifecycle(t, h, "owner-2", "l-foreign", "worker-7", types.RunRunning, 0, 30*day, now)
-	memSeedEntries(t, h, "l-foreign", "worker-7", []types.RunMemoryEntryKind{"message", "message", "rlm_inbox_cursor"}, 30*day, now)
 	// N1, N2: no record anywhere.
 	memSeedEntries(t, h, "n-old", "worker-8", []types.RunMemoryEntryKind{"message", "message", "rlm_inbox_cursor"}, 30*day, now)
 	memSeedEntries(t, h, "n-new", "worker-9", []types.RunMemoryEntryKind{"message", "message", "rlm_inbox_cursor"}, 3*day, now)
@@ -76,13 +82,13 @@ func TestRunMemoryRetireR1Selection(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := append([]string(nil), r1Retired...)
-	sortStrings(want)
+	sort.Strings(want)
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("selected %v, want %v", got, want)
 	}
 	byName := censusByName(c)
 	for name, runs := range map[string]int64{
-		"retired":                           7, // l-done, l-failed, p-1..3, d-1
+		"retired":                           6, // l-done, l-failed, p-1..3, d-1
 		"retired_no_run_record":             2, // n-old, l-foreign
 		"kept_newest_entry_in_window":       1, // n-new
 		"kept_newest_two_of_agent_7_30d":    0,
@@ -105,14 +111,6 @@ func TestRunMemoryRetireR1Selection(t *testing.T) {
 	}
 	if runs != c.Groups {
 		t.Errorf("dispositions sum to %d, groups %d", runs, c.Groups)
-	}
-}
-
-func sortStrings(s []string) {
-	for i := 1; i < len(s); i++ {
-		for j := i; j > 0 && s[j] < s[j-1]; j-- {
-			s[j], s[j-1] = s[j-1], s[j]
-		}
 	}
 }
 
@@ -200,8 +198,8 @@ func TestRunMemoryRetireR1BacklogDrainsBackToBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if passes != 4 { // 100, 100, 30, then the pass that finds nothing
-		t.Errorf("passes = %d, want 4", passes)
+	if passes != 3 { // 100, 100, 30: the last leaves nothing over the cap
+		t.Errorf("passes = %d, want 3", passes)
 	}
 	if ops != total/runMemoryRetireRunsPerOp {
 		t.Errorf("ops = %d, want %d", ops, total/runMemoryRetireRunsPerOp)

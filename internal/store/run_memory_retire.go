@@ -8,11 +8,14 @@ package store
 // store only. Nothing on the tape is touched.
 //
 // What reads run memory after a run finishes (checked at each caller):
-//   - LatestActorRunMemoryEntries (agentcore/run_memory.go:142, :207,
-//     texture_lifecycle_api.go:243): a Texture run continuing the same
-//     document carries the newest completed or passivated run's conversation
-//     (no other desk inherits a prior run since 2026-11-01). The job keeps the
-//     newest runs of every owner/agent pair, so that read still finds its run.
+//   - LatestActorRunMemoryEntries (agentcore/run_memory.go carryActorConversation,
+//     texture_lifecycle_api.go): a Texture run continuing the same document
+//     carries the newest completed or passivated run's conversation (no other
+//     desk inherits a prior run since 2026-11-01). Only a document custodian's
+//     agent (deskmanifest.IsDocumentInbox) is ever carried from, and the
+//     source needs a run record. The job keeps the newest runs of every
+//     document custodian's agent, so that read still finds its run; no other
+//     agent's old run is read by anything.
 //   - ListRunMemoryEntriesForAgent(rlm_inbox_cursor) (rlm_reduce.go:525): the
 //     inbox cursor. Rows of that kind are never retired (KeepKinds).
 //   - ListRunMemoryEntries(run) of a live or just-finished run (management,
@@ -21,10 +24,16 @@ package store
 //   - get_run_memory_entry by id (agentcore/tools_evidence.go:57): an entry
 //     of a retired run answers not-found, a visible refusal.
 //
-// A run is retired only when it is terminal (completed, failed, cancelled; a
-// passivated run can be re-warmed, a blocked one resumed), finished more than
-// runMemoryRetireWindow ago, has not written an entry in that window, and is
-// not one of the newest runMemoryKeepPerAgent runs of its agent. The op names
+// A run is retired only when it has not written an entry in
+// runMemoryRetireWindow, is not one of the newest runMemoryKeepPerAgent runs
+// of a document custodian's agent, and either has a record that says it is
+// terminal (completed, failed, cancelled; a passivated run can be re-warmed, a
+// blocked one resumed) and finished more than the window ago, or has no record
+// at all (nothing can carry from, resume or name a run with no record). The
+// record is read by its owner-scoped id and, failing that, by its run id: a
+// run the lifecycle writes lives under a computer-scoped id, which the
+// owner-scoped read never finds (docs/problems/
+// run-memory-retirement-keeps-nearly-everything-2026-11-14.md). The op names
 // the runs explicitly, so replay removes exactly what the live apply removed.
 
 import (
@@ -38,14 +47,15 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 var (
 	// runMemoryRetireWindow is how old a finished run's last entry must be.
 	runMemoryRetireWindow = 7 * 24 * time.Hour
-	// runMemoryKeepPerAgent is how many newest runs per owner/agent keep their
-	// entries whatever their age.
+	// runMemoryKeepPerAgent is how many newest runs per owner and document
+	// custodian agent keep their entries whatever their age.
 	runMemoryKeepPerAgent = 2
 	// runMemoryRetireMaxOps bounds the ops one run appends.
 	runMemoryRetireMaxOps = 50
@@ -167,7 +177,9 @@ func (s *Store) selectRunMemory(ctx context.Context, now time.Time) ([]string, R
 	}
 	_ = rows.Close()
 
-	// The newest runs of each owner/agent keep their entries.
+	// The newest runs of each owner's document custodian agent keep their
+	// entries: a Texture run carries from its document's newest run. No other
+	// agent is ever carried from.
 	byAgent := map[string][]*runMemoryGroup{}
 	for i := range groups {
 		g := &groups[i]
@@ -182,6 +194,9 @@ func (s *Store) selectRunMemory(ctx context.Context, now time.Time) ([]string, R
 	for _, list := range byAgent {
 		if len(list) <= runMemoryKeepPerAgent {
 			census.AgentsWithOneOrTwoRuns++
+		}
+		if !deskmanifest.IsDocumentInbox(list[0].agentID) {
+			continue
 		}
 		sort.Slice(list, func(i, j int) bool { return list[i].last.After(list[j].last) })
 		for i := 0; i < len(list) && i < runMemoryKeepPerAgent; i++ {
@@ -228,10 +243,17 @@ func (s *Store) selectRunMemory(ctx context.Context, now time.Time) ([]string, R
 		if err := ctx.Err(); err != nil {
 			return out, census, err
 		}
-		run, err := s.GetRunByOwnerOG(ctx, g.ownerID, g.runID)
+		run, err := s.runRecordForRetirement(ctx, g.ownerID, g.runID)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
-				census.add("kept_run_record_not_found", g) // a run we cannot see is not proven finished
+				// No record under either id: nothing can carry from, resume or
+				// name this run, and its newest entry is past the window.
+				census.add("retired_no_run_record", g)
+				out = append(out, g.runID)
+				continue
+			}
+			if errors.Is(err, errRunRecordUnreadable) {
+				census.add("kept_run_record_unreadable", g) // an unreadable record is never proof of state
 				continue
 			}
 			return out, census, err
@@ -262,6 +284,63 @@ func (s *Store) selectRunMemory(ctx context.Context, now time.Time) ([]string, R
 	sort.Strings(out)
 	census.finish()
 	return out, census, nil
+}
+
+// errRunRecordUnreadable is a run record that exists and does not decode.
+var errRunRecordUnreadable = errors.New("run record unreadable")
+
+// runRecordForRetirement is the run's record as the selection needs it: read by
+// the owner-scoped id, and on a miss by the run id in the record's metadata
+// (an indexed column), which finds the computer-scoped lifecycle records. Only
+// the owner's own, live records count. When more than one copy exists the
+// first that is not terminal wins (it keeps the run); else the newest finish.
+func (s *Store) runRecordForRetirement(ctx context.Context, ownerID, runID string) (types.RunRecord, error) {
+	rec, err := s.GetRunByOwnerOG(ctx, ownerID, runID)
+	if err == nil {
+		return rec, nil
+	}
+	if !errors.Is(err, ErrNotFound) {
+		return types.RunRecord{}, fmt.Errorf("%w: %v", errRunRecordUnreadable, err)
+	}
+	objs, err := s.ogListAllByMetadata(ctx, ogKindRun, "run_id", runID)
+	if err != nil {
+		return types.RunRecord{}, err
+	}
+	var best types.RunRecord
+	found := false
+	for _, obj := range objs {
+		if obj.Tombstone || obj.OwnerID != ownerID {
+			continue
+		}
+		var r types.RunRecord
+		if err := ogDecode(obj, &r); err != nil {
+			return types.RunRecord{}, fmt.Errorf("%w: %v", errRunRecordUnreadable, err)
+		}
+		if r.RunID != runID {
+			continue
+		}
+		switch {
+		case !found:
+			best, found = r, true
+		case !r.State.Terminal():
+			if best.State.Terminal() {
+				best = r
+			}
+		case best.State.Terminal() && runFinishedAt(r).After(runFinishedAt(best)):
+			best = r
+		}
+	}
+	if !found {
+		return types.RunRecord{}, ErrNotFound
+	}
+	return best, nil
+}
+
+func runFinishedAt(r types.RunRecord) time.Time {
+	if r.FinishedAt != nil {
+		return *r.FinishedAt
+	}
+	return r.UpdatedAt
 }
 
 // runMemoryRetireRunsPerOp is the runs one op names when this store writes
@@ -317,7 +396,41 @@ func (s *Store) RetireRunMemory(ctx context.Context, now time.Time) (int, error)
 	return appended, nil
 }
 
-// RetireRunMemoryBacklog is not built yet (test stub).
+// runMemoryCatchUpGap is the rest between back-to-back passes of a backlog.
+// Each pass already rests after every op (a duty cycle of one in five at
+// most); the gap lets a pass's group read and the desks' work through.
+var runMemoryCatchUpGap = time.Minute
+
+// RetireRunMemoryBacklog runs passes until one leaves no run over the per-pass
+// cap, retires nothing, or fails, resting gap between them. A backlog the
+// size of the paper's (about 105,000 runs at 5,000 a pass) drains in one
+// wake, not one pass a day. It returns the ops and passes done. now is the start; a pass that runs
+// long judges age by that start, which only keeps more.
 func (s *Store) RetireRunMemoryBacklog(ctx context.Context, now time.Time, gap time.Duration) (ops, passes int, err error) {
-	return 0, 0, nil
+	for {
+		n, err := s.RetireRunMemory(ctx, now)
+		passes++
+		ops += n
+		if err != nil {
+			return ops, passes, err
+		}
+		if n == 0 || s.runMemoryOverCap() == 0 {
+			return ops, passes, nil
+		}
+		select {
+		case <-ctx.Done():
+			return ops, passes, ctx.Err()
+		case <-time.After(gap):
+		}
+	}
+}
+
+// runMemoryOverCap is the runs the last pass left unreached because of the cap.
+func (s *Store) runMemoryOverCap() int64 {
+	for _, d := range s.RunMemoryRetirementCensus().Dispositions {
+		if d.Disposition == "not_reached_over_cap" {
+			return d.Runs
+		}
+	}
+	return 0
 }

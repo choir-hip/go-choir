@@ -38,7 +38,7 @@ func (t *RunMemoryTally) add(g runMemoryGroup) {
 }
 
 // RunMemoryNewestTwo counts the runs that are among the newest two of their
-// agent whatever other rule also keeps them, by the age of their newest entry.
+// document custodian agent whatever other rule also keeps them, by the age of their newest entry.
 // The dispositions are exclusive and name the first rule in order, so a run in
 // the window shows there; this block shows the overlap.
 type RunMemoryNewestTwo struct {
@@ -58,7 +58,8 @@ type RunMemoryCensus struct {
 	Groups  int64 `json:"groups"`
 	Entries int64 `json:"entries"`
 	// Agents is the distinct owner/agent pairs; AgentsWithOneOrTwoRuns those
-	// whose every run is protected by the newest-two rule.
+	// with at most two runs (all agents; only a document custodian's are
+	// protected by the newest-two rule).
 	Agents                 int64 `json:"agents"`
 	AgentsWithOneOrTwoRuns int64 `json:"agents_with_one_or_two_runs"`
 	// Dispositions: every group in exactly one, in the order the rules apply.
@@ -71,11 +72,12 @@ type RunMemoryCensus struct {
 // runMemoryCensusOrder is the fixed dispositions, listed even at zero.
 var runMemoryCensusOrder = []string{
 	"retired",
+	"retired_no_run_record",
 	"kept_only_cursor_entries",
 	"kept_newest_entry_in_window",
 	"kept_newest_two_of_agent_7_30d",
 	"kept_newest_two_of_agent_over_30d",
-	"kept_run_record_not_found",
+	"kept_run_record_unreadable",
 	"kept_state_passivated",
 	"kept_state_blocked",
 	"kept_finished_in_window",
