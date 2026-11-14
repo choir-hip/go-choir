@@ -1,6 +1,6 @@
-# Keenable auth errors leave some of the paper's searches with no provider
+# One Keenable 403 left the paper's searches with no provider for fifteen minutes
 
-Recorded 2026-11-14T17:40Z. Not repaired. Read-only observation from the
+Recorded 2026-11-14T17:36Z (first written with 17:40Z, which was ahead of the clock). Not repaired. Read-only observation from the
 hourly tick.
 
 ## Problem
@@ -36,3 +36,29 @@ a deploy of ours (the 16:20Z landing was tests only and did not deploy).
 - Whether an auth error on a provider that answers the next call deserves the
   same bench as a dead key is a policy question for the search plane.
 - The paper keeps publishing; the cost is searches that return nothing.
+
+## Correction, 2026-11-14T17:38Z
+
+The first version of this record said Keenable was benched "from time to
+time". That was wrong: I counted skip lines, not failures. Read again with the
+owner:
+
+- The gateway logged **one** failure: `16:24:15 searchplane: keenable call
+  failed class=auth_error http_status=403 stage=http_status
+  latency_ms=19122`. A 403 that takes 19 seconds is not what a refused key
+  looks like (the same endpoint answers in about 0.2 s).
+- The policy benches an auth error for 15 minutes on the first strike
+  (`internal/gateway/searchplane/policy.go:72`). All 37 `keenable=auth_error`
+  skips fall between 16:24:51Z and 16:39:01Z, and so do all the unanswered
+  searches of both hourly readings (19 before 16:35Z, 22 after).
+- Since 16:39Z Keenable answers: 19 of 19 searches in the fifteen minutes to
+  17:37Z.
+- Eight calls from a developer machine with the key in the gitignored `.env`,
+  same URL, header and body as `KeenableProvider.Search`: eight 200s in 0.18
+  to 0.35 s. Whether that key is the one deployed on Node B was not checked.
+- The only other Keenable failures in eight hours are six `parse_response`
+  errors in one burst at 10:36Z to 10:37Z.
+
+So the key is good and the event is over. What remains is the policy
+question: one slow 403 from the only uncapped provider cost fifteen minutes of
+search while every paid provider was quota-limited.
