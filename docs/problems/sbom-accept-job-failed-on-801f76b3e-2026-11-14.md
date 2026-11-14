@@ -1,6 +1,6 @@
 # SBOM accept job failed on 801f76b3e (2026-11-14)
 
-Recorded 2026-11-14T06:00Z from a read-only reading of the run's logs.
+Recorded 2026-11-14T05:48Z from a read-only reading of the run's logs.
 
 ## Problem
 CI run 43560540641 on main commit 801f76b3e concluded failure. The only

@@ -1,6 +1,6 @@
 # The updater prune did not converge in three review rounds: structural assessment
 
-Recorded 2026-11-14T04:20Z. Candidate: `lane/updater-prune` at `03c956e31`.
+Recorded 2026-11-14T04:18Z. Candidate: `lane/updater-prune` at `03c956e31`.
 It does not land (owner ruling N1 in the part 3 goal file). Problem it was
 solving: [updater-directory-fills-the-data-volume-2026-11-13.md](updater-directory-fills-the-data-volume-2026-11-13.md).
 
