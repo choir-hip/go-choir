@@ -1,5 +1,10 @@
 package platform
 
+import (
+	"context"
+	"log"
+)
+
 // The queries of computer_event_append_receipts that choose its indexes
 // (docs/design/store-once-2026-11-14.md R4,
 // docs/evidence/tape-write-census-2026-11-12.md section 5).
@@ -36,8 +41,9 @@ package platform
 //      lookups that replaced them;
 //  I6. a binary that still creates the old indexes at boot rebuilds them
 //      without CONCURRENTLY, which blocks appends while it builds on a 30 GB
-//      table. Bootstrap therefore creates neither; nothing in this release
-//      creates or drops an index.
+//      table. Bootstrap therefore creates neither of them, and creates the
+//      partial one only on a table with no rows (ensureFreshReceiptIndex); the
+//      live table's swap is the supervised scripts/receipts-index-swap.
 
 const (
 	receiptKindPartialIdx = "computer_event_append_kind_partial_idx"
@@ -72,3 +78,78 @@ const (
 	receiptAtSequenceSQL       = `SELECT ` + appendReceiptRowColumns + ` FROM computer_event_append_receipts WHERE computer_id=? AND sequence=?`
 	receiptDigestAtSequenceSQL = `SELECT event_digest, event_head_receipt_id FROM computer_event_append_receipts WHERE computer_id=? AND sequence=?`
 )
+
+// receiptKindPartialDDL is the exact definition of the partial kind index: the
+// one a fresh database gets at Bootstrap and the one the supervised swap of the
+// live table builds (scripts/receipts-index-swap). The readers above are written
+// for it.
+const receiptKindPartialDDL = `CREATE INDEX IF NOT EXISTS ` + receiptKindPartialIdx + ` ON computer_event_append_receipts (computer_id, event_kind, sequence) WHERE ` + receiptKindNotBatchSQL
+
+// freshIndexLockTimeout bounds how long Bootstrap waits for the table or for
+// another booting process before it leaves the index to the supervised swap.
+var freshIndexLockTimeout = "10s"
+
+// freshIndexLockKey is the transaction advisory lock that serializes the
+// processes that boot an empty database together. SHARE mode does not: it is
+// compatible with itself, and two sessions that both see an empty table then
+// both run CREATE INDEX, of which PostgreSQL lets the second fail on pg_class.
+const freshIndexLockKey = 7330212470802
+
+// Test seams: the moments between the unlocked look and the lock, and between
+// the second look and the build, where another process or a writer can act.
+var (
+	freshIndexBeforeLock   func()
+	freshIndexBeforeCreate func()
+)
+
+// ensureFreshReceiptIndex gives a database whose receipt table has no rows the
+// partial kind index, and does nothing to one that has rows: building an index
+// on a live table is the supervised swap's job, concurrently and watched, never
+// a boot's. The index is never needed for correctness (every reader works
+// without it), so nothing here may fail Bootstrap: a lock timeout, a duplicate
+// object or any other error is logged and the index is left to the swap script.
+func (s *Store) ensureFreshReceiptIndex(ctx context.Context) error {
+	if err := s.freshReceiptIndex(ctx); err != nil {
+		log.Printf("corpusd: fresh receipt index skipped, the swap script can build it: %v", err)
+	}
+	return nil
+}
+
+// freshReceiptIndex is one transaction: the advisory lock (so a second booting
+// process waits for the first and then finds the index), an unlocked look at the
+// table (so a live table is never made to queue for a table lock), the table in
+// SHARE mode and a second look (so a row appended between the first look and the
+// lock is not missed), and the build.
+func (s *Store) freshReceiptIndex(ctx context.Context) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `SET LOCAL lock_timeout = '`+freshIndexLockTimeout+`'`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, freshIndexLockKey); err != nil {
+		return err
+	}
+	var any bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM computer_event_append_receipts)`).Scan(&any); err != nil || any {
+		return err
+	}
+	if freshIndexBeforeLock != nil {
+		freshIndexBeforeLock()
+	}
+	if _, err := tx.ExecContext(ctx, `LOCK TABLE computer_event_append_receipts IN SHARE MODE`); err != nil {
+		return err
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM computer_event_append_receipts)`).Scan(&any); err != nil || any {
+		return err
+	}
+	if freshIndexBeforeCreate != nil {
+		freshIndexBeforeCreate()
+	}
+	if _, err := tx.ExecContext(ctx, receiptKindPartialDDL); err != nil {
+		return err
+	}
+	return tx.Commit()
+}

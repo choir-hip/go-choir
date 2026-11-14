@@ -234,7 +234,12 @@ func (c *ComputerEventCAS) CompareAndSwap(ctx context.Context, request computere
 	// SERIALIZABLE can still fail one against another computer's transaction
 	// (predicate locks are per page). The retry re-reads the head.
 	return dbx.Retry(ctx, 5, func() (computerevent.Receipt, error) {
-		return c.compareAndSwapTx(ctx, request)
+		started := time.Now()
+		receipt, err := c.compareAndSwapTx(ctx, request)
+		if err == nil {
+			c.store.appendTimes.record(request.Event.ComputerID, time.Since(started))
+		}
+		return receipt, err
 	})
 }
 

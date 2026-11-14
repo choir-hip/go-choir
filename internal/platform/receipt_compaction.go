@@ -25,7 +25,7 @@ package platform
 //      receiptCompactionBatch rows in one short transaction, with a rest of
 //      at least a second and four times the batch's own time after it;
 //  C5. a corpusd restart rescans the whole paper chain: progress is durable
-//      per computer and mode (computer_event_receipt_compaction);
+//      per computer and mode (computer_event_receipt_compaction_v2);
 //  C6. rollback to a binary that cannot expand: mode expand rewrites the
 //      named computers' compact rows back to full JSON, and stops writing
 //      compact; run it to completion before reverting;
@@ -82,20 +82,21 @@ CREATE TABLE IF NOT EXISTS computer_event_receipt_compaction (
   bytes_after BIGINT NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (computer_id)
+);
+-- The codec-2 walk's own progress. A release that does not know it (step 1, or
+-- main) writes only computer_event_receipt_compaction, so it cannot move this
+-- one past rows it did not compact.
+CREATE TABLE IF NOT EXISTS computer_event_receipt_compaction_v2 (
+  computer_id VARCHAR(128) NOT NULL,
+  mode VARCHAR(16) NOT NULL,
+  through_sequence BIGINT NOT NULL,
+  rows_rewritten BIGINT NOT NULL,
+  rows_kept BIGINT NOT NULL,
+  bytes_before BIGINT NOT NULL,
+  bytes_after BIGINT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (computer_id)
 );`
-
-// receiptCompactionCodec numbers what the backfill may write. Codec 1 writes
-// the canonical compact format only; codec 2 also writes format 2, the jsonb
-// spelling of the rows stored while the column was jsonb
-// (docs/problems/old-receipts-do-not-compact-2026-11-14.md). Every reader
-// expands both at every codec; the writer is raised one release after the
-// readers, so a revert to the release before it still finds only rows it can
-// read.
-const receiptCompactionCodec = 1
-
-// receiptCompactionAllowJSONB is the write allowance the codec threads to
-// computerevent.CompactStoredHeadReceipt.
-const receiptCompactionAllowJSONB = receiptCompactionCodec >= 2
 
 var (
 	receiptCompactionBatch    = 500
@@ -103,6 +104,10 @@ var (
 	receiptCompactionRest     = 4.0
 	receiptCompactionInterval = 10 * time.Minute
 	receiptCompactionDelay    = 2 * time.Minute
+	// receiptCompactionLoadEvery is how many batches pass between two load
+	// lines in the log (first batch included), so the first hours of a walk
+	// over the live table can be read from the log.
+	receiptCompactionLoadEvery = 100
 )
 
 // ReceiptCompactionPolicy maps each named computer to its mode.
@@ -234,10 +239,26 @@ type ReceiptCompactionPass struct {
 type ReceiptCompactor struct {
 	store *Store
 	sleep func(context.Context, time.Duration) error
+	// allowJSONB is the write allowance for format 2, the jsonb spelling of the
+	// rows stored while the column was jsonb
+	// (docs/problems/old-receipts-do-not-compact-2026-11-14.md). It is true;
+	// a test sets it false to see the path of the release that only reads
+	// format 2, where a compact row the compactor may not write is kept.
+	allowJSONB bool
+	// freeSpace reads the free bytes of the volumes the walk writes to.
+	freeSpace func(context.Context) (free uint64, from string, known bool)
+	// buildRunning reports a maintenance lock on the receipt table
+	// (receipt_walk.go).
+	buildRunning func(context.Context) (bool, error)
+	// lastDeferral is the last reason noteDeferral logged.
+	lastDeferral string
 }
 
 func NewReceiptCompactor(store *Store) *ReceiptCompactor {
-	return &ReceiptCompactor{store: store, sleep: sleepContext}
+	c := &ReceiptCompactor{store: store, sleep: sleepContext, allowJSONB: true}
+	c.freeSpace = store.receiptWalkFreeSpace
+	c.buildRunning = store.receiptBuildRunning
+	return c
 }
 
 func sleepContext(ctx context.Context, d time.Duration) error {
@@ -262,8 +283,12 @@ func (c *ReceiptCompactor) Start(ctx context.Context) {
 			return
 		}
 		for {
-			if _, err := c.RunOnce(ctx); err != nil && ctx.Err() == nil {
-				log.Printf("corpusd: receipt compaction: %v", err)
+			why := c.deferWalk(ctx, true)
+			c.noteDeferral(why)
+			if why == "" {
+				if _, err := c.RunOnce(ctx); err != nil && ctx.Err() == nil {
+					log.Printf("corpusd: receipt compaction: %v", err)
+				}
 			}
 			if c.sleep(ctx, receiptCompactionInterval) != nil {
 				return
@@ -307,9 +332,10 @@ func (c *ReceiptCompactor) runComputer(ctx context.Context, computerID, mode str
 	db := c.store.db
 	pass := ReceiptCompactionPass{ComputerID: computerID, Mode: mode}
 	var storedMode string
+	var storedAt time.Time
 	var cum ReceiptCompactionPass
-	err := db.QueryRowContext(ctx, `SELECT mode, through_sequence, rows_rewritten, rows_kept, bytes_before, bytes_after FROM computer_event_receipt_compaction WHERE computer_id=?`, computerID).
-		Scan(&storedMode, &cum.Through, &cum.Rewritten, &cum.Kept, &cum.BytesBefore, &cum.BytesAfter)
+	err := db.QueryRowContext(ctx, `SELECT mode, through_sequence, rows_rewritten, rows_kept, bytes_before, bytes_after, updated_at FROM computer_event_receipt_compaction_v2 WHERE computer_id=?`, computerID).
+		Scan(&storedMode, &cum.Through, &cum.Rewritten, &cum.Kept, &cum.BytesBefore, &cum.BytesAfter, &storedAt)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return pass, err
 	}
@@ -317,6 +343,21 @@ func (c *ReceiptCompactor) runComputer(ctx context.Context, computerID, mode str
 		// A new mode starts its walk over: what an earlier mode did proves
 		// nothing about this one.
 		cum = ReceiptCompactionPass{}
+	}
+	// This walk's progress is its own row, which a release that does not know
+	// it never writes. Such a release (step 1) walks the same rows under its own
+	// row and may have done anything to them meanwhile: kept the jsonb-spelled
+	// rows, or expanded compact ones. Any row of the older progress table that is
+	// newer than this walk's own, in any mode, restarts this walk from zero: the
+	// restart costs a pass over rows that are already compact (they are kept),
+	// and the rule needs no reading of what the older release did.
+	var legacyAt time.Time
+	if err := db.QueryRowContext(ctx, `SELECT updated_at FROM computer_event_receipt_compaction WHERE computer_id=?`, computerID).Scan(&legacyAt); err == nil {
+		if legacyAt.After(storedAt) {
+			cum = ReceiptCompactionPass{}
+		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return pass, err
 	}
 	head, err := readComputerEventHead(ctx, db, computerID, false)
 	if err != nil {
@@ -327,6 +368,16 @@ func (c *ReceiptCompactor) runComputer(ctx context.Context, computerID, mode str
 		pass.Done = true
 		return pass, nil
 	}
+	if cum.Through == 0 && !storedAt.IsZero() {
+		// A restart: the row is written back to zero here, once and on purpose,
+		// so that the saves of the pass can be held to never move it backward.
+		if err := c.resetProgress(ctx, computerID, mode); err != nil {
+			return pass, err
+		}
+	}
+	walkStart := time.Now()
+	startLSN, _ := c.walLSN(ctx)
+	batches := 0
 	for pass.Through < head.Sequence {
 		started := time.Now()
 		batch, err := c.batch(ctx, computerID, mode, pass.Through, head.Sequence)
@@ -342,9 +393,19 @@ func (c *ReceiptCompactor) runComputer(ctx context.Context, computerID, mode str
 		if err := c.saveProgress(ctx, computerID, mode, cum, pass); err != nil {
 			return pass, err
 		}
+		if batches%receiptCompactionLoadEvery == 0 {
+			c.logLoad(ctx, computerID, pass, startLSN, walkStart)
+		}
+		batches++
 		if batch.Done {
 			break
 		}
+		if why := c.deferWalk(ctx, batches%receiptCompactionLoadEvery == 0); why != "" {
+			// Progress is saved; the next pass resumes from it.
+			c.noteDeferral(why)
+			return pass, nil
+		}
+		c.noteDeferral("")
 		rest := max(receiptCompactionPause, time.Duration(receiptCompactionRest*float64(time.Since(started))))
 		if err := c.sleep(ctx, rest); err != nil {
 			return pass, err
@@ -354,9 +415,22 @@ func (c *ReceiptCompactor) runComputer(ctx context.Context, computerID, mode str
 	return pass, nil
 }
 
+// resetProgress writes the walk's row back to zero for the mode, unconditionally.
+func (c *ReceiptCompactor) resetProgress(ctx context.Context, computerID, mode string) error {
+	_, err := c.store.db.ExecContext(ctx, `INSERT INTO computer_event_receipt_compaction_v2 (computer_id, mode, through_sequence, rows_rewritten, rows_kept, bytes_before, bytes_after, updated_at) VALUES (?,?,0,0,0,0,0,?)
+		ON CONFLICT (computer_id) DO UPDATE SET mode=excluded.mode, through_sequence=0, rows_rewritten=0, rows_kept=0, bytes_before=0, bytes_after=0, updated_at=excluded.updated_at`,
+		computerID, mode, time.Now().UTC())
+	return err
+}
+
+// saveProgress records a batch. It never moves the row's through_sequence
+// backward in the same mode (a second process, or a pass that began before
+// another one saved further, would otherwise undo it); a restart goes through
+// resetProgress.
 func (c *ReceiptCompactor) saveProgress(ctx context.Context, computerID, mode string, cum, pass ReceiptCompactionPass) error {
-	_, err := c.store.db.ExecContext(ctx, `INSERT INTO computer_event_receipt_compaction (computer_id, mode, through_sequence, rows_rewritten, rows_kept, bytes_before, bytes_after, updated_at) VALUES (?,?,?,?,?,?,?,?)
-		ON CONFLICT (computer_id) DO UPDATE SET mode=excluded.mode, through_sequence=excluded.through_sequence, rows_rewritten=excluded.rows_rewritten, rows_kept=excluded.rows_kept, bytes_before=excluded.bytes_before, bytes_after=excluded.bytes_after, updated_at=excluded.updated_at`,
+	_, err := c.store.db.ExecContext(ctx, `INSERT INTO computer_event_receipt_compaction_v2 (computer_id, mode, through_sequence, rows_rewritten, rows_kept, bytes_before, bytes_after, updated_at) VALUES (?,?,?,?,?,?,?,?)
+		ON CONFLICT (computer_id) DO UPDATE SET mode=excluded.mode, through_sequence=excluded.through_sequence, rows_rewritten=excluded.rows_rewritten, rows_kept=excluded.rows_kept, bytes_before=excluded.bytes_before, bytes_after=excluded.bytes_after, updated_at=excluded.updated_at
+		WHERE computer_event_receipt_compaction_v2.mode <> excluded.mode OR computer_event_receipt_compaction_v2.through_sequence <= excluded.through_sequence`,
 		computerID, mode, pass.Through, cum.Rewritten+pass.Rewritten, cum.Kept+pass.Kept, cum.BytesBefore+pass.BytesBefore, cum.BytesAfter+pass.BytesAfter, time.Now().UTC())
 	return err
 }
@@ -399,7 +473,7 @@ func (c *ReceiptCompactor) batch(ctx context.Context, computerID, mode string, t
 		}
 		target := string(original)
 		if mode != ReceiptCompactExpand {
-			if compact, ok := computerevent.CompactStoredHeadReceipt(row, original, receiptCompactionAllowJSONB); ok {
+			if compact, ok := computerevent.CompactStoredHeadReceipt(row, original, c.allowJSONB); ok {
 				target = compact
 			} else if computerevent.IsCompactHeadReceipt(stored) {
 				// A compact row this codec may not write (format 2 under
