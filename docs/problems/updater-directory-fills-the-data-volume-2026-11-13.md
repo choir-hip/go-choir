@@ -82,9 +82,9 @@ counts an installed-verdict fence (a settled-forward apply, journal Phase
 `arbitrated`, Outcome `refused`, Verdict `installed`) as installing `current`,
 so the predecessor its revert reads survives the next boot. The prune refuses,
 exit 0 with the reason in its line, when the daemon's socket
-(`/run/choir/updater.sock`) or started marker (`updater-unit-entered`) exists,
-and the unit is `RemainAfterExit`, `RefuseManualStart` and conditioned on those
-two paths, so a later `systemctl start multi-user.target` or manual start
+(`/run/choir/updater.sock`), its started marker (`updater-unit-entered`) or the
+runtime's (`runtime-unit-entered`) exists, and the unit is `RemainAfterExit`,
+`RefuseManualStart` and conditioned on those three paths, so a later `systemctl start multi-user.target` or manual start
 cannot run it beside a live daemon. A full volume: leftovers of earlier runs
 are deleted before anything is renamed, and a rename that fails with ENOSPC
 frees that entry in place (a release's manifest first, so a half-deleted
@@ -148,7 +148,7 @@ Residuals:
   `writeJournal` (a few hundred bytes per crash) are not pruned either.
 - Between boots a self-development apply adds one release directory (about
   0.1 GiB), its store objects (about 0.2 GiB, from the 6.56 GiB over 36 releases
-  on d@e), and, because apply now drops its source, no payload in incoming; a
+  on d@e), and no payload in incoming for an apply that staged (apply drops its source), but a failed stage, an unreadable store floor or a failed closure replay keep their payload, collected at the next boot once it is past the 10-minute window; a
   computer that applies N times between two boots holds N times that until the
   next boot.
 - Maximum releases kept with no dead journal: three (`current`, the Prior of
@@ -156,7 +156,7 @@ Residuals:
   newest restage that installed it). A swap-back that cannot journal
   (`RestagePinnedReleaseBestEffort`) loses its predecessor at the next boot.
 
-Review round 3 (62c8cb18e): a failed stage keeps its source (a transient
+Review round 3 (62c8cb18e, delta e27661f69): a failed stage keeps its source (a transient
 failure such as ENOSPC must not delete the only local copy of a downloaded
 payload; the boot prune collects it past its window), while a staged release
 and a deterministic pre-staging refusal (base mismatch, state incompatibility)
@@ -168,3 +168,12 @@ script or the workflow changes. The classifier's own self-test already failed on
 main (three scripts named by Go code or a deployed file were classified
 docs-like) and is fixed here. The line also counts in-place deletions the
 budget cut (`inplace_unfinished`).
+
+Delta review: the deploy classifier now ignores the boot prune's test script and
+`scripts/chaos/*` (CI tooling; the README stays docs-like), so none of them
+triggers a staging deploy; `scripts/node-b-growth-meter` is read into the host
+system closure by `nix/node-b.nix` and still deploys the host OS (asserted), and
+`scripts/off-host-restore-drill.sh` is operator tooling (ignored, asserted).
+Apply drops its source only after a deterministic refusal (store floor, schema
+window, base commit) or a successful stage; the three exits that keep it are
+named above.
