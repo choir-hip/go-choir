@@ -47,9 +47,10 @@ func readReceipts(ctx context.Context, q dbx.Queryer, computerID string, after, 
 			return nil, fmt.Errorf("bundle: scan receipt: %w", err)
 		}
 		r.CreatedAt = r.CreatedAt.UTC()
-		// A bundle always carries the canonical receipt bytes: a compact
-		// stored body (platform receipt_compaction.go) is expanded here, the
-		// one read of the column in this package.
+		// A compact stored body (platform receipt_compaction.go) is expanded
+		// here, the one read of the column in this package. The bytes are the
+		// stored spelling (canonical, or PostgreSQL's jsonb spelling for the rows
+		// written while the column was jsonb); import canonicalizes them.
 		full, err := computerevent.ExpandHeadReceipt(computerevent.HeadReceiptRow{
 			ComputerID: r.ComputerID, Sequence: uint64(r.Sequence), EventKind: r.EventKind, EventDigest: r.EventDigest,
 			RequestCommitment: r.RequestCommitment, EventPinReceiptDigest: r.EventPinReceiptDigest, ReceiptID: r.EventHeadReceiptID,

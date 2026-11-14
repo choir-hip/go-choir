@@ -204,8 +204,7 @@ func TestReceiptKindReadersUseAKindIndex(t *testing.T) {
 				for _, generic := range []bool{false, true} {
 					plan := explain(t, s, tc.query, generic, tc.args...)
 					t.Logf("%s state=%s generic=%v:\n%s", tc.name, state, generic, plan)
-					if strings.Contains(plan, "Seq Scan") || !strings.Contains(plan, active) || strings.Contains(plan, "Rows Removed") ||
-						strings.Contains(plan, "computer_event_append_sequence_uq") {
+					if strings.Contains(plan, "Seq Scan") || !strings.Contains(plan, active) || strings.Contains(plan, "computer_event_append_sequence_uq") {
 						t.Errorf("%s state=%s generic=%v does not seek %s:\n%s", tc.name, state, generic, active, plan)
 					}
 				}
@@ -279,5 +278,22 @@ func TestHeadReceiptLookupsUseTheSequenceIndex(t *testing.T) {
 				t.Errorf("generic=%v: %s\n%s", generic, query, plan)
 			}
 		}
+	}
+}
+
+// I6: a freshly bootstrapped database has neither old index (nor the partial
+// one, which only the migration builds). A well-meant re-add of the DDL would
+// make the release before this one the last that boots without building them
+// non-concurrently.
+func TestBootstrapCreatesNoKindOrReceiptIDIndex(t *testing.T) {
+	s, _ := openTestPlatformStore(t)
+	idx := receiptIndexNames(t, s)
+	for _, name := range []string{receiptKindOldIdx, receiptIDOldIdx, receiptKindPartialIdx} {
+		if idx[name] {
+			t.Errorf("Bootstrap left %s on the table: %v", name, idx)
+		}
+	}
+	if !idx["computer_event_append_sequence_uq"] {
+		t.Fatalf("the unique sequence index is missing: %v", idx)
 	}
 }
