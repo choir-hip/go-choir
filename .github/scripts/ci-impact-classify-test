@@ -86,6 +86,13 @@ assert_output ci-gate-script $'scripts/check-guest-security-epoch\n' \
 assert_output ci-gate-support $'scripts/lib/choir_internal.sh\nscripts/testdata/desk-names/good/internal/x/a.go\nscripts/store-handles-allowlist.json\n' \
   'docs_only=false'
 
+# The chaos scripts are read by a Go test, but their README is only docs.
+assert_output chaos-script $'scripts/chaos/s2-corpusd-crash.sh\n' \
+  'docs_only=false' 'go=true'
+
+assert_output chaos-readme-only $'scripts/chaos/README.md\n' \
+  'docs_only=true' 'go=false'
+
 assert_output receipts-swap-script $'scripts/receipts-index-swap\n' \
   'docs_only=false' 'non_docs=true' 'go=true' 'receipts_swap=true'
 assert_output receipts-swap-test $'scripts/receipts-index-swap-test\n' \
@@ -124,6 +131,10 @@ while ((${#queue[@]} > 0)); do
   queue=("${queue[@]:1}")
   [[ -n "${seen[$ref]:-}" ]] && continue
   seen[$ref]=1
+  # The one markdown file a script merely mentions (a usage line in
+  # scripts/chaos/run): documentation, not an input. Any other markdown file a
+  # script, unit or workflow names must stay non-docs, as nix/guest-release-policy.md is.
+  case "$ref" in scripts/chaos/README.md) continue ;; esac
   out="$tmpdir/ref.out"; : >"$out"
   printf '%s\n' "$ref" | "$classifier" --sha 0000000000000000000000000000000000000000 "$out" >/dev/null
   if ! grep -qxF 'docs_only=false' "$out"; then
