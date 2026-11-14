@@ -102,9 +102,10 @@ the swap is no longer in the binary; it is a supervised act (step 2b).
   the walk over from zero. It costs one pass over rows that are already compact
   (they are kept) and needs no reading of what the older release did. Tested for
   expand, expand then active, expand then dry run, and active alone.
-  A row whose `through_sequence` is past the computer's head (the computer was
-  purged and created again under the same id by a release whose purge does not
-  know this table) is walked from zero. A restart writes the row back to zero once,
+  A row whose `through_sequence` is past the computer's head is walked from
+  zero: a defensive invariant with no known trigger (heads are never deleted and
+  a tombstoned computer refuses appends), kept because progress past the head
+  cannot describe the tape. A restart writes the row back to zero once,
   on purpose; every save of a pass
   after that is held never to move `through_sequence` backward in the same mode,
   so a second process or a pass that began earlier cannot undo another's
@@ -122,11 +123,12 @@ the swap is no longer in the binary; it is a supervised act (step 2b).
   (tested from an unprivileged role). Progress is saved before it steps aside,
   the reason is logged when it changes, and "receipt compaction resumes" when it
   clears. It also defers for free space: under 12 GiB on the measured volume,
-  read at the start of a pass and again after every 100th batch (the load line
-  is written after batches 0, 100, 200 and so on; the space check after 100, 200).
-  The deferral line is repeated every time the walk is held (a pass is ten
-  minutes apart), so it is in any ten-minute journal window, and every load line
-  ends `walk_state=running`, `deferred: build` or `deferred: free space`. If the
+  read at the start of a pass and again after the 100th, 200th, 300th batch of a
+  pass; the load line is written after the 1st, 101st, 201st batch. The deferral
+  line is repeated every time the walk is held (a pass is ten minutes apart), so
+  it is in any ten-minute journal window; it is the signal of the walk's state,
+  because a load line is written only by a walk that is running and carries no
+  state. If the
   build check itself cannot be read (the table does not resolve, the lock view
   fails) the walk runs and says so once, `build check unavailable: ...`, and again
   when it is readable. The estimate is 2.4 GB
@@ -245,11 +247,10 @@ set of indexes; corpusd logs the append timing line a minute).
 the table for an index build or drop (it watches `pg_locks`). While it is held it
 logs, at every pass (ten minutes apart) and whenever a pass steps aside,
 `receipt compaction deferred: an index build or other maintenance holds the
-receipt table...`, and `receipt compaction resumes` when it clears; every
-`receipt compaction load` line ends `walk_state=running|deferred: build|deferred:
-free space`. After the build starts, wait for a `deferred` line newer than the
-build's start (the journal window of `watch` is ten minutes, and the line repeats
-at that cadence) before relying on a reading: until then the walk may still be
+receipt table...`, and `receipt compaction resumes` when it clears. After the build starts, wait for a
+`deferred` line newer than the build's start (the journal window of `watch` is
+ten minutes, and the line repeats at that cadence; a `receipt compaction load`
+line newer than the build's start means the walk is still running) before relying on a reading: until then the walk may still be
 writing and its I/O is in the append times. Name the walk's state when taking the
 pre-build reading (running mid-pass, deferred, or finished: its last `receipt
 compaction load` line). To take the swap with the walk out of the picture

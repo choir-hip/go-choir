@@ -284,15 +284,26 @@ func TestReceiptBuildRunningIsSeenByAnUnprivilegedRole(t *testing.T) {
 	if _, err := s.db.Exec(`CREATE ROLE ` + role + ` NOLOGIN`); err != nil {
 		t.Fatalf("cannot create the unprivileged role: %v", err)
 	}
-	t.Cleanup(func() {
-		_, _ = s.db.Exec(`REVOKE ALL ON computer_event_append_receipts FROM ` + role)
-		_, _ = s.db.Exec(`DROP ROLE IF EXISTS ` + role)
-	})
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
+	// The role is really dropped: the connection leaves it (RESET ROLE) before it
+	// goes back to the pool, then the privileges and the role go, with their errors
+	// checked. A cluster whose test role lacks CREATEROLE fails this test at the
+	// CREATE ROLE above; it no longer skips.
+	t.Cleanup(func() {
+		if _, err := conn.ExecContext(ctx, `RESET ROLE`); err != nil {
+			t.Errorf("reset role: %v", err)
+		}
+		_ = conn.Close()
+		if _, err := s.db.Exec(`REVOKE ALL ON computer_event_append_receipts FROM ` + role); err != nil {
+			t.Errorf("revoke: %v", err)
+		}
+		if _, err := s.db.Exec(`DROP ROLE ` + role); err != nil {
+			t.Errorf("drop role: %v", err)
+		}
+	})
 	for _, stmt := range []string{`GRANT SELECT ON computer_event_append_receipts TO ` + role, `SET ROLE ` + role} {
 		if _, err := conn.ExecContext(ctx, stmt); err != nil {
 			t.Fatal(err)
@@ -478,32 +489,10 @@ func TestReceiptWalkSaysOnceThatTheBuildCheckIsBlind(t *testing.T) {
 	}
 }
 
-// The walk's state is on the load line, running or held and why.
-func TestReceiptCompactionLoadLineCarriesTheWalkState(t *testing.T) {
-	d := newDrillComputer(t, "computer-59c902c5d46caecc0a180a8557164e72")
-	d.appendEvent(computerevent.EventGenesisImported, "", nil)
-	c := noSleepCompactor(d.store)
-	c.freeSpace = func(context.Context) (uint64, string, bool) { return 1 << 40, "/data", true }
-	var lines strings.Builder
-	log.SetOutput(&lines)
-	t.Cleanup(func() { log.SetOutput(os.Stderr) })
-	for want, reason := range map[string]string{
-		"walk_state=running":              "",
-		"walk_state=deferred: build":      "an index build or other maintenance holds the receipt table",
-		"walk_state=deferred: free space": "100 MiB free on /data, under the 12288 MiB the walk needs",
-	} {
-		c.lastDeferral = reason
-		lines.Reset()
-		c.logLoad(context.Background(), d.id, ReceiptCompactionPass{Through: 1}, "", time.Now())
-		if !strings.Contains(lines.String(), want) {
-			t.Fatalf("line %q lacks %q", lines.String(), want)
-		}
-	}
-}
-
-// A stale row (the computer was purged and created again under the same id, by a
-// release whose purge does not know this table) whose through_sequence is past
-// the new tape's head is walked from zero, not reported done.
+// A defensive invariant with no known trigger (heads are never deleted and a
+// tombstoned computer refuses appends): a progress row whose through_sequence is
+// past the head cannot describe the tape, and is walked from zero, not reported
+// done.
 func TestReceiptCompactionWalksFromZeroWhenProgressIsPastTheHead(t *testing.T) {
 	d, _ := jsonbChain(t, "computer-59c902c5d46caecc0a180a8557164e72", 5)
 	d.store.SetReceiptCompaction(ReceiptCompactionPolicy{Computers: map[string]string{d.id: ReceiptCompactActive}})
