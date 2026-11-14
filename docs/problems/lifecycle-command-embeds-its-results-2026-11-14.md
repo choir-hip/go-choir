@@ -397,3 +397,52 @@ counters and must be run before step 2 reaches the paper.
    memory cap in its header. I have not run any of this.
 8. **Failure means stop.** Any failed check above blocks step 2 from the
    paper; roll d@e back to step 1 (never past it).
+
+## The d@e proof as run, 2026-11-14T21:00Z
+
+Step 2 landed 20:21Z (c72feca81, 9b7a7c0cd, 795dc7233, 4e52b8e48, fdbe766d6),
+CI 43637074875, deployed 20:35Z. The owner lifted the d@e-first ruling for
+this change (N6 in the part 3 goal file), so the paper took it in the same
+deploy and the drill ran on d@e straight after. Run by a separate agent,
+d@e only; its requests and responses are kept outside the repo.
+
+- **The paper**, first 35 lifecycle commands after its 20:34:59Z restart:
+  197,164 bytes, 5.6 KB a command, against 31.1 KB a command at 18:58Z on the
+  build before (128 commands, 3,982,899 bytes). Forms: slim 20, no_revision 9,
+  nothing embedded. No "stored revision" line in its console log.
+- **Step 1**: d@e on fdbe766d6. No baseline was taken before the deploy; at
+  18:58Z d@e had no lifecycle command tape ops since boot, so zero is used.
+- **Steps 2 and 3**: three creates (201) and three owner revises (202). Forms
+  at the end: slim 17, embedded_head 11, no_revision 2; embedded_mismatch
+  never appeared. Mean command 6.3 KB over 30 ops. Not confirmed: that slim
+  equals the count of Texture commands (17 against 14 revisions visible; the
+  desk was writing its own revisions throughout), and the byte fall on d@e,
+  which has no baseline.
+- **Step 4**: 4a create re-submit, six times, 201 `replay: true` with the same
+  document and revision ids, twice after the head had moved. 4b the original
+  create re-sent after a further revise named the original revision. 4c
+  revise re-submit 202 `replay: true`, same id. 4d editor-save re-submit on
+  two documents, same revision id each time; this is the check that reaches
+  the stored command. 4e first and latest revisions read twice six minutes
+  apart, identical, no 404.
+- **Step 5 not evaluated**: replay-completeness answered 500, "replay scratch
+  insufficient: probe needs about 2.07 GB plus a 3.35 GB reserve on
+  /mnt/persistent/replay-probe; 975 MB free". Recorded separately
+  (`replay-completeness-refuses-on-de-for-lack-of-scratch-2026-11-14.md`).
+- **Steps 6 and 7 not run**: both restart or restore d@e; step 7 is an owner
+  act and waits for the owner.
+
+Corrections to the procedure above, found by running it:
+
+- Step 4d's body also needs `expected_lifecycle_version` greater than zero
+  (`internal/textureowner/revise_edit.go:44`); read it from
+  `GET /api/trajectories/<the document's current trajectory_id>`, field
+  `.trajectory.lifecycle_version`. A revise gives the document a new
+  trajectory id, so use the one in the document read, not the one the create
+  returned.
+- Step 4c works only if the re-send is immediate: the desk writes a follow-up
+  revision after an owner revise and the head moves.
+- Step 1: `lifecycle_command_forms` is an empty object before step 2, not
+  absent.
+- The stored first revision drops a trailing space of `initial_content`;
+  compare stored revisions with each other, not with the request body.
