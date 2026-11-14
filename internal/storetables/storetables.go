@@ -81,8 +81,12 @@ func clampBudget(d time.Duration) time.Duration {
 // ClampBudget is the budget a request for d gets.
 func ClampBudget(d time.Duration) time.Duration { return clampBudget(d) }
 
-// MaxTreeRead caps one tree's single read, and so the longest read
-// transaction a reading holds.
+// MaxTreeRead caps one tree's single read in a default (unnamed) reading, and
+// so the longest read transaction such a reading holds: an unasked dbstat
+// query must not pin a WAL snapshot for the whole budget. A tree the request
+// names (Limits.Only) is not capped by it: the caller asked for that read, and
+// its cap is its share of the remaining budget (at most MaxBudget, 100 s,
+// far below the snapshot capture's own WAL pin).
 const MaxTreeRead = 15 * time.Second
 
 var maxTreeRead = MaxTreeRead
@@ -171,6 +175,14 @@ type Reading struct {
 	// and how many past the cap were ignored. Only a restricted reading's
 	// Trees are the named ones; a table total is Complete only when every
 	// tree of the table, named or not, was read.
+	// UnattributedBytes is file_bytes - free_bytes - the bytes of the trees
+	// read: pages no tree in this reading accounts for. It is not attributed
+	// to anything here. When exactly one tree was cut, it is that tree's
+	// missing bytes; in a restricted reading it is the trees not named plus
+	// any cut one; it is also the header page, and pages of trees dbstat
+	// does not list.
+	UnattributedBytes int64 `json:"unattributed_bytes"`
+
 	Only        []string     `json:"only,omitempty"`
 	Unknown     []string     `json:"unknown,omitempty"`
 	OnlyDropped int          `json:"only_dropped,omitempty"`
@@ -290,7 +302,9 @@ func (s *Scanner) read(ctx context.Context, db *sql.DB, budget time.Duration, on
 		left := time.Until(deadline)
 		share := time.Duration(float64(left) * w / remainingWeight)
 		remainingWeight -= w
-		share = min(share, maxTreeRead)
+		if len(only) == 0 {
+			share = min(share, maxTreeRead)
+		}
 		if s.testHook != nil {
 			share = s.testHook(t.name, share)
 		}
@@ -318,6 +332,11 @@ func (s *Scanner) read(ctx context.Context, db *sql.DB, budget time.Duration, on
 			}
 		}
 	}
+	var seen int64
+	for _, tr := range r.Trees {
+		seen += tr.Bytes
+	}
+	r.UnattributedBytes = r.Header.FileBytes - r.Header.FreeBytes - seen
 	sortTrees(r.Trees)
 	r.ElapsedMillis = time.Since(started).Milliseconds()
 	return r

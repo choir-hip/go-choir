@@ -514,3 +514,50 @@ func TestAnEarlierReadingOrdersAndWeighsTheTrees(t *testing.T) {
 }
 
 func treeNamedBiggest(r *Reading) string { return r.Trees[0].Name }
+
+func TestANamedTreeIsNotCappedByMaxTreeRead(t *testing.T) {
+	db := openTestDB(t)
+	fill(t, db.Write, 300)
+	old := maxTreeRead
+	maxTreeRead = time.Nanosecond // the shortened test cap
+	defer func() { maxTreeRead = old }()
+	var sc Scanner
+	named := sc.Read(context.Background(), db.Read, Limits{Budget: time.Minute, Only: []string{"og_bodies"}}, true).Reading
+	if b := treeNamed(t, named, "og_bodies"); !b.Complete {
+		t.Fatalf("a named tree was cut at the cap: %+v", b)
+	}
+	plain := sc.Read(context.Background(), db.Read, Limits{Budget: time.Minute}, true).Reading
+	if b := treeNamed(t, plain, "og_bodies"); b.Complete || !plain.Truncated {
+		t.Fatalf("an unnamed tree ran past the cap: %+v", b)
+	}
+}
+
+func TestUnattributedBytesIsTheRemainder(t *testing.T) {
+	db := openTestDB(t)
+	fill(t, db.Write, 300)
+	var sc Scanner
+	for _, only := range [][]string{nil, {"og_bodies"}} {
+		r := sc.Read(context.Background(), db.Read, Limits{Budget: time.Minute, Only: only}, true).Reading
+		var sum int64
+		for _, tr := range r.Trees {
+			sum += tr.Bytes
+		}
+		if want := r.Header.FileBytes - r.Header.FreeBytes - sum; r.UnattributedBytes != want {
+			t.Fatalf("only %v: unattributed %d, want %d", only, r.UnattributedBytes, want)
+		}
+		if only != nil && r.UnattributedBytes <= 0 {
+			t.Fatalf("a restricted reading leaves the other trees unattributed: %d", r.UnattributedBytes)
+		}
+	}
+	// A cut tree's missing bytes show up in the remainder.
+	sc.testHook = func(name string, d time.Duration) time.Duration {
+		if name == "og_bodies" {
+			return time.Nanosecond
+		}
+		return d
+	}
+	r := sc.Read(context.Background(), db.Read, Limits{Budget: time.Minute}, true).Reading
+	if b := treeNamed(t, r, "og_bodies"); b.Complete || r.UnattributedBytes < 50*r.Header.PageSize {
+		t.Fatalf("cut tree's missing bytes not in remainder: %d (%+v)", r.UnattributedBytes, b)
+	}
+}
