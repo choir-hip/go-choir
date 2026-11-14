@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/dbx"
@@ -279,5 +281,137 @@ func TestHeadReceiptLookupsUseTheSequenceIndex(t *testing.T) {
 				t.Errorf("generic=%v: %s\n%s", generic, query, plan)
 			}
 		}
+	}
+}
+
+// I6: a freshly bootstrapped database has neither old index; it has the
+// partial one, with the definition the readers and the supervised swap use,
+// because its table has no rows.
+func TestBootstrapCreatesThePartialIndexOnAFreshDatabase(t *testing.T) {
+	s, _ := openTestPlatformStore(t)
+	idx := receiptIndexNames(t, s)
+	if idx[receiptKindOldIdx] || idx[receiptIDOldIdx] {
+		t.Errorf("Bootstrap left an old index on the table: %v", idx)
+	}
+	if !idx[receiptKindPartialIdx] || !idx["computer_event_append_sequence_uq"] {
+		t.Fatalf("the partial and the unique sequence indexes are expected: %v", idx)
+	}
+	var def string
+	if err := s.db.QueryRow(`SELECT pg_get_indexdef(?::regclass)`, receiptKindPartialIdx).Scan(&def); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(def, "(computer_id, event_kind, sequence)") || !strings.Contains(def, "projection_batch_recorded") {
+		t.Fatalf("definition = %s", def)
+	}
+}
+
+// Bootstrap never builds an index on a table that has rows: that is the
+// supervised swap's job, concurrently and watched.
+func TestBootstrapNeverBuildsAnIndexOnATableWithRows(t *testing.T) {
+	ctx := t.Context()
+	s, _ := openTestPlatformStore(t)
+	loadReceiptRows(t, s, indexTestComputer, 100, true)
+	if _, err := s.db.Exec(`DROP INDEX ` + receiptKindPartialIdx); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Bootstrap(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if idx := receiptIndexNames(t, s); idx[receiptKindPartialIdx] || idx[receiptKindOldIdx] || idx[receiptIDOldIdx] {
+		t.Fatalf("Bootstrap built an index on a table with rows: %v", idx)
+	}
+}
+
+func dropFreshIndex(t *testing.T, s *Store) {
+	t.Helper()
+	if _, err := s.db.Exec(`DROP INDEX IF EXISTS ` + receiptKindPartialIdx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Two processes that boot an empty database together: both look, both see it
+// empty, both reach the build at the same moment (a barrier holds each at the
+// moment before CREATE INDEX until the other is there, or half a second has
+// passed). The SHARE lock alone lets both build, and the second fails on
+// pg_class; the advisory lock makes the second wait and find the index. Neither
+// call returns an error, which freshReceiptIndex would show.
+func TestBootstrapOfAFreshDatabaseIsNotRacedByASecondProcess(t *testing.T) {
+	ctx := t.Context()
+	s, _ := openTestPlatformStore(t)
+	dropFreshIndex(t, s)
+	var arrived atomic.Int32
+	both := make(chan struct{})
+	freshIndexBeforeCreate = func() {
+		if arrived.Add(1) == 2 {
+			close(both) // released together
+		}
+		select {
+		case <-both:
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	t.Cleanup(func() { freshIndexBeforeCreate = nil })
+	errs := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		go func() { errs <- s.freshReceiptIndex(ctx) }()
+	}
+	for i := 0; i < 2; i++ {
+		if err := <-errs; err != nil {
+			t.Fatalf("a booting process failed: %v", err)
+		}
+	}
+	if !receiptIndexNames(t, s)[receiptKindPartialIdx] {
+		t.Fatal("no process built the index")
+	}
+}
+
+// A lock timeout (an idle writer on the empty table) is logged and skipped:
+// the index is never needed for correctness, so Bootstrap does not fail.
+func TestBootstrapSkipsTheFreshIndexOnALockTimeout(t *testing.T) {
+	ctx := t.Context()
+	s, _ := openTestPlatformStore(t)
+	dropFreshIndex(t, s)
+	freshIndexLockTimeout = "200ms"
+	t.Cleanup(func() { freshIndexLockTimeout = "10s" })
+	holder, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Rollback()
+	if _, err := holder.ExecContext(ctx, `LOCK TABLE computer_event_append_receipts IN ROW EXCLUSIVE MODE`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.freshReceiptIndex(ctx); err == nil || !strings.Contains(err.Error(), "lock timeout") {
+		t.Fatalf("freshReceiptIndex = %v, want a lock timeout", err)
+	}
+	if err := s.ensureFreshReceiptIndex(ctx); err != nil {
+		t.Fatalf("Bootstrap would fail on a lock timeout: %v", err)
+	}
+	if err := s.Bootstrap(ctx); err != nil {
+		t.Fatalf("Bootstrap failed on a lock timeout: %v", err)
+	}
+	if receiptIndexNames(t, s)[receiptKindPartialIdx] {
+		t.Fatal("the index was built although the table was locked")
+	}
+}
+
+// A row appended between the first look and the lock is not missed: the second
+// look sees it and no index is built.
+func TestBootstrapLooksAgainAfterTheTableLock(t *testing.T) {
+	ctx := t.Context()
+	s, _ := openTestPlatformStore(t)
+	dropFreshIndex(t, s)
+	freshIndexBeforeLock = func() {
+		if _, err := s.db.Exec(`INSERT INTO computer_event_append_receipts (computer_id, idempotency_key, request_commitment, sequence, event_kind, event_digest, event_pin_receipt_digest, event_head_receipt_id, event_head_receipt_json, created_at)
+			VALUES ('computer-late', 'late', 'a', 1, 'projection_batch_recorded', 'd', 'c', 'r', '{}', now())`); err != nil {
+			t.Error(err)
+		}
+	}
+	t.Cleanup(func() { freshIndexBeforeLock = nil })
+	if err := s.freshReceiptIndex(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if receiptIndexNames(t, s)[receiptKindPartialIdx] {
+		t.Fatal("an index was built on a table that had a row by the time the lock was taken")
 	}
 }

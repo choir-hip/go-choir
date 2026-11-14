@@ -111,6 +111,17 @@ func (c *drillComputer) trust() *bundle.TrustSet {
 }
 
 func (c *drillComputer) appendEventKey(kind computerevent.EventKind, mediaType string, payload []byte, idempotencyKey string) string {
+	c.t.Helper()
+	request := c.buildRequest(kind, mediaType, payload, idempotencyKey)
+	if _, err := c.cas.CompareAndSwap(context.Background(), request); err != nil {
+		c.t.Fatalf("append %s at %d: %v", kind, request.Event.Sequence, err)
+	}
+	return request.EventDigest
+}
+
+// buildRequest pins the payload and the event and returns the head CAS request
+// against the current head, without submitting it.
+func (c *drillComputer) buildRequest(kind computerevent.EventKind, mediaType string, payload []byte, idempotencyKey string) computerevent.CASRequest {
 	t := c.t
 	t.Helper()
 	ctx := context.Background()
@@ -181,14 +192,11 @@ func (c *drillComputer) appendEventKey(kind computerevent.EventKind, mediaType s
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.cas.CompareAndSwap(ctx, computerevent.CASRequest{
+	return computerevent.CASRequest{
 		Event: event, EventDigest: eventPin.ArtifactDigest, EventArtifactDigest: eventPin.ArtifactDigest,
 		EventPinReceiptDigest: computerevent.DigestBytes(eventReceipt), PayloadPinReceiptDigests: payloadPins,
 		PinIntentCommitment: pinIntent, Input: input, Next: next,
-	}); err != nil {
-		t.Fatalf("append %s at %d: %v", kind, event.Sequence, err)
 	}
-	return eventPin.ArtifactDigest
 }
 
 func (c *drillComputer) appendMixed(n int, tag string) {

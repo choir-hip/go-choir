@@ -51,6 +51,13 @@ type Store struct {
 	// receiptCompaction is the append-receipt compaction policy
 	// (receipt_compaction.go); nil compacts nothing.
 	receiptCompaction atomic.Pointer[ReceiptCompactionPolicy]
+	// appendTimes holds the recent duration of each computer's append
+	// transaction, for the timing line corpusd logs (receipt_index_health.go).
+	// Nothing gates on it.
+	appendTimes appendTimings
+	// walkFreeLogged is set once the free-space reading has said which volume it
+	// measures (receipt_walk.go).
+	walkFreeLogged atomic.Bool
 }
 
 // SetArtifactsRoot configures the filesystem CAS root used to externalize
@@ -239,6 +246,9 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 	}
 	if _, err := s.db.ExecContext(ctx, computerEventSchemaDDL); err != nil {
 		return fmt.Errorf("platform store: bootstrap computer event schema: %w", err)
+	}
+	if err := s.ensureFreshReceiptIndex(ctx); err != nil {
+		return fmt.Errorf("platform store: bootstrap receipt index: %w", err)
 	}
 	if _, err := s.db.ExecContext(ctx, receiptCompactionDDL); err != nil {
 		return fmt.Errorf("platform store: bootstrap receipt compaction schema: %w", err)
