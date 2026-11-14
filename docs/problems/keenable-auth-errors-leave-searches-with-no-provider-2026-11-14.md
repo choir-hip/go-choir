@@ -62,3 +62,31 @@ owner:
 So the key is good and the event is over. What remains is the policy
 question: one slow 403 from the only uncapped provider cost fifteen minutes of
 search while every paid provider was quota-limited.
+
+## Repair, 2026-11-14
+
+Owner rule, stated again today: Keenable is to be retried, not benched,
+because its rate limit is very hard to hit (100,000 searches a month). The
+2026-11-13 repair made an uncapped provider tolerate error, server_error and
+timeout, but `transientClass` left out auth_error, so one 403 took the
+`OutcomeAuthError` base of 15 minutes.
+
+Decision: for an uncapped provider (`Outcome.Uncapped`), auth_error joins the
+transient classes as ONE streak. Five failures of any of those classes in a
+row bench it for `TransientBackoff` (30 s) and one probe decides. A metered
+provider keeps 15 minutes doubling to 6 hours. `rate_limited` and
+`quota_limited` are left as they are: a real 429 is a provider's real
+refusal and stays backed off (60 s base, 15 min cap for rate_limited; an
+hour for quota_limited), and the code does not bench an uncapped provider
+long on a single 429.
+
+Ways it can fail, written before the code:
+1. One 403 on an uncapped provider benches it, so the next search is
+   answered by nobody (both stores, through `Router.Start`).
+2. Five 403s in a row bench it for 15 minutes, not `TransientBackoff`, or
+   the bench ends and no single probe goes out.
+3. A metered provider's single 403 stops benching it for 15 minutes.
+4. A 403 after four transient errors starts a new streak instead of being
+   the fifth strike (or the reverse), or a success between does not reset it.
+5. `needsProbe` ignores an auth_error streak, so the benched provider is
+   called by every search once the bench ends.

@@ -353,7 +353,7 @@ type launch struct {
 // transient failures has benched it (the bench may have ended since).
 func (r *Router) needsProbe(rec ProviderHealth) bool {
 	return r.TierOf(rec.Provider).Tier == TierFree &&
-		rec.StrikeCount >= TransientStrikesBeforeCooldown && transientClass(OutcomeClass(rec.LastFailureClass))
+		rec.StrikeCount >= TransientStrikesBeforeCooldown && uncappedStreakClass(OutcomeClass(rec.LastFailureClass))
 }
 
 // claimProbe books the one probe call after a bench; false when one is out.

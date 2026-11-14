@@ -148,18 +148,18 @@ func applyOutcome(rec *ProviderHealth, outcome Outcome, policy BackoffPolicy, no
 		// An empty-result streak and a failure run are separate counts: a
 		// change between them restarts the count, so nine empties and one
 		// error are one error, and five errors and five empties are five
-		// empties. A transient failure of an uncapped provider also counts
-		// only against earlier transient failures, not refusals.
+		// empties. A transient failure or auth error of an uncapped provider
+		// counts as one streak with the others, not against refusals.
 		prev := OutcomeClass(rec.LastFailureClass)
 		if (outcome.Class == OutcomeSuccessEmpty) != (prev == OutcomeSuccessEmpty) ||
-			(outcome.Uncapped && transientClass(outcome.Class) && !transientClass(prev)) {
+			(outcome.Uncapped && uncappedStreakClass(outcome.Class) && !uncappedStreakClass(prev)) {
 			rec.StrikeCount = 0
 		}
 		rec.StrikeCount++
 		rec.LastFailureClass = string(outcome.Class)
 		rec.LastErrorSummary = truncateSummary(outcome.Error)
 		d := policy.CooldownDuration(outcome.Class, rec.StrikeCount)
-		if outcome.Uncapped && transientClass(outcome.Class) {
+		if outcome.Uncapped && uncappedStreakClass(outcome.Class) {
 			// Nothing behind this provider: a transient failure is not an
 			// exhausted quota. Bench it only after a run of them, briefly.
 			d = 0
