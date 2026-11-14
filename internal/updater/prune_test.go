@@ -816,10 +816,6 @@ func TestRollbackStillWorksAfterThePrune(t *testing.T) {
 	}
 }
 
-// A restore swaps `current` to an older release and, when it fails, back to the
-// release it came from. Nothing in the journals says so (it is no apply), so
-// the prune must honour the restore's own hold: with it held, the release the
-// restore may swap back to survives.
 // The accepted price of a bounded root: a restore to a release the prune
 // removed refuses cleanly, names why, and changes nothing.
 func TestRestoreToAPrunedReleaseRefusesCleanly(t *testing.T) {
@@ -852,10 +848,6 @@ func TestRestoreToAPrunedReleaseRefusesCleanly(t *testing.T) {
 	}
 }
 
-// B1: the prune does not test the restore hold, it holds it. A restore that
-// starts between two chunks of a running prune makes the next chunk stand
-// down; the release the restore may swap back to survives. And S1: the updater
-// mutex is free between chunks, so an RPC never waits behind a long deletion.
 // S3: the predecessor is the Prior of the newest apply (or restage) that
 // installed current, whatever order the directory lists journals in, and a
 // failed apply names no predecessor.
@@ -959,8 +951,6 @@ func TestApplyDropsARefusedPayload(t *testing.T) {
 	}
 }
 
-// restoreInFlight samples the hold for tests; nothing in production may act on
-// such a sample (the prune holds the hold instead).
 // G1: the kept predecessors are a union, not a newest-wins choice. A restage
 // and its swap-back (a package migration that is rolled back, a tape restore
 // that fails) journal "B -> R2" newer than the apply "R1 -> R2"; the revert of
@@ -999,11 +989,6 @@ func TestPruneKeepsTheAppliedPredecessorAcrossARestageAndSwapBack(t *testing.T) 
 	}
 }
 
-// D1: the prune holds the restore hold for the whole chunk. A probe at chunk
-// entry would pass this test's first half; the second half fails a hold that is
-// released early.
-// D2: the hold is taken within a deadline and honours the context; a stuck
-// holder yields a named error, not a silent wait.
 // A restage that cannot be journaled refuses before it swaps (the caller can
 // still refuse); the swap-back is best effort.
 func TestRestagePinnedReleaseRefusesWhenItCannotJournalButSwapBackProceeds(t *testing.T) {
@@ -1031,9 +1016,6 @@ func TestRestagePinnedReleaseRefusesWhenItCannotJournalButSwapBackProceeds(t *te
 	}
 }
 
-// A candidate shot reuses a store object that may be old and unrooted; reuse
-// refreshes its mtime so the prune's input window starts again. The same for a
-// baseline release reused by StageBaselineRelease.
 // A leading slash (or `./`) in LayeringEntrypoint is resolved the same way at
 // run time (resolveLayeringEntrypoint); the prune must read the same first
 // segment, or the store is never collected on a computer whose release declares
@@ -1217,7 +1199,7 @@ func TestPruneReportLine(t *testing.T) {
 	writeTestFile(t, filepath.Join(root, "incoming", ".host-build-a", "f"), 4096)
 	ageBy(t, filepath.Join(root, "incoming", ".host-build-a"), old)
 	line := pruneRoot(root).Line()
-	for _, want := range []string{"updater: prune:", "releases_kept=1", "entries_deleted=1", "incoming=1", "releases=0", "store=0", "bytes_freed=4096", "hidden_left=0", "errors=0", "elapsed="} {
+	for _, want := range []string{"updater: prune:", "releases_kept=1", "entries_deleted=1", "incoming=1", "releases=0", "gc_roots=0", "store=0", "bytes_freed=4096", "hidden_left=0", "errors=0", "elapsed="} {
 		if !strings.Contains(line, want) || strings.Contains(line, "\n") {
 			t.Fatalf("line %q lacks %q", line, want)
 		}

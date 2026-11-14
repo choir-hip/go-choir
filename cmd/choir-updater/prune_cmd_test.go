@@ -53,7 +53,7 @@ func TestPruneSubcommandRunsWithNoSignerSocketOrIdentity(t *testing.T) {
 		t.Skip("main dispatch is the linux binary's")
 	}
 	root, stale := staleRoot(t)
-	cmd := exec.Command(os.Args[0], "prune", "--root", root, "--budget", "30s")
+	cmd := exec.Command(os.Args[0], "prune", "--root", root, "--budget", "30s", "--run-dir", t.TempDir())
 	cmd.Env = []string{"CHOIR_UPDATER_TEST_RUN_MAIN=1", "PATH=" + os.Getenv("PATH")}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -97,7 +97,7 @@ func TestPruneMainSkipsOnABrokenJournalAndStillExitsZero(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if code := pruneMain([]string{"--root", root}, &out); code != 0 {
+	if code := pruneMain([]string{"--root", root, "--run-dir", t.TempDir()}, &out); code != 0 {
 		t.Fatalf("a skipped prune exited %d: %s", code, out.String())
 	}
 	if _, err := os.Lstat(stale); err != nil {
@@ -105,5 +105,28 @@ func TestPruneMainSkipsOnABrokenJournalAndStillExitsZero(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "skipped (journal broken.json cannot be read)") {
 		t.Fatalf("output = %q", out.String())
+	}
+}
+
+// The prune is for the boot transaction only. With the daemon's socket or its
+// started marker present (a manual start, a re-activated target) it refuses,
+// exits 0, and says why.
+func TestPruneMainRefusesWhileTheDaemonIsLive(t *testing.T) {
+	for _, marker := range []string{"updater.sock", "updater-unit-entered"} {
+		root, stale := staleRoot(t)
+		runDir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(runDir, marker), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		var out bytes.Buffer
+		if code := pruneMain([]string{"--root", root, "--run-dir", runDir}, &out); code != 0 {
+			t.Fatalf("%s: exit %d: %s", marker, code, out.String())
+		}
+		if _, err := os.Lstat(stale); err != nil {
+			t.Fatalf("%s: pruned beside a live daemon", marker)
+		}
+		if !strings.Contains(out.String(), "skipped (the updater is running: "+filepath.Join(runDir, marker)+")") {
+			t.Fatalf("%s: output = %q", marker, out.String())
+		}
 	}
 }
