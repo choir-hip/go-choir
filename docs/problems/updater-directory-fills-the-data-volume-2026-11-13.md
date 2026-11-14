@@ -95,6 +95,34 @@ nothing renames, and a kill in the window of one chunk of one run leaves a
 partial object under its real name that `MaterializeClosure` would reuse: a
 named residual.
 
+Review round 2 (9843b93b1): a store object is never freed in place (no marker,
+and `MaterializeClosure` trusts an existing object), so a store rename that
+fails for want of space is counted (`enospc_skipped=N` in the line) and left for
+a boot with room; incoming/ and releases/ are deleted before the store is
+touched. The budget bounds the hide phases too, directories are synced once
+per phase (a lost rename is re-decided at the next boot), a missing or
+non-directory root is a skip (exit 0), a skipped line carries no counters, and
+the runtime marks itself entered (ExecStartPre writes the same marker the
+updater unit writes) so a failed updater unit cannot leave the runtime live
+with the boot prune still runnable. `scripts/updater-prune-unit-nix-test.sh`
+runs in `scripts/gates` and in CI's `guest-floor-commit-free` job (nix
+installed).
+
+Every writer of a journal result, and what the keep rule does with it
+(`current` may equal the journal's target afterwards where marked):
+
+| Phase | Outcome | Writer | current == target possible | Keep rule |
+| --- | --- | --- | --- | --- |
+| refused | refused | `Apply` `refuse()`, before any mutation | rarely, but no prior is recorded | nothing to keep |
+| prepared, pointer_swapped, restart_requested, recovering | none | `Apply` mid-flight, `restorePrior` | yes | dead journal: prior and target kept |
+| completed | applied | `Apply` | yes | prior kept (newest applied or installed fence) |
+| completed | failed | `Apply` after a successful restore | no, current is the prior | none |
+| completed | restaged | `RestagePinnedRelease` | yes | prior kept (newest restage) |
+| fenced | refused, verdict nothing_installed | `Fence` | no | none |
+| arbitrated | refused, verdict installed | `Fence` | yes | prior kept (shares the applied slot) |
+| arbitrated | refused, verdict unknown | `Fence` | no at fence time | none |
+| arbitrated | refused, no verdict (fenced before the field) | `Fence` | yes if it installed | kept when target is current (errs towards keeping one release) |
+
 Residuals:
 
 - A dead journal (no result, key free) pins the two releases it names. The
@@ -114,8 +142,10 @@ Residuals:
   only the runtime's operation store can judge (the same reason bundles are the
   runtime's), so deleting them by age here would be a guess; they grow with
   engineering rounds, megabytes each, well below the 0.1 GiB per release.
-  `operations/*.json` (small, one `restage-*` per boot follow or restore) and
-  `bootguard` are not pruned either.
+  `operations/*.json` (small, one `restage-*` per boot follow or restore),
+  `bootguard`, `.overlay-work` and `layering-diag.log` (written by the
+  runtime's exec wrapper) and a `.journal-*` temp left by a crash inside
+  `writeJournal` (a few hundred bytes per crash) are not pruned either.
 - Between boots a self-development apply adds one release directory (about
   0.1 GiB), its store objects (about 0.2 GiB, from the 6.56 GiB over 36 releases
   on d@e), and, because apply now drops its source, no payload in incoming; a

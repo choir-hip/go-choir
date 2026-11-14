@@ -1107,7 +1107,7 @@ func TestPruneStopsAtItsBudgetAndTheNextRunFinishes(t *testing.T) {
 	digest := stageTestRelease(t, u, root, "r1", false)
 	setCurrent(t, root, digest)
 	paths := staleIncoming(t, root, 6, 5)
-	first := Prune(PruneOptions{Root: root, Now: func() time.Time { return pruneNow }, Clock: fakeClock(time.Second), Budget: 8 * time.Second})
+	first := Prune(PruneOptions{Root: root, Now: func() time.Time { return pruneNow }, Clock: fakeClock(time.Second), Budget: 20 * time.Second})
 	if !first.BudgetExhausted || first.Hidden == 0 {
 		t.Fatalf("the budget did not stop the prune: %+v", first)
 	}
@@ -1154,19 +1154,21 @@ func TestPruneNeverLeavesAHalfDeletedObjectUnderItsRealName(t *testing.T) {
 		}
 		ageBy(t, filepath.Join(root, "store", fmt.Sprintf("orphan-%d", i)), old)
 	}
-	for _, budget := range []time.Duration{time.Nanosecond, 3 * time.Second, 12 * time.Second} {
+	for _, budget := range []time.Duration{time.Nanosecond, 3 * time.Second, 12 * time.Second, 40 * time.Second} {
 		report := Prune(PruneOptions{Root: root, Now: func() time.Time { return pruneNow }, Clock: fakeClock(time.Second), Budget: budget})
-		entries, _ := os.ReadDir(filepath.Join(root, "store"))
-		for _, entry := range entries {
-			if strings.HasPrefix(entry.Name(), "orphan-") {
-				t.Fatalf("budget %s: store/%s is still under its real name after the run (report %+v)", budget, entry.Name(), report)
+		for i := 0; i < 3; i++ {
+			object := filepath.Join(root, "store", fmt.Sprintf("orphan-%d", i))
+			if !exists(object) {
+				continue // renamed away (hidden or deleted): never partial
+			}
+			files, _ := os.ReadDir(filepath.Join(object, "bin"))
+			if len(files) != 20 {
+				t.Fatalf("budget %s: store/orphan-%d is partial under its real name (%d of 20 files): %+v", budget, i, len(files), report)
 			}
 		}
 	}
-	if left := hiddenLeftovers(t, root); len(left) == 0 {
-		// 12 s of a 1 s clock is enough to finish everything; either way no
-		// real name may remain, which the loop above checked.
-		t.Log("finished within the budgets")
+	if left := hiddenLeftovers(t, root); len(left) != 0 {
+		t.Logf("leftovers remain for the next boot: %v", left)
 	}
 }
 
