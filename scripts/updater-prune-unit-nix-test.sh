@@ -92,13 +92,13 @@ unit = d["unit"]
 if unit.get("RefuseManualStart") not in (True, "yes", "true"): bad.append("P6 RefuseManualStart is %r" % unit.get("RefuseManualStart"))
 conds = unit.get("ConditionPathExists", [])
 conds = conds if isinstance(conds, list) else [conds]
-for want in ("!/run/choir/updater-unit-entered", "!/run/choir/updater.sock"):
+for want in ("!/run/choir/updater-unit-entered", "!/run/choir/updater.sock", "!/run/choir/runtime-unit-entered"):
     if want not in conds: bad.append("P6 no ConditionPathExists=%s (have %r)" % (want, conds))
 if unit.get("RequiresMountsFor") != "/mnt/persistent": bad.append("P7 RequiresMountsFor is %r" % unit.get("RequiresMountsFor"))
 if sc.get("NoNewPrivileges") is not True: bad.append("P7 NoNewPrivileges is %r" % sc.get("NoNewPrivileges"))
 pre = d["autoputerPre"]
 pre = " ".join(pre) if isinstance(pre, list) else pre
-if "/run/choir/updater-unit-entered" not in pre: bad.append("P6 the runtime does not mark itself entered (ExecStartPre %r): a failed updater unit would leave the runtime live with no marker" % pre)
+if "/run/choir/runtime-unit-entered" not in pre: bad.append("P6 the runtime does not mark itself entered (ExecStartPre %r): a failed updater unit would leave the runtime live with no marker" % pre)
 if sc.get("User") != "root": bad.append("P7 User is %r" % sc.get("User"))
 if sorted(sc.get("CapabilityBoundingSet", [])) != ["CAP_DAC_OVERRIDE", "CAP_FOWNER"]: bad.append("P7 CapabilityBoundingSet is %r" % sc.get("CapabilityBoundingSet"))
 if sc.get("Restart", "no") != "no": bad.append("P3 Restart is %r" % sc.get("Restart"))

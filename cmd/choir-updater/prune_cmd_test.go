@@ -110,7 +110,7 @@ func TestPruneMainSkipsOnABrokenJournalAndStillExitsZero(t *testing.T) {
 // started marker present (a manual start, a re-activated target) it refuses,
 // exits 0, and says why.
 func TestPruneMainRefusesWhileTheDaemonIsLive(t *testing.T) {
-	for _, marker := range []string{"updater.sock", "updater-unit-entered"} {
+	for _, marker := range []string{"updater.sock", "updater-unit-entered", "runtime-unit-entered"} {
 		root, stale := staleRoot(t)
 		runDir := t.TempDir()
 		if err := os.WriteFile(filepath.Join(runDir, marker), nil, 0o600); err != nil {
