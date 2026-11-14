@@ -4,7 +4,7 @@
 corpus and does not make an unverified graph status into a live work claim.
 Sequencing: the owner's roadmap,
 [`roadmap-2026-10-31.md`](roadmap-2026-10-31.md) (data system, Mac app and
-sync, PSA/self-development/Autopaper, voice and Autoradio, the five S's,
+sync, the learning engine/self-development/Autopaper, voice and Autoradio, the five S's,
 agentic red teaming, economics, launch); this file names the live station in
 it. The 2026-10-14 sequencing and the 2026-09-22 R-series stack are
 superseded; the mission format is
@@ -31,14 +31,31 @@ infrastructure strong before we can ship auto radio anyway." Goal:
 keeps S4, S5 and S7; its receipts fold and payload compression continue in
 part 3. Autoradio waits behind both.
 
-## Next station: Autoradio, with Autopaper
+## Next station: Autoradio learns its listener (the four-stroke learning engine)
 
-Owner, 2026-11-13 (overnight): "i want to move on back to autopaper,
-autoradio, tomorrow". Autoradio pass 1
+The core mechanism has a new statement,
+[`learning-engine.md`](learning-engine.md): forecast, outcome, lesson, trust
+(owner, 2026-11-13 and 2026-11-14). It replaces the precommitment-records and
+PSA documents, now in [`archive/learning/`](archive/learning/README.md). It is
+built first on Autoradio, then backported to Autopaper through the listener's
+edition, then to self-development.
+
+Owner, 2026-11-14: "we'll merge that PR, and then we'll get to work on it
+from our main worker thread." Goal:
+[`definitions/choir-autoradio-learning-engine-2026-11-14.md`](definitions/choir-autoradio-learning-engine-2026-11-14.md)
+(`readiness: executable`, `now.status: working`, slice L0, the design
+review). Design:
+[`design/autoradio-learning-engine-2026-11-14.md`](design/autoradio-learning-engine-2026-11-14.md).
+Run it with `/goal docs/definitions/choir-autoradio-learning-engine-2026-11-14.md`.
+Its default is to run beside the storage stations: phone and local work never
+wait, and a server landing waits only on a refused deploy.
+
+Autoradio pass 1
 ([`definitions/choir-autoradio-pass1-2026-11-10.md`](definitions/choir-autoradio-pass1-2026-11-10.md))
-is `blocked_incomplete` on three owner items: the install go, the TestFlight
-verdict and the River credential. The first act of the day is the owner's
-word on those; until then the work is what needs no phone.
+stays the root for the app and is `blocked_incomplete` on owner items: the
+install go, the TestFlight verdict and the River credential. River is not
+registered on the gateway; the procedure is
+[`reference/RIVER.md`](reference/RIVER.md), section 5, and it is an owner act.
 
 ## Storage solutions, part 2: history of the station
 

@@ -17,7 +17,7 @@ names (World Wire, Universal Wire, sourcecycled) is still the §9 TODO.
 
 Inputs:
 - *Choir — Canonical Project Context* (2026-10-08);
-- [Prospective Self-Alignment](precommitment-records.md);
+- [Prospective Self-Alignment](archive/learning/precommitment-records.md);
 - [Store B inventory](archive/evidence/world-wire-store-b-inventory-2026-10-09.md);
 - [precommitment records memo](<Precommitment Records — Engineering Memo.md>).
 

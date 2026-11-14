@@ -1,5 +1,10 @@
 # Bayesian Trust: Earned Authority from PSA Track Records (2026-11-04)
 
+> **Archived 2026-11-14.** Superseded by [the four-stroke learning engine](../../learning-engine.md),
+> which is the current home of this mechanism and its vocabulary (forecast,
+> outcome, lesson, trust). Kept as the record of how the mechanism was reasoned
+> out; where the two disagree, the learning engine wins.
+
 > **Folded into the consolidated plan (2026-11-04).** This draft is folded into section 10 of
 > `modular-architecture-plan-2026-11-04.md` (with the leases of its section 7.2). The plan is the
 > authority; where the two differ, the plan wins. This document stays as the detailed companion.
@@ -22,8 +27,8 @@
 > `docs/research/scoring-and-materiality-2026-11-04.md` sections 1, 2 and 8.1 to 8.3.
 
 
-Status: **design, green.** No code. It inherits [Choir Doctrine](../choir-doctrine.md)
-and [precommitment-records.md](../precommitment-records.md) (PSA), which stays
+Status: **design, green.** No code. It inherits [Choir Doctrine](../../choir-doctrine.md)
+and [precommitment-records.md](precommitment-records.md) (PSA), which stays
 the normative mechanism document; this design applies PSA to security. It is a
 companion to the modular-architecture design
 (`design/modular-architecture-2026-11-04.md`) and the app agent desks design

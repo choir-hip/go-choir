@@ -271,7 +271,7 @@ via Texture of ongoing self-development." The pieces that exist today:
 | See what the computer is doing | Runs `/api/runs`, trajectories `/api/trajectories/{id}` with `/stream?after=` (SSE), runtime obligations `/api/runtime/obligations`, the desktop live socket `/api/ws?after_seq=` | No single "what needs me" view; the phone must not hold a socket open (wakes and keeps the computer awake, §8.3) |
 | Approve or reject self-development | `/api/computers/{id}/self-development/operations?state=awaiting_approval`, `POST .../operations/{op}/decision` (CLI: `cmd/choir/selfdev.go`); API-key scopes `computer:self_development:approve|propose|rollback` (`SettingsApp.svelte`) | A mobile approval sheet showing what the capsule changes, its verifier evidence and the effect bundle id; a step-up (Face ID) before the decision |
 | Direct the computer | Texture prompt bar `/api/prompt-bar`, Texture revise `/api/texture/documents/{id}/revise` | Voice directive → a typed directive record; today the prompt bar takes text |
-| Open commitments and their scores | Commitment records (`internal/types/commitment.go`: precommit, report, resolve, disagreement, directive), inbox records `/api/inboxes/{inbox}/records`, derived views incl. "a supervision projection ordered by materiality" (`docs/precommitment-records.md`) | Nothing settles or scores yet (L3); box scores are design only. The phone should render the supervision projection the moment it exists, not invent its own |
+| Open commitments and their scores | Commitment records (`internal/types/commitment.go`: precommit, report, resolve, disagreement, directive), inbox records `/api/inboxes/{inbox}/records`, derived views incl. "a supervision projection ordered by materiality" (`docs/archive/learning/precommitment-records.md`) | Nothing settles or scores yet (L3); box scores are design only. The phone should render the supervision projection the moment it exists, not invent its own |
 | Read the work | Texture documents, revisions, the `/stream` SSE per document | A native Texture renderer (§3.4) |
 
 **The supervision home** (Texture tab):
@@ -1302,7 +1302,7 @@ is where the margin is). So:
   returning approvals awaiting decision, open obligations, running
   trajectories, open and recently settled commitments, ordered by
   materiality, as **one projection of the tape** (the "supervision
-  projection" in `docs/precommitment-records.md`), not a client-side join
+  projection" in `docs/archive/learning/precommitment-records.md`), not a client-side join
   of five endpoints. SSE while the screen is open; the cursor resumes on
   reconnect.
 - **Per-document live updates** reuse `/api/texture/documents/{id}/stream`
@@ -1448,7 +1448,7 @@ Android                                                 [... M5 ...]
    fragment, no code): it is the API the owner most wants on the phone,
    it is a projection the desktop and the CLI also need, and it forces
    the materiality-ordered supervision projection of
-   `docs/precommitment-records.md` out of design. This is foundations
+   `docs/archive/learning/precommitment-records.md` out of design. This is foundations
    work that the app pulls forward.
 3. **M0**, as a labelled prototype with no server changes beyond the
    mobile redeem variant.
@@ -1504,7 +1504,7 @@ Choir (code and docs): `docs/archive/reports/autoradio-prototype-2026-10-14.md`,
 `docs/archive/reports/pricing-and-economics-notes-2026-10-14.md`,
 `docs/reports/desktop-sync-and-local-vms-2026-10-14.md` (main checkout),
 `docs/research/autopaper-media-and-rights-2026-10-14/README.md`,
-`docs/learn/04-computer-lifecycle.md`, `docs/precommitment-records.md`,
+`docs/learn/04-computer-lifecycle.md`, `docs/archive/learning/precommitment-records.md`,
 `frontend/src/lib/TextureEditor.svelte`,
 `frontend/src/lib/texture-structured-editor-doc.ts`,
 `frontend/src/lib/texture.js`, `frontend/src/lib/apps/registry.ts`,

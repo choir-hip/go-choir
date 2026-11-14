@@ -8,7 +8,7 @@ Owner ruling, 2026-10-20 ([owner notes](owner-notes-2026-10-14.md) §27, item
 events, settled by rules first; a desk sees aggregates of its own record,
 not item verdicts; no token-budget learner yet."
 
-Reads behind this: [precommitment records](../precommitment-records.md), the
+Reads behind this: [precommitment records](../archive/learning/precommitment-records.md), the
 [ICRL experiment](../archive/reports/icrl-calibration-experiment-2026-10-14.md), the
 [three-day letter](choir-last-three-days-2026-10-17.md), the
 [op-ed design](op-ed-section-design-2026-10-20.md),

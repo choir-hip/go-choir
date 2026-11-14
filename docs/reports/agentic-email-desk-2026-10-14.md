@@ -258,7 +258,7 @@ contract Friday"). The claims ontology fits, with its privacy rules
 the computer, the runtime commits one system-provenance observation record
 to `email:<owner>` that lists the message ids. This is the same shape as a
 poll's captures reaching `management:<owner>`
-([precommitment records](../precommitment-records.md) §4.1). The record
+([precommitment records](../archive/learning/precommitment-records.md) §4.1). The record
 wakes the desk through the usual outbox, projector and dispatcher path
 ([desk runtime](../learn/02-desk-runtime.md) §5.4). One record per batch,
 not one per message, so a mail flood stays within the existing pacing
@@ -603,7 +603,7 @@ approval request, with the failed check named, and records a say-do miss
 ### 4.5 Say-do scoring of the desk's sends
 
 External sends are a **material action class** in the precommitment design
-([precommitment records](../precommitment-records.md) §2.3). Before every
+([precommitment records](../archive/learning/precommitment-records.md) §2.3). Before every
 `MailPropose`, the desk commits a precommitment:
 
 - **intent:** recipients, purpose in one sentence, content class, the
@@ -957,7 +957,7 @@ Docs: [autoradio plan](../archive/reports/autoradio-mobile-app-plan-2026-10-14.m
 [gateway and providers](../learn/03-gateway-and-providers.md);
 [computer lifecycle](../learn/04-computer-lifecycle.md);
 [isolation review](../archive/reports/computer-isolation-security-review-2026-10-14.md);
-[precommitment records](../precommitment-records.md);
+[precommitment records](../archive/learning/precommitment-records.md);
 [claims ontology](claims-events-entities-ontology-2026-10-14.md);
 [puter review, collaboration](../archive/research/puter-everything-2026-10-14/collaboration.md);
 [roadmap sequencing](../archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md);

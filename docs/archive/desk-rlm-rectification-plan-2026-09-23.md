@@ -19,7 +19,7 @@ executable authority for the mission spine; it governs over §§1–10 where
 they conflict. §§1–10 remain the adjudicated base record.
 **Authority:** inherits `docs/choir-doctrine.md`, `docs/why-texture-2026-06-15.md`,
 `docs/texture-live-supervision-architecture.md`, `AGENTS.md`, and the
-precommitment-records direction (`docs/precommitment-records.md`).
+precommitment-records direction (`docs/archive/learning/precommitment-records.md`).
 **Mutation class:** green (this document; the work it plans is orange/red).
 
 ## 0. Owner direction this plan encodes

@@ -995,7 +995,7 @@ reviewed):
    window before its segment is sealed and stored, so the interim before the
    analytical database loses nothing.
 2. **The witness must survive offload.** A record's trusted time is the first
-   event-head receipt that carried it (`docs/precommitment-records.md` §6,
+   event-head receipt that carried it (`docs/archive/learning/precommitment-records.md` §6,
    plan step 1). The host receipt chain (`computer_event_append_receipts`) and
    the segment chain must stay verifiable after the window moves: each
    window starts from a head that commits to the sealed history, and receipts

@@ -3,7 +3,7 @@
 **2026-10-01 · Status: describes the live system plus explicitly labeled Target
 transitions.** Companion to [current-architecture.md](current-architecture.md)
 (landed-state tracking) and
-[Precommitment Records — Engineering Memo.md](precommitment-records.md)
+[Precommitment Records — Engineering Memo.md](archive/learning/precommitment-records.md)
 (the learning theory). This document explains the multi-agent machinery itself:
 desks, cells, records, packets, wakes — and the record-native messaging
 redesign the owner directed on 2026-10-01.

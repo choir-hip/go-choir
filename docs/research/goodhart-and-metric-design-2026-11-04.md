@@ -11,7 +11,7 @@ Date: 2026-11-04. Read-only survey; no repo touched. Redo of `research-goodhart-
   - **U-secondary / U-unverified**: I could confirm a claim only from news or summary pages, or not at all. These are labelled and none of them carries a load-bearing number.
 - Numbers quoted from papers were checked against the abstract or body text unless flagged. Several numbers from v1 were wrong or conflated; all are listed in the "Changes from v1" section at the end.
 - Evidence grades are unchanged: **strong** (replicated, large, or formal result), **moderate** (one good study or consistent reports), **weak** (folklore, vendor blog, single case, single-author preprint).
-- PSA context: I re-read `docs/precommitment-records.md` sections 5.1 to 5.7 (scoring, scorers each scored, self never governs, guards in 5.4, box scores, unscorable bucket). Section 1.2 and the reference list cite Pan et al. 2024 (arXiv 2402.06627) as the in-context reward hacking result, so the v1 remark that this is the PSA document's own cited result is correct [K].
+- PSA context: I re-read `docs/archive/learning/precommitment-records.md` sections 5.1 to 5.7 (scoring, scorers each scored, self never governs, guards in 5.4, box scores, unscorable bucket). Section 1.2 and the reference list cite Pan et al. 2024 (arXiv 2402.06627) as the in-context reward hacking result, so the v1 remark that this is the PSA document's own cited result is correct [K].
 - A structural limit still governs everything: Choir has one owner and few users. Section 8 says what survives at n of about 1.
 - Search-result pages in this session included items dated after mid-2026 (arXiv ids 2607.x and 2609.x). I verified the ones I use against arXiv records. They are single-author preprints and are graded weak.
 

@@ -24,13 +24,21 @@ documents:
     witnesses: [docs/signal-is-sparse-not-the-learner-2026-08-01.md, docs/choir-vision.md]
     refresh_triggers: [product_vision_change, doctrine_change]
 
-  - path: docs/precommitment-records.md
+  - path: docs/learning-engine.md
     claim_scope: current
     is_root: [entry]
     is_evidence: false
     annotations: {doc_role: mechanism_spec, authority: support, lifecycle: living}
-    witnesses: [docs/precommitment-records.md, docs/choir-vision.md, docs/choir-doctrine.md, docs/re-engineering-decisions-2026-10-12.md]
+    witnesses: [docs/learning-engine.md, docs/precommitment-records-practice-2026-11-08.md, docs/choir-vision.md, docs/choir-doctrine.md]
     refresh_triggers: [product_vision_change, doctrine_change]
+
+  - path: docs/archive/learning/precommitment-records.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: mechanism_spec, authority: support, lifecycle: superseded, entrypoint: false}
+    witnesses: [docs/learning-engine.md]
+    refresh_triggers: []
 
   - path: docs/world-wire-mission-stack-2026-09-22.md
     claim_scope: current
@@ -616,7 +624,7 @@ documents:
     is_root: []
     is_evidence: false
     annotations: {doc_role: definition, authority: mission, lifecycle: living, entrypoint: false}
-    depends_on: [docs/choir-doctrine.md, docs/archive/definitions/choir-ledger-metamission-2026-10-13.md, docs/precommitment-records.md]
+    depends_on: [docs/choir-doctrine.md, docs/archive/definitions/choir-ledger-metamission-2026-10-13.md, docs/archive/learning/precommitment-records.md]
     witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
 
@@ -625,7 +633,7 @@ documents:
     is_root: [authority, entry]
     is_evidence: false
     annotations: {doc_role: definition, authority: working_mission_contract, lifecycle: living, entrypoint: true}
-    depends_on: [docs/choir-doctrine.md, docs/archive/design/data-rearchitecture-2026-10-28.md, docs/evidence/data-architecture-consensus-2026-10-28.md, docs/evidence/data-architecture-research-2026-10-28.md, docs/precommitment-records.md]
+    depends_on: [docs/choir-doctrine.md, docs/archive/design/data-rearchitecture-2026-10-28.md, docs/evidence/data-architecture-consensus-2026-10-28.md, docs/evidence/data-architecture-research-2026-10-28.md, docs/archive/learning/precommitment-records.md]
     witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md, docs/definitions/choir-data-architecture-selection-2026-10-28.precommit.md]
     refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
 
@@ -672,4 +680,13 @@ documents:
     annotations: {doc_role: definition, authority: mission, lifecycle: living, entrypoint: false}
     depends_on: [docs/choir-doctrine.md, docs/archive/definitions/choir-ledger-metamission-2026-10-13.md, docs/restart-subsystem-design-2026-10-13.md, docs/reports/lu-guest-updates-design-2026-10-14.md]
     witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md, docs/archive/reports/lu-guest-updates-adjudication-2026-10-14.md]
+    refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
+
+  - path: docs/definitions/choir-autoradio-learning-engine-2026-11-14.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: mission, lifecycle: living, entrypoint: false}
+    depends_on: [docs/choir-doctrine.md, docs/learning-engine.md, docs/design/autoradio-learning-engine-2026-11-14.md, docs/definitions/choir-autoradio-pass1-2026-11-10.md]
+    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]

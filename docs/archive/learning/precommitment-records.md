@@ -1,24 +1,29 @@
 # Precommitment Records and Prospective Self-Alignment
 
+> **Archived 2026-11-14.** Superseded by [the four-stroke learning engine](../../learning-engine.md),
+> which is the current home of this mechanism and its vocabulary (forecast,
+> outcome, lesson, trust). Kept as the record of how the mechanism was reasoned
+> out; where the two disagree, the learning engine wins.
+
 Canonical mechanism and theory document, synthesized 2026-10-14.
 
 **Status and authority.** The one current home for the precommitment record
 mechanism, its theory (prospective self-alignment, PSA), the inter-agent
 protocol built on it, scoring, and signing. It inherits
-[Choir Doctrine](choir-doctrine.md), the apex; doctrine wins any conflict. It
+[Choir Doctrine](../../choir-doctrine.md), the apex; doctrine wins any conflict. It
 restates once what was spread over seven overlapping documents, now archived
 under `docs/archive/precommitment/` and in git history (section 9 maps them).
 Where a source disagreed with a newer decision this document follows the
 newest, and section 7 lists what was withdrawn. Deciding documents, by
-authority: [owner notes 2026-10-14](reports/owner-notes-2026-10-14.md),
-[re-engineering decisions 2026-10-12](re-engineering-decisions-2026-10-12.md),
+authority: [owner notes 2026-10-14](../../reports/owner-notes-2026-10-14.md),
+[re-engineering decisions 2026-10-12](../../re-engineering-decisions-2026-10-12.md),
 the owner's 2026-10-11 protocol answers. Two live companions stay separate and
 are summarized in section 5: the
-[claims, events and entities design](reports/claims-events-entities-ontology-2026-10-14.md)
+[claims, events and entities design](../../reports/claims-events-entities-ontology-2026-10-14.md)
 and the
-[historical back-testing research](research/historical-precommitment-backtesting-2026-10-14.md).
+[historical back-testing research](../../research/historical-precommitment-backtesting-2026-10-14.md).
 
-**Split (MA8.0, 2026-11-08).** The theory continues in [psa-theory-2026-11-08.md](psa-theory-2026-11-08.md) and the engineering as built in [precommitment-records-practice-2026-11-08.md](precommitment-records-practice-2026-11-08.md). Where they differ from this document, they follow the build.
+**Split (MA8.0, 2026-11-08).** The theory continues in [psa-theory-2026-11-08.md](psa-theory-2026-11-08.md) and the engineering as built in [precommitment-records-practice-2026-11-08.md](../../precommitment-records-practice-2026-11-08.md). Where they differ from this document, they follow the build.
 
 Labels: *built* means in the code; *decided* means an owner decision the code
 does not yet fully implement; *hypothesis* means untested. PSA is a research
@@ -70,7 +75,7 @@ background tasks, fixed and free-form claims, System1 scoring, engineering
 sees aggregates of its own calibration with a 10% held-out set, calibration
 feedback on) are in the launch first pass ledger, 18:2x; the context-design
 text in 1.2 and 4.7 is being revised to match
-(docs/design/tasks-precommit-icrl-2026-10-24.md, in progress).
+(docs/archive/learning/tasks-precommit-icrl-2026-10-24.md, in progress).
 
 ### 1.1 The mechanism
 
@@ -781,7 +786,7 @@ the open control-database history decision (Store A was deleted 2026-10-30; this
 
 ## 7. Withdrawn or superseded
 
-"Re-eng" is the [re-engineering decisions](re-engineering-decisions-2026-10-12.md).
+"Re-eng" is the [re-engineering decisions](../../re-engineering-decisions-2026-10-12.md).
 
 | Withdrawn or superseded | Date, deciding source | Replacement and reason |
 |---|---|---|
@@ -924,12 +929,12 @@ default and published to the graph database by choice.
 | `memo-predictive-icrl-delta-2026-09-10.md` | 8.4 |
 
 Live documents pointed to, not absorbed:
-[claims, events and entities](reports/claims-events-entities-ontology-2026-10-14.md),
-[historical back-testing](research/historical-precommitment-backtesting-2026-10-14.md),
-[re-engineering decisions](re-engineering-decisions-2026-10-12.md),
-[owner notes](reports/owner-notes-2026-10-14.md),
-[ledger metamission](archive/definitions/choir-ledger-metamission-2026-10-13.md),
-[computer ontology](computer-ontology.md), `skills/throughline/SKILL.md`. Code:
+[claims, events and entities](../../reports/claims-events-entities-ontology-2026-10-14.md),
+[historical back-testing](../../research/historical-precommitment-backtesting-2026-10-14.md),
+[re-engineering decisions](../../re-engineering-decisions-2026-10-12.md),
+[owner notes](../../reports/owner-notes-2026-10-14.md),
+[ledger metamission](../definitions/choir-ledger-metamission-2026-10-13.md),
+[computer ontology](../../computer-ontology.md), `skills/throughline/SKILL.md`. Code:
 `internal/types/commitment.go`, `internal/store/inbox.go`.
 
 ## References
