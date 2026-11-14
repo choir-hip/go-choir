@@ -715,7 +715,13 @@ func TestUpdaterRootIsBoundedOverManyApplies(t *testing.T) {
 	census := func() (releases, incoming, gcRoots, store int) {
 		count := func(dir string) int {
 			entries, _ := os.ReadDir(filepath.Join(root, dir))
-			return len(entries)
+			n := 0
+			for _, entry := range entries {
+				if !strings.HasPrefix(entry.Name(), "host-build-") {
+					n++
+				}
+			}
+			return n
 		}
 		return count("releases"), count("incoming"), count("gc-roots"), count("store")
 	}
@@ -733,9 +739,15 @@ func TestUpdaterRootIsBoundedOverManyApplies(t *testing.T) {
 		// store object no release roots.
 		name := fmt.Sprintf("op-%02d", i)
 		if i > 1 {
-			residue := filepath.Join(root, "incoming", fmt.Sprintf(".host-build-%02d", i))
+			residue := filepath.Join(root, "incoming", fmt.Sprintf(".stage-%02d", i))
 			writeTestFile(t, filepath.Join(residue, "closure.nar"), 4096)
 			ageBy(t, residue, old)
+			// A real host build belongs to the runtime (collectSettledBundles
+			// removes it): the prune leaves it, and the census below does not
+			// count it.
+			build := filepath.Join(root, "incoming", fmt.Sprintf("host-build-%02d", i))
+			writeTestFile(t, filepath.Join(build, "closure.nar"), 4096)
+			ageBy(t, build, old)
 			orphan := filepath.Join(root, "store", fmt.Sprintf("orphan-%02d", i))
 			writeTestFile(t, filepath.Join(orphan, "f"), 1024)
 			ageBy(t, orphan, old)

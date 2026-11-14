@@ -69,7 +69,7 @@ func TestPruneSubcommandRunsWithNoSignerSocketOrIdentity(t *testing.T) {
 	}
 }
 
-func TestPruneMainUsageAndRootErrorsExitTwoAndNeverTouchAnything(t *testing.T) {
+func TestPruneMainUsageErrorsExitTwoAndNeverTouchAnything(t *testing.T) {
 	root, stale := staleRoot(t)
 	var out bytes.Buffer
 	for _, args := range [][]string{
@@ -77,8 +77,6 @@ func TestPruneMainUsageAndRootErrorsExitTwoAndNeverTouchAnything(t *testing.T) {
 		{"--root", ""},
 		{"--root", root, "--budget", "0s"},
 		{"--root", root, "extra"},
-		{"--root", filepath.Join(root, "missing")},
-		{"--root", filepath.Join(root, "incoming", ".stage-old", "f")},
 		{"--nope"},
 	} {
 		out.Reset()
@@ -127,6 +125,21 @@ func TestPruneMainRefusesWhileTheDaemonIsLive(t *testing.T) {
 		}
 		if !strings.Contains(out.String(), "skipped (the updater is running: "+filepath.Join(runDir, marker)+")") {
 			t.Fatalf("%s: output = %q", marker, out.String())
+		}
+	}
+}
+
+// A prune never fails a boot: a root that is missing or not a directory exits 0
+// and says so.
+func TestPruneMainMissingOrNonDirectoryRootExitsZero(t *testing.T) {
+	root, _ := staleRoot(t)
+	for _, target := range []string{filepath.Join(root, "missing"), filepath.Join(root, "incoming", ".stage-old", "f")} {
+		var out bytes.Buffer
+		if code := pruneMain([]string{"--root", target, "--run-dir", t.TempDir()}, &out); code != 0 {
+			t.Fatalf("root %s exited %d: %s", target, code, out.String())
+		}
+		if !strings.Contains(out.String(), "skipped (no root") {
+			t.Fatalf("root %s: output = %q", target, out.String())
 		}
 	}
 }
