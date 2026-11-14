@@ -40,8 +40,10 @@ type tapeWriteMaps struct {
 	runMemoryByKind map[string]int64
 	runMemoryBytes  map[string]int64        // body bytes of those entries, same keys
 	rewrites        map[string]*rewriteKind // object_rewrite_counters.go
-	// lifecycleForms counts committed lifecycle commands by the form of their
-	// stored result (lifecycleForm* in lifecycle.go), so the saving of naming
+	// lifecycleForms counts lifecycle commands committed through
+	// commitLifecycleTransition (not the story-open start command, which is
+	// written by its own batch and is neither counted nor slimmed) by the form
+	// of their stored result (lifecycleForm* in lifecycle.go), so the saving of naming
 	// a revision instead of embedding it is read on a live computer.
 	lifecycleForms map[string]int64
 }
