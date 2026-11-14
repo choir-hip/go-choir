@@ -265,6 +265,14 @@ func (s *Store) retireClearedKey(g telemetryRetireGroup) string {
 	return fmt.Sprintf("%p/%s", s, g.name)
 }
 
+// retireRunMemoryBacklogFn is the run-memory step of a wake (stub seam).
+var retireRunMemoryBacklogFn = func(s *Store, ctx context.Context, ready func() bool) (int, int, error) {
+	return s.RetireRunMemoryBacklog(ctx, time.Now().UTC(), runMemoryCatchUpGap, ready)
+}
+
+// retirementWakeDone is called at the end of a wake (stub seam).
+var retirementWakeDone = func() {}
+
 // StartTelemetryRetirement runs RetireTelemetry about ten minutes after
 // start, then every 24 hours, until ctx ends. Call it once the replay is done
 // and the runtime is up. ready, when set, gates each run: a computer whose
