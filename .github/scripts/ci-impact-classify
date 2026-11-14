@@ -111,9 +111,9 @@ else
 
     # The boot prune's unit test guards the ordering line in nix/autoputer-vm.nix
     # (scripts/updater-prune-unit-nix-test.sh): it runs when any nix module, the
-    # test, or the workflow that wires it changes.
+    # test, the flake that imports them, or the workflow that wires it changes.
     case "$path" in
-      nix/*|scripts/updater-prune-unit-nix-test.sh|.github/workflows/ci.yml)
+      nix/*|flake.nix|flake.lock|scripts/updater-prune-unit-nix-test.sh|.github/workflows/ci.yml)
         mark guest_unit "$path -> boot prune unit ordering test"
         ;;
     esac

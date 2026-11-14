@@ -310,7 +310,9 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 	// the vm-3dc68688 stale-binary failure class, caught pre-restart instead
 	// of by a post-mortem health probe.
 	if cerr := u.checkStateCompatibility(request.Manifest); cerr != nil {
-		u.dropStagedSource(request.SourceDir)
+		if isDeterministicRefusal(cerr) {
+			u.dropStagedSource(request.SourceDir)
+		}
 		return refuse(cerr.Error())
 	}
 
@@ -339,7 +341,9 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 	// untouched and never publishes a restart — the running release keeps
 	// serving (fail-closed on the data path).
 	if serr := u.materializeReleaseClosure(releaseDir, request.Manifest); serr != nil {
-		u.dropStagedSource(request.SourceDir)
+		// No drop: the release is staged and verified, so the source is not
+		// needed again, but the failure may be a full volume and the boot prune
+		// collects the source past its window.
 		return refuse(serr.Error())
 	}
 	if !found {
@@ -464,6 +468,20 @@ func (u *Updater) RestartCurrent(ctx context.Context) error {
 	return u.service.Restart(ctx)
 }
 
+// deterministicRefusal marks a refusal that does not change on a retry (the
+// release is wrong for this computer), as opposed to an I/O failure reading
+// what the check needs. Apply drops a payload only for the former
+// (dropStagedSource): the latter may be transient (no space) and the payload is
+// the only local copy.
+type deterministicRefusal struct{ error }
+
+func (r deterministicRefusal) Unwrap() error { return r.error }
+
+func isDeterministicRefusal(err error) bool {
+	var d deterministicRefusal
+	return errors.As(err, &d) || errors.Is(err, ErrStoreFloorRefused)
+}
+
 // ReasonBaseMovedSinceFreeze names the refusal of a release whose declared
 // base commit is not the booted base's: the candidate was built on a base the
 // computer no longer runs, and installing it would revert what the booted base
@@ -496,10 +514,10 @@ func (u *Updater) checkStateCompatibility(manifest ReleaseManifest) error {
 		}
 		persisted := receipt.Version
 		if manifest.StoreSchemaVersion != 0 && persisted > manifest.StoreSchemaVersion {
-			return fmt.Errorf("updater: guest store schema %d is newer than release's built schema %d; refusing stale binary", persisted, manifest.StoreSchemaVersion)
+			return deterministicRefusal{fmt.Errorf("updater: guest store schema %d is newer than release's built schema %d; refusing stale binary", persisted, manifest.StoreSchemaVersion)}
 		}
 		if manifest.MinStoreSchemaVersion != 0 && persisted < manifest.MinStoreSchemaVersion {
-			return fmt.Errorf("updater: guest store schema %d is older than release's minimum migratable schema %d; refusing unmigratable store", persisted, manifest.MinStoreSchemaVersion)
+			return deterministicRefusal{fmt.Errorf("updater: guest store schema %d is older than release's minimum migratable schema %d; refusing unmigratable store", persisted, manifest.MinStoreSchemaVersion)}
 		}
 	}
 	if manifest.BaseCommit != "" && u.guestImageManifestPath != "" {
@@ -509,13 +527,13 @@ func (u *Updater) checkStateCompatibility(manifest ReleaseManifest) error {
 		}
 		booted = strings.TrimSpace(booted)
 		if booted == "" {
-			return fmt.Errorf("updater: %s: release declares base_commit %s but the booted base carries no build_commit", ReasonBaseMovedSinceFreeze, manifest.BaseCommit)
+			return deterministicRefusal{fmt.Errorf("updater: %s: release declares base_commit %s but the booted base carries no build_commit", ReasonBaseMovedSinceFreeze, manifest.BaseCommit)}
 		}
 		// A commit is compared whole and without regard to case; a short
 		// commit is not a prefix match (it cannot be proven to name the
 		// booted commit).
 		if !strings.EqualFold(booted, strings.TrimSpace(manifest.BaseCommit)) {
-			return fmt.Errorf("updater: %s: release base commit %s does not match booted base commit %s", ReasonBaseMovedSinceFreeze, manifest.BaseCommit, booted)
+			return deterministicRefusal{fmt.Errorf("updater: %s: release base commit %s does not match booted base commit %s", ReasonBaseMovedSinceFreeze, manifest.BaseCommit, booted)}
 		}
 	}
 	return nil

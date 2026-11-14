@@ -1239,8 +1239,9 @@ EOF
     };
     serviceConfig = {
       # The runtime marks itself entered too (its own marker; the updater's
-      # marker keeps its meaning for internal/updater/client.go), so a failed updater unit cannot leave the runtime live with no
-      # marker for the boot prune's condition. "-": it never blocks the runtime.
+      # marker keeps its meaning for internal/updater/client.go), so a failed
+      # updater unit cannot leave the runtime live with no marker for the boot
+      # prune's condition. "-": it never blocks the runtime.
       ExecStartPre = "-${pkgs.coreutils}/bin/install -m 0600 /dev/null /run/choir/runtime-unit-entered";
       ExecStart = "${autoputerRuntimeExec}";
       Restart = "on-failure";
