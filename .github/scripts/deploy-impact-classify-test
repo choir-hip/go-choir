@@ -290,6 +290,18 @@ assert_not_contains "$dolt_ops_output" "unknown deployed path"
 dolt_ops_tooling_output="$(run_classifier "scripts/off-host-restore-drill.sh" "scripts/off-host-backup-pg-test.sh")"
 assert_contains "$dolt_ops_tooling_output" "deploy_needed=false"
 
+# CI-only tooling a CI or Go lane reads is never a deploy: the boot prune's unit
+# test, the chaos drill scripts (and their README). A host unit script is: the
+# growth meter is read into the host system closure (nix/node-b.nix).
+ci_only_output="$(run_classifier "scripts/updater-prune-unit-nix-test.sh" "scripts/chaos/s2-corpusd-crash.sh" "scripts/chaos/README.md")"
+assert_contains "$ci_only_output" "deploy_needed=false"
+assert_contains "$ci_only_output" "deploy_active_vm_refresh=false"
+assert_not_contains "$ci_only_output" "unknown deployed path"
+growth_meter_output="$(run_classifier "scripts/node-b-growth-meter")"
+assert_contains "$growth_meter_output" "deploy_host_os=true"
+assert_contains "$growth_meter_output" "deploy_active_vm_refresh=false"
+assert_not_contains "$growth_meter_output" "unknown deployed path"
+
 # D2 guest release metadata: the policy file and the floor list are inputs of
 # flake.nix (the guest image's release.json), so they rebuild the guest image;
 # the checks and their selftests are CI tooling and deploy nothing.
