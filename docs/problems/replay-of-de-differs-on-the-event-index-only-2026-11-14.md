@@ -91,7 +91,16 @@ reading after this lands, and its `event_index` field if it still differs.
   reads its live rows in the pinned snapshot (telemetry partition rows, which
   are separate files, are still read at the time of the call).
 
-Remaining error: checkpoint binding uses the strict extractor, so on a
-store whose lineage mixes null and `[]` the probe can say equivalent and a
-bind can still refuse (it fails closed). Whether d@e has such a lineage is
-unread.
+Remaining error, as first written and corrected (review round 1): the stored
+witness stayed strict, so the probe could say equivalent while a restore
+refused. This was wrong about where. It is the restore gate, not only the
+bind, that disagreed: a restore replays the tail with the new `Prepare`
+(`[]`) onto a base whose rows may hold `null`, and compares with the strict
+digest a checkpoint recorded; and the trim backlog differs between a live
+store, a base snapshot and a staged store whose own catch-up has not run.
+Both are repaired by the canonical witness, witness version 4, which the bind
+records and the restore recomputes, and which the probe uses on both sides
+(`restore-cannot-finish-inside-its-ten-minute-request-2026-11-14.md`, the
+canonical witness section). Cold recovery (`autoputer/projection_base.go`
+installs a snapshot, then replays a tail with no witness gate) is the likely
+producer of `null` rows, read from code. Whether d@e holds any is unread.
