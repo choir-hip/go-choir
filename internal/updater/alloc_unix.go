@@ -15,3 +15,7 @@ func allocatedBytes(info fs.FileInfo) int64 {
 	}
 	return info.Size()
 }
+
+// syncFilesystems asks the kernel to commit what it holds: ext4 returns freed
+// blocks to the allocator only when the transaction that freed them commits.
+func syncFilesystems() { syscall.Sync() }
