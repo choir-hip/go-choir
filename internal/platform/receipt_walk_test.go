@@ -3,6 +3,7 @@ package platform
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"reflect"
@@ -279,15 +280,20 @@ func TestReceiptBuildRunningIsSeenByAnUnprivilegedRole(t *testing.T) {
 		t.Fatalf("running with a build = %v, %v", running, err)
 	}
 	// As a role that has no pg_read_all_stats.
-	if _, err := s.db.Exec(`CREATE ROLE walk_reader NOLOGIN`); err != nil {
-		t.Skipf("cannot create a role here: %v", err)
+	role := fmt.Sprintf("walk_reader_%d", time.Now().UnixNano())
+	if _, err := s.db.Exec(`CREATE ROLE ` + role + ` NOLOGIN`); err != nil {
+		t.Fatalf("cannot create the unprivileged role: %v", err)
 	}
+	t.Cleanup(func() {
+		_, _ = s.db.Exec(`REVOKE ALL ON computer_event_append_receipts FROM ` + role)
+		_, _ = s.db.Exec(`DROP ROLE IF EXISTS ` + role)
+	})
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	for _, stmt := range []string{`GRANT SELECT ON computer_event_append_receipts TO walk_reader`, `SET ROLE walk_reader`} {
+	for _, stmt := range []string{`GRANT SELECT ON computer_event_append_receipts TO ` + role, `SET ROLE ` + role} {
 		if _, err := conn.ExecContext(ctx, stmt); err != nil {
 			t.Fatal(err)
 		}
@@ -310,7 +316,7 @@ func TestReceiptBuildRunningIsSeenByAnUnprivilegedRole(t *testing.T) {
 }
 
 // The walk steps aside between batches while a build holds the table, logs the
-// reason once, keeps its progress, and carries on when the build is gone.
+// reason each time it is held, keeps its progress, and carries on when the build is gone.
 func TestReceiptWalkStepsAsideBetweenBatchesAndResumes(t *testing.T) {
 	ctx := context.Background()
 	oldBatch := receiptCompactionBatch
@@ -344,8 +350,9 @@ func TestReceiptWalkStepsAsideBetweenBatchesAndResumes(t *testing.T) {
 	if err := d.store.db.QueryRow(`SELECT through_sequence FROM computer_event_receipt_compaction_v2 WHERE computer_id=?`, d.id).Scan(&through); err != nil || through < 2 {
 		t.Fatalf("saved progress = %d, %v", through, err)
 	}
-	if n := strings.Count(lines.String(), "receipt compaction deferred"); n != 1 {
-		t.Fatalf("the reason was logged %d times, want once: %q", n, lines.String())
+	// Every pass that is held says so, so the line is in any journal window.
+	if n := strings.Count(lines.String(), "receipt compaction deferred"); n != 3 {
+		t.Fatalf("the reason was logged %d times for three held passes: %q", n, lines.String())
 	}
 	building = false
 	passes, err := c.RunOnce(ctx)
@@ -436,5 +443,80 @@ func TestReceiptCompactionLoadLineSaysWALUnknown(t *testing.T) {
 	c.logLoad(context.Background(), d.id, ReceiptCompactionPass{Through: 1}, "not-an-lsn", time.Now())
 	if !strings.Contains(lines.String(), "wal_bytes_since_start=unknown") {
 		t.Fatalf("line = %q", lines.String())
+	}
+}
+
+// A build check that cannot be read is said once, on the transition, and the
+// walk runs; it says again when the check is readable.
+func TestReceiptWalkSaysOnceThatTheBuildCheckIsBlind(t *testing.T) {
+	s, _ := openTestPlatformStore(t)
+	c := noSleepCompactor(s)
+	c.freeSpace = func(context.Context) (uint64, string, bool) { return receiptWalkMinFree * 2, "/data", true }
+	var lines strings.Builder
+	log.SetOutput(&lines)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	failing := true
+	c.buildRunning = func(context.Context) (bool, error) {
+		if failing {
+			return false, errors.New("relation does not resolve")
+		}
+		return false, nil
+	}
+	for i := 0; i < 3; i++ {
+		if why := c.deferWalk(context.Background(), true); why != "" {
+			t.Fatalf("a blind check held the walk: %s", why)
+		}
+	}
+	if n := strings.Count(lines.String(), "build check unavailable: relation does not resolve; the walk runs"); n != 1 {
+		t.Fatalf("blind check logged %d times, want once: %q", n, lines.String())
+	}
+	failing = false
+	c.deferWalk(context.Background(), true)
+	c.deferWalk(context.Background(), true)
+	if n := strings.Count(lines.String(), "build check available again"); n != 1 {
+		t.Fatalf("recovery logged %d times, want once: %q", n, lines.String())
+	}
+}
+
+// The walk's state is on the load line, running or held and why.
+func TestReceiptCompactionLoadLineCarriesTheWalkState(t *testing.T) {
+	d := newDrillComputer(t, "computer-59c902c5d46caecc0a180a8557164e72")
+	d.appendEvent(computerevent.EventGenesisImported, "", nil)
+	c := noSleepCompactor(d.store)
+	c.freeSpace = func(context.Context) (uint64, string, bool) { return 1 << 40, "/data", true }
+	var lines strings.Builder
+	log.SetOutput(&lines)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	for want, reason := range map[string]string{
+		"walk_state=running":              "",
+		"walk_state=deferred: build":      "an index build or other maintenance holds the receipt table",
+		"walk_state=deferred: free space": "100 MiB free on /data, under the 12288 MiB the walk needs",
+	} {
+		c.lastDeferral = reason
+		lines.Reset()
+		c.logLoad(context.Background(), d.id, ReceiptCompactionPass{Through: 1}, "", time.Now())
+		if !strings.Contains(lines.String(), want) {
+			t.Fatalf("line %q lacks %q", lines.String(), want)
+		}
+	}
+}
+
+// A stale row (the computer was purged and created again under the same id, by a
+// release whose purge does not know this table) whose through_sequence is past
+// the new tape's head is walked from zero, not reported done.
+func TestReceiptCompactionWalksFromZeroWhenProgressIsPastTheHead(t *testing.T) {
+	d, _ := jsonbChain(t, "computer-59c902c5d46caecc0a180a8557164e72", 5)
+	d.store.SetReceiptCompaction(ReceiptCompactionPolicy{Computers: map[string]string{d.id: ReceiptCompactActive}})
+	if _, err := d.store.db.Exec(`INSERT INTO computer_event_receipt_compaction_v2 (computer_id, mode, through_sequence, rows_rewritten, rows_kept, bytes_before, bytes_after, updated_at) VALUES (?,?,?,?,?,?,?,now())`,
+		d.id, ReceiptCompactActive, 1000, 1000, 0, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	p := runCompaction(t, noSleepCompactor(d.store))
+	if p[0].Scanned != 5 || p[0].Rewritten != 5 || !p[0].Done {
+		t.Fatalf("pass = %+v, want the 5 rows walked and rewritten", p[0])
+	}
+	var through int64
+	if err := d.store.db.QueryRow(`SELECT through_sequence FROM computer_event_receipt_compaction_v2 WHERE computer_id=?`, d.id).Scan(&through); err != nil || through != 5 {
+		t.Fatalf("through = %d, %v", through, err)
 	}
 }
