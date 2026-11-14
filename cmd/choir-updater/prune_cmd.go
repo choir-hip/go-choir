@@ -22,6 +22,7 @@ func pruneMain(args []string, logOut io.Writer) int {
 	flags := flag.NewFlagSet("prune", flag.ContinueOnError)
 	flags.SetOutput(logOut)
 	root := flags.String("root", "", "updater root directory to prune")
+	runDir := flags.String("run-dir", "/run/choir", "directory holding the updater daemon's socket and started marker; the prune refuses when either exists")
 	budget := flags.Duration("budget", updater.DefaultPruneBudget, "time to spend deleting; the next boot continues")
 	if err := flags.Parse(args); err != nil {
 		return 2
@@ -36,8 +37,7 @@ func pruneMain(args []string, logOut io.Writer) int {
 		return 2
 	}
 	logger := log.New(logOut, "", 0)
-	report := updater.Prune(updater.PruneOptions{Root: cleaned, Budget: *budget})
+	report := updater.Prune(updater.PruneOptions{Root: cleaned, Budget: *budget, RunDir: *runDir})
 	logger.Print(report.Line())
 	return 0
 }
-

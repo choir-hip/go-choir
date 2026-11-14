@@ -140,6 +140,7 @@ func (h *ApplyKeyHold) Fence(reason string) error {
 		RequestCommitment: h.journal.RequestCommitment, Phase: phase,
 		PriorReleaseDigest: h.journal.PriorReleaseDigest, PriorReleaseTarget: h.journal.PriorReleaseTarget,
 		TargetReleaseDigest: h.journal.TargetReleaseDigest, StartedAt: h.journal.StartedAt,
+		Verdict: string(h.Verdict),
 		Failure: reason + " (" + string(h.Verdict) + ": " + h.Cause + ")",
 		Result:  ApplyResult{ReleaseDigest: h.journal.TargetReleaseDigest, PriorReleaseDigest: h.journal.PriorReleaseDigest, Outcome: "refused"},
 	}
