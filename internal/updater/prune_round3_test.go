@@ -60,3 +60,56 @@ func TestPruneCountsAnInPlaceDeletionTheBudgetCut(t *testing.T) {
 		t.Fatalf("second = %+v", second)
 	}
 }
+
+// D3: the source is dropped on a deterministic pre-staging refusal only. A floor
+// that cannot be read, or a closure replay that fails for want of space, keeps
+// it for the boot prune.
+func TestApplyDropsItsSourceOnADeterministicStateRefusal(t *testing.T) {
+	rig := newFloorRig(t, 2)
+	rig.floor(t, 3)
+	request := rig.release(t, "op-below-floor", 2)
+	if _, err := rig.engine.Apply(context.Background(), request); err == nil {
+		t.Fatal("a release below the floor was applied")
+	}
+	if exists(request.SourceDir) {
+		t.Fatal("a deterministic refusal kept its payload")
+	}
+}
+
+func TestApplyKeepsItsSourceWhenTheFloorCannotBeRead(t *testing.T) {
+	rig := newFloorRig(t, 2)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(rig.schema), "store-floor.json"), []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	request := rig.release(t, "op-floor-unreadable", 2)
+	if _, err := rig.engine.Apply(context.Background(), request); err == nil {
+		t.Fatal("a release was applied although the floor could not be read")
+	}
+	if !exists(request.SourceDir) {
+		t.Fatal("an unreadable floor (not a refusal of the release) deleted the payload")
+	}
+}
+
+func TestApplyKeepsItsSourceWhenTheClosureReplayFails(t *testing.T) {
+	blob, err := os.ReadFile(filepath.Join("testdata", "closure-single.nar"))
+	if err != nil {
+		t.Skipf("closure fixture absent: %v", err)
+	}
+	baseManifestPath, bootedDigest := layeredTestBase(t)
+	u, root, _ := newApplyRig(t, baseManifestPath)
+	request := layeredRequestFixture(t, root, "computer-test", "realization-test", "op-replay", bootedDigest, blob, "0pvb33w34jr4243s1182511gxwrchf0c-payload.txt")
+	// The release is already staged (a replayed or resumed apply), and the
+	// private store cannot be written.
+	if err := u.stageRelease(request.SourceDir, filepath.Join(root, "releases", request.Manifest.ContentDigest), request.Manifest); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "store"), []byte("a file, not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := u.Apply(context.Background(), request); err == nil {
+		t.Fatal("the replay succeeded without a store")
+	}
+	if !exists(request.SourceDir) {
+		t.Fatal("a failed closure replay deleted the payload")
+	}
+}
