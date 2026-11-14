@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Self-test of scripts/receipts-index-swap against a throwaway PostgreSQL (initdb,
-# pg_ctl and psql from PATH; version 17 is the host's). RUNNER-ONLY: the script
-# and this test are developer-side (docs-like paths, scripts/receipts-index-swap*),
-# so no CI lane runs them; run it on the build runner before a change to either.
+# pg_ctl and psql from PATH; version 17 is the host's). CI runs it (the Receipts
+# Index Swap Script job, PostgreSQL from .github/actions/install-postgres) whenever
+# the script, this test, the workflow or the receipt index definitions change; run
+# it by hand on a runner before a change to either.
 #
 # It checks, on a seeded table with the live table's shape: the full swap with
 # concurrent inserts never blocked over 5 s; refusal of both drops while the
@@ -127,6 +128,11 @@ wait_for_build && ok "the build is waiting behind the writer" || bad "the build 
 decoy_pid=$!
 pids+=("$decoy_pid")
 sleep 1
+# A second build, and restore-old, refuse while the first holds the table: they
+# neither wait out lock_timeout nor drop the first build's index as a leftover.
+run 3 build
+has "another session holds the table"
+run 3 restore-old
 run 0 cancel
 has "signalled 1 backend"
 wait "$build_pid"; rc=$?
@@ -137,6 +143,18 @@ has "no backend was signalled"
 kill "$decoy_pid" 2>/dev/null
 release_writer
 "${D[@]}" -c "DROP INDEX IF EXISTS decoy_idx" >/dev/null 2>&1
+# cancel signals only an ACTIVE backend. An idle session whose last statement is
+# the build's own text (a statement that fails at once, naming a column that is not
+# there, with the session staying connected) matches the pattern but is left alone
+# and not counted.
+sleep 2 # the released decoy build finishes
+coproc IDLE { psql -h "$tmp" -U postgres -X -q -At -d swaptest; }
+printf '%s\n' "CREATE INDEX CONCURRENTLY \"computer_event_append_kind_partial_idx\" ON \"public\".\"computer_event_append_receipts\" (no_such_column) WHERE event_kind <> 'projection_batch_recorded';" >&"${IDLE[1]}"
+sleep 1
+[ "$("${D[@]}" -c "SELECT count(*) FROM pg_stat_activity WHERE state = 'idle' AND query LIKE 'CREATE INDEX CONCURRENTLY \"computer_event_append_kind_partial_idx\" ON %'")" -ge 1 ] && ok "an idle session carries the build's text as its last statement" || bad "the idle session was not set up"
+run 1 cancel
+has "no backend was signalled"
+exec {IDLE[1]}>&-
 if exists computer_event_append_kind_partial_idx && ! valid computer_event_append_kind_partial_idx; then ok "the cancelled build left an INVALID index"; else bad "no invalid leftover after the cancel"; fi
 
 # The swap, with inserts running throughout: none is blocked for 5 s.

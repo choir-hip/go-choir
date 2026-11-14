@@ -102,7 +102,10 @@ the swap is no longer in the binary; it is a supervised act (step 2b).
   the walk over from zero. It costs one pass over rows that are already compact
   (they are kept) and needs no reading of what the older release did. Tested for
   expand, expand then active, expand then dry run, and active alone.
-  A restart writes the row back to zero once, on purpose; every save of a pass
+  A row whose `through_sequence` is past the computer's head (the computer was
+  purged and created again under the same id by a release whose purge does not
+  know this table) is walked from zero. A restart writes the row back to zero once,
+  on purpose; every save of a pass
   after that is held never to move `through_sequence` backward in the same mode,
   so a second process or a pass that began earlier cannot undo another's
   progress.
@@ -119,7 +122,14 @@ the swap is no longer in the binary; it is a supervised act (step 2b).
   (tested from an unprivileged role). Progress is saved before it steps aside,
   the reason is logged when it changes, and "receipt compaction resumes" when it
   clears. It also defers for free space: under 12 GiB on the measured volume,
-  read at the start of a pass and again at every load line (every 100 batches). The estimate is 2.4 GB
+  read at the start of a pass and again after every 100th batch (the load line
+  is written after batches 0, 100, 200 and so on; the space check after 100, 200).
+  The deferral line is repeated every time the walk is held (a pass is ten
+  minutes apart), so it is in any ten-minute journal window, and every load line
+  ends `walk_state=running`, `deferred: build` or `deferred: free space`. If the
+  build check itself cannot be read (the table does not resolve, the lock view
+  fails) the walk runs and says so once, `build check unavailable: ...`, and again
+  when it is readable. The estimate is 2.4 GB
   of new heap, 0.8 GB of index churn and 7.7 GB of dead tuples that stay until a
   vacuum, 10.9 GB, with the WAL on top. The measured volume is the smaller of
   PostgreSQL's data directory and corpusd's artifacts root; the deployed database
@@ -232,23 +242,26 @@ set of indexes; corpusd logs the append timing line a minute).
 4. `scripts/receipts-index-swap watch` in a second terminal.
 
 **The walk.** Step 2a's walk steps aside by itself while another session holds
-the table for an index build or drop (it watches `pg_locks`); it logs
+the table for an index build or drop (it watches `pg_locks`). While it is held it
+logs, at every pass (ten minutes apart) and whenever a pass steps aside,
 `receipt compaction deferred: an index build or other maintenance holds the
-receipt table...` and `receipt compaction resumes` when it clears. After the
-build starts, confirm the `deferred` line in the corpusd journal before relying
-on a reading: until it appears the walk may still be writing and its I/O is in
-the append times. Name the walk's state when taking the pre-build reading
-(running mid-pass, or deferred, or finished: its last `receipt compaction load`
-line). To take the swap with the walk out of the picture entirely, run it before
-the first pass starts (two minutes after a boot) or after the walk is done
-(`receipt compaction ... done=true` for the paper); either is cleaner than
-reading the build's effect through the walk's.
+receipt table...`, and `receipt compaction resumes` when it clears; every
+`receipt compaction load` line ends `walk_state=running|deferred: build|deferred:
+free space`. After the build starts, wait for a `deferred` line newer than the
+build's start (the journal window of `watch` is ten minutes, and the line repeats
+at that cadence) before relying on a reading: until then the walk may still be
+writing and its I/O is in the append times. Name the walk's state when taking the
+pre-build reading (running mid-pass, deferred, or finished: its last `receipt
+compaction load` line). To take the swap with the walk out of the picture
+entirely, run it before the first pass starts (two minutes after a boot) or after
+the walk is done (`receipt compaction ... done=true` for the paper).
 
 **The pre-build reading.** From the timing line
 `corpusd append timing: 1m busiest=<id> ...; 10m busiest=<id> ...[; 1m of <id> ...]`:
 the paper's computer id is the one the rule is about. Read the 10-minute figure
-three times a minute apart; the lowest p95 is the pre-build reading P, and its
-computer id is written down. Every later reading must be for the same computer
+three times a minute apart; if the busiest computer is not the same id in all
+three, take them again; the lowest p95 of one id is the pre-build reading P, and
+that id is written down. Every later reading must be for the same computer
 id: take it from `1m busiest=<id>` when that is the id, and otherwise from
 `1m of <id>` (the line gives the ten-minute computer's own last minute); if
 neither names it, take another reading a minute later. The cancel rule: that
@@ -276,7 +289,10 @@ INVALID, which every reader ignores and which the next `build` drops first.
 **After a cancel**, wait until two readings a minute apart, for the same computer
 id as P, are back under the rule, then run `build` again. At most three attempts
 in a night; after the third, stop, leave the old indexes, and record the attempts
-and the readings here. A restart of Postgres or a crash mid-build has the same
+and the readings here. After both drops, a partial index that later turns INVALID
+leaves no kind index at all (readers stay correct through the sequence unique
+index, but slow): rebuild it promptly with `build`, not at the next night's
+leisure. A restart of Postgres or a crash mid-build has the same
 result as a cancel; a restart of corpusd does not touch the build (it is the
 database's) but empties the timing ring, so take the pre-build reading again.
 
@@ -286,6 +302,12 @@ index: `restore-old` recreates both concurrently with the definitions main's
 Bootstrap gave them (the receipt id index first); no reader of step 1 or step 2a
 needs them, so this is for a revert past step 1 only, and it takes a few minutes
 each.
+
+`build` and `restore-old` refuse (exit 3) while another session builds, drops or
+vacuums the table, so a second terminal cannot wait out a minute to be told to
+retry, or drop the first build's finished index as a leftover. The index the
+script builds is owned by `postgres`; a later change of role would need a
+superuser to drop it.
 
 **What the script does not do.** It does not read or print the psql command, any
 connection string or env file; it does not run two heavy statements at once; it

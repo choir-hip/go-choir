@@ -33,7 +33,11 @@
 # when the appends are back); 5 psql could not be run or a statement it ran failed
 # (psql runs with ON_ERROR_STOP=1 and every read is checked); 6 an index of the
 # partial index's name exists, is valid, and its definition is not the expected
-# one (build and the drops refuse; nothing is changed).
+# one (build refuses with 6; the drops refuse with 3; nothing is changed).
+# build and restore-old also refuse with 3 while another session is building or
+# dropping an index on the table (or holds SHARE UPDATE EXCLUSIVE on it), so a
+# second invocation can neither wait out a minute to be told to retry nor drop a
+# just-finished index as if it were an interrupted build.
 set -uo pipefail
 
 TABLE=computer_event_append_receipts
@@ -118,6 +122,17 @@ drop_leftover() {
   fi
 }
 
+# busy_refuse refuses (exit 3) when another session in this database holds SHARE
+# UPDATE EXCLUSIVE on the table: what CREATE and DROP INDEX CONCURRENTLY, a manual
+# VACUUM or ANALYZE hold for their whole run. An autovacuum worker (no user name)
+# is not counted: it does not conflict with a build's outcome and is not this
+# script's to wait for.
+busy_refuse() {
+  local rows
+  rows=$(q "SELECT 'pid=' || l.pid || ' ' || left(COALESCE(a.query, '?'), 100) FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid WHERE l.locktype = 'relation' AND l.relation = '${Q}'::regclass AND l.mode = 'ShareUpdateExclusiveLock' AND l.granted AND l.pid <> pg_backend_pid() AND a.datname = current_database() AND a.usename IS NOT NULL") || die "psql failed" 5
+  [ -z "$rows" ] || die "another session holds the table (an index build or drop, a VACUUM or ANALYZE); not starting a second statement: ${rows//$'\n'/; }" 3
+}
+
 cmd_status() {
   say "schema ${schema}"
   q "SELECT 'table_total_bytes=' || pg_total_relation_size('${Q}'::regclass) || ' heap_bytes=' || pg_relation_size('${Q}'::regclass) || ' indexes_bytes=' || pg_indexes_size('${Q}'::regclass)" || exit 5
@@ -133,6 +148,7 @@ cmd_build() {
     say "$PARTIAL is already valid"
     return 0
   fi
+  busy_refuse
   drop_leftover "$PARTIAL"
   say "building $PARTIAL"
   if ! heavy "CREATE INDEX CONCURRENTLY \"${PARTIAL}\" ON ${Q} ${PARTIAL_COLUMNS}"; then
@@ -169,6 +185,7 @@ cmd_cancel() {
 
 cmd_restore_old() {
   local pair name columns
+  busy_refuse
   for pair in "${RECEIPT_ID}|${RECEIPT_ID_COLUMNS}" "${KIND_SEQ}|${KIND_SEQ_COLUMNS}"; do
     name=${pair%%|*}; columns=${pair#*|}
     index_state "$name"
