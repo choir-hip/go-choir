@@ -294,16 +294,24 @@ func looksLikeGitCommit(value string) bool {
 // appliedOperationForRelease is the applied operation whose release digest
 // is releaseDigest and that froze a bundle.
 func (rt *Runtime) appliedOperationForRelease(ctx context.Context, releaseDigest string) (selfdev.Operation, bool) {
+	operation, ok, _ := rt.resolveOperationForRelease(ctx, releaseDigest)
+	return operation, ok
+}
+
+// resolveOperationForRelease is appliedOperationForRelease with a read error
+// told apart from "no operation": a caller that deletes on "none" (the bundle
+// collection) must not act on an error.
+func (rt *Runtime) resolveOperationForRelease(ctx context.Context, releaseDigest string) (selfdev.Operation, bool, error) {
 	operations, err := rt.selfdevOperations.ListByStates(ctx, rt.cfg.ComputerID, selfdev.StateApplied)
 	if err != nil {
-		return selfdev.Operation{}, false
+		return selfdev.Operation{}, false, err
 	}
 	for i := len(operations) - 1; i >= 0; i-- {
 		if !operations[i].IsPackage() && operations[i].ReleaseDigest == releaseDigest && operations[i].BundleDigest != "" {
-			return operations[i], true
+			return operations[i], true, nil
 		}
 	}
-	return rt.rollbackTargetForRelease(ctx, releaseDigest, operations)
+	return rt.resolveRollbackTargetForRelease(ctx, releaseDigest, operations)
 }
 
 // rollbackTargetForRelease resolves a release that a rollback installed. A
@@ -314,9 +322,14 @@ func (rt *Runtime) appliedOperationForRelease(ctx context.Context, releaseDigest
 // operation that froze that bundle. A base restore serves the booted base
 // manifest, which is not a selfdev- release and never comes here.
 func (rt *Runtime) rollbackTargetForRelease(ctx context.Context, releaseDigest string, applied []selfdev.Operation) (selfdev.Operation, bool) {
+	operation, ok, _ := rt.resolveRollbackTargetForRelease(ctx, releaseDigest, applied)
+	return operation, ok
+}
+
+func (rt *Runtime) resolveRollbackTargetForRelease(ctx context.Context, releaseDigest string, applied []selfdev.Operation) (selfdev.Operation, bool, error) {
 	rolledBack, err := rt.selfdevOperations.ListByStates(ctx, rt.cfg.ComputerID, selfdev.StateRolledBack)
 	if err != nil {
-		return selfdev.Operation{}, false
+		return selfdev.Operation{}, false, err
 	}
 	for i := len(rolledBack) - 1; i >= 0; i-- {
 		row := rolledBack[i]
@@ -325,11 +338,11 @@ func (rt *Runtime) rollbackTargetForRelease(ctx context.Context, releaseDigest s
 		}
 		for j := len(applied) - 1; j >= 0; j-- {
 			if !applied[j].IsPackage() && applied[j].BundleDigest == row.BundleDigest && !strings.HasPrefix(applied[j].OperationID, "rollback-") {
-				return applied[j], true
+				return applied[j], true, nil
 			}
 		}
 	}
-	return selfdev.Operation{}, false
+	return selfdev.Operation{}, false, nil
 }
 
 // boundSourcePatch reads the operation's bound bundle and its source patch:

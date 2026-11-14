@@ -887,6 +887,58 @@ EOF
     };
   };
 
+  # Boot-time prune of the updater root (docs/problems/updater-directory-fills-
+  # the-data-volume-2026-11-13.md; why it runs here and not beside a live
+  # runtime: docs/problems/updater-prune-three-rounds-structural-assessment-
+  # 2026-11-14.md). It runs to completion, or to its budget, before the updater
+  # daemon and the runtime start, so while it runs it is the only process in
+  # /mnt/persistent/choir-updater: no restore, swap or apply can overlap it.
+  #
+  # It must never cost a boot. It is ordered before both services but neither
+  # requires nor is required by them (no requires/requiredBy/bindsTo/partOf):
+  # a prune that fails, is killed by its timeout or never starts leaves the
+  # directory as it was, the services start anyway, and the next boot
+  # continues. The binary stops deleting at --budget (60 s); TimeoutStartSec
+  # (120 s) is the kill for a prune stuck in the kernel. Everything it deletes
+  # is renamed out of sight first, so a kill at any point leaves a state the
+  # next run finishes.
+  systemd.services.go-choir-updater-prune = {
+    description = "Prune the guest updater root before the updater and the runtime start";
+    wantedBy = [ "multi-user.target" ];
+    before = [ "go-choir-updater.service" "go-choir-autoputer.service" ];
+    unitConfig.RequiresMountsFor = "/mnt/persistent";
+    serviceConfig = {
+      Type = "oneshot";
+      User = "root";
+      Group = "root";
+      ExecStart = "${goChoirPackages.updater}/bin/choir-updater prune --root /mnt/persistent/choir-updater --budget 60s";
+      TimeoutStartSec = "120s";
+      UMask = "0077";
+      # Release trees are sealed read-only and may hold files another uid
+      # wrote; deleting them needs these two and nothing else.
+      NoNewPrivileges = true;
+      CapabilityBoundingSet = [ "CAP_DAC_OVERRIDE" "CAP_FOWNER" ];
+      AmbientCapabilities = [ ];
+      PrivatePIDs = true;
+      ProtectProc = "invisible";
+      ProcSubset = "pid";
+      PrivateTmp = true;
+      PrivateDevices = true;
+      PrivateNetwork = true;
+      ProtectHome = true;
+      ProtectSystem = "strict";
+      ProtectControlGroups = true;
+      ReadWritePaths = [ "/mnt/persistent/choir-updater" ];
+      InaccessiblePaths = [ "/mnt/persistent/choir-signers" "/mnt/persistent/choir-credentials" "/run/choir-signers" "/run/choir-verifier" "/run/choir-bootstrap" "/run/choir-runtime-handoff" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
+      RestrictAddressFamilies = [ "AF_UNIX" ];
+      LockPersonality = true;
+      RestrictSUIDSGID = true;
+      SystemCallFilter = [ "~@debug" ];
+      StandardOutput = "journal+console";
+      StandardError = "journal+console";
+    };
+  };
+
   systemd.services.go-choir-kernel-capability-probe = {
     description = "Probe mandatory guest kernel isolation capabilities";
     before = [ "go-choir-updater.service" "go-choir-autoputer.service" ];
