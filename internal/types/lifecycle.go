@@ -659,14 +659,21 @@ type ArchiveLifecycleArtifactRequest struct {
 }
 
 type LifecycleStoredResult struct {
-	Trajectory      TrajectoryRecord      `json:"trajectory"`
-	Schema          string                `json:"schema,omitempty"`
-	WorkItem        *WorkItemRecord       `json:"work_item,omitempty"`
-	Agent           *AgentRecord          `json:"agent,omitempty"`
-	Update          *CoagentSourcePacket  `json:"update,omitempty"`
-	Events          []LifecycleEvent      `json:"events"`
-	Document        *Document             `json:"document,omitempty"`
-	Revision        *Revision             `json:"revision,omitempty"`
+	Trajectory TrajectoryRecord     `json:"trajectory"`
+	Schema     string               `json:"schema,omitempty"`
+	WorkItem   *WorkItemRecord      `json:"work_item,omitempty"`
+	Agent      *AgentRecord         `json:"agent,omitempty"`
+	Update     *CoagentSourcePacket `json:"update,omitempty"`
+	Events     []LifecycleEvent     `json:"events"`
+	Document   *Document            `json:"document,omitempty"`
+	Revision   *Revision            `json:"revision,omitempty"`
+	// RevisionID names the revision this command wrote in its own batch, in
+	// place of an embedded copy in Revision. When both are set the reader
+	// prefers Revision. The store rebuilds the revision by id; revisions are
+	// immutable. A binary that predates this field ignores it and reads
+	// Revision as absent, so a writer of RevisionID may land only after a
+	// release that reads it has been the deployed one.
+	RevisionID      string                `json:"revision_id,omitempty"`
 	TextureTurn     *TextureTurnRecord    `json:"texture_turn,omitempty"`
 	Controls        []CoagentSourcePacket `json:"controls,omitempty"`
 	TargetWorkItems []WorkItemRecord      `json:"target_work_items,omitempty"`
