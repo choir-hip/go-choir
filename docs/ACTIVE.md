@@ -20,6 +20,17 @@ have a stronger foundation." Goal:
 Lanes in motion: S4 (snapshots that cost the change), S5 (coalescing, fewer
 corpusd calls per event), S7 (the sweep on a schedule) and the small guards.
 
+## Live station beside it (2026-11-14): storage solutions, part 3, store once
+
+Owner, 2026-11-14: "all these refactors and maybe more if you discover them
+... should be key top priorities, because we really need to get our
+infrastructure strong before we can ship auto radio anyway." Goal:
+[`definitions/choir-storage-solutions-3-store-once-2026-11-14.md`](definitions/choir-storage-solutions-3-store-once-2026-11-14.md)
+(`readiness: executable`, `now.status: working`). Design:
+[`design/store-once-2026-11-14.md`](design/store-once-2026-11-14.md). Part 2
+keeps S4, S5 and S7; its receipts fold and payload compression continue in
+part 3. Autoradio waits behind both.
+
 ## Next station: Autoradio, with Autopaper
 
 Owner, 2026-11-13 (overnight): "i want to move on back to autopaper,

@@ -1387,3 +1387,18 @@ nodes:
       Owner 2026-11-12: "Let's make a storage solutions mission (part 2) as
       our next priority. We can return to autoradio after we do that."
       Frame: docs/design/storage-pressure-frame-2026-11-12.md.
+  - id: choir-storage-solutions-3-store-once-2026-11-14
+    title: Storage solutions, part 3 — store once (ops carry what changed, the guest store is a working set, receipts by segment, shared-context compression, a bounded data volume)
+    path: docs/definitions/choir-storage-solutions-3-store-once-2026-11-14.md
+    ledger: docs/definitions/choir-storage-solutions-3-store-once-2026-11-14.ledger.md
+    status: working  # 2026-11-14 live station, ahead of Autoradio by the owner's word
+    kind: station
+    entrypoint: true
+    depends_on: []
+    enables: []
+    settled_by: owner
+    note: >-
+      Owner 2026-11-14: the refactors are key top priorities before Autoradio
+      ships. Design: docs/design/store-once-2026-11-14.md (the lead's,
+      reviewed at station T0). Takes over S6 and the compression half of S8
+      from part 2.
