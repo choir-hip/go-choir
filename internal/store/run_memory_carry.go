@@ -57,18 +57,37 @@ func carrySourceState(s types.RunState) bool {
 	return s == types.RunCompleted || s == types.RunPassivated
 }
 
-// resolveRunCopies reduces the copies of one run's record to the one both the
-// reader and the selector act on: a copy that is not terminal beats a terminal
-// one (it keeps the run), and among terminal copies the newest finish wins.
-func resolveRunCopies(best types.RunRecord, haveBest bool, r types.RunRecord) types.RunRecord {
-	switch {
-	case !haveBest:
-		return r
-	case !r.State.Terminal():
-		if best.State.Terminal() {
-			return r
+// runCopyBetter reports whether copy a is preferred to copy b when both are
+// live records of one run. The preference is a total order, so the result does
+// not depend on the order the copies are read in: a copy that is not terminal
+// first (it keeps the run), then the later finish, then a carry-source state,
+// then the state name, then the computer id.
+func runCopyBetter(a, b types.RunRecord) bool {
+	if a.State.Terminal() != b.State.Terminal() {
+		return !a.State.Terminal()
+	}
+	if !a.State.Terminal() {
+		// Two copies that are not terminal: the carry-source state, then the name.
+		if carrySourceState(a.State) != carrySourceState(b.State) {
+			return carrySourceState(a.State)
 		}
-	case best.State.Terminal() && runCarryFinishedAt(r).After(runCarryFinishedAt(best)):
+	} else if af, bf := runCarryFinishedAt(a), runCarryFinishedAt(b); !af.Equal(bf) {
+		return af.After(bf)
+	} else if carrySourceState(a.State) != carrySourceState(b.State) {
+		return carrySourceState(a.State)
+	}
+	if a.State != b.State {
+		return a.State < b.State
+	}
+	return a.ComputerID < b.ComputerID
+}
+
+// resolveRunCopies reduces the copies of one run's record to the one both the
+// reader and the selector act on (runCopyBetter): a copy that is not terminal
+// beats a terminal one, among terminal copies the newest finish wins, and ties
+// go to the carry-source state and then by name, never by read order.
+func resolveRunCopies(best types.RunRecord, haveBest bool, r types.RunRecord) types.RunRecord {
+	if !haveBest || runCopyBetter(r, best) {
 		return r
 	}
 	return best

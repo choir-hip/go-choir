@@ -100,6 +100,9 @@ func TestRunMemoryCensusCountsEveryGroupExactlyOnce(t *testing.T) {
 		"kept_run_record_unreadable":  {0, 0},
 		"kept_run_agent_disagrees":    {0, 0},
 		"kept_append_failed":          {0, 0},
+		"kept_run_copies_disagree":    {0, 0},
+		"kept_mixed_owner_rows":       {0, 0},
+		"kept_loop_id_invalid":        {0, 0},
 	}
 	var runs, entries int64
 	for _, d := range c.Dispositions {
