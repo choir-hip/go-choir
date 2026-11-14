@@ -9,7 +9,9 @@
 // a store that size reads the whole file, the same read a snapshot capture
 // makes. The reading is therefore on request only, and bounded:
 //
-//   - one wall-time budget for the whole reading, shared out by weight: a
+//   - one wall-time budget for the whole reading, shared out by weight (the
+//     previous reading's bytes when there is one; a request may name the trees
+//     to read, Limits.Only): a
 //     table's b-tree weighs four times an index's, and each tree gets its
 //     share of what is left when it starts, so one big tree cannot leave the
 //     others unread (a tree that finishes early gives its time back);
@@ -48,9 +50,17 @@ import (
 	"time"
 )
 
+// MaxOnly caps how many tree names one request may name.
+const MaxOnly = 16
+
 // Limits bounds one reading. Budget is the wall time of the whole reading.
+// Only, when not empty, names the trees to read (tables or indexes, matched
+// exactly against their schema names): the whole budget is shared among them
+// in the order given, no other tree is walked or listed, and the reading is
+// not kept as the scanner's last. At most MaxOnly names are used.
 type Limits struct {
 	Budget time.Duration
+	Only   []string
 }
 
 // DefaultLimits is one minute: under the server's 120 s write timeout, and
@@ -155,10 +165,18 @@ type Reading struct {
 	ElapsedMillis int64     `json:"elapsed_ms"`
 	BudgetMillis  int64     `json:"budget_ms"`
 	// Truncated says a tree was cut or never reached: some numbers are floors.
-	Truncated bool         `json:"truncated"`
-	Header    Header       `json:"header"`
-	Trees     []Tree       `json:"trees"`
-	Tables    []TableTotal `json:"tables"`
+	Truncated bool `json:"truncated"`
+	// Only, Unknown and OnlyDropped describe a restricted reading: the names
+	// asked for (deduplicated, at most MaxOnly), those that match no tree,
+	// and how many past the cap were ignored. Only a restricted reading's
+	// Trees are the named ones; a table total is Complete only when every
+	// tree of the table, named or not, was read.
+	Only        []string     `json:"only,omitempty"`
+	Unknown     []string     `json:"unknown,omitempty"`
+	OnlyDropped int          `json:"only_dropped,omitempty"`
+	Header      Header       `json:"header"`
+	Trees       []Tree       `json:"trees"`
+	Tables      []TableTotal `json:"tables"`
 }
 
 // Report is the store_tables section of guest observability.
@@ -206,12 +224,14 @@ func (s *Scanner) Read(ctx context.Context, db *sql.DB, lim Limits, want bool) R
 		s.running = false
 		// A reading cut by its request's own cancellation does not replace
 		// one that others may read.
-		if r != nil && (ctx.Err() == nil || s.last == nil) {
+		// A restricted reading is never kept: a later plain read must not
+		// show one tree's numbers as the file's.
+		if r != nil && len(r.Only) == 0 && (ctx.Err() == nil || s.last == nil) {
 			s.last = r
 		}
 		s.mu.Unlock()
 	}()
-	r = s.read(ctx, db, clampBudget(lim.Budget))
+	r = s.read(ctx, db, clampBudget(lim.Budget), lim.Only)
 	rep.Reading = r
 	return rep
 }
@@ -221,7 +241,7 @@ type schemaTree struct {
 	rowid            bool
 }
 
-func (s *Scanner) read(ctx context.Context, db *sql.DB, budget time.Duration) *Reading {
+func (s *Scanner) read(ctx context.Context, db *sql.DB, budget time.Duration, only []string) *Reading {
 	started := time.Now()
 	r := &Reading{ReadAt: started.UTC(), BudgetMillis: budget.Milliseconds(), Trees: []Tree{}, Tables: []TableTotal{}}
 	if db == nil {
@@ -249,6 +269,18 @@ func (s *Scanner) read(ctx context.Context, db *sql.DB, budget time.Duration) *R
 		}
 		return 1
 	}
+	treesOfTable := map[string]int{}
+	for _, t := range list {
+		treesOfTable[t.table]++
+	}
+	s.mu.Lock()
+	prev := s.last
+	s.mu.Unlock()
+	if len(only) > 0 {
+		list = selectOnly(r, list, only)
+	} else if prev != nil {
+		list, weight = orderByPrevious(list, prev)
+	}
 	remainingWeight := 0.0
 	for _, t := range list {
 		remainingWeight += weight(t)
@@ -275,9 +307,70 @@ func (s *Scanner) read(ctx context.Context, db *sql.DB, budget time.Duration) *R
 		r.Trees = append(r.Trees, tr)
 	}
 	r.Tables = rollUp(r.Trees)
+	if len(r.Only) > 0 {
+		counts := map[string]int{}
+		for _, tr := range r.Trees {
+			counts[tr.Table]++
+		}
+		for i := range r.Tables {
+			if counts[r.Tables[i].Table] < treesOfTable[r.Tables[i].Table] {
+				r.Tables[i].Complete = false
+			}
+		}
+	}
 	sortTrees(r.Trees)
 	r.ElapsedMillis = time.Since(started).Milliseconds()
 	return r
+}
+
+// selectOnly keeps the trees named, in the order named, and records the
+// names and the ones that match nothing on r.
+func selectOnly(r *Reading, list []schemaTree, only []string) []schemaTree {
+	byName := map[string]schemaTree{}
+	for _, t := range list {
+		byName[t.name] = t
+	}
+	r.Only = []string{}
+	seen := map[string]bool{}
+	var out []schemaTree
+	for _, n := range only {
+		if seen[n] {
+			continue
+		}
+		if len(r.Only) >= MaxOnly {
+			r.OnlyDropped++
+			continue
+		}
+		seen[n] = true
+		r.Only = append(r.Only, n)
+		if t, ok := byName[n]; ok {
+			out = append(out, t)
+		} else {
+			r.Unknown = append(r.Unknown, n)
+		}
+	}
+	return out
+}
+
+// orderByPrevious orders trees by the bytes the last reading saw, largest
+// first, and weighs each by them, so the budget goes where the bytes are. A
+// tree the last reading cut counts double (its bytes are a floor); a tree it
+// never saw weighs a minimum. Nothing cheaper than a walk gives a tree's
+// size: dbstat has no root-only mode, and the schema holds no sizes.
+func orderByPrevious(list []schemaTree, prev *Reading) ([]schemaTree, func(schemaTree) float64) {
+	const minWeight = 64 << 10
+	est := map[string]float64{}
+	for _, tr := range prev.Trees {
+		b := float64(tr.Bytes)
+		if !tr.Complete {
+			b *= 2
+		}
+		est[tr.Name] = b
+	}
+	w := func(t schemaTree) float64 { return max(est[t.name], minWeight) }
+	out := append([]schemaTree(nil), list...)
+	sort.SliceStable(out, func(i, j int) bool { return w(out[i]) > w(out[j]) })
+	return out, w
 }
 
 func readHeader(ctx context.Context, db *sql.DB) Header {

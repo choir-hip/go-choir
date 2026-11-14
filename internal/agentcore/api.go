@@ -1086,7 +1086,13 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 			// Clamp before multiplying: a huge value must not wrap the Duration.
 			budget = time.Duration(min(secs, int(storetables.MaxBudget/time.Second))) * time.Second
 		}
-		report := h.rt.storeTables.Read(r.Context(), h.rt.store.ReadDB(), storetables.Limits{Budget: budget}, r.URL.Query().Get("store_tables") == "detail")
+		var only []string
+		for _, n := range strings.Split(r.URL.Query().Get("store_tables_only"), ",") {
+			if n = strings.TrimSpace(n); n != "" {
+				only = append(only, n)
+			}
+		}
+		report := h.rt.storeTables.Read(r.Context(), h.rt.store.ReadDB(), storetables.Limits{Budget: budget, Only: only}, r.URL.Query().Get("store_tables") == "detail")
 		if report.Reading != nil || report.Busy {
 			resp.StoreTables = &report
 		}
