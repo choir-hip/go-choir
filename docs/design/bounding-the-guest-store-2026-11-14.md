@@ -1,6 +1,9 @@
 # Bounding the guest store (2026-11-14)
 
-Status: design from code and earlier measurements. Nothing in this note is
+Status: revised 2026-11-14 from named-tree readings of the paper's 47.5 GB
+file (section 0 and its ranking, 0.5). Sections 1 to 4 are the earlier
+design, written before those numbers existed, and are marked superseded where
+section 0 replaces them. The earlier note said: nothing in it is
 measured on the 43.76 GiB file; the measurement that settles it is
 `GET /api/runtime/observability?store_tables=detail` (built in this lane,
 `internal/storetables`). Run it on the paper before building any bound below
@@ -18,7 +21,489 @@ projection: the store is a projection that replay and the content witness
 read), two seats, a conjecture delta, a rollback and a heresy delta. The
 measurement is **orange** and built.
 
-## 1. What the 44 GiB is made of (ranked)
+## 0. Measured 2026-11-14 (this section replaces the ranking below)
+
+Named-tree `dbstat` readings on the paper (the busiest computer; guest store
+`state.db`, 47.5 GB), 05:30Z to 05:58Z, by `store_tables=detail&store_tables_only=<names>`.
+A tree marked "cut" hit the 95 s budget; its number is a floor.
+
+| Tree | Bytes | Note |
+| --- | --- | --- |
+| `og_bodies` (table) | at least 12.43 GB | cut after 5.15 M rows; payload 10.0 GB; 932 k overflow pages |
+| `run_memory_entries` (table) | at least 11.17 GB | cut after 4.63 M rows; payload 9.87 GB; 1.24 M overflow pages |
+| `run_memory_entries` indexes (5) | 2.51 GB | complete |
+| `og_objects` (table) | 5.42 GB | complete; 5.98 M rows; payload 4.43 GB |
+| `og_objects` indexes (19) | at least 7.73 GB | four cut: `idx_og_objects_owner_computer_kind`, `sqlite_autoindex_og_objects_1`, `idx_og_objects_kind_id`, `idx_og_objects_kind_owner_computer` |
+| `og_key_index` and its indexes | 1.38 GB | 1.44 M rows |
+| `og_edges`, `computer_event_index`, `texture_agent_mutations` | 0.29 GB | |
+
+At most 29.9 GB is left for the two cut tables together (floors 12.4 and
+11.2). The object graph (`og_*`) is at least 27 GB. Run memory with its
+indexes is 13.7 to 20 GB. The store grows about 2 GiB a day. On the small
+test computer (d@e, 1.11 GB): `run_memory_entries` 38%, `og_bodies` 30%,
+`og_objects` 25% (two thirds of that is indexes).
+
+Tape-side facts for context, first hour after group commit deployed:
+run-memory ops by kind: message 15,563; cell_fate/tray committed 1,979;
+compaction/actor_rewarm 59; compaction/threshold 15. Per-op tape bytes:
+`choir.event` 20.3%, `choir.run` 19.4% (23.5 KB per op, 1,586 ops, a mutable
+object rewritten whole).
+
+What this settles about the estimates in sections 1 to 3 below:
+
+- Rank 1 (run memory) is confirmed as the largest named component and larger
+  than the 12 to 18 GiB estimate's low end: 13.7 GB at the floor.
+- Rank 3 (the `og_objects` index share) was too small a claim: the indexes are
+  larger than the table (7.73 GB or more against 5.42 GB). Claim C81 settled
+  false on the same readings (the two big tables hold 55% to 68%, not 70%).
+- Rank 2 (unretired event kinds) is unmeasured; the readings do not split
+  `og_bodies` or `og_objects` by kind.
+- Rank 4 (free pages) is not supported: the readings show a freelist near 0
+  on an `auto_vacuum=2` file. The file is not holding returned-but-unreclaimed
+  space; the deletes are being reused as fast as they arrive, or they are not
+  happening.
+
+### 0.1 What bounds `run_memory_entries` today (read from code)
+
+The only delete is `ProjectionOpRunMemoryRetire`
+(`run_memory_retire.go:58-82`): `DELETE FROM run_memory_entries WHERE loop_id
+IN (...) AND kind NOT IN ('rlm_inbox_cursor')`. The daily job that appends it
+is `StartTelemetryRetirement` (`telemetry_retire.go:275-331`).
+
+Which rows are eligible (`SelectRunMemoryRetirements`,
+`run_memory_retire.go:123-208`). A run's rows are retired only when all hold:
+
+1. The run has at least one entry that is not `rlm_inbox_cursor` (`:179`).
+2. Its newest entry is older than 7 days (`runMemoryRetireWindow`, `:46`;
+   `:179`).
+3. It is not one of the newest 2 runs of its owner and agent by newest entry
+   (`runMemoryKeepPerAgent = 2`, `:49`; `:165-171`). A run with no agent id is
+   never protected by this rule (`:159`) but is still subject to the rest.
+4. The run record is found (`GetRunByOwnerOG`; a `ErrNotFound` run is skipped
+   forever, `:185-190`).
+5. The run's state is `completed`, `failed` or `cancelled` (`:192-196`). A
+   `passivated`, `blocked`, `pending` or `running` run is never retired, however
+   old.
+6. The run's finish time (`FinishedAt`, else `UpdatedAt`) is older than 7 days
+   (`:197-203`).
+
+Rows of kind `rlm_inbox_cursor` are never deleted (`:53`).
+
+Pacing and size of one pass.
+
+- Per pass at most `runMemoryRetireMaxOps * RunMemoryRetireMaxRuns` = 50 x
+  100 = 5,000 runs (`run_memory_retire.go:51,173`;
+  `computerevent/projection_batch.go:321`).
+- Ten runs to an op (`runMemoryRetireRunsPerOp`, `:214`), so at most 500 ops
+  in a pass. One op is one transaction on the one writer.
+- After each op the job rests `max(250 ms, 4 x the op's own time)`
+  (`:246`, `telemetry_retire.go:33,36`). The writer is held about a fifth of
+  the time. At 2 s an op, 500 ops take about 83 minutes.
+- The number of rows per pass is not bounded, only the number of runs. A run
+  that carried a conversation holds hundreds of rows
+  (`carryActorConversation`, `agentcore/run_memory.go:165-217`: the previous
+  run's whole tail is copied, "history is kept, never trimmed").
+- The selection reads the covering index `idx_run_memory_entries_loop_retire`
+  whole (`GROUP BY loop_id` over every row, `:118`) on each pass.
+
+When the pass runs.
+
+- `StartTelemetryRetirement` waits 10 minutes after boot, then runs every 24 h
+  (`telemetry_retire.go:28,30,283-298`). A restart resets the timer to 10
+  minutes; the paper restarts on every deploy.
+- Run-memory retirement is the second step of the pass, after
+  `RetireTelemetry` returns without error (`:298-310`). An error in the
+  telemetry step logs and skips run memory for that process until the next
+  24 h tick (`:299-302`; `wait` was set to 24 h before the run, `:296`). A
+  restart during the telemetry step cancels the context and the pass ends
+  there.
+- The pass is gated on file-tree hydration being settled and on the
+  `store.telemetry_retire` setting, default on (`autoputer/run.go:793-794,
+  822-823`; `computer_setting.go:159`; `graph_home.go:33-49`, which answers
+  false with no owner id, no projection tape, or a read error).
+- An interrupted run-memory pass keeps what it did: each op is committed and
+  the selection reads the table, not a watermark, so the next pass takes the
+  remaining runs. So a pass that is cut during run memory still makes
+  progress; a pass that is cut during the telemetry step makes none for run
+  memory. The telemetry step restarts from the oldest candidate after every
+  boot (`retireCleared` is in memory, `:116,148-156`) and does at most 2,000
+  hour slices per group (`:39,162`).
+- Whether run-memory retirement has ever completed on the paper is not
+  known from code. No retirement counter is served by
+  `GET /api/runtime/observability`: the only evidence is the guest log lines
+  `store: run memory retirement: N runs in M ops`, `store: telemetry
+  retirement: ...`, `store: run memory retirement: after N ops: <err>` and
+  `store: incremental vacuum: N pages returned` (`telemetry_retire.go:300-321`;
+  `run_memory_retire.go:254`). Served and relevant: `store_tables.header`
+  (`freelist_count`, `auto_vacuum`, `file_bytes`) and, per tree, `rowid_min`
+  and `rowid_max` (`internal/storetables/storetables.go:111-147`;
+  `agentcore/api.go:958-966`).
+
+Do retired rows free pages. A delete puts pages on the freelist. On a file
+with `auto_vacuum=2`, `reclaimFreePages` runs `PRAGMA incremental_vacuum`
+after the daily retirement (`telemetry_retire.go:317`; `compact.go:978-1012`):
+2,000 pages a chunk, 100 ms apart, at most 250,000 pages a run (`compact.go:
+102-105`; about 1 GiB at 4 KiB pages, page size not read here). It returns 0
+on a file whose `auto_vacuum` is not 2 (`:983-985`). It is the last step of
+the pass, so it is skipped whenever the telemetry or run-memory step returns
+an error (`:300-310` `continue`). New inserts reuse free pages first, so a
+store that inserts 2 GiB a day shows a freelist near 0 whether it deleted
+little or a lot.
+
+Most likely reason the table is this large (a hypothesis until the read).
+Arithmetic: 15,563 message ops in the first hour is about 374,000 rows a day;
+seven days of them is about 2.6 M rows, about 7.6 GB with indexes at the
+measured 2.41 KB a row in the table plus about 0.5 KB of index. The table
+holds at least 4.63 M rows and at least 13.7 GB with indexes. So even if the
+retirement runs, at least about 6 GB sits outside a 7-day window, and the
+real surplus is larger because the table reading was cut. The code names three
+places rows can sit past the window:
+
+1. Runs that are `passivated` or `blocked` and never resumed, which rule 5
+   excludes. A planned restart passivates every running run
+   (`agentcore/runtime.go:3095-3115`), so every deploy adds to them, and the
+   Texture reader itself takes the newest `completed` or `passivated` run
+   (`store/run_memory.go:329`), so passivated is a normal end state.
+2. The newest 2 runs of every agent, forever, however old (rule 3). Texture
+   documents each have their own agent, and each wake copies the whole
+   conversation tail into a new run, so a dormant document keeps two full
+   conversations. The reader that needs this is the document custodian only
+   (`run_memory.go:136-146`; `run_memory_retire.go:10-16`).
+3. Runs the store cannot find (rule 4).
+
+The single read that would confirm which: the group query the job itself
+runs, joined to the run state, on a restored copy of the store (not the live
+file): rows and runs by (state, in the newest 2 of its agent or not, older
+than 7 days or not). It is the same `SelectRunMemoryRetirements` logic as a
+count. On the live computer the counter-only version is two
+`store_tables=detail&store_tables_only=run_memory_entries` readings 24 hours
+apart: if `rowid_min` does not rise between them, old runs are not being
+retired at all; if it rises while `rows` does not fall, the retirement keeps
+pace with arrivals but never gets behind them.
+
+### 0.2 What is in `og_bodies`, and what is ever deleted (read from code)
+
+`og_bodies` (`objectgraph/sql_store.go:252-263`) holds one row per
+`og_objects` row of any kind, keyed by `obj_id`; a trigger deletes the body
+when its header is deleted (`:261-262`), so a retired object takes its body
+with it. The only code that deletes `og_objects` rows besides the one-object
+`DeleteObject` (`sql_store.go:1886`, one id) and the vocabulary rewrite
+(`store/vocab_migrate_og.go:773`) is `ProjectionOpObjectRetire`
+(`store/object_retire.go:191`), and the op is validated to name `choir.event`
+only (`computerevent/projection_batch.go:206-209,267`).
+
+Retired event kinds today (`telemetry_retire.go:88-94`): `tool.invoked` and
+`texture_agent_revision_progress` at once; phaseless `loop.progress` at once;
+`desk.cell` and `desk.egress` after 14 days; `tool.result` after 7 days except
+rows a run acceptance cites; phased `loop.progress` after 14 days. Every other
+event kind (for example `model.served`, `search.served`, the run lifecycle
+events) is kept forever, and so is every object of every other kind (Texture
+documents and revisions, lifecycle commands, commitment records, run records,
+source refs, work items). The tape holds all of them.
+
+I did not find a kind that is written once and never read after N days with
+a deletion rule; that is the candidate class for bound R-5 and it needs the
+per-kind counts, which no served counter gives. Objects written whole and
+rewritten in place (`choir.run`, 23.5 KB a write on the tape) do not grow the
+store: the overwrite reuses the row. What the readings cannot say is which kinds
+account for the 10.0 GB of body payload; `store-once-2026-11-14.md` names the
+suspects (lifecycle commands that embed the revision, revisions with both
+the structured body and the plain text).
+
+### 0.3 The 19 indexes of `og_objects` (read from code)
+
+Defined in `objectgraph/sql_store.go:194-214` (`objectIndexes`), created by
+`CREATE INDEX IF NOT EXISTS` in `SchemaDDL` at every open
+(`sql_store.go:276-292,385-392`). The test fixture
+`store/testdata/presplit/schema.sql` is the pre-split layout and is stale for
+the current set. Nineteen are the unique key plus 18 named ones.
+
+| # | Index | Columns, predicate | Queries that need it |
+| --- | --- | --- | --- |
+| 1 | `sqlite_autoindex_og_objects_1` | `canonical_id` unique, all rows | every `GetObject` and write conflict (`sql_store.go:574,1843,1886`); `KindIDRangePageSQL` (`newest_headers.go:91`); delete by id (`object_retire.go:191`) |
+| 2 | `idx_og_objects_updated` | `updated_at`, all rows | `NewestObjectHeadersSQL` (`newest_headers.go:19`, the stream-seq seed); `ListObjects` with no kind (`sql_store.go:611`) |
+| 3 | `idx_og_objects_kind_id` | `object_kind, canonical_id`, all rows | `ListObjectsPage` (`:1180`); `KindMetadataPageSQL` and `KindOutsideRangeSQL` (`newest_headers.go:92-93`); `ObjectKindExistsSQL` (`:22`) |
+| 4 | `idx_og_objects_owner_computer_kind` | `owner_id, computer_id, object_kind, canonical_id`, all rows | `ReadObjectSnapshot` and the filtered snapshot (`sql_store.go:651,681,696`); `ListObjects` with owner and computer |
+| 5 | `idx_og_objects_kind_owner_computer` | `object_kind, owner_id, computer_id, canonical_id`, all rows | `ListObjectsByKindOwnerComputerPage` (`:1218`) |
+| 6 | `idx_og_objects_kind_owner_updated` | `object_kind, owner_id, updated_at`, all rows | `ListObjectsByKindOwnerWhere` (`:1556`); `ListObjectsByOwnerAndBody` (`:1418,1438`); `ListJSONBodyFieldsByKindOwner` (`:1693`); `KindUsage` (`:1366`) |
+| 7, 8 | `..._og_meta_run_id`, `..._recent` | `object_kind, og_meta_run_id, canonical_id` and `..., updated_at`; partial `og_meta_run_id IS NOT NULL` | `ListObjectsByMetadataPage` (keyset, `:1139`) and `ListObjectsByMetadata` (newest first, `:1115`); callers `store.go:1329,1518,2516`, `graph_store.go:661` |
+| 9, 10 | `..._og_meta_trajectory_id`, `..._recent` | same shape on `og_meta_trajectory_id` | the same two reads; `trajectoryRefsSQL` (`:766`); callers `store.go:794,1697,1815,2073`, `engineering_assignments.go:1478,2511,2676`, `lifecycle.go:1602,2630` |
+| 11, 12 | `..._og_meta_channel_id`, `..._recent` | same shape on `og_meta_channel_id` | the same two reads; callers `store.go:744,1652,1746,2317` |
+| 13 | `..._og_rec_inbox` | `object_kind, og_rec_inbox, canonical_id`; partial, commitment records only | `listInboxRecordsBy` field `inbox` (`inbox.go:990,1045,1177,1443`) |
+| 14 | `..._og_rec_sender_inbox` | same, `sender_inbox` | `inbox.go:1424` |
+| 15 | `..._og_rec_conversation_id` | same, `conversation_id` | `inbox.go:1141,1146` |
+| 16 | `idx_og_objects_rec_inbox_seq` | `object_kind, og_rec_inbox, og_rec_inbox_seq`; partial | `ListRecordsByInboxSeq` (`:1448-1454`; `inbox.go:1038`) |
+| 17 | `idx_og_objects_rec_claim` | `object_kind, owner_id, og_rec_claim, updated_at, canonical_id`; partial `og_rec_claim IS NOT NULL` | `ListCommitmentClaimObjects` (`:1481`; `commitment.go:179`) |
+| 18 | `idx_og_objects_choir_event_updated` | `updated_at`; partial `object_kind = 'choir.event'` | `retireOldest` (`object_retire.go:278`, pinned `INDEXED BY`) |
+| 19 | `idx_og_objects_choir_event_retire` | `event_kind, updated_at, event_phase`; partial `object_kind = 'choir.event'` | every telemetry retire slice (`object_retire.go:57`, pinned) |
+
+Findings.
+
+- No index of the 19 is unused: each has a named reader above. (In
+  `run_memory_entries` one is: see 0.4.)
+- Redundant on a single-tenant guest. The guest store holds one owner and one
+  computer (`CHOIR_OWNER_ID`), so `owner_id` and `computer_id` are constant
+  and index 4 orders rows the same way as `(object_kind, canonical_id)`,
+  index 5 the same as index 3, and index 6 is `(object_kind, updated_at)`.
+  Indexes 3, 4 and 5 then carry one ordering three times. Whether the guest
+  can hold more than one owner or computer id is not read here; the read that
+  settles it is `SELECT count(*) FROM (SELECT DISTINCT owner_id, computer_id
+  FROM og_objects)` on a restored copy. If it is 1, indexes 4 and 5 can go,
+  with `ReadObjectSnapshot` and `ListObjectsByKindOwnerComputerPage` taking
+  indexes 3 and 1 and filtering owner and computer on the fetched row (the
+  header fetch is needed anyway for a full object read). The hazard is
+  the planner, as in the 2026-10-14 incident
+  (`docs/archive/problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md`,
+  and `trajectoryRefsSQL`'s own comment, `sql_store.go:760-764`).
+- Overlap for events: while `store.event_table` is off and events live in
+  `og_objects`, every event row is in indexes 1 to 6, 18, 19, and in 7 to 12
+  where its metadata names a run, trajectory or channel: up to about 13 entries
+  an event (the count `computer_setting.go:54-63` and the earlier version of
+  this note give for the event table). Index 18 is a subset of index 2 by
+  construction. Making index 2 partial (`WHERE object_kind <> 'choir.event'`)
+  would stop the planner using it for `NewestObjectHeadersSQL` and for
+  `ListObjects` with no kind, so it is not a free change. Whether the paper's
+  `og_objects` rows are mostly events is not measured: `choir_events` is not in
+  the readings and the setting default is off (`computer_setting.go:209`).
+- Could be partial: 7 to 17 already are. Nothing else qualifies without a
+  query change.
+- The paired indexes (7/8, 9/10, 11/12) are both read: the `_recent` one for
+  the newest-first list, the other for the keyset page. Merging them is a
+  query change, not a drop.
+- Sizes. Not measured per index: the four full indexes the readings cut are
+  the biggest, and the lower bound on all 19 is 7.73 GB (1.29 KB a row over
+  5.98 M rows, before the cut ones are completed). Estimate by key width, not
+  measurement: indexes 4 and 5 are about 0.4 to 0.8 GB each (5.98 M entries of
+  owner, computer, kind and canonical id, 70 to 130 bytes with the rowid and
+  cell overhead); 3 about 0.3 to 0.5 GB; 1 about 0.3 to 0.4 GB. The read that
+  replaces these: `store_tables_only=idx_og_objects_owner_computer_kind,
+  idx_og_objects_kind_owner_computer,idx_og_objects_kind_id,
+  sqlite_autoindex_og_objects_1` with a long `store_tables_seconds`.
+
+Cost of changing an index on a 6 M-row table in the guest.
+
+- Create: no index is created by a migration step today. `SchemaDDL` runs
+  `CREATE INDEX IF NOT EXISTS` at every open on the one write handle
+  (`sql_store.go:385-392`), so a new index is built synchronously at boot,
+  reading the 5.4 GB header table and sorting 6 M entries before the process
+  serves. How long is not measured; the 2026-10-31 index catch-up stalled the
+  paper's store at 97% (`telemetry_retire.go:187-189`), which is why the
+  split migration builds indexes one at a time (`header_body_split.go`).
+- Drop: nothing drops an `og_objects` index today (`DROP INDEX` appears only in
+  the partition-file migration, `store/partition_split.go:70`, inside its own
+  transaction). A drop is one write transaction on the single writer that
+  frees every page of the index; its time scales with the index's pages
+  (0.4 to 0.8 GB is 100 k to 200 k pages) and is not measured: measure it on
+  d@e first. The freed pages go to the freelist and leave the file only
+  through `reclaimFreePages`, at most 250,000 pages a day.
+- Removing the index from `objectIndexes()` is also required in the same
+  change, or the next open recreates it. The reverse is the rollback cost: an
+  older binary that opens the store rebuilds every missing index at boot,
+  synchronously.
+- How schema changes are applied: the DDL above at every open; data
+  migrations (header and body split, partition split, compaction rebase) are
+  named steps with a store schema floor written first
+  (`storeschema.WriteFloor`; `header_body_split.go:598`, `event_table.go:554`)
+  so an older binary refuses the file.
+
+### 0.4 The indexes of `run_memory_entries` (read from code)
+
+Five trees, 2.51 GB complete: the primary key autoindex on `entry_id`, the
+`UNIQUE(loop_id, seq)` autoindex, `idx_run_memory_entries_parent`
+(`parent_entry_id`), `idx_run_memory_entries_kind` (`owner_id, agent_id, kind,
+created_at`) and `idx_run_memory_entries_loop_retire` (`loop_id, kind,
+created_at, owner_id, agent_id`) (`schema.go:94-113,188,356-357`).
+
+- `idx_run_memory_entries_parent` has no reader: no statement in the
+  repository filters on `parent_entry_id` (`grep` of non-test code finds it
+  only in column lists and the entry's own fields; its only mention in
+  prose is the id comment, `run_memory_ids.go:7-9`). Every row pays for it
+  (a 36-byte id and the rowid).
+- `idx_run_memory_entries_kind` serves one reader: `ListRunMemoryEntriesForAgent`
+  with `kind IN ('rlm_inbox_cursor')` (`run_memory.go:416-436`;
+  `agentcore/rlm_reduce.go:582`), yet it indexes every row. It could be
+  partial on that kind only if the query names the kind as a literal; with a
+  bound `IN (?)` the planner cannot prove the partial predicate.
+- `idx_run_memory_entries_loop_retire` is wide (it also carries `owner_id`
+  and `agent_id`) so the retire group query is index only
+  (`run_memory_retire.go:108-119`); its leading `loop_id` duplicates the
+  `UNIQUE(loop_id, seq)` autoindex.
+- Share by key width (estimate, not measured): with entry ids at 36 bytes the
+  five trees are about 36 + 36 + 45 + 130 + 150 bytes an entry, so the parent
+  index is about 9% (0.2 to 0.3 GB), the kind index about 33% (0.6 to
+  0.8 GB), the loop_retire index about 38% (0.7 to 1.0 GB). The per-tree bytes
+  are in the 05:30Z reading's tree list; read them there before using these.
+- Building a replacement index reads the whole table including overflow
+  chains, because `created_at` sits after `message_json`
+  (`run_memory_retire.go:110-111`): an 11 GB read.
+
+### 0.5 Ranking from the measurements (replaces section 3)
+
+Order is GB per unit of risk. Every item that deletes rows or changes a
+query plan on the guest is red by the project's classes (the store is a
+projection that replay and the content witness read): two seats, a
+conjecture delta, a rollback and a heresy delta. "Read first" names what the
+lead can run before building.
+
+### R-1. Make run-memory retirement catch every finished run (selection only; the op exists)
+
+- Removes: rows of runs that rules 3 to 5 of 0.1 keep forever. Three changes
+  to the selection, each independent: retire `passivated` and `blocked` runs
+  whose last entry and last update are older than the window and which are
+  not the newest `completed` or `passivated` run of their agent (the one the
+  Texture reader takes, `run_memory.go:329`); stop the keep-newest-2 rule at
+  an age (30 days is a candidate) and apply it only to the document custodian,
+  the only desk that inherits a prior run (`run_memory.go:136-146`); retire
+  runs whose record is not found after two windows by entry age alone.
+- GB now: about 6 to 12 GB. Lower bound: 13.7 GB (table floor plus indexes)
+  minus the 7-day steady state of about 7.6 GB, if the hour's rate holds.
+  Upper bound: the 29.9 GB left for the two cut tables, less the 12.4 GB floor
+  of `og_bodies`, leaves at most about 17.5 GB for the table, 20 GB with
+  indexes, minus 7.6 GB. Which of the three changes holds the GB is unknown
+  until the read.
+- GB a day stopped: this makes run memory follow its window, so it stops the
+  part of the 2 GiB a day that is surplus over the window. Run memory is
+  about 374,000 rows a day, about 1.1 GB a day at 2.9 KB a row with indexes
+  (inferred from one hour). If retirement removes nothing today, the whole
+  1.1 GB a day is surplus; the two readings 24 h apart tell how much is.
+- Class: red (a retire policy), two seats.
+- Could go wrong: a Texture wake finds no carried conversation and starts
+  from its prompt: the model's context changes and the provider's warm prompt
+  cache is lost for that wake; `get_run_memory_entry` answers not found for a
+  retired entry (`agentcore/tools_evidence.go:57`). Retiring a passivated run
+  that is later re-warmed breaks resume: re-warm reads its entries
+  (`texture_lifecycle_api.go:243-247`), so keep the newest completed or
+  passivated run per agent whatever its age.
+- Proof: a dry-run count of the new selection on a restored copy, by rule;
+  then on staging the log line `run memory retirement: N runs in M ops` and
+  the `run_memory_entries` tree's `rows` falling across two readings;
+  a test that renders a Texture continuation from a store before and after
+  and compares bytes.
+- Rollback: revert the selection. The deleted rows are on the tape and return
+  by replay or by restoring a snapshot taken before the op.
+- Read first (needed): the run-state, keep-rule and age breakdown on a
+  restored copy (0.1); the two `rowid_min` readings; the guest log lines for
+  retirement since the last boot. None of these is a served counter.
+
+### R-2. Shorten the run-memory window from 7 days to 3
+
+- Removes: rows of finished runs between 3 and 7 days old.
+- GB now: about 4.3 GB (7.6 GB at 7 days minus 3.3 GB at 3 days of
+  arrivals, same inference). GB a day stopped: none (it lowers the level,
+  not the rate).
+- Class: red (policy constant, `run_memory_retire.go:46`); an owner decision,
+  since the 7 days came from the lean-system step (`telemetry_retire.go:68`).
+- Could go wrong: a person reading an older run's trace gets not found; a
+  Texture wake after 3 days of the document being quiet loses nothing, as
+  the newest run is kept by R-1.
+- Proof, rollback: as R-1. Do it after R-1, because it only helps once the
+  job reaches every run.
+- Read first: none beyond R-1's.
+
+### R-3. Drop or narrow the `run_memory_entries` indexes
+
+- Removes: `idx_run_memory_entries_parent` (no reader), then the kind index
+  made partial by naming the kind as a literal in the one query, then the
+  `owner_id` and `agent_id` columns out of the retire index.
+- GB now: about 1.1 to 1.6 GB of the 2.51 GB by key-width estimate (0.2 to
+  0.3, 0.6 to 0.8 and about 0.3). GB a day stopped: about 0.1 GB (0.25 to
+  0.3 KB an entry at 374,000 entries a day).
+- Class: orange for dropping the unreferenced parent index (it changes no
+  plan, because no statement uses it); red for the other two (query plans on a
+  hot read and on the retire selection).
+- Could go wrong: a statement I did not find (a dynamic query, a tool that
+  builds SQL) uses the parent index; the kind query loses its index and scans
+  an 11 GB table. The plan test for `runMemoryAgentListQuery` is the guard
+  (`run_memory.go:412-415`); extend it.
+- Proof: `EXPLAIN QUERY PLAN` of every statement in 0.4 on a copy; the tree
+  list of a later reading; CPU and read bytes for a day.
+- Rollback: the older binary recreates the dropped index at open,
+  synchronously; scan time for 4.6 M or more rows is not measured.
+- Read first: the three per-index byte figures, already in the 05:30Z tree
+  list; no new read needed.
+
+### R-4. Drop the redundant full indexes of `og_objects` (indexes 4 and 5)
+
+- Removes: two of the five full-width indexes, on the premise of 0.3 that the
+  guest holds one owner and computer.
+- GB now: about 0.8 to 1.6 GB by estimate (0.4 to 0.8 each). GB a day: 130 to
+  260 bytes an object written; objects a day is not measured.
+- Class: red (plans on the hot path, a schema change), two seats.
+- Could go wrong: the planner prefers a full scan for the snapshot read or
+  the page read (the 2026-10-14 incident). The retire and event paths use
+  `INDEXED BY` pins and are not touched.
+- Proof: `EXPLAIN QUERY PLAN` of each reader in the table of 0.3 on a copy of
+  the paper's store; drop time on d@e; CPU after.
+- Rollback: an older binary rebuilds both at open (minutes, unmeasured).
+- Read first: `SELECT DISTINCT owner_id, computer_id` count (restored copy),
+  and the four cut indexes' bytes through `store_tables_only` as in 0.3.
+
+### R-5. Retire more event kinds, and any object kind that is write-once and unread
+
+- Removes: `choir.event` rows of kinds no group names (`model.served`,
+  `search.served`, `loop.delta`, lifecycle events of finished runs) after a
+  window, each only after its reader is named; for other kinds, a new
+  retire class, which `ObjectRetireKindEvent` forbids today
+  (`projection_batch.go:206-209`) and needs its own design.
+- GB now: not estimable. The readings do not split `og_bodies` (at least
+  12.4 GB) or `og_objects` (at least 13.2 GB with indexes) by kind. Whatever
+  they hold of the kinds named is the ceiling.
+- Class: red (`telemetryRetireGroups` is a projection rule), two seats.
+- Could go wrong: a reader of the kind exists that the search missed.
+  `model.served` is read by publication provenance
+  (`store-once-2026-11-14.md`, R3), so it is not on the list without a
+  design.
+- Proof, rollback: as R-1, plus per-kind counts before and after. Rows return
+  by replay from the tape.
+- Read first (needed, not served): row count and body bytes by `object_kind`
+  and, for events, `event_kind`. A yellow addition to `internal/storetables`
+  (a covering walk of `idx_og_objects_kind_id` for counts; body bytes need
+  `og_bodies` joined by `obj_id`) or a query on a restored copy. Build this
+  before R-5.
+
+### R-6. Carry run memory by reference (store-once R1)
+
+- Removes: the copy of the previous run's whole tail into every new
+  Texture run (`run_memory.go:165-217`).
+- GB now: none directly; it lowers the steady state that R-1 and R-2
+  leave. GB a day: at most the run-memory share, about 1.1 GB; the carried
+  share of it is not measured (store-once R0 names the counter, carried
+  versus new rows).
+- Class: red, the largest change here; the conversation the model sees must
+  be byte-equal, proved by rendering both ways.
+- Read first: the carried-versus-new run-memory counter. Do not build before
+  it.
+
+### R-7. Return freed pages sooner
+
+- Removes: nothing; it returns pages to the filesystem.
+- GB now: none; the freelist is near 0. After R-1 and R-2 free 6 to 12 GB,
+  new inserts reuse them (the store grows about 2 GiB a day, so 3 to 6 days to
+  refill), and `reclaimFreePages` returns at most about 1 GiB a day
+  (`compact.go:105`). Raise the cap in proportion to the freelist only if
+  the file's size, not its content, is what matters (snapshot size follows
+  the file).
+- Class: orange, one seat; proof: `header.freelist_count` and `file_bytes`
+  before and after a daily pass; rollback: revert, the file stays larger.
+
+### Order and what to read first
+
+1. Read, no build: two `store_tables_only=run_memory_entries` readings 24 h
+   apart (`rowid_min`, `rows`, `freelist_count`); the four cut `og_objects`
+   index trees; the guest's retirement log lines.
+2. Restored-copy counts: run state and keep-rule breakdown of the rows (R-1);
+   distinct owner and computer (R-4).
+3. Build the per-kind counter (R-5's read, yellow).
+4. R-1, then R-2 and R-3 as separate changes, then R-7 if file size matters.
+   R-4 and R-5 when their reads are in. R-6 after the carried-share counter.
+
+Sections 1 to 4 below are the earlier note, kept as history. Their
+estimates are superseded where 0 says so.
+
+## 1. What the 44 GiB is made of (ranked) (superseded 2026-11-14 by section 0; kept as history)
+
+Superseded: the estimates in the table below were made before the readings.
+Rank 3 and rank 4 in particular are wrong or unsupported (see 0).
 
 The file is a projection of the tape (`docs/computer-ontology.md`, Store
 Taxonomy: "a projection of the computer's tape, rebuilt by replay"). The
@@ -171,7 +656,7 @@ O(1) or O(log n): `page_count`, `freelist_count`, `page_size`, `auto_vacuum`
 (header), and `min(rowid)`, `max(rowid)` of a rowid table (b-tree edge). So
 the reading is built bounded, on request only, and says partial when cut.
 
-## 3. Candidate bounds, by bytes saved per unit of risk
+## 3. Candidate bounds, by bytes saved per unit of risk (superseded 2026-11-14 by 0.5; kept as history)
 
 Do the measurement first. Bounds 1 to 3 are wiring and extending what exists;
 none adds a switch (CLAUDE.md "no switches").
