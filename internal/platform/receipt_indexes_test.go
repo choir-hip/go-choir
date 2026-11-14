@@ -3,6 +3,10 @@ package platform
 import (
 	"context"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -177,11 +181,14 @@ func TestEnsureReceiptIndexesMigratesALiveTable(t *testing.T) {
 	if _, err := s.db.Exec(`CREATE INDEX ` + receiptKindOldIdx + ` ON computer_event_append_receipts (computer_id, event_kind, sequence)`); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := s.db.Exec(`CREATE INDEX ` + receiptIDOldIdx + ` ON computer_event_append_receipts (computer_id, event_head_receipt_id)`); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.ensureReceiptIndexes(ctx); err != nil {
 		t.Fatal(err)
 	}
 	idx := receiptIndexNames(t, s)
-	if !idx[receiptKindPartialIdx] || idx[receiptKindOldIdx] {
+	if !idx[receiptKindPartialIdx] || idx[receiptKindOldIdx] || idx[receiptIDOldIdx] {
 		t.Fatalf("after the migration: %v", idx)
 	}
 	// Smaller: only the rows of other kinds are in it.
@@ -257,5 +264,53 @@ func TestEnsureReceiptIndexesYieldsToARunningMigration(t *testing.T) {
 	}
 	if idx := receiptIndexNames(t, s); idx[receiptKindPartialIdx] {
 		t.Fatal("a second runner built the index while another held the lock")
+	}
+}
+
+// I7: no source outside tests filters the receipt table by receipt id, so its
+// index has no reader.
+func TestNoReaderLooksUpAReceiptByID(t *testing.T) {
+	byID := regexp.MustCompile(`event_head_receipt_id\s*(=|IN\b|LIKE\b|ANY\b)`)
+	root := filepath.Join("..", "..")
+	var scanned int
+	for _, dir := range []string{"internal", "cmd"} {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+				return err
+			}
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			scanned++
+			if loc := byID.FindIndex(raw); loc != nil {
+				t.Errorf("%s filters on event_head_receipt_id (%q); computer_event_append_receipt_id_idx is dropped", path, raw[loc[0]:loc[1]])
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if scanned < 100 {
+		t.Fatalf("scanned %d files; the scan is vacuous", scanned)
+	}
+}
+
+// The head lookups read one row through the unique (computer, sequence) key
+// with the receipt id index gone.
+func TestHeadReceiptLookupsUseTheSequenceIndex(t *testing.T) {
+	s, _ := openTestPlatformStore(t)
+	if idx := receiptIndexNames(t, s); idx[receiptIDOldIdx] {
+		t.Fatalf("the receipt id index is still there: %v", idx)
+	}
+	loadReceiptRows(t, s, indexTestComputer, 50000)
+	for _, query := range []string{receiptAtSequenceSQL, receiptDigestAtSequenceSQL} {
+		for _, generic := range []bool{false, true} {
+			plan := explain(t, s, query, generic, indexTestComputer, 25000)
+			if !strings.Contains(plan, "computer_event_append_sequence_uq") || strings.Contains(plan, "Seq Scan") {
+				t.Errorf("generic=%v: %s\n%s", generic, query, plan)
+			}
+		}
 	}
 }

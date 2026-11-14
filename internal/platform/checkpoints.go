@@ -575,7 +575,7 @@ type receiptRowQuerier interface {
 // at the old sequence and the request is judged against that, as a lookup by
 // id was; a request naming any other receipt is refused here.
 func headAppendReceipt(ctx context.Context, db receiptRowQuerier, computerID string, sequence uint64, receiptID string) (computerevent.HeadReceiptRow, []byte, error) {
-	row, raw, err := scanExpandedAppendReceipt(db.QueryRowContext(ctx, `SELECT `+appendReceiptRowColumns+` FROM computer_event_append_receipts WHERE computer_id=? AND sequence=?`, computerID, sequence))
+	row, raw, err := scanExpandedAppendReceipt(db.QueryRowContext(ctx, receiptAtSequenceSQL, computerID, sequence))
 	if err != nil {
 		return row, nil, err
 	}
@@ -588,7 +588,7 @@ func headAppendReceipt(ctx context.Context, db receiptRowQuerier, computerID str
 // headAppendReceiptDigest is headAppendReceipt for the event digest alone.
 func headAppendReceiptDigest(ctx context.Context, db receiptRowQuerier, computerID string, sequence uint64, receiptID string) (string, error) {
 	var digest, id string
-	if err := db.QueryRowContext(ctx, `SELECT event_digest, event_head_receipt_id FROM computer_event_append_receipts WHERE computer_id=? AND sequence=?`, computerID, sequence).Scan(&digest, &id); err != nil {
+	if err := db.QueryRowContext(ctx, receiptDigestAtSequenceSQL, computerID, sequence).Scan(&digest, &id); err != nil {
 		return "", err
 	}
 	if id != receiptID {

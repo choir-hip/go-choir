@@ -28,7 +28,12 @@ package platform
 //      next run of the migration finds the work done;
 //  I6. a binary rolled back to one that names the old index re-creates it in
 //      its boot DDL, non-concurrently, which blocks appends while it builds:
-//      the rollback note in the commit says so.
+//      the rollback note in the commit says so;
+//  I7. a reader of the table by event_head_receipt_id remains after its index
+//      is dropped and walks 12M rows: TestNoReaderLooksUpAReceiptByID fails on
+//      any non-test source that filters on the column, and
+//      TestHeadReceiptLookupsUseTheSequenceIndex reads the plans of the
+//      lookups that replaced them.
 
 import (
 	"context"
@@ -41,6 +46,9 @@ import (
 const (
 	receiptKindPartialIdx = "computer_event_append_kind_partial_idx"
 	receiptKindOldIdx     = "computer_event_append_kind_seq_idx"
+	// receiptIDOldIdx served the three lookups of the current head's receipt by
+	// id (checkpoints.go), which now find the row by (computer, sequence).
+	receiptIDOldIdx = "computer_event_append_receipt_id_idx"
 	// receiptKindNotBatchSQL is the predicate of the partial index. A reader
 	// that filters on event_kind adds it, spelled the same, so that the planner
 	// can prove the index applies even for a generic plan, where the kind is a
@@ -58,6 +66,11 @@ const (
 	receiptFirstOfKindSQL = `SELECT sequence FROM computer_event_append_receipts WHERE computer_id=? AND event_kind=? AND ` + receiptKindNotBatchSQL + ` ORDER BY sequence LIMIT 1`
 	// receiptLatestAppliedSQL: clean_rebase.go, the latest apply or rollback event.
 	receiptLatestAppliedSQL = `SELECT event_kind, event_digest FROM computer_event_append_receipts WHERE computer_id=? AND event_kind IN (?, ?, ?) AND ` + receiptKindNotBatchSQL + ` ORDER BY sequence DESC LIMIT 1`
+
+	// The head receipt lookups of checkpoints.go: one row by the unique key
+	// (computer, sequence).
+	receiptAtSequenceSQL       = `SELECT ` + appendReceiptRowColumns + ` FROM computer_event_append_receipts WHERE computer_id=? AND sequence=?`
+	receiptDigestAtSequenceSQL = `SELECT event_digest, event_head_receipt_id FROM computer_event_append_receipts WHERE computer_id=? AND sequence=?`
 
 	// receiptIndexLockKey is the session advisory lock that serializes the
 	// index migration across corpusd processes.
@@ -90,7 +103,10 @@ func (s *Store) ensureReceiptIndexes(ctx context.Context) error {
 	if err := ensurePartialIndex(ctx, conn, receiptKindPartialIdx, `(computer_id, event_kind, sequence) WHERE `+receiptKindNotBatchSQL); err != nil {
 		return err
 	}
-	return dropIndexConcurrently(ctx, conn, receiptKindOldIdx)
+	if err := dropIndexConcurrently(ctx, conn, receiptKindOldIdx); err != nil {
+		return err
+	}
+	return dropIndexConcurrently(ctx, conn, receiptIDOldIdx)
 }
 
 // indexState reports whether the named index exists and is valid.
