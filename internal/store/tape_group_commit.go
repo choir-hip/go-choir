@@ -44,9 +44,13 @@ type groupCommit struct {
 	// afterToken, when set, runs right after a caller wins the leader token
 	// (a test seam; atomic so a test may set it while writers run).
 	afterToken atomic.Pointer[func()]
+	// beforeTake, when set, runs in the leader right before it takes the group,
+	// holding flushMu (a test seam).
+	beforeTake atomic.Pointer[func()]
 
 	mu      sync.Mutex // leaf: protects pending
 	pending []*groupMember
+	nextSeq uint64 // arrival counter for the next member; under mu
 
 	token chan struct{} // one leader at a time; created lazily
 	once  sync.Once
@@ -61,11 +65,37 @@ type groupCommit struct {
 	cancelled       atomic.Int64
 	waitNanosTotal  atomic.Int64
 	waitNanosMax    atomic.Int64
+	// pendingAtTake is len(pending) when a leader takes its group; lateJoiners
+	// counts members taken that arrived after the leader won the token (the
+	// ones an early snapshot would have missed).
+	pendingAtTake [pendingAtTakeBuckets]atomic.Int64
+	lateJoiners   atomic.Int64
+}
+
+// pendingAtTakeBuckets and pendingAtTakeLabels bucket len(pending) at take
+// time: 1, 2, 3-4, 5-8, 9+.
+const pendingAtTakeBuckets = 5
+
+var pendingAtTakeLabels = [pendingAtTakeBuckets]string{"1", "2", "3-4", "5-8", "9+"}
+
+func pendingAtTakeBucket(n int) int {
+	switch {
+	case n <= 1:
+		return 0
+	case n == 2:
+		return 1
+	case n <= 4:
+		return 2
+	case n <= 8:
+		return 3
+	}
+	return 4
 }
 
 type groupMember struct {
 	ops   []computerevent.ProjectionOp
 	bytes int
+	seq   uint64 // arrival order; under groupCommit.mu
 	start time.Time
 	taken bool // under groupCommit.mu
 	err   error
@@ -112,6 +142,8 @@ func (t *projectionTape) appendGrouped(ctx context.Context, ops []computerevent.
 	}
 	m := &groupMember{ops: ops, bytes: opsBytes(ops), start: time.Now(), done: make(chan struct{})}
 	g.mu.Lock()
+	m.seq = g.nextSeq
+	g.nextSeq++
 	g.pending = append(g.pending, m)
 	g.mu.Unlock()
 	token := g.leaderToken()
@@ -119,19 +151,10 @@ func (t *projectionTape) appendGrouped(ctx context.Context, ops []computerevent.
 	// taken, nothing of it is written and it returns ctx.Err(); if it was
 	// taken, its outcome is the group's.
 	cancelled := func() error {
-		g.mu.Lock()
-		if !m.taken {
-			for i, p := range g.pending {
-				if p == m {
-					g.pending = append(g.pending[:i:i], g.pending[i+1:]...)
-					break
-				}
-			}
-			g.mu.Unlock()
+		if g.withdraw(m) {
 			g.cancelled.Add(1)
 			return ctx.Err() // nothing of it was written
 		}
-		g.mu.Unlock()
 		<-m.done // taken: its outcome is the group's
 		return m.err
 	}
@@ -158,7 +181,7 @@ func (t *projectionTape) appendGrouped(ctx context.Context, ops []computerevent.
 				<-token
 				return cancelled()
 			}
-			t.leadHolding(token)
+			t.leadHolding(token, m)
 			select {
 			case <-m.done:
 				return m.err
@@ -184,16 +207,51 @@ func (g *groupCommit) groupContext() (context.Context, context.CancelFunc) {
 // leadHolding commits one group while the caller holds the leader token, and
 // frees the token even if the commit panics: a token left full would block
 // every later writer for ever.
-func (t *projectionTape) leadHolding(token chan struct{}) {
+func (t *projectionTape) leadHolding(token chan struct{}, own *groupMember) {
 	defer func() { <-token }()
-	t.leadGroup()
+	t.leadGroup(own)
+}
+
+// withdraw removes m from the pending list if no leader has taken it, and
+// reports whether it did; a withdrawn member is never committed.
+func (g *groupCommit) withdraw(m *groupMember) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if m.taken {
+		return false
+	}
+	for i, p := range g.pending {
+		if p == m {
+			g.pending = append(g.pending[:i:i], g.pending[i+1:]...)
+			break
+		}
+	}
+	return true
+}
+
+// leaderStart is read by a leader that has just won the token: the arrival
+// counter (members numbered at or above it arrived after the win) and whether
+// anything is pending at all.
+func (g *groupCommit) leaderStart() (wonAt uint64, any bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.nextSeq, len(g.pending) > 0
 }
 
 // takeGroup removes the next group from the pending list, oldest first, up to
 // the caps. The first member is always taken, whatever its size.
 func (g *groupCommit) takeGroup() []*groupMember {
+	return g.takeGroupSince(^uint64(0))
+}
+
+// takeGroupSince is takeGroup that also counts, as late joiners, the members it
+// takes that arrived at or after wonAt (the leader's token win).
+func (g *groupCommit) takeGroupSince(wonAt uint64) []*groupMember {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if len(g.pending) > 0 {
+		g.pendingAtTake[pendingAtTakeBucket(len(g.pending))].Add(1)
+	}
 	n, ops, bytes := 0, 0, 0
 	for n < len(g.pending) {
 		m := g.pending[n]
@@ -203,6 +261,9 @@ func (g *groupCommit) takeGroup() []*groupMember {
 		ops += len(m.ops)
 		bytes += m.bytes
 		m.taken = true
+		if m.seq >= wonAt {
+			g.lateJoiners.Add(1)
+		}
 		n++
 	}
 	taken := append([]*groupMember(nil), g.pending[:n]...)
@@ -210,19 +271,33 @@ func (g *groupCommit) takeGroup() []*groupMember {
 	return taken
 }
 
-// leadGroup commits one group. It is called holding the leader token.
-func (t *projectionTape) leadGroup() {
+// leadGroup commits one group. It is called holding the leader token. The
+// group is taken as late as is safe: inside the commit step, once sealRiding
+// holds flushMu, so writers that arrive while the leader waits behind a
+// telemetry seal (or any other holder of flushMu) join this group instead of
+// queueing for the next. own is the caller's member, withdrawn if the leader
+// panics before taking.
+func (t *projectionTape) leadGroup(own *groupMember) {
 	g := t.group
-	members := g.takeGroup()
-	if len(members) == 0 {
+	wonAt, any := g.leaderStart()
+	if !any {
 		return
 	}
-	// A panic below must not leave taken members waiting for ever: each gets an
-	// error (never an acknowledgement; the append may or may not have landed,
-	// so its outcome is unknown), and the panic goes on.
+	var members []*groupMember
+	tookGroup := false
+	// A panic before the take leaves every pending writer for a later leader
+	// (the token is freed by leadHolding), and withdraws the leader's own
+	// member, whose caller sees the panic and not an outcome. A panic after the
+	// take must not leave taken members waiting for ever: each gets an error
+	// (never an acknowledgement; the append may or may not have landed, so its
+	// outcome is unknown), and the panic goes on.
 	settled := false
 	defer func() {
 		if settled {
+			return
+		}
+		if !tookGroup {
+			g.withdraw(own)
 			return
 		}
 		err := errors.New("store: group commit failed: the leader panicked; outcome unknown")
@@ -239,10 +314,15 @@ func (t *projectionTape) leadGroup() {
 	defer cancel()
 
 	var memberOps []computerevent.ProjectionOp
-	for _, m := range members {
-		memberOps = append(memberOps, m.ops...)
-	}
 	commit := func(teleOps []computerevent.ProjectionOp) error {
+		if hook := g.beforeTake.Load(); hook != nil {
+			(*hook)()
+		}
+		members = g.takeGroupSince(wonAt)
+		tookGroup = true
+		for _, m := range members {
+			memberOps = append(memberOps, m.ops...)
+		}
 		// One event, ops in arrival order: the riding telemetry first, then
 		// each member's ops. The parts keep the writers apart for the counters
 		// (a mixed event is counted per member family, tape_write_counters.go).
@@ -263,6 +343,10 @@ func (t *projectionTape) leadGroup() {
 		err = commit(nil)
 	}
 
+	if !tookGroup {
+		settled = true
+		return
+	}
 	switch {
 	case err == nil:
 		g.finishMembers(members, nil)
@@ -284,10 +368,12 @@ func (t *projectionTape) leadGroup() {
 		g.unknownOutcome.Add(1)
 		g.finishMembers(members, err)
 	}
-	g.groups.Add(1)
-	g.members.Add(int64(len(members)))
-	g.ops.Add(int64(len(memberOps)))
-	g.membersHist[opsBucket(len(members))].Add(1)
+	if len(members) > 0 { // else every pending writer withdrew before the take
+		g.groups.Add(1)
+		g.members.Add(int64(len(members)))
+		g.ops.Add(int64(len(memberOps)))
+		g.membersHist[opsBucket(len(members))].Add(1)
+	}
 	if err == nil {
 		g.telemetryRidden.Add(int64(ridden)) // only records that rode a committed event
 	}
@@ -407,6 +493,10 @@ type GroupCommitStats struct {
 	Cancelled       int64            `json:"cancelled"`
 	WaitMeanMS      float64          `json:"wait_ms_mean"`
 	WaitMaxMS       float64          `json:"wait_ms_max"`
+	// PendingAtTake is len(pending) when a leader took its group; LateJoiners
+	// counts members taken that arrived after the leader won the token.
+	PendingAtTake map[string]int64 `json:"pending_at_take"`
+	LateJoiners   int64            `json:"late_joiners"`
 }
 
 func (s *Store) groupCommitStats() GroupCommitStats {
@@ -421,6 +511,13 @@ func (s *Store) groupCommitStats() GroupCommitStats {
 		UnknownOutcome:  g.unknownOutcome.Load(),
 		Cancelled:       g.cancelled.Load(),
 		WaitMaxMS:       float64(g.waitNanosMax.Load()) / 1e6,
+		PendingAtTake:   map[string]int64{},
+		LateJoiners:     g.lateJoiners.Load(),
+	}
+	for i := range g.pendingAtTake {
+		if n := g.pendingAtTake[i].Load(); n > 0 {
+			out.PendingAtTake[pendingAtTakeLabels[i]] = n
+		}
 	}
 	for i := range g.membersHist {
 		if n := g.membersHist[i].Load(); n > 0 {
