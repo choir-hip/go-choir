@@ -250,8 +250,10 @@ type ReceiptCompactor struct {
 	// buildRunning reports a maintenance lock on the receipt table
 	// (receipt_walk.go).
 	buildRunning func(context.Context) (bool, error)
-	// lastDeferral is the last reason noteDeferral logged.
+	// lastDeferral is the last reason noteDeferral logged ("" when running).
 	lastDeferral string
+	// buildCheckFailed is set while the build check cannot be read.
+	buildCheckFailed bool
 }
 
 func NewReceiptCompactor(store *Store) *ReceiptCompactor {
@@ -362,6 +364,12 @@ func (c *ReceiptCompactor) runComputer(ctx context.Context, computerID, mode str
 	head, err := readComputerEventHead(ctx, db, computerID, false)
 	if err != nil {
 		return pass, err
+	}
+	if head != nil && cum.Through > head.Sequence {
+		// A stale row: the computer was purged and created again under the same
+		// id (the purge of an older release does not know this table), and its
+		// tape is shorter than the progress says. Walk it from zero.
+		cum = ReceiptCompactionPass{}
 	}
 	pass.Through = cum.Through
 	if head == nil || cum.Through >= head.Sequence {

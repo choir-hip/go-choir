@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -98,7 +99,9 @@ const receiptBuildRunningSQL = `SELECT EXISTS (
 // and the load lines show the size. checkSpace is false for the per-batch look,
 // which reads the volume only at the load line's cadence.
 func (c *ReceiptCompactor) deferWalk(ctx context.Context, checkSpace bool) string {
-	if running, err := c.buildRunning(ctx); err == nil && running {
+	running, err := c.buildRunning(ctx)
+	c.noteBuildCheck(err)
+	if err == nil && running {
 		return "an index build or other maintenance holds the receipt table (SHARE UPDATE EXCLUSIVE); one heavy job at a time on it"
 	}
 	if !checkSpace {
@@ -111,17 +114,44 @@ func (c *ReceiptCompactor) deferWalk(ctx context.Context, checkSpace bool) strin
 	return ""
 }
 
-// noteDeferral logs a deferral when the reason changes, not every pass.
+// noteBuildCheck says once, on the transition, that the build check cannot be
+// read (the walk then runs: nothing is known to hold the table), and once when it
+// can again.
+func (c *ReceiptCompactor) noteBuildCheck(err error) {
+	if err != nil && !c.buildCheckFailed {
+		c.buildCheckFailed = true
+		log.Printf("corpusd: receipt walk: build check unavailable: %v; the walk runs", err)
+	} else if err == nil && c.buildCheckFailed {
+		c.buildCheckFailed = false
+		log.Printf("corpusd: receipt walk: build check available again")
+	}
+}
+
+// noteDeferral logs the reason the walk is not running, every time it is asked
+// (once a pass, ten minutes apart, and when a pass steps aside), so that the line
+// is in any ten-minute journal window while the walk is held; and a "resumes"
+// line when it was held and is not.
 func (c *ReceiptCompactor) noteDeferral(why string) {
-	if why == c.lastDeferral {
-		return
-	}
+	was := c.lastDeferral
 	c.lastDeferral = why
-	if why == "" {
+	switch {
+	case why != "":
+		log.Printf("corpusd: receipt compaction deferred: %s", why)
+	case was != "":
 		log.Printf("corpusd: receipt compaction resumes")
-		return
 	}
-	log.Printf("corpusd: receipt compaction deferred: %s", why)
+}
+
+// walkState is the walk's state for the load line: running, or the reason it was
+// last held.
+func (c *ReceiptCompactor) walkState() string {
+	switch {
+	case c.lastDeferral == "":
+		return "running"
+	case strings.Contains(c.lastDeferral, "free on"):
+		return "deferred: free space"
+	}
+	return "deferred: build"
 }
 
 // ReceiptTableLoad is what a walk over the table costs it, read from
@@ -178,7 +208,7 @@ func (c *ReceiptCompactor) logLoad(ctx context.Context, computerID string, pass 
 	if load.WALBytesVisible {
 		wal = fmt.Sprint(load.WALBytesSince)
 	}
-	log.Printf("corpusd: receipt compaction load %s through=%d scanned=%d rewritten=%d kept=%d elapsed=%s live_tuples=%d dead_tuples=%d autovacuums=%d last_autovacuum=%s table_bytes=%d wal_bytes_since_start=%s free_bytes=%s",
+	log.Printf("corpusd: receipt compaction load %s through=%d scanned=%d rewritten=%d kept=%d elapsed=%s live_tuples=%d dead_tuples=%d autovacuums=%d last_autovacuum=%s table_bytes=%d wal_bytes_since_start=%s free_bytes=%s walk_state=%s",
 		computerID, pass.Through, pass.Scanned, pass.Rewritten, pass.Kept, time.Since(walkStart).Round(time.Second),
-		load.LiveTuples, load.DeadTuples, load.Autovacuums, load.LastAutovacuum, load.TableBytes, wal, freeText)
+		load.LiveTuples, load.DeadTuples, load.Autovacuums, load.LastAutovacuum, load.TableBytes, wal, freeText, c.walkState())
 }
