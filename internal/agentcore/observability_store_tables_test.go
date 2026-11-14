@@ -3,6 +3,7 @@ package agentcore
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/storetables"
 	"net/http"
 	"net/http/httptest"
@@ -93,8 +94,12 @@ func TestObservabilityStoreTablesSecondsCannotOverflow(t *testing.T) {
 		if err := json.Unmarshal(raw, &rep); err != nil {
 			t.Fatal(err)
 		}
-		if rep.Reading.BudgetMillis != 100000 {
-			t.Fatalf("seconds=%s gave a budget of %d ms, want the 100000 ms cap: %s", secs, rep.Reading.BudgetMillis, raw)
+		want, _ := storeTablesBudget(storetables.MaxBudget*2, 0, server.WriteTimeoutFromEnv())
+		if want != storetables.MaxBudget && want != 95*time.Second {
+			t.Fatalf("unexpected ceiling %s", want)
+		}
+		if d := want.Milliseconds() - rep.Reading.BudgetMillis; d < 0 || d > 2000 { // handler time already spent comes off the budget
+			t.Fatalf("seconds=%s gave a budget of %d ms, want the %s cap: %s", secs, rep.Reading.BudgetMillis, want, raw)
 		}
 	}
 }
