@@ -52,8 +52,6 @@ CREATE TABLE IF NOT EXISTS computer_event_append_receipts (
   CONSTRAINT computer_event_append_sequence_uq UNIQUE (computer_id, sequence),
   CONSTRAINT computer_event_append_digest_uq UNIQUE (computer_id, event_digest)
 );
-CREATE INDEX IF NOT EXISTS computer_event_append_receipt_id_idx ON computer_event_append_receipts (computer_id, event_head_receipt_id);
-CREATE INDEX IF NOT EXISTS computer_event_append_kind_seq_idx ON computer_event_append_receipts (computer_id, event_kind, sequence);
 CREATE TABLE IF NOT EXISTS control_key_history (
   signer_domain VARCHAR(64) NOT NULL,
   computer_id VARCHAR(128) NOT NULL DEFAULT '',
