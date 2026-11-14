@@ -196,6 +196,7 @@ entered below as lapsed, not scored.
 | C70 | 2026-11-13T18:50Z | false | sent back on rounds 1, 2 and 3 by one seat (the other accepted each time), so not accepted within two rounds and not landed. Each repair opened a new surface, the last two in vmctl admission; the lane is split (docs/problems/unappended-snapshot-root-evicts-the-on-tape-root-2026-11-13.md). I priced a host-only prune change and did not see that advertising only named roots drags in admission policy | 0.20 |
 | C69 | 2026-11-13T20:33Z | false | two of three conditions held: both seats accepted on round 2, and the first scheduled run on Node B at 20:33:20Z reported `outcome=nothing errors=0` over 266 computers (251 destroyed, 0 listed) in 182 s. The deploy did not go out on the first CI attempt: run 43488183830 failed once on `TestGvisorAdmissionDeadlineRefusesByName`, a timing test the change does not touch, and passed on a full rerun. The claim was a conjunction, so it is false; the lesson is that a first-attempt CI condition is a bet on the suite's flake rate, not on the change. |
 | C72 | 2026-11-14T01:30Z | false | settled early from code, not from the counters: three of the five kinds are written once (`internal/store/commitment.go:46`, `capture_label.go:117`, lifecycle commands), the 170 KB Texture figure is the revision counted under the document by `tapeFamily` (`tape_write_counters.go:58`), and with a 3.5 KB fixed toll per 5.7 KB event at most 39% of tape bytes are payload at all. Both review seats, `store-once` revision 2. Lesson: I ranked from a counter without reading what it counts. | 0.42 |
+| C80 | 2026-11-14T05:58Z | false | round 3: DeepSeek accepted, Gemini sent it back for the CI wiring of the nix unit test (classified docs-only, so the test would not run on changes to the unit). Both seats held the prune mechanism sound, but it was not accepted by both and did not land. Brier 0.30. The same shape as C70: one seat accepts each round, the other finds something new the repair introduced. |
 
 ### Scorecard
 
@@ -205,6 +206,6 @@ false, 1 partial), 7 lapsed.
 | band | claims settled | came true |
 |---|---|---|
 | 0.0 to 0.3 | 0 | n/a |
-| 0.3 to 0.6 | 7 | 1, and 1 partial |
+| 0.3 to 0.6 | 8 | 1, and 1 partial |
 | 0.6 to 0.8 | 13 | 10, and 1 partial |
 | 0.8 to 1.0 | 0 | n/a |
