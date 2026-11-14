@@ -485,11 +485,17 @@ func TestEngineeringAdmissionCrashRestartClosesQueuedRequest(t *testing.T) {
 // into the {assignment_id, attempt} wake an open or a fate watchdog minted
 // (which may already be consumed).
 func TestEngineeringBoundDeadlineRunsFromBindNotArrival(t *testing.T) {
-	t.Setenv("CHOIR_ASSIGNMENT_DEADLINE", "300ms")
+	// The deadline is read at each call (assignedEngineeringDeadline), and
+	// the handler compares it with time.Now (continuation_schedule.go), so
+	// the test sets the deadline it needs at each step instead of racing a
+	// fixed 300 ms window against the machine: an hour while arming (nothing
+	// can expire), a value measured from the stored arrival and bind times
+	// for the open-time wake, and one nanosecond once the run is bound.
+	t.Setenv("CHOIR_ASSIGNMENT_DEADLINE", "1h")
 	f := newAdmissionFixture(t, 1)
 	wakes := captureAdmissionWakes(f.rt)
 	f.open(0)
-	time.Sleep(400 * time.Millisecond) // waited in the queue past the deadline
+	time.Sleep(400 * time.Millisecond) // waited in the queue; load only lengthens it
 	boundAt := time.Now().UTC()
 	bound := f.bind(0)
 	ctx := context.Background()
@@ -507,12 +513,24 @@ func TestEngineeringBoundDeadlineRunsFromBindNotArrival(t *testing.T) {
 	if armed.content == legacy {
 		t.Fatalf("the bind-time deadline wake has the open-time identity %s; it would dedup into a consumed wake", legacy)
 	}
-	if armed.notBefore.Before(boundAt.Add(300 * time.Millisecond)) {
+	// Armed from bind: due no earlier than bind plus the deadline, which is
+	// later than arrival plus the deadline by the queue wait.
+	if armed.notBefore.Before(boundAt.Add(time.Hour)) {
 		t.Fatalf("bound deadline due %s, before bind (%s) plus the deadline: queue wait counted against the run", armed.notBefore, boundAt)
 	}
 
-	// The open-time (legacy) wake fires at arrival plus the deadline: the run
-	// has barely started and must not be failed.
+	// The open-time (legacy) wake fires after arrival plus the deadline and
+	// before bind plus the deadline: the run has barely started and must not
+	// be failed. Pick the deadline halfway between the two from the stored
+	// times, so load before the call moves it toward neither side by more
+	// than half the queue wait, and the arrival side only gets safer.
+	arrival := f.get(0).CreatedAt
+	bindTime := f.rt.assignedEngineeringBoundAt(ctx, bound)
+	queued := bindTime.Sub(arrival)
+	if queued < 400*time.Millisecond {
+		t.Fatalf("fixture: the request queued %s, want at least the 400ms wait", queued)
+	}
+	t.Setenv("CHOIR_ASSIGNMENT_DEADLINE", (time.Since(arrival) - queued/2).String())
 	if err := f.rt.HandleAssignedEngineeringFateDeadline(ctx, f.seed.OwnerID, f.computer, f.seed.ParentAgentID, legacy); err != nil {
 		t.Fatal(err)
 	}
@@ -520,7 +538,8 @@ func TestEngineeringBoundDeadlineRunsFromBindNotArrival(t *testing.T) {
 		t.Fatalf("a run bound after a long queue wait was failed at arrival plus the deadline: %s (%q)", got.Disposition, got.DispositionReason)
 	}
 
-	time.Sleep(400 * time.Millisecond)
+	// Bind plus the deadline has now passed, whatever the machine is doing.
+	t.Setenv("CHOIR_ASSIGNMENT_DEADLINE", "1ns")
 	if err := f.rt.HandleAssignedEngineeringFateDeadline(ctx, f.seed.OwnerID, f.computer, f.seed.ParentAgentID, armed.content); err != nil {
 		t.Fatal(err)
 	}
