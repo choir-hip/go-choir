@@ -84,6 +84,19 @@ CREATE TABLE IF NOT EXISTS computer_event_receipt_compaction (
   PRIMARY KEY (computer_id)
 );`
 
+// receiptCompactionCodec numbers what the backfill may write. Codec 1 writes
+// the canonical compact format only; codec 2 also writes format 2, the jsonb
+// spelling of the rows stored while the column was jsonb
+// (docs/problems/old-receipts-do-not-compact-2026-11-14.md). Every reader
+// expands both at every codec; the writer is raised one release after the
+// readers, so a revert to the release before it still finds only rows it can
+// read.
+const receiptCompactionCodec = 1
+
+// receiptCompactionAllowJSONB is the write allowance the codec threads to
+// computerevent.CompactStoredHeadReceipt.
+const receiptCompactionAllowJSONB = receiptCompactionCodec >= 2
+
 var (
 	receiptCompactionBatch    = 500
 	receiptCompactionPause    = time.Second
@@ -386,8 +399,12 @@ func (c *ReceiptCompactor) batch(ctx context.Context, computerID, mode string, t
 		}
 		target := string(original)
 		if mode != ReceiptCompactExpand {
-			if compact, ok := computerevent.CompactHeadReceipt(row, original); ok {
+			if compact, ok := computerevent.CompactStoredHeadReceipt(row, original, receiptCompactionAllowJSONB); ok {
 				target = compact
+			} else if computerevent.IsCompactHeadReceipt(stored) {
+				// A compact row this codec may not write (format 2 under
+				// codec 1) is kept, not expanded back to full text.
+				target = stored
 			}
 		}
 		out.BytesBefore += int64(len(stored))

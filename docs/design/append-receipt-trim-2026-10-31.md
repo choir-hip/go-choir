@@ -54,7 +54,10 @@ receipt id) or constants (version, kind, issuer), as hex under JSON keys.
 binary (`c1:` + base64): previous head, the next heads and commitments, the
 pending ref, the payload pin digests, issued_at, the signer refs and raw
 signatures, and a 16-byte check of the original bytes.
-`ExpandHeadReceipt` rebuilds the exact canonical bytes from it and the row.
+`ExpandHeadReceipt` rebuilds the exact stored bytes from it and the row: the
+canonical spelling for format 1, PostgreSQL's jsonb spelling for format 2 (rows
+written while the column was jsonb; see
+`docs/problems/old-receipts-do-not-compact-2026-11-14.md`).
 
 Why it is safe:
 
