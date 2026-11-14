@@ -451,3 +451,23 @@ func TestRunMemoryRetireR1BacklogBounds(t *testing.T) {
 		t.Errorf("nil store = %d, %d, %v", ops, passes, err)
 	}
 }
+
+// P2: a document custodian's run whose record does not decode is protected
+// (it might be the carry source), and does not use a slot.
+func TestRunMemoryRetireR1UnreadableDocumentRunIsProtected(t *testing.T) {
+	h := newTapeHarness(t)
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	day := 24 * time.Hour
+	memPutOwnerScoped(t, h, "owner-1", "ur-bad", []byte(`"not a run"`), false, now)
+	memSeedEntries(t, h, "ur-bad", docAgent("ur"), entryKinds, 50*day, now)
+	memSeedLifecycle(t, h, "owner-1", "ur-a", docAgent("ur"), types.RunCompleted, 40*day, 40*day, now)
+	memSeedLifecycle(t, h, "owner-1", "ur-b", docAgent("ur"), types.RunCompleted, 41*day, 41*day, now)
+	memSeedLifecycle(t, h, "owner-1", "ur-c", docAgent("ur"), types.RunCompleted, 42*day, 42*day, now)
+	ids, c, err := h.store.selectRunMemory(context.Background(), now)
+	if err != nil || !reflect.DeepEqual(ids, []string{"ur-c"}) {
+		t.Fatalf("selected %v, %v; want only ur-c (the unreadable run takes no slot, and is kept)", ids, err)
+	}
+	if got := censusByName(c)["kept_carry_source_over_30d"].Runs; got != 3 {
+		t.Fatalf("carry sources = %d, want 3 (ur-bad, ur-a, ur-b): %+v", got, c.Dispositions)
+	}
+}
