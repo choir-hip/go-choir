@@ -58,3 +58,25 @@ rows left by the 21:46:09Z restart, when d@e applied its own layered release.
   1d9316e72, not a repo commit). The patch was not read, so that it leaves
   the lifecycle code alone is not confirmed.
 - The diagnostic should read its samples in the snapshot.
+
+## Code reading, 22:18Z (nothing run, no live computer touched)
+
+- The probe replays a tail onto the newest snapshot (`restore_snapshot.go:117`),
+  not from sequence 1; a snapshot copies the index whole
+  (`snapshot_to.go:424`). Most replay-side rows are therefore an old live
+  index, and only tail rows go through replay's own write path.
+- Confirmed from code, not yet by a test: live normalizes a no-payload event's
+  payload pin digests to `[]` (`appender.go:974`, `:1056`); replay leaves the
+  slice nil (`internal/platform/event_replay.go:96`) and `Prepare` marshals it
+  to `null`. The probe hashes the raw text. Whether d@e's tail holds such an
+  event is not known.
+- Suspected: the incremental trim removes one slice at a time and leaves older
+  backlog to the catch-up that starts two minutes after boot. A base snapshot
+  taken before a catch-up finished, or the staged store's own catch-up racing
+  the four-minute probe, would leave batch rows on one side only.
+- Not a cause, from code: the timestamp columns (excluded), receipt digests,
+  any time-based trim condition.
+
+A builder lane (`lane/event-index-diff`) is writing the tests for both, the
+fix for the first, and a per-row diff of the index in the probe report with
+the object-graph samples read in the snapshot.
