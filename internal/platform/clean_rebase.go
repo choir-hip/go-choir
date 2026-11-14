@@ -290,8 +290,8 @@ func (a *OwnerActAuthority) cleanRebaseLink(ctx context.Context, tx *sql.Tx, eve
 // pending) and a change that never applied are refused.
 func (a *OwnerActAuthority) cleanRebaseAppliedChange(ctx context.Context, tx *sql.Tx, computerID string, receipt selfdevprotocol.CleanRebaseReceipt) (string, error) {
 	var kind, digest string
-	err := tx.QueryRowContext(ctx, `SELECT event_kind, event_digest FROM computer_event_append_receipts WHERE computer_id=? AND event_kind IN (?, ?, ?) ORDER BY sequence DESC LIMIT 1`,
-		computerID, string(computerevent.EventMaterializationApplied), string(computerevent.EventRollbackRequested), string(computerevent.EventRollbackApplied)).Scan(&kind, &digest)
+	err := tx.QueryRowContext(ctx, receiptLatestAppliedSQL,
+		computerID, string(computerevent.EventMaterializationApplied), computerID, string(computerevent.EventRollbackRequested), computerID, string(computerevent.EventRollbackApplied)).Scan(&kind, &digest)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "the computer has applied no self-development change to rebase", nil
 	}
