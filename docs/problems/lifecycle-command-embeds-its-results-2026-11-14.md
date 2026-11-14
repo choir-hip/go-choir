@@ -446,3 +446,20 @@ Corrections to the procedure above, found by running it:
   absent.
 - The stored first revision drops a trailing space of `initial_content`;
   compare stored revisions with each other, not with the request body.
+
+### After the 21:31Z restart (prune at boot)
+
+d@e restarted on a layered release over c1ea7a418 (its own applied patch on
+top of main, which includes step 2). Run by the same agent, d@e only.
+
+- 4a (three create re-submits), 4d (two editor-save re-submits) and 4e
+  (first and latest revisions re-read) all answered as before the restart:
+  same revision ids, same content hashes, no "stored revision unavailable".
+  This is the after-restart replay check.
+- Step 5 now runs and answers `not_equivalent`. Two readings agree that the
+  object graph and run memory are equal at the pinned head and that only the
+  event index differs; that is not a step 2 effect and is recorded in
+  `replay-of-de-differs-on-the-event-index-only-2026-11-14.md`. Step 5
+  therefore neither passes nor fails on step 2's account: the tables step 2
+  could change are equal, and the check as a whole is not `equivalent`.
+- Still not run: steps 6 and 7.
