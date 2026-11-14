@@ -38,6 +38,7 @@ type tapeWriteMaps struct {
 	opsByObjectKind map[string]int64
 	opBytesByObject map[string]int64
 	runMemoryByKind map[string]int64
+	runMemoryBytes  map[string]int64        // body bytes of those entries, same keys
 	rewrites        map[string]*rewriteKind // object_rewrite_counters.go
 }
 
@@ -51,6 +52,14 @@ func bumpKey(m *map[string]int64, key string, n int64) {
 	}
 	(*m)[key] += n
 }
+
+// Per-event versus per-op attribution: tape_events_by_family and
+// tape_bytes_by_family give a whole event, whatever it holds, to the family of
+// its first op (continuity with earlier readings), so a batch [document,
+// revision, sources...] is all "object:<document kind>". The per-op numbers
+// (tape_ops_by_object_kind, tape_op_bytes_by_object_kind, object_rewrites,
+// run_memory_*_by_kind) count every op under its own kind and its own body
+// bytes and are the ones to read for what a kind costs.
 
 // tapeFamily names the writer family of one writer's ops: the telemetry sealer
 // by its authority, otherwise the first op decides ("run_memory", "edge",
@@ -102,6 +111,7 @@ type tapeEventTally struct {
 	objBytes     []int64
 	objHashes    []uint64 // of the canonical ids, parallel to objKinds
 	rmKeys       []string
+	rmBytes      []int64 // body bytes, parallel to rmKeys
 }
 
 // tallyTapeEvent classifies an event written by one writer.
@@ -138,6 +148,7 @@ func tallyTapeParts(authority string, parts [][]computerevent.ProjectionOp, firs
 				t.objHashes = append(t.objHashes, hashID(op.CanonicalID))
 			case computerevent.ProjectionOpRunMemoryEntry:
 				t.rmKeys = append(t.rmKeys, runMemoryKey(op.Body))
+				t.rmBytes = append(t.rmBytes, int64(len(op.Body)))
 			}
 		}
 	}
@@ -218,8 +229,11 @@ func (m *tapeWriteMaps) add(t tapeEventTally) {
 		}
 		m.addRewrite(kind, t.objBytes[i], h, hasHash)
 	}
-	for _, key := range t.rmKeys {
+	for i, key := range t.rmKeys {
 		bumpKey(&m.runMemoryByKind, key, 1)
+		if i < len(t.rmBytes) {
+			bumpKey(&m.runMemoryBytes, key, t.rmBytes[i])
+		}
 	}
 }
 
@@ -231,6 +245,7 @@ func (m *tapeWriteMaps) copyInto(out *TelemetryStats) {
 	out.TapeOpsByObjectKind = copyCounts(m.opsByObjectKind)
 	out.TapeOpBytesByObjectKind = copyCounts(m.opBytesByObject)
 	out.RunMemoryOpsByKind = copyCounts(m.runMemoryByKind)
+	out.RunMemoryBytesByKind = copyCounts(m.runMemoryBytes)
 	out.ObjectRewrites = m.rewriteStats()
 }
 
