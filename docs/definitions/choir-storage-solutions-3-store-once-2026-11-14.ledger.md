@@ -40,4 +40,12 @@
   lane/store-only so a request can name the trees. Updater prune round 3 is
   with both seats; its suite run is queued behind the counters' on the
   agents VM.
+- 2026-11-14T04:20Z. Updater prune round 3: Gemini REPAIR (the bounded hold
+  starves against the chunk loop), DeepSeek ACCEPT. Third REPAIR, so by N1
+  it does not land. Assessment:
+  docs/problems/updater-prune-three-rounds-structural-assessment-2026-11-14.md.
+  Seven of eight blocking findings were the cross-process coordination; the
+  keep rule was verified sound. Changed approach: prune as a boot unit
+  before the updater and the runtime start, so no hold exists. C78's odds
+  fall (a new candidate, new review).
 
