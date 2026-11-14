@@ -103,7 +103,8 @@ Two exclusions hold 57% of all entries: "newest two runs of the agent" and
    one census on the paper shows what remains of the runs the old lookup could
    not see. Its ops carry their own reason.
 4. **Group query** takes `MAX(owner_id)` and `MAX(agent_id)`; the covering index
-   is still the only read (the M8 test pins it). The cell-author receipt now
+   is still the only read (the M8 test pins it). The query also aggregates the
+   document agent and its owner (MAX and MIN) apart from the plain MAX. The cell-author receipt now
    carries the run's agent id.
 5. **Catch-up** (`RetireRunMemoryBacklog`): passes back to back with a one
    minute gap, at most 32 per wake (the paper's backlog is 22 passes of 5,000
@@ -118,14 +119,16 @@ is inside `!lateEvidenceOnly`, where the producer run must be pending, running
 or passivated (`persistentManagementRunStateAllowed`,
 `engineering_assignments.go:680`); retirement selects only terminal runs. A
 terminal producer run is refused on a live trajectory and reads no memory on a
-terminal one, whatever retirement did. `TestManagementReportOutcomeDoesNotDependOnRetiredRunMemory`
-drives the real report path with a completed producer run before and after its
-memory is retired and requires the same outcome. The round-1 claim of a refusal
+terminal one, whatever retirement did. `TestManagementReportRefusalIsUnchangedWithTheProducersMemoryRetired`
+drives the real report path with a completed producer run on a live trajectory
+before and after its memory is retired and requires the same outcome (the same
+refusal both times). It proves that and no more: that the late-evidence branch
+reads no memory is by reading `lifecycle.go`, not by the test. The round-1 claim of a refusal
 (and the line in the code header) is withdrawn.
 
 Round 2 (both seats) changed:
 
-- One rule for the reader and the selector (`run_memory_carry.go`): the carry
+- One rule for the reader and the selector (`run_memory_carry.go`; what is true after round 3: copy resolution is a total order, so read order never decides, and the reader and the selector agree on every shape the code has a test for; a run whose live copies name two computers is kept, because the reader reads one computer and the selector cannot tell which copy it would see): the carry
   kinds (`message`, `compaction`), the copy resolution (`resolveRunCopies`:
   a non-terminal copy wins, else the newest finish), the order (`FinishedAt`,
   else `UpdatedAt`, else `CreatedAt`, then run id descending) and the slot key
@@ -177,3 +180,28 @@ inside one wake (cap 32). The 30 day hold on record-less runs can only lower it.
 Revert the commits. Retired entries stay retired (each is on the sealed tape
 and in the retire op's explicit run list); a replay of the same tape reaches
 the same store either way.
+
+## Round 3 (follow-up commit)
+
+- Mixed owners: a run whose document-agent rows name two owners is kept
+  (`kept_mixed_owner_rows`); the record cannot be read under one owner and the
+  delete is by loop id.
+- Copies: `runCopyBetter` is a total order (not terminal, later finish,
+  carry-source state, state name, computer id); copies on two computers keep the
+  run (`kept_run_copies_disagree`). A record with no computer id is invisible to
+  the reader and takes a slot of its own, so it never evicts a real source.
+- A loop id the op would refuse (blank or padded) is skipped and counted
+  (`kept_loop_id_invalid`), never trimmed; it no longer stops every pass.
+- Record reads are counted per pass (`record_reads`: slot pre-pass and
+  selection) and per wake; a wake memo keeps the records already read, so a run
+  kept in pass 1 is not read in pass 2 (an error or an absence is never kept).
+  The wake log line carries its duration and the read counts.
+- `carryActorConversation` also reads the run named by
+  `actor_rewarm_source_loop_id` (`agentcore/run_memory.go:166-173`) before it
+  asks `LatestActorRunMemoryEntries`. It is covered: the name is set from that
+  same lookup at record creation (`texture_agent_revision.go:745`), the document
+  agent's runs are serialized, so the named run is at most the second-newest
+  source while it can still be read; a resumed passivated run reads its own
+  entries, and a passivated run is never retired.
+- A read error aborts the pass in the slot pre-pass and in the selection
+  (`TestRecordReadErrorAbortsThePass`).
