@@ -20,6 +20,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -40,6 +41,21 @@ func boundWitness(t *testing.T, rt *Runtime, computerID string) selfdevprotocol.
 		t.Fatalf("bind witness: %v", err)
 	}
 	return w
+}
+
+// canonicalLiveWitness is the canonical witness of the runtime's live store at
+// its current head, read outside the bind (what a bind at that head records).
+func canonicalLiveWitness(ctx context.Context, rt *Runtime) (selfdevprotocol.VMLocalContentWitness, error) {
+	var empty selfdevprotocol.VMLocalContentWitness
+	head, err := rt.store.Head(ctx, rt.cfg.ComputerID)
+	if err != nil || head == nil {
+		return empty, fmt.Errorf("live head: %v", err)
+	}
+	digests, boundary, err := canonicalSnapshotDigests(ctx, rt.store.ReadDB(), func(context.Context, *sql.Tx) (uint64, error) { return head.Sequence, nil })
+	if err != nil {
+		return empty, err
+	}
+	return selfdevprotocol.WitnessFromDigestsCanonical(digests, boundary)
 }
 
 func openIndexStore(t *testing.T) *choirstore.Store {
