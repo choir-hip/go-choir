@@ -139,10 +139,14 @@ and watermarks: did the daily job run, and what did it clear.
   names them. Red: the conversation an agent sees must be byte-equal to
   today's (the carry code already promises that for the checkpoint
   message), proved by a test that renders both ways.
-- **Drop the stored result's duplicates.** Stop embedding the document,
-  revision and events in a lifecycle command when the same batch writes
-  them; replay's existing rebuild path becomes the only path. Old events
-  with a stored result still replay as they do now. Red, small.
+- **Drop the stored result's duplicates.** Built as the revision only
+  (see [the problem record](../problems/lifecycle-command-embeds-its-results-2026-11-14.md)):
+  a command that writes its revision in its own batch names it by id. The
+  document, trajectory and the other mutable fields cannot be rebuilt at the
+  command's time (the existing rebuild path reads the latest head and would
+  leak a later revision), and events are small, so they stay embedded. Old
+  events with a stored result still replay as they do now. Landed in two
+  steps, reader before writer, so a revert always has a reader. Red.
 - **Tool output has one home** (was R5): the `tool.result` event names the
   run-memory entry.
 
@@ -165,7 +169,9 @@ and watermarks: did the daily job run, and what did it clear.
 No design until the per-table reading and the retirement log are read.
 Candidates the reviewers named: event kinds no retirement group covers
 (for example `model.served`, which publication provenance reads), Texture
-revisions (needed locally for history and diff), lifecycle commands
+revisions (needed locally for history and diff; never one that a
+`choir.lifecycle_command` names by `revision_id`, or retire that command
+first), lifecycle commands
 (halved by R1), free pages on a store that has not been compacted since
 its split, and `store.event_table` with `store.telemetry_partitions`, which
 exist so that deletes do not dirty pages across the whole file and so
