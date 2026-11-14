@@ -58,3 +58,40 @@ rows left by the 21:46:09Z restart, when d@e applied its own layered release.
   1d9316e72, not a repo commit). The patch was not read, so that it leaves
   the lifecycle code alone is not confirmed.
 - The diagnostic should read its samples in the snapshot.
+
+## Code investigation and repair (lane/event-index-diff, same day)
+
+Neither cause below is confirmed on d@e: the deployed proof is a probe
+reading after this lands, and its `event_index` field if it still differs.
+
+- Cause 2, a null where live has `[]` (reproduced by a test, not on d@e). The
+  live append normalizes `PayloadPinReceiptDigests` with `nonNilStrings`, so
+  an event with no payload pins stores `[]` in
+  `payload_pin_receipt_digests_json`. The tape replay
+  (`platform/event_replay.go`) sets the list only when an event has payload
+  pins, so `Store.Prepare` marshalled nil to `null`. The probe hashes the raw
+  text. An end to end probe test with one tail event of that kind answered
+  not_equivalent on `computer_event_index` and `content_root`, the two keys of
+  this record, and is equivalent after `Prepare` writes `[]` for both.
+  d@e's own rows: unread. A tail of 216 events on d@e almost certainly holds
+  such events, but that is a belief.
+- Cause 1, trim timing (mechanism tested, not seen on d@e). The incremental
+  trim deletes the last slice at each trim point; the older backlog goes in a
+  catch-up two minutes after each open, on the live store and on the probe's
+  staged store, and a base snapshot copied before a catch-up finished
+  carries the backlog. The two sides then differ by rows the trim defines as
+  disposable. The probe now leaves those rows (finalized
+  `projection_batch_recorded` at or below the trim boundary of the pinned
+  head) out of its index digest on both sides and reports their counts.
+- Stores written by an earlier replay keep `null` in that column inside their
+  base snapshots; the probe reads null as `[]` there. The stored witness is
+  unchanged, so recorded checkpoints still verify.
+- The report has `event_index` (schema_version 5): the per-row diff, filled
+  only when the result is not equivalent. The object graph diagnostic now
+  reads its live rows in the pinned snapshot (telemetry partition rows, which
+  are separate files, are still read at the time of the call).
+
+Remaining error: checkpoint binding uses the strict extractor, so on a
+store whose lineage mixes null and `[]` the probe can say equivalent and a
+bind can still refuse (it fails closed). Whether d@e has such a lineage is
+unread.
