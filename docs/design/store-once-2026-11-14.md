@@ -145,8 +145,12 @@ and watermarks: did the daily job run, and what did it clear.
   document, trajectory and the other mutable fields cannot be rebuilt at the
   command's time (the existing rebuild path reads the latest head and would
   leak a later revision), and events are small, so they stay embedded. Old
-  events with a stored result still replay as they do now. Landed in two
-  steps, reader before writer, so a revert always has a reader. Red.
+  events with a stored result still replay as they do now. Cut in two
+  steps, reader before writer, so a revert always has a reader; neither is
+  landed until deployed. Step 2 (the writer) must be a separate deploy after
+  step 1 is the release computers have adopted, because the deploy's automatic
+  rollback returns to the previous release, which cannot read a slim command.
+  Red.
 - **Tool output has one home** (was R5): the `tool.result` event names the
   run-memory entry.
 
