@@ -85,6 +85,8 @@ type runMemoryGroup struct {
 	runID, ownerID, agentID string
 	last                    time.Time
 	retirable               int64
+	// entries is every row of the run, cursors included (census only).
+	entries int64
 }
 
 // parseStoreTime reads a time that MAX(created_at) returns as a time.Time or
@@ -108,47 +110,60 @@ func parseStoreTime(v any) (time.Time, bool) {
 // runMemoryRetireGroupQuery is the per-run summary the selection reads. It
 // is served by idx_run_memory_entries_loop_retire alone: every column it
 // names is in that index, so it never reads a row, whose created_at and kind
-// sit after message_json (a table scan read the whole 3.8 GB table).
+// sit after message_json (a table scan read the whole 3.8 GB table). COUNT(*)
+// is the census's row count and is free in the same index. The body's size is
+// not: length(message_json) is in the row, after which overflow pages hold a
+// large body, so summing it would read the table; the census keeps rows only.
 func runMemoryRetireGroupQuery() (string, []any) {
 	keepMarks := make([]string, len(runMemoryRetireKeepKinds))
 	args := make([]any, len(runMemoryRetireKeepKinds))
 	for i, k := range runMemoryRetireKeepKinds {
 		keepMarks[i], args[i] = "?", k
 	}
-	return `SELECT loop_id, owner_id, agent_id, MAX(created_at), SUM(CASE WHEN kind NOT IN (` + strings.Join(keepMarks, ",") + `) THEN 1 ELSE 0 END) FROM run_memory_entries GROUP BY loop_id`, args
+	return `SELECT loop_id, owner_id, agent_id, MAX(created_at), SUM(CASE WHEN kind NOT IN (` + strings.Join(keepMarks, ",") + `) THEN 1 ELSE 0 END), COUNT(*) FROM run_memory_entries GROUP BY loop_id`, args
 }
 
 // SelectRunMemoryRetirements returns the loop ids whose entries may leave the
 // working store at now. It reads only (read pool); the caller appends the op.
 func (s *Store) SelectRunMemoryRetirements(ctx context.Context, now time.Time) ([]string, error) {
+	ids, _, err := s.selectRunMemory(ctx, now)
+	return ids, err
+}
+
+// selectRunMemory is the selection and the census of the groups it considered:
+// each group lands in exactly one disposition, named by the first rule that
+// keeps it, in the order the rules apply.
+func (s *Store) selectRunMemory(ctx context.Context, now time.Time) ([]string, RunMemoryCensus, error) {
+	census := newRunMemoryCensus()
 	db := s.ReadDB()
 	if db == nil {
-		return nil, nil
+		return nil, census, nil
 	}
 	cutoff := now.Add(-runMemoryRetireWindow).UTC()
 	query, args := runMemoryRetireGroupQuery()
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("run memory retire: group: %w", err)
+		return nil, census, fmt.Errorf("run memory retire: group: %w", err)
 	}
 	var groups []runMemoryGroup
 	for rows.Next() {
 		var g runMemoryGroup
 		var last any
-		if err := rows.Scan(&g.runID, &g.ownerID, &g.agentID, &last, &g.retirable); err != nil {
+		if err := rows.Scan(&g.runID, &g.ownerID, &g.agentID, &last, &g.retirable, &g.entries); err != nil {
 			_ = rows.Close()
-			return nil, err
+			return nil, census, err
 		}
 		t, ok := parseStoreTime(last)
 		if !ok {
-			continue // an unreadable time is never proof of age
+			census.add("kept_unreadable_time", g) // an unreadable time is never proof of age
+			continue
 		}
 		g.last = t
 		groups = append(groups, g)
 	}
 	if err := rows.Err(); err != nil {
 		_ = rows.Close()
-		return nil, err
+		return nil, census, err
 	}
 	_ = rows.Close()
 
@@ -163,35 +178,74 @@ func (s *Store) SelectRunMemoryRetirements(ctx context.Context, now time.Time) (
 		byAgent[key] = append(byAgent[key], g)
 	}
 	protected := map[string]bool{}
+	census.Agents = int64(len(byAgent))
 	for _, list := range byAgent {
+		if len(list) <= runMemoryKeepPerAgent {
+			census.AgentsWithOneOrTwoRuns++
+		}
 		sort.Slice(list, func(i, j int) bool { return list[i].last.After(list[j].last) })
 		for i := 0; i < len(list) && i < runMemoryKeepPerAgent; i++ {
 			protected[list[i].runID] = true
+		}
+	}
+	for _, g := range groups {
+		if !protected[g.runID] {
+			continue
+		}
+		age := now.Sub(g.last)
+		switch {
+		case age < runMemoryRetireWindow:
+			census.NewestTwoOfAgent.Within7d.add(g)
+		case age < 30*24*time.Hour:
+			census.NewestTwoOfAgent.From7To30d.add(g)
+		default:
+			census.NewestTwoOfAgent.Over30d.add(g)
 		}
 	}
 
 	maxRuns := runMemoryRetireMaxOps * computerevent.RunMemoryRetireMaxRuns
 	var out []string
 	for _, g := range groups {
-		if len(out) >= maxRuns {
-			break
+		switch {
+		case g.retirable == 0:
+			census.add("kept_only_cursor_entries", g)
+			continue
+		case !g.last.Before(cutoff):
+			census.add("kept_newest_entry_in_window", g)
+			continue
+		case protected[g.runID]:
+			if now.Sub(g.last) < 30*24*time.Hour {
+				census.add("kept_newest_two_of_agent_7_30d", g)
+			} else {
+				census.add("kept_newest_two_of_agent_over_30d", g)
+			}
+			continue
 		}
-		if g.retirable == 0 || !g.last.Before(cutoff) || protected[g.runID] {
+		if len(out) >= maxRuns {
+			census.add("not_reached_over_cap", g)
 			continue
 		}
 		if err := ctx.Err(); err != nil {
-			return out, err
+			return out, census, err
 		}
 		run, err := s.GetRunByOwnerOG(ctx, g.ownerID, g.runID)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
-				continue // a run we cannot see is not proven finished
+				census.add("kept_run_record_not_found", g) // a run we cannot see is not proven finished
+				continue
 			}
-			return out, err
+			return out, census, err
 		}
 		switch run.State {
 		case types.RunCompleted, types.RunFailed, types.RunCancelled:
+		case types.RunPassivated:
+			census.add("kept_state_passivated", g)
+			continue
+		case types.RunBlocked:
+			census.add("kept_state_blocked", g)
+			continue
 		default:
+			census.add("kept_state_other:"+string(run.State), g)
 			continue
 		}
 		finished := run.UpdatedAt
@@ -199,12 +253,15 @@ func (s *Store) SelectRunMemoryRetirements(ctx context.Context, now time.Time) (
 			finished = *run.FinishedAt
 		}
 		if finished.IsZero() || !finished.Before(cutoff) {
+			census.add("kept_finished_in_window", g)
 			continue
 		}
+		census.add("retired", g)
 		out = append(out, g.runID)
 	}
 	sort.Strings(out)
-	return out, nil
+	census.finish()
+	return out, census, nil
 }
 
 // runMemoryRetireRunsPerOp is the runs one op names when this store writes
@@ -220,10 +277,13 @@ func (s *Store) RetireRunMemory(ctx context.Context, now time.Time) (int, error)
 	if s == nil || s.projectionTape == nil {
 		return 0, nil
 	}
-	ids, err := s.SelectRunMemoryRetirements(ctx, now)
+	started := time.Now().UTC()
+	ids, census, err := s.selectRunMemory(ctx, now)
 	if err != nil {
 		return 0, err
 	}
+	// The census is of this pass's selection; the pass ends when the appends do.
+	defer func() { s.recordRunMemoryCensus(census, started) }()
 	appended := 0
 	for start := 0; start < len(ids); start += runMemoryRetireRunsPerOp {
 		chunk := ids[start:min(start+runMemoryRetireRunsPerOp, len(ids))]
@@ -253,5 +313,6 @@ func (s *Store) RetireRunMemory(ctx context.Context, now time.Time) (int, error)
 	if appended > 0 {
 		log.Printf("store: run memory retirement: %d runs in %d ops", len(ids), appended)
 	}
+	census.logLines()
 	return appended, nil
 }
