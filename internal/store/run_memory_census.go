@@ -47,7 +47,9 @@ type RunMemoryNewestTwo struct {
 	Over30d    RunMemoryTally `json:"newest_entry_over_30d"`
 }
 
-// RunMemoryWake is the wake's total (stub).
+// RunMemoryWake is the retired runs of every pass of one wake (the first pass
+// after boot, or a backlog's catch-up), so the claim a catch-up makes can be
+// read after the last pass has replaced the census.
 type RunMemoryWake struct {
 	Passes  int64                  `json:"passes"`
 	Retired []RunMemoryDisposition `json:"retired"`
@@ -71,7 +73,8 @@ type RunMemoryCensus struct {
 	// Dispositions: every group in exactly one, in the order the rules apply.
 	Dispositions []RunMemoryDisposition `json:"dispositions"`
 	CarrySources RunMemoryNewestTwo     `json:"carry_sources_by_entry_age"`
-	// FirstPass is the first pass of the wake, whole; Wake totals the retired runs of every pass of it (stubs).
+	// FirstPass is the first pass of the wake, whole (the census a backlog's
+	// catch-up begins with); Wake totals the retired runs of every pass of it.
 	FirstPass *RunMemoryCensus `json:"first_pass_of_wake,omitempty"`
 	Wake      *RunMemoryWake   `json:"wake,omitempty"`
 	// BodyBytes says why no byte count is given.
@@ -84,8 +87,9 @@ var runMemoryCensusOrder = []string{
 	"retired_no_run_record",
 	"kept_only_cursor_entries",
 	"kept_newest_entry_in_window",
-	"kept_newest_two_of_agent_7_30d",
-	"kept_newest_two_of_agent_over_30d",
+	"kept_carry_source_7_30d",
+	"kept_carry_source_over_30d",
+	"kept_no_run_record_in_hold",
 	"kept_run_record_unreadable",
 	"kept_state_passivated",
 	"kept_state_blocked",
@@ -157,16 +161,73 @@ type runMemoryCensusHolder struct {
 	mu   sync.Mutex
 	last RunMemoryCensus
 	set  bool
+	// passes counts the passes since boot.
+	passes int64
+	// wakeOpen is set while a backlog wake runs; a pass outside one is a wake
+	// of its own. first is the wake's first pass, whole; wake its retired totals.
+	wakeOpen bool
+	first    *RunMemoryCensus
+	wake     RunMemoryWake
 }
 
-// recordRunMemoryCensus keeps the pass's census as the last, with its times.
+// beginWake starts a wake: the next pass is its first.
+func (h *runMemoryCensusHolder) beginWake() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.wakeOpen, h.first, h.wake = true, nil, RunMemoryWake{}
+}
+
+func (h *runMemoryCensusHolder) endWake() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.wakeOpen = false
+}
+
+// retiredDispositions are the dispositions a wake totals: the others hold the
+// same runs again each pass.
+var retiredDispositions = []string{"retired", "retired_no_run_record"}
+
+func copyCensus(c RunMemoryCensus) RunMemoryCensus {
+	c.Dispositions = append([]RunMemoryDisposition(nil), c.Dispositions...)
+	return c
+}
+
+// recordRunMemoryCensus keeps the pass's census as the last, with its times,
+// the wake's first pass and the wake's totals.
 func (s *Store) recordRunMemoryCensus(c RunMemoryCensus, started time.Time) {
 	finished := time.Now().UTC()
 	h := &s.runMemoryCensus
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	c.Passes = h.last.Passes + 1
+	h.passes++
+	c.Passes = h.passes
 	c.StartedAt, c.FinishedAt = &started, &finished
+	if !h.wakeOpen {
+		h.first, h.wake = nil, RunMemoryWake{}
+	}
+	if h.first == nil {
+		first := copyCensus(c)
+		h.first = &first
+	}
+	h.wake.Passes++
+	if len(h.wake.Retired) == 0 {
+		for _, n := range retiredDispositions {
+			h.wake.Retired = append(h.wake.Retired, RunMemoryDisposition{Disposition: n})
+		}
+	}
+	for _, d := range c.Dispositions {
+		for i := range h.wake.Retired {
+			if h.wake.Retired[i].Disposition == d.Disposition {
+				h.wake.Retired[i].Runs += d.Runs
+				h.wake.Retired[i].Entries += d.Entries
+				h.wake.Retired[i].RetirableEntries += d.RetirableEntries
+			}
+		}
+	}
+	first := copyCensus(*h.first)
+	wake := h.wake
+	wake.Retired = append([]RunMemoryDisposition(nil), wake.Retired...)
+	c.FirstPass, c.Wake = &first, &wake
 	h.last, h.set = c, true
 }
 
@@ -179,7 +240,5 @@ func (s *Store) RunMemoryRetirementCensus() RunMemoryCensus {
 	if !h.set {
 		return newRunMemoryCensus()
 	}
-	c := h.last
-	c.Dispositions = append([]RunMemoryDisposition(nil), c.Dispositions...)
-	return c
+	return copyCensus(h.last)
 }

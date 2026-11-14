@@ -126,6 +126,7 @@ func (h *Handler) recordCellAuthorReceipt(ctx context.Context, rec *types.RunRec
 	_, _ = h.Store.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{
 		RunID:   rec.RunID,
 		OwnerID: rec.OwnerID,
+		AgentID: rec.AgentID,
 		Kind:    cellAuthorReceiptKind,
 		Summary: "texture cell authored turn committed",
 		Details: map[string]any{"intent_identity": revisionIdentity, "receipt": receipt},
