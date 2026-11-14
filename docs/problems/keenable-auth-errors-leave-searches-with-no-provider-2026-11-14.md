@@ -90,3 +90,22 @@ Ways it can fail, written before the code:
    the fifth strike (or the reverse), or a success between does not reset it.
 5. `needsProbe` ignores an auth_error streak, so the benched provider is
    called by every search once the bench ends.
+
+### Review findings and stated behavior
+
+- The streak count restarts when an uncapped provider enters or leaves the
+  transient-plus-auth class. The first version restarted it only on
+  entering, so four 403s then one 429 counted as a fifth strike (15 minutes
+  instead of 60 s; quota_limited 6 h instead of 1 h). The same inheritance
+  existed before this change for transient errors then a 429 (flagged
+  2026-11-13) and is repaired with it. Test:
+  `TestRefusalAndUncappedStreakDoNotShareStrikes`.
+- A health row benched under the old rule before the deploy keeps its
+  `CooldownUntil` until it expires (up to 15 minutes for one strike; the
+  stored-cooldown clamp does not shorten an auth_error bench), unless an
+  operator resets it. After it expires, a row with fewer than five strikes
+  takes the remaining strikes before the 30 s bench.
+- A dead key (every call a 403) costs five calls, then one probe per 30 s.
+  While it is benched a search escalates to paid providers at once; while a
+  call is out, a fast failure escalates on arrival and a slow one at the 8 s
+  escalation threshold.
