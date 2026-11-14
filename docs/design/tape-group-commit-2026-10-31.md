@@ -84,7 +84,7 @@ Each has a test in `internal/store/tape_group_commit_test.go`.
 | F2 | One member's refusal fails the others | a refused group (`ErrBatchRefused`, nothing pinned) is split: pending telemetry is sealed first, then each member is written alone in arrival order and gets its own result | `TestGroupCommitRefusalSplitsToSingles` |
 | F3 | Unknown outcome (pin or CAS failed after something may have landed) appended twice | never retried, as today: every member gets the error; `RecoverPrepared` settles the prepared event at boot | `TestGroupCommitUnknownOutcomeIsNotRetried` |
 | F4 | A guarded op (expected state, create-only) fails inside a group and drags others | only unconditional ops group: `object_recorded`, `object_edge_recorded`, `run_memory_entry_recorded` (upserts by key). Every other op kind takes the direct path | `TestGroupCommitOnlyUnconditionalOpsGroup` |
-| F5 | A semantic write lands on the tape ahead of earlier telemetry | the group leader holds the sealer's flush lock and puts every queued telemetry record in the same event, ahead of the members' ops; older chunks beyond the batch cap are sealed first in order | `TestGroupCommitTelemetryRidesAheadOfMembers` |
+| F5 | A semantic write lands on the tape ahead of earlier telemetry | the group leader holds the sealer's flush lock and puts every queued telemetry record in the same event, ahead of the members' ops; older chunks beyond the batch cap are sealed first in order; the leader takes its members before it reads the queue, so a record acknowledged before a member arrived is always in what it reads (section 4) | `TestGroupCommitTelemetryRidesAheadOfMembers`, `TestGroupCommitLateTakeNeverPassesAcknowledgedTelemetry` |
 | F6 | Ordering across streams | ops in the event are telemetry (enqueue order), then members (arrival order under the group lock). A write that causally follows another (issued after its ack) arrives after the earlier group is done, so it lands in a later event | `TestGroupCommitCausalOrderAcrossGoroutines` |
 | F7 | Deadlock: leader and sealer, or the sealer's own class-violation fallback | lock order is always flushMu -> appender mutex; the leader appends with the barrier exemption (it is the barrier); the sealer's internal singles bypass grouping | `TestGroupCommitNoDeadlockUnderLoad` (race, 32 writers, telemetry on) |
 | F8 | Replay or witness diverges | the event is an ordinary `projection_batch_recorded` batch; live finalize and replay apply the same ops in the same order; positions (`pos`, op index) of stamped ops are fixed by the tape. No reducer, payload or witness change | `TestGroupCommitReplayMatchesLive` |
@@ -124,10 +124,23 @@ Leader and followers on `projectionTape.appendOps`, no timer:
 - A write whose ops are all unconditional joins the pending list and then
   either finds its result already set (a leader took it) or takes the leader
   token.
-- The leader takes the pending list (up to the caps), takes the sealer's
-  flush lock and its queue, builds one batch (telemetry ops, then members'
-  ops), and appends it once with the barrier exemption. It then sets every
-  member's result and hands the token on.
+- The leader takes the sealer's flush lock, then takes the pending list (up
+  to the caps) and only then reads the sealer's queue (2026-11-14: the take
+  was first made when the leader won the token, before the wait for the flush
+  lock, so writers arriving during that wait queued for the next group; mean
+  group size on the paper was 1.37). It builds one batch (telemetry ops, then
+  members' ops) and appends it once with the barrier exemption. It then sets
+  every member's result and hands the token on.
+- Ordering invariant of the take point: a telemetry record acknowledged
+  before a member arrived was enqueued before that member joined the pending
+  list, hence before the take, hence before the queue read that follows the
+  take under the same flush lock hold; so it is sealed ahead of the group or
+  rides in the group's event ahead of the members' ops. A record enqueued
+  after the take may land after the members taken (it is later than all of
+  them). The take must stay before the queue read: taking after it lets a
+  member that arrived after an acknowledged record reach the tape ahead of
+  it. A take that finds nobody (every pending writer withdrew) returns
+  without touching the queue. The group's deadline starts after the take.
 - On `ErrBatchRefused` it splits (F2). On any other error every member gets
   it (F3).
 - Run memory: the global `runMemoryMu` becomes 64 stripes keyed by run, so
