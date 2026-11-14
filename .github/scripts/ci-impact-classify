@@ -61,6 +61,7 @@ flakehub=false
 high_risk_race=false
 ci=false
 receipts_swap=false
+guest_unit=false
 
 # is_docs_like_path: docs, skill text and developer-side scripts need no CI
 # lane (owner, 2026-11-12); they ship with the next push that does run.
@@ -87,6 +88,7 @@ if [[ "${CI_FORCE_ALL:-false}" == "true" ]]; then
   high_risk_race=true
   ci=true
   receipts_swap=true
+  guest_unit=true
   explanations+=("manual/recovery run -> all CI lanes")
 else
   for path in "${changed[@]}"; do
@@ -104,6 +106,15 @@ else
     case "$path" in
       scripts/receipts-index-swap|scripts/receipts-index-swap-test|.github/workflows/ci.yml|internal/platform/receipt_indexes.go|internal/platform/computer_events.go)
         mark receipts_swap "$path -> receipts index swap script self-test"
+        ;;
+    esac
+
+    # The boot prune's unit test guards the ordering line in nix/autoputer-vm.nix
+    # (scripts/updater-prune-unit-nix-test.sh): it runs when any nix module, the
+    # test, or the workflow that wires it changes.
+    case "$path" in
+      nix/*|scripts/updater-prune-unit-nix-test.sh|.github/workflows/ci.yml)
+        mark guest_unit "$path -> boot prune unit ordering test"
         ;;
     esac
 
@@ -206,6 +217,7 @@ flakehub=${flakehub}
 high_risk_race=${high_risk_race}
 ci=${ci}
 receipts_swap=${receipts_swap}
+guest_unit=${guest_unit}
 sampled_race=${sampled_race}
 sample_bucket=${sample_bucket}
 EOF

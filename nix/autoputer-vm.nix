@@ -917,7 +917,7 @@ EOF
       # ExecStartPre marker, its socket) neither this condition nor the
       # binary's own check (--run-dir) lets it run.
       RefuseManualStart = true;
-      ConditionPathExists = [ "!/run/choir/updater-unit-entered" "!/run/choir/updater.sock" ];
+      ConditionPathExists = [ "!/run/choir/updater-unit-entered" "!/run/choir/updater.sock" "!/run/choir/runtime-unit-entered" ];
     };
     serviceConfig = {
       Type = "oneshot";
@@ -1238,10 +1238,10 @@ EOF
       RUNTIME_LLM_REASONING_EFFORT = "low";
     };
     serviceConfig = {
-      # The runtime marks itself entered too (the same marker the updater unit
-      # writes), so a failed updater unit cannot leave the runtime live with no
+      # The runtime marks itself entered too (its own marker; the updater's
+      # marker keeps its meaning for internal/updater/client.go), so a failed updater unit cannot leave the runtime live with no
       # marker for the boot prune's condition. "-": it never blocks the runtime.
-      ExecStartPre = "-${pkgs.coreutils}/bin/install -m 0600 /dev/null /run/choir/updater-unit-entered";
+      ExecStartPre = "-${pkgs.coreutils}/bin/install -m 0600 /dev/null /run/choir/runtime-unit-entered";
       ExecStart = "${autoputerRuntimeExec}";
       Restart = "on-failure";
       RestartSec = 1;

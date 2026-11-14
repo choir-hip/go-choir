@@ -56,6 +56,8 @@ ci_deploy_script_path() {
     scripts/chaos/*.md) return 1 ;; # the README stays docs, whatever else the line below says
     scripts/chaos/*) return 0 ;;    # the drill scripts (already the Go lane through ci_go_script_path)
     scripts/snapshot-vault*|scripts/choir-shot*|scripts/mail-resend-setup) return 0 ;;
+    # CI runs it (the boot prune's ordering test).
+    scripts/updater-prune-unit-nix-test.sh) return 0 ;;
     scripts/paper-liveness-probe.py|scripts/verify-host-hardening.py|scripts/vmm_confinement_verify.py) return 0 ;;
     scripts/fuzz-broker-protocol.sh|scripts/res10_balloon_stats_probe.sh|scripts/vmmanager-netfilter-test.sh) return 0 ;;
     # Read by a kept script (selftest-guest-token, node_b_host_reboot.py).
