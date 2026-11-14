@@ -2,6 +2,8 @@ package agentcore
 
 import (
 	"encoding/json"
+	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/storetables"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -92,6 +94,69 @@ func TestObservabilityStoreTablesSecondsCannotOverflow(t *testing.T) {
 		}
 		if rep.Reading.BudgetMillis != 100000 {
 			t.Fatalf("seconds=%s gave a budget of %d ms, want the 100000 ms cap: %s", secs, rep.Reading.BudgetMillis, raw)
+		}
+	}
+}
+
+type storeTablesOnlyReading struct {
+	Reading struct {
+		Only    []string `json:"only"`
+		Unknown []string `json:"unknown"`
+		Dropped int      `json:"only_dropped"`
+		Trees   []struct {
+			Name     string `json:"name"`
+			Complete bool   `json:"complete"`
+		} `json:"trees"`
+	} `json:"reading"`
+}
+
+// store_tables_only names the trees to read: parsed from a comma list, blanks
+// dropped, unknown names reported, the list capped, and a restricted reading
+// is not what a later plain read shows.
+func TestObservabilityStoreTablesOnlyNamesTheTrees(t *testing.T) {
+	rt := telemetryRuntime(t, "computer-store-tables-only")
+	raw, ok := readStoreTables(t, rt, "?store_tables=detail&store_tables_only=og_objects,%20,no_such_tree,,og_objects")
+	if !ok {
+		t.Fatal("no store_tables")
+	}
+	var rep storeTablesOnlyReading
+	if err := json.Unmarshal(raw, &rep); err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Reading.Only) != 2 || rep.Reading.Only[0] != "og_objects" || rep.Reading.Only[1] != "no_such_tree" {
+		t.Fatalf("only = %v: %s", rep.Reading.Only, raw)
+	}
+	if len(rep.Reading.Unknown) != 1 || rep.Reading.Unknown[0] != "no_such_tree" {
+		t.Fatalf("unknown = %v", rep.Reading.Unknown)
+	}
+	if len(rep.Reading.Trees) != 1 || rep.Reading.Trees[0].Name != "og_objects" || !rep.Reading.Trees[0].Complete {
+		t.Fatalf("trees = %+v", rep.Reading.Trees)
+	}
+	if again, ok := readStoreTables(t, rt, ""); ok {
+		t.Fatalf("a plain read after only a restricted reading showed one: %s", again)
+	}
+}
+
+func TestObservabilityStoreTablesOnlyIsCappedAndTolerant(t *testing.T) {
+	rt := telemetryRuntime(t, "computer-store-tables-only-cap")
+	names := ""
+	for i := 0; i < 20; i++ {
+		names += fmt.Sprintf("x%d,", i)
+	}
+	for _, q := range []string{names, ",,,", "%00", "a%2Cb"} {
+		raw, ok := readStoreTables(t, rt, "?store_tables=detail&store_tables_seconds=-5&store_tables_only="+q)
+		if !ok {
+			t.Fatalf("only=%q returned no store_tables", q)
+		}
+		var rep storeTablesOnlyReading
+		if err := json.Unmarshal(raw, &rep); err != nil {
+			t.Fatal(err)
+		}
+		if len(rep.Reading.Only) > storetables.MaxOnly {
+			t.Fatalf("only=%q kept %d names", q, len(rep.Reading.Only))
+		}
+		if q == names && (len(rep.Reading.Only) != 16 || rep.Reading.Dropped != 4) {
+			t.Fatalf("cap: %d kept, %d dropped", len(rep.Reading.Only), rep.Reading.Dropped)
 		}
 	}
 }
