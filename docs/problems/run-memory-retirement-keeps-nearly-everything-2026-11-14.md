@@ -112,13 +112,51 @@ Two exclusions hold 57% of all entries: "newest two runs of the agent" and
    compact copy go on. The census keeps the wake's first pass whole and the
    retired totals of every pass.
 
-Named residual: a late management report for a producer run whose memory was
-retired is refused. `persistentManagementHistoricalReportRunStateAllowed`
-(`lifecycle.go:3856-3859`) admits any terminal run with no age bound and
-`lifecycle.go:3933` reads its memory to authenticate the delivered packets; if
-that run finished more than 7 days ago and its memory is retired, the report
-gets `ErrLifecycleInvalidTransition`. Reachable today only if a report arrives
-days after its run ends; the lifecycle behaviour is not changed here.
+Settled in round 2: the late management report is not a residual. Its read of
+the producer run's memory (`lifecycle.go`, `ListRunMemoryEntries(req.SourceRunID)`)
+is inside `!lateEvidenceOnly`, where the producer run must be pending, running
+or passivated (`persistentManagementRunStateAllowed`,
+`engineering_assignments.go:680`); retirement selects only terminal runs. A
+terminal producer run is refused on a live trajectory and reads no memory on a
+terminal one, whatever retirement did. `TestManagementReportOutcomeDoesNotDependOnRetiredRunMemory`
+drives the real report path with a completed producer run before and after its
+memory is retired and requires the same outcome. The round-1 claim of a refusal
+(and the line in the code header) is withdrawn.
+
+Round 2 (both seats) changed:
+
+- One rule for the reader and the selector (`run_memory_carry.go`): the carry
+  kinds (`message`, `compaction`), the copy resolution (`resolveRunCopies`:
+  a non-terminal copy wins, else the newest finish), the order (`FinishedAt`,
+  else `UpdatedAt`, else `CreatedAt`, then run id descending) and the slot key
+  (owner, computer, agent). The reader skips tombstoned copies.
+- A run with nothing a carry uses (no message or compaction row) takes no slot,
+  and the reader skips it. Product effect, named: a run above the source that
+  holds only cursors or receipts used to make the carry take that run (and, with
+  retirement, nothing); now the carry takes the older run's conversation and
+  unions its labels.
+- The group query aggregates the document agent and its owner apart
+  (`MAX(CASE WHEN substr(agent_id,..)=prefix ...)`), still reading only the
+  covering index. When the record is readable its agent must match the rows' or
+  the run is kept (`kept_run_agent_disagrees`, or protected as a carry source).
+- A read error other than not-found aborts the pass; only a decode failure is an
+  unreadable record.
+- The census counts applied runs: planned runs a failed or cancelled append did
+  not reach are `kept_append_failed`, so the wake's totals do not double count.
+  It logs one census per wake.
+- Census JSON renames: `newest_two_of_agent_overlap` is now
+  `carry_sources_by_entry_age`; `kept_newest_two_of_agent_7_30d` and
+  `_over_30d` are `kept_carry_source_7_30d` and `_over_30d`;
+  `kept_run_record_not_found` is gone (`retired_no_run_record`,
+  `kept_no_run_record_in_hold`, `kept_run_record_unreadable`, `kept_run_agent_disagrees`
+  and `kept_append_failed` are new); `first_pass_of_wake` and `wake` are new.
+  Nothing in the repo reads the old names.
+- Pass size: 5,000 runs a pass at 10 runs an op is 500 ops, at least 250 ms apart
+  (two minutes of rest), about 500 tape events a pass and 11,000 for the paper's
+  22-pass backlog (about 11 MB of tape at 1 KB an event). At 100 runs an op the
+  backlog would be 1,100 events but each delete holds the write connection ten
+  times as long (about 3,400 entries, several MB of rows); the 10-run op is kept
+  until a wake on the paper shows the delete time.
 
 ### Expected on the paper under the repaired rule
 
