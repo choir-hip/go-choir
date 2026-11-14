@@ -152,6 +152,8 @@ entered below as lapsed, not scored.
 | C69 | 2026-11-13T16:45Z | lead | landing | The scheduled destroyed-computer sweep (S7) is accepted by both seats within two review rounds, lands and deploys on the first CI attempt, and its first scheduled run on Node B finishes with a report and no error. | 0.50 | 2026-11-14T18:00Z | review outputs, CI run, corpusd journal |
 | C70 | 2026-11-13T17:30Z | lead | landing | Stage 0 of the S4 design (the prune and RecoveryBase count only roots the tape names; an unappended root never evicts one) is accepted by both seats within two review rounds, lands and deploys with no fix commit, and the audit query on Node B then shows every computer's advertised recovery base named by its tape. | 0.45 | 2026-11-17T12:00Z | review outputs, CI run, deploy receipt, the audit query |
 | C71 | 2026-11-13T20:05Z | lead | diagnosis | Nothing prunes the updater's `incoming`, `store` and `releases` directories; a prune that keeps the current release and its rollback predecessor frees at least 12 GiB on d@e's data volume when it deploys (20.1 GiB held at 20:02Z). | 0.60 | 2026-11-15T18:00Z | the `data_volume` reading on d@e before and after |
+| C72 | 2026-11-14T00:07Z | lead | diagnosis | On the paper, more than 35% of tape bytes are whole-object rewrites of content that did not change (`choir.run`, `choir.texture_document`, `choir.commitment_record`, `choir.capture_label`, `choir.lifecycle_command`): read from per-kind writes-per-object and op-size counters once they exist. | 0.65 | 2026-11-17T12:00Z | the R1 counters in `telemetry_batching` on the paper |
+| C73 | 2026-11-14T00:07Z | lead | diagnosis | Run-memory entries and `choir.event` rows together hold more than 60% of the paper's 43.8 GiB guest store (table and index pages), by the per-table reading. | 0.55 | 2026-11-16T12:00Z | the `store_tables` reading on the paper |
 
 ### Settlements
 
@@ -188,7 +190,7 @@ entered below as lapsed, not scored.
 
 ### Scorecard
 
-Second form: 30 claims open, 21 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
+Second form: 32 claims open, 21 settled (recounted 2026-11-13). First form: 12 settled (7 true, 4
 false, 1 partial), 7 lapsed.
 
 | band | claims settled | came true |
