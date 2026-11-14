@@ -46,7 +46,7 @@ without a stored result (`lifecycleTransitionReceipt`).
 
 | Field | Read by | Rebuildable exactly from objects of this or earlier batches? | Dropping it changes returned bytes? | Decision |
 | --- | --- | --- | --- | --- |
-| `Revision` | replay, applied-turn, tests | Yes, when the batch writes the revision: the object at the revision's canonical id has the revision's own JSON as its body and revisions are immutable (no live path rewrites one: `PatchRevisionMetadata` refuses lifecycle revisions, and the legacy `PutRevision` writes a different, unscoped canonical id; only the retired vocabulary cutover could re-encode an object body in place). Read by id, never by head. | No, checked at commit time byte for byte (`bytes.Equal(obj.Body, json.Marshal(revision))`) | **Dropped** when the batch writes it, named by `RevisionID`. Embedded otherwise. |
+| `Revision` | replay, applied-turn, tests | Yes, when the batch writes the revision: the object at the revision's canonical id has the revision's own JSON as its body and revisions are immutable (no live path rewrites one: `PatchRevisionMetadata` refuses lifecycle revisions, and the legacy `CreateTextureRevisionOG` writes a different, unscoped canonical id; only the retired vocabulary cutover could re-encode an object body in place). Read by id, never by head. | No, checked at commit time byte for byte (`bytes.Equal(obj.Body, json.Marshal(revision))`) | **Dropped** when the batch writes it, named by `RevisionID`. Embedded otherwise. |
 | `Revision` of a command that only reads the head (settle, archive, continue: `&head`) | same | The head was written by an earlier batch, not this one; it is immutable too, but proving it needs a read at commit | not applicable | **Kept embedded.** Not a second write in the same batch; no measured cost. |
 | `Document` | replay, applied-turn, tests | **No.** One mutable object overwritten by every revision (`CurrentRevisionID`, `UpdatedAt`); an earlier state is not kept anywhere but the tape. A rebuild would return the later document. | Yes | **Kept.** Small (no body). |
 | `Trajectory` | same | **No.** One mutable object, versioned in place (`LifecycleVersion`, `ReducerSeq`) | Yes | Kept. |
@@ -105,12 +105,15 @@ blocking findings; both are in this record because they shaped the cut.
   "no turn committed" and marked a committed mutation stale
   (`TestFailedTurnReadLeavesTheMutationPendingNotStale` found it).
 - **The blast radius of a missing revision is one run.**
-  `GetAppliedTextureTurnByCallerRun` scans a trajectory's commands newest
-  first but resolves the revision only for the command that matches (kind,
-  Texture turn, agent, active run: `texture_turn.go`, the resolve after the
-  match), so a missing revision breaks recovery for its own run only. (An
-  earlier version of this record said the whole trajectory aborts; that was
-  wrong.)
+  `GetAppliedTextureTurnByCallerRun` lists a trajectory's commands by paging
+  on canonical id (hash order, not time) and walks the list from its end. It
+  resolves the revision only for the command that matches (kind, Texture
+  turn, agent, active run: `texture_turn.go`, the resolve after the match), so
+  a missing revision breaks recovery for its own run only. (An earlier version
+  of this record said the whole trajectory aborts, and another said "newest
+  first"; both were wrong.) Residual, pre-existing and not changed here: a run
+  with several Texture-turn commands can match and resolve a turn that is not
+  its newest, because the walk order is hash order.
 - **After a transient read error at idle passivation the mutation stays
   pending** until the next wake or restart reconciles it; completion is never
   blocked and nothing loops. A pending row keeps the host from calling the
@@ -219,3 +222,78 @@ previous release without step 1 reads a slim command as a command with no
 revision and no error. Landing both in one train makes that previous release
 the one before step 1. Step 2 must never be reverted past step 1 once
 deployed.
+
+## The d@e proof for step 2 (operator procedure)
+
+Run on d@e only, never the paper or the owner's computers. What to deploy
+where is the coordinator's step; these are the checks. Step 2 may not reach any
+computer until step 1 is the adopted release (landing precondition above). The
+steps use the product API with d@e's key as `scripts/chaos/README.md` does
+(the key is read from `.env` into a variable by the harness, never printed),
+and the existing drills `scripts/chaos/run s1-guest-crash` and
+`scripts/chaos/run s3-planned-restart`, run with `--execute` after a dry run.
+I have not run this procedure; it is written from the repo's drills and
+counters and must be run before step 2 reaches the paper.
+
+1. **Before the step 2 deploy, read the baseline.**
+   `GET /api/runtime/observability` on d@e: record
+   `telemetry_batching.tape_op_bytes_by_object_kind["choir.lifecycle_command"]`
+   and `tape_ops_by_object_kind["choir.lifecycle_command"]` (mean command op
+   bytes = bytes / ops), and `lifecycle_command_forms` (absent before step 2).
+   Record `GET /api/computers/<d@e>/self-development/replay-completeness`
+   `.result.status`.
+2. **After the deploy, drive Texture writes.** Create and revise at least
+   three Texture lifecycle documents through the product API
+   (`POST /api/texture/lifecycle-documents`, then prompt-bar revisions), as
+   the chaos harness does, and keep each `client_request_id` and `doc_id`, and
+   the head revision id and `content` hash of each document.
+3. **Counters, what must read.** `lifecycle_command_forms.slim` increased by
+   the number of Texture commands written (one start per document plus one per
+   revision turn). `embedded_mismatch` must stay 0: any nonzero value means
+   the byte check refused a batch and the saving is silently lost for it, so
+   stop. `embedded_head` and `no_revision` may rise (settlements, work
+   commands). The mean `choir.lifecycle_command` op bytes must fall against
+   step 1's baseline by about the revision body size per Texture command; if
+   it did not fall while `slim` rose, the counter or the op accounting is
+   wrong.
+4. **Replay comparison.** For every document from step 2, re-submit its create
+   with the same `client_request_id`: the response must be the same `doc_id`
+   and the same head revision id (idempotent re-submit rebuilds the revision
+   by id). Then write one further revision to one document and re-submit the
+   earlier create again: the response must still name the original revision,
+   not the later one. Any difference fails the drill.
+5. **Replay completeness.** `replay-completeness` `.result.status` must be
+   `equivalent`, `.eligibility.unknown_tables` empty. Anything else fails it.
+6. **Crash and planned restart.** `scripts/chaos/run s1-guest-crash --execute`
+   then `scripts/chaos/run s3-planned-restart --execute`. Both must pass
+   their own checks, and after each, repeat steps 4 and 5 and re-read each
+   document's head revision id and `content` hash: they must equal step 2's.
+7. **Destroy and restore, with the CLI (`cmd/choir/commands.go`).** d@e is
+   `computer-59c902c5d46caecc0a180a8557164e72`; D=that id. Both acts below are
+   owner acts and destructive (`ownerAct(computerCheckpointed(...))`): the key
+   used needs `owner:acts` (admin does not imply it). If d@e's key lacks it,
+   the owner runs them; do not use another key. Run only on d@e.
+   a. Record each document's head revision id and `content` hash (step 2) and
+      the `slim` count.
+   b. List checkpoints: `choir computer checkpoints --computer $D`. Pick one
+      taken after the step 2 writes whose verdict the host marks restorable.
+      Fetch it: `choir computer checkpoints --computer $D --digest <digest>
+      > ckpt.json`.
+   c. Write one more revision to one document (the post-checkpoint write).
+   d. Restore: `choir computer restore --computer $D --checkpoint-file
+      ckpt.json`. This restores VM-local state and the served SPA from the
+      checkpoint and rematerializes from the tape.
+   e. Rebuild from the tape alone: `choir computer rematerialize-from-tape
+      --computer $D --checkpoint-file ckpt.json` (the same artifact), and
+      wait for `choir computer status --computer $D` to read active.
+   f. After d and again after e: repeat steps 4 and 5. Every document written
+      before the checkpoint returns its step 2 head revision id and `content`
+      hash; the post-checkpoint revision is absent after d. A re-submit that
+      returns no revision, a 500, a `stored revision unavailable` reason, or a
+      differing hash fails the drill. The `slim` counter restarts from the
+      restored process, so compare documents, not the counter.
+   Byte-level restore of the host's stores, if wanted, is
+   `scripts/off-host-restore-drill.sh <snapshot> tape` on Node B under the
+   memory cap in its header. I have not run any of this.
+8. **Failure means stop.** Any failed check above blocks step 2 from the
+   paper; roll d@e back to step 1 (never past it).
