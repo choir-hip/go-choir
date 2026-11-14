@@ -105,11 +105,22 @@ Two exclusions hold 57% of all entries: "newest two runs of the agent" and
    Each pass keeps its own duty-cycle rest between ops; the pass's group read
    is a covering-index scan. No setting.
 
+As built: `runRecordForRetirement` (owner-scoped id, then `run_id` metadata,
+owner's live copies only, a non-terminal copy wins); `retired_no_run_record`
+replaces `kept_run_record_not_found`; `kept_run_record_unreadable` keeps a
+record that does not decode; the protected set is built only for agents where
+`deskmanifest.IsDocumentInbox(agent_id)`; `RetireRunMemoryBacklog` repeats
+passes (one minute gap) until a pass retires nothing or leaves no run over the
+cap, and `StartTelemetryRetirement` calls it in place of one pass.
+
 Expected on the paper if belief 1 holds: of the 60,451 + 2,468 runs held by
 the newest-two rule, only document agents' runs remain protected; of 44,792
 no-record runs, those with a terminal record past the window retire
 (`retired`) and any still unseen retire as `retired_no_run_record`. Backlog is
-about 2.9 M entries in about 105,000 runs: 21 passes at 5,000 runs.
+about 2.94 M retirable entries (1,536,498 + 62,479 + 1,339,446) in 107,711
+runs (60,451 + 2,468 + 44,792): 22 passes at 5,000 runs. Upper bound: runs of
+document custodian agents (at most two each) and runs whose record is
+passivated or blocked stay, and the census does not say how many.
 Each pass is paced at least 250 ms per op of 10 runs, so 500 ops is two to
 ten minutes; back to back that is a few hours, not 21 days.
 
