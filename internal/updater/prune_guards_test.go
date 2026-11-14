@@ -24,7 +24,7 @@ import (
 )
 
 func TestPruneRefusesWhileTheDaemonIsLive(t *testing.T) {
-	for _, marker := range []string{"updater.sock", "updater-unit-entered"} {
+	for _, marker := range []string{"updater.sock", "updater-unit-entered", "runtime-unit-entered"} {
 		u, root := newPruneUpdater(t)
 		digest := stageTestRelease(t, u, root, "r1", false)
 		setCurrent(t, root, digest)
