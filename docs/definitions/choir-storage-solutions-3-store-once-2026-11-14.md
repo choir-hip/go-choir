@@ -4,10 +4,10 @@ definition_version: 7
 readiness: executable
 
 review:
-  reviewer: none
-  frozen_ref: none
-  verdict: none
-  evidence_ref: owner statement 2026-11-14 (authority is the owner's direction; the design this file follows is reviewed at station T0, before any format change is built)
+  reviewer: omp-gemini4-hydrogen and omp-deepseek-v41-flash, on the design this file follows
+  frozen_ref: 8203f53fd
+  verdict: send_back
+  evidence_ref: both seats REPAIR at 2026-11-14T01:25Z; the design is at revision 2 and this file's stations follow it. T0 and T7 run on the owner's word; no red station builds until a seat accepts the re-ranked design (station T0)
 
 start:
   captured_at: 2026-11-14T01:15Z
@@ -45,26 +45,23 @@ finish:
     predecessor; and a per-computer byte budget in docs/ACTIVE.md with the
     measured value beside each line.
   acceptance:
-    - action: read the paper's tape counters over a day of ordinary work after R1 and R4 are deployed
-      proves: tape growth is under 1.5 GB a day (3.6 at the start) and no object kind writes more than twice its changed bytes
+    - action: read the paper's per-op tape counters over a day of ordinary work after T1 and T2 are deployed
+      proves: carried and duplicated bytes are under 5% of payload bytes, no kind writes more than twice its changed bytes, and tape growth is under a number precommitted in the calibration ledger from the T0 counters (3.6 GB a day at the start)
       evidence_class: deployed, the guest's observability counters and Node B du
-    - action: read the paper's store size and its per-table reading after R2 is deployed, seven days apart
-      proves: the store is under 8 GiB and the second reading is within 10% of the first (43.8 GiB and rising at the start)
+    - action: read the paper's store by table after T3 is deployed, seven days apart
+      proves: the second reading is within 10% of the first, and every table over 1 GiB has a named retirement rule or a named reason to stay (43.8 GiB and rising at the start; the size target is precommitted from the T0 reading)
       evidence_class: deployed, store_tables detail
-    - action: time the paper's snapshot after R2
-      proves: under 10 minutes (37 at the start)
-      evidence_class: deployed, snapshot_recorded events
-    - action: count the paper's receipt rows and bytes after R3
-      proves: under 0.1 GB (about 14 GB at the start)
+    - action: count the paper's receipt rows and bytes after T4
+      proves: under the number precommitted from the retained set (about 14 GB at the start)
       evidence_class: deployed, host metadata (pg_total_relation_size)
-    - action: on d@e, after every format or retention change, destroy the guest disk and restore from the latest snapshot plus the tape tail; then replay the whole tape into an empty store
-      proves: the restore address works, the local head equals the platform head, and replay of old and new op formats yields the same objects byte for byte
+    - action: on d@e, after every change to what an op carries or to retention, destroy the guest disk and restore from the latest snapshot plus the tape tail; then replay the whole tape into an empty store
+      proves: the restore address works, the local head equals the platform head, and replay of old and new ops yields the same objects and content hashes
       evidence_class: deployed drill on d@e
-    - action: on d@e, open a run trace older than its retirement moment
-      proves: the product answers from the tape with no operator act
-      evidence_class: deployed, product path
+    - action: on d@e, start a run that carries a conversation by reference and compare the messages the model is sent with the copying path
+      proves: byte-equal messages
+      evidence_class: test in the repo and a deployed run on d@e
     - action: read d@e's data volume after twelve updates with no hand cleanup
-      proves: the updater directory holds two releases and is under 2 GiB (20.5 at the start), and the volume's use does not grow per update
+      proves: the updater directory holds at most three releases and is under 2 GiB (20.5 at the start), and the volume's use does not grow per update
       evidence_class: deployed, data_volume detail
   rollback: >
     Each station reverts by commit. A tape format change keeps the old
@@ -122,72 +119,64 @@ boundaries:
 
 stations:
   - id: T0
-    name: review the design, count the rewrites
-    scope: two seats on docs/design/store-once-2026-11-14.md; per-kind mean op size and writes per object in the tape counters; land the per-table store reading and read d@e and the paper
-    class: green and yellow (the counters), orange (the reading)
-    review: two seats on the design; none on the counters; one seat on the reading (done)
+    name: count honestly, then re-rank
+    scope: per-op bytes by kind for every op in a batch (the current counter gives a batch to its first op), writes per object, run-memory bytes split carried and new; land the per-table store reading and read d@e and the paper; read the paper's retirement log and watermarks; then re-rank the design and get one seat's accept
+    class: yellow (counters), orange (the reading), green (the re-rank)
+    review: two seats on the design (done, both REPAIR, revision 2 written); one seat on the re-ranked revision
     depends_on: []
-    carrier: lane/store-size (one seat accepted)
+    carrier: lane/store-size-land ceb5288c7 (one seat accepted, rounds 1 and 2); lane/rewrite-counters (building)
     status: working
   - id: T1
-    name: a run is written once
-    scope: R1 for choir.run. Prompt, result and metadata by digest or by changed-field op; an upcast for old events; replay completeness on d@e
+    name: stop copying forward
+    scope: a new run carries its conversation by naming the source run and entry range, with the retirement rule keeping entries a live run names; a lifecycle command stops embedding the document, revision and events its own batch writes; a tool result names its run-memory entry
     class: red
     review: two seats
-    depends_on: [T0]
+    depends_on: [T0, coalescing deployed]
     carrier: none yet
     status: pending
   - id: T2
-    name: the other kinds that rewrite themselves
-    scope: R1 for choir.texture_document, choir.commitment_record, choir.lifecycle_command, choir.capture_label, choir.source_schedule, in order of measured bytes; a gate that fails a new kind whose ops embed a growing list
+    name: stop writing mutable objects whole
+    scope: a patch op for run updates applied inside the store's transaction, live and on replay, with a witness that the content hash matches a whole write (or fewer intermediate run writes, decided from the T0 numbers); head objects that embed a growing list (choir.story_library_head) split into an append-only kind; a gate that fails a new kind that embeds a growing list
     class: red
     review: two seats
-    depends_on: [T1]
+    depends_on: [T0, T1]
     carrier: none yet
     status: pending
   - id: T3
-    name: the guest store is a working set
-    scope: R2. A read path from the product to retired history on the tape; then retirement moments for run memory, telemetry rows and superseded revisions; freed pages leave the file. Resolves store.event_table and store.telemetry_partitions (ship on or delete)
+    name: the guest store, from the reading
+    scope: no design until T0's reading; then retirement rules for whatever the reading shows uncovered; an index from run and trajectory to tape positions before any widening of retirement; store.event_table and store.telemetry_partitions shipped on or deleted
     class: red
     review: two seats
     depends_on: [T0]
-    carrier: design notes "bounding the guest store" on lane/store-size, not on main yet
+    carrier: design notes "bounding the guest store" on lane/store-size-land
     status: pending
   - id: T4
-    name: receipts by segment
-    scope: R3. One receipt per sealed segment; per-event rows only for the unsealed tail. Takes over S6 of part 2
+    name: receipts, with the retained set named
+    scope: keep per-event rows for the latest two snapshots to the head, checkpoint head receipts, every non-batch event and live idempotency keys; replace the wide row and four indexes of old batch events with a slim sequence-to-digest row. Takes over S6 of part 2
     class: red
     review: two seats
     depends_on: [coalescing deployed]
     carrier: none yet
     status: pending
   - id: T5
-    name: amortise the toll
-    scope: R4. Coalescing (lands under part 2 S5); then a per-kind dictionary or per-segment compression of sealed payloads, with a version byte. Takes over the compression half of S8 of part 2
-    class: red
-    review: two seats
-    depends_on: [T1]
-    carrier: lane/s5-coalesce-land for coalescing
-    status: working
-  - id: T6
-    name: one home for conversation content
-    scope: R5. A tool-result telemetry event names the run-memory entry instead of carrying the output again
-    class: red
-    review: one seat
-    depends_on: [T1]
+    name: compression, measured first
+    scope: payloads are already compressed singly before sealing; measure the share of payload bytes in small plaintexts after coalescing and build a shared dictionary only if it is large
+    class: yellow (the measurement)
+    review: none for the measurement
+    depends_on: [coalescing deployed]
     carrier: none yet
     status: pending
   - id: T7
     name: a user's data volume is bounded
-    scope: the updater prune to current and predecessor; the host re-supplies a pruned release on demand so a restore to it works; a budget line per directory of the data volume, each with its mechanism
+    scope: the updater prune to current and its predecessors (at most three releases); the host re-supplies a pruned release on demand so a restore to it works; a budget line per directory of the data volume, each with its mechanism
     class: red
     review: two seats
     depends_on: []
-    carrier: lane/updater-prune (round 2 of review)
+    carrier: lane/updater-prune (review round 3 pending; both seats REPAIR on rounds 1 and 2)
     status: working
   - id: T8
     name: find the next one
-    scope: a standing read. After each landing, read the per-table store reading, the tape counters by kind and the data volume on d@e and the paper; anything that grows without a named mechanism gets a problem record and a station here
+    scope: a standing read. After each landing, read the per-table store reading, the per-op tape counters and the data volume on d@e and the paper; anything that grows without a named mechanism gets a problem record and a station here
     class: green
     review: none
     depends_on: [T0]
@@ -206,9 +195,9 @@ decisions_for_the_owner:
     default: it refuses cleanly until the host can re-supply the release (T7); no cushion of old releases is kept
 
 observation_plan: >
-  When T1 to T7 have landed and passed their deployed proofs, the mission
+  When T1 to T4 and T7 have landed and passed their deployed proofs, the mission
   moves to observing for seven days. Readings: the paper's tape bytes a day,
-  store size, snapshot time, receipt bytes; d@e's data volume. Reader: the
+  store size by table, receipt bytes; d@e's data volume. Reader: the
   hourly status tick. Tripwire: a failed replay or restore drill, a kind
   whose writes per object exceed two, or a day over the budget returns the
   mission to working.
@@ -223,38 +212,39 @@ now:
     state: none
   conjecture:
     id: SS3-C1
-    calibration_claim: C72
+    calibration_claim: C74
     claim: >
-      Most of what a computer stores is unchanged content written again and
-      history that no running computer reads. If ops carry only what
-      changed and the guest store keeps a working set, the paper's daily
-      growth falls from about 7 GB to under 2.5 and its store from 43.8 GiB
-      to under 8, with the tape still whole and replay complete.
-    test: the first two acceptance items
+      Most repeated bytes on the tape are content that already has a home:
+      conversation tails copied from run to run, results embedded beside
+      the objects they describe, and a few mutable objects written whole.
+      Naming instead of copying, with coalescing, brings the paper's tape
+      growth to well under half of 3.6 GB a day with the tape whole and
+      replay complete. What fills the guest store is not yet known.
+    test: the first acceptance item; C74 for the carried share
     edge: missing_oracle
-    delta_o: writes per object and mean op size by kind in the tape counters; the per-table store reading (both in T0)
+    delta_o: per-op bytes by kind and the carried and new split (T0); the per-table store reading (T0)
     scope_if_supported: storage stops being a station of its own; a new kind is checked by a gate
     status: active
-    evidence_refs: [docs/design/store-once-2026-11-14.md, docs/problems/the-papers-store-doubles-in-eleven-days-2026-11-13.md]
+    evidence_refs: [docs/design/store-once-2026-11-14.md, docs/evidence/tape-write-census-2026-11-12.md]
   decision:
-    what: write less before keeping less; nothing is retired before its read path exists; the tape is the one archive and stays whole
+    what: name content instead of copying it; nothing is retired before its read path exists; the tape is the one archive and stays whole; no content store outside the tape
     kind: architecture
     status: proposed
     evidence_ref: docs/design/store-once-2026-11-14.md
     owner_ratification_ref: none yet (the design is the lead's; T0 reviews it)
   belief:
     believed_state: >
-      About half of tape bytes are objects rewritten whole on each state
-      change, and the guest store keeps every row it has ever projected.
-      Both are inferred from one 2.9-hour window and an unmeasured store.
-    main_uncertainty: what fills the paper's store by table; whether a run's replay can be made byte-identical across the format change without touching every reader of RunRecord
-    next_observation: store_tables detail on d@e and the paper (claim C73); writes per object by kind
+      The first ranking was wrong: it came from a counter that gives a
+      batch's bytes to its first op, and three of the five kinds it named
+      are written once (claim C72 false). Retirement already runs daily on
+      the guest store. The duplicates are read from code, not measured.
+    main_uncertainty: the measured share of each duplicate; what fills the paper's store after a retirement that runs; whether retirement is running on the paper at all
+    next_observation: store_tables detail on d@e and the paper (claim C73); the per-op counters; the paper's retirement log
   blocker_or_risk: >
-    The design has had no review. T1 changes the tape format, the most
-    protected surface in the system; a mistake there is silent until a
-    replay. The read path in T3 does not exist and is the largest piece of
-    new work.
-  next_action: land the three lanes in flight, read the store by table, send the design to two seats.
+    No red station may build until the re-ranked design has a seat's
+    accept. Carry by reference changes what an agent's conversation is
+    built from; a mistake there changes model input silently.
+  next_action: land coalescing and the store reading, read both computers by table, land the per-op counters, re-rank.
 
 receipts: []
 
@@ -274,10 +264,9 @@ weak_measures:
 # Storage solutions, part 3: store once
 
 Part 2 stopped the drain and bounds what the host keeps. This mission
-changes what is written in the first place. The frame, the measurements and
-the five refactors are in
+changes what is written in the first place. The frame, what the review
+corrected and the refactors are in
 [store-once-2026-11-14](../design/store-once-2026-11-14.md). Part 2 keeps
 its stations S4 (snapshots), S5 (coalescing) and S7 (the collector) and its
-seven-day reading; its S6 and the compression half of S8 continue here as
-T4 and T5. Move history goes to the
+seven-day reading; its S6 continues here as T4. Move history goes to the
 [ledger](choir-storage-solutions-3-store-once-2026-11-14.ledger.md).
