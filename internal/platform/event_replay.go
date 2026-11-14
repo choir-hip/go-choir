@@ -36,7 +36,7 @@ func (s *EventArtifactService) EventsPage(ctx context.Context, computerID string
 	}
 	var credentialEpoch uint64
 	if afterSequence > 0 {
-		if err := s.platform.store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM computer_event_append_receipts WHERE computer_id=? AND sequence<=? AND event_kind=?`, computerID, afterSequence, computerevent.EventKeyRevoked).Scan(&credentialEpoch); err != nil {
+		if err := s.platform.store.db.QueryRowContext(ctx, receiptKeyRevokedCountSQL, computerID, afterSequence, computerevent.EventKeyRevoked).Scan(&credentialEpoch); err != nil {
 			return nil, fmt.Errorf("event replay: resolve credential epoch: %w", err)
 		}
 	}
