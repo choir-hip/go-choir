@@ -148,6 +148,7 @@ var goChoirSystemdUnits = []string{
 	"systemd-networkd-wait-online.service",
 	"network-online.target",
 	"go-choir-extract-cmdline.service",
+	"go-choir-updater-prune.service",
 	"go-choir-guest-receipt-signer-state-migration.service",
 	"go-choir-guest-receipt-signer.service",
 	"go-choir-verifier-signer.service",

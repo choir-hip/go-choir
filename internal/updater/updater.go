@@ -160,6 +160,11 @@ type Updater struct {
 	storeSchemaPath string
 }
 
+// restagedOutcome marks the journal RestagePinnedRelease writes: a swap of
+// `current` that is no apply, recorded so the release it came from stays the
+// rollback predecessor.
+const restagedOutcome = "restaged"
+
 func New(root, computerID, realizationID string, service ServiceManager, health HealthProber, signer ReceiptSigner) (*Updater, error) {
 	return newUpdater(root, computerID, realizationID, service, health, signer, "")
 }
@@ -294,6 +299,7 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 			return refuse(fmt.Errorf("updater: resolve booted base image digest: %w", digestErr).Error())
 		}
 		if booted != request.Manifest.BaseImageManifestDigest {
+			u.dropStagedSource(request.SourceDir)
 			return refuse(fmt.Sprintf("updater: release base %s does not match booted base %s", request.Manifest.BaseImageManifestDigest, booted))
 		}
 	}
@@ -304,24 +310,34 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 	// the vm-3dc68688 stale-binary failure class, caught pre-restart instead
 	// of by a post-mortem health probe.
 	if cerr := u.checkStateCompatibility(request.Manifest); cerr != nil {
+		u.dropStagedSource(request.SourceDir)
 		return refuse(cerr.Error())
 	}
 
 	releaseDigest := request.Manifest.ContentDigest
-	sourceDir, serr := u.trustedSourceDir(request.SourceDir, releaseDigest)
-	if serr != nil {
-		return refuse(serr.Error())
-	}
-	request.SourceDir = sourceDir
 	releaseDir := filepath.Join(u.root, "releases", releaseDigest)
-	if serr := u.stageRelease(request.SourceDir, releaseDir, request.Manifest); serr != nil {
-		return refuse(serr.Error())
+	// A release already staged and verified needs no source: a resumed apply
+	// (its source was dropped when it first staged) and a replay both land
+	// here. Otherwise the source must be trusted, and once the release is
+	// verified and staged the source is dropped (prune.go).
+	if verifyManifest(releaseDir, request.Manifest) != nil {
+		sourceDir, serr := u.trustedSourceDir(request.SourceDir, releaseDigest)
+		if serr != nil {
+			return refuse(serr.Error())
+		}
+		request.SourceDir = sourceDir
+		if serr := u.stageRelease(request.SourceDir, releaseDir, request.Manifest); serr != nil {
+			u.dropStagedSource(request.SourceDir)
+			return refuse(serr.Error())
+		}
+		u.dropStagedSource(sourceDir)
 	}
 	// Layered release: replay the app-layer narchive into the private store
 	// and GC-root it before the pointer swap. A failure here leaves `current`
 	// untouched and never publishes a restart — the running release keeps
 	// serving (fail-closed on the data path).
 	if serr := u.materializeReleaseClosure(releaseDir, request.Manifest); serr != nil {
+		u.dropStagedSource(request.SourceDir)
 		return refuse(serr.Error())
 	}
 	if !found {
@@ -941,6 +957,16 @@ func classifyPinnedReadError(err error) error {
 // stamped ops are replayed into it, so both are passed. An empty path is
 // skipped; none skips the check.
 func RestagePinnedRelease(root, releaseDigest string, storeSchemaPaths ...string) error {
+	return restagePinnedRelease(root, releaseDigest, true, storeSchemaPaths)
+}
+
+// RestagePinnedReleaseBestEffort is RestagePinnedRelease for a swap-back, where
+// the caller cannot refuse: a restage that cannot be journaled still swaps.
+func RestagePinnedReleaseBestEffort(root, releaseDigest string, storeSchemaPaths ...string) error {
+	return restagePinnedRelease(root, releaseDigest, false, storeSchemaPaths)
+}
+
+func restagePinnedRelease(root, releaseDigest string, strict bool, storeSchemaPaths []string) error {
 	root = filepath.Clean(root)
 	if root == "." || !filepath.IsAbs(root) {
 		return fmt.Errorf("updater: restage requires an absolute updater root")
@@ -955,7 +981,44 @@ func RestagePinnedRelease(root, releaseDigest string, storeSchemaPaths ...string
 		}
 	}
 	ensureReleaseEntrypoint(root, releaseDir, manifest)
+	if err := recordRestage(root, releaseDigest); err != nil && strict {
+		return fmt.Errorf("updater: restage not journaled, nothing swapped: %w", err)
+	}
 	return swapCurrentPointer(root, releaseDir)
+}
+
+// recordRestage journals a swap of `current` to releaseDigest that is no apply,
+// so the release it comes from stays the one rollback predecessor the prune
+// keeps (a boot frontend follow, a tape restore, a base restore, a package
+// migration). Best effort: a restage that cannot be recorded is still done.
+func recordRestage(root, releaseDigest string) error {
+	prior, priorTarget, err := currentReleaseOf(root)
+	if err != nil {
+		return err
+	}
+	if prior == "" || prior == releaseDigest {
+		return nil
+	}
+	suffix := make([]byte, 8)
+	if _, err := rand.Read(suffix); err != nil {
+		return err
+	}
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	key := "restage-" + now.Format("20060102T150405.000000") + "-" + hex.EncodeToString(suffix)
+	journal := operationJournal{
+		Phase: "completed", PriorReleaseDigest: prior, PriorReleaseTarget: priorTarget,
+		TargetReleaseDigest: releaseDigest, StartedAt: now,
+		Result: ApplyResult{ReleaseDigest: releaseDigest, PriorReleaseDigest: prior, Outcome: restagedOutcome},
+	}
+	if err := os.MkdirAll(operationsDir(root), 0o700); err != nil {
+		log.Printf("updater: restage journal: %v", err)
+		return err
+	}
+	if err := writeJournal(filepath.Join(operationsDir(root), safeName(key)+".json"), journal); err != nil {
+		log.Printf("updater: restage journal: %v", err)
+		return err
+	}
+	return nil
 }
 
 // ensureReleaseEntrypoint backfills releaseDir/layering-entrypoint for a
