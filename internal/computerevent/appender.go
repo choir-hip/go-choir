@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -215,7 +216,11 @@ type ComputerEventAppender struct {
 	replayAppliedRows  uint64 // rows applied during this Reconstruct call
 	// replayPayloadNanos is time spent fetching projection-batch payloads
 	// from the host during a replay: one request per event.
-	replayPayloadNanos       atomic.Int64
+	replayPayloadNanos atomic.Int64
+	// replayRateBits is the float64 bits of the last replay's events/s that
+	// applied at least minReplayRateEvents (0: none yet). The snapshot
+	// producer reads it to estimate how long a restore's tail takes.
+	replayRateBits           atomic.Uint64
 	replayCheckpointEvery    int
 	replayCheckpointInterval time.Duration
 }
@@ -450,6 +455,32 @@ func (a *ComputerEventAppender) ReplaySnapshot() ReplaySnapshot {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return ReplaySnapshot{InProgress: a.replayActive, Sequence: a.replaySeq, CommittedSequence: a.replayCommittedSeq, AppliedRows: a.replayAppliedRows}
+}
+
+// minReplayRateEvents is the fewest events a replay must apply for its rate to
+// count: a replay of a few events measures startup, not the apply rate.
+const minReplayRateEvents = 1000
+
+// recordReplayRate keeps the rate of a replay that applied enough events.
+func (a *ComputerEventAppender) recordReplayRate(applied uint64, elapsed time.Duration) {
+	if a == nil || applied < minReplayRateEvents || elapsed <= 0 {
+		return
+	}
+	a.replayRateBits.Store(math.Float64bits(float64(applied) / elapsed.Seconds()))
+}
+
+// ReplayRate is the events per second of the last replay on this computer that
+// applied at least minReplayRateEvents (the figure the "replay applied" log
+// line prints). False when no such replay has run since the process started.
+func (a *ComputerEventAppender) ReplayRate() (float64, bool) {
+	if a == nil {
+		return 0, false
+	}
+	bits := a.replayRateBits.Load()
+	if bits == 0 {
+		return 0, false
+	}
+	return math.Float64frombits(bits), true
 }
 
 // SetReplayCheckpointPolicy configures the durable checkpoint cadence during a
@@ -1420,6 +1451,7 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 			return
 		}
 		elapsed := time.Since(replayStarted)
+		a.recordReplayRate(snap.AppliedRows, elapsed)
 		log.Printf("computer event appender: replay applied %d events through seq=%d in %s (%.0f events/s; fetch %s in %d pages, payload prefetch %s, apply %s: reduce %s, verify %s, prepare %s, finalize %s of which payload fetch %s; commit %s)", snap.AppliedRows, snap.Sequence, elapsed.Round(time.Millisecond), float64(snap.AppliedRows)/max(elapsed.Seconds(), 1e-3),
 			replayFetch.Round(time.Millisecond), replayPages, replayPrefetch.Round(time.Millisecond), replayApply.Round(time.Millisecond),
 			replayReduce.Round(time.Millisecond), replayVerify.Round(time.Millisecond), replayPrepare.Round(time.Millisecond), replayFinalize.Round(time.Millisecond),

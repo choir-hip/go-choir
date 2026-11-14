@@ -174,7 +174,7 @@ func TestFloorDoesNotDelayTheEventCeilingOrTheInterval(t *testing.T) {
 	// And so does the interval.
 	h.set.TailEvents = 0
 	h.set.Interval = time.Hour
-	h.head++
+	h.head += 10
 	clock.now = clock.now.Add(snapshotTickEvery + time.Hour)
 	if outcome, detail := h.run(&p, clock.now); outcome != snapshotTaken || !strings.Contains(detail, "interval") {
 		t.Fatalf("interval inside the floor: outcome=%s detail=%q", outcome, detail)

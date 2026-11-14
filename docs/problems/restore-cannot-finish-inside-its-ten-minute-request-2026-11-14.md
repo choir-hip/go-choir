@@ -188,3 +188,21 @@ behavior of the producer; the snapshot and its tape record are unchanged).
 Consequence for the trigger: the cost of a capture (seconds on d@e, 37 minutes
 and several GB on the paper) is known after the fact from `Stats`, so the
 trigger can derive its own floor between captures from the last capture.
+
+## Repair: snapshot due by replay time (lane/snapshot-by-replay-time)
+
+The producer estimates a restore's replay as tail events over a replay rate
+(this computer's last measured replay of at least 1,000 events, otherwise 113
+events/s, d@e's slowest recent reading) and takes a snapshot when that exceeds
+four minutes (27,120 events at 113/s): ten minutes of request, four of scan and
+install, one for the witness and flip, one of margin. The 540,000-event ceiling
+and the seven-day interval stay and fire regardless. Replay-time captures keep a
+floor from the last capture's own cost: the larger of ten times its duration and
+its sealed bytes spread over 8 GiB a day. d@e (11 s, a small store): minutes to
+under an hour, so the bound decides (about every four hours at 1.8 events/s).
+The paper (37 min 40 s, 4.8 GB, 3.3 events/s): 13.4 hours, so the floor decides,
+about two captures a day against one every 45 hours by the ceiling, 4.6% of wall
+time, and its restore tail stays above the bound; the producer logs
+"snapshot floor-limited" and the observability block says `floor_limited`.
+Observability `snapshot_producer` carries the state, including how long a due
+snapshot has been refused. Not verified on a live computer.

@@ -904,6 +904,10 @@ type guestObservabilityResponse struct {
 	// kept it), with runs and rows. Always present; no passes and no times
 	// before the first pass since boot. Read-only.
 	RunMemoryRetirement *store.RunMemoryCensus `json:"run_memory_retirement,omitempty"`
+	// SnapshotProducer is the snapshot producer's state: the newest snapshot,
+	// the tail and its estimated replay time, whether a snapshot is due and
+	// why one was not taken. Always present.
+	SnapshotProducer *snapshotProducerStatus `json:"snapshot_producer,omitempty"`
 	// WAL is the state file's WAL size and the WAL bound's checkpoints
 	// (store/wal_bound.go).
 	WAL *store.WALStats `json:"wal,omitempty"`
@@ -1142,6 +1146,10 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		resp.ToolLayers = []toolLayerObservability{}
 	}
 	unanswered := func(name string) { resp.Unanswered = append(resp.Unanswered, name) }
+	{
+		st := h.rt.snapshots.status(time.Now().UTC())
+		resp.SnapshotProducer = &st
+	}
 	if h.rt.store != nil {
 		resp.StorePools = h.rt.store.PoolStats()
 		telemetry := h.rt.store.TelemetryStats()
