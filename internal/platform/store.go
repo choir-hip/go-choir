@@ -51,6 +51,10 @@ type Store struct {
 	// receiptCompaction is the append-receipt compaction policy
 	// (receipt_compaction.go); nil compacts nothing.
 	receiptCompaction atomic.Pointer[ReceiptCompactionPolicy]
+	// appendTimes holds the recent duration of each computer's append
+	// transaction: the signal the receipt index migration reads
+	// (receipt_index_health.go).
+	appendTimes appendTimings
 	// receiptIndexState is 0 until the receipt index migration starts, 1 while
 	// it runs and 2 once it is done (receipt_index_migration.go).
 	receiptIndexState atomic.Int32

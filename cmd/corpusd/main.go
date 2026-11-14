@@ -250,5 +250,11 @@ func main() {
 	ogHandler.ConfigureCaptureIndex(store)
 	platform.RegisterObjectGraphRoutes(s, ogHandler)
 
+	// The receipt table's index swap is its own goroutine, started as the
+	// listener starts: it takes minutes on the host's 30 GB table, must not hold
+	// the retrieval steps back, and takes its baseline of append times from the
+	// appends this listener serves (receipt_index_migration.go).
+	store.StartReceiptIndexMigration(context.Background())
+
 	s.Start()
 }
