@@ -318,3 +318,25 @@ self-test, `scripts/receipts-index-swap-test`, runs against a throwaway
 PostgreSQL and runs in CI (the `Receipts Index Swap Script` job, selected when
 the script, its test, the workflow or the index definitions change); the script
 and its test are not docs-like and not a deploy by themselves.
+
+## The swap as run, 2026-11-14
+
+Run by the lead from 22:01Z to 22:14Z under N3, claim C88 entered first.
+
+- Before: staging and `/opt/go-choir` on c1ea7a418; corpusd up since 21:31:20Z;
+  no CI or deploy in flight; 170 GiB free; the walk mid-pass on the paper,
+  rewriting nothing (rows already in the new format). P = 3.33 ms (the paper's
+  ten-minute p95, lowest of four readings), so the cancel line was 253 ms.
+- `build` 22:04:31Z: valid and ready in under a minute, 9.4 MB. The walk logged
+  `deferred` at 22:04:33Z. Paper one-minute p95 during it: 5.9 ms.
+- `drop-kind-seq` 22:07:54Z and `drop-receipt-id` 22:11:01Z, each after two
+  readings under 10 ms a minute apart, each exit 0.
+- After: `indexes_bytes` 12,429,336,576 to 7,403,438,080; `table_total_bytes`
+  33.78 GB to 28.75 GB; paper ten-minute p95 3.56 ms at 22:14Z; no error line
+  in corpusd's journal since 22:04Z.
+- The build estimate of 3 to 10 minutes was far too high: the partial index
+  covers under 1% of rows.
+
+Rollback is `restore-old`. What remains of the table is the heap (21.3 GB,
+about 970,000 dead tuples awaiting vacuum) and three unique indexes (7.4 GB).
+
