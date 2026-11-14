@@ -295,6 +295,7 @@ func TestAppendReceiptJSONReadersExpand(t *testing.T) {
 		"internal/bundle/bundle.go":               true, // the bundle line's field tag
 	}
 	allowed["scripts/chaos/s2-corpusd-crash.sh"] = true // counts rows by the c1: prefix, which every format shares
+	allowed["scripts/receipts-index-swap-test"] = true  // creates a throwaway table with this column; reads no receipt
 	sourceFiles(t, func(path string, raw []byte) {
 		rel, _ := filepath.Rel(filepath.Join("..", ".."), path)
 		rel = filepath.ToSlash(rel)

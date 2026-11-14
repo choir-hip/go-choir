@@ -218,6 +218,15 @@ assert_contains "$skill_go_output" "host_services=autoputer"
 dev_scripts_output="$(run_classifier "scripts/land" "scripts/spend-report" "scripts/system_briefing.py" "scripts/prove-autoradio-turns" "scripts/probes/x.sh")"
 assert_contains "$dev_scripts_output" "deploy_needed=false"
 assert_contains "$dev_scripts_output" "scripts/land -> ignored (docs-like"
+# The operator's index-swap script runs DDL on the live table, so it is not
+# docs-like (CI runs its self-test); it is still not a deploy by itself: it
+# reaches Node B with the next deploy that runs.
+swap_output="$(run_classifier "scripts/receipts-index-swap" "scripts/receipts-index-swap-test")"
+assert_contains "$swap_output" "deploy_needed=false"
+assert_contains "$swap_output" "scripts/receipts-index-swap -> ignored (CI/local/operator tooling"
+assert_contains "$swap_output" "scripts/receipts-index-swap-test -> ignored (CI/local/operator tooling"
+swap_with_code_output="$(run_classifier "scripts/receipts-index-swap" "internal/platform/receipt_walk.go")"
+assert_contains "$swap_with_code_output" "deploy_needed=true"
 mixed_skill_output="$(run_classifier "skills/definition/SKILL.md" "internal/store/db.go")"
 assert_contains "$mixed_skill_output" "deploy_needed=true"
 ci_script_deploys_output="$(run_classifier "scripts/ci-prune-go-cache" "scripts/selftest-store-handles")"

@@ -52,6 +52,7 @@ jobs:
       go: ${{ steps.classify.outputs.go }}
       frontend: ${{ steps.classify.outputs.frontend }}
       sbom: ${{ steps.classify.outputs.sbom }}
+      receipts_swap: ${{ steps.classify.outputs.receipts_swap }}
       flakehub: ${{ steps.classify.outputs.flakehub }}
       high_risk_race: ${{ steps.classify.outputs.high_risk_race }}
       ci: ${{ steps.classify.outputs.ci }}
@@ -681,10 +682,29 @@ jobs:
         shell: bash
         run: scripts/test-guest-floor-commit-free
 
+  # scripts/receipts-index-swap runs DDL on the live receipt table (the supervised
+  # swap of docs/problems/old-receipts-do-not-compact-2026-11-14.md); its
+  # self-test runs it against a throwaway PostgreSQL. Selected whenever the
+  # script, its test, this workflow or the receipt index definitions change
+  # (ci-impact-classify receipts_swap).
+  receipts-index-swap:
+    name: Receipts Index Swap Script
+    runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.receipts_swap == 'true'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: ./.github/actions/install-postgres
+
+      - name: The swap script against a throwaway PostgreSQL
+        shell: bash
+        run: scripts/receipts-index-swap-test
+
   check:
     name: Go Vet + Test + Build
     runs-on: ubuntu-latest
-    needs: [plan, go-vet-build, go-test, go-test-runtime, go-test-scale, doccheck, heresy-detector, v1-inventory, guest-floor-commit-free, build-frontend, package-modularity, desk-protocol, base-packages-listed]
+    needs: [plan, go-vet-build, go-test, go-test-runtime, go-test-scale, doccheck, heresy-detector, v1-inventory, guest-floor-commit-free, receipts-index-swap, build-frontend, package-modularity, desk-protocol, base-packages-listed]
     if: always()
     steps:
       - name: Confirm selected CI gates passed
@@ -747,6 +767,7 @@ jobs:
           require_success "${{ needs.plan.outputs.non_docs }}" heresy-detector "${{ needs.heresy-detector.result }}"
           require_success "${{ needs.plan.outputs.non_docs }}" v1-inventory "${{ needs.v1-inventory.result }}"
           require_if_run guest-floor-commit-free "${{ needs.guest-floor-commit-free.result }}"
+          require_success "${{ needs.plan.outputs.receipts_swap }}" receipts-index-swap "${{ needs.receipts-index-swap.result }}"
           require_if_run build-frontend "${{ needs.build-frontend.result }}"
           require_if_run base-packages-listed "${{ needs.base-packages-listed.result }}"
           require_success "${{ needs.plan.outputs.frontend }}" package-modularity "${{ needs.package-modularity.result }}"

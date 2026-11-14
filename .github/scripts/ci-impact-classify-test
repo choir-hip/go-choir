@@ -86,6 +86,13 @@ assert_output ci-gate-script $'scripts/check-guest-security-epoch\n' \
 assert_output ci-gate-support $'scripts/lib/choir_internal.sh\nscripts/testdata/desk-names/good/internal/x/a.go\nscripts/store-handles-allowlist.json\n' \
   'docs_only=false'
 
+assert_output receipts-swap-script $'scripts/receipts-index-swap\n' \
+  'docs_only=false' 'non_docs=true' 'go=true' 'receipts_swap=true'
+assert_output receipts-swap-test $'scripts/receipts-index-swap-test\n' \
+  'docs_only=false' 'non_docs=true' 'go=true' 'receipts_swap=true'
+assert_output receipts-swap-untouched $'internal/auth/service.go\n' \
+  'receipts_swap=false'
+
 assert_output scripts-go-file $'scripts/kernelgate/main.go\n' \
   'docs_only=false' 'go=true'
 

@@ -24,6 +24,18 @@ ci_go_script_path() {
     scripts/reeng_tracer*.mjs|scripts/rollback/*|scripts/snapshot-vault.sh|scripts/test-node-b-*) return 0 ;;
     scripts/verify-host-hardening.py|scripts/vision_probe.py|scripts/vmm_confinement_verify.py) return 0 ;;
     scripts/vmmanager-netfilter-test.sh|scripts/host_floor_probe.py) return 0 ;;
+    # Named by Go tests under internal/platform (the receipt table scans); the
+    # operator's DDL script on the live table and its self-test run in CI
+    # (receipts-index-swap job) but are not deployed (deploy-impact-classify).
+    scripts/receipts-index-swap|scripts/receipts-index-swap-test) return 0 ;;
+    # Named by Go code under internal/ (a test reads or runs them).
+    scripts/off-host-restore-drill.sh) return 0 ;;
+    scripts/node-b-growth-meter) return 0 ;;
+    # Named by a Go test (internal/platform tape_sweep_refs_review_test.go);
+    # its README stays docs. ci-impact-classify-test runs only when .github
+    # changes, and this name made it fail then.
+    scripts/chaos/*.md) return 1 ;;
+    scripts/chaos/*) return 0 ;;
   esac
   return 1
 }
@@ -41,6 +53,7 @@ ci_deploy_script_path() {
     scripts/check-*|scripts/selftest-*|scripts/test-*|scripts/test_*|scripts/go-test-*) return 0 ;;
     scripts/ci-*|scripts/deploy-*|scripts/build-sboms-*|scripts/sbom-*|scripts/verify-sbom-*) return 0 ;;
     scripts/doccheck|scripts/guest-*|scripts/node-b-*|scripts/node_b_*|scripts/off-host-*) return 0 ;;
+    scripts/chaos/*) return 0 ;; # the drill scripts and the README they read
     scripts/snapshot-vault*|scripts/choir-shot*|scripts/mail-resend-setup) return 0 ;;
     scripts/paper-liveness-probe.py|scripts/verify-host-hardening.py|scripts/vmm_confinement_verify.py) return 0 ;;
     scripts/fuzz-broker-protocol.sh|scripts/res10_balloon_stats_probe.sh|scripts/vmmanager-netfilter-test.sh) return 0 ;;
