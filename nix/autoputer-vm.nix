@@ -906,9 +906,22 @@ EOF
     description = "Prune the guest updater root before the updater and the runtime start";
     wantedBy = [ "multi-user.target" ];
     before = [ "go-choir-updater.service" "go-choir-autoputer.service" ];
-    unitConfig.RequiresMountsFor = "/mnt/persistent";
+    unitConfig = {
+      # mnt-persistent.mount (the data volume, an fstab-generator unit from
+      # microvm.nix) is ordered before basic.target, and so before this unit.
+      RequiresMountsFor = "/mnt/persistent";
+      # Only the boot transaction may run it: it is the only moment nothing
+      # else touches the updater root. A manual start is refused, a
+      # re-activated multi-user.target finds it still active
+      # (RemainAfterExit), and once the updater daemon has started (its
+      # ExecStartPre marker, its socket) neither this condition nor the
+      # binary's own check (--run-dir) lets it run.
+      RefuseManualStart = true;
+      ConditionPathExists = [ "!/run/choir/updater-unit-entered" "!/run/choir/updater.sock" ];
+    };
     serviceConfig = {
       Type = "oneshot";
+      RemainAfterExit = true;
       User = "root";
       Group = "root";
       ExecStart = "${goChoirPackages.updater}/bin/choir-updater prune --root /mnt/persistent/choir-updater --budget 60s";

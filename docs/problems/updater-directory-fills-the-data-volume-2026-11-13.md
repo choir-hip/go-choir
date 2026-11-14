@@ -77,8 +77,51 @@ neither. Premises read before building:
   0.5 s (`rm -rf`, warm directory cache). The 60 s budget is generous; the
   unit's `TimeoutStartSec` is 120 s and nothing requires it.
 
-Residuals: a dead journal (no result, key free) pins the two releases it names.
-The runtime's crash-boot settlement fences a dead self-development journal, so
-that one pins for one boot; a platform update left pending on purpose is never
-fenced and pins until its pending state is resolved. The prune line reports
-`dead_journals=N`. `operations/*.json` (small) and `bootguard` are not pruned.
+Review round 1 changed the design in three places. The keep rule now also
+counts an installed-verdict fence (a settled-forward apply, journal Phase
+`arbitrated`, Outcome `refused`, Verdict `installed`) as installing `current`,
+so the predecessor its revert reads survives the next boot. The prune refuses,
+exit 0 with the reason in its line, when the daemon's socket
+(`/run/choir/updater.sock`) or started marker (`updater-unit-entered`) exists,
+and the unit is `RemainAfterExit`, `RefuseManualStart` and conditioned on those
+two paths, so a later `systemctl start multi-user.target` or manual start
+cannot run it beside a live daemon. A full volume: leftovers of earlier runs
+are deleted before anything is renamed, and a rename that fails with ENOSPC
+frees that entry in place (a release's manifest first, so a half-deleted
+release reads as a corpse the next run removes at once; syncing and retrying the
+rename after each MiB freed). A store object freed in place has no marker; it
+is reached only after incoming/ (hidden first) when the volume is so full
+nothing renames, and a kill in the window of one chunk of one run leaves a
+partial object under its real name that `MaterializeClosure` would reuse: a
+named residual.
+
+Residuals:
+
+- A dead journal (no result, key free) pins the two releases it names. The
+  runtime's crash-boot settlement fences a dead self-development journal, so
+  that one pins for one boot; a platform update left pending on purpose is
+  never fenced and pins until its pending state is resolved. The prune line
+  reports `dead_journals=N`.
+- One corrupt or unreadable journal stops the prune (fail closed: what it names
+  is unknown), on every boot, until it is repaired; the report line names it
+  (`skipped (journal <name> cannot be read)`).
+- Not pruned, with their size and rate (estimates from the code, not measured on
+  a computer): `carried/<sha>/source.patch` is at most 2 MiB
+  (`capsule.CarriedPatchMaxBytes`) and one per distinct carried patch of a
+  rejected or failed candidate; `package-drafts/<operation>.json` holds a
+  package operation's tree, review, parent and source patches, so it is the
+  size of those patches, one per package operation. Both belong to operations
+  only the runtime's operation store can judge (the same reason bundles are the
+  runtime's), so deleting them by age here would be a guess; they grow with
+  engineering rounds, megabytes each, well below the 0.1 GiB per release.
+  `operations/*.json` (small, one `restage-*` per boot follow or restore) and
+  `bootguard` are not pruned either.
+- Between boots a self-development apply adds one release directory (about
+  0.1 GiB), its store objects (about 0.2 GiB, from the 6.56 GiB over 36 releases
+  on d@e), and, because apply now drops its source, no payload in incoming; a
+  computer that applies N times between two boots holds N times that until the
+  next boot.
+- Maximum releases kept with no dead journal: three (`current`, the Prior of
+  the newest apply or installed fence that installed it, the Prior of the
+  newest restage that installed it). A swap-back that cannot journal
+  (`RestagePinnedReleaseBestEffort`) loses its predecessor at the next boot.
