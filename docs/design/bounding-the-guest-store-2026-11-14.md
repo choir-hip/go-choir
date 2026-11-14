@@ -77,9 +77,11 @@ rule after R-1, docs/problems/run-memory-retirement-keeps-nearly-everything-
 1. The run has at least one entry that is not `rlm_inbox_cursor`.
 2. Its newest entry is older than 7 days (`runMemoryRetireWindow`).
 3. It is not a carry source: for each owner's document custodian agent
-   (`deskmanifest.IsDocumentInbox`), the newest `runMemoryKeepPerAgent = 2`
-   runs whose record is `completed` or `passivated`, ordered by `FinishedAt`
-   else `UpdatedAt` as `LatestActorRunMemoryEntries` orders them, keep their
+   (`deskmanifest.IsDocumentInbox`) on one computer, the newest
+   `runMemoryKeepPerAgent = 2` runs whose record is `completed` or `passivated`
+   and that hold a `message` or `compaction` entry, ordered by `FinishedAt`, else
+   `UpdatedAt`, else `CreatedAt`, then run id, by the same helpers
+   `LatestActorRunMemoryEntries` uses (`run_memory_carry.go`), keep their
    entries whatever their age. A failed, cancelled or record-less run takes no
    slot; a record that does not decode is protected. No other agent's run is
    protected: nothing reads it.
@@ -566,7 +568,7 @@ tables of `state.db` are small or windowed.
 | Table (with indexes) | Row holds | Per row, with indexes [E from M] | Writer | Delete path |
 |---|---|---|---|---|
 | `og_objects` header (`sql_store.go:230`) + `og_bodies` (`:257`), 17 indexes (`:195-215`) | one object: id (about 140 B, in 13 of 17 indexes), kind, owner, metadata JSON, times, body BLOB | 2.2 KB logical, 4.8 KB physical [M: 16.05 GB / 3.34 M] | the tape projector (`ProjectionOpObject`), every kind including `choir.event` | `ProjectionOpObjectRetire` only: `choir.event` rows of named kinds (`computerevent/projection_batch.go:206-209`, validated at `:267`); other kinds are never deleted except by a tombstone-and-supersede on the same row |
-| `run_memory_entries` + `idx_run_memory_entries_parent`, `_kind`, `_loop_retire` (`schema.go:94-357`) | one message of a run's conversation: `message_json` (2.2 KB average), role, kind, details_json | 2.45 KB [M] | `ProjectionOpRunMemoryEntry` | `ProjectionOpRunMemoryRetire` (`run_memory_retire.go:216`): whole runs, terminal and last written over 7 days ago, not a document custodian's newest 2 completed or passivated runs, 5,000 runs a pass and up to 32 passes a day (`run_memory_retire.go`) |
+| `run_memory_entries` + `idx_run_memory_entries_parent`, `_kind`, `_loop_retire` (`schema.go:94-357`) | one message of a run's conversation: `message_json` (2.2 KB average), role, kind, details_json | 2.45 KB [M] | `ProjectionOpRunMemoryEntry` | `ProjectionOpRunMemoryRetire` (`run_memory_retire.go:216`): whole runs, terminal and last written over 7 days ago, not a document custodian's newest 2 completed or passivated runs, 5,000 runs a pass and up to 32 passes in a wake (a wake runs ten minutes after each boot and daily) (`run_memory_retire.go`) |
 | `og_key_index` + 2 indexes (`derived_keys.go:72`) | derived key per object | 0.9 KB [M] | the same projector | dropped with its object (`retireDropBatch`) |
 | `og_edges` + 3 indexes | edge | 0.9 KB | projector | none that I found |
 | `choir_events` + `choir_event_bodies` (`schema.go:33`) | the event table | not in use: `store.event_table` is off and `choir_events` holds 0 rows (`store.split.summary`) | none | n/a |
