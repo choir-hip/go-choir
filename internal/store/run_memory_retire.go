@@ -316,3 +316,8 @@ func (s *Store) RetireRunMemory(ctx context.Context, now time.Time) (int, error)
 	census.logLines()
 	return appended, nil
 }
+
+// RetireRunMemoryBacklog is not built yet (test stub).
+func (s *Store) RetireRunMemoryBacklog(ctx context.Context, now time.Time, gap time.Duration) (ops, passes int, err error) {
+	return 0, 0, nil
+}
