@@ -189,8 +189,8 @@ func TestRunMemoryCensusCountsEveryGroupExactlyOnce(t *testing.T) {
 		"kept_no_run_record_in_hold":  {1, 3},  // z-nh
 		"kept_only_cursor_entries":    {1, 1},
 		"kept_newest_entry_in_window": {1, 3},
-		"kept_carry_source_7_30d":     {2, 6}, // x-mid, z-new2
-		"kept_carry_source_over_30d":  {2, 6}, // x-old, z-fin
+		"kept_carry_source_7_30d":     {3, 9}, // x-old (its newest entry is two seconds inside thirty days), x-mid, z-new2
+		"kept_carry_source_over_30d":  {1, 3}, // z-fin
 		"kept_state_passivated":       {2, 6},
 		"kept_state_blocked":          {2, 6},
 		"kept_state_other:running":    {2, 6},
@@ -236,8 +236,8 @@ func TestRunMemoryCensusCountsEveryGroupExactlyOnce(t *testing.T) {
 	// The protected set (document custodians only) regardless of the order
 	// the rules apply in.
 	ov := c.CarrySources
-	if ov.Within7d.Runs != 0 || ov.From7To30d.Runs != 2 || ov.Over30d.Runs != 2 {
-		t.Errorf("carry sources = %+v, want 0/2/2", ov)
+	if ov.Within7d.Runs != 0 || ov.From7To30d.Runs != 3 || ov.Over30d.Runs != 1 {
+		t.Errorf("carry sources = %+v, want 0/3/1", ov)
 	}
 }
 
