@@ -213,6 +213,11 @@ owner_rulings:
     decision: N5
     said: "We should stop them both without deleting them, and also probably overcommit the memory"
     read_as: Node A's ws-01 and ws-02 are parked, a runner VM (choir-runner) takes landings, memory overcommitted by about 1 GiB, done 2026-11-14T02:00Z
+  - on: 2026-11-14
+    decision: N6
+    asked: stored-result step 2 cannot be proved on d@e before the paper takes it by a normal landing (the deploy reaches the paper within about ten minutes); how should it go forward
+    said: "Oh, it appears we have some blockers now that I'm reviewing that. I just want to go forward and just make it work." Then, asked the route, chose "Land it now"
+    read_as: N2 is lifted for stored-result step 2 only. It lands normally, the replay drill runs on d@e straight after the deploy, the restore part of the drill waits for the owner (owner act), and the rollback is a revert to step 1, never past it. The same message is the owner's go to land prune at boot.
 
 decisions_for_the_owner:
   - id: E1
