@@ -232,7 +232,9 @@ revision are slim: start, commit-head, apply-update, apply-turn.
 | create `POST /api/texture/lifecycle-documents` | `internal/textureowner/texture_lifecycle_create.go` (`HandleTextureLifecycleCreate`) | 500 (was 400); also a derived-id mismatch |
 | fork `POST /api/texture/fork` | `revise_fork.go` `forkStartFailure` | 500 (was 400) |
 | owner revise `POST /api/texture/documents/{id}/revise` commit | `texture_agent_revision.go` (`refuseCommit`) | 500 naming it |
-| revise with sources/take/merge commit | `revise_edit.go` (`refuseCommit`) | 500 naming it |
+| editor save `POST /api/texture/documents/{id}/revisions` (`handleTextureCreateRevision` in `texture.go`, then `reviseDocument` `ReviseEdit`, then `commitOwnerBodyEdit` in `revise_edit.go`) | `revise_edit.go` (`refuseCommit`) | 500 naming it. Unlike the comment, take and merge cases it does not go through `reviseReplay`, so a re-submit with the same `idempotency_key` reaches `CommitLifecycleArtifactHeadWithSourceGraph` and `replayLifecycleCommand` directly: the one revise-shaped route whose replay exercises the command |
+| revise with sources, take, merge commit | `revise_edit.go` (`refuseCommit`) | 500 naming it (these cases replay through `reviseReplay` first) |
+| the Texture root's background create | `texture_root.go` `createTextureRootDocument` (via `ensureTextureRoot`, driven by `HandleTextureRootDigest`) | calls `startLifecycleTextureDocument`; a start replay that fails this way returns a wrapped error to `ensureTextureRoot` and `HandleTextureRootDigest` re-arms the digest when the root does not yet exist, and returns `false, nil` when it does. No HTTP status of its own |
 | prompt bar and ask-story submit | `prompt_bar.go` `promptBarSubmitFailure` (via `EnsureTextureHandoff`, the conductor start in `texture_handoff.go` and the coagent route start in `coagent_route.go`) | 500 naming it (was a generic 500) |
 | prompt eval | `api_texture_prompt_eval.go` | 500 `failed to prepare texture prompt eval` |
 | Texture cell tools: atomic turn and Write | `texture_cell_author.go`, `texture_turn_runtime.go` | a tool-result error whose text carries the error (no HTTP) |
@@ -337,7 +339,16 @@ counters and must be run before step 2 reaches the paper.
       derived id; the command replay path itself is exercised by (a) and by
       the unit tests, and the record says so rather than claiming (c) proves
       it.
-   d. *Rebuilt revision bytes.* For each document, `GET
+   d. *Editor save re-submit (the replay check that reaches the command).*
+      For a document, save a body with `POST /api/texture/documents/{id}/revisions`
+      and `{content, parent_revision_id, idempotency_key}` (201, `revision_id`),
+      keeping the body. Re-send it unchanged (same `idempotency_key`, same
+      `parent_revision_id`). This route does not pass through `reviseReplay`, so
+      the re-send reaches `replayLifecycleCommand` and rebuilds the revision by
+      id. Pass: 201 with the same `revision_id` as the first save. Fails: a
+      different `revision_id`, a 409 (the head moved: do it while this revision
+      is the head), or a 500 naming `stored revision unavailable`.
+   e. *Rebuilt revision bytes.* For each document, `GET
       /api/texture/revisions/{id}` for the first and the latest revision: the
       `content` equals what step 2 recorded. Fails: any difference or 404.
 5. **Replay completeness.** `replay-completeness` `.result.status` must be
@@ -364,16 +375,23 @@ counters and must be run before step 2 reaches the paper.
    e. Rebuild from the tape alone: `choir computer rematerialize-from-tape
       --computer $D --checkpoint-file ckpt.json` (the same artifact), and
       wait for `choir computer status --computer $D` to read active.
-   f. After d and again after e, repeat 4a, 4c, 4d and step 5. Pass: every
-      document written before the checkpoint answers its create re-submit 201
-      `replay: true` with its step 2 `revision_id`, its revise re-submit 202
-      `replay: true` with its step 2 `revision_id`, and the same `content`;
-      replay-completeness `equivalent`. After d only, the revision written
-      after the checkpoint must be absent (`GET /api/texture/revisions/{id}`
-      404). Fails: any 500 or a `stored revision unavailable` body; a `revision_id`
-      or `content` that differs from step 2; a post-checkpoint revision still
-      present after d. The `slim` counter restarts with the restored process
-      (do not compare it); compare documents.
+   f. After d and again after e, repeat 4a, 4c, 4d, 4e and step 5. Pass: every
+      request recorded before the checkpoint answers its re-submit with its
+      own recorded pre-checkpoint `revision_id`: the create 201 `replay: true`,
+      the revise 202 `replay: true`, the editor save 201, and the same
+      `content`; replay-completeness `equivalent`. Use the response each
+      request got when it was first sent, not step 2's, for a document whose
+      later revisions fall before the checkpoint; a revise re-submit also needs
+      the document's trajectory unchanged (it hashes the trajectory id) and
+      the head where it was, else it answers 409, which is not a failure of the
+      stored revision. The editor save (4e) and the create (4a) are the
+      re-submits that replay the stored command after restore and after
+      rematerialize. After d only, the revision written after the checkpoint
+      must be absent (`GET /api/texture/revisions/{id}` 404). Fails: any 500 or
+      a `stored revision unavailable` body; a `revision_id` or `content` that
+      differs from the recorded one; a post-checkpoint revision still present
+      after d. The `slim` counter restarts with the restored process (do not
+      compare it); compare documents.
    Byte-level restore of the host's stores, if wanted, is
    `scripts/off-host-restore-drill.sh <snapshot> tape` on Node B under the
    memory cap in its header. I have not run any of this.
