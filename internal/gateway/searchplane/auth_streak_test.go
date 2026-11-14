@@ -153,40 +153,66 @@ func TestAuthAndTransientFailuresAreOneStreak(t *testing.T) {
 			}
 			// A 403 first, then transient ones: same streak, same bench.
 			at = at.Add(time.Minute)
-			store.RecordOutcome(Outcome{Provider: "searxng", Class: OutcomeAuthError, Uncapped: true, At: at})
-			for i := 0; i < 3; i++ {
+			rec2 := func(provider string, class OutcomeClass) ProviderHealth {
 				at = at.Add(time.Second)
-				store.RecordOutcome(Outcome{Provider: "searxng", Class: OutcomeError, Uncapped: true, At: at})
+				r, err := store.RecordOutcome(Outcome{Provider: provider, Class: class, Uncapped: true, Error: keenable403, At: at})
+				if err != nil {
+					t.Fatal(err)
+				}
+				return r
 			}
-			at = at.Add(time.Second)
-			r, _ = store.RecordOutcome(Outcome{Provider: "searxng", Class: OutcomeTimeout, Uncapped: true, At: at})
-			if r.StrikeCount != 5 || r.CooldownUntil == nil {
+			rec2("searxng", OutcomeAuthError)
+			for i := 0; i < 3; i++ {
+				rec2("searxng", OutcomeError)
+			}
+			if r = rec2("searxng", OutcomeTimeout); r.StrikeCount != 5 || r.CooldownUntil == nil {
 				t.Fatalf("403 then four transient: %+v, want streak 5 benched", r)
 			}
 			// A success between resets the run.
 			for i := 0; i < 4; i++ {
-				at = at.Add(time.Second)
-				store.RecordOutcome(Outcome{Provider: "serpapi", Class: OutcomeAuthError, Uncapped: true, At: at})
+				rec2("serpapi", OutcomeAuthError)
 			}
-			at = at.Add(time.Second)
-			store.RecordOutcome(Outcome{Provider: "serpapi", Class: OutcomeSuccess, Uncapped: true, Results: 3, At: at})
-			at = at.Add(time.Second)
-			r, _ = store.RecordOutcome(Outcome{Provider: "serpapi", Class: OutcomeAuthError, Uncapped: true, At: at})
-			if r.StrikeCount != 1 || r.State == StateCoolingDown {
+			rec2("serpapi", OutcomeSuccess)
+			if r = rec2("serpapi", OutcomeAuthError); r.StrikeCount != 1 || r.State == StateCoolingDown {
 				t.Fatalf("403 after a success: %+v, want streak 1, no bench", r)
 			}
-			// A real refusal between breaks the streak: 4x403, 429, 403 is one.
-			for i := 0; i < 4; i++ {
-				at = at.Add(time.Second)
-				store.RecordOutcome(Outcome{Provider: "brave", Class: OutcomeAuthError, Uncapped: true, At: at})
-			}
-			at = at.Add(time.Minute)
-			store.RecordOutcome(Outcome{Provider: "brave", Class: OutcomeRateLimited, Uncapped: true, At: at})
-			at = at.Add(time.Hour)
-			r, _ = store.RecordOutcome(Outcome{Provider: "brave", Class: OutcomeAuthError, Uncapped: true, At: at})
-			if r.StrikeCount != 1 {
-				t.Fatalf("403 after a 429: %+v, want a fresh streak of 1", r)
-			}
 		})
+	}
+}
+
+// A real refusal ends the uncapped streak and is its own first strike, in
+// either direction: four 403s then a 429 is a 60 s bench, not the fifth
+// strike's 15 minutes (Gemini review of a5100a629; the same inheritance
+// existed for transient errors then a 429 since 2026-11-13).
+func TestRefusalAndUncappedStreakDoNotShareStrikes(t *testing.T) {
+	policy := DefaultBackoffPolicy()
+	for _, from := range []OutcomeClass{OutcomeAuthError, OutcomeError, OutcomeServerError, OutcomeTimeout} {
+		for _, to := range []OutcomeClass{OutcomeRateLimited, OutcomeQuotaLimited} {
+			for name, store := range stores(t) {
+				t.Run(string(from)+"_then_"+string(to)+"/"+name, func(t *testing.T) {
+					at := time.Now()
+					rec := func(class OutcomeClass) ProviderHealth {
+						at = at.Add(time.Minute)
+						r, err := store.RecordOutcome(Outcome{Provider: "keenable", Class: class, Uncapped: true, Error: "status 4xx", At: at})
+						if err != nil {
+							t.Fatal(err)
+						}
+						return r
+					}
+					for i := 0; i < TransientStrikesBeforeCooldown-1; i++ {
+						rec(from)
+					}
+					r := rec(to)
+					if r.StrikeCount != 1 || r.CooldownUntil == nil || r.CooldownUntil.Sub(at) != policy.CooldownDuration(to, 1) {
+						t.Fatalf("%s after four %s: %+v, want strike 1 and a %s bench", to, from, r, policy.CooldownDuration(to, 1))
+					}
+					// And back: the uncapped streak starts at 1, not after the refusal.
+					at = at.Add(24 * time.Hour)
+					if r = rec(from); r.StrikeCount != 1 || !IsEligible(r, at) {
+						t.Fatalf("%s after %s: %+v, want a fresh streak of 1 and no bench", from, to, r)
+					}
+				})
+			}
+		}
 	}
 }

@@ -149,10 +149,12 @@ func applyOutcome(rec *ProviderHealth, outcome Outcome, policy BackoffPolicy, no
 		// change between them restarts the count, so nine empties and one
 		// error are one error, and five errors and five empties are five
 		// empties. A transient failure or auth error of an uncapped provider
-		// counts as one streak with the others, not against refusals.
+		// counts as one streak with the others, in either direction: entering
+		// or leaving it restarts the count, so four 403s then a 429 is a first
+		// 429 (60 s), not a fifth strike.
 		prev := OutcomeClass(rec.LastFailureClass)
 		if (outcome.Class == OutcomeSuccessEmpty) != (prev == OutcomeSuccessEmpty) ||
-			(outcome.Uncapped && uncappedStreakClass(outcome.Class) && !uncappedStreakClass(prev)) {
+			(outcome.Uncapped && uncappedStreakClass(outcome.Class) != uncappedStreakClass(prev)) {
 			rec.StrikeCount = 0
 		}
 		rec.StrikeCount++
