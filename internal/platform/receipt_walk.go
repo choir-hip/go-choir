@@ -11,7 +11,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 	"time"
 )
 
@@ -130,7 +129,8 @@ func (c *ReceiptCompactor) noteBuildCheck(err error) {
 // noteDeferral logs the reason the walk is not running, every time it is asked
 // (once a pass, ten minutes apart, and when a pass steps aside), so that the line
 // is in any ten-minute journal window while the walk is held; and a "resumes"
-// line when it was held and is not.
+// line when it was held and is not. This line is the signal of the walk's state:
+// a load line is written only by a walk that is running, so it carries none.
 func (c *ReceiptCompactor) noteDeferral(why string) {
 	was := c.lastDeferral
 	c.lastDeferral = why
@@ -140,18 +140,6 @@ func (c *ReceiptCompactor) noteDeferral(why string) {
 	case was != "":
 		log.Printf("corpusd: receipt compaction resumes")
 	}
-}
-
-// walkState is the walk's state for the load line: running, or the reason it was
-// last held.
-func (c *ReceiptCompactor) walkState() string {
-	switch {
-	case c.lastDeferral == "":
-		return "running"
-	case strings.Contains(c.lastDeferral, "free on"):
-		return "deferred: free space"
-	}
-	return "deferred: build"
 }
 
 // ReceiptTableLoad is what a walk over the table costs it, read from
@@ -208,7 +196,7 @@ func (c *ReceiptCompactor) logLoad(ctx context.Context, computerID string, pass 
 	if load.WALBytesVisible {
 		wal = fmt.Sprint(load.WALBytesSince)
 	}
-	log.Printf("corpusd: receipt compaction load %s through=%d scanned=%d rewritten=%d kept=%d elapsed=%s live_tuples=%d dead_tuples=%d autovacuums=%d last_autovacuum=%s table_bytes=%d wal_bytes_since_start=%s free_bytes=%s walk_state=%s",
+	log.Printf("corpusd: receipt compaction load %s through=%d scanned=%d rewritten=%d kept=%d elapsed=%s live_tuples=%d dead_tuples=%d autovacuums=%d last_autovacuum=%s table_bytes=%d wal_bytes_since_start=%s free_bytes=%s",
 		computerID, pass.Through, pass.Scanned, pass.Rewritten, pass.Kept, time.Since(walkStart).Round(time.Second),
-		load.LiveTuples, load.DeadTuples, load.Autovacuums, load.LastAutovacuum, load.TableBytes, wal, freeText, c.walkState())
+		load.LiveTuples, load.DeadTuples, load.Autovacuums, load.LastAutovacuum, load.TableBytes, wal, freeText)
 }
