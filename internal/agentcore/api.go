@@ -1164,6 +1164,9 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 // lock (the store's engine lock, the executor's).
 const observabilityReadBudget = 3 * time.Second
 
+// observabilityNow is the handler's clock; a test replaces it.
+var observabilityNow = time.Now
+
 // boundedObservabilityRead runs read and gives up after budget. A read it
 // gives up on keeps running until its lock frees and then writes only to its
 // own buffered channel, so the caller's response is never touched late.

@@ -561,3 +561,65 @@ func TestUnattributedBytesIsTheRemainder(t *testing.T) {
 		t.Fatalf("cut tree's missing bytes not in remainder: %d (%+v)", r.UnattributedBytes, b)
 	}
 }
+
+func closedDB(t *testing.T) *sql.DB {
+	t.Helper()
+	d, err := dbx.OpenSQLite(filepath.Join(t.TempDir(), "x.db"), dbx.SQLiteOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = d.Close()
+	return d.Read
+}
+
+func TestAFailedReadingNeverReplacesTheCachedFullOne(t *testing.T) {
+	db := openTestDB(t)
+	fill(t, db.Write, 300)
+	var sc Scanner
+	full := sc.Read(context.Background(), db.Read, Limits{Budget: time.Minute}, true).Reading
+	for _, lim := range []Limits{
+		{Budget: time.Minute, Only: []string{"og_bodies"}},
+		{Budget: time.Minute},
+	} {
+		sc.Read(context.Background(), nil, lim, true)
+		sc.Read(context.Background(), closedDB(t), lim, true)
+		if got := sc.Read(context.Background(), db.Read, Limits{}, false).Reading; got != full {
+			t.Fatalf("limits %+v: a failed reading replaced the full one: %+v", lim, got)
+		}
+	}
+	_, order := hookShares(&sc)
+	sc.Read(context.Background(), db.Read, Limits{Budget: time.Minute}, true)
+	if (*order)[0] != full.Trees[0].Name {
+		t.Fatalf("the full reading's weights were lost: order starts %s, want %s", (*order)[0], full.Trees[0].Name)
+	}
+}
+
+func TestAnEmptyPreviousReadingChangesNothing(t *testing.T) {
+	list := []schemaTree{{name: "i", typ: "index"}, {name: "t", typ: "table"}}
+	out, w := orderByPrevious(list, &Reading{})
+	if out[0].name != "i" || out[1].name != "t" || w(out[0]) != 1 || w(out[1]) != 4 {
+		t.Fatalf("order %+v weights %v %v", out, w(out[0]), w(out[1]))
+	}
+}
+
+func TestUnattributedBytesIsNeverNegativeNorGuessed(t *testing.T) {
+	h := Header{FileBytes: 1000, FreeBytes: 100}
+	if got := unattributed(h, 5000); got != 0 {
+		t.Fatalf("file grew during the read: %d", got)
+	}
+	if got := unattributed(h, 300); got != 600 {
+		t.Fatalf("got %d", got)
+	}
+	h.Error = "page_count: boom"
+	if got := unattributed(h, 0); got != 0 {
+		t.Fatalf("a header with an error gave %d", got)
+	}
+}
+
+func TestSelectOnlyDropsBlankNames(t *testing.T) {
+	r := &Reading{}
+	out := selectOnly(r, []schemaTree{{name: "a", typ: "table"}}, []string{" a ", "", "  "})
+	if len(out) != 1 || len(r.Only) != 1 || r.Only[0] != "a" || len(r.Unknown) != 0 {
+		t.Fatalf("out %+v only %v unknown %v", out, r.Only, r.Unknown)
+	}
+}
