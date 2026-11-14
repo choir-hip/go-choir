@@ -910,7 +910,7 @@ func TestRecordWithoutComputerTakesNoRealSlot(t *testing.T) {
 	memSeedEntries(t, h, "e-0", docAgent("ec"), entryKinds, 35*day, now)
 	memSeedLifecycle(t, h, "owner-1", "e-1", docAgent("ec"), types.RunCompleted, 40*day, 40*day, now)
 	memSeedLifecycle(t, h, "owner-1", "e-2", docAgent("ec"), types.RunCompleted, 41*day, 41*day, now)
-	wantSelected(t, h, now, "e-0")
+	wantSelected(t, h, now) // e-0 is invisible to the reader and is kept, in a slot of its own
 	runID, _, err := h.store.LatestActorRunMemoryEntries(ctx, "owner-1", "computer-1", docAgent("ec"), "")
 	if err != nil || runID != "e-1" {
 		t.Fatalf("carry source = %q, %v; want e-1", runID, err)

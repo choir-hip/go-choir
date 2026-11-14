@@ -47,8 +47,9 @@ type RunMemoryNewestTwo struct {
 	Over30d    RunMemoryTally `json:"newest_entry_over_30d"`
 }
 
-// RunMemoryRecordReads counts the run record lookups of a pass: the slot
-// pre-pass and the selection apart (stub).
+// RunMemoryRecordReads counts the run record lookups a pass made (a record
+// already known to the wake is not a lookup): the slot pre-pass and the
+// selection apart.
 type RunMemoryRecordReads struct {
 	SlotPrePass int64 `json:"slot_pre_pass"`
 	Selection   int64 `json:"selection"`
@@ -102,6 +103,9 @@ var runMemoryCensusOrder = []string{
 	"kept_no_run_record_in_hold",
 	"kept_run_record_unreadable",
 	"kept_run_agent_disagrees",
+	"kept_run_copies_disagree",
+	"kept_mixed_owner_rows",
+	"kept_loop_id_invalid",
 	"kept_append_failed",
 	"kept_state_passivated",
 	"kept_state_blocked",
@@ -131,7 +135,8 @@ func (c *RunMemoryCensus) add(name string, g runMemoryGroup) {
 }
 
 // unretire moves a planned run the pass did not apply from the retired
-// disposition from to kept_append_failed. The totals do not change.
+// disposition from to kept_append_failed (a run the append failed on, or never
+// reached because the context ended). The totals do not change.
 func (c *RunMemoryCensus) unretire(from string, g runMemoryGroup) {
 	var to *RunMemoryDisposition
 	for i := range c.Dispositions {
@@ -246,6 +251,8 @@ func (s *Store) recordRunMemoryCensus(c RunMemoryCensus, started time.Time) {
 		h.first = &first
 	}
 	h.wake.Passes++
+	h.wake.RecordReads.SlotPrePass += c.RecordReads.SlotPrePass
+	h.wake.RecordReads.Selection += c.RecordReads.Selection
 	if len(h.wake.Retired) == 0 {
 		for _, n := range retiredDispositions {
 			h.wake.Retired = append(h.wake.Retired, RunMemoryDisposition{Disposition: n})

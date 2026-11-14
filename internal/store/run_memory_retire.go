@@ -119,6 +119,8 @@ type runMemoryGroup struct {
 	retirable               int64
 	// carry is the rows a carry can use (runMemoryCarryKinds).
 	carry int64
+	// mixedOwner is set when the run's document-agent rows name more than one owner.
+	mixedOwner bool
 	// entries is every row of the run, cursors included (census only).
 	entries int64
 }
@@ -168,12 +170,13 @@ func runMemoryRetireGroupQuery() (string, []any) {
 	// "texture:<doc>" and must not hide the run's document agent.
 	prefix := deskmanifest.DocumentCustodianName() + ":"
 	n := len([]rune(prefix))
-	args = append(args, n, prefix, n, prefix)
+	args = append(args, n, prefix, n, prefix, n, prefix)
 	return `SELECT loop_id, MAX(owner_id), MAX(agent_id), MAX(created_at),
 		SUM(CASE WHEN kind NOT IN (` + marks(runMemoryRetireKeepKinds) + `) THEN 1 ELSE 0 END), COUNT(*),
 		SUM(CASE WHEN kind IN (` + marks(runMemoryCarryKinds) + `) THEN 1 ELSE 0 END),
 		MAX(CASE WHEN substr(agent_id, 1, ?) = ? THEN agent_id END),
-		MAX(CASE WHEN substr(agent_id, 1, ?) = ? THEN owner_id END)
+		MAX(CASE WHEN substr(agent_id, 1, ?) = ? THEN owner_id END),
+		MIN(CASE WHEN substr(agent_id, 1, ?) = ? THEN owner_id END)
 		FROM run_memory_entries GROUP BY loop_id`, args
 }
 
@@ -202,7 +205,10 @@ func (s *Store) selectRunMemory(ctx context.Context, now time.Time) ([]string, R
 
 // runRecordMemo reads each carry candidate's record once per pass (the slot
 // pre-pass and the main loop both need it). A record of any other run is read
-// once and not kept: a pass holds at most the document agents' runs.
+// once and not kept: a pass holds at most the document agents' runs. Across the
+// passes of one wake the store's wake memo holds the records already read, so a
+// run kept in pass 1 is not read again in pass 2; only successful reads are
+// kept there, never an error or an absence.
 type runRecordMemo struct {
 	s *Store
 	m map[string]runRecordResult
@@ -211,17 +217,41 @@ type runRecordMemo struct {
 type runRecordResult struct {
 	rec types.RunRecord
 	err error
+	// computerDisagree is set when the run's live copies name more than one computer.
+	computerDisagree bool
 }
 
-func (m *runRecordMemo) get(ctx context.Context, g *runMemoryGroup, keep bool) runRecordResult {
+// runRecordWakeMemo is a wake's record cache.
+type runRecordWakeMemo struct {
+	m map[string]runRecordResult
+}
+
+func newRunRecordWakeMemo() *runRecordWakeMemo {
+	return &runRecordWakeMemo{m: map[string]runRecordResult{}}
+}
+
+// get returns the run's record result; reads counts the lookups actually made.
+func (m *runRecordMemo) get(ctx context.Context, g *runMemoryGroup, keep bool, reads *int64) runRecordResult {
 	key := g.ownerID + "\x00" + g.runID
 	if r, ok := m.m[key]; ok {
 		return r
 	}
-	rec, err := m.s.runRecordForRetirement(ctx, g.ownerID, g.runID)
-	r := runRecordResult{rec, err}
+	if w := m.s.runMemoryWake; w != nil {
+		if r, ok := w.m[key]; ok {
+			if keep {
+				m.m[key] = r
+			}
+			return r
+		}
+	}
+	*reads++
+	rec, disagree, err := m.s.runRecordCopiesForRetirement(ctx, g.ownerID, g.runID)
+	r := runRecordResult{rec, err, disagree}
 	if keep {
 		m.m[key] = r
+	}
+	if err == nil && m.s.runMemoryWake != nil {
+		m.s.runMemoryWake.m[key] = r
 	}
 	return r
 }
@@ -248,10 +278,16 @@ func (s *Store) selectRunMemoryPlan(ctx context.Context, now time.Time) (plan ru
 	for rows.Next() {
 		var g runMemoryGroup
 		var last any
-		var docAgent, docOwner sql.NullString
-		if err := rows.Scan(&g.runID, &g.ownerID, &g.agentID, &last, &g.retirable, &g.entries, &g.carry, &docAgent, &docOwner); err != nil {
+		var docAgent, docOwner, docOwnerMin sql.NullString
+		if err := rows.Scan(&g.runID, &g.ownerID, &g.agentID, &last, &g.retirable, &g.entries, &g.carry, &docAgent, &docOwner, &docOwnerMin); err != nil {
 			_ = rows.Close()
 			return plan, census, err
+		}
+		// A loop id the retire op would refuse (blank or padded) cannot be named
+		// in one: skip it here, never trim it (the delete is by exact loop id).
+		if g.runID == "" || g.runID != strings.TrimSpace(g.runID) {
+			census.add("kept_loop_id_invalid", g)
+			continue
 		}
 		// A run with document custodian rows is that agent's, whatever other
 		// agent or owner ids its other rows carry.
@@ -259,6 +295,7 @@ func (s *Store) selectRunMemoryPlan(ctx context.Context, now time.Time) (plan ru
 			g.agentID = docAgent.String
 			if docOwner.Valid && docOwner.String != "" {
 				g.ownerID = docOwner.String
+				g.mixedOwner = docOwnerMin.Valid && docOwnerMin.String != docOwner.String
 			}
 		}
 		t, ok := parseStoreTime(last)
@@ -300,16 +337,16 @@ func (s *Store) selectRunMemoryPlan(ctx context.Context, now time.Time) (plan ru
 		}
 		agents[g.ownerID+"\x00"+g.agentID] = true
 		perAgent[g.ownerID+"\x00"+g.agentID]++
-		if !deskmanifest.IsDocumentInbox(g.agentID) || g.carry == 0 {
+		if !deskmanifest.IsDocumentInbox(g.agentID) || g.carry == 0 || g.mixedOwner {
 			continue
 		}
 		if err := ctx.Err(); err != nil {
 			return plan, census, err
 		}
-		r := memo.get(ctx, g, true)
+		r := memo.get(ctx, g, true, &census.RecordReads.SlotPrePass)
 		switch {
 		case r.err == nil:
-			if r.rec.AgentID != g.agentID {
+			if r.rec.AgentID != g.agentID || r.computerDisagree {
 				protected[g.ownerID+"\x00"+g.runID] = true // fail closed
 				continue
 			}
@@ -364,6 +401,10 @@ func (s *Store) selectRunMemoryPlan(ctx context.Context, now time.Time) (plan ru
 		case !g.last.Before(cutoff):
 			census.add("kept_newest_entry_in_window", *g)
 			continue
+		case g.mixedOwner:
+			// The record cannot be read under one owner and the delete is by loop id.
+			census.add("kept_mixed_owner_rows", *g)
+			continue
 		case protected[g.ownerID+"\x00"+g.runID]:
 			if now.Sub(g.last) < runMemoryRetireNoRecordWindow {
 				census.add("kept_carry_source_7_30d", *g)
@@ -379,7 +420,7 @@ func (s *Store) selectRunMemoryPlan(ctx context.Context, now time.Time) (plan ru
 		if err := ctx.Err(); err != nil {
 			return plan, census, err
 		}
-		r := memo.get(ctx, g, false)
+		r := memo.get(ctx, g, false, &census.RecordReads.Selection)
 		if r.err != nil {
 			switch {
 			case errors.Is(r.err, ErrNotFound):
@@ -401,6 +442,12 @@ func (s *Store) selectRunMemoryPlan(ctx context.Context, now time.Time) (plan ru
 			continue
 		}
 		run := r.rec
+		if r.computerDisagree {
+			// Live copies of the run sit on more than one computer; the reader
+			// reads one computer's, so which copy decides is not known.
+			census.add("kept_run_copies_disagree", *g)
+			continue
+		}
 		// The rows said this run is not a document agent's and the record says it
 		// is (or the other way): the carry reads records, so keep the run.
 		if deskmanifest.IsDocumentInbox(run.AgentID) != deskmanifest.IsDocumentInbox(g.agentID) {
@@ -445,12 +492,24 @@ var errRunRecordUnreadable = errors.New("run record unreadable")
 // not terminal keeps the run, else the newest finish.
 // A copy that does not decode makes the record unreadable.
 func (s *Store) runRecordForRetirement(ctx context.Context, ownerID, runID string) (types.RunRecord, error) {
+	rec, _, err := s.runRecordCopiesForRetirement(ctx, ownerID, runID)
+	return rec, err
+}
+
+// runRecordCopiesForRetirement is runRecordForRetirement and whether the run's
+// live copies name more than one computer.
+func (s *Store) runRecordCopiesForRetirement(ctx context.Context, ownerID, runID string) (types.RunRecord, bool, error) {
+	if runRecordLookupHook != nil {
+		if err := runRecordLookupHook(ownerID, runID); err != nil {
+			return types.RunRecord{}, false, err
+		}
+	}
 	graph := s.ogReadStore
 	if graph == nil {
 		graph = s.ogStore
 	}
 	if graph == nil {
-		return types.RunRecord{}, fmt.Errorf("store: object graph not initialized")
+		return types.RunRecord{}, false, fmt.Errorf("store: object graph not initialized")
 	}
 	var copies []objectgraph.Object
 	if id, err := objectgraph.BuildCanonicalID(ogKindRun, ownerID, objectgraph.StableSuffixFromKey(runID)); err == nil {
@@ -460,7 +519,7 @@ func (s *Store) runRecordForRetirement(ctx context.Context, ownerID, runID strin
 			copies = append(copies, obj)
 		case !errors.Is(err, objectgraph.ErrNotFound):
 			// A read that failed (context, I/O) says nothing about the record.
-			return types.RunRecord{}, err
+			return types.RunRecord{}, false, err
 		}
 	}
 	// A run id has a few copies at most: one page, and a second only when the
@@ -469,17 +528,21 @@ func (s *Store) runRecordForRetirement(ctx context.Context, ownerID, runID strin
 	for {
 		page, err := graph.ListObjectsByMetadataPage(ctx, string(ogKindRun), "$.run_id", runID, after, ogMetadataPageSize)
 		if err != nil {
-			return types.RunRecord{}, err
+			return types.RunRecord{}, false, err
 		}
 		copies = append(copies, page...)
-		if len(page) < ogMetadataPageSize || page[len(page)-1].CanonicalID <= after {
+		if len(page) < ogMetadataPageSize {
 			break
+		}
+		if page[len(page)-1].CanonicalID <= after {
+			return types.RunRecord{}, false, fmt.Errorf("run record lookup: metadata page did not advance")
 		}
 		after = page[len(page)-1].CanonicalID
 	}
 	seen := map[string]bool{}
 	var best types.RunRecord
-	found := false
+	found, disagree := false, false
+	computer := ""
 	for _, obj := range copies {
 		if seen[obj.CanonicalID] {
 			continue
@@ -490,17 +553,21 @@ func (s *Store) runRecordForRetirement(ctx context.Context, ownerID, runID strin
 		}
 		var r types.RunRecord
 		if err := ogDecode(obj, &r); err != nil {
-			return types.RunRecord{}, fmt.Errorf("%w: %v", errRunRecordUnreadable, err)
+			return types.RunRecord{}, false, fmt.Errorf("%w: %v", errRunRecordUnreadable, err)
 		}
 		if r.RunID != runID {
 			continue
 		}
+		if found && r.ComputerID != computer {
+			disagree = true
+		}
+		computer = r.ComputerID
 		best, found = resolveRunCopies(best, found, r), true
 	}
 	if !found {
-		return types.RunRecord{}, ErrNotFound
+		return types.RunRecord{}, false, ErrNotFound
 	}
-	return best, nil
+	return best, disagree, nil
 }
 
 // runMemoryRetireRunsPerOp is the runs one op names when this store writes
@@ -609,7 +676,11 @@ func (s *Store) RetireRunMemoryBacklog(ctx context.Context, now time.Time, gap t
 		return 0, 0, nil
 	}
 	s.runMemoryCensus.beginWake()
+	// The records read in one pass stay known for the rest of the wake.
+	s.runMemoryWake = newRunRecordWakeMemo()
+	wakeStarted := time.Now()
 	defer func() {
+		s.runMemoryWake = nil
 		s.runMemoryCensus.endWake()
 		// One census in the log per wake: the last pass's, and the wake's totals
 		// (a catch-up of 22 passes would log 300 lines otherwise).
@@ -619,6 +690,8 @@ func (s *Store) RetireRunMemoryBacklog(ctx context.Context, now time.Time, gap t
 			for _, d := range c.Wake.Retired {
 				log.Printf("store: run memory census: wake of %d passes: %s: %d runs, %d entries", c.Wake.Passes, d.Disposition, d.Runs, d.Entries)
 			}
+			log.Printf("store: run memory census: wake of %d passes took %s; record reads: %d in the slot pre-pass, %d in the selection",
+				c.Wake.Passes, time.Since(wakeStarted).Round(time.Millisecond), c.Wake.RecordReads.SlotPrePass, c.Wake.RecordReads.Selection)
 		}
 	}()
 	for {
@@ -656,8 +729,3 @@ func (s *Store) runMemoryOverCap() int64 {
 // lookup; an error it returns is the lookup's error (a seam for the test that a
 // read error aborts the pass, in the slot pre-pass and in the selection).
 var runRecordLookupHook func(ownerID, runID string) error
-
-// runRecordWakeMemo is a wake's record cache (stub).
-type runRecordWakeMemo struct{}
-
-func newRunRecordWakeMemo() *runRecordWakeMemo { return &runRecordWakeMemo{} }
