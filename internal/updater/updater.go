@@ -961,7 +961,10 @@ func RestagePinnedRelease(root, releaseDigest string, storeSchemaPaths ...string
 }
 
 // RestagePinnedReleaseBestEffort is RestagePinnedRelease for a swap-back, where
-// the caller cannot refuse: a restage that cannot be journaled still swaps.
+// the caller cannot refuse: a restage that cannot be journaled still swaps. The
+// consequence: the release it swapped away from has no journal naming it, so
+// the boot prune no longer keeps it as a predecessor and the next boot deletes
+// it, if nothing else keeps it; a revert that needed it then refuses cleanly.
 func RestagePinnedReleaseBestEffort(root, releaseDigest string, storeSchemaPaths ...string) error {
 	return restagePinnedRelease(root, releaseDigest, false, storeSchemaPaths)
 }
@@ -1298,11 +1301,14 @@ type operationJournal struct {
 	// RecoverySwapped / RecoveryRestartPublished dedup the recovery path the
 	// same way: a resumed apply while recovering must not swap or re-publish
 	// the recovery restart — the prior caller's recovery is already in flight.
-	RecoverySwapped          bool        `json:"recovery_swapped,omitempty"`
-	RecoveryRestartPublished bool        `json:"recovery_restart_published,omitempty"`
-	StartedAt                time.Time   `json:"started_at"`
-	Failure                  string      `json:"failure,omitempty"`
-	Result                   ApplyResult `json:"result"`
+	RecoverySwapped          bool      `json:"recovery_swapped,omitempty"`
+	RecoveryRestartPublished bool      `json:"recovery_restart_published,omitempty"`
+	StartedAt                time.Time `json:"started_at"`
+	// Verdict is what a fence arbitrated (journal_fence.go); empty on every
+	// other journal and on fences written before the field existed.
+	Verdict string      `json:"verdict,omitempty"`
+	Failure string      `json:"failure,omitempty"`
+	Result  ApplyResult `json:"result"`
 }
 
 func readJournal(path string) (operationJournal, bool, error) {

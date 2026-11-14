@@ -8,8 +8,10 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -116,7 +118,25 @@ type PruneOptions struct {
 	// time.Now. Clock is the clock the budget is measured on; nil means time.Now.
 	Now   func() time.Time
 	Clock func() time.Time
+	// RunDir is where the updater daemon keeps its socket and its started
+	// marker ("/run/choir" on a guest). The prune is for the boot transaction,
+	// before the daemon starts: when either exists a daemon is or was running
+	// in this boot, so the prune refuses. Empty skips the check (tests).
+	RunDir string
+
+	// rename and freeChunk are test seams: the rename that hides an entry, and
+	// the bytes freed in place before the rename is retried.
+	rename    func(oldpath, newpath string) error
+	freeChunk int64
 }
+
+// pruneLiveMarkers are the files, under RunDir, that say the updater daemon is
+// running or has run in this boot.
+var pruneLiveMarkers = []string{"updater.sock", "updater-unit-entered"}
+
+// pruneFreeChunk is how much an in-place deletion frees before it syncs and
+// retries the rename that failed for want of space.
+const pruneFreeChunk = 1 << 20
 
 // PruneReport is what one prune did.
 type PruneReport struct {
@@ -168,7 +188,13 @@ func (r PruneReport) Line() string {
 // safe to run repeatedly, to kill at any point, and needs no signer, socket,
 // network or runtime.
 func Prune(opts PruneOptions) PruneReport {
-	p := &pruner{root: filepath.Clean(opts.Root), now: opts.Now, clock: opts.Clock}
+	p := &pruner{root: filepath.Clean(opts.Root), now: opts.Now, clock: opts.Clock, runDir: opts.RunDir, rename: opts.rename, freeChunk: opts.freeChunk}
+	if p.rename == nil {
+		p.rename = os.Rename
+	}
+	if p.freeChunk <= 0 {
+		p.freeChunk = pruneFreeChunk
+	}
 	if p.now == nil {
 		p.now = func() time.Time { return time.Now().UTC() }
 	}
@@ -192,6 +218,10 @@ type pruner struct {
 	clock    func() time.Time
 	deadline time.Time
 	report   PruneReport
+	runDir   string
+	rename   func(oldpath, newpath string) error
+	// freeChunk: see PruneOptions.
+	freeChunk int64
 }
 
 func (p *pruner) expired() bool {
@@ -203,18 +233,39 @@ func (p *pruner) expired() bool {
 }
 
 func (p *pruner) run() {
+	if p.runDir != "" {
+		for _, marker := range pruneLiveMarkers {
+			path := filepath.Join(p.runDir, marker)
+			if pathExists(path) {
+				p.report.Skipped = "the updater is running: " + path
+				return
+			}
+		}
+	}
 	if reason := pruneBlocked(p.root); reason != "" {
 		p.report.Skipped = reason
 		return
 	}
+	// First, finish what an earlier run hid: on a full volume this is what
+	// makes room for the renames below.
+	p.sweepAll()
+	if p.report.BudgetExhausted {
+		return
+	}
 	cutoff := p.now().Add(-pruneInputGrace)
-	// Decide everything first: each decision is a rename. The order matters
-	// only in that incoming/ is judged against the releases as they were.
+	// Decide everything next: each decision is a rename. The order matters
+	// only in that incoming/ is judged against the releases as they were, and
+	// that incoming goes first, so a full volume frees the most expendable
+	// bytes first.
 	p.hideIncoming(cutoff)
 	p.hideReleases(cutoff)
 	p.hideGCRootsAndStore(cutoff)
 	p.report.ReleasesKept = countReleaseDirs(p.root)
-	// Then delete what is hidden, the leftovers of an earlier run included.
+	// Then delete what is hidden.
+	p.sweepAll()
+}
+
+func (p *pruner) sweepAll() {
 	for _, dir := range []struct {
 		name string
 		kind *int
@@ -271,20 +322,94 @@ func pruneBlocked(root string) string {
 
 // hide renames path to .prune-<name> beside it. A name that already exists
 // (a leftover of an earlier run for a release staged and pruned again) gets a
-// suffix.
-func (p *pruner) hide(path string) bool {
+// suffix. A rename can fail for want of space on a full volume, exactly where
+// the prune is needed; then the entry is freed in place (freeInPlace) and
+// counted in kind.
+func (p *pruner) hide(path string, kind *int) {
 	dir, name := filepath.Split(path)
 	hidden := filepath.Join(dir, pruneHiddenPrefix+name)
 	if pathExists(hidden) {
 		hidden += "-" + strconv.FormatInt(p.clock().UnixNano(), 36)
 	}
-	if err := os.Rename(path, hidden); err != nil {
+	err := p.rename(path, hidden)
+	if err == nil {
+		_ = syncDir(filepath.Clean(dir))
+		return
+	}
+	if !errors.Is(err, syscall.ENOSPC) {
 		log.Printf("updater: prune hide %s: %v", name, err)
 		p.report.Errors++
-		return false
+		return
 	}
-	_ = syncDir(filepath.Clean(dir))
-	return true
+	p.freeInPlace(path, hidden, kind)
+}
+
+// freeInPlace deletes an entry whose rename failed for want of space. It is
+// safe because nothing else is running, but a tree half deleted under its real
+// name must not be trusted by what reads it next, so the order is chosen:
+//
+//   - a release's release-manifest.json goes first: ReadPinnedManifest, the
+//     boot follow and every restore read it, and a release directory without
+//     one is a corpse that the next run removes whatever its age
+//     (hideReleases); Apply restages from its source, never from a corpse;
+//   - a store object has no such marker. incoming/ is hidden first, so a
+//     computer normally frees gigabytes there before a store object is ever
+//     reached, and a store object is only freed in place when the volume is so
+//     full that nothing could be renamed. After every freeChunk bytes freed it
+//     syncs (ext4 returns freed blocks to the allocator at commit) and retries
+//     the rename, so the partial tree under its real name lasts for one chunk
+//     of one run; a kill inside that window is the named residual.
+func (p *pruner) freeInPlace(path, hidden string, kind *int) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return
+	}
+	if info.IsDir() {
+		_ = os.Chmod(path, 0o700)
+		var files []string
+		_ = filepath.WalkDir(path, func(q string, entry fs.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+			if entry.IsDir() {
+				_ = os.Chmod(q, 0o700)
+				return nil
+			}
+			files = append(files, q)
+			return nil
+		})
+		sort.SliceStable(files, func(i, j int) bool {
+			return filepath.Base(files[i]) == "release-manifest.json" && filepath.Base(files[j]) != "release-manifest.json"
+		})
+		var freed int64
+		for _, file := range files {
+			fi, err := os.Lstat(file)
+			if err != nil {
+				continue
+			}
+			size := int64(0)
+			if fi.Mode().IsRegular() {
+				size = allocatedBytes(fi)
+			}
+			if err := os.Remove(file); err != nil {
+				p.fail(file, err)
+				return
+			}
+			p.report.BytesFreed += size
+			freed += size
+			if freed >= p.freeChunk {
+				syncFilesystems()
+				freed = 0
+				if p.rename(path, hidden) == nil {
+					_ = syncDir(filepath.Dir(path))
+					return // what is left is hidden; the sweep finishes it
+				}
+			}
+		}
+	}
+	if p.removeTree(path, false) {
+		*kind++
+	}
 }
 
 func (p *pruner) hideIncoming(cutoff time.Time) {
@@ -320,7 +445,7 @@ func (p *pruner) hideIncoming(cutoff time.Time) {
 				continue
 			}
 		}
-		p.hide(path)
+		p.hide(path, &p.report.IncomingRemoved)
 	}
 }
 
@@ -330,12 +455,24 @@ func (p *pruner) hideReleases(cutoff time.Time) {
 	if err != nil {
 		return
 	}
-	// Stage temporaries are invisible to every reader; old ones go.
+	// Stage temporaries are invisible to every reader; old ones go. So does
+	// anything in releases/ that is not a directory (a symlink or a file:
+	// nothing writes one there).
 	for _, entry := range entries {
 		name := entry.Name()
-		if entry.IsDir() && strings.HasPrefix(name, ".stage-") {
-			if _, newest := treeStat(filepath.Join(releasesDir, name)); !newest.After(cutoff) {
-				p.hide(filepath.Join(releasesDir, name))
+		if strings.HasPrefix(name, pruneHiddenPrefix) {
+			continue
+		}
+		path := filepath.Join(releasesDir, name)
+		if !entry.IsDir() {
+			if info, err := os.Lstat(path); err == nil && !info.ModTime().After(cutoff) {
+				p.hide(path, &p.report.ReleasesRemoved)
+			}
+			continue
+		}
+		if strings.HasPrefix(name, ".stage-") {
+			if _, newest := treeStat(path); !newest.After(cutoff) {
+				p.hide(path, &p.report.ReleasesRemoved)
 			}
 		}
 	}
@@ -356,11 +493,18 @@ func (p *pruner) hideReleases(cutoff time.Time) {
 		}
 		path := filepath.Join(releasesDir, name)
 		info, err := os.Lstat(path)
-		if err != nil || info.ModTime().After(cutoff) {
+		if err != nil {
+			continue
+		}
+		// A release directory with no manifest is the corpse of a deletion that
+		// was interrupted in place (freeInPlace removes the manifest first):
+		// no reader trusts it, and the deletion touched it, so its age says
+		// nothing.
+		if info.ModTime().After(cutoff) && pathExists(filepath.Join(path, "release-manifest.json")) {
 			// Young: a baseline staged and waiting for its swap.
 			continue
 		}
-		p.hide(path)
+		p.hide(path, &p.report.ReleasesRemoved)
 	}
 }
 
@@ -394,7 +538,7 @@ func (p *pruner) releasesToKeep(current string) map[string]bool {
 						keep[digest] = true
 					}
 				}
-			case outcome == "applied" && installs && (appliedPrior == "" || journal.StartedAt.After(appliedAt)):
+			case (outcome == "applied" || installedFence(journal)) && installs && (appliedPrior == "" || journal.StartedAt.After(appliedAt)):
 				appliedAt, appliedPrior = journal.StartedAt, journal.PriorReleaseDigest
 			case outcome == restagedOutcome && installs && (restagedPrior == "" || journal.StartedAt.After(restagedAt)):
 				restagedAt, restagedPrior = journal.StartedAt, journal.PriorReleaseDigest
@@ -444,6 +588,20 @@ func (p *pruner) releasesToKeep(current string) map[string]bool {
 	return keep
 }
 
+// installedFence is a journal the runtime's crash-boot settlement (or an owner
+// settle) rewrote through Fence after arbitrating, on the current pointer, that
+// the apply had installed its target: Phase "arbitrated", Outcome "refused".
+// The operation it belongs to is applied and revertible, and its revert reads
+// the Prior, so it counts as an apply that installed the target. A fence of
+// nothing installed (Phase "fenced") installed nothing, and an unknown verdict
+// is no proof of anything: neither names a predecessor. A fence written before
+// the Verdict field existed carries none; it counts when its target is
+// current, which errs towards keeping one release.
+func installedFence(journal operationJournal) bool {
+	return journal.Result.Outcome == "refused" && journal.Phase == "arbitrated" &&
+		(journal.Verdict == "" || journal.Verdict == string(VerdictInstalled))
+}
+
 // readManifestLight parses a release's manifest without hashing its files: the
 // prune only needs which closure and entrypoint a surviving release declares.
 func readManifestLight(releaseDir string) (ReleaseManifest, error) {
@@ -467,8 +625,13 @@ func entrypointStoreBase(manifest ReleaseManifest) string {
 	if manifest.LayeringEntrypoint == "" {
 		return ""
 	}
+	for _, segment := range strings.Split(filepath.ToSlash(manifest.LayeringEntrypoint), "/") {
+		if segment == ".." {
+			return ""
+		}
+	}
 	rel := strings.TrimPrefix(filepath.Clean("/"+filepath.ToSlash(manifest.LayeringEntrypoint)), "/")
-	if rel == "" || rel == ".." || strings.HasPrefix(rel, "../") {
+	if rel == "" {
 		return ""
 	}
 	return strings.SplitN(rel, "/", 2)[0]
@@ -505,7 +668,7 @@ func (p *pruner) hideGCRootsAndStore(cutoff time.Time) {
 				continue
 			}
 			if _, ok := surviving[name]; !ok {
-				p.hide(path)
+				p.hide(path, &p.report.GCRootsRemoved)
 				continue
 			}
 			links, err := os.ReadDir(path)
@@ -569,7 +732,7 @@ func (p *pruner) hideGCRootsAndStore(cutoff time.Time) {
 		if _, newest := treeStat(path); newest.After(cutoff) {
 			continue
 		}
-		p.hide(path)
+		p.hide(path, &p.report.StoreRemoved)
 	}
 }
 
@@ -588,7 +751,7 @@ func (p *pruner) sweep(dir string, counter *int) {
 			p.report.Hidden++
 			continue
 		}
-		if p.removeTree(filepath.Join(dir, entry.Name())) {
+		if p.removeTree(filepath.Join(dir, entry.Name()), true) {
 			*counter++
 		} else {
 			p.report.Hidden++
@@ -599,7 +762,7 @@ func (p *pruner) sweep(dir string, counter *int) {
 // removeTree deletes a hidden tree whose directories may be sealed read-only,
 // file by file, counting allocated bytes as they go. It returns false when the
 // budget ran out or a deletion failed; what is left is still hidden.
-func (p *pruner) removeTree(path string) bool {
+func (p *pruner) removeTree(path string, budgeted bool) bool {
 	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return true
@@ -627,10 +790,10 @@ func (p *pruner) removeTree(path string) bool {
 		return false
 	}
 	for _, child := range children {
-		if p.expired() {
+		if budgeted && p.expired() {
 			return false
 		}
-		if !p.removeTree(filepath.Join(path, child.Name())) {
+		if !p.removeTree(filepath.Join(path, child.Name()), budgeted) {
 			return false
 		}
 	}
@@ -718,6 +881,15 @@ func removeTree(path string) error {
 func (u *Updater) dropStagedSource(sourceDir string) {
 	incoming, err := filepath.EvalSymlinks(filepath.Join(u.root, "incoming"))
 	if err != nil {
+		return
+	}
+	// A symlink source directly under incoming/ is unlinked, never followed.
+	if info, err := os.Lstat(filepath.Clean(sourceDir)); err == nil && info.Mode()&fs.ModeSymlink != 0 {
+		if parent, err := filepath.EvalSymlinks(filepath.Dir(filepath.Clean(sourceDir))); err == nil && parent == incoming {
+			if err := os.Remove(filepath.Clean(sourceDir)); err != nil {
+				log.Printf("updater: drop staged source %s: %v", filepath.Base(sourceDir), err)
+			}
+		}
 		return
 	}
 	if resolved, err := filepath.EvalSymlinks(filepath.Clean(sourceDir)); err == nil {
