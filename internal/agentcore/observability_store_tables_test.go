@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 // The store_tables section of guest observability: absent until asked for,
@@ -158,5 +159,54 @@ func TestObservabilityStoreTablesOnlyIsCappedAndTolerant(t *testing.T) {
 		if q == names && (len(rep.Reading.Only) != 16 || rep.Reading.Dropped != 4) {
 			t.Fatalf("cap: %d kept, %d dropped", len(rep.Reading.Only), rep.Reading.Dropped)
 		}
+	}
+}
+
+// One request must end under the server's write timeout: the store budget is
+// what the handler's overall deadline leaves, and nothing is read when nothing
+// is left. The handler's clock is injected.
+func TestObservabilityStoreTablesBudgetFitsTheWriteTimeout(t *testing.T) {
+	t.Setenv("SERVER_WRITE_TIMEOUT", "120s")
+	reserve := storetables.HeaderBudget + toolLayerReadBudget + time.Second + 4*observabilityReadBudget + 5*time.Second
+	ceiling := 120*time.Second - reserve
+	run := func(elapsed time.Duration) (budgetMs int64, skipped string, hasReading bool) {
+		start := time.Now()
+		calls := 0
+		old := observabilityNow
+		observabilityNow = func() time.Time {
+			calls++
+			if calls == 1 {
+				return start
+			}
+			return start.Add(elapsed)
+		}
+		defer func() { observabilityNow = old }()
+		rt := telemetryRuntime(t, fmt.Sprintf("computer-store-tables-deadline-%d", elapsed))
+		raw, ok := readStoreTables(t, rt, "?store_tables=detail&store_tables_seconds=100")
+		if !ok {
+			t.Fatal("no store_tables")
+		}
+		var rep struct {
+			Skipped string `json:"skipped"`
+			Reading *struct {
+				BudgetMillis int64 `json:"budget_ms"`
+			} `json:"reading"`
+		}
+		if err := json.Unmarshal(raw, &rep); err != nil {
+			t.Fatal(err)
+		}
+		if rep.Reading != nil {
+			budgetMs = rep.Reading.BudgetMillis
+		}
+		return budgetMs, rep.Skipped, rep.Reading != nil
+	}
+	if ms, _, _ := run(0); ms != min(ceiling, storetables.MaxBudget).Milliseconds() {
+		t.Fatalf("no pre-read: budget %d ms, ceiling %s", ms, ceiling)
+	}
+	if ms, _, _ := run(ceiling - 10*time.Second); ms != 10000 {
+		t.Fatalf("after a slow pre-read: budget %d ms, want 10000", ms)
+	}
+	if ms, skipped, has := run(ceiling + time.Second); has || ms != 0 || skipped == "" {
+		t.Fatalf("with nothing left: reading %v budget %d skipped %q", has, ms, skipped)
 	}
 }

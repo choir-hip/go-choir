@@ -100,6 +100,9 @@ var (
 // are a few page reads each.
 const headerBudget = 5 * time.Second
 
+// HeaderBudget is headerBudget, for a caller reserving time for it.
+const HeaderBudget = headerBudget
+
 // Header is the file's own accounting: what the file is, and how much of it
 // is free pages a delete left and SQLite has not returned.
 type Header struct {
@@ -198,6 +201,8 @@ type Report struct {
 	Reading *Reading `json:"reading,omitempty"`
 	// Busy says another reading was running, so this request did none.
 	Busy bool `json:"busy,omitempty"`
+	// Skipped says why no reading was taken though one was asked for.
+	Skipped string `json:"skipped,omitempty"`
 }
 
 // Scanner runs readings one at a time and keeps the last. The zero value
@@ -552,4 +557,15 @@ func sortTotals(totals []TableTotal) {
 		}
 		return totals[i].Table < totals[j].Table
 	})
+}
+
+// unattributed is the pages no tree accounts for.
+func unattributed(h Header, seen int64) int64 { return h.FileBytes - h.FreeBytes - seen }
+
+// flatWeight weighs a table four times an index.
+func flatWeight(t schemaTree) float64 {
+	if t.typ == "table" {
+		return 4
+	}
+	return 1
 }
