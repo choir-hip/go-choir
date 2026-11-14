@@ -32,3 +32,33 @@ func TestObservabilityServesTheTapeWriteCounters(t *testing.T) {
 		}
 	}
 }
+
+// The per-kind rewrite counters ride in the same block: object_rewrites maps a
+// kind to ops, bytes, mean bytes per op, distinct objects, writes per object
+// and the estimated flag.
+func TestObservabilityServesTheObjectRewriteCounters(t *testing.T) {
+	rt := telemetryRuntime(t, "computer-rewrite-counters-obs")
+	queueTelemetry(t, rt, 2)
+	req := httptest.NewRequest(http.MethodGet, "/api/runtime/observability", nil)
+	req.Header.Set("X-Authenticated-User", "owner-telemetry")
+	rec := httptest.NewRecorder()
+	(&APIHandler{rt: rt}).HandleGuestObservability(rec, req)
+	var obs struct {
+		TelemetryBatching struct {
+			ObjectRewrites map[string]map[string]json.RawMessage `json:"object_rewrites"`
+		} `json:"telemetry_batching"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &obs); err != nil {
+		t.Fatalf("observability = %d %s", rec.Code, rec.Body.String())
+	}
+	if obs.TelemetryBatching.ObjectRewrites == nil {
+		t.Fatalf("object_rewrites is absent or null: %s", rec.Body.String())
+	}
+	for kind, fields := range obs.TelemetryBatching.ObjectRewrites {
+		for _, key := range []string{"ops", "bytes", "mean_bytes_per_op", "distinct_objects", "writes_per_object", "estimated"} {
+			if _, ok := fields[key]; !ok {
+				t.Errorf("object_rewrites[%s] lacks %q", kind, key)
+			}
+		}
+	}
+}
