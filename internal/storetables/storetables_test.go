@@ -391,3 +391,126 @@ func TestSchemaDetectionToleratesWhitespace(t *testing.T) {
 		t.Fatalf("rowid detection = %v", got)
 	}
 }
+
+func hookShares(sc *Scanner) (shares map[string]time.Duration, order *[]string) {
+	shares = map[string]time.Duration{}
+	order = &[]string{}
+	sc.testHook = func(name string, d time.Duration) time.Duration {
+		shares[name] = d
+		*order = append(*order, name)
+		return d
+	}
+	return
+}
+
+func TestNamedTreesGetTheWholeBudget(t *testing.T) {
+	db := openTestDB(t)
+	fill(t, db.Write, 300)
+	old := maxTreeRead
+	maxTreeRead = time.Hour
+	defer func() { maxTreeRead = old }()
+
+	var flat Scanner
+	flatShares, _ := hookShares(&flat)
+	flat.Read(context.Background(), db.Read, Limits{Budget: 40 * time.Second}, true)
+
+	var sc Scanner
+	shares, order := hookShares(&sc)
+	r := sc.Read(context.Background(), db.Read, Limits{Budget: 40 * time.Second, Only: []string{"og_bodies", "og_objects"}}, true).Reading
+	if len(*order) != 2 || (*order)[0] != "og_bodies" || (*order)[1] != "og_objects" {
+		t.Fatalf("walk order = %v, want the named trees in the order given", *order)
+	}
+	if shares["og_bodies"] < 19*time.Second || shares["og_bodies"] < flatShares["og_bodies"]*3/2 {
+		t.Fatalf("og_bodies got %s named, %s flat", shares["og_bodies"], flatShares["og_bodies"])
+	}
+	for _, n := range []string{"og_bodies", "og_objects"} {
+		if tr := treeNamed(t, r, n); !tr.Complete {
+			t.Fatalf("%s not complete: %+v", n, tr)
+		}
+	}
+	if len(r.Trees) != 2 || len(r.Only) != 2 {
+		t.Fatalf("a restricted reading lists only the named trees: %+v", r.Trees)
+	}
+	if tt := tableNamed(t, r, "og_objects"); tt.Complete {
+		t.Fatalf("og_objects total says complete with its indexes unread: %+v", tt)
+	}
+	if tt := tableNamed(t, r, "og_bodies"); !tt.Complete {
+		t.Fatalf("og_bodies has no indexes and was read whole: %+v", tt)
+	}
+}
+
+func TestUnknownNamesAreReportedNotAnError(t *testing.T) {
+	db := openTestDB(t)
+	fill(t, db.Write, 20)
+	var sc Scanner
+	r := sc.Read(context.Background(), db.Read, Limits{Budget: time.Minute, Only: []string{"og_bodies", "nope", "OG_BODIES", "og_bodies", "idx_og_objects_kind"}}, true).Reading
+	if len(r.Unknown) != 2 || r.Unknown[0] != "nope" || r.Unknown[1] != "OG_BODIES" {
+		t.Fatalf("unknown = %v", r.Unknown)
+	}
+	if len(r.Trees) != 2 || r.Header.Error != "" {
+		t.Fatalf("trees = %+v header error %q", r.Trees, r.Header.Error)
+	}
+	if r.Truncated {
+		t.Fatal("a finished restricted reading is not truncated")
+	}
+}
+
+func TestTheNamedListIsCapped(t *testing.T) {
+	db := openTestDB(t)
+	fill(t, db.Write, 5)
+	var names []string
+	for i := 0; i < MaxOnly+4; i++ {
+		names = append(names, fmt.Sprintf("none%d", i))
+	}
+	var sc Scanner
+	r := sc.Read(context.Background(), db.Read, Limits{Budget: time.Minute, Only: names}, true).Reading
+	if len(r.Only) != MaxOnly || len(r.Unknown) != MaxOnly || r.OnlyDropped != 4 {
+		t.Fatalf("only %d unknown %d dropped %d", len(r.Only), len(r.Unknown), r.OnlyDropped)
+	}
+}
+
+func TestARestrictedReadingIsNotCachedAsTheFullOne(t *testing.T) {
+	db := openTestDB(t)
+	fill(t, db.Write, 50)
+	var sc Scanner
+	only := Limits{Budget: time.Minute, Only: []string{"og_bodies"}}
+	if rep := sc.Read(context.Background(), db.Read, only, true); rep.Reading == nil || len(rep.Reading.Trees) != 1 {
+		t.Fatalf("restricted reading = %+v", rep.Reading)
+	}
+	if rep := sc.Read(context.Background(), db.Read, Limits{}, false); rep.Reading != nil {
+		t.Fatalf("a plain read after only a restricted reading shows %+v", rep.Reading)
+	}
+	full := sc.Read(context.Background(), db.Read, Limits{Budget: time.Minute}, true).Reading
+	sc.Read(context.Background(), db.Read, only, true)
+	if got := sc.Read(context.Background(), db.Read, Limits{}, false).Reading; got != full || len(got.Trees) < 5 {
+		t.Fatalf("a restricted reading replaced the full one: %+v", got)
+	}
+}
+
+func TestAnEarlierReadingOrdersAndWeighsTheTrees(t *testing.T) {
+	db := openTestDB(t)
+	fill(t, db.Write, 600)
+	old := maxTreeRead
+	maxTreeRead = time.Hour
+	defer func() { maxTreeRead = old }()
+	var sc Scanner
+	firstShares, firstOrder := hookShares(&sc)
+	first := sc.Read(context.Background(), db.Read, Limits{Budget: 40 * time.Second}, true).Reading
+	if (*firstOrder)[0] == "og_bodies" {
+		t.Fatalf("with nothing known the order is the schema's: %v", *firstOrder)
+	}
+	secondShares, secondOrder := hookShares(&sc)
+	sc.Read(context.Background(), db.Read, Limits{Budget: 40 * time.Second}, true)
+	if (*secondOrder)[0] != treeNamedBiggest(first) {
+		t.Fatalf("second order starts %s, want the biggest tree %s", (*secondOrder)[0], treeNamedBiggest(first))
+	}
+	if secondShares["og_bodies"] <= firstShares["og_bodies"] {
+		t.Fatalf("the big tree's share did not grow: %s then %s", firstShares["og_bodies"], secondShares["og_bodies"])
+	}
+	// Every tree is still walked.
+	if len(*secondOrder) != len(first.Trees) {
+		t.Fatalf("walked %d of %d trees", len(*secondOrder), len(first.Trees))
+	}
+}
+
+func treeNamedBiggest(r *Reading) string { return r.Trees[0].Name }
