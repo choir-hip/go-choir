@@ -24,13 +24,14 @@ package store
 //     inbox cursor. Rows of that kind are never retired (KeepKinds).
 //   - ListRunMemoryEntries(run) of a live or just-finished run (management,
 //     Texture, engineering assignment, lifecycle SourceRunID resume): only a
-//     run that is not terminal, or finished within the window, is read, with
-//     one named residual: a late report for a producer run (lifecycle.go
-//     persistentManagementHistoricalReportRunStateAllowed, then :3933) admits
-//     any terminal run with no age bound, and if the run's memory was retired,
-//     more than seven days after it finished, the report cannot authenticate
-//     its packets and is refused (ErrLifecycleInvalidTransition). The reach
-//     today is minutes after the run ends, not days.
+//     run that is not terminal, or finished within the window, is read. The
+//     late management report reads a producer run's memory only for a live
+//     trajectory (lifecycle.go, inside !lateEvidenceOnly), where the producer
+//     run must be pending, running or passivated
+//     (persistentManagementRunStateAllowed, engineering_assignments.go:680);
+//     none of those is ever retired, and a terminal producer run is refused or
+//     read for no memory whatever retirement did
+//     (TestManagementReportOutcomeDoesNotDependOnRetiredRunMemory).
 //   - get_run_memory_entry by id (agentcore/tools_evidence.go:57): an entry
 //     of a retired run answers not-found, a visible refusal.
 //
@@ -74,7 +75,11 @@ var (
 	// record must be. It can be lowered once a census on the paper shows what
 	// remains of the runs the old lookup could not see.
 	runMemoryRetireNoRecordWindow = 30 * 24 * time.Hour
-	// runMemoryRetireMaxOps bounds the ops one run appends.
+	// runMemoryRetireMaxOps times computerevent.RunMemoryRetireMaxRuns (100) is
+	// the runs one pass names: 50 x 100 = 5,000. At runMemoryRetireRunsPerOp (10)
+	// runs an op that is up to 500 ops, each at least 250 ms apart (rest of four
+	// times the op's own time when longer), so a full pass takes at least two
+	// minutes of rest and appends about 500 tape events.
 	runMemoryRetireMaxOps = 50
 	// runMemoryRetireKeepKinds are the kinds that outlive their run.
 	runMemoryRetireKeepKinds = []string{"rlm_inbox_cursor"}
@@ -112,6 +117,8 @@ type runMemoryGroup struct {
 	runID, ownerID, agentID string
 	last                    time.Time
 	retirable               int64
+	// carry is the rows a carry can use (runMemoryCarryKinds).
+	carry int64
 	// entries is every row of the run, cursors included (census only).
 	entries int64
 }
@@ -142,12 +149,32 @@ func parseStoreTime(v any) (time.Time, bool) {
 // not: length(message_json) is in the row, after which overflow pages hold a
 // large body, so summing it would read the table; the census keeps rows only.
 func runMemoryRetireGroupQuery() (string, []any) {
-	keepMarks := make([]string, len(runMemoryRetireKeepKinds))
-	args := make([]any, len(runMemoryRetireKeepKinds))
-	for i, k := range runMemoryRetireKeepKinds {
-		keepMarks[i], args[i] = "?", k
+	marks := func(vals []string) string {
+		m := make([]string, len(vals))
+		for i := range vals {
+			m[i] = "?"
+		}
+		return strings.Join(m, ",")
 	}
-	return `SELECT loop_id, MAX(owner_id), MAX(agent_id), MAX(created_at), SUM(CASE WHEN kind NOT IN (` + strings.Join(keepMarks, ",") + `) THEN 1 ELSE 0 END), COUNT(*) FROM run_memory_entries GROUP BY loop_id`, args
+	var args []any
+	for _, k := range runMemoryRetireKeepKinds {
+		args = append(args, k)
+	}
+	for _, k := range runMemoryCarryKinds {
+		args = append(args, k)
+	}
+	// The document custodian's agent id and its owner are aggregated apart from
+	// the plain MAX: a row of another agent (a worker's) can sort above
+	// "texture:<doc>" and must not hide the run's document agent.
+	prefix := deskmanifest.DocumentCustodianName() + ":"
+	n := len([]rune(prefix))
+	args = append(args, n, prefix, n, prefix)
+	return `SELECT loop_id, MAX(owner_id), MAX(agent_id), MAX(created_at),
+		SUM(CASE WHEN kind NOT IN (` + marks(runMemoryRetireKeepKinds) + `) THEN 1 ELSE 0 END), COUNT(*),
+		SUM(CASE WHEN kind IN (` + marks(runMemoryCarryKinds) + `) THEN 1 ELSE 0 END),
+		MAX(CASE WHEN substr(agent_id, 1, ?) = ? THEN agent_id END),
+		MAX(CASE WHEN substr(agent_id, 1, ?) = ? THEN owner_id END)
+		FROM run_memory_entries GROUP BY loop_id`, args
 }
 
 // SelectRunMemoryRetirements returns the loop ids whose entries may leave the
@@ -158,9 +185,11 @@ func (s *Store) SelectRunMemoryRetirements(ctx context.Context, now time.Time) (
 }
 
 // runMemoryPlan is the runs a pass retires, by why: runs whose record says they
-// are finished, and runs with no record.
+// are finished, and runs with no record. groups holds each planned run's group,
+// for the census to say what was applied.
 type runMemoryPlan struct {
 	recorded, noRecord []string
+	groups             map[string]runMemoryGroup
 }
 
 // selectRunMemory is the plan's runs sorted, with the census.
@@ -171,7 +200,9 @@ func (s *Store) selectRunMemory(ctx context.Context, now time.Time) ([]string, R
 	return ids, census, err
 }
 
-// runRecordMemo reads each run's record once per pass.
+// runRecordMemo reads each carry candidate's record once per pass (the slot
+// pre-pass and the main loop both need it). A record of any other run is read
+// once and not kept: a pass holds at most the document agents' runs.
 type runRecordMemo struct {
 	s *Store
 	m map[string]runRecordResult
@@ -182,14 +213,16 @@ type runRecordResult struct {
 	err error
 }
 
-func (m *runRecordMemo) get(ctx context.Context, g *runMemoryGroup) runRecordResult {
+func (m *runRecordMemo) get(ctx context.Context, g *runMemoryGroup, keep bool) runRecordResult {
 	key := g.ownerID + "\x00" + g.runID
 	if r, ok := m.m[key]; ok {
 		return r
 	}
 	rec, err := m.s.runRecordForRetirement(ctx, g.ownerID, g.runID)
 	r := runRecordResult{rec, err}
-	m.m[key] = r
+	if keep {
+		m.m[key] = r
+	}
 	return r
 }
 
@@ -199,6 +232,7 @@ func (m *runRecordMemo) get(ctx context.Context, g *runMemoryGroup) runRecordRes
 // every return.
 func (s *Store) selectRunMemoryPlan(ctx context.Context, now time.Time) (plan runMemoryPlan, census RunMemoryCensus, err error) {
 	census = newRunMemoryCensus()
+	plan.groups = map[string]runMemoryGroup{}
 	defer func() { census.finish() }()
 	db := s.ReadDB()
 	if db == nil {
@@ -214,9 +248,18 @@ func (s *Store) selectRunMemoryPlan(ctx context.Context, now time.Time) (plan ru
 	for rows.Next() {
 		var g runMemoryGroup
 		var last any
-		if err := rows.Scan(&g.runID, &g.ownerID, &g.agentID, &last, &g.retirable, &g.entries); err != nil {
+		var docAgent, docOwner sql.NullString
+		if err := rows.Scan(&g.runID, &g.ownerID, &g.agentID, &last, &g.retirable, &g.entries, &g.carry, &docAgent, &docOwner); err != nil {
 			_ = rows.Close()
 			return plan, census, err
+		}
+		// A run with document custodian rows is that agent's, whatever other
+		// agent or owner ids its other rows carry.
+		if docAgent.Valid && docAgent.String != "" {
+			g.agentID = docAgent.String
+			if docOwner.Valid && docOwner.String != "" {
+				g.ownerID = docOwner.String
+			}
 		}
 		t, ok := parseStoreTime(last)
 		if !ok {
@@ -234,16 +277,20 @@ func (s *Store) selectRunMemoryPlan(ctx context.Context, now time.Time) (plan ru
 
 	memo := &runRecordMemo{s: s, m: map[string]runRecordResult{}}
 
-	// The carry sources: each owner's document custodian agent keeps its newest
-	// runMemoryKeepPerAgent completed or passivated runs, in the order
-	// LatestActorRunMemoryEntries takes them. A failed, cancelled, blocked,
-	// running or record-less run takes no slot (that reader never takes it); a
-	// record that does not decode is protected.
+	// The carry sources: each owner's document custodian agent on one computer
+	// keeps its newest runMemoryKeepPerAgent completed or passivated runs that
+	// hold something a carry uses, in the order LatestActorRunMemoryEntries takes
+	// them (carryRunBefore, resolveRunCopies: the one rule, run_memory_carry.go).
+	// A failed, cancelled, blocked, running or record-less run takes no slot, and
+	// neither does a run with only cursors or receipts; a record that does not
+	// decode is protected, and so is a run whose rows and record disagree about
+	// its agent.
 	type slot struct {
 		runID string
 		at    time.Time
 	}
 	agents := map[string]bool{}
+	perAgent := map[string]int{}
 	slots := map[string][]slot{}
 	protected := map[string]bool{}
 	for i := range groups {
@@ -252,18 +299,23 @@ func (s *Store) selectRunMemoryPlan(ctx context.Context, now time.Time) (plan ru
 			continue
 		}
 		agents[g.ownerID+"\x00"+g.agentID] = true
-		if !deskmanifest.IsDocumentInbox(g.agentID) {
+		perAgent[g.ownerID+"\x00"+g.agentID]++
+		if !deskmanifest.IsDocumentInbox(g.agentID) || g.carry == 0 {
 			continue
 		}
 		if err := ctx.Err(); err != nil {
 			return plan, census, err
 		}
-		r := memo.get(ctx, g)
+		r := memo.get(ctx, g, true)
 		switch {
 		case r.err == nil:
-			if r.rec.State == types.RunCompleted || r.rec.State == types.RunPassivated {
-				key := g.ownerID + "\x00" + g.agentID
-				slots[key] = append(slots[key], slot{g.runID, runFinishedAt(r.rec)})
+			if r.rec.AgentID != g.agentID {
+				protected[g.ownerID+"\x00"+g.runID] = true // fail closed
+				continue
+			}
+			if carrySourceState(r.rec.State) {
+				key := g.ownerID + "\x00" + r.rec.ComputerID + "\x00" + g.agentID
+				slots[key] = append(slots[key], slot{g.runID, runCarryFinishedAt(r.rec)})
 			}
 		case errors.Is(r.err, errRunRecordUnreadable):
 			protected[g.ownerID+"\x00"+g.runID] = true
@@ -273,26 +325,15 @@ func (s *Store) selectRunMemoryPlan(ctx context.Context, now time.Time) (plan ru
 		}
 	}
 	census.Agents = int64(len(agents))
-	perAgent := map[string]int{}
-	for i := range groups {
-		if groups[i].agentID != "" {
-			perAgent[groups[i].ownerID+"\x00"+groups[i].agentID]++
-		}
-	}
 	for _, n := range perAgent {
 		if n <= runMemoryKeepPerAgent {
 			census.AgentsWithOneOrTwoRuns++
 		}
 	}
-	for _, list := range slots {
-		sort.Slice(list, func(i, j int) bool {
-			if !list[i].at.Equal(list[j].at) {
-				return list[i].at.After(list[j].at)
-			}
-			return list[i].runID > list[j].runID
-		})
-	}
 	for key, list := range slots {
+		sort.Slice(list, func(i, j int) bool {
+			return carryRunBefore(list[i].at, list[i].runID, list[j].at, list[j].runID)
+		})
 		owner, _, _ := strings.Cut(key, "\x00")
 		for i := 0; i < len(list) && i < runMemoryKeepPerAgent; i++ {
 			protected[owner+"\x00"+list[i].runID] = true
@@ -306,7 +347,7 @@ func (s *Store) selectRunMemoryPlan(ctx context.Context, now time.Time) (plan ru
 		switch {
 		case age < runMemoryRetireWindow:
 			census.CarrySources.Within7d.add(g)
-		case age < 30*24*time.Hour:
+		case age < runMemoryRetireNoRecordWindow:
 			census.CarrySources.From7To30d.add(g)
 		default:
 			census.CarrySources.Over30d.add(g)
@@ -324,7 +365,7 @@ func (s *Store) selectRunMemoryPlan(ctx context.Context, now time.Time) (plan ru
 			census.add("kept_newest_entry_in_window", *g)
 			continue
 		case protected[g.ownerID+"\x00"+g.runID]:
-			if now.Sub(g.last) < 30*24*time.Hour {
+			if now.Sub(g.last) < runMemoryRetireNoRecordWindow {
 				census.add("kept_carry_source_7_30d", *g)
 			} else {
 				census.add("kept_carry_source_over_30d", *g)
@@ -338,7 +379,7 @@ func (s *Store) selectRunMemoryPlan(ctx context.Context, now time.Time) (plan ru
 		if err := ctx.Err(); err != nil {
 			return plan, census, err
 		}
-		r := memo.get(ctx, g)
+		r := memo.get(ctx, g, false)
 		if r.err != nil {
 			switch {
 			case errors.Is(r.err, ErrNotFound):
@@ -351,6 +392,7 @@ func (s *Store) selectRunMemoryPlan(ctx context.Context, now time.Time) (plan ru
 				}
 				census.add("retired_no_run_record", *g)
 				plan.noRecord = append(plan.noRecord, g.runID)
+				plan.groups[g.runID] = *g
 			case errors.Is(r.err, errRunRecordUnreadable):
 				census.add("kept_run_record_unreadable", *g) // an unreadable record is never proof of state
 			default:
@@ -359,6 +401,12 @@ func (s *Store) selectRunMemoryPlan(ctx context.Context, now time.Time) (plan ru
 			continue
 		}
 		run := r.rec
+		// The rows said this run is not a document agent's and the record says it
+		// is (or the other way): the carry reads records, so keep the run.
+		if deskmanifest.IsDocumentInbox(run.AgentID) != deskmanifest.IsDocumentInbox(g.agentID) {
+			census.add("kept_run_agent_disagrees", *g)
+			continue
+		}
 		switch run.State {
 		case types.RunCompleted, types.RunFailed, types.RunCancelled:
 		case types.RunPassivated:
@@ -371,13 +419,14 @@ func (s *Store) selectRunMemoryPlan(ctx context.Context, now time.Time) (plan ru
 			census.add("kept_state_other:"+string(run.State), *g)
 			continue
 		}
-		finished := runFinishedAt(run)
+		finished := runCarryFinishedAt(run)
 		if finished.IsZero() || !finished.Before(cutoff) {
 			census.add("kept_finished_in_window", *g)
 			continue
 		}
 		census.add("retired", *g)
 		plan.recorded = append(plan.recorded, g.runID)
+		plan.groups[g.runID] = *g
 	}
 	sort.Strings(plan.recorded)
 	sort.Strings(plan.noRecord)
@@ -391,8 +440,9 @@ var errRunRecordUnreadable = errors.New("run record unreadable")
 // through the read pool (never the single write connection): the owner-scoped
 // id, and every copy the run id in the record's metadata (an indexed column)
 // names, which finds the computer-scoped lifecycle records. Only the owner's
-// live copies whose own run id matches count. When more than one exists the
-// first that is not terminal wins (it keeps the run); else the newest finish.
+// live copies whose own run id matches count. When more than one exists
+// resolveRunCopies picks (the carry reader picks the same way): a copy that is
+// not terminal keeps the run, else the newest finish.
 // A copy that does not decode makes the record unreadable.
 func (s *Store) runRecordForRetirement(ctx context.Context, ownerID, runID string) (types.RunRecord, error) {
 	graph := s.ogReadStore
@@ -409,11 +459,12 @@ func (s *Store) runRecordForRetirement(ctx context.Context, ownerID, runID strin
 		case err == nil:
 			copies = append(copies, obj)
 		case !errors.Is(err, objectgraph.ErrNotFound):
-			return types.RunRecord{}, fmt.Errorf("%w: %v", errRunRecordUnreadable, err)
+			// A read that failed (context, I/O) says nothing about the record.
+			return types.RunRecord{}, err
 		}
 	}
 	// A run id has a few copies at most: one page, and a second only when the
-	// first was full (no trailing empty read).
+	// first was full (the usual run costs one read, not two).
 	after := ""
 	for {
 		page, err := graph.ListObjectsByMetadataPage(ctx, string(ogKindRun), "$.run_id", runID, after, ogMetadataPageSize)
@@ -444,30 +495,12 @@ func (s *Store) runRecordForRetirement(ctx context.Context, ownerID, runID strin
 		if r.RunID != runID {
 			continue
 		}
-		switch {
-		case !found:
-			best, found = r, true
-		case !r.State.Terminal():
-			if best.State.Terminal() {
-				best = r
-			}
-		case best.State.Terminal() && runFinishedAt(r).After(runFinishedAt(best)):
-			best = r
-		}
+		best, found = resolveRunCopies(best, found, r), true
 	}
 	if !found {
 		return types.RunRecord{}, ErrNotFound
 	}
 	return best, nil
-}
-
-// runFinishedAt is when the run finished, as LatestActorRunMemoryEntries
-// orders its candidates: FinishedAt, else UpdatedAt.
-func runFinishedAt(r types.RunRecord) time.Time {
-	if r.FinishedAt != nil {
-		return *r.FinishedAt
-	}
-	return r.UpdatedAt
 }
 
 // runMemoryRetireRunsPerOp is the runs one op names when this store writes
@@ -494,8 +527,23 @@ func (s *Store) RetireRunMemory(ctx context.Context, now time.Time) (int, error)
 		s.recordRunMemoryCensus(census, started)
 		return 0, err
 	}
-	// The census is of this pass's selection; the pass ends when the appends do.
-	defer func() { s.recordRunMemoryCensus(census, started) }()
+	// The census is of what this pass applied: runs it planned and did not reach
+	// (an append failed, the context ended) are moved out of "retired" before it
+	// is recorded, so the wake's totals count applied runs only.
+	applied := map[string]bool{}
+	defer func() {
+		for _, id := range plan.recorded {
+			if !applied[id] {
+				census.unretire("retired", plan.groups[id])
+			}
+		}
+		for _, id := range plan.noRecord {
+			if !applied[id] {
+				census.unretire("retired_no_run_record", plan.groups[id])
+			}
+		}
+		s.recordRunMemoryCensus(census, started)
+	}()
 	appended := 0
 	appendRuns := func(ids []string, reason string) error {
 		for start := 0; start < len(ids); start += runMemoryRetireRunsPerOp {
@@ -515,6 +563,9 @@ func (s *Store) RetireRunMemory(ctx context.Context, now time.Time) (int, error)
 				return err
 			}
 			appended++
+			for _, id := range chunk {
+				applied[id] = true
+			}
 			// The same duty-cycle bound as the telemetry ops (telemetry_retire.go).
 			rest := max(telemetryRetireChunkPause, time.Duration(telemetryRetireRest*float64(time.Since(opStart))))
 			select {
@@ -534,7 +585,6 @@ func (s *Store) RetireRunMemory(ctx context.Context, now time.Time) (int, error)
 	if appended > 0 {
 		log.Printf("store: run memory retirement: %d runs in %d ops", len(plan.recorded)+len(plan.noRecord), appended)
 	}
-	census.logLines()
 	return appended, nil
 }
 
@@ -559,7 +609,18 @@ func (s *Store) RetireRunMemoryBacklog(ctx context.Context, now time.Time, gap t
 		return 0, 0, nil
 	}
 	s.runMemoryCensus.beginWake()
-	defer s.runMemoryCensus.endWake()
+	defer func() {
+		s.runMemoryCensus.endWake()
+		// One census in the log per wake: the last pass's, and the wake's totals
+		// (a catch-up of 22 passes would log 300 lines otherwise).
+		c := s.RunMemoryRetirementCensus()
+		c.logLines()
+		if c.Wake != nil {
+			for _, d := range c.Wake.Retired {
+				log.Printf("store: run memory census: wake of %d passes: %s: %d runs, %d entries", c.Wake.Passes, d.Disposition, d.Runs, d.Entries)
+			}
+		}
+	}()
 	for {
 		n, err := s.RetireRunMemory(ctx, now)
 		passes++
