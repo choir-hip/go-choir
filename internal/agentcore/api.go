@@ -1083,7 +1083,8 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 	if h.rt.store != nil {
 		var budget time.Duration
 		if secs, err := strconv.Atoi(r.URL.Query().Get("store_tables_seconds")); err == nil && secs > 0 {
-			budget = time.Duration(secs) * time.Second
+			// Clamp before multiplying: a huge value must not wrap the Duration.
+			budget = time.Duration(min(secs, int(storetables.MaxBudget/time.Second))) * time.Second
 		}
 		report := h.rt.storeTables.Read(r.Context(), h.rt.store.ReadDB(), storetables.Limits{Budget: budget}, r.URL.Query().Get("store_tables") == "detail")
 		if report.Reading != nil || report.Busy {
