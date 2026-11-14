@@ -18,6 +18,17 @@
 #  P4 it does not run the binary's prune mode on the updater root, or it can
 #     write outside the updater root.
 #  P5 it is not started at boot (nothing wants it).
+#  P6 it can run again while the daemon and the runtime are live (a later
+#     `systemctl start multi-user.target` or a manual start), beside a live
+#     restore with store/ mounted as an overlay upperdir: it must stay active
+#     after its boot run (RemainAfterExit), refuse a manual start, and carry a
+#     condition on the daemon's own started marker.
+#  P7 its mount ordering or its privileges drift: it needs /mnt/persistent
+#     (RequiresMountsFor; the real chain is the fstab-generator mount unit that
+#     microvm.nix declares for the data volume, mnt-persistent.mount, then
+#     local-fs.target, then basic.target, then this unit; the mount is not in
+#     config.systemd.units, so only the RequiresMountsFor line is assertable
+#     here), runs as root with exactly CAP_DAC_OVERRIDE and CAP_FOWNER.
 #
 # Run: bash scripts/updater-prune-unit-nix-test.sh
 set -u
@@ -46,7 +57,7 @@ json="$(nix eval --json '.#nixosConfigurations.go-choir-autoputer-vm.config.syst
     serviceRequiredBy = rel "requiredBy";
     updaterAfter = get "go-choir-updater" "after";
     sc = prune.serviceConfig;
-    mounts = prune.unitConfig.RequiresMountsFor or "";
+    unit = prune.unitConfig;
   }' 2>"${TMPDIR:-/tmp}/updater-prune-nix.err")" || { echo "FAIL: nix eval:"; cat "${TMPDIR:-/tmp}/updater-prune-nix.err"; exit 1; }
 
 printf '%s' "$json" | python3 -c '
@@ -75,7 +86,16 @@ for name in ("go-choir-updater", "go-choir-autoputer"):
 # P3
 sc = d["sc"]
 if sc.get("Type") != "oneshot": bad.append("P3 Type is %r" % sc.get("Type"))
-if sc.get("RemainAfterExit"): bad.append("P3 RemainAfterExit is set")
+if sc.get("RemainAfterExit") is not True: bad.append("P6 RemainAfterExit is %r: a re-activation would run the prune again" % sc.get("RemainAfterExit"))
+unit = d["unit"]
+if unit.get("RefuseManualStart") not in (True, "yes", "true"): bad.append("P6 RefuseManualStart is %r" % unit.get("RefuseManualStart"))
+conds = unit.get("ConditionPathExists", [])
+conds = conds if isinstance(conds, list) else [conds]
+for want in ("!/run/choir/updater-unit-entered", "!/run/choir/updater.sock"):
+    if want not in conds: bad.append("P6 no ConditionPathExists=%s (have %r)" % (want, conds))
+if unit.get("RequiresMountsFor") != "/mnt/persistent": bad.append("P7 RequiresMountsFor is %r" % unit.get("RequiresMountsFor"))
+if sc.get("User") != "root": bad.append("P7 User is %r" % sc.get("User"))
+if sorted(sc.get("CapabilityBoundingSet", [])) != ["CAP_DAC_OVERRIDE", "CAP_FOWNER"]: bad.append("P7 CapabilityBoundingSet is %r" % sc.get("CapabilityBoundingSet"))
 if sc.get("Restart", "no") != "no": bad.append("P3 Restart is %r" % sc.get("Restart"))
 timeout = sc.get("TimeoutStartSec", "")
 def secs(v):
