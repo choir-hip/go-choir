@@ -159,6 +159,9 @@ entered below as lapsed, not scored.
 | C76 | 2026-11-14T01:37Z | lead | landing | Thirty days from now the paper's guest store is under 10 GiB and flat within 10% over seven days (43.8 GiB and rising at 2026-11-13). | 0.30 | 2026-12-14T12:00Z | `store_tables` on the paper, seven days apart |
 | C77 | 2026-11-14T01:37Z | lead | landing | Thirty days from now the paper's receipts are under 2 GB (about 14 GB at 2026-11-13). | 0.35 | 2026-12-14T12:00Z | row count times row width for the paper in the control database |
 | C78 | 2026-11-14T01:37Z | lead | landing | Within seven days d@e's updater directory is under 2 GiB and holds at most three releases (20.5 GiB at 2026-11-13). | 0.75 | 2026-11-21T12:00Z | `data_volume=detail` on d@e |
+| C79 | 2026-11-14T05:43Z | lead | landing | With the late take deployed, the paper's commit groups over a full hour of ordinary work average at least 1.6 members (1.37 before), with zero refused batches and zero unknown outcomes. | 0.45 | 2026-11-15T12:00Z | `group_commit` on the paper's observability, an hour apart |
+| C80 | 2026-11-14T05:43Z | lead | review | The boot-time updater prune (lane/prune-at-boot) is accepted by both seats in its third round and lands without a fourth. | 0.55 | 2026-11-14T18:00Z | both seats' verdicts on the round-3 candidate |
+| C81 | 2026-11-14T05:43Z | lead | diagnosis | On the paper, og_bodies and run_memory_entries (tables with their indexes) together hold more than 70% of the guest store's file (floors read at 05:35Z: 12.4 and 11.2 GB of 47.5, both cut by the budget). | 0.60 | 2026-11-16T12:00Z | named-tree store readings on the paper plus the unattributed remainder |
 
 ### Settlements
 
