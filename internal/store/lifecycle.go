@@ -1376,6 +1376,41 @@ func (s *Store) lifecycleStoredRevision(ctx context.Context, ownerID, computerID
 	return &revision, nil
 }
 
+// The forms a stored result takes, counted per committed command.
+const (
+	lifecycleFormSlim             = "slim"              // the revision is named by id
+	lifecycleFormEmbeddedMismatch = "embedded_mismatch" // the batch writes the revision, but its object body is not the revision's own JSON
+	lifecycleFormEmbeddedHead     = "embedded_head"     // the revision was written by an earlier batch (a head the command read)
+	lifecycleFormNoRevision       = "no_revision"       // the command carries no revision
+)
+
+// lifecycleBatchRevisionForm decides the form of a command's stored result:
+// slim only when the batch writes exactly this revision, meaning an object at
+// the revision's canonical id whose body is the revision's own JSON. Only
+// then is a second copy in the command redundant; any doubt keeps it embedded.
+func lifecycleBatchRevisionForm(objects []objectgraph.Object, ownerID, computerID string, revision *types.Revision) string {
+	if revision == nil || strings.TrimSpace(revision.RevisionID) == "" {
+		return lifecycleFormNoRevision
+	}
+	canonicalID, err := lifecycleCanonicalID(ogKindTexRev, ownerID, computerID, revision.RevisionID)
+	if err != nil {
+		return lifecycleFormEmbeddedMismatch
+	}
+	body, err := json.Marshal(revision)
+	if err != nil {
+		return lifecycleFormEmbeddedMismatch
+	}
+	for _, obj := range objects {
+		if obj.ObjectKind == ogKindTexRev && obj.CanonicalID == canonicalID {
+			if bytes.Equal(obj.Body, body) {
+				return lifecycleFormSlim
+			}
+			return lifecycleFormEmbeddedMismatch
+		}
+	}
+	return lifecycleFormEmbeddedHead
+}
+
 func validateLifecycleCommand(commandID, digest, trajectoryID string) error {
 	if strings.TrimSpace(commandID) == "" || strings.TrimSpace(digest) == "" || strings.TrimSpace(trajectoryID) == "" {
 		return fmt.Errorf("lifecycle: command_id, command digest, and trajectory_id are required")
@@ -2724,6 +2759,16 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 		Document: result.Document, Revision: result.Revision, TextureTurn: result.TextureTurn,
 		Controls: result.Controls, TargetWorkItems: result.TargetWorkItems,
 	}
+	// A revision this batch writes is named, not copied: the revision object
+	// is the one home of its body (store once, R1). The form of every command
+	// is counted, so a byte mismatch that keeps the revision embedded shows
+	// as embedded_mismatch instead of a silent zero saving.
+	form := lifecycleBatchRevisionForm(objects, ownerID, computerID, result.Revision)
+	if form == lifecycleFormSlim {
+		storedReceipt.StoredResult.Revision = nil
+		storedReceipt.StoredResult.RevisionID = result.Revision.RevisionID
+	}
+	s.telemetryStats.countLifecycleCommandForm(form)
 	receiptObj, err := lifecycleObject(ogKindLifecycleCmd, ownerID, computerID, commandID, storedReceipt,
 		lifecycleMetadata("command_id", commandID, computerID, result.Receipt.TrajectoryID, result.Receipt.ReducerSeq),
 		result.Receipt.CreatedAt, result.Receipt.CreatedAt)
