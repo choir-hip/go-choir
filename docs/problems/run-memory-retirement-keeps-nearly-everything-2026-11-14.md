@@ -77,9 +77,8 @@ Two exclusions hold 57% of all entries: "newest two runs of the agent" and
 
 - Whether the paper's no-record runs resolve after the lookup fix is a
   prediction (C85 in the calibration ledger).
-- A Texture agent whose newest two runs are failed or cancelled would have its
-  carry source (newest completed) unprotected. This exists today and is not
-  changed here; it is named residual.
+- The failed and cancelled carry-source gap (round 1, B1) is closed: those
+  runs take no slot.
 - Agents ids that look like document inboxes but are not carried from are
   kept (two runs each); that is bounded by the document count.
 
@@ -134,3 +133,9 @@ how many runs are document agents' carry sources or passivated or blocked:
 
 Total upper bound unchanged: 107,711 runs, 2.94 M entries, 22 passes of 5,000
 inside one wake (cap 32). The 30 day hold on record-less runs can only lower it.
+
+## Rollback
+
+Revert the commits. Retired entries stay retired (each is on the sealed tape
+and in the retire op's explicit run list); a replay of the same tape reaches
+the same store either way.
