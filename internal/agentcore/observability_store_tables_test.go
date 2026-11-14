@@ -215,3 +215,50 @@ func TestObservabilityStoreTablesBudgetFitsTheWriteTimeout(t *testing.T) {
 		t.Fatalf("with nothing left: reading %v budget %d skipped %q", has, ms, skipped)
 	}
 }
+
+// The run_memory_retirement block of guest observability is always present:
+// empty before the first retirement pass, the last pass's census after it.
+func TestObservabilityServesTheRunMemoryRetirementCensus(t *testing.T) {
+	rt := telemetryRuntime(t, "computer-run-memory-census")
+	read := func() struct {
+		Passes       int64      `json:"passes"`
+		FinishedAt   *time.Time `json:"finished_at"`
+		Dispositions []struct {
+			Disposition string `json:"disposition"`
+			Runs        int64  `json:"runs"`
+		} `json:"dispositions"`
+	} {
+		req := httptest.NewRequest(http.MethodGet, "/api/runtime/observability", nil)
+		req.Header.Set("X-Authenticated-User", "owner-telemetry")
+		rec := httptest.NewRecorder()
+		(&APIHandler{rt: rt}).HandleGuestObservability(rec, req)
+		var obs struct {
+			Census *struct {
+				Passes       int64      `json:"passes"`
+				FinishedAt   *time.Time `json:"finished_at"`
+				Dispositions []struct {
+					Disposition string `json:"disposition"`
+					Runs        int64  `json:"runs"`
+				} `json:"dispositions"`
+			} `json:"run_memory_retirement"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &obs); err != nil || rec.Code != http.StatusOK {
+			t.Fatalf("observability = %d %s", rec.Code, rec.Body.String())
+		}
+		if obs.Census == nil {
+			t.Fatalf("no run_memory_retirement in %s", rec.Body.String())
+		}
+		return *obs.Census
+	}
+	if c := read(); c.Passes != 0 || c.FinishedAt != nil || len(c.Dispositions) != 0 {
+		t.Fatalf("before a pass: %+v", c)
+	}
+	if _, err := rt.store.RetireRunMemory(t.Context(), time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	c := read()
+	if c.Passes != 1 || c.FinishedAt == nil || len(c.Dispositions) == 0 {
+		t.Fatalf("after a pass: %+v", c)
+	}
+	_ = fmt.Sprint
+}
