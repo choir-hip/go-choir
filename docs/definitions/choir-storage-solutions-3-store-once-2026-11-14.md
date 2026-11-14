@@ -189,6 +189,28 @@ stations:
     carrier: none yet
     status: pending
 
+owner_rulings:
+  - on: 2026-11-14
+    decision: N1
+    said: "yes" (to: may the updater prune run on every computer, including the owner's and the real user's)
+    read_as: the prune may deploy everywhere once both seats accept; a failed round 3 stops it
+  - on: 2026-11-14
+    decision: N2
+    said: "default; makes sense for tape-modifying stuff"
+    read_as: coalescing is expedited; a change to what tape events contain is proved on d@e (replay and destroy-and-restore) before the paper takes it
+  - on: 2026-11-14
+    decision: N3
+    said: "yes" (to: rebuild and drop receipt indexes on the live table overnight)
+    read_as: after review, one index at a time, concurrently, stopping if the paper's append times rise
+  - on: 2026-11-14
+    decision: N4
+    said: "yes" (to: revert and redeploy without waking the owner if a landing misbehaves on the paper)
+    read_as: revert first, notify, investigate after
+  - on: 2026-11-14
+    decision: N5
+    said: "We should stop them both without deleting them, and also probably overcommit the memory"
+    read_as: Node A's ws-01 and ws-02 are parked, a runner VM (choir-runner) takes landings, memory overcommitted by about 1 GiB; done 2026-11-14T02:00Z
+
 decisions_for_the_owner:
   - id: E1
     question: May old run traces open more slowly once they are read from the tape?
