@@ -227,6 +227,7 @@ func TestAppendReceiptRowWritersAreKnown(t *testing.T) {
 		// ON CONFLICT clauses, "updated_at"-style words, shell tools). Each was
 		// read when this list was made; none updates or deletes receipt rows.
 		"internal/platform/computer_events.go":  "append insert",
+		"internal/platform/receipt_indexes.go":  "schema: builds and drops indexes of the table and holds the readers' query text; no row is changed",
 		"internal/platform/clean_rebase.go":     "reader",
 		"internal/platform/checkpoint_list.go":  "reader",
 		"internal/platform/event_replay.go":     "reader",

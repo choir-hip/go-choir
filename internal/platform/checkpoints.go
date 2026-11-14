@@ -134,7 +134,7 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 			// volume and cannot be observed host-side); a wrong key is at most
 			// as bad as the verifier socket itself being compromised.
 			var genesisSeq uint64
-			if genErr := a.cas.store.db.QueryRowContext(ctx, `SELECT sequence FROM computer_event_append_receipts WHERE computer_id=? AND event_kind=? ORDER BY sequence LIMIT 1`, request.ComputerID, string(computerevent.EventGenesisImported)).Scan(&genesisSeq); genErr != nil {
+			if genErr := a.cas.store.db.QueryRowContext(ctx, receiptFirstOfKindSQL, request.ComputerID, string(computerevent.EventGenesisImported)).Scan(&genesisSeq); genErr != nil {
 				return selfdevprotocol.CheckpointResponse{}, errors.New(selfdevprotocol.CheckpointRefusalVerifierKeyNotPinned)
 			}
 			legacyFirstPin = true
