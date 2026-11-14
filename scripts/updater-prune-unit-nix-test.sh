@@ -58,6 +58,7 @@ json="$(nix eval --json '.#nixosConfigurations.go-choir-autoputer-vm.config.syst
     updaterAfter = get "go-choir-updater" "after";
     sc = prune.serviceConfig;
     unit = prune.unitConfig;
+    updaterPre = svc.go-choir-updater.serviceConfig.ExecStartPre or "";
     autoputerPre = svc.go-choir-autoputer.serviceConfig.ExecStartPre or "";
   }' 2>"${TMPDIR:-/tmp}/updater-prune-nix.err")" || { echo "FAIL: nix eval:"; cat "${TMPDIR:-/tmp}/updater-prune-nix.err"; exit 1; }
 
@@ -96,8 +97,12 @@ for want in ("!/run/choir/updater-unit-entered", "!/run/choir/updater.sock", "!/
     if want not in conds: bad.append("P6 no ConditionPathExists=%s (have %r)" % (want, conds))
 if unit.get("RequiresMountsFor") != "/mnt/persistent": bad.append("P7 RequiresMountsFor is %r" % unit.get("RequiresMountsFor"))
 if sc.get("NoNewPrivileges") is not True: bad.append("P7 NoNewPrivileges is %r" % sc.get("NoNewPrivileges"))
+upre = d["updaterPre"]
+upre = " ".join(upre) if isinstance(upre, list) else upre
+if "/run/choir/updater-unit-entered" not in upre: bad.append("P6 the updater ExecStartPre no longer writes updater-unit-entered (%r): internal/updater/client.go reads it" % upre)
 pre = d["autoputerPre"]
 pre = " ".join(pre) if isinstance(pre, list) else pre
+if "updater-unit-entered" in pre: bad.append("P6 the runtime writes the updater marker (%r): its meaning belongs to internal/updater/client.go" % pre)
 if "/run/choir/runtime-unit-entered" not in pre: bad.append("P6 the runtime does not mark itself entered (ExecStartPre %r): a failed updater unit would leave the runtime live with no marker" % pre)
 if sc.get("User") != "root": bad.append("P7 User is %r" % sc.get("User"))
 if sorted(sc.get("CapabilityBoundingSet", [])) != ["CAP_DAC_OVERRIDE", "CAP_FOWNER"]: bad.append("P7 CapabilityBoundingSet is %r" % sc.get("CapabilityBoundingSet"))
