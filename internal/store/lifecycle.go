@@ -1388,6 +1388,10 @@ const (
 // slim only when the batch writes exactly this revision, meaning an object at
 // the revision's canonical id whose body is the revision's own JSON. Only
 // then is a second copy in the command redundant; any doubt keeps it embedded.
+// The second json.Marshal of the revision below is the proof of "the revision's
+// own JSON": it is the same call lifecycleObject made for the object body, so
+// byte equality means the reader will decode exactly what the command would
+// have embedded. Do not replace it with a cheaper check.
 func lifecycleBatchRevisionForm(objects []objectgraph.Object, ownerID, computerID string, revision *types.Revision) string {
 	if revision == nil || strings.TrimSpace(revision.RevisionID) == "" {
 		return lifecycleFormNoRevision
@@ -2768,7 +2772,6 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 		storedReceipt.StoredResult.Revision = nil
 		storedReceipt.StoredResult.RevisionID = result.Revision.RevisionID
 	}
-	s.telemetryStats.countLifecycleCommandForm(form)
 	receiptObj, err := lifecycleObject(ogKindLifecycleCmd, ownerID, computerID, commandID, storedReceipt,
 		lifecycleMetadata("command_id", commandID, computerID, result.Receipt.TrajectoryID, result.Receipt.ReducerSeq),
 		result.Receipt.CreatedAt, result.Receipt.CreatedAt)
@@ -2799,6 +2802,9 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 		}
 		return types.LifecycleResult{}, err
 	}
+	// Counted on the success path only: a lost condition or a failed outbox
+	// append commits nothing and counts nothing.
+	s.telemetryStats.countLifecycleCommandForm(form)
 	s.signalActorWakesIfAny(objects)
 	return result, nil
 }
