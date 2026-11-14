@@ -81,21 +81,24 @@ CREATE TABLE IF NOT EXISTS computer_event_receipt_compaction (
   bytes_before BIGINT NOT NULL,
   bytes_after BIGINT NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL,
+  codec_version INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY (computer_id)
-);`
+);
+ALTER TABLE computer_event_receipt_compaction ADD COLUMN IF NOT EXISTS codec_version INTEGER NOT NULL DEFAULT 1;`
 
 // receiptCompactionCodec numbers what the backfill may write. Codec 1 writes
 // the canonical compact format only; codec 2 also writes format 2, the jsonb
 // spelling of the rows stored while the column was jsonb
-// (docs/problems/old-receipts-do-not-compact-2026-11-14.md). Every reader
-// expands both at every codec; the writer is raised one release after the
-// readers, so a revert to the release before it still finds only rows it can
-// read.
-const receiptCompactionCodec = 1
+// (docs/problems/old-receipts-do-not-compact-2026-11-14.md). Every reader has
+// expanded both since the release before this one, so a revert to that release
+// finds only rows it can read. A pass saved by an older codec kept rows the
+// current one rewrites, so its progress starts over.
+const receiptCompactionCodec = 2
 
 // receiptCompactionAllowJSONB is the write allowance the codec threads to
-// computerevent.CompactStoredHeadReceipt.
-const receiptCompactionAllowJSONB = receiptCompactionCodec >= 2
+// computerevent.CompactStoredHeadReceipt. It is a variable only so a test can
+// exercise the codec-1 path (a compact row it may not write is kept).
+var receiptCompactionAllowJSONB = receiptCompactionCodec >= 2
 
 var (
 	receiptCompactionBatch    = 500
@@ -103,6 +106,10 @@ var (
 	receiptCompactionRest     = 4.0
 	receiptCompactionInterval = 10 * time.Minute
 	receiptCompactionDelay    = 2 * time.Minute
+	// receiptCompactionLoadEvery is how many batches pass between two load
+	// lines in the log (first batch included), so the first hours of a walk
+	// over the live table can be read from the log.
+	receiptCompactionLoadEvery = 100
 )
 
 // ReceiptCompactionPolicy maps each named computer to its mode.
@@ -307,15 +314,16 @@ func (c *ReceiptCompactor) runComputer(ctx context.Context, computerID, mode str
 	db := c.store.db
 	pass := ReceiptCompactionPass{ComputerID: computerID, Mode: mode}
 	var storedMode string
+	var storedCodec int
 	var cum ReceiptCompactionPass
-	err := db.QueryRowContext(ctx, `SELECT mode, through_sequence, rows_rewritten, rows_kept, bytes_before, bytes_after FROM computer_event_receipt_compaction WHERE computer_id=?`, computerID).
-		Scan(&storedMode, &cum.Through, &cum.Rewritten, &cum.Kept, &cum.BytesBefore, &cum.BytesAfter)
+	err := db.QueryRowContext(ctx, `SELECT mode, through_sequence, rows_rewritten, rows_kept, bytes_before, bytes_after, codec_version FROM computer_event_receipt_compaction WHERE computer_id=?`, computerID).
+		Scan(&storedMode, &cum.Through, &cum.Rewritten, &cum.Kept, &cum.BytesBefore, &cum.BytesAfter, &storedCodec)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return pass, err
 	}
-	if storedMode != mode {
+	if storedMode != mode || storedCodec != receiptCompactionCodec {
 		// A new mode starts its walk over: what an earlier mode did proves
-		// nothing about this one.
+		// nothing about this one. So does a pass an older codec saved.
 		cum = ReceiptCompactionPass{}
 	}
 	head, err := readComputerEventHead(ctx, db, computerID, false)
@@ -327,6 +335,9 @@ func (c *ReceiptCompactor) runComputer(ctx context.Context, computerID, mode str
 		pass.Done = true
 		return pass, nil
 	}
+	walkStart := time.Now()
+	startLSN, _ := c.walLSN(ctx)
+	batches := 0
 	for pass.Through < head.Sequence {
 		started := time.Now()
 		batch, err := c.batch(ctx, computerID, mode, pass.Through, head.Sequence)
@@ -342,6 +353,10 @@ func (c *ReceiptCompactor) runComputer(ctx context.Context, computerID, mode str
 		if err := c.saveProgress(ctx, computerID, mode, cum, pass); err != nil {
 			return pass, err
 		}
+		if batches%receiptCompactionLoadEvery == 0 {
+			c.logLoad(ctx, computerID, pass, startLSN, walkStart)
+		}
+		batches++
 		if batch.Done {
 			break
 		}
@@ -355,9 +370,9 @@ func (c *ReceiptCompactor) runComputer(ctx context.Context, computerID, mode str
 }
 
 func (c *ReceiptCompactor) saveProgress(ctx context.Context, computerID, mode string, cum, pass ReceiptCompactionPass) error {
-	_, err := c.store.db.ExecContext(ctx, `INSERT INTO computer_event_receipt_compaction (computer_id, mode, through_sequence, rows_rewritten, rows_kept, bytes_before, bytes_after, updated_at) VALUES (?,?,?,?,?,?,?,?)
-		ON CONFLICT (computer_id) DO UPDATE SET mode=excluded.mode, through_sequence=excluded.through_sequence, rows_rewritten=excluded.rows_rewritten, rows_kept=excluded.rows_kept, bytes_before=excluded.bytes_before, bytes_after=excluded.bytes_after, updated_at=excluded.updated_at`,
-		computerID, mode, pass.Through, cum.Rewritten+pass.Rewritten, cum.Kept+pass.Kept, cum.BytesBefore+pass.BytesBefore, cum.BytesAfter+pass.BytesAfter, time.Now().UTC())
+	_, err := c.store.db.ExecContext(ctx, `INSERT INTO computer_event_receipt_compaction (computer_id, mode, through_sequence, rows_rewritten, rows_kept, bytes_before, bytes_after, updated_at, codec_version) VALUES (?,?,?,?,?,?,?,?,?)
+		ON CONFLICT (computer_id) DO UPDATE SET mode=excluded.mode, through_sequence=excluded.through_sequence, rows_rewritten=excluded.rows_rewritten, rows_kept=excluded.rows_kept, bytes_before=excluded.bytes_before, bytes_after=excluded.bytes_after, updated_at=excluded.updated_at, codec_version=excluded.codec_version`,
+		computerID, mode, pass.Through, cum.Rewritten+pass.Rewritten, cum.Kept+pass.Kept, cum.BytesBefore+pass.BytesBefore, cum.BytesAfter+pass.BytesAfter, time.Now().UTC(), receiptCompactionCodec)
 	return err
 }
 
@@ -449,4 +464,52 @@ func (c *ReceiptCompactor) batch(ctx context.Context, computerID, mode string, t
 		return out, err
 	}
 	return out, nil
+}
+
+// ReceiptTableLoad is what a walk over the table costs it, read from
+// PostgreSQL's own counters.
+type ReceiptTableLoad struct {
+	LiveTuples      int64
+	DeadTuples      int64
+	Autovacuums     int64
+	LastAutovacuum  string
+	WALBytesSince   int64
+	TableBytes      int64
+	WALBytesVisible bool
+}
+
+func (c *ReceiptCompactor) walLSN(ctx context.Context) (string, error) {
+	var lsn string
+	err := c.store.db.QueryRowContext(ctx, `SELECT pg_current_wal_lsn()::text`).Scan(&lsn)
+	return lsn, err
+}
+
+// receiptTableLoad reads the table's live and dead tuples, its autovacuum
+// count and size, and the WAL written since startLSN (when it was read).
+func (c *ReceiptCompactor) receiptTableLoad(ctx context.Context, startLSN string) (ReceiptTableLoad, error) {
+	var load ReceiptTableLoad
+	err := c.store.db.QueryRowContext(ctx, `SELECT COALESCE(n_live_tup,0), COALESCE(n_dead_tup,0), COALESCE(autovacuum_count,0), COALESCE(to_char(last_autovacuum AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), 'never'), pg_total_relation_size(relid)
+		FROM pg_stat_user_tables WHERE relname = 'computer_event_append_receipts' AND schemaname = current_schema()`).
+		Scan(&load.LiveTuples, &load.DeadTuples, &load.Autovacuums, &load.LastAutovacuum, &load.TableBytes)
+	if err != nil {
+		return load, err
+	}
+	if startLSN != "" {
+		if err := c.store.db.QueryRowContext(ctx, `SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), ?::pg_lsn)::bigint`, startLSN).Scan(&load.WALBytesSince); err == nil {
+			load.WALBytesVisible = true
+		}
+	}
+	return load, nil
+}
+
+// logLoad writes one line: the walk's counts and the table's load.
+func (c *ReceiptCompactor) logLoad(ctx context.Context, computerID string, pass ReceiptCompactionPass, startLSN string, walkStart time.Time) {
+	load, err := c.receiptTableLoad(ctx, startLSN)
+	if err != nil {
+		log.Printf("corpusd: receipt compaction load %s through=%d: %v", computerID, pass.Through, err)
+		return
+	}
+	log.Printf("corpusd: receipt compaction load %s through=%d scanned=%d rewritten=%d kept=%d elapsed=%s live_tuples=%d dead_tuples=%d autovacuums=%d last_autovacuum=%s table_bytes=%d wal_bytes_since_start=%d",
+		computerID, pass.Through, pass.Scanned, pass.Rewritten, pass.Kept, time.Since(walkStart).Round(time.Second),
+		load.LiveTuples, load.DeadTuples, load.Autovacuums, load.LastAutovacuum, load.TableBytes, load.WALBytesSince)
 }
