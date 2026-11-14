@@ -659,14 +659,19 @@ type ArchiveLifecycleArtifactRequest struct {
 }
 
 type LifecycleStoredResult struct {
-	Trajectory      TrajectoryRecord      `json:"trajectory"`
-	Schema          string                `json:"schema,omitempty"`
-	WorkItem        *WorkItemRecord       `json:"work_item,omitempty"`
-	Agent           *AgentRecord          `json:"agent,omitempty"`
-	Update          *CoagentSourcePacket  `json:"update,omitempty"`
-	Events          []LifecycleEvent      `json:"events"`
-	Document        *Document             `json:"document,omitempty"`
-	Revision        *Revision             `json:"revision,omitempty"`
+	Trajectory TrajectoryRecord     `json:"trajectory"`
+	Schema     string               `json:"schema,omitempty"`
+	WorkItem   *WorkItemRecord      `json:"work_item,omitempty"`
+	Agent      *AgentRecord         `json:"agent,omitempty"`
+	Update     *CoagentSourcePacket `json:"update,omitempty"`
+	Events     []LifecycleEvent     `json:"events"`
+	Document   *Document            `json:"document,omitempty"`
+	Revision   *Revision            `json:"revision,omitempty"`
+	// RevisionID names the revision this command wrote in its own batch, in
+	// place of embedding a second copy of it in Revision. Exactly one of
+	// Revision (commands written before store-once) and RevisionID is set; the
+	// store rebuilds the revision by id, and revisions are immutable.
+	RevisionID      string                `json:"revision_id,omitempty"`
 	TextureTurn     *TextureTurnRecord    `json:"texture_turn,omitempty"`
 	Controls        []CoagentSourcePacket `json:"controls,omitempty"`
 	TargetWorkItems []WorkItemRecord      `json:"target_work_items,omitempty"`

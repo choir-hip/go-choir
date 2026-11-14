@@ -833,7 +833,11 @@ func (s *Store) GetAppliedTextureTurnByCallerRun(ctx context.Context, ownerID, c
 		if receipt.Kind != types.LifecycleApplyTextureTurn || stored == nil || stored.TextureTurn == nil || stored.Agent == nil || strings.TrimSpace(stored.Agent.ActiveRunID) != strings.TrimSpace(runID) {
 			continue
 		}
-		return types.LifecycleResult{Receipt: receipt, Trajectory: stored.Trajectory, Schema: stored.Schema, WorkItem: stored.WorkItem, Agent: stored.Agent, Update: stored.Update, Events: stored.Events, Document: stored.Document, Revision: stored.Revision, TextureTurn: stored.TextureTurn, Controls: stored.Controls, TargetWorkItems: stored.TargetWorkItems}, nil
+		revision, revisionErr := s.lifecycleStoredRevision(ctx, ownerID, computerID, stored)
+		if revisionErr != nil {
+			return types.LifecycleResult{}, revisionErr
+		}
+		return types.LifecycleResult{Receipt: receipt, Trajectory: stored.Trajectory, Schema: stored.Schema, WorkItem: stored.WorkItem, Agent: stored.Agent, Update: stored.Update, Events: stored.Events, Document: stored.Document, Revision: revision, TextureTurn: stored.TextureTurn, Controls: stored.Controls, TargetWorkItems: stored.TargetWorkItems}, nil
 	}
 	return types.LifecycleResult{}, ErrNotFound
 }

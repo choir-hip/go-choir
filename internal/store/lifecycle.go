@@ -1296,10 +1296,14 @@ func (s *Store) replayLifecycleCommand(ctx context.Context, ownerID, computerID,
 	if receipt.StoredResult != nil {
 		stored := receipt.StoredResult
 		receipt.StoredResult = nil
+		revision, revisionErr := s.lifecycleStoredRevision(ctx, ownerID, computerID, stored)
+		if revisionErr != nil {
+			return types.LifecycleResult{}, true, revisionErr
+		}
 		return types.LifecycleResult{
 			Receipt: receipt, Trajectory: stored.Trajectory, Schema: stored.Schema,
 			WorkItem: stored.WorkItem, Agent: stored.Agent, Update: stored.Update,
-			Events: stored.Events, Replay: true, Document: stored.Document, Revision: stored.Revision,
+			Events: stored.Events, Replay: true, Document: stored.Document, Revision: revision,
 			TextureTurn: stored.TextureTurn, Controls: stored.Controls, TargetWorkItems: stored.TargetWorkItems,
 		}, true, nil
 	}
@@ -1342,6 +1346,45 @@ func (s *Store) replayLifecycleCommand(ctx context.Context, ownerID, computerID,
 		}
 	}
 	return result, true, nil
+}
+
+// lifecycleStoredRevision returns the revision a command's stored result
+// carries: the embedded copy of a command written before store-once, or the
+// revision object the command names by id. A revision is immutable and is
+// read by its own id, never as the document's latest head, so a later
+// revision cannot leak into an earlier command's result.
+func (s *Store) lifecycleStoredRevision(ctx context.Context, ownerID, computerID string, stored *types.LifecycleStoredResult) (*types.Revision, error) {
+	if stored.Revision != nil || strings.TrimSpace(stored.RevisionID) == "" {
+		return stored.Revision, nil
+	}
+	revision, err := s.GetLifecycleRevision(ctx, ownerID, computerID, stored.RevisionID)
+	if err != nil {
+		return nil, fmt.Errorf("lifecycle: rebuild stored revision %q: %w", stored.RevisionID, err)
+	}
+	return &revision, nil
+}
+
+// lifecycleBatchWritesRevision reports whether the batch writes exactly this
+// revision: an object at the revision's canonical id whose body is the
+// revision's own JSON. Only then is a second copy in the command redundant.
+func lifecycleBatchWritesRevision(objects []objectgraph.Object, ownerID, computerID string, revision *types.Revision) bool {
+	if revision == nil || strings.TrimSpace(revision.RevisionID) == "" {
+		return false
+	}
+	canonicalID, err := lifecycleCanonicalID(ogKindTexRev, ownerID, computerID, revision.RevisionID)
+	if err != nil {
+		return false
+	}
+	body, err := json.Marshal(revision)
+	if err != nil {
+		return false
+	}
+	for _, obj := range objects {
+		if obj.ObjectKind == ogKindTexRev && obj.CanonicalID == canonicalID {
+			return bytes.Equal(obj.Body, body)
+		}
+	}
+	return false
 }
 
 func validateLifecycleCommand(commandID, digest, trajectoryID string) error {
@@ -2691,6 +2734,12 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 		Agent: result.Agent, Update: result.Update, Events: result.Events,
 		Document: result.Document, Revision: result.Revision, TextureTurn: result.TextureTurn,
 		Controls: result.Controls, TargetWorkItems: result.TargetWorkItems,
+	}
+	// A revision this batch writes is named, not copied: the revision object
+	// is the one home of its body (store once, R1).
+	if lifecycleBatchWritesRevision(objects, ownerID, computerID, result.Revision) {
+		storedReceipt.StoredResult.Revision = nil
+		storedReceipt.StoredResult.RevisionID = result.Revision.RevisionID
 	}
 	receiptObj, err := lifecycleObject(ogKindLifecycleCmd, ownerID, computerID, commandID, storedReceipt,
 		lifecycleMetadata("command_id", commandID, computerID, result.Receipt.TrajectoryID, result.Receipt.ReducerSeq),
