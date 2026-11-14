@@ -51,6 +51,9 @@ type Store struct {
 	// receiptCompaction is the append-receipt compaction policy
 	// (receipt_compaction.go); nil compacts nothing.
 	receiptCompaction atomic.Pointer[ReceiptCompactionPolicy]
+	// receiptIndexState is 0 until the receipt index migration starts, 1 while
+	// it runs and 2 once it is done (receipt_index_migration.go).
+	receiptIndexState atomic.Int32
 }
 
 // SetArtifactsRoot configures the filesystem CAS root used to externalize
