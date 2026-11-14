@@ -73,6 +73,16 @@ assert_output nix-module-only $'nix/autoputer-vm.nix\n' \
 assert_output nix-unit-test-script-only $'scripts/updater-prune-unit-nix-test.sh\n' \
   'docs_only=false' 'non_docs=true' 'guest_unit=true' 'go=false'
 
+assert_output nix-flake-inputs $'flake.nix\nflake.lock\n' \
+  'guest_unit=true'
+
+# The chaos scripts are read by a Go test, but their README is only docs.
+assert_output chaos-script-and-readme $'scripts/chaos/s2-corpusd-crash.sh\n' \
+  'docs_only=false' 'go=true'
+
+assert_output chaos-readme-only $'scripts/chaos/README.md\n' \
+  'docs_only=true' 'go=false' 'guest_unit=false'
+
 assert_output nix-workflow-wiring $'.github/workflows/ci.yml\n' \
   'guest_unit=true'
 
@@ -190,7 +200,7 @@ grep -qxF 'sampled_race=true' "$sample_output"
 
 force_output="$tmpdir/force.out"
 printf '' | CI_FORCE_ALL=true "$classifier" --sha 1111111111111111111111111111111111111111 "$force_output" >/dev/null
-for expected in go=true frontend=true sbom=true flakehub=true high_risk_race=true ci=true; do
+for expected in go=true frontend=true sbom=true flakehub=true high_risk_race=true ci=true guest_unit=true; do
   grep -qxF "$expected" "$force_output"
 done
 
