@@ -210,11 +210,11 @@ func (s *Store) selectRunMemory(ctx context.Context, now time.Time) ([]string, R
 		age := now.Sub(g.last)
 		switch {
 		case age < runMemoryRetireWindow:
-			census.NewestTwoOfAgent.Within7d.add(g)
+			census.CarrySources.Within7d.add(g)
 		case age < 30*24*time.Hour:
-			census.NewestTwoOfAgent.From7To30d.add(g)
+			census.CarrySources.From7To30d.add(g)
 		default:
-			census.NewestTwoOfAgent.Over30d.add(g)
+			census.CarrySources.Over30d.add(g)
 		}
 	}
 
@@ -397,40 +397,15 @@ func (s *Store) RetireRunMemory(ctx context.Context, now time.Time) (int, error)
 }
 
 // runMemoryCatchUpGap is the rest between back-to-back passes of a backlog.
-// Each pass already rests after every op (a duty cycle of one in five at
-// most); the gap lets a pass's group read and the desks' work through.
 var runMemoryCatchUpGap = time.Minute
 
-// RetireRunMemoryBacklog runs passes until one leaves no run over the per-pass
-// cap, retires nothing, or fails, resting gap between them. A backlog the
-// size of the paper's (about 105,000 runs at 5,000 a pass) drains in one
-// wake, not one pass a day. It returns the ops and passes done. now is the start; a pass that runs
-// long judges age by that start, which only keeps more.
-func (s *Store) RetireRunMemoryBacklog(ctx context.Context, now time.Time, gap time.Duration) (ops, passes int, err error) {
-	for {
-		n, err := s.RetireRunMemory(ctx, now)
-		passes++
-		ops += n
-		if err != nil {
-			return ops, passes, err
-		}
-		if n == 0 || s.runMemoryOverCap() == 0 {
-			return ops, passes, nil
-		}
-		select {
-		case <-ctx.Done():
-			return ops, passes, ctx.Err()
-		case <-time.After(gap):
-		}
-	}
-}
+// runMemoryWakeMaxPasses bounds the passes of one wake (stub).
+var runMemoryWakeMaxPasses = 32
 
-// runMemoryOverCap is the runs the last pass left unreached because of the cap.
-func (s *Store) runMemoryOverCap() int64 {
-	for _, d := range s.RunMemoryRetirementCensus().Dispositions {
-		if d.Disposition == "not_reached_over_cap" {
-			return d.Runs
-		}
-	}
-	return 0
+// runMemoryRetireNoRecordWindow is how old a record-less run's newest entry must be (stub).
+var runMemoryRetireNoRecordWindow = 7 * 24 * time.Hour
+
+// RetireRunMemoryBacklog is the stub of the repaired signature.
+func (s *Store) RetireRunMemoryBacklog(ctx context.Context, now time.Time, gap time.Duration, ready func() bool) (ops, passes int, err error) {
+	return 0, 0, nil
 }
