@@ -1,6 +1,8 @@
 package store
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -16,8 +18,9 @@ const (
 	EventIndexPinListColumn = "payload_pin_receipt_digests_json"
 )
 
-// EventIndexIgnoredColumns are the columns of computer_event_index left out
-// of the witness: the one list the extractor and the row fingerprints share.
+// EventIndexIgnoredColumns are the two wall-clock columns of
+// computer_event_index that the content witness and the row fingerprints both
+// leave out (one list for both, so they cannot drift).
 func EventIndexIgnoredColumns() map[string]struct{} {
 	return map[string]struct{}{eventIndexPreparedAtColumn: {}, eventIndexFinalizedAtColumn: {}}
 }
@@ -41,4 +44,23 @@ func EventIndexWitnessFilter(boundary uint64) string {
 	}
 	return fmt.Sprintf("NOT (event_kind = '%s' AND status = 'finalized' AND sequence <= %d)",
 		computerevent.EventProjectionBatchRecorded, boundary)
+}
+
+// CheckEventIndexSingleComputerTx fails when computer_event_index holds rows
+// of more than one computer. The trim deletes per computer_id and
+// EventIndexWitnessFilter does not look at it, so the canonical witness is
+// defined only for the one-computer store a guest has; a second computer_id
+// is refused, not silently digested.
+func CheckEventIndexSingleComputerTx(ctx context.Context, tx *sql.Tx) error {
+	if tx == nil {
+		return fmt.Errorf("event index computer check: transaction is required")
+	}
+	var n int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(DISTINCT computer_id) FROM computer_event_index`).Scan(&n); err != nil {
+		return fmt.Errorf("event index computer check: %w", err)
+	}
+	if n > 1 {
+		return fmt.Errorf("event index computer check: computer_event_index holds rows of %d computers; the canonical witness is defined for one", n)
+	}
+	return nil
 }

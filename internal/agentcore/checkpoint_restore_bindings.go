@@ -181,8 +181,10 @@ func (rt *Runtime) liveCheckpointWitness(ctx context.Context, computerID string,
 		depositMode string
 		scanStart   time.Time
 	)
-	extractor := replayStateExtractor(db)
-	extractor.SnapshotHook = func(ctx context.Context, tx *sql.Tx) error {
+	// The checkpoint's witness is the canonical form (witness version 4) at
+	// the trim boundary of the head it names, the form restore recomputes
+	// (canonical_witness.go).
+	digests, boundary, err := canonicalSnapshotDigests(ctx, db, func(ctx context.Context, tx *sql.Tx) (uint64, error) {
 		read := func() error {
 			var err error
 			if head, err = rt.store.HeadTx(ctx, tx, computerID); err != nil {
@@ -203,19 +205,22 @@ func (rt *Runtime) liveCheckpointWitness(ctx context.Context, computerID string,
 			err = rt.eventAppender.HoldAppends(read)
 		}
 		if err != nil {
-			return err
+			return 0, err
 		}
 		scanStart = time.Now()
 		if rt.checkpointScanHook != nil {
 			rt.checkpointScanHook(pinned)
 		}
-		return nil
-	}
-	witness, err := storeWitness(ctx, db, extractor)
+		return head.Sequence, nil
+	})
 	if err != nil {
 		if head != nil {
 			return nil, "", empty, 0, fmt.Errorf("self-development checkpoint: read live store witness at sequence %d: %w", head.Sequence, err)
 		}
+		return nil, "", empty, 0, err
+	}
+	witness, err := selfdevprotocol.WitnessFromDigestsCanonical(digests, boundary)
+	if err != nil {
 		return nil, "", empty, 0, err
 	}
 	return head, depositMode, witness, time.Since(scanStart), nil

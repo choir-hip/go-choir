@@ -17,9 +17,12 @@ import (
 // backlog the catch-up trim has not finished is visible but is not a
 // difference.
 type ReplayEventIndexComparison struct {
-	LiveCount            int    `json:"live_count"`
-	ReplayCount          int    `json:"replay_count"`
-	TrimBoundary         uint64 `json:"trim_boundary"`
+	LiveCount    int    `json:"live_count"`
+	ReplayCount  int    `json:"replay_count"`
+	TrimBoundary uint64 `json:"trim_boundary"`
+	// ReplayTrimBoundary is the trim boundary of the replay's own head; it
+	// equals TrimBoundary when the heads are equal.
+	ReplayTrimBoundary   uint64 `json:"replay_trim_boundary"`
 	LiveDisposableRows   int    `json:"live_disposable_rows"`
 	ReplayDisposableRows int    `json:"replay_disposable_rows"`
 	LiveOnlyCount        int    `json:"live_only_count"`
@@ -60,9 +63,9 @@ type ReplayEventIndexDifference struct {
 const replayEventIndexSampleLimit = 32
 
 // compareReplayEventIndex returns nil when the compared rows are equal.
-func compareReplayEventIndex(live, replay []choirstore.EventIndexFingerprint, liveDisposable, replayDisposable int, boundary uint64) *ReplayEventIndexComparison {
+func compareReplayEventIndex(live, replay []choirstore.EventIndexFingerprint, liveDisposable, replayDisposable int, boundary, replayBoundary uint64) *ReplayEventIndexComparison {
 	c := &ReplayEventIndexComparison{
-		LiveCount: len(live), ReplayCount: len(replay), TrimBoundary: boundary,
+		LiveCount: len(live), ReplayCount: len(replay), TrimBoundary: boundary, ReplayTrimBoundary: replayBoundary,
 		LiveDisposableRows: liveDisposable, ReplayDisposableRows: replayDisposable,
 		LiveOnlyByKind: map[string]int{}, LiveOnlyByStatus: map[string]int{},
 		ReplayOnlyByKind: map[string]int{}, ReplayOnlyByStatus: map[string]int{},

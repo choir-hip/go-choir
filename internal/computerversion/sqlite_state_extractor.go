@@ -494,7 +494,7 @@ func (e SQLiteStateExtractor) queryDigest(ctx context.Context, tx *sql.Tx, table
 			}
 			value := values[i]
 			if _, listed := emptyArray[name]; listed {
-				value = emptyJSONArrayFromNull(value)
+				value = EmptyJSONArrayFromNull(value)
 			}
 			var encErr error
 			row, encErr = appendCanonicalValue(row, value)
@@ -527,8 +527,10 @@ func (e SQLiteStateExtractor) queryDigest(ctx context.Context, tx *sql.Tx, table
 	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
-// emptyJSONArrayFromNull reads the JSON text "null" as "[]".
-func emptyJSONArrayFromNull(value any) any {
+// EmptyJSONArrayFromNull reads the JSON text "null" as "[]": the one place the
+// two spellings of an empty list are made one (the extractor and the row
+// fingerprints both use it).
+func EmptyJSONArrayFromNull(value any) any {
 	switch v := value.(type) {
 	case string:
 		if v == "null" {

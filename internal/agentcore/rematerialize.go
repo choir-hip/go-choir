@@ -178,7 +178,9 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	}
 	report.TailEventsApplied = applied
 	report.TailPagesFetched = observer.pages
-	got, err := storeWitness(ctx, staged.ReadDB(), replayStateExtractor(staged.ReadDB()))
+	// The form the checkpoint names decides how the reconstructed store is
+	// read: a checkpoint without the canonical form is compared strictly.
+	got, err := reconstructedWitness(ctx, staged.ReadDB(), checkpoint.Request.VMLocalContentWitness, targetSequence)
 	if err != nil {
 		_ = staged.Close()
 		_ = os.RemoveAll(stagingRoot)
@@ -372,7 +374,10 @@ func (h *APIHandler) restoreComputer(w http.ResponseWriter, r *http.Request, com
 // refused required base is a conflict the operator resolves by publishing or
 // selecting a compatible base, never a server error to retry blindly.
 func rematerializeRefusalStatus(err error) int {
-	if errors.Is(err, recoveryplan.ErrBaseRefused) || errors.Is(err, ErrCheckpointNotDerivable) {
+	// A witness mismatch and a witness version this release does not judge are
+	// refusals of the checkpoint, answered with their reason; not server errors.
+	if errors.Is(err, recoveryplan.ErrBaseRefused) || errors.Is(err, ErrCheckpointNotDerivable) ||
+		errors.Is(err, selfdevprotocol.ErrWitnessMismatch) || errors.Is(err, selfdevprotocol.ErrWitnessVersionRefused) {
 		return http.StatusConflict
 	}
 	if errors.Is(err, ErrRematerializeUnavailable) {

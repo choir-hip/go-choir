@@ -35,9 +35,15 @@ type VMLocalContentWitness struct {
 	// Tables is the per-table SHA-256 over the rows in primary-key order.
 	Tables             map[string]string `json:"tables"`
 	DerivabilityDigest string            `json:"derivability_digest"`
-	// WitnessVersion is 3. A reader refuses every other version
-	// (RefuseWitnessVersion): 1 and 2 were Dolt witnesses.
+	// WitnessVersion is 3 (strict) or 4 (canonical event index). A reader
+	// refuses every other version (RefuseWitnessVersion): 1 and 2 were Dolt
+	// witnesses. A checkpoint without a version 4 witness is compared strictly.
 	WitnessVersion int `json:"witness_version"`
+	// EventIndexTrimBoundary is, in a version 4 witness, the trim boundary of
+	// the checkpoint's head sequence: the digest of computer_event_index
+	// leaves out finalized projection_batch_recorded rows at or below it and
+	// reads a null pin list as "[]". Always zero in a version 3 witness.
+	EventIndexTrimBoundary uint64 `json:"event_index_trim_boundary,omitempty"`
 }
 
 // FrontendIdentity names the served computer-surface SPA. A checkpoint without

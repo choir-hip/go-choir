@@ -50,6 +50,9 @@ func (s *Store) ListObjectGraphFingerprintsTx(ctx context.Context, tx *sql.Tx) (
 }
 
 func (s *Store) listObjectGraphFingerprints(ctx context.Context, q readQuerier) ([]ObjectGraphFingerprint, error) {
+	if err := diagnosticRowsWithinLimit(ctx, q, "object graph", ObjectGraphDiagnosticRowLimit, "og_objects", "choir_events"); err != nil {
+		return nil, err
+	}
 	rows, err := q.QueryContext(ctx, `
 		SELECT h.canonical_id, h.object_kind, h.version_id, h.content_hash, COALESCE(b.body, ''), h.metadata,
 		       h.updated_at, h.tombstone, h.superseded_by
@@ -161,4 +164,57 @@ func (s *Store) eventTableFingerprints(ctx context.Context, q readQuerier) ([]Ob
 		return nil, fmt.Errorf("iterate %s fingerprints: %w", choirEventsTable, err)
 	}
 	return out, nil
+}
+
+// ObjectGraphDiagnosticRowLimit and EventIndexDiagnosticRowLimit bound the
+// replay-completeness row diagnostics. A fingerprint list is held in memory
+// on both sides of the comparison; past the limit the diagnostic is skipped
+// and says so (DiagnosticTooLargeError), and the probe's verdict, which rests
+// on the table digests, is unaffected. At about 0.7 KB per object-graph
+// fingerprint and 1.5 KB per index fingerprint, a list stays under roughly 140
+// MB and 90 MB on each side. (The telemetry partitions' rows are not
+// counted: they are read outside the snapshot, as before.)
+const (
+	ObjectGraphDiagnosticRowLimit = 200000
+	EventIndexDiagnosticRowLimit  = 60000
+)
+
+// DiagnosticTooLargeError says a row diagnostic was skipped for its size.
+type DiagnosticTooLargeError struct {
+	What  string
+	Rows  int
+	Limit int
+}
+
+func (e *DiagnosticTooLargeError) Error() string {
+	return fmt.Sprintf("%s row diagnostic skipped: %d rows exceed the limit of %d", e.What, e.Rows, e.Limit)
+}
+
+// diagnosticRowsWithinLimit counts the rows of the tables and returns a
+// DiagnosticTooLargeError when they exceed limit.
+func diagnosticRowsWithinLimit(ctx context.Context, q readQuerier, what string, limit int, tables ...string) error {
+	total := 0
+	for _, table := range tables {
+		rows, err := q.QueryContext(ctx, `SELECT COUNT(*) FROM `+table)
+		if err != nil {
+			return fmt.Errorf("count %s rows: %w", table, err)
+		}
+		var n int
+		if rows.Next() {
+			if err := rows.Scan(&n); err != nil {
+				_ = rows.Close()
+				return err
+			}
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		_ = rows.Close()
+		total += n
+	}
+	if total > limit {
+		return &DiagnosticTooLargeError{What: what, Rows: total, Limit: limit}
+	}
+	return nil
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/computerversion"
 )
 
 // EventIndexFingerprint is one computer_event_index row reduced to digests
@@ -53,6 +54,9 @@ func (s *Store) ListEventIndexFingerprintsTx(ctx context.Context, tx *sql.Tx, tr
 }
 
 func listEventIndexFingerprints(ctx context.Context, q readQuerier, boundary uint64) ([]EventIndexFingerprint, int, error) {
+	if err := diagnosticRowsWithinLimit(ctx, q, "event index", EventIndexDiagnosticRowLimit, "computer_event_index"); err != nil {
+		return nil, 0, err
+	}
 	disposable, err := countEventIndexDisposable(ctx, q, boundary)
 	if err != nil {
 		return nil, 0, err
@@ -89,7 +93,7 @@ func listEventIndexFingerprints(ctx context.Context, q readQuerier, boundary uin
 			}
 			value := values[i]
 			if name == EventIndexPinListColumn {
-				value = emptyListFromNull(value)
+				value = computerversion.EmptyJSONArrayFromNull(value)
 			}
 			encoded := fingerprintValue(value)
 			sum := sha256.Sum256(encoded)
@@ -135,20 +139,6 @@ func countEventIndexDisposable(ctx context.Context, q readQuerier, boundary uint
 		}
 	}
 	return n, rows.Err()
-}
-
-func emptyListFromNull(value any) any {
-	switch v := value.(type) {
-	case string:
-		if v == "null" {
-			return "[]"
-		}
-	case []byte:
-		if string(v) == "null" {
-			return "[]"
-		}
-	}
-	return value
 }
 
 // fingerprintValue is a type-tagged encoding, so NULL, 0 and ” differ.
