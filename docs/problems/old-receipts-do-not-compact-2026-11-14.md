@@ -67,10 +67,10 @@ a 60 s boot that blocks appends. So:
 
 **Step 1 (`lane/receipts-step1`), the safe revert target.**
 
-- Every reader expands format 2. Nothing writes it: the backfill's write
-  allowance (`receiptCompactionAllowJSONB`, from `receiptCompactionCodec`, still
-  1) is false, `codec_version` is not added and the walk is not restarted. A
-  compact row the codec may not write is kept by an active pass, not expanded.
+- Every reader expands format 2. Nothing writes it: in step 1 the backfill's
+  write allowance is a constant false, no progress column is added and the walk
+  is not restarted. A compact row the backfill may not write is kept by an
+  active pass, not expanded.
 - Bootstrap no longer creates `computer_event_append_kind_seq_idx` or
   `computer_event_append_receipt_id_idx`. This release creates and drops no
   index: both stay on the live table.
@@ -79,18 +79,93 @@ a 60 s boot that blocks appends. So:
   by `(computer_id, sequence)`. All are tested index-backed with the old full
   kind index alone and with the partial one alone.
 
-Rollback of step 1 to today's main: no format-2 row exists and both old
-indexes are present, so main's boot DDL (`CREATE INDEX IF NOT EXISTS`) is a
-no-op and its readers run as they do now. Nothing to undo.
+Rollback of step 1 to the main before it, on the live host: no format-2 row
+exists until step 2 lands and both old indexes are present, so main's boot DDL
+(`CREATE INDEX IF NOT EXISTS`) is a no-op and its readers run as they do now.
+That holds only on the live host and only until step 2 has run: on a database
+that step 1 bootstrapped and a restore then filled, main would build both
+indexes without `CONCURRENTLY`; after step 2 has written format-2 rows, main
+cannot read them.
+
+**Step 2a (`lane/receipts-step2a`, on step 1): the writer and the walk.**
+After three review rounds of an automatic index-swap controller inside corpusd
+(docs/problems/receipts-step2-three-rounds-structural-assessment-2026-11-14.md)
+the swap is no longer in the binary; it is a supervised act (step 2b).
+
+- The backfill writes format 2. Its progress is its own table,
+  `computer_event_receipt_compaction_v2`, which no earlier release names; the
+  shared row `computer_event_receipt_compaction` is no longer written, and the
+  tape purge deletes the new table too. A release that does not know the walk
+  (step 1) advances only the shared row, so it cannot move this walk past rows it
+  kept. The restart rule is conservative: any row of the shared table for the
+  computer with `updated_at` newer than the walk's own row, in any mode, starts
+  the walk over from zero. It costs one pass over rows that are already compact
+  (they are kept) and needs no reading of what the older release did. Tested for
+  expand, expand then active, expand then dry run, and active alone.
+- The walk does not depend on the state of any index (every reader works with
+  either set of kind indexes) and does not wait for the swap. It defers a pass
+  only for free space: under 12 GiB on the measured volume. The estimate is 2.4 GB
+  of new heap, 0.8 GB of index churn and 7.7 GB of dead tuples that stay until a
+  vacuum, 10.9 GB, with the WAL on top. The measured volume is the smaller of
+  PostgreSQL's data directory and corpusd's artifacts root; the deployed database
+  role has no `pg_read_all_settings`, so `data_directory` is refused there and
+  the volume measured is the artifacts root alone, which may not be the volume
+  of the database. The log says so once, naming the directory. An unknown free
+  space does not hold the walk back. Every 100 batches the load line gives live
+  and dead tuples, autovacuum count and last run, table size, WAL since the walk
+  began and the free bytes.
+- Bootstrap creates `computer_event_append_kind_partial_idx` only when the
+  receipt table has no rows (a fresh database): the check, the lock
+  (SHARE mode, ten seconds) and the build are one transaction, so two processes
+  cannot race it, and a table with rows is never touched. The live table's
+  index swap is not done by any binary.
+- corpusd logs one line a minute: the busiest computer's append count, p50 and
+  p95 over the last minute and over the last ten
+  (`corpusd append timing: 1m busiest=... n=... p50=... p95=...; 10m ...`). The
+  signal is the wall time of the serializable append transaction, kept per
+  computer in an in-memory ring; nothing in corpusd measured the host append
+  before. It is an observation: no code gates on it, waits for it or cancels
+  anything because of it. A restart empties it.
+
+Rollback of step 2a to step 1: step 1 reads every format-2 row, its backfill
+keeps a compact row it may not write, its Bootstrap creates no index, and its
+readers need neither old index. The partial index and the v2 table stay,
+harmless. Re-landing step 2a restarts the walk if step 1 wrote the shared row
+meanwhile.
+
+Rollback past step 1 (to the main before it, after step 2a ran): not a revert to
+run blind. Main cannot read format-2 rows (run mode `expand` on the named
+computers to completion first, which writes the exact stored bytes back) and its
+boot DDL would build both old indexes without `CONCURRENTLY` inside a 60 s open
+(create them concurrently by hand first).
 
 ## Remaining error
 
 - The walk starts at sequence 0 for the paper: 11.6M rows at 500 a batch with a
   rest of at least a second is on the order of ten hours or more, not measured.
-- Rewriting 5.13M rows makes about 5 GB of dead space in the table. VACUUM makes
-  it reusable by later rows; PostgreSQL returns it to the operating system only
-  when the freed pages are at the end of the file (these are the oldest rows, at
-  the front), so the file does not shrink without a rewrite.
+  The load lines in the log are how the first hour is read.
+- Dead space (a reviewer's arithmetic, not measured): each of the 5.13M updates
+  rewrites a full page's worth of tuple, so almost none can be HOT. Expect about
+  7.7 GB of dead heap tuples (5.13M x 1.5 KB), about 2.4 GB of new heap (5.13M x
+  470 B) and about 0.8 GB of index churn (a new entry in each of the primary key,
+  the sequence and the digest indexes for each updated row). VACUUM makes the
+  dead space reusable by later rows; PostgreSQL returns it to the operating
+  system only when the free pages are at the end of the file, and these are the
+  oldest rows at the front, so the file does not shrink without a rewrite.
+- What triggers vacuum: the default `autovacuum_vacuum_scale_factor` of 0.2 on
+  12.7M rows means one run per 2.5M dead tuples, so about twice during the walk;
+  until it runs the dead space is not reused and the table grows by the new heap.
+  Proposed, not applied: `ALTER TABLE computer_event_append_receipts SET
+  (autovacuum_vacuum_scale_factor = 0.02)` for the duration of the walk, which
+  vacuums about every 250k rewrites. It is a host tuning with its own I/O cost
+  on an 18 GB table, so it is the owner's call after the first hour's load lines
+  (dead tuples against autovacuums) show whether the default keeps up; the
+  migration does not apply it.
+- The ring holds less than ten minutes above about 13 appends a second; the
+  count in the timing line says how many appends it read.
+- The 12 GiB deferral threshold is the record's estimate rounded up, not a
+  measured need, and it applies to the artifacts root's volume on the live host
+  (see above), which may not be the database's.
 - Other computers' old rows were not sampled; the same walk covers them if they
   are named in `PLATFORM_RECEIPT_COMPACT_COMPUTERS`.
 - Only receipts of kind EventHeadReceipt with this issuer are handled; a row of

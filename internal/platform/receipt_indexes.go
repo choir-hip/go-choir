@@ -1,5 +1,7 @@
 package platform
 
+import "context"
+
 // The queries of computer_event_append_receipts that choose its indexes
 // (docs/design/store-once-2026-11-14.md R4,
 // docs/evidence/tape-write-census-2026-11-12.md section 5).
@@ -36,8 +38,9 @@ package platform
 //      lookups that replaced them;
 //  I6. a binary that still creates the old indexes at boot rebuilds them
 //      without CONCURRENTLY, which blocks appends while it builds on a 30 GB
-//      table. Bootstrap therefore creates neither; nothing in this release
-//      creates or drops an index.
+//      table. Bootstrap therefore creates neither of them, and creates the
+//      partial one only on a table with no rows (ensureFreshReceiptIndex); the
+//      live table's swap is the supervised scripts/receipts-index-swap.
 
 const (
 	receiptKindPartialIdx = "computer_event_append_kind_partial_idx"
@@ -72,3 +75,41 @@ const (
 	receiptAtSequenceSQL       = `SELECT ` + appendReceiptRowColumns + ` FROM computer_event_append_receipts WHERE computer_id=? AND sequence=?`
 	receiptDigestAtSequenceSQL = `SELECT event_digest, event_head_receipt_id FROM computer_event_append_receipts WHERE computer_id=? AND sequence=?`
 )
+
+// receiptKindPartialDDL is the exact definition of the partial kind index: the
+// one a fresh database gets at Bootstrap and the one the supervised swap of the
+// live table builds (scripts/receipts-index-swap). The readers above are written
+// for it.
+const receiptKindPartialDDL = `CREATE INDEX IF NOT EXISTS ` + receiptKindPartialIdx + ` ON computer_event_append_receipts (computer_id, event_kind, sequence) WHERE ` + receiptKindNotBatchSQL
+
+// ensureFreshReceiptIndex gives a database whose receipt table has no rows the
+// partial kind index, and does nothing to one that has rows: building an index
+// on a live table is the supervised swap's job, concurrently and watched, never
+// a boot's. The check and the build are one transaction holding the table in
+// SHARE mode, so two processes that boot together cannot race it, and a row
+// appended between the check and the build cannot be missed. The first look
+// takes no lock, so a live table is never made to queue for one.
+func (s *Store) ensureFreshReceiptIndex(ctx context.Context) error {
+	var any bool
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM computer_event_append_receipts)`).Scan(&any); err != nil || any {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `SET LOCAL lock_timeout = '10s'`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `LOCK TABLE computer_event_append_receipts IN SHARE MODE`); err != nil {
+		return err
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM computer_event_append_receipts)`).Scan(&any); err != nil || any {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, receiptKindPartialDDL); err != nil {
+		return err
+	}
+	return tx.Commit()
+}

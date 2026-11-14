@@ -29,8 +29,12 @@ func TestFormat2RowsAreReadByEveryReaderAndNotWrittenByTheBackfill(t *testing.T)
 		t.Fatalf("baseline replay: %d, %v", len(baseline), err)
 	}
 	d.store.SetReceiptCompaction(ReceiptCompactionPolicy{Computers: map[string]string{d.id: ReceiptCompactActive}})
-	// Codec 1: the jsonb-spelled rows are kept as they are.
-	if p := runCompaction(t, noSleepCompactor(d.store)); p[0].Rewritten != 0 || p[0].Kept != 7 || !reflect.DeepEqual(storedReceipts(t, d.store, d.id), old) {
+	// The compactor of the release that only reads format 2 (and the one a
+	// reverted writer leaves rows to): it may not write it.
+	readOnly := noSleepCompactor(d.store)
+	readOnly.allowJSONB = false
+	// The jsonb-spelled rows are kept as they are.
+	if p := runCompaction(t, readOnly); p[0].Rewritten != 0 || p[0].Kept != 7 || !reflect.DeepEqual(storedReceipts(t, d.store, d.id), old) {
 		t.Fatalf("pass = %+v: the backfill wrote a jsonb-spelled row", p[0])
 	}
 	// What the writer's release will have stored: format 2, made here by the
@@ -76,11 +80,11 @@ func TestFormat2RowsAreReadByEveryReaderAndNotWrittenByTheBackfill(t *testing.T)
 			t.Fatal("empty retry receipt")
 		}
 	}
-	// A pass under codec 1 keeps them compact.
-	if _, err := d.store.db.Exec(`DELETE FROM computer_event_receipt_compaction WHERE computer_id=?`, d.id); err != nil {
+	// A pass that may not write format 2 keeps the compact rows.
+	if _, err := d.store.db.Exec(`DELETE FROM computer_event_receipt_compaction_v2 WHERE computer_id=?`, d.id); err != nil {
 		t.Fatal(err)
 	}
-	if p := runCompaction(t, noSleepCompactor(d.store)); p[0].Rewritten != 0 || p[0].Kept != 7 {
+	if p := runCompaction(t, readOnly); p[0].Rewritten != 0 || p[0].Kept != 7 {
 		t.Fatalf("pass over format-2 rows = %+v, want all kept", p[0])
 	}
 	for _, r := range storedReceipts(t, d.store, d.id) {
@@ -90,7 +94,7 @@ func TestFormat2RowsAreReadByEveryReaderAndNotWrittenByTheBackfill(t *testing.T)
 	}
 	// The rollback gives back the stored bytes exactly.
 	d.store.SetReceiptCompaction(ReceiptCompactionPolicy{Computers: map[string]string{d.id: ReceiptCompactExpand}})
-	if exp := runCompaction(t, noSleepCompactor(d.store)); exp[0].Rewritten != 7 {
+	if exp := runCompaction(t, readOnly); exp[0].Rewritten != 7 {
 		t.Fatalf("expand = %+v", exp[0])
 	}
 	if got := storedReceipts(t, d.store, d.id); !reflect.DeepEqual(got, old) {

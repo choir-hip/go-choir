@@ -210,7 +210,7 @@ func TestReceiptCompactionDryRunWritesNothing(t *testing.T) {
 	}
 	var mode string
 	var rewritten int64
-	if err := d.store.db.QueryRow(`SELECT mode, rows_rewritten FROM computer_event_receipt_compaction WHERE computer_id=?`, d.id).Scan(&mode, &rewritten); err != nil || mode != ReceiptCompactDryRun || rewritten != 6 {
+	if err := d.store.db.QueryRow(`SELECT mode, rows_rewritten FROM computer_event_receipt_compaction_v2 WHERE computer_id=?`, d.id).Scan(&mode, &rewritten); err != nil || mode != ReceiptCompactDryRun || rewritten != 6 {
 		t.Fatalf("dry-run progress = %q %d %v", mode, rewritten, err)
 	}
 }

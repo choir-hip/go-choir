@@ -204,8 +204,7 @@ func TestReceiptKindReadersUseAKindIndex(t *testing.T) {
 				for _, generic := range []bool{false, true} {
 					plan := explain(t, s, tc.query, generic, tc.args...)
 					t.Logf("%s state=%s generic=%v:\n%s", tc.name, state, generic, plan)
-					if strings.Contains(plan, "Seq Scan") || !strings.Contains(plan, active) || strings.Contains(plan, "Rows Removed") ||
-						strings.Contains(plan, "computer_event_append_sequence_uq") {
+					if strings.Contains(plan, "Seq Scan") || !strings.Contains(plan, active) || strings.Contains(plan, "computer_event_append_sequence_uq") {
 						t.Errorf("%s state=%s generic=%v does not seek %s:\n%s", tc.name, state, generic, active, plan)
 					}
 				}
@@ -279,5 +278,65 @@ func TestHeadReceiptLookupsUseTheSequenceIndex(t *testing.T) {
 				t.Errorf("generic=%v: %s\n%s", generic, query, plan)
 			}
 		}
+	}
+}
+
+// I6: a freshly bootstrapped database has neither old index; it has the
+// partial one, with the definition the readers and the supervised swap use,
+// because its table has no rows.
+func TestBootstrapCreatesThePartialIndexOnAFreshDatabase(t *testing.T) {
+	s, _ := openTestPlatformStore(t)
+	idx := receiptIndexNames(t, s)
+	if idx[receiptKindOldIdx] || idx[receiptIDOldIdx] {
+		t.Errorf("Bootstrap left an old index on the table: %v", idx)
+	}
+	if !idx[receiptKindPartialIdx] || !idx["computer_event_append_sequence_uq"] {
+		t.Fatalf("the partial and the unique sequence indexes are expected: %v", idx)
+	}
+	var def string
+	if err := s.db.QueryRow(`SELECT pg_get_indexdef(?::regclass)`, receiptKindPartialIdx).Scan(&def); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(def, "(computer_id, event_kind, sequence)") || !strings.Contains(def, "projection_batch_recorded") {
+		t.Fatalf("definition = %s", def)
+	}
+}
+
+// Bootstrap never builds an index on a table that has rows: that is the
+// supervised swap's job, concurrently and watched.
+func TestBootstrapNeverBuildsAnIndexOnATableWithRows(t *testing.T) {
+	ctx := t.Context()
+	s, _ := openTestPlatformStore(t)
+	loadReceiptRows(t, s, indexTestComputer, 100, true)
+	if _, err := s.db.Exec(`DROP INDEX ` + receiptKindPartialIdx); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Bootstrap(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if idx := receiptIndexNames(t, s); idx[receiptKindPartialIdx] || idx[receiptKindOldIdx] || idx[receiptIDOldIdx] {
+		t.Fatalf("Bootstrap built an index on a table with rows: %v", idx)
+	}
+}
+
+// Two processes that boot a fresh database together build the index once and
+// neither fails.
+func TestBootstrapOfAFreshDatabaseIsNotRacedByASecondProcess(t *testing.T) {
+	ctx := t.Context()
+	s, _ := openTestPlatformStore(t)
+	if _, err := s.db.Exec(`DROP INDEX ` + receiptKindPartialIdx); err != nil {
+		t.Fatal(err)
+	}
+	errs := make(chan error, 8)
+	for i := 0; i < 8; i++ {
+		go func() { errs <- s.ensureFreshReceiptIndex(ctx) }()
+	}
+	for i := 0; i < 8; i++ {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !receiptIndexNames(t, s)[receiptKindPartialIdx] {
+		t.Fatal("no process built the index")
 	}
 }

@@ -118,7 +118,6 @@ func main() {
 	}
 	store.SetReceiptCompaction(receiptPolicy)
 	log.Printf("corpusd: receipt compaction: %s", receiptPolicy)
-	platform.NewReceiptCompactor(store).Start(context.Background())
 	handler := platform.NewHandler(svc)
 	if cfg.VmctlURL != "" {
 		svc.SetComputerRegistry(platform.NewVmctlComputerRegistry(vmctl.NewClient(cfg.VmctlURL)))
@@ -249,6 +248,13 @@ func main() {
 	ogHandler.ConfigureCaptureBodies(platform.CaptureBodiesRoot(cfg.ArtifactsRoot))
 	ogHandler.ConfigureCaptureIndex(store)
 	platform.RegisterObjectGraphRoutes(s, ogHandler)
+
+	// The receipt backfill walk and the append timing line start as the
+	// listener does: the walk waits its boot delay and then only for free space
+	// (receipt_walk.go), and the timing line is what an operator watches while
+	// the receipt table's indexes are swapped by hand.
+	platform.NewReceiptCompactor(store).Start(context.Background())
+	store.StartAppendTimingLog(context.Background())
 
 	s.Start()
 }
