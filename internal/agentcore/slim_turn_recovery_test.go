@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,7 +130,7 @@ func TestFailedTurnReadLeavesTheMutationPendingNotStale(t *testing.T) {
 	for _, path := range []string{"run completion", "idle passivation"} {
 		t.Run(path, func(t *testing.T) {
 			rt, s, rec, _ := slimTurnFixture(t, "bad"+path[:3])
-			nameRevisionInCommand2(t, s, "texture-turn-doc-slim-bad"+path[:3], "no-such-revision")
+			nameRevisionInCommand(t, s, "texture-turn-doc-slim-bad"+path[:3], "no-such-revision")
 			if err := runRecoveryPath(rt, path, rec); err != nil {
 				t.Fatalf("%s: %v", path, err)
 			}
@@ -138,39 +142,22 @@ func TestFailedTurnReadLeavesTheMutationPendingNotStale(t *testing.T) {
 	}
 }
 
-// nameRevisionInCommand2 points an already slim command at another id.
-func nameRevisionInCommand2(t *testing.T, s *store.Store, commandID, namedID string) {
-	t.Helper()
-	rows, err := s.DB().Query(`SELECT o.obj_id, b.body FROM og_objects o JOIN og_bodies b ON b.obj_id = o.obj_id WHERE o.object_kind = 'choir.lifecycle_command'`)
-	if err != nil {
-		t.Fatal(err)
+// A command that names a revision the store cannot read is a server invariant
+// break, not a client error: the API answers 500 and names it.
+func TestLifecycleAPIErrorMapsAnUnavailableStoredRevisionTo500(t *testing.T) {
+	err := fmt.Errorf("%w: revision %q named by command %q: gone", store.ErrLifecycleStoredRevisionUnavailable, "rev-x", "cmd-x")
+	rec := httptest.NewRecorder()
+	writeLifecycleAPIError(rec, err)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500; body %s", rec.Code, rec.Body.String())
 	}
-	var id int64
-	var body []byte
-	for rows.Next() {
-		var i int64
-		var b []byte
-		if err := rows.Scan(&i, &b); err != nil {
-			t.Fatal(err)
-		}
-		var head struct {
-			CommandID string `json:"command_id"`
-		}
-		if json.Unmarshal(b, &head) == nil && head.CommandID == commandID {
-			id, body = i, b
-		}
+	if !strings.Contains(rec.Body.String(), "stored revision unavailable") {
+		t.Fatalf("body %s does not name the broken invariant", rec.Body.String())
 	}
-	rows.Close()
-	if body == nil {
-		t.Fatalf("command %s not found", commandID)
-	}
-	var receipt, stored map[string]json.RawMessage
-	_ = json.Unmarshal(body, &receipt)
-	_ = json.Unmarshal(receipt["stored_result"], &stored)
-	stored["revision_id"], _ = json.Marshal(namedID)
-	receipt["stored_result"], _ = json.Marshal(stored)
-	out, _ := json.Marshal(receipt)
-	if _, err := s.DB().Exec(`UPDATE og_bodies SET body = ? WHERE obj_id = ?`, out, id); err != nil {
-		t.Fatal(err)
+	// A plain not-found stays a 404 and an invalid transition stays a client error.
+	rec = httptest.NewRecorder()
+	writeLifecycleAPIError(rec, store.ErrNotFound)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("not found status = %d", rec.Code)
 	}
 }
