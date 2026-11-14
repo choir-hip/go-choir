@@ -265,12 +265,17 @@ func (s *Store) retireClearedKey(g telemetryRetireGroup) string {
 	return fmt.Sprintf("%p/%s", s, g.name)
 }
 
-// retireRunMemoryBacklogFn is the run-memory step of a wake (stub seam).
-var retireRunMemoryBacklogFn = func(s *Store, ctx context.Context, ready func() bool) (int, int, error) {
-	return s.RetireRunMemoryBacklog(ctx, time.Now().UTC(), runMemoryCatchUpGap, ready)
+// retireRunMemoryBacklogFn is the run-memory step of a wake (a seam for the test
+// that an error in it does not skip the rest).
+var retireRunMemoryBacklogFn func(s *Store, ctx context.Context, ready func() bool) (int, int, error)
+
+func init() {
+	retireRunMemoryBacklogFn = func(s *Store, ctx context.Context, ready func() bool) (int, int, error) {
+		return s.RetireRunMemoryBacklog(ctx, time.Now().UTC(), runMemoryCatchUpGap, ready)
+	}
 }
 
-// retirementWakeDone is called at the end of a wake (stub seam).
+// retirementWakeDone is called at the end of a wake that reached its last step.
 var retirementWakeDone = func() {}
 
 // StartTelemetryRetirement runs RetireTelemetry about ten minutes after
@@ -311,7 +316,7 @@ func (s *Store) StartTelemetryRetirement(ctx context.Context, ready, forceCompac
 			log.Printf("store: telemetry retirement: %d ops in %s", ops, time.Since(start).Round(time.Millisecond))
 			memStart := time.Now()
 			// A backlog beyond one pass's cap runs back to back, not a pass a day.
-			memOps, memPasses, memErr := s.RetireRunMemoryBacklog(ctx, time.Now().UTC(), runMemoryCatchUpGap, ready)
+			memOps, memPasses, memErr := retireRunMemoryBacklogFn(s, ctx, ready)
 			if memErr != nil {
 				// The rest of the maintenance goes on: a backlog that failed after
 				// freeing pages must not hold them (and the compact copy) a day.
@@ -337,6 +342,7 @@ func (s *Store) StartTelemetryRetirement(ctx context.Context, ready, forceCompac
 			if _, cErr := s.prepareCompactCopy(ctx, forceCompact != nil && forceCompact()); cErr != nil {
 				log.Printf("store: compact copy: %v", cErr)
 			}
+			retirementWakeDone()
 		}
 	}()
 }

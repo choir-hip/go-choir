@@ -310,12 +310,14 @@ func (s *Store) LatestActorRunMemoryEntries(ctx context.Context, ownerID, comput
 	if err != nil {
 		return "", nil, fmt.Errorf("query latest actor run memory: %w", err)
 	}
-	type candidate struct {
-		runID    string
-		priority time.Time
-	}
-	candidates := make([]candidate, 0, len(objs))
+	// The copies of one run resolve as the retirement selector resolves them
+	// (resolveRunCopies), and the sources are taken in its order
+	// (carryRunBefore): the two cannot disagree about which run is the source.
+	best := map[string]types.RunRecord{}
 	for _, obj := range objs {
+		if obj.Tombstone {
+			continue
+		}
 		var rec types.RunRecord
 		if err := ogDecode(obj, &rec); err != nil {
 			continue
@@ -326,50 +328,34 @@ func (s *Store) LatestActorRunMemoryEntries(ctx context.Context, ownerID, comput
 		if rec.RunID == excludeRunID {
 			continue
 		}
-		if rec.State != types.RunCompleted && rec.State != types.RunPassivated {
-			continue
-		}
-		priority := rec.UpdatedAt
-		if rec.FinishedAt != nil {
-			priority = *rec.FinishedAt
-		}
-		if priority.IsZero() {
-			priority = rec.CreatedAt
-		}
-		candidates = append(candidates, candidate{runID: rec.RunID, priority: priority})
+		prev, have := best[rec.RunID]
+		best[rec.RunID] = resolveRunCopies(prev, have, rec)
 	}
-	// Sort by priority descending.
-	sort.Slice(candidates, func(i, j int) bool { return candidates[i].priority.After(candidates[j].priority) })
+	candidates := make([]types.RunRecord, 0, len(best))
+	for _, rec := range best {
+		if carrySourceState(rec.State) {
+			candidates = append(candidates, rec)
+		}
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return carryRunBefore(runCarryFinishedAt(candidates[i]), candidates[i].RunID, runCarryFinishedAt(candidates[j]), candidates[j].RunID)
+	})
 
-	// Find the first candidate that has run_memory_entries in SQL.
+	// Find the first candidate that holds a conversation to carry.
 	for _, c := range candidates {
-		entries, err := s.ListRunMemoryEntries(ctx, ownerID, c.runID)
+		entries, err := s.ListRunMemoryEntries(ctx, ownerID, c.RunID)
 		if err != nil {
 			return "", nil, err
 		}
-		// A run whose only rows are the kept cursors (retirement leaves them)
-		// holds no conversation to carry: the next older run is the source.
-		if runMemoryHasBody(entries) {
-			return c.runID, entries, nil
+		// A run holding nothing a carry uses (only the kept cursors, which
+		// retirement leaves, or receipts) is not a source: the next older run
+		// is. Before this a cursor-only run above the source made the carry
+		// take nothing.
+		if runMemoryHasCarryBody(entries) {
+			return c.RunID, entries, nil
 		}
 	}
 	return "", nil, ErrNotFound
-}
-
-// runMemoryHasBody reports whether any entry is not of a kind retirement keeps.
-func runMemoryHasBody(entries []types.RunMemoryEntry) bool {
-	for _, e := range entries {
-		kept := false
-		for _, k := range runMemoryRetireKeepKinds {
-			if string(e.Kind) == k {
-				kept = true
-			}
-		}
-		if !kept {
-			return true
-		}
-	}
-	return false
 }
 
 // ListRunMemoryEntries returns a run's durable memory log in sequence order.

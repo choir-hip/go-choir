@@ -91,6 +91,8 @@ var runMemoryCensusOrder = []string{
 	"kept_carry_source_over_30d",
 	"kept_no_run_record_in_hold",
 	"kept_run_record_unreadable",
+	"kept_run_agent_disagrees",
+	"kept_append_failed",
 	"kept_state_passivated",
 	"kept_state_blocked",
 	"kept_finished_in_window",
@@ -116,6 +118,30 @@ func (c *RunMemoryCensus) add(name string, g runMemoryGroup) {
 		}
 	}
 	c.Dispositions = append(c.Dispositions, RunMemoryDisposition{Disposition: name, Runs: 1, Entries: g.entries, RetirableEntries: g.retirable})
+}
+
+// unretire moves a planned run the pass did not apply from the retired
+// disposition from to kept_append_failed. The totals do not change.
+func (c *RunMemoryCensus) unretire(from string, g runMemoryGroup) {
+	var to *RunMemoryDisposition
+	for i := range c.Dispositions {
+		if c.Dispositions[i].Disposition == from {
+			d := &c.Dispositions[i]
+			d.Runs--
+			d.Entries -= g.entries
+			d.RetirableEntries -= g.retirable
+		}
+		if c.Dispositions[i].Disposition == "kept_append_failed" {
+			to = &c.Dispositions[i]
+		}
+	}
+	if to == nil {
+		c.Dispositions = append(c.Dispositions, RunMemoryDisposition{Disposition: "kept_append_failed"})
+		to = &c.Dispositions[len(c.Dispositions)-1]
+	}
+	to.Runs++
+	to.Entries += g.entries
+	to.RetirableEntries += g.retirable
 }
 
 // finish totals the groups and puts the dispositions in order; the fixed ones
