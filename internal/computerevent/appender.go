@@ -1850,10 +1850,12 @@ const GuestAttemptTimeout = 10 * time.Minute
 // outcome is unknown.
 const CASResendTimeout = 30 * time.Second
 
-// AppendSequentialRequests is how many host requests AppendNewPrivatePayload
-// makes in sequence on its normal path: bind the head, pin the private
-// payload, read the head again (appendLockedInner), pin the event, and the
-// compare-and-swap. The host derives how long an appended snapshot root may
+// AppendSequentialRequests is an upper bound on how many host requests
+// AppendNewPrivatePayload makes in sequence on its normal path: bind the
+// head, pin the private payload, read the head again (appendLockedInner,
+// only when the bind read cannot serve), pin the event, and the
+// compare-and-swap. It is deliberately the larger count: the host's window
+// may be too long, never too short. The host derives how long an appended snapshot root may
 // stay unnamed from it (internal/platform snapshotRootInFlightWindow). A change
 // to the number of requests must change this constant.
 const AppendSequentialRequests = 5
