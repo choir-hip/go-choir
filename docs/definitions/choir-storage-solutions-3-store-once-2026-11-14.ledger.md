@@ -65,3 +65,5 @@
   first steps: both seats REPAIR, one step breaks revert-first; split into
   two landings. Lifecycle stored result (cfbbdd29a) is with both seats.
 
+
+- 2026-11-14T08:05Z. Counters deployed 07:06Z (a21558f9b under f4108ff50; CI 43567350353, test flake rerun green, SBOM accept job failed again). Paper, first hour: carried run memory 55.9% of message bytes (C74 true); choir.run 22.6% of object bytes at 4.7 rewrites per run, 18.7 KB each; tape 150 MB/h. Node A OOM killed the agents VM at 06:42Z: landings on the runner only. Receipts step 1 accepted by both seats; step 2 stopped after a third REPAIR, assessment written, the index swap becomes a supervised script (2b) and the writer and walk stay code (2a). Prune-at-boot: both seats accept round 5 at 92241b062, should-fixes at 3ae395c89, held for the owner. Train on the runner since 07:06Z: receipts step 1, late take, census.
