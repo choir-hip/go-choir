@@ -5,8 +5,12 @@ package store
 // the header of run_memory_retire_test.go.
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"log"
+	"os"
 	"reflect"
 	"sort"
 	"strconv"
@@ -28,12 +32,17 @@ func lifecycleMetadataAgent(runID, agentID string) map[string]any {
 // lifecycle path uses; no entries.
 func memPutLifecycleRecord(t *testing.T, h *tapeHarness, ownerID, runID, agentID string, state types.RunState, finishedAgo time.Duration, now time.Time) {
 	t.Helper()
+	memPutLifecycleRecordOn(t, h, "computer-1", ownerID, runID, agentID, state, finishedAgo, now)
+}
+
+func memPutLifecycleRecordOn(t *testing.T, h *tapeHarness, computerID, ownerID, runID, agentID string, state types.RunState, finishedAgo time.Duration, now time.Time) {
+	t.Helper()
 	fin := now.Add(-finishedAgo)
-	rec := types.RunRecord{RunID: runID, AgentID: agentID, OwnerID: ownerID, ComputerID: "computer-1", TrajectoryID: "trajectory-1", State: state, CreatedAt: fin.Add(-time.Hour), UpdatedAt: fin}
+	rec := types.RunRecord{RunID: runID, AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: "trajectory-1", State: state, CreatedAt: fin.Add(-time.Hour), UpdatedAt: fin}
 	if state.Terminal() {
 		rec.FinishedAt = &fin
 	}
-	obj, err := lifecycleObject(ogKindRun, ownerID, "computer-1", runID, rec, lifecycleMetadataAgent(runID, agentID), rec.CreatedAt, rec.UpdatedAt)
+	obj, err := lifecycleObject(ogKindRun, ownerID, computerID, runID, rec, lifecycleMetadataAgent(runID, agentID), rec.CreatedAt, rec.UpdatedAt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -469,5 +478,332 @@ func TestRunMemoryRetireR1UnreadableDocumentRunIsProtected(t *testing.T) {
 	}
 	if got := censusByName(c)["kept_carry_source_over_30d"].Runs; got != 3 {
 		t.Fatalf("carry sources = %d, want 3 (ur-bad, ur-a, ur-b): %+v", got, c.Dispositions)
+	}
+}
+
+func seedCursorOnly(t *testing.T, h *tapeHarness, runID, agentID string, ago time.Duration, now time.Time) {
+	t.Helper()
+	memSeedEntries(t, h, runID, agentID, []types.RunMemoryEntryKind{"rlm_inbox_cursor"}, ago, now)
+}
+
+func wantSelected(t *testing.T, h *tapeHarness, now time.Time, want ...string) RunMemoryCensus {
+	t.Helper()
+	ids, c, err := h.store.selectRunMemory(context.Background(), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want == nil {
+		want = []string{}
+	}
+	if ids == nil {
+		ids = []string{}
+	}
+	sort.Strings(want)
+	if !reflect.DeepEqual(ids, want) {
+		t.Fatalf("selected %v, want %v (%+v)", ids, want, c.Dispositions)
+	}
+	return c
+}
+
+// RR2-B1: a run holding only the kept cursor rows is never a carry source (the
+// reader skips it), so it must not take a carry slot either.
+func TestRunMemoryRetireCursorOnlyRunsTakeNoCarrySlot(t *testing.T) {
+	h := newTapeHarness(t)
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	day := 24 * time.Hour
+	memSeedLifecycle(t, h, "owner-1", "cs-old", docAgent("cs"), types.RunCompleted, 40*day, 40*day, now)
+	for i, id := range []string{"cs-3", "cs-4"} {
+		memPutLifecycleRecord(t, h, "owner-1", id, docAgent("cs"), types.RunCompleted, time.Duration(10+i)*day, now)
+		seedCursorOnly(t, h, id, docAgent("cs"), time.Duration(10+i)*day, now)
+	}
+	wantSelected(t, h, now) // cs-old is the carry source and stays
+}
+
+// RR2-B2: three or more runs with one finish time: the reader and the selector
+// order them the same way (newest first, then run id descending).
+func TestCarryReaderAndRetirementAgreeOnEqualFinishTimes(t *testing.T) {
+	ctx := context.Background()
+	h := newTapeHarness(t)
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	day := 24 * time.Hour
+	ids := []string{"tie-1", "tie-2", "tie-3", "tie-4", "tie-5", "tie-6"}
+	for _, id := range ids {
+		memSeedLifecycle(t, h, "owner-1", id, docAgent("tie"), types.RunCompleted, 40*day, 40*day, now)
+	}
+	wantSelected(t, h, now, "tie-1", "tie-2", "tie-3", "tie-4")
+	runID, _, err := h.store.LatestActorRunMemoryEntries(ctx, "owner-1", "computer-1", docAgent("tie"), "")
+	if err != nil || runID != "tie-6" {
+		t.Fatalf("carry source = %q, %v; want tie-6 (the first slot)", runID, err)
+	}
+}
+
+// RR2-B2: a stale completed copy and a newer failed copy of one run: both sides
+// resolve to the failed copy, which is no source.
+func TestCarryReaderAndRetirementResolveCopiesAlike(t *testing.T) {
+	ctx := context.Background()
+	h := newTapeHarness(t)
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	day := 24 * time.Hour
+	memSeedLifecycle(t, h, "owner-1", "cp-0", docAgent("cp"), types.RunCompleted, 50*day, 50*day, now)
+	memSeed(t, h, "cp-1", docAgent("cp"), types.RunCompleted, 40*day, 40*day, now) // owner-scoped, stale
+	memPutLifecycleRecord(t, h, "owner-1", "cp-1", docAgent("cp"), types.RunFailed, 30*day, now)
+	wantSelected(t, h, now, "cp-1")
+	runID, _, err := h.store.LatestActorRunMemoryEntries(ctx, "owner-1", "computer-1", docAgent("cp"), "")
+	if err != nil || runID != "cp-0" {
+		t.Fatalf("carry source = %q, %v; want cp-0 (cp-1 resolves to failed)", runID, err)
+	}
+}
+
+// RR2-B2: the reader reads one computer; the slots are per computer.
+func TestCarrySlotsAreKeyedByComputer(t *testing.T) {
+	ctx := context.Background()
+	h := newTapeHarness(t)
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	day := 24 * time.Hour
+	memPutLifecycleRecordOn(t, h, "computer-1", "owner-1", "k1", docAgent("kc"), types.RunCompleted, 40*day, now)
+	memSeedEntries(t, h, "k1", docAgent("kc"), entryKinds, 40*day, now)
+	for i, id := range []string{"k2a", "k2b"} {
+		memPutLifecycleRecordOn(t, h, "computer-2", "owner-1", id, docAgent("kc"), types.RunCompleted, time.Duration(35+i)*day, now)
+		memSeedEntries(t, h, id, docAgent("kc"), entryKinds, time.Duration(35+i)*day, now)
+	}
+	wantSelected(t, h, now)
+	runID, _, err := h.store.LatestActorRunMemoryEntries(ctx, "owner-1", "computer-1", docAgent("kc"), "")
+	if err != nil || runID != "k1" {
+		t.Fatalf("carry source on computer-1 = %q, %v; want k1", runID, err)
+	}
+}
+
+// RR2-S1: a run whose rows carry two agent ids (a worker's id sorts above the
+// document inbox) still groups under the document agent.
+func TestRunWithTwoAgentIDsStaysAProtectedCarrySource(t *testing.T) {
+	h := newTapeHarness(t)
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	day := 24 * time.Hour
+	for i, id := range []string{"ta-1", "ta-2", "ta-3"} {
+		memSeedLifecycle(t, h, "owner-1", id, docAgent("ta"), types.RunCompleted, time.Duration(40-3*i)*day, time.Duration(40-3*i)*day, now)
+	}
+	if _, err := h.store.AppendRunMemoryEntry(context.Background(), types.RunMemoryEntry{RunID: "ta-3", OwnerID: "owner-1", AgentID: "worker-zzz", Kind: "rlm_inbox_cursor", CreatedAt: now.Add(-31 * day)}); err != nil {
+		t.Fatal(err)
+	}
+	wantSelected(t, h, now, "ta-1")
+}
+
+// RR2-S1: the same for owner ids on the rows.
+func TestRunWithTwoOwnerIDsStaysAProtectedCarrySource(t *testing.T) {
+	h := newTapeHarness(t)
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	day := 24 * time.Hour
+	for i, id := range []string{"to-1", "to-2", "to-3"} {
+		memSeedLifecycle(t, h, "owner-1", id, docAgent("to"), types.RunCompleted, time.Duration(40-3*i)*day, time.Duration(40-3*i)*day, now)
+	}
+	if _, err := h.store.AppendRunMemoryEntry(context.Background(), types.RunMemoryEntry{RunID: "to-3", OwnerID: "owner-9", Kind: "rlm_inbox_cursor", CreatedAt: now.Add(-31 * day)}); err != nil {
+		t.Fatal(err)
+	}
+	wantSelected(t, h, now, "to-1")
+}
+
+// RR2-S1: rows and record disagree about the agent: fail closed.
+func TestRunWhoseRowsAndRecordDisagreeOnTheAgentIsKept(t *testing.T) {
+	h := newTapeHarness(t)
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	day := 24 * time.Hour
+	memPutLifecycleRecord(t, h, "owner-1", "dis-1", docAgent("other"), types.RunCompleted, 40*day, now)
+	memSeedEntries(t, h, "dis-1", docAgent("dis"), entryKinds, 40*day, now)
+	memPutLifecycleRecord(t, h, "owner-1", "dis-2", docAgent("dis"), types.RunCompleted, 40*day, now)
+	memSeedEntries(t, h, "dis-2", "worker-dis", entryKinds, 40*day, now)
+	c := wantSelected(t, h, now)
+	if got := censusByName(c)["kept_run_agent_disagrees"].Runs + censusByName(c)["kept_carry_source_over_30d"].Runs; got != 2 {
+		t.Fatalf("disagreeing runs kept = %d, want 2 (%+v)", got, c.Dispositions)
+	}
+}
+
+// RR2-S2: a read error other than not-found is the pass's error, not an
+// unreadable record.
+func TestRunRecordLookupReturnsReadErrors(t *testing.T) {
+	h := newTapeHarness(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := h.store.runRecordForRetirement(ctx, "owner-1", "any-run")
+	if err == nil || errors.Is(err, errRunRecordUnreadable) || errors.Is(err, ErrNotFound) {
+		t.Fatalf("lookup with a cancelled context = %v; want the context error", err)
+	}
+}
+
+// RR2-S3: a pass that fails mid-append counts what it applied.
+func TestCensusCountsWhatWasApplied(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	withRetireKnobs(t)
+	h := newTapeHarness(t)
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	seedBacklog(t, h, "m", 25, now)
+	telemetryRetireChunkPause = time.Hour
+	go func() {
+		time.Sleep(1500 * time.Millisecond)
+		cancel()
+	}()
+	ops, err := h.store.RetireRunMemory(ctx, now)
+	if err == nil || ops != 1 {
+		t.Fatalf("RetireRunMemory = %d, %v; want 1 op then the context error", ops, err)
+	}
+	c := h.store.RunMemoryRetirementCensus()
+	by := censusByName(c)
+	if by["retired_no_run_record"].Runs != 10 || by["kept_append_failed"].Runs != 15 {
+		t.Fatalf("census after a mid-pass failure: %+v", c.Dispositions)
+	}
+	if c.Wake == nil {
+		t.Fatal("no wake")
+	}
+	for _, d := range c.Wake.Retired {
+		if d.Disposition == "retired_no_run_record" && d.Runs != 10 {
+			t.Fatalf("wake counts %d retired runs, want the 10 applied", d.Runs)
+		}
+	}
+	if left := len(memRunsWithRows(t, h.store)); left != 15 {
+		t.Fatalf("%d runs hold rows, want 15", left)
+	}
+}
+
+// RR2-S4: a run with nothing the carry can use (message, compaction) is no
+// source and takes no slot, whatever else it holds.
+func TestRunWithOnlyReceiptsIsNoCarrySource(t *testing.T) {
+	ctx := context.Background()
+	h := newTapeHarness(t)
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	day := 24 * time.Hour
+	memPutLifecycleRecord(t, h, "owner-1", "ro-new", docAgent("ro"), types.RunCompleted, 9*day, now)
+	memSeedEntries(t, h, "ro-new", docAgent("ro"), []types.RunMemoryEntryKind{"texture_cell_author_receipt", "rlm_inbox_cursor"}, 9*day, now)
+	for i, id := range []string{"ro-a", "ro-b", "ro-c"} {
+		memSeedLifecycle(t, h, "owner-1", id, docAgent("ro"), types.RunCompleted, time.Duration(20+i)*day, time.Duration(20+i)*day, now)
+	}
+	wantSelected(t, h, now, "ro-c", "ro-new")
+	runID, _, err := h.store.LatestActorRunMemoryEntries(ctx, "owner-1", "computer-1", docAgent("ro"), "")
+	if err != nil || runID != "ro-a" {
+		t.Fatalf("carry source = %q, %v; want ro-a", runID, err)
+	}
+}
+
+// RR2-S6: a backlog error does not skip the rest of the wake.
+func TestWakeGoesOnPastABacklogError(t *testing.T) {
+	h := newTapeHarness(t)
+	delay, fn, done := telemetryRetireFirstDelay, retireRunMemoryBacklogFn, retirementWakeDone
+	t.Cleanup(func() { telemetryRetireFirstDelay, retireRunMemoryBacklogFn, retirementWakeDone = delay, fn, done })
+	telemetryRetireFirstDelay = 10 * time.Millisecond
+	retireRunMemoryBacklogFn = func(*Store, context.Context, func() bool) (int, int, error) {
+		return 7, 2, errors.New("append failed")
+	}
+	finished := make(chan struct{}, 1)
+	retirementWakeDone = func() {
+		select {
+		case finished <- struct{}{}:
+		default:
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	h.store.StartTelemetryRetirement(ctx, nil, nil)
+	select {
+	case <-finished:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the wake did not reach its maintenance after a backlog error")
+	}
+}
+
+// RR2-S7: one census per wake in the log, not one per pass.
+func TestBacklogLogsOneCensusPerWake(t *testing.T) {
+	ctx := context.Background()
+	withRetireKnobs(t)
+	h := newTapeHarness(t)
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	maxOps := runMemoryRetireMaxOps
+	runMemoryRetireMaxOps = 1
+	t.Cleanup(func() { runMemoryRetireMaxOps = maxOps })
+	seedBacklog(t, h, "l", 230, now)
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	if _, passes, err := h.store.RetireRunMemoryBacklog(ctx, now, time.Millisecond, nil); err != nil || passes != 3 {
+		t.Fatalf("passes = %d, %v", passes, err)
+	}
+	headers := bytes.Count(buf.Bytes(), []byte("run memory census: "))
+	one := len(runMemoryCensusOrder) + 1
+	if headers == 0 || headers > one+2 {
+		t.Fatalf("%d census lines for a 3 pass wake; want one census (about %d) and a wake line", headers, one)
+	}
+}
+
+// RR2-S5: the management late-report path never meets retired memory. The
+// producer run of a live trajectory must be pending, running or passivated
+// (lifecycle.go persistentManagementRunStateAllowed), none of which retirement
+// selects; a terminal producer run is refused (live trajectory) or reads no
+// memory (late evidence), so retiring its memory changes nothing. The test
+// drives the real report path with a completed producer run before and after
+// retirement.
+func TestManagementReportOutcomeDoesNotDependOnRetiredRunMemory(t *testing.T) {
+	ctx := context.Background()
+	withRetireKnobs(t)
+	h := newTapeHarness(t)
+	s, start, caller, _ := setupLifecycleTextureTargetFixtureWithStore(t, h.store)
+	now := time.Now().UTC()
+	managementID := "management:" + start.OwnerID
+	if err := s.UpsertAgent(ctx, types.AgentRecord{AgentID: managementID, OwnerID: start.OwnerID, ComputerID: start.ComputerID, Profile: "management", Role: "management", ChannelID: managementID, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	packet := textureTurnControlPacket("retired-super")
+	digest, _ := ComputeLifecycleUpdatePayloadDigest(packet, "control retired-super")
+	workID := "retired-super-work"
+	turnReq := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
+	turnReq.CommandID = "turn-retired-super"
+	turnReq.Controls = []types.TextureTurnControl{{ControlID: "control-retired-super", TargetAgentID: managementID, TargetWorkItemID: workID, OpenWork: &types.WorkItemRecord{WorkItemID: workID, Objective: "execute exact request", AuthorityProfile: "management", AssignedAgentID: managementID}, Packet: packet, Content: "control retired-super", PayloadDigest: digest}}
+	setTextureTurnDigest(t, &turnReq, TextureSourceGraphWriteSet{})
+	turn, err := s.ApplyTextureTurn(ctx, turnReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := types.RunRecord{RunID: "retired-super-run", OwnerID: start.OwnerID, ComputerID: start.ComputerID, AgentID: managementID, AgentProfile: "management", AgentRole: "management", ChannelID: start.InitialDocument.DocID, State: types.RunRunning, Metadata: map[string]any{"assignment_trajectory_id": start.TrajectoryID, "work_item_ids": []string{workID}, "lifecycle_work_item_id": workID}, CreatedAt: now, UpdatedAt: now}
+	if err := s.CreateRun(ctx, run); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.BindLifecycleControlDelivery(ctx, bindControlRequestForTest(t, s, start, run, turn.Controls)); err != nil {
+		t.Fatal(err)
+	}
+	injection, _ := json.Marshal(map[string]any{
+		"schema": "choir.lifecycle_injection.v1", "packet_type": "coagent_update",
+		"owner_id": start.OwnerID, "computer_id": start.ComputerID, "trajectory_id": start.TrajectoryID,
+		"target_agent_id": managementID, "target_run_id": run.RunID,
+		"updates": []map[string]any{{"update_id": turn.Controls[0].UpdateID}},
+	})
+	message, _ := json.Marshal(map[string]any{"role": "user", "content": "Choir authenticated coagent update packet.\n\n" + string(injection)})
+	old := now.Add(-20 * 24 * time.Hour)
+	if _, err := s.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{RunID: run.RunID, OwnerID: start.OwnerID, AgentID: managementID, Kind: types.RunMemoryEntryMessage, Role: types.RunMemoryRoleRuntimeInjection, Message: message, CreatedAt: old}); err != nil {
+		t.Fatal(err)
+	}
+	// The run completes more than a week ago.
+	run.State, run.UpdatedAt = types.RunCompleted, old
+	run.FinishedAt = &old
+	if err := s.UpdateRun(ctx, run); err != nil {
+		t.Fatal(err)
+	}
+	reportPacket := types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_result", Summary: "late progress", Notes: []string{"evidence:progress"}}
+	reportDigest, _ := ComputeLifecycleUpdatePayloadDigest(reportPacket, "late progress")
+	report := types.QueueLifecycleUpdateRequest{OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "queue-retired-super", TrajectoryID: start.TrajectoryID,
+		TargetAgentID: caller.AgentID, ProducerAgentID: managementID, ControlBindingID: turn.Controls[0].UpdateID, TargetWorkItemID: start.InitialWork.WorkItemID,
+		ConsumedDeliveryUpdateIDs: []string{turn.Controls[0].UpdateID},
+		ProducerUpdateID:          "retired-progress-occurrence", UpdateID: "retired-progress-result", ChannelID: start.InitialDocument.DocID, Role: "management", SourceRunID: run.RunID,
+		Packet: reportPacket, Content: "late progress", WorkDisposition: types.WorkItemCompleted, WorkItemID: workID, PayloadDigest: reportDigest}
+	report.CommandDigest, _ = ComputeQueuePersistentManagementReportDigest(report)
+	_, before := s.QueueLifecycleUpdate(ctx, report)
+	ops, err := s.RetireRunMemory(ctx, now)
+	if err != nil || ops == 0 {
+		t.Fatalf("retirement of the completed producer run = %d ops, %v; want it retired", ops, err)
+	}
+	if got, _ := s.ListRunMemoryEntries(ctx, start.OwnerID, run.RunID); len(got) != 0 {
+		t.Fatalf("producer memory not retired: %d entries", len(got))
+	}
+	report.CommandID = "queue-retired-super-2"
+	report.CommandDigest, _ = ComputeQueuePersistentManagementReportDigest(report)
+	_, after := s.QueueLifecycleUpdate(ctx, report)
+	if (before == nil) != (after == nil) || (before != nil && before.Error() != after.Error()) {
+		t.Fatalf("report outcome changed with the producer's memory retired: before=%v after=%v", before, after)
 	}
 }
