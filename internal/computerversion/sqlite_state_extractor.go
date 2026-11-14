@@ -64,6 +64,14 @@ type SQLiteStateExtractor struct {
 	// Schema observations still include them.
 	IgnoredContentColumns map[string]map[string]struct{}
 
+	// EmptyJSONArrayColumns lists JSON-array text columns whose JSON null is
+	// read as the empty array "[]" (STUB: not yet applied).
+	EmptyJSONArrayColumns map[string]map[string]struct{}
+
+	// RowFilters maps a table to an SQL predicate that keeps rows (STUB: not
+	// yet applied).
+	RowFilters map[string]string
+
 	// IgnoredTables lists tables left out of the observation entirely, name,
 	// schema and rows: derived indexes that are rebuilt from other tables
 	// and so are not state.

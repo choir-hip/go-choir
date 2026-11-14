@@ -75,6 +75,11 @@ func (s *Store) ListObjectGraphFingerprints(ctx context.Context) ([]ObjectGraphF
 	return append(out, parts...), nil
 }
 
+// ListObjectGraphFingerprintsTx (STUB) reads in the caller's snapshot.
+func (s *Store) ListObjectGraphFingerprintsTx(ctx context.Context, tx *sql.Tx) ([]ObjectGraphFingerprint, error) {
+	return s.ListObjectGraphFingerprints(ctx)
+}
+
 // telemetryPartitionFingerprints are the rows of the live telemetry
 // partitions, keyed by tape position like choir_events' (a position is in
 // one table only).

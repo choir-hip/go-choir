@@ -39,6 +39,7 @@ type ReplayCompletenessReport struct {
 	ProbeDigest        string                            `json:"probe_digest"`
 	RunMemory          ReplayRunMemoryComparison         `json:"run_memory"`
 	ObjectGraph        *ReplayObjectGraphComparison      `json:"object_graph,omitempty"`
+	EventIndex         *ReplayEventIndexComparison       `json:"event_index,omitempty"`
 	DepositMode        string                            `json:"deposit_mode,omitempty"`
 	BaseSequence       uint64                            `json:"base_sequence"`
 	BaseBlobSHA256     string                            `json:"base_blob_sha256"`
@@ -214,6 +215,11 @@ func differingReplayRunMemoryFields(live, replay map[string]string) []string {
 // that projection and the live store through SQLiteStateExtractor, and
 // returns the exact deterministic diff. No event is appended and the live
 // store is never used as the replay projection.
+// replayProbeStateExtractor (STUB) is replayStateExtractor for the probe.
+func replayProbeStateExtractor(db *sql.DB, head uint64) computerversion.SQLiteStateExtractor {
+	return replayStateExtractor(db)
+}
+
 func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (ReplayCompletenessReport, error) {
 	probe, err := rt.openReplayProbe(ctx, computerID)
 	if err != nil {
