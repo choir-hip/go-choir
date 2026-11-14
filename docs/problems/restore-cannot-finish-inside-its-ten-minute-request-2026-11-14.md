@@ -62,3 +62,29 @@ may refuse on that. Not observed.
   tied to the events to replay, and a witness mismatch answered as a refusal.
   Not designed.
 - Steps 7d to 7f of the step 2 proof are not done.
+
+## Third request, with a checkpoint above the snapshot (2026-11-14T23:05Z)
+
+Claim C89, entered first; true.
+
+- Checkpoint df408396..., 22:52:48Z, sequence 110,778. The newest snapshot is
+  `interval snapshot at head 108786`, 21:34:58Z, so the tail was 1,992 events.
+- Restore 22:58:30Z to 23:02:39Z: http 500, `rematerialize: reconstructed
+  computer_event_index does not match checkpoint`. Replay took 15.6 s; the
+  3m44s before the staged store opened is the scan and the snapshot install.
+- Nothing flipped: epoch 13706 before and after, the revision written after
+  the checkpoint still answers 200.
+- d@e's console also shows snapshots refused for free space under the 2 GiB
+  floor from 20:06Z to 21:17Z, before the boot prune freed the volume.
+
+So on d@e today no checkpoint can be restored: the restore's witness compares
+the event index strictly and a replayed index differs from the live one
+(`replay-of-de-differs-on-the-event-index-only-2026-11-14.md`). Making the
+probe tolerant is not a repair of this; the witness that a checkpoint records
+and a restore recomputes needs the same canonical form, versioned so an old
+checkpoint still fails closed. The refusal also answers 500 where it should be
+a refusal status. Whether the paper or any other computer is in the same state
+is not known; nothing was run there.
+
+Steps 7d to 7f of the step 2 proof stay open behind this.
+
