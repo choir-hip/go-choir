@@ -293,6 +293,11 @@ type TelemetryStats struct {
 	TapeOpsByObjectKind     map[string]int64 `json:"tape_ops_by_object_kind"`
 	TapeOpBytesByObjectKind map[string]int64 `json:"tape_op_bytes_by_object_kind"`
 	RunMemoryOpsByKind      map[string]int64 `json:"run_memory_ops_by_kind"`
+	// RunMemoryBytesByKind is the body bytes of run memory ops under the same
+	// keys as RunMemoryOpsByKind. A carried conversation tail is not told apart
+	// from new messages in the op (no marker in the entry), so only the carried
+	// checkpoint shows, as compaction/actor_rewarm.
+	RunMemoryBytesByKind map[string]int64 `json:"run_memory_bytes_by_kind"`
 	// ObjectRewrites is per object kind: ops, bytes, mean bytes per op, distinct
 	// objects written since boot and writes per object (object_rewrite_counters.go).
 	ObjectRewrites           map[string]ObjectKindRewrites `json:"object_rewrites"`
