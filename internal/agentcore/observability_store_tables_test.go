@@ -73,3 +73,25 @@ func TestObservabilityReadsTheStoreTablesOnRequest(t *testing.T) {
 		t.Fatalf("a plain read after a reading does not show it: %s", again)
 	}
 }
+
+// A huge store_tables_seconds must clamp to the cap, not wrap the duration.
+func TestObservabilityStoreTablesSecondsCannotOverflow(t *testing.T) {
+	rt := telemetryRuntime(t, "computer-store-tables-huge")
+	for _, secs := range []string{"9223372036854775807", "9223372036", "99999999999"} {
+		raw, ok := readStoreTables(t, rt, "?store_tables=detail&store_tables_seconds="+secs)
+		if !ok {
+			t.Fatalf("seconds=%s returned no store_tables", secs)
+		}
+		var rep struct {
+			Reading struct {
+				BudgetMillis int64 `json:"budget_ms"`
+			} `json:"reading"`
+		}
+		if err := json.Unmarshal(raw, &rep); err != nil {
+			t.Fatal(err)
+		}
+		if rep.Reading.BudgetMillis != 100000 {
+			t.Fatalf("seconds=%s gave a budget of %d ms, want the 100000 ms cap: %s", secs, rep.Reading.BudgetMillis, raw)
+		}
+	}
+}

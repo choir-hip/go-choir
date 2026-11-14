@@ -214,9 +214,7 @@ func TestOneTreeDoesNotTakeTheWholeBudget(t *testing.T) {
 	var sc Scanner
 	// A budget that finishes the small trees and cannot finish the biggest
 	// at its share: the small ones are still read.
-	hook := make(chan string, 64)
 	sc.testHook = func(name string, d time.Duration) time.Duration {
-		hook <- name
 		if name == "og_bodies" {
 			return time.Nanosecond
 		}
@@ -314,5 +312,82 @@ func TestBudgetIsBounded(t *testing.T) {
 	}
 	if MaxBudget >= 120*time.Second {
 		t.Fatalf("the cap %s reaches the server's 120 s write timeout", MaxBudget)
+	}
+}
+
+func TestANilDatabaseIsAnErrorNotAPanic(t *testing.T) {
+	var sc Scanner
+	r := sc.Read(context.Background(), nil, DefaultLimits, true).Reading
+	if r == nil || r.Header.Error == "" || !r.Truncated {
+		t.Fatalf("a nil database = %+v", r)
+	}
+}
+
+func TestHeaderKeepsTheFirstErrorInAFixedOrder(t *testing.T) {
+	db := openTestDB(t)
+	_ = db.Read.Close()
+	for i := 0; i < 20; i++ {
+		h := readHeader(context.Background(), db.Read)
+		if !strings.HasPrefix(h.Error, "PRAGMA page_size") {
+			t.Fatalf("header error = %q, want the first pragma's", h.Error)
+		}
+	}
+}
+
+func TestExtentsAreSkippedOncePastTheDeadline(t *testing.T) {
+	db := openTestDB(t)
+	fill(t, db.Write, 50)
+	var sc Scanner
+	sc.testHook = func(name string, d time.Duration) time.Duration {
+		if name == "og_bodies" {
+			time.Sleep(400 * time.Millisecond) // past the whole budget
+			return time.Second
+		}
+		return d
+	}
+	r := sc.Read(context.Background(), db.Read, Limits{Budget: 200 * time.Millisecond}, true).Reading
+	if b := treeNamed(t, r, "og_bodies"); b.RowidMax != nil {
+		t.Fatalf("extents were read after the deadline: %+v", b)
+	}
+	if !r.Truncated {
+		t.Fatalf("later trees were not reached but the reading is not truncated: %+v", r)
+	}
+}
+
+func TestOneTreesSingleReadIsCapped(t *testing.T) {
+	db := openTestDB(t)
+	fill(t, db.Write, 50)
+	old := maxTreeRead
+	maxTreeRead = 3 * time.Second
+	defer func() { maxTreeRead = old }()
+	var sc Scanner
+	var biggest time.Duration
+	sc.testHook = func(name string, d time.Duration) time.Duration {
+		biggest = max(biggest, d)
+		return d
+	}
+	sc.Read(context.Background(), db.Read, Limits{Budget: time.Minute}, true)
+	if biggest == 0 || biggest > 3*time.Second {
+		t.Fatalf("the largest single-read share was %s, want at most the 3s cap", biggest)
+	}
+	if MaxTreeRead != 15*time.Second {
+		t.Fatalf("MaxTreeRead = %s", MaxTreeRead)
+	}
+}
+
+func TestSchemaDetectionToleratesWhitespace(t *testing.T) {
+	db := openTestDB(t)
+	exec(t, db.Write, "CREATE TABLE w (a TEXT PRIMARY KEY)  WITHOUT\n\tROWID")
+	exec(t, db.Write, `CREATE TABLE r (a INTEGER)`)
+	list, err := readSchema(context.Background(), db.Read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, st := range list {
+		got[st.name] = st.rowid
+	}
+	if got["w"] || !got["r"] {
+		t.Fatalf("rowid detection = %v", got)
 	}
 }
