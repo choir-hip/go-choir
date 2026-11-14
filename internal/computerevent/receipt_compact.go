@@ -9,8 +9,10 @@ package computerevent
 // or constants (version, kind, issuer), spelled as hex text under JSON keys.
 // The compact form keeps only what no column holds, in binary: the previous
 // head, the next heads and commitments, the payload pin digests, issued_at
-// and the signatures. Expand rebuilds the exact canonical bytes from it and
-// the row; nothing is lost and the signature still verifies.
+// and the signatures. Expand rebuilds the exact stored bytes from it and the
+// row: the canonical spelling for format 1, PostgreSQL's jsonb spelling for
+// format 2 (rows written while the column was jsonb). Nothing is lost and the
+// signature still verifies.
 //
 // Ways it could fail, written before the code:
 //
@@ -42,12 +44,17 @@ const CompactHeadReceiptPrefix = "c1:"
 
 const (
 	compactFormatV1 byte = 1
-	compactCheckLen      = 16
-	hexTagEmpty     byte = 0
-	hexTagSHA256    byte = 1
-	hexTagRaw       byte = 2
-	eventHeadKind        = "EventHeadReceipt"
-	eventHeadIssuer      = "corpusd"
+	// compactFormatJSONB is the same fields as V1; it expands to the text
+	// PostgreSQL's jsonb output wrote for rows stored before the column was
+	// TEXT (keys by length then bytes, ", " and ": " separators), not to the
+	// canonical form. docs/problems/old-receipts-do-not-compact-2026-11-14.md.
+	compactFormatJSONB byte = 2
+	compactCheckLen         = 16
+	hexTagEmpty        byte = 0
+	hexTagSHA256       byte = 1
+	hexTagRaw          byte = 2
+	eventHeadKind           = "EventHeadReceipt"
+	eventHeadIssuer         = "corpusd"
 )
 
 // HeadReceiptRow is the part of an append-receipt row the compact form
@@ -72,8 +79,17 @@ func IsCompactHeadReceipt(stored string) bool {
 
 // CompactHeadReceipt returns the compact form of a stored full receipt, and
 // false when the receipt cannot be stored compactly without loss (the caller
-// keeps the full JSON).
+// keeps the full JSON). It writes the canonical format only.
 func CompactHeadReceipt(row HeadReceiptRow, receiptJSON []byte) (string, bool) {
+	return CompactStoredHeadReceipt(row, receiptJSON, false)
+}
+
+// CompactStoredHeadReceipt is CompactHeadReceipt for a stored value that may
+// be in the jsonb spelling. allowJSONB is the write allowance for format 2:
+// every reader understands it (ExpandHeadReceipt), but a binary that has not
+// been the previous release cannot, so only a caller that has been cleared to
+// write it passes true (the backfill, by receiptCompactionCodec).
+func CompactStoredHeadReceipt(row HeadReceiptRow, receiptJSON []byte, allowJSONB bool) (string, bool) {
 	if len(receiptJSON) == 0 || receiptJSON[0] != '{' {
 		return "", false
 	}
@@ -87,23 +103,50 @@ func CompactHeadReceipt(row HeadReceiptRow, receiptJSON []byte) (string, bool) {
 	if len(receipt.RequiredSigners) == 0 || len(receipt.RequiredSigners) != len(receipt.SignatureSet) {
 		return "", false
 	}
+	// The canonical form first; a receipt that is not canonical text (the
+	// jsonb-spelled rows) takes the second format when it is allowed. Each is
+	// returned only when its expansion is the original bytes exactly. A
+	// structural refusal (the fields, not the spelling) is the same for both
+	// formats, so it ends the search.
+	formats := []byte{compactFormatV1}
+	if allowJSONB {
+		formats = append(formats, compactFormatJSONB)
+	}
+	for _, format := range formats {
+		blob, ok := compactBlob(receipt, receiptJSON, format)
+		if !ok {
+			return "", false
+		}
+		compact := CompactHeadReceiptPrefix + base64.RawStdEncoding.EncodeToString(blob)
+		if len(compact) >= len(receiptJSON) {
+			return "", false
+		}
+		expanded, err := ExpandHeadReceipt(row, compact)
+		if err == nil && bytes.Equal(expanded, receiptJSON) {
+			return compact, true
+		}
+	}
+	return "", false
+}
+
+func compactBlob(receipt Receipt, receiptJSON []byte, format byte) ([]byte, bool) {
 	str := func(name string) (string, bool) {
 		v, ok := receipt.KindFields[name].(string)
 		return v, ok
 	}
 	var b bytes.Buffer
-	b.WriteByte(compactFormatV1)
+	b.WriteByte(format)
 	b.Write(binary.AppendUvarint(nil, uint64(receipt.ReceiptVersion)))
 	for _, name := range []string{"previous_head", "desired_event_head", "effective_event_head", "pending_transition_ref", "desired_state_commitment", "effective_state_commitment"} {
 		v, ok := str(name)
 		if !ok {
-			return "", false
+			return nil, false
 		}
 		writeHexField(&b, v)
 	}
 	pins, ok := receiptPinList(receipt.KindFields["pin_receipt_digests"])
 	if !ok || len(pins) == 0 {
-		return "", false
+		return nil, false
 	}
 	b.Write(binary.AppendUvarint(nil, uint64(len(pins)-1)))
 	for _, pin := range pins[1:] {
@@ -113,11 +156,11 @@ func CompactHeadReceipt(row HeadReceiptRow, receiptJSON []byte) (string, bool) {
 	b.Write(binary.AppendUvarint(nil, uint64(len(receipt.SignatureSet))))
 	for i, sig := range receipt.SignatureSet {
 		if receipt.RequiredSigners[i].SignerDomain != sig.SignerDomain || receipt.RequiredSigners[i].KeyID != sig.KeyID {
-			return "", false
+			return nil, false
 		}
 		raw, err := base64.RawStdEncoding.Strict().DecodeString(sig.Signature)
 		if err != nil {
-			return "", false
+			return nil, false
 		}
 		writeString(&b, sig.SignerDomain)
 		writeString(&b, sig.KeyID)
@@ -125,17 +168,7 @@ func CompactHeadReceipt(row HeadReceiptRow, receiptJSON []byte) (string, bool) {
 	}
 	check := sha256.Sum256(receiptJSON)
 	b.Write(check[:compactCheckLen])
-	compact := CompactHeadReceiptPrefix + base64.RawStdEncoding.EncodeToString(b.Bytes())
-	if len(compact) >= len(receiptJSON) {
-		return "", false
-	}
-	// The round trip is the proof: only a form that rebuilds the original
-	// bytes is ever returned.
-	expanded, err := ExpandHeadReceipt(row, compact)
-	if err != nil || !bytes.Equal(expanded, receiptJSON) {
-		return "", false
-	}
-	return compact, true
+	return b.Bytes(), true
 }
 
 // ExpandHeadReceipt returns the canonical receipt JSON a stored value holds:
@@ -153,7 +186,8 @@ func ExpandHeadReceipt(row HeadReceiptRow, stored string) ([]byte, error) {
 	}
 	check := blob[len(blob)-compactCheckLen:]
 	r := &compactReader{buf: blob[:len(blob)-compactCheckLen]}
-	if format := r.byte(); format != compactFormatV1 {
+	format := r.byte()
+	if r.err == nil && format != compactFormatV1 && format != compactFormatJSONB {
 		return nil, fmt.Errorf("%w: unknown format %d", ErrCompactHeadReceipt, format)
 	}
 	version := r.uvarint()
@@ -219,7 +253,12 @@ func ExpandHeadReceipt(row HeadReceiptRow, stored string) ([]byte, error) {
 	}
 	digest := sha256.Sum256(payload)
 	receipt.CanonicalPayloadSHA256 = hex.EncodeToString(digest[:])
-	out, err := receipt.CanonicalBytes()
+	var out []byte
+	if format == compactFormatJSONB {
+		out, err = receipt.jsonbText()
+	} else {
+		out, err = receipt.CanonicalBytes()
+	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrCompactHeadReceipt, err)
 	}
