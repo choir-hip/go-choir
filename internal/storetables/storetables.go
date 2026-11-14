@@ -182,8 +182,9 @@ type Reading struct {
 	// read: pages no tree in this reading accounts for. It is not attributed
 	// to anything here. When exactly one tree was cut, it is that tree's
 	// missing bytes; in a restricted reading it is the trees not named plus
-	// any cut one; it is also the header page, and pages of trees dbstat
-	// does not list.
+	// any cut one. It also holds pages dbstat does not report: the pointer-map
+	// pages of an auto_vacuum file and the lock-byte page. (sqlite_schema is
+	// left out by readSchema, not by dbstat.) Never negative.
 	UnattributedBytes int64 `json:"unattributed_bytes"`
 
 	Only        []string     `json:"only,omitempty"`
@@ -241,9 +242,13 @@ func (s *Scanner) Read(ctx context.Context, db *sql.DB, lim Limits, want bool) R
 		s.running = false
 		// A reading cut by its request's own cancellation does not replace
 		// one that others may read.
-		// A restricted reading is never kept: a later plain read must not
-		// show one tree's numbers as the file's.
-		if r != nil && len(r.Only) == 0 && (ctx.Err() == nil || s.last == nil) {
+		// A restricted reading (decided from the request, not from the
+		// reading, which an early failure leaves unmarked) is never kept: a
+		// later plain read must not show one tree's numbers as the file's.
+		// A reading that failed (a header error, no trees) never replaces a
+		// good one either.
+		failed := r != nil && r.Header.Error != "" && len(r.Trees) == 0
+		if r != nil && len(lim.Only) == 0 && (ctx.Err() == nil || s.last == nil) && (!failed || s.last == nil) {
 			s.last = r
 		}
 		s.mu.Unlock()
@@ -280,12 +285,7 @@ func (s *Scanner) read(ctx context.Context, db *sql.DB, budget time.Duration, on
 	}
 
 	deadline := started.Add(budget)
-	weight := func(t schemaTree) float64 {
-		if t.typ == "table" {
-			return 4
-		}
-		return 1
-	}
+	weight := flatWeight
 	treesOfTable := map[string]int{}
 	for _, t := range list {
 		treesOfTable[t.table]++
@@ -341,7 +341,7 @@ func (s *Scanner) read(ctx context.Context, db *sql.DB, budget time.Duration, on
 	for _, tr := range r.Trees {
 		seen += tr.Bytes
 	}
-	r.UnattributedBytes = r.Header.FileBytes - r.Header.FreeBytes - seen
+	r.UnattributedBytes = unattributed(r.Header, seen)
 	sortTrees(r.Trees)
 	r.ElapsedMillis = time.Since(started).Milliseconds()
 	return r
@@ -358,6 +358,9 @@ func selectOnly(r *Reading, list []schemaTree, only []string) []schemaTree {
 	seen := map[string]bool{}
 	var out []schemaTree
 	for _, n := range only {
+		if n = strings.TrimSpace(n); n == "" {
+			continue
+		}
 		if seen[n] {
 			continue
 		}
@@ -383,6 +386,9 @@ func selectOnly(r *Reading, list []schemaTree, only []string) []schemaTree {
 // size: dbstat has no root-only mode, and the schema holds no sizes.
 func orderByPrevious(list []schemaTree, prev *Reading) ([]schemaTree, func(schemaTree) float64) {
 	const minWeight = 64 << 10
+	if len(prev.Trees) == 0 {
+		return list, flatWeight
+	}
 	est := map[string]float64{}
 	for _, tr := range prev.Trees {
 		b := float64(tr.Bytes)
@@ -560,7 +566,15 @@ func sortTotals(totals []TableTotal) {
 }
 
 // unattributed is the pages no tree accounts for.
-func unattributed(h Header, seen int64) int64 { return h.FileBytes - h.FreeBytes - seen }
+//
+// The header is read first, so growth of the file during the read is not
+// counted: the result is clamped at zero. It is zero when the header failed.
+func unattributed(h Header, seen int64) int64 {
+	if h.Error != "" {
+		return 0
+	}
+	return max(0, h.FileBytes-h.FreeBytes-seen)
+}
 
 // flatWeight weighs a table four times an index.
 func flatWeight(t schemaTree) float64 {

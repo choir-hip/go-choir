@@ -1034,7 +1034,23 @@ func parseGuestMeminfo(data string) *guestMemoryObservability {
 // HandleGuestObservability handles GET /api/runtime/observability: the guest's
 // build commit and a bounded recent boot log. This closes the deploy-to-guest
 // verification gap that otherwise requires shell access.
+// storeTablesBudget is the wall time the store reading may take: what asked
+// allows, capped by what is left of the server's write timeout after the
+// handler's own elapsed time and a reserve for what runs after the reading
+// (the reading's header reads, the tool-layer read, the four bounded reads of
+// observabilityReadBudget, and 5 s for serialization). ok is false when
+// nothing is left.
+func storeTablesBudget(asked, elapsed, writeTimeout time.Duration) (budget time.Duration, ok bool) {
+	reserve := storetables.HeaderBudget + toolLayerReadBudget + time.Second + 4*observabilityReadBudget + 5*time.Second
+	left := writeTimeout - reserve - elapsed
+	if left < time.Second {
+		return 0, false
+	}
+	return min(storetables.ClampBudget(asked), left), true
+}
+
 func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Request) {
+	handlerStart := observabilityNow()
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -1092,8 +1108,15 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 				only = append(only, n)
 			}
 		}
-		report := h.rt.storeTables.Read(r.Context(), h.rt.store.ReadDB(), storetables.Limits{Budget: budget, Only: only}, r.URL.Query().Get("store_tables") == "detail")
-		if report.Reading != nil || report.Busy {
+		want := r.URL.Query().Get("store_tables") == "detail"
+		var report storetables.Report
+		if left, ok := storeTablesBudget(budget, observabilityNow().Sub(handlerStart), server.WriteTimeoutFromEnv()); ok || !want {
+			report = h.rt.storeTables.Read(r.Context(), h.rt.store.ReadDB(), storetables.Limits{Budget: left, Only: only}, want)
+		} else {
+			report = h.rt.storeTables.Read(r.Context(), h.rt.store.ReadDB(), storetables.Limits{}, false)
+			report.Skipped = "no time left under the server's write timeout; ask again without data_volume=detail or memory=detail"
+		}
+		if report.Reading != nil || report.Busy || report.Skipped != "" {
 			resp.StoreTables = &report
 		}
 	}
