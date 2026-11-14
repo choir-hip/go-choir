@@ -672,7 +672,7 @@ The work runs on the owner's computer, through the desks (doctrine `I26`):
 2. Management casts research, and research returns the provider spec with
    citations.
 3. Management files a **precommitment record**
-   (`docs/precommitment-records.md`). It predicts each probe result from
+   (`docs/archive/learning/precommitment-records.md`). It predicts each probe result from
    the spec, and the latency and tool-call failure band it expects at each
    stage.
 4. If no vault entry exists for the provider, management escalates "add a

@@ -7,7 +7,7 @@ progressive delivery, the optimization pass); each of those adds its own
 records before its evidence exists. Round 0 covers the selection goal and a
 first frame for the hypervisor bake-off. (Preamble scope clarified with
 round 0b; no record was edited.) The mechanism and scoring rules are in
-docs/precommitment-records.md, sections 2 and 5. This file applies them by
+docs/archive/learning/precommitment-records.md, sections 2 and 5. This file applies them by
 hand until desk records carry the work.
 
 Owner ruling (2026-10-28 ~14:40): "the point is not to have performance

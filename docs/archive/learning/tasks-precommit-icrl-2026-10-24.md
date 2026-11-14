@@ -1,10 +1,15 @@
 # Prospective Self-Alignment for Background Tasks: Mandatory Precommits, Visible Verdicts and a Hidden Audit (2026-10-24)
 
+> **Archived 2026-11-14.** Superseded by [the four-stroke learning engine](../../learning-engine.md),
+> which is the current home of this mechanism and its vocabulary (forecast,
+> outcome, lesson, trust). Kept as the record of how the mechanism was reasoned
+> out; where the two disagree, the learning engine wins.
+
 Status: **design, green, round 4.** Nothing here is built. Written on lane
 `lane/fp0-icrl-design` from `origin/main` 5ca8d8f3b. Also read on main
 after the branch point:
 
-- the owner's framing in `docs/precommitment-records.md` §1.0
+- the owner's framing in `docs/archive/learning/precommitment-records.md` §1.0
   (fe56626d8);
 - the owner's rulings at 19:0x, and at 19:4x (ee645c3fb).
 
@@ -26,8 +31,8 @@ Authority: the owner's rulings of 2026-10-24 in the launch first pass ledger
 - 19:3x: the reframe;
 - 19:4x: decision 5 reversed, and the four protections.
 
-The design inherits [Choir Doctrine](../choir-doctrine.md) and
-[precommitment-records.md](../precommitment-records.md). It is not doctrine;
+The design inherits [Choir Doctrine](../../choir-doctrine.md) and
+[precommitment-records.md](precommitment-records.md). It is not doctrine;
 §12 proposes the doctrine text.
 
 Every claim about code is marked **[V]** (verified by reading the code at
@@ -1235,7 +1240,7 @@ and settlements resolve commitments; a desk sees verdicts on its own
 finished work under the four protections (choir-doctrine, the paragraph
 after I26)."
 
-**D. `docs/precommitment-records.md` §1.2** [V `:118`]. Replace "feed an
+**D. `docs/archive/learning/precommitment-records.md` §1.2** [V `:118`]. Replace "feed an
 agent observations and discrepancies; keep independent scores out of its
 context, or sample and delay them, so it cannot learn a scorer's quirks
 inside one session (section 4.7)" with:

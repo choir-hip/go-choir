@@ -352,7 +352,7 @@ nodes:
       score scope removed. Goal file deleted (stale anchor).
     sources:
       - docs/archive/desk-rlm-rectification-plan-2026-09-23.md
-      - docs/precommitment-records.md
+      - docs/archive/learning/precommitment-records.md
   - id: choir-durable-vocabulary-migration-draft-2026-09-23
     title: Durable Vocabulary Migration (R5, superseded draft)
     path: docs/archive/desk-rlm-rectification-plan-2026-09-23.md
@@ -590,7 +590,7 @@ nodes:
       selfdev verification payload).
     sources:
       - docs/archive/desk-rlm-rectification-plan-2026-09-23.md
-      - docs/precommitment-records.md
+      - docs/archive/learning/precommitment-records.md
   - id: choir-selfdev-derivable-continuations-2026-09-26
     title: Skip the Harness — Derivable Selfdev Continuations (M7, station)
     path: docs/archive/definitions/choir-selfdev-derivable-continuations-2026-09-26.md
@@ -610,7 +610,7 @@ nodes:
       revert+redeploy restores API-driven advance.
     sources:
       - docs/archive/desk-rlm-rectification-plan-2026-09-23.md
-      - docs/precommitment-records.md
+      - docs/archive/learning/precommitment-records.md
   - id: choir-platform-update-push-restore-2026-09-26
     title: Platform-Signed Update Push + Restore (M9a, station)
     path: docs/archive/definitions/choir-platform-update-push-restore-2026-09-26.md
@@ -847,7 +847,7 @@ nodes:
     enables: [choir-autopaper-w2-living-textures-2026-10-11]
     note: >-
       Owner 2026-10-11: all inter-agent communication through precommitment
-      records; plan approved. Design docs/precommitment-records.md (section 4).
+      records; plan approved. Design docs/archive/learning/precommitment-records.md (section 4).
       Unblocks Autopaper W2.
   - id: choir-protocol-p1-record-first-controls-2026-10-11
     title: P1 — Texture's controls mint cast records in the same commit as their packets
@@ -1387,6 +1387,33 @@ nodes:
       Owner 2026-11-12: "Let's make a storage solutions mission (part 2) as
       our next priority. We can return to autoradio after we do that."
       Frame: docs/design/storage-pressure-frame-2026-11-12.md.
+  - id: choir-autoradio-pass1-2026-11-10
+    title: Autoradio pass 1 — the iOS app on Exact, voice modes, the fast turn, the programme
+    path: docs/definitions/choir-autoradio-pass1-2026-11-10.md
+    status: blocked_incomplete  # owner items: install go, TestFlight verdict, River credential
+    kind: station
+    entrypoint: false
+    depends_on: []
+    enables: [choir-autoradio-learning-engine-2026-11-14]
+    settled_by: owner
+    note: >-
+      Registered 2026-11-14 with its successor station; it was authored
+      2026-11-10 and never entered here. Stays the root for the app.
+  - id: choir-autoradio-learning-engine-2026-11-14
+    title: Autoradio learns its listener — the four-stroke learning engine, first build (forecast, outcome, lesson, trust)
+    path: docs/definitions/choir-autoradio-learning-engine-2026-11-14.md
+    status: working  # 2026-11-14 next station; slice L0, the design review
+    kind: station
+    entrypoint: false
+    depends_on: []
+    enables: []
+    settled_by: owner
+    note: >-
+      Owner 2026-11-14: "we'll merge that PR, and then we'll get to work on
+      it from our main worker thread." Theory: docs/learning-engine.md.
+      Design: docs/design/autoradio-learning-engine-2026-11-14.md. Takes
+      pass 1's acceptance item on run sheet forecasts and widens it to all
+      four strokes. The backport to Autopaper is the mission after it.
   - id: choir-storage-solutions-3-store-once-2026-11-14
     title: Storage solutions, part 3 — store once (ops carry what changed, the guest store is a working set, receipts by segment, shared-context compression, a bounded data volume)
     path: docs/definitions/choir-storage-solutions-3-store-once-2026-11-14.md

@@ -14,7 +14,7 @@ these scores aren't limited to our development repo [...] now we get to
 run the experiment to prove or provide evidence against the notion that
 you can improve calibration with in-context reinforcement learning."
 
-Related designs: [precommitment records](../../precommitment-records.md)
+Related designs: [precommitment records](../learning/precommitment-records.md)
 (the merged design: §2 the record, §4.6 one schema across computers, §5
 scoring, multi-scorers, self never governs), and its archived sources
 [predictions and scoring](../precommitment/precommitment-predictions-and-scoring-design-2026-10-11.md)

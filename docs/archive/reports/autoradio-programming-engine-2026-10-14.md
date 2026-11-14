@@ -612,7 +612,7 @@ not window scans.
 | Followed entities and topics | Autopaper | New claims mentioning a followed entity or topic: `(entity_id, fetched_at)`; new episodes whose transcript mentions it (later) | `developing_event`, `human_clip` |
 | Clips for a story | Autopaper | Transcript captures whose timed blocks share entities or propositions with the story; ranked by a Jev "illuminates this story?" judgment. Lexical matching is too crude (prototype finding: an AI data-centre story matched an AI-regulation episode on words alone) | `human_clip` |
 | Inbox | Personal (email desk) | Email desk records since the cursor, with the desk's urgency and a summary | `mail_update` |
-| Work state | Personal (supervision projection) | Approvals awaiting decision, open obligations, newly settled commitments, finished or failed runs, ordered by materiality (doc: `docs/precommitment-records.md` §4.7) | `desk_update`, `alert` |
+| Work state | Personal (supervision projection) | Approvals awaiting decision, open obligations, newly settled commitments, finished or failed runs, ordered by materiality (doc: `docs/archive/learning/precommitment-records.md` §4.7) | `desk_update`, `alert` |
 | Takes | Personal / team | Teammates' takes shared with the listener (LC/LA); replies to the listener's takes | `take` |
 | Requests and threads | Either, plus web research through the research desk | Anything the listener asked for ("tell me about X", "more on this", "what happened with...") opens a thread (§2.1): adjacent material first, generated continuation after; thread segments carry the highest personal weight while the listener stays on the topic | `answer` and any kind |
 | Likely questions | Either | Entities and topics of what is playing and queued, open threads and open work, each with adjacent material resolved in advance, so an interruption about them is answered from the buffer (§2.1) | any kind, marked speculative |
@@ -807,7 +807,7 @@ only as the bounded V term (§2.3).
 
 The engine is a desk, so it is held to the same rule as every desk: commit
 to what you expect before the evidence arrives, then be scored by someone
-else (doc: `docs/precommitment-records.md` §1.1, §5.1). Ruling 3 extends
+else (doc: `docs/archive/learning/precommitment-records.md` §1.1, §5.1). Ruling 3 extends
 the rule to **everything the engine learns about the listener**: a learned
 preference is not a hidden weight but a precommitment, visible and
 steerable.
@@ -1430,7 +1430,7 @@ AI   Pathway decision: how to rank the front page next.
   The listener's forecasts become their own private precommitments,
   settled like the desks' and shown only to them: the human gets a
   calibration record too. This is the learning economy's premise applied
-  to the owner (doc: `docs/precommitment-records.md` §1.3) and is opt-in
+  to the owner (doc: `docs/archive/learning/precommitment-records.md` §1.3) and is opt-in
   (open question 11).
 - **The choice is recorded with provenance.** A decision spoken in a
   briefing becomes a decision record citing the briefing segment and the
@@ -1987,7 +1987,7 @@ Choir (docs and code): `docs/archive/reports/autoradio-mobile-app-plan-2026-10-1
 (including "Owner rulings, 2026-10-14 ~21:40 UTC"),
 `docs/archive/reports/autoradio-prototype-2026-10-14.md`,
 `docs/reports/claims-events-entities-ontology-2026-10-14.md` (§0, §4.2-4.4,
-§8), `docs/precommitment-records.md` (§1, §2, §4.7, §5),
+§8), `docs/archive/learning/precommitment-records.md` (§1, §2, §4.7, §5),
 `docs/archive/reports/object-graph-retrieval-research-2026-10-14.md` (§0, §2, §5),
 `docs/archive/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md`,
 `docs/research/autopaper-media-and-rights-2026-10-14/README.md` (§4, §6, §7),

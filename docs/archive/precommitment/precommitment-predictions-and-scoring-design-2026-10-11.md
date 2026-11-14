@@ -6,10 +6,10 @@ Draft for owner review, 2026-10-11. Stations P3 (predictions required) and
 P4 (scoring) of
 [definitions/choir-precommitment-protocol-metamission-2026-10-11.md](../definitions/choir-precommitment-protocol-metamission-2026-10-11.md).
 Parent design:
-[precommitment-protocol-design-2026-10-11.md](../../precommitment-records.md)
+[precommitment-protocol-design-2026-10-11.md](../learning/precommitment-records.md)
 (§4 the prediction, §5 resolution and scoring, §7 stations, §9 decisions,
 §10 one schema). Mechanism:
-[Precommitment Records — Engineering Memo](../../precommitment-records.md).
+[Precommitment Records — Engineering Memo](../learning/precommitment-records.md).
 Mutation class for both stations: red (lifecycle reducer, desk surface,
 evidence ledger, scoring).
 

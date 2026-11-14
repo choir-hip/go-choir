@@ -1,5 +1,10 @@
 # Keeping Score Without Fooling Ourselves
 
+> **Archived 2026-11-14.** Superseded by [the four-stroke learning engine](../../learning-engine.md),
+> which is the current home of this mechanism and its vocabulary (forecast,
+> outcome, lesson, trust). Kept as the record of how the mechanism was reasoned
+> out; where the two disagree, the learning engine wins.
+
 I wrote this on the evening of November fourth, twenty twenty-six. It covers one day of design conversation with you and the research it set off: two literature reviews and a citation check, all run that afternoon and evening.
 
 The short version: the research says our track-record idea is sound, but it found four real flaws in how I wrote it down, and it hands us a clear rule for staying honest, which is to satisfice on hidden floors and spend the slack on diversity.
@@ -72,7 +77,7 @@ If I were holding the phone, I would decide four things. Whether to adopt frozen
 
 Research reports, citation-checked: docs/research/scoring-and-materiality-2026-11-04.md and docs/research/goodhart-and-metric-design-2026-11-04.md (copied from the scratchpad files research-metascoring.md and research-goodhart-metrics-v2.md).
 
-Design documents under discussion, not yet reviewed: the consolidated plan on branch modplan, commit f1a43fe6e, docs/design/modular-architecture-plan-2026-11-04.md; the trust draft docs/design/bayesian-trust-2026-11-04.md on the same branch.
+Design documents under discussion, not yet reviewed: the consolidated plan on branch modplan, commit f1a43fe6e, docs/design/modular-architecture-plan-2026-11-04.md; the trust draft docs/archive/learning/bayesian-trust-2026-11-04.md on the same branch.
 
 Measurements: docs/evidence/gvisor-desk-capsule-x86-2026-11-04.md. Mission ledger with settled predictions: docs/definitions/choir-modular-architecture-2026-11-04.precommit.md (round zero, settlements in commit 1876a56da, time correction in 303eff7c0).
 

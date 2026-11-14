@@ -578,7 +578,7 @@ The tent poles after it, in the owner's order: apps become app agents
 (T1), an agentic red-teaming loop on the sandboxes (T2), and distribution
 with forced security updates (T3). Then the focus returns to Autopaper, with
 prospective self-alignment scoring it first
-(docs/design/tasks-precommit-icrl-2026-10-24.md), then Autoradio.
+(docs/archive/learning/tasks-precommit-icrl-2026-10-24.md), then Autoradio.
 
 Ledger: `choir-selfdev-readiness-metamission-2026-10-24.ledger.md`, beside
 this file.

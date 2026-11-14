@@ -102,12 +102,17 @@ re-proven on the records substrate. Self-development is only real when built on
 precommitment scoring — self-supervising and self-learning, not another app
 builder.
 
-## Precommitment Records: The Core Mechanism
+## The Four-Stroke Learning Engine: The Core Mechanism
 
-Before a step with a verifiable outcome, an agent commits a typed prediction
-(hypothesis, assumptions, alternatives, probabilities); the outcome resolves and
-scores it; the accumulated log is the agent's evolving world model. This is
-prospective self-alignment (PSA), the core of the product:
+Call it. Check it. Learn it. Earn it. Before a step with a checkable outcome,
+an agent states a **forecast** (hypothesis, assumptions, alternatives,
+probabilities). Someone else reports the **outcome**. The agent writes the
+**lesson**, the most general thing learned, where the next actor and whoever
+it is about can read it. **Trust** is what the agent is given ahead of the
+next outcome. The outcome is the teacher (owner, 2026-11-14). Two rules: you
+do not mark your own work, and nothing is held about you that you cannot read.
+The record of a forecast is still called a precommitment record in code. This
+is the core of the product:
 
 - **In-context reinforcement learning.** Records live in the desk's REPL and come
   back as context packs and on-demand retrieval, so feedback teaches a model
@@ -120,8 +125,8 @@ prospective self-alignment (PSA), the core of the product:
 
 Documentation-driven development is the same pattern applied to the builders:
 goal files with value criteria, typed conjectures and named evidence are
-precommitments for coding agents. See
-[`precommitment-records.md`](precommitment-records.md).
+forecasts for coding agents. See
+[`learning-engine.md`](learning-engine.md).
 
 ## Multiplayer By Design
 
@@ -170,7 +175,7 @@ vision is the architecture supervision lives in.
 - `docs/choir-doctrine.md` — apex doctrine; this vision defers to it.
 - `docs/computer-ontology.md` — persistent computer, candidate, promotion
   ontology.
-- `docs/precommitment-records.md` — the core mechanism.
+- `docs/learning-engine.md` — the core mechanism.
 - `docs/signal-is-sparse-not-the-learner-2026-08-01.md` — the foundational
   argument.
 - `docs/archive/reports/choir-state-and-vision-2026-10-14.md` — what is built, designed

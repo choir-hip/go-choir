@@ -90,7 +90,7 @@ looks at outcome metrics before then. Counts of n may be watched.
 
 ### P1. H4: track records beat the usual proxies
 
-**Claim** (PSA, `docs/precommitment-records.md` section 8.4): "a prior,
+**Claim** (PSA, `docs/archive/learning/precommitment-records.md` section 8.4): "a prior,
 domain-specific history of resolved records predicts future performance better
 than success rates, benchmarks, popularity or uncalibrated ratings."
 

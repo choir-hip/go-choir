@@ -365,7 +365,7 @@ receipts:
       PD1-1 coverage improved by changing how Texture spends rounds; the
       next gap is citation (importing what is reported). Prompt
       hill-climbing pauses here: the owner's precommitment-records protocol
-      (docs/precommitment-records.md) is the measured
+      (docs/archive/learning/precommitment-records.md) is the measured
       replacement for reading these traces by hand
 ---
 

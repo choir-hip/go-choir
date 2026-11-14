@@ -6,7 +6,7 @@ the owner's design day on "PSA / pre-commitment records / ICRL in the REPL"
 have fully integrated PSA/precommitment records and in-context reinforcement
 learning" yet. This document says how far that is true. It inherits
 [Choir Doctrine](../../choir-doctrine.md) and
-[precommitment-records.md](../../precommitment-records.md), the normative
+[precommitment-records.md](../learning/precommitment-records.md), the normative
 mechanism document. It is not doctrine.
 
 Read at `origin/main` 911be16b1. Every claim about code is marked **verified**

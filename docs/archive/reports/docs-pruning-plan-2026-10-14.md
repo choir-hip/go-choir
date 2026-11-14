@@ -135,7 +135,7 @@ This is the new `docs/README.md`, summarized.
 ## Proposed CLAUDE.md (AGENTS.md) edits (not applied)
 
 The only edit made to `AGENTS.md` is a path: the precommitment mechanism now
-lives at `docs/precommitment-records.md` instead of the Engineering Memo. The
+lives at `docs/archive/learning/precommitment-records.md` instead of the Engineering Memo. The
 rest is for the owner:
 
 1. **Roadmap pointer.** Replace "The mission roadmap from here to World Wire
@@ -146,7 +146,7 @@ rest is for the owner:
    line moves, `world-wire-mission-stack-2026-09-22.md` can go.
 2. **Product direction.** Add the tagline ("multiplayer intelligence for the
    learning economy") and one sentence that precommitment records / PSA
-   (`docs/precommitment-records.md`) are the core mechanism and that the
+   (`docs/archive/learning/precommitment-records.md`) are the core mechanism and that the
    throughline discipline is its builder-side precursor.
 3. **Heresy delta.** "Heresy delta (discovered, introduced, repaired)" is
    demanded for red/black work and in Final Evidence. Proposal: keep it only
