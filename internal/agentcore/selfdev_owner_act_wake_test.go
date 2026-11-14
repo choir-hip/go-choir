@@ -377,6 +377,16 @@ func TestOwnerActWakeCrashSettledApplyMintsNothing(t *testing.T) {
 	operation, bundleDigest, _ := fx.seedOperationToAwaitingApproval(t, "owner-act-crash")
 	fx.appendDecision(t, operation, bundleDigest, "owner-act-crash-decision")
 	fx.waitForState(t, operation.OperationID, selfdev.StateMaterializing)
+	// A crash boot sets its marks before the post-commit observer exists
+	// (setSelfdevCrashMarks), so no pass is in flight when they land. This
+	// fixture's observer is live: a drain that read "not interrupted" just
+	// before the mark, then saw control recover, would apply the operation
+	// live and mint the record this test says a crash boot never mints. Hold
+	// the drains out (the in-flight one finishes first, with control still
+	// failing) from before the mark to the end of the test; the fixture
+	// cleanup joins any drain that queued meanwhile.
+	fx.reconfigure.Lock()
+	defer fx.reconfigure.Unlock()
 
 	// The crash boot: the operation is marked interrupted while control is
 	// still failing (so no live pass can finish it first), and the next
