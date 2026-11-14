@@ -89,11 +89,11 @@ cannot run it beside a live daemon. A full volume: leftovers of earlier runs
 are deleted before anything is renamed, and a rename that fails with ENOSPC
 frees that entry in place (a release's manifest first, so a half-deleted
 release reads as a corpse the next run removes at once; syncing and retrying the
-rename after each MiB freed). A store object freed in place has no marker; it
-is reached only after incoming/ (hidden first) when the volume is so full
-nothing renames, and a kill in the window of one chunk of one run leaves a
-partial object under its real name that `MaterializeClosure` would reuse: a
-named residual.
+rename after each MiB freed). **Superseded by round 2:** a store object is
+never freed in place (it has no marker, and `MaterializeClosure` reuses an
+existing object), so the residual this sentence named no longer exists; a
+store rename that fails for want of space is counted and left for a boot with
+room.
 
 Review round 2 (9843b93b1): a store object is never freed in place (no marker,
 and `MaterializeClosure` trusts an existing object), so a store rename that
@@ -155,3 +155,16 @@ Residuals:
   the newest apply or installed fence that installed it, the Prior of the
   newest restage that installed it). A swap-back that cannot journal
   (`RestagePinnedReleaseBestEffort`) loses its predecessor at the next boot.
+
+Review round 3 (62c8cb18e): a failed stage keeps its source (a transient
+failure such as ENOSPC must not delete the only local copy of a downloaded
+payload; the boot prune collects it past its window), while a staged release
+and a deterministic pre-staging refusal (base mismatch, state incompatibility)
+drop it. The runtime has its own marker, `/run/choir/runtime-unit-entered`, in
+the boot prune's conditions and the binary's refusal; the updater's
+`updater-unit-entered` keeps its meaning for `internal/updater/client.go`. The
+CI classifier selects the unit test (`guest_unit`) when any `nix/` file, the
+script or the workflow changes. The classifier's own self-test already failed on
+main (three scripts named by Go code or a deployed file were classified
+docs-like) and is fixed here. The line also counts in-place deletions the
+budget cut (`inplace_unfinished`).

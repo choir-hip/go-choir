@@ -65,7 +65,9 @@ import (
 //     wrapper overlays store/ on /nix/store, so a surviving layered release's
 //     entrypoint must be rooted or the collection does not run.
 //   - incoming/: staged inputs. Apply deletes its own source once the release is
-//     verified and staged, and when it refuses before staging (dropStagedSource),
+//     verified and staged, and when it refuses before staging for a
+//     deterministic reason (base mismatch, state incompatibility;
+//     dropStagedSource); a failed stage keeps it, the only local copy,
 //     and does not need it again (a resumed apply of a staged release skips the
 //     source). So here: a `<digest>` payload whose release is staged goes at
 //     once, a markerless `<digest>` payload with no staged release goes once
@@ -132,7 +134,7 @@ type PruneOptions struct {
 
 // pruneLiveMarkers are the files, under RunDir, that say the updater daemon is
 // running or has run in this boot.
-var pruneLiveMarkers = []string{"updater.sock", "updater-unit-entered"}
+var pruneLiveMarkers = []string{"updater.sock", "updater-unit-entered", "runtime-unit-entered"}
 
 // pruneFreeChunk is how much an in-place deletion frees before it syncs and
 // retries the rename that failed for want of space.
@@ -158,6 +160,10 @@ type PruneReport struct {
 	// and that were left for a boot with room: a store object is never freed in
 	// place (it has no marker, and MaterializeClosure trusts an existing one).
 	ENOSPCSkipped int
+	// InPlaceUnfinished is the entries freed in place (a full volume) that the
+	// budget cut short: partial under their real name, finished by the next
+	// boot. A release among them has no manifest, so no reader trusts it.
+	InPlaceUnfinished int
 	// DeadJournals is the journals with no result that pin what they name.
 	DeadJournals int
 	// BudgetExhausted is set when the budget stopped the deleting.
@@ -183,8 +189,8 @@ func (r PruneReport) Line() string {
 	if r.BudgetExhausted {
 		b.WriteString(" budget exhausted, the next boot continues")
 	}
-	fmt.Fprintf(&b, ": releases_kept=%d entries_deleted=%d incoming=%d releases=%d gc_roots=%d store=%d bytes_freed=%d hidden_left=%d errors=%d enospc_skipped=%d dead_journals=%d elapsed=%s",
-		r.ReleasesKept, r.Entries(), r.IncomingRemoved, r.ReleasesRemoved, r.GCRootsRemoved, r.StoreRemoved, r.BytesFreed, r.Hidden, r.Errors, r.ENOSPCSkipped, r.DeadJournals, r.Elapsed.Round(time.Millisecond))
+	fmt.Fprintf(&b, ": releases_kept=%d entries_deleted=%d incoming=%d releases=%d gc_roots=%d store=%d bytes_freed=%d hidden_left=%d errors=%d enospc_skipped=%d inplace_unfinished=%d dead_journals=%d elapsed=%s",
+		r.ReleasesKept, r.Entries(), r.IncomingRemoved, r.ReleasesRemoved, r.GCRootsRemoved, r.StoreRemoved, r.BytesFreed, r.Hidden, r.Errors, r.ENOSPCSkipped, r.InPlaceUnfinished, r.DeadJournals, r.Elapsed.Round(time.Millisecond))
 	return b.String()
 }
 
@@ -412,6 +418,7 @@ func (p *pruner) freeInPlace(path, hidden string, kind *int) {
 		var freed int64
 		for _, file := range files {
 			if p.expired() {
+				p.report.InPlaceUnfinished++
 				return
 			}
 			fi, err := os.Lstat(file)
@@ -437,7 +444,9 @@ func (p *pruner) freeInPlace(path, hidden string, kind *int) {
 			}
 		}
 	}
-	if p.removeTree(path, true) {
+	if !p.removeTree(path, true) {
+		p.report.InPlaceUnfinished++
+	} else {
 		*kind++
 	}
 }
@@ -702,9 +711,9 @@ func (p *pruner) hideGCRootsAndStore(cutoff time.Time) {
 	live := map[string]bool{}
 	rooted := map[string]bool{}
 	if entries, err := os.ReadDir(gcRoots); err == nil {
-		defer func() { _ = syncDir(gcRoots) }()
 		for _, entry := range entries {
 			if p.expired() {
+				_ = syncDir(gcRoots)
 				return // the live set is incomplete: the store waits for the next boot
 			}
 			name := entry.Name()
@@ -730,6 +739,9 @@ func (p *pruner) hideGCRootsAndStore(cutoff time.Time) {
 				rooted[name] = true
 			}
 		}
+		// The gc-roots phase is over: make its renames durable now, before the
+		// store phase renames anything.
+		_ = syncDir(gcRoots)
 	}
 	// A surviving layered release must be rooted, and its entrypoint's store
 	// path must be among the roots, or the collection could take the binary
