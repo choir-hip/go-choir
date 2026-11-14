@@ -437,8 +437,7 @@ func TestRunMemoryRetireR1BacklogBounds(t *testing.T) {
 		t.Fatalf("%d runs left after two capped passes, want 150", left)
 	}
 	runMemoryWakeMaxPasses = 32
-	calls := 0
-	ready := func() bool { calls++; return calls < 2 }
+	ready := func() bool { return false }
 	if _, passes, err := h.store.RetireRunMemoryBacklog(ctx, now, time.Millisecond, ready); err != nil || passes != 1 {
 		t.Fatalf("ready false: passes = %d, %v; want 1", passes, err)
 	}
