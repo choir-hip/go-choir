@@ -1,6 +1,6 @@
 # The updater's directory fills a computer's data volume
 
-Recorded 2026-11-13T20:05Z. Status: cause located, fix not yet built.
+Recorded 2026-11-13T20:05Z. Status: cause located; fix built as a boot-time prune (lane/prune-at-boot), not landed.
 
 ## Problem
 
@@ -49,3 +49,36 @@ image. The paper's image grows the same way.
 Prune in the updater itself, after a verified apply: empty `incoming` of
 everything not in flight, keep the current release and its rollback
 predecessor, and collect store objects no kept release or gc-root names.
+
+## Built: the prune runs at boot, when nothing else does (2026-11-14)
+
+`lane/updater-prune` is abandoned
+([three-rounds assessment](updater-prune-three-rounds-structural-assessment-2026-11-14.md)).
+`lane/prune-at-boot` replaces the post-apply prune with
+`choir-updater prune --root ... --budget 60s`, run by the oneshot
+`go-choir-updater-prune` (nix/autoputer-vm.nix), ordered before
+`go-choir-updater.service` and `go-choir-autoputer.service` and required by
+neither. Premises read before building:
+
+- Writers of the updater root: the updater daemon (Apply, ImportBaseline,
+  RestartCurrent) and the runtime and its workers (incoming bundles and host
+  builds, RestagePinnedRelease, StageBaselineRelease, package-migration
+  patches), and the runtime's exec wrapper (`bootguard`, `.overlay-work`,
+  `layering-diag.log`). All start after the prune. The restart, recovery and
+  cleanup path units write only under `/run`. The data volume is not mounted by
+  the host while the guest runs.
+- Every release reaches a computer by a runtime apply, and an apply restarts
+  only `go-choir-autoputer.service` while the updater daemon stays up, so a
+  prune ordered before every runtime start would see that apply unsettled and
+  skip, and could overlap a live daemon. Boot only. A deploy refreshes the
+  computer, so the directory is pruned once per deploy, at the rate it grows;
+  self-development applies between boots wait for the next boot.
+- Deleting a 20 GiB, 9,000-file tree on the build VM's ext4 virtio-blk took
+  0.5 s (`rm -rf`, warm directory cache). The 60 s budget is generous; the
+  unit's `TimeoutStartSec` is 120 s and nothing requires it.
+
+Residuals: a dead journal (no result, key free) pins the two releases it names.
+The runtime's crash-boot settlement fences a dead self-development journal, so
+that one pins for one boot; a platform update left pending on purpose is never
+fenced and pins until its pending state is resolved. The prune line reports
+`dead_journals=N`. `operations/*.json` (small) and `bootguard` are not pruned.
