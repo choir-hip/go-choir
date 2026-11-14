@@ -19,12 +19,21 @@
 //   - each tree is its own short read transaction on the read pool, so no
 //     transaction pins the WAL for the whole reading (a snapshot capture's
 //     does, and grew it to 2.6 GB);
-//   - the header and the rowid extents cost a few page reads and are always
-//     taken;
+//   - one tree's single read is capped at MaxTreeRead (15 s), so the longest
+//     read transaction the reading holds is 15 s, never the whole budget; a
+//     tree cut at the cap with budget to spare is reported partial (there is
+//     no resume);
+//   - the header and the schema cost a few page reads and are always taken
+//     (at most headerBudget); a rowid table's extents are two b-tree edge
+//     reads, taken only while the budget lasts, so the whole reading, extents
+//     included, ends within the budget plus the header's own few reads;
 //   - only one reading runs at a time; a request that arrives during one gets
 //     Busy and the last reading.
 //
-// The reading never writes and never takes the write connection. A table is
+// The reading never writes and never takes the write connection. It does read
+// pages from disk, which competes with the guest's own I/O for its duration:
+// that is the stated cost of an on-request diagnostic, and no pacing is added.
+// A table is
 // named by its schema name and nothing else of its content is read: no row,
 // no body, no key.
 package storetables
@@ -32,6 +41,7 @@ package storetables
 import (
 	"context"
 	"database/sql"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -60,6 +70,17 @@ func clampBudget(d time.Duration) time.Duration {
 
 // ClampBudget is the budget a request for d gets.
 func ClampBudget(d time.Duration) time.Duration { return clampBudget(d) }
+
+// MaxTreeRead caps one tree's single read, and so the longest read
+// transaction a reading holds.
+const MaxTreeRead = 15 * time.Second
+
+var maxTreeRead = MaxTreeRead
+
+var (
+	withoutRowidRE  = regexp.MustCompile(`(?i)\bWITHOUT\s+ROWID\b`)
+	createVirtualRE = regexp.MustCompile(`(?i)^\s*CREATE\s+VIRTUAL\b`)
+)
 
 // headerBudget bounds the header pragmas and one tree's rowid extents, which
 // are a few page reads each.
@@ -203,6 +224,11 @@ type schemaTree struct {
 func (s *Scanner) read(ctx context.Context, db *sql.DB, budget time.Duration) *Reading {
 	started := time.Now()
 	r := &Reading{ReadAt: started.UTC(), BudgetMillis: budget.Milliseconds(), Trees: []Tree{}, Tables: []TableTotal{}}
+	if db == nil {
+		r.Header.Error = "no database"
+		r.Truncated = true
+		return r
+	}
 	// The header and the schema are a few page reads and are taken even by a
 	// cancelled request: the answer then says what was left unread.
 	fixed, cancel := context.WithTimeout(context.WithoutCancel(ctx), headerBudget)
@@ -232,6 +258,7 @@ func (s *Scanner) read(ctx context.Context, db *sql.DB, budget time.Duration) *R
 		left := time.Until(deadline)
 		share := time.Duration(float64(left) * w / remainingWeight)
 		remainingWeight -= w
+		share = min(share, maxTreeRead)
 		if s.testHook != nil {
 			share = s.testHook(t.name, share)
 		}
@@ -239,7 +266,7 @@ func (s *Scanner) read(ctx context.Context, db *sql.DB, budget time.Duration) *R
 		if left > 0 && share > 0 && ctx.Err() == nil {
 			walkTree(ctx, db, &tr, share)
 			if t.rowid {
-				readExtents(ctx, db, &tr)
+				readExtents(ctx, db, &tr, deadline)
 			}
 		}
 		if !tr.Complete {
@@ -255,14 +282,17 @@ func (s *Scanner) read(ctx context.Context, db *sql.DB, budget time.Duration) *R
 
 func readHeader(ctx context.Context, db *sql.DB) Header {
 	var h Header
-	for q, dst := range map[string]*int64{
-		"PRAGMA page_size":      &h.PageSize,
-		"PRAGMA page_count":     &h.PageCount,
-		"PRAGMA freelist_count": &h.FreelistCount,
-		"PRAGMA auto_vacuum":    &h.AutoVacuum,
+	for _, p := range []struct {
+		q   string
+		dst *int64
+	}{
+		{"PRAGMA page_size", &h.PageSize},
+		{"PRAGMA page_count", &h.PageCount},
+		{"PRAGMA freelist_count", &h.FreelistCount},
+		{"PRAGMA auto_vacuum", &h.AutoVacuum},
 	} {
-		if err := db.QueryRowContext(ctx, q).Scan(dst); err != nil {
-			h.Error = q + ": " + err.Error()
+		if err := db.QueryRowContext(ctx, p.q).Scan(p.dst); err != nil && h.Error == "" {
+			h.Error = p.q + ": " + err.Error()
 		}
 	}
 	h.FileBytes = h.PageCount * h.PageSize
@@ -284,10 +314,9 @@ func readSchema(ctx context.Context, db *sql.DB) ([]schemaTree, error) {
 		if err := rows.Scan(&typ, &name, &table, &ddl); err != nil {
 			return nil, err
 		}
-		upper := strings.ToUpper(ddl)
 		out = append(out, schemaTree{
 			name: name, typ: typ, table: table,
-			rowid: typ == "table" && !strings.Contains(upper, "WITHOUT ROWID") && !strings.HasPrefix(upper, "CREATE VIRTUAL"),
+			rowid: typ == "table" && !withoutRowidRE.MatchString(ddl) && !createVirtualRE.MatchString(ddl),
 		})
 	}
 	return out, rows.Err()
@@ -350,8 +379,12 @@ func finishWalk(wctx context.Context, tr *Tree, err error) {
 
 // readExtents reads a rowid table's smallest and largest rowid: two edge
 // reads of its b-tree.
-func readExtents(ctx context.Context, db *sql.DB, tr *Tree) {
-	ectx, cancel := context.WithTimeout(ctx, headerBudget)
+func readExtents(ctx context.Context, db *sql.DB, tr *Tree, deadline time.Time) {
+	left := time.Until(deadline)
+	if left <= 0 {
+		return
+	}
+	ectx, cancel := context.WithTimeout(ctx, min(headerBudget, left))
 	defer cancel()
 	var lo, hi sql.NullInt64
 	q := `SELECT min(rowid), max(rowid) FROM "` + strings.ReplaceAll(tr.Name, `"`, `""`) + `"`
