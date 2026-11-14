@@ -106,7 +106,10 @@ type Store struct {
 	// retireCited is the cited-event-id snapshot (a JSON array) of the
 	// telemetry run in flight, nil outside one (telemetry_retire.go).
 	retireCited atomic.Pointer[string]
-	path        string
+	// runMemoryCensus is the last run-memory retirement pass's census
+	// (run_memory_census.go).
+	runMemoryCensus runMemoryCensusHolder
+	path            string
 	// sqlite is the state database (db is its write handle, readDB its read
 	// pool); texturePath is the sidecar directory beside it that holds the
 	// schema receipt, floor and lease markers (storeschema).
