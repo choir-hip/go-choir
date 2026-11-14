@@ -22,3 +22,22 @@
   stored result, receipts first steps (the table is 30.1 GB, the paper 27.6,
   twice what the design said). Carry by reference waits on the counters:
   only the Texture document agent carries a conversation forward.
+- 2026-11-14T04:04Z. Coalescing deployed 02:37Z. The paper's first hour
+  (02:37Z to 03:35Z): 13,369 events, 44,409 ops, 192 MB; 3.32 ops per event
+  (was 1.47), 1.5 corpusd calls per op (was 4.1). Lossless (refused 0,
+  unknown outcome 0) but below C68's claim: 8,344 groups, mean 1.37 members,
+  77% with one. Cause read from the code: the leader takes its group when it
+  wins the token, before it waits behind a telemetry seal and the appender,
+  so later arrivals miss it; about 30% of writes never group (conditional
+  batches, telemetry seals, other kinds). Builder on lane/late-take. Honest
+  bytes by kind for that hour: choir.event 20.3%, choir.run 19.4% (23.5 KB
+  per op), source_ref 4.8%, lifecycle_command 4.2%, texture_revision 3.6%.
+  The store-table reading landed through the runner (d4a27b2a2, CI
+  43552949573, deployed 03:57Z; expedite). d@e's store is 1.11 GB:
+  run_memory_entries 38%, og_bodies 30%, og_objects 25% (two thirds of that
+  its indexes). On the paper (47.4 GB) the reading saw 8.9% in 67 s: the
+  flat budget share gave each big table 2 s. C73 stays open; builder on
+  lane/store-only so a request can name the trees. Updater prune round 3 is
+  with both seats; its suite run is queued behind the counters' on the
+  agents VM.
+
