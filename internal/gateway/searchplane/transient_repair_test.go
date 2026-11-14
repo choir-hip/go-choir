@@ -133,7 +133,7 @@ func TestEmptyAndTransientStreaksAreSeparate(t *testing.T) {
 			for i := 0; i < EmptyStreakBeforeCooldown-1; i++ {
 				rec("keenable", OutcomeSuccessEmpty, true)
 			}
-			if r := rec("keenable", OutcomeError, true); r.State == StateCoolingDown || r.StrikeCount != 1 {
+			if r := rec("keenable", OutcomeError, true); !IsEligible(r, at) || r.StrikeCount != 1 {
 				t.Fatalf("nine empties then one error: %+v, want one strike and no bench", r)
 			}
 			// Five errors (benched), then five empties: not the empty bench.
@@ -144,7 +144,7 @@ func TestEmptyAndTransientStreaksAreSeparate(t *testing.T) {
 			for i := 0; i < 5; i++ {
 				r = rec("searxng", OutcomeSuccessEmpty, true)
 			}
-			if r.State == StateCoolingDown || r.StrikeCount != 5 {
+			if !IsEligible(r, at) || r.StrikeCount != 5 {
 				t.Fatalf("five errors then five empties: %+v, want 5 empties and no bench", r)
 			}
 			// A metered provider: nine empties then an error is a first strike.
