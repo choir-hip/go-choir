@@ -40,6 +40,10 @@ type tapeWriteMaps struct {
 	runMemoryByKind map[string]int64
 	runMemoryBytes  map[string]int64        // body bytes of those entries, same keys
 	rewrites        map[string]*rewriteKind // object_rewrite_counters.go
+	// lifecycleForms counts committed lifecycle commands by the form of their
+	// stored result (lifecycleForm* in lifecycle.go), so the saving of naming
+	// a revision instead of embedding it is read on a live computer.
+	lifecycleForms map[string]int64
 }
 
 func bumpKey(m *map[string]int64, key string, n int64) {
@@ -247,6 +251,18 @@ func (m *tapeWriteMaps) copyInto(out *TelemetryStats) {
 	out.RunMemoryOpsByKind = copyCounts(m.runMemoryByKind)
 	out.RunMemoryBytesByKind = copyCounts(m.runMemoryBytes)
 	out.ObjectRewrites = m.rewriteStats()
+	out.LifecycleCommandForms = copyCounts(m.lifecycleForms)
+}
+
+// countLifecycleCommandForm counts one committed lifecycle command by the
+// form of its stored result.
+func (c *telemetryCounters) countLifecycleCommandForm(form string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	bumpKey(&c.tapeWrites.lifecycleForms, form, 1)
+	c.mu.Unlock()
 }
 
 // enterTapeWrite counts a caller entering a tape write and returns the func
