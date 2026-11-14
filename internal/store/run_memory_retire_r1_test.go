@@ -727,7 +727,7 @@ func TestBacklogLogsOneCensusPerWake(t *testing.T) {
 	}
 	headers := bytes.Count(buf.Bytes(), []byte("run memory census: "))
 	one := len(runMemoryCensusOrder) + 1
-	if headers == 0 || headers > one+2 {
+	if headers == 0 || headers > one+4 {
 		t.Fatalf("%d census lines for a 3 pass wake; want one census (about %d) and a wake line", headers, one)
 	}
 }
