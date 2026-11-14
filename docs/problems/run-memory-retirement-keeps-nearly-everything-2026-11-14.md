@@ -51,8 +51,10 @@ Two exclusions hold 57% of all entries: "newest two runs of the agent" and
   lists run records of that agent id and takes the newest completed or
   passivated one holding entries. The agent id of every such agent is
   `deskmanifest.DocumentInbox(docID)` (`deskmanifest/document_custodian.go:21`),
-  a durable string on every entry. One-shot workers have other agent ids and
-  are never a carry source.
+  a durable string on the entries of a run (not on every one: a
+  `texture_cell_author_receipt` was written with no agent id, now fixed, and the
+  group query takes `MAX(agent_id)` so a stored empty id cannot hide it).
+  One-shot workers have other agent ids and are never a carry source.
 
 ## Belief
 
@@ -81,51 +83,54 @@ Two exclusions hold 57% of all entries: "newest two runs of the agent" and
 - Agents ids that look like document inboxes but are not carried from are
   kept (two runs each); that is bounded by the document count.
 
-## R-1: the smallest correct rule change
+## R-1: the rule as repaired after round 1 (both seats)
 
-1. **Fix the lookup.** `selectRunMemory` reads the run record through a
-   helper that tries the owner-scoped id, and on a miss reads the run by its
-   `run_id` metadata (indexed) and takes the owner's non-tombstoned record
-   (newest `updated_at` when several). It reads, never writes.
-2. **A run with no record after that retires** once its newest entry is past
-   the window. Nothing reads such a run: carry sources and resumes need its
-   record. The disposition is `retired_no_run_record`. Seven days is the
-   guard for a record written after its first entry.
-3. **Newest-two protection narrows to document-custodian agents**
-   (`deskmanifest.IsDocumentInbox(agent_id)`), still the newest
-   `runMemoryKeepPerAgent` by newest entry. Every other agent's runs are
-   judged by state and finish time alone. `agents_with_one_or_two_runs` keeps
-   its meaning (all agents); the overlap block counts protected runs.
-4. Everything else is unchanged: terminal state, finished past the window,
-   cursors never retired, the explicit run list on the op (replay removes the
-   same rows), 5,000 runs per pass, 10 per op, duty-cycle rest.
-5. **Catch-up.** When a pass names the full cap and left more runs
-   (`not_reached_over_cap` > 0), the same daily wake runs the next pass after
-   a short gap, repeating until a pass retires nothing or no run was left over.
-   Each pass keeps its own duty-cycle rest between ops; the pass's group read
-   is a covering-index scan. No setting.
+1. **The lookup** (`runRecordForRetirement`) reads through the read pool, never
+   the single write connection. It collects the owner-scoped copy and every
+   copy whose `run_id` metadata names the run (one page; a second only when the
+   first is full), keeps the owner's live copies whose own run id matches
+   (a tombstoned or mismatched owner-scoped row is a miss), and decides: a
+   copy that does not decode makes the record unreadable (kept); a copy that
+   is not terminal wins; among terminal copies the newest `FinishedAt`, else
+   `UpdatedAt`. Reads are memoized for the pass.
+2. **Carry sources.** For each owner's document custodian agent the newest
+   two runs whose record is `completed` or `passivated`, ordered by finish as
+   `LatestActorRunMemoryEntries` orders them, keep their entries. Failed,
+   cancelled and record-less runs take no slot; an unreadable record is
+   protected. `LatestActorRunMemoryEntries` now skips a run holding only the
+   kept cursor rows.
+3. **No record** retires when the newest entry is over 30 days old (recorded
+   runs: 7 days). Absence is not proof of state. The hold can be lowered after
+   one census on the paper shows what remains of the runs the old lookup could
+   not see. Its ops carry their own reason.
+4. **Group query** takes `MAX(owner_id)` and `MAX(agent_id)`; the covering index
+   is still the only read (the M8 test pins it). The cell-author receipt now
+   carries the run's agent id.
+5. **Catch-up** (`RetireRunMemoryBacklog`): passes back to back with a one
+   minute gap, at most 32 per wake (the paper's backlog is 22 passes of 5,000
+   runs; 32 is half again), `ready()` re-checked between passes, and an error
+   in the backlog is logged and the partition GC, incremental vacuum and
+   compact copy go on. The census keeps the wake's first pass whole and the
+   retired totals of every pass.
 
-As built: `runRecordForRetirement` (owner-scoped id, then `run_id` metadata,
-owner's live copies only, a non-terminal copy wins); `retired_no_run_record`
-replaces `kept_run_record_not_found`; `kept_run_record_unreadable` keeps a
-record that does not decode; the protected set is built only for agents where
-`deskmanifest.IsDocumentInbox(agent_id)`; `RetireRunMemoryBacklog` repeats
-passes (one minute gap) until a pass retires nothing or leaves no run over the
-cap, and `StartTelemetryRetirement` calls it in place of one pass.
+Named residual: a late management report for a producer run whose memory was
+retired is refused. `persistentManagementHistoricalReportRunStateAllowed`
+(`lifecycle.go:3856-3859`) admits any terminal run with no age bound and
+`lifecycle.go:3933` reads its memory to authenticate the delivered packets; if
+that run finished more than 7 days ago and its memory is retired, the report
+gets `ErrLifecycleInvalidTransition`. Reachable today only if a report arrives
+days after its run ends; the lifecycle behaviour is not changed here.
 
-Expected on the paper if belief 1 holds: of the 60,451 + 2,468 runs held by
-the newest-two rule, only document agents' runs remain protected; of 44,792
-no-record runs, those with a terminal record past the window retire
-(`retired`) and any still unseen retire as `retired_no_run_record`. Backlog is
-about 2.94 M retirable entries (1,536,498 + 62,479 + 1,339,446) in 107,711
-runs (60,451 + 2,468 + 44,792): 22 passes at 5,000 runs. Upper bound: runs of
-document custodian agents (at most two each) and runs whose record is
-passivated or blocked stay, and the census does not say how many.
-Each pass is paced at least 250 ms per op of 10 runs, so 500 ops is two to
-ten minutes; back to back that is a few hours, not 21 days.
+### Expected on the paper under the repaired rule
 
-## Rollback
+From the census above (belief 1 holding). Upper bounds, the census does not say
+how many runs are document agents' carry sources or passivated or blocked:
 
-Revert the commit. Retired entries stay retired (each is on the sealed tape
-and in the retire op's explicit run list); a replay of the same tape reaches
-the same store either way.
+| class | runs | retirable entries | repaired rule |
+| --- | --- | --- | --- |
+| newest-2, 7 to 30 d | 60,451 | 1,536,498 | retire if the agent is not a document custodian and its record is terminal and finished over 7 d ago; document agents keep two completed or passivated runs |
+| newest-2, over 30 d | 2,468 | 62,479 | the same |
+| record not found | 44,792 | 1,339,446 | recorded after the lookup: the same state rules; the rest (no record) wait for a newest entry over 30 d, so up to those with an entry in the 7 to 30 d band stay one more cycle |
+
+Total upper bound unchanged: 107,711 runs, 2.94 M entries, 22 passes of 5,000
+inside one wake (cap 32). The 30 day hold on record-less runs can only lower it.
