@@ -651,3 +651,13 @@ func (s *Store) runMemoryOverCap() int64 {
 	}
 	return 0
 }
+
+// runRecordLookupHook, when set, is consulted at the start of every record
+// lookup; an error it returns is the lookup's error (a seam for the test that a
+// read error aborts the pass, in the slot pre-pass and in the selection).
+var runRecordLookupHook func(ownerID, runID string) error
+
+// runRecordWakeMemo is a wake's record cache (stub).
+type runRecordWakeMemo struct{}
+
+func newRunRecordWakeMemo() *runRecordWakeMemo { return &runRecordWakeMemo{} }

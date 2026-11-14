@@ -732,14 +732,18 @@ func TestBacklogLogsOneCensusPerWake(t *testing.T) {
 	}
 }
 
-// RR2-S5: the management late-report path never meets retired memory. The
+// RR3-F5: what this proves is narrow: for a completed producer run of a live
+// trajectory the report is refused before and after its memory is retired (the
+// same refusal). That the late-evidence branch reads no memory is by reading
+// lifecycle.go (inside !lateEvidenceOnly), not by this test. RR2-S5: the
+// management late-report path never meets retired memory. The
 // producer run of a live trajectory must be pending, running or passivated
 // (lifecycle.go persistentManagementRunStateAllowed), none of which retirement
 // selects; a terminal producer run is refused (live trajectory) or reads no
 // memory (late evidence), so retiring its memory changes nothing. The test
 // drives the real report path with a completed producer run before and after
 // retirement.
-func TestManagementReportOutcomeDoesNotDependOnRetiredRunMemory(t *testing.T) {
+func TestManagementReportRefusalIsUnchangedWithTheProducersMemoryRetired(t *testing.T) {
 	ctx := context.Background()
 	withRetireKnobs(t)
 	h := newTapeHarness(t)
@@ -843,4 +847,176 @@ func TestDisagreeingRunTakesNoCarrySlot(t *testing.T) {
 		memSeedLifecycle(t, h, "owner-1", id, docAgent("dg"), types.RunCompleted, time.Duration(35+i)*day, time.Duration(35+i)*day, now)
 	}
 	wantSelected(t, h, now, "dg-c")
+}
+
+func newMixedStore(t *testing.T) (*tapeHarness, time.Time, time.Duration) {
+	h := newTapeHarness(t)
+	return h, time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC), 24 * time.Hour
+}
+
+// RR3-F1: a run whose document-agent rows carry two owners is kept (the record
+// cannot be read under one owner and the delete is by loop id).
+func TestMixedOwnerDocumentRowsKeepTheRun(t *testing.T) {
+	h, now, day := newMixedStore(t)
+	for i, id := range []string{"mo-1", "mo-2", "mo-3"} {
+		memSeedLifecycle(t, h, "owner-1", id, docAgent("mo"), types.RunCompleted, time.Duration(40-3*i)*day, time.Duration(40-3*i)*day, now)
+	}
+	if _, err := h.store.AppendRunMemoryEntry(context.Background(), types.RunMemoryEntry{RunID: "mo-3", OwnerID: "owner-9", AgentID: docAgent("mo"), Kind: "rlm_inbox_cursor", CreatedAt: now.Add(-31 * day)}); err != nil {
+		t.Fatal(err)
+	}
+	c := wantSelected(t, h, now)
+	if got := censusByName(c)["kept_mixed_owner_rows"].Runs; got != 1 {
+		t.Fatalf("kept_mixed_owner_rows = %d, want 1 (%+v)", got, c.Dispositions)
+	}
+}
+
+// RR3-F2: equal-finish copies of one run with different states resolve to the
+// carry-source state on both sides, whatever order the copies are read in.
+func TestEqualFinishCopiesResolveToTheSourceState(t *testing.T) {
+	ctx := context.Background()
+	h, now, day := newMixedStore(t)
+	for i := 0; i < 6; i++ {
+		id, agent := "eq-"+strconv.Itoa(i), docAgent("eq"+strconv.Itoa(i))
+		memSeed(t, h, id, agent, types.RunFailed, 40*day, 40*day, now) // owner-scoped copy
+		memPutLifecycleRecord(t, h, "owner-1", id, agent, types.RunCompleted, 40*day, now)
+	}
+	wantSelected(t, h, now)
+	for i := 0; i < 6; i++ {
+		runID, _, err := h.store.LatestActorRunMemoryEntries(ctx, "owner-1", "computer-1", docAgent("eq"+strconv.Itoa(i)), "")
+		if err != nil || runID != "eq-"+strconv.Itoa(i) {
+			t.Fatalf("carry source %d = %q, %v", i, runID, err)
+		}
+	}
+}
+
+// RR3-F2: copies of one run on two computers disagree about where it is: kept.
+func TestCopiesOnTwoComputersKeepTheRun(t *testing.T) {
+	h, now, day := newMixedStore(t)
+	memPutLifecycleRecordOn(t, h, "computer-1", "owner-1", "x2c", "worker-x2c", types.RunCompleted, 40*day, now)
+	memPutLifecycleRecordOn(t, h, "computer-2", "owner-1", "x2c", "worker-x2c", types.RunCompleted, 40*day, now)
+	memSeedEntries(t, h, "x2c", "worker-x2c", entryKinds, 40*day, now)
+	c := wantSelected(t, h, now)
+	if got := censusByName(c)["kept_run_copies_disagree"].Runs; got != 1 {
+		t.Fatalf("kept_run_copies_disagree = %d, want 1 (%+v)", got, c.Dispositions)
+	}
+}
+
+// RR3-F2: a record with no computer id is invisible to the reader (it reads one
+// computer's runs); it must not take a real computer's slot.
+func TestRecordWithoutComputerTakesNoRealSlot(t *testing.T) {
+	ctx := context.Background()
+	h, now, day := newMixedStore(t)
+	memPutLifecycleRecordOn(t, h, "", "owner-1", "e-0", docAgent("ec"), types.RunCompleted, 35*day, now)
+	memSeedEntries(t, h, "e-0", docAgent("ec"), entryKinds, 35*day, now)
+	memSeedLifecycle(t, h, "owner-1", "e-1", docAgent("ec"), types.RunCompleted, 40*day, 40*day, now)
+	memSeedLifecycle(t, h, "owner-1", "e-2", docAgent("ec"), types.RunCompleted, 41*day, 41*day, now)
+	wantSelected(t, h, now, "e-0")
+	runID, _, err := h.store.LatestActorRunMemoryEntries(ctx, "owner-1", "computer-1", docAgent("ec"), "")
+	if err != nil || runID != "e-1" {
+		t.Fatalf("carry source = %q, %v; want e-1", runID, err)
+	}
+}
+
+// RR3-F3: a loop id the op would refuse (padded) is skipped and counted; the
+// pass goes on with the rest.
+func TestMalformedLoopIDDoesNotStopThePass(t *testing.T) {
+	ctx := context.Background()
+	withRetireKnobs(t)
+	h, now, day := newMixedStore(t)
+	memSeedEntries(t, h, "good-1", "worker-g", entryKinds, 40*day, now)
+	memSeedEntries(t, h, " pad-1 ", "worker-g", entryKinds, 40*day, now)
+	ops, err := h.store.RetireRunMemory(ctx, now)
+	if err != nil || ops != 1 {
+		t.Fatalf("RetireRunMemory = %d, %v; want 1 op and no error", ops, err)
+	}
+	rows := memRunsWithRows(t, h.store)
+	if rows["good-1"] != 1 || rows[" pad-1 "] != 3 {
+		t.Fatalf("rows after the pass: %v", rows)
+	}
+	if got := censusByName(h.store.RunMemoryRetirementCensus())["kept_loop_id_invalid"].Runs; got != 1 {
+		t.Fatalf("kept_loop_id_invalid = %d, want 1", got)
+	}
+}
+
+// RR3-F4: a wake reads the record of a run kept in pass 1 once; pass 2 does not
+// read it again; the counters say so; the plan equals the unmemoized plan.
+func TestWakeMemoSkipsRecordReadsForKeptRuns(t *testing.T) {
+	ctx := context.Background()
+	withRetireKnobs(t)
+	h, now, day := newMixedStore(t)
+	maxOps := runMemoryRetireMaxOps
+	runMemoryRetireMaxOps = 1
+	t.Cleanup(func() { runMemoryRetireMaxOps = maxOps })
+	for i := 0; i < 20; i++ {
+		memSeed(t, h, "a-pass-"+strconv.Itoa(100+i), "worker-p", types.RunPassivated, 30*day, 30*day, now)
+	}
+	seedBacklog(t, h, "z", 150, now)
+	ops, passes, err := h.store.RetireRunMemoryBacklog(ctx, now, time.Millisecond, nil)
+	if err != nil || passes != 2 || ops != 15 {
+		t.Fatalf("wake = %d ops, %d passes, %v; want 15, 2", ops, passes, err)
+	}
+	c := h.store.RunMemoryRetirementCensus()
+	if c.FirstPass == nil || c.FirstPass.RecordReads.Selection != 120 {
+		t.Fatalf("first pass reads = %+v, want 120 (20 kept, 100 retired)", c.FirstPass)
+	}
+	if c.RecordReads.Selection != 50 {
+		t.Fatalf("second pass read %d records, want 50 (the 20 kept runs are known)", c.RecordReads.Selection)
+	}
+	if c.Wake == nil || c.Wake.RecordReads.Selection != 170 {
+		t.Fatalf("wake reads = %+v, want 170", c.Wake)
+	}
+	if left := len(memRunsWithRows(t, h.store)); left != 20 {
+		t.Fatalf("%d runs hold rows, want the 20 passivated", left)
+	}
+}
+
+func TestWakeMemoPlanEqualsTheUnmemoizedPlan(t *testing.T) {
+	ctx := context.Background()
+	h, now, day := newMixedStore(t)
+	for i := 0; i < 5; i++ {
+		memSeed(t, h, "a-pass-"+strconv.Itoa(100+i), "worker-p", types.RunPassivated, 30*day, 30*day, now)
+		memSeedLifecycle(t, h, "owner-1", "l-"+strconv.Itoa(100+i), "worker-l", types.RunCompleted, 30*day, 30*day, now)
+	}
+	memSeedLifecycle(t, h, "owner-1", "d-1", docAgent("wm"), types.RunCompleted, 40*day, 40*day, now)
+	memSeedLifecycle(t, h, "owner-1", "d-2", docAgent("wm"), types.RunCompleted, 41*day, 41*day, now)
+	memSeedLifecycle(t, h, "owner-1", "d-3", docAgent("wm"), types.RunCompleted, 42*day, 42*day, now)
+	plain, _, err := h.store.selectRunMemory(ctx, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.store.runMemoryWake = newRunRecordWakeMemo()
+	t.Cleanup(func() { h.store.runMemoryWake = nil })
+	first, c1, err := h.store.selectRunMemory(ctx, now)
+	second, c2, err2 := h.store.selectRunMemory(ctx, now)
+	if err != nil || err2 != nil || !reflect.DeepEqual(plain, first) || !reflect.DeepEqual(plain, second) {
+		t.Fatalf("plans differ: plain %v, memo %v, memo again %v (%v, %v)", plain, first, second, err, err2)
+	}
+	if c1.RecordReads.SlotPrePass+c1.RecordReads.Selection == 0 || c2.RecordReads.SlotPrePass != 0 {
+		t.Fatalf("reads: first %+v, second %+v; the second must read no document record", c1.RecordReads, c2.RecordReads)
+	}
+}
+
+// RR3-F7: a record read error aborts the pass, in the slot pre-pass and in the
+// selection; it is not kept, retired or counted unreadable.
+func TestRecordReadErrorAbortsThePass(t *testing.T) {
+	h, now, day := newMixedStore(t)
+	memSeedLifecycle(t, h, "owner-1", "doc-run", docAgent("ab"), types.RunCompleted, 40*day, 40*day, now)
+	memSeedLifecycle(t, h, "owner-1", "worker-run", "worker-ab", types.RunCompleted, 40*day, 40*day, now)
+	t.Cleanup(func() { runRecordLookupHook = nil })
+	for _, failing := range []string{"doc-run", "worker-run"} {
+		boom := errors.New("disk i/o " + failing)
+		runRecordLookupHook = func(_, runID string) error {
+			if runID == failing {
+				return boom
+			}
+			return nil
+		}
+		_, c, err := h.store.selectRunMemory(context.Background(), now)
+		if !errors.Is(err, boom) {
+			t.Fatalf("%s: selection error = %v, want the read error", failing, err)
+		}
+		if len(c.Dispositions) != len(runMemoryCensusOrder) {
+			t.Fatalf("%s: census not finished: %d dispositions", failing, len(c.Dispositions))
+		}
+	}
 }

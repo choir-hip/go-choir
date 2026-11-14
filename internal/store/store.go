@@ -109,6 +109,8 @@ type Store struct {
 	// runMemoryCensus is the last run-memory retirement pass's census
 	// (run_memory_census.go).
 	runMemoryCensus runMemoryCensusHolder
+	// runMemoryWake is the record cache of the run-memory backlog wake in progress.
+	runMemoryWake *runRecordWakeMemo
 	path            string
 	// sqlite is the state database (db is its write handle, readDB its read
 	// pool); texturePath is the sidecar directory beside it that holds the

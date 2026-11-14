@@ -47,12 +47,20 @@ type RunMemoryNewestTwo struct {
 	Over30d    RunMemoryTally `json:"newest_entry_over_30d"`
 }
 
+// RunMemoryRecordReads counts the run record lookups of a pass: the slot
+// pre-pass and the selection apart (stub).
+type RunMemoryRecordReads struct {
+	SlotPrePass int64 `json:"slot_pre_pass"`
+	Selection   int64 `json:"selection"`
+}
+
 // RunMemoryWake is the retired runs of every pass of one wake (the first pass
 // after boot, or a backlog's catch-up), so the claim a catch-up makes can be
 // read after the last pass has replaced the census.
 type RunMemoryWake struct {
-	Passes  int64                  `json:"passes"`
-	Retired []RunMemoryDisposition `json:"retired"`
+	Passes      int64                  `json:"passes"`
+	RecordReads RunMemoryRecordReads   `json:"record_reads"`
+	Retired     []RunMemoryDisposition `json:"retired"`
 }
 
 // RunMemoryCensus is the last pass's census, as served on
@@ -73,6 +81,8 @@ type RunMemoryCensus struct {
 	// Dispositions: every group in exactly one, in the order the rules apply.
 	Dispositions []RunMemoryDisposition `json:"dispositions"`
 	CarrySources RunMemoryNewestTwo     `json:"carry_sources_by_entry_age"`
+	// RecordReads counts the pass's record lookups, the slot pre-pass and the selection apart.
+	RecordReads RunMemoryRecordReads `json:"record_reads"`
 	// FirstPass is the first pass of the wake, whole (the census a backlog's
 	// catch-up begins with); Wake totals the retired runs of every pass of it.
 	FirstPass *RunMemoryCensus `json:"first_pass_of_wake,omitempty"`
