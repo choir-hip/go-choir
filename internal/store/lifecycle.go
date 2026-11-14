@@ -24,6 +24,11 @@ import (
 var (
 	ErrLifecycleCommandConflict   = errors.New("lifecycle command digest conflict")
 	ErrLifecycleInvalidTransition = errors.New("lifecycle invalid transition")
+	// ErrLifecycleStoredRevisionUnavailable is a command that names a revision
+	// the store cannot read. It is deliberately not ErrNotFound: callers read
+	// ErrNotFound as "no such command or turn", and a command that exists but
+	// cannot return its revision is a broken invariant, not an absent turn.
+	ErrLifecycleStoredRevisionUnavailable = errors.New("lifecycle stored revision unavailable")
 	ErrLifecycleCursorExpired     = errors.New("lifecycle cursor expired")
 )
 
@@ -1366,7 +1371,7 @@ func (s *Store) lifecycleStoredRevision(ctx context.Context, ownerID, computerID
 	}
 	revision, err := s.GetLifecycleRevision(objectgraph.WithCustodianReader(ctx, ogKindTexRev), ownerID, computerID, stored.RevisionID)
 	if err != nil {
-		return nil, fmt.Errorf("lifecycle: rebuild revision %q named by command %q: %w", stored.RevisionID, commandID, err)
+		return nil, fmt.Errorf("%w: revision %q named by command %q: %v", ErrLifecycleStoredRevisionUnavailable, stored.RevisionID, commandID, err)
 	}
 	return &revision, nil
 }

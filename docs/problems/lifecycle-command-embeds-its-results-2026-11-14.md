@@ -46,7 +46,7 @@ without a stored result (`lifecycleTransitionReceipt`).
 
 | Field | Read by | Rebuildable exactly from objects of this or earlier batches? | Dropping it changes returned bytes? | Decision |
 | --- | --- | --- | --- | --- |
-| `Revision` | replay, applied-turn, tests | Yes, when the batch writes the revision: the object at the revision's canonical id has the revision's own JSON as its body and revisions are immutable (no path rewrites one; `PatchRevisionMetadata` refuses lifecycle revisions). Read by id, never by head. | No, checked at commit time byte for byte (`bytes.Equal(obj.Body, json.Marshal(revision))`) | **Dropped** when the batch writes it, named by `RevisionID`. Embedded otherwise. |
+| `Revision` | replay, applied-turn, tests | Yes, when the batch writes the revision: the object at the revision's canonical id has the revision's own JSON as its body and revisions are immutable (no live path rewrites one: `PatchRevisionMetadata` refuses lifecycle revisions, and the legacy `PutRevision` writes a different, unscoped canonical id; only the retired vocabulary cutover could re-encode an object body in place). Read by id, never by head. | No, checked at commit time byte for byte (`bytes.Equal(obj.Body, json.Marshal(revision))`) | **Dropped** when the batch writes it, named by `RevisionID`. Embedded otherwise. |
 | `Revision` of a command that only reads the head (settle, archive, continue: `&head`) | same | The head was written by an earlier batch, not this one; it is immutable too, but proving it needs a read at commit | not applicable | **Kept embedded.** Not a second write in the same batch; no measured cost. |
 | `Document` | replay, applied-turn, tests | **No.** One mutable object overwritten by every revision (`CurrentRevisionID`, `UpdatedAt`); an earlier state is not kept anywhere but the tape. A rebuild would return the later document. | Yes | **Kept.** Small (no body). |
 | `Trajectory` | same | **No.** One mutable object, versioned in place (`LifecycleVersion`, `ReducerSeq`) | Yes | Kept. |
@@ -98,9 +98,27 @@ blocking findings; both are in this record because they shaped the cut.
   `stored_result.revision_id`, or retire the command first, and carry a scan
   test.
 - **A named revision that cannot be read is an error, never a nil revision**
-  (`TestSlimCommandWithMissingRevisionFailsLoudly`). A trajectory-wide scan
-  (`GetAppliedTextureTurnByCallerRun`) aborts on one such command; scope that
-  to the matching command when retirement lands.
+  (`TestSlimCommandWithMissingRevisionFailsLoudly`), and the error is
+  `ErrLifecycleStoredRevisionUnavailable`, which is deliberately not
+  `ErrNotFound`: the first version wrapped the read's not-found, and
+  `handleRunCompletion` and `sleepTextureMutationAfterIdle` read not-found as
+  "no turn committed" and marked a committed mutation stale
+  (`TestFailedTurnReadLeavesTheMutationPendingNotStale` found it).
+- **The blast radius of a missing revision is one run.**
+  `GetAppliedTextureTurnByCallerRun` scans a trajectory's commands newest
+  first but resolves the revision only for the command that matches (kind,
+  Texture turn, agent, active run: `texture_turn.go`, the resolve after the
+  match), so a missing revision breaks recovery for its own run only. (An
+  earlier version of this record said the whole trajectory aborts; that was
+  wrong.)
+- **After a transient read error at idle passivation the mutation stays
+  pending** until the next wake or restart reconciles it; completion is never
+  blocked and nothing loops. A pending row keeps the host from calling the
+  computer idle meanwhile: a cost, not a wedge.
+- The custodian read replaces the caller's declared reader, so the lease-read
+  audit (`LeaseAdmitsKind`/`NoteLeaseRead`) does not fire for this one read.
+  The declared reader is the strictest true one; the audit signal for this
+  read is gone and that is stated here rather than hidden.
 - `GetAppliedTextureTurnByCallerRun` returns the receipt as stored, so its
   `Receipt.StoredResult` reflects the stored form; no reader uses it.
 
@@ -127,17 +145,42 @@ setting and no mode.
 
 ## Failure list (written before the code)
 
-1. A new Texture command body still contains the revision body. (Test:
+The test names below are the real ones; a name that matches no test makes
+`go test -run` print `ok`.
+
+1. A new Texture command body still contains the revision body. (Step 2:
    `TestLifecycleCommandNamesItsRevisionInsteadOfEmbeddingIt`,
-   `TestTextureTurnCommandNamesItsRevisionAndStillRecoversByCallerRun`.)
-2. Replay of an old command after a later revision returns the later
-   revision or document. (`TestLifecycleReplayAfterLaterRevisionReturnsTheOriginalResult`;
-   already true before the change, kept as the guard that a by-head rebuild
-   would break.)
-3. Replay of a tape that mixes old full and new slim commands differs from a
-   whole-write reference, or replay rewrites a revision or command object.
-   (`TestLifecycleReplayOfOldAndNewCommandsIsByteIdentical`.)
-4. A restore from a snapshot taken before the change, followed by new slim
-   commands, fails to replay either form.
-   (`TestLifecycleRestoreFromSnapshotPlusTailAcrossTheChange`.)
-5. `GetAppliedTextureTurnByCallerRun` returns no revision for a slim turn.
+   `TestTextureTurnCommandNamesItsRevision`.)
+2. Replay of a command after a later revision returns the later revision or
+   document. (`TestLifecycleSlimReplayAfterLaterRevisionReturnsTheOriginalResult`;
+   true before the change too, kept as the guard that a by-head rebuild would
+   break.)
+3. Slim and embedded commands replay to different bytes, or replay rewrites a
+   revision object. (`TestLifecycleReplayOfSlimAndEmbeddedCommandsIsByteIdentical`.)
+4. Slim commands do not survive a store copy and reopen, plus a new command on
+   the restored store. (`TestLifecycleRestoreFromSnapshotPlusTailWithSlimCommands`.)
+5. `GetAppliedTextureTurnByCallerRun` returns no revision for a slim turn, or
+   cannot read it under the enforced gate.
+   (`TestSlimTextureTurnReadsUnderTheEnforcedReaderGate`,
+   `TestSlimTextureTurnCompletesItsMutationUnderEnforce`.)
+6. A failed read of the turn marks a committed mutation stale.
+   (`TestFailedTurnReadLeavesTheMutationPendingNotStale`; each guard and the
+   error chain was removed in turn and the test failed each time.)
+
+## What the replay and restore tests do, and do not, prove
+
+They rewrite command objects in place in a store and copy the store's
+directory and reopen it. The projection copies object bodies as bytes
+(`projectObject`), which is the property they lean on. They are not a tape
+replay and not a destroy-and-restore: the full proof is the replay and
+restore drill on d@e before the paper.
+
+## Landing precondition (read this before deploying step 2)
+
+The work is cut in two steps, not landed, until each is deployed. Step 2 must
+be a separate deploy after step 1 is the release computers have adopted: the
+deploy's automatic rollback returns a computer to the previous release, and a
+previous release without step 1 reads a slim command as a command with no
+revision and no error. Landing both in one train makes that previous release
+the one before step 1. Step 2 must never be reverted past step 1 once
+deployed.
