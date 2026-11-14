@@ -938,9 +938,12 @@ func TestMalformedLoopIDDoesNotStopThePass(t *testing.T) {
 	}
 }
 
-// RR3-F4: a wake reads the record of a run kept in pass 1 once; pass 2 does not
-// read it again; the counters say so; the plan equals the unmemoized plan.
-func TestWakeMemoSkipsRecordReadsForKeptRuns(t *testing.T) {
+// RR4: every pass reads records fresh. A record cached across the passes of a
+// wake could go stale (a passivated run reactivated or cancelled without a new
+// entry) and a later pass would assign carry slots from it and retire a run a
+// fresh read protects. The ready callback, which the wake calls between passes,
+// is the seam that changes a run between passes.
+func TestWakeRereadsRecordsInEveryPass(t *testing.T) {
 	ctx := context.Background()
 	withRetireKnobs(t)
 	h, now, day := newMixedStore(t)
@@ -959,40 +962,84 @@ func TestWakeMemoSkipsRecordReadsForKeptRuns(t *testing.T) {
 	if c.FirstPass == nil || c.FirstPass.RecordReads.Selection != 120 {
 		t.Fatalf("first pass reads = %+v, want 120 (20 kept, 100 retired)", c.FirstPass)
 	}
-	if c.RecordReads.Selection != 50 {
-		t.Fatalf("second pass read %d records, want 50 (the 20 kept runs are known)", c.RecordReads.Selection)
+	if c.RecordReads.Selection != 70 {
+		t.Fatalf("second pass read %d records, want 70 (the 20 kept runs again, and 50)", c.RecordReads.Selection)
 	}
-	if c.Wake == nil || c.Wake.RecordReads.Selection != 170 {
-		t.Fatalf("wake reads = %+v, want 170", c.Wake)
-	}
-	if left := len(memRunsWithRows(t, h.store)); left != 20 {
-		t.Fatalf("%d runs hold rows, want the 20 passivated", left)
+	if c.Wake == nil || c.Wake.RecordReads.Selection != 190 {
+		t.Fatalf("wake reads = %+v, want 190", c.Wake)
 	}
 }
 
-func TestWakeMemoPlanEqualsTheUnmemoizedPlan(t *testing.T) {
-	ctx := context.Background()
+// putRunState replaces a run's lifecycle record with state, as a reactivation or
+// a cancellation would, writing no run memory entry.
+func putRunState(t *testing.T, h *tapeHarness, runID, agentID string, state types.RunState, now time.Time) {
+	t.Helper()
+	memPutLifecycleRecord(t, h, "owner-1", runID, agentID, state, 0, now)
+}
+
+// RR4: a run that changes state between two passes of a wake changes the slots
+// of the second pass. Three document runs older than the window; the cap is hit
+// before the third is reached in pass 1; between the passes the first
+// slot-holder stops being a carry source; the third must then be protected.
+func TestWakeSlotsFollowTheStateOfEveryPass(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		first    types.RunState
+		to       types.RunState
+		wantNext string
+	}{
+		{"passivated then reactivated", types.RunPassivated, types.RunRunning, "r-1"},
+		{"passivated then cancelled", types.RunPassivated, types.RunCancelled, "r-1"},
+		{"completed then cancelled", types.RunCompleted, types.RunCancelled, "r-1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			withRetireKnobs(t)
+			h, now, day := newMixedStore(t)
+			maxOps := runMemoryRetireMaxOps
+			runMemoryRetireMaxOps = 1
+			t.Cleanup(func() { runMemoryRetireMaxOps = maxOps })
+			agent := docAgent("rr4")
+			// The cap is reached before r-2 in pass 1: a hundred runs sort ahead.
+			seedBacklog(t, h, "a", 100, now)
+			memSeedLifecycle(t, h, "owner-1", "r-0", agent, tc.first, 8*day, 8*day, now)
+			memSeedLifecycle(t, h, "owner-1", "r-1", agent, types.RunCompleted, 9*day, 9*day, now)
+			memSeedLifecycle(t, h, "owner-1", "r-2", agent, types.RunCompleted, 10*day, 10*day, now)
+			changed := false
+			ready := func() bool {
+				if !changed {
+					changed = true
+					putRunState(t, h, "r-0", agent, tc.to, now)
+				}
+				return true
+			}
+			if _, _, err := h.store.RetireRunMemoryBacklog(ctx, now, time.Millisecond, ready); err != nil {
+				t.Fatal(err)
+			}
+			if !changed {
+				t.Fatal("the wake ended after one pass: the cap was not reached")
+			}
+			rows := memRunsWithRows(t, h.store)
+			if rows["r-2"] != 3 || rows["r-1"] != 3 {
+				t.Fatalf("after the wake r-1 holds %d rows and r-2 %d; both must keep their 3 (r-0 is no longer a source)", rows["r-1"], rows["r-2"])
+			}
+			runID, _, err := h.store.LatestActorRunMemoryEntries(ctx, "owner-1", "computer-1", agent, "")
+			if err != nil || runID != tc.wantNext {
+				t.Fatalf("carry source = %q, %v; want %s", runID, err, tc.wantNext)
+			}
+		})
+	}
+}
+
+// RR4: two live copies of one run on one computer that name different agents
+// are kept: the agent the carry reads by is not known.
+func TestCopiesNamingTwoAgentsKeepTheRun(t *testing.T) {
 	h, now, day := newMixedStore(t)
-	for i := 0; i < 5; i++ {
-		memSeed(t, h, "a-pass-"+strconv.Itoa(100+i), "worker-p", types.RunPassivated, 30*day, 30*day, now)
-		memSeedLifecycle(t, h, "owner-1", "l-"+strconv.Itoa(100+i), "worker-l", types.RunCompleted, 30*day, 30*day, now)
-	}
-	memSeedLifecycle(t, h, "owner-1", "d-1", docAgent("wm"), types.RunCompleted, 40*day, 40*day, now)
-	memSeedLifecycle(t, h, "owner-1", "d-2", docAgent("wm"), types.RunCompleted, 41*day, 41*day, now)
-	memSeedLifecycle(t, h, "owner-1", "d-3", docAgent("wm"), types.RunCompleted, 42*day, 42*day, now)
-	plain, _, err := h.store.selectRunMemory(ctx, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	h.store.runMemoryWake = newRunRecordWakeMemo()
-	t.Cleanup(func() { h.store.runMemoryWake = nil })
-	first, c1, err := h.store.selectRunMemory(ctx, now)
-	second, c2, err2 := h.store.selectRunMemory(ctx, now)
-	if err != nil || err2 != nil || !reflect.DeepEqual(plain, first) || !reflect.DeepEqual(plain, second) {
-		t.Fatalf("plans differ: plain %v, memo %v, memo again %v (%v, %v)", plain, first, second, err, err2)
-	}
-	if c1.RecordReads.SlotPrePass+c1.RecordReads.Selection == 0 || c2.RecordReads.SlotPrePass != 0 {
-		t.Fatalf("reads: first %+v, second %+v; the second must read no document record", c1.RecordReads, c2.RecordReads)
+	memSeed(t, h, "ag-1", "worker-ag", types.RunCompleted, 40*day, 40*day, now) // owner-scoped copy
+	memPutLifecycleRecord(t, h, "owner-1", "ag-1", docAgent("ag"), types.RunCompleted, 40*day, now)
+	c := wantSelected(t, h, now)
+	if got := censusByName(c)["kept_run_copies_disagree"].Runs; got != 1 {
+		t.Fatalf("kept_run_copies_disagree = %d, want 1 (%+v)", got, c.Dispositions)
 	}
 }
 
