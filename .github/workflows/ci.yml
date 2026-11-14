@@ -53,6 +53,7 @@ jobs:
       frontend: ${{ steps.classify.outputs.frontend }}
       sbom: ${{ steps.classify.outputs.sbom }}
       receipts_swap: ${{ steps.classify.outputs.receipts_swap }}
+      guest_unit: ${{ steps.classify.outputs.guest_unit }}
       flakehub: ${{ steps.classify.outputs.flakehub }}
       high_risk_race: ${{ steps.classify.outputs.high_risk_race }}
       ci: ${{ steps.classify.outputs.ci }}
@@ -682,9 +683,23 @@ jobs:
         shell: bash
         run: scripts/test-guest-floor-commit-free
 
-      # The boot prune is safe only while it is ordered before the updater and
-      # the runtime and cannot run beside them (docs/problems/updater-prune-
-      # three-rounds-structural-assessment-2026-11-14.md).
+  # The boot prune is safe only while it is ordered before the updater and the
+  # runtime and cannot run beside them (docs/problems/updater-prune-three-
+  # rounds-structural-assessment-2026-11-14.md). Selected whenever a nix module,
+  # the test or this workflow changes (ci-impact-classify guest_unit).
+  boot-prune-unit:
+    name: Boot Prune Unit Ordering
+    runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.guest_unit == 'true'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@786fff0690178f1234e4e1fe9b536e94f5433196 # v20
+        with:
+          determinate: false
+
       - name: Boot prune unit is ordered before the updater and the runtime
         shell: bash
         run: bash scripts/updater-prune-unit-nix-test.sh
@@ -711,7 +726,7 @@ jobs:
   check:
     name: Go Vet + Test + Build
     runs-on: ubuntu-latest
-    needs: [plan, go-vet-build, go-test, go-test-runtime, go-test-scale, doccheck, heresy-detector, v1-inventory, guest-floor-commit-free, receipts-index-swap, build-frontend, package-modularity, desk-protocol, base-packages-listed]
+    needs: [plan, go-vet-build, go-test, go-test-runtime, go-test-scale, doccheck, heresy-detector, v1-inventory, guest-floor-commit-free, receipts-index-swap, boot-prune-unit, build-frontend, package-modularity, desk-protocol, base-packages-listed]
     if: always()
     steps:
       - name: Confirm selected CI gates passed
@@ -775,6 +790,7 @@ jobs:
           require_success "${{ needs.plan.outputs.non_docs }}" v1-inventory "${{ needs.v1-inventory.result }}"
           require_if_run guest-floor-commit-free "${{ needs.guest-floor-commit-free.result }}"
           require_success "${{ needs.plan.outputs.receipts_swap }}" receipts-index-swap "${{ needs.receipts-index-swap.result }}"
+          require_success "${{ needs.plan.outputs.guest_unit }}" boot-prune-unit "${{ needs.boot-prune-unit.result }}"
           require_if_run build-frontend "${{ needs.build-frontend.result }}"
           require_if_run base-packages-listed "${{ needs.base-packages-listed.result }}"
           require_success "${{ needs.plan.outputs.frontend }}" package-modularity "${{ needs.package-modularity.result }}"

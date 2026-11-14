@@ -327,7 +327,9 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 		}
 		request.SourceDir = sourceDir
 		if serr := u.stageRelease(request.SourceDir, releaseDir, request.Manifest); serr != nil {
-			u.dropStagedSource(request.SourceDir)
+			// A failed stage may be transient (no space): the source is the only
+			// local copy of a downloaded payload, so it stays; the boot prune
+			// collects it once it is past its window.
 			return refuse(serr.Error())
 		}
 		u.dropStagedSource(sourceDir)
