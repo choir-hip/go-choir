@@ -214,6 +214,7 @@ entered below as lapsed, not scored.
 | C88 | 2026-11-14T22:14Z | true | build 22:04:31Z to under a minute, first attempt, partial index 9.4 MB valid and ready; drop-kind-seq 22:07:54Z and drop-receipt-id 22:11:01Z, each exit 0; cancel rule never near (paper one-minute p95 at most 5.9 ms against 253 ms; P 3.33 ms); `indexes_bytes` 12,429,336,576 to 7,403,438,080 (5.03 GB less); ten-minute p95 3.56 ms at 22:14Z | 0.09 |
 | C86 | 2026-11-14T22:36Z | true | landed 20:21Z (fdbe766d6), CI 43637074875, deployed 20:35Z, no revert; paper at 22:36Z: 144 `choir.lifecycle_command` ops, 828,038 bytes, 5.75 KB per op against 31.1 KB (counters since the 21:31Z restart; 5.6 KB over 35 ops before it); no "stored revision" line in the paper's console log; publishing (1,215 calls in the hour); d@e create and editor-save re-submits answered with the recorded revision ids before and after a restart | 0.04 |
 | C89 | 2026-11-14T23:05Z | true | restore to checkpoint df408396... (22:52:48Z, sequence 110,778; base snapshot at head 108,786, tail 1,992 events) started 22:58:30Z, answered 23:02:39Z: http 500 `rematerialize: reconstructed computer_event_index does not match checkpoint`; Caddy 500 after 248.4 s; replay took 15.6 s; realization epoch 13706 before and after; the post-checkpoint revision still present | 0.2025 |
+| C87 | 2026-11-14T23:33Z | true | landed 21:20Z (c1ea7a418), CI 43642246845, deployed about 21:31Z, no revert on main, deploy receipt still c1ea7a418; ring walk walk-kl7mnqvsv8xy-1794691884 complete 21:42Z with R0, R2 and R5 clean and no rollback or boot-guard line in vmctl since; d@e's updater logged one prune line per boot, errors=0 (10.6 GB freed at 21:31Z, then 203 MB and 0 at the 22:16Z and 22:28Z drill boots); the paper pruned 5.4 GB at boot and has published since | 0.04 |
 
 ### Scorecard
 
@@ -224,5 +225,5 @@ false, 1 partial), 7 lapsed.
 |---|---|---|
 | 0.0 to 0.3 | 0 | n/a |
 | 0.3 to 0.6 | 9 | 2, and 1 partial |
-| 0.6 to 0.8 | 16 | 12, and 1 partial |
+| 0.6 to 0.8 | 17 | 13, and 1 partial |
 | 0.8 to 1.0 | 0 | n/a |
