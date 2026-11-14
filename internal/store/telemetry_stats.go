@@ -300,9 +300,12 @@ type TelemetryStats struct {
 	RunMemoryBytesByKind map[string]int64 `json:"run_memory_bytes_by_kind"`
 	// ObjectRewrites is per object kind: ops, bytes, mean bytes per op, distinct
 	// objects written since boot and writes per object (object_rewrite_counters.go).
-	ObjectRewrites           map[string]ObjectKindRewrites `json:"object_rewrites"`
-	CorpusdCalls             map[string]int64              `json:"corpusd_calls"`
-	CorpusdCallsPerTapeEvent float64                       `json:"corpusd_calls_per_tape_event"`
+	ObjectRewrites map[string]ObjectKindRewrites `json:"object_rewrites"`
+	// LifecycleCommandForms counts committed lifecycle commands by stored
+	// result form: slim, embedded_mismatch, embedded_head, no_revision.
+	LifecycleCommandForms    map[string]int64 `json:"lifecycle_command_forms"`
+	CorpusdCalls             map[string]int64 `json:"corpusd_calls"`
+	CorpusdCallsPerTapeEvent float64          `json:"corpusd_calls_per_tape_event"`
 	// AppenderDepthAtEnter is the number of callers inside the tape write
 	// (dry run, queue for the appender, append) when a new one arrived, itself
 	// included: "1" arrived alone. Labels are the ops histogram's. The share at
