@@ -81,8 +81,15 @@ CREATE TABLE IF NOT EXISTS computer_event_receipt_compaction (
   bytes_before BIGINT NOT NULL,
   bytes_after BIGINT NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL,
+  codec_version INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY (computer_id)
-);`
+);
+ALTER TABLE computer_event_receipt_compaction ADD COLUMN IF NOT EXISTS codec_version INTEGER NOT NULL DEFAULT 1;`
+
+// receiptCompactionCodec numbers what CompactHeadReceipt can compact. A pass
+// saved by an older codec kept rows the current one rewrites (codec 2 added the
+// jsonb-spelled rows, which codec 1 refused), so its progress starts over.
+const receiptCompactionCodec = 2
 
 var (
 	receiptCompactionBatch    = 500
@@ -294,15 +301,16 @@ func (c *ReceiptCompactor) runComputer(ctx context.Context, computerID, mode str
 	db := c.store.db
 	pass := ReceiptCompactionPass{ComputerID: computerID, Mode: mode}
 	var storedMode string
+	var storedCodec int
 	var cum ReceiptCompactionPass
-	err := db.QueryRowContext(ctx, `SELECT mode, through_sequence, rows_rewritten, rows_kept, bytes_before, bytes_after FROM computer_event_receipt_compaction WHERE computer_id=?`, computerID).
-		Scan(&storedMode, &cum.Through, &cum.Rewritten, &cum.Kept, &cum.BytesBefore, &cum.BytesAfter)
+	err := db.QueryRowContext(ctx, `SELECT mode, through_sequence, rows_rewritten, rows_kept, bytes_before, bytes_after, codec_version FROM computer_event_receipt_compaction WHERE computer_id=?`, computerID).
+		Scan(&storedMode, &cum.Through, &cum.Rewritten, &cum.Kept, &cum.BytesBefore, &cum.BytesAfter, &storedCodec)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return pass, err
 	}
-	if storedMode != mode {
+	if storedMode != mode || storedCodec != receiptCompactionCodec {
 		// A new mode starts its walk over: what an earlier mode did proves
-		// nothing about this one.
+		// nothing about this one. So does a pass an older codec saved.
 		cum = ReceiptCompactionPass{}
 	}
 	head, err := readComputerEventHead(ctx, db, computerID, false)
@@ -342,9 +350,9 @@ func (c *ReceiptCompactor) runComputer(ctx context.Context, computerID, mode str
 }
 
 func (c *ReceiptCompactor) saveProgress(ctx context.Context, computerID, mode string, cum, pass ReceiptCompactionPass) error {
-	_, err := c.store.db.ExecContext(ctx, `INSERT INTO computer_event_receipt_compaction (computer_id, mode, through_sequence, rows_rewritten, rows_kept, bytes_before, bytes_after, updated_at) VALUES (?,?,?,?,?,?,?,?)
-		ON CONFLICT (computer_id) DO UPDATE SET mode=excluded.mode, through_sequence=excluded.through_sequence, rows_rewritten=excluded.rows_rewritten, rows_kept=excluded.rows_kept, bytes_before=excluded.bytes_before, bytes_after=excluded.bytes_after, updated_at=excluded.updated_at`,
-		computerID, mode, pass.Through, cum.Rewritten+pass.Rewritten, cum.Kept+pass.Kept, cum.BytesBefore+pass.BytesBefore, cum.BytesAfter+pass.BytesAfter, time.Now().UTC())
+	_, err := c.store.db.ExecContext(ctx, `INSERT INTO computer_event_receipt_compaction (computer_id, mode, through_sequence, rows_rewritten, rows_kept, bytes_before, bytes_after, updated_at, codec_version) VALUES (?,?,?,?,?,?,?,?,?)
+		ON CONFLICT (computer_id) DO UPDATE SET mode=excluded.mode, through_sequence=excluded.through_sequence, rows_rewritten=excluded.rows_rewritten, rows_kept=excluded.rows_kept, bytes_before=excluded.bytes_before, bytes_after=excluded.bytes_after, updated_at=excluded.updated_at, codec_version=excluded.codec_version`,
+		computerID, mode, pass.Through, cum.Rewritten+pass.Rewritten, cum.Kept+pass.Kept, cum.BytesBefore+pass.BytesBefore, cum.BytesAfter+pass.BytesAfter, time.Now().UTC(), receiptCompactionCodec)
 	return err
 }
 

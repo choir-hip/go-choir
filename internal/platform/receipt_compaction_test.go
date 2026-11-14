@@ -316,3 +316,57 @@ func TestAppendReceiptJSONReadersExpand(t *testing.T) {
 		}
 	}
 }
+
+// Rows written while the column was jsonb read back in PostgreSQL's spelling,
+// not the canonical bytes (docs/problems/old-receipts-do-not-compact-2026-11-14.md).
+// The backfill had already walked past them under the canonical codec and kept
+// them, so a pass saved by that codec must start over, and the rewrite must give
+// back exactly the stored bytes (C2, C5, C6, C8, C9).
+func TestReceiptCompactionRevisitsRowsAnOlderCodecKept(t *testing.T) {
+	ctx := context.Background()
+	d := newDrillComputer(t, "computer-59c902c5d46caecc0a180a8557164e72")
+	d.appendEvent(computerevent.EventGenesisImported, "", nil)
+	d.appendMixed(6, "jsonb")
+	// PostgreSQL's own jsonb text is the old rows' spelling.
+	if _, err := d.store.db.Exec(`UPDATE computer_event_append_receipts SET event_head_receipt_json = event_head_receipt_json::jsonb::text WHERE computer_id=?`, d.id); err != nil {
+		t.Fatal(err)
+	}
+	old := storedReceipts(t, d.store, d.id)
+	baseline, err := d.artifacts.EventsPage(ctx, d.id, 0, 100)
+	if err != nil || len(baseline) != 7 {
+		t.Fatalf("baseline replay: %d, %v", len(baseline), err)
+	}
+	// The pass the canonical codec saved: through the head, every row kept.
+	if _, err := d.store.db.Exec(`INSERT INTO computer_event_receipt_compaction (computer_id, mode, through_sequence, rows_rewritten, rows_kept, bytes_before, bytes_after, updated_at) VALUES (?, 'active', 7, 0, 7, 1, 1, now())`, d.id); err != nil {
+		t.Fatal(err)
+	}
+	// Chunks the sweep stored for this computer must survive: the rewrite is lossless (C9).
+	d.store.SetReceiptCompaction(ReceiptCompactionPolicy{Computers: map[string]string{d.id: ReceiptCompactActive}})
+	passes := runCompaction(t, noSleepCompactor(d.store))
+	if len(passes) != 1 || passes[0].Rewritten != 7 || passes[0].Kept != 0 || !passes[0].Done {
+		t.Fatalf("pass = %+v, want all 7 jsonb-spelled rows rewritten", passes)
+	}
+	now := storedReceipts(t, d.store, d.id)
+	for i, r := range now {
+		if !computerevent.IsCompactHeadReceipt(r.stored) || len(r.stored)*2 > len(old[i].stored) {
+			t.Fatalf("sequence %d not compact: %d bytes from %d", r.seq, len(r.stored), len(old[i].stored))
+		}
+	}
+	page, err := d.artifacts.EventsPage(ctx, d.id, 0, 100)
+	if err != nil || !reflect.DeepEqual(page, baseline) {
+		t.Fatalf("replay of the rewritten chain differs: %v", err)
+	}
+	verifyReplayReceipts(t, d, page)
+	// A second pass reads nothing: the codec of the saved pass is current.
+	if again := runCompaction(t, noSleepCompactor(d.store)); again[0].Scanned != 0 || !again[0].Done {
+		t.Fatalf("second pass = %+v, want nothing scanned", again)
+	}
+	// The rollback gives back the stored bytes exactly.
+	d.store.SetReceiptCompaction(ReceiptCompactionPolicy{Computers: map[string]string{d.id: ReceiptCompactExpand}})
+	if exp := runCompaction(t, noSleepCompactor(d.store)); exp[0].Rewritten != 7 {
+		t.Fatalf("expand = %+v", exp[0])
+	}
+	if got := storedReceipts(t, d.store, d.id); !reflect.DeepEqual(got, old) {
+		t.Fatal("expand did not restore the jsonb-spelled bytes")
+	}
+}
