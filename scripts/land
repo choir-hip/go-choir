@@ -14,7 +14,10 @@
 # Hidden modes (used by scripts/land.test.sh): --select <from-ref> prints the
 # test plan for the diff <from-ref>..HEAD of the current tree and exits.
 #
-# Environment: LAND_VM (ssh host, default choir-agents), LAND_PRIMARY (checkout
+# Environment: LAND_VM (ssh host, default choir-agents), LAND_VM_MIRROR (a bare
+# repository on the VM that is its checkout's origin; set it for a VM with no
+# GitHub login, such as choir-runner with go-choir-mirror.git, and the lane
+# ref is pushed there over ssh as well), LAND_PRIMARY (checkout
 # to refuse), LAND_GATES (gate command, default scripts/gates), LAND_POLL
 # (seconds between polls, 20), LAND_POLL_FAILS (consecutive failed polls
 # tolerated, 90), LAND_HOOK_AFTER_VERIFY (shell text run after the checks pass
@@ -258,6 +261,9 @@ run_suites_remote() {
   runner=$(mktemp "${TMPDIR:-/tmp}/land-runner.XXXXXX"); write_runner "$runner"
   say "pushing lane ref lane/land-$short and starting the run on $VM"
   git push -q -f origin "HEAD:refs/heads/lane/land-$short" || die "push of the lane ref failed"
+  if [ -n "${LAND_VM_MIRROR:-}" ]; then
+    git push -q -f --no-verify "$VM:$LAND_VM_MIRROR" "HEAD:refs/heads/lane/land-$short" || die "push of the lane ref to $VM:$LAND_VM_MIRROR failed"
+  fi
   ssh -o BatchMode=yes "$VM" "mkdir -p ~/mirror && cd ~/go-choir && flock ~/mirror/.fetch.lock git fetch -q origin '+refs/heads/lane/land-$short:refs/remotes/origin/lane/land-$short' && git worktree remove --force $W 2>/dev/null; rm -rf $W; git worktree add -q --detach $W $sha" || die "could not prepare the worktree on $VM"
   ssh -o BatchMode=yes "$VM" "cat > ~/mirror/land-$short.run.sh" <"$runner" || die "could not ship the runner"
   rm -f "$runner"
