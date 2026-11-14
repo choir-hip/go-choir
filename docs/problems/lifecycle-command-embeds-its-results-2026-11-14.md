@@ -463,3 +463,24 @@ top of main, which includes step 2). Run by the same agent, d@e only.
   therefore neither passes nor fails on step 2's account: the tables step 2
   could change are equal, and the check as a whole is not `equivalent`.
 - Still not run: steps 6 and 7.
+
+### Step 6 as run, 22:16Z to 22:36Z
+
+Run by an operator agent on d@e only, under the lead. Recorded 22:37Z.
+
+- `scripts/chaos/run s1-guest-crash --execute`, 22:16:15Z to 22:21:47Z, and
+  `scripts/chaos/run s3-planned-restart --execute`, 22:28:07Z to 22:29:52Z.
+  Every check of both scenarios passed except each one's own
+  replay-completeness check, so both exit 1. That check got an empty answer
+  after about 60 seconds; the probe takes four to five minutes on d@e, so
+  this reads as the scenario's client timeout (not confirmed).
+- After each drill: 4a, 4d, 4e and the head checks, 14 of 14 pass. Same
+  revision ids and content hashes as recorded; no 500, no "stored revision
+  unavailable".
+- Step 5 after each drill, with a 15-minute timeout: `not_equivalent`, the
+  event index and the content root only (heads 110,639 and 110,721). Run
+  memory equal. Same as before the drills.
+- Step 6 passes on step 2's account. It does not pass as written, because
+  step 5 is not `equivalent`; that is the event-index record.
+- New defect: the chaos scenarios' replay-completeness call cannot outlast
+  the probe on a computer this size.
