@@ -98,6 +98,8 @@ func TestRunMemoryCensusCountsEveryGroupExactlyOnce(t *testing.T) {
 		"not_reached_over_cap":        {0, 0},
 		"kept_unreadable_time":        {0, 0},
 		"kept_run_record_unreadable":  {0, 0},
+		"kept_run_agent_disagrees":    {0, 0},
+		"kept_append_failed":          {0, 0},
 	}
 	var runs, entries int64
 	for _, d := range c.Dispositions {
