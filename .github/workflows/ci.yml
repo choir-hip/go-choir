@@ -682,6 +682,13 @@ jobs:
         shell: bash
         run: scripts/test-guest-floor-commit-free
 
+      # The boot prune is safe only while it is ordered before the updater and
+      # the runtime and cannot run beside them (docs/problems/updater-prune-
+      # three-rounds-structural-assessment-2026-11-14.md).
+      - name: Boot prune unit is ordered before the updater and the runtime
+        shell: bash
+        run: bash scripts/updater-prune-unit-nix-test.sh
+
   # scripts/receipts-index-swap runs DDL on the live receipt table (the supervised
   # swap of docs/problems/old-receipts-do-not-compact-2026-11-14.md); its
   # self-test runs it against a throwaway PostgreSQL. Selected whenever the
