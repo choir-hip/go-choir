@@ -366,9 +366,9 @@ func (c *ReceiptCompactor) runComputer(ctx context.Context, computerID, mode str
 		return pass, err
 	}
 	if head != nil && cum.Through > head.Sequence {
-		// A stale row: the computer was purged and created again under the same
-		// id (the purge of an older release does not know this table), and its
-		// tape is shorter than the progress says. Walk it from zero.
+		// A defensive invariant with no known trigger (heads are never deleted and
+		// a tombstoned computer refuses appends): progress past the head cannot
+		// describe this tape, so walk it from zero rather than report it done.
 		cum = ReceiptCompactionPass{}
 	}
 	pass.Through = cum.Through
