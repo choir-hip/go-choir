@@ -53,6 +53,9 @@ func nameRevisionInCommand(t *testing.T, s *store.Store, commandID, namedID stri
 	if err := json.Unmarshal(match.body, &receipt); err != nil || json.Unmarshal(receipt["stored_result"], &stored) != nil {
 		t.Fatalf("decode command %s: %v", commandID, err)
 	}
+	if _, already := stored["revision_id"]; already && namedID == "" {
+		return // a writer that names its revision stored this command slim already
+	}
 	if namedID == "" {
 		var rev types.Revision
 		if err := json.Unmarshal(stored["revision"], &rev); err != nil {
