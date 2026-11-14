@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
 	"path/filepath"
 
 	"github.com/yusefmosiah/go-choir/internal/updater"
@@ -16,8 +15,8 @@ import (
 // signer, socket, network, identity or runtime, and runs before the daemon and
 // the runtime start (nix/autoputer-vm.nix, go-choir-updater-prune). It exits 0
 // whenever the root was examined, even when it skipped or its budget ran out
-// (the report line says which): a prune never fails a boot. A usage error, or a
-// root that is not a directory, exits 2.
+// (the report line says which): a prune never fails a boot. Only a usage error exits 2; a root that is
+// missing or not a directory is a skip.
 func pruneMain(args []string, logOut io.Writer) int {
 	flags := flag.NewFlagSet("prune", flag.ContinueOnError)
 	flags.SetOutput(logOut)
@@ -32,10 +31,6 @@ func pruneMain(args []string, logOut io.Writer) int {
 		return 2
 	}
 	cleaned := filepath.Clean(*root)
-	if info, err := os.Stat(cleaned); err != nil || !info.IsDir() {
-		fmt.Fprintf(logOut, "choir-updater: prune: root %s is not a directory\n", cleaned)
-		return 2
-	}
 	logger := log.New(logOut, "", 0)
 	report := updater.Prune(updater.PruneOptions{Root: cleaned, Budget: *budget, RunDir: *runDir})
 	logger.Print(report.Line())
