@@ -219,6 +219,11 @@ owner_rulings:
     said: "Oh, it appears we have some blockers now that I'm reviewing that. I just want to go forward and just make it work."
     then: asked the route, the owner chose "Land it now"
     read_as: N2 is lifted for stored-result step 2 only; it lands normally, the replay drill runs on d@e straight after the deploy, the restore part of the drill waits for the owner, and the rollback is a revert to step 1, never past it; the same message is the owner's go to land prune at boot
+  - on: 2026-11-14
+    decision: N7
+    asked: step 7 of the step 2 proof (destroy and restore d@e) is an owner act; does it wait for the owner, and may DeepSeek sit alone when the Gemini seat is out of quota
+    said: "uhh, you should be able to do step 7 yourself. the keys available should cover it. everything shuold be autonomous.and yes, if gemini is out no problem, just use deepseek"
+    read_as: the lead runs the restore drill on d@e with the keys at hand, on d@e only; drills on d@e do not wait for the owner; when the Gemini seat is out, DeepSeek takes the review (a two-seat red change still needs two seats, so Gemini is retried first)
 
 decisions_for_the_owner:
   - id: E1
