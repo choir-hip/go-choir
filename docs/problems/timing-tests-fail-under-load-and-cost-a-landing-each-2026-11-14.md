@@ -85,6 +85,29 @@ its failure is a goroutine ordering wait, not the clock.
    (`transient_cooldown_test.go`). The product could release before it
    sends; that is a one-line reorder not made here.
 
+4. `TestToolBatchWaitsAreBounded` (CI run 43596488443, race shard 7). The
+   test needs 129 model turns (`maxCompletionGuardWaits` is 128,
+   `toolloop.go`) inside a 3 s context deadline; under load the deadline
+   fires first and the error is the context's, not "waited". Not reproduced
+   on the runner (0 of 100 before). Repair: the test cancels its context
+   once the wait count passes the bound by 8, so the guard is a count, not a
+   clock.
+5. `TestOwnerActWakeCrashSettledApplyMintsNothing`. A crash boot sets its
+   marks before the post-commit observer exists (`setSelfdevCrashMarks`);
+   the fixture's observer is live, so a drain that read "not interrupted"
+   just before `markSelfDevelopmentOperationsInterruptedAfterCrash`, then
+   saw control recover, applied live and minted the owner-act record
+   (`self_development_materializer.go:540`). Reproduced: 5 of 60 under load.
+   Repair: the test holds `fx.reconfigure` from before the mark to the end,
+   so the in-flight drain finishes first (control still failing) and none
+   starts.
+6. `TestShotReuseGateAnswersFromTheRunsState` (found by the case 1 proof): a
+   hook capture written from the drain goroutine and read by the test (a data
+   race, 3 of 30), and a concurrent drain running the same gate against the
+   run state the test sets, committing its own shot_reuse ("idempotency
+   commitment changed", 4 of 100). Repair: the capture is guarded and the
+   drains are held out for the rest of the test.
+
 ## Remaining error
 
 The three cases above are repaired on `lane/flake-fix` (not yet landed).
