@@ -126,23 +126,36 @@ blocking findings; both are in this record because they shaped the cut.
 
 `commitLifecycleTransition` names the revision when `lifecycleBatchRevisionForm`
 returns `slim`: the batch writes an object at the revision's canonical id
-whose body equals `json.Marshal(revision)`. Every committed command is counted
-by form in `telemetry_batching.lifecycle_command_forms` (served with the other
-tape counters): `slim`, `embedded_mismatch` (the batch writes the revision but
-the bytes differ: a silent zero saving would show here), `embedded_head` (a
-head written by an earlier batch) and `no_revision`. Read it on a live
-computer before and after: `tape_op_bytes_by_object_kind` for
-`choir.lifecycle_command` over its op count is the per-command size.
+whose body equals `json.Marshal(revision)` (the second marshal is the proof;
+do not replace it with a cheaper check). Every command that commits through
+`commitLifecycleTransition` is counted by form, after its batch and outbox
+succeed, in `telemetry_batching.lifecycle_command_forms` (served with the
+other tape counters): `slim`, `embedded_mismatch` (the batch writes the
+revision but the bytes differ: a silent zero saving would show here),
+`embedded_head` (a head written by an earlier batch) and `no_revision`. A
+replay, a lost condition or a failed outbox counts nothing. The story-open
+start command (`story_open.go`) is written by its own batch: it is neither
+counted nor slimmed, so the counter total is not the count of all
+`choir.lifecycle_command` objects (its seed revision is empty; a later step may
+slim it). Read the counter on a live computer before and after:
+`tape_op_bytes_by_object_kind` for `choir.lifecycle_command` over its op count
+is the per-command size.
 
+Tests: `TestLifecycleWriterGateKeepsHeadAndMismatchedRevisionsEmbedded` (a real
+terminal settlement stays embedded as `embedded_head`; a batch whose revision
+body differs stays embedded as `embedded_mismatch`; a writer that slims every
+command fails it, and `TestLifecycleCommandFormsAreCounted`),
+`TestLifecycleCommandFormsCountOnTheSuccessPathOnly` (a lost condition counts
+nothing; counting before the commit fails it).
 `TestSlimTextureTurnCompletesItsMutationUnderEnforce` runs the real
-`handleRunCompletion` and `sleepTextureMutationAfterIdle` on a real slim turn
-under the enforced gate. With the custodian read removed it fails with the
-mutation left pending (not stale), which also shows the callers' read-error
-handling. `ApplyLifecycleUpdate` is covered by the existing
-`TestLifecycleSettlementWaitsForUpdateDisposition` flow, whose apply replay
-now reads a slim command.
+`handleRunCompletion` and `sleepTextureMutationAfterIdle` on a slim turn under
+the enforced gate. `ApplyLifecycleUpdate` is covered by the existing
+`TestLifecycleSettlementWaitsForUpdateDisposition` flow, whose apply replay now
+reads a slim command.
 
-Rollback of step 2 is "revert to step 1", never past it once deployed.
+Rollback of step 2 is "revert to step 1", never past it once deployed, and
+step 2 is a separate deploy after step 1 is the adopted release (see the
+landing precondition below).
 
 ## Belief
 
