@@ -28,14 +28,19 @@ import (
 //     journal's PriorReleaseTarget; RestagePinnedRelease (base restore, the boot
 //     frontend follow, package-migration rollback, tape restore); and
 //     trustedSourceDir (a pinned release is a trusted apply source). Kept:
-//     current; the Prior of the newest apply or restage that installed it (a
-//     restage writes a journal for exactly this, RestagePinnedRelease); what a
+//     current; the Prior of the newest apply that installed it, and the Prior of
+//     the newest restage that installed it (RestagePinnedRelease journals each
+//     swap; the two are kept as a union because a swap and its swap-back would
+//     otherwise shadow the apply's predecessor, which the revert of the
+//     operation behind current still reads: at most three releases); what a
 //     journal with no result names, Prior and Target (a platform update that
 //     crashed mid-apply is resumed from it); the pre-migration release of a
 //     package migration whose rollback is still reachable
 //     (package-migration/<pair>.json: last attempt not rolled_back or refused,
-//     and `current` is one of its pre, target or served releases). Any other
-//     release is deleted. What this costs, accepted by the owner: a tape restore
+//     and `current` is exactly one of its pre, target or served releases; after
+//     a boot frontend follow restages `current` onto a newer baseline the
+//     migration's rollback finds its pre-migration release gone and refuses
+//     cleanly, which is the zero-cushion price). Any other release is deleted. What this costs, accepted by the owner: a tape restore
 //     to a checkpoint whose release is neither current nor its predecessor finds
 //     the pinned release absent and refuses before anything is changed
 //     (agentcore verifyPinnedFrontend: "served SPA is underivable"); nothing
@@ -148,6 +153,9 @@ func (u *Updater) pruneChunk(report *PruneReport, failed map[string]bool) (progr
 		return false, "a restore holds the updater root"
 	}
 	defer release()
+	if u.pruneHeld != nil {
+		u.pruneHeld()
+	}
 	if reason := pruneBlocked(u.root); reason != "" {
 		return false, reason
 	}
@@ -328,13 +336,16 @@ func (u *Updater) pruneReleases(cutoff time.Time, report *PruneReport, failed ma
 	return false
 }
 
-// releasesToKeep is the current release, the predecessor the newest apply or
-// restage that installed it recorded, what a journal with no result names, and
-// the releases a package migration's rollback still restores.
+// releasesToKeep is the current release, the Prior of the newest apply that
+// installed it, the Prior of the newest restage that installed it (a union, not
+// a choice: a swap and its swap-back journal "B -> R2" newer than the apply
+// "R1 -> R2", and the revert of the operation behind R2 still reads R1), what a
+// journal with no result names, and the releases a package migration's
+// rollback still restores. At most three releases without a dead journal.
 func (u *Updater) releasesToKeep(current string) map[string]bool {
 	keep := map[string]bool{current: true}
-	var bestAt time.Time
-	bestPrior := ""
+	var appliedAt, restagedAt time.Time
+	appliedPrior, restagedPrior := "", ""
 	dir := operationsDir(u.root)
 	if entries, err := os.ReadDir(dir); err == nil {
 		for _, entry := range entries {
@@ -345,6 +356,7 @@ func (u *Updater) releasesToKeep(current string) map[string]bool {
 			if err != nil || !found {
 				continue
 			}
+			installs := journal.TargetReleaseDigest == current && computerevent.IsSHA256(journal.PriorReleaseDigest) && journal.PriorReleaseDigest != current
 			switch outcome := journal.Result.Outcome; {
 			case outcome == "":
 				// A dead apply, resumed from its journal: it needs both ends.
@@ -353,15 +365,17 @@ func (u *Updater) releasesToKeep(current string) map[string]bool {
 						keep[digest] = true
 					}
 				}
-			case (outcome == "applied" || outcome == restagedOutcome) && journal.TargetReleaseDigest == current &&
-				computerevent.IsSHA256(journal.PriorReleaseDigest) && journal.PriorReleaseDigest != current &&
-				(bestPrior == "" || journal.StartedAt.After(bestAt)):
-				bestAt, bestPrior = journal.StartedAt, journal.PriorReleaseDigest
+			case outcome == "applied" && installs && (appliedPrior == "" || journal.StartedAt.After(appliedAt)):
+				appliedAt, appliedPrior = journal.StartedAt, journal.PriorReleaseDigest
+			case outcome == restagedOutcome && installs && (restagedPrior == "" || journal.StartedAt.After(restagedAt)):
+				restagedAt, restagedPrior = journal.StartedAt, journal.PriorReleaseDigest
 			}
 		}
 	}
-	if bestPrior != "" {
-		keep[bestPrior] = true
+	for _, prior := range []string{appliedPrior, restagedPrior} {
+		if prior != "" {
+			keep[prior] = true
+		}
 	}
 	pins := filepath.Join(u.root, "package-migration")
 	if entries, err := os.ReadDir(pins); err == nil {

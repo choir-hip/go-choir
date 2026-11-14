@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"

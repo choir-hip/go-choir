@@ -56,7 +56,7 @@ func (rt *Runtime) baseRestoreSelfDevelopmentOperation(ctx context.Context, oper
 		return rt.settleSelfDevelopmentRefusal(ctx, operation, fmt.Errorf("%w: the booted base changed since the revert opened (%s, now %s)", updater.ErrApplyRefused, shortDigest(operation.ReleaseDigest), shortDigest(target.ContentDigest)))
 	}
 	note := ""
-	unlockCurrent, holdErr := rt.lockCurrentRelease()
+	unlockCurrent, holdErr := rt.lockCurrentRelease(ctx)
 	if holdErr != nil {
 		unlockCurrent()
 		return fmt.Errorf("materializer: base restore: %w", holdErr)

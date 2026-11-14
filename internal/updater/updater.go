@@ -163,6 +163,9 @@ type Updater struct {
 	// pruneBetween, when set, runs between two prune chunks, outside the
 	// updater's mutex (a test seam: a restore that starts mid-prune).
 	pruneBetween func()
+	// pruneHeld, when set, runs inside a chunk after the hold is taken and
+	// before the first mutation (a test seam: the hold must be held here).
+	pruneHeld func()
 }
 
 // restagedOutcome marks the journal RestagePinnedRelease writes: a swap of
@@ -681,6 +684,10 @@ func stageReleaseAt(root, sourceDir, releaseDir string, manifest ReleaseManifest
 		return err
 	}
 	if _, err := os.Lstat(releaseDir); err == nil {
+		// Reuse restarts the prune's input window for a release staged and
+		// waiting for its swap.
+		now := time.Now()
+		_ = os.Chtimes(releaseDir, now, now)
 		return verifyManifest(releaseDir, manifest)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
@@ -969,6 +976,16 @@ func classifyPinnedReadError(err error) error {
 // stamped ops are replayed into it, so both are passed. An empty path is
 // skipped; none skips the check.
 func RestagePinnedRelease(root, releaseDigest string, storeSchemaPaths ...string) error {
+	return restagePinnedRelease(root, releaseDigest, true, storeSchemaPaths)
+}
+
+// RestagePinnedReleaseBestEffort is RestagePinnedRelease for a swap-back, where
+// the caller cannot refuse: a restage that cannot be journaled still swaps.
+func RestagePinnedReleaseBestEffort(root, releaseDigest string, storeSchemaPaths ...string) error {
+	return restagePinnedRelease(root, releaseDigest, false, storeSchemaPaths)
+}
+
+func restagePinnedRelease(root, releaseDigest string, strict bool, storeSchemaPaths []string) error {
 	root = filepath.Clean(root)
 	if root == "." || !filepath.IsAbs(root) {
 		return fmt.Errorf("updater: restage requires an absolute updater root")
@@ -983,7 +1000,9 @@ func RestagePinnedRelease(root, releaseDigest string, storeSchemaPaths ...string
 		}
 	}
 	ensureReleaseEntrypoint(root, releaseDir, manifest)
-	recordRestage(root, releaseDigest)
+	if err := recordRestage(root, releaseDigest); err != nil && strict {
+		return fmt.Errorf("updater: restage not journaled, nothing swapped: %w", err)
+	}
 	return swapCurrentPointer(root, releaseDir)
 }
 
@@ -991,14 +1010,17 @@ func RestagePinnedRelease(root, releaseDigest string, storeSchemaPaths ...string
 // so the release it comes from stays the one rollback predecessor the prune
 // keeps (a boot frontend follow, a tape restore, a base restore, a package
 // migration). Best effort: a restage that cannot be recorded is still done.
-func recordRestage(root, releaseDigest string) {
+func recordRestage(root, releaseDigest string) error {
 	prior, priorTarget, err := currentReleaseOf(root)
-	if err != nil || prior == "" || prior == releaseDigest {
-		return
+	if err != nil {
+		return err
+	}
+	if prior == "" || prior == releaseDigest {
+		return nil
 	}
 	suffix := make([]byte, 8)
 	if _, err := rand.Read(suffix); err != nil {
-		return
+		return err
 	}
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	key := "restage-" + now.Format("20060102T150405.000000") + "-" + hex.EncodeToString(suffix)
@@ -1009,11 +1031,13 @@ func recordRestage(root, releaseDigest string) {
 	}
 	if err := os.MkdirAll(operationsDir(root), 0o700); err != nil {
 		log.Printf("updater: restage journal: %v", err)
-		return
+		return err
 	}
 	if err := writeJournal(filepath.Join(operationsDir(root), safeName(key)+".json"), journal); err != nil {
 		log.Printf("updater: restage journal: %v", err)
+		return err
 	}
+	return nil
 }
 
 // ensureReleaseEntrypoint backfills releaseDir/layering-entrypoint for a

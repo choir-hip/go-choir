@@ -60,7 +60,9 @@ header of `internal/updater/prune.go`. Apply drops its own source once staged or
 refused; the prune runs in chunks after a verified apply and at updater start;
 the runtime collects bundles and host builds no operation can read
 (`internal/agentcore/selfdev_bundle_gc.go`); a restage journals where it came
-from so the predecessor survives it.
+from. The keep rule is a union: current, the prior of the newest apply that
+installed it, the prior of the newest restage that installed it (at most three
+releases), so a swap and its swap-back never shadow the apply's predecessor.
 
 Consequences, named because they are the price of the bound:
 
@@ -98,3 +100,16 @@ Consequences, named because they are the price of the bound:
 - **Candidate screenshot builds.** A closure materialized into `store/` for a
   shot is unrooted and goes after ten minutes; a retried shot materializes it
   again from the host build, which stays while its operation is open.
+- **Migration rollback after a boot follow.** A package migration's
+  pre-migration release is kept only while `current` is exactly one of its pre,
+  target or served releases. After the boot frontend follow restages `current`
+  onto a newer baseline, the owner's rollback finds the pre-migration release
+  gone and refuses cleanly (the hold is written, nothing is swapped). The keep
+  rule is not widened for it.
+- **The restore hold is bounded.** Taking it waits at most a minute (longer than
+  a prune chunk's single-entry deletion) and honours the caller's context; on
+  timeout a restore refuses with a named error and the boot surface reads the
+  verified `current` read-only.
+- **The prune reads every journal per chunk.** A mature root has one journal and
+  one lock per apply forever, so a prune costs chunks times journals in small
+  reads; fine at hundreds, worth a bound if the count reaches tens of thousands.

@@ -1,6 +1,7 @@
 package agentcore
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -19,12 +20,14 @@ var errRestoreHoldUnavailable = errors.New("the updater's restore hold is unavai
 // it came from (updater.HoldRestore). It always returns the unlock, with the
 // mutex held; err is non-nil when the hold could not be taken, in which case a
 // swap-capable caller must unlock and refuse, and only a read-only caller (the
-// boot surface read of a verified `current`) may go on.
-func (rt *Runtime) lockCurrentRelease() (unlock func(), err error) {
+// boot surface read of a verified `current`) may go on. The wait for the hold
+// is bounded by ctx and by the updater's own deadline (updater.HoldRestore), so
+// a stuck holder cannot wedge a boot or a restore silently.
+func (rt *Runtime) lockCurrentRelease(ctx context.Context) (unlock func(), err error) {
 	rt.currentReleaseMu.Lock()
 	release := func() {}
 	if root := strings.TrimSpace(rt.selfdevUpdaterRoot); root != "" {
-		hold, holdErr := updater.HoldRestore(root)
+		hold, holdErr := updater.HoldRestore(ctx, root)
 		if holdErr != nil {
 			err = fmt.Errorf("%w: %v", errRestoreHoldUnavailable, holdErr)
 		} else {

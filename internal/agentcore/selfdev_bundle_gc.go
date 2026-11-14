@@ -40,10 +40,11 @@ const bundleGCGrace = 10 * time.Minute
 // A host build is kept for the same operations: the shot pipeline reuses it
 // for its operation's lifetime.
 func (rt *Runtime) collectSettledBundles(ctx context.Context) {
-	if rt == nil || rt.selfdevOperations == nil || rt.selfdevComputerID == "" || rt.selfdevUpdaterRoot == "" {
+	// One computer id throughout: the resolver below reads rt.cfg.ComputerID.
+	if rt == nil || rt.selfdevOperations == nil || rt.cfg.ComputerID == "" || rt.selfdevUpdaterRoot == "" {
 		return
 	}
-	open, err := rt.selfdevOperations.ListByStates(ctx, rt.selfdevComputerID, selfdev.OpenStates...)
+	open, err := rt.selfdevOperations.ListByStates(ctx, rt.cfg.ComputerID, selfdev.OpenStates...)
 	if err != nil {
 		return
 	}
@@ -62,7 +63,13 @@ func (rt *Runtime) collectSettledBundles(ctx context.Context) {
 		if !entry.IsDir() || !computerevent.IsSHA256(entry.Name()) {
 			continue
 		}
-		if operation, ok := rt.appliedOperationForRelease(ctx, entry.Name()); ok && operation.BundleDigest != "" {
+		operation, ok, err := rt.resolveOperationForRelease(ctx, entry.Name())
+		if err != nil {
+			// What a surviving release needs cannot be read: collect nothing.
+			log.Printf("agentcore: bundle gc skipped: the operation behind release %s cannot be resolved: %v", entry.Name()[:12], err)
+			return
+		}
+		if ok && operation.BundleDigest != "" {
 			named[operation.BundleDigest] = true
 		}
 	}

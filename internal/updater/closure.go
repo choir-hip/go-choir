@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // nix-store --export ("narchive") reader + guest-side materializer.
@@ -299,6 +300,10 @@ func MaterializeClosure(blob []byte, storeRoot string) ([]string, error) {
 		// already fully materialized (atomic rename guarantees no partial
 		// paths). Skip so replays/resumed applies are idempotent.
 		if _, statErr := os.Lstat(target); statErr == nil {
+			// Reuse restarts the prune's input window for an object no release
+			// roots yet (a candidate shot's closure).
+			now := time.Now()
+			_ = os.Chtimes(target, now, now)
 			materialized = append(materialized, base)
 			continue
 		}

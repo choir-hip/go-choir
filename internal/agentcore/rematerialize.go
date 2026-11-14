@@ -79,7 +79,7 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	rt.workspaceReplaceMu.Lock()
 	defer rt.workspaceReplaceMu.Unlock()
 	// The restore restages `current`: one writer at a time (PM13).
-	unlockCurrent, holdErr := rt.lockCurrentRelease()
+	unlockCurrent, holdErr := rt.lockCurrentRelease(ctx)
 	defer unlockCurrent()
 	if holdErr != nil {
 		// The restore swaps `current` and may swap back: without the hold a
@@ -232,7 +232,7 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		}
 		// The prior release was current on this computer before the restage;
 		// putting it back is not a step toward an older binary.
-		_ = updater.RestagePinnedRelease(rt.selfdevUpdaterRoot, priorReleaseDigest)
+		_ = updater.RestagePinnedReleaseBestEffort(rt.selfdevUpdaterRoot, priorReleaseDigest)
 	}()
 
 	quarantineDir := filepath.Join(filepath.Dir(originalMarker), "rematerialize-quarantine-"+time.Now().UTC().Format("20060102T150405.000000000Z"))
@@ -596,9 +596,10 @@ func (rt *Runtime) ensureServingBaselineWith(ctx context.Context, computerID, ba
 	}
 	// `current` is read and, when missing, imported under one lock (PM13,
 	// PM26): a migration's swap cannot land between the read and the import.
-	unlockCurrent, holdErr := rt.lockCurrentRelease()
+	unlockCurrent, holdErr := rt.lockCurrentRelease(ctx)
 	defer unlockCurrent()
 	if holdErr != nil {
+		log.Printf("runtime: restore hold unavailable at boot; serving the verified current read-only, no baseline import or follow: %v", holdErr)
 		// No hold, so nothing may stage or swap: the boot surface may still
 		// read a `current` that verifies (no follow, no import), because a
 		// readable computer must boot; one that does not verify stays refused.

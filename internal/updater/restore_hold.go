@@ -1,11 +1,13 @@
 package updater
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // A restore (tape restore, base restore, package migration, the boot baseline
@@ -24,9 +26,25 @@ func restoreHoldPath(root string) string {
 	return filepath.Join(operationsDir(root), restoreHoldName)
 }
 
+// restoreHoldTimeout bounds how long HoldRestore waits for the hold. A holder
+// is a restore (seconds to a minute) or one prune chunk, which deletes one
+// entry: at worst a few GiB of small files on a slow volume, so a minute is
+// well past a healthy holder. A holder stuck longer (storage that does not
+// answer) must not wedge a boot or a restore silently: the caller gets
+// ErrRestoreHoldTimeout, a swap-capable restore refuses, and the boot surface
+// reads the verified `current` read-only.
+var restoreHoldTimeout = time.Minute
+
+const restoreHoldPoll = 25 * time.Millisecond
+
+// ErrRestoreHoldTimeout: the hold stayed taken for restoreHoldTimeout.
+var ErrRestoreHoldTimeout = errors.New("updater: the restore hold stayed taken")
+
 // HoldRestore marks a restore in flight under root until the returned release
-// is called. It waits for another hold to end.
-func HoldRestore(root string) (release func(), err error) {
+// is called. It retries without blocking until restoreHoldTimeout or ctx ends,
+// and always creates the hold file, which tryHoldRestore's full-volume rule
+// relies on.
+func HoldRestore(ctx context.Context, root string) (release func(), err error) {
 	root = filepath.Clean(strings.TrimSpace(root))
 	if err := os.MkdirAll(operationsDir(root), 0o700); err != nil {
 		return nil, err
@@ -35,24 +53,38 @@ func HoldRestore(root string) (release func(), err error) {
 	if err != nil {
 		return nil, err
 	}
-	unlock, acquired, err := lockFile(f, true)
-	if err != nil {
-		f.Close()
-		return nil, err
+	deadline := time.Now().Add(restoreHoldTimeout)
+	for {
+		unlock, acquired, lockErr := lockFile(f, false)
+		if lockErr != nil {
+			f.Close()
+			return nil, lockErr
+		}
+		if acquired {
+			return func() { unlock(); f.Close() }, nil
+		}
+		if time.Now().After(deadline) {
+			f.Close()
+			return nil, ErrRestoreHoldTimeout
+		}
+		select {
+		case <-ctx.Done():
+			f.Close()
+			return nil, ctx.Err()
+		case <-time.After(restoreHoldPoll):
+		}
 	}
-	if !acquired {
-		f.Close()
-		return nil, errors.New("updater: restore hold not acquired")
-	}
-	return func() { unlock(); f.Close() }, nil
 }
 
 // tryHoldRestore takes the hold without waiting, for the prune: it holds the
 // updater's mutex, and a restore holds the hold while it calls Apply, which
 // waits for that mutex, so the prune must never wait for the hold. acquired is
-// false when a restore holds it. When the hold file cannot be created because
-// the volume is full, no restore can take the hold either (each refuses
-// without it), so the prune goes ahead: it is what frees the space.
+// false when a restore holds it. When the hold file does not exist and cannot be
+// created because the volume is full, no restore can take the hold either
+// (HoldRestore always creates the file, and a swap-capable restore refuses
+// without the hold), so the prune goes ahead: it is what frees the space. That
+// is only sound while HoldRestore creates the file; a hold that did not create
+// it would break this.
 func tryHoldRestore(root string) (release func(), acquired bool, err error) {
 	root = filepath.Clean(strings.TrimSpace(root))
 	f, err := os.OpenFile(restoreHoldPath(root), os.O_RDWR, 0)
@@ -78,18 +110,4 @@ func tryHoldRestore(root string) (release func(), acquired bool, err error) {
 		return nil, false, nil
 	}
 	return func() { unlock(); f.Close() }, true, nil
-}
-
-// RestoreInFlight reports whether a restore holds root, for diagnostics; the
-// answer can be stale the moment it is returned, so nothing may act on it (the
-// prune uses tryHoldRestore). A missing hold file is not held.
-func RestoreInFlight(root string) bool {
-	release, acquired, err := tryHoldRestore(root)
-	if err != nil {
-		return true
-	}
-	if acquired {
-		release()
-	}
-	return !acquired
 }

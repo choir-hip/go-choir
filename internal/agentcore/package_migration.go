@@ -492,7 +492,7 @@ func (rt *Runtime) migratePackageStack(ctx context.Context, trigger string) (*pa
 		return nil, nil
 	}
 	// PM13: `current` is read and written under one lock, held to the end.
-	unlockCurrent, holdErr := rt.lockCurrentRelease()
+	unlockCurrent, holdErr := rt.lockCurrentRelease(ctx)
 	defer unlockCurrent()
 	if holdErr != nil {
 		// The migration swaps `current` and may restore the snapshot: refuse
@@ -975,7 +975,7 @@ func (rt *Runtime) restorePackageMigration(ctx context.Context, rec *packageMigr
 	if attempt.PreReleaseDigest != "" {
 		current, err := readCurrentManifestIdentity(rt.selfdevUpdaterRoot)
 		if err != nil || current.ContentDigest != attempt.PreReleaseDigest {
-			if err := updater.RestagePinnedRelease(rt.selfdevUpdaterRoot, attempt.PreReleaseDigest, rt.storeFloorPath()); err != nil {
+			if err := updater.RestagePinnedReleaseBestEffort(rt.selfdevUpdaterRoot, attempt.PreReleaseDigest, rt.storeFloorPath()); err != nil {
 				problems = append(problems, "restage "+shortDigest(attempt.PreReleaseDigest)+": "+err.Error())
 			} else if manifest, _, err := updater.ReadPinnedManifest(rt.selfdevUpdaterRoot, attempt.PreReleaseDigest); err == nil {
 				rt.recordStartupManifest(manifest)
@@ -1000,7 +1000,7 @@ func (rt *Runtime) restorePackageMigration(ctx context.Context, rec *packageMigr
 func (rt *Runtime) rollbackPackageMigration(ctx context.Context, pair string) (*packageMigrationRecord, error) {
 	rt.packageMigrationMu.Lock()
 	defer rt.packageMigrationMu.Unlock()
-	unlockCurrent, holdErr := rt.lockCurrentRelease()
+	unlockCurrent, holdErr := rt.lockCurrentRelease(ctx)
 	defer unlockCurrent()
 	if holdErr != nil {
 		return nil, holdErr
