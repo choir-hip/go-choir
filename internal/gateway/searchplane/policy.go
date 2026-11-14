@@ -19,7 +19,7 @@ import (
 const EmptyStreakBeforeCooldown = 10
 
 // TransientStrikesBeforeCooldown is how many failures in a row (error,
-// server_error or timeout, no success between) bench a provider that has no
+// server_error, timeout or, for an uncapped provider, auth_error; no success between) bench a provider that has no
 // quota behind it (Outcome.Uncapped). One failure is the call's doing, not
 // the provider's: Keenable's single 404 after 6 s benched the only free
 // provider for five minutes and left 30 searches unanswered
@@ -40,6 +40,18 @@ const TransientBackoff = 30 * time.Second
 // transientClass is a failure that says nothing about quota.
 func transientClass(c OutcomeClass) bool {
 	return c == OutcomeError || c == OutcomeServerError || c == OutcomeTimeout
+}
+
+// uncappedStreakClass is a failure an uncapped provider is retried through:
+// the transient classes and auth_error. A provider with no quota behind it
+// has no key to lose by being called again, and its 403s come from the
+// upstream (one took 19 s and was followed by good answers); one 403 benched
+// Keenable for 15 minutes and left 41 searches unanswered
+// (docs/problems/keenable-auth-errors-leave-searches-with-no-provider-2026-11-14.md).
+// They share ONE strike count. rate_limited and quota_limited stay real
+// refusals. A metered provider keeps auth_error's long bench.
+func uncappedStreakClass(c OutcomeClass) bool {
+	return transientClass(c) || c == OutcomeAuthError
 }
 
 // BackoffPolicy computes cooldown durations from outcome class and strike count.

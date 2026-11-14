@@ -146,9 +146,10 @@ func TestMeteredProviderErrorStillBacksItOff(t *testing.T) {
 	}
 }
 
-// Failure mode 4: the uncapped provider's own refusals still back it off.
+// Failure mode 4: the uncapped provider's own refusals still back it off
+// (auth_error is a retried streak now: auth_streak_test.go).
 func TestUncappedProviderRealRefusalStillBacksOff(t *testing.T) {
-	for _, class := range []OutcomeClass{OutcomeRateLimited, OutcomeQuotaLimited, OutcomeAuthError} {
+	for _, class := range []OutcomeClass{OutcomeRateLimited, OutcomeQuotaLimited} {
 		for name, store := range stores(t) {
 			t.Run(string(class)+"/"+name, func(t *testing.T) {
 				if _, err := store.RecordOutcome(Outcome{Provider: "keenable", Class: class, Uncapped: true, Error: "status 4xx", At: time.Now()}); err != nil {
