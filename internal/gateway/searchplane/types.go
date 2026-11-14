@@ -85,8 +85,9 @@ type Outcome struct {
 	StartedAt time.Time
 	// Uncapped marks a provider with nothing behind it: free tier, no quota
 	// that a failure could mean is gone. Its transient failures (error,
-	// server_error, timeout) are not a cooldown until
-	// TransientStrikesBeforeCooldown in a row; its real refusals (rate
-	// limit, quota, auth) back it off as for any provider.
+	// server_error, timeout) and auth errors are one streak and not a
+	// cooldown until TransientStrikesBeforeCooldown in a row; its real
+	// refusals (rate limit, quota) back it off as for any provider, each
+	// counted from its own first strike.
 	Uncapped bool
 }
