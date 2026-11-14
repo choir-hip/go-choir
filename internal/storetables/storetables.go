@@ -110,6 +110,10 @@ type Tree struct {
 	RowidMax  *int64 `json:"rowid_max,omitempty"`
 	ElapsedMs int64  `json:"elapsed_ms"`
 	Error     string `json:"error,omitempty"`
+
+	// keyed says every cell of the tree, interior ones too, is a row: an
+	// index, or the primary b-tree of a WITHOUT ROWID table.
+	keyed bool
 }
 
 // TableTotal is one table with every index charged to it.
@@ -231,7 +235,7 @@ func (s *Scanner) read(ctx context.Context, db *sql.DB, budget time.Duration) *R
 		if s.testHook != nil {
 			share = s.testHook(t.name, share)
 		}
-		tr := Tree{Name: t.name, Type: t.typ, Table: t.table}
+		tr := Tree{Name: t.name, Type: t.typ, Table: t.table, keyed: !t.rowid && t.typ == "table" || t.typ == "index"}
 		if left > 0 && share > 0 && ctx.Err() == nil {
 			walkTree(ctx, db, &tr, share)
 			if t.rowid {
@@ -319,9 +323,9 @@ func walkTree(ctx context.Context, db *sql.DB, tr *Tree, share time.Duration) {
 			tr.Rows += ncell
 		case "internal":
 			tr.InternalPages++
-			// An index's interior cells are entries; a table's are only
-			// child keys.
-			if tr.Type == "index" {
+			// An index's interior cells are entries, as are those of a
+			// WITHOUT ROWID table; a rowid table's are only child keys.
+			if tr.keyed {
 				tr.Rows += ncell
 			}
 		case "overflow":
