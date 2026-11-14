@@ -15,115 +15,15 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"reflect"
-	"sort"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
-
-// legacySelectRunMemoryRetirements is an independent copy of the R-1 selection
-// (the newest completed or passivated runs of a document custodian's agent are
-// kept; a run with no record retires after thirty days; finish order, ties by
-// run id), over fixtures whose runs all have legacy ids, so the census is held
-// to the same set.
-func legacySelectRunMemoryRetirements(ctx context.Context, s *Store, now time.Time) ([]string, error) {
-	db := s.ReadDB()
-	cutoff := now.Add(-runMemoryRetireWindow).UTC()
-	rows, err := db.QueryContext(ctx, `SELECT loop_id, MAX(owner_id), MAX(agent_id), MAX(created_at), SUM(CASE WHEN kind NOT IN (?) THEN 1 ELSE 0 END) FROM run_memory_entries GROUP BY loop_id`, runMemoryRetireKeepKinds[0])
-	if err != nil {
-		return nil, err
-	}
-	var groups []runMemoryGroup
-	for rows.Next() {
-		var g runMemoryGroup
-		var last any
-		if err := rows.Scan(&g.runID, &g.ownerID, &g.agentID, &last, &g.retirable); err != nil {
-			_ = rows.Close()
-			return nil, err
-		}
-		t, ok := parseStoreTime(last)
-		if !ok {
-			continue
-		}
-		g.last = t
-		groups = append(groups, g)
-	}
-	_ = rows.Close()
-	type slot struct {
-		runID string
-		at    time.Time
-	}
-	byAgent := map[string][]slot{}
-	for _, g := range groups {
-		if !deskmanifest.IsDocumentInbox(g.agentID) {
-			continue
-		}
-		run, err := s.GetRunByOwnerOG(ctx, g.ownerID, g.runID)
-		if err != nil || (run.State != types.RunCompleted && run.State != types.RunPassivated) {
-			continue
-		}
-		fin := run.UpdatedAt
-		if run.FinishedAt != nil {
-			fin = *run.FinishedAt
-		}
-		key := g.ownerID + "\x00" + g.agentID
-		byAgent[key] = append(byAgent[key], slot{g.runID, fin})
-	}
-	protected := map[string]bool{}
-	for _, list := range byAgent {
-		sort.Slice(list, func(i, j int) bool {
-			if !list[i].at.Equal(list[j].at) {
-				return list[i].at.After(list[j].at)
-			}
-			return list[i].runID > list[j].runID
-		})
-		for i := 0; i < len(list) && i < runMemoryKeepPerAgent; i++ {
-			protected[list[i].runID] = true
-		}
-	}
-	maxRuns := runMemoryRetireMaxOps * computerevent.RunMemoryRetireMaxRuns
-	var out []string
-	for _, g := range groups {
-		if len(out) >= maxRuns {
-			break
-		}
-		if g.retirable == 0 || !g.last.Before(cutoff) || protected[g.runID] {
-			continue
-		}
-		run, err := s.GetRunByOwnerOG(ctx, g.ownerID, g.runID)
-		if err != nil {
-			if errors.Is(err, ErrNotFound) && now.Sub(g.last) >= 30*24*time.Hour {
-				out = append(out, g.runID)
-				continue
-			}
-			if errors.Is(err, ErrNotFound) {
-				continue
-			}
-			return out, err
-		}
-		switch run.State {
-		case types.RunCompleted, types.RunFailed, types.RunCancelled:
-		default:
-			continue
-		}
-		finished := run.UpdatedAt
-		if run.FinishedAt != nil {
-			finished = *run.FinishedAt
-		}
-		if finished.IsZero() || !finished.Before(cutoff) {
-			continue
-		}
-		out = append(out, g.runID)
-	}
-	sort.Strings(out)
-	return out, nil
-}
 
 // memSeedEntries writes entries of the given kinds for a run with no run
 // record unless record is true (then through memSeed's state).
@@ -241,24 +141,10 @@ func TestRunMemoryCensusCountsEveryGroupExactlyOnce(t *testing.T) {
 	}
 }
 
-// C2: the retire set is what it was before the census, on a fixture with
-// every disposition.
-func TestRunMemoryCensusLeavesTheSelectionAsItWas(t *testing.T) {
-	h := newTapeHarness(t)
-	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
-	memCensusScript(t, h, now)
-	old, err := legacySelectRunMemoryRetirements(context.Background(), h.store, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := h.store.SelectRunMemoryRetirements(context.Background(), now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(old, got) || len(got) == 0 {
-		t.Fatalf("selection %v, before the census %v", got, old)
-	}
-}
+// C2 (the census leaves the selection as it was) had an oracle that was a copy
+// of the rule it checked, so it could only agree with it; it is gone. The
+// selected sets are asserted by name in the tests above and in
+// run_memory_retire_r1_test.go.
 
 // C3: runs beyond the cap are counted as not reached, and the set is still the
 // legacy set.
@@ -273,16 +159,16 @@ func TestRunMemoryCensusCountsRunsBeyondTheCap(t *testing.T) {
 	for i := 0; i < total; i++ {
 		memSeed(t, h, "c"+strconv.Itoa(1000+i), docAgent("c"), types.RunCompleted, 40*day-time.Duration(i)*time.Minute, 40*day-time.Duration(i)*time.Minute, now)
 	}
-	old, err := legacySelectRunMemoryRetirements(context.Background(), h.store, now)
-	if err != nil {
-		t.Fatal(err)
-	}
 	ids, c, err := h.store.selectRunMemory(context.Background(), now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(ids, old) || len(ids) != computerevent.RunMemoryRetireMaxRuns {
-		t.Fatalf("selected %d, legacy %d, want %d", len(ids), len(old), computerevent.RunMemoryRetireMaxRuns)
+	if len(ids) != computerevent.RunMemoryRetireMaxRuns {
+		t.Fatalf("selected %d, want %d", len(ids), computerevent.RunMemoryRetireMaxRuns)
+	}
+	// The two newest runs are the carry sources; the oldest hundred go.
+	if ids[0] != "c1000" || slices.Contains(ids, "c"+strconv.Itoa(1000+total-1)) {
+		t.Fatalf("selection %v... is not the oldest runs", ids[:3])
 	}
 	got := censusByName(c)
 	if got["retired"].Runs != int64(len(ids)) || got["not_reached_over_cap"].Runs != 5 || got["kept_carry_source_over_30d"].Runs != 2 {
