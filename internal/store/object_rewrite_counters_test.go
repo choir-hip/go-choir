@@ -133,3 +133,42 @@ func TestRewriteCountersRace(t *testing.T) {
 		t.Errorf("race result %+v", r)
 	}
 }
+
+// A multi-op batch: the event's family and bytes stay with ops[0] (continuity),
+// but the per-op counters give each op its own kind and its own body bytes.
+func TestPerOpAttributionInAMultiOpBatch(t *testing.T) {
+	doc := objOp(t, "choir.texture_document", "d", 300)
+	rev := objOp(t, "choir.texture_revision", "r", 160000)
+	src1 := objOp(t, "choir.source", "s1", 5000)
+	src2 := objOp(t, "choir.source", "s2", 4700)
+	tally := tallyTapeEvent(projectionAuthority, []computerevent.ProjectionOp{doc, rev, src1, src2}, 170000)
+	var m tapeWriteMaps
+	m.add(tally)
+	var out TelemetryStats
+	m.copyInto(&out)
+	if out.TapeBytesByFamily["object:choir.texture_document"] != 170000 {
+		t.Errorf("per-event family bytes changed: %v", out.TapeBytesByFamily)
+	}
+	want := map[string]int64{"choir.texture_document": 300, "choir.texture_revision": 160000, "choir.source": 9700}
+	for kind, b := range want {
+		if out.TapeOpBytesByObjectKind[kind] != b || out.ObjectRewrites[kind].Bytes != b {
+			t.Errorf("%s: per-op bytes %d / %d, want %d", kind, out.TapeOpBytesByObjectKind[kind], out.ObjectRewrites[kind].Bytes, b)
+		}
+	}
+	if out.ObjectRewrites["choir.source"].Ops != 2 || out.ObjectRewrites["choir.source"].DistinctObjects != 2 {
+		t.Errorf("source = %+v", out.ObjectRewrites["choir.source"])
+	}
+}
+
+func TestRunMemoryBytesByKey(t *testing.T) {
+	a := computerevent.ProjectionOp{Kind: computerevent.ProjectionOpRunMemoryEntry, Body: []byte(`{"kind":"message"}`)}
+	b := computerevent.ProjectionOp{Kind: computerevent.ProjectionOpRunMemoryEntry, Body: []byte(`{"kind":"compaction","reason":"actor_rewarm"}`)}
+	var m tapeWriteMaps
+	m.add(tallyTapeEvent(projectionAuthority, []computerevent.ProjectionOp{a, a, b}, 100))
+	var out TelemetryStats
+	m.copyInto(&out)
+	if out.RunMemoryOpsByKind["message"] != 2 || out.RunMemoryBytesByKind["message"] != 2*int64(len(a.Body)) ||
+		out.RunMemoryBytesByKind["compaction/actor_rewarm"] != int64(len(b.Body)) {
+		t.Errorf("ops %v bytes %v", out.RunMemoryOpsByKind, out.RunMemoryBytesByKind)
+	}
+}
