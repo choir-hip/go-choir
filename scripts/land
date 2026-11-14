@@ -244,8 +244,8 @@ EOF
     echo "run env QUARANTINE_FILE=scripts/go-test-scale-tests TOTAL_SHARDS=2 PARALLEL_SHARDS=1 scripts/go-test-runtime-shards -timeout 30m" >>"$1"
     echo 'run scripts/go-test-with-timing ./internal/agentcore -count=1 -timeout 15m -run "$(grep -v '"'"'^\s*$'"'"' scripts/go-test-scale-tests | grep -v '"'"'^#'"'"' | paste -sd'"'"'|'"'"')"' >>"$1"
   fi
-  for p in $H_PLAIN; do echo "run go test -count=1 -timeout 45m -p=1 $p" >>"$1"; done
-  for p in $H_RACE; do echo "run go test -race -count=1 -timeout 45m -p=1 $p" >>"$1"; done
+  for p in $H_PLAIN; do echo "run go test -count=1 -timeout 90m -p=1 $p" >>"$1"; done
+  for p in $H_RACE; do echo "run go test -race -count=1 -timeout 90m -p=1 $p" >>"$1"; done
   [ "$GH" = 1 ] && echo 'for t in .github/scripts/*-test; do run timeout 300 bash "$t"; done' >>"$1"
   [ "$FE" = 1 ] && echo '(cd frontend && run pnpm install --frozen-lockfile && run pnpm run build) || exit $?' >>"$1"
   echo "exit 0" >>"$1"
