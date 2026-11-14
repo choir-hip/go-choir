@@ -887,14 +887,14 @@ func TestPruneSkipsWhileARestoreHoldsTheUpdaterRoot(t *testing.T) {
 		ageBy(t, filepath.Join(root, "releases", d), 30*24*time.Hour)
 	}
 	setCurrent(t, root, digests[3])
-	if RestoreInFlight(root) {
+	if restoreInFlight(root) {
 		t.Fatal("no restore is in flight")
 	}
-	release, err := HoldRestore(root)
+	release, err := HoldRestore(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !RestoreInFlight(root) {
+	if !restoreInFlight(root) {
 		t.Fatal("a held restore is not seen")
 	}
 	// The restore moves current to the predecessor; the release it came from
@@ -912,7 +912,7 @@ func TestPruneSkipsWhileARestoreHoldsTheUpdaterRoot(t *testing.T) {
 		t.Fatalf("swap-back to the prior release: %v", err)
 	}
 	release()
-	if RestoreInFlight(root) {
+	if restoreInFlight(root) {
 		t.Fatal("a released restore is still seen")
 	}
 	if report := u.Prune(); report.Skipped != "" {
@@ -985,7 +985,7 @@ func TestPruneHoldsTheRestoreHoldAndYieldsTheUpdaterBetweenChunks(t *testing.T) 
 			// A restore starts mid-prune: it holds the root, moves current to
 			// r6 without a journal and has r7 to swap back to.
 			var err error
-			if release, err = HoldRestore(root); err != nil {
+			if release, err = HoldRestore(context.Background(), root); err != nil {
 				t.Error(err)
 				return
 			}
@@ -1137,5 +1137,194 @@ func TestApplyDropsARefusedPayload(t *testing.T) {
 	}
 	if exists(request.SourceDir) {
 		t.Fatal("a refused apply left its payload in incoming")
+	}
+}
+
+// restoreInFlight samples the hold for tests; nothing in production may act on
+// such a sample (the prune holds the hold instead).
+func restoreInFlight(root string) bool {
+	release, acquired, err := tryHoldRestore(root)
+	if err != nil {
+		return true
+	}
+	if acquired {
+		release()
+	}
+	return !acquired
+}
+
+// G1: the kept predecessors are a union, not a newest-wins choice. A restage
+// and its swap-back (a package migration that is rolled back, a tape restore
+// that fails) journal "B -> R2" newer than the apply "R1 -> R2"; the revert of
+// the operation that applied R2 still reads R1.
+func TestPruneKeepsTheAppliedPredecessorAcrossARestageAndSwapBack(t *testing.T) {
+	u, root := newPruneUpdater(t)
+	r1 := stageTestRelease(t, u, root, "r1", false)
+	r2 := stageTestRelease(t, u, root, "r2", false)
+	b := stageTestRelease(t, u, root, "base", false)
+	r9 := stageTestRelease(t, u, root, "unrelated", false)
+	for _, d := range []string{r1, r2, b, r9} {
+		ageBy(t, filepath.Join(root, "releases", d), 30*24*time.Hour)
+	}
+	writeTestJournal(t, root, "op2", r1, r2, pruneNow.Add(-10*time.Hour), "applied")
+	setCurrent(t, root, r2)
+	// A migration swaps to the baseline and is rolled back; a tape restore swaps
+	// and fails: each swap-back journals "x -> R2".
+	if err := RestagePinnedRelease(root, b); err != nil {
+		t.Fatal(err)
+	}
+	if err := RestagePinnedRelease(root, r2); err != nil {
+		t.Fatal(err)
+	}
+	u.Prune()
+	if !exists(filepath.Join(root, "releases", r1)) {
+		t.Fatal("the release the operation that applied current reverts to was pruned after a swap and swap-back")
+	}
+	if !exists(filepath.Join(root, "releases", b)) {
+		t.Fatal("the release current was restaged from was not kept")
+	}
+	if exists(filepath.Join(root, "releases", r9)) {
+		t.Fatal("an unrelated release survived: the union is at most three")
+	}
+	if _, _, err := ReadPinnedManifest(root, r1); err != nil {
+		t.Fatalf("the revert input is unreadable: %v", err)
+	}
+}
+
+// D1: the prune holds the restore hold for the whole chunk. A probe at chunk
+// entry would pass this test's first half; the second half fails a hold that is
+// released early.
+func TestPruneChunkHoldsTheRestoreHoldWhileItMutates(t *testing.T) {
+	u, root := newPruneUpdater(t)
+	digest := stageTestRelease(t, u, root, "r1", false)
+	setCurrent(t, root, digest)
+	temp := filepath.Join(root, "incoming", ".stage-old")
+	writeTestFile(t, filepath.Join(temp, "f"), 100)
+	ageBy(t, temp, old)
+	seen := 0
+	u.pruneHeld = func() {
+		seen++
+		if seen != 1 {
+			return
+		}
+		release, acquired, err := tryHoldRestore(root)
+		if err != nil || acquired {
+			if acquired {
+				release()
+			}
+			t.Errorf("the restore hold was free inside a chunk (acquired=%v err=%v)", acquired, err)
+		}
+		got := make(chan struct{})
+		go func() {
+			rel, err := HoldRestore(context.Background(), root)
+			if err == nil {
+				rel()
+			}
+			close(got)
+		}()
+		select {
+		case <-got:
+			t.Error("a concurrent restore took the hold while the chunk was mutating")
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	u.Prune()
+	if seen == 0 {
+		t.Fatal("the in-chunk seam never ran")
+	}
+}
+
+// D2: the hold is taken within a deadline and honours the context; a stuck
+// holder yields a named error, not a silent wait.
+func TestHoldRestoreIsBoundedByADeadlineAndTheContext(t *testing.T) {
+	root := t.TempDir()
+	held, err := HoldRestore(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held()
+	previous := restoreHoldTimeout
+	restoreHoldTimeout = 150 * time.Millisecond
+	defer func() { restoreHoldTimeout = previous }()
+	start := time.Now()
+	if _, err := HoldRestore(context.Background(), root); !errors.Is(err, ErrRestoreHoldTimeout) {
+		t.Fatalf("err = %v, want ErrRestoreHoldTimeout", err)
+	}
+	if time.Since(start) > 3*time.Second {
+		t.Fatal("the deadline was not honoured")
+	}
+	restoreHoldTimeout = time.Minute
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if _, err := HoldRestore(ctx, root); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want the context's", err)
+	}
+}
+
+// A restage that cannot be journaled refuses before it swaps (the caller can
+// still refuse); the swap-back is best effort.
+func TestRestagePinnedReleaseRefusesWhenItCannotJournalButSwapBackProceeds(t *testing.T) {
+	u, root := newPruneUpdater(t)
+	r1 := stageTestRelease(t, u, root, "r1", false)
+	r2 := stageTestRelease(t, u, root, "r2", false)
+	setCurrent(t, root, r1)
+	if err := os.RemoveAll(filepath.Join(root, "operations")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "operations"), []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := RestagePinnedRelease(root, r2); err == nil {
+		t.Fatal("a restage that could not be journaled swapped anyway")
+	}
+	if got, _, _ := currentReleaseOf(root); got != r1 {
+		t.Fatalf("current moved to %s", got)
+	}
+	if err := RestagePinnedReleaseBestEffort(root, r2); err != nil {
+		t.Fatalf("the swap-back must proceed: %v", err)
+	}
+	if got, _, _ := currentReleaseOf(root); got != r2 {
+		t.Fatalf("current = %s after the swap-back", got)
+	}
+}
+
+// A candidate shot reuses a store object that may be old and unrooted; reuse
+// refreshes its mtime so the prune's input window starts again. The same for a
+// baseline release reused by StageBaselineRelease.
+func TestReuseOfAnExistingStoreObjectOrStagedReleaseRefreshesItsMtime(t *testing.T) {
+	blob, err := os.ReadFile(filepath.Join("testdata", "closure-single.nar"))
+	if err != nil {
+		t.Skipf("closure fixture absent: %v", err)
+	}
+	store := filepath.Join(t.TempDir(), "store")
+	t.Cleanup(func() { makeTreeWritable(store) })
+	paths, err := MaterializeClosure(blob, store)
+	if err != nil || len(paths) != 1 {
+		t.Fatalf("%v %v", paths, err)
+	}
+	object := filepath.Join(store, paths[0])
+	longAgo := time.Now().Add(-72 * time.Hour)
+	if err := os.Chtimes(object, longAgo, longAgo); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := MaterializeClosure(blob, store); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Lstat(object); err != nil || time.Since(info.ModTime()) > time.Hour {
+		t.Fatalf("a reused store object kept its old mtime: %v %v", info.ModTime(), err)
+	}
+
+	u, root := newPruneUpdater(t)
+	digest := stageTestRelease(t, u, root, "r1", false)
+	releaseDir := filepath.Join(root, "releases", digest)
+	if err := os.Chtimes(releaseDir, longAgo, longAgo); err != nil {
+		t.Fatal(err)
+	}
+	request := updaterRequestFixture(t, root, "computer-test", "realization-test", "r1", "idem-r1", "r1")
+	if err := u.stageRelease(request.SourceDir, releaseDir, request.Manifest); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Lstat(releaseDir); err != nil || time.Since(info.ModTime()) > time.Hour {
+		t.Fatalf("a reused release dir kept its old mtime: %v %v", info.ModTime(), err)
 	}
 }

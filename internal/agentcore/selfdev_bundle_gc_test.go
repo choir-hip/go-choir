@@ -95,7 +95,6 @@ func TestRemoveUnnamedBundlesKeepsWhatAnOpenOperationNamesAndWhatIsYoung(t *test
 func TestCollectSettledBundlesKeepsTheBundleBehindASurvivingRelease(t *testing.T) {
 	const computerID = "computer-bundle-gc"
 	rt, updaterRoot, repo, base := projectionRuntime(t, computerID)
-	rt.selfdevComputerID = computerID
 	ctx := context.Background()
 	patch, _ := releasePatch(t, repo, map[string]string{"frontend/public/a.txt": "A\n"})
 	applyOperation(t, rt, updaterRoot, computerID, "op-a", base, patch)
@@ -122,5 +121,42 @@ func TestCollectSettledBundlesKeepsTheBundleBehindASurvivingRelease(t *testing.T
 	}
 	if refusal := rt.unmigratedPackageStackRefusal(ctx); refusal != "" {
 		t.Fatalf("a platform update would be refused after the collection: %s", refusal)
+	}
+}
+
+// A surviving release whose operation cannot be resolved (a read error is not
+// "no operation") stops the collection: nothing is removed.
+func TestCollectSettledBundlesFailsClosedWhenAnOperationCannotBeResolved(t *testing.T) {
+	const computerID = "computer-bundle-gc-closed"
+	rt, updaterRoot, repo, base := projectionRuntime(t, computerID)
+	ctx := context.Background()
+	patch, _ := releasePatch(t, repo, map[string]string{"frontend/public/a.txt": "A\n"})
+	applyOperation(t, rt, updaterRoot, computerID, "op-a", base, patch)
+	other, _ := releasePatch(t, repo, map[string]string{"frontend/public/b.txt": "B\n"})
+	goneBundle := releaseFrozenBundle(t, updaterRoot, computerID, "op-gone", base, other)
+	insertReleaseOperation(t, rt.store, releaseOpRow{operationID: "op-gone", computerID: computerID, state: selfdev.StateRolledBack,
+		bundleDigest: goneBundle, releaseDigest: strings.Repeat("7", 64)})
+	// Corrupt the applied row so reading applied operations fails while the
+	// open-state read still works.
+	if _, err := rt.store.DB().ExecContext(ctx, `UPDATE self_development_operations SET verifier_refs_json='{not json' WHERE operation_id='op-a'`); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-48 * time.Hour)
+	entries, _ := os.ReadDir(filepath.Join(updaterRoot, "incoming"))
+	for _, entry := range entries {
+		_ = filepath.WalkDir(filepath.Join(updaterRoot, "incoming", entry.Name()), func(p string, _ os.DirEntry, err error) error {
+			if err == nil {
+				_ = os.Chtimes(p, old, old)
+			}
+			return nil
+		})
+	}
+	rt.collectSettledBundles(ctx)
+	if _, err := os.Lstat(filepath.Join(updaterRoot, "incoming", goneBundle)); err != nil {
+		t.Fatalf("a bundle was collected although a surviving release's operation could not be resolved: %v", err)
+	}
+	after, _ := os.ReadDir(filepath.Join(updaterRoot, "incoming"))
+	if len(after) != len(entries) {
+		t.Fatalf("incoming changed: %d -> %d", len(entries), len(after))
 	}
 }
