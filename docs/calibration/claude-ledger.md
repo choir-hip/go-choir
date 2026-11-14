@@ -162,6 +162,7 @@ entered below as lapsed, not scored.
 | C79 | 2026-11-14T05:43Z | lead | landing | With the late take deployed, the paper's commit groups over a full hour of ordinary work average at least 1.6 members (1.37 before), with zero refused batches and zero unknown outcomes. | 0.45 | 2026-11-15T12:00Z | `group_commit` on the paper's observability, an hour apart |
 | C80 | 2026-11-14T05:43Z | lead | review | The boot-time updater prune (lane/prune-at-boot) is accepted by both seats in its third round and lands without a fourth. | 0.55 | 2026-11-14T18:00Z | both seats' verdicts on the round-3 candidate |
 | C81 | 2026-11-14T05:43Z | lead | diagnosis | On the paper, og_bodies and run_memory_entries (tables with their indexes) together hold more than 70% of the guest store's file (floors read at 05:35Z: 12.4 and 11.2 GB of 47.5, both cut by the budget). | 0.60 | 2026-11-16T12:00Z | named-tree store readings on the paper plus the unattributed remainder |
+| C82 | 2026-11-14T06:33Z | lead | landing | Receipts step 1 (readers take format 2 and either kind index; Bootstrap creates neither old index) lands and deploys with no revert, and in the hour after the deploy corpusd logs no receipt lookup refusal or error that main did not log and the paper keeps publishing. | 0.85 | 2026-11-14T12:00Z | scripts/land result, CI and deploy receipt, corpusd journal on Node B for the hour, status-hourly |
 
 ### Settlements
 
