@@ -200,10 +200,7 @@ func replayStateExtractor(db *sql.DB) computerversion.SQLiteStateExtractor {
 		// includes the objectgraph one), so table digests do not change.
 		LogicalTables: choirstore.WitnessLogicalTables(),
 		IgnoredContentColumns: map[string]map[string]struct{}{
-			"computer_event_index": {
-				"prepared_at":  {},
-				"finalized_at": {},
-			},
+			"computer_event_index": choirstore.EventIndexIgnoredColumns(),
 			"computer_event_projection_heads": {
 				"updated_at": {},
 			},

@@ -64,12 +64,18 @@ type SQLiteStateExtractor struct {
 	// Schema observations still include them.
 	IgnoredContentColumns map[string]map[string]struct{}
 
-	// EmptyJSONArrayColumns lists JSON-array text columns whose JSON null is
-	// read as the empty array "[]" (STUB: not yet applied).
+	// EmptyJSONArrayColumns lists JSON-array text columns, per table, whose
+	// JSON null is digested as the empty array "[]": the two spellings of one
+	// empty list. It changes the digest of a store that holds a null, so the
+	// stored witness leaves it unset and only a comparison of two stores
+	// built by different writers sets it.
 	EmptyJSONArrayColumns map[string]map[string]struct{}
 
-	// RowFilters maps a table to an SQL predicate that keeps rows (STUB: not
-	// yet applied).
+	// RowFilters maps a table to an SQL predicate, over that table's own
+	// columns, that keeps the rows the digest covers; the rest are left out.
+	// A table read as a logical table (LogicalTables) is not filtered. Like
+	// EmptyJSONArrayColumns it changes digests, so the stored witness leaves
+	// it unset.
 	RowFilters map[string]string
 
 	// IgnoredTables lists tables left out of the observation entirely, name,
@@ -424,6 +430,9 @@ func (e SQLiteStateExtractor) tableDigest(ctx context.Context, tx *sql.Tx, table
 		names[i] = quoteIdent(c.name)
 	}
 	query := "SELECT " + strings.Join(names, ", ") + " FROM " + quoteIdent(table)
+	if filter := strings.TrimSpace(e.RowFilters[table]); filter != "" {
+		query += " WHERE (" + filter + ")"
+	}
 	if len(pk) > 0 {
 		order := make([]string, len(pk))
 		for i, c := range pk {
@@ -444,6 +453,7 @@ func (e SQLiteStateExtractor) tableDigest(ctx context.Context, tx *sql.Tx, table
 // (a table without a primary key) instead of the query order.
 func (e SQLiteStateExtractor) queryDigest(ctx context.Context, tx *sql.Tx, table, query string, colNames []string, needSort bool) (string, error) {
 	ignored := e.IgnoredContentColumns[table]
+	emptyArray := e.EmptyJSONArrayColumns[table]
 	rows, err := tx.QueryContext(ctx, query)
 	if err != nil {
 		return "", fmt.Errorf("select from %s: %w", table, err)
@@ -482,8 +492,12 @@ func (e SQLiteStateExtractor) queryDigest(ctx context.Context, tx *sql.Tx, table
 			if _, skip := ignored[name]; skip {
 				continue
 			}
+			value := values[i]
+			if _, listed := emptyArray[name]; listed {
+				value = emptyJSONArrayFromNull(value)
+			}
 			var encErr error
-			row, encErr = appendCanonicalValue(row, values[i])
+			row, encErr = appendCanonicalValue(row, value)
 			if encErr != nil {
 				return "", fmt.Errorf("encode %s.%s: %w", table, name, encErr)
 			}
@@ -511,6 +525,21 @@ func (e SQLiteStateExtractor) queryDigest(ctx context.Context, tx *sql.Tx, table
 		hasher.Write([]byte(strings.TrimPrefix(sum, "sha256:")))
 	}
 	return hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
+// emptyJSONArrayFromNull reads the JSON text "null" as "[]".
+func emptyJSONArrayFromNull(value any) any {
+	switch v := value.(type) {
+	case string:
+		if v == "null" {
+			return "[]"
+		}
+	case []byte:
+		if string(v) == "null" {
+			return "[]"
+		}
+	}
+	return value
 }
 
 func appendCanonicalValue(dst []byte, value any) ([]byte, error) {

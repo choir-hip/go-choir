@@ -32,7 +32,25 @@ type ObjectGraphFingerprint struct {
 // position (event-table design 3.3 item 3), so a replay inequivalence names
 // the rows of either table.
 func (s *Store) ListObjectGraphFingerprints(ctx context.Context) ([]ObjectGraphFingerprint, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	return s.listObjectGraphFingerprints(ctx, s.db)
+}
+
+// ListObjectGraphFingerprintsTx is ListObjectGraphFingerprints for the
+// og_objects and choir_events rows inside a caller's read snapshot
+// (ReadSnapshotTx), so a replay diagnostic names the rows of the state it
+// pinned and not the writes made since. The rows of the telemetry
+// partitions are separate files outside any one snapshot: they are read at
+// the time of the call, so a sample of table "telemetry" may postdate the
+// snapshot.
+func (s *Store) ListObjectGraphFingerprintsTx(ctx context.Context, tx *sql.Tx) ([]ObjectGraphFingerprint, error) {
+	if tx == nil {
+		return nil, fmt.Errorf("object graph fingerprints: transaction is required")
+	}
+	return s.listObjectGraphFingerprints(ctx, tx)
+}
+
+func (s *Store) listObjectGraphFingerprints(ctx context.Context, q readQuerier) ([]ObjectGraphFingerprint, error) {
+	rows, err := q.QueryContext(ctx, `
 		SELECT h.canonical_id, h.object_kind, h.version_id, h.content_hash, COALESCE(b.body, ''), h.metadata,
 		       h.updated_at, h.tombstone, h.superseded_by
 		  FROM og_objects h LEFT JOIN og_bodies b ON b.obj_id = h.obj_id
@@ -63,7 +81,7 @@ func (s *Store) ListObjectGraphFingerprints(ctx context.Context) ([]ObjectGraphF
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate object graph fingerprints: %w", err)
 	}
-	events, err := s.eventTableFingerprints(ctx)
+	events, err := s.eventTableFingerprints(ctx, q)
 	if err != nil {
 		return nil, err
 	}
@@ -73,11 +91,6 @@ func (s *Store) ListObjectGraphFingerprints(ctx context.Context) ([]ObjectGraphF
 		return nil, err
 	}
 	return append(out, parts...), nil
-}
-
-// ListObjectGraphFingerprintsTx (STUB) reads in the caller's snapshot.
-func (s *Store) ListObjectGraphFingerprintsTx(ctx context.Context, tx *sql.Tx) ([]ObjectGraphFingerprint, error) {
-	return s.ListObjectGraphFingerprints(ctx)
 }
 
 // telemetryPartitionFingerprints are the rows of the live telemetry
@@ -113,8 +126,8 @@ func (s *Store) telemetryPartitionFingerprints(ctx context.Context) ([]ObjectGra
 	return out, nil
 }
 
-func (s *Store) eventTableFingerprints(ctx context.Context) ([]ObjectGraphFingerprint, error) {
-	rows, err := s.db.QueryContext(ctx, `
+func (s *Store) eventTableFingerprints(ctx context.Context, q readQuerier) ([]ObjectGraphFingerprint, error) {
+	rows, err := q.QueryContext(ctx, `
 		SELECT h.tape_seq, h.op_index, h.object_kind, h.version_id, h.content_hash, b.body, h.metadata,
 		       h.updated_at, h.tombstone, h.superseded_by
 		  FROM choir_events h LEFT JOIN choir_event_bodies b ON b.ev_id = h.ev_id
