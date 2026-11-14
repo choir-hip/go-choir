@@ -208,7 +208,7 @@ func TestRefusalAndUncappedStreakDoNotShareStrikes(t *testing.T) {
 					}
 					// And back: the uncapped streak starts at 1, not after the refusal.
 					at = at.Add(24 * time.Hour)
-					if r = rec(from); r.StrikeCount != 1 || r.State == StateCoolingDown {
+					if r = rec(from); r.StrikeCount != 1 || !IsEligible(r, at) {
 						t.Fatalf("%s after %s: %+v, want a fresh streak of 1 and no bench", from, to, r)
 					}
 				})
