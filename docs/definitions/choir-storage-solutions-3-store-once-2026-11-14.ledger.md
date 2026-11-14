@@ -14,3 +14,11 @@
   plus the run record written whole. Stations re-cut; the four size targets
   withdrawn until T0's counters and reading exist. C74 entered. The per-op
   counters builder was told to attribute by every op.
+- 2026-11-14T02:22Z. Coalescing landed on main (30c9b1f34), suites green on
+  the agents VM. Node A gained a runner VM for landings (choir-runner, no
+  logins; scripts/land takes LAND_VM_MIRROR, e6bdc2db6); the store-table
+  reading is the first landing through it. Owner rulings N1 to N5 recorded.
+  In flight: updater prune round 3, per-op counters, the lifecycle command's
+  stored result, receipts first steps (the table is 30.1 GB, the paper 27.6,
+  twice what the design said). Carry by reference waits on the counters:
+  only the Texture document agent carries a conversation forward.
