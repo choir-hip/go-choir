@@ -48,4 +48,20 @@
   keep rule was verified sound. Changed approach: prune as a boot unit
   before the updater and the runtime start, so no hold exists. C78's odds
   fall (a new candidate, new review).
+- 2026-11-14T05:58Z. Landed: the store reading can name its trees (801f76b3e, deployed
+  05:25Z; expedite; its CI run failed only in the SBOM accept job, a cache
+  race recorded in docs/problems/sbom-accept-job-failed-on-801f76b3e-2026-11-14.md).
+  The paper's store, 47.5 GB: og_bodies at least 12.4 GB (cut), the
+  run_memory_entries table at least 11.2 GB (cut) with 2.5 GB of indexes,
+  og_objects 5.4 GB without its 19 indexes (being read). Late take: both
+  seats REPAIR in round 1 (a write could pass acknowledged telemetry; a
+  caps-excluded leader's write survived its panic), both ACCEPT in round 2
+  (679999c8d); lands after the counters. Boot-time prune
+  (lane/prune-at-boot): round 1 DeepSeek REPAIR (keep rule missed a fenced
+  installed apply), round 2 DeepSeek REPAIR (a store object freed in place),
+  round 3 DeepSeek ACCEPT, Gemini REPAIR (the nix unit test's CI wiring is
+  classified docs-only). Both seats hold the mechanism sound; by the
+  three-round rule it does not land without the owner. C80 false. Receipts
+  first steps: both seats REPAIR, one step breaks revert-first; split into
+  two landings. Lifecycle stored result (cfbbdd29a) is with both seats.
 
