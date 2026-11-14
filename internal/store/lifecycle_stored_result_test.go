@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -404,7 +405,8 @@ func TestSlimCommandWithMissingRevisionFailsLoudly(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := s.GetAppliedTextureTurnByCallerRun(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID, applied.Agent.ActiveRunID)
-	if err == nil || got.Revision != nil || !strings.Contains(err.Error(), req.CommandID) {
+	if err == nil || got.Revision != nil || !strings.Contains(err.Error(), req.CommandID) ||
+		!errors.Is(err, ErrLifecycleStoredRevisionUnavailable) || errors.Is(err, ErrNotFound) {
 		t.Fatalf("applied turn with a missing revision = %+v, %v", got, err)
 	}
 	if _, err := s.ApplyTextureTurn(ctx, req); err == nil {
