@@ -215,9 +215,13 @@ assert_contains "$skill_go_output" "host_services=autoputer"
 
 # Developer-side scripts are docs-like; scripts a nix module, a deploy program
 # or CI reads keep their effect (unchanged cases follow below).
-dev_scripts_output="$(run_classifier "scripts/land" "scripts/spend-report" "scripts/system_briefing.py" "scripts/prove-autoradio-turns" "scripts/probes/x.sh")"
+dev_scripts_output="$(run_classifier "scripts/land" "scripts/spend-report" "scripts/system_briefing.py" "scripts/prove-autoradio-turns" "scripts/probes/x.sh" "scripts/receipts-index-swap" "scripts/receipts-index-swap-test")"
 assert_contains "$dev_scripts_output" "deploy_needed=false"
 assert_contains "$dev_scripts_output" "scripts/land -> ignored (docs-like"
+# The operator's index-swap script and its runner-only self-test ship with the
+# next deploy that runs; neither is a deploy by itself.
+assert_contains "$dev_scripts_output" "scripts/receipts-index-swap -> ignored (docs-like"
+assert_contains "$dev_scripts_output" "scripts/receipts-index-swap-test -> ignored (docs-like"
 mixed_skill_output="$(run_classifier "skills/definition/SKILL.md" "internal/store/db.go")"
 assert_contains "$mixed_skill_output" "deploy_needed=true"
 ci_script_deploys_output="$(run_classifier "scripts/ci-prune-go-cache" "scripts/selftest-store-handles")"

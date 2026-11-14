@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+# Self-test of scripts/receipts-index-swap against a throwaway PostgreSQL (initdb,
+# pg_ctl and psql from PATH; version 17 is the host's). RUNNER-ONLY: the script
+# and this test are developer-side (docs-like paths, scripts/receipts-index-swap*),
+# so no CI lane runs them; run it on the build runner before a change to either.
+#
+# It checks, on a seeded table with the live table's shape: the full swap with
+# concurrent inserts never blocked over 5 s; refusal of both drops while the
+# partial index is INVALID (made invalid by a tiny statement_timeout); a real
+# cancel of a held build that leaves a decoy build on another index alone and
+# reports the count of signals actually sent; the repair of the invalid leftover;
+# restore-old with main's exact definitions; idempotence of every subcommand; and
+# that the psql command is never printed.
+set -uo pipefail
+cd "$(dirname "$0")/.." || exit 2
+SWAP=scripts/receipts-index-swap
+tmp=$(mktemp -d)
+fails=0
+pids=()
+cleanup() {
+  for p in "${pids[@]:-}"; do [ -n "$p" ] && kill "$p" 2>/dev/null; done
+  pg_ctl -D "$tmp/pg" -m immediate stop >/dev/null 2>&1
+  rm -rf "$tmp"
+}
+trap cleanup EXIT
+
+ok() { echo "ok   $*"; }
+bad() { echo "FAIL $*"; fails=$((fails + 1)); }
+
+initdb -D "$tmp/pg" -U postgres -A trust >/dev/null || { echo "initdb failed"; exit 2; }
+pg_ctl -D "$tmp/pg" -o "-c listen_addresses='' -c unix_socket_directories=$tmp -c fsync=off -c max_connections=50" -l "$tmp/pg.log" -w start >/dev/null || { echo "pg_ctl start failed"; exit 2; }
+P=(psql -h "$tmp" -U postgres -X -q -At -v ON_ERROR_STOP=1)
+"${P[@]}" -d postgres -c "CREATE DATABASE swaptest" || exit 2
+D=("${P[@]}" -d swaptest)
+export RECEIPTS_SWAP_PSQL="psql -h $tmp -U postgres -d swaptest -X -q -At -v ON_ERROR_STOP=1 -v secretmarker_xyz=1"
+
+"${D[@]}" -c "
+CREATE TABLE computer_event_append_receipts (
+  computer_id VARCHAR(128) NOT NULL,
+  idempotency_key VARCHAR(255) NOT NULL,
+  request_commitment CHAR(64) NOT NULL,
+  sequence BIGINT NOT NULL,
+  event_kind VARCHAR(64) NOT NULL,
+  event_digest CHAR(64) NOT NULL,
+  event_pin_receipt_digest CHAR(64) NOT NULL,
+  event_head_receipt_id VARCHAR(255) NOT NULL,
+  event_head_receipt_json TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (computer_id, idempotency_key),
+  CONSTRAINT computer_event_append_sequence_uq UNIQUE (computer_id, sequence),
+  CONSTRAINT computer_event_append_digest_uq UNIQUE (computer_id, event_digest)
+);
+CREATE INDEX computer_event_append_receipt_id_idx ON computer_event_append_receipts (computer_id, event_head_receipt_id);
+CREATE INDEX computer_event_append_kind_seq_idx ON computer_event_append_receipts (computer_id, event_kind, sequence);
+INSERT INTO computer_event_append_receipts
+SELECT 'computer-' || (g % 2), 'k' || g, repeat('a', 64), g, CASE WHEN g % 125 = 0 THEN 'artifact_produced' ELSE 'projection_batch_recorded' END,
+       md5(g::text) || md5(g::text), repeat('c', 64), 'r' || g, '{}', now()
+FROM generate_series(1, 200000) g;
+ANALYZE computer_event_append_receipts;" || { echo "seed failed"; exit 2; }
+
+OUT="$tmp/out"
+# run EXPECTED_EXIT ARGS...: runs the script, keeps its output in $OUT
+run() {
+  local want=$1; shift
+  "$SWAP" "$@" >"$OUT" 2>&1
+  local rc=$?
+  if [ "$rc" = "$want" ]; then ok "$* exits $rc"; else bad "$* exited $rc, want $want: $(tr '\n' ' ' <"$OUT" | cut -c1-300)"; fi
+  if grep -q secretmarker_xyz "$OUT"; then bad "$*: the psql command was printed"; fi
+}
+has() { grep -q -- "$1" "$OUT" && ok "output has: $1" || bad "output lacks: $1 ($(tr '\n' ' ' <"$OUT" | cut -c1-300))"; }
+exists() { [ "$("${D[@]}" -c "SELECT count(*) FROM pg_class WHERE relname = '$1' AND relkind = 'i'")" = 1 ]; }
+valid() { [ "$("${D[@]}" -c "SELECT i.indisvalid::int::text || i.indisready::int::text FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid WHERE c.relname = '$1'")" = 11 ]; }
+sessions() { "${D[@]}" -c "SELECT count(*) FROM pg_stat_activity WHERE query LIKE '$1%' AND state = 'active'"; }
+
+# hold_writer starts a session whose open transaction has written to the table, which
+# CREATE INDEX CONCURRENTLY waits for; release_writer ends it.
+holder=""
+hold_writer() {
+  "${D[@]}" -c "BEGIN; INSERT INTO computer_event_append_receipts VALUES ('held', 'held-$RANDOM$RANDOM', 'a', 1, 'projection_batch_recorded', 'h$RANDOM$RANDOM', 'c', 'held', '{}', now()); SELECT pg_sleep(600);" >/dev/null 2>&1 &
+  holder=$!
+  pids+=("$holder")
+  sleep 1
+}
+release_writer() {
+  # The client's exit does not end a backend that sleeps in a query: terminate it.
+  "${D[@]}" -c "SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity WHERE query LIKE 'BEGIN; INSERT INTO computer_event_append_receipts VALUES (''held''%'" >/dev/null
+  [ -n "$holder" ] && { kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null; }
+  holder=""
+  sleep 1
+}
+wait_for_build() {
+  for _ in $(seq 1 100); do
+    [ "$(sessions 'CREATE INDEX CONCURRENTLY')" -ge 1 ] && return 0
+    sleep 0.1
+  done
+  return 1
+}
+
+run 2 nonsense
+run 0 status
+has "index computer_event_append_kind_seq_idx valid=true ready=true"
+has "index computer_event_append_receipt_id_idx valid=true ready=true"
+
+# Refusal before any partial index exists.
+run 3 drop-kind-seq
+run 3 drop-receipt-id
+
+# An INVALID partial index, made by a tiny statement_timeout cancelling a build
+# that waits behind a writer.
+hold_writer
+"${P[@]}" -d swaptest -c "SET statement_timeout = '300ms'" -c "CREATE INDEX CONCURRENTLY computer_event_append_kind_partial_idx ON public.computer_event_append_receipts (computer_id, event_kind, sequence) WHERE event_kind <> 'projection_batch_recorded'" >/dev/null 2>&1
+if exists computer_event_append_kind_partial_idx && ! valid computer_event_append_kind_partial_idx; then ok "an INVALID partial index exists"; else bad "no invalid partial index was produced"; fi
+run 3 drop-kind-seq
+has "refusing to drop"
+run 3 drop-receipt-id
+exists computer_event_append_kind_seq_idx && exists computer_event_append_receipt_id_idx && ok "both old indexes survived the refusals" || bad "an old index went while the partial one was invalid"
+release_writer
+
+# A real cancel of a held build; a decoy build on another index is left alone.
+"${D[@]}" -c "DROP INDEX computer_event_append_kind_partial_idx"
+hold_writer
+"$SWAP" build >"$tmp/build.out" 2>&1 &
+build_pid=$!
+pids+=("$build_pid")
+wait_for_build && ok "the build is waiting behind the writer" || bad "the build never started"
+"${D[@]}" -c "CREATE INDEX CONCURRENTLY decoy_idx ON public.computer_event_append_receipts (computer_id, created_at)" >/dev/null 2>&1 &
+decoy_pid=$!
+pids+=("$decoy_pid")
+sleep 1
+run 0 cancel
+has "signalled 1 backend"
+wait "$build_pid"; rc=$?
+[ "$rc" = 4 ] && ok "the cancelled build exits 4" || bad "the cancelled build exited $rc"
+[ "$(sessions 'CREATE INDEX CONCURRENTLY decoy_idx')" = 1 ] && ok "the decoy build was not signalled" || bad "the decoy build was cancelled or ended"
+run 1 cancel
+has "no backend was signalled"
+kill "$decoy_pid" 2>/dev/null
+release_writer
+"${D[@]}" -c "DROP INDEX IF EXISTS decoy_idx" >/dev/null 2>&1
+if exists computer_event_append_kind_partial_idx && ! valid computer_event_append_kind_partial_idx; then ok "the cancelled build left an INVALID index"; else bad "no invalid leftover after the cancel"; fi
+
+# The swap, with inserts running throughout: none is blocked for 5 s.
+rm -f "$tmp/latency" "$tmp/stop"
+(
+  n=0
+  while [ ! -e "$tmp/stop" ]; do
+    n=$((n + 1))
+    s=$(date +%s%N)
+    "${D[@]}" -c "INSERT INTO computer_event_append_receipts VALUES ('live', 'live-$n', 'a', $n, 'projection_batch_recorded', 'd$n', 'c', 'live-$n', '{}', now())" >/dev/null 2>&1 || echo failed >>"$tmp/latency"
+    e=$(date +%s%N)
+    echo $(((e - s) / 1000000)) >>"$tmp/latency"
+  done
+) &
+inserter=$!
+pids+=("$inserter")
+run 0 build
+has "is valid"
+run 0 drop-kind-seq
+run 0 drop-receipt-id
+touch "$tmp/stop"; wait "$inserter" 2>/dev/null
+if grep -q failed "$tmp/latency"; then bad "an insert failed during the swap"; fi
+max=$(grep -v failed "$tmp/latency" | sort -n | tail -1); count=$(grep -vc failed "$tmp/latency")
+[ "${count:-0}" -gt 5 ] && [ "${max:-99999}" -lt 5000 ] && ok "$count inserts during the swap, slowest ${max} ms" || bad "inserts during the swap: count=$count slowest=${max:-?} ms"
+valid computer_event_append_kind_partial_idx && ! exists computer_event_append_kind_seq_idx && ! exists computer_event_append_receipt_id_idx && ok "only the valid partial index is left" || bad "unexpected indexes after the swap"
+[ "$("${D[@]}" -c "SELECT pg_get_indexdef('computer_event_append_kind_partial_idx'::regclass)")" = "CREATE INDEX computer_event_append_kind_partial_idx ON public.computer_event_append_receipts USING btree (computer_id, event_kind, sequence) WHERE ((event_kind)::text <> 'projection_batch_recorded'::text)" ] && ok "the partial index has the definition the readers expect" || bad "partial index definition differs"
+
+# Idempotence.
+run 0 build
+has "already valid"
+run 0 drop-kind-seq
+has "already absent"
+run 0 drop-receipt-id
+has "already absent"
+
+# Rollback: main's exact definitions.
+run 0 restore-old
+[ "$("${D[@]}" -c "SELECT pg_get_indexdef('computer_event_append_receipt_id_idx'::regclass)")" = "CREATE INDEX computer_event_append_receipt_id_idx ON public.computer_event_append_receipts USING btree (computer_id, event_head_receipt_id)" ] && ok "receipt id index restored exactly" || bad "receipt id index definition differs"
+[ "$("${D[@]}" -c "SELECT pg_get_indexdef('computer_event_append_kind_seq_idx'::regclass)")" = "CREATE INDEX computer_event_append_kind_seq_idx ON public.computer_event_append_receipts USING btree (computer_id, event_kind, sequence)" ] && ok "kind index restored exactly" || bad "kind index definition differs"
+valid computer_event_append_receipt_id_idx && valid computer_event_append_kind_seq_idx && ok "restored indexes are valid" || bad "restored indexes are not valid"
+run 0 restore-old
+has "already valid"
+
+if [ "$fails" = 0 ]; then echo "receipts-index-swap-test: all passed"; exit 0; fi
+echo "receipts-index-swap-test: $fails failed"
+exit 1

@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+# The supervised swap of the receipt table's indexes on the live host
+# (docs/problems/old-receipts-do-not-compact-2026-11-14.md, "Procedure").
+#
+#   status          read-only: the table's size, its indexes (valid, ready, size,
+#                   definition), index builds in progress, drops and builds of
+#                   this script running now
+#   build           CREATE INDEX CONCURRENTLY the partial kind index; first drops an
+#                   INVALID leftover of that name (concurrently); a valid one is a no-op
+#   drop-kind-seq   DROP INDEX CONCURRENTLY computer_event_append_kind_seq_idx
+#   drop-receipt-id DROP INDEX CONCURRENTLY computer_event_append_receipt_id_idx
+#                   (both refuse unless the partial index is valid AND ready)
+#   cancel          pg_cancel_backend of a backend running THIS script's create or
+#                   drop on this table; says how many signals were sent
+#   restore-old     the rollback: recreate both old indexes concurrently with the
+#                   definitions main's Bootstrap gave them (an invalid leftover first)
+#   watch           tail the append timing line corpusd logs a minute, from the journal
+#
+# It runs on Node B as the operator, through local psql, and reads no secret and
+# no env file: the psql command is RECEIPTS_SWAP_PSQL, default
+#   sudo -u postgres psql -d control -X -q -At -v ON_ERROR_STOP=1
+# (peer authentication). The command is split into words and run; it is never
+# printed, so a command that carries a connection setting is not echoed.
+# RECEIPTS_SWAP_UNIT names the systemd unit `watch` reads (default
+# go-choir-corpusd).
+#
+# One heavy CONCURRENTLY statement per invocation (restore-old runs two, one
+# after the other, each idempotent), schema-qualified, lock_timeout 1 minute,
+# statement_timeout 3 hours, and no transaction around it (CONCURRENTLY cannot
+# run in one). Exit codes: 0 done or already done; 1 cancel found nothing to
+# signal; 2 usage; 3 refused, a precondition did not hold; 4 the statement
+# failed (a cancelled or failed build leaves an INVALID index: run build again
+# when the appends are back); 5 psql could not be run.
+set -uo pipefail
+
+TABLE=computer_event_append_receipts
+PARTIAL=computer_event_append_kind_partial_idx
+KIND_SEQ=computer_event_append_kind_seq_idx
+RECEIPT_ID=computer_event_append_receipt_id_idx
+# The exact definitions. The partial one is what step 1's readers expect
+# (internal/platform/receipt_indexes.go, receiptKindPartialDDL); the two old ones
+# are what main's Bootstrap gave them.
+PARTIAL_COLUMNS="(computer_id, event_kind, sequence) WHERE event_kind <> 'projection_batch_recorded'"
+KIND_SEQ_COLUMNS="(computer_id, event_kind, sequence)"
+RECEIPT_ID_COLUMNS="(computer_id, event_head_receipt_id)"
+
+case "${1:-}" in
+  status|build|drop-kind-seq|drop-receipt-id|cancel|restore-old|watch) ;;
+  *) echo "receipts-index-swap: usage: receipts-index-swap status|build|drop-kind-seq|drop-receipt-id|cancel|restore-old|watch" >&2; exit 2 ;;
+esac
+
+cmd_watch() {
+  command -v journalctl >/dev/null || { echo "receipts-index-swap: journalctl is not available here" >&2; exit 2; }
+  journalctl -u "${RECEIPTS_SWAP_UNIT:-go-choir-corpusd}" -f -o cat --since "10 minutes ago" | grep --line-buffered "append timing"
+}
+[ "$1" = watch ] && { cmd_watch; exit $?; }
+
+read -r -a PSQL <<<"${RECEIPTS_SWAP_PSQL:-sudo -u postgres psql -d control -X -q -At -v ON_ERROR_STOP=1}"
+
+die() { echo "receipts-index-swap: $*" >&2; exit "${2:-2}"; }
+say() { echo "receipts-index-swap: $*"; }
+
+# q runs one statement and prints its rows; it fails with exit 5 when psql cannot run.
+q() { "${PSQL[@]}" -c "$1"; }
+qs() { local out; out=$(q "$1") || die "psql failed" 5; printf '%s' "$out"; }
+
+# heavy runs one statement with the timeouts, in its own session and outside any transaction.
+heavy() { "${PSQL[@]}" -c "SET lock_timeout = '1min'" -c "SET statement_timeout = '3h'" -c "$1"; }
+
+schema=$(qs "SELECT n.nspname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.oid = '${TABLE}'::regclass") || exit $?
+[[ "$schema" =~ ^[a-z_][a-z0-9_]*$ ]] || die "the table's schema ${schema:-<none>} is not a plain identifier" 5
+Q="\"${schema}\".\"${TABLE}\""
+qi() { echo "\"${schema}\".\"$1\""; }
+
+# index_state NAME prints "valid,ready" as 0/1 pairs, or nothing when absent.
+index_state() {
+  qs "SELECT i.indisvalid::int || ',' || i.indisready::int FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = '$1' AND n.nspname = '${schema}'"
+}
+
+partial_ok() { [ "$(index_state "$PARTIAL")" = "1,1" ]; }
+
+# drop_leftover NAME drops an INVALID index of that name, concurrently.
+drop_leftover() {
+  local state; state=$(index_state "$1")
+  if [ "$state" != "" ] && [ "$state" != "1,1" ]; then
+    say "$1 is invalid (an interrupted or cancelled build); dropping it"
+    heavy "DROP INDEX CONCURRENTLY IF EXISTS $(qi "$1")" || die "drop of the invalid $1 failed" 4
+  fi
+}
+
+cmd_status() {
+  say "schema ${schema}"
+  q "SELECT 'table_total_bytes=' || pg_total_relation_size('${Q}'::regclass) || ' heap_bytes=' || pg_relation_size('${Q}'::regclass) || ' indexes_bytes=' || pg_indexes_size('${Q}'::regclass)" || exit 5
+  q "SELECT 'index ' || c.relname || ' valid=' || i.indisvalid || ' ready=' || i.indisready || ' bytes=' || pg_relation_size(c.oid) || ' ' || pg_get_indexdef(c.oid) FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE i.indrelid = '${Q}'::regclass ORDER BY c.relname" || exit 5
+  q "SELECT 'building pid=' || pid || ' phase=' || phase || ' blocks=' || blocks_done || '/' || blocks_total || ' tuples=' || tuples_done || '/' || tuples_total FROM pg_stat_progress_create_index WHERE relid = '${Q}'::regclass" || exit 5
+  q "SELECT 'running pid=' || pid || ' state=' || state || ' wait=' || COALESCE(wait_event, '-') || ' since=' || to_char(query_start, 'HH24:MI:SS') || ' ' || left(query, 120) FROM pg_stat_activity WHERE pid <> pg_backend_pid() AND query ~ '^(CREATE|DROP) INDEX CONCURRENTLY' AND query LIKE '%computer_event_append%'" || exit 5
+}
+
+cmd_build() {
+  case "$(index_state "$PARTIAL")" in
+    1,1) say "$PARTIAL is already valid"; return 0 ;;
+  esac
+  drop_leftover "$PARTIAL"
+  say "building $PARTIAL"
+  if ! heavy "CREATE INDEX CONCURRENTLY \"${PARTIAL}\" ON ${Q} ${PARTIAL_COLUMNS}"; then
+    die "the build failed or was cancelled; $PARTIAL may be INVALID; run build again when the appends are back" 4
+  fi
+  partial_ok || die "the build returned but $PARTIAL is not valid and ready" 4
+  say "$PARTIAL is valid"
+}
+
+cmd_drop() { # NAME
+  local name=$1
+  partial_ok || die "refusing to drop $name: $PARTIAL is not valid and ready (status shows it); run build first" 3
+  if [ "$(index_state "$name")" = "" ]; then
+    say "$name is already absent"
+    return 0
+  fi
+  say "dropping $name"
+  heavy "DROP INDEX CONCURRENTLY IF EXISTS $(qi "$name")" || die "the drop of $name failed" 4
+  say "$name dropped"
+}
+
+cmd_cancel() {
+  local pattern="^(CREATE INDEX CONCURRENTLY \"?${PARTIAL}\"? ON \"${schema}\"\\.\"${TABLE}\"|CREATE INDEX CONCURRENTLY \"?(${KIND_SEQ}|${RECEIPT_ID})\"? ON \"${schema}\"\\.\"${TABLE}\"|DROP INDEX CONCURRENTLY IF EXISTS \"${schema}\"\\.\"(${PARTIAL}|${KIND_SEQ}|${RECEIPT_ID})\")"
+  local sent
+  sent=$(qs "SELECT count(*) FILTER (WHERE pg_cancel_backend(pid)) FROM pg_stat_activity WHERE pid <> pg_backend_pid() AND datname = current_database() AND query ~ '${pattern}'") || exit $?
+  if [ "${sent:-0}" -ge 1 ]; then
+    say "signalled ${sent} backend(s); a cancelled build leaves $PARTIAL INVALID"
+    return 0
+  fi
+  say "no backend was signalled: none is running this script's create or drop on ${TABLE}"
+  return 1
+}
+
+cmd_restore_old() {
+  local pair name columns
+  for pair in "${RECEIPT_ID}|${RECEIPT_ID_COLUMNS}" "${KIND_SEQ}|${KIND_SEQ_COLUMNS}"; do
+    name=${pair%%|*}; columns=${pair#*|}
+    if [ "$(index_state "$name")" = "1,1" ]; then
+      say "$name is already valid"
+      continue
+    fi
+    drop_leftover "$name"
+    say "recreating $name"
+    heavy "CREATE INDEX CONCURRENTLY \"${name}\" ON ${Q} ${columns}" || die "recreating $name failed or was cancelled; run restore-old again" 4
+  done
+  say "old indexes restored"
+}
+
+case "${1:-}" in
+  status) cmd_status ;;
+  build) cmd_build ;;
+  drop-kind-seq) cmd_drop "$KIND_SEQ" ;;
+  drop-receipt-id) cmd_drop "$RECEIPT_ID" ;;
+  cancel) cmd_cancel ;;
+  restore-old) cmd_restore_old ;;
+esac

@@ -71,7 +71,7 @@ assert_output skills-text-only $'skills/throughline/SKILL.md\nskills/throughline
 assert_output skills-go-file $'skills/throughline/check/main.go\n' \
   'docs_only=false' 'go=true' 'flakehub=true'
 
-assert_output dev-scripts-only $'scripts/land\nscripts/spend-report\nscripts/system_briefing.py\nscripts/probes/x.sh\nscripts/prove-autoradio-turns\n' \
+assert_output dev-scripts-only $'scripts/land\nscripts/spend-report\nscripts/system_briefing.py\nscripts/probes/x.sh\nscripts/prove-autoradio-turns\nscripts/receipts-index-swap\nscripts/receipts-index-swap-test\n' \
   'docs_only=true' 'non_docs=false' 'go=false' 'flakehub=false'
 
 assert_output mixed-skill-and-code $'skills/throughline/SKILL.md\ninternal/auth/service.go\n' \

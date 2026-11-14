@@ -95,3 +95,64 @@ no-op and its readers run as they do now. Nothing to undo.
   are named in `PLATFORM_RECEIPT_COMPACT_COMPUTERS`.
 - Only receipts of kind EventHeadReceipt with this issuer are handled; a row of
   another spelling still stays full, as before.
+
+## Procedure: the supervised swap of the live table's indexes
+
+Owner's ruling N3: the indexes may be rebuilt or dropped on the live table
+overnight, after review, one at a time, concurrently, stopping if the paper's
+append times rise. That is a permission for an act an operator performs, once,
+on one table, on one host, watching one number (see
+`receipts-step2-three-rounds-structural-assessment-2026-11-14.md`). The act is
+`scripts/receipts-index-swap`, which runs on Node B through local psql and reads
+no secret. It needs step 2a deployed (corpusd logs the append timing line a
+minute) and step 1 deployed (every reader works with either set of indexes).
+
+**Before.** No deploy in flight and none planned for the night (a restart of
+corpusd does not cancel the build, which is the database's, but a deploy adds
+load and a second thing to watch). `scripts/receipts-index-swap status`: both old
+indexes valid and ready, no build running, the free space of the database volume
+(`df`) at least the partial index's size (about 16 MB) plus the WAL of the build
+(a few hundred MB). `scripts/receipts-index-swap watch` in a second terminal.
+
+**The pre-build reading.** From the timing line, the paper's p95 over the last
+ten minutes, read three times a minute apart; the lowest is the pre-build
+reading P. The cancel rule is: p95 of the last minute above the larger of 2 x P
+and P + 250 ms on two consecutive readings a minute apart.
+
+**Order, one statement at a time.**
+1. `build`: `CREATE INDEX CONCURRENTLY computer_event_append_kind_partial_idx ...`
+   (the exact definition step 1's readers expect). Expected 3 to 10 minutes: two
+   scans of the 18 GB heap, a 16 MB index (the 0.8% of rows that are not
+   projection batches), WAL of the order of the index's size plus the full-page
+   images of the pages touched. Watch the timing line and `status` (the build's
+   phase and blocks).
+2. When the partial index reads valid and ready and the timing is back at P (two
+   readings a minute apart), `drop-kind-seq` (1.9 GB, seconds to a minute; it
+   waits for transactions that can see the index).
+3. Again two readings, then `drop-receipt-id` (2.3 GB). Both drops refuse unless
+   the partial index is valid and ready. Dropped index files go back to the
+   operating system at once, 4.2 GB.
+
+**Cancel.** If the rule fires during a statement, run `cancel`. It signals only a
+backend running this script's create or drop on this table and says how many
+signals it sent (zero is exit 1); a cancelled build leaves the partial index
+INVALID, which every reader ignores and which the next `build` drops first.
+**After a cancel**, wait until two readings a minute apart are back under the
+rule, then run `build` again. At most three attempts in a night; after the
+third, stop, leave the old indexes, and record the attempts and the readings
+here. A restart of Postgres or a crash mid-build has the same result as a
+cancel.
+
+**Rollback.** Before the drops: nothing to undo (drop the invalid leftover with
+`build`'s first step, or leave it). After a drop, if anything wants the old
+index: `restore-old` recreates both concurrently with the definitions main's
+Bootstrap gave them (the receipt id index first); no reader of step 1 or step 2a
+needs them, so this is for a revert past step 1 only, and it takes a few
+minutes each.
+
+**What the script does not do.** It does not read or print the psql command, any
+connection string or env file; it does not run two heavy statements at once; it
+does not watch the timing for you. Its self-test,
+`scripts/receipts-index-swap-test`, runs against a throwaway PostgreSQL and is
+runner-only: both files are developer-side paths (docs-like), so no CI lane runs
+them; run it on a runner before changing either.
