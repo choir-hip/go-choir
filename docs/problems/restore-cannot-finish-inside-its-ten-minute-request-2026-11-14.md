@@ -88,3 +88,30 @@ is not known; nothing was run there.
 
 Steps 7d to 7f of the step 2 proof stay open behind this.
 
+
+## Why the base snapshot was so old (2026-11-14T23:08Z; code and console logs, read-only)
+
+- A snapshot is due when the head is 540,000 events past the newest one or
+  seven days have passed (`internal/agentcore/snapshot_producer.go`,
+  `snapshotDefaultTailEvents`, `snapshotDefaultInterval`); the producer ticks
+  every ten minutes. It is not linked to the checkpoint cadence, which is a
+  separate loop (`checkpoint_cadence.go` names no snapshot).
+- d@e's snapshot fell due on the seven-day rule about 2026-11-13T22:10Z and was
+  refused every ten minutes until 21:17Z on 11-14: 0.9 GB free against the
+  2 GiB floor. The boot prune freed 10.6 GB at 21:31Z and the next tick took
+  it (head 108,786, 11 s). That the 34,716 snapshot was the only older one is
+  inferred; logs before 11-12 are gone.
+- The 21:34Z checkpoint sits two events below that snapshot only because the
+  cadence waits two minutes after boot and the producer three. Not a rule:
+  the binds at 18:29Z, 19:29Z and 20:31Z had no snapshot after them.
+- The worst case by design: 540,000 events of tail, about 80 minutes of replay
+  at d@e's 113 events a second, against a ten-minute request.
+- The paper's newest snapshot is a day old because none is due: about 282,000
+  events since (inferred from the effective release's head, not the live
+  head). No producer line in its retained log (from 17:43Z).
+- A refusal that lasted 23 hours was visible only in the console log.
+
+Repairs, not designed: restore as an accepted act with a status, refusing up
+front when tail events over the measured replay rate exceed its bound; a
+snapshot trigger in time to replay, not events alone; the snapshot refusal
+surfaced where someone reads it.
