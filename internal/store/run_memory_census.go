@@ -47,6 +47,12 @@ type RunMemoryNewestTwo struct {
 	Over30d    RunMemoryTally `json:"newest_entry_over_30d"`
 }
 
+// RunMemoryWake is the wake's total (stub).
+type RunMemoryWake struct {
+	Passes  int64                  `json:"passes"`
+	Retired []RunMemoryDisposition `json:"retired"`
+}
+
 // RunMemoryCensus is the last pass's census, as served on
 // /api/runtime/observability.
 type RunMemoryCensus struct {
@@ -63,8 +69,11 @@ type RunMemoryCensus struct {
 	Agents                 int64 `json:"agents"`
 	AgentsWithOneOrTwoRuns int64 `json:"agents_with_one_or_two_runs"`
 	// Dispositions: every group in exactly one, in the order the rules apply.
-	Dispositions     []RunMemoryDisposition `json:"dispositions"`
-	NewestTwoOfAgent RunMemoryNewestTwo     `json:"newest_two_of_agent_overlap"`
+	Dispositions []RunMemoryDisposition `json:"dispositions"`
+	CarrySources RunMemoryNewestTwo     `json:"carry_sources_by_entry_age"`
+	// FirstPass is the first pass of the wake, whole; Wake totals the retired runs of every pass of it (stubs).
+	FirstPass *RunMemoryCensus `json:"first_pass_of_wake,omitempty"`
+	Wake      *RunMemoryWake   `json:"wake,omitempty"`
 	// BodyBytes says why no byte count is given.
 	BodyBytes string `json:"body_bytes"`
 }

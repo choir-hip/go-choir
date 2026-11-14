@@ -28,13 +28,14 @@ import (
 )
 
 // legacySelectRunMemoryRetirements is an independent copy of the R-1 selection
-// (protection only for document custodians, no record retires), with its own
-// copy of the group query, over fixtures whose runs all have legacy ids, so the
-// census is held to the same set.
+// (the newest completed or passivated runs of a document custodian's agent are
+// kept; a run with no record retires after thirty days; finish order, ties by
+// run id), over fixtures whose runs all have legacy ids, so the census is held
+// to the same set.
 func legacySelectRunMemoryRetirements(ctx context.Context, s *Store, now time.Time) ([]string, error) {
 	db := s.ReadDB()
 	cutoff := now.Add(-runMemoryRetireWindow).UTC()
-	rows, err := db.QueryContext(ctx, `SELECT loop_id, owner_id, agent_id, MAX(created_at), SUM(CASE WHEN kind NOT IN (?) THEN 1 ELSE 0 END) FROM run_memory_entries GROUP BY loop_id`, runMemoryRetireKeepKinds[0])
+	rows, err := db.QueryContext(ctx, `SELECT loop_id, MAX(owner_id), MAX(agent_id), MAX(created_at), SUM(CASE WHEN kind NOT IN (?) THEN 1 ELSE 0 END) FROM run_memory_entries GROUP BY loop_id`, runMemoryRetireKeepKinds[0])
 	if err != nil {
 		return nil, err
 	}
@@ -54,18 +55,34 @@ func legacySelectRunMemoryRetirements(ctx context.Context, s *Store, now time.Ti
 		groups = append(groups, g)
 	}
 	_ = rows.Close()
-	byAgent := map[string][]*runMemoryGroup{}
-	for i := range groups {
-		g := &groups[i]
+	type slot struct {
+		runID string
+		at    time.Time
+	}
+	byAgent := map[string][]slot{}
+	for _, g := range groups {
 		if !deskmanifest.IsDocumentInbox(g.agentID) {
 			continue
 		}
+		run, err := s.GetRunByOwnerOG(ctx, g.ownerID, g.runID)
+		if err != nil || (run.State != types.RunCompleted && run.State != types.RunPassivated) {
+			continue
+		}
+		fin := run.UpdatedAt
+		if run.FinishedAt != nil {
+			fin = *run.FinishedAt
+		}
 		key := g.ownerID + "\x00" + g.agentID
-		byAgent[key] = append(byAgent[key], g)
+		byAgent[key] = append(byAgent[key], slot{g.runID, fin})
 	}
 	protected := map[string]bool{}
 	for _, list := range byAgent {
-		sort.Slice(list, func(i, j int) bool { return list[i].last.After(list[j].last) })
+		sort.Slice(list, func(i, j int) bool {
+			if !list[i].at.Equal(list[j].at) {
+				return list[i].at.After(list[j].at)
+			}
+			return list[i].runID > list[j].runID
+		})
 		for i := 0; i < len(list) && i < runMemoryKeepPerAgent; i++ {
 			protected[list[i].runID] = true
 		}
@@ -81,8 +98,11 @@ func legacySelectRunMemoryRetirements(ctx context.Context, s *Store, now time.Ti
 		}
 		run, err := s.GetRunByOwnerOG(ctx, g.ownerID, g.runID)
 		if err != nil {
-			if errors.Is(err, ErrNotFound) {
+			if errors.Is(err, ErrNotFound) && now.Sub(g.last) >= 30*24*time.Hour {
 				out = append(out, g.runID)
+				continue
+			}
+			if errors.Is(err, ErrNotFound) {
 				continue
 			}
 			return out, err
@@ -129,6 +149,10 @@ func memCensusScript(t *testing.T, h *tapeHarness, now time.Time) {
 	memSeed(t, h, "z-run", docAgent("z"), types.RunRunning, 0, 40*day, now)
 	memSeed(t, h, "z-fin", docAgent("z"), types.RunCompleted, 2*day, 40*day, now)
 	memSeedEntries(t, h, "z-nf", docAgent("z"), []types.RunMemoryEntryKind{"message", "message", "rlm_inbox_cursor"}, 41*day, now)
+	// No record, newest entry inside the thirty day hold.
+	memSeedEntries(t, h, "z-nh", "agent-n", []types.RunMemoryEntryKind{"message", "message", "rlm_inbox_cursor"}, 20*day, now)
+	// Finished inside the window though the entries are old: a worker, so unprotected.
+	memSeed(t, h, "f-fin", "agent-f", types.RunCompleted, 2*day, 40*day, now)
 	// A finished run holding only its cursor (retirable = 0).
 	if err := h.store.CreateRunOG(context.Background(), types.RunRecord{RunID: "z-cur", AgentID: docAgent("z"), OwnerID: "owner-1", ComputerID: "computer-1", State: types.RunCompleted, CreatedAt: now.Add(-51 * day), UpdatedAt: now.Add(-50 * day)}); err != nil {
 		t.Fatal(err)
@@ -155,24 +179,25 @@ func TestRunMemoryCensusCountsEveryGroupExactlyOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"v1", "v2", "v3", "v4", "x-old", "z-nf"}; !reflect.DeepEqual(ids, want) {
+	if want := []string{"v1", "v2", "v3", "v4", "x-new", "z-new1", "z-nf"}; !reflect.DeepEqual(ids, want) {
 		t.Fatalf("selected %v, want %v", ids, want)
 	}
 	got := censusByName(c)
 	want := map[string][2]int64{ // runs, entries
-		"retired":                           {5, 15},
-		"retired_no_run_record":             {1, 3},
-		"kept_only_cursor_entries":          {1, 1},
-		"kept_newest_entry_in_window":       {1, 3},
-		"kept_newest_two_of_agent_7_30d":    {4, 12},
-		"kept_newest_two_of_agent_over_30d": {0, 0},
-		"kept_state_passivated":             {2, 6},
-		"kept_state_blocked":                {2, 6},
-		"kept_state_other:running":          {2, 6},
-		"kept_finished_in_window":           {1, 3},
-		"not_reached_over_cap":              {0, 0},
-		"kept_unreadable_time":              {0, 0},
-		"kept_run_record_unreadable":        {0, 0},
+		"retired":                     {6, 18}, // v1-v4, x-new (failed), z-new1
+		"retired_no_run_record":       {1, 3},  // z-nf
+		"kept_no_run_record_in_hold":  {1, 3},  // z-nh
+		"kept_only_cursor_entries":    {1, 1},
+		"kept_newest_entry_in_window": {1, 3},
+		"kept_carry_source_7_30d":     {2, 6}, // x-mid, z-new2
+		"kept_carry_source_over_30d":  {2, 6}, // x-old, z-fin
+		"kept_state_passivated":       {2, 6},
+		"kept_state_blocked":          {2, 6},
+		"kept_state_other:running":    {2, 6},
+		"kept_finished_in_window":     {1, 3}, // f-fin
+		"not_reached_over_cap":        {0, 0},
+		"kept_unreadable_time":        {0, 0},
+		"kept_run_record_unreadable":  {0, 0},
 	}
 	var runs, entries int64
 	for _, d := range c.Dispositions {
@@ -192,8 +217,8 @@ func TestRunMemoryCensusCountsEveryGroupExactlyOnce(t *testing.T) {
 	if len(got) != len(want) {
 		t.Errorf("dispositions %v, want exactly %d", c.Dispositions, len(want))
 	}
-	if runs != 19 || c.Groups != 19 {
-		t.Errorf("dispositions sum to %d runs, groups %d, want 19", runs, c.Groups)
+	if runs != 21 || c.Groups != 21 {
+		t.Errorf("dispositions sum to %d runs, groups %d, want 21", runs, c.Groups)
 	}
 	var tableRows int
 	for _, n := range memRunsWithRows(t, h.store) {
@@ -202,17 +227,17 @@ func TestRunMemoryCensusCountsEveryGroupExactlyOnce(t *testing.T) {
 	if entries != int64(tableRows) || c.Entries != int64(tableRows) {
 		t.Errorf("dispositions sum to %d entries, census %d, table %d", entries, c.Entries, tableRows)
 	}
-	if got["retired"].RetirableEntries != 10 {
-		t.Errorf("retired retirable entries = %d, want 10", got["retired"].RetirableEntries)
+	if got["retired"].RetirableEntries != 12 {
+		t.Errorf("retired retirable entries = %d, want 12", got["retired"].RetirableEntries)
 	}
-	if c.Agents != 7 || c.AgentsWithOneOrTwoRuns != 4 {
-		t.Errorf("agents = %d (%d with 1-2 runs), want 7 (4)", c.Agents, c.AgentsWithOneOrTwoRuns)
+	if c.Agents != 9 || c.AgentsWithOneOrTwoRuns != 6 {
+		t.Errorf("agents = %d (%d with 1-2 runs), want 9 (6)", c.Agents, c.AgentsWithOneOrTwoRuns)
 	}
 	// The protected set (document custodians only) regardless of the order
 	// the rules apply in.
-	ov := c.NewestTwoOfAgent
-	if ov.Within7d.Runs != 0 || ov.From7To30d.Runs != 4 || ov.Over30d.Runs != 0 {
-		t.Errorf("newest-two overlap = %+v, want 0/4/0", ov)
+	ov := c.CarrySources
+	if ov.Within7d.Runs != 0 || ov.From7To30d.Runs != 2 || ov.Over30d.Runs != 2 {
+		t.Errorf("carry sources = %+v, want 0/2/2", ov)
 	}
 }
 
@@ -246,7 +271,7 @@ func TestRunMemoryCensusCountsRunsBeyondTheCap(t *testing.T) {
 	t.Cleanup(func() { runMemoryRetireMaxOps = ops })
 	total := computerevent.RunMemoryRetireMaxRuns + 5 + runMemoryKeepPerAgent
 	for i := 0; i < total; i++ {
-		memSeed(t, h, "c"+strconv.Itoa(1000+i), docAgent("c"), types.RunCompleted, 40*day, 40*day-time.Duration(i)*time.Minute, now)
+		memSeed(t, h, "c"+strconv.Itoa(1000+i), docAgent("c"), types.RunCompleted, 40*day-time.Duration(i)*time.Minute, 40*day-time.Duration(i)*time.Minute, now)
 	}
 	old, err := legacySelectRunMemoryRetirements(context.Background(), h.store, now)
 	if err != nil {
@@ -260,7 +285,7 @@ func TestRunMemoryCensusCountsRunsBeyondTheCap(t *testing.T) {
 		t.Fatalf("selected %d, legacy %d, want %d", len(ids), len(old), computerevent.RunMemoryRetireMaxRuns)
 	}
 	got := censusByName(c)
-	if got["retired"].Runs != int64(len(ids)) || got["not_reached_over_cap"].Runs != 5 || got["kept_newest_two_of_agent_over_30d"].Runs != 2 {
+	if got["retired"].Runs != int64(len(ids)) || got["not_reached_over_cap"].Runs != 5 || got["kept_carry_source_over_30d"].Runs != 2 {
 		t.Fatalf("census %+v", c.Dispositions)
 	}
 	if c.Groups != int64(total) {
@@ -286,7 +311,7 @@ func TestRunMemoryCensusIsKeptFromTheLastPass(t *testing.T) {
 	if c.Passes != 1 || c.StartedAt == nil || c.FinishedAt == nil || c.FinishedAt.Before(*c.StartedAt) {
 		t.Fatalf("after a pass: %+v", c)
 	}
-	if censusByName(c)["retired"].Runs != 5 || censusByName(c)["retired_no_run_record"].Runs != 1 {
+	if censusByName(c)["retired"].Runs != 6 || censusByName(c)["retired_no_run_record"].Runs != 1 {
 		t.Fatalf("census %+v", c.Dispositions)
 	}
 	// The second pass finds the retired runs holding only cursors.

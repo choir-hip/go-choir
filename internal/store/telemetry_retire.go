@@ -303,7 +303,7 @@ func (s *Store) StartTelemetryRetirement(ctx context.Context, ready, forceCompac
 			log.Printf("store: telemetry retirement: %d ops in %s", ops, time.Since(start).Round(time.Millisecond))
 			memStart := time.Now()
 			// A backlog beyond one pass's cap runs back to back, not a pass a day.
-			memOps, memPasses, memErr := s.RetireRunMemoryBacklog(ctx, time.Now().UTC(), runMemoryCatchUpGap)
+			memOps, memPasses, memErr := s.RetireRunMemoryBacklog(ctx, time.Now().UTC(), runMemoryCatchUpGap, ready)
 			if memErr != nil {
 				log.Printf("store: run memory retirement: after %d ops in %d passes: %v", memOps, memPasses, memErr)
 				continue
