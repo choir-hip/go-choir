@@ -305,10 +305,12 @@ func (s *Store) StartTelemetryRetirement(ctx context.Context, ready, forceCompac
 			// A backlog beyond one pass's cap runs back to back, not a pass a day.
 			memOps, memPasses, memErr := s.RetireRunMemoryBacklog(ctx, time.Now().UTC(), runMemoryCatchUpGap, ready)
 			if memErr != nil {
+				// The rest of the maintenance goes on: a backlog that failed after
+				// freeing pages must not hold them (and the compact copy) a day.
 				log.Printf("store: run memory retirement: after %d ops in %d passes: %v", memOps, memPasses, memErr)
-				continue
+			} else {
+				log.Printf("store: run memory retirement: %d ops in %d passes in %s", memOps, memPasses, time.Since(memStart).Round(time.Millisecond))
 			}
-			log.Printf("store: run memory retirement: %d ops in %d passes in %s", memOps, memPasses, time.Since(memStart).Round(time.Millisecond))
 			// The files of the partitions the ops retired (telemetry_partition.go).
 			if _, gcErr := s.GCTelemetryPartitions(ctx); gcErr != nil {
 				log.Printf("store: telemetry partitions: delete retired files: %v", gcErr)

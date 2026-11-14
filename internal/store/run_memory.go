@@ -347,11 +347,29 @@ func (s *Store) LatestActorRunMemoryEntries(ctx context.Context, ownerID, comput
 		if err != nil {
 			return "", nil, err
 		}
-		if len(entries) > 0 {
+		// A run whose only rows are the kept cursors (retirement leaves them)
+		// holds no conversation to carry: the next older run is the source.
+		if runMemoryHasBody(entries) {
 			return c.runID, entries, nil
 		}
 	}
 	return "", nil, ErrNotFound
+}
+
+// runMemoryHasBody reports whether any entry is not of a kind retirement keeps.
+func runMemoryHasBody(entries []types.RunMemoryEntry) bool {
+	for _, e := range entries {
+		kept := false
+		for _, k := range runMemoryRetireKeepKinds {
+			if string(e.Kind) == k {
+				kept = true
+			}
+		}
+		if !kept {
+			return true
+		}
+	}
+	return false
 }
 
 // ListRunMemoryEntries returns a run's durable memory log in sequence order.
