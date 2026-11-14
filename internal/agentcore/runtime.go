@@ -4543,7 +4543,8 @@ func (rt *Runtime) sleepTextureMutationAfterIdle(ctx context.Context, rec *types
 		// not a failed mutation. A committed non-revision turn sleeps the
 		// mutation; nothing committed means the activation died mid-flight and
 		// the row goes stale for the next reconcile to replace.
-		if turn, err := rt.store.GetAppliedTextureTurnByCallerRun(ctx, rec.OwnerID, rec.ComputerID, rec.TrajectoryID, rec.RunID); err == nil && turn.TextureTurn != nil {
+		turn, turnErr := rt.store.GetAppliedTextureTurnByCallerRun(ctx, rec.OwnerID, rec.ComputerID, rec.TrajectoryID, rec.RunID)
+		if turnErr == nil && turn.TextureTurn != nil {
 			if turn.TextureTurn.Outcome == types.TextureTurnRevision && turn.Revision != nil {
 				if err := rt.store.CompleteAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, turn.Revision.RevisionID); err != nil && err != store.ErrMutationAlreadyCompleted {
 					return err
@@ -4563,6 +4564,12 @@ func (rt *Runtime) sleepTextureMutationAfterIdle(ctx context.Context, rec *types
 			if err := rt.store.CompleteAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, mutation.RevisionID); err != nil && err != store.ErrMutationAlreadyCompleted {
 				return err
 			}
+			return nil
+		}
+		if turnErr != nil && !errors.Is(turnErr, store.ErrNotFound) {
+			// A read error is not "nothing committed": the turn may be durable.
+			// Leave the mutation pending for the next recovery to decide.
+			log.Printf("runtime: idle passivation of run %s could not read its committed Texture turn: %v", rec.RunID, turnErr)
 			return nil
 		}
 		_ = rt.store.MarkAgentMutationStale(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
@@ -5058,6 +5065,7 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 		return nil
 	}
 
+	var turnReadErr error
 	if strings.TrimSpace(rec.TrajectoryID) != "" && strings.TrimSpace(rec.ComputerID) != "" {
 		if turn, turnErr := rt.store.GetAppliedTextureTurnByCallerRun(persistCtx, rec.OwnerID, rec.ComputerID, rec.TrajectoryID, rec.RunID); turnErr == nil && turn.TextureTurn != nil {
 			if turn.TextureTurn.Outcome == types.TextureTurnRevision && turn.Revision != nil {
@@ -5068,6 +5076,7 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 			return nil
 		} else if turnErr != nil && !errors.Is(turnErr, store.ErrNotFound) {
 			log.Printf("runtime: recover committed Texture turn for run %s: %v", rec.RunID, turnErr)
+			turnReadErr = turnErr
 		}
 	}
 	// Legacy-protocol recovery: a pending mutation carrying RevisionID is a
@@ -5082,7 +5091,11 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 	}
 	// No committed turn: the activation ended without a durable write — a
 	// completed no-op. The mutation row goes stale so reconcile's stranded
-	// repair reclaims its covered packets; it is never a failure.
+	// repair reclaims its covered packets; it is never a failure. A failed
+	// read of the turn is not "no committed turn": the mutation stays pending.
+	if turnReadErr != nil {
+		return nil
+	}
 	_ = rt.store.MarkAgentMutationStale(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
 	return nil
 }
