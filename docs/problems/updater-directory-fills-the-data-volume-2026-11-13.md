@@ -148,7 +148,7 @@ Residuals:
   `writeJournal` (a few hundred bytes per crash) are not pruned either.
 - Between boots a self-development apply adds one release directory (about
   0.1 GiB), its store objects (about 0.2 GiB, from the 6.56 GiB over 36 releases
-  on d@e), and no payload in incoming for an apply that staged (apply drops its source), but a failed stage, an unreadable store floor or a failed closure replay keep their payload, collected at the next boot once it is past the 10-minute window; a
+  on d@e), and no payload in incoming for an apply that staged (apply drops its source), but a failed stage or an unreadable store floor keeps its payload (collected at the next boot once it is past the 10-minute window), and a failed closure replay keeps its payload for diagnosis (its release is staged, so the next boot collects it at once); a
   computer that applies N times between two boots holds N times that until the
   next boot.
 - Maximum releases kept with no dead journal: three (`current`, the Prior of
@@ -175,5 +175,5 @@ triggers a staging deploy; `scripts/node-b-growth-meter` is read into the host
 system closure by `nix/node-b.nix` and still deploys the host OS (asserted), and
 `scripts/off-host-restore-drill.sh` is operator tooling (ignored, asserted).
 Apply drops its source only after a deterministic refusal (store floor, schema
-window, base commit) or a successful stage; the three exits that keep it are
+window, base commit, base-image digest mismatch) or a successful stage; the three exits that keep it are
 named above.

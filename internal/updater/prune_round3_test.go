@@ -113,3 +113,37 @@ func TestApplyKeepsItsSourceWhenTheClosureReplayFails(t *testing.T) {
 		t.Fatal("a failed closure replay deleted the payload")
 	}
 }
+
+// The deterministicRefusal wrapper itself: a base-commit mismatch is dropped, a
+// receipt that cannot be read (transient, not a verdict on the release) is kept.
+func TestApplyDropsItsSourceOnABaseCommitMismatch(t *testing.T) {
+	basePath, _ := compatTestBase(t, "commit-abc123")
+	root := filepath.Join(t.TempDir(), "updater")
+	t.Cleanup(func() { makeTreeWritable(root) })
+	engine, _ := compatEngine(t, root, basePath, writeSchemaReceipt(t, t.TempDir(), 1))
+	request := updaterRequestFixture(t, root, "computer-test", "realization-test", "op-base", "idem-base", "base")
+	request.Manifest.BaseCommit = "commit-other"
+	if err := refinalizeRequest(&request); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engine.Apply(context.Background(), request); err == nil || !strings.Contains(err.Error(), ReasonBaseMovedSinceFreeze) {
+		t.Fatalf("apply = %v, want the base-moved refusal", err)
+	}
+	if exists(request.SourceDir) {
+		t.Fatal("a base-commit mismatch kept its payload")
+	}
+}
+
+func TestApplyKeepsItsSourceWhenTheSchemaReceiptCannotBeRead(t *testing.T) {
+	rig := newFloorRig(t, 2)
+	if err := os.WriteFile(rig.schema, []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	request := rig.release(t, "op-receipt-unreadable", 2)
+	if _, err := rig.engine.Apply(context.Background(), request); err == nil {
+		t.Fatal("a release was applied although the schema receipt could not be read")
+	}
+	if !exists(request.SourceDir) {
+		t.Fatal("an unreadable receipt (no verdict on the release) deleted the payload")
+	}
+}

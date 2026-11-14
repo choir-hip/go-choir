@@ -311,6 +311,9 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 	// of by a post-mortem health probe.
 	if cerr := u.checkStateCompatibility(request.Manifest); cerr != nil {
 		if isDeterministicRefusal(cerr) {
+			// The drop precedes the refusal's journal write: if that write
+			// fails the payload is gone and only the I/O error returns, which is
+			// acceptable for a refusal that no retry changes.
 			u.dropStagedSource(request.SourceDir)
 		}
 		return refuse(cerr.Error())
@@ -341,9 +344,10 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 	// untouched and never publishes a restart — the running release keeps
 	// serving (fail-closed on the data path).
 	if serr := u.materializeReleaseClosure(releaseDir, request.Manifest); serr != nil {
-		// No drop: the release is staged and verified, so the source is not
-		// needed again, but the failure may be a full volume and the boot prune
-		// collects the source past its window.
+		// No drop: the release dir holds the verified copy, so the source is not
+		// needed again, and the failure may be a full volume. It is kept for
+		// diagnosis and, because its release is staged, the boot prune removes
+		// it at the first boot whatever its age.
 		return refuse(serr.Error())
 	}
 	if !found {
@@ -475,11 +479,15 @@ func (u *Updater) RestartCurrent(ctx context.Context) error {
 // the only local copy.
 type deterministicRefusal struct{ error }
 
-func (r deterministicRefusal) Unwrap() error { return r.error }
+// ErrDeterministicRefusal matches (errors.Is) a refusal that does not change on
+// a retry, like ErrStoreFloorRefused.
+var ErrDeterministicRefusal = errors.New("updater: deterministic refusal")
+
+func (r deterministicRefusal) Unwrap() error        { return r.error }
+func (r deterministicRefusal) Is(target error) bool { return target == ErrDeterministicRefusal }
 
 func isDeterministicRefusal(err error) bool {
-	var d deterministicRefusal
-	return errors.As(err, &d) || errors.Is(err, ErrStoreFloorRefused)
+	return errors.Is(err, ErrDeterministicRefusal) || errors.Is(err, ErrStoreFloorRefused)
 }
 
 // ReasonBaseMovedSinceFreeze names the refusal of a release whose declared
