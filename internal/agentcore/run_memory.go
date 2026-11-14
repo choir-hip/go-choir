@@ -222,6 +222,11 @@ func (m *runMemoryManager) carryActorConversation(ctx context.Context, ownerID, 
 	if _, err := m.store.AppendRunMemoryEntries(ctx, batch); err != nil {
 		return fmt.Errorf("carry actor conversation: %w", err)
 	}
+	tailMessages := make([][]byte, len(tail))
+	for i, entry := range tail {
+		tailMessages[i] = entry.Message
+	}
+	runMemoryCarry.recordCarry(checkpoint != "", tailMessages)
 	return nil
 }
 
@@ -410,6 +415,9 @@ func (m *runMemoryManager) onProviderError(ctx context.Context, _ []json.RawMess
 
 func (m *runMemoryManager) appendMessage(ctx context.Context, role string, msg json.RawMessage) error {
 	_, err := m.store.AppendRunMemoryEntry(ctx, m.messageEntry(role, msg))
+	if err == nil {
+		runMemoryCarry.recordNew(msg)
+	}
 	return err
 }
 
@@ -433,6 +441,9 @@ func (m *runMemoryManager) appendMessages(ctx context.Context, msgs []json.RawMe
 			batch = append(batch, m.messageEntry(runMemoryMessageRole(msg), msg))
 		}
 		_, err := m.store.AppendRunMemoryEntries(ctx, batch)
+		if err == nil {
+			runMemoryCarry.recordNew(msgs...)
+		}
 		return err
 	}
 	for _, msg := range msgs {
