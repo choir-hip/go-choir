@@ -81,6 +81,19 @@ Two exclusions hold 57% of all entries: "newest two runs of the agent" and
   runs take no slot.
 - Agents ids that look like document inboxes but are not carried from are
   kept (two runs each); that is bounded by the document count.
+- **Named residual, inside one pass** (round 4 re-review, Gemini, accepted and
+  stated; present since the round 3 accept). A pass reads the records, picks
+  the two protected sources of each document agent, and then appends its ops
+  ten runs at a time with a rest between them, so a full pass of 5,000 runs
+  leaves about two minutes between the read and the last append. If a
+  protected source older than seven days leaves the source states inside that
+  window without writing a run-memory row (a passivated run reactivated or
+  cancelled), the run that should now take its slot can already be in the plan
+  and is retired. The reader still finds the other protected source; the carry
+  is lost only if both protected sources leave inside the same pass. Not
+  mitigated: holding the write connection across the selection would stall the
+  writer. If the census ever shows it, the repair is to re-read the slot
+  holders of an op's agents immediately before that op is appended.
 
 ## R-1: the rule as repaired after round 1 (both seats)
 
