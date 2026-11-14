@@ -77,7 +77,7 @@ assert_output nix-flake-inputs $'flake.nix\nflake.lock\n' \
   'guest_unit=true'
 
 # The chaos scripts are read by a Go test, but their README is only docs.
-assert_output chaos-script-and-readme $'scripts/chaos/s2-corpusd-crash.sh\n' \
+assert_output chaos-script $'scripts/chaos/s2-corpusd-crash.sh\n' \
   'docs_only=false' 'go=true'
 
 assert_output chaos-readme-only $'scripts/chaos/README.md\n' \
