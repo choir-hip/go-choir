@@ -29,7 +29,7 @@ var (
 	// ErrNotFound as "no such command or turn", and a command that exists but
 	// cannot return its revision is a broken invariant, not an absent turn.
 	ErrLifecycleStoredRevisionUnavailable = errors.New("lifecycle stored revision unavailable")
-	ErrLifecycleCursorExpired     = errors.New("lifecycle cursor expired")
+	ErrLifecycleCursorExpired             = errors.New("lifecycle cursor expired")
 )
 
 type lifecycleSequence struct {
@@ -1371,6 +1371,10 @@ func (s *Store) lifecycleStoredRevision(ctx context.Context, ownerID, computerID
 	}
 	revision, err := s.GetLifecycleRevision(objectgraph.WithCustodianReader(ctx, ogKindTexRev), ownerID, computerID, stored.RevisionID)
 	if err != nil {
+		// The cause is formatted with %v, deliberately not wrapped with %w: a
+		// chain would re-match ErrNotFound, which callers read as "no such
+		// turn". So errors.Is on the cause never fires; the revision id and
+		// command id in the message carry the detail.
 		return nil, fmt.Errorf("%w: revision %q named by command %q: %v", ErrLifecycleStoredRevisionUnavailable, stored.RevisionID, commandID, err)
 	}
 	return &revision, nil
