@@ -260,5 +260,4 @@ func TestObservabilityServesTheRunMemoryRetirementCensus(t *testing.T) {
 	if c.Passes != 1 || c.FinishedAt == nil || len(c.Dispositions) == 0 {
 		t.Fatalf("after a pass: %+v", c)
 	}
-	_ = fmt.Sprint
 }

@@ -167,6 +167,7 @@ func TestRunMemoryCensusCountsEveryGroupExactlyOnce(t *testing.T) {
 		"kept_state_other:running":          {1, 3},
 		"kept_finished_in_window":           {1, 3},
 		"not_reached_over_cap":              {0, 0},
+		"kept_unreadable_time":              {0, 0},
 	}
 	var runs, entries int64
 	for _, d := range c.Dispositions {

@@ -21,9 +21,9 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/actgate"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/datavolume"
 	"github.com/yusefmosiah/go-choir/internal/disclosure"
 	"github.com/yusefmosiah/go-choir/internal/events"
-	"github.com/yusefmosiah/go-choir/internal/datavolume"
 	"github.com/yusefmosiah/go-choir/internal/guestmem"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -899,6 +899,11 @@ type guestObservabilityResponse struct {
 	// TelemetryPartitions is the per-day telemetry files
 	// (store.telemetry_partitions), when any is open or the writer is on.
 	TelemetryPartitions *store.TelemetryPartitionStats `json:"telemetry_partitions,omitempty"`
+	// RunMemoryRetirement is the last run-memory retirement pass's census:
+	// every run group in exactly one disposition (retired, or the rule that
+	// kept it), with runs and rows. Always present; no passes and no times
+	// before the first pass since boot. Read-only.
+	RunMemoryRetirement *store.RunMemoryCensus `json:"run_memory_retirement,omitempty"`
 	// WAL is the state file's WAL size and the WAL bound's checkpoints
 	// (store/wal_bound.go).
 	WAL *store.WALStats `json:"wal,omitempty"`
@@ -1143,6 +1148,8 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		resp.TelemetryBatching = &telemetry
 		lease := h.rt.store.StreamSeqLeaseStats()
 		resp.StreamSeqLease = &lease
+		census := h.rt.store.RunMemoryRetirementCensus()
+		resp.RunMemoryRetirement = &census
 		if st := h.rt.eventTableStatus(); st.HostGranted || st.Setting || st.StoreFloor > 0 {
 			resp.EventTable = &st
 		}
