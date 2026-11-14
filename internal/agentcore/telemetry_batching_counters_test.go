@@ -24,7 +24,7 @@ func TestObservabilityServesTheTapeWriteCounters(t *testing.T) {
 	}
 	for _, key := range []string{
 		"tape_bytes", "tape_events_by_family", "tape_bytes_by_family", "tape_ops_by_object_kind",
-		"tape_op_bytes_by_object_kind", "run_memory_ops_by_kind", "corpusd_calls",
+		"tape_op_bytes_by_object_kind", "run_memory_ops_by_kind", "run_memory_bytes_by_kind", "corpusd_calls",
 		"corpusd_calls_per_tape_event", "appender_depth_at_enter", "appender_inflight", "appender_call_mean_ms",
 	} {
 		if _, ok := obs.TelemetryBatching[key]; !ok {
