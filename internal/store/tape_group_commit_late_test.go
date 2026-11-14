@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,8 +20,10 @@ import (
 // The group is taken late (the commit group's take moved inside sealRiding,
 // after flushMu is held): writers that arrive while the leader waits behind a
 // telemetry seal join its group. These tests hold flushMu in the test to be
-// that seal, and count pending members as the new design does: the leader's own
-// member stays pending until the take.
+// that seal. Arrivals are counted from the group's arrival counter, not from
+// the pending list, so a regression to an early take fails on the composition
+// of the event (a, b and c in one) and not on a wait for a count the old design
+// never reaches.
 
 // lateHarness holds flushMu, starts a leader, and returns once that leader has
 // won the token (so it is, or is about to be, waiting on flushMu).
@@ -29,13 +32,31 @@ type lateHarness struct {
 	sl      *telemetrySealer
 	results chan writeResult
 	held    bool
+	base    uint64
+}
+
+// arrived is how many grouped writers have arrived since the harness was made.
+func (l *lateHarness) arrived() int {
+	g := &l.store.tapeGroup
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return int(g.nextSeq - l.base)
 }
 
 func newLateHarness(t *testing.T) *lateHarness {
 	h := newTapeHarness(t)
 	sl := h.enableBatching(farFuture)
 	h.warm()
-	return &lateHarness{tapeHarness: h, sl: sl, results: make(chan writeResult, 16)}
+	// The first batched telemetry write makes the boot watermark durable through
+	// the group path; do that now, so a later telemetry write is only a queue
+	// append and can be made from inside a leader.
+	if err := h.store.AppendEvent(context.Background(), h.event("prime", "run-prime", "owner-1", types.EventRunProgress, telemetryBase)); err != nil {
+		t.Fatal(err)
+	}
+	sl.drain()
+	l := &lateHarness{tapeHarness: h, sl: sl, results: make(chan writeResult, 512)}
+	l.base = l.store.tapeGroup.nextSeq
+	return l
 }
 
 // holdFlush stands in for an in-flight telemetry seal.
@@ -72,12 +93,14 @@ func (l *lateHarness) startLeader(id string) {
 	l.store.tapeGroup.afterToken.Store(nil)
 }
 
-func (l *lateHarness) startMember(ctx context.Context, id string, wantPending int) {
+// startMember starts a writer and waits until it is the wantArrived-th to have
+// arrived (the leader is the first).
+func (l *lateHarness) startMember(ctx context.Context, id string, wantArrived int) {
 	l.t.Helper()
 	go func() {
 		l.results <- writeResult{id, l.store.AppendEvent(ctx, l.event(id, "run-"+id, "owner-1", types.EventRunCompleted, telemetryBase))}
 	}()
-	waitFor(l.t, "member "+id+" pending", 5*time.Second, func() bool { return l.pendingMembers() >= wantPending })
+	waitFor(l.t, "member "+id+" arrived", 5*time.Second, func() bool { return l.arrived() >= wantArrived })
 }
 
 func (l *lateHarness) collect(n int) map[string]error {
@@ -251,7 +274,7 @@ func TestGroupCommitLateTakeRefusalSplit(t *testing.T) {
 			_, err := l.store.AppendRunMemoryEntry(context.Background(), types.RunMemoryEntry{EntryID: id, RunID: run, OwnerID: "owner-1", Kind: types.RunMemoryEntryMessage, Role: "user", Message: json.RawMessage(`{"role":"user","content":"x"}`)})
 			l.results <- writeResult{id, err}
 		}()
-		waitFor(t, id+" pending", 5*time.Second, func() bool { return l.pendingMembers() >= i+2 })
+		waitFor(t, id+" arrived", 5*time.Second, func() bool { return l.arrived() >= i+2 })
 	}
 	l.releaseFlush()
 	got := l.collect(3)
@@ -382,6 +405,245 @@ func TestGroupCommitLateTakeStressAckedOnceAndReplays(t *testing.T) {
 			if ma[i].EntryID != mb[i].EntryID || ma[i].Seq != mb[i].Seq || ma[i].EntryID != fmt.Sprintf("e-ls-%d-%d", w, i) {
 				t.Fatalf("%s entry %d: live %+v replayed %+v", run, i, ma[i], mb[i])
 			}
+		}
+	}
+}
+
+// captureFillerOps writes n distinct events and returns each one's ops as the
+// dry run saw them, so a test can queue valid members without goroutines.
+func (l *lateHarness) captureFillerOps(n int) [][]computerevent.ProjectionOp {
+	l.t.Helper()
+	var last []computerevent.ProjectionOp
+	l.dryRunHook = func(batch *computerevent.ProjectionBatch) error {
+		last = append([]computerevent.ProjectionOp(nil), batch.Ops...)
+		return nil
+	}
+	defer func() { l.dryRunHook = nil }()
+	var out [][]computerevent.ProjectionOp
+	for i := 0; i < n; i++ {
+		last = nil
+		if err := l.store.AppendEvent(context.Background(), l.event(fmt.Sprintf("fill-%d", i), "run-fill", "owner-1", types.EventRunCompleted, telemetryBase)); err != nil {
+			l.t.Fatal(err)
+		}
+		if len(last) == 0 {
+			l.t.Fatalf("filler %d: no ops captured", i)
+		}
+		out = append(out, last)
+	}
+	return out
+}
+
+// queueMembers puts members straight on the pending list, in order, as if their
+// writers had arrived; a leader's take closes their done channel.
+func (l *lateHarness) queueMembers(opsList [][]computerevent.ProjectionOp) []*groupMember {
+	g := &l.store.tapeGroup
+	var out []*groupMember
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for _, ops := range opsList {
+		m := &groupMember{ops: ops, bytes: opsBytes(ops), start: time.Now(), done: make(chan struct{})}
+		m.seq = g.nextSeq
+		g.nextSeq++
+		g.pending = append(g.pending, m)
+		out = append(out, m)
+	}
+	return out
+}
+
+// The barrier contract (appender.go, design F5): a semantic write that arrives
+// after a telemetry record was acknowledged never reaches the tape ahead of it.
+// A hook, running as the leader holds flushMu and before it looks at the
+// telemetry queue, acknowledges telemetry and then lets a semantic writer
+// arrive; the telemetry must be on the tape ahead of that writer's ops (the
+// same event, earlier, or an earlier event) and the queue empty by the time the
+// members are acknowledged.
+func TestGroupCommitLateTakeNeverPassesAcknowledgedTelemetry(t *testing.T) {
+	l := newLateHarness(t)
+	var fired atomic.Bool
+	hook := func() {
+		if !fired.CompareAndSwap(false, true) {
+			return
+		}
+		if err := l.store.AppendEvent(context.Background(), l.event("tel", "run-tel", "owner-1", types.EventRunProgress, telemetryBase)); err != nil {
+			t.Errorf("telemetry: %v", err)
+		}
+		if l.sl.depth() == 0 {
+			t.Error("the telemetry record was not queued")
+		}
+		l.startMember(context.Background(), "c", 2)
+	}
+	l.store.tapeGroup.beforeTake.Store(&hook)
+	l.startLeader("a")
+	for id, err := range l.collect(2) {
+		if err != nil {
+			t.Fatalf("%s: %v", id, err)
+		}
+	}
+	if d := l.sl.depth(); d != 0 {
+		t.Fatalf("sealer queue holds %d records after the members were acknowledged: acknowledged telemetry is behind an acknowledged write", d)
+	}
+	var flat []string
+	for _, e := range l.shape() {
+		flat = append(flat, e.Items...)
+	}
+	pos := func(item string) int {
+		for i, it := range flat {
+			if it == item {
+				return i
+			}
+		}
+		return -1
+	}
+	tel, c := pos("loop.progress:tel"), pos("loop.completed:c")
+	if tel < 0 || c < 0 || tel > c {
+		t.Fatalf("tape order %v: telemetry acknowledged before c was issued must precede c", flat)
+	}
+}
+
+// Invariant 2 with caps: a leader whose own member the caps left out of its
+// first group leads again, and its write is committed once, after the older
+// members.
+func TestGroupCommitLateTakeLeaderBehindTheCaps(t *testing.T) {
+	l := newLateHarness(t)
+	opsList := l.captureFillerOps(groupMaxOps)
+	before := l.store.TelemetryStats().GroupCommit
+	fillers := l.queueMembers(opsList)
+	go func() {
+		l.results <- writeResult{"own", l.store.AppendEvent(context.Background(), l.event("own", "run-own", "owner-1", types.EventRunCompleted, telemetryBase))}
+	}()
+	got := l.collect(1)
+	if got["own"] != nil {
+		t.Fatalf("own: %v", got["own"])
+	}
+	for i, m := range fillers {
+		select {
+		case <-m.done:
+			if m.err != nil {
+				t.Fatalf("filler %d: %v", i, m.err)
+			}
+		default:
+			t.Fatalf("filler %d was never settled", i)
+		}
+	}
+	at := l.eventsHolding("loop.completed:own")
+	shape := l.shape()
+	if len(at) != 1 || at[0] != len(shape)-1 || len(shape[at[0]].Items) != 1 {
+		t.Fatalf("own is in events %v of %d (items %v): want once, alone, after the older members", at, len(shape), shape[len(shape)-1].Items)
+	}
+	after := l.store.TelemetryStats().GroupCommit
+	if after.Members-before.Members != int64(len(fillers))+1 || after.Groups-before.Groups < 2 {
+		t.Fatalf("before %+v after %+v: want %d members in at least two groups", before, after, len(fillers)+1)
+	}
+	if n := l.pendingMembers(); n != 0 {
+		t.Fatalf("%d members left pending", n)
+	}
+}
+
+// The same position, but the leader panics after taking the older members: its
+// caller sees the panic, so its write must be withdrawn and never reach the
+// tape, not left for a later leader.
+func TestGroupCommitLateTakePanicAfterTakeWithdrawsLeaderLeftOutByCaps(t *testing.T) {
+	l := newLateHarness(t)
+	opsList := l.captureFillerOps(groupMaxOps)
+	fillers := l.queueMembers(opsList)
+	l.tape.mu.Lock()
+	l.tape.casErr = func(computerevent.CASRequest) error { panic("cas panics after the take") }
+	l.tape.mu.Unlock()
+	go func() {
+		defer func() {
+			if p := recover(); p != nil {
+				l.results <- writeResult{"own", errors.New("leader panicked")}
+			}
+		}()
+		err := l.store.AppendEvent(context.Background(), l.event("own", "run-own", "owner-1", types.EventRunCompleted, telemetryBase))
+		l.results <- writeResult{"own", err}
+	}()
+	got := l.collect(1)
+	if got["own"] == nil || !strings.Contains(got["own"].Error(), "leader panicked") {
+		t.Fatalf("own: %v, want its caller to see the panic", got["own"])
+	}
+	settled := 0
+	for _, m := range fillers {
+		select {
+		case <-m.done:
+			settled++
+			if m.err == nil {
+				t.Fatal("a filler was acknowledged though the leader panicked")
+			}
+		default:
+		}
+	}
+	if settled == 0 {
+		t.Fatal("no taken member was settled")
+	}
+	if n := l.pendingMembers(); n != 0 {
+		t.Fatalf("%d members left pending after the panic: the panicked caller's write is still queued for a later leader", n)
+	}
+	l.tape.mu.Lock()
+	l.tape.casErr = nil
+	l.tape.mu.Unlock()
+	// A later leader must not find it; drain what the panic left of the fillers.
+	if err := l.store.AppendEvent(context.Background(), l.event("later", "run-later", "owner-1", types.EventRunCompleted, telemetryBase)); err != nil {
+		t.Fatal(err)
+	}
+	if got := l.eventsHolding("loop.completed:own"); len(got) != 0 {
+		t.Fatalf("the panicked caller's write reached the tape in events %v", got)
+	}
+}
+
+// A take that finds every pending writer withdrawn commits nothing: the
+// telemetry the leader would have ridden stays queued for the sealer's own
+// seal, no event is stamped with the group authority, and no group counter
+// moves.
+func TestGroupCommitLateTakeEmptyTakeLeavesTelemetryQueued(t *testing.T) {
+	l := newLateHarness(t)
+	if err := l.store.AppendEvent(context.Background(), l.event("tel", "run-tel", "owner-1", types.EventRunProgress, telemetryBase)); err != nil {
+		t.Fatal(err)
+	}
+	if l.sl.depth() != 1 {
+		t.Fatalf("queue depth %d, want 1", l.sl.depth())
+	}
+	g := &l.store.tapeGroup
+	b := l.queueMembers([][]computerevent.ProjectionOp{{{Kind: computerevent.ProjectionOpObject}}})[0]
+	hook := func() { g.withdraw(b) }
+	g.beforeTake.Store(&hook)
+	own := &groupMember{taken: true, done: make(chan struct{})}
+	close(own.done)
+	events := len(l.tape.snapshot())
+	before := l.store.TelemetryStats().GroupCommit
+	token := g.leaderToken()
+	token <- struct{}{}
+	l.store.projectionTape.leadHolding(token, own)
+	g.beforeTake.Store(nil)
+	after := l.store.TelemetryStats().GroupCommit
+	if n := len(l.tape.snapshot()); n != events {
+		t.Fatalf("%d tape events written by a take of nobody", n-events)
+	}
+	if l.sl.depth() != 1 {
+		t.Fatalf("queue depth %d after an empty take, want the telemetry still queued", l.sl.depth())
+	}
+	if after.Groups != before.Groups || after.Members != before.Members || after.TelemetryRidden != before.TelemetryRidden || after.RefusedSplits != before.RefusedSplits || after.UnknownOutcome != before.UnknownOutcome {
+		t.Fatalf("before %+v after %+v: an empty take moved a group counter", before, after)
+	}
+	if n := l.pendingMembers(); n != 0 {
+		t.Fatalf("%d members left pending", n)
+	}
+}
+
+// The group's deadline starts when it is taken, not when the leader started
+// waiting: a late joiner does not inherit a deadline spent behind flushMu.
+func TestGroupCommitLateTakeDeadlineStartsAtTheTake(t *testing.T) {
+	l := newLateHarness(t)
+	l.store.tapeGroup.timeoutNanos.Store(int64(600 * time.Millisecond))
+	l.holdFlush()
+	defer l.releaseFlush()
+	l.startLeader("a")
+	l.startMember(context.Background(), "b", 2)
+	time.Sleep(900 * time.Millisecond) // real time: the deadline is the point
+	l.releaseFlush()
+	for id, err := range l.collect(2) {
+		if err != nil {
+			t.Fatalf("%s: %v (the group's deadline ran out while the leader waited for flushMu)", id, err)
 		}
 	}
 }
