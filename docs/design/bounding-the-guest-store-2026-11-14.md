@@ -500,6 +500,19 @@ lead can run before building.
 Sections 1 to 4 below are the earlier note, kept as history. Their
 estimates are superseded where 0 says so.
 
+## Read on the paper, 2026-11-14T06:08Z (console log, after the 02:37Z boot)
+
+The daily job ran to its end on that boot: telemetry retirement 18 ops in
+6 m (02:48Z to 02:54Z), then `store: run memory retirement: 4 runs in 1 ops`
+(36 s), then `store: incremental vacuum: 26262 pages returned`. So the job
+is not being cut short and no step errored. It found four eligible runs in
+a table of at least 4.6 million rows. The selection rule, not the schedule,
+is what keeps run memory: R-1 stands, and what remains unknown is which of
+its three exclusions (passivated or blocked runs, the newest two runs of
+each agent, runs whose record is not found) holds the rows. The next step
+is a census taken by the pass itself, at no extra read: for each exclusion,
+the runs, rows and bytes it kept, logged and served with the store counters.
+
 ## 1. What the 44 GiB is made of (ranked) (superseded 2026-11-14 by section 0; kept as history)
 
 Superseded: the estimates in the table below were made before the readings.
