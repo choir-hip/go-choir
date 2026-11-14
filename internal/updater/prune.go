@@ -68,11 +68,13 @@ import (
 //     verified and staged, and when it refuses before staging for a
 //     deterministic reason (base mismatch, state incompatibility;
 //     dropStagedSource); a failed stage, an unreadable floor and a failed
-//     closure replay keep it: the failure may be transient (no space) and the
-//     payload is the only local copy. The refusal is journaled terminally for
-//     that idempotency key, so a kept payload serves diagnosis, and a retry
-//     under a new key, until this prune collects it past its window (a resumed
-//     apply of a staged release never needs the source). So here: a `<digest>` payload whose release is staged goes at
+//     closure replay keep it, since the failure may be transient (no space).
+//     The refusal is journaled terminally for that idempotency key, so a kept
+//     payload serves diagnosis, and a retry under a new key. The prune
+//     collects it at the first boot when its release is staged (the closure
+//     replay case) and once past its window otherwise (a failed stage, an
+//     unreadable floor; a resumed apply of a staged release never needs the
+//     source). So here: a `<digest>` payload whose release is staged goes at
 //     once, a markerless `<digest>` payload with no staged release goes once
 //     older than pruneInputGrace (a refused or aborted update), a dot temporary
 //     or an unrecognised entry goes once older than pruneInputGrace. Two kinds
