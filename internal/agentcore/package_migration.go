@@ -969,7 +969,7 @@ func (rt *Runtime) restorePackageMigration(ctx context.Context, rec *packageMigr
 	if attempt.PreReleaseDigest != "" {
 		current, err := readCurrentManifestIdentity(rt.selfdevUpdaterRoot)
 		if err != nil || current.ContentDigest != attempt.PreReleaseDigest {
-			if err := updater.RestagePinnedRelease(rt.selfdevUpdaterRoot, attempt.PreReleaseDigest, rt.storeFloorPath()); err != nil {
+			if err := updater.RestagePinnedReleaseBestEffort(rt.selfdevUpdaterRoot, attempt.PreReleaseDigest, rt.storeFloorPath()); err != nil {
 				problems = append(problems, "restage "+shortDigest(attempt.PreReleaseDigest)+": "+err.Error())
 			} else if manifest, _, err := updater.ReadPinnedManifest(rt.selfdevUpdaterRoot, attempt.PreReleaseDigest); err == nil {
 				rt.recordStartupManifest(manifest)

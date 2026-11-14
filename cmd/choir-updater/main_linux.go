@@ -26,6 +26,11 @@ import (
 )
 
 func main() {
+	// The boot-time prune needs nothing the daemon needs: dispatch before the
+	// signer, identity and socket are configured.
+	if len(os.Args) > 1 && os.Args[1] == "prune" {
+		os.Exit(pruneMain(os.Args[2:], os.Stderr))
+	}
 	if handled, code := updater.RunKernelCapabilityProbeHelper(); handled {
 		os.Exit(code)
 	}
