@@ -115,3 +115,76 @@ Repairs, not designed: restore as an accepted act with a status, refusing up
 front when tail events over the measured replay rate exceed its bound; a
 snapshot trigger in time to replay, not events alone; the snapshot refusal
 surfaced where someone reads it.
+
+## Investigation for the replay-time trigger (lane/snapshot-by-replay-time; code, read-only)
+
+Written before the build. Mutation class of the build: orange (runtime
+behavior of the producer; the snapshot and its tape record are unchanged).
+
+(i) How chunks are stored, shared and pruned.
+
+- `internal/store/snapshot_to.go` is the capsule store copy
+  (`SnapshotTo`, `:77`), not the snapshot capture. The capture is
+  `internal/snapshot/snapshot.go`. It writes no copy of the store: one
+  read-only transaction streams the pages of the WAL snapshot
+  (`snapshot.go:532`).
+- Chunks are content-addressed and shared across successive snapshots of one
+  computer. The page stream is cut into fixed page ranges, 4 MiB
+  (`ChunkSize`, `snapshot.go:66`; chunk i is pages `[i*N,(i+1)*N)`,
+  `:19`). Each is sealed with `filecas.SealChunk`, deterministic per key and
+  plaintext (`snapshot.go:441`), so an unchanged range has the same digest.
+  The uploader HEADs every digest and PUTs only the ones the host does not
+  hold (`snapshot.go:450-475`; stats `ChunksHeld`, `ChunksUploaded`,
+  `BytesUploaded`). A new snapshot therefore costs the changed ranges, not a
+  full copy. A range counts as changed if any page in it changed, so a
+  store that rewrites pages all over (the paper) shares little: the comment
+  at `snapshot_producer.go:56-60` records 20 GB a day in October and the
+  paper's 11-13 record gives 4.8 GB of sealed chunks added by a 46.7 GB,
+  37 min 40 s snapshot.
+- Retention, host side: each snapshot registers a root (digest list)
+  (`snapshot/http_chunks.go:100`), and `pruneSnapshotRoots`
+  (`internal/platform/snapshot_roots.go:203`) keeps the newest 4 roots the
+  tape names, 2 when the store is over 2048 chunks (8 GiB)
+  (`snapshot_roots.go:42-49`). Chunks no live root names become collectable
+  by the artifact sweep (`platform/artifact_gc.go:182`, after its grace).
+  Restore considers at most the newest 4 snapshots (`snapshot.MaxCandidates`,
+  `snapshot.go:896-899`), so on a large store a checkpoint older than the
+  second newest snapshot has no base.
+- Retention, guest side: nothing is kept locally. Only the
+  `snapshot_recorded` event stays on the tape, and the producer removes a
+  leftover VACUUM INTO copy (`snapshot_producer.go`, `snapshotLegacyTempDirName`).
+
+(ii) What the replay rate depends on, and whether it is measured.
+
+- The tail replay (`computerevent/appender.go:1396-1430`) pages events from
+  the host in 1,024-event pages (fetch), then reduces, verifies receipts,
+  projects rows and commits. The log line breaks the time into fetch,
+  payload prefetch, reduce, verify, prepare, finalize and commit. So the rate
+  depends on host fetch latency, payload fetches, the per-event projection
+  (which grows with the store's indexes and the cold page cache) and the
+  commit cadence. Measured: 206 to 380 events/s on d@e in October and early
+  November, 113 events/s on 2026-11-14 (restore of 33,332 events in 4 m 54 s).
+  The paper's replay rate has not been measured in the records.
+- At runtime it is a log line only: `replay applied N events ... (X events/s`
+  (`appender.go:1423`) is computed in a deferred function and kept nowhere.
+  `ReplaySnapshot().AppliedRows` is zeroed per replay (`:1404`). No counter
+  of the rate exists. The build adds one.
+
+(iii) Cost of a capture as a function of store size.
+
+- Time: the stream and the witness both read every page, so both scale with
+  the store. The paper's 46.7 GB took 37 min 40 s; the witness alone was 22 to
+  35 minutes on 21 GiB (`snapshot_producer.go:79-84`); d@e's 1 GiB took 11 s.
+- Held: one read transaction on the read pool for the whole capture
+  (`ReadTxTime`). Writers and appends do not wait, but the transaction pins
+  the WAL, which grew 3.7 GB in 30 minutes under load (comment at
+  `snapshot_producer.go:81-84`), so free space is the resource held; the
+  producer refuses under 2 GiB (`snapshotFreeFloor`) and the capture checks
+  it during the stream. Memory is a few 4 MiB buffers.
+- Written: sealed bytes to the host for the changed ranges only
+  (`BytesUploaded`), plus a probe per chunk, and the host keeps unreferenced
+  chunks through its grace.
+
+Consequence for the trigger: the cost of a capture (seconds on d@e, 37 minutes
+and several GB on the paper) is known after the fact from `Stats`, so the
+trigger can derive its own floor between captures from the last capture.
