@@ -286,15 +286,18 @@ type TelemetryStats struct {
 	// The tape write counters (tape_write_counters.go): events and bytes by
 	// writer family, ops and bytes by object kind, run memory entries by kind,
 	// and the corpusd requests the guest has sent.
-	TapeBytes                int64            `json:"tape_bytes"`
-	TapeEventsByFamily       map[string]int64 `json:"tape_events_by_family"`
-	TapeOpsByFamily          map[string]int64 `json:"tape_ops_by_family"`
-	TapeBytesByFamily        map[string]int64 `json:"tape_bytes_by_family"`
-	TapeOpsByObjectKind      map[string]int64 `json:"tape_ops_by_object_kind"`
-	TapeOpBytesByObjectKind  map[string]int64 `json:"tape_op_bytes_by_object_kind"`
-	RunMemoryOpsByKind       map[string]int64 `json:"run_memory_ops_by_kind"`
-	CorpusdCalls             map[string]int64 `json:"corpusd_calls"`
-	CorpusdCallsPerTapeEvent float64          `json:"corpusd_calls_per_tape_event"`
+	TapeBytes               int64            `json:"tape_bytes"`
+	TapeEventsByFamily      map[string]int64 `json:"tape_events_by_family"`
+	TapeOpsByFamily         map[string]int64 `json:"tape_ops_by_family"`
+	TapeBytesByFamily       map[string]int64 `json:"tape_bytes_by_family"`
+	TapeOpsByObjectKind     map[string]int64 `json:"tape_ops_by_object_kind"`
+	TapeOpBytesByObjectKind map[string]int64 `json:"tape_op_bytes_by_object_kind"`
+	RunMemoryOpsByKind      map[string]int64 `json:"run_memory_ops_by_kind"`
+	// ObjectRewrites is per object kind: ops, bytes, mean bytes per op, distinct
+	// objects written since boot and writes per object (object_rewrite_counters.go).
+	ObjectRewrites           map[string]ObjectKindRewrites `json:"object_rewrites"`
+	CorpusdCalls             map[string]int64              `json:"corpusd_calls"`
+	CorpusdCallsPerTapeEvent float64                       `json:"corpusd_calls_per_tape_event"`
 	// AppenderDepthAtEnter is the number of callers inside the tape write
 	// (dry run, queue for the appender, append) when a new one arrived, itself
 	// included: "1" arrived alone. Labels are the ops histogram's. The share at
