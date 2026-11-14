@@ -79,18 +79,75 @@ a 60 s boot that blocks appends. So:
   by `(computer_id, sequence)`. All are tested index-backed with the old full
   kind index alone and with the partial one alone.
 
-Rollback of step 1 to today's main: no format-2 row exists and both old
+Rollback of step 1 to the main before it: no format-2 row exists and both old
 indexes are present, so main's boot DDL (`CREATE INDEX IF NOT EXISTS`) is a
 no-op and its readers run as they do now. Nothing to undo.
+
+**Step 2 (`lane/receipts-step2`, on step 1).**
+
+- The backfill writes format 2 (`receiptCompactionCodec` 2). The progress row
+  gains `codec_version`; a pass saved by codec 1 starts over, so the 5.13M old
+  rows are visited. Every 100 batches the pass logs live and dead tuples,
+  autovacuum count and last run, table size and the WAL written since the walk
+  began.
+- `StartReceiptIndexMigration` builds `computer_event_append_kind_partial_idx`
+  concurrently, reads it back valid, then drops `computer_event_append_kind_seq_idx`
+  and `computer_event_append_receipt_id_idx` concurrently, one at a time. Each
+  statement carries a three-hour `statement_timeout` and a one-minute
+  `lock_timeout`; an invalid leftover is dropped and rebuilt; a process that
+  does not get the advisory lock retries with backoff; the table's own schema
+  names every index; each phase is logged (waiting, building, valid, dropping,
+  dropped).
+- Owner's ruling N3 for the live table (one index at a time, stop if the busiest
+  computer's append times rise) is a wait before the build, after the partial
+  index is valid and before each drop: the migration reads the busiest
+  computer's append p95 over two minutes and compares it with the p95 it read
+  over ten minutes before it began; it waits while the p95 is both twice the
+  baseline and 250 ms above it. Nothing in corpusd measured the host append
+  before (retrieval metrics time Store B reads, the guest appender times its own
+  request, `pg_stat_statements` is not loaded), so the signal is the wall time of
+  the serializable append transaction, recorded per computer in an in-memory
+  ring (`receipt_index_health.go`). It is a read, not a gate on any append;
+  it is lost at a restart, and then there is no baseline and no wait. The wait
+  ends by itself when the appends recover; no setting turns it off.
+
+Rollback of step 2 to step 1: step 1 reads every format-2 row, its backfill keeps
+a compact row it may not write, its Bootstrap creates no index, and its readers
+need neither dropped index (the head lookups use the sequence unique key, the
+kind readers work with the partial index). The partial index stays and is
+harmless. Nothing is re-created and nothing to expand.
+
+Rollback of step 2 or step 1 to a binary from before step 1 (not planned): run
+mode `expand` on the named computers to completion first, which writes the exact
+stored bytes back (about as long as the walk), and create the two old indexes
+concurrently by hand before it boots; its boot DDL would otherwise build them
+without `CONCURRENTLY` inside a 60 s open.
 
 ## Remaining error
 
 - The walk starts at sequence 0 for the paper: 11.6M rows at 500 a batch with a
   rest of at least a second is on the order of ten hours or more, not measured.
-- Rewriting 5.13M rows makes about 5 GB of dead space in the table. VACUUM makes
-  it reusable by later rows; PostgreSQL returns it to the operating system only
-  when the freed pages are at the end of the file (these are the oldest rows, at
-  the front), so the file does not shrink without a rewrite.
+  The load lines in the log are how the first hour is read.
+- Dead space (a reviewer's arithmetic, not measured): each of the 5.13M updates
+  rewrites a full page's worth of tuple, so almost none can be HOT. Expect about
+  7.7 GB of dead heap tuples (5.13M x 1.5 KB), about 2.4 GB of new heap (5.13M x
+  470 B) and about 0.8 GB of index churn (a new entry in each of the primary key,
+  the sequence and the digest indexes for each updated row). VACUUM makes the
+  dead space reusable by later rows; PostgreSQL returns it to the operating
+  system only when the free pages are at the end of the file, and these are the
+  oldest rows at the front, so the file does not shrink without a rewrite.
+- What triggers vacuum: the default `autovacuum_vacuum_scale_factor` of 0.2 on
+  12.7M rows means one run per 2.5M dead tuples, so about twice during the walk;
+  until it runs the dead space is not reused and the table grows by the new heap.
+  Proposed, not applied: `ALTER TABLE computer_event_append_receipts SET
+  (autovacuum_vacuum_scale_factor = 0.02)` for the duration of the walk, which
+  vacuums about every 250k rewrites. It is a host tuning with its own I/O cost
+  on an 18 GB table, so it is the owner's call after the first hour's load lines
+  (dead tuples against autovacuums) show whether the default keeps up; the
+  migration does not apply it.
+- The index build time (about 3 to 10 minutes) and its effect on appends on the
+  live table are estimates; the N3 wait is how the build is held to the owner's
+  ruling.
 - Other computers' old rows were not sampled; the same walk covers them if they
   are named in `PLATFORM_RECEIPT_COMPACT_COMPUTERS`.
 - Only receipts of kind EventHeadReceipt with this issuer are handled; a row of

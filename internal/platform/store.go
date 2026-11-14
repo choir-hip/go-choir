@@ -51,6 +51,10 @@ type Store struct {
 	// receiptCompaction is the append-receipt compaction policy
 	// (receipt_compaction.go); nil compacts nothing.
 	receiptCompaction atomic.Pointer[ReceiptCompactionPolicy]
+	// appendTimes holds the recent duration of each computer's append
+	// transaction: the signal the receipt index migration reads between its
+	// phases (receipt_index_health.go).
+	appendTimes appendTimings
 }
 
 // SetArtifactsRoot configures the filesystem CAS root used to externalize
