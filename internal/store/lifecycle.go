@@ -1296,10 +1296,14 @@ func (s *Store) replayLifecycleCommand(ctx context.Context, ownerID, computerID,
 	if receipt.StoredResult != nil {
 		stored := receipt.StoredResult
 		receipt.StoredResult = nil
+		revision, revisionErr := s.lifecycleStoredRevision(ctx, ownerID, computerID, commandID, stored)
+		if revisionErr != nil {
+			return types.LifecycleResult{}, true, revisionErr
+		}
 		return types.LifecycleResult{
 			Receipt: receipt, Trajectory: stored.Trajectory, Schema: stored.Schema,
 			WorkItem: stored.WorkItem, Agent: stored.Agent, Update: stored.Update,
-			Events: stored.Events, Replay: true, Document: stored.Document, Revision: stored.Revision,
+			Events: stored.Events, Replay: true, Document: stored.Document, Revision: revision,
 			TextureTurn: stored.TextureTurn, Controls: stored.Controls, TargetWorkItems: stored.TargetWorkItems,
 		}, true, nil
 	}
@@ -1342,6 +1346,29 @@ func (s *Store) replayLifecycleCommand(ctx context.Context, ownerID, computerID,
 		}
 	}
 	return result, true, nil
+}
+
+// lifecycleStoredRevision returns the revision a command's stored result
+// carries: the embedded copy, or the revision object the command names by id.
+// A revision is immutable and is read by its own id, never as the document's
+// latest head, so a later revision cannot leak into an earlier command's
+// result. A revision a command names must never be retired; a missing one is
+// an error, never a nil revision.
+//
+// The read declares the revision's custodian as reader. That is not a
+// widening: the caller already read this command (choir.lifecycle_command is
+// kernel-owned, readable by any reader), and a command written before
+// store-once carried this very revision inside it. The store is rebuilding a
+// value the command held, not opening Texture's revisions to a new reader.
+func (s *Store) lifecycleStoredRevision(ctx context.Context, ownerID, computerID, commandID string, stored *types.LifecycleStoredResult) (*types.Revision, error) {
+	if stored.Revision != nil || strings.TrimSpace(stored.RevisionID) == "" {
+		return stored.Revision, nil
+	}
+	revision, err := s.GetLifecycleRevision(objectgraph.WithCustodianReader(ctx, ogKindTexRev), ownerID, computerID, stored.RevisionID)
+	if err != nil {
+		return nil, fmt.Errorf("lifecycle: rebuild revision %q named by command %q: %w", stored.RevisionID, commandID, err)
+	}
+	return &revision, nil
 }
 
 func validateLifecycleCommand(commandID, digest, trajectoryID string) error {
