@@ -47,6 +47,13 @@ func TestShotReuseGateAnswersFromTheRunsState(t *testing.T) {
 	operation, bundleDigest, _ := fx.seedOperationToAwaitingApproval(t, "op-shot-reuse-runs")
 	fx.appendDecision(t, operation, bundleDigest, "decision-shot-reuse-runs")
 	accepted := fx.waitForState(t, operation.OperationID, selfdev.StateAccepted)
+	// Hold the observer's reconcile drains out for the rest of the test: a
+	// drain running the same gate against the run state this test sets would
+	// commit its own shot_reuse under the same key with another payload
+	// ("idempotency commitment changed"). The drains wait on the read lock
+	// and the fixture cleanup joins them after this test's unlock.
+	fx.reconfigure.Lock()
+	defer fx.reconfigure.Unlock()
 	if err := fx.rt.materializeSelfDevelopmentOperation(context.Background(), accepted, false); !errors.Is(err, errCandidateShotPending) {
 		t.Fatalf("setup pass = %v", err)
 	}
