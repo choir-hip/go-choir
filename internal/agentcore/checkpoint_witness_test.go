@@ -17,6 +17,7 @@ package agentcore
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
@@ -36,7 +37,17 @@ func tapeReplayWitness(t *testing.T, fx *checkpointHeadFixture) selfdevprotocol.
 	if err := fx.rt.eventAppender.ReconstructInto(ctx, replay); err != nil {
 		t.Fatal(err)
 	}
-	w, err := LiveStoreWitness(ctx, replay.DB())
+	// The canonical form at the replayed head's boundary: the form the bind
+	// records and restore recomputes.
+	head, err := replay.Head(ctx, fx.rt.cfg.ComputerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digests, boundary, err := canonicalSnapshotDigests(ctx, replay.ReadDB(), func(context.Context, *sql.Tx) (uint64, error) { return head.Sequence, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := selfdevprotocol.WitnessFromDigestsCanonical(digests, boundary)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,8 +68,8 @@ func TestCheckpointBindV3WitnessEqualsTapeReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if binding.Witness.WitnessVersion != selfdevprotocol.WitnessVersionSQLite {
-		t.Fatalf("the bind produced witness version %d, want %d", binding.Witness.WitnessVersion, selfdevprotocol.WitnessVersionSQLite)
+	if binding.Witness.WitnessVersion != selfdevprotocol.WitnessVersionCanonical {
+		t.Fatalf("the bind produced witness version %d, want %d", binding.Witness.WitnessVersion, selfdevprotocol.WitnessVersionCanonical)
 	}
 	for _, table := range []string{"computer_event_index", "computer_event_projection_heads"} {
 		if _, hashed := binding.Witness.Tables[table]; !hashed {

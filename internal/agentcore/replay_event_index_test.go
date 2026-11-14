@@ -28,7 +28,7 @@ func TestCompareReplayEventIndexNamesRowsAndColumns(t *testing.T) {
 		row("b", 2, "k", "finalized", "r2x", map[string]string{"x": "1", "y": "2"}),
 		row("d", 9, "m", "finalized", "r4", map[string]string{"x": "1"}),
 	}
-	got := compareReplayEventIndex(live, replay, 3, 0, 40000)
+	got := compareReplayEventIndex(live, replay, 3, 0, 40000, 40000)
 	if got == nil {
 		t.Fatal("differing indexes produced no comparison")
 	}
@@ -53,14 +53,14 @@ func TestCompareReplayEventIndexNamesRowsAndColumns(t *testing.T) {
 	if !sawDifferent || len(got.Samples) != 3 {
 		t.Fatalf("samples = %+v", got.Samples)
 	}
-	if compareReplayEventIndex(live, live, 0, 0, 0) != nil {
+	if compareReplayEventIndex(live, live, 0, 0, 0, 0) != nil {
 		t.Fatal("equal indexes must produce no comparison")
 	}
 	many := make([]choirstore.EventIndexFingerprint, 100)
 	for i := range many {
 		many[i] = row(string(rune('A'+i%26))+strings.Repeat("x", i), int64(i), "k", "finalized", "r", nil)
 	}
-	if c := compareReplayEventIndex(many, nil, 0, 0, 0); len(c.Samples) != replayEventIndexSampleLimit || c.LiveOnlyCount != 100 {
+	if c := compareReplayEventIndex(many, nil, 0, 0, 0, 0); len(c.Samples) != replayEventIndexSampleLimit || c.LiveOnlyCount != 100 {
 		t.Fatalf("sample bound: %d samples, %d live-only", len(c.Samples), c.LiveOnlyCount)
 	}
 }
@@ -95,7 +95,7 @@ func TestReplayProbeExtractorIgnoresTrimBacklogAndNullPinList(t *testing.T) {
 	digest := func(s *choirstore.Store, probe bool) string {
 		e := replayStateExtractor(s.ReadDB())
 		if probe {
-			e = replayProbeStateExtractor(s.ReadDB(), head)
+			e = canonicalWitnessExtractor(s.ReadDB(), choirstore.ProjectionBatchTrimBoundary(head))
 		}
 		d, err := e.Digests(ctx)
 		if err != nil {

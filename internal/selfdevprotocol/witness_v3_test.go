@@ -33,7 +33,7 @@ func testWitnessV3Tables(database string, tables map[string]string) VMLocalConte
 }
 
 func TestWitnessV3RefusesOlderVersionsWithAReason(t *testing.T) {
-	for _, version := range []int{0, 1, 2, 4} {
+	for _, version := range []int{0, 1, 2, 5} {
 		w := testWitnessV3("texture")
 		w.WitnessVersion = version
 		err := w.Validate()
