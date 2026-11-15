@@ -399,6 +399,10 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     public var onChange: (@Sendable () -> Void)?
     /// Where playback is, per segment (station P1): P2 observes it.
     public let playback = SegmentTracker()
+    /// Tests only: runs in the loop after its last look at the document and before the write that ends it (the window of review finding R3).
+    var beforeLoopTail: (@Sendable () -> Void)?
+    /// A playback loop is running (it ended dry, or was never started, when false).
+    var loopIsActive: Bool { st.read { $0.loop != nil } }
     public var dipVolume: Float = 0.25
     /// Text the listener asked to hear (mail's "Read it to me"), behind the story now playing; each one a programme of its own.
     private var queue: [ProgrammeDocument] = []

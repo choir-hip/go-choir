@@ -336,9 +336,14 @@ public final class RadioProgramme: Programme, @unchecked Sendable {
         let base = p.string("baseURL", ChoirEnvironment.defaultBaseURL)
         source = RouteStretchSource(baseURL: base)
         fallback = { try await ChoirFrontProgramme(StageParams()).load() }
+        firstSegmentDeadline = Self.defaultFirstSegmentDeadline
     }
-    public init(source: StretchSource, fallback: @escaping @Sendable () async throws -> ProgrammeDocument) {
-        self.source = source; self.fallback = fallback
+    /// How long the listener waits in silence for the first segment before the article plays. The design names no figure; 8 seconds.
+    public static let defaultFirstSegmentDeadline: TimeInterval = 8
+    let firstSegmentDeadline: TimeInterval
+    public init(source: StretchSource, fallback: @escaping @Sendable () async throws -> ProgrammeDocument,
+                firstSegmentDeadline: TimeInterval = RadioProgramme.defaultFirstSegmentDeadline) {
+        self.source = source; self.fallback = fallback; self.firstSegmentDeadline = firstSegmentDeadline
     }
 
     /// As a plain Programme stage: the document to start with. The rest of a stretch is lost; ChoirApp uses `open`.
