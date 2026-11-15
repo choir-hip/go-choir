@@ -220,6 +220,7 @@ entered below as lapsed, not scored.
 | C86 | 2026-11-14T22:36Z | true | landed 20:21Z (fdbe766d6), CI 43637074875, deployed 20:35Z, no revert; paper at 22:36Z: 144 `choir.lifecycle_command` ops, 828,038 bytes, 5.75 KB per op against 31.1 KB (counters since the 21:31Z restart; 5.6 KB over 35 ops before it); no "stored revision" line in the paper's console log; publishing (1,215 calls in the hour); d@e create and editor-save re-submits answered with the recorded revision ids before and after a restart | 0.04 |
 | C89 | 2026-11-14T23:05Z | true | restore to checkpoint df408396... (22:52:48Z, sequence 110,778; base snapshot at head 108,786, tail 1,992 events) started 22:58:30Z, answered 23:02:39Z: http 500 `rematerialize: reconstructed computer_event_index does not match checkpoint`; Caddy 500 after 248.4 s; replay took 15.6 s; realization epoch 13706 before and after; the post-checkpoint revision still present | 0.2025 |
 | C87 | 2026-11-14T23:33Z | true | landed 21:20Z (c1ea7a418), CI 43642246845, deployed about 21:31Z, no revert on main, deploy receipt still c1ea7a418; ring walk walk-kl7mnqvsv8xy-1794691884 complete 21:42Z with R0, R2 and R5 clean and no rollback or boot-guard line in vmctl since; d@e's updater logged one prune line per boot, errors=0 (10.6 GB freed at 21:31Z, then 203 MB and 0 at the 22:16Z and 22:28Z drill boots); the paper pruned 5.4 GB at boot and has published since | 0.04 |
+| C91 | 2026-11-15T04:20Z | partial | deployed as 304a81277 (CI 43672725876, Node B 03:47:26Z). d@e bound checkpoint 998cd98d... at 04:04:55Z (sequence 114,093, witness version 4). `choir computer restore` started 04:05:54Z, answered 04:10:48Z: exit 0, method tape_reconstruct, `witness_matched: true`, base 108,786, 5,307 tail events; Caddy 200 after 283.1 s. Replay completeness 04:12Z to 04:18Z: `equivalent`, live and replay heads at sequence 114,177. Thirteen of the fourteen checks pass; the fourteenth compared doc2's head to a revision I had written down before a later drill revision, and the restored head is the right one. The epoch clause was wrong: the realization epoch was 13709 before and after, an in-place restore does not advance it. Scored as true with the wrong clause named | 0.2025 |
 
 ### Scorecard
 
@@ -229,6 +230,6 @@ false, 1 partial), 7 lapsed.
 | band | claims settled | came true |
 |---|---|---|
 | 0.0 to 0.3 | 0 | n/a |
-| 0.3 to 0.6 | 9 | 2, and 1 partial |
+| 0.3 to 0.6 | 10 | 2, and 2 partial |
 | 0.6 to 0.8 | 17 | 13, and 1 partial |
 | 0.8 to 1.0 | 0 | n/a |
