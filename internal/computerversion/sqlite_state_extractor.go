@@ -67,15 +67,15 @@ type SQLiteStateExtractor struct {
 	// EmptyJSONArrayColumns lists JSON-array text columns, per table, whose
 	// JSON null is digested as the empty array "[]": the two spellings of one
 	// empty list. It changes the digest of a store that holds a null, so the
-	// stored witness leaves it unset and only a comparison of two stores
-	// built by different writers sets it.
+	// strict (version 3) witness leaves it unset; the canonical (version 4)
+	// witness sets it (agentcore/canonical_witness.go).
 	EmptyJSONArrayColumns map[string]map[string]struct{}
 
 	// RowFilters maps a table to an SQL predicate, over that table's own
 	// columns, that keeps the rows the digest covers; the rest are left out.
 	// A table read as a logical table (LogicalTables) is not filtered. Like
-	// EmptyJSONArrayColumns it changes digests, so the stored witness leaves
-	// it unset.
+	// EmptyJSONArrayColumns it changes digests, so the strict (version 3)
+	// witness leaves it unset and the canonical (version 4) witness sets it.
 	RowFilters map[string]string
 
 	// IgnoredTables lists tables left out of the observation entirely, name,

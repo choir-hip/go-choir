@@ -48,8 +48,8 @@ var ErrWitnessVersionRefused = errors.New("witness version refused")
 // checkpoint's. A refusal, not an internal error.
 var ErrWitnessMismatch = errors.New("witness mismatch")
 
-// VerdictReasonWitnessVersion: the checkpoint's witness is not version 3, so
-// the host cannot judge it.
+// VerdictReasonWitnessVersion: the checkpoint's witness is not version 3 or 4,
+// so the host cannot judge it.
 const VerdictReasonWitnessVersion = "witness_version"
 
 func (w VMLocalContentWitness) version() int { return w.WitnessVersion }

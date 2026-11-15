@@ -547,7 +547,7 @@ func compactOnChain(ctx context.Context, db *sql.DB, statePath string, side comp
 // file, the head is still an ancestor. A restore or rematerialize writes a
 // new file, which voids the anchor (a copy of an older history is then
 // refused unless the strong form holds). The trim cannot be taught to keep
-// an anchor row instead: the content witness hashes every row of the index,
+// an anchor row instead: the version 3 content witness hashes every row of the index (version 4 leaves the disposable batch rows out),
 // so a kept row would differ from a replay's.
 func compactTail(ctx context.Context, db *sql.DB, statePath string, side compactSidecar) (uint64, error) {
 	cur, err := compactHead(ctx, db)

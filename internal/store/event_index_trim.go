@@ -7,9 +7,11 @@ package store
 // continuity come from computer_event_projection_heads. The index keeps only
 // the last window of them.
 //
-// The content witness hashes every row of computer_event_index except its
-// timestamp columns (agentcore/restore_snapshot.go replayStateExtractor), and
-// the replay-completeness probe compares the live witness with a replay's.
+// The version 3 content witness hashes every row of computer_event_index except
+// its timestamp columns (agentcore/restore_snapshot.go replayStateExtractor);
+// the version 4 witness (agentcore/canonical_witness.go) leaves out the
+// disposable rows below. The replay-completeness probe compares the live
+// witness with a replay's.
 // So the trim is a pure function of the head sequence, never of wall time:
 // when a finalize lands on a multiple of projectionBatchTrimInterval, every
 // finalized projection_batch_recorded row at or below

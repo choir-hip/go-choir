@@ -165,8 +165,9 @@ func (rt *Runtime) bindCheckpointOnce(ctx context.Context, computerID string, fr
 }
 
 // liveCheckpointWitness reads, in one read transaction on the store's read
-// pool, the live head and then the v3 witness of the state that head names
-// (LiveStoreWitness's extractor, byte for byte). The head read is the
+// pool, the live head and then the canonical (version 4) witness of the state
+// that head names (canonicalSnapshotDigests, the extractor restore and the
+// probe use). The head read is the
 // transaction's first statement and runs under the append hold unless the
 // caller already holds appends (pinned); the scan after it holds nothing. The
 // write connection is never used, so writes are not queued behind the scan.

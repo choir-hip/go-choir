@@ -167,16 +167,24 @@ func (s *Store) eventTableFingerprints(ctx context.Context, q readQuerier) ([]Ob
 }
 
 // ObjectGraphDiagnosticRowLimit and EventIndexDiagnosticRowLimit bound the
-// replay-completeness row diagnostics. A fingerprint list is held in memory
-// on both sides of the comparison; past the limit the diagnostic is skipped
-// and says so (DiagnosticTooLargeError), and the probe's verdict, which rests
-// on the table digests, is unaffected. At about 0.7 KB per object-graph
-// fingerprint and 1.5 KB per index fingerprint, a list stays under roughly 140
-// MB and 90 MB on each side. (The telemetry partitions' rows are not
-// counted: they are read outside the snapshot, as before.)
+// replay-completeness row diagnostics. The live lists are read inside the
+// probe's snapshot, before the replay exists (the snapshot cannot be held
+// open across a replay of minutes: it would pin the write-ahead log of a
+// computer that keeps appending, on a volume that may be short), so whether
+// they are needed is known only afterwards. They are therefore bounded. A
+// fingerprint is about 0.7 KB (object graph) or 1.5 KB (event index). The
+// peak, when the result is not equivalent, holds the live list, the replay
+// list and the comparison's maps for each diagnostic in turn: about
+// (2 x 0.7 KB + 0.25 KB) x 100,000 = 165 MB for the object graph and
+// (2 x 1.5 KB + 0.5 KB) x 30,000 = 105 MB for the index, about 270 MB in the
+// worst case, on a guest whose ceiling is 1,024 MiB. Past the bound a list is
+// skipped and the report says so (DiagnosticTooLargeError, and
+// diagnostics_skipped); the verdict rests on the table digests and does not
+// depend on it. (The telemetry partitions' rows are not counted: they are
+// read outside the snapshot, as before.)
 const (
-	ObjectGraphDiagnosticRowLimit = 200000
-	EventIndexDiagnosticRowLimit  = 60000
+	ObjectGraphDiagnosticRowLimit = 100000
+	EventIndexDiagnosticRowLimit  = 30000
 )
 
 // DiagnosticTooLargeError says a row diagnostic was skipped for its size.

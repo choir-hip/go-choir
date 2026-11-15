@@ -119,17 +119,22 @@ func checkpointEvidenceClass(request selfdevprotocol.CheckpointRequest) string {
 }
 
 // StoredCheckpointResponse returns a published checkpoint with its receipt,
-// scoped to its computer: the artifact a restore takes.
-func (s *Store) StoredCheckpointResponse(ctx context.Context, computerID, checkpointDigest string) (selfdevprotocol.CheckpointResponse, error) {
+// scoped to its computer, as the JSON that was stored: the artifact a restore
+// takes. The stored bytes are served as they are and never decoded into a
+// struct and encoded again, so a field this release's structs do not know (a
+// newer witness field) survives transit and the checkpoint digest still
+// matches what the reader recomputes. The stored JSON must still decode.
+func (s *Store) StoredCheckpointResponse(ctx context.Context, computerID, checkpointDigest string) (json.RawMessage, error) {
 	var checkpointJSON, receiptJSON string
 	if err := s.db.QueryRowContext(ctx, `SELECT checkpoint_json,receipt_json FROM computer_checkpoints WHERE computer_id=? AND checkpoint_digest=?`, computerID, checkpointDigest).Scan(&checkpointJSON, &receiptJSON); err != nil {
-		return selfdevprotocol.CheckpointResponse{}, err
+		return nil, err
 	}
-	var response selfdevprotocol.CheckpointResponse
-	if json.Unmarshal([]byte(checkpointJSON), &response.Checkpoint) != nil || json.Unmarshal([]byte(receiptJSON), &response.Receipt) != nil {
-		return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("stored checkpoint response is invalid")
+	var checkpoint selfdevprotocol.Checkpoint
+	var receipt selfdevprotocol.AuthorityReceipt
+	if json.Unmarshal([]byte(checkpointJSON), &checkpoint) != nil || json.Unmarshal([]byte(receiptJSON), &receipt) != nil || !json.Valid([]byte(checkpointJSON)) || !json.Valid([]byte(receiptJSON)) {
+		return nil, fmt.Errorf("stored checkpoint response is invalid")
 	}
-	return response, nil
+	return json.RawMessage(`{"checkpoint":` + checkpointJSON + `,"receipt":` + receiptJSON + `}`), nil
 }
 
 // HandleCheckpointList serves a computer's checkpoint listing, newest first
@@ -175,7 +180,10 @@ func (h *Handler) HandleCheckpointList(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "checkpoint unavailable"})
 			return
 		}
-		writeJSON(w, http.StatusOK, response)
+		// The stored bytes, not an encoding of a decoded copy.
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(response)
 		return
 	}
 	list, err := h.service.store.ListCheckpointSummaries(r.Context(), computerID, limit)

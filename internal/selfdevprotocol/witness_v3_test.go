@@ -96,7 +96,7 @@ func TestWitnessFromExtractionEqualsWitnessFromItsObservations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	viaObservations, err := WitnessFromObservationSet(set)
+	viaObservations, err := witnessFromObservationSet(set)
 	if err != nil {
 		t.Fatal(err)
 	}
