@@ -85,18 +85,47 @@ public struct PreparedSegment: Sendable, Equatable {
 
 /// The server's `SplitBlocks` (learning engine design 12.3), mirrored: line endings to LF (a lone CR is one too), split on one or more
 /// blank lines (a line of only whitespace is blank), trim each part, drop empty parts.
+/// It works on Unicode scalars, as Go's strings do, not on Swift's characters: a space with a combining mark after it is one character
+/// to Swift (and "whitespace"), but to Go it is a space and a mark, and the line is not blank. The outputs in blocks.json and
+/// blocks_unicode.json are what the Go function returned.
 public enum SplitBlocks {
+    /// Go's `unicode.IsSpace` (what `strings.TrimSpace` trims).
+    static func isSpace(_ u: Unicode.Scalar) -> Bool {
+        switch u.value {
+        case 0x09...0x0D, 0x20, 0x85, 0xA0, 0x1680, 0x2000...0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000: return true
+        default: return false
+        }
+    }
+    static func trimmed(_ s: [Unicode.Scalar]) -> [Unicode.Scalar] {
+        var a = s[...]
+        while let f = a.first, isSpace(f) { a = a.dropFirst() }
+        while let l = a.last, isSpace(l) { a = a.dropLast() }
+        return Array(a)
+    }
     public static func split(_ text: String) -> [String] {
-        let lf = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
-        var out: [String] = [], cur: [Substring] = []
+        // line endings to LF: CRLF and a lone CR
+        var lf: [Unicode.Scalar] = []
+        var prevCR = false
+        for u in text.unicodeScalars {
+            if u == "\n" { if !prevCR { lf.append("\n") }; prevCR = false }
+            else if u == "\r" { lf.append("\n"); prevCR = true }
+            else { lf.append(u); prevCR = false }
+        }
+        var out: [String] = [], cur: [[Unicode.Scalar]] = []
         func flush() {
-            let part = cur.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            if !part.isEmpty { out.append(part) }
+            var joined: [Unicode.Scalar] = []
+            for (i, l) in cur.enumerated() { if i > 0 { joined.append("\n") }; joined += l }
+            let part = trimmed(joined)
+            if !part.isEmpty { var v = String.UnicodeScalarView(); v.append(contentsOf: part); out.append(String(v)) }
             cur = []
         }
-        for line in lf.split(separator: "\n", omittingEmptySubsequences: false) {
-            if line.allSatisfy({ $0.isWhitespace }) { flush() } else { cur.append(line) }
+        var line: [Unicode.Scalar] = []
+        func endLine() {
+            if line.allSatisfy(isSpace) { flush() } else { cur.append(line) }
+            line = []
         }
+        for u in lf { if u == "\n" { endLine() } else { line.append(u) } }
+        endLine()
         flush()
         return out
     }
@@ -108,12 +137,22 @@ public enum SegmentPrep {
 
     /// One clean line: controls and newlines become spaces, runs of space collapse, capped in bytes at a character boundary.
     static func oneLine(_ s: String) -> String {
-        var t = String(String.UnicodeScalarView(s.unicodeScalars.map { $0.properties.generalCategory == .control ? " " : $0 }))
+        // Controls (and newlines) become spaces; format characters (zero-width, bidi overrides) are dropped.
+        var scalars = String.UnicodeScalarView()
+        for u in s.unicodeScalars {
+            switch u.properties.generalCategory {
+            case .control: scalars.append(" ")
+            case .format: continue
+            default: scalars.append(u)
+            }
+        }
+        var t = String(scalars)
         t = t.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
         while t.utf8.count > maxTitleBytes { t.removeLast() }
         return t.trimmingCharacters(in: .whitespaces)
     }
-    /// `pub:harbour-1`, `mail:abc`: a ref, which is never shown to the listener.
+    /// `pub:harbour-1`, `mail:abc`: a ref, which is never shown to the listener. Known limit (review round 1, left as is): a real one-word
+    /// title with a colon and no space, such as "Note:important", reads as a ref and becomes the kind's plain label.
     static func looksLikeRef(_ s: String) -> Bool {
         s.range(of: "^[a-z][a-z_]{1,11}:\\S+$", options: .regularExpression) != nil
     }
@@ -219,11 +258,32 @@ public struct StretchDecoder {
     /// The stream ended: a last line with no line ending still counts.
     public mutating func finish() -> [StretchEvent] {
         afterCR = false
-        return line.isEmpty ? [] : endLine()
+        var out = line.isEmpty ? [] : endLine()
+        out += flushPending()
+        return out
+    }
+
+    /// An `event:` line that no `data:` line followed (a bare `event: done`): it is dispatched when the next line that is not a comment or
+    /// its data arrives, or when the stream ends. (AsyncLineSequence drops the blank line, so the blank line cannot be waited for.)
+    private var pendingEvent: String?
+    private mutating func flushPending() -> [StretchEvent] {
+        guard let p = pendingEvent else { return [] }
+        pendingEvent = nil
+        return dispatch(p, [:])
     }
 
     private mutating func endLine() -> [StretchEvent] {
         let l = line; line = ""
+        if l.hasPrefix(":") { return [] }                                    // a comment says nothing about the event in progress
+        var out: [StretchEvent] = []
+        if !l.hasPrefix("data:") { out = flushPending() }
+        let rest = process(l)
+        if l.hasPrefix("event:") { pendingEvent = l.dropFirst(6).trimmingCharacters(in: .whitespaces) }
+        else if l.hasPrefix("data:") { pendingEvent = nil }
+        return out + rest
+    }
+
+    private mutating func process(_ l: String) -> [StretchEvent] {
         if l.trimmingCharacters(in: .whitespaces).isEmpty { _ = sse.push(""); return [] }
         if l.hasPrefix("{") {
             guard let o = Self.object(l) else { ignoredCount += 1; return [] }
@@ -238,6 +298,12 @@ public struct StretchDecoder {
         return []
     }
 
+    /// A JSON number that is a whole number: not a bool, not a fraction, not a string.
+    static func wholeNumber(_ v: Any?) -> Int? {
+        guard let n = v as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() else { return nil }
+        let d = n.doubleValue
+        return d.isFinite && d == d.rounded() && abs(d) < 1e9 ? Int(d) : nil
+    }
     private static func object(_ s: String) -> [String: Any]? {
         (try? JSONSerialization.jsonObject(with: Data(s.utf8))) as? [String: Any]
     }
@@ -259,7 +325,7 @@ public struct StretchDecoder {
                 }
             }
             return [.segment(IncomingSegment(stretchID: st, segmentID: id, kind: kind, title: (o["title"] as? String) ?? "", text: text, cites: cites,
-                                             blockCount: (o["block_count"] as? NSNumber)?.intValue))]
+                                             blockCount: Self.wholeNumber(o["block_count"])))]
         case "stretch":
             if let id = o["stretch_id"] as? String, !id.isEmpty { stretchID = id }
             return []
@@ -350,42 +416,60 @@ public final class RadioProgramme: Programme, @unchecked Sendable {
     public func load() async throws -> ProgrammeDocument { try await open().document }
 
     /// The first speakable segment (or, with no stretch, the article), and what follows.
-    public func open(cause: String = "open") async throws -> OpenedProgramme {
+    private enum First: Sendable {
+        case doc(ProgrammeDocument, IteratorBox), nothing, timedOut, failed(Error)
+    }
+
+    /// Ask for the stretch and read up to its first speakable segment.
+    private func readFirst(cause: String) async -> First {
         let env = ChoirEnvironment.shared
         do {
             let stream = try await source.events(cause: cause)
-            var it = stream.makeAsyncIterator()
-            var doc: ProgrammeDocument?
-            readFirst: while let e = try await it.next() {
+            let box = IteratorBox(stream.makeAsyncIterator())
+            while let e = try await box.next() {
                 switch e {
                 case .segment(let s):
                     guard let p = SegmentPrep.prepare(s) else { continue }
                     var d = ProgrammeDocument(id: "radio:" + s.stretchID, title: "Autoradio", blocks: [])
-                    d.append(p); doc = d
-                    break readFirst
-                case .done: break readFirst
-                case .error(let m): env.log?.emit(.note("programme: the stretch ended with an error: \(m)")); break readFirst
+                    d.append(p)
+                    return .doc(d, box)
+                case .done: return .nothing
+                case .error(let m): env.log?.emit(.note("programme: the stretch ended with an error: \(m)")); return .nothing
                 }
             }
-            if let doc {
-                let box = IteratorBox(it)
-                let id = doc.id
-                return OpenedProgramme(document: doc, usedFallback: false, follow: { player in
-                    while !Task.isCancelled, let e = try? await box.next() {
-                        switch e {
-                        case .segment(let s):
-                            if let p = SegmentPrep.prepare(s) { _ = player.appendSegment(p, toDocument: id) }
-                        case .done: return
-                        case .error(let m): env.log?.emit(.note("programme: the stretch ended with an error: \(m)")); return
-                        }
+            return .nothing
+        } catch { return .failed(error) }
+    }
+
+    /// The first speakable segment (or, with no stretch, the article), and what follows. The listener waits at most `firstSegmentDeadline`
+    /// seconds, for the request and the first segment together (a computer that is waking up); then the article plays and the stretch is let go.
+    public func open(cause: String = "open") async throws -> OpenedProgramme {
+        let env = ChoirEnvironment.shared
+        let deadline = firstSegmentDeadline
+        let first: First = await withTaskGroup(of: First.self) { g in
+            g.addTask { await self.readFirst(cause: cause) }
+            g.addTask { try? await Task.sleep(nanoseconds: UInt64(max(0, deadline) * 1_000_000_000)); return .timedOut }
+            let r = await g.next() ?? .nothing
+            g.cancelAll()
+            return r
+        }
+        try Task.checkCancellation()                                         // a cancelled open is cancelled, not a reason to fetch the article
+        switch first {
+        case .doc(let doc, let box):
+            let id = doc.id
+            return OpenedProgramme(document: doc, usedFallback: false, follow: { player in
+                while !Task.isCancelled, let e = try? await box.next() {
+                    switch e {
+                    case .segment(let s):
+                        if let p = SegmentPrep.prepare(s) { _ = player.appendSegment(p, toDocument: id) }
+                    case .done: return
+                    case .error(let m): env.log?.emit(.note("programme: the stretch ended with an error: \(m)")); return
                     }
-                })
-            }
-            env.log?.emit(.note("programme: the stretch had nothing to say; playing the front page"))
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            env.log?.emit(.note("programme: no stretch (\(error)); playing the front page"))
+                }
+            })
+        case .nothing: env.log?.emit(.note("programme: the stretch had nothing to say; playing the front page"))
+        case .timedOut: env.log?.emit(.note("programme: no first segment in \(Int(deadline)) s; playing the front page"))
+        case .failed(let e): env.log?.emit(.note("programme: no stretch (\(e)); playing the front page"))
         }
         return OpenedProgramme(document: try await fallback(), usedFallback: true, follow: nil)
     }

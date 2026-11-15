@@ -81,6 +81,16 @@ Fixtures: `mobile/fixtures/learning/` (from the server builder, `lane/arl-l1a`).
 - For P2: `player.playback.observe { PlaybackEvent }`. `lastBlock` is the server's block index; `blockCount` is the server's count. `finished` means the last playback block played to its end; the server refuses a `finished` whose `last_block` is not `block_count - 1` (a mismatch the segment records as `blockCountMismatch`). P2 owns `seq`, ids, hashes, `started_at`/`ended_at`, the buffer and what to send on each kind.
 - Readings taken where the designs were open: the wire shape of a `segment` event is the segment fields of design 1.3 plus `stretch_id`, `segment_id`, `block_count` (nothing pins it until L1); the request body is `request_id`, `cause`, `local_time`, `tz` only (`after`, `heard` and the edition fields are for later stations); the player waits for the first segment before it starts (no time limit but the transport's idle timeout), then appends the rest; the cold-start ladder (design 2.1) and play-on-open are not P1; the first block of a segment is not subdivided to one sentence (only paragraphs over 600 characters are split).
 
+### Review round 1 repairs (tests in `ProgrammePlayerRepairTests.swift`, written first)
+
+- R1 a segment closed as `failed` or `finished` reports nothing more from its later blocks until another segment begins or the document is replaced (a multi-block segment with no voice on block 0 was `failed`, then `segmentBegan`, then `finished`).
+- R2 after the programme ran dry, pause, append, play starts at the first unplayed block (it replayed the last old block and reported its segment twice). With nothing new, play still replays the last block.
+- R3 the loop ends in one write that also looks at the document, so a segment appended in the window between its last read and its end is played (test hook: `beforeLoopTail`).
+- Load token in `ChoirApp.loadProgramme`: a stale open drops its result and a new load cancels the old follower; sign-out invalidates loads in flight. `RadioProgramme.open` re-throws a cancel instead of fetching the article. A first-segment deadline of 8 seconds (the design names none; it covers the request and the first segment) falls back to the article and lets the stretch go; late segments of that stretch are not used.
+- A bare `event: done` or `event: error` with no `data:` line is dispatched when the next line or the end of the stream arrives. Titles lose Unicode format characters (zero-width, bidi). `block_count` is a whole JSON number only (not a bool, a fraction or a string). The player view counts segments in a programme.
+- `SplitBlocks` works on scalars with Go's `unicode.IsSpace` set, so it matches `calibration.SplitBlocks`. `fixtures/learning/blocks_unicode.json` holds 12 cases whose outputs came from running that Go function; it is a separate file so the L1a lane's `blocks.json` is not edited.
+- Left as is: `looksLikeRef` turns a one-word title such as "Note:important" into the kind's label (noted at the function). Some tests still wait with short sleeps and polling.
+
 ## Acknowledgement timing (`ackTiming`): ways it can fail (written before the code)
 
 `LabConfiguration.ackTiming` is `immediate` (default) or `afterSystem1`. Measured on staging, the acknowledgement
