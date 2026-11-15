@@ -23,7 +23,7 @@ reset_state() { # [light|dark] [unused]
   CONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
   if [ -n "$CONT" ]; then
     S="$CONT/Library/Application Support/Autoradio"
-    rm -f "$S/open-pages.json" "$S/onboarding.json" "$S/interview.json" "$S/voice-setup.json" "$S/interview.md" "$S/signals.jsonl" "$S/recent-files.json"
+    rm -f "$S/open-pages.json" "$S/onboarding.json" "$S/edition-topics.json" "$S/voice-setup.json" "$S/signals.jsonl" "$S/recent-files.json"
     rm -rf "$S/themes" "$CONT/Library/Caches/Autoradio/files"
     rm -f "$CONT/Library/Preferences/$APP.plist"
   fi

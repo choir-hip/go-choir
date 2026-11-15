@@ -287,7 +287,7 @@ component Autoradio
     refreshActivity
     devDetails
     toggleDevDetails
-    // ---- lane 8: onboarding and the interview ----
+    // ---- lane 8: onboarding and the edition topics ----
     ob
     obBegin
     obBeginMobile
@@ -297,10 +297,16 @@ component Autoradio
     obMicNext
     obHearingYes
     obHearingNo
-    obInterview
-    obContinue
-    obDemoNext
+    obTopics
+    obToggleTopic
+    obAddTopic
+    editObTopic
+    obTopicText
+    obTalk
+    obTopicsDone
+    obDemoSay
     obEditionRetry
+    obContinueAnyway
     obSkip
     obReset
     obOpenEdition

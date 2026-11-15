@@ -24,13 +24,18 @@ public enum DemoFixtureData {
   "title": "My edition",
   "failFirst": true,
   "intro": "This is your edition. Change anything by asking.",
-  "writingLines": ["Reading what you told me", "Sorting it into what you follow and what you do not", "Writing your edition"],
+  "writingLines": [
+    "Reading your choices",
+    "Putting your edition together"
+  ],
   "sections": [
-    { "heading": "What I follow", "lines": ["Tech, the companies mostly: what they ship, who they hire, and what it does to work.", "The harbor council, from the tide barrier vote to the ferry timetable."] },
-    { "heading": "Less of", "lines": ["Celebrity gossip. Sports, unless my team makes the final."] },
-    { "heading": "Sources", "lines": ["I trust the public radio. I would rather not see the tabloids."] },
-    { "heading": "Places and people", "lines": ["Dunmere, and the harbor council."] },
-    { "heading": "When I listen", "lines": ["Mornings on the train, about twenty minutes."] }
+    {
+      "heading": "What I follow",
+      "lines": [
+        "Technology",
+        "Space"
+      ]
+    }
   ]
 }
 """#,
@@ -683,24 +688,6 @@ public enum DemoFixtureData {
    "updated_at": "2026-11-10T09:00:00Z"
   }
  ]
-}
-"""#,
-        "interview-script": #"""
-{
-  "sections": ["World", "Local", "Culture", "Tech and AI"],
-  "steps": [
-    { "kind": "say", "words": "Honestly, the news", "note": "A vague answer: the radio offers sections from today's paper." },
-    { "kind": "interrupt", "words": "Actually, tech", "note": "Cuts in over the offer; the next line answers what was said." },
-    { "kind": "loud", "words": "", "note": "The room gets loud: the interview waits, kindly, on its card." },
-    { "kind": "resume", "words": "", "note": "Back in a quiet place: continue." },
-    { "kind": "say", "words": "The companies, mostly", "note": "Answers the prepared follow-up." },
-    { "kind": "say", "words": "Celebrity gossip, and sports", "note": "Tired of hearing about." },
-    { "kind": "say", "words": "I trust the public radio but not the tabloids", "note": "Sources." },
-    { "kind": "say", "words": "Dunmere, and I follow the harbor council", "note": "Places and people." },
-    { "kind": "say", "words": "Mornings on the train, about twenty minutes", "note": "When and how long." },
-    { "kind": "say", "words": "Drop sports", "note": "A change at the read-back." },
-    { "kind": "say", "words": "That's it", "note": "Confirms the read-back; the desk writes the edition." }
-  ]
 }
 """#,
         "learned": #"""

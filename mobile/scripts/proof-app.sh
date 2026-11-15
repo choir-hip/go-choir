@@ -220,7 +220,7 @@ step "tap open-trace"; view light-33-trace-timeline 1500
 step logs
 run_drive ask light "" --touch platform
 
-# ---- 4b. voice setup and the interview (the page opens at launch by a defaults flag), light
+# ---- 4b. voice setup and the edition topics (the page opens at launch by a defaults flag), light
 step "clock data"; wait_ 1500; step tree; shot light-20-onboarding-welcome
 step "tap ob-begin"; view light-21-setup-downloading 1200
 step "clock +3500 real"; step "clock data"; step tree; shot light-22-setup-stalled
@@ -231,14 +231,11 @@ step "clock +7500 real"; step "clock data"; step tree; shot light-24-mic-ask
 step "tap ob-mic-ask"; wait_ 1800
 step "tap ob-mic-next"; view light-25-hearing 600
 step "tap ob-hearing-yes"; wait_ 600
-step "tap ob-interview"; view light-26-interview-q1 800
-step "tap ob-demo-next"; wait_ 1200
-step "tap ob-demo-next"; wait_ 1200
-step "tap ob-demo-next"; view light-27-interview-paused 1200
-step "tap ob-continue"; view light-28-interview-continued 700
+step "tap ob-topics-start"; view light-26-topics 800
+step "tap ob-topic-World"; wait_ 600
+step "tap ob-demo-say"; view light-27-topics-spoken 1200
 # on to the edition and "Start the radio" (this check is fatal: the radio must really start from the edition page)
-for i in 1 2 3 4 5 6 7; do step "tap ob-demo-next"; wait_ 1200; done
-step "tap ob-demo-next"; view light-29-writing 900
+step "tap ob-topics-done"; view light-29-writing 900
 wait_ 3200; step "tap ob-edition-retry"; wait_ 1200
 wait_ 3500; step tree; shot light-31-edition-done
 step "tap ob-edition-open"; wait_ 900
@@ -310,13 +307,9 @@ step "tap ob-fallback-transcriber"; wait_ 8400; step tree; shot dark-22-mic-ask
 step "tap ob-mic-ask"; wait_ 2300; step tree; shot dark-23-mic-heard
 step "tap ob-mic-next"; view dark-24-hearing 600
 step "tap ob-hearing-yes"; wait_ 600
-step "tap ob-interview"; wait_ 800
-step "tap ob-demo-next"; wait_ 1200
-step "tap ob-demo-next"; view dark-25-interview-interrupted 1200
-step "tap ob-demo-next"; view dark-26-interview-paused 1200
-step "tap ob-continue"; wait_ 700
-for i in 1 2 3 4 5; do step "tap ob-demo-next"; wait_ 1200; done
-step "tap ob-demo-next"; view dark-27-readback 1200
+step "tap ob-topics-start"; wait_ 800
+step "tap ob-demo-say"; view dark-25-topics-spoken 1200
+step "tap ob-topics-done"; view dark-27-writing 1200
 step "tap bar-mark"; wait_ 600; step "tap place-settings"; wait_ 900
 step "tap settings-mode-light"; wait_ 900; step tree
 step logs
@@ -367,12 +360,13 @@ done
 must "voice: welcome" '[ob-begin]'
 must "voice: setup rows" '[ob-row-transcriber]'
 must "voice: microphone check" '[ob-mic-ask]'
-must "interview: listening" '[ob-listening]'
+must "topics: the chips" '[ob-topics]'
+must "topics: the explanation" '[ob-explainer]'
 must "bar: tells the setup state" '[bar-setup]'
-must "bar: tells the interview state" 'Interview: '
+must "bar: tells the topics step" 'Choose your topics'
 must "voice: the edition is done" '[ob-start-radio]'
 if grep -qF 'NOW PLAYING' "$SHOTS/drive-voice.txt" 2>/dev/null; then echo "ok: Start the radio from the edition page starts it (the bar says NOW PLAYING)"; else echo "MISSING: Start the radio did not start the radio within 5 s"; FAILS="$FAILS [start the radio]"; fi
-must "interview: pause card" '[ob-paused]'
+must "topics: the selection is shown" '[ob-selection]'
 must "first run: the card on the paper" '[firstrun-card]'
 if grep -qF 'local reply text ready' "$SHOTS/drive-ask.txt" 2>/dev/null; then echo "ok: trace: the timing steps are listed"; else echo "note: the trace page did not list the timing steps in the demo run (no turn record yet, or the path moved)"; fi
 if grep -qF 'Got it' "$SHOTS/drive-ask.txt" 2>/dev/null; then echo "UNWANTED: a stock phrase was spoken"; FAILS="$FAILS [stock phrase]"; fi

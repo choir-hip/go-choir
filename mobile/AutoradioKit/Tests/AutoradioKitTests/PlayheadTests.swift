@@ -16,8 +16,6 @@ import XCTest
 //  I1. The engine decides "interrupted" late (after the yield has paused the programme): it must ask at the moment the turn
 //      begins, before anything yields. Test: the answer changes after the button goes down; the turn keeps the first.
 //  I2. Nothing was speaking (paused, clip, nothing): interrupted is false and the spoken text empty.
-//  I3. The interview reads the engine's answer, not a timing guess: with no information it is not interrupted.
-//  I4. The cut line keeps the words heard, and the saved document shows only what was heard.
 //
 // speakText:
 //  S1. Empty or markup-only text speaks nothing and changes nothing.
@@ -401,23 +399,4 @@ final class InterruptedTurnTests: XCTestCase {
         XCTAssertTrue(cut.contains("cut in on the radio") && cut.contains("heard only: \"Para two\""), cut)
     }
 
-    // I3, I4
-    func testInterviewUsesTheEnginesAnswerNotATimingGuess() async throws {
-        let session = InterviewSession(interview: Interview(), file: nil)
-        _ = session.start()
-        _ = await session.hear("the news")
-        let l = await session.hear("actually, tech")             // no information: not interrupted, however soon it came
-        XCTAssertFalse(session.snapshot.state.turns.contains { $0.interrupted })
-        XCTAssertFalse(l.isEmpty)
-
-        let s2 = InterviewSession(interview: Interview(), file: nil)
-        _ = s2.start()
-        _ = await s2.hear("the news")
-        _ = await s2.hear("actually, tech", interrupted: true, heard: "Today's paper has")
-        let cutTurn = s2.snapshot.state.turns.last { $0.who == "radio" && $0.interrupted }
-        XCTAssertEqual(cutTurn?.heard, "Today's paper has")
-        let md = s2.snapshot.documentMarkdown(title: "t")
-        XCTAssertTrue(md.contains("Today's paper has …"), "the saved document shows what was heard")
-        XCTAssertTrue(md.contains("(cut off)"))
-    }
 }

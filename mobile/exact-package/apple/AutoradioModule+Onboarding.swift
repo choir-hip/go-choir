@@ -1,16 +1,16 @@
-// Lane 8: first run. Voice setup (configuring the voice and audio models), the interview on the existing turn engine, and
-// the edition. Owned by the onboarding lane. The logic is in the kit (VoiceSetup.swift, Interview.swift, with tests); this
+// Lane 8: first run. Voice setup (configuring the voice and audio models), the edition's topics (chips the reader taps, types or
+// says) and the edition. Owned by the onboarding lane. The logic is in the kit (VoiceSetup.swift, EditionSetup.swift, with tests); this
 // file only holds the listener's progress, the demo drive, the platform calls (microphone, route, speech) and the sources
 // and sends the contract binds.
 //
 // What runs where:
-//   demo mode / simulator driver : setup is a scripted download and check (fixtures/demo/setup-script.json); the interview
-//                                  is driven turn by turn from fixtures/demo/interview-script.json through the same
-//                                  `InterviewSession.hear` the desk stage calls; the edition is fixtures/demo/edition.json.
-//                                  No microphone, no model, no network.
+//   demo mode / simulator driver : setup is a scripted download and check (fixtures/demo/setup-script.json); speech is one
+//                                  button that says "add space and chess" through the same `EditionSetupSession.hear` the desk
+//                                  stage calls; the edition is fixtures/demo/edition.json. No microphone, no model, no network.
 //   a phone                      : setup uses the ModelStore downloader and (when the models lane supplies them) the
-//                                  library fetch and on-device checkers; the interview runs on the engine: programme
-//                                  "interview", desk "interview-desk", open addressing. UNPROVEN on a device.
+//                                  library fetch and on-device checkers; "Talk to it" runs on the engine: programme
+//                                  "edition-setup", desk "edition-setup-desk", open addressing, until the reader stops it.
+//                                  UNPROVEN on a device.
 import AVFoundation
 import Foundation
 import UIKit
@@ -20,7 +20,7 @@ private struct OnboardingProgress: Codable {
     var skipped = false
     var setupDone = false
     var micRefused = false
-    var interviewStarted = false
+    var topicsStarted: Bool?
     var editionDone = false
     var step = "welcome"
 }
@@ -44,11 +44,9 @@ final class OnboardingController: @unchecked Sendable {
     private var heard = ""
     private var route = ""
     private var hearingOK = false
-    // interview
-    private var session: InterviewSession?
-    private var demoScript: [[String: String]] = []
-    private var demoIndex = 0
-    private var demoSections: [String] = []
+    // edition topics
+    private var session: EditionSetupSession?
+    private var talking = false
     // edition
     private var edition: Edition?
     private var editionStatus = ""       // "" | writing | failed | ready
@@ -57,30 +55,27 @@ final class OnboardingController: @unchecked Sendable {
     private var writer: EditionWriter
 
     var progressFile: URL { support.appendingPathComponent("onboarding.json") }
-    var interviewFile: URL { support.appendingPathComponent("interview.json") }
+    var topicsFile: URL { support.appendingPathComponent("edition-topics.json") }
     var recordFile: URL { support.appendingPathComponent("voice-setup.json") }
 
     init(module: AutoradioModule, support: URL, demo: Bool) {
         self.module = module; self.support = support; self.demo = demo
-        if demo, let d = Demo.fixture("edition"), let e = Edition.parse(d) { writer = DemoEditionWriter(edition: e) } else { writer = UnbuiltEditionWriter() }
+        if demo, let d = Demo.fixture("edition"), let e = Edition.parse(d) { writer = DemoEditionWriter(edition: e) } else { writer = LocalEditionWriter() }
         if let d = try? Data(contentsOf: progressFile), let p = try? JSONDecoder().decode(OnboardingProgress.self, from: d) { progress = p }
-        // Nothing resumes by itself (restart rule): a saved interview comes back paused, behind a card.
-        if let saved = InterviewSession.load(file: interviewFile, sections: []), !saved.state.turns.isEmpty, !progress.editionDone {
-            let s = InterviewSession(interview: saved, file: interviewFile)
-            session = s; InterviewSession.shared = s
-            step = "interview"
+        // Coming back to the topics step shows what was saved. The microphone never opens by itself (restart rule).
+        if progress.topicsStarted == true, !progress.editionDone, !progress.skipped {
+            let s = EditionSetupSession(suggestions: EditionTopics.suggestions(), file: topicsFile)
+            session = s; EditionSetupSession.shared = s
+            step = "topics"
         } else if progress.editionDone { step = "done" }
         else if progress.skipped { step = "skipped" }
         else if progress.setupDone { step = "ready" }
-        if demo, let d = Demo.fixture("interview-script"), let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] {
-            demoSections = o["sections"] as? [String] ?? []
-            demoScript = (o["steps"] as? [[String: Any]] ?? []).map { st in st.reduce(into: [String: String]()) { $0[$1.key] = $1.value as? String ?? "" } }
-        }
         wire(session)
     }
 
-    private func wire(_ s: InterviewSession?) {
+    private func wire(_ s: EditionSetupSession?) {
         s?.onChange = { [weak self] in self?.changed() }
+        s?.onFinish = { [weak self] in self?.finishTopics() }
     }
 
     func changed() { module.touch(["onboardingState"]) }
@@ -93,9 +88,8 @@ final class OnboardingController: @unchecked Sendable {
 
     private func set(_ f: () -> Void) { lock.lock(); f(); lock.unlock(); changed() }
 
-    /// Sections from today's paper, offered when the first answer is vague.
+    /// Section ids from today's paper; merged into the suggestions so a section the house list adds shows up as a chip.
     private func sections() -> [String] {
-        if demo, !demoSections.isEmpty { return demoSections }
         var seen: [String] = []
         for r in module.choir.storyRows() where !r.section.isEmpty && !seen.contains(r.section) { seen.append(r.section) }
         return seen
@@ -107,7 +101,7 @@ final class OnboardingController: @unchecked Sendable {
         lock.lock()
         let doneBefore = progress.setupDone && setup == nil && step == "skipped"
         lock.unlock()
-        // Skipped after a finished setup: nothing to download again; go on to the interview.
+        // Skipped after a finished setup: nothing to download again; go on to the topics.
         if doneBefore { set { step = "ready"; progress.skipped = false }; save(); return }
         lock.lock()
         if step == "setup", setup?.isStarted == true, setup?.isFinished == false { lock.unlock(); return }
@@ -178,7 +172,7 @@ final class OnboardingController: @unchecked Sendable {
         AVAudioApplication.requestRecordPermission { [weak self] granted in
             guard let self else { return }
             if !granted {
-                self.set { self.mic = "refused"; self.progress.micRefused = true; self.message = "The interview is a spoken conversation, so it needs the microphone. You can allow it in Settings." }
+                self.set { self.mic = "refused"; self.progress.micRefused = true; self.message = "Talking to the radio needs the microphone. You can allow it in Settings; you can always tap instead." }
                 self.save(); return
             }
             self.set { self.progress.micRefused = false }
@@ -191,7 +185,7 @@ final class OnboardingController: @unchecked Sendable {
                     let t = self.module.runtime.snapshot().transcript
                     if !t.isEmpty { self.set { self.heard = t; self.mic = "heard" }; return }
                 }
-                self.set { self.mic = "silent"; self.message = "I could not hear anything. The paper keeps working; the interview waits until I can hear you." }
+                self.set { self.mic = "silent"; self.message = "I could not hear anything. The paper keeps working, and you can tap your topics instead." }
             }
         }
     }
@@ -217,30 +211,40 @@ final class OnboardingController: @unchecked Sendable {
         }
     }
 
-    // MARK: The interview
+    // MARK: The edition's topics
 
-    func startInterview() {
-        if !demo, mic != "heard" && mic != "checking" && progress.micRefused {
-            set { message = "The interview is a spoken conversation, so it needs the microphone." }; return
-        }
-        let bankSections = sections()
-        let s = InterviewSession(interview: Interview(bank: .default, sections: bankSections.isEmpty ? ["World", "Local", "Culture", "Tech and AI"] : bankSections), file: interviewFile)
+    /// The step: chips the reader taps, a field to type their own, and "Talk to it". Nothing here needs the microphone or the network.
+    func startTopics() {
+        lock.lock(); let existing = session; lock.unlock()
+        let s = existing ?? EditionSetupSession(suggestions: EditionTopics.suggestions(liveSections: sections()), file: topicsFile)
+        s.setSuggestions(EditionTopics.suggestions(liveSections: sections()))
         wire(s)
-        InterviewSession.shared = s
-        set { session = s; step = "interview"; progress.interviewStarted = true; progress.skipped = false; demoIndex = 0; message = "" }
+        EditionSetupSession.shared = s
+        set { session = s; step = "topics"; progress.topicsStarted = true; progress.skipped = false; message = "" }
         save()
-        // On the engine the programme's loader starts the session (InterviewProgramme.load), so the open line and the first
-        // question are spoken and recorded once. Demo has no engine and no loader: it starts the session itself.
-        if demo { _ = s.start() } else { startOnEngine() }
     }
 
-    /// The interview on the radio's own engine: programme, desk and open addressing come from the kit's registry.
-    /// UNPROVEN on a device (the simulator proof drives the session directly).
-    private func startOnEngine() {
+    func toggleTopic(_ label: String) { session?.toggle(label) }
+
+    func addTopic(_ text: String) {
+        guard let s = session else { return }
+        if s.addTyped(text).isEmpty, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { set { message = "That one is already there." } }
+        else { set { message = "" } }
+    }
+
+    /// Say it instead of tapping: the engine listens until the reader stops it or taps Continue.
+    func toggleTalk() {
+        lock.lock(); let on = talking; lock.unlock()
+        if on { stopVoice(); return }
+        if demo { set { message = "" }; return }
+        if progress.micRefused { set { message = "Talking to the radio needs the microphone. You can allow it in Settings, or tap topics instead." }; return }
+        guard let s = session else { return }
+        EditionSetupSession.shared = s
         let rt = module.runtime!
-        rt.setStage(.programme, id: InterviewProgramme.stageID)
-        rt.setStage(.desk, id: InterviewDesk.stageID)
+        rt.setStage(.programme, id: EditionSetupProgramme.stageID)
+        rt.setStage(.desk, id: EditionSetupDesk.stageID)
         rt.setAudioPolicy(.alwaysTalking)
+        set { talking = true; message = "" }
         Task { [weak self] in
             guard let self else { return }
             await rt.start(virtual: self.module.virtualEngine)
@@ -248,58 +252,67 @@ final class OnboardingController: @unchecked Sendable {
         }
     }
 
-    func continueInterview() {
-        guard let s = session else { startInterview(); return }
-        InterviewSession.shared = s
-        set { step = "interview"; message = "" }
-        // On the engine the loader resumes the session (InterviewProgramme.load); resuming here too asked the question twice.
-        if demo { _ = s.resume() } else { startOnEngine() }
+    /// Back to the radio's own stages, and the setup's one-line programme out of the player.
+    private func stopVoice() {
+        lock.lock(); let was = talking; talking = false; lock.unlock()
+        if was {
+            let rt = module.runtime!
+            rt.setStage(.desk, id: AutoradioDeskStage.stageID)
+            rt.setStage(.programme, id: RadioProgramme.stageID)
+            rt.player.pause()
+            rt.player.setDocument(ProgrammeDocument(id: "none", title: "", blocks: []))
+        }
+        changed()
     }
 
-    /// Demo: the next recorded turn, through the same `hear` the desk stage calls.
-    func demoNext() {
+    /// Demo: the same words the desk stage would hear, through the same `hear`.
+    func demoSay() {
         guard demo, let s = session else { return }
-        lock.lock(); let i = demoIndex; let script = demoScript; lock.unlock()
-        guard i < script.count else { return }
-        set { demoIndex = i + 1 }
-        let st = script[i]
-        Task { [weak self] in
-            guard let self else { return }
-            switch st["kind"] ?? "say" {
-            case "interrupt": _ = await s.hear(st["words"] ?? "", interrupted: true)
-            case "loud": _ = s.tooLoud()
-            case "resume": _ = s.resume()
-            case "silence": _ = s.silence()
-            default: _ = await s.hear(st["words"] ?? "", interrupted: false)
-            }
-            if s.snapshot.status == .done { self.writeEdition() }
-            self.changed()
-        }
+        _ = s.hear("add space and chess")
+        changed()
+    }
+
+    /// Continue: the selection is already saved (every change writes it); the edition is written from it.
+    func finishTopics() {
+        guard session != nil else { return }
+        lock.lock(); let on = step == "topics"; lock.unlock()
+        guard on else { return }
+        stopVoice()
+        writeEdition()
     }
 
     // MARK: The edition
 
     func writeEdition() {
         guard let s = session else { return }
-        let iv = s.snapshot
-        let title = "Interview, " + Self.dayLabel()
-        set { step = "writing"; editionStatus = "writing"; writingLine = "Reading what you said"; editionError = "" }
-        try? iv.documentMarkdown(title: title).write(to: support.appendingPathComponent("interview.md"), atomically: true, encoding: .utf8)
+        lock.lock(); let busy = editionStatus == "writing"; lock.unlock()
+        guard !busy else { return }
+        let topics = s.topics
+        set { step = "writing"; editionStatus = "writing"; writingLine = "Writing your edition…"; editionError = "" }
         let w = writer
         Task { [weak self, w] in
             guard let self else { return }
-            do {
-                let e = try await w.write(from: iv, interviewTitle: title) { line in self.set { self.writingLine = line } }
-                self.set { self.edition = e; self.editionStatus = "ready"; self.step = "done"; self.progress.editionDone = true }
-                self.save()
-                self.module.pages.open("texture:my-edition", title: e.title)
-                self.module.pages.focus("onboarding:setup")
-                self.module.touch(["openPages"])
-            } catch {
-                // The interview document is kept; the listener can retry. The default edition goes on meanwhile.
-                self.set { self.editionStatus = "failed"; self.editionError = "I couldn't write your edition just now. I'll keep what you said." }
+            // Always ends: the edition, a failure, or the deadline (EditionCompletion). The topics were saved before this ran.
+            let outcome = await EditionCompletion.run(topics: topics, writer: w) { line in self.set { self.writingLine = line } }
+            switch outcome {
+            case .written(let e): self.editionReady(e)
+            case .failed(let m): self.set { self.editionStatus = "failed"; self.editionError = m }
+            case .timedOut: self.set { self.editionStatus = "failed"; self.editionError = EditionCompletion.timedOutLine }
             }
         }
+    }
+
+    /// "Continue anyway": the general edition, from nothing but this phone. The saved topics stay in the file.
+    func continueAnyway() {
+        editionReady(EditionCompletion.general())
+    }
+
+    private func editionReady(_ e: Edition) {
+        set { edition = e; editionStatus = "ready"; step = "done"; progress.editionDone = true }
+        save()
+        module.pages.open("texture:my-edition", title: e.title)
+        module.pages.focus("onboarding:setup")
+        module.touch(["openPages"])
     }
 
     static func dayLabel() -> String {
@@ -313,13 +326,15 @@ final class OnboardingController: @unchecked Sendable {
     }
 
     func skip() {
+        stopVoice()
         set { progress.skipped = true; step = "skipped" }
         save()
     }
 
     func reset() {
-        set { progress = OnboardingProgress(); step = "welcome"; setup = nil; session = nil; InterviewSession.shared = nil; edition = nil; editionStatus = ""; mic = "unasked"; message = ""; demoIndex = 0 }
-        try? FileManager.default.removeItem(at: interviewFile)
+        stopVoice()
+        set { progress = OnboardingProgress(); step = "welcome"; setup = nil; session = nil; EditionSetupSession.shared = nil; edition = nil; editionStatus = ""; mic = "unasked"; message = "" }
+        try? FileManager.default.removeItem(at: topicsFile)
         save()
     }
 
@@ -334,24 +349,17 @@ final class OnboardingController: @unchecked Sendable {
             ["stage": r.stage, "name": r.name, "model": r.model, "sizeLabel": r.sizeLabel, "state": r.state, "progress": r.progress, "statusLine": r.statusLine,
              "isFallback": r.isFallback, "canRetry": r.canRetry, "canFallback": r.canFallback, "numbers": r.numbers]
         }
-        let iv = session?.snapshot
-        let turns = iv?.state.turns ?? []
-        let talk: [[String: Any]] = turns.suffix(7).map { ["who": $0.who, "text": $0.text, "interrupted": $0.interrupted] }
-        var interviewStatus = iv?.status.rawValue ?? "notStarted"
-        if iv?.status == .readback { interviewStatus = "readback" }
-        let ivPaused = iv?.status == .paused
-        let lastRadio = turns.last(where: { $0.who == "radio" })?.text ?? ""
+        let chips: [[String: Any]] = (session?.chips() ?? EditionTopics.suggestions().map { EditionChip(label: $0, selected: false, own: false) }).map {
+            ["label": $0.label, "selected": $0.selected, "own": $0.own]
+        }
+        let picked = session?.topics ?? []
         var card = "", cardBody = ""
         if progress.editionDone { card = "" }
-        else if progress.micRefused { card = "Make your edition"; cardBody = "The interview is a spoken conversation, so it needs the microphone." }
-        else if iv != nil, !turns.isEmpty { card = "Continue your interview"; cardBody = "Pick up where you left off. Nothing starts by itself." }
-        else if progress.interviewStarted || (setup?.isStarted == true && setup?.isFinished == false) { card = "Finish voice setup"; cardBody = "Setting up the voice on this phone takes a few minutes." }
-        else { card = "Make your edition"; cardBody = "A short spoken conversation, then your paper is yours." }
-        let nextNote = demo && demoIndex < demoScript.count ? (demoScript[demoIndex]["note"] ?? "") : ""
-        let nextKind = demo && demoIndex < demoScript.count ? (demoScript[demoIndex]["kind"] ?? "") : ""
-        let nextWords = demo && demoIndex < demoScript.count ? (demoScript[demoIndex]["words"] ?? "") : ""
-        let titles: [String: String] = ["welcome": "Make it yours", "setup": "Set up your voice", "mic": "Can I hear you?", "hearing": "Can you hear me?", "ready": "Ready to talk",
-                                        "interview": "Your interview", "writing": "Writing your edition", "done": "Your edition", "skipped": "Make it yours"]
+        else if progress.topicsStarted == true { card = "Choose your topics"; cardBody = "Pick up where you left off. What you chose is saved." }
+        else if setup?.isStarted == true && setup?.isFinished == false { card = "Finish voice setup"; cardBody = "Setting up the voice on this phone takes a few minutes." }
+        else { card = "Make your edition"; cardBody = "Pick the topics you care about, then your paper is yours." }
+        let titles: [String: String] = ["welcome": "Make it yours", "setup": "Set up your voice", "mic": "Can I hear you?", "hearing": "Can you hear me?", "ready": "Voice is ready",
+                                        "topics": "Your edition", "writing": "Writing your edition", "done": "Your edition", "skipped": "Make it yours"]
         var d = [String: Any]()
         d["step"] = step; d["title"] = titles[step] ?? "Make it yours"; d["message"] = message
         d["totalLabel"] = setup?.totalLabel ?? SetupCatalog.totalLabel(bytes: SetupCatalog.totalBytes(SetupCatalog.plan(for: .current())), onWiFi: true)
@@ -361,10 +369,9 @@ final class OnboardingController: @unchecked Sendable {
         if let p = setup?.profile { device = p.chip + ", " + String(format: "%.0f", p.memoryGB) + " GB" }
         d["device"] = device
         d["mic"] = mic; d["level"] = level; d["heard"] = heard; d["route"] = route; d["hearingOK"] = hearingOK
-        d["interviewStatus"] = interviewStatus; d["paused"] = ivPaused; d["pauseReason"] = iv?.state.pauseReason ?? ""
-        d["talk"] = talk; d["nowSaying"] = lastRadio
-        d["listening"] = (iv?.status == .running || iv?.status == .readback)
-        d["demo"] = demo; d["demoNote"] = nextNote; d["demoKind"] = nextKind; d["demoWords"] = nextWords; d["demoLeft"] = max(0, demoScript.count - demoIndex)
+        d["chips"] = chips; d["pickedCount"] = picked.count; d["selectionLine"] = EditionSetupText.selectionLine(picked)
+        d["explainer"] = EditionSetupText.explainer; d["voiceHint"] = EditionSetupText.voiceHint; d["talking"] = talking
+        d["demo"] = demo; d["demoWords"] = "add space and chess"
         d["editionStatus"] = editionStatus; d["writingLine"] = writingLine; d["editionError"] = editionError
         d["editionTitle"] = edition?.title ?? "My edition"; d["editionIntro"] = edition?.intro ?? ""
         d["editionLines"] = edition?.lines ?? []; d["editionAddress"] = "texture:my-edition"
@@ -374,7 +381,7 @@ final class OnboardingController: @unchecked Sendable {
     }
 }
 
-/// `onboarding:*` pages and the edition Texture the interview wrote (`texture:my-edition`, until the server has an edition marker).
+/// `onboarding:*` pages and the edition Texture the topics step wrote (`texture:my-edition`, until the server has an edition marker).
 struct OnboardingPageSource: PageSource {
     let controller: OnboardingController
     func handles(_ address: String) -> Bool {
@@ -393,7 +400,7 @@ extension AutoradioModule {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
         let c = OnboardingController(module: self, support: support, demo: Demo.isOn)
         OnboardingController.shared = c
-        StageRegistry.registerInterviewStages(runtime.registry)
+        StageRegistry.registerEditionSetupStages(runtime.registry)
         pageSources.register(OnboardingPageSource(controller: c))
 
         handle("onboardingState") { args, reply in reply(c.view()) }
@@ -404,16 +411,20 @@ extension AutoradioModule {
         handle("onboardingMic") { args, reply in c.askMicrophone(); reply(c.view()) }
         handle("onboardingMicNext") { args, reply in c.microphoneNext(); reply(c.view()) }
         handle("onboardingHearing") { args, reply in c.hearing(ok: (args["ok"] as? String) == "true"); reply(c.view()) }
-        handle("onboardingInterview") { args, reply in c.startInterview(); reply(c.view()) }
-        handle("onboardingContinue") { args, reply in c.continueInterview(); reply(c.view()) }
-        handle("onboardingDemoNext") { args, reply in c.demoNext(); reply(c.view()) }
+        handle("onboardingTopics") { args, reply in c.startTopics(); reply(c.view()) }
+        handle("onboardingTopicToggle") { args, reply in c.toggleTopic(args["label"] as? String ?? ""); reply(c.view()) }
+        handle("onboardingTopicAdd") { args, reply in c.addTopic(args["text"] as? String ?? ""); reply(c.view()) }
+        handle("onboardingTalk") { args, reply in c.toggleTalk(); reply(c.view()) }
+        handle("onboardingTopicsDone") { args, reply in c.finishTopics(); reply(c.view()) }
+        handle("onboardingDemoSay") { args, reply in c.demoSay(); reply(c.view()) }
         handle("onboardingEditionRetry") { args, reply in c.writeEdition(); reply(c.view()) }
+        handle("onboardingContinueAnyway") { args, reply in c.continueAnyway(); reply(c.view()) }
         handle("onboardingSkip") { args, reply in c.skip(); reply(c.view()) }
         handle("onboardingReset") { args, reply in c.reset(); reply(c.view()) }
 
         // Fresh install, signed in, not demo: offer the path once as the open page (closing it is a choice that sticks).
         // The computer is asked first (GET /api/texture/edition): a listener who already has an edition (a second phone, a reinstall) is
-        // not offered the interview. No answer (offline, signed out, an older server) offers it as before.
+        // not offered the topics step. No answer (offline, signed out, an older server) offers it as before.
         if !Demo.isOn {
             Task { [weak c, pages] in
                 if let ed = await EditionLookup.fetch(), ed.found { c?.markEditionFound() } else if let pages { c?.offerOnce(pages: pages) }
