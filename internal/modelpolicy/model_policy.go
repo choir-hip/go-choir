@@ -44,6 +44,10 @@ const (
 	// the verifier roles.
 	AutoradioRole = "autoradio"
 
+	// AutoradioProgrammeRole is the role of the Autoradio programme call
+	// (STUB in the tests commit).
+	AutoradioProgrammeRole = "autoradio_programme"
+
 	// ReasoningOff is a reasoning setting only the autoradio role may hold:
 	// reasoning off for the call. Every other role keeps the 2026-11-09 rule
 	// that thinking is never off (the providers floor "none", "minimal" and

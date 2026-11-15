@@ -78,3 +78,6 @@ func FirstPartyPrompt(pkg string) (string, bool) {
 	}
 	return string(raw), true
 }
+
+// ProgrammePrompt is the prompt of the Autoradio programme call (STUB).
+func ProgrammePrompt() (string, bool) { return "", false }
