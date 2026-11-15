@@ -48,15 +48,16 @@ public final class SegmentTracker: @unchecked Sendable {
         var lastBlock = -1            // announced
         var pending = -1              // begun, not announced yet (the listener is paused)
         var announced = false
+        var lastUnit = -1             // the playback block that began last
         var pausedReported = false
         var cutReported = false
     }
     private let lock = NSLock()
     private var open: Open?
     private var userPaused = false
-    /// The segment last closed as failed or finished: its later blocks (the rest of a failed segment, a replay of a finished one) report
-    /// nothing, until a block of another segment begins or the document is replaced.
-    private var closedMark: (doc: String, seg: String)?
+    /// The segment last closed as failed or finished: its later blocks (the rest of a failed segment) report
+    /// nothing, until a block of another segment begins or the document is replaced. A block at or before the unit it closed on is a seek (previous, a rewind, a jump back, play at the end): a new play, reported.
+    private var closedMark: (doc: String, seg: String, lastUnit: Int)?
     private var observers: [@Sendable (PlaybackEvent) -> Void] = []
     private let now: @Sendable () -> Date
 
@@ -82,7 +83,7 @@ public final class SegmentTracker: @unchecked Sendable {
     private func close(_ kind: PlaybackKind, into out: inout [PlaybackEvent]) {
         if let o = open {
             if o.announced { out.append(event(kind, o)) }
-            if kind == .failed || kind == .finished { closedMark = (o.docID, o.segment.id) }
+            if kind == .failed || kind == .finished { closedMark = (o.docID, o.segment.id, o.lastUnit) }
         }
         open = nil
     }
@@ -94,7 +95,7 @@ public final class SegmentTracker: @unchecked Sendable {
         if let si = doc.segmentIndex(containingBlock: unit) {
             let seg = doc.segments[si]
             if let m = closedMark {
-                if m.doc == doc.id, m.seg == seg.id { lock.unlock(); return }
+                if m.doc == doc.id, m.seg == seg.id, unit > m.lastUnit { lock.unlock(); return }   // later blocks of a closed segment; a unit at or before is a seek, a new play
                 closedMark = nil
             }
             if let o = open, o.segment.id != seg.id || o.docID != doc.id {
@@ -103,7 +104,7 @@ public final class SegmentTracker: @unchecked Sendable {
             var o = open ?? Open(segment: seg, docID: doc.id, index: si)
             let local = unit - seg.firstBlock
             let block = seg.unitServerBlocks.indices.contains(local) ? seg.unitServerBlocks[local] : 0
-            o.pending = max(o.pending, block)
+            o.pending = max(o.pending, block); o.lastUnit = unit
             if !userPaused { announce(&o, into: &out) }
             open = o
         } else {

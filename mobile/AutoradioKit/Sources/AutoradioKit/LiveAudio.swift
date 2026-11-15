@@ -388,6 +388,8 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         var jumpTo: Int?
         /// Where the loop stopped when the programme ran dry: the first block that was never played. Play starts there when blocks have come since.
         var resumeAt: Int?
+        /// A programme that arrived late (after the first-segment deadline) while an article plays: it takes over at the next block boundary.
+        var pendingDocument: ProgrammeDocument?
         var rate = 1.0
         var loop: Task<Void, Never>?
         var epoch = 0                           // bumped by every start: a loop that is no longer the current one writes nothing
@@ -416,7 +418,12 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         installRemoteCommands()
     }
     public func setConfiguration(_ c: LabConfiguration) { lock.lock(); configuration = c; lock.unlock() }
-    public func setDocument(_ d: ProgrammeDocument) { playback.documentReplaced(); st.write { $0.document = d; $0.blockIndex = 0 } }
+    /// Per-document state dies with the document: the block index, where the loop ran dry (`resumeAt`), a programme waiting to take over
+    /// (`pendingDocument`), and the tracker's open and closed segments.
+    public func setDocument(_ d: ProgrammeDocument) {
+        playback.documentReplaced()
+        st.write { $0.document = d; $0.blockIndex = 0; $0.resumeAt = nil; $0.pendingDocument = nil }
+    }
 
     // MARK: Transport
 
@@ -455,8 +462,18 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         }
         start(at: max(i - 1, 0))
     }
-    /// Scaffolding (round 2 tests first): replaced by the real hand-over.
-    public func handOver(_ d: ProgrammeDocument) {}
+    /// Give the player a programme that arrived while another document (the article) was already playing. Playing: it takes over at the
+    /// next block boundary, never mid-sentence. Not playing: it replaces the document now (and plays if the listener has not paused).
+    public func handOver(_ d: ProgrammeDocument) {
+        let (queued, playNow) = st.write { s -> (Bool, Bool) in
+            if s.loop != nil && !s.userPaused { s.pendingDocument = d; return (true, false) }
+            return (false, !s.userPaused)
+        }
+        if queued { return }
+        setDocument(d)
+        if playNow { start(at: 0) }
+        onChange?(); publishNowPlaying()
+    }
     /// The segment now playing; nil for a single article.
     public var currentSegmentIndex: Int? { st.read { $0.document.segmentIndex(containingBlock: $0.blockIndex) } }
     /// Go to the first block of segment `i`. Outside the list: nothing.
@@ -471,7 +488,11 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     @discardableResult
     public func appendSegment(_ p: PreparedSegment, toDocument documentID: String) -> Bool {
         let (ok, resumeAt) = st.write { s -> (Bool, Int?) in
-            guard s.document.id == documentID else { return (false, nil) }
+            guard s.document.id == documentID else {
+                // The programme waiting to take over is a document too: its later segments join it there.
+                if var w = s.pendingDocument, w.id == documentID, w.append(p) { s.pendingDocument = w; return (true, nil) }
+                return (false, nil)
+            }
             let old = s.document.blocks.count
             guard s.document.append(p) else { return (false, nil) }
             return (true, s.loop == nil && !s.userPaused ? old : nil)
@@ -479,6 +500,17 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         if let at = resumeAt { start(at: at) }
         if ok { onChange?(); publishNowPlaying() }
         return ok
+    }
+
+    /// Swap in the programme that is waiting to take over, if loop `my` is still the current one. True when it did (the loop goes on at block 0).
+    private func takeOver(_ my: Int) -> Bool {
+        let swapped = st.write { s -> Bool in
+            guard s.epoch == my, let p = s.pendingDocument else { return false }
+            s.document = p; s.pendingDocument = nil; s.blockIndex = 0; s.resumeAt = nil
+            return true
+        }
+        if swapped { playback.documentReplaced(); onChange?(); publishNowPlaying() }
+        return swapped
     }
 
     func start(at i: Int) {
@@ -507,16 +539,19 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
                     if Task.isCancelled { break }
                     self.playback.unitEnded(n, played: played, in: self.st.read { $0.document })
                     n += 1
+                    if self.takeOver(my) { n = 0 }                  // a late programme takes over at this block boundary
                 }
                 if Task.isCancelled { break }
                 self.beforeLoopTail?()
                 // The end, decided in one write with the look at the document: a segment appended since the last read is played, not lost.
                 let tail = self.st.write { s -> Int in
                     guard s.epoch == my else { return 0 }
+                    if s.pendingDocument != nil, !s.userPaused { return 3 }
                     if n < s.document.blocks.count, !s.userPaused { return 1 }
                     s.blockIndex = min(n, max(s.document.blocks.count - 1, 0)); s.resumeAt = n; s.loop = nil; return 2
                 }
                 if tail == 1 { continue outer }
+                if tail == 3 { if self.takeOver(my) { n = 0 }; continue outer }
                 // The story is over: what the listener asked to hear comes next, like the next story.
                 if tail == 2 { if let q = self.dequeue() { self.setDocument(q); self.start(at: 0) } else { self.onChange?() } }
                 break

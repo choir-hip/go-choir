@@ -181,7 +181,7 @@ final class RepairStageTests: XCTestCase {
         let stage = RadioProgramme(source: src, fallback: article, firstSegmentDeadline: 0.3)
         let t0 = Date()
         let o = try await stage.open()
-        XCTAssertTrue(o.usedFallback); XCTAssertEqual(o.document.id, "choir:a"); XCTAssertNil(o.follow)
+        XCTAssertTrue(o.usedFallback); XCTAssertEqual(o.document.id, "choir:a"); XCTAssertNotNil(o.follow, "round 2: the stretch is still followed")
         XCTAssertLessThan(Date().timeIntervalSince(t0), 3)
     }
 
