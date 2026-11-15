@@ -16,6 +16,10 @@ use PageScroll, Card, Layer, Btn, BarClear from "./ui.contract"
 // Citations drawn as atom pills in the Markdown experiment (the page menu, demo mode). Atom styles are literals, not tokens.
 atom citation link="cite:" color="light-dark(#7a0a57, #ff9bd6)" background-color="light-dark(#f7e4f2, #3a2236)" border-radius="6px" padding-inline="3px"
 
+// A story's content emerging: it fades in and rises a little. Off under Reduce Motion (th.reducedMotion: the animation is "none").
+keyframes readerEmerge
+  from opacity=0 translate="0px 12px"
+
 shape ReaderViewport
   width: number
   height: number
@@ -383,6 +387,7 @@ component ReaderBody
     column position="absolute" inset=0
       scroll id="reader-scroll" testId="reader-scroll" overflow-x="hidden" flex=1 min-height=0 width="100%"
         column width="100%" align-items="center" padding-top=`calc(env(safe-area-inset-top) + ${rdoc.revising ? 72 : 12}px)`
+          animation=(th.reducedMotion ? "none" : `readerEmerge ${th.motionEnterMs * 1.6}ms ease-out both`)
           column width="100%" max-width="38rem" padding-left=20 padding-right=20 box-sizing="border-box" color=th.fg font-family=th.fontRead
             // header: kicker, menu, headline, standfirst, byline and version line
             row align-items="center" gap=8 margin-bottom=remv(0.5)
@@ -488,11 +493,18 @@ component ReaderMessage
     title: string
     message: string
     busy: bool
+  derive still = th.reducedMotion
+  derive bars = [0.92, 0.98, 0.86, 0.95, 0.6]
   view
     PageScroll(id="reader-message")
       text title role="heading" aria-level=1 font-size=28 font-weight=700 testId="page-title"
+        animation=(still ? "none" : `readerEmerge ${th.motionEnterMs}ms ease-out both`)
+      // The title is already the real one: the body is drawn as quiet lines that rise in one after another, not a spinner.
       if busy
-        progress aria-label="Loading" width=24 height=24 color=th.accent
+        column gap=12 width="100%" margin-top=12 testId="reader-loading"
+          for w, i in bars key=i
+            box height=14 border-radius=7 background-color=th.paper2 width=`${floor(w * 100)}%`
+              animation=(still ? "none" : `readerEmerge ${th.motionEnterMs}ms ${th.staggerMs * (i + 1)}ms ease-out both`)
       if message != ""
         text message testId="reader-message" font-family=th.fontUi color=th.muted
 

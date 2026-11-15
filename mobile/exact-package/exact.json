@@ -1917,6 +1917,14 @@
       "answers": "ReaderAck"
     },
     {
+      "send": "readerPrefetch",
+      "options": {
+        "prev": "string",
+        "next": "string"
+      },
+      "answers": "ReaderAck"
+    },
+    {
       "send": "readerFollowSet",
       "options": {
         "address": "string",

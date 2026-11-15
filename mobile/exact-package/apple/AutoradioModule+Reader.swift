@@ -3,7 +3,7 @@
 //   texturesList(at)      the listener's documents (reloaded each time the Textures page is the page in front)
 //   readerFollow          the block and sentence the radio is reading (set by lane 1 through ReaderFollow.shared.set)
 //   readerAim             what the bar's prompt is aimed at: a document or one block of it
-// Sends: readerAimSet, readerStop (stop the desk's revision), readerRestore (a version as latest), readerReload, readerFollowSet.
+// Sends: readerAimSet, readerStop (stop the desk's revision), readerRestore (a version as latest), readerReload, readerPrefetch, readerFollowSet.
 import Foundation
 import SafariServices
 import UIKit
@@ -73,6 +73,11 @@ extension AutoradioModule {
                 let ok = await ReaderStore.shared.restore(document: address, revisionAddress: version)
                 DispatchQueue.main.async { self?.touch(["readerDoc", "texturesList"]); reply(["ok": ok]) }
             }
+        }
+        // The stack's neighbours: the card above and below the one on top are fetched and decoded now, so a swipe finds them held.
+        handle("readerPrefetch") { args, reply in
+            ReaderStore.shared.prefetch([args["prev"] as? String ?? "", args["next"] as? String ?? ""])
+            reply(["ok": true])
         }
         handle("readerReload") { [unowned self] args, reply in
             ReaderStore.shared.invalidate(args["address"] as? String ?? "")
