@@ -1,0 +1,667 @@
+package agentcore
+
+import (
+	"bytes"
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"math"
+	"net/http"
+	"regexp"
+	"strings"
+	"sync/atomic"
+	"time"
+	_ "time/tzdata" // the listener's tz must resolve on a guest with no zoneinfo
+	"unicode"
+
+	"github.com/yusefmosiah/go-choir/internal/appdesk"
+	"github.com/yusefmosiah/go-choir/internal/calibration"
+	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
+)
+
+// POST /api/autoradio/programme: the Autoradio desk's programme call (station
+// L1 of docs/definitions/choir-autoradio-learning-engine-2026-11-14.md; design
+// docs/design/autoradio-learning-engine-2026-11-14.md sections 3, 9 and 12;
+// docs/design/autoradio-dj-programme-2026-11-11.md slice 2). One streamed
+// model call writes one stretch: one JSON object per line, each validated as
+// it completes. For each valid line, in this order, the handler appends the
+// segment record, appends the forecast claim (a content segment only), and
+// sends the `segment` event, so no event can precede its forecast.
+//
+// This handler never writes an outcome: it has no air event, no settlement and
+// no lesson, and does not call the reserved settle method (design 4.1; a scan
+// test holds that). A crash never resumes work: a stretch the process did not
+// finish has its start, its segment records and its claims and no index, and a
+// retry is a new request_id.
+
+const (
+	programmeMaxBody     = 256 << 10
+	programmeMaxCands    = 40
+	programmeTextCands   = 10
+	programmeMaxCandText = 8 << 10
+	programmeMaxEdition  = 32 << 10
+
+	programmeFallbackLine = "Sorry, I lost the thread of the programme."
+	programmeCachePrefix  = "autoradio-programme:"
+)
+
+var (
+	programmeStretchesTotal atomic.Int64
+	programmeCallsTotal     atomic.Int64
+	programmeSegmentsTotal  atomic.Int64
+	programmeDroppedTotal   atomic.Int64
+)
+
+// Deadlines and a bound on output. These are not limits on our model calls
+// (CLAUDE.md: no rate bucket, in-flight cap, spacing or call quota); they end
+// a call that has stalled or runs away, and are bounds on what the model can
+// cause. The values are invented: neither the design nor the turn route names
+// one (the gateway client's own deadline is 10m30s). Variables so a test can
+// shorten them.
+var (
+	programmeWallDeadline = 120 * time.Second // the whole walk of the pool
+	programmeIdleDeadline = 30 * time.Second  // between two deltas
+)
+
+const programmeMaxSegments = 30 // the prompt asks for 10 to 15
+
+// programmePrompt is the programme prompt; a variable so a test can empty it.
+var programmePrompt = appdesk.ProgrammePrompt
+
+var programmeCauses = map[string]bool{"open": true, "extend": true, "turn": true, "result": true}
+var programmeVersionRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+var programmeIntRe = regexp.MustCompile(`^[0-9]{1,12}$`)
+
+type programmeCandidate struct {
+	Route   string          `json:"route"`
+	Version json.RawMessage `json:"version"`
+	Title   string          `json:"title"`
+	Dek     string          `json:"dek"`
+	Text    string          `json:"text,omitempty"`
+
+	ref string
+}
+
+type programmeRequest struct {
+	RequestID   string               `json:"request_id"`
+	Cause       string               `json:"cause"`
+	LocalTime   string               `json:"local_time,omitempty"`
+	TZ          string               `json:"tz,omitempty"`
+	Candidates  []programmeCandidate `json:"candidates,omitempty"`
+	EditionText string               `json:"edition_text,omitempty"`
+}
+
+// parseProgrammeRequest validates the body. These are bounds on what a
+// stranger can cause (design 12.7), not timers; every refusal is 400, because
+// the reader's cap is above anything a valid request can be.
+func parseProgrammeRequest(body []byte) (programmeRequest, error) {
+	var req programmeRequest
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		return req, fmt.Errorf("decode the request: %v", err)
+	}
+	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return req, errors.New("decode the request: trailing data")
+	}
+	if !autoradioTurnID.MatchString(req.RequestID) {
+		return req, errors.New("request_id must be 1 to 64 characters of letters, digits and _ . -")
+	}
+	if !programmeCauses[req.Cause] {
+		return req, errors.New("cause must be open, extend, turn or result")
+	}
+	if req.LocalTime != "" {
+		if _, err := time.Parse(time.RFC3339, req.LocalTime); err != nil {
+			return req, errors.New("local_time must be RFC 3339")
+		}
+	}
+	if req.TZ != "" {
+		if len(req.TZ) > 64 {
+			return req, errors.New("tz is too long")
+		}
+		// A name this guest cannot resolve is not a refusal: tz only decides how
+		// the local time is shown, and local_time carries its own offset.
+	}
+	if len(req.EditionText) > programmeMaxEdition {
+		return req, fmt.Errorf("edition_text exceeds %d bytes", programmeMaxEdition)
+	}
+	if len(req.Candidates) > programmeMaxCands {
+		return req, fmt.Errorf("candidates holds at most %d items", programmeMaxCands)
+	}
+	seen := map[string]bool{}
+	for i := range req.Candidates {
+		c := &req.Candidates[i]
+		if err := c.check(i); err != nil {
+			return req, err
+		}
+		if seen[c.ref] {
+			return req, fmt.Errorf("candidates[%d] repeats the ref %s", i, c.ref)
+		}
+		seen[c.ref] = true
+	}
+	return req, nil
+}
+
+func (c *programmeCandidate) check(i int) error {
+	if c.Route == "" || len(c.Route) > 256 || strings.ContainsAny(c.Route, "@#") ||
+		strings.IndexFunc(c.Route, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) >= 0 {
+		return fmt.Errorf("candidates[%d].route must be 1 to 256 bytes with no space, control character, @ or #", i)
+	}
+	version := strings.TrimSpace(string(c.Version))
+	if strings.HasPrefix(version, `"`) {
+		var s string
+		if err := json.Unmarshal(c.Version, &s); err != nil || !programmeVersionRe.MatchString(s) {
+			return fmt.Errorf("candidates[%d].version is not a version", i)
+		}
+		version = s
+	} else if !programmeIntRe.MatchString(version) {
+		return fmt.Errorf("candidates[%d].version must be a whole number or a short string", i)
+	}
+	c.Title = strings.TrimSpace(c.Title)
+	if c.Title == "" || len(c.Title) > 300 || hasControl(c.Title) {
+		return fmt.Errorf("candidates[%d].title must be one line of 1 to 300 bytes", i)
+	}
+	if c.Dek = strings.TrimSpace(c.Dek); c.Dek == "" || len(c.Dek) > 1000 {
+		return fmt.Errorf("candidates[%d].dek must be 1 to 1000 bytes (design 12.7: each candidate has title, dek, route and version)", i)
+	}
+	if c.Text != "" {
+		if i >= programmeTextCands {
+			return fmt.Errorf("candidates[%d] carries text, which only the first %d items may", i, programmeTextCands)
+		}
+		if len(c.Text) > programmeMaxCandText {
+			return fmt.Errorf("candidates[%d].text exceeds %d bytes", i, programmeMaxCandText)
+		}
+	}
+	c.ref = "pub:" + c.Route + "@v" + version
+	return nil
+}
+
+// programmeCall is one call in flight.
+type programmeCall struct {
+	rt      *Runtime
+	ledger  autoradioLedger
+	w       http.ResponseWriter
+	ownerID string
+	req     programmeRequest
+	input   *programmeInput
+
+	stretchID string
+	startedAt time.Time
+	received  time.Time
+	firstSeg  time.Time
+
+	// The member answering now, and the one that wrote the first segment.
+	provider, model string
+
+	segmentIDs []string
+	claimIDs   []string
+	dropped    []droppedLine
+	lineNo     int
+	streak     int
+	segCount   int
+	usage      provideriface.TokenUsage
+	hops       []autoradioHop
+	timingsAt  map[string]time.Time
+
+	// How the call ended.
+	fatal    error // a store write failed: no index, no walk
+	runEnded bool  // three invalid lines in a row
+	stop     bool
+	// cancelUpstream cancels the model call in flight; set when the call must
+	// stop reading.
+	cancelUpstream context.CancelFunc
+	capped         bool        // the segment cap ended the call
+	timedOut       atomic.Bool // a deadline ended the call
+	writeErr       error       // the first write error: the client went away
+	prompt         string
+}
+
+func (c *programmeCall) memberName() string {
+	if c.provider == "" {
+		return autoradioDesk
+	}
+	return c.provider + "/" + c.model
+}
+
+func (c *programmeCall) timings(done time.Time) map[string]int64 {
+	ms := func(t time.Time) int64 {
+		if t.IsZero() {
+			return -1
+		}
+		return t.Sub(c.received).Milliseconds()
+	}
+	return map[string]int64{"first_segment": ms(c.firstSeg), "done": ms(done)}
+}
+
+func (c *programmeCall) begin() {
+	h := c.w.Header()
+	h.Set("Content-Type", "text/event-stream")
+	h.Set("Cache-Control", "no-cache")
+	h.Set("X-Accel-Buffering", "no")
+	// The server-wide WriteTimeout would cut a stretch's stream; lift it for
+	// this response only, as the turn route does.
+	_ = http.NewResponseController(c.w).SetWriteDeadline(time.Time{})
+	c.w.WriteHeader(http.StatusOK)
+	if _, err := io.WriteString(c.w, ": autoradio\n\n"); err != nil && c.writeErr == nil {
+		c.writeErr = err
+	}
+	c.flush()
+}
+
+func (c *programmeCall) flush() {
+	if f, ok := c.w.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (c *programmeCall) event(name string, v any) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		log.Printf("autoradio programme: marshal %s event: %v", name, err)
+		return
+	}
+	// One write per event, so a reader of the stream sees whole events.
+	if _, err := io.WriteString(c.w, "event: "+name+"\ndata: "+string(data)+"\n\n"); err != nil && c.writeErr == nil {
+		c.writeErr = err
+	}
+	c.flush()
+}
+
+func estSeconds(text string) int {
+	return int(math.Ceil(float64(len(strings.Fields(text))) / 2.5))
+}
+
+func (c *programmeCall) segmentEvent(s programmeSegment) map[string]any {
+	cites := s.Cites
+	if cites == nil {
+		cites = []programmeCite{}
+	}
+	return map[string]any{
+		"stretch_id": c.stretchID, "segment_id": s.ID, "kind": s.Kind, "title": s.Title, "text": s.Text,
+		"cites": cites, "block_count": s.Blocks, "est_seconds": estSeconds(s.Text), "cut_at": "sentence",
+	}
+}
+
+func mintStretchID() string {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	return "s" + hex.EncodeToString(b)
+}
+
+func (h *APIHandler) HandleAutoradioProgramme(w http.ResponseWriter, r *http.Request) {
+	received := time.Now()
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	rt := h.rt
+	streamer, ok := provideriface.TextStreamProvider(nil), false
+	if rt != nil {
+		streamer, ok = rt.provider.(provideriface.TextStreamProvider)
+	}
+	if !ok {
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "no streaming model is bound on this computer"})
+		return
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, programmeMaxBody))
+	if err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			writeAPIJSON(w, http.StatusRequestEntityTooLarge, apiError{Error: fmt.Sprintf("body exceeds %d bytes", programmeMaxBody)})
+			return
+		}
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "cannot read the body"})
+		return
+	}
+	req, err := parseProgrammeRequest(body)
+	if err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+	// autoradioInflight is process-local: a computer serves its API from one
+	// process, so it holds; two overlapping processes could each answer one
+	// request_id (a duplicate model call, not a duplicate claim).
+	key := "programme/" + ownerID + "/" + rt.cfg.ComputerID + "/" + req.RequestID
+	if _, busy := autoradioInflight.LoadOrStore(key, struct{}{}); busy {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "this request_id is already being answered"})
+		return
+	}
+	defer autoradioInflight.Delete(key)
+
+	// A disconnect does not stop the call: the stretch commits and a replay
+	// of the request_id returns it (programme design 1.2, slice 2).
+	ctx := context.WithoutCancel(r.Context())
+	c := &programmeCall{rt: rt, ledger: h.programmeLedger(), w: w, ownerID: ownerID, req: req, received: received}
+
+	prior, err := c.get(ctx, requestRecordPrefix+req.RequestID)
+	if err != nil {
+		log.Printf("autoradio programme: request %s: reading the request record: %v", req.RequestID, err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "cannot read the request record"})
+		return
+	}
+	if prior != nil {
+		if prior.SubjectRefs["cause"] != req.Cause {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "this request_id was used for another cause; use a new request_id"})
+			return
+		}
+		c.stretchID = prior.SubjectRefs["stretch_id"]
+		c.begin()
+		c.replay(ctx)
+		return
+	}
+
+	prompt, ok := programmePrompt()
+	if !ok || strings.TrimSpace(prompt) == "" {
+		log.Printf("autoradio programme: request %s: the programme prompt is not shipped", req.RequestID)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "the programme prompt is not available"})
+		return
+	}
+	c.prompt = prompt
+	if c.input, err = c.buildInput(ctx); err != nil {
+		log.Printf("autoradio programme: request %s: reading the listener's record: %v", req.RequestID, err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "cannot read the listener's record"})
+		return
+	}
+	c.stretchID = mintStretchID()
+	if err := c.writeStart(ctx); err != nil {
+		log.Printf("autoradio programme: request %s: start record not written: %v", req.RequestID, err)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "cannot record the stretch"})
+		return
+	}
+	c.begin()
+	c.run(ctx, streamer)
+}
+
+// replay answers a request_id already written: the stored segments, then how
+// the stretch ended. No model call, no write.
+func (c *programmeCall) replay(ctx context.Context) {
+	c.event("stretch", map[string]any{"stretch_id": c.stretchID, "written_for": c.req.Cause, "request_id": c.req.RequestID})
+	idx, err := c.get(ctx, stretchIndexRecordPrefix+c.stretchID)
+	if err != nil {
+		c.event("error", map[string]any{"stretch_id": c.stretchID, "spoken": programmeFallbackLine, "reason": "cannot read the stretch: " + err.Error()})
+		return
+	}
+	n := -1
+	status := "interrupted"
+	if idx != nil {
+		status = idx.SubjectRefs["status"]
+		_, _ = fmt.Sscanf(idx.SubjectRefs["segments"], "%d", &n)
+	}
+	segs, err := c.readSegments(ctx, c.stretchID, n)
+	if err == nil && idx != nil && status == "completed" && len(segs) < n {
+		err = fmt.Errorf("the stretch's records are incomplete: %d of %d segments have what they should", len(segs), n)
+	}
+	if err != nil {
+		c.event("error", map[string]any{"stretch_id": c.stretchID, "spoken": programmeFallbackLine, "reason": err.Error()})
+		return
+	}
+	for _, s := range segs {
+		c.event("segment", c.segmentEvent(s))
+	}
+	if idx != nil && status == "completed" {
+		c.event("done", map[string]any{
+			"stretch_id": c.stretchID, "status": "completed", "replayed": true, "segments": len(segs),
+			"claims": len(idx.RelatedIDs), "index_record_id": idx.RecordID, "provider": idx.SubjectRefs["provider"], "model": idx.SubjectRefs["model"],
+		})
+		return
+	}
+	reason := "the stretch ended without an index; use a new request_id"
+	if idx != nil {
+		reason = "the stretch ended " + status + "; use a new request_id"
+	}
+	c.event("error", map[string]any{"stretch_id": c.stretchID, "spoken": programmeFallbackLine, "reason": reason, "replayed": true})
+}
+
+func (c *programmeCall) run(ctx context.Context, streamer provideriface.TextStreamProvider) {
+	programmeStretchesTotal.Add(1)
+	c.event("stretch", map[string]any{"stretch_id": c.stretchID, "written_for": c.req.Cause, "request_id": c.req.RequestID})
+	defer func() {
+		// A panic is a crash's stand-in: nothing is settled, no index is
+		// written, and a retry is a new request.
+		if p := recover(); p != nil {
+			log.Printf("autoradio programme: stretch %s: panic: %v", c.stretchID, p)
+			func() {
+				defer func() { _ = recover() }()
+				c.event("error", map[string]any{"stretch_id": c.stretchID, "spoken": programmeFallbackLine, "reason": fmt.Sprintf("internal error: %v", p)})
+			}()
+		}
+	}()
+
+	prompt := c.prompt
+	promptSum := sha256Hex(prompt)
+	stable, volatile := c.frame(c.input, c.localTime())
+	chain := c.rt.modelPolicy.PoolChain(ctx, c.ownerID, modelpolicy.AutoradioProgrammeRole)
+
+	reason := "no model answered"
+	status := "failed"
+	walkCtx, cancelWalk := context.WithTimeout(ctx, programmeWallDeadline)
+	defer cancelWalk()
+	for _, sel := range chain {
+		if walkCtx.Err() != nil {
+			c.finish(ctx, "deadline", "the wall-clock deadline of the walk passed", true)
+			return
+		}
+		member := sel.Provider + "/" + sel.Model
+		hopStart := time.Now()
+		c.provider, c.model = sel.Provider, sel.Model
+		c.streak = 0
+		var reader lineReader
+		effort := strings.ToLower(strings.TrimSpace(sel.ReasoningEffort))
+		callCtx, cancel := context.WithCancel(walkCtx)
+		c.cancelUpstream = cancel
+		// The idle deadline runs between deltas, from the first one (the time to
+		// the first delta is under the wall-clock deadline of the walk).
+		var idle *time.Timer
+		programmeCallsTotal.Add(1)
+		resp, err := streamer.StreamText(callCtx, provideriface.TextStreamRequest{
+			Provider: sel.Provider, Model: sel.Model, ReasoningEffort: effort,
+			ConversationID: c.stretchID, CacheKey: programmeCachePrefix + c.rt.cfg.ComputerID + ":" + promptSum[:8],
+			System: prompt, StableUser: stable, User: volatile, MaxTokens: sel.MaxTokens,
+		}, func(delta string) {
+			if idle == nil {
+				idle = time.AfterFunc(programmeIdleDeadline, func() { c.timedOut.Store(true); cancel() })
+			} else {
+				idle.Reset(programmeIdleDeadline)
+			}
+			if !c.stop {
+				reader.push(delta, c.handleLine)
+			}
+		})
+		if idle != nil {
+			idle.Stop()
+		}
+		timedOut := c.timedOut.Load() || errors.Is(walkCtx.Err(), context.DeadlineExceeded)
+		cancel()
+		hop := autoradioHop{Member: member, MS: time.Since(hopStart).Milliseconds()}
+		if err == nil && !c.stop {
+			reader.flush(c.handleLine)
+		}
+		switch {
+		case c.fatal != nil:
+			hop.Outcome = "store_failed"
+			c.hops = append(c.hops, hop)
+			c.finish(ctx, "store_failed", "a record could not be written: "+c.fatal.Error(), false)
+			return
+		case c.runEnded:
+			hop.Outcome = "invalid_run"
+			c.hops = append(c.hops, hop)
+			c.finish(ctx, "invalid_run", fmt.Sprintf("%d invalid lines in a row ended the stretch", programmeInvalidRun), true)
+			return
+		case c.capped:
+			hop.Outcome = "capped"
+			c.hops = append(c.hops, hop)
+			c.finish(ctx, "completed", "", true)
+			return
+		case timedOut:
+			hop.Outcome = "deadline"
+			c.hops = append(c.hops, hop)
+			c.finish(ctx, "deadline", "a deadline passed (wall clock of the walk, or idle between deltas)", true)
+			return
+		case err != nil && c.segCount > 0:
+			hop.Outcome = "failed_mid_stream"
+			c.hops = append(c.hops, hop)
+			c.finish(ctx, "failed", "the model failed mid-stream: "+err.Error(), true)
+			return
+		case err != nil:
+			hop.Outcome = "refused"
+			c.hops = append(c.hops, hop)
+			log.Printf("autoradio programme: stretch %s: %s refused before a segment was sent: %v", c.stretchID, member, err)
+			reason = member + " refused"
+			continue
+		case c.segCount == 0:
+			hop.Outcome = "empty"
+			c.hops = append(c.hops, hop)
+			reason = member + " wrote no valid segment"
+			continue
+		}
+		hop.Outcome = "answered"
+		c.hops = append(c.hops, hop)
+		c.usage = resp.Usage
+		c.finish(ctx, "completed", "", true)
+		return
+	}
+	c.finish(ctx, status, reason, true)
+}
+
+// handleLine validates one line and, when it is valid, writes and streams it.
+// It returns false when the call must stop reading.
+func (c *programmeCall) handleLine(line string, tooLong bool) bool {
+	if c.stop {
+		return false
+	}
+	if !tooLong && isSkippable(line) {
+		return true
+	}
+	c.lineNo++
+	var seg *programmeSegment
+	class, reason := lineInvalid, ""
+	if tooLong {
+		reason = fmt.Sprintf("line is over %d bytes", programmeMaxLine)
+	} else {
+		seg, class, reason = c.input.checkLine(line)
+	}
+	switch class {
+	case lineLesson:
+		return true // station L3 reads lesson lines; here they are neither counted nor reset
+	case lineInvalid:
+		return c.drop(reason)
+	}
+	if c.segCount >= programmeMaxSegments {
+		c.dropped = append(c.dropped, droppedLine{N: c.lineNo, Reason: fmt.Sprintf("segment cap %d reached: the stretch ended", programmeMaxSegments)})
+		c.capped, c.stop = true, true
+		if c.cancelUpstream != nil {
+			c.cancelUpstream()
+		}
+		return false
+	}
+	// A content segment's claim is checked before anything is written, so a
+	// line the constructor refuses leaves no segment record.
+	seg.ID = fmt.Sprintf("%s.s%d", c.stretchID, c.segCount)
+	seg.Blocks = len(calibration.SplitBlocks(seg.Text))
+	seg.SHA256 = sha256Hex(seg.Text)
+	if seg.Content {
+		if _, err := calibration.NewAutoradioForecast(c.forecastInput(seg), time.Now()); err != nil {
+			return c.drop("the forecast was refused: " + err.Error())
+		}
+	}
+	c.streak = 0
+	ctx := context.Background()
+	if err := c.writeSegment(ctx, seg); err != nil {
+		return c.failStore(err)
+	}
+	if seg.Content {
+		claim, err := calibration.NewAutoradioForecast(c.forecastInput(seg), time.Now())
+		if err != nil {
+			return c.failStore(err)
+		}
+		if err := c.writeClaim(ctx, claim); err != nil {
+			return c.failStore(err)
+		}
+		c.claimIDs = append(c.claimIDs, claim.RecordID)
+	}
+	c.segmentIDs = append(c.segmentIDs, seg.ID)
+	c.segCount++
+	if c.firstSeg.IsZero() {
+		c.firstSeg = time.Now()
+	}
+	programmeSegmentsTotal.Add(1)
+	c.event("segment", c.segmentEvent(*seg))
+	return true
+}
+
+func (c *programmeCall) forecastInput(s *programmeSegment) calibration.AutoradioForecastInput {
+	return calibration.AutoradioForecastInput{
+		StretchID: c.stretchID, SegmentID: s.ID, Kind: s.Kind, Title: s.Title, Model: c.memberName(), P: s.P,
+		Cause: s.Cause, CausedBy: s.CausedBy, LessonID: s.LessonID, TextSHA256: s.SHA256, Blocks: s.Blocks, StretchStart: c.startedAt,
+	}
+}
+
+// drop notes an invalid line; the third in a row ends the call.
+func (c *programmeCall) drop(reason string) bool {
+	c.dropped = append(c.dropped, droppedLine{N: c.lineNo, Reason: reason})
+	programmeDroppedTotal.Add(1)
+	log.Printf("autoradio programme: stretch %s: line %d dropped: %s", c.stretchID, c.lineNo, reason)
+	c.streak++
+	if c.streak >= programmeInvalidRun {
+		c.runEnded, c.stop = true, true
+		if c.cancelUpstream != nil {
+			c.cancelUpstream()
+		}
+		return false
+	}
+	return true
+}
+
+func (c *programmeCall) failStore(err error) bool {
+	log.Printf("autoradio programme: stretch %s: write failed: %v", c.stretchID, err)
+	c.fatal, c.stop = err, true
+	if c.cancelUpstream != nil {
+		c.cancelUpstream()
+	}
+	return false
+}
+
+// finish ends the call: the index when the handler itself concluded the call,
+// then `done` or `error`.
+func (c *programmeCall) finish(ctx context.Context, status, reason string, index bool) {
+	indexID, indexErr := "", ""
+	if index {
+		id, err := c.writeIndex(ctx, status)
+		indexID = id
+		if err != nil {
+			indexErr = err.Error()
+			log.Printf("autoradio programme: stretch %s: index not written: %v", c.stretchID, err)
+		}
+	}
+	done := time.Now()
+	log.Printf("autoradio programme: stretch=%s request=%s status=%s member=%s segments=%d claims=%d dropped=%d tokens_in=%d tokens_out=%d ms{first_segment=%d done=%d} stretches_total=%d model_calls_total=%d",
+		c.stretchID, c.req.RequestID, status, c.memberName(), c.segCount, len(c.claimIDs), len(c.dropped), c.usage.InputTokens, c.usage.OutputTokens,
+		c.timings(done)["first_segment"], c.timings(done)["done"], programmeStretchesTotal.Load(), programmeCallsTotal.Load())
+	if status != "completed" {
+		c.event("error", map[string]any{"stretch_id": c.stretchID, "spoken": programmeFallbackLine, "reason": reason, "status": status})
+		return
+	}
+	data := map[string]any{
+		"stretch_id": c.stretchID, "status": "completed", "replayed": false, "segments": c.segCount, "claims": len(c.claimIDs),
+		"dropped": len(c.dropped), "provider": c.provider, "model": c.model, "index_record_id": indexID,
+		"timings_ms": c.timings(done), "members_tried": c.hops,
+		"usage": map[string]any{"input_tokens": c.usage.InputTokens, "output_tokens": c.usage.OutputTokens, "cached_input_tokens": c.usage.CachedInputTokens, "cache_reported": c.usage.CacheReported},
+	}
+	if indexErr != "" {
+		data["index_error"] = indexErr
+	}
+	c.event("done", data)
+}

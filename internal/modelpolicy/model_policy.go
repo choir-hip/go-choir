@@ -44,6 +44,14 @@ const (
 	// the verifier roles.
 	AutoradioRole = "autoradio"
 
+	// AutoradioProgrammeRole is the role of the Autoradio programme call, the
+	// DJ's stretch (POST /api/autoradio/programme). It is registered like
+	// AutoradioRole, in NormalizeRole, not as a registry profile. It has the
+	// same pool (River, then Bedrock Haiku 5.5) and runs with reasoning ON
+	// ("low"), on its own prompt prefix, never toggled within one prompt
+	// lineage (owner 2026-11-11).
+	AutoradioProgrammeRole = "autoradio_programme"
+
 	// ReasoningOff is a reasoning setting only the autoradio role may hold:
 	// reasoning off for the call. Every other role keeps the 2026-11-09 rule
 	// that thinking is never off (the providers floor "none", "minimal" and
@@ -54,8 +62,8 @@ const (
 	// because I don't know if every model allows you to switch reasoning
 	// without breaking the cache." So reasoning is a property of the role,
 	// fixed per role, never toggled within one prompt lineage: the fast turn
-	// role (autoradio) runs with it off; the future script role
-	// (autoradio_programme) will run with it on, on its own prompt prefix.
+	// role (autoradio) runs with it off; the script role
+	// (autoradio_programme) runs with it on, on its own prompt prefix.
 	// A policy file naming "off" for any other role is dropped with a
 	// diagnostic (sanitizeEffort), so no other role can reach it by accident.
 	ReasoningOff = "off"
@@ -543,6 +551,9 @@ func (p Policy) Resolve(role string) provideriface.LLMSelection {
 	if normalized == AutoradioRole {
 		return p.resolveAutoradio()
 	}
+	if normalized == AutoradioProgrammeRole {
+		return p.resolveAutoradioProgramme()
+	}
 	if p.Roles != nil {
 		if selection, ok := p.Roles[normalized]; ok {
 			return fillSelection(selection, p.Defaults)
@@ -580,15 +591,43 @@ func (p Policy) resolveAutoradio() provideriface.LLMSelection {
 	return sel
 }
 
+// resolveAutoradioProgramme is the programme role's selection. Like the fast
+// turn role it starts from compiled values (pool:autoradio, no token budget)
+// and a section in the computer's policy overrides only what it names, so a
+// file that predates the role does not send the programme to the default pool
+// and a section with no reasoning line does not inherit the Defaults' effort or
+// max_tokens. Its reasoning is on: "low", the floor of every other role.
+func (p Policy) resolveAutoradioProgramme() provideriface.LLMSelection {
+	sel := provideriface.LLMSelection{
+		Model: modelcatalog.PoolSpecPrefix + modelcatalog.AutoradioPool, ReasoningEffort: "low", Source: "platform_fallback",
+	}
+	own, ok := p.Roles[AutoradioProgrammeRole]
+	if !ok {
+		return sel
+	}
+	sel.Source = "model_policy"
+	if own.Model != "" {
+		sel.Provider, sel.Model = own.Provider, own.Model
+	}
+	if own.ReasoningEffort != "" {
+		sel.ReasoningEffort = own.ReasoningEffort
+	}
+	if own.MaxTokens > 0 {
+		sel.MaxTokens = own.MaxTokens
+	}
+	return sel
+}
+
 // Selections returns each distinct model the policy names, defaults first
 // and then roles in name order, filled from the defaults: the models this
 // computer is configured to call.
 func (p Policy) Selections() []provideriface.LLMSelection {
 	roles := make([]string, 0, len(p.Roles))
 	for role := range p.Roles {
-		if role == AutoradioRole {
+		if role == AutoradioRole || role == AutoradioProgrammeRole {
 			// The autoradio role's selection carries ReasoningOff, which no
-			// other role's chain may inherit.
+			// other role's chain may inherit; the programme role has the same
+			// pool and is not a configured default either.
 			continue
 		}
 		roles = append(roles, role)
@@ -634,7 +673,7 @@ func NormalizeRole(role string) string {
 		return current
 	}
 	switch normalized {
-	case VerifierRole, AutoradioRole:
+	case VerifierRole, AutoradioRole, AutoradioProgrammeRole:
 		return normalized
 	case MultimodalVerifierRole, "verifier-multimodal":
 		// One canonical spelling: the hyphenated form normalizes to the
@@ -802,6 +841,7 @@ func fallbackPolicy(_ provideriface.Config) Policy {
 			VerifierRole:                         pool("low"),
 			MultimodalVerifierRole:               pool("low"),
 			AutoradioRole:                        {Model: modelcatalog.PoolSpecPrefix + modelcatalog.AutoradioPool, ReasoningEffort: ReasoningOff, Source: "platform_fallback"},
+			AutoradioProgrammeRole:               {Model: modelcatalog.PoolSpecPrefix + modelcatalog.AutoradioPool, ReasoningEffort: "low", Source: "platform_fallback"},
 		},
 		Source: "platform_fallback",
 	}

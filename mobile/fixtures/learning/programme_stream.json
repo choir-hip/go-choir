@@ -1,0 +1,29 @@
+{
+  "about": "The stream POST /api/autoradio/programme answers for one request, as the L1 handler writes it (station L1; docs/design/autoradio-l1-failure-list-2026-11-15.md, test F44). The handler's own test runs the request with a provider that writes `model_lines` and compares what it streams, with the stretch id replaced by S. Hand-written text, no third-party text. A candidate's ref is pub:<route>@v<version>; a plain string cite arrives as {ref, role, label} (role defaults to subject, label to the candidate's title). A segment event carries no forecast: p_heard and caused_by are written to the tape and never sent. The `done` event is compared on the fields listed in done_fields only (the rest is timings and token counts). The model's lines are what a model writes; a line the handler drops is in the table under drops and is never streamed.",
+  "request": {
+    "request_id": "r-1",
+    "cause": "open",
+    "local_time": "2026-11-15T07:40:00+01:00",
+    "tz": "Europe/Paris",
+    "candidates": [
+      {"route": "harbour-1", "version": 1, "title": "Harbour reopens", "dek": "Repairs are done.", "text": "The harbour reopened today after repairs."},
+      {"route": "harbour-2", "version": 1, "title": "Ferry timetable", "dek": "New sailings.", "text": "The ferry adds two sailings."},
+      {"route": "budget-3", "version": 1, "title": "Budget vote", "dek": "Council votes.", "text": "The council votes on the budget on Monday."}
+    ]
+  },
+  "model_lines": [
+    {"kind": "ident", "title": "On air", "text": "This is the radio."},
+    {"kind": "story", "title": "First", "text": "The harbour reopened today.\n\nThe ferries run again.", "cites": ["pub:harbour-1@v1"], "p_heard": 0.7, "caused_by": "importance"},
+    {"kind": "update", "title": "Second", "text": "The harbour reopened today.\n\nThe ferries run again.", "cites": [{"ref": "pub:harbour-2@v1", "role": "quoted", "label": "The ferry piece"}], "p_heard": 0.4, "caused_by": "explore"},
+    {"kind": "story", "title": "Dropped for its p_heard", "text": "A line with a probability outside zero to one.", "cites": ["pub:budget-3@v1"], "p_heard": 1.7, "caused_by": "importance"}
+  ],
+  "events": [
+    {"event": "stretch", "data": {"stretch_id": "S", "written_for": "open", "request_id": "r-1"}},
+    {"event": "segment", "data": {"stretch_id": "S", "segment_id": "S.s0", "kind": "ident", "title": "On air", "text": "This is the radio.", "cites": [], "block_count": 1, "est_seconds": 2, "cut_at": "sentence"}},
+    {"event": "segment", "data": {"stretch_id": "S", "segment_id": "S.s1", "kind": "story", "title": "First", "text": "The harbour reopened today.\n\nThe ferries run again.", "cites": [{"ref": "pub:harbour-1@v1", "role": "subject", "label": "Harbour reopens"}], "block_count": 2, "est_seconds": 4, "cut_at": "sentence"}},
+    {"event": "segment", "data": {"stretch_id": "S", "segment_id": "S.s2", "kind": "update", "title": "Second", "text": "The harbour reopened today.\n\nThe ferries run again.", "cites": [{"ref": "pub:harbour-2@v1", "role": "quoted", "label": "The ferry piece"}], "block_count": 2, "est_seconds": 4, "cut_at": "sentence"}}
+  ],
+  "done_fields": {"stretch_id": "S", "status": "completed", "replayed": false, "segments": 3, "claims": 2, "dropped": 1},
+  "error_event": "On a store failure, a run of three invalid lines or a failure after a segment, the stream ends with `event: error` and data {stretch_id, spoken, reason, status} instead of done; the segments already sent stand. The phone keeps what it has.",
+  "replay": "The same request_id again returns the same stretch event and segment events from the stored records, then done with replayed true; a stretch that a restart interrupted returns its segments and then an error whose reason says so; the retry is a new request_id."
+}
