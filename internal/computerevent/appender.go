@@ -1834,6 +1834,28 @@ func (a *ComputerEventAppender) ReconstructThroughTarget(ctx context.Context, pr
 	return a.replayInto(ctx, projection, targetHead)
 }
 
+// ReconstructThroughTargetObserved is ReconstructThroughTarget with an
+// observer of its own. The observer is set on the replay's dry-run copy and
+// never on this appender, so a probe or a boot replay that sets or clears the
+// appender's observer cannot clear this one mid-run (a restore replay lasts
+// minutes to an hour; a replay-completeness probe runs every checkpoint).
+func (a *ComputerEventAppender) ReconstructThroughTargetObserved(ctx context.Context, projection ProjectionStore, targetHead string, observer ReplayObserver) error {
+	targetHead = strings.TrimSpace(targetHead)
+	if !IsSHA256(targetHead) {
+		return fmt.Errorf("computer event appender: restore target head is required")
+	}
+	if a == nil || projection == nil {
+		return fmt.Errorf("computer event appender: replay projection is required")
+	}
+	source, ok := a.cas.(EventSource)
+	if !ok {
+		return fmt.Errorf("computer event appender: CAS does not expose event replay")
+	}
+	dryRun := a.dryRunCopy(projection)
+	dryRun.replayObserver = observer
+	return dryRun.ReconstructThrough(ctx, source, targetHead)
+}
+
 // dryRunCopy is the appender a replay into another projection runs on. Its
 // replay rate is the restore path's rate, so it reports to the live appender.
 func (a *ComputerEventAppender) dryRunCopy(projection ProjectionStore) *ComputerEventAppender {

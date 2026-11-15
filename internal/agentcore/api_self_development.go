@@ -103,14 +103,18 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 		h.bootstrapComputerChain(w, r, ownerID, computerID)
 		return
 	}
+	// Restore and rematerialize are accepted acts: they answer at once and
+	// run in the background, so neither needs the long write deadline.
 	if len(parts) == 3 && parts[1] == "lifecycle" && parts[2] == "rematerialize-from-tape" {
-		extendReplayCompletenessGuestWriteDeadline(w)
 		h.rematerializeComputerFromTape(w, r, computerID)
 		return
 	}
 	if len(parts) == 3 && parts[1] == "lifecycle" && parts[2] == "restore" {
-		extendReplayCompletenessGuestWriteDeadline(w)
 		h.restoreComputer(w, r, computerID)
+		return
+	}
+	if len(parts) == 3 && parts[1] == "lifecycle" && parts[2] == "restore-status" {
+		h.restoreActStatus(w, r, computerID)
 		return
 	}
 	// Checkpoints are bound automatically (checkpoint_cadence.go); the manual

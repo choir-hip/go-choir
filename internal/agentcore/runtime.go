@@ -216,6 +216,9 @@ type Runtime struct {
 	// replacement so concurrent product-path calls cannot interleave
 	// quarantine and OpenFresh.
 	workspaceReplaceMu sync.Mutex
+	// restoreActs is the registry of restore acts (restore_act.go); its zero
+	// value is ready.
+	restoreActs restoreActs
 	// engineeringAssignmentOpenMu serializes the per-runtime open/spawn/bind
 	// saga so a duplicate revision wake cannot drive a second saga against an
 	// in-flight durable open (each delivery's cleanup would otherwise write

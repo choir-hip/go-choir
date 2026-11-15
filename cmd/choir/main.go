@@ -73,9 +73,12 @@ type client struct {
 	// prefix is put before every path: the platform operator path reaches a
 	// platform computer's routes under /api/platform/operator/computers/<id>/guest.
 	prefix string
-	http       *http.Client
-	stdout     io.Writer
-	stderr     io.Writer
+	http   *http.Client
+	// timeoutGiven: --timeout or $CHOIR_TIMEOUT was set. A restore waits for
+	// its act as long as it says, and two hours otherwise.
+	timeoutGiven bool
+	stdout       io.Writer
+	stderr       io.Writer
 }
 
 // newClient defines the shared client flags on flags, parses args and

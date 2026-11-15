@@ -373,6 +373,8 @@ func clientFlags(fs *flag.FlagSet) func() (*client, error) {
 			apiKey:     key,
 			computerID: strings.TrimSpace(fs.Lookup("computer").Value.String()),
 			http:       newHTTPClient(requestTimeout),
+
+			timeoutGiven: strings.TrimSpace(*timeout) != "" || strings.TrimSpace(os.Getenv(timeoutEnvVar)) != "",
 		}, nil
 	}
 }

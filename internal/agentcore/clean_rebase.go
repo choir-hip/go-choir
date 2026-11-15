@@ -95,6 +95,8 @@ func (rt *Runtime) cleanRebaseQuietHold(ctx context.Context) string {
 		return fmt.Sprintf("%d live engineering capsule(s) a restart would destroy", work.LiveCapsules)
 	case work.SnapshotInFlight:
 		return "a snapshot is streaming; a restart would discard it"
+	case work.RestoreInFlight:
+		return "a restore is running; a restart would end it half done"
 	}
 	return ""
 }

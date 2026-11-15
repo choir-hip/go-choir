@@ -95,6 +95,36 @@ func (s *Store) NewestEventOfKind(ctx context.Context, computerID string, kind c
 	return sequence, at, true, nil
 }
 
+// RestoreTailEstimate reads, from this store's local index only and never the
+// tape, where a restore to the event with eventDigest would start and end: its
+// sequence, and the sequence of the newest finalized snapshot_recorded event at
+// or below it (0 when the index holds none). found is false when the index does
+// not know the event. It is the acceptance answer's estimate of the tail: the
+// restore's plan, which reads the tape, is exact.
+func (s *Store) RestoreTailEstimate(ctx context.Context, computerID, eventDigest string) (target, base uint64, found bool, err error) {
+	db := s.ReadDB()
+	if db == nil {
+		return 0, 0, false, fmt.Errorf("computer event index: nil store")
+	}
+	computerID, eventDigest = strings.TrimSpace(computerID), strings.TrimSpace(eventDigest)
+	err = db.QueryRowContext(ctx, `SELECT sequence FROM computer_event_index WHERE computer_id=? AND event_digest=? AND status='finalized'`, computerID, eventDigest).Scan(&target)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, 0, false, nil
+	}
+	if err != nil {
+		return 0, 0, false, fmt.Errorf("computer event index: restore target: %w", err)
+	}
+	err = db.QueryRowContext(ctx, `SELECT sequence FROM computer_event_index WHERE computer_id=? AND event_kind=? AND status='finalized' AND sequence<=? ORDER BY sequence DESC LIMIT 1`,
+		computerID, string(computerevent.EventSnapshotRecorded), target).Scan(&base)
+	if errors.Is(err, sql.ErrNoRows) {
+		return target, 0, true, nil
+	}
+	if err != nil {
+		return 0, 0, false, fmt.Errorf("computer event index: restore base: %w", err)
+	}
+	return target, base, true, nil
+}
+
 func (s *Store) Prepare(ctx context.Context, request computerevent.CASRequest) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("computer event projection: nil store")

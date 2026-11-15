@@ -287,6 +287,9 @@ type restoreReplayObserver struct {
 	pageAfterMin    uint64
 	pageAfterMinSet bool
 	commits         int
+	// onApplied, when set, is called after each applied event with the count so
+	// far, outside the lock: a restore act reports its progress through it.
+	onApplied func(applied int)
 }
 
 func (o *restoreReplayObserver) PageFetched(afterSequence uint64, count int) {
@@ -307,13 +310,17 @@ func (o *restoreReplayObserver) RecordApplied(sequence uint64) {
 		return
 	}
 	o.mu.Lock()
-	defer o.mu.Unlock()
 	o.applied++
 	if o.applied == 1 || sequence < o.appliedMin {
 		o.appliedMin = sequence
 	}
 	if sequence > o.appliedMax {
 		o.appliedMax = sequence
+	}
+	applied, callback := o.applied, o.onApplied
+	o.mu.Unlock()
+	if callback != nil {
+		callback(applied)
 	}
 }
 

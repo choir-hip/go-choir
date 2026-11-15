@@ -517,6 +517,11 @@ type plannedRestartWork struct {
 	// and the next attempt would read the whole store again, so on a busy
 	// computer that restarts at every deploy no snapshot would finish.
 	SnapshotInFlight bool
+	// RestoreInFlight is a restore act running (restore_act.go): a restart
+	// would end it half done, with a staged store on the volume and the
+	// computer on its pre-restore state, and a deploy refresh would take that
+	// for an idle computer. It is unsafe whatever the host asks.
+	RestoreInFlight bool
 	// SelfdevAwaitingDecision counts candidates frozen, verified or awaiting
 	// their decision inside the hold bounds (selfdevDecisionHeld); HeldOperations
 	// names them. They survive a restart on disk, but a deploy refresh boots a
@@ -564,7 +569,7 @@ func selfdevDecisionHeld(operation selfdev.Operation, now time.Time) bool {
 
 // unsafe reports work no restart may cut, whatever the host asks.
 func (w plannedRestartWork) unsafe() bool {
-	return w.SelfdevActive > 0 || w.LiveCapsules > 0 || w.SnapshotInFlight
+	return w.SelfdevActive > 0 || w.LiveCapsules > 0 || w.SnapshotInFlight || w.RestoreInFlight
 }
 
 // plannedRestartBusy counts the work a restart would cut; countCapsules adds
@@ -579,7 +584,7 @@ func (rt *Runtime) plannedRestartBusy(ctx context.Context, countCapsules bool) (
 // excluded (committed pauses, capsule_pause.go) left out of both halves of
 // the gate. Only the deploy-refresh mark passes a set.
 func (rt *Runtime) plannedRestartBusyWith(ctx context.Context, countCapsules bool, excluded map[string]bool) (plannedRestartWork, error) {
-	work := plannedRestartWork{Running: rt.RunningCount(), SnapshotInFlight: rt.snapshots.inFlight.Load()}
+	work := plannedRestartWork{Running: rt.RunningCount(), SnapshotInFlight: rt.snapshots.inFlight.Load(), RestoreInFlight: rt.restoreInFlight()}
 	computerID := strings.TrimSpace(rt.TextureComputerID())
 	if computerID == "" {
 		return work, nil
@@ -687,6 +692,7 @@ type plannedRestartBusyResponse struct {
 	SelfdevActiveOps int    `json:"selfdev_active_operations"`
 	LiveCapsules     int    `json:"live_capsules"`
 	SnapshotInFlight bool   `json:"snapshot_in_flight,omitempty"`
+	RestoreInFlight  bool   `json:"restore_in_flight,omitempty"`
 	// SelfdevAwaitingDecision and HeldOperations name the candidates that
 	// hold the refresh until they are decided or age out (problem 22).
 	SelfdevAwaitingDecision int      `json:"selfdev_awaiting_decision,omitempty"`
@@ -814,7 +820,7 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 			why = "live capsules are pausing for the restart; the mark completes once every pause is committed"
 			reason = capsulePauseRefusalPausing
 		case work.unsafe():
-			why = "a self-development operation, a live capsule or a streaming snapshot would not survive a restart; restart deferred until it settles"
+			why = "a self-development operation, a live capsule, a streaming snapshot or a restore would not survive a restart; restart deferred until it settles"
 		case held:
 			why = fmt.Sprintf("a self-development candidate is frozen, verified or awaiting its decision; a refresh would boot a newer base under it; restart deferred until it is decided, %s pass since its last update, or %s since it was created", selfdevDecisionHoldCap, selfdevDecisionHoldLifetime)
 			reason = "selfdev_awaiting_decision"
@@ -826,6 +832,7 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 			AllowBusy:   allowBusy,
 			RunningRuns: work.Running, SelfdevActiveOps: work.SelfdevActive, LiveCapsules: work.LiveCapsules,
 			SnapshotInFlight:        work.SnapshotInFlight,
+			RestoreInFlight:         work.RestoreInFlight,
 			SelfdevAwaitingDecision: work.SelfdevAwaitingDecision, HeldOperations: work.HeldOperations,
 			HoldsNewWork: pausing || h.rt.refreshHoldsNewWork(askedAt),
 		})

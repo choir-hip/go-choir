@@ -262,11 +262,11 @@ func (r *OwnershipRegistry) crashRestartRefusal(own *VMOwnership) *RecoveryRefus
 	if !health.Answered {
 		return nil
 	}
-	if health.SelfdevActive > 0 || (health.LiveCapsules != nil && *health.LiveCapsules > 0) {
+	if health.SelfdevActive > 0 || (health.LiveCapsules != nil && *health.LiveCapsules > 0) || health.RestoreInFlight {
 		return &RecoveryRefusal{
 			ComputerID:        stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
 			Kind:              RecoveryRefusalGuestWorking,
-			Reason:            "the computer answers and has a self-development apply or a live capsule in flight; it is not restarted",
+			Reason:            "the computer answers and has a self-development apply, a live capsule or a restore in flight; it is not restarted",
 			RetryAfterSeconds: guestWorkingRetryAfterSeconds,
 		}
 	}

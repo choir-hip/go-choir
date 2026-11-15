@@ -173,6 +173,7 @@ func guestRefusalCode(detail string) (string, json.RawMessage) {
 		SelfdevActiveOps        int    `json:"selfdev_active_operations"`
 		LiveCapsules            int    `json:"live_capsules"`
 		SnapshotInFlight        bool   `json:"snapshot_in_flight"`
+		RestoreInFlight         bool   `json:"restore_in_flight"`
 		SelfdevAwaitingDecision int    `json:"selfdev_awaiting_decision"`
 	}
 	if json.Unmarshal([]byte(detail), &r) != nil {
@@ -190,6 +191,8 @@ func guestRefusalCode(detail string) (string, json.RawMessage) {
 		code = "selfdev_active"
 	case r.SnapshotInFlight:
 		code = "snapshot_in_flight"
+	case r.RestoreInFlight:
+		code = "restore_in_flight"
 	}
 	return code, json.RawMessage(detail)
 }

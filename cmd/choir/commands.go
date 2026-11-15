@@ -460,6 +460,7 @@ func buildRegistry() []*command {
 		ownerAct(computerPost("resume-checkpoints", "Reopen the automatic checkpoint cadence a crashed bind closed", "/lifecycle/resume-checkpoints", nil, false)),
 		computerPost("import-residue-snapshot", "Append current desktop+OG residue as one tape snapshot", "/lifecycle/import-residue-snapshot", nil, false),
 		ownerAct(computerCheckpointed("restore", "Restore VM-local state and served SPA from a checkpoint", "/lifecycle/restore", []string{"vm_local", "computer_surface_frontend"})),
+		restoreStatusCommand(),
 		ownerAct(computerPost("bootstrap-chain", "Establish a canonical event chain on a pre-genesis computer", "/lifecycle/bootstrap-chain", nil, true)),
 		computerGet("verifier-key", "Read the key this computer's verifier presents and the host's pin state for it", "/self-development/verifier-key", selfDevRead),
 		ownerAct(&command{
@@ -777,8 +778,8 @@ func buildRegistry() []*command {
 			path: []string{"calibration", "claims"}, tool: "calibration_claims",
 			summary: "List an engineering round's rule-settled predictions, stated against what happened",
 			desc:    "Every rule-settled precommit on the computer (a round's Cast predictions and engineering's own): kind, stated p and minutes, stated_at, the late mark, the assignment, operation and Cast, and the settlement (answer, actual_s, censored, settled_at). Filter by --assignment or --operation. These are not the agent claims of `choir precommit list`.",
-			params: []param{pStr("assignment", "Only this engineering assignment's claims"), pStr("operation", "Only the claims of this self-development operation's assignment")},
-			scopes: []string{"read:runtime"}, readOnly: true,
+			params:  []param{pStr("assignment", "Only this engineering assignment's claims"), pStr("operation", "Only the claims of this self-development operation's assignment")},
+			scopes:  []string{"read:runtime"}, readOnly: true,
 			handler: func(x *call) (any, error) {
 				q := url.Values{}
 				q.Set("assignment", x.trim("assignment"))
@@ -966,14 +967,19 @@ const ownerActsScope = "owner:acts"
 
 // computerCheckpointed is restore and rematerialize-from-tape: the CLI
 // reads the checkpoint artifact from --checkpoint-file, MCP takes it inline.
+// Both are accepted acts on the guest: the command submits one and waits for
+// it to end (computer_restore.go), or with --no-wait prints the act and exits.
 func computerCheckpointed(verb, summary, route string, operandScopes []string) *command {
 	return &command{
 		path: []string{"computer", verb}, summary: summary,
+		desc: summary + ". The guest accepts the request as an act and answers at once; the work runs in its background for as long as the tail takes (about 113 events a second: a long tail is tens of minutes). By default this waits, polling the act and printing its progress to stderr, and prints the result to stdout when it succeeds; it exits 1 on a refusal (named on stderr) and when the wait ends first, which leaves the act running (read it with choir computer restore-status). --timeout is the wait (default 2h). --no-wait prints the act id and exits. A restore that is interrupted by a restart is not resumed and leaves the computer on its pre-restore state. An owner act: the key needs owner:acts, which admin does not imply.",
 		params: []param{
 			computerParam(),
 			pStr("checkpoint_file", "JSON checkpoint artifact").req().onlyCLI("reads the caller's local filesystem; MCP passes the checkpoint inline"),
 			pJSON("checkpoint", "Checkpoint artifact: a Checkpoint or a CheckpointResponse (what choir computer checkpoints --digest prints)").req().
 				onlyMCP("the CLI reads the artifact from --checkpoint-file"),
+			pBool("no_wait", "Print the accepted act (its id, status URL and estimate) and exit, instead of waiting for it to end"),
+			pDuration("interval", "Poll interval while waiting (floor 100ms)").dflt(5 * time.Second),
 		},
 		usage:  "--computer and --checkpoint-file are required",
 		scopes: lifecycle, destructive: true,
@@ -989,10 +995,16 @@ func computerCheckpointed(verb, summary, route string, operandScopes []string) *
 			if err != nil {
 				return nil, usagef("invalid checkpoint: %v", err)
 			}
+			var answer any
 			if operandScopes == nil {
-				return sendRaw(x, http.MethodPost, computerPath(x, route), map[string]json.RawMessage{"checkpoint": checkpoint})
+				answer, err = sendRaw(x, http.MethodPost, computerPath(x, route), map[string]json.RawMessage{"checkpoint": checkpoint})
+			} else {
+				answer, err = sendRaw(x, http.MethodPost, computerPath(x, route), map[string]any{"checkpoint": checkpoint, "operand_scopes": operandScopes})
 			}
-			return sendRaw(x, http.MethodPost, computerPath(x, route), map[string]any{"checkpoint": checkpoint, "operand_scopes": operandScopes})
+			if err != nil {
+				return nil, err
+			}
+			return awaitRestoreAct(x, "choir "+x.cmd.name(), answer.(json.RawMessage))
 		},
 	}
 }

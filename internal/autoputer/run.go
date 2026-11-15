@@ -209,6 +209,13 @@ func Run() {
 	// boot, before the store opens; the tape replay below brings it to the
 	// canonical head (store/compact.go). A crash between its renames is
 	// finished or undone here on any boot.
+	// A restore the previous process left open is closed here, before anything
+	// opens the store: a flip it half made is undone, the release it moved is
+	// put back, its staged store is removed and its act is closed "interrupted
+	// by a restart". Nothing resumes it (CLAUDE.md, "Restarts").
+	doneRestoreRepair := objectgraph.BootPhase("autoputer: startup", "restore-act-repair")
+	agentcore.RepairRestoreAtBoot(rtCfg.StorePath, os.Getenv("CHOIR_UPDATER_ROOT"))
+	doneRestoreRepair(nil)
 	doneRebase := objectgraph.BootPhase("autoputer: startup", "compact-rebase")
 	rebased, rebaseErr := store.RebaseOntoCompactCopy(rtCfg.StorePath, agentcore.PlannedRestartMarkerPending(rtCfg.StorePath, bootTimelineClock.start.UTC()))
 	doneRebase(rebaseErr)

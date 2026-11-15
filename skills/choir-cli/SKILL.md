@@ -25,6 +25,16 @@ bootstrap-chain, rematerialize-from-tape) also need `owner:acts`, which only
 the owner's signed-in session can grant (Settings or the browser mint), and
 which `admin` does not imply; reject stays an agent act.
 
+`choir computer restore` and `rematerialize-from-tape` are accepted acts, not
+one long request: the guest answers at once and the work runs in its
+background (a tail replays at about 113 events a second, so a long one takes
+tens of minutes). By default the command waits, printing progress to stderr
+and the result to stdout, and exits 1 on a refusal (named) or when `--timeout`
+(default 2h) ends the wait, which leaves the act running. `--no-wait` prints
+the act id and exits; `choir computer restore-status --computer C [--act ID]`
+reads one. A restore a restart interrupts is closed, not resumed, and leaves
+the computer on its pre-restore state.
+
 | Step | CLI surface | Durable evidence |
 | --- | --- | --- |
 | Turn self-development off or on | `choir self-dev mode set --mode=off\|apply --expected-generation=N --idempotency-key=K` (a computer with no row is `apply`) | generation-CAS `ModeReceipt` |

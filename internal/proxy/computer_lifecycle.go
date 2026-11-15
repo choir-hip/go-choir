@@ -321,6 +321,16 @@ func computerRestoreComputerID(path string) (string, bool) {
 	return computerLifecycleGuestComputerID(path, "restore")
 }
 
+// computerRestoreStatusComputerID matches the read of a restore act's status.
+func computerRestoreStatusComputerID(path string) (string, bool) {
+	return computerLifecycleGuestComputerID(path, "restore-status")
+}
+
+func isComputerRestoreStatusPath(path string) bool {
+	_, ok := computerRestoreStatusComputerID(path)
+	return ok
+}
+
 func computerImportResidueSnapshotComputerID(path string) (string, bool) {
 	return computerLifecycleGuestComputerID(path, "import-residue-snapshot")
 }
@@ -365,6 +375,11 @@ func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.
 	if !ok {
 		computerID, ok = computerRestoreComputerID(r.URL.Path)
 	}
+	restoreStatusRequest := false
+	if !ok {
+		computerID, ok = computerRestoreStatusComputerID(r.URL.Path)
+		restoreStatusRequest = ok
+	}
 	if !ok {
 		computerID, ok = computerImportResidueSnapshotComputerID(r.URL.Path)
 	}
@@ -372,7 +387,12 @@ func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 		return
 	}
-	if r.Method != http.MethodPost {
+	// Every route here is a POST, except the read of a restore act's status.
+	wantMethod := http.MethodPost
+	if restoreStatusRequest {
+		wantMethod = http.MethodGet
+	}
+	if r.Method != wantMethod {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
 	}
@@ -391,6 +411,11 @@ func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.
 	// Restore and rematerialize-from-tape rewrite the computer's state from
 	// a checkpoint or its tape: owner acts (auth-boundary-gaps F4).
 	if isComputerRestorePath(r.URL.Path) && !authorizeOwnerAct(w, authResult, "computer restore") {
+		return
+	}
+	// The status of a restore act carries the same paths and witness detail
+	// the restore's own answer does: the same gate.
+	if restoreStatusRequest && !authorizeOwnerAct(w, authResult, "computer restore status") {
 		return
 	}
 	if isComputerRematerializePath(r.URL.Path) && !authorizeOwnerAct(w, authResult, "computer rematerialize-from-tape") {
@@ -454,7 +479,11 @@ func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.
 	if isComputerRematerializePath(r.URL.Path) || isComputerRestorePath(r.URL.Path) {
 		maxBody = 1 << 20
 	}
-	upstream, err := http.NewRequestWithContext(r.Context(), http.MethodPost, u.String(), http.MaxBytesReader(w, r.Body, maxBody))
+	var upstreamBody io.Reader
+	if !restoreStatusRequest {
+		upstreamBody = http.MaxBytesReader(w, r.Body, maxBody)
+	}
+	upstream, err := http.NewRequestWithContext(r.Context(), r.Method, u.String(), upstreamBody)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid workspace replace request"})
 		return
@@ -472,12 +501,11 @@ func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.
 	}
 	client := h.autoputerHTTP
 	// Residue import serializes a bounded projection batch (110s budget).
-	// Checkpoint, restore, and rematerialize reconstruct/extract full Dolt state (~2m on staging),
-	// matching replay completeness. Route them through replayAutoputerHTTP (10m on staging).
+	// Restore and rematerialize are accepted acts: the guest answers 202 when
+	// it has recorded the act and the work runs in its background, so they and
+	// the status read use the ordinary client, not a ten-minute one.
 	if isComputerImportResidueSnapshotPath(r.URL.Path) && h.residueImportAutoputerHTTP != nil {
 		client = h.residueImportAutoputerHTTP
-	} else if (isComputerRestorePath(r.URL.Path) || isComputerRematerializePath(r.URL.Path)) && h.replayAutoputerHTTP != nil {
-		client = h.replayAutoputerHTTP
 	}
 	if client == nil {
 		client = http.DefaultClient

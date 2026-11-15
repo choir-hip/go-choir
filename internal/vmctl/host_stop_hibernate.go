@@ -60,7 +60,7 @@ type hostStopHealth struct {
 // busyCaptureAllowed: the guest is known free of a self-development apply
 // and of a live capsule.
 func (h hostStopHealth) busyCaptureAllowed() bool {
-	return h.Answered && h.SelfdevActive == 0 && h.LiveCapsules != nil && *h.LiveCapsules == 0
+	return h.Answered && h.SelfdevActive == 0 && h.LiveCapsules != nil && *h.LiveCapsules == 0 && !h.RestoreInFlight
 }
 
 // HostStopReport counts what a host stop did.
@@ -185,10 +185,11 @@ func httpHostStopHealth() func(*VMOwnership) hostStopHealth {
 		var health struct {
 			SelfdevActiveOps int  `json:"selfdev_active_operations"`
 			LiveCapsules     *int `json:"live_capsules"`
+			RestoreInFlight  bool `json:"restore_in_flight"`
 		}
 		if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&health); err != nil {
 			return hostStopHealth{}
 		}
-		return hostStopHealth{Answered: true, SelfdevActive: health.SelfdevActiveOps, LiveCapsules: health.LiveCapsules}
+		return hostStopHealth{Answered: true, SelfdevActive: health.SelfdevActiveOps, LiveCapsules: health.LiveCapsules, RestoreInFlight: health.RestoreInFlight}
 	}
 }

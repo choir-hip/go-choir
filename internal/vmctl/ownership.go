@@ -3984,6 +3984,10 @@ func httpGuestHealth() func(*VMOwnership) guestHealthReading {
 			// LiveCapsules is a pointer: absent is a guest that predates
 			// the field, not zero live capsules.
 			LiveCapsules *int `json:"live_capsules"`
+			// RestoreInFlight: an accepted restore act is running in the
+			// guest. It is no run, operation or capsule, and a hibernate
+			// here would end it half done.
+			RestoreInFlight bool `json:"restore_in_flight"`
 		}
 		if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&health); err != nil {
 			return busy
@@ -4002,7 +4006,7 @@ func httpGuestHealth() func(*VMOwnership) guestHealthReading {
 		// docs/problems/idle-hibernate-blind-to-live-capsules-2026-10-26.md
 		reading := guestHealthReading{ReportsCapsules: health.LiveCapsules != nil}
 		reading.Busy = health.RunningRuns > 0 || health.DeskPendingMutations > 0 || health.SelfdevActiveOps > 0 ||
-			(health.LiveCapsules != nil && *health.LiveCapsules > 0)
+			(health.LiveCapsules != nil && *health.LiveCapsules > 0) || health.RestoreInFlight
 		return reading
 	}
 }

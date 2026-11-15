@@ -53,13 +53,18 @@ type RematerializeReport struct {
 	TailPagesFetched   int    `json:"tail_pages_fetched"`
 }
 
+// IdempotencyKey names the request: the same key while its act runs returns
+// that act, another key is refused 409. Empty is the checkpoint's digest, the
+// key the restore intent already uses.
 type rematerializeAPIRequest struct {
-	Checkpoint selfdevprotocol.Checkpoint `json:"checkpoint"`
+	Checkpoint     selfdevprotocol.Checkpoint `json:"checkpoint"`
+	IdempotencyKey string                     `json:"idempotency_key,omitempty"`
 }
 
 type restoreAPIRequest struct {
-	Checkpoint    selfdevprotocol.Checkpoint `json:"checkpoint"`
-	OperandScopes []string                   `json:"operand_scopes"`
+	Checkpoint     selfdevprotocol.Checkpoint `json:"checkpoint"`
+	OperandScopes  []string                   `json:"operand_scopes"`
+	IdempotencyKey string                     `json:"idempotency_key,omitempty"`
 }
 
 func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string, checkpoint selfdevprotocol.Checkpoint) (RematerializeReport, error) {
@@ -76,11 +81,9 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		return report, err
 	}
 
+	progress := restoreProgressFrom(ctx)
 	rt.workspaceReplaceMu.Lock()
 	defer rt.workspaceReplaceMu.Unlock()
-	// The restore restages `current`: one writer at a time (PM13).
-	rt.currentReleaseMu.Lock()
-	defer rt.currentReleaseMu.Unlock()
 	if rt.store == nil {
 		return report, fmt.Errorf("%w: runtime store is not configured", ErrRematerializeUnavailable)
 	}
@@ -92,22 +95,20 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	}
 	stagingRoot := filepath.Join(filepath.Dir(originalMarker), "rematerialize-staging-"+time.Now().UTC().Format("20060102T150405.000000000Z"))
 	stagedMarker := filepath.Join(stagingRoot, filepath.Base(originalMarker))
-	request := selfdevprotocol.RematerializeRequest{
-		ComputerID:            computerID,
-		Checkpoint:            checkpoint,
-		Method:                selfdevprotocol.RematerializeMethodTape,
-		OriginalMarkerPath:    originalMarker,
-		OriginalWorkspacePath: originalWorkspace,
-		StagedMarkerPath:      stagedMarker,
-		StagedWorkspacePath:   filepath.Join(stagingRoot, filepath.Base(originalWorkspace)+"-pending"),
-	}
+	request := rt.rematerializeRequest(computerID, checkpoint, originalMarker, originalWorkspace, stagingRoot)
 	if err := selfdevprotocol.RematerializeFromRequest(request); err != nil {
 		return report, err
 	}
 	// RematerializeFromRequest rebuilt the checkpoint, which validates its
 	// witness: a version this release does not judge was refused there.
-	priorReleaseDigest, err := rt.verifyPinnedFrontend(checkpoint)
-	if err != nil {
+	// `current` is read under its lock for this check only: the replay below
+	// takes minutes to an hour, and every checkpoint bind reads `current`
+	// under the same lock.
+	if _, err := func() (string, error) {
+		rt.currentReleaseMu.Lock()
+		defer rt.currentReleaseMu.Unlock()
+		return rt.verifyPinnedFrontend(checkpoint)
+	}(); err != nil {
 		return report, err
 	}
 
@@ -158,15 +159,19 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		_ = os.RemoveAll(stagingRoot)
 		return report, err
 	}
-	observer := &restoreReplayObserver{}
-	rt.eventAppender.SetReplayObserver(observer)
-	reconstructErr := rt.eventAppender.ReconstructThroughTarget(ctx, staged, targetHead)
-	rt.eventAppender.SetReplayObserver(nil)
+	progress.planned(record.StoreHeadSequence, targetSequence)
+	progress.enter(restoreStateReplaying)
+	// The replay is observed through its own dry-run copy, never the shared
+	// appender: a replay probe (every checkpoint bind runs one) that sets or
+	// clears the appender's observer must not change what this restore saw.
+	observer := &restoreReplayObserver{onApplied: progress.onApplied}
+	reconstructErr := rt.eventAppender.ReconstructThroughTargetObserved(ctx, staged, targetHead, observer)
 	if reconstructErr != nil {
 		_ = staged.Close()
 		_ = os.RemoveAll(stagingRoot)
 		return report, fmt.Errorf("rematerialize: reconstruct through target: %w", reconstructErr)
 	}
+	progress.enter(restoreStateVerifying)
 	applied, err := observer.tailReceipt(record.StoreHeadSequence, targetSequence)
 	if err != nil {
 		_ = staged.Close()
@@ -211,6 +216,36 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		return report, fmt.Errorf("rematerialize: lease untrust marker: %w", err)
 	}
 
+	// From here the restore writes to the live computer: `current`, then the
+	// flip. The release lock is held for this part only (the replay above
+	// takes minutes to an hour), and the prior release is read again under
+	// it: an apply may have moved `current` since the check at the start.
+	rt.currentReleaseMu.Lock()
+	defer rt.currentReleaseMu.Unlock()
+	priorReleaseDigest := ""
+	if current, err := updater.ReadCurrentManifest(rt.selfdevUpdaterRoot); err == nil {
+		priorReleaseDigest = current.ContentDigest
+	}
+	quarantineDir := filepath.Join(filepath.Dir(originalMarker), "rematerialize-quarantine-"+time.Now().UTC().Format("20060102T150405.000000000Z"))
+	quarantinedMarker := filepath.Join(quarantineDir, filepath.Base(originalMarker))
+	quarantinedWorkspace := filepath.Join(quarantineDir, filepath.Base(originalWorkspace))
+	originalState, stagedState := rt.store.StatePath(), choirstore.StateDBPath(stagedMarker)
+	quarantinedState := filepath.Join(quarantineDir, filepath.Base(originalState))
+	// The original realization goes to quarantine, the staged one takes its
+	// place. A source that does not exist (the legacy marker, a workspace
+	// directory the store no longer keeps) is skipped; a failure undoes every
+	// rename already made.
+	flip := []renameStep{
+		{originalMarker, quarantinedMarker}, {originalWorkspace, quarantinedWorkspace},
+		{originalState, quarantinedState}, {originalState + "-wal", quarantinedState + "-wal"}, {originalState + "-shm", quarantinedState + "-shm"},
+		{stagedMarker, originalMarker}, {stagedWorkspace, originalWorkspace},
+		{stagedState, originalState}, {stagedState + "-wal", originalState + "-wal"}, {stagedState + "-shm", originalState + "-shm"},
+	}
+	// The act's record says what is about to change, durably, before it
+	// changes: a boot that finds this process dead puts the release back and
+	// undoes a half flip from it (RepairRestoreAtBoot).
+	progress.beginInstall(priorReleaseDigest, flip)
+
 	// Both floors: the live workspace carries the floor; the staged one gets it
 	// only if Open found rows, and on the genesis-replay path the stamped ops
 	// arrive after Open (bunch 152, Devin 1).
@@ -229,31 +264,26 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		_ = updater.RestagePinnedReleaseBestEffort(rt.selfdevUpdaterRoot, priorReleaseDigest)
 	}()
 
-	quarantineDir := filepath.Join(filepath.Dir(originalMarker), "rematerialize-quarantine-"+time.Now().UTC().Format("20060102T150405.000000000Z"))
 	if err := rt.store.Close(); err != nil {
 		_ = os.RemoveAll(stagingRoot)
 		return report, fmt.Errorf("rematerialize: close original realization: %w", err)
 	}
+	// A refusal from here to the reopen leaves the live realization where it
+	// was, so the store is opened again on it: the closed store a failed flip
+	// used to leave behind answered nothing until the next restart.
 	if err := os.Mkdir(quarantineDir, 0o755); err != nil {
 		_ = os.RemoveAll(stagingRoot)
+		if reopenErr := rt.store.Reopen(originalMarker); reopenErr != nil {
+			log.Printf("rematerialize: reopen the live realization after a refused quarantine: %v", reopenErr)
+		}
 		return report, fmt.Errorf("rematerialize: create quarantine: %w", err)
-	}
-	quarantinedMarker := filepath.Join(quarantineDir, filepath.Base(originalMarker))
-	quarantinedWorkspace := filepath.Join(quarantineDir, filepath.Base(originalWorkspace))
-	originalState, stagedState := rt.store.StatePath(), choirstore.StateDBPath(stagedMarker)
-	quarantinedState := filepath.Join(quarantineDir, filepath.Base(originalState))
-	// The original realization goes to quarantine, the staged one takes its
-	// place. A source that does not exist (the legacy marker, a workspace
-	// directory the store no longer keeps) is skipped; a failure undoes every
-	// rename already made.
-	flip := []renameStep{
-		{originalMarker, quarantinedMarker}, {originalWorkspace, quarantinedWorkspace},
-		{originalState, quarantinedState}, {originalState + "-wal", quarantinedState + "-wal"}, {originalState + "-shm", quarantinedState + "-shm"},
-		{stagedMarker, originalMarker}, {stagedWorkspace, originalWorkspace},
-		{stagedState, originalState}, {stagedState + "-wal", originalState + "-wal"}, {stagedState + "-shm", originalState + "-shm"},
 	}
 	if err := applyRenames(flip); err != nil {
 		_ = os.RemoveAll(stagingRoot)
+		_ = os.Remove(quarantineDir)
+		if reopenErr := rt.store.Reopen(originalMarker); reopenErr != nil {
+			log.Printf("rematerialize: reopen the live realization after a refused flip: %v", reopenErr)
+		}
 		return report, fmt.Errorf("rematerialize: flip staged realization: %w", err)
 	}
 	_ = os.RemoveAll(stagingRoot)
@@ -309,15 +339,9 @@ func (h *APIHandler) rematerializeComputerFromTape(w http.ResponseWriter, r *htt
 			return
 		}
 	}
-	report, err := h.rt.RematerializeFromTape(r.Context(), computerID, request.Checkpoint)
-	if err != nil {
-		writeAPIJSON(w, rematerializeRefusalStatus(err), apiError{Error: err.Error()})
-		return
-	}
-	if report.ExecChanged {
-		report.RestartScheduled, report.RestartDeferred = h.rt.requestRestoreRestart(r.Context(), request.Checkpoint.Digest)
-	}
-	writeAPIJSON(w, http.StatusOK, report)
+	// An accepted act: the answer comes when the act is recorded, and the work
+	// (tens of minutes on a long tail) runs in the guest's background.
+	h.acceptRestoreRoute(w, r, restoreActKindRematerial, computerID, request.Checkpoint, request.IdempotencyKey)
 }
 
 func (h *APIHandler) restoreComputer(w http.ResponseWriter, r *http.Request, computerID string) {
@@ -357,19 +381,9 @@ func (h *APIHandler) restoreComputer(w http.ResponseWriter, r *http.Request, com
 		writeAPIJSON(w, status, apiError{Error: err.Error()})
 		return
 	}
-	if err := h.rt.appendRestoreIntent(r.Context(), computerID, request.Checkpoint); err != nil {
-		writeAPIJSON(w, rematerializeRefusalStatus(err), apiError{Error: err.Error()})
-		return
-	}
-	report, err := h.rt.RematerializeFromTape(r.Context(), computerID, request.Checkpoint)
-	if err != nil {
-		writeAPIJSON(w, rematerializeRefusalStatus(err), apiError{Error: err.Error()})
-		return
-	}
-	if report.ExecChanged {
-		report.RestartScheduled, report.RestartDeferred = h.rt.requestRestoreRestart(r.Context(), request.Checkpoint.Digest)
-	}
-	writeAPIJSON(w, http.StatusOK, report)
+	// The intent is appended inside the acceptance, after the request has
+	// validated and claimed the one act slot, so a refused request leaves none.
+	h.acceptRestoreRoute(w, r, restoreActKindRestore, computerID, request.Checkpoint, request.IdempotencyKey)
 }
 
 // rematerializeRefusalStatus maps recovery failures to visible refusals: a
@@ -379,8 +393,17 @@ func rematerializeRefusalStatus(err error) int {
 	// A witness mismatch and a witness version this release does not judge are
 	// refusals of the checkpoint, answered with their reason; not server errors.
 	if errors.Is(err, recoveryplan.ErrBaseRefused) || errors.Is(err, ErrCheckpointNotDerivable) ||
-		errors.Is(err, selfdevprotocol.ErrWitnessMismatch) || errors.Is(err, selfdevprotocol.ErrWitnessVersionRefused) {
+		errors.Is(err, selfdevprotocol.ErrWitnessMismatch) || errors.Is(err, selfdevprotocol.ErrWitnessVersionRefused) ||
+		isRestoreInProgress(err) {
 		return http.StatusConflict
+	}
+	// A volume without room for the staged store is a refusal the owner can
+	// act on, not a server fault.
+	if errors.Is(err, errRestoreInsufficientDisk) {
+		return http.StatusInsufficientStorage
+	}
+	if errors.Is(err, errRestoreInvalid) {
+		return http.StatusBadRequest
 	}
 	if errors.Is(err, ErrRematerializeUnavailable) {
 		return http.StatusServiceUnavailable

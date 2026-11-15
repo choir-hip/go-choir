@@ -165,7 +165,12 @@ type runtimeHealthResponse struct {
 	// keeps the legacy idle rule for such a guest. A parked run, a capsule
 	// before its first Freeze and a frozen candidate awaiting approval all
 	// read 0 in the three fields above.
-	LiveCapsules          *int                   `json:"live_capsules,omitempty"`
+	LiveCapsules *int `json:"live_capsules,omitempty"`
+	// RestoreInFlight is a restore act running (restore_act.go). Nothing else
+	// on the guest looks like work to vmctl once the restore's request has
+	// been answered: no run, no operation, no capsule. A guest that predates
+	// the field is not mid-restore, so absent reads false.
+	RestoreInFlight       bool                   `json:"restore_in_flight,omitempty"`
 	ActiveProvider        string                 `json:"active_provider"`
 	PersistentDisk        *persistentdisk.Status `json:"persistent_disk,omitempty"`
 	Build                 buildinfo.Info         `json:"build"`
@@ -720,6 +725,7 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		DeskPendingMutations: reads.deskPending,
 		SelfdevActiveOps:     reads.selfdevActive,
 		LiveCapsules:         reads.liveCapsules,
+		RestoreInFlight:      h.rt.restoreInFlight(),
 		ActiveProvider:       h.rt.provider.ProviderName(),
 		Build:                buildinfo.Snapshot("autoputer"),
 	}
