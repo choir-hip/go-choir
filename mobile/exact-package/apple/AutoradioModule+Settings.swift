@@ -96,8 +96,7 @@ extension AutoradioModule {
             }
         }
 
-        // The talk mode applies at launch and when set; the gesture meanings are Settings' too, handed to lane 4's Preferences.
-        lane.settings.apply(to: runtime)
+        // The gesture meanings are Settings' too, handed to lane 4's Preferences. (The talk mode is gone: voice is hands-free.)
         syncGestureMeanings()
 
         // ---- themes

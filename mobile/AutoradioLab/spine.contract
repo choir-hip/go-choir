@@ -14,6 +14,8 @@ members Autoradio
   resource bi = barState() as shape BarInfo else empty()
   resource dm = demoInfo() as shape DemoInfo else empty()
   mutation pm as shape PageList
+  // A second handle, for an action that opens one page and closes another in the same step.
+  mutation pc as shape PageList
 
   // The layer above the page: "" (none), "launcher" (the stack's pages and the destinations), "player" (the expanded player, a
   // sheet over the page with the bar still under it).
