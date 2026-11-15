@@ -137,3 +137,8 @@ The owner tested onboarding, where the app helps set up the edition.
   side".** Ruling: the source page opens in place, expanding from inside the
   story, with the prompt bar, the mark and the audio controls kept at the
   bottom, "so that way it doesn't feel like you're going anywhere".
+- **Problem: too many taps to reach a source.** Evidence: four owner
+  screenshots: citation chip, then an inline source card with "Open source",
+  then a second sheet repeating the source with "Open original", then the
+  page. Ruling: "Open source" opens the page directly; expand the inline
+  source card rather than adding a second sheet.
