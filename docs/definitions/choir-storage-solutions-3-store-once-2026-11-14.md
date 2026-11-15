@@ -131,7 +131,7 @@ stations:
     review: two seats on the design (done, both REPAIR, revision 2 written); one seat on the re-ranked revision
     depends_on: []
     carrier: lane/store-size-land ceb5288c7 (one seat accepted, rounds 1 and 2); lane/rewrite-counters (building)
-    status: complete
+    status: proved
   - id: T1
     name: stop copying forward
     scope: a new run carries its conversation by naming the source run and entry range, with the retirement rule keeping entries a live run names; a lifecycle command stops embedding the document, revision and events its own batch writes; a tool result names its run-memory entry
@@ -179,7 +179,7 @@ stations:
     review: two seats
     depends_on: []
     carrier: lane/updater-prune (review round 3 pending; both seats REPAIR on rounds 1 and 2)
-    status: complete
+    status: landed
   - id: T8
     name: find the next one
     scope: a standing read. After each landing, read the per-table store reading, the per-op tape counters and the data volume on d@e and the paper; anything that grows without a named mechanism gets a problem record and a station here
