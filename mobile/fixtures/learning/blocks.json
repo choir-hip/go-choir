@@ -1,0 +1,80 @@
+{
+ "about": "SplitBlocks edge texts (design 12.3): line endings to LF, split on one or more blank lines (a whitespace-only line is blank), trim each part, drop empty parts. `blocks` is the exact list; its length is the claim's blocks.",
+ "cases": [
+  {
+   "name": "one_paragraph",
+   "text": "Only one paragraph here.",
+   "blocks": [
+    "Only one paragraph here."
+   ],
+   "block_count": 1
+  },
+  {
+   "name": "trailing_newline",
+   "text": "A first.\n\nA second.\n",
+   "blocks": [
+    "A first.",
+    "A second."
+   ],
+   "block_count": 2
+  },
+  {
+   "name": "crlf",
+   "text": "A first.\r\n\r\nA second.\r\n\r\nA third.",
+   "blocks": [
+    "A first.",
+    "A second.",
+    "A third."
+   ],
+   "block_count": 3
+  },
+  {
+   "name": "blank_lines_with_spaces",
+   "text": "A first.\n   \t \nA second.",
+   "blocks": [
+    "A first.",
+    "A second."
+   ],
+   "block_count": 2
+  },
+  {
+   "name": "leading_blank_lines",
+   "text": "\n\n\nA first.\n\nA second.",
+   "blocks": [
+    "A first.",
+    "A second."
+   ],
+   "block_count": 2
+  },
+  {
+   "name": "many_blank_lines",
+   "text": "A first.\n\n\n\n\nA second.",
+   "blocks": [
+    "A first.",
+    "A second."
+   ],
+   "block_count": 2
+  },
+  {
+   "name": "single_newline_joins",
+   "text": "Line one\nline two.\n\nA second.",
+   "blocks": [
+    "Line one\nline two.",
+    "A second."
+   ],
+   "block_count": 2
+  },
+  {
+   "name": "empty",
+   "text": "",
+   "blocks": [],
+   "block_count": 0
+  },
+  {
+   "name": "only_blanks",
+   "text": " \n\n \n",
+   "blocks": [],
+   "block_count": 0
+  }
+ ]
+}

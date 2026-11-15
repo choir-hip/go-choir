@@ -1,0 +1,1400 @@
+{
+ "about": "Heard-route fixtures for design 12.3, 4.2 and 12.7. Each scenario starts empty: its segments are forecast claims the server wrote (stretch fx) with the text named in `texts`; its batches are sent in order. `results` is the code (and reason of a refusal) per event, in the batch's own order; `settlements` is the segment's settlement ('yes' or 'no') after all batches, absent when none. `pre.air_without_settlement` is events already stored whose settlement was never written. Reason tokens are defined by these fixtures. A segment has `blocks` from its text by SplitBlocks.",
+ "texts": {
+  "one": {
+   "text": "Only one paragraph here.",
+   "sha256": "f53ef5af874bb9398ca7f1a28ada1cba70ecae5ad652b631b956b4a3a2764292",
+   "blocks": 1
+  },
+  "three": {
+   "text": "First block.\n\nSecond block.\n\nThird block.",
+   "sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+   "blocks": 3
+  }
+ },
+ "scenarios": [
+  {
+   "name": "one_block_finish",
+   "about": "a one-block segment finished at block 0 settles yes",
+   "segments": {
+    "fx.s0": "one"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "f53ef5af874bb9398ca7f1a28ada1cba70ecae5ad652b631b956b4a3a2764292",
+       "seq": 1,
+       "type": "finished",
+       "last_block": 0,
+       "block_count": 1,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "accepted"
+      }
+     ]
+    }
+   ],
+   "settlements": {
+    "fx.s0": "yes"
+   }
+  },
+  {
+   "name": "many_block_finish",
+   "about": "a three-block segment finished at its last block settles yes",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "accepted"
+      }
+     ]
+    }
+   ],
+   "settlements": {
+    "fx.s0": "yes"
+   }
+  },
+  {
+   "name": "first_block_skip_one_block",
+   "about": "a skip at block 0 of a one-block segment has the final block begun: yes",
+   "segments": {
+    "fx.s0": "one"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "f53ef5af874bb9398ca7f1a28ada1cba70ecae5ad652b631b956b4a3a2764292",
+       "seq": 1,
+       "type": "skipped",
+       "last_block": 0,
+       "block_count": 1,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "accepted"
+      }
+     ]
+    }
+   ],
+   "settlements": {
+    "fx.s0": "yes"
+   }
+  },
+  {
+   "name": "first_block_skip_many_blocks",
+   "about": "a skip at block 0 of a three-block segment is valid and settles no",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "skipped",
+       "last_block": 0,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "accepted"
+      }
+     ]
+    }
+   ],
+   "settlements": {
+    "fx.s0": "no"
+   }
+  },
+  {
+   "name": "skip_at_final_block",
+   "about": "a skip with the final block begun settles yes",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "skipped",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "accepted"
+      }
+     ]
+    }
+   ],
+   "settlements": {
+    "fx.s0": "yes"
+   }
+  },
+  {
+   "name": "wrong_block_count",
+   "about": "a block_count that differs from the claim's blocks is refused",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 2,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "refused",
+       "reason": "block_count_mismatch"
+      }
+     ]
+    }
+   ],
+   "settlements": {}
+  },
+  {
+   "name": "block_count_zero",
+   "about": "a block_count of zero is refused",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "skipped",
+       "last_block": 0,
+       "block_count": 0,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "refused",
+       "reason": "block_count_zero"
+      }
+     ]
+    }
+   ],
+   "settlements": {}
+  },
+  {
+   "name": "last_block_out_of_range",
+   "about": "a negative last_block, or one at or above blocks, is refused",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "skipped",
+       "last_block": 3,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      },
+      {
+       "event_id": "e2",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 2,
+       "type": "skipped",
+       "last_block": -1,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "refused",
+       "reason": "last_block_out_of_range"
+      },
+      {
+       "event_id": "e2",
+       "code": "refused",
+       "reason": "last_block_out_of_range"
+      }
+     ]
+    }
+   ],
+   "settlements": {}
+  },
+  {
+   "name": "finished_before_final_block",
+   "about": "a finished whose final block has not begun is refused",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "finished",
+       "last_block": 1,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "refused",
+       "reason": "finished_before_final_block"
+      }
+     ]
+    }
+   ],
+   "settlements": {}
+  },
+  {
+   "name": "hash_mismatch_full",
+   "about": "a hash of other text (first 32 digits differ) is refused",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "969973c59c9d3d6396e0b33459e1bfa7beab63c91a24ef80f6e48decf3dc1fd0",
+       "seq": 1,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "refused",
+       "reason": "hash_mismatch"
+      }
+     ]
+    }
+   ],
+   "settlements": {}
+  },
+  {
+   "name": "hash_differs_after_32",
+   "about": "only the first 32 digits are compared: digits 33 to 64 differing is accepted (design 12.6)",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad9400000000000000000000000000000000",
+       "seq": 1,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "accepted"
+      }
+     ]
+    }
+   ],
+   "settlements": {
+    "fx.s0": "yes"
+   }
+  },
+  {
+   "name": "hash_first_digits_differ",
+   "about": "a hash that differs in the first 32 digits by one digit is refused",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "0a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "refused",
+       "reason": "hash_mismatch"
+      }
+     ]
+    }
+   ],
+   "settlements": {}
+  },
+  {
+   "name": "hash_32_digit_form",
+   "about": "the event carries the full 64 digits; the 32-digit tag form is refused (conservative reading of 12.3 and 12.6)",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94",
+       "seq": 1,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "refused",
+       "reason": "hash_mismatch"
+      }
+     ]
+    }
+   ],
+   "settlements": {}
+  },
+  {
+   "name": "refusals_by_check",
+   "about": "unknown type, ended before started, no forecast, event_id outside the grammar",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "rewound",
+       "last_block": 0,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      },
+      {
+       "event_id": "e2",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 2,
+       "type": "skipped",
+       "last_block": 0,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:05Z",
+       "ended_at": "2026-11-15T10:00:00Z"
+      },
+      {
+       "event_id": "e3",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.nope",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "skipped",
+       "last_block": 0,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      },
+      {
+       "event_id": "-bad id",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 3,
+       "type": "skipped",
+       "last_block": 0,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "refused",
+       "reason": "unknown_type"
+      },
+      {
+       "event_id": "e2",
+       "code": "refused",
+       "reason": "ended_before_started"
+      },
+      {
+       "event_id": "e3",
+       "code": "refused",
+       "reason": "no_forecast"
+      },
+      {
+       "event_id": "-bad id",
+       "code": "refused",
+       "reason": "bad_event_id"
+      }
+     ]
+    }
+   ],
+   "settlements": {}
+  },
+  {
+   "name": "non_terminal_then_finish",
+   "about": "cut, a repeat cut with a new event id, paused, resume and left are stored and do not settle; the finish does",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "cut",
+       "last_block": 0,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      },
+      {
+       "event_id": "e2",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 2,
+       "type": "cut",
+       "last_block": 0,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      },
+      {
+       "event_id": "e3",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 3,
+       "type": "paused",
+       "last_block": 1,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      },
+      {
+       "event_id": "e4",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 4,
+       "type": "resume",
+       "last_block": 1,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      },
+      {
+       "event_id": "e5",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 5,
+       "type": "left",
+       "last_block": 1,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      },
+      {
+       "event_id": "e6",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 6,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "accepted"
+      },
+      {
+       "event_id": "e2",
+       "code": "accepted"
+      },
+      {
+       "event_id": "e3",
+       "code": "accepted"
+      },
+      {
+       "event_id": "e4",
+       "code": "accepted"
+      },
+      {
+       "event_id": "e5",
+       "code": "accepted"
+      },
+      {
+       "event_id": "e6",
+       "code": "accepted"
+      }
+     ]
+    }
+   ],
+   "settlements": {
+    "fx.s0": "yes"
+   }
+  },
+  {
+   "name": "signals_never_settle",
+   "about": "more, less and corrected are stored and never settle; a signal naming no segment is stored for the session; one naming an unforecast segment is refused",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "g1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "more",
+       "last_block": 0,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      },
+      {
+       "event_id": "g2",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 2,
+       "type": "less",
+       "last_block": 0,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      },
+      {
+       "event_id": "g3",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 3,
+       "type": "corrected",
+       "last_block": 0,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z",
+       "turn_id": "turn-1"
+      },
+      {
+       "event_id": "g4",
+       "session_id": "sess-fx",
+       "stretch_id": "",
+       "segment_id": "",
+       "text_sha256": "",
+       "seq": 4,
+       "type": "more",
+       "last_block": 0,
+       "block_count": 0,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      },
+      {
+       "event_id": "g5",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.nope",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 5,
+       "type": "less",
+       "last_block": 0,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "g1",
+       "code": "accepted"
+      },
+      {
+       "event_id": "g2",
+       "code": "accepted"
+      },
+      {
+       "event_id": "g3",
+       "code": "accepted"
+      },
+      {
+       "event_id": "g4",
+       "code": "accepted"
+      },
+      {
+       "event_id": "g5",
+       "code": "refused",
+       "reason": "no_forecast"
+      }
+     ]
+    }
+   ],
+   "settlements": {}
+  },
+  {
+   "name": "replay_is_duplicate",
+   "about": "the same events sent again are duplicates and change nothing",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "accepted"
+      }
+     ]
+    },
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "duplicate"
+      }
+     ]
+    }
+   ],
+   "settlements": {
+    "fx.s0": "yes"
+   }
+  },
+  {
+   "name": "same_id_changed_content",
+   "about": "the same event_id with different content is changed: not stored, settlement unchanged",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "accepted"
+      }
+     ]
+    },
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:09:00Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "changed"
+      }
+     ]
+    }
+   ],
+   "settlements": {
+    "fx.s0": "yes"
+   }
+  },
+  {
+   "name": "later_events_ignored",
+   "about": "after settlement an agreeing terminal event and any other event are ignored",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "accepted"
+      }
+     ]
+    },
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e2",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 2,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      },
+      {
+       "event_id": "e3",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 3,
+       "type": "cut",
+       "last_block": 1,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      },
+      {
+       "event_id": "e4",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 4,
+       "type": "skipped",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e2",
+       "code": "ignored"
+      },
+      {
+       "event_id": "e3",
+       "code": "ignored"
+      },
+      {
+       "event_id": "e4",
+       "code": "ignored"
+      }
+     ]
+    }
+   ],
+   "settlements": {
+    "fx.s0": "yes"
+   }
+  },
+  {
+   "name": "conflict_finish_then_skip",
+   "about": "a later skip at block 0 disagrees with a settled yes: conflict-recorded, settlement unchanged",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "accepted"
+      }
+     ]
+    },
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e2",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 2,
+       "type": "skipped",
+       "last_block": 0,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e2",
+       "code": "conflict-recorded"
+      }
+     ]
+    }
+   ],
+   "settlements": {
+    "fx.s0": "yes"
+   }
+  },
+  {
+   "name": "conflict_skip_then_finish",
+   "about": "the other arrival order: the first terminal event received settles, the finish is the conflict",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "skipped",
+       "last_block": 0,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "accepted"
+      }
+     ]
+    },
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e2",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 2,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e2",
+       "code": "conflict-recorded"
+      }
+     ]
+    }
+   ],
+   "settlements": {
+    "fx.s0": "no"
+   }
+  },
+  {
+   "name": "one_batch_order_a",
+   "about": "within a batch events are sorted by stretch, segment and seq: seq 1 settles",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "skipped",
+       "last_block": 0,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      },
+      {
+       "event_id": "e2",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 2,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "accepted"
+      },
+      {
+       "event_id": "e2",
+       "code": "conflict-recorded"
+      }
+     ]
+    }
+   ],
+   "settlements": {
+    "fx.s0": "no"
+   }
+  },
+  {
+   "name": "one_batch_order_b",
+   "about": "the same batch listed in the other order settles the same and each event gets the same code",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e2",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 2,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      },
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "skipped",
+       "last_block": 0,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e2",
+       "code": "conflict-recorded"
+      },
+      {
+       "event_id": "e1",
+       "code": "accepted"
+      }
+     ]
+    }
+   ],
+   "settlements": {
+    "fx.s0": "no"
+   }
+  },
+  {
+   "name": "air_without_settlement_then_replay",
+   "about": "the process stopped between the air append and the settlement: the replay answers duplicate and settles",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "pre": {
+    "air_without_settlement": [
+     {
+      "event_id": "e1",
+      "session_id": "sess-fx",
+      "stretch_id": "fx",
+      "segment_id": "fx.s0",
+      "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+      "seq": 1,
+      "type": "finished",
+      "last_block": 2,
+      "block_count": 3,
+      "started_at": "2026-11-15T10:00:00Z",
+      "ended_at": "2026-11-15T10:00:05Z"
+     }
+    ]
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "duplicate"
+      }
+     ]
+    }
+   ],
+   "settlements": {
+    "fx.s0": "yes"
+   }
+  },
+  {
+   "name": "batch_over_event_bound",
+   "about": "more than 200 events: the whole batch is refused with HTTP 400 and nothing is stored",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 400,
+     "events_generated": {
+      "count": 201,
+      "id_prefix": "bulk-",
+      "template": {
+       "event_id": "x",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "cut",
+       "last_block": 0,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     },
+     "results": []
+    }
+   ],
+   "settlements": {}
+  },
+  {
+   "name": "batch_within_bounds",
+   "about": "100 events (about 32 KB) are accepted; 200 events of this size would exceed the 64 KB bound, so the phone chunks by bytes as well as by count",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events_generated": {
+      "count": 100,
+      "id_prefix": "bulk-",
+      "template": {
+       "event_id": "x",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "cut",
+       "last_block": 0,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     },
+     "results_all": "accepted"
+    }
+   ],
+   "settlements": {}
+  },
+  {
+   "name": "batch_over_byte_bound",
+   "about": "over 64 KB of events: refused whole with HTTP 400",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 400,
+     "events_generated": {
+      "count": 1,
+      "id_prefix": "fat-",
+      "template": {
+       "event_id": "x",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "cut",
+       "last_block": 0,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z",
+       "cites": [
+        "air:pad"
+       ]
+      },
+      "cites_pad_bytes": 70000
+     },
+     "results": []
+    }
+   ],
+   "settlements": {}
+  }
+ ]
+}
