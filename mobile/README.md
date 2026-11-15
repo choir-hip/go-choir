@@ -329,6 +329,32 @@ The `YieldPolicy` is pure; the engine applies it and `ProgrammePlayer.setLevel` 
 5. Interruption while locked (a call) with no `resumed`: the programme stays silent. The Lab screen shows engine "down" on unlock.
 6. Now Playing and the lock-screen controls belong to Exact's own audio element (`UIBackgroundModes` and the remote command centre are Exact's). Our engine's `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter` calls in `ProgrammePlayer` are not what Exact shows; building that is out of scope here. What it would take: an Exact `audio` element (a hold the owner knows) carrying the programme, or a package-side `MPNowPlayingSession` plus an active remote command target, with the app category `playback` and an activated session; Exact would need to not fight over `MPRemoteCommandCenter`.
 
+## Slim simulators (`scripts/sim-slim.sh`)
+
+A booted stock iOS 27.0 simulator runs about 160 to 180 processes. `simslim` (MobAI-App/simslim, MIT, commit `7e374b3839d49608a681d1f8b9ca0dd83d35189e`, read in full and built with the repo's Go 1.26; it makes no network calls, runs nothing as root, and its only host write for `on` and `off` is the device's launchd disable store, `/private/var/tmp/com.apple.CoreSimulator.SimDevice.<udid>/disabled.plist`) switches off daemons by launchd label. It talks to the simulator only through `xcrun simctl`; it never opens Simulator.app, so Device Hub changes nothing for it. Binary: `~/.local/bin/simslim` (`SIMSLIM=` overrides).
+
+```sh
+mobile/scripts/sim-slim.sh autoradio-p2            # slim it: reboots once, offline, about 25 s
+mobile/scripts/sim-slim.sh autoradio-p2 --status   # 143/173 managed services off
+mobile/scripts/sim-slim.sh autoradio-p2 --off      # back to stock (a clean `simctl erase` also keeps the store: use --off)
+```
+
+It refuses `autoradio-lab` unless `--allow-lab` is given. Never run `simslim disk-clean`.
+
+What stays on: category `siri` (speech recognition, `corespeechd`, on-device language and model services, text to speech) and `com.apple.mobileassetd` and `com.apple.accessibility.axassetsd` (speech models and voices arrive as assets). What goes: widgets and wallpaper, search, iCloud and account, store and push, mail and calendar, web sync, family, health and home, photos analysis, news and maps, messaging, connectivity, telemetry, device management, and the rest of "other".
+
+Measured on 2026-11-15 on this Mac (load average 100 to 200 at the time, one simulator, 60 s after boot, `simslim measure`):
+
+| | processes | footprint |
+| --- | --- | --- |
+| stock, first boot | 178 | 5.82 GB |
+| stock, second boot | 162 | not measured |
+| slim (siri kept) | 97 | 2.90 GB |
+| slim after the app ran, siri kept | 106 | 3.50 GB |
+| the same, siri also disabled live | 91 | 2.87 GB |
+
+Proved on a slim simulator: the installed `news.choir.autoradio.lab` launched, its Exact agent socket opened in 2 to 3 s, `tree` returned 45 to 67 nodes, `bar-play` and `bar-mic` claimed the audio session (`PlayAndRecord`, then `VoiceChat`). Not proved: real speech recognition and real text to speech on a slim simulator (the agent runs the virtual engine), `proof-sim.sh`, background audio. Keep `siri` until those are run. If something breaks, `sim-slim.sh <name> --off`, then report which feature failed; `simslim enable <udid> <category>` turns one category back on without a reboot.
+
 ## Driving the app and proving it (`scripts/proof-sim.sh`)
 
 ```sh
