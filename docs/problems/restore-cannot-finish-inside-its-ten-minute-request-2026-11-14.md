@@ -592,3 +592,67 @@ nobody asked for. The owner re-submits (the intent is idempotent).
   kill) interrupts the act by design; the table above is its answer.
 - Estimates assume the best base. A pruned root costs a longer tail than the
   estimate says; `tail_events_total` becomes exact at the plan.
+
+### Failure list (each has a test; written before the code, seen failing)
+
+Guest, through the real router (`NewAPIHandler(rt).HandleComputersRouter`):
+
+1. F1 Restore answers before the work ends: 202, an act id, a status URL, state
+   `accepted`, an estimate. `TestRestoreActAnswersAtOnceWhileTheReplayRuns`
+2. F2 Status shows progress while replaying: state, tail total and applied,
+   rate, estimated seconds remaining. `TestRestoreActStatusReportsProgress`
+3. F3 On success the status carries the report the synchronous route returned
+   and the store is the restored one. `TestRestoreActSucceedsWithTheReport`
+4. F4 A refusal in the background (witness mismatch) ends `failed` naming the
+   refusal and its HTTP status; the live store and the served release are
+   untouched. `TestRestoreActFailsByNameAndLeavesLiveState`
+5. F5 One at a time: another key answers 409 naming the running act; the same
+   key returns that act, appends no second intent and starts no second run.
+   `TestRestoreActOneAtATime`
+6. F6 The estimate uses the measured rate when one is recorded, else the
+   assumed one, and says which; a long tail is not refused.
+   `TestRestoreActEstimateNamesItsRate`
+7. F7 A disk below the floor refuses up front, before the intent is appended.
+   `TestRestoreActRefusesBelowDiskFloorBeforeTheIntent`
+8. F8 The refusals that were up front stay up front and append no intent
+   (bad scope 400, unjudgeable witness 409). `TestRestoreActKeepsUpFrontRefusals`
+9. F9 A kill mid-replay (a real SIGKILL of a child process) leaves the live
+   store and the served release as they were; the boot closes the act
+   `interrupted` and does not resume; the staged store is gone.
+   `TestRestoreKilledMidReplayLeavesTheLiveStateUntouched`
+10. F10 A crash mid-flip is undone by the boot; a completed flip is left and
+    the act says so. `TestBootUndoesAHalfFlipAndLeavesACompleteOne`
+11. F11 A crash after the release was restaged and before the flip puts the
+    prior release back at boot. `TestBootPutsBackThePriorRelease`
+12. F12 A planned restart is refused mid-restore whatever `allow_busy` says,
+    and `/health` reports `restore_in_flight`.
+    `TestPlannedRestartIsRefusedMidRestore`, `TestHealthReportsRestoreInFlight`
+13. F13 `currentReleaseMu` is free during the replay.
+    `TestRestoreActDoesNotHoldTheReleaseLockDuringTheReplay`
+14. F14 A replay probe and a restore exclude each other.
+    `TestReplayProbeAndRestoreExclude`
+15. F15 Act records: unknown id 404, newest 20 kept, a record of another
+    computer is not served. `TestRestoreActRecords`
+16. F16 No production capability is missing from the test wiring: the act runs
+    on `resolveRestoreTape` and the production `ReplayObserver`.
+    `TestRestoreActWiring`
+
+Host (proxy and vmctl):
+
+17. F17 The proxy forwards restore and rematerialize on the ordinary client and
+    answers the guest's 202 unchanged; `restore-status` is a GET gated as
+    restore is (owner act, lifecycle scope, ownership).
+    `TestRestoreRoutesUseTheOrdinaryClientAnd202`, `TestRestoreStatusRouteIsAnOwnerAct`
+18. F18 vmctl's idle reading, host-stop reading and crash-restart refusal treat
+    `restore_in_flight` as busy; the deploy refusal names it.
+    `TestRestoreInFlightIsBusyForVmctl`
+
+CLI:
+
+19. F19 `computer restore` submits, polls, prints progress to stderr and the
+    result to stdout (exit 0), a failed or interrupted act exits 1, `--no-wait`
+    prints the act id, `restore-status` reads one, a poll that meets a 502
+    while the guest restarts keeps polling to the deadline.
+    `TestComputerRestoreWaits`, `TestComputerRestoreNoWait`,
+    `TestComputerRestoreStatus`, `TestComputerRestoreFailedExitsOne`,
+    `TestComputerRestoreToleratesATransientPollError`
