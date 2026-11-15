@@ -96,3 +96,6 @@ The investigation is `docs/evidence/autoradio-phone-review-investigation-2026-11
   is ordered by what makes hands-free voice work end to end soonest, not by
   removing the other implementations. A model or voice picker is a feature,
   not a switch.
+- **QA builds may be installed on the owner's phone without asking first**
+  (2026-11-15, for the Autoradio QA rounds): install when a build is ready,
+  then notify the owner.
