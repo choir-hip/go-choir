@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# Jev entry-point gate (owner, 2026-11-15; docs/problems/jev-misuse-
+# structural-assessment-2026-11-15.md; docs/design/jev-batched-questions-
+# 2026-11-10.md section 10).
+#
+# A job asks Jev once: it builds one jevJob (internal/agentcore/jev_job.go),
+# adds every question, and sends the job's calls, one unless a vendor limit
+# forces a split. A site that builds and sends its own request is the defect
+# that was corrected five times.
+#
+# scripts/jev-entry-baseline.txt lists, per file, how many direct Jev call
+# sites it has and what each file is. The gate fails when
+#   - a file with a direct Jev call is not listed (a new site);
+#   - a listed file has more call sites than its count (a second call loop in a
+#     listed file) or fewer (lower the count so the list shrinks visibly);
+#   - with --base REF: a file is added or a count is raised against REF's list.
+# A base that cannot be read fails (a check that passes when it cannot see the
+# base is open exactly then).
+# What it cannot catch (it counts regex matches of call sites per file, not a
+# syntax tree): a loop or a second caller around an existing call site (a
+# second `for` that calls askIntakeCall, or a wrapper that calls the listed
+# function again), a call the pattern does not name, a comment edited so the
+# count stays equal, and an edited list in the same change (the --base check
+# catches a raised count or a new file against the base, but a base with no
+# list, on first adoption, stands alone). It is a tripwire for the shape of the
+# mistake, not a proof; the tests that assert calls per job are the proof.
+#
+#   scripts/check-jev-entry [--base REF] [--root DIR]
+set -euo pipefail
+root="$(cd "$(dirname "$0")/.." && pwd)"
+base=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --base) base="$2"; shift 2 ;;
+    --root) root="$2"; shift 2 ;;
+    *) echo "usage: check-jev-entry [--base REF] [--root DIR]" >&2; exit 2 ;;
+  esac
+done
+cd "$root"
+baseline=scripts/jev-entry-baseline.txt
+pattern='(^|[^A-Za-z0-9_])(judgeCall|callJudgeWithin|callSubCallJudge)\(|\.JudgeScoped\(|\.Judge\(|jevrecord\.Observe\(|JudgmentRequest\{'
+fail=0
+
+listed_count() { # file -> its count in the list, or empty
+  awk -F'|' -v f="$1" '$0 !~ /^#/ && $1 == f { print $2 }' "$baseline"
+}
+listed_files() {
+  awk -F'|' '$0 !~ /^#/ && NF >= 3 { print $1 }' "$baseline"
+}
+
+hits="$(grep -rlE "$pattern" internal cmd --include='*.go' 2>/dev/null | grep -v '_test\.go$' | sort || true)"
+for f in $hits; do
+  want="$(listed_count "$f")"
+  got="$(grep -oE "$pattern" "$f" | wc -l | tr -d " ")"
+  if [ -z "$want" ]; then
+    echo "check-jev-entry: $f calls Jev directly and is not on the list. Build one jevJob for the job and ask through it (docs/design/jev-batched-questions-2026-11-10.md section 10)." >&2
+    fail=1
+  elif [ "$got" -gt "$want" ]; then
+    echo "check-jev-entry: $f has $got direct Jev call sites; the list allows $want. A second call over the same job is the defect: add the questions to the job's one request." >&2
+    fail=1
+  elif [ "$got" -lt "$want" ]; then
+    echo "check-jev-entry: $f has $got direct Jev call sites, fewer than the listed $want; lower its count in $baseline." >&2
+    fail=1
+  fi
+done
+for f in $(listed_files); do
+  if ! printf '%s\n' "$hits" | grep -qx "$f"; then
+    echo "check-jev-entry: $f is on the list but no longer calls Jev directly; delete its line from $baseline." >&2
+    fail=1
+  fi
+done
+
+if [ -n "$base" ]; then
+  if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+    echo "check-jev-entry: FAIL: base $base cannot be read here" >&2
+    exit 1
+  fi
+  if git cat-file -e "$base:$baseline" 2>/dev/null; then
+    basefile="$(mktemp)"
+    git show "$base:$baseline" >"$basefile"
+    for f in $(listed_files); do
+      now="$(listed_count "$f")"
+      was="$(awk -F'|' -v f="$f" '$0 !~ /^#/ && $1 == f { print $2 }' "$basefile")"
+      if [ -z "$was" ]; then
+        echo "check-jev-entry: $f is new on the list against $base; the list only shrinks." >&2
+        fail=1
+      elif [ "$now" -gt "$was" ]; then
+        echo "check-jev-entry: $f went from $was to $now direct Jev call sites against $base; the list only shrinks." >&2
+        fail=1
+      fi
+    done
+    rm -f "$basefile"
+  else
+    echo "check-jev-entry: $base has no list (first adoption); the head's list stands alone"
+  fi
+fi
+
+if [ "$fail" -eq 0 ]; then
+  echo "check-jev-entry: ok. Sites not yet on the entry point, with calls per job:"
+  awk -F'|' '$0 !~ /^#/ && $3 ~ /^UNMOVED/ { printf "  %s (%s): %s\n", $1, $2, $3 }' "$baseline"
+fi
+exit "$fail"

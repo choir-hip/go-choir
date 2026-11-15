@@ -622,7 +622,12 @@ work. Each is closed:
 
 ## 9. Intake flush: ways it can fail (2026-11-10, orange; rollback: revert)
 
-Owner rule (2026-11-10): never call Jev concurrently; put many questions in
+Owner rule (2026-11-10, superseded as to serial calls by the rulings of
+2026-11-12 and 2026-11-15: "jev isnt supposed to be serial. the point is to
+use the same large context for many questions, not call it in sequence with
+the same context"; calls over different states are asked together, with no
+cap; the group commit below remains because it merges captures that arrive
+while a flush is in flight into the next call over one state): put many questions in
 single calls. Intake labels are one sequential stream of calls per runtime,
 a **group commit with no timer**:
 
@@ -633,16 +638,19 @@ a **group commit with no timer**:
 - One flusher goroutine per runtime runs whenever anything is held and no call
   is in flight, draining the computers' queues in turn. The first capture is
   asked at once; captures that arrive while a call is in flight accumulate and
-  go out together in the next flush (at most `intakeFlushCaptures` = 12
-  captures, and at most `intakeCallCaptures` = 6 to a call, further calls in
-  sequence). Under a burst the batches form by themselves; when quiet, the
+  go out together in the next flush (every waiting capture, no count of ours,
+  all in one job; the call splits only where the
+  vendor's token limits would be crossed, `jevbudget`, see F12). Under a burst the batches form by themselves; when quiet, the
   latency is one call.
 - The poll enqueues, waits on the handle (or its ctx), then calls
   `announceCaptures` exactly as before, so labels exist before the wake again,
   the durable `PendingArrivals` retry machinery is untouched, and a capture
   whose label failed is still announced, unlabelled.
-- A call packs captures and candidate stories to the 30,000-byte guard
-  (`intakeChunkStateBytes` cuts story chunks by bytes).
+- A call packs captures and candidate stories to the vendor's token limits
+  (`intakeTokenPolicy`; before 2026-11-12 a 30,000-byte guard and 15,000-byte
+  story slices). The chunk bound reserves, for every capture of the poll, its
+  captures-block entry sized for a dense script, so a window near the ceiling
+  does not close every group at one capture.
 
 **Locks and scheduling at the wait.** `HandleSourcePollDue` releases
 `sourceScheduleMu` after writing the in-flight mark
@@ -695,9 +703,26 @@ Failure list:
   there, `l.running` cleared, flusher restarted if anything is held). Each
   leaves that flush's captures unlabelled.
 - F12. A call carries more questions than the measured 8 (accuracy above 12 is
-  unmeasured). Bound: at most `intakeCallCaptures` = 6 captures (12
-  questions) to a call. Raise it only after the shadow comparison measures
-  accuracy at the larger size.
+  unmeasured). Revised 2026-11-14; before, this said at most
+  `intakeCallCaptures` = 6 captures (12 questions) to a call, raised only
+  after the shadow comparison measured accuracy at the larger size. What
+  governs the size now: CLAUDE.md (Delivery, owner, 2026-11-12) and the owner's ruling of 2026-11-15 (Jev is not serial; the point is one large context for many questions) say every
+  question about a state goes in the one call that carries that state, and a
+  second call over the same or an overlapping state is the defect. A cap of 6
+  would make two calls over one state on every full flush, which is that
+  defect, and it was an arbitrary size of ours, not a vendor limit. So a call
+  carries the whole flush (every waiting capture; no constant of ours; section
+  10 says what bounds a call) and is split only by the vendor's limits (64k
+  tokens a request, 32k for the state plus one question, 255 options a
+  question; `jevbudget`). The accuracy concern is real and unmeasured: the vendor
+  publishes none for 24 questions, and ours stops at 12. The shadow comparison
+  (`cmd/intake-shadow -run` on d@e, over a recorded real flush) is therefore
+  not a gate on the size but the measurement of it: event and topic agreement
+  between the old slicing and one state, and billed against estimated tokens.
+  If it measures a loss at the larger size, the size is lowered by a commit
+  that changes the constant and names the measurement; there is no switch
+  and no cap on the number of calls. The shadow has been built and has not yet
+  been run. The residual until it is: a wrong label at 24 questions is silent.
 - F15. A handle that never closes strands a poll. Every exit path closes it:
   the flush's own defer (normal, failed and panicked), the stop drain
   (labelled or abandoned at the bound), and the refused enqueue. A test per
@@ -719,3 +744,148 @@ Label counts live on the flush log line (`intake labels: flush captures=
 calls= questions= bytes_max= waited_ms= unlabelled= cancelled=`);
 `SourcePollUsage.Labelled` and `.Unlabelled` were deleted because the poll
 no longer knows them.
+
+## 10. One entry point per job (2026-11-15, orange; rollback: revert)
+
+Why this section exists: `docs/problems/jev-misuse-structural-assessment-2026-11-15.md`.
+Five rounds went wrong the same way because every site built and sent its own
+request for its own unit, so nothing owned "the job's state and all its
+questions". Owner, 2026-11-15: "jev should run as many questions in the same
+call as possible. not multiple calls to the jev api. not concurrently or
+sequentially"; efficiency is the job done with as few Jev calls as possible.
+
+**The entry point.** `jevJob` (`internal/agentcore/jev_job.go`). A site makes
+one per job (a capture flush, a judge pass), adds the job's state as keyed
+entries (`Entry(group, key, levels...)`, a group rendered as a list or a
+map; a level is a short or full rendering) and its questions
+(`Ask(name, question, decision, needs...)`, each naming the entries it
+reads), and calls `Plan()`. The plan is one call when the whole job fits
+`jevbudget` (64k request, 32k state plus one question, 255 options a choice
+question), otherwise the fewest calls, each carrying only the entries its
+questions read. Every split names the limit that forced it
+(`jevbudget.Limit`: `request_tokens_64k`, `state_plus_question_tokens_32k`,
+`choices_255`) and is logged, with one `jev job: site= calls= questions=
+est_tokens_max=` line per job. The site reads answers back by question name.
+No constant of ours bounds questions or items per call. Concurrency and
+queues are not offered: a split that remains is answered by shrinking the
+context, not by sending the calls in parallel.
+
+**Closest existing type and what it replaces.** `intakeCall` (state,
+questions, decisions) is the shape of a call; `planJevCalls` (the longest
+prefix that fits, by bisection) is the splitter. `jevJob` generalizes
+`intakeCall` and `buildIntakeCall`, and replaces for intake: the story chunks
+(`p.cuts`, `chunk(k)`), the group closing in `planIntakeCalls`, the
+`reserve` and `chunkRequest/chunkQuestion` policy fields, and the per-call
+loop. The byte policy and slicing stay only as the shadow comparison's old arm
+until it has been run, then are deleted. Every other site still ends in
+`rt.judgeCall`, the single funnel; `scripts/check-jev-entry` fails a new
+direct call and lists the sites not yet moved with their calls per job.
+
+**What bounds a call.** Only the vendor's limits, `jevbudget`: 64k tokens a
+request, 32k for the state plus any one question, and 255 options on one
+choice question (`jevbudget.Limit` checks all three, in that order of
+naming: `choices_255`, `request_tokens_64k`,
+`state_plus_question_tokens_32k`). The budgets are the vendor's limits
+themselves, not a margin of ours. Where the estimate under-counts and the
+vendor refuses a request for size, the caller halves the call (see Failure of
+one big call). No count of captures,
+questions or items is a bound: a flush takes every capture waiting for the
+computer, and the job gives all of them to the planner. The 255 limit is per
+question, so a capture's options (its candidate stories, then every other
+capture of the poll) are cut into parts of at most 252 (255 less `new` and a
+margin of two), each part as large as the limit and the token limit allow;
+nothing is trimmed, so a reworded or translated duplicate is always offered.
+
+**Failure of one big call, independent of the reason.** The gateway answers
+every upstream failure, a vendor refusal for size included, with 502 "Jev
+judgment provider unavailable" (`internal/gateway/jev.go`), and the client's
+error carries no vendor reason, so handling must not read one
+(`jev_failure.go`, `jevNextStep`). A deadline bounds how long we wait, not what
+a call may carry: an intake call's is 5 s plus 1 s per thousand estimated
+request tokens, an event call's 30 s plus the same; constants to calibrate from
+the gateway's `upstream_ms`. For a call that fails (not a cancelled context),
+in this order:
+1. A rate refusal (429, 529) backs off and is asked again, whole, up to two
+   more times. It is never halved: halving a rate-limited call only makes more
+   calls.
+2. A refusal whose text names a size (`max_tokens_exceeded`, "context length"
+   and similar; a secondary hint the gateway does not relay today) halves the
+   call at once, logged `forced_by=vendor_refused`.
+3. A gateway 413 (a body over its transport cap) halves at once, logged
+   `forced_by=gateway_body_cap`. A deterministic status (400, 401, 403, 404, 422)
+   or an answer that parsed and has the wrong shape fails once, visibly (the
+   caller logs the call and each capture); a short body is a transient drop and
+   gets the ordinary retry.
+4. Any other failure is asked once more after a backoff. If it fails again and
+   the call carries more than one unit, it is halved at a unit boundary, to two
+   levels, logged `forced_by=call_failed` with the error. A half that fails
+   halves again without a retry of its own.
+The worst case on a persistent failure is eight calls (the call twice, its
+two halves, their four quarters) and every capture of it unlabelled (events:
+unresolved, reported in `Left`); on a failure that a smaller request avoids,
+nothing is lost. A persistent 429 is three calls. The failure tests run the
+production `gatewayruntime.JudgmentClient` against an httptest gateway that
+answers as the real one does. The flush line counts the calls actually made,
+retries and halves included.
+
+**Calls per job, before and after, and the most questions one call can carry.**
+
+| Job | Before | After | Most questions in a call | Worst case on a failure |
+| --- | --- | --- | --- | --- |
+| Capture poll, labels | 3 to 5 per 6 captures, per 15 KB slice | 1 call per flush (every waiting capture) when the entries fit; else the fewest, named | no constant: the token limits | asked once more, then halved to two levels (8 calls at most); a 429 is asked up to 3 times, never halved; what still fails is unlabelled |
+| Capture poll, events | 1 per 12 captures, in sequence | 1 per flush (a flush runs 60 s after the first waiting capture; the count trigger of 12 is gone) when it fits; else the fewest | no constant: `choices_255` (siblings plus candidates) and the token limits | as labels: asked once more, then halved to two levels (8 calls at most); what still fails stays unresolved (`Left`) |
+| Support pass | 1 per revision, queued behind a one-slot semaphore | 1 per queue pass: revisions waiting during a call are one call, owners never mixed | all waiting pairs, to `state_plus_question_tokens_32k` | that call's pairs stay pending for the next commit that cites them |
+| Sub-call, desk cast, inert | 1 per 20 behind a gate of one | 1 per round or pass; the gate is gone | no constant | that call's Casts stay unsettled |
+| Story analysis (24 questions) | 2 | 2 | 12, our cap `yaegikernel.System1MaxQuestions` | one call's slots fail |
+| Capture poll in all (labels then events) | 3 to 5 plus 1 | 2 | — | — |
+
+**Why labels and events are still two calls per poll.** They are one question
+about one capture (which story or capture reports the same incident), asked
+over two states: the story window for labels, the known events for the event
+layer. One call needs both entries in one job. The obstacle is not the minting
+(see the next paragraph) but the event layer's custody and timing: its queue,
+index lock and 60 s window are per computer and fed by every poll, and its
+answers are applied by `resolveEventChunk` under that lock with the alias map
+`eventQuestion` builds; the labels flush runs per poll when the first capture
+arrives. Moving events onto the label job means moving that apply path onto
+the job's answers and running the event questions in the labels flush, which
+is larger than this lane. It stays on the gate's list at 2 calls per poll.
+
+**Can the event layer's minting wait for the answers?** Yes. Its sequential
+chunks existed so a later chunk would see events an earlier chunk minted; a
+question already offers every other capture of its call as an option (the
+sibling union), and the union is resolved after the answers. So the whole set
+of waiting captures is one call, split only where `choices_255` or the token
+limits force it, and the split names its limit. The event layer is not yet on
+`jevJob` (its candidates are one list shared by all captures). Its context is
+reduced instead: option descriptions are null (handles, as intake's), because
+a sentence under every option of every question put the request past 64k at
+three dozen captures. At several hundred captures the options are every
+other capture, so the request is quadratic and the planner splits it into
+more calls (450 captures took 14 in a test fixture, each split named); the
+fix for that is parts of a capture's options as intake has them, not trimming.
+
+**Accuracy.** It is unmeasured at large question counts. The shadow comparison
+(`cmd/intake-shadow -run`, never yet run) measures it; a loss is fixed in the
+context, not with a cap and not by trimming options.
+
+**Gate.** `scripts/check-jev-entry` (CI, with `scripts/selftest-jev-entry`)
+compares direct Jev call sites per file with `scripts/jev-entry-baseline.txt`:
+a new file, a second call site in a listed file, or a count that went down
+without the list being lowered fails; against the base commit a file added or
+a count raised fails. It counts `judgeCall`, `callJudgeWithin`,
+`callSubCallJudge`, `.JudgeScoped`, `.Judge`, `jevrecord.Observe` and
+`JudgmentRequest{`, which reaches the front-page scorer and the desk judge.
+The list is the sites not yet moved, each with its calls per job.
+
+**Residuals named by the third review round.** The support pass has no overall
+deadline (each call has its own), so a stuck store or call holds the queue until
+a stop cancels it. One intake flusher serves all computers of a runtime, so a
+slow flush delays another computer's labels (no lock is held); a failed flush
+can occupy it about nine minutes (2 + 2 + 4 calls of up to 69 s, plus backoff),
+four times main's. The event layer's retries and halves run under the index
+lock (`idx.mu`) for up to eight calls a chunk. The backoff ignores the
+gateway's `Retry-After`; using it needs the client to expose it, a follow-up on
+the client surface. The gateway relaying the vendor's status and reason is a
+separate, later change on the gateway, which is a red surface and not part of
+this lane.

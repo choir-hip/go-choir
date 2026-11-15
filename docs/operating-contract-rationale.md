@@ -371,6 +371,20 @@ divergence of computers. thats the point of this architecture"). A grant
 that spends the owner's money (the Claude delegate) is an owner act on the
 tape, not a switch.
 
+**Jev: one context, many questions** (owner, 2026-11-12, as CLAUDE.md
+Delivery states it: "the point was never to serialize calls, it is to reuse
+the context"). Every question about a state goes in the one call that carries
+that state; a second call over the same or an overlapping state is the
+defect. Intake labels follow it: a flush's captures are asked in one call over
+one story window, split only where the vendor's limits (64k tokens a request,
+32k for the state plus one question, `internal/jevbudget`) would be crossed,
+and not by a size of ours. A fuller phrasing attributed to the owner that day,
+"use vendor limits not our arbitrary size limits", appears in the
+`lane/jev-one-state` commit message; this file records only the CLAUDE.md
+wording as verified. Whether accuracy holds at 24 questions a call is
+unmeasured and is the job of `cmd/intake-shadow`; see
+docs/design/jev-batched-questions-2026-11-10.md, F12.
+
 **Blocking fixes are expedited** (owner, 2026-11-03: "For these blocking
 fixes we should use expedited delivery so changes propagate not blocking on
 wait. Not just now but as policy"; earlier: "for stuff related to an
