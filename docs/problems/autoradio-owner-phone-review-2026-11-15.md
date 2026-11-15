@@ -90,3 +90,9 @@ The investigation is `docs/evidence/autoradio-phone-review-investigation-2026-11
   Pocket TTS, LFM3 audio, the llama.cpp responder); the voice setup and
   configurator with its model store; and the unmerged voice branches (the
   responder ladder). They are kept for later, not merely deprecated.
+- **Be practical; the happy path is the main thing** (same day, later). The
+  configurator, the model store and the onboarding download are needed and
+  stay in use. Fallback voices and more available models are good. The work
+  is ordered by what makes hands-free voice work end to end soonest, not by
+  removing the other implementations. A model or voice picker is a feature,
+  not a switch.
