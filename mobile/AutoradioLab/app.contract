@@ -20,6 +20,7 @@ component Autoradio
   members "./members-settings.contract"
   members "./members-onboarding.contract"
   members "./members-mark.contract"
+  members "./members-voice.contract"
   // ---- end of members ----
 
   // What child components may `inject`. Bare names of this component's states, derives, resources and actions.
@@ -300,6 +301,11 @@ component Autoradio
     obReset
     obOpenEdition
     obFinish
+    // ---- the voice cards ----
+    vc
+    vcPick
+    vcStop
+    vcContinue
     // ---- lane 9: motion and the mark ----
     mkT
     mkFrames

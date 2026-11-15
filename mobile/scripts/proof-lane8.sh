@@ -80,7 +80,7 @@ drive "$OUT" \
   "tap ob-mic-ask" "clock +350 real" "clock data" tree "screenshot $SHOTS/06-mic-checking.png" \
   "clock +1800 real" "clock data" tree "screenshot $SHOTS/07-mic-heard.png" \
   "tap ob-mic-next" "clock +600 real" "clock data" tree "screenshot $SHOTS/08-hearing.png" \
-  "tap ob-hearing-yes" "clock +600 real" "clock data" tree "screenshot $SHOTS/09-ready.png" \
+  "tap ob-hearing-yes" "clock +600 real" "clock data" tree "screenshot $SHOTS/08b-voice.png" "tap voice-card-kokoro:af_bella" "clock +1800 real" "clock data" "tap ob-voice-continue" "clock +600 real" "clock data" tree "screenshot $SHOTS/09-ready.png" \
   "tap ob-interview" "clock +800 real" "clock data" tree "screenshot $SHOTS/10-interview-q1.png" \
   "tap ob-demo-next" "clock +1200 real" "clock data" tree "screenshot $SHOTS/11-vague-offer.png" \
   "tap ob-demo-next" "clock +1200 real" "clock data" tree "screenshot $SHOTS/12-interrupted.png" \
@@ -113,7 +113,7 @@ drive "$OUT2" \
   "tap ob-fallback-transcriber" "clock +8400 real" "clock data" tree "screenshot $SHOTS/32-dark-mic-ask.png" \
   "tap ob-mic-ask" "clock +2300 real" "clock data" tree "screenshot $SHOTS/33-dark-mic-heard.png" \
   "tap ob-mic-next" "clock +600 real" "clock data" tree "screenshot $SHOTS/34-dark-hearing.png" \
-  "tap ob-hearing-yes" "clock +600 real" "clock data" "tap ob-interview" "clock +800 real" "clock data" \
+  "tap ob-hearing-yes" "clock +600 real" "clock data" "tap ob-voice-continue" "clock +600 real" "clock data" "tap ob-interview" "clock +800 real" "clock data" \
   "tap ob-demo-next" "clock +1200 real" "clock data" "tap ob-demo-next" "clock +1200 real" "clock data" tree "screenshot $SHOTS/35-dark-interrupted.png" \
   "tap ob-demo-next" "clock +1200 real" "clock data" tree "screenshot $SHOTS/36-dark-paused.png" \
   logs
@@ -139,6 +139,7 @@ must "mic: the live check" 'Say anything.'
 must "mic: the words appear" '[ob-heard]'
 must "hearing: the route" '[ob-route]'
 must "hearing: the check" '[ob-hearing-yes]'
+must "voice: the cards" '[voice-cards]'
 must "ready: start the interview" '[ob-interview]'
 must "interview: the microphone is open" '[ob-listening]'
 must "interview: the first question" 'every day'

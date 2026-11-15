@@ -488,7 +488,7 @@ public actor TurnEngine {
         do {
             system1 = try env.registry.make(.system1, as: System1.self, cfg)
             holder = try env.registry.make(.holder, as: Holder.self, cfg)
-            voice = try env.registry.make(.voice, as: Voice.self, cfg)
+            voice = try env.registry.makeSpeaker(cfg, log: log)
             desk = try env.registry.make(.desk, as: Desk.self, cfg)
         } catch { log.emit(.error(stage: "resolve", message: "\(error)")) }
 

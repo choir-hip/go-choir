@@ -200,8 +200,20 @@ final class OnboardingController: @unchecked Sendable {
         let r = demo ? "Playing on the speaker (demo)" : currentRoute()
         set { route = r; step = "hearing"; hearingOK = false; message = "" }
         if !demo && !module.virtualEngine {
-            DispatchQueue.main.async { Self.synth.speak(AVSpeechUtterance(string: "Can you hear this?")) }
+            // In the voice that was just set up. The radio's engine is running after the microphone check; if it is not, the phone's
+            // own voice says it (the check is about the speaker, and it must not stay silent).
+            if module.runtime.snapshot().running, let v = VoiceController.shared {
+                Task { await v.speak("Can you hear this?") }
+            } else {
+                DispatchQueue.main.async { Self.synth.speak(AVSpeechUtterance(string: "Can you hear this?")) }
+            }
         }
+    }
+
+    /// The voice step is done (the voice cards keep the choice): on to the interview's door.
+    func voiceNext() {
+        set { if step == "voice" { step = "ready" }; message = "" }
+        save()
     }
 
     private func currentRoute() -> String {
@@ -210,7 +222,7 @@ final class OnboardingController: @unchecked Sendable {
     }
 
     func hearing(ok: Bool) {
-        if ok { set { hearingOK = true; step = "ready"; progress.setupDone = true; message = "" }; save() }
+        if ok { set { hearingOK = true; step = "voice"; progress.setupDone = true; message = "" }; save() }
         else {
             if !demo { microphoneNext() }
             set { message = "Try the volume, or another speaker or headphones, then play it again." }
@@ -350,7 +362,7 @@ final class OnboardingController: @unchecked Sendable {
         let nextNote = demo && demoIndex < demoScript.count ? (demoScript[demoIndex]["note"] ?? "") : ""
         let nextKind = demo && demoIndex < demoScript.count ? (demoScript[demoIndex]["kind"] ?? "") : ""
         let nextWords = demo && demoIndex < demoScript.count ? (demoScript[demoIndex]["words"] ?? "") : ""
-        let titles: [String: String] = ["welcome": "Make it yours", "setup": "Set up your voice", "mic": "Can I hear you?", "hearing": "Can you hear me?", "ready": "Ready to talk",
+        let titles: [String: String] = ["welcome": "Make it yours", "setup": "Set up your voice", "mic": "Can I hear you?", "hearing": "Can you hear me?", "voice": "Pick a voice", "ready": "Ready to talk",
                                         "interview": "Your interview", "writing": "Writing your edition", "done": "Your edition", "skipped": "Make it yours"]
         var d = [String: Any]()
         d["step"] = step; d["title"] = titles[step] ?? "Make it yours"; d["message"] = message

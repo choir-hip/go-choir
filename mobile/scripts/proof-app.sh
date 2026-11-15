@@ -230,7 +230,9 @@ step "tap ob-fallback-transcriber"; view light-23-setup-fallback 900
 step "clock +7500 real"; step "clock data"; step tree; shot light-24-mic-ask
 step "tap ob-mic-ask"; wait_ 1800
 step "tap ob-mic-next"; view light-25-hearing 600
-step "tap ob-hearing-yes"; wait_ 600
+step "tap ob-hearing-yes"; view light-25b-voice 600
+step "tap voice-card-kokoro:af_bella"; wait_ 1800
+step "tap ob-voice-continue"; wait_ 600
 step "tap ob-interview"; view light-26-interview-q1 800
 step "tap ob-demo-next"; wait_ 1200
 step "tap ob-demo-next"; wait_ 1200
@@ -310,6 +312,7 @@ step "tap ob-fallback-transcriber"; wait_ 8400; step tree; shot dark-22-mic-ask
 step "tap ob-mic-ask"; wait_ 2300; step tree; shot dark-23-mic-heard
 step "tap ob-mic-next"; view dark-24-hearing 600
 step "tap ob-hearing-yes"; wait_ 600
+step "tap ob-voice-continue"; wait_ 600
 step "tap ob-interview"; wait_ 800
 step "tap ob-demo-next"; wait_ 1200
 step "tap ob-demo-next"; view dark-25-interview-interrupted 1200

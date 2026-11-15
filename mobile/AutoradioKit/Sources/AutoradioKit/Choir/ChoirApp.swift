@@ -10,12 +10,13 @@ extension StageRegistry {
     }
 
     /// What the listener's app runs: the real programme, System 1 and desk on the listener's computer, and
-    /// the best Apple stages for the rest. Stubs and fixtures stay registered and selectable in the Lab tab.
-    public static func listenerConfiguration() -> LabConfiguration {
+    /// the best Apple stages for the rest. The voice is the saved choice, or on a fresh install the catalog's neural default (the speaker
+    /// falls back to the system voice while that model is not on the phone, `makeSpeaker`). Stubs and fixtures stay registered and selectable in the Lab tab.
+    public static func listenerConfiguration(voice: StageSetting = VoiceCatalog.defaultOption.setting) -> LabConfiguration {
         var c = LabConfiguration(name: "listener", stages: [
             .micSource: .init(id: "builtin"), .addressing: .init(id: "open"), .speechBounds: .init(id: "energy-vad", params: ["hangoverSeconds": .number(0.25)]),
             .speakerCheck: .init(id: "none"), .transcriber: .init(id: "apple-speech"), .yieldPolicy: .init(id: "dip-then-pause"),
-            .system1: .init(id: ChoirSystem1.stageID), .holder: .init(id: "local-ack"), .voice: .init(id: "avspeech"),
+            .system1: .init(id: ChoirSystem1.stageID), .holder: .init(id: "local-ack"), .voice: voice,
             .desk: .init(id: AutoradioDeskStage.stageID), .programme: .init(id: RadioProgramme.stageID),
         ])
         c.audioPolicy = .alwaysTalking          // hands-free: voice processing for the whole session, so the radio's voice is cancelled from the microphone

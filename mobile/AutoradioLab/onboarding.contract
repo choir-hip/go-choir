@@ -16,6 +16,7 @@
 use Theme, ChoirAuth, Onboarding from "@choir/autoradio"
 use Card, PaperCard, PageScroll, Btn from "./ui.contract"
 use Mark from "./mark.contract"
+use VoiceStep from "./voice.contract"
 
 keyframes obBreathe
   from opacity=1 scale=1
@@ -149,7 +150,7 @@ component OnboardingPage
   props
     address: string
     title: string
-  derive n = ob.step == "mic" ? 2 : ob.step == "hearing" ? 3 : (ob.step == "ready" or ob.step == "interview" or ob.step == "writing" or ob.step == "done") ? 4 : 1
+  derive n = ob.step == "mic" ? 2 : (ob.step == "hearing" or ob.step == "voice") ? 3 : (ob.step == "ready" or ob.step == "interview" or ob.step == "writing" or ob.step == "done") ? 4 : 1
   derive markState = ob.step == "writing" ? "holding" : (ob.step == "interview" and ob.listening) ? "listening" : "idle"
   derive beginLabel = ob.setupStarted ? "Continue voice setup" : "Set up the voice"
   derive deviceLine = ob.device == "" ? "Choosing the models that fit this phone." : `Chosen for this phone: ${ob.device}.`
@@ -239,6 +240,10 @@ component OnboardingPage
               button press=obHearingNo testId="ob-hearing-no" appearance="none"
                 Btn(label="No", primary=false, wide=false)
             text ob.message font-family=th.fontUi font-size=14 color=th.danger
+
+      // ---- the voice: tap a voice to hear it, then go on (voice.contract)
+      if ob.step == "voice"
+        VoiceStep()
 
       // ---- ready: voice setup is done
       if ob.step == "ready"

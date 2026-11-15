@@ -376,3 +376,39 @@ revenue needs a separate licence from Liquid AI) is recorded in the table; it do
 **Mac proof** (`CONFIGURE=1 mobile/scripts/proof-models.sh`, simulated 6, 8 and 12 GB profiles; the planner enforces the memory budget, speeds are the Mac's):
 6 GB chose LFM3 QAD Q4_0 with Parakeet TDT, Pocket voice and Silero (decision through the computer); 8 GB chose LFM3 Q8_0 with Parakeet TDT, Kokoro and Silero; 12 GB
 chose LFM3 Q8_0 with the on-phone Qwen3-0.6B decision as well.
+
+## 9. The default voice (2026-11-15, owner QA round 1)
+
+Owner on the phone: the app spoke with the built-in system voice, and a better voice loaded when he picked one in Settings. Each line is
+marked **verified** (read or run on 2026-11-15 by us, source named) or **relayed** (from a card or an earlier page, not re-checked).
+
+**Why the system voice spoke (verified, code).** (1) `StageRegistry.listenerConfiguration()` named the stage `avspeech` for the voice.
+(2) A voice picked on the Components page or by voice setup went through `LabRuntime.setStage`, which changed the in-memory configuration
+only: every launch built the listener configuration again, so a pick lasted until the app closed. (3) Nothing recorded that a neural voice's
+files were on the phone, so nothing could prefer one safely: a Kokoro or Pocket stage whose files are missing makes FluidAudio fetch about
+350 MB inside the first sentence. Fix: `VoiceChoice.swift` (saved choice, default Kokoro Heart, readiness record, `makeSpeaker` with a line
+by line fall back to the system voice, with the reason on the log).
+
+**What the linked FluidAudio (v0.18.3, `~/.cache/autoradio-deps/xcframeworks`, built 2026-11-11) offers for speech (verified, symbol
+listing of `libFluidAudio.a` and the `.swiftmodule`; there is no `.swiftinterface` in the xcframework, only the binary module).**
+`KokoroAneManager` (`initialize(preloadVoices: Set<String>?)`, `synthesizeDetailed(text:voice:speed:)`, `setDefaultVoice`),
+`PocketTtsManager` (`synthesize`, `synthesizeStreaming`), `LuxTtsManager`, `NeuTtsManager`, `Lfm3Audio*`. For Phonon the module has only
+`PhononTextChunker`, `PhononTextNormalizer` and the `PhononChunkTokenizer` protocol, **no Phonon synthesizer class**, so the 31M voice
+that section 2 lists is not reachable through this build of FluidAudio. The library's strings name three repos (`phonon-31m-en`,
+`Muesli-HQ/phonon-2.5-coreml`, `FluidInference/phonon-2-coreml`); the listing of `FluidInference/phonon-2-coreml` (Hugging Face API,
+2026-11-15) holds Parakeet-style encoder, decoder and vocab files, not a voice. Using Phonon needs a newer FluidAudio and a rebuild of the
+xcframework; it is not done here.
+
+**What the app speaks with now.** Default: Kokoro 82M, voice `af_heart` (Apache-2.0, `FluidInference/kokoro-82m-coreml`; model about 350 MB,
+relayed from `KnownModels`; the repo's `ANE-v3` folder is 728.8 MB because it also holds the Japanese and Chinese models, verified by the
+API listing). That is over the 100 MB line, so it is downloaded during setup (voice setup's first rung), not bundled; the system voice speaks
+until `Voices.readiness` records it. Cards also offer Kokoro `af_bella`, `am_adam`, `bf_emma`, `bm_george` (all five voice files are in
+the repo's `voices/` folder, 2.7 MB each, verified by the API listing; the stage preloads all five with the model) and Pocket `alba`
+(Pocket's other voice names were not found in the library's strings), and the phone's own voice. Kokoro does not stream (vendor, section
+8.1): the first sound of a block is its synthesis time; blocks of speech are now at most 280 characters and the next block is made while
+the current one plays. Kokoro on a physical iPhone is **unvalidated by the vendor**; the owner's phone picked and played one on 2026-11-15
+(which voice and how long it took to a first sound: not recorded, measure it).
+
+**Still to measure on the phone:** time to first sound of the first block for Kokoro `af_heart` after a cold launch (the first load compiles
+the models: the speaker gives the system voice a line when no sound has come in 25 s), memory with Kokoro plus the other models resident on
+the 6 GB 14 Pro Max (`os_proc_available_memory()` before and after), and whether the four other Kokoro voices load without a second fetch.

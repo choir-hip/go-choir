@@ -178,7 +178,7 @@ public enum SegmentPrep {
         for (i, b) in server.enumerated() {
             // A single newline inside a paragraph is not a pause; a long paragraph is spoken as several blocks of the one server block.
             let flat = b.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: " ")
-            for part in ChoirText.split(flat, maxChars: 600) where !part.isEmpty {
+            for part in ChoirText.split(flat, maxChars: ChoirText.speechChars) where !part.isEmpty {
                 units.append(.speech(text: part)); map.append(min(i, reported - 1))
             }
         }
