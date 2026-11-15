@@ -311,7 +311,9 @@ public struct Interview: Equatable, Sendable {
             text = followLine(q)
             if text.isEmpty { return advance(lead: "") }
         }
-        record(text, qid: q.id)
+        // A resume of a session that has only just started hands the question back to be spoken, but it is already the last
+        // thing the radio recorded: recording it again showed it twice in the talk.
+        if let last = state.turns.last, last.who == "radio", last.text == text, last.questionID == q.id {} else { record(text, qid: q.id) }
         return [.init(text, kind: "question", questionID: q.id)]
     }
 

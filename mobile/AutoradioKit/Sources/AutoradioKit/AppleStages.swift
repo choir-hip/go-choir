@@ -195,15 +195,20 @@ public final class AVSpeechVoice: Voice, @unchecked Sendable {
                     cont.finish(); return
                 }
                 let synth = AVSpeechSynthesizer()
+                let ender = SpeechEndDelegate()
+                synth.delegate = ender
                 for await line in text {
                     if Task.isCancelled { break }
                     let u = AVSpeechUtterance(string: line)
                     u.rate = rate
                     if !voiceID.isEmpty { u.voice = AVSpeechSynthesisVoice(identifier: voiceID) }
                     else { u.voice = AVSpeechSynthesisVoice(language: "en-US") }
-                    // One resume, whichever comes first: the synthesizer's empty closing buffer (its thread), the 30 s timer (main), or
-                    // the task being cancelled. `Once` is the single place that decides.
+                    // One resume, whichever comes first: the end of the utterance (the delegate's didFinish, or silence after an
+                    // empty buffer), the 30 s timer (main), or the task being cancelled. `Once` is the single place that decides.
+                    // An empty buffer alone is not the end: the synthesizer sends them between phrases.
                     let once = Once<Void>()
+                    let end = UtteranceEnd { once.resume(()) }
+                    ender.current = end
                     await withTaskCancellationHandler {
                         await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
                         once.arm(done)
@@ -211,7 +216,8 @@ public final class AVSpeechVoice: Voice, @unchecked Sendable {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 30) { once.resume(()) }
                         synth.write(u) { buf in
                             guard let pcm = buf as? AVAudioPCMBuffer else { return }
-                            if pcm.frameLength == 0 { once.resume(()); return }
+                            if pcm.frameLength == 0 { end.buffer(empty: true); return }
+                            end.buffer(empty: false)
                             let n = Int(pcm.frameLength)
                             var s = [Float](repeating: 0, count: n)
                             if let p = pcm.floatChannelData { for i in 0..<n { s[i] = p[0][i] } }
@@ -226,6 +232,45 @@ public final class AVSpeechVoice: Voice, @unchecked Sendable {
             cont.onTermination = { _ in task.cancel() }
         }
     }
+}
+
+/// When one utterance written to buffers is over. The end is the synthesizer's `didFinish`; an empty buffer is not the end
+/// (`AVSpeechSynthesizer.write` sends them between phrases, and ending there cut speech off after about 13 seconds, the defect
+/// Mike's speech plugin records). An empty buffer followed by `quiet` seconds of nothing counts as the end only for a system
+/// that never calls the delegate: rendering runs far faster than real time, so that quiet means the synthesizer is done.
+final class UtteranceEnd: @unchecked Sendable {
+    private let lock = NSLock()
+    private let quiet: TimeInterval
+    private let onEnd: @Sendable () -> Void
+    private var received = 0, done = false
+    init(quiet: TimeInterval = 1, onEnd: @escaping @Sendable () -> Void) { self.quiet = quiet; self.onEnd = onEnd }
+
+    func buffer(empty: Bool) {
+        lock.lock(); received += 1; let mark = received; lock.unlock()
+        guard empty else { return }
+        DispatchQueue.global().asyncAfter(deadline: .now() + quiet) { [self] in
+            lock.lock(); let still = received == mark; lock.unlock()
+            if still { didFinish() }
+        }
+    }
+    func didFinish() {
+        lock.lock()
+        if done { lock.unlock(); return }
+        done = true; lock.unlock()
+        onEnd()
+    }
+}
+
+/// Carries the synthesizer's delegate calls to the utterance being written.
+final class SpeechEndDelegate: NSObject, AVSpeechSynthesizerDelegate, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _current: UtteranceEnd?
+    var current: UtteranceEnd? {
+        get { lock.lock(); defer { lock.unlock() }; return _current }
+        set { lock.lock(); _current = newValue; lock.unlock() }
+    }
+    func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { current?.didFinish() }
+    func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) { current?.didFinish() }
 }
 
 /// Process-wide facts about how the app is being run.

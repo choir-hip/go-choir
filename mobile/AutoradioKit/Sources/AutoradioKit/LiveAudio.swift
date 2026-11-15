@@ -582,7 +582,10 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         switch b {
         case .speech(let t), .listenerPassage(let t, _):
             lock.lock(); let cfg = configuration; lock.unlock()
-            guard let voice = try? registry.make(.voice, as: Voice.self, cfg) else { return false }
+            let voice: Voice
+            do { voice = try registry.make(.voice, as: Voice.self, cfg) } catch {
+                log.emit(.error(stage: "voice", message: "the voice \(cfg.setting(.voice)?.id ?? "") could not be made: \(error)")); return false
+            }
             var samples: [Float] = []; var rate = 22050.0
             var failed = false
             do { for try await f in voice.speak(AsyncStream { $0.yield(t); $0.finish() }) { samples += f.samples; rate = f.sampleRate } } catch {

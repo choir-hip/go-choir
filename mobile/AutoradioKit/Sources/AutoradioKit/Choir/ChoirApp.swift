@@ -66,12 +66,16 @@ public final class ChoirApp: @unchecked Sendable {
         eventTask = Task { [weak self] in
             guard let self else { return }
             for await te in self.runtime.log.stream() {
-                if case .error(let stage, let m) = te.event, stage == "system1" || stage == "desk" || stage == "programme" {
+                if case .error(let stage, let m) = te.event, Self.surfacedErrorStages.contains(stage) {
                     self.say(Self.plain(stage: stage, message: m))
                 }
             }
         }
     }
+
+    /// Error stages that reach the player's message. "start" and "voice" are the Play path: a failed engine start and a voice
+    /// that could not be made or could not speak.
+    static let surfacedErrorStages: Set<String> = ["system1", "desk", "programme", "start", "voice"]
 
     private func say(_ m: String) { lock.lock(); message = m; lock.unlock(); onChange?() }
 
@@ -84,6 +88,8 @@ public final class ChoirApp: @unchecked Sendable {
         switch stage {
         case "system1": return "Your computer was slow to understand that; carrying on."
         case "desk": return "Your computer could not act on that. Try asking again."
+        case "start": return "The radio could not start its audio. Try Play again."
+        case "voice": return "The radio's voice did not work, so nothing could be read aloud."
         default: return "Something went wrong loading the radio."
         }
     }

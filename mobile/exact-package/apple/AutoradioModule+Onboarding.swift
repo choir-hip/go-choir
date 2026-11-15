@@ -364,6 +364,7 @@ final class OnboardingController: @unchecked Sendable {
         d["mic"] = mic; d["level"] = level; d["heard"] = heard; d["route"] = route; d["hearingOK"] = hearingOK
         d["interviewStatus"] = interviewStatus; d["paused"] = ivPaused; d["pauseReason"] = iv?.state.pauseReason ?? ""
         d["talk"] = talk; d["nowSaying"] = lastRadio
+        d["listenLine"] = AppSettings.listeningLine(forTalkMode: AppSettings.shared.value("talkMode"))
         d["listening"] = (iv?.status == .running || iv?.status == .readback)
         d["demo"] = demo; d["demoNote"] = nextNote; d["demoKind"] = nextKind; d["demoWords"] = nextWords; d["demoLeft"] = max(0, demoScript.count - demoIndex)
         d["editionStatus"] = editionStatus; d["writingLine"] = writingLine; d["editionError"] = editionError

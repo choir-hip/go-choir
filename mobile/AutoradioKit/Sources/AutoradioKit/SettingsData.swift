@@ -85,6 +85,14 @@ public final class AppSettings: @unchecked Sendable {
     public static func addressingStage(forTalkMode m: String) -> String {
         switch m { case "open": return "open"; case "word": return "hybrid"; default: return "button" }
     }
+    /// What the interview screen says about the microphone, true for the talk setting in force.
+    public static func listeningLine(forTalkMode m: String) -> String {
+        switch m {
+        case "open": return "The microphone is open. Talk any time, even over me."
+        case "word": return "Tap the talk button to answer, or just answer after a question."
+        default: return "Tap the talk button to answer."
+        }
+    }
     public func apply(to runtime: LabRuntime) { runtime.setStage(.addressing, id: Self.addressingStage(forTalkMode: value("talkMode"))) }
 }
 
