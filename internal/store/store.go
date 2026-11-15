@@ -2504,6 +2504,7 @@ func (s *Store) unionRunLabelsOnce(ctx context.Context, ownerID, computerID, run
 		}
 		return nil, err
 	}
+	s.noteRunWrite(runSiteLabels, obj.Body, updated.Body) // counter only: after the put committed
 	return merged, nil
 }
 

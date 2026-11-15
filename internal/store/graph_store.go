@@ -598,6 +598,7 @@ func (s *Store) CreateRunOG(ctx context.Context, rec types.RunRecord) error {
 	if err != nil {
 		return err
 	}
+	s.noteRunWrite(runSiteCreateOG, nil, obj.Body) // counter only: after the put committed
 
 	// Non-lifecycle run mints (no trajectory) skip commitLifecycleTransition,
 	// so the pending-mint initial_dispatch wake is minted here best-effort —
@@ -790,6 +791,7 @@ func (s *Store) updateRunOGOnce(ctx context.Context, rec types.RunRecord) error 
 		}
 		return err
 	}
+	s.noteRunWrite(runSiteUpdateOG, existing.Body, updated.Body) // counter only: after the put committed
 	return nil
 }
 
