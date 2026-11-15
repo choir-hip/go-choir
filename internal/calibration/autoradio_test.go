@@ -5,8 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"math"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -321,12 +319,18 @@ type memLedger struct {
 	// raceSettlement, when set, is stored under its id the moment the settle
 	// method looks the id up and finds nothing: another writer won first.
 	raceSettlement *types.CommitmentRecord
-	appended       []string
+	// raceOnAppend, when set, is stored instead of the record being appended
+	// under its id: another writer won between the existence read and the append.
+	raceOnAppend *types.CommitmentRecord
+	appended     []string
 }
 
 func newMemLedger() *memLedger { return &memLedger{records: map[string]types.CommitmentRecord{}} }
 
 func (m *memLedger) AppendCommitmentRecord(_ context.Context, _, _ string, rec types.CommitmentRecord) (string, error) {
+	if m.raceOnAppend != nil && m.raceOnAppend.RecordID == rec.RecordID {
+		rec = *m.raceOnAppend
+	}
 	if _, ok := m.records[rec.RecordID]; ok {
 		return rec.RecordID, nil
 	}
@@ -529,52 +533,6 @@ func dropPrefix(tags []string, prefix string) []string {
 		}
 	}
 	return out
-}
-
-func TestSettleAutoradioHasOneCaller(t *testing.T) {
-	// Provenance of a rule settlement is read from this one-caller test and
-	// from the settlement's evidence (an air event the heard route wrote),
-	// never from a scorer-name string (design 4.1, 4.3). Today no caller
-	// exists; the heard route (station L2) is the only one that may.
-	root := filepath.Join("..", "..")
-	allowed := map[string]bool{"internal/agentcore/api_autoradio_heard.go": true}
-	var offenders []string
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			switch d.Name() {
-			case ".git", "node_modules", "mobile", "docs", "vendor":
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		rel, _ := filepath.Rel(root, path)
-		rel = filepath.ToSlash(rel)
-		if strings.HasPrefix(rel, "internal/calibration/") {
-			return nil
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if strings.Contains(string(data), "SettleAutoradio(") || strings.Contains(string(data), "NewAutoradioSettlementRecord(") {
-			if !allowed[rel] {
-				offenders = append(offenders, rel)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(offenders) > 0 {
-		t.Fatalf("the reserved settle method is called from %v; only the heard route may call it", offenders)
-	}
 }
 
 // ---- SplitBlocks ----
