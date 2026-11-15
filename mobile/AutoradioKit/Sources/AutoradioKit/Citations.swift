@@ -42,7 +42,17 @@ public enum Citations {
         ["texture_span", "publication_span", "texture", "texture_doc"].contains(kind) || uri.hasPrefix("texture:")
     }
 
-    static func cite(anchor: String, number: Int, blockId: String, entityId: String, ctx: TextureDocParser.Context) -> ReaderCite {
+    /// A ref given as an object or as JSON text (the web's parseJSON of attrs.ref).
+    static func refObject(_ v: Any?) -> [String: Any]? {
+        if let o = v as? [String: Any] { return o }
+        if let s = v as? String, let d = s.data(using: .utf8) { return (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] }
+        return nil
+    }
+
+    /// The server's check carries `quote` = the outcome word, not the quoted words.
+    static let outcomeWords: Set<String> = ["exact", "tolerant", "failed", "unread", "pending"]
+
+    static func cite(anchor: String, number: Int, blockId: String, entityId: String, ctx: TextureDocParser.Context, nodeRef: [String: Any]? = nil) -> ReaderCite {
         let entity = ctx.entities[entityId]
         let target = entity?["target"] as? [String: Any] ?? [:]
         let display = entity?["display"] as? [String: Any] ?? [:]
@@ -67,8 +77,12 @@ public enum Citations {
         // The quote: the transclusion's snapshot, else the check's, else the ref's.
         let tr = ctx.transclusions[anchor]
         let ck = ctx.checks[anchor]
-        let ref = (tr?["ref"] as? [String: Any]) ?? (ck?["ref"] as? [String: Any]) ?? [:]
-        c.quote = firstNonEmpty([tr?["snapshot_text"], ck?["quote"], ref["quote"]], "")
+        // The ref: the manifest anchor's (as the web's published context reads it), else the citation node's own attrs.ref,
+        // else the one a transclusion or a check carries.
+        let manifestRef = refObject(ctx.manifestAnchors[anchor]?["ref"])
+        let ref = (tr?["ref"] as? [String: Any]) ?? manifestRef ?? nodeRef ?? (ck?["ref"] as? [String: Any]) ?? [:]
+        let ckQuote = (ck?["quote"] as? String).flatMap { outcomeWords.contains($0.rdTrim.lowercased()) ? nil : $0 }
+        c.quote = firstNonEmpty([tr?["snapshot_text"], ref["quote"], manifestRef?["quote"], nodeRef?["quote"], ckQuote], "")
         let (state, label) = checkLabel((ck?["state"] as? String) ?? "")
         c.check = state; c.checkLabel = label
         // The quote inside its source block (resolved_blocks, by cid).

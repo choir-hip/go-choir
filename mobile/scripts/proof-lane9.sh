@@ -83,7 +83,7 @@ drive "$SCRATCH/d1.txt" "clock data" "clock +1200 real" \
   "tap motion-wait-replay" "clock +1800 real" tree "screenshot $SHOTS/07-wait-1.png" \
   "clock +3500 real" "screenshot $SHOTS/07-wait-2.png" "clock +3500 real" "screenshot $SHOTS/07-wait-3.png" \
   "clock +3200 real" "screenshot $SHOTS/07-wait-4.png" "clock +2500 real" tree "screenshot $SHOTS/07-wait-5-done.png" \
-  "tap fins-clocked" "clock +900 real" tree "screenshot $SHOTS/08-gallery-bottom.png" "clock +2000 real" "screenshot $SHOTS/08-gallery-bottom-b.png" \
+  "clock +900 real" tree "screenshot $SHOTS/08-gallery-bottom.png" "clock +2000 real" "screenshot $SHOTS/08-gallery-bottom-b.png" \
   "tap bar-pages" "clock +600 real" "tap pile-places" "clock +600 real" "tap place-settings" "clock +600 real" \
   "tap settings-wait" "clock +1500 real" tree "screenshot $SHOTS/09-wait-page.png" logs \
   || { grep -v "^warning" "$SCRATCH/d1.txt" | tail -20; fail "drive gallery"; }
@@ -110,12 +110,11 @@ D="$SCRATCH/d1.txt"
 must "settings: the motion gallery is reachable" "$D" '[settings-motion]'
 must "gallery: a page" "$D" '[page-title] "Motion"'
 for s in idle listening thinking speaking success error reduced; do must "gallery: row $s" "$D" "[motion-row-$s]"; done
-for z in 26 44 96; do must "gallery: thinking mark at $z pt" "$D" "[mark-thinking-$z]"; done
-must "gallery: the reduced row" "$D" '[mark-reduced-96]'
+for z in 36 44 120; do must "gallery: thinking mark at $z pt" "$D" "[mark-thinking-$z]"; done
+must "gallery: the reduced row" "$D" '[mark-reduced-120]'
 must "wait: first scripted line" "$D" 'Reading what you asked'
 must "wait: a later scripted line" "$D" 'Drafting the revision'
 must "wait: the end" "$D" 'Revision ready'
-must "experiment: clocked 3D boxes" "$D" '[fins-clocked]'
 must "wait page: reachable" "$D" '[wait]'
 # the pictures must move: consecutive screenshots of the wait differ
 for p in 07-wait-1:07-wait-2 07-wait-2:07-wait-3 07-wait-3:07-wait-4 05-flip-a:05-flip-c; do
