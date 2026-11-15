@@ -62,8 +62,8 @@ var (
 // IsReservedAgent reports whether an agent name falls in the reserved
 // namespace: its cleaned, slugged form begins "autoradio". Slug lower-cases,
 // trims and maps every other character to '-', so a padded, cased or
-// punctuation-led variant (" Autoradio-DJ", "-autoradio-dj") is reserved
-// while "my-autoradio" is not.
+// hyphen-led variant (" Autoradio-DJ", "-autoradio-dj") is reserved
+// while "my-autoradio" is not. Slug trims only hyphens, so "_autoradio" is not.
 func IsReservedAgent(name string) bool {
 	return strings.HasPrefix(Slug(name), AutoradioNamespace)
 }
@@ -136,10 +136,12 @@ func checkAutoradioInput(in AutoradioForecastInput) (criterionRef string, err er
 	if !kindRe.MatchString(in.Kind) {
 		return "", invalid("segment kind %q is outside the grammar", in.Kind)
 	}
-	if in.Title != strings.TrimSpace(in.Title) || in.Title == "" || len(in.Title) > maxTitleBytes {
-		return "", invalid("title must be one trimmed, non-empty line of at most %d bytes", maxTitleBytes)
+	// The title is trimmed (design 3.2 does not drop a padded one-line title);
+	// an empty one is refused, and the programme validators drop it first.
+	if t := strings.TrimSpace(in.Title); t == "" || len(t) > maxTitleBytes {
+		return "", invalid("title must be a non-empty line of at most %d bytes", maxTitleBytes)
 	}
-	for _, r := range in.Title {
+	for _, r := range strings.TrimSpace(in.Title) {
 		if unicode.IsControl(r) {
 			return "", invalid("title contains a control character")
 		}
@@ -205,7 +207,7 @@ func NewAutoradioForecast(in AutoradioForecastInput, now time.Time) (types.Commi
 	p := in.P
 	rec, err := NewClaimRecord(ClaimRequest{
 		Agent:          AgentIdentity{Name: AutoradioAgent, Model: in.Model, SessionID: in.StretchID},
-		Claim:          fmt.Sprintf("The listener hears segment %s (%s: %s) through.", in.SegmentID, in.Kind, in.Title),
+		Claim:          fmt.Sprintf("The listener hears segment %s (%s: %s) through.", in.SegmentID, in.Kind, strings.TrimSpace(in.Title)),
 		Type:           types.CalibrationClaimForecast,
 		P:              &p,
 		Criterion:      "caused_by=" + ref,
@@ -346,7 +348,10 @@ func SettleAutoradio(ctx context.Context, ledger SettleLedger, ownerID, computer
 	if stored == nil {
 		return SettleResult{}, errors.New("settlement not readable after append")
 	}
-	won := stored.Provenance.ResolvedAt == rec.Provenance.ResolvedAt && SameSettlement(*stored, rec)
+	// SameSettlement compares the outcome and the evidence (the air ref), and the
+	// commit stamp tells our append from a concurrent identical one.
+	won := stored.Provenance.ResolvedAt == rec.Provenance.ResolvedAt && SameSettlement(*stored, rec) &&
+		len(stored.EvidenceRefs) == 1 && len(rec.EvidenceRefs) == 1 && stored.EvidenceRefs[0] == rec.EvidenceRefs[0]
 	return SettleResult{Record: *stored, Won: won}, nil
 }
 
