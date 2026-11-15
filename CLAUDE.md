@@ -116,7 +116,8 @@ A commit subject ends with its class and rollback, for example
   2026-11-15: "not multiple calls to the jev api. not concurrently or
   sequentially. thats the whole point of how it works"). Build one large
   context and put every question it can answer in that one call, up to the
-  vendor's real limits. The count of Jev calls is the thing to minimize.
+  vendor's real limits. Efficiency means the job done with as few Jev
+  calls as possible (owner, 2026-11-15); count calls per job, not per site.
   Running several calls at once is not a fix, and neither is queuing them:
   both are the defect. A second call is right only when the vendor's
   limits refuse the first, and the code says which limit. Do not split by
