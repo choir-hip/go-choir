@@ -91,11 +91,12 @@ At the start of a Texture revision run, after both merges
 
 1. `final := decodeAvailableTextureSourceEntities(metadata)`, the one variable
    holding the list that today goes into the run record (section 2.1).
-2. `mergeSelfDevelopmentJoinIntoMetadata(metadata, selfDevelopmentJoinFromSourceEntities(final))`
-   sets the non-empty join keys in the local map. The loop at `:789` then
-   copies them into `runMetadata` as it copies any durable key. The override
-   precedence is the one R2 applies today: a join value from the list replaces
-   a value inherited from the parent revision.
+2. `join := selfDevelopmentJoinFromSourceEntities(final)` is derived there, and
+   `mergeSelfDevelopmentJoinIntoMetadata(runMetadata, join)` sets the non-empty
+   join keys in the run's metadata **after** the loop at `:789` and after the
+   `req.Provenance` copy that follows it. The override precedence is the one R2
+   applies today at completion: a join value from the list replaces a value
+   inherited from the parent revision and a value a caller put in provenance.
 3. `textureAvailableSourceEntitiesKey` leaves `durableMetadataKeys`
    (`texture_task_types.go:66`), so the loop stops copying the list into the
    run. The local map keeps the key for `:681`.
@@ -114,7 +115,7 @@ key from it is not a run-record-only change:
 | run start, `texture_agent_revision.go:789-797` | copies the list and the join keys from the local map into the run | copies the join keys (now list-derived) and no longer the list |
 | R2 parent-revision copy, `texture_revision_metadata.go:26-33` | copies the parent revision's durable keys, list included, into the new revision | no longer copies the list; R2 deleted it from the revision anyway (`:81`) |
 | R2 run copy, `texture_revision_metadata.go:38-44` | copies the run's durable keys, list included | copies the join keys the run now holds; no list to copy |
-| `carryForwardDurableTextureMetadata`, `texture_structure.go:35-76` (loop `:55`), reached from `carryForwardTextureMetadataForRecord` (`texture_structure.go:19`), which `texture_agent_revision.go:252`, `texture_evidence_embed.go:230` and `revise_edit.go:99` call, and from rebase (`texture.go:1152`) | a legacy parent revision whose persisted metadata still holds the list passes it to the child revision | no longer passes it. No live writer stores the key in a revision (R2 deletes it), so this only affects pre-change rows, and it matches the rule in R2's own comment that the list is run-time context and not durable revision metadata |
+| `carryForwardDurableTextureMetadata`, `texture_structure.go:35-76` (loop `:55`), reached from `carryForwardTextureMetadataForRecord` (`texture_structure.go:19`), which `texture_agent_revision.go:252`, `texture_evidence_embed.go:230` and `revise_edit.go:99` call, and from rebase (`texture.go:1152`) | a legacy parent revision whose persisted metadata still holds the list passes it to the child revision | no longer passes it. Before this change it did copy the key from a head revision that held it into owner-revise, tool and embed revisions (`revise_edit.go:99`, `texture_evidence_embed.go:230`, `texture_agent_revision.go:252`, rebase `texture.go:1152`), so a legacy list could persist across those; after, post-deploy revisions stop carrying it. The join keys are durable and the same loop still copies them, so no join id is lost. It matches the rule in R2's own comment that the list is run-time context and not durable revision metadata |
 
 The join keys now also appear in Texture run records that did not carry them
 before. `store.ListRunsBySelfDevelopmentOperation` (`store.go:687-720`) queries

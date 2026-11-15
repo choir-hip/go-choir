@@ -26,6 +26,8 @@ package textureowner
 //  8. The list is still stored in the run record, or the run record is not
 //     smaller, or the key is still in durableMetadataKeys.
 //  9. The run's model input changes: the prompt must be byte-equal.
+// 10. A provenance value for a join key beats the list's value in the run record
+//     (req.Provenance is copied into the run after the durable keys).
 //
 // Goldens: each scenario's revision metadata (loop_id removed) was recorded by
 // running these scenarios on the code before the change.
@@ -91,6 +93,11 @@ type startedJoinRun struct {
 // revision carries headMeta, with req.SourceEntities = reqEntities.
 func startJoinRun(t *testing.T, suffix string, headMeta map[string]any, reqEntities []textureSourceEntity) startedJoinRun {
 	t.Helper()
+	return startJoinRunWithProvenance(t, suffix, headMeta, reqEntities, nil)
+}
+
+func startJoinRunWithProvenance(t *testing.T, suffix string, headMeta map[string]any, reqEntities []textureSourceEntity, provenance map[string]any) startedJoinRun {
+	t.Helper()
 	core, handler := testAPISetup(t)
 	core.SetDispatchActor(noDispatch)
 	s := core.Store()
@@ -101,7 +108,7 @@ func startJoinRun(t *testing.T, suffix string, headMeta map[string]any, reqEntit
 		t.Fatal(err)
 	}
 	rec, err := handler.submitTextureAgentRevisionRun(t.Context(), doc, start.OwnerID, textureAgentRevisionRequest{
-		Intent: "integrate_execution_findings", Provenance: map[string]any{"request_source": "inbox_record"},
+		Intent: "integrate_execution_findings", Provenance: withInboxRecord(provenance),
 		SourceEntities: reqEntities,
 	}, 0)
 	if err != nil || rec == nil {
@@ -112,6 +119,14 @@ func startJoinRun(t *testing.T, suffix string, headMeta map[string]any, reqEntit
 		t.Fatal(err)
 	}
 	return startedJoinRun{handler: handler, s: s, start: start, doc: doc, stored: stored, prompt: rec.Prompt}
+}
+
+func withInboxRecord(provenance map[string]any) map[string]any {
+	out := map[string]any{"request_source": "inbox_record"}
+	for key, value := range provenance {
+		out[key] = value
+	}
+	return out
 }
 
 func noDispatch(context.Context, string, string, string, string, string, string, string) error {
@@ -149,8 +164,13 @@ const (
 	goldenAllFour       = `{"self_development_bundle_digest":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","self_development_event_head":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","self_development_operation_id":"op-1","self_development_receipt_id":"receipt-1","source":"texture_cell","trajectory_id":"trajectory-hold-allfour"}`
 	goldenSameKindTwice = `{"self_development_operation_id":"op-second","source":"texture_cell","trajectory_id":"trajectory-hold-samekind"}`
 	goldenListBeatsP    = `{"self_development_bundle_digest":"bundle-from-parent","self_development_operation_id":"op-from-list","source":"texture_cell","trajectory_id":"trajectory-hold-beatsp"}`
+	// goldenListBeatsQ equals goldenListBeatsP on purpose: a later parent
+	// revision with different join ids changes nothing, because the run holds
+	// the list's value (and the inherited one for a kind the list lacks).
 	goldenListBeatsQ    = `{"self_development_bundle_digest":"bundle-from-parent","self_development_operation_id":"op-from-list","source":"texture_cell","trajectory_id":"trajectory-hold-beatsp"}`
 	goldenAllFourPrompt = "Your document woke you. Intent: integrate_execution_findings. Your frame follows: the document as blocks b1..bN and the records addressed to you.\n\nThe owner's request:\nReplace the PDF and EPUB readers with one Reader app package. Quality bar: the Reader renders the sample PDF's first page in the capture. Do not change package.json. HOLD-REQUEST-END\n(revision revision-hold-root-allfour)"
+	goldenMergedList    = `{"self_development_operation_id":"op-from-request","self_development_receipt_id":"legacy-receipt","source":"texture_cell","trajectory_id":"trajectory-hold-merged"}`
+	goldenProvenance    = `{"self_development_operation_id":"op-from-list","self_development_receipt_id":"receipt-from-provenance","source":"texture_cell","trajectory_id":"trajectory-hold-provenance"}`
 	goldenEmptyAbsent   = `{"self_development_receipt_id":"receipt-only","source":"texture_cell","trajectory_id":"trajectory-hold-empty"}`
 )
 
@@ -294,9 +314,9 @@ func TestListNotStoredLegacyParentRevisionDoesNotCarryTheList(t *testing.T) {
 }
 
 // Failure 8: the key is out of durableMetadataKeys, the started run's stored
-// record lacks it and holds the join keys, and its body is smaller than the
-// body that would carry the list.
-func TestListNotStoredTheRunRecordLacksTheListAndIsSmaller(t *testing.T) {
+// record lacks it and holds the join keys, and the stored body holds nothing of
+// the list.
+func TestListNotStoredTheRunRecordLacksTheList(t *testing.T) {
 	for _, key := range durableMetadataKeys {
 		if key == textureAvailableSourceEntitiesKey {
 			t.Fatalf("%s is still a durable metadata key", key)
@@ -312,18 +332,55 @@ func TestListNotStoredTheRunRecordLacksTheListAndIsSmaller(t *testing.T) {
 		t.Errorf("the stored run record lacks the join keys: %#v", r.stored.Metadata)
 	}
 	body, _ := json.Marshal(r.stored)
-	with := r.stored
-	with.Metadata = map[string]any{}
-	for key, value := range r.stored.Metadata {
-		with.Metadata[key] = value
-	}
-	with.Metadata[textureAvailableSourceEntitiesKey] = entities
-	withBody, _ := json.Marshal(with)
-	listJSON, _ := json.Marshal(entities)
-	if len(withBody)-len(body) < len(listJSON) {
-		t.Errorf("the body is %d bytes, %d with the list; the list is %d bytes", len(body), len(withBody), len(listJSON))
+	// The stored body holds neither the key nor anything only an entity has.
+	for _, needle := range []string{textureAvailableSourceEntitiesKey, "whole_resource", "collapsed_citation"} {
+		if strings.Contains(string(body), needle) {
+			t.Errorf("the stored run body still holds %q (%d bytes)", needle, len(body))
+		}
 	}
 	if strings.Contains(r.prompt, textureAvailableSourceEntitiesKey) {
 		t.Errorf("the key reached the prompt")
+	}
+}
+
+// Failure 2, with a merged list that differs from req.SourceEntities: the head
+// revision's metadata still carries the legacy key (a receipt entity) and the
+// request carries an operation entity. Both join ids reach the stored run and
+// the revision metadata. Deriving from req.SourceEntities only, or before the
+// request merge, loses the receipt.
+func TestListNotStoredTheMergedListNotTheRequestAloneDerivesTheJoin(t *testing.T) {
+	head := map[string]any{textureAvailableSourceEntitiesKey: joinEntities("receipt", "legacy-receipt")}
+	r := startJoinRun(t, "merged", head, joinEntities("operation", "op-from-request"))
+	got := r.revisionMetadataOf(t, r.stored, r.doc)
+	t.Logf("GOLDEN merged %s", got)
+	if got != goldenMergedList {
+		t.Errorf("revision metadata =\n%s\nwant\n%s", got, goldenMergedList)
+	}
+	if r.stored.Metadata[textureJoinReceiptID] != "legacy-receipt" || r.stored.Metadata[textureJoinOperationID] != "op-from-request" {
+		t.Errorf("the stored run lacks a join id of the merged list: %#v", r.stored.Metadata)
+	}
+	meta := decodeRevisionMetadata(json.RawMessage(got))
+	if meta[textureJoinReceiptID] != "legacy-receipt" || meta[textureJoinOperationID] != "op-from-request" {
+		t.Errorf("the revision metadata lacks a join id of the merged list: %#v", meta)
+	}
+}
+
+// Failure 4: req.Provenance is copied into the run after the durable keys. A
+// provenance value for a join key the list has loses to the list, in the stored
+// run and in the revision metadata, as it did when the builder derived the join
+// at completion.
+func TestListNotStoredProvenanceCannotBeatTheListsJoinValue(t *testing.T) {
+	r := startJoinRunWithProvenance(t, "provenance", nil, joinEntities("operation", "op-from-list"),
+		map[string]any{textureJoinOperationID: "op-from-provenance", textureJoinReceiptID: "receipt-from-provenance"})
+	got := r.revisionMetadataOf(t, r.stored, r.doc)
+	t.Logf("GOLDEN provenance %s", got)
+	if got != goldenProvenance {
+		t.Errorf("revision metadata =\n%s\nwant\n%s", got, goldenProvenance)
+	}
+	if r.stored.Metadata[textureJoinOperationID] != "op-from-list" {
+		t.Errorf("the stored run holds %v for the operation id, want the list's", r.stored.Metadata[textureJoinOperationID])
+	}
+	if r.stored.Metadata[textureJoinReceiptID] != "receipt-from-provenance" {
+		t.Errorf("a join kind the list lacks keeps the provenance value, got %v", r.stored.Metadata[textureJoinReceiptID])
 	}
 }

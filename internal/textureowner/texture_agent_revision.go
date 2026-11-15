@@ -689,9 +689,11 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	// The list is run-time context and is not stored in the run record
 	// (docs/design/run-record-written-less-2026-11-15.md): its one live reader
 	// of a stored run, the revision metadata builder, needs only the join ids
-	// derived from it. They are set here, from the list after both merges, and
-	// the durable-key copy below carries them into the run.
-	mergeSelfDevelopmentJoinIntoMetadata(metadata, selfDevelopmentJoinFromSourceEntities(decodeAvailableTextureSourceEntities(metadata)))
+	// derived from it. They are derived here, from the list after both merges,
+	// and set in the run's metadata after the provenance copy below, so the
+	// list's value wins over an inherited or provenance value as it did when the
+	// revision metadata builder derived it at completion.
+	join := selfDevelopmentJoinFromSourceEntities(decodeAvailableTextureSourceEntities(metadata))
 
 	contextMode := textureAgentRevisionContextMode(currentRevision, previousRevision)
 	agentPrompt := buildAgentRevisionRequest(currentRevision, previousRevision, promptMetadata, req, diffSummary, ownerDirections)
@@ -809,6 +811,7 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 			runMetadata[key] = val
 		}
 	}
+	mergeSelfDevelopmentJoinIntoMetadata(runMetadata, join)
 	if requestedByRunID := strings.TrimSpace(req.RequestedByRunID); requestedByRunID != "" {
 		runMetadata["requested_by_run_id"] = requestedByRunID
 	}
