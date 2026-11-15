@@ -20,12 +20,12 @@ or in `internal/modelpolicy`, `internal/appdesk`, `internal/apihandler`.
   claim" means each content segment; the design says they carry no forecast).
 - R2. The index (`autoradio.stretch`) is written whenever the handler itself
   ends the call (done, a run of three invalid lines, a provider failure after a
-  segment), with the status in it; it is not written after a crash or after a
-  failed claim write. Design 3.3 says "at `done`"; the status makes the other
-  endings readable and replayable.
-- R3. A replay of a `request_id` whose stretch has no index (a crash) streams
-  the stored segments, then an `error` event "interrupted by a restart", and
-  makes no model call; the retry is a new `request_id`.
+  segment, a deadline), with the status in it; it is not written after a crash
+  or after a failed claim write. Design 3.3 and 12.2 now say so (review round 1).
+- R3. A replay of a `request_id` streams the leading run of stored segments
+  whose claim exists, then `done` or an `error` event ("ended without an
+  index" when there is none), and makes no model call; the retry is a new
+  `request_id`.
 - R4. Edition text arrives as the request field `edition_text` (programme
   design 2.2, slice 2); the handler numbers its paragraphs with
   `calibration.SplitBlocks`. A candidate's cite ref is `pub:<route>@v<version>`.
@@ -187,6 +187,22 @@ Wiring and boundaries
   `mobile/fixtures/learning/programme_stream.json` equals the events that
   fixture holds (the phone's contract for the `stretch`, `segment` and `done`
   events).
+
+Review round 1 repairs (tests in `api_autoradio_programme_repair_test.go`)
+
+- F45. A replay never streams a segment whose claim was not written (the claim
+  write failed; a panic between the segment record and its claim).
+- F46. A wall-clock deadline for the walk and an idle deadline between deltas
+  end the call as `deadline` with an index, and the `request_id` then replays,
+  not 409.
+- F47. A segment cap of 30 ends the stretch with a named drop reason.
+- F48. The replay reason for a stretch with no index says so, not "restart".
+- F49. `mail`, `podcast_note`, `answer` and `result` are dropped by name.
+- F50. Each instruction's and note's prompt text is bounded and marked.
+- F51. `client_gone` is in the index.
+- F52. An empty programme prompt fails before the first record.
+- F53. An empty dek is 400; U+2028 and U+2029 do not reach the input.
+- F54. `-0` is 0.
 
 ## Known and left
 

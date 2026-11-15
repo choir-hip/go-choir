@@ -80,12 +80,31 @@ text), the forecast claim `calib:autoradio-dj:<hash>` (deadline: the start plus
 the status, the drop reasons), written whenever the handler itself ends the
 call, not after a crash or a failed claim write.
 
+## Bounds and invented numbers
+
+These are deadlines and bounds on what the model can cause, not limits on our
+model calls. Invented, because neither the design nor the turn route names one
+(the gateway client's own deadline is 10 m 30 s): the wall-clock deadline of 120
+seconds for the whole walk, the idle deadline of 30 seconds between deltas
+(from the first), the cap of 30 segments per stretch (the prompt asks for 10 to
+15), the per-kind text maxima in bytes (story 8000, update 4000, headlines 3000,
+ident 800, bridge 500), 1,000 bytes per instruction or note in the prompt, 32 KB
+of edition text. A deadline or the cap ends the call through the index with a
+`status` (design 12.2). Kinds: `story`, `update`, `headlines`, `ident`,
+`bridge`; `mail`, `podcast_note`, `answer` and `result` are dropped until their
+stations. A candidate needs a non-empty `dek` (12.7).
+
+Residuals: a candidate's text can steer `caused_by` to a real listed ref (a
+forged cause on a valid claim; it cannot be validated); the in-flight key is
+process-local, so two overlapping API processes could each answer one
+`request_id` (a duplicate model call, not a duplicate claim); the notes and
+turns reader fetches at most 5,000 records of a kind.
+
 ## Replay, disconnect, crash
 
 The same `request_id` returns the stored stretch with no model call and no
 write: the segments, then `done` with `replayed: true`. A client that goes away
 does not stop the call; the stretch commits and a replay returns it. A stretch a
 restart interrupted has its start, segment records and claims and no index; its
-`request_id` replays the stored segments and an `error` ("interrupted by a
-restart"), and the retry is a new `request_id` and a new stretch that never
+`request_id` replays the stored segments that have their claim and an `error` ("ended without an index"), and the retry is a new `request_id` and a new stretch that never
 re-streams a claimed segment id. Nothing resumes at boot.
