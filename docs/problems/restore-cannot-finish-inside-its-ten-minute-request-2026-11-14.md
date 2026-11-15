@@ -181,14 +181,10 @@ those are bookkeeping rows the trim deletes anyway.
 - Evidence class: code reading, store-level tests that bind and restore, one
   full restore of a checkpoint of a store holding null pin lists, negative
   tests. Not yet staging or d@e.
-- Rollback: a plain revert. A checkpoint bound in version 4 and kept: the
-  reverted code refuses it. `RefuseWitnessVersion` there accepts only version
-  3, and `CheckpointFromRequest` validates the witness through it on every
-  bind, restore and route-projection path, so the restore fails with "witness
-  version 4 is not judgeable" before anything is read. It is never misread as
-  strict. Read from the old code (`witness_v3.go`, `restore.go`); not run
-  against the old binary. Checkpoints bound before stay version 3 and restore
-  on either code.
+- Rollback: a plain revert of the code, with the truth per order of
+  rollback below. The short form: a version 4 checkpoint is never restored by
+  code that does not know it; where the refusal happens, and what the
+  operator reads, depends on which side rolled back.
 - Heresy delta: a witness that names its own form is a kind of switch. It is
   a version of a commitment, fixed by what the checkpoint says, not a setting
   and not off by default. The strict form stays only to read old checkpoints
@@ -205,15 +201,79 @@ those are bookkeeping rows the trim deletes anyway.
   producer of null rows. Read from code.
 - Diagnostics: the live row lists are read in the probe's snapshot, which
   cannot be after the digests are compared, because the replay does not exist
-  yet. They are bounded instead (`ObjectGraphDiagnosticRowLimit` 200,000
-  rows, `EventIndexDiagnosticRowLimit` 60,000; about 140 MB and 90 MB per
-  side), and a store past the bound skips them and says so in
-  `diagnostics_skipped`; the verdict does not depend on them. The trim keeps
-  the index small, so a trimmed store is far below the bound; with millions of
-  index rows the diagnostic is skipped.
+  yet. They are bounded instead (`ObjectGraphDiagnosticRowLimit` 100,000
+  rows, `EventIndexDiagnosticRowLimit` 30,000). The two-sided peak, when the
+  result is not equivalent, is the live list, the replay list and the
+  comparison maps: about 165 MB for the object graph and 105 MB for the
+  index, about 270 MB together, on a guest whose ceiling is 1,024 MiB. A store
+  past a bound skips that diagnostic and says so in `diagnostics_skipped`; the
+  verdict does not depend on it. The live lists could be read lazily only if
+  the snapshot stayed open across the replay (minutes), which pins the
+  write-ahead log of a computer that keeps appending on a volume that may be
+  short; I did not do that. The trim keeps the index small, so a trimmed store
+  is far below the index bound; d@e's 122,000 objects are over the object
+  bound, so its object graph rows are not diffed (a digest verdict is).
 - The replay side uses the replay head's boundary and the report carries both
   (`trim_boundary`, `replay_trim_boundary`). The one-computer invariant is
   checked.
-- A probe at a non-zero boundary end to end is not tested: it needs a tape of
-  more than 20,000 events. The wiring is tested at the one function the probe,
-  the bind and the restore share, at head 50,000.
+- The probe at a non-zero boundary is tested end to end on a 20,010-event
+  tape (`TestProbeAtANonzeroTrimBoundary`): a null pin list on the live side
+  only is equivalent, and the bound witness has the probed head's boundary and
+  content root. A trim backlog row on the live side only, and a real
+  difference above the boundary, are tested at the function the probe, bind
+  and restore share, at head 50,000; they are not injected into the
+  20,000-event tape (every sequence there is a tape event). Named residual,
+  with the test to write if the probe's composition changes.
+
+### Rollback by order (review round 2)
+
+The version 4 witness JSON carries `witness_version: 4` and
+`event_index_trim_boundary`. "Old" is the code before this change. Read from
+the structs and decoders, not run against an old binary.
+
+- **Full revert (guest and host old).** Checkpoints bound as version 4 stay in
+  the host store. The old host serves one decoded into its struct, which keeps
+  `witness_version: 4` and drops `event_index_trim_boundary` (unknown field).
+  The old guest's `RestoreFromRequest` validates the witness first and refuses
+  by name: `/lifecycle/restore` answers 400 `witness version 4 is not
+  judgeable`; `/lifecycle/rematerialize-from-tape` answers 500 with the same
+  text (the old status map does not know the refusal). Version 3 checkpoints
+  restore as before.
+- **Guest new, host old (a guest updated before the host, or the host rolled
+  back first).** A new guest binds version 4 and publishes it. The old host's
+  `CheckpointFromRequest` refuses it by name, so nothing is stored: the bind
+  and the cadence checkpoint fail with `witness version 4 is not judgeable`,
+  and no checkpoint is made on that guest until the host is new. Fail closed;
+  a lost checkpoint, not a wrong one.
+- **Host new, guest old.** The old guest binds version 3, which the new host
+  accepts. It cannot restore a version 4 checkpoint a new guest published
+  earlier: refused by name, as in the full revert.
+- **Host-only automatic rollback mid-deploy, after new guests published
+  version 4 to the new host.** The stored version 4 checkpoints are now served
+  by the old host through its struct, which drops the boundary. A new guest
+  restoring one recomputes the derivability digest with boundary 0 and gets
+  `witness derivability digest does not match`: 400 on `/lifecycle/restore`
+  and a 500 on rematerialize (new code does not map that validation text to a
+  status). This is not "version 4 is not judgeable"; the operator is told the
+  checkpoint is corrupt, and it is not: it is unrestorable until the host is
+  new again. The old host also certifies a route projection for such a
+  checkpoint, because it never validated the witness there; the new host
+  refuses it (`RouteProjectionFromRequest` rebuilds the checkpoint). That
+  certification is a route, not a restore, and the checkpoint still cannot be
+  restored. Version 4 checkpoints published in a skew window are therefore
+  refused (fail closed) until both sides are on the new code.
+- **What this change does about it.** The host now serves a stored checkpoint
+  verbatim (`StoredCheckpointResponse` returns the stored bytes, never a
+  decoded and re-encoded copy), so a field a release does not know survives
+  transit, and the next field added will not be lost this way. It cannot
+  change the old host. The route projection rebuilds the checkpoint, so an
+  unjudgeable version or a digest that does not follow from the request is
+  refused as a route.
+- **The `Prepare` nuance.** `Prepare` now writes `[]` where an old replay
+  wrote `null`. For an ordinary store that fixes version 3 restores (live
+  rows are `[]`; the old replay's `null` was the mismatch). For a store
+  written entirely by an old replay (null in every no-payload row), a version
+  3 checkpoint that restored on the old binary now refuses (fail closed); a
+  new version 4 bind canonicalizes null and recovers. So "version 3
+  checkpoints restore on either code" holds for stores whose live rows are
+  `[]`, not for that class.
