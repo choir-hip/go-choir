@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -125,6 +126,16 @@ type probeFixture struct {
 // probe replays the second event as a tail (failure 3).
 func newProbeFixture(t *testing.T, computerID string, tail bool) *probeFixture {
 	t.Helper()
+	if tail {
+		return newProbeFixtureN(t, computerID, 1, 1)
+	}
+	return newProbeFixtureN(t, computerID, 0, 1)
+}
+
+// newProbeFixtureN appends a genesis and tailEvents no-payload desk events,
+// and installs the base snapshot at baseSeq.
+func newProbeFixtureN(t *testing.T, computerID string, tailEvents, baseSeq int) *probeFixture {
+	t.Helper()
 	ctx := context.Background()
 	storePath := filepath.Join(t.TempDir(), "runtime.db")
 	liveStore, err := choirstore.Open(storePath)
@@ -162,9 +173,13 @@ func newProbeFixture(t *testing.T, computerID string, tail bool) *probeFixture {
 	if _, err := appender.AppendNew(ctx, newEvent(computerevent.EventGenesisImported, "genesis", a, "management"), computerevent.TransitionInput{TargetStateCommitment: a}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if tail {
+	for i := 0; i < tailEvents; i++ {
 		f := strings.Repeat("f", 64)
-		update := newEvent(computerevent.EventResearchUpdate, "desk-update", f, "research")
+		key := "desk-update"
+		if i > 0 {
+			key = fmt.Sprintf("desk-update-%d", i)
+		}
+		update := newEvent(computerevent.EventResearchUpdate, key, f, "research")
 		update.PayloadCommitment = strings.Repeat("0", 64)
 		if _, err := appender.AppendNew(ctx, update, computerevent.TransitionInput{TargetStateCommitment: f}, nil); err != nil {
 			t.Fatal(err)
@@ -183,7 +198,7 @@ func newProbeFixture(t *testing.T, computerID string, tail bool) *probeFixture {
 			cas.events[i].Request.PayloadPinReceiptDigests = nil
 		}
 	}
-	seedRestoreBase(t, ctx, rt, cas, computerID, 1)
+	seedRestoreBase(t, ctx, rt, cas, computerID, baseSeq)
 	return &probeFixture{rt: rt, cas: cas}
 }
 

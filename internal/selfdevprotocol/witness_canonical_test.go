@@ -15,6 +15,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
@@ -129,9 +130,9 @@ func TestWitnessContentMatchesComparesFormsAndNamesTheRefusal(t *testing.T) {
 	}
 	strict, _ := WitnessFromDigests(testCanonicalDigests())
 	for name, pair := range map[string][2]VMLocalContentWitness{
-		"strict against canonical":       {strict, canonical},
-		"canonical against strict":       {canonical, strict},
-		"another boundary":               {testWitnessCanonical(t, 30000), canonical},
+		"strict against canonical": {strict, canonical},
+		"canonical against strict": {canonical, strict},
+		"another boundary":         {testWitnessCanonical(t, 30000), canonical},
 		"another table digest, same form": {func() VMLocalContentWitness {
 			d := testCanonicalDigests()
 			d.Tables = map[string]string{"computer_event_index": strings.Repeat("c", 64)}
@@ -156,5 +157,47 @@ func TestUnknownWitnessVersionsAreRefusedWithTheirSentinel(t *testing.T) {
 		if err := RefuseWitnessVersion(v); err != nil {
 			t.Fatalf("version %d: %v", v, err)
 		}
+	}
+}
+
+// The checkpoint digest is over the request: two checkpoints identical but
+// for the event index boundary have different digests.
+func TestCheckpointDigestCommitsToTheEventIndexBoundary(t *testing.T) {
+	digests := computerversion.StateDigests{Database: "choir", SchemaHash: strings.Repeat("a", 64), Tables: map[string]string{"agents": strings.Repeat("b", 64)}}
+	build := func(boundary uint64) Checkpoint {
+		w, err := WitnessFromDigestsCanonical(digests, boundary)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request := testCheckpointRequest(t)
+		request.VMLocalContentWitness = w
+		// One request body, so that nothing but the witness differs.
+		c, _, err := CheckpointFromRequest(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	a, b := build(40000), build(30000)
+	if a.Digest == b.Digest {
+		t.Fatal("the boundary is not in the checkpoint digest")
+	}
+}
+
+// A route is not certified for a checkpoint whose witness this release does
+// not judge, whatever its stored digest says.
+func TestRouteProjectionRefusesAnUnjudgeableWitness(t *testing.T) {
+	request := testCheckpointRequest(t)
+	checkpoint, _, err := CheckpointFromRequest(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkpoint.Request.VMLocalContentWitness.WitnessVersion = 5
+	_, _, err = RouteProjectionFromRequest(RouteProjectionRequest{
+		ComputerID: request.ComputerID, IdempotencyKey: "route",
+		Checkpoint: CheckpointResponse{Checkpoint: checkpoint},
+	}, time.Now())
+	if err == nil || !strings.Contains(err.Error(), "not judgeable") {
+		t.Fatalf("err = %v, want a witness version refusal", err)
 	}
 }

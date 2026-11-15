@@ -16,7 +16,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
-	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -262,10 +261,7 @@ func TestRematerializeFromTapeKeepsObjectGraphAndOperationWritesOnTheTape(t *tes
 	if !report.Result.Equivalent() {
 		t.Fatalf("control: before the rematerialize the replay is not equivalent: %#v", report.Result.Differences)
 	}
-	witness, err := selfdevprotocol.WitnessFromObservationSets(report.Live, report.Replay, report.Result)
-	if err != nil {
-		t.Fatal(err)
-	}
+	witness := boundWitness(t, rt, computerID)
 	head, err := live.Head(ctx, computerID)
 	if err != nil || head == nil {
 		t.Fatalf("head: %v %#v", err, head)

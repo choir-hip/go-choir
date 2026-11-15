@@ -17,17 +17,22 @@ package agentcore
 //  6. the probe's equivalence and the restore's witness disagree.
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
@@ -312,21 +317,29 @@ func TestRestoreAcceptsABoundCheckpointOfAStoreWithNullPinLists(t *testing.T) {
 	}
 }
 
-// The probe and the witness agree: on the e2e fixture where the probe says
-// equivalent, the probe's own live digests are the bound witness's.
-func TestProbeEquivalentAndBoundWitnessAreOneComputation(t *testing.T) {
+// The probe's live observations and the bound witness are one extraction:
+// every table digest the bind records is the probe's.
+func TestProbeLiveObservationsAndBoundWitnessShareEveryTableDigest(t *testing.T) {
 	fx := newProbeFixture(t, "computer-probe-bound-agree", true)
 	report, err := fx.rt.ReplayCompleteness(context.Background(), "computer-probe-bound-agree")
 	if err != nil || !report.Result.Equivalent() {
 		t.Fatalf("probe: %v %v", err, report.Result.Differences)
 	}
 	bound := boundWitness(t, fx.rt, "computer-probe-bound-agree")
-	fromProbe, err := selfdevprotocol.WitnessFromObservationSet(report.Live)
-	if err != nil {
-		t.Fatal(err)
+	seen := map[string]string{}
+	for _, o := range report.Live.Observations {
+		seen[o.Key] = o.Value
 	}
-	if bound.ContentRoot != fromProbe.ContentRoot {
+	if seen["sqlite:texture:content_root"] != "sha256:"+bound.ContentRoot {
 		t.Fatal("the probe's live content root is not the bound witness's: the probe and the restore gate disagree")
+	}
+	for table, digest := range bound.Tables {
+		if seen["sqlite:texture:table:"+table] != "sha256:"+digest {
+			t.Fatalf("table %s: probe %q, bind %q", table, seen["sqlite:texture:table:"+table], digest)
+		}
+	}
+	if bound.EventIndexTrimBoundary != choirstore.ProjectionBatchTrimBoundary(report.LiveHead.Sequence) {
+		t.Fatalf("bound boundary %d does not follow the probed head", bound.EventIndexTrimBoundary)
 	}
 }
 
@@ -346,4 +359,80 @@ func TestReplayStoreWritesEmptyPinListNotNull(t *testing.T) {
 	if raw != "[]" {
 		t.Fatalf("the replay stored %q for an event with no payload pins, want []", raw)
 	}
+}
+
+// The probe at a non-zero trim boundary, end to end on a tape past 20,000
+// events: a trim backlog row and a null pin list on the live side only are
+// not a difference, and a real difference above the boundary still is.
+func TestProbeAtANonzeroTrimBoundary(t *testing.T) {
+	const computerID = "computer-probe-boundary"
+	fx := newProbeFixtureN(t, computerID, 20040, 20030)
+	ctx := context.Background()
+	db := fx.rt.store.DB()
+	batch := string(computerevent.EventProjectionBatchRecorded)
+	insertIndexRow(t, fx.rt.store, computerID, "backlog-row", 7, batch, "finalized", "[]")
+	if _, err := db.Exec(`UPDATE computer_event_index SET payload_pin_receipt_digests_json = 'null' WHERE sequence = 100`); err != nil {
+		t.Fatal(err)
+	}
+	report, err := fx.rt.ReplayCompleteness(ctx, computerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.LiveHead == nil || report.LiveHead.Sequence < 20000 || choirstore.ProjectionBatchTrimBoundary(report.LiveHead.Sequence) == 0 {
+		t.Fatalf("fixture head = %+v: the boundary is zero", report.LiveHead)
+	}
+	if !report.Result.Equivalent() {
+		t.Fatalf("a backlog row and a null pin list below the boundary made the probe not equivalent: %v", report.Result.Differences)
+	}
+	bound := boundWitness(t, fx.rt, computerID)
+	if bound.EventIndexTrimBoundary != choirstore.ProjectionBatchTrimBoundary(report.LiveHead.Sequence) {
+		t.Fatalf("bound boundary %d", bound.EventIndexTrimBoundary)
+	}
+	if _, err := db.Exec(`UPDATE computer_event_index SET next_reducer_version = 99 WHERE sequence = 20035`); err != nil {
+		t.Fatal(err)
+	}
+	report, err = fx.rt.ReplayCompleteness(ctx, computerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Result.Equivalent() {
+		t.Fatal("a real difference above the boundary was hidden")
+	}
+	if report.EventIndex == nil || report.EventIndex.TrimBoundary == 0 || report.EventIndex.ReplayTrimBoundary != report.EventIndex.TrimBoundary {
+		t.Fatalf("event index comparison = %+v", report.EventIndex)
+	}
+}
+
+// Route-level: an unjudgeable witness version on /lifecycle/restore is a
+// refusal (409), not a bad request, and nothing is written.
+func TestRestoreRouteAnswers409ForAnUnjudgeableWitnessVersion(t *testing.T) {
+	computerID := "computer-restore-version"
+	rt := &Runtime{cfg: provideriface.Config{ComputerID: computerID}}
+	checkpoint := selfdevprotocol.Checkpoint{
+		Digest: strings.Repeat("a", 64),
+		Request: selfdevprotocol.CheckpointRequest{
+			ComputerID:            computerID,
+			VMLocalContentWitness: selfdevprotocol.VMLocalContentWitness{WitnessVersion: 5},
+		},
+	}
+	body, _ := json.Marshal(restoreAPIRequest{Checkpoint: checkpoint})
+	request := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/lifecycle/restore", bytes.NewReader(body))
+	request.Header.Set("X-Authenticated-User", "owner-restore")
+	request.Header.Set("X-Authenticated-Computer", computerID)
+	response := httptest.NewRecorder()
+	NewAPIHandler(rt).HandleComputersRouter(response, request)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "not judgeable") {
+		t.Fatalf("restore with witness version 5: status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+// observationValues is the texture state observations of a set, by key.
+func observationValues(set computerversion.ObservationSet) map[string]string {
+	out := map[string]string{}
+	for _, o := range set.Observations {
+		if strings.HasPrefix(o.Key, "sqlite:texture:") {
+			out[o.Key] = o.Value
+		}
+	}
+	return out
 }

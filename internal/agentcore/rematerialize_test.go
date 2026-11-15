@@ -302,11 +302,8 @@ func TestRematerializeFromTapeRefusesMissingFrontend(t *testing.T) {
 		selfdevUpdaterRoot: updaterRoot,
 	}
 	ctx := context.Background()
-	report, err := rt.ReplayCompleteness(ctx, computerID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	witness, err := selfdevprotocol.WitnessFromObservationSets(report.Live, report.Replay, report.Result)
+	// An empty store has no head to bind a checkpoint at: its strict witness.
+	witness, err := LiveStoreWitness(ctx, live.ReadDB())
 	if err != nil {
 		t.Fatal(err)
 	}
