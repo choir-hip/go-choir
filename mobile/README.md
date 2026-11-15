@@ -93,7 +93,7 @@ Fixtures: `mobile/fixtures/learning/` (from the server builder, `lane/arl-l1a`).
 
 ### Review round 2 repairs (tests in `ProgrammePlayerRepair2Tests.swift`, written first)
 
-- B1 `resumeAt` (and a pending programme) are cleared by `setDocument`, which `speakText` uses, so a text read after a dry programme starts at its first paragraph.
+- B1 `resumeAt` is cleared by `setDocument`, which `speakText` uses, so a text read after a dry programme starts at its first paragraph.
 - S1 the tracker's closed marker holds the unit it closed on and swallows only a later unit of the same segment; a unit at or before it is a seek (previous, rewind, jump back, play at the end) and is reported as a new play (`segmentBegan`, `blockBegan`, `finished`).
 - S2 sign-out sets `loading` false. S3 titles lose only bidi controls (U+202A to U+202E, U+2066 to U+2069, U+200E, U+200F, U+061C), U+200B and U+FEFF; ZWJ and ZWNJ stay. The server's title rule (design 3.2: one line, no control character, 200 bytes) is about control characters only, so the phone strips more than the server checks; the two do not disagree, the phone is stricter on what it shows.
 - The 8-second first-segment deadline (request and first segment together): after it the article plays and the stretch is let go (the reader is cancelled, nothing is followed). A late programme is not handed over: there is no hand-over in P1 (round 3 removed the one round 2 added). A computer that is slow to wake leaves the listener on the article for that load; the programme comes at the next load.

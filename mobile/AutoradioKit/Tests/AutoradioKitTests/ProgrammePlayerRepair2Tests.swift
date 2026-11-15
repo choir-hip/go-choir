@@ -2,8 +2,8 @@ import XCTest
 @testable import AutoradioKit
 
 // Station P1, review round 2 (REPAIR): written before the repair. B1 resumeAt outlives its document, S1 the closed marker swallows a real
-// replay, S2 sign-out leaves `loading` set, S3 format-character stripping is too broad, and the late programme (the first segment after
-// the deadline is handed over at a block boundary instead of lost). They fail on d2bf58f61.
+// replay, S2 sign-out leaves `loading` set, and S3 format-character stripping is too broad. They fail on d2bf58f61. The hand-over of a late
+// programme that this round also added was removed in round 3; its tests went with it.
 
 final class Repair2TrackerTests: XCTestCase {
     final class Sink: @unchecked Sendable { var events: [PlaybackEvent] = []; var kinds: [PlaybackKind] { events.map(\.kind) } }

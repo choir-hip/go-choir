@@ -447,8 +447,6 @@ public final class RadioProgramme: Programme, @unchecked Sendable {
 
     /// The first speakable segment (or, with no stretch, the article), and what follows. The listener waits at most `firstSegmentDeadline`
     /// seconds, for the request and the first segment together (a computer that is waking up); then the article plays and the stretch is let go.
-    /// The first speakable segment (or, with no stretch, the article), and what follows. The listener waits at most `firstSegmentDeadline`
-    /// seconds, for the request and the first segment together (a computer that is waking up); then the article plays and the stretch is let go.
     public func open(cause: String = "open") async throws -> OpenedProgramme {
         let env = ChoirEnvironment.shared
         let deadline = firstSegmentDeadline
