@@ -19,6 +19,8 @@ final class CardsState: @unchecked Sendable {
     var note = ""
     var noteAt = 0.0
     var ready = false
+    /// The paper-wide search: asks the public search route, one query current, late answers for older queries dropped.
+    var corpus: CorpusSearcher?
     static let shared = CardsState()
 }
 
@@ -150,12 +152,29 @@ extension AutoradioModule {
             let places = Places.rows(topStory: stories.first?.title, extra: Demo.isOn ? Places.demoExtra() : [:])
             let recentPages = RecentPages.addresses(events: signals.recent(limit: 200), excluding: Set(list.map(\.address)))
                 .map { Page(address: $0, kind: PageAddress.kind(of: $0), title: RecentPages.title(for: $0, stories: stories)) }
-            let hits = LauncherSearch.hits(query: q, open: list, places: places, recent: recentPages, stories: stories)
+            let local = LauncherSearch.hits(query: q, open: list, places: places, recent: recentPages, stories: stories)
+            // The whole paper: the server's substring search over every published story. The answer lands later and the launcher is
+            // re-read (touch); until then the local hits show with a "Searching the paper" line. Demo mode has no server.
+            var searchNote = ""
+            var hits = local
+            if !Demo.isOn {
+                cs.lock.lock()
+                if cs.corpus == nil {
+                    let c = CorpusSearcher { query in try await ChoirEnvironment.shared.client().searchPaper(query) }
+                    c.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["launcherData"]) } }
+                    cs.corpus = c
+                }
+                let searcher = cs.corpus!
+                cs.lock.unlock()
+                let status = searcher.status(for: q)
+                if case .done(let found) = status { hits = CorpusSearch.rows(found, after: local) }
+                searchNote = CorpusSearcher.note(status, hasHits: !hits.isEmpty)
+            }
             func hit(_ h: SearchHit) -> [String: Any] { ["address": h.address, "title": h.title, "kind": h.kind, "detail": h.detail] }
             reply(["query": q, "hasQuery": !q.trimmingCharacters(in: .whitespaces).isEmpty,
                    "places": places.map { ["slug": $0.slug, "name": $0.name, "address": $0.address, "line": $0.line] },
                    "recent": recentPages.map { ["address": $0.address, "title": $0.title, "kind": $0.kind, "detail": "Recent"] },
-                   "hits": hits.map(hit), "stories": stories.count])
+                   "hits": hits.map(hit), "stories": stories.count, "searchNote": searchNote])
         }
 
         // ---- sends (each answers {message})
