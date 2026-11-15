@@ -349,6 +349,9 @@ func TestRestoreActSucceedsWithTheReport(t *testing.T) {
 	if got := f.served(); got != "<html>checkpoint</html>" {
 		t.Fatalf("served SPA = %q", got)
 	}
+	if !strings.Contains(fmt.Sprint(end["reason"]), "not forward-durable") {
+		t.Fatalf("reason = %v: a success must say the restored state is not forward-durable", end["reason"])
+	}
 	if end["finished_at"] == "" || end["finished_at"] == nil {
 		t.Fatalf("finished_at missing in %v", end)
 	}

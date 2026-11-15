@@ -224,3 +224,14 @@ func TestComputerRestoreSaysOnlyWhatIsProven(t *testing.T) {
 		t.Fatalf("failed, unresolved: code=%d stderr=%s", code, errOut)
 	}
 }
+
+// An act that is open with an unresolved live state ends the wait: it will not
+// move by itself, and the CLI must say so rather than poll until its deadline.
+func TestComputerRestoreStopsAtAnUnresolvedAct(t *testing.T) {
+	stub := newRestoreActStub(t, restoreStubAnswer{http.StatusOK, `{"act_id":"ra-1","state":"installing","live_state":"unresolved","reason":"flip completion could not be recorded"}`})
+	started := time.Now()
+	code, _, errOut := runRestore(t, stub)
+	if code != 1 || time.Since(started) > 5*time.Second || !strings.Contains(errOut, "unresolved") {
+		t.Fatalf("code=%d after %s stderr=%s", code, time.Since(started), errOut)
+	}
+}

@@ -33,3 +33,6 @@ func restoreRepairStops(step string) bool {
 	hook := restoreRepairStepHook
 	return hook != nil && hook(step)
 }
+
+// restoreDirSyncHook, when set, is told each directory the install syncs.
+var restoreDirSyncHook func(dir string)

@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -62,11 +63,42 @@ func TestRestoreActChildProcess(t *testing.T) {
 	f := newRestoreActFixtureIn(t, base, "computer-act-kill", 6)
 	readyPath := filepath.Join(base, "child-ready.json")
 	var reached <-chan struct{}
-	if point == "replay" {
+	killAt := point
+	switch point {
+	case "replay":
 		reached, _ = holdReplayAfter(t, 2)
-	} else {
+	case "after_undo":
+		// The flip completes but its fact cannot be written: the engine undoes it
+		// itself (the one routine), and dies right after the undo.
+		restoreInstallWriteFault = func(phase string) error {
+			if phase == "flip_completed" {
+				return errors.New("write restore-acts: no space left on device")
+			}
+			return nil
+		}
+	case "live_wal_at_flip_started":
+		// A live store's -wal that its close left behind, there when the flip
+		// starts; the staged store, closed cleanly, never had one.
+		killAt = "after_flip_started"
 		restoreInstallCrashHook = func(p string) {
-			if p != point {
+			if p == "before_flip_started" {
+				_ = os.WriteFile(filepath.Join(base, "data", "state.db-wal"), []byte("live wal frames"), 0o600)
+			}
+			if p == killAt {
+				for {
+					if _, err := os.Stat(readyPath); err == nil {
+						break
+					}
+					time.Sleep(2 * time.Millisecond)
+				}
+				_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
+				select {}
+			}
+		}
+	}
+	if point != "replay" && point != "live_wal_at_flip_started" {
+		restoreInstallCrashHook = func(p string) {
+			if p != killAt {
 				return
 			}
 			// The parent must be told what the computer was before the restore:
@@ -238,7 +270,7 @@ func (c crashChild) wantRestored(t *testing.T) {
 // F9, F21: a real SIGKILL at each point of the real engine's install, and the
 // boot that follows.
 func TestRestoreCrashPoints(t *testing.T) {
-	pre := []string{"after_prepared", "after_release_restaged", "after_flip_started", "mid_flip", "before_flip_completed"}
+	pre := []string{"after_prepared", "after_release_restaged", "after_flip_started", "mid_flip", "before_flip_completed", "after_undo"}
 	post := []string{"after_flip_completed", "after_reopen"}
 	for _, point := range append(append([]string{}, pre...), post...) {
 		t.Run(point, func(t *testing.T) {
@@ -477,6 +509,13 @@ func TestRestoreReopenFailureIsRestoredNotFailed(t *testing.T) {
 	if got := f.served(); got != "<html>checkpoint</html>" {
 		t.Fatalf("served SPA = %q: the prior release was put back over a flipped store", got)
 	}
+	if !f.rt.restoreRestaged.Load() {
+		t.Fatal("restoreRestaged is not set: a migration could move `current` under the restored store")
+	}
+	result, _ := end["result"].(map[string]any)
+	if result == nil || (result["restart_scheduled"] != true && fmt.Sprint(result["restart_deferred"]) == "<nil>") {
+		t.Fatalf("result = %v: the restart a restored act needs was not requested", result)
+	}
 	if len(leftovers(filepath.Dir(f.storePath), "rematerialize-quarantine-*")) != 1 {
 		t.Fatal("the old store is not in quarantine")
 	}
@@ -568,5 +607,228 @@ func TestProductAPIRefusesTheRestoreStatus(t *testing.T) {
 	err := validateProductAPIRoute(http.MethodGet, "/api/computers/computer-own/lifecycle/restore-status?act=ra-1")
 	if err == nil || !strings.Contains(err.Error(), "restore-status") {
 		t.Fatalf("a desk's read of the restore status = %v, want a refusal naming it", err)
+	}
+}
+
+// A live sidecar present when the flip starts is not moved by an undo that
+// infers from which files exist: the record lists only the renames whose source
+// existed, and the staged store's never-existing sidecars are not in it.
+func TestRestoreCrashPointLiveWalAtFlipStarted(t *testing.T) {
+	c := runCrashChild(t, "live_wal_at_flip_started")
+	report := RepairRestoreAtBoot(c.storePath, c.updater)
+	if len(report.Closed) != 1 || len(report.Unresolved) != 0 {
+		t.Fatalf("boot report = %+v", report)
+	}
+	raw, err := os.ReadFile(filepath.Join(c.dataDir, "state.db-wal"))
+	if err != nil || string(raw) != "live wal frames" {
+		t.Fatalf("the live -wal = %q %v: the undo moved a sidecar it never renamed (and boot then deleted it with the staging)", raw, err)
+	}
+	if staged := leftovers(c.dataDir, "rematerialize-staging-*"); len(staged) != 0 {
+		t.Fatalf("staging left: %v", staged)
+	}
+	rec := c.record(t)
+	if rec["state"] != "interrupted" || rec["live_state"] != "pre_restore" {
+		t.Fatalf("the act = %v", rec)
+	}
+}
+
+// An engine failure is settled by the one routine: nothing is deleted by the
+// engine, the renames are undone from the facts, the store is reopened, and
+// the act ends failed on the pre-restore state.
+func TestRestoreEnginePanicsAreSettledByTheRoutine(t *testing.T) {
+	t.Cleanup(func() { restoreInstallCrashHook = nil })
+	for _, point := range []string{"after_flip_started", "before_flip_completed"} {
+		name := map[string]string{"after_flip_started": "before_renames", "before_flip_completed": "after_renames"}[point]
+		t.Run(name, func(t *testing.T) {
+			f := newRestoreActFixture(t, "computer-act-panic-"+strings.ReplaceAll(name, "_", "-"), 3)
+			restoreInstallCrashHook = func(p string) {
+				if p == point {
+					panic("injected panic at " + point)
+				}
+			}
+			_, accepted := f.post("")
+			end := f.waitTerminal(f.actID(accepted))
+			if end["state"] != "failed" || end["live_state"] != "pre_restore" {
+				t.Fatalf("act = %v, want failed on the pre-restore state", end)
+			}
+			head, err := f.rt.store.Head(context.Background(), f.computerID)
+			if err != nil || head == nil || head.CanonicalEventHead == f.checkpoint.Request.AcceptedEventHead {
+				t.Fatalf("live head = %+v %v: the store is not the open, unrestored one", head, err)
+			}
+			if got := f.served(); got != "<html>live</html>" {
+				t.Fatalf("served SPA = %q", got)
+			}
+			dataDir := filepath.Dir(f.storePath)
+			if len(leftovers(dataDir, "rematerialize-staging-*"))+len(leftovers(dataDir, "rematerialize-quarantine-*")) != 0 {
+				t.Fatal("directories left after the act ended")
+			}
+			restoreInstallCrashHook = nil
+			if again := RepairRestoreAtBoot(f.storePath, f.updaterRoot); len(again.Closed) != 0 || len(again.Unresolved) != 0 {
+				t.Fatalf("boot found work after a settled act: %+v", again)
+			}
+		})
+	}
+}
+
+// Two write failures in a row: the flip completed, its fact cannot be written
+// and neither can the corrective one. The routine does not undo (the files and
+// whichever fact the disk holds must agree), the act stays open and
+// unresolved, acceptance refuses from the record with no boot between, and the
+// boot then finishes it from the fact.
+func TestRestoreDoubleWriteFailureIsUnresolvedNotTerminal(t *testing.T) {
+	t.Cleanup(func() { restoreInstallWriteFault = nil })
+	f := newRestoreActFixture(t, "computer-act-double", 3)
+	flipStarts := 0
+	restoreInstallWriteFault = func(phase string) error {
+		switch phase {
+		case "flip_completed":
+			return errors.New("write restore-acts: no space left on device")
+		case "flip_started":
+			flipStarts++
+			if flipStarts >= 2 {
+				return errors.New("write restore-acts: no space left on device")
+			}
+		}
+		return nil
+	}
+	_, accepted := f.post("")
+	act := f.actID(accepted)
+	drainRestoreActs(f.rt)
+	_, view := f.status(act)
+	if restoreActTerminal(fmt.Sprint(view["state"])) || view["live_state"] != "unresolved" {
+		t.Fatalf("act = %v: an act with an unresolved live state was written terminal", view)
+	}
+	code, refused := f.post("another-key")
+	refusal, _ := refused["refusal"].(map[string]any)
+	if code != http.StatusConflict || refusal == nil || refusal["name"] != "restore_unresolved" {
+		t.Fatalf("a restore over an unresolved act answered %d %v, want 409 restore_unresolved with no boot between", code, refused)
+	}
+	rec, _ := serveHealth(t, &APIHandler{rt: f.rt})
+	var health map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &health); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := health["restore_unresolved"].([]any); len(list) != 1 || list[0] != act {
+		t.Fatalf("/health restore_unresolved = %v, want [%s]", health["restore_unresolved"], act)
+	}
+	restoreInstallWriteFault = nil
+	report := RepairRestoreAtBoot(f.storePath, f.updaterRoot)
+	if len(report.Closed) != 1 || len(report.Unresolved) != 0 {
+		t.Fatalf("boot report = %+v, want the act finished from the fact the disk held", report)
+	}
+	if got := f.served(); got != "<html>live</html>" {
+		t.Fatalf("served SPA = %q after the boot's undo", got)
+	}
+}
+
+// Unresolved is the answer when the prior release cannot be put back: the
+// store is undone but `current` is not, and that is never reported clean.
+func TestRepairIsUnresolvedWhenThePriorReleaseCannotBePutBack(t *testing.T) {
+	c := runCrashChild(t, "after_release_restaged")
+	path := filepath.Join(c.dataDir, "restore-acts", c.ActID+".json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rec map[string]any
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		t.Fatal(err)
+	}
+	rec["prior_release_digest"] = "sha256:" + strings.Repeat("f", 64) // not a release this updater root has
+	raw, _ = json.Marshal(rec)
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report := RepairRestoreAtBoot(c.storePath, c.updater)
+	if len(report.Unresolved) != 1 || len(report.Closed) != 0 {
+		t.Fatalf("boot report = %+v, want the act unresolved", report)
+	}
+	if after := c.record(t); after["state"] == "interrupted" || after["state"] == "restored" {
+		t.Fatalf("the record was closed over a release that was not put back: %v", after["state"])
+	}
+	if staged := leftovers(c.dataDir, "rematerialize-staging-*"); len(staged) == 0 {
+		t.Fatal("staging was deleted under an unresolved act")
+	}
+}
+
+// Acceptance reads the records: an open record refuses a new restore with no
+// boot in between.
+func TestRestoreActRefusedFromAnOpenRecord(t *testing.T) {
+	f := newRestoreActFixture(t, "computer-act-open-record", 2)
+	dir := filepath.Join(filepath.Dir(f.storePath), "restore-acts")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := json.Marshal(map[string]any{"schema_version": 1, "act_id": "ra-open", "computer_id": f.computerID, "state": "installing", "install_phase": "flip_started", "live_state": "unresolved"})
+	if err := os.WriteFile(filepath.Join(dir, "ra-open.json"), rec, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, view := f.post("")
+	refusal, _ := view["refusal"].(map[string]any)
+	if code != http.StatusConflict || refusal == nil || refusal["name"] != "restore_unresolved" {
+		t.Fatalf("answered %d %v, want 409 restore_unresolved from the record", code, view)
+	}
+}
+
+// The first record is durable and its failure refuses the request.
+func TestRestoreAcceptRefusedWhenItsFirstRecordCannotBeWritten(t *testing.T) {
+	t.Cleanup(func() { restoreInstallWriteFault = nil })
+	f := newRestoreActFixture(t, "computer-act-first-record", 2)
+	restoreInstallWriteFault = func(phase string) error {
+		if phase == "accepted" {
+			return errors.New("write restore-acts: no space left on device")
+		}
+		return nil
+	}
+	code, view := f.post("")
+	if code != http.StatusInternalServerError || !strings.Contains(fmt.Sprint(view["error"]), "no space left") {
+		t.Fatalf("answered %d %v, want the failed write named", code, view)
+	}
+	if n := f.intents(); n != 0 {
+		t.Fatalf("the refused request left %d intents", n)
+	}
+	restoreInstallWriteFault = nil
+	if code, view := f.post(""); code != http.StatusAccepted {
+		t.Fatalf("the slot was not released: %d %v", code, view)
+	}
+}
+
+// The renames' directories are synced before the fact that says they were made.
+func TestRestoreSyncsTheFlipsDirectoriesBeforeItsFact(t *testing.T) {
+	t.Cleanup(func() { restoreInstallWriteFault = nil; restoreDirSyncHook = nil })
+	f := newRestoreActFixture(t, "computer-act-syncs", 2)
+	var mu sync.Mutex
+	var log []string
+	restoreDirSyncHook = func(dir string) {
+		mu.Lock()
+		log = append(log, "sync:"+filepath.Base(dir))
+		mu.Unlock()
+	}
+	restoreInstallWriteFault = func(phase string) error {
+		mu.Lock()
+		log = append(log, "write:"+phase)
+		mu.Unlock()
+		return nil
+	}
+	_, accepted := f.post("")
+	f.waitTerminal(f.actID(accepted))
+	mu.Lock()
+	defer mu.Unlock()
+	completed := -1
+	for i, entry := range log {
+		if entry == "write:flip_completed" {
+			completed = i
+		}
+	}
+	if completed < 0 {
+		t.Fatalf("no flip_completed write in %v", log)
+	}
+	var sawData, sawQuarantine bool
+	for _, entry := range log[:completed] {
+		sawData = sawData || entry == "sync:data"
+		sawQuarantine = sawQuarantine || strings.HasPrefix(entry, "sync:rematerialize-quarantine-")
+	}
+	if !sawData || !sawQuarantine {
+		t.Fatalf("directories synced before flip_completed: data=%v quarantine=%v in %v", sawData, sawQuarantine, log)
 	}
 }
