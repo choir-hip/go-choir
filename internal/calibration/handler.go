@@ -20,12 +20,16 @@ import (
 type Ledger interface {
 	AppendCommitmentRecord(ctx context.Context, ownerID, computerID string, rec types.CommitmentRecord) (string, error)
 	GetCommitmentRecord(ctx context.Context, ownerID, computerID, recordID string) (*types.CommitmentRecord, error)
-	// ListCalibrationRecordsExcludingAgentPrefix is the generic routes' only
-	// read of calibration records: it leaves the Autoradio namespace out in
-	// the query, before the limit (design 4.3). The unfiltered read is not on
-	// this interface, so no generic path can reach a reserved record.
-	ListCalibrationRecordsExcludingAgentPrefix(ctx context.Context, ownerID, computerID, agent, excludePrefix string, limit int) ([]types.CommitmentRecord, error)
+	// ListCalibrationRecordsExcludingAgentPrefixPage is the generic routes'
+	// only read of calibration records, newest first by cursor: it leaves the
+	// Autoradio agent prefix out in the query, before any limit (design 4.3).
+	// The unfiltered read is not on this interface, so no generic path can
+	// reach a reserved record.
+	ListCalibrationRecordsExcludingAgentPrefixPage(ctx context.Context, ownerID, computerID, agent, excludePrefix, before string, limit int) ([]types.CommitmentRecord, string, error)
 }
+
+// DefaultPageSize is how many records one page of the generic read holds.
+const DefaultPageSize = 500
 
 // DefaultMaxRecords bounds how many calibration records one read joins.
 const DefaultMaxRecords = 10000
@@ -194,7 +198,7 @@ func (h *Handler) fail(w http.ResponseWriter, err error) {
 
 // view joins one claim with its settlements.
 func (h *Handler) view(ctx context.Context, sc scope, claim types.CommitmentRecord) (ClaimView, error) {
-	records, err := h.Ledger.ListCalibrationRecordsExcludingAgentPrefix(ctx, sc.owner, sc.computer, claim.Calibration.Agent, AutoradioNamespace, h.maxRecords())
+	records, _, err := h.readUnreserved(ctx, sc, claim.Calibration.Agent)
 	if err != nil {
 		return ClaimView{}, err
 	}
@@ -371,18 +375,9 @@ func (h *Handler) claims(ctx context.Context, sc scope, f Filters) ([]ClaimView,
 	if f.Agent != "" && IsReservedAgent(f.Agent) {
 		return nil, false, nil // the namespace is not listed, even when asked for by name
 	}
-	max := h.maxRecords()
-	records, err := h.Ledger.ListCalibrationRecordsExcludingAgentPrefix(ctx, sc.owner, sc.computer, f.Agent, AutoradioNamespace, max)
+	kept, truncated, err := h.readUnreserved(ctx, sc, f.Agent)
 	if err != nil {
 		return nil, false, err
-	}
-	// The query leaves out reserved agents before the limit; a record
-	// reserved only by a tag (written before the reservation) is dropped here.
-	kept := make([]types.CommitmentRecord, 0, len(records))
-	for i := range records {
-		if !IsReservedRecord(&records[i]) {
-			kept = append(kept, records[i])
-		}
 	}
 	var out []ClaimView
 	for _, c := range JoinClaims(kept, h.now()) {
@@ -390,7 +385,37 @@ func (h *Handler) claims(ctx context.Context, sc scope, f Filters) ([]ClaimView,
 			out = append(out, c)
 		}
 	}
-	return out, len(records) >= max, nil
+	return out, truncated, nil
+}
+
+// readUnreserved reads the newest maxRecords calibration records that are not
+// in the reserved namespace, newest first. The query leaves out reserved
+// agents before the limit; a record that only the Go test reserves (a tag
+// written before the reservation, a hyphen-led agent that Slug folds in) is
+// dropped here and the read pages on until the limit is filled, so such a
+// record never uses up a place. truncated is true only when unreserved records
+// remain past the limit.
+func (h *Handler) readUnreserved(ctx context.Context, sc scope, agent string) (kept []types.CommitmentRecord, truncated bool, err error) {
+	max := h.maxRecords()
+	before := ""
+	for {
+		page, next, err := h.Ledger.ListCalibrationRecordsExcludingAgentPrefixPage(ctx, sc.owner, sc.computer, agent, AutoradioNamespace, before, DefaultPageSize)
+		if err != nil {
+			return nil, false, err
+		}
+		for i := range page {
+			if !IsReservedRecord(&page[i]) {
+				kept = append(kept, page[i])
+			}
+		}
+		if len(kept) > max {
+			return kept[:max], true, nil
+		}
+		if next == "" {
+			return kept, false, nil
+		}
+		before = next
+	}
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request, sc scope) {
