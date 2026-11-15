@@ -236,6 +236,7 @@ entered below as lapsed, not scored.
 | C96 | 2026-11-15T12:31Z | true | landed 10:07Z as 8b15ec2e9, CI 43702528075, the paper booted it at 10:31Z. Console log 10:31Z to 12:31Z: 73 intake flushes; 70 `jev job: site=intake_labels` lines, 57 with calls=1 and 13 with calls=2; all 13 `jev split:` lines `forced_by=map[request_tokens_64k:1]`; no flush reports unlabelled above 0; paper calls per hour 1,255 and 1,530 against 1,483 before (status-hourly); no revert. Not in the claim and recorded as problems: 32 of the 73 flushes were one capture in its own call; 3 flushes wrote a label with no call (two after a timed-out index read, one with no logged cause) | 0.16 |
 | C68 | 2026-11-15T12:31Z | false | the coalescing landed (d81cb98b4 and the storage ledger: groups stay single, 1.16 writes per commit) and the paper wrote about 10,100 tape events an hour on 2026-11-15, 2.7-fold under the 27,000 of 2026-11-13, short of 3-fold and not attributable to coalescing; the corpusd-calls ratio was not measured | 0.2025 |
 | C101 | 2026-11-15T18:21Z | void | The six uninterrupted hours never existed: the lead's own landing of 8d81b7fe5 restarted the paper at about 18:05Z and changed what the counter measures. Last reading on 6387e5dff, 16:05Z to 17:45Z (1.6 h): metadata 93.2% of choir.run body bytes (16.07 of 17.25 MB), `texture_available_source_entities` 81.8%; attributed ops 1,373 against the tape's 1,373. Both parts held in that window; the test as entered became impossible, so it is not scored. | not scored |
+| C102 | 2026-11-15T22:01Z | false | The mean passed and the second clause did not. The paper booted 8d81b7fe5 at 18:11Z and ran 3.8 h without a restart; `telemetry_batching.run_writes` at 22:00Z: 4,513 writes, 11,297,536 body bytes, mean 2,503 a write (the claim allowed 4,500, against 8,972 before). `texture_available_source_entities` is still the largest metadata key in 26 writes carrying 907,714 bytes, 8.0% of body bytes, above the 5% the claim allowed, and `metadata_key_changes` counts one write that changed it since boot: one writer still stores the list. No join-key error in the paper's recent log. The 26 writes are not yet traced to a site. | 0.49 |
 
 ### Scorecard
 
@@ -246,5 +247,5 @@ false, 1 partial), 7 lapsed.
 |---|---|---|
 | 0.0 to 0.3 | 0 | n/a |
 | 0.3 to 0.6 | 13 | 3, and 2 partial |
-| 0.6 to 0.8 | 20 | 16, and 1 partial |
+| 0.6 to 0.8 | 21 | 16, and 1 partial |
 | 0.8 to 1.0 | 0 | n/a |
