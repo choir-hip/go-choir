@@ -168,3 +168,13 @@ The owner tested onboarding, where the app helps set up the edition.
   set aside on 2026-11-15 to come back after hands-free works; this ruling
   says what it comes back as: an answer grounded in the saved articles, then
   the server's answer.
+- **Problem: selecting a topic chip reflowed the grid** (the checkmark
+  widened the chip). Ruling: "Can't do that." Fixed on `lane/autoradio-qa`
+  (the checkmark is gone; the fill says selected) and installed 22:53Z.
+- **Problem: "start the radio" answered that there was nothing to report.**
+  Evidence: owner, after choosing topics: the radio said "you're with the
+  Autoradio desk, and there's nothing to report now, so I'm just going to
+  let the music play", while the paper held many stories. Ruling: it must
+  never say there is nothing to report; "there's always material". Belief
+  (owner's and the lead's): the radio's start is not wired to the paper's
+  stories. Not yet traced.
