@@ -7,6 +7,7 @@
 package objectgraph
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -33,6 +34,63 @@ type Object struct {
 	UpdatedAt    time.Time       `json:"updated_at"`
 	Tombstone    bool            `json:"tombstone,omitempty"`
 	SupersededBy string          `json:"superseded_by,omitempty"`
+}
+
+// UnmarshalJSON is the reader of docs/design/object-bodies-inline-on-the-tape-2026-11-15.md.
+// An object op carries its body either as base64 in "body" (the form every
+// tape written so far holds) or as the body's own JSON in "body_json". The
+// body_json bytes become Body exactly, uncompacted and unescaped, so the
+// content hash and every row are the same in either form. The reader accepts
+// both forms forever, because tape is read forever. It refuses an op that
+// carries both (the presence of the "body" key, whatever its value) and
+// "body_json":null; it never prefers one body to another.
+//
+// The decode runs an inner json.Unmarshal, so an outer decoder's
+// DisallowUnknownFields is not honoured for Object.
+//
+// Only decoding is custom. Object's marshalling is unchanged, so every writer
+// still emits "body".
+func (o *Object) UnmarshalJSON(data []byte) error {
+	type plain Object // no methods: no recursion
+	aux := struct {
+		*plain
+		BodyJSON json.RawMessage `json:"body_json,omitempty"`
+	}{plain: (*plain)(o)}
+	// A reused destination keeps its body unless the op carries one, as the
+	// default decoder does; the slot is cleared so that a body already there
+	// is not mistaken for the op's own.
+	previous := o.Body
+	o.Body = nil
+	if err := json.Unmarshal(data, &aux); err != nil {
+		o.Body = previous
+		return err
+	}
+	if aux.BodyJSON == nil {
+		if o.Body == nil {
+			o.Body = previous
+		}
+		return nil
+	}
+	if bytes.Equal(aux.BodyJSON, []byte("null")) {
+		return errors.New("objectgraph: body_json is null")
+	}
+	// The refusal is on the presence of the "body" key, not on the length of
+	// the decoded body: "body":"" and "body":null beside body_json are two
+	// bodies spelled. A RawMessage field sees the literal null too. This second
+	// pass runs only for an op that carries body_json, which no writer emits yet.
+	var probe struct {
+		Body json.RawMessage `json:"body"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil {
+		o.Body = previous
+		return err
+	}
+	if probe.Body != nil {
+		o.Body = previous
+		return errors.New("objectgraph: object carries both body and body_json")
+	}
+	o.Body = []byte(aux.BodyJSON) // a RawMessage the decoder allocated for this value: already a copy
+	return nil
 }
 
 type Edge struct {

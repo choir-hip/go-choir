@@ -21,6 +21,15 @@ const (
 	ProjectorVersionV2 = 2
 	ProjectionBatchV2  = 2
 
+	// ProjectionBatchV3 is a batch in which an object op may carry its body as
+	// raw JSON in "body_json" instead of base64 in "body"
+	// (docs/design/object-bodies-inline-on-the-tape-2026-11-15.md). The projector
+	// did not change, so it pairs with ProjectorVersionV2. A binary that
+	// predates the reader refuses this version at Validate, which is the fence:
+	// without it such a binary would read an inline op as a bodyless object.
+	// Nothing writes this version yet; the reader ships first.
+	ProjectionBatchV3 = 3
+
 	ProjectionOpDesktopState               = "desktop_state_recorded"
 	ProjectionOpObject                     = "object_recorded"
 	ProjectionOpObjectEdge                 = "object_edge_recorded"
@@ -364,7 +373,8 @@ func (p RunMemoryRetireProjection) Validate() error {
 
 func (b ProjectionBatch) Validate() error {
 	validVersion := (b.Version == ProjectionBatchV1 && b.ProjectorVersion == ProjectorVersionV1) ||
-		(b.Version == ProjectionBatchV2 && b.ProjectorVersion == ProjectorVersionV2)
+		(b.Version == ProjectionBatchV2 && b.ProjectorVersion == ProjectorVersionV2) ||
+		(b.Version == ProjectionBatchV3 && b.ProjectorVersion == ProjectorVersionV2)
 	if !validVersion {
 		return fmt.Errorf("%w: unsupported version", ErrProjectionBatchInvalid)
 	}
