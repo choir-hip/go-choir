@@ -23,10 +23,14 @@ public struct LayoutEngine: Sendable {
 
     // MARK: ranking
 
-    public func rank(_ stories: [PaperStory], now: Date) -> [PaperStory] {
+    /// `priority` (route -> a count, default 0) puts stories with a higher count first, whatever their weight; My edition uses it for "more of your picks
+    /// first". Everything else about the order is as before.
+    public func rank(_ stories: [PaperStory], now: Date, priority: [String: Int] = [:]) -> [PaperStory] {
         var seen = Set<String>()
         let unique = stories.filter { seen.insert($0.route).inserted }
         return unique.sorted { a, b in
+            let pa = priority[a.route] ?? 0, pb = priority[b.route] ?? 0
+            if pa != pb { return pa > pb }
             let wa = a.weight(now: now), wb = b.weight(now: now)
             if wa != wb { return wa > wb }
             if a.updated != b.updated { return (a.updated ?? .distantPast) > (b.updated ?? .distantPast) }
@@ -36,8 +40,8 @@ public struct LayoutEngine: Sendable {
 
     // MARK: composing
 
-    public func compose(_ stories: [PaperStory], width: Double, now: Date) -> [PaperBand] {
-        let all = rank(stories, now: now)
+    public func compose(_ stories: [PaperStory], width: Double, now: Date, priority: [String: Int] = [:]) -> [PaperBand] {
+        let all = rank(stories, now: now, priority: priority)
         var pool = all.filter { !$0.isOpinion }
         var opinions = all.filter { $0.isOpinion }
         guard !pool.isEmpty || !opinions.isEmpty else { return [] }
@@ -228,27 +232,41 @@ extension String {
 // MARK: the whole page
 
 public enum PaperComposer {
-    /// Edition → the front page value the Contract reads. `section` is "" for the front, or a section slug.
-    public static func front(stories: [PaperStory], section: String = "", width: Double, now: Date? = nil, edition: String = "",
+    /// The paper's front for one view. `stories` is the front list (newest first, as the server sends it); `view` is "front", "mine" or a category
+    /// id (V7: an unknown id is a category of that name). `categoryStories` is the category's own list from the server (`?section=`), nil when it
+    /// could not be asked: the front list is filtered instead. `picks` are the reader's saved topics. `live` is the answer's `sections`.
+    public static func front(stories: [PaperStory], view: String = PaperViews.front, picks: [String] = [], categoryStories: [PaperStory]? = nil,
+                             live: [LiveSection] = [], width: Double, now: Date? = nil, edition: String = "",
                              engine: LayoutEngine = LayoutEngine(), status: String = "ready", message: String = "") -> PaperFront {
         let at = now ?? stories.compactMap(\.updated).max() ?? Date()
-        let rankedAll = engine.rank(stories, now: at)
-        var counts: [String: (label: String, n: Int)] = [:]
-        var order: [String] = []
-        for s in rankedAll {
-            let label = s.section.isEmpty ? "News" : s.section
-            let id = PaperText.slug(label)
-            if counts[id] == nil { counts[id] = (label, 0); order.append(id) }
-            counts[id]!.n += 1
+        let sections = PaperViews.sections(live: live, stories: stories)
+        var viewId = PaperViews.front, viewLabel = "Front page", sectionId = "", sectionLabel = ""
+        var shown: [PaperStory] = Array(stories.prefix(PaperViews.frontLimit))
+        var priority: [String: Int] = [:]
+        var mineState = "", mineFrom = "", note = "", empty = "Nothing on the front page yet."
+        if view == PaperViews.mine {
+            viewId = PaperViews.mine; viewLabel = "My edition"
+            let m = MyEdition.build(stories: stories, picks: picks, sections: sections)
+            mineState = m.state.rawValue; mineFrom = m.from
+            switch m.state {
+            case .ready: shown = m.stories; priority = m.priority
+            case .noPicks: note = "Choose the topics you care about and this page arranges the paper around them. Until then, here is the front page."
+            case .noMatch: note = "Nothing in today's paper matches your topics yet. Here is the front page."
+            }
+        } else if PaperViews.isCategory(view) {
+            let sec = PaperViews.resolve(view, in: sections) ?? PaperSection(id: view, label: PaperViews.display(view), count: 0, current: false)
+            viewId = sec.id; viewLabel = sec.label; sectionId = sec.id; sectionLabel = sec.label
+            shown = categoryStories ?? stories.filter { PaperViews.belongs($0, to: sec) }
+            empty = "Nothing in \(sec.label) yet."
         }
-        let sections = order.map { PaperSection(id: $0, label: counts[$0]!.label, count: counts[$0]!.n, current: $0 == section) }
-        let shown = section.isEmpty ? stories : stories.filter { PaperText.slug($0.section.isEmpty ? "News" : $0.section) == section }
-        let bands = engine.compose(shown, width: width, now: at)
+        let bands = engine.compose(shown, width: width, now: at, priority: priority)
         let newest = shown.compactMap(\.updated).max()
         let stack = PaperFront.stack(of: bands)
-        return PaperFront(status: shown.isEmpty ? "empty" : status, message: shown.isEmpty && message.isEmpty ? "Nothing on the front page yet." : message,
+        return PaperFront(status: shown.isEmpty ? "empty" : status, message: shown.isEmpty && message.isEmpty ? empty : message,
                           edition: edition, layout: engine.doc.name, composition: LayoutEngine.composition(bands),
                           dateLine: PaperText.dateLine(at), updated: newest.map { "Updated \(PaperText.relative($0, now: at))" } ?? "",
-                          sectionId: section, sectionLabel: counts[section]?.label ?? "", count: shown.count, sections: sections, bands: bands, routes: stack.routes, titles: stack.titles)
+                          sectionId: sectionId, sectionLabel: sectionLabel, viewId: viewId, viewLabel: viewLabel,
+                          mineState: mineState, mineFrom: mineFrom, note: note,
+                          count: shown.count, sections: sections, bands: bands, routes: stack.routes, titles: stack.titles)
     }
 }
