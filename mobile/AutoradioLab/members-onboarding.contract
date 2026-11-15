@@ -2,7 +2,7 @@
 // (AutoradioModule+Onboarding.swift): setup rows, microphone and hearing checks, the edition topics, the edition. The page reads
 // it as one resource, `ob`; every button is a send that answers the same shape.
 use onboardingState, onboardingBegin, onboardingRetry, onboardingFallback, onboardingMic, onboardingMicNext, onboardingHearing from "@choir/autoradio"
-use onboardingTopics, onboardingTopicToggle, onboardingTopicAdd, onboardingTalk, onboardingTopicsDone, onboardingDemoSay from "@choir/autoradio"
+use onboardingTopics, onboardingTopicToggle, onboardingTopicExpand, onboardingTopicAdd, onboardingTalk, onboardingTopicsDone, onboardingDemoSay from "@choir/autoradio"
 use onboardingEditionRetry, onboardingContinueAnyway, onboardingSkip, onboardingReset from "@choir/autoradio"
 use pageOpen, pageClose, choirStartRadio from "@choir/autoradio"
 use Onboarding from "@choir/autoradio"
@@ -33,6 +33,8 @@ members Autoradio
     send obm = onboardingTopics()
   action obToggleTopic(label: string)
     send obm = onboardingTopicToggle(label=label)
+  action obExpandTopic(label: string)
+    send obm = onboardingTopicExpand(label=label)
   action editObTopic(v: string)
     obTopicText = v
   action obAddTopic

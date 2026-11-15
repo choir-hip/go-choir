@@ -64,7 +64,7 @@ final class OnboardingController: @unchecked Sendable {
         if let d = try? Data(contentsOf: progressFile), let p = try? JSONDecoder().decode(OnboardingProgress.self, from: d) { progress = p }
         // Coming back to the topics step shows what was saved. The microphone never opens by itself (restart rule).
         if progress.topicsStarted == true, !progress.editionDone, !progress.skipped {
-            let s = EditionSetupSession(suggestions: EditionTopics.suggestions(), file: topicsFile)
+            let s = EditionSetupSession(suggestions: EditionTopics.suggestions(), file: topicsFile, liveSections: [])
             session = s; EditionSetupSession.shared = s
             step = "topics"
         } else if progress.editionDone { step = "done" }
@@ -228,8 +228,9 @@ final class OnboardingController: @unchecked Sendable {
     /// The step: chips the reader taps, a field to type their own, and "Talk to it". Nothing here needs the microphone or the network.
     func startTopics() {
         lock.lock(); let existing = session; lock.unlock()
-        let s = existing ?? EditionSetupSession(suggestions: EditionTopics.suggestions(liveSections: sections()), file: topicsFile)
-        s.setSuggestions(EditionTopics.suggestions(liveSections: sections()))
+        let live = sections()
+        let s = existing ?? EditionSetupSession(suggestions: EditionTopics.suggestions(liveSections: live), file: topicsFile, liveSections: live)
+        s.setLiveSections(live)
         wire(s)
         EditionSetupSession.shared = s
         set { session = s; step = "topics"; progress.topicsStarted = true; progress.skipped = false; message = "" }
@@ -237,6 +238,9 @@ final class OnboardingController: @unchecked Sendable {
     }
 
     func toggleTopic(_ label: String) { session?.toggle(label) }
+
+    /// The disclosure control: open or close a category. Not a selection.
+    func expandTopic(_ label: String) { session?.toggleExpanded(label) }
 
     func addTopic(_ text: String) {
         guard let s = session else { return }
@@ -361,8 +365,9 @@ final class OnboardingController: @unchecked Sendable {
             ["stage": r.stage, "name": r.name, "model": r.model, "sizeLabel": r.sizeLabel, "state": r.state, "progress": r.progress, "statusLine": r.statusLine,
              "isFallback": r.isFallback, "canRetry": r.canRetry, "canFallback": r.canFallback, "numbers": r.numbers]
         }
-        let chips: [[String: Any]] = (session?.chips() ?? EditionTopics.suggestions().map { EditionChip(label: $0, selected: false, own: false) }).map {
-            ["label": $0.label, "selected": $0.selected, "own": $0.own]
+        let tree: [[String: Any]] = (session?.treeRows() ?? TopicTree.rows(expanded: [], selection: EditionSelection(), own: [])).map {
+            ["key": $0.key, "label": $0.label, "kind": $0.kind, "selected": $0.selected, "partial": $0.partial,
+             "expandable": $0.expandable, "expanded": $0.expanded, "note": $0.note]
         }
         let picked = session?.topics ?? []
         var card = "", cardBody = ""
@@ -381,7 +386,7 @@ final class OnboardingController: @unchecked Sendable {
         if let p = setup?.profile { device = p.chip + ", " + String(format: "%.0f", p.memoryGB) + " GB" }
         d["device"] = device
         d["mic"] = mic; d["level"] = level; d["heard"] = heard; d["route"] = route; d["hearingOK"] = hearingOK
-        d["chips"] = chips; d["pickedCount"] = picked.count; d["selectionLine"] = EditionSetupText.selectionLine(picked)
+        d["tree"] = tree; d["pickedCount"] = picked.count; d["selectionLine"] = EditionSetupText.selectionLine(picked)
         d["explainer"] = EditionSetupText.explainer; d["voiceHint"] = EditionSetupText.voiceHint; d["talking"] = talking
         d["demo"] = demo; d["demoWords"] = "add space and chess"
         d["editionStatus"] = editionStatus; d["writingLine"] = writingLine; d["editionError"] = editionError
@@ -425,6 +430,7 @@ extension AutoradioModule {
         handle("onboardingHearing") { args, reply in c.hearing(ok: (args["ok"] as? String) == "true"); reply(c.view()) }
         handle("onboardingTopics") { args, reply in c.startTopics(); reply(c.view()) }
         handle("onboardingTopicToggle") { args, reply in c.toggleTopic(args["label"] as? String ?? ""); reply(c.view()) }
+        handle("onboardingTopicExpand") { args, reply in c.expandTopic(args["label"] as? String ?? ""); reply(c.view()) }
         handle("onboardingTopicAdd") { args, reply in c.addTopic(args["text"] as? String ?? ""); reply(c.view()) }
         handle("onboardingTalk") { args, reply in c.toggleTalk(); reply(c.view()) }
         handle("onboardingTopicsDone") { args, reply in c.finishTopics(); reply(c.view()) }

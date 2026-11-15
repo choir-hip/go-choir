@@ -11,7 +11,7 @@
 // testIds: signin, signin-intro, signin-code, signin-open, signin-cancel, signin-message (unchanged);
 //   ob-steps, ob-mark-slot, ob-begin, ob-begin-mobile, ob-skip, ob-row-<stage>, ob-retry-<stage>, ob-fallback-<stage>,
 //   ob-summary, ob-mic-ask, ob-mic-level, ob-heard, ob-mic-next, ob-route, ob-hearing-yes, ob-hearing-no, ob-topics-start,
-//   ob-topics, ob-explainer, ob-topic-<label>, ob-topic-input, ob-topic-add, ob-selection, ob-talk, ob-topics-done, ob-demo, ob-demo-say, ob-wait-slot, ob-writing-line,
+//   ob-topics, ob-explainer, ob-topic-<label>, ob-topic-open-<label>, ob-trow-<row key>, ob-topic-input, ob-topic-add, ob-selection, ob-talk, ob-topics-done, ob-demo, ob-demo-say, ob-wait-slot, ob-writing-line,
 //   ob-edition-retry, ob-continue-anyway, ob-edition, ob-edition-open, ob-start-radio, firstrun-card, firstrun-open.
 use Theme, ChoirAuth, Onboarding from "@choir/autoradio"
 use Card, PaperCard, PageScroll, Btn from "./ui.contract"
@@ -21,6 +21,10 @@ use VoiceStep from "./voice.contract"
 keyframes obBreathe
   from opacity=1 scale=1
   to opacity=0.35 scale=0.7
+
+keyframes obReveal
+  from opacity=0
+  to opacity=1
 
 // ---------------------------------------------------------------- sign-in
 
@@ -116,7 +120,9 @@ component SetupRowItem
               button press=obFallback(stage) testId=`ob-fallback-${stage}` appearance="none"
                 Btn(label="Use the fallback", primary=false, wide=false)
 
-// One topic: a pill the reader taps to select, and taps again to deselect. A selected pill is filled with the accent.
+// One topic: a pill the reader taps to select, and taps again to deselect. A selected pill is filled with the accent; a category with
+// only some of its subtopics picked ("partial") has the accent ring and text. The border is the same width in every state and
+// nothing is added or removed on selection, so selecting never changes the chip's size or anything's position.
 component TopicChip
   inject
     th: Theme
@@ -124,12 +130,56 @@ component TopicChip
   props
     label: string
     selected: bool
+    partial: bool
+  derive chipLabel = partial ? `${label}, some inside picked` : label
   view
-    button press=obToggleTopic(label) testId=`ob-topic-${label}` role="radio" aria-checked=selected aria-label=label appearance="none" flex-shrink=0
-      row padding="10px 14px" border-radius=th.radiusPill align-items="center" justify-content="center" min-height=44 gap=6
-        background-color=(selected ? th.accent : th.paper2) border-width=1 border-style="solid" border-color=(selected ? th.accent : th.rule)
-        // No checkmark: a mark that appears on selection widens the chip and reflows the grid. The fill says selected.
-        text label font-family=th.fontUi font-size=15 font-weight=600 color=(selected ? th.onAccent : th.fg)
+    button press=obToggleTopic(label) testId=`ob-topic-${label}` role="radio" aria-checked=selected aria-label=chipLabel appearance="none" flex-shrink=0
+      row padding="10px 14px" border-radius=th.radiusPill align-items="center" justify-content="center" min-height=44
+        background-color=(selected ? th.accent : th.paper2) border-width=2 border-style="solid" border-color=((selected or partial) ? th.accent : th.rule)
+        text label font-family=th.fontUi font-size=15 font-weight=600 color=(selected ? th.onAccent : (partial ? th.accent : th.fg))
+
+// One line of the topic tree. A category is a row: the disclosure control at the left edge (it opens and closes; it does not select),
+// then the chip (it selects), then a quiet note ("2 picked"). A subtopic sits indented beneath its category behind a vertical rule and an
+// elbow; one that sits under several categories shows "also in <the others>" and lights up under all of them, because it is one topic.
+// Opening and closing moves what is below, gently (not with Reduce Motion); selecting moves nothing.
+component TopicRowItem
+  inject
+    th: Theme
+    obExpandTopic: action
+  props
+    rowId: string
+    label: string
+    kind: string
+    selected: bool
+    partial: bool
+    expandable: bool
+    expanded: bool
+    note: string
+  derive discLabel = expanded ? `Close ${label}` : `Open ${label}`
+  derive discGlyph = expanded ? "▾" : "▸"
+  view
+    column width="100%"
+      if kind == "yoursHead"
+        text "Yours" testId="ob-topics-yours" font-family=th.fontUi font-size=13 color=th.muted margin-top=12
+      if kind == "category" or kind == "yours"
+        row align-items="center" gap=4 min-height=52 width="100%" testId=`ob-trow-${rowId}`
+          if expandable
+            button press=obExpandTopic(label) testId=`ob-topic-open-${label}` appearance="none" aria-label=discLabel width=44 height=44
+              row width=44 height=44 align-items="center" justify-content="center"
+                text discGlyph font-family=th.fontUi font-size=18 color=th.muted
+          if expandable == false
+            box width=44 height=44
+          TopicChip(label=label, selected=selected, partial=partial)
+          text note font-family=th.fontUi font-size=12 color=th.muted flex=1 min-width=0 margin-left=6
+      if kind == "sub"
+        row min-height=52 width="100%" align-items="stretch" padding="0px 0px 0px 22px" testId=`ob-trow-${rowId}`
+          animation=(th.reducedMotion ? "none" : "obReveal 220ms ease-out")
+          box width=2 background-color=th.rule
+          row align-items="center" flex=1 min-width=0
+            box width=16 height=2 background-color=th.rule
+            box width=8 height=2
+            TopicChip(label=label, selected=selected, partial=false)
+            text note font-family=th.fontUi font-size=12 color=th.muted flex=1 min-width=0 margin-left=6
 
 component OnboardingPage
   inject
@@ -274,9 +324,9 @@ component OnboardingPage
         Card(level=1, testId="ob-explainer", minHeight=0)
           column padding=16 gap=8
             text ob.explainer font-family=th.fontRead font-size=17 line-height=1.45 color=th.fg
-        row flex-wrap="wrap" gap=8 width="100%" testId="ob-topics"
-          for c in ob.chips key=c.label
-            TopicChip(label=c.label, selected=c.selected)
+        column width="100%" testId="ob-topics"
+          for r in ob.tree key=r.key
+            TopicRowItem(rowId=r.key, label=r.label, kind=r.kind, selected=r.selected, partial=r.partial, expandable=r.expandable, expanded=r.expanded, note=r.note)
         row gap=8 align-items="center" width="100%"
           input value=obTopicText input=editObTopic submit=obAddTopic placeholder="Add your own topic" aria-label="Add your own topic" testId="ob-topic-input" enterkeyhint="done" flex=1 min-width=0 min-height=44
             font-family=th.fontRead font-size=17 color=th.fg padding="8px 12px" border-width=1 border-style="solid" border-color=th.rule border-radius=th.radiusControl background-color=th.paper2

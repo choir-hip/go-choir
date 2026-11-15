@@ -19,6 +19,10 @@ import Foundation
 //  E6 Saving needs no network: the selection is a local file written after every change; a failed write loses nothing in memory.
 //  E7 Coming back to the step shows the saved selection; a corrupt or empty file starts empty and never throws.
 //  E8 "Not X" or "no X" said aloud is not an exclusion list: it only takes X off the selection if it is there.
+//  T1 A subtopic under several parents is one topic: picking it anywhere lights it everywhere; the saved list holds it once.
+//  T2 Every subtopic has a parent, no label is a category and a subtopic at once (no cycles), and speech finds the one "AI".
+//  T3 Picking a category does not pick its subtopics, and picking a subtopic does not pick its category; a category with only some
+//     subtopics picked is "partial". Picking changes no row, only expanding does.
 //  E9 Chips of the reader's own topics stay on screen after they are deselected until the step is left, so a mis-tap is undone.
 
 /// What the edition setup offers and how a word becomes a topic.
@@ -31,15 +35,55 @@ public enum EditionTopics {
         ("science", "Science"), ("health", "Health"), ("climate", "Climate"), ("culture", "Culture"), ("sports", "Sports"),
     ]
 
-    /// Subjects the house sections' questions name (house.json `question`): world and politics (conflict, governments,
-    /// elections, courts), business (markets, banks, trade, jobs, prices), technology (AI, software, security),
-    /// science (space, physics, biology), health (medicine, public health), climate (energy, weather, nature), culture
-    /// (film, music, books, food, religion, media, ideas), sports (a game, a team, a league).
-    public static let finer: [String] = [
-        "Conflict", "Elections", "Courts", "Markets", "Banks", "Trade", "Jobs", "Prices",
-        "AI", "Software", "Security", "Space", "Physics", "Biology", "Medicine", "Public health",
-        "Energy", "Extreme weather", "Nature", "Film", "Music", "Books", "Food", "Religion", "Media", "Ideas",
+    /// The graph: each house section with the subtopics its own `question` (house.json) covers. A subtopic may sit under several
+    /// sections; it is still ONE topic (one label, one selection state). Where each edge comes from:
+    ///  World      "events, governments, conflict or society outside the United States": Conflict, Elections (governments), Trade ("relations
+    ///             among several countries"), Security (owner's example: Security under Technology and World).
+    ///  U.S.       "its people, states, courts, institutions, communities or domestic affairs": Courts, Elections (states, institutions).
+    ///  Politics   "elections, parties, legislatures, government policy, officials or political conflict": Elections, Conflict (political
+    ///             conflict), Public health (owner's example: government policy).
+    ///  Business   "markets, companies, banks, trade, jobs, prices or finance": Markets, Banks, Trade, Jobs, Prices; AI and Energy (owner's
+    ///             examples: companies and the economy around them).
+    ///  Technology "computing, the internet, AI, software, devices, security": AI, Software, Security.
+    ///  Science    "research findings, discoveries, space, physics, biology": Space, Physics, Biology.
+    ///  Health     "medicine, disease, public health, health care, drugs": Medicine, Public health.
+    ///  Climate    "climate change, energy transition, emissions, extreme weather, nature or conservation": Energy, Extreme weather, Nature.
+    ///  Culture    "arts, film, music, books, media, food, religion, ideas": Film, Music, Books, Food, Religion, Media, Ideas.
+    ///  Sports     "a game, a match, a team, an athlete, a league or a competition": no subtopics.
+    public static let tree: [(label: String, children: [String])] = [
+        ("World", ["Conflict", "Elections", "Trade", "Security"]),
+        ("U.S.", ["Courts", "Elections"]),
+        ("Politics", ["Elections", "Conflict", "Public health"]),
+        ("Business", ["Markets", "Banks", "Trade", "Jobs", "Prices", "AI", "Energy"]),
+        ("Technology", ["AI", "Software", "Security"]),
+        ("Science", ["Space", "Physics", "Biology"]),
+        ("Health", ["Medicine", "Public health"]),
+        ("Climate", ["Energy", "Extreme weather", "Nature"]),
+        ("Culture", ["Film", "Music", "Books", "Food", "Religion", "Media", "Ideas"]),
+        ("Sports", []),
     ]
+
+    /// The top level: the tree, then any live section the house list does not have (no subtopics).
+    public static func categories(liveSections: [String] = []) -> [(label: String, children: [String])] {
+        var out = tree
+        for id in liveSections {
+            let l = label(forSectionID: id)
+            if !l.isEmpty, !out.contains(where: { key($0.label) == key(l) }), !out.contains(where: { $0.children.contains { key($0) == key(l) } }) { out.append((l, [])) }
+        }
+        return out
+    }
+
+    /// Every subtopic once, in first-seen order.
+    public static var finer: [String] {
+        var seen: [String] = []
+        for c in tree { for k in c.children where !seen.contains(k) { seen.append(k) } }
+        return seen
+    }
+
+    /// The categories a subtopic sits under (one or more).
+    public static func parents(of child: String) -> [String] {
+        tree.filter { $0.children.contains { key($0) == key(child) } }.map(\.label)
+    }
 
     /// Other ways of saying a suggestion (keys are `key(_:)` of the phrase).
     static let aliases: [String: String] = [
@@ -61,8 +105,7 @@ public enum EditionTopics {
     public static func suggestions(liveSections: [String] = []) -> [String] {
         var out: [String] = []
         func add(_ l: String) { if !l.isEmpty, !out.contains(where: { key($0) == key(l) }) { out.append(l) } }
-        house.forEach { add($0.label) }
-        liveSections.forEach { add(label(forSectionID: $0)) }
+        categories(liveSections: liveSections).forEach { add($0.label) }
         finer.forEach(add)
         return out
     }
@@ -243,7 +286,7 @@ extension EditionSelection {
 
 public enum EditionSetupText {
     /// The two or three plain sentences that explain this step, said once at the top of the screen.
-    public static let explainer = "Your edition is the paper arranged around what you care about. Pick any topics below, as many as you like, or tell me and I will add them. You can change your edition at any time."
+    public static let explainer = "Your edition is the paper arranged around what you care about. Tap a topic to pick it, open one to see what is inside, or tell me. You can change your edition at any time."
     public static let voiceHint = "Say, for example, add space and chess."
     public static let emptyLine = "Nothing picked yet. You will get the general edition, and you can add topics whenever you like."
     public static let spokenOpen = "Tap the topics you want, or tell me. Say, add space and chess."
@@ -264,10 +307,46 @@ public enum EditionSetupText {
 
 // MARK: The session: one selection, saved after every change, shared by the screen and the voice stages
 
-public struct EditionChip: Equatable, Sendable {
+/// One line of the tree on screen. `kind`: category | sub | yoursHead | yours.
+public struct TopicRow: Equatable, Sendable {
+    public var key: String
     public var label: String
+    public var kind: String
     public var selected: Bool
-    public var own: Bool
+    /// A category that is not itself picked but has some of its subtopics picked.
+    public var partial: Bool
+    public var expandable: Bool
+    public var expanded: Bool
+    /// Quiet text beside the chip: "2 picked" on a category, "also in Business" on a shared subtopic.
+    public var note: String
+}
+
+public enum TopicTree {
+    /// The rows to show. Collapsed: one per category. A subtopic appears under every parent that is expanded, with the same selection
+    /// state everywhere. The reader's own topics come last under "Yours". Picking never changes which rows exist; only `expanded` does.
+    public static func rows(liveSections: [String] = [], expanded: Set<String>, selection: EditionSelection, own: [String]) -> [TopicRow] {
+        var out: [TopicRow] = []
+        for c in EditionTopics.categories(liveSections: liveSections) {
+            let picked = c.children.filter { selection.contains($0) }.count
+            let isSel = selection.contains(c.label)
+            let open = expanded.contains(EditionTopics.key(c.label)) && !c.children.isEmpty
+            let note = picked > 0 ? "\(picked) picked" : ""
+            out.append(TopicRow(key: "c/" + c.label, label: c.label, kind: "category", selected: isSel, partial: !isSel && picked > 0,
+                                expandable: !c.children.isEmpty, expanded: open, note: note))
+            if open {
+                for k in c.children {
+                    let others = EditionTopics.parents(of: k).filter { EditionTopics.key($0) != EditionTopics.key(c.label) }
+                    out.append(TopicRow(key: "s/\(c.label)/\(k)", label: k, kind: "sub", selected: selection.contains(k), partial: false, expandable: false,
+                                        expanded: false, note: others.isEmpty ? "" : "also in " + EditionSetupText.joined(others)))
+                }
+            }
+        }
+        if !own.isEmpty {
+            out.append(TopicRow(key: "yours", label: "Yours", kind: "yoursHead", selected: false, partial: false, expandable: false, expanded: false, note: ""))
+            for o in own { out.append(TopicRow(key: "y/" + o, label: o, kind: "yours", selected: selection.contains(o), partial: false, expandable: false, expanded: false, note: "")) }
+        }
+        return out
+    }
 }
 
 public final class EditionSetupSession: @unchecked Sendable {
@@ -283,8 +362,11 @@ public final class EditionSetupSession: @unchecked Sendable {
     /// Called when the reader says "continue" or "done".
     public var onFinish: (@Sendable () -> Void)?
 
-    public init(suggestions: [String], file: URL? = nil) {
-        self.suggestions = suggestions; self.file = file
+    private var liveSections: [String] = []
+    private var expanded: Set<String> = []
+
+    public init(suggestions: [String], file: URL? = nil, liveSections: [String] = []) {
+        self.suggestions = suggestions; self.file = file; self.liveSections = liveSections
         self.selection = Self.load(file) ?? EditionSelection()
         ownSeen = selection.topics.filter { t in !suggestions.contains { EditionTopics.key($0) == EditionTopics.key(t) } }
     }
@@ -305,17 +387,24 @@ public final class EditionSetupSession: @unchecked Sendable {
     public var topics: [String] { lock.lock(); defer { lock.unlock() }; return selection.topics }
     public var hasSaved: Bool { guard let f = file else { return false }; return FileManager.default.fileExists(atPath: f.path) }
 
-    public func setSuggestions(_ s: [String]) { lock.lock(); suggestions = s; lock.unlock(); onChange?() }
+    public func setLiveSections(_ live: [String]) {
+        lock.lock(); liveSections = live; suggestions = EditionTopics.suggestions(liveSections: live); lock.unlock(); onChange?()
+    }
+
+    /// Open or close a category (the disclosure control). Not a selection.
+    public func toggleExpanded(_ label: String) {
+        lock.lock(); let k = EditionTopics.key(label); if expanded.contains(k) { expanded.remove(k) } else { expanded.insert(k) }; lock.unlock()
+        onChange?()
+    }
 
     private func noteOwn(_ t: String) {
         if !suggestions.contains(where: { EditionTopics.key($0) == EditionTopics.key(t) }), !ownSeen.contains(where: { EditionTopics.key($0) == EditionTopics.key(t) }) { ownSeen.append(t) }
     }
 
-    /// The grid: the reader's own topics first, then every suggestion, each marked selected or not.
-    public func chips() -> [EditionChip] {
+    /// The tree as rows (see `TopicTree.rows`).
+    public func treeRows() -> [TopicRow] {
         lock.lock(); defer { lock.unlock() }
-        let own = ownSeen.map { EditionChip(label: $0, selected: selection.contains($0), own: true) }
-        return own + suggestions.map { EditionChip(label: $0, selected: selection.contains($0), own: false) }
+        return TopicTree.rows(liveSections: liveSections, expanded: expanded, selection: selection, own: ownSeen)
     }
 
     public func toggle(_ label: String) {

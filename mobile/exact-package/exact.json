@@ -450,12 +450,17 @@
       "voiceHint": "string",
       "talking": "bool",
       "pickedCount": "number",
-      "chips": "TopicChipView[]"
+      "tree": "TopicRowView[]"
     },
-    "TopicChipView": {
+    "TopicRowView": {
+      "key": "string",
       "label": "string",
+      "kind": "string",
       "selected": "bool",
-      "own": "bool"
+      "partial": "bool",
+      "expandable": "bool",
+      "expanded": "bool",
+      "note": "string"
     },
     "PaperItem": {
       "route": "string",
@@ -1728,7 +1733,7 @@
           "voiceHint": "",
           "talking": false,
           "pickedCount": 0,
-          "chips": []
+          "tree": []
         }
       }
     },
@@ -1774,6 +1779,13 @@
     },
     {
       "send": "onboardingTopicToggle",
+      "options": {
+        "label": "string"
+      },
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingTopicExpand",
       "options": {
         "label": "string"
       },
