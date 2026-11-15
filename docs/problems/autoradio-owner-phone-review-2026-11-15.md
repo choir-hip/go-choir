@@ -200,3 +200,7 @@ The owner tested onboarding, where the app helps set up the edition.
   good reason to think that the user has already started saying something
   meaningful", and it never hides the playback controls. At rest with
   hands-free on, the bar and the player look normal.
+- **Problem: an edition cannot be edited after onboarding.** Evidence:
+  owner's question; from code, the only way back is Settings, "Set up
+  voice", which walks the whole setup. Ruling: editing an edition is the
+  same screen as creating it.
