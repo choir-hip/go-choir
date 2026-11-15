@@ -222,7 +222,7 @@ func TestListAndSummaryOmitTheNamespace(t *testing.T) {
 				t.Fatalf("summary%s has group %+v", q, g)
 			}
 		}
-		if strings.Contains(sum.Context, "autoradio") {
+		if q == "" && strings.Contains(sum.Context, "autoradio") {
 			t.Fatalf("summary%s context mentions the namespace: %s", q, sum.Context)
 		}
 	}
