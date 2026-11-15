@@ -38,7 +38,7 @@ const (
 // intakeLegacyBytePolicy is the policy the intake labels ran under until
 // 2026-11-12: slices of stories by bytes, a call closed by bytes.
 var intakeLegacyBytePolicy = intakePolicy{
-	storyCost: func(s intakeStory) (int, int) {
+	storyCost: func(s intakeStory, _ int) (int, int) {
 		c := len(s.entry) + 2*(len(s.handle)+8)
 		return c, c
 	},
@@ -175,7 +175,15 @@ func shadowPlanArm(rt *Runtime, in IntakeShadowInput, name string, policy intake
 // the estimate's error (the estimate is weighted above the tokenizer, so it
 // overstates).
 func PlanIntakeShadow(in IntakeShadowInput) (IntakeShadowReport, error) {
-	rt := &Runtime{}
+	return planIntakeShadowWith(&Runtime{}, in)
+}
+
+// planIntakeShadowWith is PlanIntakeShadow over rt; a test gives rt a judge to
+// see that planning never reaches it.
+func planIntakeShadowWith(rt *Runtime, in IntakeShadowInput) (IntakeShadowReport, error) {
+	if len(in.Captures) > intakeFlushCaptures {
+		return IntakeShadowReport{}, fmt.Errorf("a flush is at most %d captures; the input has %d", intakeFlushCaptures, len(in.Captures))
+	}
 	var rep IntakeShadowReport
 	for n, arm := range intakeShadowArms {
 		got, err := shadowPlanArm(rt, in, arm.name, arm.policy, arm.batch)

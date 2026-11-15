@@ -360,7 +360,7 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 	if len(questions) == 0 {
 		return nil, nil
 	}
-	// One call per revision, or, when the pairs are over the byte bound,
+	// One call per revision, or, when the pairs are over the token budget,
 	// several calls one after another (never at once; owner, 2026-11-10).
 	ordered := make([]string, 0, len(names))
 	for name := range names {
@@ -400,7 +400,7 @@ const supportEnvelopeTokens = 400
 // questions, sizes in estimated tokens, stay inside the vendor's per-question
 // budget (the state of a support call is its pairs, so that limit binds; the
 // request total is larger). It replaced a 30,000-byte guard that came from
-// OpenRouter's long-context line (owner, 2026-11-12). A lone over-size pair
+// OpenRouter's long-context line. A lone over-size pair
 // is its own batch.
 func splitSupportBatches(ordered []string, sizes map[string]int) [][]string {
 	var batches [][]string

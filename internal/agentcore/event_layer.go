@@ -71,7 +71,7 @@ const (
 	eventTentativeP = 0.5
 	// A call is bounded by the vendor's token limits (jevbudget), not by the
 	// 24 KiB guard it had, which came from OpenRouter's "about 32,000 bytes"
-	// long-context line (owner, 2026-11-12: Jev is sized by vendor limits).
+	// long-context line (a design choice of 2026-11-12, see the Delivery rules in CLAUDE.md).
 	eventSummaryRunes = 400
 	eventRecentTitles = 2
 	// eventIndexLoad bounds the rebuild read.
@@ -370,7 +370,7 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 }
 
 // eventPrepareChunk builds the call for chunk against the index as it stands.
-// split is true when the request is over the byte bound and the chunk must be
+// split is true when the request is over the token budget and the chunk must be
 // halved first (the halves are prepared one after the other, each seeing the
 // previous half's events).
 func eventPrepareChunk(idx *eventIndex, chunk []eventInput, now time.Time) (state json.RawMessage, questions map[string]json.RawMessage, alias eventAliases, split bool) {

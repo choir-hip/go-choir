@@ -13,6 +13,10 @@
 // it on d@e, never on the paper) and reports the billed tokens and the label
 // agreement per question. -json prints the report as JSON.
 //
+// The deploy does not ship this tool (it is not in flake.nix's
+// goServiceSubPackages). Build it on the build VM, `go build -o intake-shadow
+// ./cmd/intake-shadow`, and run it from d@e. A flush is at most 12 captures.
+//
 // The input is one flush: {"stories":[{"doc_id","headline","lede",
 // "updated_at"}],"captures":[{"capture_id","title","summary","outlet",
 // "language"}]}. The jev-calls record keeps digests, not state, so a recorded

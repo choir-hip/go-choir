@@ -360,6 +360,13 @@ func TestEventLayerIndexRebuildsFromTheStore(t *testing.T) {
 	}
 }
 
+// R8 is a guard, not a proof of the split: with the vendor's token budget
+// (jevbudget) and the event layer's clips (eventSummaryRunes, 30 recent
+// candidates, 12 captures a chunk) a chunk's call does not reach the budget on
+// any input this layer can build (a twelve-capture chunk of dense-script
+// titles and summaries measured 86 to 93 KB and fit), so eventPrepareChunk's split,
+// summary drop and candidate drop are not exercised here. The test asserts
+// the bound on a long-summary fixture and fails if a clip is raised past it.
 func TestEventLayerKeepsEachCallUnderTheContextBound(t *testing.T) {
 	judge := &eventJudge{answers: map[string]eventAnswer{}}
 	rt, owner, computer := eventRuntime(t, judge)

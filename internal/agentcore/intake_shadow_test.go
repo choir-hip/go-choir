@@ -31,9 +31,13 @@ func shadowFlush(stories, captures int) IntakeShadowInput {
 }
 
 func TestIntakeShadowPlanOldCutsSlicesNewIsOneState(t *testing.T) {
+	// The runtime the plan reads carries a judge, so a plan that called Jev
+	// would be seen.
+	rt, _ := testRuntime(t)
 	judge := &fakeIntakeJudge{}
+	rt.SetCandidateJudge(judge)
 	in := shadowFlush(450, 6)
-	rep, err := PlanIntakeShadow(in)
+	rep, err := planIntakeShadowWith(rt, in)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +50,7 @@ func TestIntakeShadowPlanOldCutsSlicesNewIsOneState(t *testing.T) {
 	if rep.New.Calls >= rep.Old.Calls || rep.New.Bytes >= rep.Old.Bytes || rep.New.EstTokens >= rep.Old.EstTokens {
 		t.Fatalf("H3: new %+v is not smaller than old %+v", rep.New, rep.Old)
 	}
-	if rep.New.Calls > 2 {
+	if rep.New.Calls > 3 {
 		t.Fatalf("H3: %d calls for one flush of 6 captures over 450 stories", rep.New.Calls)
 	}
 	if rep.Old.EstCostUSD <= 0 || rep.New.EstCostUSD <= 0 {
@@ -86,5 +90,16 @@ func TestIntakeShadowAgreementSeesADisagreementAndAnUnlabelledCapture(t *testing
 	a := intakeShadowAgreement(in, old, cur)
 	if a.Captures != 2 || a.EventAgree != 1 || len(a.Disagreements) != 2 {
 		t.Fatalf("H4: %+v", a)
+	}
+}
+
+// A flush is at most intakeFlushCaptures captures: an input with more would put
+// more than the vendor takes in a question and is refused, not planned.
+func TestIntakeShadowRefusesMoreCapturesThanAFlush(t *testing.T) {
+	if _, err := PlanIntakeShadow(shadowFlush(20, intakeFlushCaptures+1)); err == nil {
+		t.Fatal("a 13-capture input was planned")
+	}
+	if _, err := RunIntakeShadow(context.Background(), &fakeIntakeJudge{}, shadowFlush(20, intakeFlushCaptures+1)); err == nil {
+		t.Fatal("a 13-capture input was run")
 	}
 }

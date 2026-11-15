@@ -227,3 +227,34 @@ func TestQuestionDecisionsJoinABatchedCallPerQuestion(t *testing.T) {
 		t.Fatalf("decisions = %v, record %q", got, r.DecisionID)
 	}
 }
+
+// A 24-question intake call (twelve captures, an event and a topic question
+// each, a dozen options a question) keeps every answer: the calls under
+// measurement are the big ones, and shedding their answers would drop the
+// per-question probabilities the accuracy comparison reads.
+func TestRecordKeepsEveryAnswerOfATwentyFourQuestionIntakeCall(t *testing.T) {
+	qs := map[string]json.RawMessage{}
+	answers := map[string]map[string]any{}
+	for i := 0; i < 24; i++ {
+		name := fmt.Sprintf("q%02d", i)
+		choices := make([]string, 14)
+		p := map[string]float64{}
+		for j := range choices {
+			choices[j] = fmt.Sprintf("c%d", j+100*i)
+			p[choices[j]] = 1.0 / 14
+		}
+		q, _ := json.Marshal(map[string]any{"type": "choice", "instructions": strings.Repeat("Which story does the capture report? ", 4), "choices": choices})
+		qs[name] = q
+		answers[name] = map[string]any{"choice": choices[1], "probabilities": p}
+	}
+	body, _ := json.Marshal(map[string]any{"model": "m", "answers": answers})
+	r := Build(Meta{Site: "intake_labels"}, json.RawMessage(`{}`), qs, body, nil, time.Now(), time.Millisecond)
+	line := Encode(r)
+	var back Record
+	if err := json.Unmarshal(line, &back); err != nil {
+		t.Fatal(err)
+	}
+	if back.AnswersCut != 0 || len(back.Answers) != 24 {
+		t.Fatalf("answers kept %d of 24, cut %d (record %d bytes, cap %d)", len(back.Answers), back.AnswersCut, len(line), MaxRecordBytes)
+	}
+}

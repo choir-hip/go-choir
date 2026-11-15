@@ -596,7 +596,7 @@ func TestIntakeLabelsFailingOrSlowJevLeavesCapturesUnlabelledWithinBudget(t *tes
 // B7: twelve captures against no stories are one call of twelve questions
 // (the flush's whole group, owner 2026-11-12), and the site never has more
 // than one in flight.
-func TestIntakeLabelsBatchTwelveCapturesIntoTwoCalls(t *testing.T) {
+func TestIntakeLabelsTwelveCapturesOverOneStateAreOneCall(t *testing.T) {
 	f := newIntakeFixture(t, "owner-labels-parallel")
 	f.enable(t)
 	judge := &fakeIntakeJudge{delay: 40 * time.Millisecond}
@@ -625,10 +625,15 @@ func TestIntakeLabelsBatchTwelveCapturesIntoTwoCalls(t *testing.T) {
 }
 
 // storiesPerChunk is how many stories one chunk holds for the test library's
-// stories, measured on the poll's own cutting.
-func storiesPerChunk(t *testing.T, rt *Runtime) int {
+// stories, measured on the poll's own cutting. The room depends on the poll's
+// captures (their entries are in every question's state), so the probe takes
+// the titles of the captures the test will ask; none is one capture.
+func storiesPerChunk(t *testing.T, rt *Runtime, items ...sourcegraph.CapturedItem) int {
 	t.Helper()
-	p, err := newIntakePoll(context.Background(), pollLib(rt, 4000), pollItems("probe"), intakeTokenPolicy)
+	if len(items) == 0 {
+		items = pollItems("probe")
+	}
+	p, err := newIntakePoll(context.Background(), pollLib(rt, 4000), items, intakeTokenPolicy)
 	if err != nil || len(p.cuts) < 2 {
 		t.Fatalf("probe poll: %v", err)
 	}
@@ -791,20 +796,53 @@ func TestIntakeBatchRespectsTheVendorLimitsBySplittingTheCaptureBatch(t *testing
 	}
 	calls := judge.labelCalls()
 	if len(calls) < 2 {
-		t.Fatalf("B3: %d call for 24 questions over 300 stories; the vendor's request limit should have split it", len(calls))
+		t.Fatalf("B3: %d call for 24 questions over 200 stories; the vendor's request limit should have split it", len(calls))
 	}
 	asked := 0
+	// Whether the batch splits by captures (the state sent twice) or the
+	// window by stories (the captures block sent twice), every capture is
+	// offered every story once, and no call is over the vendor's budget.
+	offered := map[string]map[string]int{} // question -> story handle -> times
 	for _, call := range calls {
 		if !call.fits {
 			t.Fatalf("B3: a request of %d bytes is over the vendor's token budget", call.bytes)
 		}
-		if got := len(storyEntries(call.state)); got != 200 {
-			t.Fatalf("B3: a call carries %d of 200 stories; the window is split by captures, never trimmed", got)
+		for name, raw := range call.raw {
+			if offered[name] == nil {
+				offered[name] = map[string]int{}
+			}
+			for _, o := range questionOptions(t, raw) {
+				if strings.HasPrefix(o, "c") {
+					offered[name][o]++
+				}
+			}
 		}
 		asked += len(call.questions)
 	}
-	if asked != 24 {
-		t.Fatalf("B3: %d questions asked; want 24", asked)
+	if asked < 24 {
+		t.Fatalf("B3: %d questions asked; want at least 24", asked)
+	}
+	for name, stories := range offered {
+		for h, n := range stories {
+			if n != 1 {
+				t.Fatalf("B3: %s offers %s %d times", name, h, n)
+			}
+		}
+	}
+	perCapture := map[string]int{} // capture handle -> distinct stories over its event questions
+	for name, stories := range offered {
+		if kind, handle, ok := strings.Cut(name, "_"); ok && kind == "event" {
+			handle, _, _ = strings.Cut(handle, "_")
+			perCapture[handle] += len(stories)
+		}
+	}
+	if len(perCapture) != 12 {
+		t.Fatalf("B3: %d captures asked an event question; want 12", len(perCapture))
+	}
+	for handle, n := range perCapture {
+		if n != 200 {
+			t.Fatalf("B3: capture %s is offered %d of 200 stories; the window is never trimmed", handle, n)
+		}
 	}
 }
 
@@ -964,7 +1002,7 @@ func TestIntakeShortlistTakesTheWindowThenTenByTitleOverlap(t *testing.T) {
 			t.Fatalf("overlap picked %q, which shares no title token", d.Title)
 		}
 	}
-	// A busy window is not cut to a count: 300 stories in the window all stay.
+	// A busy window is not cut to a count: the whole window in the window all stay.
 	var busy []types.Document
 	for i := 0; i < 700; i++ {
 		busy = append(busy, types.Document{DocID: fmt.Sprintf("busy-%03d", i), Title: "x", UpdatedAt: now.Add(-time.Duration(i) * time.Second)})
@@ -1021,7 +1059,8 @@ func (j *failingQuestionJudge) JudgeScoped(ctx context.Context, scope string, st
 // to the "new" answers of the others.
 func TestIntakeLabelsAskALongWindowInChunksAndKeepEveryCandidate(t *testing.T) {
 	rt, _ := testRuntime(t)
-	per := storiesPerChunk(t, rt)
+	items := []sourcegraph.CapturedItem{{CaptureID: "cap-chunk", Title: "Incoming report"}}
+	per := storiesPerChunk(t, rt, items...)
 	n := 2*per + 20
 	now := time.Now().UTC()
 	lib := &intakeLibrary{rt: rt, summary: map[string]store.StorySummary{}}
@@ -1032,7 +1071,6 @@ func TestIntakeLabelsAskALongWindowInChunksAndKeepEveryCandidate(t *testing.T) {
 	target := fmt.Sprintf("Story headline %03d", n-3) // in the last chunk
 	judge := &failingChunkJudge{fakeIntakeJudge: fakeIntakeJudge{answers: map[string]string{"Incoming report": target}, delay: 30 * time.Millisecond}, marker: "never"}
 	rt.SetCandidateJudge(judge)
-	items := []sourcegraph.CapturedItem{{CaptureID: "cap-chunk", Title: "Incoming report"}}
 	label, err := labelOnly(rt, lib, items)
 	if err != nil {
 		t.Fatal(err)
@@ -1092,7 +1130,7 @@ func TestIntakeBatchQuestionsOfferExactlyTheCriteriaKeys(t *testing.T) {
 	judge := &fakeIntakeJudge{}
 	rt.SetCandidateJudge(judge)
 	items := pollItems("Alpha report", "Bravo report", "Charlie report")
-	per := storiesPerChunk(t, rt)
+	per := storiesPerChunk(t, rt, items...)
 	rt.labelPoll(context.Background(), pollLib(rt, per+20), "owner", "computer", "src", items, intakeBatchCaptures)
 	calls := judge.labelCalls()
 	if len(calls) != 2 {

@@ -105,8 +105,8 @@ func TestIntakeFlushFirstCaptureIsAskedAtOnce(t *testing.T) {
 }
 
 // Burst: N enqueues made while a call is in flight go out together in the
-// next flush, at most 6 captures a call, one call at a time.
-func TestIntakeFlushBurstDuringACallBatchesIntoCeilNOverSix(t *testing.T) {
+// next flush, one call carrying all of them (up to 12), one call at a time.
+func TestIntakeFlushBurstDuringACallGoesOutTogether(t *testing.T) {
 	f := newIntakeFixture(t, "owner-flush-burst")
 	f.enable(t)
 	openTestStory(t, f.s, f.owner, f.computer, "Pope has lung surgery")
@@ -131,7 +131,7 @@ func TestIntakeFlushBurstDuringACallBatchesIntoCeilNOverSix(t *testing.T) {
 		waitClosed(t, fmt.Sprintf("capture %d", i+1), h)
 	}
 	if got, want := len(judge.labelCalls()), 1+(14+intakeCallCaptures-1)/intakeCallCaptures; got != want {
-		t.Fatalf("%d calls; want %d (the held one, then ceil(14/6) for the burst)", got, want)
+		t.Fatalf("%d calls; want %d (the held one, then the burst in flushes of at most intakeFlushCaptures)", got, want)
 	}
 	if got := judge.maxSeen.Load(); got != 1 {
 		t.Fatalf("F1: %d Jev calls in flight at once; want 1", got)

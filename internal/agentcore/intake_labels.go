@@ -5,9 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
-	"github.com/yusefmosiah/go-choir/internal/jevbudget"
-	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"log"
 	"math"
 	"path/filepath"
@@ -19,6 +16,9 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
+	"github.com/yusefmosiah/go-choir/internal/jevbudget"
+	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -62,28 +62,34 @@ var (
 	// calls: each gets its own intakeLabelCallTimeout, started when it is
 	// about to be sent, and only a stop cancels the rest. Our measured
 	// latency is flat in question count (docs/reference/system1/
-	// our-usage.md), so 5 s is not expected to bite at 12 questions; the
-	// shadow comparison is where that is checked.
+	// our-usage.md) at 2 to 12 questions, all under 30,046 bytes. A call now
+	// carries up to 24 questions and 48k estimated tokens, which is not
+	// measured; a timeout loses the whole flush's captures (twelve, not the
+	// six a call carried before), and an unlabelled capture is not retried.
+	// The deadline stays until a staging flush line and the gateway's
+	// upstream_ms for site=intake_labels show what a big call takes; it is
+	// changed by a commit with that number, not by a setting.
 	intakeLabelPrepBudget  = 15 * time.Second
 	intakeLabelCallTimeout = 5 * time.Second
 )
 
 const (
 	// intakeFlushCaptures is the most captures one flush takes from the
-	// queue (the event layer's chunk size); a call carries at most
-	// intakeCallCaptures of them, and the vendor-limit policy below can split a call
-	// earlier (docs/design/jev-batched-questions-2026-11-10.md, "Intake
-	// flush").
+	// queue (the event layer's chunk size). All of them go in one call over
+	// one state, and the vendor-token policy below splits a call only when it
+	// would cross the vendor's limits (docs/design/
+	// jev-batched-questions-2026-11-10.md, F12, "Intake flush").
 	intakeFlushCaptures = 12
 	// intakeCallCaptures is the most captures one call carries: the whole
-	// flush, two questions each, so 24. The vendor sets no limit on questions
-	// a request, and the owner ruled on 2026-11-12 that Jev is meant to take
-	// many questions over a big context ("use vendor limits not our
-	// arbitrary size limits"). It was 6 (12 questions) because accuracy above
-	// 12 questions a call is unmeasured (SYSTEM1.md rule 7); the shadow
-	// comparison (intake_shadow.go, cmd/intake-shadow) is where accuracy at
-	// the larger size is checked. A call is split only when the vendor's
-	// token limits would be crossed (intakeTokenPolicy).
+	// flush, two questions each, so 24. CLAUDE.md (Delivery, owner,
+	// 2026-11-12) says every question about a state goes in the one call that
+	// carries that state, and a second call over the same state is the
+	// defect; a cap of 6 captures would make two calls over one state on
+	// every full flush. The vendor sets no limit on questions a request.
+	// Accuracy above 12 questions a call is unmeasured (SYSTEM1.md rule 7);
+	// that is what the shadow comparison (intake_shadow.go, cmd/intake-shadow)
+	// is for, and its result is a measured constant changed by a commit, not
+	// a setting. See F12 in the design record.
 	intakeCallCaptures = intakeFlushCaptures
 	// intakeBatchCaptures is the count handed to labelPoll's grouping.
 	intakeBatchCaptures = intakeCallCaptures
@@ -98,18 +104,28 @@ const (
 	// guard of ours. A group of captures that would cross them is split,
 	// never trimmed.
 	//
-	// intakeCallReserveTokens is what a call needs beside its stories: the
-	// task text, the captures block, up to twelve corrections and one
-	// capture's two questions' instructions (about 1,000 tokens in all; four
-	// times that is left for a long summary or a language that tokenizes
-	// dense). The stories of a chunk may take the budget less this.
-	intakeCallReserveTokens = 4000
+	// The reserve a call needs beside its stories (intakePolicy.reserve) is
+	// the task text, up to twelve corrections and one capture's two
+	// questions' instructions (intakeCallFixedTokens), and the captures
+	// block, which every question of the call reads as part of the state: an
+	// entry for each of the poll's captures at the full summary clip, weighed
+	// by script, and its key (intakeCaptureKeyTokens). The stories of a chunk
+	// take the budget less this. Sizing it for the whole poll's captures, not
+	// a flat amount, keeps a window near intakeShortlistCeiling from filling a
+	// call so full that every capture group closes at one capture and the
+	// state is sent once a capture.
+	intakeCallFixedTokens  = 1000
+	intakeCaptureKeyTokens = 10
 	// intakeMaxStoryOptions is the most stories one question offers: the
 	// vendor takes 255 choices a question (jevbudget.VendorMaxChoices), and an
 	// event question also offers the poll's other captures (at most
 	// intakeFlushCaptures-1) and new. A capture with more candidates in a call
 	// is asked in parts, every part over the same state.
-	intakeMaxStoryOptions = jevbudget.VendorMaxChoices - intakeFlushCaptures
+	intakeMaxStoryOptions = jevbudget.VendorMaxChoices - intakeFlushCaptures - intakeChoiceMargin
+	// intakeChoiceMargin is what a question leaves unused under the vendor's
+	// documented maximum of 255 choices; the poll's other captures and new are
+	// counted above, and the margin covers a count that differs by one or two.
+	intakeChoiceMargin = 2
 	// intakeOptionTokens is what one option key costs in a question's
 	// criteria (`"c123":null,`, estimated at 8 to 9; rounded up).
 	intakeOptionTokens        = 10
@@ -697,10 +713,13 @@ func newIntakePoll(ctx context.Context, lib *intakeLibrary, items []sourcegraph.
 	// The stories are one chunk unless they cannot be: a chunk closes only
 	// when the next story would take a one-capture call past the policy's
 	// limits (the vendor's, in production). Never by a count, never trimmed.
-	var request, question int
+	var request, question, reserve int
+	if policy.reserve != nil {
+		reserve = policy.reserve(items)
+	}
 	for n, s := range p.stories {
-		r, q := policy.storyCost(s)
-		if n > 0 && (request+r > policy.chunkRequest || question+q > policy.chunkQuestion) {
+		r, q := policy.storyCost(s, len(items))
+		if n > 0 && (request+r > policy.chunkRequest-reserve || question+q > policy.chunkQuestion-reserve) {
 			p.cuts = append(p.cuts, n)
 			request, question = 0, 0
 		}
@@ -951,12 +970,16 @@ func intakeEventInstructions(handle string, stories, siblings, corrections bool)
 // intakePolicy is how a poll is cut into calls: where the stories of a chunk
 // end, and when a group of captures is full.
 type intakePolicy struct {
-	// storyCost is what one story adds to a chunk: to a one-capture request
-	// (its entry in the state and its key in the capture's two questions) and
-	// to the state a question reads.
-	storyCost func(s intakeStory) (request, question int)
+	// storyCost is what one story adds to a chunk: to the request of a call
+	// that asks all of the poll's captures (its entry in the state once, and
+	// its key in each capture's two questions) and to the state a question
+	// reads.
+	storyCost func(s intakeStory, captures int) (request, question int)
 	// chunkRequest and chunkQuestion are the most a chunk's stories may add.
 	chunkRequest, chunkQuestion int
+	// reserve is what a poll's captures need beside the stories, in the same
+	// unit as the chunk limits, taken from both limits; nil is nothing.
+	reserve func(items []sourcegraph.CapturedItem) int
 	// fits reports whether a call is within the policy's size limit.
 	fits func(c intakeCall) bool
 }
@@ -967,16 +990,30 @@ type intakePolicy struct {
 // carry them all; a group of captures is split when the estimate says the
 // request or one of its questions would cross the budget.
 var intakeTokenPolicy = intakePolicy{
-	storyCost: func(s intakeStory) (int, int) {
+	storyCost: func(s intakeStory, captures int) (int, int) {
 		entry, _ := json.Marshal(s.entry)
 		key := jevbudget.Tokens([]byte(strconv.Quote(s.handle) + ":null,"))
 		state := jevbudget.Tokens(entry) + 1
-		return state + 2*key, state
+		// Each capture asks the story in an event and a topic question, and
+		// the instructions of each part of 241 stories (about 150 tokens a
+		// question) add a token a capture to a story.
+		return state + max(captures, 1)*(2*key+1), state
 	},
-	chunkRequest: jevbudget.RequestBudgetTokens - intakeCallReserveTokens,
+	chunkRequest: jevbudget.RequestBudgetTokens,
 	// A question offers at most 255 keys, however many stories the state lists.
-	chunkQuestion: jevbudget.QuestionBudgetTokens - intakeCallReserveTokens - jevbudget.VendorMaxChoices*intakeOptionTokens,
-	fits:          func(c intakeCall) bool { return jevbudget.Fits(c.state, c.questions) },
+	chunkQuestion: jevbudget.QuestionBudgetTokens - jevbudget.VendorMaxChoices*intakeOptionTokens,
+	// A poll's captures are in the state of every question of its calls, so
+	// their entries, at the full summary clip and as the estimator weighs
+	// their script, come off the stories' room.
+	reserve: func(items []sourcegraph.CapturedItem) int {
+		n := intakeCallFixedTokens
+		for _, item := range items {
+			raw, _ := json.Marshal(intakeCaptureState(item, intakeSummaryRunes))
+			n += jevbudget.Tokens(raw) + intakeCaptureKeyTokens
+		}
+		return n
+	},
+	fits: func(c intakeCall) bool { return jevbudget.Fits(c.state, c.questions) },
 }
 
 // planIntakeCalls lists the poll's calls, chunk by chunk: a chunk's captures
@@ -1269,7 +1306,7 @@ const (
 	// duplicates read opened 40 minutes to 6.5 hours after their first.
 	intakeShortlistWindow = 8 * time.Hour
 	// intakeShortlistCeiling backstops the window: past this many stories
-	// (six chunks; seven with the overlap picks) the oldest fall out.
+	// (about ten chunks of a dense script, fewer in Latin) the oldest fall out.
 	intakeShortlistCeiling = 480
 	// intakeShortlistFloor is the newest stories that are candidates whatever
 	// their age, so a quiet stretch never shrinks the list below the old

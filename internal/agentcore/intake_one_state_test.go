@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -13,9 +14,9 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// One state, every question (owner, 2026-11-12: "for jev, use vendor limits
-// not our arbitrary size limits ... we can reuse the same context to do
-// multiple calls"). Ways intake can fail, written before the code:
+// One state, every question (CLAUDE.md, Delivery, owner, 2026-11-12: one
+// context, many questions; the point is to reuse the context, not to cap or
+// split a call over one state). Ways intake can fail, written before the code:
 //
 //	O1. A window of a few hundred stories is still asked in 3 to 5 chunk calls
 //	    per capture group, each repeating the task, the captures and the
@@ -121,6 +122,21 @@ func TestIntakeBoundFollowsTheTextNotTheByteCount(t *testing.T) {
 		t.Fatalf("O2: twelve English captures over 100 stories are %d calls; want one", lc)
 	}
 	_ = cc
+	// The same count of bytes: English is inside the vendor's budget and
+	// Cyrillic is not, so the bound follows the script, not the byte count.
+	en := strings.Repeat("the quick brown fox jumps over a lazy dog ", 1450)
+	ru := strings.Repeat("быстрая бурая лиса прыгает через ленивую ", 1450)
+	enState, _ := json.Marshal(map[string]string{"text": en[:56000]})
+	ruState, _ := json.Marshal(map[string]string{"text": string([]rune(ru)[:30000])})
+	if len(ruState) < len(enState)-1500 || len(ruState) > len(enState)+1500 {
+		t.Fatalf("O2: fixtures are %d and %d bytes; want the same count", len(enState), len(ruState))
+	}
+	if !jevbudget.Fits(enState, nil) {
+		t.Fatalf("O2: %d bytes of English are over the budget", len(enState))
+	}
+	if jevbudget.Fits(ruState, nil) {
+		t.Fatalf("O2: %d bytes of Cyrillic fit a budget that is counted by bytes, not by the script", len(ruState))
+	}
 }
 
 // O3: stories whose entries are so long that one capture's call cannot carry
