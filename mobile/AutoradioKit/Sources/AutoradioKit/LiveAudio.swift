@@ -592,6 +592,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
                 log.emit(.error(stage: "voice", message: "\(error)")); failed = true
             }
             if Task.isCancelled { return false }
+            if samples.isEmpty && !failed { log.emit(.error(stage: "voice", message: "the voice made no sound for this block")) }
             if failed || samples.isEmpty { return false }
             log.emit(.programmeAudioStart(block: tag))      // the trace reads "desk audio start" from the first of these after a revision
             await audio.playProgramme(samples, rate: rate, tag: tag)

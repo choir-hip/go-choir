@@ -229,8 +229,9 @@ final class OnboardingController: @unchecked Sendable {
         InterviewSession.shared = s
         set { session = s; step = "interview"; progress.interviewStarted = true; progress.skipped = false; demoIndex = 0; message = "" }
         save()
-        _ = s.start()
-        if !demo { startOnEngine() }
+        // On the engine the programme's loader starts the session (InterviewProgramme.load), so the open line and the first
+        // question are spoken and recorded once. Demo has no engine and no loader: it starts the session itself.
+        if demo { _ = s.start() } else { startOnEngine() }
     }
 
     /// The interview on the radio's own engine: programme, desk and open addressing come from the kit's registry.
@@ -253,8 +254,8 @@ final class OnboardingController: @unchecked Sendable {
         guard let s = session else { startInterview(); return }
         InterviewSession.shared = s
         set { step = "interview"; message = "" }
-        _ = s.resume()
-        if !demo { startOnEngine() }
+        // On the engine the loader resumes the session (InterviewProgramme.load); resuming here too asked the question twice.
+        if demo { _ = s.resume() } else { startOnEngine() }
     }
 
     /// Demo: the next recorded turn, through the same `hear` the desk stage calls.
@@ -364,7 +365,6 @@ final class OnboardingController: @unchecked Sendable {
         d["mic"] = mic; d["level"] = level; d["heard"] = heard; d["route"] = route; d["hearingOK"] = hearingOK
         d["interviewStatus"] = interviewStatus; d["paused"] = ivPaused; d["pauseReason"] = iv?.state.pauseReason ?? ""
         d["talk"] = talk; d["nowSaying"] = lastRadio
-        d["listenLine"] = AppSettings.listeningLine(forTalkMode: AppSettings.shared.value("talkMode"))
         d["listening"] = (iv?.status == .running || iv?.status == .readback)
         d["demo"] = demo; d["demoNote"] = nextNote; d["demoKind"] = nextKind; d["demoWords"] = nextWords; d["demoLeft"] = max(0, demoScript.count - demoIndex)
         d["editionStatus"] = editionStatus; d["writingLine"] = writingLine; d["editionError"] = editionError
