@@ -67,3 +67,13 @@ and the edition.
 Not known: why the interview hears nothing and repeats its question; whether
 any text-to-speech path exists in the app today; what of Mike's voice work is
 portable and what state it is in; which pages scroll sideways and why.
+
+## Owner rulings, 2026-11-15 (after the investigation)
+
+- **The other voice versions are deprecated, not deleted yet**, once Mike's
+  loop is in. Deletion waits for the owner's word.
+- **Models: a model under 100 MB may be bundled in the app. A larger one is
+  downloaded during onboarding.** This replaces the earlier no-bundled-models
+  ruling for the phone app.
+
+The investigation is `docs/evidence/autoradio-phone-review-investigation-2026-11-15.md`.
