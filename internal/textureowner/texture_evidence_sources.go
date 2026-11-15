@@ -454,28 +454,6 @@ func decodeAvailableTextureSourceEntities(metadata map[string]any) []textureSour
 	return decodeTextureSourceEntities(metadata[textureAvailableSourceEntitiesKey])
 }
 
-func mergeTextureSourceEntitiesIntoAvailableContext(metadata map[string]any, incoming []textureSourceEntity) bool {
-	if metadata == nil || len(incoming) == 0 {
-		return false
-	}
-	existing := decodeAvailableTextureSourceEntities(metadata)
-	merged, changed := mergeTextureSourceEntities(existing, incoming)
-	if len(merged) > 0 {
-		metadata[textureAvailableSourceEntitiesKey] = merged
-	}
-	return changed
-}
-
-func mergeTextureSourceEntitiesIntoRunMetadata(rec *types.RunRecord, incoming []textureSourceEntity) bool {
-	if rec == nil || len(incoming) == 0 {
-		return false
-	}
-	if rec.Metadata == nil {
-		rec.Metadata = map[string]any{}
-	}
-	return mergeTextureSourceEntitiesIntoAvailableContext(rec.Metadata, incoming)
-}
-
 const textureSourceRejectionsKey = "texture_source_rejections"
 
 func decodeCoagentSourceRejections(value any) []coagentSourceRejection {
