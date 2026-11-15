@@ -14,7 +14,7 @@
 //   ob-topics, ob-explainer, edit-edition, edit-edition-done, edit-edition-link, edit-edition-retry, edit-edition-leave, ob-topic-<label>, ob-topic-open-<label>, ob-trow-<row key>, ob-topic-input, ob-topic-add, ob-selection, ob-talk, ob-topics-done, ob-demo, ob-demo-say, ob-wait-slot, ob-writing-line,
 //   ob-edition-retry, ob-continue-anyway, ob-edition, ob-edition-open, ob-start-radio, firstrun-card, firstrun-open.
 use Theme, ChoirAuth, Onboarding from "@choir/autoradio"
-use Card, PaperCard, PageScroll, Btn, ListGroup, Hairline, SelectMark, PageHeader from "./ui.contract"
+use Card, PaperCard, PageScroll, Btn, ListGroup, RowRule, SelectMark, PageHeader from "./ui.contract"
 use Mark from "./mark.contract"
 use VoiceStep from "./voice.contract"
 
@@ -154,7 +154,7 @@ component TopicRowItem
         text "Yours" testId="ob-topics-yours" font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted padding="16px 16px 6px 16px"
       if kind != "yoursHead"
         if first == false
-          Hairline(indent=48)
+          RowRule(indent=48)
         row align-items="center" width="100%" min-height=rowH position="relative" testId=`ob-trow-${rowId}`
           animation=((sub and th.reducedMotion == false) ? "obReveal 220ms ease-out" : "none")
           box position="absolute" inset=0 pointer-events="none" background-color=th.accent opacity=wash transition=`opacity ${th.motionFastMs}ms ease`
