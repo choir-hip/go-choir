@@ -544,10 +544,17 @@ func (rt *Runtime) labelHeld(ctx context.Context, ownerID, computerID string, he
 	prep, cancelPrep := context.WithTimeout(ctx, intakeLabelPrepBudget)
 	defer cancelPrep()
 	lib := &intakeLibrary{rt: rt, summary: map[string]store.StorySummary{}}
+	// indexErr is why the story index cannot be trusted: it was not reconciled
+	// (the publish failed, a write that can lose a conditional write) or it
+	// was not read (the list failed). A read that succeeds and finds no
+	// stories is not an error (the honest default below stands for it).
+	var indexErr error
 	if err := rt.store.PublishStoryIndex(prep, ownerID, computerID); err != nil {
-		log.Printf("intake labels: flush: publish story index: %v; labelling against siblings only", err)
+		log.Printf("intake labels: flush: story index not reconciled: %v", err)
+		indexErr = fmt.Errorf("story index not reconciled: %w", err)
 	} else if sums, err := rt.store.ListStoryIndex(prep, ownerID, computerID, time.Time{}, "", 0); err != nil {
-		log.Printf("intake labels: flush: list stories: %v; labelling against siblings only", err)
+		log.Printf("intake labels: flush: story index unread: %v", err)
+		indexErr = fmt.Errorf("story index unread: %w", err)
 	} else {
 		docs := make([]types.Document, 0, len(sums))
 		for _, sum := range sums {
@@ -562,7 +569,20 @@ func (rt *Runtime) labelHeld(ctx context.Context, ownerID, computerID string, he
 		lib.examples = examples
 	}
 
-	results := rt.labelPoll(ctx, lib, ownerID, computerID, sourceID, items, intakeBatchCaptures)
+	var results []intakeLabelResult
+	if indexErr != nil {
+		// Against an index not reconciled or unread a lone capture would be written "new" with
+		// full confidence and a larger flush asked against its siblings
+		// only, each indistinguishable from a full judgment. No capture is
+		// labelled; management has them as unlabelled.
+		log.Printf("intake labels: story index not reconciled or unread; %d captures unlabelled", len(items))
+		results = make([]intakeLabelResult, len(items))
+		for i := range results {
+			results[i].Err = indexErr
+		}
+	} else {
+		results = rt.labelPoll(ctx, lib, ownerID, computerID, sourceID, items, intakeBatchCaptures)
+	}
 	for i, r := range results {
 		r.Value.SourceID = held[i].sourceID
 		if r.Err == nil {
