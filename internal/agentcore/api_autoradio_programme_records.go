@@ -130,6 +130,9 @@ func (c *programmeCall) writeSegment(ctx context.Context, s *programmeSegment) e
 		"stretch_id": c.stretchID, "segment_id": s.ID, "kind": s.Kind, "sha256": s.SHA256,
 		"blocks": fmt.Sprint(s.Blocks), "forecast": fmt.Sprint(s.Content), "cites": string(cites),
 	}
+	if s.ClipID != "" {
+		refs["clip_id"], refs["clip_seconds"] = s.ClipID, fmt.Sprint(s.ClipSeconds)
+	}
 	rec, err := c.noticeRecord(segmentRecordID(c.stretchID, s.ID), kindSegment, refs, s.Title, s.Text, nil, time.Now())
 	if err != nil {
 		return err
@@ -209,6 +212,10 @@ func (c *programmeCall) readSegments(ctx context.Context, stretchID string, n in
 		_, _ = fmt.Sscanf(rec.SubjectRefs["blocks"], "%d", &s.Blocks)
 		_ = json.Unmarshal([]byte(rec.SubjectRefs["cites"]), &s.Cites)
 		s.Content = rec.SubjectRefs["forecast"] == "true"
+		if id := rec.SubjectRefs["clip_id"]; id != "" {
+			s.ClipID = id
+			_, _ = fmt.Sscanf(rec.SubjectRefs["clip_seconds"], "%g", &s.ClipSeconds)
+		}
 		if s.Content {
 			// A content segment is streamed only with its claim: the segment
 			// record is written first, so a record with no claim is a write

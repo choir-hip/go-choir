@@ -35,7 +35,7 @@ refused (400), so a request carrying `heard`, `after` or `interview_notes` answe
 | `request_id` | required; `[A-Za-z0-9][A-Za-z0-9_.-]{0,63}`; the idempotency key |
 | `cause` | required; `open`, `extend`, `turn` or `result` |
 | `local_time`, `tz` | optional; RFC 3339, and an IANA name (at most 64 bytes). A name the computer cannot resolve is not refused: the time is shown by its own offset |
-| `candidates` | optional; at most 40 items `{route, version, title, dek, text?}`, ordered by importance, highest first. `route` has no space, `@` or `#`; `version` is a whole number or a short string; `title` one line of at most 300 bytes; `dek` required, at most 1000 bytes; `text` at most 8 KB and only on the first ten items. A candidate's cite ref is `pub:<route>@v<version>`. Over a bound is 400 |
+| `candidates` | optional; at most 40 items `{route, version, title, dek, text?, clips?}`, ordered by importance, highest first. `route` has no space, `@` or `#`; `version` is a whole number or a short string; `title` one line of at most 300 bytes; `dek` required, at most 1000 bytes; `text` at most 8 KB and only on the first ten items. A candidate's cite ref is `pub:<route>@v<version>`. `clips` (at most 3) are the podcast clips that source the story, copied by the phone from `GET /api/platform/podcast-clips` (see below). Over a bound is 400 |
 | `edition_text` | optional; at most 32 KB; its paragraphs (blank-line split, `calibration.SplitBlocks`) are numbered `edition:P1`, `edition:P2` and so on |
 
 Refusals are plain JSON `{"error": "..."}` before the stream starts: 401 no
@@ -54,6 +54,7 @@ was used with another `cause`, 413 body too large, 503 no streaming model bound.
   `block_count` is the server's `SplitBlocks` count of `text`, the one the heard
   route will check; the phone never recomputes it. `title` may be empty on an
   `ident` or `bridge`. The event carries no forecast.
+- A `podcast_clip` segment is a `segment` event with two differences: `cut_at` is `segment` (real audio is cut only between segments) and it carries `clip: {clip_id, story_ref, seconds}`. Its `text` is the DJ's lead-in, which the phone speaks; the phone then plays the clip, finding `audio_url`, `start` and `end` for `clip.clip_id` in the clip set it fetched. `cites` is the one story the clip is for (role `quoted`), filled by the server.
 - `done`: `{stretch_id, status: "completed", replayed, segments, claims, dropped, provider, model, index_record_id, timings_ms, members_tried, usage}`.
 - `error`: `{stretch_id, spoken, reason, status}` instead of `done`: a claim
   write failed (`store_failed`), three invalid lines in a row (`invalid_run`),
@@ -89,7 +90,7 @@ seconds for the whole walk, the idle deadline of 30 seconds between deltas
 ident 800, bridge 500), 1,000 bytes per instruction or note in the prompt, 32 KB
 of edition text. A deadline or the cap ends the call through the index with a
 `status` (design 12.2). Kinds: `story`, `update`, `headlines`, `ident`,
-`bridge`; `mail`, `podcast_note`, `answer` and `result` are dropped until their
+`bridge`, `podcast_clip`; `mail`, `podcast_note`, `answer` and `result` are dropped until their
 stations. A candidate needs a non-empty `dek` (12.7).
 
 Residuals: a candidate's text can steer `caused_by` to a real listed ref (a
@@ -106,3 +107,20 @@ does not stop the call; the stretch commits and a replay returns it. A stretch a
 restart interrupted has its start, segment records and claims and no index; its
 `request_id` replays the stored segments that have their claim and an `error` ("ended without an index"), and the retry is a new `request_id` and a new stretch that never
 re-streams a claimed segment id. Nothing resumes at boot.
+
+## Podcast clips (2026-11-15)
+
+Design: [podcast-clips-2026-11-15.md](../design/podcast-clips-2026-11-15.md).
+Request: a candidate's `clips` are `{clip_id, show, episode_title, published?, seconds, quote}`
+(unknown fields refused): `clip_id` matches `clip-[0-9a-f]{12,64}` and is unique
+in the request; `show` and `episode_title` are one line of at most 200 bytes;
+`seconds` is 5 to 300; `quote` is 1 to 400 bytes; at most 3 clips a candidate.
+Over a bound is 400. The clip lines reach the model inside the candidates fence,
+each as one fence-safe line.
+
+The model writes `{"kind":"podcast_clip","title":...,"clip":"<clip id>","text":"<lead-in>"}`
+(text at most 800 bytes). A line is dropped when the clip is not one of the
+request's, `clip` or `title` is missing, or it carries `p_heard` or
+`caused_by`. A `podcast_clip` writes a segment record (with `clip_id` and
+`clip_seconds`, so a replay returns it) and no forecast claim (residual R2 of the
+design). The segment cap and the invalid-run rule count it like any line.

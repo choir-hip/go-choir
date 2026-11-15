@@ -31,7 +31,7 @@ const (
 // podcast_note wait for their sources (programme design slices 3 and 6), and
 // answer and result belong to the turn route and the hand-offs.
 var programmeContentKinds = map[string]bool{"story": true, "update": true, "headlines": true}
-var programmeOtherKinds = map[string]bool{"ident": true, "bridge": true}
+var programmeOtherKinds = map[string]bool{"ident": true, "bridge": true, "podcast_clip": true}
 var programmeLaterKinds = map[string]bool{"mail": true, "podcast_note": true, "answer": true, "result": true}
 
 // programmeTextRange is the longest text a kind may have, in bytes. The
@@ -40,7 +40,7 @@ var programmeLaterKinds = map[string]bool{"mail": true, "podcast_note": true, "a
 // steers, and are generous for twenty minutes of speech (about 150 words a
 // minute across ten to fifteen segments).
 var programmeTextRange = map[string]int{
-	"story": 8000, "update": 4000, "headlines": 3000, "bridge": 500, "ident": 800,
+	"story": 8000, "update": 4000, "headlines": 3000, "bridge": 500, "ident": 800, "podcast_clip": 800,
 }
 
 var (
@@ -66,6 +66,10 @@ type programmeSegment struct {
 	Content bool
 	Blocks  int
 	SHA256  string
+
+	// ClipID and ClipSeconds name the clip a podcast_clip segment leads in.
+	ClipID      string
+	ClipSeconds float64
 
 	P        float64
 	Cause    string // the cause class
@@ -200,6 +204,9 @@ func (in *programmeInput) checkLine(line string) (*programmeSegment, lineClass, 
 		return invalidf("a %s needs a title", kind)
 	}
 
+	if kind == "podcast_clip" {
+		return in.checkClipLine(seg, raw)
+	}
 	cites, reason := in.checkCites(raw["cites"], content)
 	if reason != "" {
 		return invalidf("%s", reason)
@@ -232,6 +239,32 @@ func (in *programmeInput) checkLine(line string) (*programmeSegment, lineClass, 
 	if reason := in.checkCause(seg, causedBy); reason != "" {
 		return invalidf("%s", reason)
 	}
+	return seg, lineOK, ""
+}
+
+// checkClipLine finishes a podcast_clip line. The line names a clip of the
+// request and carries the DJ's lead-in as its text; the cite is the clip's own
+// story, filled here and never taken from the model, and the segment carries
+// no forecast (residual R2 of docs/design/podcast-clips-2026-11-15.md).
+func (in *programmeInput) checkClipLine(seg *programmeSegment, raw map[string]json.RawMessage) (*programmeSegment, lineClass, string) {
+	if seg.Title == "" {
+		return invalidf("a podcast_clip needs a title")
+	}
+	_, hasP := raw["p_heard"]
+	_, hasC := raw["caused_by"]
+	if hasP || hasC {
+		return invalidf("a forecast field (p_heard or caused_by) on a podcast_clip, which carries none")
+	}
+	var id string
+	if err := json.Unmarshal(raw["clip"], &id); err != nil || id == "" {
+		return invalidf("a podcast_clip names its clip in the clip field")
+	}
+	ref, ok := in.clipByID[id]
+	if !ok {
+		return invalidf("clip %q is not one of this request's clips", truncate(id, 60))
+	}
+	seg.ClipID, seg.ClipSeconds = id, ref.clip.Seconds
+	seg.Cites = []programmeCite{{Ref: ref.cand.ref, Role: "quoted", Label: truncate(oneLine(ref.cand.Title), programmeMaxLabel)}}
 	return seg, lineOK, ""
 }
 

@@ -1,0 +1,179 @@
+package podcastworker
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+)
+
+const (
+	userAgent = "choir-podcast-worker/1"
+	// maxDownload bounds one enclosure; a news episode is tens of MB.
+	maxDownload = 600 << 20
+	// wavBytesPerSecond is 16 kHz, mono, 16-bit.
+	wavBytesPerSecond = 32000.0
+)
+
+// FetchFeed downloads and parses one feed.
+func FetchFeed(ctx context.Context, client *http.Client, feedURL, show string) ([]Episode, error) {
+	u, err := url.Parse(feedURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return nil, fmt.Errorf("feed %q is not an http(s) URL", feedURL)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, feedURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch feed %s: %w", feedURL, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetch feed %s: status %d", feedURL, resp.StatusCode)
+	}
+	return ParseFeed(feedURL, resp.Body, show)
+}
+
+// Transcriber turns an enclosure URL into timed segments with ffmpeg and
+// parakeet.cpp's CLI.
+type Transcriber struct {
+	FFmpeg, Parakeet, Model, VAD string
+	Threads                      int
+	WorkDir                      string
+	// MaxMinutes limits the audio transcribed from the start of an episode;
+	// 0 means all of it.
+	MaxMinutes int
+	HTTP       *http.Client
+}
+
+// Engine names the engine and model for the transcript's record.
+func (t *Transcriber) Engine() string {
+	base := strings.TrimSuffix(filepath.Base(t.Model), filepath.Ext(t.Model))
+	return "parakeet.cpp " + base
+}
+
+// Result is a transcription: the segments, the seconds of audio transcribed
+// and the length in seconds of the whole file as downloaded (0 when unknown).
+type Result struct {
+	Segments    []Segment
+	Seconds     float64
+	FileSeconds float64
+}
+
+// Transcribe downloads the enclosure, converts it to 16 kHz mono and runs
+// the model.
+func (t *Transcriber) Transcribe(ctx context.Context, enclosureURL string) (Result, error) {
+	dir, err := os.MkdirTemp(t.WorkDir, "episode-")
+	if err != nil {
+		return Result{}, err
+	}
+	defer os.RemoveAll(dir)
+	src := filepath.Join(dir, "in.audio")
+	if err := t.download(ctx, enclosureURL, src); err != nil {
+		return Result{}, err
+	}
+	// The length of the file as downloaded: an ad-stitched episode differs
+	// from its feed's duration and from the next download, and a clip is valid
+	// only for this file, so the phone checks its own length against this one.
+	fileSeconds := probeSeconds(ctx, t.FFmpeg, src)
+	wav := filepath.Join(dir, "in.wav")
+	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", src}
+	if t.MaxMinutes > 0 {
+		args = append(args, "-t", fmt.Sprint(t.MaxMinutes*60))
+	}
+	args = append(args, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav)
+	if out, err := exec.CommandContext(ctx, t.FFmpeg, args...).CombinedOutput(); err != nil {
+		return Result{}, fmt.Errorf("ffmpeg: %v: %s", err, tail(out))
+	}
+	_ = os.Remove(src)
+	info, err := os.Stat(wav)
+	if err != nil {
+		return Result{}, err
+	}
+	seconds := float64(info.Size()-44) / wavBytesPerSecond
+	threads := t.Threads
+	if threads <= 0 {
+		threads = 4
+	}
+	cmd := exec.CommandContext(ctx, t.Parakeet, "transcribe", "--model", t.Model, "--input", wav,
+		"--vad", "--vad-model", t.VAD, "--threads", fmt.Sprint(threads), "--timestamps", "--json")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil {
+		return Result{}, fmt.Errorf("parakeet: %v: %s", err, tail(stderr.Bytes()))
+	}
+	parsed, err := ParseParakeet(stdout.Bytes())
+	if err != nil {
+		return Result{}, err
+	}
+	return Result{Segments: Segments(parsed.Words), Seconds: seconds, FileSeconds: fileSeconds}, nil
+}
+
+func (t *Transcriber) download(ctx context.Context, rawURL, dst string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	client := t.HTTP
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Minute}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("download: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download: status %d", resp.StatusCode)
+	}
+	f, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	n, err := io.Copy(f, io.LimitReader(resp.Body, maxDownload+1))
+	if err != nil {
+		return fmt.Errorf("download: %w", err)
+	}
+	if n > maxDownload {
+		return fmt.Errorf("download: over %d bytes", maxDownload)
+	}
+	return nil
+}
+
+var durationRe = regexp.MustCompile(`Duration: (\d+):(\d+):(\d+(?:\.\d+)?)`)
+
+// probeSeconds reads a file's duration from `ffmpeg -i`, which prints it on
+// stderr and exits with an error for lack of an output. 0 means unknown.
+func probeSeconds(ctx context.Context, ffmpeg, path string) float64 {
+	out, _ := exec.CommandContext(ctx, ffmpeg, "-nostdin", "-hide_banner", "-i", path).CombinedOutput()
+	m := durationRe.FindSubmatch(out)
+	if m == nil {
+		return 0
+	}
+	h, _ := strconv.ParseFloat(string(m[1]), 64)
+	mi, _ := strconv.ParseFloat(string(m[2]), 64)
+	sec, _ := strconv.ParseFloat(string(m[3]), 64)
+	return h*3600 + mi*60 + sec
+}
+
+func tail(b []byte) string {
+	s := strings.TrimSpace(string(b))
+	if len(s) > 400 {
+		s = s[len(s)-400:]
+	}
+	return s
+}

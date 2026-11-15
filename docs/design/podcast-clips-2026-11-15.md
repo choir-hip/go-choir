@@ -37,7 +37,7 @@ the programme it plugs into is
 |---|---|---|
 | episode | Autopaper object graph (Store B, corpusd), `choir.podcast_episode`, keyed by feed URL and guid | the platform podcast service in corpusd, sole writer and reader |
 | transcript | same store, `choir.podcast_transcript`, one per episode: timed segments (sentence or pause bounded: `start`, `end`, `text`), not words | same |
-| clip | same store, `choir.podcast_clip` plus an edge `clip_for` from the clip to the story's publication object | same; the public route reads it |
+| clip | same store, `choir.podcast_clip`, naming the story by its bare route and the episode by id (no edge: the row is the join) | same; the public route reads it |
 
 **Shortcut, named residual R1.** The doctrine says one custodian desk per
 data kind. No desk owns public audio today and a desk needs the in-cell
@@ -59,7 +59,8 @@ change (the same kinds-by-name pattern as `choir.entity`).
 feed list (data) -> worker: poll feeds ----------------> POST episodes
 worker: GET episodes needing a transcript -> download enclosure -> ffmpeg 16 kHz mono
         -> parakeet-cli (110M q8, VAD, word timestamps) -> sentence segments -> PUT transcript
-worker: POST match ->  corpusd: stories x transcripts -> BM25 -> ONE Jev call -> clips
+worker: POST match ->  corpusd: stories x transcripts -> BM25 -> ONE Jev call -> clips   (the red commit)
+operator: PUT clips  (a clip an operator, or the proof run, matched by hand: the same store)
 phone / any client: GET /api/platform/podcast-clips   (public, bulk, one request)
 ```
 
@@ -115,10 +116,58 @@ phone / any client: GET /api/platform/podcast-clips   (public, bulk, one request
    per clip (a `podcast_clip` segment carries none tonight, R2); transcripts
    for episodes of subscribed shows of a listener; deleting stale episodes
    and transcripts (R3: they stay until a retention rule exists); scoring of
-   the support threshold; speaker labels; detecting ad insertion (R4: a clip
-   from a file whose ads differ from the transcribed copy plays at a wrong
-   offset, and the phone should fall back to the episode start if the audio
-   duration differs by more than a few seconds from `duration_seconds`).
+   the support threshold; speaker labels; aligning clips across ad insertion (R4, measured 2026-11-15: NPR, NYT, Vox and Marketplace serve a different ad-stitched file on each download, 5 to 21% longer than the feed says; BBC and Pod Save America were identical). The worker stores the length it measured on the file it transcribed as `duration_seconds`; the phone skips a clip whose loaded item differs from it by more than about 3 seconds. Re-aligning by text, or keeping the exact file, is the real fix.
+
+### 3.1 The worker keeps running (owner, 2026-11-15)
+
+Owner: "why not get transcription worker running going forward too? we have
+concurrency issues currently (its on node a shared with mike and choir builder)
+but otherwise should be a good service to have running; we will scale hardware
+next week probably". So `podcast-worker serve` is the long-running mode.
+
+- **What it does.** Every 30 minutes it polls the feed list and posts the new
+  items; between polls it asks the platform for episodes without a transcript
+  (newest first, published within 72 hours), transcribes ONE at a time, posts
+  the transcript, and loops at once. When nothing is pending it sleeps 30 s,
+  doubling to 10 minutes, and starts over from 30 s when work appears.
+- **Restart and kill.** The platform's episode list is the queue: an episode
+  leaves it only when its transcript is stored, so a kill (SIGTERM stops the
+  child processes and removes the scratch directory) leaves an unfinished
+  episode pending and the next start redoes it. No server-side claim exists
+  tonight because one worker runs; the transcript put replaces, so a second
+  worker would at worst repeat an episode. When more than one worker runs, a
+  claim with a deadline is added to the listing route (named residual R7). An
+  episode that fails (a dead enclosure, a bad file) is skipped for 15 minutes,
+  doubling to 6 hours, in memory, and does not hold the queue.
+- **Manners on a shared host** (not limits on model calls): `nice 19` and the
+  idle I/O class on the worker, inherited by ffmpeg and the model; at most 4
+  threads (the benchmark showed 8 give nothing over 4; the command line cannot
+  raise it); one episode at a time; the unit adds `CPUWeight=1` and
+  `MemoryMax=2G`. Cost to neighbours: about 0.7 GB for the model plus ffmpeg's
+  buffer, and per episode a temporary download (tens of MB, at most 600 MB)
+  and a 16 kHz WAV (about 115 MB an hour), both deleted when the episode ends.
+  The build VM has 3.9 GB, so the 2 GB ceiling matters.
+- **Observed.** One line per episode (episode, show, segments, seconds of audio,
+  seconds of work), one volume line per hour (stored, failed, audio and work
+  seconds), a line per failure with its skip, and no line per poll, so the log
+  volume does not follow the idle rate. `journalctl --user -u choir-podcast-worker`.
+  The platform side is observed by what it holds: the episode listing with
+  `need=transcript` is the backlog.
+- **Where it runs, and how it is kept running.** The build VM `choir-agents`
+  is a NixOS guest declared in Mike's infra repo (`infra/node-a/choir-agents.nix`),
+  not in this repo, so a declared service (option a) is not ours to write or
+  apply from here. Option (b) is `scripts/podcast-worker-user-unit`, which writes
+  a `systemd --user` unit (restart on failure, nice 19, idle I/O, CPUWeight 1,
+  2 GB ceiling); it survives logout only with linger on, which is off on that
+  guest today (`loginctl show-user agent` says `Linger=no`), and turning it on is
+  an act on the host that the lead decides. Option (c), tonight's stopgap,
+  is `systemd-run --user` or `nohup` with the same flags, which lasts while the
+  guest's user manager lives.
+- **When hardware scales.** Nothing in the worker changes: it is one process
+  with a fixed thread cap. The service moves to its own host (or a guest of its
+  own) as the same binary under a unit declared in that host's config, the model
+  files in the image, the operator key as a credential file. More throughput
+  means more such workers, which needs the claim of R7.
 
 ## 4. What the phone receives (the exact shapes; do not change without the lead)
 
@@ -127,7 +176,7 @@ phone / any client: GET /api/platform/podcast-clips   (public, bulk, one request
 Public, no sign-in, no computer (like `/api/platform/publications/front`).
 Query: `route` (repeatable, at most 60; a story's bare route, `route.bare`
 of the front list) to ask for named stories; with no `route`, the clips of
-every story updated in the last 72 hours (the front page in bulk, one
+every story updated in the last 72 hours that has any (the front page in bulk, one
 request). `limit` (default 120, at most 200). `Cache-Control: public,
 max-age=60`. 400 on a bad query; 405 not GET.
 
@@ -216,13 +265,20 @@ internal routes, which accept only the proxy's host credential.
 |---|---|
 | `POST /api/platform/operator/podcasts/episodes` | `{"episodes":[{"feed_url","guid","show","title","published","duration_seconds","enclosure_url","notes"}]}`, at most 200, `notes` cut to 2000 bytes; answers `{"recorded":n,"new":m}` |
 | `GET /api/platform/operator/podcasts/episodes?need=transcript&since=<RFC3339>&limit=<n>` | `{"episodes":[{"episode_id","feed_url","guid","show","title","published","duration_seconds","enclosure_url"}]}`, newest first, episodes with no transcript |
-| `PUT /api/platform/operator/podcasts/transcripts` | `{"episode_id","engine","audio_seconds","segments":[{"start","end","text"}]}`, at most 4 MB; answers `{"segments":n}` |
-| `POST /api/platform/operator/podcasts/match` | `{"since_hours":72}`; answers `{"stories","episodes","windows","pairs","jev_calls","clips","published","dropped"}` |
+| `PUT /api/platform/operator/podcasts/transcripts` | `{"episode_id","engine","audio_seconds","file_seconds","segments":[{"start","end","text"}]}`, at most 6 MB; `file_seconds` (optional) is the length of the whole file as downloaded and replaces the feed's duration as the episode's `duration_seconds`; answers `{"segments":n}` |
+| `PUT /api/platform/operator/podcasts/clips` | `{"clips":[{"story_route","episode_id","start","end","quote","support"}]}`, at most 200; the story must be on the front list, the episode known, 5 to 120 s, inside the episode, quote cut to 280 characters; answers `{"clips":n}`. The clip id is made from story, episode and the start rounded to the second, so a repeat replaces |
+| `POST /api/platform/operator/podcasts/match` | (the red commit) `{"since_hours":72}`; answers `{"stories","episodes","windows","pairs","jev_calls","clips","published","dropped"}` |
 
 Enclosure and feed URLs must be `http` or `https`, with no credentials in the
 URL and at most 2048 bytes; the server stores them, never fetches them.
 
 ## 5. Mutation classes and rollback
+
+The slice lands in two parts so the first can deploy while the second is reviewed:
+part 1 (orange) is the stored kinds, the public read, the operator write routes
+(episodes, transcripts, clips), the programme's `podcast_clip` and the worker;
+part 2 (red) is the match job and the gateway entry. Clips from part 1 come from
+the operator's own matching posted through the clips route.
 
 - Platform store, public route and operator routes (new kinds, additive): orange,
   rollback revert; the objects are inert without the route.
@@ -235,7 +291,7 @@ URL and at most 2048 bytes; the server stores them, never fetches them.
 ## 6. Residuals
 
 R1 no desk custodian (section 2). R2 no forecast claim per clip. R3 no
-retention for episodes and transcripts. R4 ad insertion offsets. R5 the
+retention for episodes and transcripts. R4 ad insertion offsets. R7 no server-side claim for more than one worker. R5 the
 support threshold (0.6) and the window size are guesses to be scored against
 listening outcomes. R6 matching is operator-triggered tonight, so clips appear
 when the lead runs the worker, not on a schedule.

@@ -1,0 +1,122 @@
+package podcastworker
+
+// Ways the worker can fail, written before the code (synthetic feeds and
+// words only; no third-party text):
+//   1. a feed item with no audio enclosure, or no parsable date, becomes an
+//      episode;
+//   2. a duration in HH:MM:SS, MM:SS or seconds is read wrong;
+//   3. a segment spans a sentence end or a long pause, so a clip would start
+//      or end mid-sentence;
+//   4. a segment is longer than the hard bound, so a clip could not be cut;
+//   5. a word timestamp is lost or moved when words are joined;
+//   6. HTML in show notes reaches the platform.
+
+import (
+	"strings"
+	"testing"
+)
+
+const syntheticFeed = `<?xml version="1.0"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"><channel><title>Synthetic Daily</title>
+<item><title>Episode &amp; One</title><guid>g-1</guid><pubDate>Mon, 16 Nov 2026 09:00:00 +0000</pubDate>
+<description>&lt;p&gt;Notes &lt;b&gt;here&lt;/b&gt;&lt;/p&gt;</description><itunes:duration>01:02:03</itunes:duration>
+<enclosure url="https://cdn.example.test/1.mp3" type="audio/mpeg"/></item>
+<item><title>Text only</title><guid>g-2</guid><pubDate>Mon, 16 Nov 2026 08:00:00 +0000</pubDate></item>
+<item><title>Bad date</title><guid>g-3</guid><pubDate>soon</pubDate><enclosure url="https://cdn.example.test/3.mp3" type="audio/mpeg"/></item>
+<item><title>Video</title><guid>g-4</guid><pubDate>Mon, 16 Nov 2026 07:00:00 +0000</pubDate><enclosure url="https://cdn.example.test/4.mp4" type="video/mp4"/></item>
+<item><title>Short</title><pubDate>Sun, 15 Nov 2026 07:00:00 GMT</pubDate><itunes:duration>754</itunes:duration><enclosure url="https://cdn.example.test/5.mp3" type="audio/mpeg"/></item>
+</channel></rss>`
+
+func TestParseFeed(t *testing.T) {
+	eps, err := ParseFeed("https://f.example.test/x.xml", strings.NewReader(syntheticFeed), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(eps) != 2 {
+		t.Fatalf("got %d episodes, want 2 (audio enclosure and date only): %+v", len(eps), eps)
+	}
+	a := eps[0]
+	if a.Show != "Synthetic Daily" || a.Title != "Episode & One" || a.GUID != "g-1" || a.Published != "2026-11-16T09:00:00Z" || a.DurationSeconds != 3723 || a.EnclosureURL != "https://cdn.example.test/1.mp3" {
+		t.Fatalf("episode 1 = %+v", a)
+	}
+	if a.Notes != "Notes here" {
+		t.Fatalf("notes = %q", a.Notes)
+	}
+	b := eps[1]
+	if b.GUID != "https://cdn.example.test/5.mp3" || b.DurationSeconds != 754 || b.Published != "2026-11-15T07:00:00Z" {
+		t.Fatalf("episode 2 = %+v (guid falls back to the enclosure URL)", b)
+	}
+	named, _ := ParseFeed("u", strings.NewReader(syntheticFeed), "Chosen Name")
+	if named[0].Show != "Chosen Name" {
+		t.Fatalf("the feed list's show name wins, got %q", named[0].Show)
+	}
+}
+
+func TestParseDuration(t *testing.T) {
+	for in, want := range map[string]float64{"": 0, "90": 90, "1:30": 90, "1:00:00": 3600, "x": 0, "-5": 0, "1:xx": 0} {
+		if got := parseDuration(in); got != want {
+			t.Errorf("parseDuration(%q) = %v, want %v", in, got, want)
+		}
+	}
+}
+
+func w(text string, start, end float64) Word { return Word{W: text, Start: start, End: end} }
+
+func TestSegmentsBreakOnSentencesAndPauses(t *testing.T) {
+	words := []Word{
+		w("The", 0.1, 0.3), w("market", 0.4, 0.8), w("opened.", 0.9, 1.3), // sentence end
+		w("Traders", 1.5, 2.0), w("waited", 2.1, 2.5), // pause of 1.5 s follows
+		w("Then", 4.0, 4.2), w("it", 4.3, 4.4), w("rose?", 4.5, 4.9),
+		w("Yes!", 5.0, 5.3),
+	}
+	segs := Segments(words)
+	if len(segs) != 4 {
+		t.Fatalf("got %d segments, want 4: %+v", len(segs), segs)
+	}
+	want := []Segment{
+		{0.1, 1.3, "The market opened."}, {1.5, 2.5, "Traders waited"}, {4.0, 4.9, "Then it rose?"}, {5.0, 5.3, "Yes!"},
+	}
+	for i := range want {
+		if segs[i] != want[i] {
+			t.Errorf("segment %d = %+v, want %+v", i, segs[i], want[i])
+		}
+	}
+}
+
+func TestSegmentsBoundTheLengthOfUnpunctuatedSpeech(t *testing.T) {
+	var words []Word
+	at := 0.0
+	for i := 0; i < 400; i++ {
+		gap := 0.05
+		if i%25 == 24 {
+			gap = 0.3 // a small gap
+		}
+		words = append(words, w("word", at, at+0.3))
+		at += 0.3 + gap
+	}
+	segs := Segments(words)
+	if len(segs) < 3 {
+		t.Fatalf("unpunctuated speech of %.0f s made %d segments", at, len(segs))
+	}
+	for i, s := range segs {
+		if s.End-s.Start > hardMax+0.5 {
+			t.Fatalf("segment %d is %.1f s, over the hard bound", i, s.End-s.Start)
+		}
+		if i > 0 && s.Start < segs[i-1].End {
+			t.Fatalf("segment %d starts before the last ends", i)
+		}
+	}
+}
+
+func TestParseParakeetOutput(t *testing.T) {
+	out, err := ParseParakeet([]byte(`{"text":"Hi there.","frame_sec":0.08,"words":[{"w":"Hi","start":0.08,"end":0.24,"conf":0.99},{"w":"there.","start":0.32,"end":0.56,"conf":0.7}],"tokens":[]}`))
+	if err != nil || len(out.Words) != 2 || out.Words[1].End != 0.56 {
+		t.Fatalf("parse: %+v %v", out, err)
+	}
+	if _, err := ParseParakeet([]byte(`{"text":"","words":[]}`)); err == nil {
+		t.Fatal("an output with no words is an error")
+	}
+	if _, err := ParseParakeet([]byte(`not json`)); err == nil {
+		t.Fatal("bad JSON is an error")
+	}
+}

@@ -84,9 +84,33 @@ type programmeCandidate struct {
 	Title   string          `json:"title"`
 	Dek     string          `json:"dek"`
 	Text    string          `json:"text,omitempty"`
+	// Clips are the podcast clips that source this story, copied by the phone
+	// from GET /api/platform/podcast-clips (docs/design/podcast-clips-2026-11-15.md 4.2).
+	Clips []programmeClip `json:"clips,omitempty"`
 
 	ref string
 }
+
+// programmeClip is what the call knows of a clip: enough to introduce it,
+// never its audio address (the phone holds that).
+type programmeClip struct {
+	ClipID       string  `json:"clip_id"`
+	Show         string  `json:"show"`
+	EpisodeTitle string  `json:"episode_title"`
+	Published    string  `json:"published,omitempty"`
+	Seconds      float64 `json:"seconds"`
+	Quote        string  `json:"quote"`
+}
+
+const (
+	programmeMaxClipsPerCand = 3
+	programmeClipMinSeconds  = 5
+	programmeClipMaxSeconds  = 300
+	programmeClipQuoteMax    = 400
+	programmeClipLineMax     = 200
+)
+
+var programmeClipIDRe = regexp.MustCompile(`^clip-[0-9a-f]{12,64}$`)
 
 type programmeRequest struct {
 	RequestID   string               `json:"request_id"`
@@ -135,6 +159,7 @@ func parseProgrammeRequest(body []byte) (programmeRequest, error) {
 		return req, fmt.Errorf("candidates holds at most %d items", programmeMaxCands)
 	}
 	seen := map[string]bool{}
+	clipSeen := map[string]bool{}
 	for i := range req.Candidates {
 		c := &req.Candidates[i]
 		if err := c.check(i); err != nil {
@@ -144,8 +169,42 @@ func parseProgrammeRequest(body []byte) (programmeRequest, error) {
 			return req, fmt.Errorf("candidates[%d] repeats the ref %s", i, c.ref)
 		}
 		seen[c.ref] = true
+		for j := range c.Clips {
+			if err := c.Clips[j].check(i, j); err != nil {
+				return req, err
+			}
+			if clipSeen[c.Clips[j].ClipID] {
+				return req, fmt.Errorf("candidates[%d].clips[%d] repeats the clip_id %s", i, j, c.Clips[j].ClipID)
+			}
+			clipSeen[c.Clips[j].ClipID] = true
+		}
 	}
 	return req, nil
+}
+
+func (k *programmeClip) check(i, j int) error {
+	at := fmt.Sprintf("candidates[%d].clips[%d]", i, j)
+	if !programmeClipIDRe.MatchString(k.ClipID) {
+		return fmt.Errorf("%s.clip_id is not a clip id", at)
+	}
+	for name, v := range map[string]*string{"show": &k.Show, "episode_title": &k.EpisodeTitle} {
+		*v = strings.TrimSpace(*v)
+		if *v == "" || len(*v) > programmeClipLineMax || hasControl(*v) {
+			return fmt.Errorf("%s.%s must be one line of 1 to %d bytes", at, name, programmeClipLineMax)
+		}
+	}
+	if k.Published != "" {
+		if _, err := time.Parse(time.RFC3339, k.Published); err != nil {
+			return fmt.Errorf("%s.published must be RFC 3339", at)
+		}
+	}
+	if !(k.Seconds >= programmeClipMinSeconds && k.Seconds <= programmeClipMaxSeconds) {
+		return fmt.Errorf("%s.seconds must be %d to %d", at, programmeClipMinSeconds, programmeClipMaxSeconds)
+	}
+	if k.Quote = strings.TrimSpace(k.Quote); k.Quote == "" || len(k.Quote) > programmeClipQuoteMax {
+		return fmt.Errorf("%s.quote must be 1 to %d bytes", at, programmeClipQuoteMax)
+	}
+	return nil
 }
 
 func (c *programmeCandidate) check(i int) error {
@@ -169,6 +228,9 @@ func (c *programmeCandidate) check(i int) error {
 	}
 	if c.Dek = strings.TrimSpace(c.Dek); c.Dek == "" || len(c.Dek) > 1000 {
 		return fmt.Errorf("candidates[%d].dek must be 1 to 1000 bytes (design 12.7: each candidate has title, dek, route and version)", i)
+	}
+	if len(c.Clips) > programmeMaxClipsPerCand {
+		return fmt.Errorf("candidates[%d] carries %d clips, at most %d", i, len(c.Clips), programmeMaxClipsPerCand)
 	}
 	if c.Text != "" {
 		if i >= programmeTextCands {
@@ -282,10 +344,21 @@ func (c *programmeCall) segmentEvent(s programmeSegment) map[string]any {
 	if cites == nil {
 		cites = []programmeCite{}
 	}
-	return map[string]any{
+	ev := map[string]any{
 		"stretch_id": c.stretchID, "segment_id": s.ID, "kind": s.Kind, "title": s.Title, "text": s.Text,
 		"cites": cites, "block_count": s.Blocks, "est_seconds": estSeconds(s.Text), "cut_at": "sentence",
 	}
+	if s.ClipID != "" {
+		// Real audio is cut only between segments (design 1.3), and the phone
+		// finds the audio address of the clip in the set it fetched.
+		ev["cut_at"] = "segment"
+		storyRef := ""
+		if len(cites) > 0 {
+			storyRef = cites[0].Ref
+		}
+		ev["clip"] = map[string]any{"clip_id": s.ClipID, "story_ref": storyRef, "seconds": s.ClipSeconds}
+	}
+	return ev
 }
 
 func mintStretchID() string {
