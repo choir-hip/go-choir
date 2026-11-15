@@ -4,7 +4,7 @@ Reference page (convention: [README.md](README.md)). Synthesised 2026-11-10
 from the subpages in [system1/](system1/); every figure below is traced to one
 of them and carries the subpage's tag. Replaces `JEV.md` (renamed so the page
 is about the role, not one vendor). Code lines are those the subpages give, at
-`origin/main` dc637a84f, and drift.
+`origin/main` dc637a84f, and drift; failure handling is cited by file and symbol, not by line.
 
 Tags: **[V]** vendor's own page or figure; **[T]** third party or independent
 evaluator; **[P]** paper (arXiv or peer-reviewed); **[R]** relayed,
@@ -178,7 +178,7 @@ counted 13 because it merged the router and classifier):
 
 | # | Site (`internal/...`) | Unit | Questions per call | Action rule |
 |---|---|---|---|---|
-| 1 | intake labels `agentcore/intake_job.go` (`planIntakeJobCalls`), `intake_labels.go` (`askIntakeCall`) | every waiting capture, one job (`jevJob`), one call unless a vendor limit splits it | 2 per capture per part of at most 252 options (stories, then every other capture): 24 for 12 captures over a window that fits, split into more calls by units when a vendor limit is crossed; a call that fails twice is halved, to two levels | max-p choice over parts and chunks, p stored |
+| 1 | intake labels `agentcore/intake_job.go` (`planIntakeJobCalls`), `intake_labels.go` (`askIntakeCall`) | every waiting capture, one job (`jevJob`), one call unless a vendor limit splits it | 2 per capture per part of at most 252 options (stories, then every other capture): 24 for 12 captures over a window that fits, split into more calls by units when a vendor limit is crossed; a call that fails twice is halved, to two levels (`jevNextStep`, `internal/agentcore/jev_failure.go`), except a dial failure, which fails at once, is never asked again or halved, and stops the rest of the flush (`labelPollWith`); a story index not reconciled or unread leaves every capture unlabelled with no call (`labelHeld`) | max-p choice over parts and chunks, p stored |
 | 2 | event layer `event_layer.go` | every queued capture of a flush (a flush runs 60 s after the first) | 1 each | join at p>=0.92, tentative 0.5 to 0.92 |
 | 3 | support judge `support_judge.go:369` | citation pairs of a revision | one per pair, uncapped | yes and p>=0.5 |
 | 4 | System 1 verb `system1_verb.go:286` | a desk's ask | up to 12 | returned with probabilities |
@@ -352,6 +352,14 @@ order they should change a decision.
     100 to 150 stories) kept each question under 255; the single state keeps the
     stories once and puts a capture's options in questions of at most 252 each (`intakeOptionsMax`)
     C.
+27. **The gateway answers every upstream failure as 502, so the guest cannot tell a size refusal from an outage.** The
+    vendor's size refusal and a 529 reach the guest as 502 "Jev judgment provider unavailable"
+    (`internal/gateway/jev.go`, the final `StatusBadGateway` answer of the judgment handler); a rate refusal (429), a disabled or held
+    transport (503) and the gateway's own request refusals (400, 413) keep their own status. That is why a call the
+    gateway answers 502, the class whose reason the guest cannot read, is still asked once more and halved (`jevNextStep` in `internal/agentcore/jev_failure.go`):
+    halving is the only cure the guest has for a refusal it cannot read. A dial failure (no request left the guest: refused, unresolvable, or
+    the dial deadline expired; no status) is told apart by the client, and every halving seen on 2026-11-15 was one (all 13 failures, gateway
+    restarts; 24 of 258 calls spent on 7 captures that ended unlabelled). A 529 backs off only if the error the guest sees says 529 or overloaded; through the gateway it arrives as 502, so today it is asked once more and halved like any 502 (unchanged from main). Relaying the vendor's reason through the gateway is a later change. C, M.
 
 ## 5. Patterns
 
