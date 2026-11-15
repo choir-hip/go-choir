@@ -15,6 +15,7 @@
 // Every colour, face, radius and shadow is a theme token (th.*, tx.*); a theme's own preview card paints from the card's data.
 use Theme, ThemeList, DemoInfo, ThemeCard, ThemeExtras, SettingsAccount, SettingsComputer, SettingRowInfo, LearnedInfo, AboutInfo, ThemeCards, SettingRows, ChoirAuth from "@choir/autoradio"
 use ToolScroll, Card, Btn from "./ui.contract"
+use VoiceCardsList from "./voice.contract"
 
 component SettingsPage
   props
@@ -404,6 +405,7 @@ component VoiceScreen
     ToolScroll(id="settings")
       ScreenTitle(label="Voice and models", back=true)
       text "The voice that reads the paper, and the models that hear you, run on this phone. Their sizes and checks are on the Components page." font-family=th.fontRead font-size=tx.sizeBody line-height=tx.lineBody color=th.fg
+      VoiceCardsList()
       Card(level=1, testId="settings-card-voice", minHeight=0)
         NavRow(address="lab:components", title="Components", subtitle="Models, stages and parameters", testId="settings-voice-components")
         Hairline()

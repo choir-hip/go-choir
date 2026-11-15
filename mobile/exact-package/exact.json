@@ -875,6 +875,22 @@
     },
     "SignalList": {
       "rows": "SignalRow[]"
+    },
+    "VoiceCard": {
+      "id": "string",
+      "name": "string",
+      "blurb": "string",
+      "sizeLabel": "string",
+      "state": "string",
+      "note": "string",
+      "progress": "number",
+      "selected": "bool",
+      "playing": "bool"
+    },
+    "VoiceCards": {
+      "selected": "string",
+      "message": "string",
+      "cards": "VoiceCard[]"
     }
   },
   "views": {
@@ -2343,6 +2359,33 @@
         "on": "string"
       },
       "answers": "PageList"
+    },
+    {
+      "source": "voiceCards",
+      "live": true,
+      "answers": "VoiceCards",
+      "substitute": {
+        "default": {
+          "selected": "",
+          "message": "",
+          "cards": []
+        }
+      }
+    },
+    {
+      "send": "voicePick",
+      "options": {
+        "id": "string"
+      },
+      "answers": "VoiceCards"
+    },
+    {
+      "send": "voiceStop",
+      "answers": "VoiceCards"
+    },
+    {
+      "send": "voiceContinue",
+      "answers": "VoiceCards"
     }
   ]
 }

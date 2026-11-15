@@ -113,6 +113,7 @@ public final class AutoradioModule: ExactPackage {
         registerSettings()
         registerOnboarding()
         registerMark()
+        registerVoice()
         Task { [choir] in await choir?.refresh() }
     }
 

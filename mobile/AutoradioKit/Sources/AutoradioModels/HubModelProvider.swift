@@ -35,8 +35,12 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
         case "silero-vad-v6.2.1": _ = try await SileroVAD.probabilities([Float](repeating: 0, count: 4096))
         case "parakeet-eou-120m": let s = try await ParakeetEOUTranscriber(StageParams()).begin(); s.cancel()
         case "parakeet-tdt-0.6b-v2": let s = try await ParakeetTDTTranscriber(StageParams()).begin(); s.cancel()
-        case "kokoro-82m-ane": _ = try await KokoroVoice.synthesizeOnce("Ready.")
-        case "pocket-tts": _ = try await PocketTTSVoice.firstFrameMs("Ready.")
+        case "kokoro-82m-ane":
+            _ = try await KokoroVoice.synthesizeOnce("Ready.")
+            Voices.readiness.markReady(model: id)          // fetched, compiled and heard to speak: the radio may prefer it now
+        case "pocket-tts":
+            _ = try await PocketTTSVoice.firstFrameMs("Ready.")
+            Voices.readiness.markReady(model: id)
         default:
             guard KnownModels.isPinned(id) else { throw LabError.unavailable("no loader for \(id) in this build") }
             #if canImport(llama)

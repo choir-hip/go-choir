@@ -41,16 +41,27 @@ public final class KokoroVoice: Voice, @unchecked Sendable {
     let voice: String, speed: Float
     public init(_ p: StageParams) { voice = p.string("voice", "af_heart"); speed = Float(p.double("speed", 1.0)) }
 
+    /// Load the model with every Kokoro voice of the catalog ready, so the voice cards switch voices without another fetch. If one of them
+    /// will not load, the model loads with the wanted voice alone: one missing voice must not take the voice away.
+    static func load(preferring voice: String) async throws -> (KokoroAneManager, @Sendable () async -> Void) {
+        let all = Set([voice] + VoiceCatalog.options.filter { $0.stageID == stageID }.map(\.voice))
+        let k = KokoroAneManager(version: .v3)
+        do { try await k.initialize(preloadVoices: all) }
+        catch {
+            await k.cleanup()
+            let one = KokoroAneManager(version: .v3)
+            try await one.initialize(preloadVoices: [voice])
+            return (one, { await one.cleanup() })
+        }
+        return (k, { await k.cleanup() })
+    }
+
     public func speak(_ text: AsyncStream<String>) -> AsyncThrowingStream<AudioFrame, Error> {
         let (voice, speed) = (voice, speed)
         return AsyncThrowingStream { c in
             let task = Task {
                 do {
-                    let m = try await Self.slot.get {
-                        let k = KokoroAneManager(version: .v3)
-                        try await k.initialize(preloadVoices: [voice])
-                        return (k, { await k.cleanup() })
-                    }
+                    let m = try await Self.slot.get { try await Self.load(preferring: voice) }
                     for await line in text {
                         for s in sentences(line) {
                             if Task.isCancelled { break }
@@ -66,7 +77,7 @@ public final class KokoroVoice: Voice, @unchecked Sendable {
     }
     /// One synthesis with its timing, for the proof.
     public static func synthesizeOnce(_ text: String, voice: String = "af_heart") async throws -> (samples: [Float], rate: Double, ms: Double) {
-        let m = try await slot.get { let k = KokoroAneManager(version: .v3); try await k.initialize(preloadVoices: [voice]); return (k, { await k.cleanup() }) }
+        let m = try await slot.get { try await load(preferring: voice) }
         let t0 = nowMs()
         let r = try await m.synthesizeDetailed(text: text, voice: voice, speed: 1.0)
         return (r.samples, Double(r.sampleRate), nowMs() - t0)

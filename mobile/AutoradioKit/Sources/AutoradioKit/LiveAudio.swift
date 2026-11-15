@@ -556,7 +556,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     /// not running; it plays when the radio starts). Returns false for text with nothing to say.
     @discardableResult
     public func speakText(address: String, text: String, title: String? = nil, startNow: Bool = false, play: Bool = true) -> Bool {
-        let paras = Array(ChoirText.paragraphs(text).prefix(200))
+        let paras = Array(ChoirText.paragraphs(text, maxChars: ChoirText.speechChars).prefix(600))
         guard !paras.isEmpty else { return false }
         let name = title ?? paras[0].split(separator: " ").prefix(6).joined(separator: " ")
         let doc = ProgrammeDocument(id: "text:\(address)", title: name, blocks: paras.map { .speech(text: $0) })
@@ -588,21 +588,21 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     func playBlock(_ b: ProgrammeBlock, index tag: Int) async -> Bool {
         switch b {
         case .speech(let t), .listenerPassage(let t, _):
-            lock.lock(); let cfg = configuration; lock.unlock()
-            let voice: Voice
-            do { voice = try registry.make(.voice, as: Voice.self, cfg) } catch {
-                log.emit(.error(stage: "voice", message: "the voice \(cfg.setting(.voice)?.id ?? "") could not be made: \(error)")); return false
+            // The block after this one is synthesised while this one plays (`lookahead`), so a long story starts after its first short
+            // block and then runs without a gap; the voice itself falls back to the system voice line by line (`makeSpeaker`).
+            lock.lock(); let current = configuration; lock.unlock()
+            let key = Self.lookaheadKey(t, current)
+            let hit = ahead.write { a -> Task<Synthesized?, Never>? in
+                guard let x = a, x.key == key else { return nil }
+                a = nil; return x.task
             }
-            var samples: [Float] = []; var rate = 22050.0
-            var failed = false
-            do { for try await f in voice.speak(AsyncStream { $0.yield(t); $0.finish() }) { samples += f.samples; rate = f.sampleRate } } catch {
-                log.emit(.error(stage: "voice", message: "\(error)")); failed = true
-            }
+            let made: Synthesized?
+            if let hit { made = await hit.value } else { made = await synthesize(t) }
             if Task.isCancelled { return false }
-            if samples.isEmpty && !failed { log.emit(.error(stage: "voice", message: "the voice made no sound for this block")) }
-            if failed || samples.isEmpty { return false }
+            guard let made else { return false }
             log.emit(.programmeAudioStart(block: tag))      // the trace reads "desk audio start" from the first of these after a revision
-            await audio.playProgramme(samples, rate: rate, tag: tag)
+            startLookahead(after: tag)
+            await audio.playProgramme(made.samples, rate: made.rate, tag: tag)
             return true
         case .clip(let url, let start, let end, _):
             guard let u = FixtureResources.resolve(url), let all = try? AudioFiles.readMono(u, rate: 16_000) else {
@@ -612,6 +612,53 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             if a < z { log.emit(.programmeAudioStart(block: tag)); await audio.playProgramme(Array(all[a..<z]), rate: 16_000, tag: tag); return true }
             return false
         }
+    }
+
+    // MARK: Synthesis and lookahead
+
+    struct Synthesized: Sendable { var samples: [Float]; var rate: Double }
+    private let ahead = Locked<(key: String, task: Task<Synthesized?, Never>)?>(nil)
+
+    static func lookaheadKey(_ text: String, _ cfg: LabConfiguration) -> String {
+        "\(String(describing: cfg.setting(.voice)))|\(text)"
+    }
+
+    /// Make the audio of one block with the configured voice (the neural voice, the system voice as its fall back). nil when nothing could be
+    /// made; the failure is on the log (the trace's "voice" errors).
+    func synthesize(_ text: String) async -> Synthesized? {
+        lock.lock(); let cfg = configuration; lock.unlock()
+        let voice: Voice
+        do { voice = try registry.makeSpeaker(cfg, log: log) } catch {
+            log.emit(.error(stage: "voice", message: "the voice \(cfg.setting(.voice)?.id ?? "") could not be made: \(error)")); return nil
+        }
+        var samples: [Float] = []; var rate = 22050.0
+        var failed = false
+        do { for try await f in voice.speak(AsyncStream { $0.yield(text); $0.finish() }) { samples += f.samples; rate = f.sampleRate } } catch {
+            log.emit(.error(stage: "voice", message: "\(error)")); failed = true
+        }
+        if Task.isCancelled { return nil }
+        if samples.isEmpty && !failed { log.emit(.error(stage: "voice", message: "the voice made no sound for this block")) }
+        if failed || samples.isEmpty { return nil }
+        return Synthesized(samples: samples, rate: rate)
+    }
+
+    /// Start making the next speech block now, so it is ready when this one ends.
+    private func startLookahead(after tag: Int) {
+        let next = st.read { s -> String? in
+            let i = tag + 1
+            guard s.document.blocks.indices.contains(i) else { return nil }
+            return s.document.blocks[i].spokenText
+        }
+        guard let text = next, !text.isEmpty else { return }
+        lock.lock(); let cfg = configuration; lock.unlock()
+        let key = Self.lookaheadKey(text, cfg)
+        let task = Task { [weak self] in await self?.synthesize(text) }
+        let old = ahead.write { a -> Task<Synthesized?, Never>? in let o = a; a = (key, task); return o?.task }
+        old?.cancel()
+    }
+    private func cancelLookahead() {
+        let old = ahead.write { a -> Task<Synthesized?, Never>? in let o = a; a = nil; return o?.task }
+        old?.cancel()
     }
 
     // MARK: PlaybackControl
@@ -631,6 +678,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     }
     public func setLevel(_ l: PlayLevel) async {
         let paused = st.write { s -> Bool in s.level = l; return s.userPaused }
+        if l == .pause { cancelLookahead() }          // the listener spoke: the voice is wanted for the answer, not for the next block
         playback.cut(l == .pause)
         switch l {
         case .play: audio.setProgrammeVolume(1); if !paused { audio.programmePlay() }

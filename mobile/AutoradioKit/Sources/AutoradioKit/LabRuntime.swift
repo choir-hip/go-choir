@@ -69,6 +69,8 @@ public final class LabRuntime: @unchecked Sendable {
     public let recorder: TurnRecorder
     public let store: KeptTurnStore
     public let configs: ConfigStore
+    /// The voice choice that survives a relaunch.
+    public let voiceStore: VoiceChoiceStore
     public let session: AudioSessionOwner
     public let coordinator: SessionCoordinator
     public var onChange: (@Sendable () -> Void)?
@@ -90,7 +92,11 @@ public final class LabRuntime: @unchecked Sendable {
         self.registry = registry
         let log = EventLog(clock: clock)
         self.log = log
-        let cfg = StageRegistry.listenerConfiguration()
+        let voiceStore = VoiceChoiceStore(file: supportDir.appendingPathComponent("voice-choice.json"))
+        self.voiceStore = voiceStore
+        // The saved voice, or on a fresh install the neural default. The model stages register after this runs, so the stage is not checked
+        // here: `makeSpeaker` falls back to the system voice for a stage that is not registered.
+        let cfg = StageRegistry.listenerConfiguration(voice: voiceStore.current())
         self.config = cfg
         let policyBox = PolicyBox(cfg.audio)
         self.policyBox = policyBox
@@ -320,6 +326,14 @@ public final class LabRuntime: @unchecked Sendable {
         var c = configuration
         c.set(kind, StageSetting(id: id))
         setConfiguration(c)
+        if kind == .voice, let v = c.setting(.voice) { voiceStore.save(v) }       // a voice picked anywhere is the voice from now on
+    }
+    /// The listener picked a voice (the cards, setup): it speaks everything from now on and after a relaunch.
+    public func setVoice(_ o: VoiceOption) {
+        var c = configuration
+        c.set(.voice, o.setting)
+        setConfiguration(c)
+        voiceStore.save(o.setting)
     }
     public func setParam(_ kind: StageKind, name: String, value: String) {
         var c = configuration
@@ -332,6 +346,7 @@ public final class LabRuntime: @unchecked Sendable {
         }
         c.set(kind, s)
         setConfiguration(c)
+        if kind == .voice { voiceStore.save(s) }
     }
     public func saveConfiguration(name: String) throws {
         var c = configuration; c.name = name
