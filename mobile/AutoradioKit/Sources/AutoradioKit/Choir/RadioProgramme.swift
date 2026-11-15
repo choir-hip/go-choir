@@ -361,13 +361,49 @@ extension StretchSource {
 public struct RouteStretchSource: StretchSource {
     let baseURL: String
     public init(baseURL: String) { self.baseURL = baseURL }
+    /// How long the texts of the first ten stories may take to arrive (plain GETs, not model calls); a story whose text is late goes without it.
+    static let textDeadline: TimeInterval = 3
+
     public func events(cause: String) async throws -> AsyncThrowingStream<StretchEvent, Error> { try await events(cause: cause, excludingRoutes: []) }
+
+    /// The candidates: the front list in the paper's order, and the text of the first ten. Throws `empty` when there is no story to tell: a
+    /// request with no candidates is answered with station breaks only, so it is not made.
+    func candidates(client: ChoirClient, skipping: Set<String>) async throws -> [[String: Any]] {
+        let r = try await client.send("GET", "/api/platform/publications/front", query: ["limit": "60"], authenticated: false)
+        let items = StretchCandidates.fromFront(try r.object(), skipping: skipping)
+        if items.isEmpty { throw ChoirError.empty("no story to tell") }
+        enum Got: Sendable { case text(String, String), none, late }
+        let routes = items.prefix(StretchCandidates.maxTextItems).map(\.route)
+        var texts: [String: String] = [:]
+        let deadline = Self.textDeadline
+        await withTaskGroup(of: Got.self) { g in
+            for route in routes {
+                g.addTask {
+                    guard let t = try? await ChoirFront.resolveText(route: route, client: client), !t.isEmpty else { return .none }
+                    return .text(route, t)
+                }
+            }
+            g.addTask { try? await Task.sleep(nanoseconds: UInt64(deadline * 1_000_000_000)); return .late }
+            var pending = routes.count
+            loop: for await got in g {
+                switch got {
+                case .text(let route, let t): texts[route] = t; pending -= 1
+                case .none: pending -= 1
+                case .late: break loop
+                }
+                if pending <= 0 { break loop }
+            }
+            g.cancelAll()
+        }
+        return StretchCandidates.body(items, texts: texts)
+    }
 
     public func events(cause: String, excludingRoutes: Set<String>) async throws -> AsyncThrowingStream<StretchEvent, Error> {
         let client = ChoirEnvironment.shared.client(baseURL: baseURL)
+        let cands = try await candidates(client: client, skipping: excludingRoutes)
         let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd'T'HH:mm:ssXXXXX"
         let body: [String: Any] = ["request_id": "radio-" + UUID().uuidString.prefix(12).lowercased(), "cause": cause,
-                                   "local_time": f.string(from: Date()), "tz": TimeZone.current.identifier]
+                                   "local_time": f.string(from: Date()), "tz": TimeZone.current.identifier, "candidates": cands]
         let (_, lines) = try await client.postEventStream("/api/autoradio/programme", body, route: "/api/autoradio/programme")
         return AsyncThrowingStream { c in
             let task = Task {
@@ -437,11 +473,16 @@ public final class RadioProgramme: Programme, @unchecked Sendable {
         do {
             let stream = try await source.events(cause: cause)
             let box = IteratorBox(stream.makeAsyncIterator())
+            // Station breaks and bridges at the head wait for the first thing to tell (a story, an update, headlines): a stretch of only
+            // breaks ("nothing to report, I'll let the music play") is not a programme, and the paper's story plays instead.
+            var lead: [PreparedSegment] = []
             while let e = try await box.next() {
                 switch e {
                 case .segment(let s):
                     guard let p = SegmentPrep.prepare(s) else { continue }
+                    if s.kind == "ident" || s.kind == "bridge" { lead.append(p); continue }
                     var d = ProgrammeDocument(id: "radio:" + s.stretchID, title: "Autoradio", blocks: [])
+                    for l in lead { d.append(l) }
                     d.append(p)
                     return .doc(d, box)
                 case .done: return .nothing

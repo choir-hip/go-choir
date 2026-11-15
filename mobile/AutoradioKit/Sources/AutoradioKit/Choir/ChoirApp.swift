@@ -101,7 +101,7 @@ public final class ChoirApp: @unchecked Sendable {
         if m.contains("not signed in") { return "Sign in to talk to your computer." }
         if m.contains("401") { return "Your sign-in is no longer accepted. Please sign in again." }
         if m.contains("429") { return "Your computer is busy right now. Try again in a moment." }
-        if m.contains("network") || m.contains("timed out") { return "Could not reach choir.news. Check your connection." }
+        if m.contains("network") || m.contains("timed out") { return "I can't reach the paper right now. Check your connection." }
         switch stage {
         case "system1": return "Your computer was slow to understand that; carrying on."
         case "desk": return "Your computer could not act on that. Try asking again."
@@ -163,7 +163,7 @@ public final class ChoirApp: @unchecked Sendable {
             guard current() else { return }
             runtime.player.setDocument(ProgrammeDocument(id: "none", title: "", blocks: []))
             runtime.log.emit(.error(stage: "programme", message: "\(error)"))
-            if case ChoirError.empty = error { say("There is nothing to play right now.") }
+            if case ChoirError.empty = error { say("The paper has no stories to read yet.") }
         }
     }
 
@@ -331,8 +331,25 @@ public final class ChoirApp: @unchecked Sendable {
         runFollow(follow, loadToken: my, documentID: documentID)
     }
 
+    /// A programme a listener can hear: a stretch, a story or a text. The player starts with the Lab's fixture edition ("written only to test the
+    /// radio") and holds an empty document after sign-out; neither is what Play should speak.
+    static func isRealProgramme(_ d: ProgrammeDocument) -> Bool {
+        !d.blocks.isEmpty && (d.id.hasPrefix("radio:") || d.id.hasPrefix("choir:") || d.id.hasPrefix("text:"))
+    }
+
+    /// Before the radio plays: make sure the paper's programme is what is loaded. The launch load may still be running (wait for it, up to 20
+    /// seconds, rather than ask the computer twice); when none has run or it found nothing, load now. Never leaves the fixture edition to play.
+    func ensureProgramme() async {
+        func loadingNow() -> Bool { lock.lock(); defer { lock.unlock() }; return loading }
+        var waited = 0
+        while loadingNow(), waited < 400 { try? await Task.sleep(nanoseconds: 50_000_000); waited += 1 }
+        if Self.isRealProgramme(runtime.player.document) { return }
+        await loadProgramme()
+    }
+
     /// Play/pause from the big button: starts the audio engine on first use.
     public func playPause() async {
+        await ensureProgramme()
         if !runtime.snapshot().running { await runtime.start() }
         if runtime.player.userPaused { runtime.player.play() } else { runtime.player.pause() }
         onChange?()
@@ -340,8 +357,8 @@ public final class ChoirApp: @unchecked Sendable {
     /// Start the radio and leave it playing, whatever it was doing (a toggle would pause it if the interview had left it
     /// running): the setup's "Start the radio". A programme is loaded first when none is.
     public func startRadio() async {
+        await ensureProgramme()
         if !runtime.snapshot().running { await runtime.start() }
-        if runtime.player.document.blocks.isEmpty { await loadProgramme() }
         runtime.player.play()
         onChange?()
     }
