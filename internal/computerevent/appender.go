@@ -73,6 +73,29 @@ type BatchDryRunner interface {
 	DryRunProjectionBatch(ctx context.Context, computerID string, batch *ProjectionBatch) error
 }
 
+// BatchHeadDryRunner is a BatchDryRunner that also reports the projection head
+// sequence its dry run validated against (the store's dry run reads it in the
+// same transaction that applies the batch to roll it back). The head and the
+// projected rows commit together, so a batch validated at head N is still
+// valid while the local head is N; the appender compares instead of guessing
+// which event might have changed the state.
+type BatchHeadDryRunner interface {
+	DryRunProjectionBatchAt(ctx context.Context, computerID string, batch *ProjectionBatch) (headSequence uint64, err error)
+}
+
+type validatedHeadKey struct{}
+
+// WithValidatedHead tells an append that its batch was dry-run (outside the
+// appender mutex) against the local projection at head sequence seq.
+func WithValidatedHead(ctx context.Context, seq uint64) context.Context {
+	return context.WithValue(ctx, validatedHeadKey{}, seq)
+}
+
+func validatedHeadFrom(ctx context.Context) (uint64, bool) {
+	seq, ok := ctx.Value(validatedHeadKey{}).(uint64)
+	return seq, ok
+}
+
 // ReplayDurability relaxes per-commit durability for a bounded replay. Each
 // replayed event commits at least twice, and at synchronous=FULL each commit
 // syncs the WAL: about 2.7 ms an event on d@e (2026-10-30). The replayed
@@ -169,7 +192,22 @@ type ComputerEventAppender struct {
 	reconstructing atomic.Bool
 	// recoveryFailedAt bounds a recovery that keeps failing (a poison
 	// finalize): appends refuse fast for inPlaceRecoveryCooldown after it.
-	recoveryFailedAt   time.Time
+	recoveryFailedAt time.Time
+	// revalidations counts dry runs repeated under the mutex because the local
+	// head moved since the caller's dry run (see batchGuard).
+	revalidations atomic.Int64
+	// catchUpPages overrides catchUpMaxPages when positive (tests).
+	catchUpPages int
+	// orphanPayloads are cached plaintexts of prepared rows the host has
+	// passed or contradicted: kept for one catch-up pass, then released.
+	orphanPayloads map[string]struct{}
+	// stop is the parent of every detached recovery, re-send, finalize and
+	// catch-up context (detached below). InterruptDetachedWork cancels it so a
+	// shutdown, a hibernate or a store close is not held for minutes by work
+	// that deliberately ignores its caller's cancellation.
+	stopMu             sync.Mutex
+	stop               context.Context
+	cancel             context.CancelFunc
 	wedge              wedgeState
 	wedgeNow           func() time.Time // test clock; nil is time.Now
 	replaySeq          uint64
@@ -191,11 +229,13 @@ type ReplayObserver interface {
 	CheckpointCommitted(sequence uint64)
 }
 
-// ErrBatchRefused marks a projection batch refused before anything was pinned
-// or appended: it did not decode, or the projection's dry run rejected it.
-// Nothing about the batch is on the tape or in the artifact store, so a caller
-// that built it from separable records may safely split it and write the
-// pieces. Any other AppendNewPayload failure may have an unknown outcome.
+// ErrBatchRefused marks a projection batch refused before it was sent to the
+// host: it did not decode, or the projection's dry run rejected it (at the
+// caller, or again under the appender mutex after the local state moved).
+// Nothing of it is canonical: it is not on the tape, and the host never saw the
+// event (a payload or event pin may exist, which is storage and not canon). A
+// caller that built it from separable records may safely split it and write
+// the pieces. Any other AppendNewPayload failure may have an unknown outcome.
 var ErrBatchRefused = errors.New("computer event appender: projection batch refused")
 
 // batchRefusedError carries the original message unchanged and matches
@@ -273,6 +313,89 @@ func (a *ComputerEventAppender) HeadsAligned(ctx context.Context) error {
 	}
 	return nil
 }
+
+// batchGuard keeps a projection batch from reaching the CAS after the local
+// state it was validated against has moved. It records the local head sequence
+// the batch's last dry run saw (the store's dry run reads it in the same
+// transaction that would apply the batch; head and projected rows commit
+// together, so an unchanged head means unchanged state). Under the appender
+// mutex, before the event is pinned or prepared and again after any in-place
+// recovery, check compares that sequence with the current local head: equal
+// costs one comparison; different, for any reason (this append's recovery,
+// another writer's recovery or ordinary finalize), it re-runs the dry run
+// against the current state and refuses the batch (ErrBatchRefused) if the
+// state no longer accepts it. It replaces a "did a recovery happen in this
+// append" trigger, which missed every other writer's head move.
+type batchGuard struct {
+	a       *ComputerEventAppender
+	payload []byte // the bytes dry-run: what finalize and replay read
+	seq     uint64 // local head sequence the last dry run validated against
+	known   bool   // the dry run reported a head (a projection without one never does)
+}
+
+// newBatchGuard is nil for anything but a projection batch, and when the
+// projection cannot dry-run.
+func (a *ComputerEventAppender) newBatchGuard(mediaType string, payload []byte) *batchGuard {
+	if strings.TrimSpace(mediaType) != ProjectionBatchMediaType {
+		return nil
+	}
+	if _, ok := a.projection.(BatchDryRunner); !ok {
+		return nil
+	}
+	return &batchGuard{a: a, payload: payload}
+}
+
+// dryRunBatch dry-runs a decoded batch through the projection, reporting the
+// head it validated against when the projection can.
+func (a *ComputerEventAppender) dryRunBatch(ctx context.Context, batch *ProjectionBatch) (seq uint64, known bool, err error) {
+	if runner, ok := a.projection.(BatchHeadDryRunner); ok {
+		seq, err = runner.DryRunProjectionBatchAt(ctx, a.computerID, batch)
+		return seq, err == nil, err
+	}
+	runner, ok := a.projection.(BatchDryRunner)
+	if !ok {
+		return 0, false, nil
+	}
+	return 0, false, runner.DryRunProjectionBatch(ctx, a.computerID, batch)
+}
+
+// record notes the head a dry run just validated against.
+func (g *batchGuard) record(seq uint64, known bool) {
+	if g != nil {
+		g.seq, g.known = seq, known
+	}
+}
+
+// check is called under the appender mutex with the current local head. force
+// re-validates when the dry run never reported a head (after a recovery, when
+// the state may have moved and there is nothing to compare).
+func (g *batchGuard) check(ctx context.Context, local *Head, force bool) error {
+	if g == nil {
+		return nil
+	}
+	if g.known {
+		if headSeq(local) == g.seq {
+			return nil
+		}
+	} else if !force {
+		return nil
+	}
+	g.a.revalidations.Add(1)
+	batch, err := DecodeProjectionBatch(g.payload)
+	if err != nil {
+		return batchRefused(fmt.Errorf("computer event appender: projection dry-run decode after the local head moved: %w", err))
+	}
+	seq, known, err := g.a.dryRunBatch(ctx, &batch)
+	if err != nil {
+		return batchRefused(fmt.Errorf("computer event appender: projection dry-run refused batch after the local head moved since it was validated: %w", err))
+	}
+	g.record(seq, known)
+	return nil
+}
+
+// Revalidations is how many dry runs this appender repeated under its mutex
+// because the local head had moved since the caller's dry run.
+func (a *ComputerEventAppender) Revalidations() int64 { return a.revalidations.Load() }
 
 // HoldAppends runs fn while no event can be appended. Every append and its
 // live projection run under the same lock, so fn sees a head and a projection
@@ -434,7 +557,8 @@ func (a *ComputerEventAppender) AppendNew(ctx context.Context, event Event, inpu
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if err := a.bindCurrentHeadLocked(ctx, &event); err != nil {
+	bound, err := a.bindCurrentHeadLocked(ctx, &event)
+	if err != nil {
 		return Receipt{}, err
 	}
 	event.RequestCommitment = ZeroHead
@@ -446,7 +570,7 @@ func (a *ComputerEventAppender) AppendNew(ctx context.Context, event Event, inpu
 	if err != nil {
 		return Receipt{}, fmt.Errorf("computer event appender: compute new request commitment: %w", err)
 	}
-	return a.appendLocked(ctx, event, input, payloadPinReceiptDigests)
+	return a.appendBoundLocked(ctx, event, input, payloadPinReceiptDigests, bound, nil)
 }
 
 // AppendNewPayload content-addresses and pins one non-private payload before
@@ -461,7 +585,8 @@ func (a *ComputerEventAppender) AppendNewPayload(ctx context.Context, event Even
 	if !ok {
 		return Receipt{}, "", fmt.Errorf("computer event appender: non-private payload pinning unavailable")
 	}
-	if err := a.bindCurrentHeadLocked(ctx, &event); err != nil {
+	bound, err := a.bindCurrentHeadLocked(ctx, &event)
+	if err != nil {
 		return Receipt{}, "", err
 	}
 	payloadDigest := DigestBytes(payload)
@@ -479,15 +604,18 @@ func (a *ComputerEventAppender) AppendNewPayload(ctx context.Context, event Even
 	if err != nil {
 		return Receipt{}, "", fmt.Errorf("computer event appender: compute payload pin intent: %w", err)
 	}
+	var guard *batchGuard
 	if strings.TrimSpace(mediaType) == ProjectionBatchMediaType {
-		if runner, ok := a.projection.(BatchDryRunner); ok {
+		if guard = a.newBatchGuard(mediaType, payload); guard != nil {
 			batch, derr := DecodeProjectionBatch(payload)
 			if derr != nil {
 				return Receipt{}, "", batchRefused(fmt.Errorf("computer event appender: projection dry-run decode: %w", derr))
 			}
-			if derr = runner.DryRunProjectionBatch(ctx, a.computerID, &batch); derr != nil {
+			seq, known, derr := a.dryRunBatch(ctx, &batch)
+			if derr != nil {
 				return Receipt{}, "", batchRefused(fmt.Errorf("computer event appender: projection dry-run refused batch: %w", derr))
 			}
+			guard.record(seq, known)
 		}
 	}
 	pin, err := pinner.PinNonPrivatePayload(ctx, a.computerID, payload, mediaType, privacyClass, pinIntentCommitment)
@@ -510,14 +638,29 @@ func (a *ComputerEventAppender) AppendNewPayload(ctx context.Context, event Even
 		a.livePayloads = map[string][]byte{}
 	}
 	a.livePayloads[payloadDigest] = append([]byte(nil), payload...)
-	receipt, err := a.appendLocked(ctx, event, input, []string{payloadReceiptDigest})
+	receipt, err := a.appendBoundLocked(ctx, event, input, []string{payloadReceiptDigest}, bound, guard)
 	if err == nil {
 		// Finalized: drop the cached plaintext, or every payload this process
 		// ever appended stays on the heap (docs/problems/guest-appender-
-		// retains-every-projection-payload-2026-10-19.md). After a failure it
-		// stays for the prepared-event recovery paths, which read through to
-		// the artifact store without it.
+		// retains-every-projection-payload-2026-10-19.md).
 		delete(a.livePayloads, payloadDigest)
+	} else {
+		// After a failure it stays only while a prepared row may still be
+		// finalized from it (the recovery paths read through to the artifact
+		// store without it, but need not); a refusal left no row, and 1,600
+		// refusals of a wedge must not each keep a plaintext (F23).
+		pctx, pcancel := a.detached(ctx, 30*time.Second)
+		prepared, perr := a.projection.Prepared(pctx, a.computerID)
+		pcancel()
+		held := perr != nil
+		for _, row := range prepared {
+			if row.Event.PayloadCommitment == payloadDigest {
+				held = true
+			}
+		}
+		if !held {
+			delete(a.livePayloads, payloadDigest)
+		}
 	}
 	return receipt, payloadDigest, err
 }
@@ -533,12 +676,32 @@ func (a *ComputerEventAppender) AppendNewPrivatePayload(ctx context.Context, eve
 	if !ok || cipher == nil {
 		return Receipt{}, "", fmt.Errorf("computer event appender: private payload authority unavailable")
 	}
-	if err := a.bindCurrentHeadLocked(ctx, &event); err != nil {
+	bound, err := a.bindCurrentHeadLocked(ctx, &event)
+	if err != nil {
 		return Receipt{}, "", err
 	}
 	envelope, sealedMeta, err := pinner.PreparePrivatePayload(ctx, cipher, a.computerID, event.EventID, mediaType, plaintext)
 	if err != nil {
 		return Receipt{}, "", fmt.Errorf("computer event appender: encrypt private payload: %w", err)
+	}
+	// The store dry-ran this batch before sealing and says against which local
+	// head (the context value); check compares it under the mutex.
+	guard := a.newBatchGuard(mediaType, plaintext)
+	if seq, ok := validatedHeadFrom(ctx); ok && guard != nil {
+		guard.record(seq, true)
+	} else if guard != nil {
+		// The caller did not validate the batch (a direct append: no leader
+		// adjacency to make an outside dry run worth it): validate it here,
+		// once, under the mutex, against the head it will be appended on.
+		batch, derr := DecodeProjectionBatch(plaintext)
+		if derr != nil {
+			return Receipt{}, "", batchRefused(fmt.Errorf("computer event appender: projection dry-run decode: %w", derr))
+		}
+		seq, known, derr := a.dryRunBatch(ctx, &batch)
+		if derr != nil {
+			return Receipt{}, "", batchRefused(fmt.Errorf("computer event appender: projection dry-run refused batch: %w", derr))
+		}
+		guard.record(seq, known)
 	}
 	if strings.TrimSpace(mediaType) == ProjectionBatchMediaType && len(sealedMeta.SecretHandles) > 0 {
 		// The caller dry-ran the batch before sealing; redaction changed it
@@ -551,14 +714,19 @@ func (a *ComputerEventAppender) AppendNewPrivatePayload(ctx context.Context, eve
 		if err != nil {
 			return Receipt{}, "", batchRefused(fmt.Errorf("computer event appender: open sealed batch: %w", err))
 		}
+		if guard != nil {
+			guard.payload = sealed // what finalize and replay read
+		}
 		batch, err := DecodeProjectionBatch(sealed)
 		if err != nil {
 			return Receipt{}, "", batchRefused(fmt.Errorf("computer event appender: sealed batch decode: %w", err))
 		}
-		if runner, ok := a.projection.(BatchDryRunner); ok {
-			if err := runner.DryRunProjectionBatch(ctx, a.computerID, &batch); err != nil {
+		if guard != nil {
+			seq, known, err := a.dryRunBatch(ctx, &batch)
+			if err != nil {
 				return Receipt{}, "", batchRefused(fmt.Errorf("computer event appender: projection dry-run refused sealed batch: %w", err))
 			}
+			guard.record(seq, known)
 		}
 	}
 	payloadDigest := DigestBytes(envelope)
@@ -592,7 +760,7 @@ func (a *ComputerEventAppender) AppendNewPrivatePayload(ctx context.Context, eve
 	if err != nil {
 		return Receipt{}, "", fmt.Errorf("computer event appender: compute private payload request commitment: %w", err)
 	}
-	receipt, err := a.appendLocked(ctx, event, input, []string{payloadReceiptDigest})
+	receipt, err := a.appendBoundLocked(ctx, event, input, []string{payloadReceiptDigest}, bound, guard)
 	return receipt, payloadDigest, err
 }
 
@@ -620,7 +788,8 @@ func (a *ComputerEventAppender) AppendNewPayloadSet(ctx context.Context, event E
 	if len(payloads) == 0 {
 		return Receipt{}, nil, fmt.Errorf("computer event appender: payload set is empty")
 	}
-	if err := a.bindCurrentHeadLocked(ctx, &event); err != nil {
+	bound, err := a.bindCurrentHeadLocked(ctx, &event)
+	if err != nil {
 		return Receipt{}, nil, err
 	}
 	type preparedPayload struct {
@@ -704,14 +873,31 @@ func (a *ComputerEventAppender) AppendNewPayloadSet(ctx context.Context, event E
 	if err != nil {
 		return Receipt{}, nil, fmt.Errorf("computer event appender: compute payload set request commitment: %w", err)
 	}
-	receipt, err := a.appendLocked(ctx, event, input, receiptDigests)
+	receipt, err := a.appendBoundLocked(ctx, event, input, receiptDigests, bound, nil)
 	return receipt, artifactDigests, err
 }
 
-func (a *ComputerEventAppender) bindCurrentHeadLocked(ctx context.Context, event *Event) error {
+// boundHead is the platform head a new event was bound to, read once under
+// the appender mutex. appendLockedInner reuses it as the platform head for the
+// embedded-head comparison and the reducer instead of reading it again: two
+// reads per append were two of the six corpusd calls each tape event cost.
+//
+// The reuse is safe because the head is a guess the CAS checks. The event
+// carries the bound head as its previous head and the host's compare-and-swap
+// refuses a request whose previous head is not the host's (definitely, so the
+// prepared row is discarded); the reducer refuses it earlier when a recovery
+// moved the head. A head that moves between the bind and the CAS (a host-side
+// event during the payload pin) used to be seen by the second read and now
+// fails at the CAS, and the next append's bind reads the new head and the
+// embedded-head comparison repairs the gap, as it does for any host-side
+// event (heads_differ recovery). Nothing is committed on a stale head either
+// way (TestAppendNewPayloadHeadMovedDuringPinIsRefused).
+type boundHead struct{ head *Head }
+
+func (a *ComputerEventAppender) bindCurrentHeadLocked(ctx context.Context, event *Event) (*boundHead, error) {
 	head, err := a.cas.Head(ctx, a.computerID)
 	if err != nil {
-		return fmt.Errorf("computer event appender: resolve head for new event: %w", err)
+		return nil, fmt.Errorf("computer event appender: resolve head for new event: %w", err)
 	}
 	if event.RequireExpectedHead {
 		expectedDesiredEventHead, expectedEffectiveEventHead := ZeroHead, ZeroHead
@@ -732,7 +918,7 @@ func (a *ComputerEventAppender) bindCurrentHeadLocked(ctx context.Context, event
 			{"effective state commitment", event.ExpectedEffectiveStateCommitment, expectedEffectiveStateCommitment},
 		} {
 			if binding.supplied != binding.current {
-				return fmt.Errorf("computer event appender: expected %s changed", binding.name)
+				return nil, fmt.Errorf("computer event appender: expected %s changed", binding.name)
 			}
 		}
 	}
@@ -744,7 +930,7 @@ func (a *ComputerEventAppender) bindCurrentHeadLocked(ctx context.Context, event
 		event.ExpectedPendingTransitionRef = ""
 		event.ExpectedDesiredStateCommitment = ZeroHead
 		event.ExpectedEffectiveStateCommitment = ZeroHead
-		return nil
+		return &boundHead{head: head}, nil
 	}
 	event.Sequence = head.Sequence + 1
 	event.PreviousHead = head.CanonicalEventHead
@@ -753,16 +939,27 @@ func (a *ComputerEventAppender) bindCurrentHeadLocked(ctx context.Context, event
 	event.ExpectedPendingTransitionRef = head.PendingTransitionRef
 	event.ExpectedDesiredStateCommitment = head.DesiredStateCommitment
 	event.ExpectedEffectiveStateCommitment = head.EffectiveStateCommitment
-	return nil
+	return &boundHead{head: head}, nil
 }
 
 func (a *ComputerEventAppender) appendLocked(ctx context.Context, event Event, input TransitionInput, payloadPinReceiptDigests []string) (Receipt, error) {
-	receipt, err := a.appendLockedInner(ctx, event, input, payloadPinReceiptDigests)
+	return a.appendBoundLocked(ctx, event, input, payloadPinReceiptDigests, nil, nil)
+}
+
+// appendBoundLocked is appendLocked for an event bindCurrentHeadLocked just
+// bound: bound carries the platform head that bind read, so the append does
+// not read it a second time. A nil bound reads it.
+//
+// guard, when set, keeps a projection batch from reaching the CAS after the
+// local state it was validated against has moved (see batchGuard); nil for
+// events that carry no batch.
+func (a *ComputerEventAppender) appendBoundLocked(ctx context.Context, event Event, input TransitionInput, payloadPinReceiptDigests []string, bound *boundHead, guard *batchGuard) (Receipt, error) {
+	receipt, err := a.appendLockedInner(ctx, event, input, payloadPinReceiptDigests, bound, guard)
 	a.noteAppendResult(err)
 	return receipt, err
 }
 
-func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Event, input TransitionInput, payloadPinReceiptDigests []string) (Receipt, error) {
+func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Event, input TransitionInput, payloadPinReceiptDigests []string, bound *boundHead, guard *batchGuard) (Receipt, error) {
 	if event.ComputerID != a.computerID {
 		return Receipt{}, fmt.Errorf("computer event appender: wrong computer")
 	}
@@ -786,8 +983,10 @@ func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Eve
 	if event.RequestCommitment != requestCommitment {
 		return Receipt{}, fmt.Errorf("computer event appender: request commitment mismatch")
 	}
-	platformHead, err := a.cas.Head(ctx, a.computerID)
-	if err != nil {
+	var platformHead *Head
+	if bound != nil {
+		platformHead = bound.head
+	} else if platformHead, err = a.cas.Head(ctx, a.computerID); err != nil {
 		return Receipt{}, fmt.Errorf("computer event appender: resolve canonical head: %w", err)
 	}
 	embeddedHead, err := a.projection.Head(ctx, a.computerID)
@@ -795,6 +994,12 @@ func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Eve
 		return Receipt{}, fmt.Errorf("computer event appender: resolve embedded head: %w", err)
 	}
 	a.noteHeads(headSeq(embeddedHead), headSeq(platformHead))
+	// The batch was validated against some local head; if the local head is
+	// not that one, another writer (or a recovery) changed the state since:
+	// validate it again now, under the mutex, before anything else is sent.
+	if err := guard.check(ctx, embeddedHead, false); err != nil {
+		return Receipt{}, err
+	}
 	if !sameHead(platformHead, embeddedHead) {
 		// A prepared row a failed earlier append left behind (a post-CAS
 		// finalize, or a discard that never ran) wedged the running computer
@@ -804,8 +1009,19 @@ func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Eve
 		if embeddedHead, err = a.recoverPreparedInPlaceLocked(ctx, "heads differ"); err != nil {
 			return Receipt{}, err
 		}
+		// Recovery may have moved the host's head as seen by this append (a
+		// resent committed row, a catch-up); bind to the head as it is now.
+		if platformHead, err = a.cas.Head(ctx, a.computerID); err != nil {
+			return Receipt{}, fmt.Errorf("computer event appender: resolve canonical head after recovery: %w", err)
+		}
 		if !sameHead(platformHead, embeddedHead) {
 			return Receipt{}, &wedgeError{kind: "heads differ after in-place recovery", err: ErrNeedsProjectionRepair}
+		}
+		// The recovery may have applied events (a landed row finalized, a
+		// catch-up from the host's tape) that the batch was validated without:
+		// compare heads again (forced when the dry run could not report one).
+		if err := guard.check(ctx, embeddedHead, true); err != nil {
+			return Receipt{}, err
 		}
 	}
 	next, err := Reduce(platformHead, event, input)
@@ -845,8 +1061,20 @@ func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Eve
 	if err := a.projection.Prepare(ctx, request); err != nil {
 		// An orphaned prepared row at this sequence fails the insert on the
 		// index's (computer_id, sequence) key; clear it and retry once.
-		if _, rerr := a.recoverPreparedInPlaceLocked(ctx, "prepare failed: "+err.Error()); rerr != nil {
+		recovered, rerr := a.recoverPreparedInPlaceLocked(ctx, "prepare failed: "+err.Error())
+		if rerr != nil {
 			return Receipt{}, &wedgeError{kind: prepareKind(err), err: fmt.Errorf("computer event appender: prepare embedded projection: %w (recovery: %v)", err, rerr)}
+		}
+		if headSeq(recovered)+1 != event.Sequence {
+			// The recovery moved the local head (a catch-up applied events at
+			// or past this event's sequence): the bound event is stale. Refuse
+			// it cleanly; the next append binds to the head as it is now.
+			return Receipt{}, fmt.Errorf("computer event appender: the local head moved to %d during prepare recovery; event bound at sequence %d not appended", headSeq(recovered), event.Sequence)
+		}
+		// Same guard as after the heads-differ recovery. The event and payload
+		// are pinned by now (a pin is storage, not canon): refuse, send nothing.
+		if gerr := guard.check(ctx, recovered, true); gerr != nil {
+			return Receipt{}, gerr
 		}
 		if err := a.projection.Prepare(ctx, request); err != nil {
 			return Receipt{}, &wedgeError{kind: prepareKind(err), err: fmt.Errorf("computer event appender: prepare embedded projection: %w", err)}
@@ -854,19 +1082,29 @@ func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Eve
 	}
 	receipt, err := a.cas.CompareAndSwap(ctx, request)
 	if err != nil {
-		// The discard must not share a cancelled ctx with the CAS, or the
-		// prepared row outlives the failed append and blocks the next one.
-		dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
-		if derr := a.projection.DiscardPrepared(dctx, a.computerID, digest); derr != nil {
-			log.Printf("computer event appender: discard prepared seq=%d after failed CAS: %v", event.Sequence, derr)
+		if CASRefusedDefinitely(err) {
+			a.discardPreparedLocked(ctx, request)
+			return Receipt{}, fmt.Errorf("computer event appender: head CAS: %w", err)
 		}
-		cancel()
-		return Receipt{}, fmt.Errorf("computer event appender: head CAS: %w", err)
+		// The outcome is unknown: the host may have committed before the
+		// reply was lost (a reset, a cancelled caller, a 5xx after the
+		// commit). Deleting the prepared row here left the local projection
+		// one behind with nothing to recover from, and the computer refused
+		// every write until a boot (the paper, 2026-11-02 and 2026-11-12).
+		// Ask the host by re-sending the same request.
+		if receipt, err = a.resendUnclearCASLocked(ctx, request, err); err != nil {
+			return Receipt{}, err
+		}
 	}
-	if err := a.verifier.VerifyEventHeadReceipt(ctx, receipt, request); err != nil {
+	// With a receipt in hand the event is canonical: the caller going away
+	// (a cancelled turn, the incident's likeliest trigger) must not fail the
+	// local finalize, which begins its transaction on the ctx it is given.
+	fctx, fcancel := a.detached(ctx, finalizeTimeout)
+	defer fcancel()
+	if err := a.verifier.VerifyEventHeadReceipt(fctx, receipt, request); err != nil {
 		return Receipt{}, fmt.Errorf("computer event appender: verify head receipt: %w", err)
 	}
-	if err := a.finalizeProjection(ctx, event, digest, receipt); err != nil {
+	if err := a.finalizeProjection(fctx, event, digest, receipt); err != nil {
 		if errors.Is(err, ErrProjectionBatchUnreadable) {
 			return Receipt{}, fmt.Errorf("computer event appender: sequence %d: %w", event.Sequence, err)
 		}
@@ -878,6 +1116,107 @@ func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Eve
 	return receipt, nil
 }
 
+const (
+	// casResendTimeout (CASResendTimeout) bounds the re-send of a CAS whose outcome is unknown.
+	// It is a deadline, not a limit on calls; appends wait behind it under a.mu.
+	casResendTimeout = CASResendTimeout
+	// finalizeTimeout bounds verify and finalize once a receipt is in hand. It
+	// replaces the caller's context, which used to govern them, so it is sized
+	// from the worst payload: an event payload is at most
+	// EventPayloadMaxResponseBytes (64 MiB); fetched at a pessimistic 1 MiB/s
+	// across the host tap under load that is about 64 s, decode, decrypt and
+	// the SQLite apply of a batch add tens of seconds. Five minutes is more
+	// than three times that and stays half of the 10 minute bound of the
+	// guest's HTTP client.
+	finalizeTimeout = 5 * time.Minute
+)
+
+// detached returns a context that keeps ctx's values but not its cancellation,
+// ends at timeout, and ends when InterruptDetachedWork runs. Work that must
+// settle canonical state after its caller left uses it; shutdown still stops it.
+func (a *ComputerEventAppender) detached(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	stop := a.currentStop()
+	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+	unregister := context.AfterFunc(stop, cancel)
+	return dctx, func() { unregister(); cancel() }
+}
+
+func (a *ComputerEventAppender) currentStop() context.Context {
+	a.stopMu.Lock()
+	defer a.stopMu.Unlock()
+	if a.stop == nil {
+		a.stop, a.cancel = context.WithCancel(context.Background())
+	}
+	return a.stop
+}
+
+// InterruptDetachedWork cancels the detached recovery, re-send, finalize and
+// catch-up work in flight, so shutdown (Runtime.Stop, Store.Close) is not held
+// by it. Whatever it leaves is recovered by the next append or the next boot:
+// a prepared row is resolved from the host's chain, and a half-applied
+// catch-up resumes. The appender stays usable; later detached work runs under
+// a fresh stop context.
+func (a *ComputerEventAppender) InterruptDetachedWork() {
+	if a == nil {
+		return
+	}
+	a.stopMu.Lock()
+	cancel := a.cancel
+	a.stop, a.cancel = context.WithCancel(context.Background())
+	a.stopMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// discardPreparedLocked drops the prepared row of a request the host refused,
+// on a context that outlives a cancelled caller.
+func (a *ComputerEventAppender) discardPreparedLocked(ctx context.Context, request CASRequest) {
+	// The discard must not share a cancelled ctx with the CAS, or the
+	// prepared row outlives the failed append and blocks the next one.
+	dctx, cancel := a.detached(ctx, 30*time.Second)
+	defer cancel()
+	if derr := a.projection.DiscardPrepared(dctx, a.computerID, request.EventDigest); derr != nil {
+		log.Printf("computer event appender: discard prepared seq=%d after a refused CAS or failed apply: %v", request.Event.Sequence, derr)
+	} else {
+		a.dropLivePayload(request.Event)
+	}
+}
+
+// dropLivePayload releases the cached plaintext of a projection payload once
+// no prepared row needs it.
+func (a *ComputerEventAppender) dropLivePayload(event Event) {
+	delete(a.livePayloads, event.PayloadCommitment)
+}
+
+// resendUnclearCASLocked settles a CAS that returned an error without proving
+// a refusal. It re-sends the same request on a context that outlives a
+// cancelled caller: the host answers a request it already committed with the
+// stored receipt (it checks the idempotency key under the computer's lock),
+// commits one it never saw, and refuses one that cannot commit.
+//
+// Any failure of the re-send keeps the prepared row. A refusal of the re-send
+// does not prove that the first send did not commit: the host runs
+// authorization and pin validation before it looks up the idempotency key, and
+// maps unclassified internal errors to 400. RecoverPrepared decides on the
+// next pass against the host's chain: when the host's head is that event it
+// re-sends once more and finalizes, and if that re-send is refused too it
+// drops the row and the catch-up applies the event from the host's tape; it
+// discards the row when the host holds another event at its sequence or has
+// not reached it. Only a definite refusal of the FIRST send
+// discards at once.
+func (a *ComputerEventAppender) resendUnclearCASLocked(ctx context.Context, request CASRequest, first error) (Receipt, error) {
+	rctx, cancel := a.detached(ctx, casResendTimeout)
+	defer cancel()
+	receipt, err := a.cas.CompareAndSwap(rctx, request)
+	if err == nil {
+		log.Printf("computer event appender: seq=%d head CAS outcome was unclear (%v); the re-send settled it", request.Event.Sequence, first)
+		return receipt, nil
+	}
+	log.Printf("computer event appender: seq=%d head CAS outcome unknown after a re-send (%v; first: %v); prepared row kept for recovery", request.Event.Sequence, err, first)
+	return Receipt{}, fmt.Errorf("computer event appender: head CAS outcome unknown, prepared row kept for recovery: %w (re-send: %v)", first, err)
+}
+
 // recoverPreparedInPlaceLocked runs RecoverPrepared on a running computer and
 // returns the embedded head after it. Callers hold a.mu.
 func (a *ComputerEventAppender) recoverPreparedInPlaceLocked(ctx context.Context, why string) (*Head, error) {
@@ -887,18 +1226,36 @@ func (a *ComputerEventAppender) recoverPreparedInPlaceLocked(ctx context.Context
 	if !a.recoveryFailedAt.IsZero() && time.Since(a.recoveryFailedAt) < inPlaceRecoveryCooldown {
 		return nil, ErrNeedsProjectionRepair
 	}
-	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+	stop := a.currentStop()
+	// A failure while the work was interrupted (a shutdown, a store close) is
+	// not the recovery failing: it gets no cooldown.
+	failed := func() {
+		if stop.Err() == nil {
+			a.recoveryFailedAt = time.Now()
+		}
+	}
+	rctx, cancel := a.detached(ctx, time.Minute)
 	defer cancel()
 	err := a.RecoverPrepared(rctx)
 	head, herr := a.projection.Head(rctx, a.computerID)
 	log.Printf("computer event appender: in-place prepared recovery (%s): err=%v embedded_seq=%d", why, err, headSeq(head))
 	if err != nil {
-		a.recoveryFailedAt = time.Now()
+		failed()
 		return nil, err
 	}
 	a.recoveryFailedAt = time.Time{}
 	if herr != nil {
 		return nil, fmt.Errorf("computer event appender: embedded head after recovery: %w", herr)
+	}
+	// No prepared row explains the gap: if the host is simply ahead, fetch
+	// what the local projection missed, as the boot does.
+	head, err = a.catchUpLocked(ctx, head)
+	if err != nil {
+		var we *wedgeError
+		if !(errors.As(err, &we) && we.kind == wedgeKindCatchUpIncomplete) {
+			failed() // an incomplete catch-up made progress: resume at once
+		}
+		return nil, err
 	}
 	return head, nil
 }
@@ -946,7 +1303,18 @@ func (a *ComputerEventAppender) RecoverPrepared(ctx context.Context) error {
 		if platformHead != nil && platformHead.Sequence == request.Event.Sequence && platformHead.CanonicalEventHead == request.EventDigest {
 			receipt, err := a.cas.CompareAndSwap(ctx, request)
 			if err != nil {
-				return fmt.Errorf("computer event appender: recover durable receipt: %w", err)
+				// The head read already proves this event canonical, so a
+				// failed re-send cannot be left to wedge the recovery: the host
+				// runs authorization and pin validation before it looks up the
+				// idempotency key, and may refuse a re-send of a committed
+				// event. Drop the row and let the catch-up that follows apply
+				// the event from the host's tape with its signed receipt. The
+				// cached plaintext stays for that apply, which releases it.
+				log.Printf("computer event appender: seq=%d the re-send of a committed row failed (%v); resolving it from the host chain", request.Event.Sequence, err)
+				if derr := a.projection.DiscardPrepared(ctx, a.computerID, request.EventDigest); derr != nil {
+					return fmt.Errorf("computer event appender: recover durable receipt: %w (discard: %v)", err, derr)
+				}
+				continue
 			}
 			if err := a.verifier.VerifyEventHeadReceipt(ctx, receipt, request); err != nil {
 				return fmt.Errorf("computer event appender: verify recovery receipt: %w", err)
@@ -954,12 +1322,35 @@ func (a *ComputerEventAppender) RecoverPrepared(ctx context.Context) error {
 			if err := a.finalizeProjection(ctx, request.Event, request.EventDigest, receipt); err != nil && !errors.Is(err, ErrProjectionBatchUnreadable) {
 				return fmt.Errorf("%w: finalize recovery: %w", ErrNeedsProjectionRepair, ClassifyProjectionFailure(err))
 			}
+			a.dropLivePayload(request.Event)
 			continue
 		}
 		if (platformHead == nil && request.Event.Sequence == 1 && request.Event.PreviousHead == ZeroHead) ||
 			(platformHead != nil && platformHead.Sequence+1 == request.Event.Sequence && platformHead.CanonicalEventHead == request.Event.PreviousHead) {
 			if err := a.projection.DiscardPrepared(ctx, a.computerID, request.EventDigest); err != nil {
 				return fmt.Errorf("computer event appender: discard uncommitted projection: %w", err)
+			}
+			a.dropLivePayload(request.Event)
+			continue
+		}
+		if platformHead != nil && request.Event.Sequence <= platformHead.Sequence {
+			// The host's chain has moved past this row, or holds another event
+			// at its sequence. The host is authoritative and the row is only a
+			// local note of an attempt: drop it. When the host did commit this
+			// very event (the row of an append whose outcome was unknown, and
+			// the chain moved on since), the catch-up applies it from the host's
+			// tape through the same step as the boot replay. Its cached
+			// plaintext stays for that apply; whatever the pass does not use is
+			// released when the catch-up ends (orphanPayloads), since the host
+			// may hold a different event at that sequence.
+			if err := a.projection.DiscardPrepared(ctx, a.computerID, request.EventDigest); err != nil {
+				return fmt.Errorf("computer event appender: discard prepared projection the host has passed: %w", err)
+			}
+			if _, cached := a.livePayloads[request.Event.PayloadCommitment]; cached {
+				if a.orphanPayloads == nil {
+					a.orphanPayloads = map[string]struct{}{}
+				}
+				a.orphanPayloads[request.Event.PayloadCommitment] = struct{}{}
 			}
 			continue
 		}
@@ -1054,29 +1445,14 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 	current := localHead
 	apply := func(record DurableEvent) error {
 		applyStarted := time.Now()
-		next, err := Reduce(current, record.Request.Event, record.Request.Input)
+		next, timings, err := a.applyDurableEvent(ctx, current, record)
+		replayReduce += timings.reduce
+		replayVerify += timings.verify
+		replayPrepare += timings.prepare
+		replayFinalize += timings.finalize
 		if err != nil {
-			return fmt.Errorf("computer event appender: replay sequence %d: %w", record.Request.Event.Sequence, err)
+			return err
 		}
-		if !sameHead(&next, &record.Request.Next) {
-			return fmt.Errorf("computer event appender: replay projection mismatch at sequence %d", record.Request.Event.Sequence)
-		}
-		verifyStarted := time.Now()
-		if err := a.verifier.VerifyEventHeadReceipt(ctx, record.Receipt, record.Request); err != nil {
-			return fmt.Errorf("computer event appender: replay receipt sequence %d: %w", record.Request.Event.Sequence, err)
-		}
-		prepareStarted := time.Now()
-		replayReduce += verifyStarted.Sub(applyStarted)
-		replayVerify += prepareStarted.Sub(verifyStarted)
-		if err := a.projection.Prepare(ctx, record.Request); err != nil {
-			return fmt.Errorf("computer event appender: replay prepare sequence %d: %w", record.Request.Event.Sequence, err)
-		}
-		finalizeStarted := time.Now()
-		replayPrepare += finalizeStarted.Sub(prepareStarted)
-		if err := a.finalizeProjection(ctx, record.Request.Event, record.Request.EventDigest, record.Receipt); err != nil && !errors.Is(err, ErrProjectionBatchUnreadable) {
-			return fmt.Errorf("computer event appender: replay finalize sequence %d: %w", record.Request.Event.Sequence, err)
-		}
-		replayFinalize += time.Since(finalizeStarted)
 		a.setReplayProgress(record.Request.Event.Sequence, a.committedReplaySeq())
 		a.mu.Lock()
 		a.replayAppliedRows++
@@ -1219,6 +1595,48 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 		return fmt.Errorf("computer event appender: replay commit: %w", err)
 	}
 	return nil
+}
+
+// applyTimings splits the cost of one applyDurableEvent for the replay log.
+type applyTimings struct{ reduce, verify, prepare, finalize time.Duration }
+
+// applyDurableEvent applies one event of the canonical tape to the local
+// projection: reduce it against current, check the result against the head the
+// host committed, verify the host's receipt, prepare, and finalize. The boot
+// replay (reconstruct) and the in-place catch-up (catchUpLocked) both apply
+// events through this one step: the reduce, the check against the committed
+// head, the receipt verification, the prepare and the finalize. They differ in
+// one respect: replay mode finalizes through FinalizeReplayBatch (which may
+// upcast a legacy deposit) and the catch-up through the strict live
+// FinalizeBatch, so an old event that only the upcast accepts is a poison for
+// the catch-up and waits for the boot. It never performs a CAS.
+func (a *ComputerEventAppender) applyDurableEvent(ctx context.Context, current *Head, record DurableEvent) (Head, applyTimings, error) {
+	var timings applyTimings
+	applyStarted := time.Now()
+	next, err := Reduce(current, record.Request.Event, record.Request.Input)
+	if err != nil {
+		return Head{}, timings, fmt.Errorf("computer event appender: replay sequence %d: %w", record.Request.Event.Sequence, err)
+	}
+	if !sameHead(&next, &record.Request.Next) {
+		return Head{}, timings, fmt.Errorf("computer event appender: replay projection mismatch at sequence %d: %w", record.Request.Event.Sequence, ErrProjectionMismatch)
+	}
+	verifyStarted := time.Now()
+	if err := a.verifier.VerifyEventHeadReceipt(ctx, record.Receipt, record.Request); err != nil {
+		return Head{}, timings, fmt.Errorf("computer event appender: replay receipt sequence %d: %w", record.Request.Event.Sequence, err)
+	}
+	prepareStarted := time.Now()
+	timings.reduce = verifyStarted.Sub(applyStarted)
+	timings.verify = prepareStarted.Sub(verifyStarted)
+	if err := a.projection.Prepare(ctx, record.Request); err != nil {
+		return Head{}, timings, fmt.Errorf("computer event appender: replay prepare sequence %d: %w", record.Request.Event.Sequence, err)
+	}
+	finalizeStarted := time.Now()
+	timings.prepare = finalizeStarted.Sub(prepareStarted)
+	if err := a.finalizeProjection(ctx, record.Request.Event, record.Request.EventDigest, record.Receipt); err != nil && !errors.Is(err, ErrProjectionBatchUnreadable) {
+		return Head{}, timings, fmt.Errorf("computer event appender: replay finalize sequence %d: %w", record.Request.Event.Sequence, err)
+	}
+	timings.finalize = time.Since(finalizeStarted)
+	return next, timings, nil
 }
 
 func (a *ComputerEventAppender) commitReplay(ctx context.Context) error {
@@ -1423,3 +1841,21 @@ func sameHead(left, right *Head) bool {
 	}
 	return *left == *right
 }
+
+// GuestAttemptTimeout is the guest HTTP client's per-attempt timeout
+// (NewGuestHTTPClient): the bound on one request of an append to the host.
+const GuestAttemptTimeout = 10 * time.Minute
+
+// CASResendTimeout bounds the detached re-send of a compare-and-swap whose
+// outcome is unknown.
+const CASResendTimeout = 30 * time.Second
+
+// AppendSequentialRequests is an upper bound on how many host requests
+// AppendNewPrivatePayload makes in sequence on its normal path: bind the
+// head, pin the private payload, read the head again (appendLockedInner,
+// only when the bind read cannot serve), pin the event, and the
+// compare-and-swap. It is deliberately the larger count: the host's window
+// may be too long, never too short. The host derives how long an appended snapshot root may
+// stay unnamed from it (internal/platform snapshotRootInFlightWindow). A change
+// to the number of requests must change this constant.
+const AppendSequentialRequests = 5

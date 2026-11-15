@@ -29,6 +29,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/committer"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
+	"github.com/yusefmosiah/go-choir/internal/datavolume"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/eventtablegrant"
 	"github.com/yusefmosiah/go-choir/internal/guestmem"
@@ -58,6 +59,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 	"github.com/yusefmosiah/go-choir/internal/steptrace"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/storetables"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -515,6 +517,11 @@ type Runtime struct {
 	costWatchLast         map[string]time.Time
 	selfdevRouteDesktopID string
 	selfdevUpdaterRoot    string
+	// dataVolume runs the data volume walks one at a time and keeps the last.
+	dataVolume datavolume.Scanner
+	// storeTables runs the state file's per-table readings one at a time and
+	// keeps the last (internal/storetables).
+	storeTables storetables.Scanner
 	selfdevComputerID     string
 	selfdevRealizationID  string
 	selfdevStartupMarker  string
@@ -538,9 +545,6 @@ type Runtime struct {
 	hostRestartTelemetryMu      sync.Mutex
 	hostRestartTelemetryRestore func()
 	hostRestartDrainFailed      bool
-	// hostRestartWindowWasOpen: the failed drain held records under an open
-	// run-memory window (kept across repeated requests like the failure).
-	hostRestartWindowWasOpen bool
 	// restartDrainHook is a test seam called when the planned-restart drain
 	// has returned.
 	restartDrainHook func()
@@ -1285,8 +1289,6 @@ func (rt *Runtime) Start(ctx context.Context) {
 	rt.configureEventTable(ctx)
 	// And the telemetry partition writer (store.telemetry_partitions).
 	rt.configureTelemetryPartitions(ctx)
-	// And tape group commit (tape.group_commit).
-	rt.configureTapeGroupCommit(ctx)
 	if rt.maintenanceHeld() {
 		log.Printf("runtime: maintenance hold active (RUNTIME_MAINTENANCE_HOLD=1); refusing run admission + agent rewake while held")
 		return
@@ -1418,6 +1420,9 @@ func (rt *Runtime) Stop() {
 		delete(rt.running, runID)
 	}
 	rt.runningMu.Unlock()
+	// Detached recovery, re-send and catch-up work ignores its callers'
+	// cancellation by design; shutdown must not wait for it.
+	rt.eventAppender.InterruptDetachedWork()
 
 	rt.wg.Wait()
 
@@ -4317,10 +4322,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	text, usage, err := toolregistry.RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, injectUserTurns, toolLoopOptions...)
 	if err != nil {
 		if errors.Is(err, toolregistry.ErrToolLoopPassivated) {
-			if lossErr := rt.runMemoryLossErr(rec); lossErr != nil {
-				rt.handleExecutionError(ctx, rec, lossErr)
-				return
-			}
 			rt.passivateIdleToolLoopRun(context.Background(), rec, text, usage, err)
 			return
 		}
@@ -4329,13 +4330,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		} else {
 			rt.handleExecutionError(ctx, rec, err)
 		}
-		return
-	}
-	// A run whose run memory lost a queued entry after its last append would
-	// complete clean and seed the next run from a log with a hole (the damage
-	// mark does not survive a restart): fail it, so the fate is durable.
-	if lossErr := rt.runMemoryLossErr(rec); lossErr != nil {
-		rt.handleExecutionError(ctx, rec, lossErr)
 		return
 	}
 	// Transition to completed.
@@ -4549,7 +4543,8 @@ func (rt *Runtime) sleepTextureMutationAfterIdle(ctx context.Context, rec *types
 		// not a failed mutation. A committed non-revision turn sleeps the
 		// mutation; nothing committed means the activation died mid-flight and
 		// the row goes stale for the next reconcile to replace.
-		if turn, err := rt.store.GetAppliedTextureTurnByCallerRun(ctx, rec.OwnerID, rec.ComputerID, rec.TrajectoryID, rec.RunID); err == nil && turn.TextureTurn != nil {
+		turn, turnErr := rt.store.GetAppliedTextureTurnByCallerRun(ctx, rec.OwnerID, rec.ComputerID, rec.TrajectoryID, rec.RunID)
+		if turnErr == nil && turn.TextureTurn != nil {
 			if turn.TextureTurn.Outcome == types.TextureTurnRevision && turn.Revision != nil {
 				if err := rt.store.CompleteAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, turn.Revision.RevisionID); err != nil && err != store.ErrMutationAlreadyCompleted {
 					return err
@@ -4569,6 +4564,12 @@ func (rt *Runtime) sleepTextureMutationAfterIdle(ctx context.Context, rec *types
 			if err := rt.store.CompleteAgentMutation(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID, mutation.RevisionID); err != nil && err != store.ErrMutationAlreadyCompleted {
 				return err
 			}
+			return nil
+		}
+		if turnErr != nil && !errors.Is(turnErr, store.ErrNotFound) {
+			// A read error is not "nothing committed": the turn may be durable.
+			// Leave the mutation pending for the next recovery to decide.
+			log.Printf("runtime: idle passivation of run %s could not read its committed Texture turn: %v", rec.RunID, turnErr)
 			return nil
 		}
 		_ = rt.store.MarkAgentMutationStale(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
@@ -4597,11 +4598,6 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 		return
 	}
 	rec.Result = execRec.Result
-
-	if lossErr := rt.runMemoryLossErr(rec); lossErr != nil {
-		rt.handleExecutionError(ctx, rec, lossErr)
-		return
-	}
 
 	// Transition to completed.
 	now := time.Now().UTC()
@@ -5069,6 +5065,7 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 		return nil
 	}
 
+	var turnReadErr error
 	if strings.TrimSpace(rec.TrajectoryID) != "" && strings.TrimSpace(rec.ComputerID) != "" {
 		if turn, turnErr := rt.store.GetAppliedTextureTurnByCallerRun(persistCtx, rec.OwnerID, rec.ComputerID, rec.TrajectoryID, rec.RunID); turnErr == nil && turn.TextureTurn != nil {
 			if turn.TextureTurn.Outcome == types.TextureTurnRevision && turn.Revision != nil {
@@ -5079,6 +5076,7 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 			return nil
 		} else if turnErr != nil && !errors.Is(turnErr, store.ErrNotFound) {
 			log.Printf("runtime: recover committed Texture turn for run %s: %v", rec.RunID, turnErr)
+			turnReadErr = turnErr
 		}
 	}
 	// Legacy-protocol recovery: a pending mutation carrying RevisionID is a
@@ -5093,7 +5091,11 @@ func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord
 	}
 	// No committed turn: the activation ended without a durable write — a
 	// completed no-op. The mutation row goes stale so reconcile's stranded
-	// repair reclaims its covered packets; it is never a failure.
+	// repair reclaims its covered packets; it is never a failure. A failed
+	// read of the turn is not "no committed turn": the mutation stays pending.
+	if turnReadErr != nil {
+		return nil
+	}
 	_ = rt.store.MarkAgentMutationStale(persistCtx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
 	return nil
 }
@@ -5497,20 +5499,6 @@ func (rt *Runtime) activeRunByAgent(ctx context.Context, ownerID, agentID string
 		return types.RunRecord{}, false, nil
 	}
 	return rec, true, nil
-}
-
-// runMemoryLossErr names a run whose run-memory window lost a queued entry.
-func (rt *Runtime) runMemoryLossErr(rec *types.RunRecord) error {
-	if rt == nil || rt.store == nil || rec == nil {
-		return nil
-	}
-	// Seal first: a queued entry whose seal fails marks the run damaged now,
-	// while the run can still be failed.
-	rt.store.SealRunMemory(rec.RunID)
-	if !rt.store.RunMemoryDamaged(rec.RunID) {
-		return nil
-	}
-	return fmt.Errorf("run %s: %w", rec.RunID, store.ErrRunMemoryLost)
 }
 
 // defaultOpenTextureDecision is the conductor's fallback decision when the

@@ -265,6 +265,19 @@ func (s *Store) retireClearedKey(g telemetryRetireGroup) string {
 	return fmt.Sprintf("%p/%s", s, g.name)
 }
 
+// retireRunMemoryBacklogFn is the run-memory step of a wake (a seam for the test
+// that an error in it does not skip the rest).
+var retireRunMemoryBacklogFn func(s *Store, ctx context.Context, ready func() bool) (int, int, error)
+
+func init() {
+	retireRunMemoryBacklogFn = func(s *Store, ctx context.Context, ready func() bool) (int, int, error) {
+		return s.RetireRunMemoryBacklog(ctx, time.Now().UTC(), runMemoryCatchUpGap, ready)
+	}
+}
+
+// retirementWakeDone is called at the end of a wake that reached its last step.
+var retirementWakeDone = func() {}
+
 // StartTelemetryRetirement runs RetireTelemetry about ten minutes after
 // start, then every 24 hours, until ctx ends. Call it once the replay is done
 // and the runtime is up. ready, when set, gates each run: a computer whose
@@ -302,12 +315,15 @@ func (s *Store) StartTelemetryRetirement(ctx context.Context, ready, forceCompac
 			}
 			log.Printf("store: telemetry retirement: %d ops in %s", ops, time.Since(start).Round(time.Millisecond))
 			memStart := time.Now()
-			memOps, memErr := s.RetireRunMemory(ctx, time.Now().UTC())
+			// A backlog beyond one pass's cap runs back to back, not a pass a day.
+			memOps, memPasses, memErr := retireRunMemoryBacklogFn(s, ctx, ready)
 			if memErr != nil {
-				log.Printf("store: run memory retirement: after %d ops: %v", memOps, memErr)
-				continue
+				// The rest of the maintenance goes on: a backlog that failed after
+				// freeing pages must not hold them (and the compact copy) a day.
+				log.Printf("store: run memory retirement: after %d ops in %d passes: %v", memOps, memPasses, memErr)
+			} else {
+				log.Printf("store: run memory retirement: %d ops in %d passes in %s", memOps, memPasses, time.Since(memStart).Round(time.Millisecond))
 			}
-			log.Printf("store: run memory retirement: %d ops in %s", memOps, time.Since(memStart).Round(time.Millisecond))
 			// The files of the partitions the ops retired (telemetry_partition.go).
 			if _, gcErr := s.GCTelemetryPartitions(ctx); gcErr != nil {
 				log.Printf("store: telemetry partitions: delete retired files: %v", gcErr)
@@ -326,6 +342,7 @@ func (s *Store) StartTelemetryRetirement(ctx context.Context, ready, forceCompac
 			if _, cErr := s.prepareCompactCopy(ctx, forceCompact != nil && forceCompact()); cErr != nil {
 				log.Printf("store: compact copy: %v", cErr)
 			}
+			retirementWakeDone()
 		}
 	}()
 }

@@ -70,7 +70,7 @@ if u.hostname == "choir.news":
     elif path == "/api/runtime/observability":
         body = {"ok": True}
     elif path == "/api/computer-settings":
-        body = {"settings": [{"key": "tape.group_commit", "value": True}, {"key": "telemetry.batch", "value": True}]}
+        body = {"settings": [{"key": "telemetry.batch", "value": True}]}
     elif path.startswith("/api/files/"):
         store = os.path.join(ST, "files", path[len("/api/files/"):])
         if method == "PUT":

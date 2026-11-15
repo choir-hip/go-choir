@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -97,12 +96,19 @@ func TestToolBatchWaitsAreBounded(t *testing.T) {
 		t.Fatal(err)
 	}
 	provider := ctxBoundProvider{newMockToolLoopProvider(&provideriface.ToolLoopResponse{StopReason: "tool_use", ToolCalls: []types.ToolCall{{ID: "c", Name: "capsule_go_eval", Arguments: json.RawMessage(`{}`)}}, Model: "m"})}
-	// Without the bound the loop would call the model forever; the deadline
-	// turns that into a failure, not a hung test binary.
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	// Without the bound the loop would call the model forever. The guard is
+	// the count of waits, so the test's own guard is a count too: it cancels
+	// the run once the waits pass the bound by a margin, which fails the test
+	// without a clock (a 3 s deadline failed under load, when the 129 turns
+	// were not done in time and the error was the deadline's, not the bound's).
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	waits := 0
 	_, _, err := RunToolLoop(ctx, provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"x"}`)}, "system", 0, noEmit, nil,
 		WithToolBatchWait(func(context.Context, []types.ToolCall, []types.ToolResult) (ToolLoopCompletionGuardResult, bool, error) {
+			if waits++; waits > maxCompletionGuardWaits+8 {
+				cancel()
+			}
 			return ToolLoopCompletionGuardResult{Continue: true, Waited: true, Instruction: "again"}, true, nil
 		}))
 	if err == nil || !strings.Contains(err.Error(), "waited") {

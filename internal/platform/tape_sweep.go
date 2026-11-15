@@ -143,7 +143,12 @@ type TapeSweepRequest struct {
 	// computer's file is listed or deleted.
 	AcceptUnrecordedForkLineage bool `json:"accept_unrecorded_fork_lineage,omitempty"`
 	// NoArchive skips the archive of a destroyed computer's files and rows
-	// (test computers). The default is to archive. The dry-run records it in
+	// (test computers). It does not cover the orphan sweep: applyOrphans
+	// always archives the pins it deletes, so an apply that includes orphans
+	// writes a small archive under tape-sweep-archive whatever this says. The
+	// archive is local (decision D1: no tape leaves Node B). The scheduled
+	// pass runs the destroyed sweep only and never sets this. The default is
+	// to archive. The dry-run records it in
 	// the manifest and apply must repeat it exactly.
 	NoArchive      bool   `json:"no_archive,omitempty"`
 	RunID          string `json:"run_id,omitempty"`
@@ -212,36 +217,40 @@ type TapeSweepNamespaceCounts struct {
 
 // TapeSweepReport is the receipt for one dry-run or apply.
 type TapeSweepReport struct {
-	RunID                       string                              `json:"run_id"`
-	Action                      string                              `json:"action"`
-	Mode                        string                              `json:"mode"`
-	Grace                       string                              `json:"grace"`
-	Quiet                       string                              `json:"quiet,omitempty"`
-	Sweeps                      []string                            `json:"sweeps"`
-	AcceptUnrecordedForkLineage bool                                `json:"accept_unrecorded_fork_lineage"`
-	ManifestPath                string                              `json:"manifest_path,omitempty"`
-	ManifestSHA256              string                              `json:"manifest_sha256,omitempty"`
-	ReportPath                  string                              `json:"report_path,omitempty"`
-	Computers                   int                                 `json:"computers"`
-	ChainEvents                 uint64                              `json:"chain_events"`
-	Orphans                     map[string]TapeSweepNamespaceCounts `json:"orphans,omitempty"`
-	OrphanFiles                 int                                 `json:"orphan_files"`
-	OrphanBytes                 int64                               `json:"orphan_bytes"`
-	OrphansRefused              string                              `json:"orphans_refused,omitempty"`
-	DestroyedRefused            string                              `json:"destroyed_refused,omitempty"`
-	DestroyedComputers          int                                 `json:"destroyed_computers"`
-	DestroyedBlockedByLineage   int                                 `json:"destroyed_blocked_by_fork_lineage"`
-	DestroyedListed             int                                 `json:"destroyed_listed"`
-	DestroyedFiles              int                                 `json:"destroyed_files"`
-	DestroyedBytes              int64                               `json:"destroyed_bytes"`
-	DestroyedRows               int64                               `json:"destroyed_rows"`
-	DestroyedClasses            map[string]TapeSweepClassCounts     `json:"destroyed_classes,omitempty"`
-	NoArchive                   bool                                `json:"no_archive,omitempty"`
-	DestroyedProofs             []TapeSweepComputerProof            `json:"destroyed_proofs,omitempty"`
-	Apply                       *TapeSweepApplyCounts               `json:"apply,omitempty"`
-	Warnings                    []string                            `json:"warnings,omitempty"`
-	StartedAt                   time.Time                           `json:"started_at"`
-	DurationMs                  int64                               `json:"duration_ms"`
+	RunID                       string   `json:"run_id"`
+	Action                      string   `json:"action"`
+	Mode                        string   `json:"mode"`
+	Grace                       string   `json:"grace"`
+	Quiet                       string   `json:"quiet,omitempty"`
+	Sweeps                      []string `json:"sweeps"`
+	AcceptUnrecordedForkLineage bool     `json:"accept_unrecorded_fork_lineage"`
+	ManifestPath                string   `json:"manifest_path,omitempty"`
+	ManifestSHA256              string   `json:"manifest_sha256,omitempty"`
+	ReportPath                  string   `json:"report_path,omitempty"`
+	Computers                   int      `json:"computers"`
+	ChainEvents                 uint64   `json:"chain_events"`
+	// ChainEventsResumed are chain rows whose references came from stored
+	// progress; ChainEventsWalked are rows read from the chain this run.
+	ChainEventsResumed        uint64                              `json:"chain_events_resumed"`
+	ChainEventsWalked         uint64                              `json:"chain_events_walked"`
+	Orphans                   map[string]TapeSweepNamespaceCounts `json:"orphans,omitempty"`
+	OrphanFiles               int                                 `json:"orphan_files"`
+	OrphanBytes               int64                               `json:"orphan_bytes"`
+	OrphansRefused            string                              `json:"orphans_refused,omitempty"`
+	DestroyedRefused          string                              `json:"destroyed_refused,omitempty"`
+	DestroyedComputers        int                                 `json:"destroyed_computers"`
+	DestroyedBlockedByLineage int                                 `json:"destroyed_blocked_by_fork_lineage"`
+	DestroyedListed           int                                 `json:"destroyed_listed"`
+	DestroyedFiles            int                                 `json:"destroyed_files"`
+	DestroyedBytes            int64                               `json:"destroyed_bytes"`
+	DestroyedRows             int64                               `json:"destroyed_rows"`
+	DestroyedClasses          map[string]TapeSweepClassCounts     `json:"destroyed_classes,omitempty"`
+	NoArchive                 bool                                `json:"no_archive,omitempty"`
+	DestroyedProofs           []TapeSweepComputerProof            `json:"destroyed_proofs,omitempty"`
+	Apply                     *TapeSweepApplyCounts               `json:"apply,omitempty"`
+	Warnings                  []string                            `json:"warnings,omitempty"`
+	StartedAt                 time.Time                           `json:"started_at"`
+	DurationMs                int64                               `json:"duration_ms"`
 }
 
 // TapeSweepApplyCounts are the apply outcomes, by the GC log's op names.
@@ -289,17 +298,46 @@ type tapeSweepState struct {
 	order    []string
 	// beforeDelete is a test hook run before each item's locked unlink.
 	beforeDelete func(item tapeSweepItem)
+	// walkViewDone is a test hook run when a chain walk that reads events
+	// ends; view is nil when the computer's view could not be opened.
+	walkViewDone func(computerID string, view *tapestore.SegmentView)
 	// afterReferences is a test hook run after the dry-run's chain walk and
 	// before the append-receipt check, to simulate live appends during the walk.
 	afterReferences func()
 	// beforeRowsDelete is a test hook run before a computer's rows
 	// transaction; an error stands in for a crash between files and rows.
 	beforeRowsDelete func(computerID string) error
+	// refChunkEvents is the events per persisted reference chunk; 0 means
+	// defaultTapeRefChunkEvents. Test-only.
+	refChunkEvents int
+	// refCompactAfter is the chunk count that triggers compaction; 0 means
+	// defaultTapeRefCompactAfter. Test-only.
+	refCompactAfter int
+	// refCompactMaxEvents caps a merged chunk's rows; 0 means
+	// defaultTapeRefCompactMaxEvents. Test-only.
+	refCompactMaxEvents int
+	// afterRefChunk is a test hook run after each reference chunk is
+	// persisted; an error stands in for a restart at that point.
+	afterRefChunk func(computerID string, to uint64) error
 	// extraRefsMax caps the unique digests the extra-refs route holds and
 	// answers; 0 means defaultTapeExtraRefsMax. Test-only: set before the
 	// route is called and never written in production, so it is read without
 	// the sweep lock.
 	extraRefsMax int
+	// passMu makes a scheduled pass (a dry run and the apply of its manifest,
+	// repeated) one unit: a second schedule in the process never starts
+	// while one holds it. A hand-started job is stopped by running instead.
+	passMu sync.Mutex
+	// schedForkAck, schedMaxDeletes, schedMaxBytes and schedMaxRounds are
+	// test-only overrides of the scheduled pass (see tape_sweep_schedule.go).
+	// Production never sets them: the schedule never acknowledges unrecorded
+	// fork lineage, and uses the sweep's own caps and a fixed round bound.
+	schedForkAck    bool
+	schedMaxDeletes int
+	schedMaxBytes   int64
+	schedMaxRounds  int
+	// schedAfterDry runs after each scheduled dry run (test-only).
+	schedAfterDry func()
 }
 
 // SetTapeSweepPolicy records the configured policy.
@@ -734,7 +772,76 @@ type tapeChainRow struct {
 // indexed sequence point lookups (event_replay.go), reading each event file
 // when readEvents is set. A gap or an unreadable row is an error: a partial
 // chain must never pass for a complete one.
+//
+// Events are read through one tapestore view per computer walk: the directory
+// is listed and the indexes validated once, and, when the walk reads at least
+// tapeWalkIndexMinEvents events, the view also holds a digest index of the
+// event namespace, so a read probes the one or two segments that hold the
+// digest, wherever they are, and none for an absent one (the repack scatters
+// a chain across segments by digest byte). The rows are the ones the
+// per-event Reader.Read gave. A computer whose view cannot be opened is
+// walked with the per-event reads.
 func (s *Service) walkTapeChain(ctx context.Context, computerID string, from, to uint64, readEvents bool, visit func(tapeChainRow) error) error {
+	var wv *tapeWalkView
+	if readEvents {
+		var events uint64
+		if to > from {
+			events = to - from
+		}
+		wv = s.openTapeWalkView(computerID, events)
+		defer wv.finish(from, to)
+	}
+	return s.walkTapeChainWith(ctx, wv, computerID, from, to, readEvents, visit)
+}
+
+// tapeWalkIndexMinEvents is the walk length from which the view builds its
+// digest index: building it reads every sealed index file once (about the
+// cost of probing a few hundred scattered events), so a short walk (the
+// apply pass's delta) does not.
+var tapeWalkIndexMinEvents uint64 = 1000
+
+// tapeWalkView is the view of one computer shared by the chunks of one walk.
+// A nil *tapeWalkView, or one without a view, reads events one by one.
+type tapeWalkView struct {
+	s    *Service
+	id   string
+	view *tapestore.SegmentView
+}
+
+func (s *Service) openTapeWalkView(computerID string, events uint64) *tapeWalkView {
+	var v *tapestore.SegmentView
+	var err error
+	if events >= tapeWalkIndexMinEvents {
+		v, err = s.tapeReader().OpenIndexedView(computerID, tapestore.NSEvent)
+	} else {
+		v, err = s.tapeReader().OpenView(computerID)
+	}
+	if err != nil {
+		log.Printf("tape sweep: computer %s: segment view not opened, reading events one by one: %v", computerID, err)
+		v = nil
+	}
+	return &tapeWalkView{s: s, id: computerID, view: v}
+}
+
+// finish reports what the walk cost. A view holds no open files, so there is
+// nothing to close.
+func (w *tapeWalkView) finish(from, to uint64) {
+	if w == nil {
+		return
+	}
+	if v := w.view; v != nil {
+		log.Printf("tape sweep: computer %s walk (%d,%d]: %d segments, %d probes (%d sealed), %d reloads, %d reader fallbacks, %d absent or legacy-only reads (%d listings skipped), digest index %d entries (%d bytes)", w.id, from, to, v.Segments(), v.Probes(), v.SealedProbes(), v.Reloads(), v.Fallbacks(), v.Absent(), v.ListingsSkipped(), v.IndexEntries(), v.IndexBytes())
+	}
+	if w.s.tapeSweep.walkViewDone != nil {
+		w.s.tapeSweep.walkViewDone(w.id, w.view)
+	}
+}
+
+func (s *Service) walkTapeChainWith(ctx context.Context, wv *tapeWalkView, computerID string, from, to uint64, readEvents bool, visit func(tapeChainRow) error) error {
+	var view *tapestore.SegmentView
+	if wv != nil {
+		view = wv.view
+	}
 	for start := from + 1; start <= to; start += tapeSweepSeqChunk {
 		end := min(to, start+tapeSweepSeqChunk-1)
 		args := []any{computerID}
@@ -784,7 +891,13 @@ func (s *Service) walkTapeChain(ctx context.Context, computerID string, from, to
 				// Segment first, legacy second. A corrupt segment is not
 				// "unreadable, no references": it stops the walk, so no
 				// caller can read it as an empty reference set.
-				raw, _, err := s.tapeReader().Read(computerID, tapestore.NSEvent, row.EventDigest)
+				var raw []byte
+				var err error
+				if view != nil {
+					raw, _, err = view.ReadObject(tapestore.NSEvent, row.EventDigest)
+				} else {
+					raw, _, err = s.tapeReader().Read(computerID, tapestore.NSEvent, row.EventDigest)
+				}
 				if errors.Is(err, tapestore.ErrCorrupt) {
 					return fmt.Errorf("tape sweep: chain %s sequence %d: %w", computerID, row.Sequence, err)
 				}
@@ -1038,21 +1151,18 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 			// walk and nothing of it to reference (not a gap).
 			continue
 		}
-		err = s.walkTapeChain(ctx, id, 0, h.Sequence, readEvents || deletable(id), func(row tapeChainRow) error {
-			walkedRows[id]++
-			set.add(row.EventDigest)
-			set.add(row.EventPin)
-			for _, d := range row.PayloadPins {
-				set.add(d)
-			}
-			for _, d := range row.PayloadRefs {
-				set.add(d)
-			}
-			if readEvents && !row.EventReadable && orphansIncomplete == "" {
+		walk, err := s.walkTapeRefs(ctx, id, h.Sequence, readEvents || deletable(id), readEvents, set, func(row tapeChainRow) {
+			if orphansIncomplete == "" {
 				orphansIncomplete = fmt.Sprintf("event %s (computer %s sequence %d) is unreadable; its payload references are unknown", row.EventDigest, id, row.Sequence)
 			}
-			return nil
 		})
+		walkedRows[id] = walk.Resumed + walk.Walked
+		report.ChainEventsResumed += walk.Resumed
+		report.ChainEventsWalked += walk.Walked
+		var persistErr *tapeRefPersistError
+		if errors.As(err, &persistErr) || ctx.Err() != nil {
+			return report, err
+		}
 		if err != nil {
 			report.OrphansRefused = err.Error()
 			report.Warnings = append(report.Warnings, err.Error())

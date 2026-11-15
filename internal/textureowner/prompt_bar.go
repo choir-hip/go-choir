@@ -325,6 +325,8 @@ func promptBarSubmitFailure(err error) (int, string) {
 	switch {
 	case errors.Is(err, agentcore.ErrPromptCommandConflict), errors.Is(err, store.ErrLifecycleCommandConflict), errors.Is(err, store.ErrConcurrentStateChange):
 		return http.StatusConflict, "command identity conflicts with the stored request"
+	case storedRevisionBroken(err):
+		return http.StatusInternalServerError, "failed to submit prompt: " + storedRevisionBrokenMessage
 	case errors.Is(err, agentcore.ErrPreGenesis):
 		return http.StatusServiceUnavailable, "computer initializing"
 	case errors.Is(err, store.ErrInvalidTextureRevision):

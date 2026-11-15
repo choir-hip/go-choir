@@ -61,6 +61,7 @@ func TestSnapshotRootsKeepNewestFourAndSharedChunks(t *testing.T) {
 		t.Helper()
 		root := gcDigest("root/" + name)
 		chunks := append([]string{digests[name]}, extra...)
+		f.nameRoot(computer, root, head) // the tape names it (the prune keeps roots it names)
 		if code := putSnapshotRoot(t, handler, snapshotRootRequest{ComputerID: computer, Root: root, HeadSequence: head, Chunks: chunks}, true); code != http.StatusCreated {
 			t.Fatalf("declare %s = %d", name, code)
 		}
@@ -143,7 +144,8 @@ func TestSnapshotRootsOfALargeStoreKeepTwo(t *testing.T) {
 		return len(roots)
 	}
 	for seq := int64(1); seq <= 4; seq++ {
-		if err := store.RecordSnapshotRoot(ctx, "computer-large", gcDigest("large root"+string(rune('0'+seq))), seq, chunks(largeSnapshotChunks+1, string(rune('0'+seq)))); err != nil {
+		nameRootRow(t, store, "computer-large", gcDigest("large root"+string(rune('0'+seq))), seq)
+		if err := store.recordSnapshotRoot(ctx, "computer-large", gcDigest("large root"+string(rune('0'+seq))), seq, chunks(largeSnapshotChunks+1, string(rune('0'+seq)))); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -151,7 +153,8 @@ func TestSnapshotRootsOfALargeStoreKeepTwo(t *testing.T) {
 		t.Fatalf("a large store keeps %d roots, want %d", got, largeSnapshotRetention)
 	}
 	for seq := int64(5); seq <= 8; seq++ {
-		if err := store.RecordSnapshotRoot(ctx, "computer-large", gcDigest("small root"+string(rune('0'+seq))), seq, chunks(3, string(rune('0'+seq)))); err != nil {
+		nameRootRow(t, store, "computer-large", gcDigest("small root"+string(rune('0'+seq))), seq)
+		if err := store.recordSnapshotRoot(ctx, "computer-large", gcDigest("small root"+string(rune('0'+seq))), seq, chunks(3, string(rune('0'+seq)))); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -203,7 +206,8 @@ func TestSnapshotRootRejectsBadDeclarations(t *testing.T) {
 			t.Fatalf("%s accepted: %d", name, code)
 		}
 	}
-	// Idempotent redeclaration.
+	// Idempotent redeclaration (the host must hold the chunk it names).
+	f.writeAged("sha256/file-cas-chunks/c1/"+good, []byte("c"), time.Hour)
 	for i := 0; i < 2; i++ {
 		if code := putSnapshotRoot(t, handler, snapshotRootRequest{ComputerID: "c1", Root: root, HeadSequence: 1, Chunks: []string{good}}, true); code != http.StatusCreated {
 			t.Fatalf("declaration %d = %d", i, code)

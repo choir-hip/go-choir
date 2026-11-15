@@ -199,7 +199,7 @@ All figures: fixture turn `plain` (3.6 s of speech). "first" is the first load i
 | `pocket-tts` (voice) | Kyutai PocketTTS 100M via FluidAudio, CC-BY-4.0 | 44 s | 0.4-1.2 s | 1027 / 413 MB | first frame 120-239 ms, RTF 0.5 (streams frames) | Mac | 5.6 s of audio at 24 kHz |
 | `lfm3-audio-live`, `lfm3-holder`, `lfm3-audio-tts` | LFM3-Audio-2B Core ML via `LFM3AudioManager`, about 2.9 GB, LFM Open License (read it: commercial use limited by revenue) | 739 s (download of about 2.9 GB plus first Core ML compile; the cache delta was not captured because the library's cache folder is named differently) | not run | 238 MB loaded / 78 after unload (measured before the first prediction; vendor figure 1.9 GB peak) | live ASR RTF 4.97 (17.6 s for 3.6 s of audio, so slower than real time on this loaded M1; vendor: RTFx 10 on an M5 Pro); TTS first audio 2.4 s, RTF 1.65 | Mac only | live ASR: "Please tell me more about the harbour..." (correct); TTS: 5.9 s of audio at 24 kHz |
 
-Library licences: FluidAudio Apache-2.0; llama.cpp MIT. Models' licences are read from the Hugging Face cards (`cardData.license`), not from memory. `lfm3-holder` returns the same fixed lines as `fixed-lines` (FluidAudio exposes ASR and TTS for the model, not text generation); it exists so a configuration can take transcriber, holder and voice from the one loaded model.
+Library licences: FluidAudio Apache-2.0; llama.cpp MIT. Models' licences are read from the Hugging Face cards (`cardData.license`), not from memory. The LFM3 holder (`lfm3-holder`) and the fixed-lines holder were removed in round 3: the holder is now `local-ack`, the phone's own Qwen3 model thinking aloud (see docs/reference/ON-DEVICE-MODELS.md).
 
 Findings worth acting on:
 - FluidAudio's downloader cancels a file as "stalled" when under 1 MB arrives in 120 s, even for a tiny file (`metadata.json`), then retries with back-off. On the phone this made the first `parakeet-eou` load look hung for more than 20 minutes; the second launch finished in 34 s. A first-run download therefore needs a visible progress state, not a spinner.
@@ -400,7 +400,8 @@ if it adds a name a child component must `inject`).
 ### How the pieces fit
 
 - `AutoradioLab/app.contract` is the root: `members` lines (already wired, one per lane), the `provide` list (a band per
-  lane), and the view: sign-in screen, or the page (full bleed), the layers (pile, launcher, player) and the bar.
+  lane), and the view: sign-in screen, or the page deck (full bleed; `pages.contract` PageDeck, order and drag in `members-stack.contract`), and the glass
+  lens bar (`bar.contract`) with the launcher and the player rising from it as sheets. There is no pile view (round 3).
 - A **page** is `{address, kind, title}` (`Pages.swift`). `PageHost` in `pages.contract` maps kind to a component, one
   `if` line per kind, already pointing at each lane's component (`PaperPage`, `ReaderPage`, ...). The lane owns the
   component; it takes what it needs with `inject` (the root `provide`s names; children cannot hold resources, so a lane's
@@ -428,9 +429,9 @@ if it adds a name a child component must `inject`).
 ### Test id conventions
 
 `<lane>-<thing>[-<id>]`, lower case, every interactive element has one, ids built from addresses keep the address as is.
-Existing: `bar`, `bar-pages`, `bar-pages-count`, `bar-field`, `bar-text`, `bar-voice`, `bar-progress`, `mark`, `pile`, `pile-scrim`, `pile-places`,
-`pile-reopen`, `card-<address>`, `card-open-<address>`, `card-close-<address>`, `card-swipe-<address>`, `launcher`, `launcher-layer`,
-`launcher-scrim`, `launcher-open-<address>`, `place-<slug>`, `player`, `player-play`, `paper-story-<route>`, `reader-cite-<anchor>` (lane 3),
+Existing: `bar-stack`, `bar` (the glass lens), `bar-mark` (opens the launcher), `bar-field`, `bar-mic` (tap to talk, tap to send), `bar-send`, `bar-play`,
+`bar-text` (the now-playing line), `bar-progress`, `page-indicator`, `mark`, `page-deck` (the pan surface), `deck-slot-<address>`, `story-more`, `launcher`,
+`launcher-layer`, `launcher-open-<address>` (bring to the top), `launcher-close-<address>` (remove from the deck), `layer-scrim`, `place-<slug>`, `player`, `player-play`, `paper-story-<route>`, `reader-cite-<anchor>` (lane 3),
 `settings-theme-<id>`, `settings-mode-<light|dark|system>`, `settings-demo`, `settings-components`, `page-title` (every page's heading), plus the
 integrator's (`signin`, `lab-talk`, `inject`, `stage-<kind>-<id>`, `trace-*`, ...), unchanged. Keep an id or update `scripts/proof-sim.sh` in the same commit.
 
@@ -465,7 +466,7 @@ page kind's address scheme is a spine change (`PageAddress.kind(of:)`).
 2. **A card dragged left and closed: YES, with `swipeleft`, not `pan`.** `swipeleft=closePage(address)` on the card: it follows the finger and the action
    runs when the finger lifts past 64 pt (needs `touch-action="pan-y"`); the proof drives it with `tap card-swipe-<address> drag -150 0` under
    `agent ios --touch platform`. `pan` reports the movement since its last event, so a pull (the bar's drag up to the launcher) accumulates `dy` in a state and
-   decides in `panrelease` (`spine.contract`, `pullBar`/`pullEnd`); the proof's `tap bar-pages drag 0 -200` opens the launcher.
+   decides in `panrelease`. Round 3 uses that for the page deck (`pageDrag`/`pageRelease`, `touch-action="pan-y"` on the deck so vertical scroll is left to the page). The bar has no drag and no hold any more.
 3. **A colour bound from data: YES.** `background-color=th.paper`, `color=th.fg`, `box-shadow=th.shadow2` and `font-family=th.fontRead` (a data string,
    `ui-serif`) all paint from the `theme` source, and a switch (Depth, Newsprint, light, dark) repaints without a rebuild (proof screenshots 06 to 10).
    The data-theme path is therefore the only path: the "compiled themes" fallback is not needed.
@@ -590,3 +591,15 @@ banner), not fixture text. `REAL_PROMPT=1` adds one typed question in the bar (a
 - **Known and left.** A typed Ask forks and revises the story the radio has loaded, not the page in front (the desk stage's first turn forks the
   programme); the Textures list shows the newest 100 documents (the route pages with `next_cursor`, not read yet); the document route returns every
   revision body (the largest document on the test computer has 314), which the reader fetches whole.
+
+## Round 3 merge (lane/ar3-app)
+
+- The lens is theme data: a theme's `lens` is `{ "style": "A", "wash": 0 }` (A native glass, B no material with a wash of the page colour,
+  C ultra-thin; wash 0 to 1). Absent, it is A and 0. `Theme.lensStyle` / `Theme.lensWash` reach the bar as `th.lensStyle` / `th.lensWash`;
+  there is no in-app switch (the launcher's Developer lens rows are gone). Failure list F11 in `ThemeLoader.swift`, tests in `AimAndLensTests.swift`.
+- Cancel while listening calls `choirTalkCancel` (the engine drops the audio and the words, nothing is sent); Send is the microphone again.
+- `aim` (the address of the page in front) goes from the bar to `choirAsk` / `choirTalkDown`, into `LabRuntime.aimAddress`, and from there into the
+  Autoradio desk request's `page.address`.
+- `RadioInfo.modeLabel` is gone; nothing in the app describes a hold gesture.
+- With no theme chosen the app shows Chrome Pastel (light) and Liquid Metal (dark); `proof-common.sh` no longer writes a theme.
+- The deck cycle is proved by `proof-app.sh` (drives `deckprobe` and `deckcycle`): the page count is read off the deck label, not assumed.

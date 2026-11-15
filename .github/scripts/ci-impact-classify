@@ -60,10 +60,16 @@ sbom=false
 flakehub=false
 high_risk_race=false
 ci=false
+receipts_swap=false
+guest_unit=false
+
+# is_docs_like_path: docs, skill text and developer-side scripts need no CI
+# lane (owner, 2026-11-12); they ship with the next push that does run.
+# shellcheck source=ci-docs-like-paths
+source "$(dirname "${BASH_SOURCE[0]}")/ci-docs-like-paths"
 
 is_docs_path() {
-  local path="$1"
-  [[ "$path" == docs/* ]] || [[ "$path" != */* && "$path" == *.md ]]
+  is_docs_like_path "$1"
 }
 
 mark() {
@@ -81,6 +87,8 @@ if [[ "${CI_FORCE_ALL:-false}" == "true" ]]; then
   flakehub=true
   high_risk_race=true
   ci=true
+  receipts_swap=true
+  guest_unit=true
   explanations+=("manual/recovery run -> all CI lanes")
 else
   for path in "${changed[@]}"; do
@@ -91,6 +99,24 @@ else
     if ! is_docs_path "$path" && [[ "$path" != .github/* ]]; then
       flakehub=true
     fi
+
+    # The operator's index-swap script runs DDL on the live receipt table; its
+    # self-test (a throwaway PostgreSQL) runs whenever it, its test, the workflow
+    # that wires it or the receipt index definitions it mirrors change.
+    case "$path" in
+      scripts/receipts-index-swap|scripts/receipts-index-swap-test|.github/workflows/ci.yml|internal/platform/receipt_indexes.go|internal/platform/computer_events.go)
+        mark receipts_swap "$path -> receipts index swap script self-test"
+        ;;
+    esac
+
+    # The boot prune's unit test guards the ordering line in nix/autoputer-vm.nix
+    # (scripts/updater-prune-unit-nix-test.sh): it runs when any nix module, the
+    # test, the flake that imports them, or the workflow that wires it changes.
+    case "$path" in
+      nix/*|flake.nix|flake.lock|scripts/updater-prune-unit-nix-test.sh|.github/workflows/ci.yml)
+        mark guest_unit "$path -> boot prune unit ordering test"
+        ;;
+    esac
 
     case "$path" in
       .github/*|scripts/ci-find-green-pr-run)
@@ -112,10 +138,15 @@ else
     esac
 
     case "$path" in
-      cmd/*|internal/*|configs/*|skills/*|go.mod|go.sum|scripts/go-test-*)
+      cmd/*|internal/*|configs/*|scripts/*.go|skills/*.go|skills/*/go.mod|skills/*/go.sum|go.mod|go.sum|scripts/go-test-*)
         mark go "$path -> Go verification"
         ;;
     esac
+
+    # Scripts that Go code names run the Go lane (ci-docs-like-paths).
+    if ci_go_script_path "$path"; then
+      mark go "$path -> Go verification (a Go test reads or runs this script)"
+    fi
 
     # internal/pkgruntime embeds a byte copy of the boundary plugin; its Go test
     # (TestEmbeddedBoundaryPluginIsTheFrontends) must run when the frontend copy changes.
@@ -143,7 +174,7 @@ else
     esac
 
     case "$path" in
-      flake.nix|flake.lock|go.mod|go.sum|skills/*|frontend/src/*|frontend/public/*|frontend/package.json|frontend/package-lock.json|frontend/svelte.config.js|frontend/vite.config.js|frontend/index.html)
+      flake.nix|flake.lock|go.mod|go.sum|frontend/src/*|frontend/public/*|frontend/package.json|frontend/package-lock.json|frontend/svelte.config.js|frontend/vite.config.js|frontend/index.html)
         mark sbom "$path -> SBOM derivation input"
         ;;
       cmd/*|internal/*)
@@ -185,6 +216,8 @@ sbom=${sbom}
 flakehub=${flakehub}
 high_risk_race=${high_risk_race}
 ci=${ci}
+receipts_swap=${receipts_swap}
+guest_unit=${guest_unit}
 sampled_race=${sampled_race}
 sample_bucket=${sample_bucket}
 EOF

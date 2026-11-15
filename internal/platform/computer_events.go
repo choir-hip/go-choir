@@ -52,8 +52,6 @@ CREATE TABLE IF NOT EXISTS computer_event_append_receipts (
   CONSTRAINT computer_event_append_sequence_uq UNIQUE (computer_id, sequence),
   CONSTRAINT computer_event_append_digest_uq UNIQUE (computer_id, event_digest)
 );
-CREATE INDEX IF NOT EXISTS computer_event_append_receipt_id_idx ON computer_event_append_receipts (computer_id, event_head_receipt_id);
-CREATE INDEX IF NOT EXISTS computer_event_append_kind_seq_idx ON computer_event_append_receipts (computer_id, event_kind, sequence);
 CREATE TABLE IF NOT EXISTS control_key_history (
   signer_domain VARCHAR(64) NOT NULL,
   computer_id VARCHAR(128) NOT NULL DEFAULT '',
@@ -236,7 +234,12 @@ func (c *ComputerEventCAS) CompareAndSwap(ctx context.Context, request computere
 	// SERIALIZABLE can still fail one against another computer's transaction
 	// (predicate locks are per page). The retry re-reads the head.
 	return dbx.Retry(ctx, 5, func() (computerevent.Receipt, error) {
-		return c.compareAndSwapTx(ctx, request)
+		started := time.Now()
+		receipt, err := c.compareAndSwapTx(ctx, request)
+		if err == nil {
+			c.store.appendTimes.record(request.Event.ComputerID, time.Since(started))
+		}
+		return receipt, err
 	})
 }
 

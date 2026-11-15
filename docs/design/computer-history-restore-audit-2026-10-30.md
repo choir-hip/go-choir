@@ -29,7 +29,7 @@ Inputs, not re-derived here:
 [secrets vault, revision 2](secrets-vault-design-2026-10-28.md),
 [data rearchitecture](../archive/design/data-rearchitecture-2026-10-28.md),
 [apply checkpoint without replay](../archive/design/apply-checkpoint-without-replay-2026-10-26.md),
-[precommitment records](../precommitment-records.md) section 6,
+[precommitment records](../archive/learning/precommitment-records.md) section 6,
 [tape window sizing](../evidence/tape-window-sizing-2026-10-30.md),
 [new engine storage](../evidence/new-engine-storage-measurement-2026-10-30.md),
 [keep-set accounting](../evidence/keep-set-accounting-2026-10-29.md),

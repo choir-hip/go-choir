@@ -2,11 +2,15 @@
 
 Status: written at MA8.0 of the modular architecture mission. It describes the
 engineering on main at the date above: the files, the invariants, the failure
-modes and how to extend each part. The theory is in
-[psa-theory-2026-11-08.md](psa-theory-2026-11-08.md). The longer, earlier
-statement is [precommitment-records.md](precommitment-records.md); this document
-replaces its engineering sections (4 to 6) as the description of what runs, and
-that doc keeps its role for the motivation and the research record. The plan
+modes and how to extend each part. The theory is the four-stroke learning
+engine, [learning-engine.md](learning-engine.md) (2026-11-14), whose words map
+onto this document's: a precommitment record is a forecast, a settlement is an
+outcome. The earlier theory is
+[psa-theory-2026-11-08.md](archive/learning/psa-theory-2026-11-08.md) and the
+longer, earlier statement is
+[precommitment-records.md](archive/learning/precommitment-records.md), both
+archived; this document replaces the latter's engineering sections (4 to 6) as
+the description of what runs. The plan
 ([design/modular-architecture-plan-2026-11-04.md](design/modular-architecture-plan-2026-11-04.md))
 and the ledger
 ([definitions/choir-modular-architecture-2026-11-04.ledger.md](definitions/choir-modular-architecture-2026-11-04.ledger.md))
@@ -201,23 +205,23 @@ or without the injected images in the run's memory. Tool-loop failover is
 image-aware. d@e proved the path on a one-line platform change (apply-proof-5d,
 2026-11-08: management's pass verdict, applied).
 
-Open: two sites still call an LLM from the computer runtime outside any desk.
-The install review seats (`internal/installreview`; Devin unwired, DeepSeek
-through the tool-loop provider) are one. The anchor sampler was the other and was
-reverted whole (0047d0892) on 2026-11-08. The install review design that moves
-the seats onto a desk
-(`docs/design/desk-install-review-2026-11-08.md`) is not on main; main still has
-the platform seats.
+Corrected 2026-11-14: this section said two sites still called an LLM from
+the computer runtime outside any desk. Both are gone. The install review's
+model seats were deleted in 950e35eb8 (2026-11-07 local, 2026-11-08 UTC), which
+put the judgment on management's desk
+(`docs/design/desk-install-review-2026-11-08.md`). The anchor sampler was
+reverted whole (0047d0892) on 2026-11-08.
 
 ## 8. The install review gate
 
 An install that widens its ceiling installs only with a sealed install-review
 verdict for its exact digests (`internal/installreview`,
-`agentcore/install_review.go`). Mechanical checks run first; seats are sized by
-risk, and each answer is a precommitment. Known limits: the seal proves only
-that the socket was reachable, not who the reviewer was; the platform has no
-Devin provider and the DeepSeek seat had no funds when last exercised, so a
-widened install is refused today. Publisher reputation (`trust/reputation.go`)
+`agentcore/install_review.go`). Mechanical checks run first; the judgment is
+management's, on its desk, sized by risk (950e35eb8; corrected 2026-11-14, this
+section had described the deleted platform model seats). The seat records name
+the desk that judged. Known limits: the review's prediction is stated and never
+scored (no resolve is written for it), so it is a forecast with no outcome
+([learning-engine.md](learning-engine.md), section 9). Publisher reputation (`trust/reputation.go`)
 is written as sentences with n from signed settled outcomes, never a score.
 
 ## 9. The trust view and the act gate

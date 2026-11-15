@@ -4,28 +4,76 @@
 corpus and does not make an unverified graph status into a live work claim.
 Sequencing: the owner's roadmap,
 [`roadmap-2026-10-31.md`](roadmap-2026-10-31.md) (data system, Mac app and
-sync, PSA/self-development/Autopaper, voice and Autoradio, the five S's,
+sync, the learning engine/self-development/Autopaper, voice and Autoradio, the five S's,
 agentic red teaming, economics, launch); this file names the live station in
 it. The 2026-10-14 sequencing and the 2026-09-22 R-series stack are
 superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
-## Live station (2026-11-12): storage solutions, part 2
+## Live station (2026-11-13, from 16:40Z): storage solutions, part 2
+
+Owner, 2026-11-13: "Let's continue the storage solutions. Take them to the
+point of diminishing marginal returns. We will return to autoradio after we
+have a stronger foundation." Goal:
+[`definitions/choir-storage-solutions-2-2026-11-12.md`](definitions/choir-storage-solutions-2-2026-11-12.md).
+Lanes in motion: S4 (snapshots that cost the change), S5 (coalescing, fewer
+corpusd calls per event), S7 (the sweep on a schedule) and the small guards.
+
+## Live station beside it (2026-11-14): storage solutions, part 3, store once
+
+Owner, 2026-11-14: "all these refactors and maybe more if you discover them
+... should be key top priorities, because we really need to get our
+infrastructure strong before we can ship auto radio anyway." Goal:
+[`definitions/choir-storage-solutions-3-store-once-2026-11-14.md`](definitions/choir-storage-solutions-3-store-once-2026-11-14.md)
+(`readiness: executable`, `now.status: working`). Design:
+[`design/store-once-2026-11-14.md`](design/store-once-2026-11-14.md). Part 2
+keeps S4, S5 and S7; its receipts fold and payload compression continue in
+part 3. Autoradio waits behind both.
+
+## Next station: Autoradio learns its listener (the four-stroke learning engine)
+
+The core mechanism has a new statement,
+[`learning-engine.md`](learning-engine.md): forecast, outcome, lesson, trust
+(owner, 2026-11-13 and 2026-11-14). It replaces the precommitment-records and
+PSA documents, now in [`archive/learning/`](archive/learning/README.md). It is
+built first on Autoradio, then backported to Autopaper through the listener's
+edition, then to self-development.
+
+Owner, 2026-11-14: "we'll merge that PR, and then we'll get to work on it
+from our main worker thread." Goal:
+[`definitions/choir-autoradio-learning-engine-2026-11-14.md`](definitions/choir-autoradio-learning-engine-2026-11-14.md)
+(`readiness: executable`, `now.status: working`, slice L0, the design
+review). Design:
+[`design/autoradio-learning-engine-2026-11-14.md`](design/autoradio-learning-engine-2026-11-14.md).
+Run it with `/goal docs/definitions/choir-autoradio-learning-engine-2026-11-14.md`.
+Its default is to run beside the storage stations: phone and local work never
+wait, and a server landing waits only on a refused deploy.
+
+Autoradio pass 1
+([`definitions/choir-autoradio-pass1-2026-11-10.md`](definitions/choir-autoradio-pass1-2026-11-10.md))
+stays the root for the app and is `blocked_incomplete` on owner items: the
+install go, the TestFlight verdict and the River credential. River is not
+registered on the gateway; the procedure is
+[`reference/RIVER.md`](reference/RIVER.md), section 5, and it is an owner act.
+
+## Storage solutions, part 2: history of the station
 
 **Goal:** [`definitions/choir-storage-solutions-2-2026-11-12.md`](definitions/choir-storage-solutions-2-2026-11-12.md)
 (`readiness: executable`, `now.status: working`; ledger
 [`definitions/choir-storage-solutions-2-2026-11-12.ledger.md`](definitions/choir-storage-solutions-2-2026-11-12.ledger.md)).
 Run it with `/goal docs/definitions/choir-storage-solutions-2-2026-11-12.md`.
 
-Owner, 2026-11-12: "Let's make a storage solutions mission (part 2) as our
-next priority. We can return to autoradio after we do that." Node B was
-81 GiB free and draining 6 GiB an hour. Frame:
+The drain that made it the live station on 2026-11-12 has stopped (Node B
+gained 6.7 GiB in the six hours to 05:35Z on 2026-11-13). Landed and deployed
+overnight: the appender wedge fix, the root-time chunk check, sweep progress
+that survives a restart, the tape write counters and the status scripts. The
+footprint has not shrunk yet. Three lanes continue in the background: the
+sweep walk (S7), coalescing after a day of counters (S5), and the chunk window
+and cheaper snapshots (S4). `scripts/status-hourly` is the tripwire: a
+fast-drain warning that is not a deploy, or a failed paper snapshot, makes
+storage the live station again. Frame:
 [`design/storage-pressure-frame-2026-11-12.md`](design/storage-pressure-frame-2026-11-12.md).
-Autoradio pass 1
-([`definitions/choir-autoradio-pass1-2026-11-10.md`](definitions/choir-autoradio-pass1-2026-11-10.md))
-stays `blocked_incomplete` on the owner's install go and resumes after this
-mission.
 
 ## Earlier station (2026-11-09 evening): Autopaper improvement, then one merged overnight mission
 

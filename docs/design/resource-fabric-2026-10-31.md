@@ -74,7 +74,7 @@ What exists, read for this document:
 - **Ontology:** forks, single state authority
   ([standing questions](../standing-questions.md) 5), the doctrine's
   invariant I3 ("parent/child is not a control ontology"), the Autopaper
-  object graph and [precommitment records](../precommitment-records.md).
+  object graph and [precommitment records](../archive/learning/precommitment-records.md).
 - **The Mike repository** (`~/Dev/mike`, read-only). It already ships
   on-device speech, computer-use helpers for macOS, Windows and Linux,
   workstation VMs, organizations and an audit log. §6 builds on it.

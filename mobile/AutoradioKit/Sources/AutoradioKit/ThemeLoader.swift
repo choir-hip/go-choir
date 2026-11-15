@@ -26,6 +26,12 @@ import Foundation
 //  F7 A theme installed from a Texture replaces a bundled theme by accident, or an invalid one is written to disk: the
 //     install validates before it writes, and the file name is texture-<id>.json; the origin is shown on the card.
 //  F8 A new colour role is missing in a partial theme: roles fall back to the base (paper2 to paper, accent2 to accent).
+//  F9 A Texture or a file installs a theme under a bundled id (or the reserved id "default") and replaces the bundled one: refused.
+//  F11 The lens (the glass the bar sits on) is a style (A native glass, B no material with a wash, C ultra-thin) and a wash of the
+//     page colour: both are theme data with A and 0 as the defaults, so a theme without a "lens" key shows the native glass; an
+//     unknown style or a wash outside 0...1 is refused.
+//  F10 A chosen theme that has only one scheme (Chrome Pastel, Liquid Metal) meets a mode control that asks for the other: the
+//     control shows the one scheme and refuses the other; the "default" id clears the choice and gives the person's mode back.
 
 public struct Theme: Codable, Sendable, Equatable {
     public var id = "", name = "", scheme = "light", schemes = "light,dark"
@@ -45,6 +51,8 @@ public struct Theme: Codable, Sendable, Equatable {
     public var behindScale3 = 1.0, behindDim3 = 0.0
     // the page-colour backing under the bar (level 2) and under a layer (level 3): how opaque, so text stays legible over the page
     public var barBacking = 0.94, layerBacking = 0.86
+    // the lens (the bar's glass): the style (A native glass, B none + wash, C ultra-thin) and the wash of the page colour over it (0...1)
+    public var lensStyle = "A", lensWash = 0.0
     // motion, in milliseconds, and the spring
     public var motionFastMs = 120.0, motionEnterMs = 320.0, motionSheetMs = 260.0, staggerMs = 40.0
     public var springStiffness = 240.0, springDamping = 26.0, springMass = 1.0
@@ -121,6 +129,7 @@ struct ThemeDoc: Decodable {
         var flip: Flip?
         var reduced: String?
     }
+    struct Lens: Decodable { var style: String?; var wash: Double? }
     var schema_version: Int
     var id: String
     var name: String
@@ -131,6 +140,7 @@ struct ThemeDoc: Decodable {
     var elevation: [String: Level]?
     var motion: Motion?
     var mark: Mark?
+    var lens: Lens?
 }
 
 /// Named type scales (the plan's type table; a theme names one and may override single steps with `type.sizes`).
@@ -145,7 +155,13 @@ public enum TypeScale {
 }
 
 public final class ThemeStore: @unchecked Sendable {
-    public static let defaultID = "depth"
+    /// The defaults for a person who has not chosen a theme: the light one in a light scheme, the dark one in a dark scheme
+    /// (the web's Chrome Pastel and Liquid Metal). A chosen theme (AutoradioThemeID) always wins and is never rewritten.
+    public static let defaultLightID = "chrome-pastel"
+    public static let defaultDarkID = "liquid-metal"
+    public static let defaultID = defaultLightID
+    /// The id Settings sends to go back to the default pair (it clears the choice). No theme may take it.
+    public static let defaultChoice = "default"
     /// The faces Exact resolves on the phone, and the generics that map to them.
     static let faces: Set<String> = ["ui-serif", "system-ui", "ui-rounded", "ui-monospace"]
     static let genericMap: [String: String] = ["serif": "ui-serif", "sans-serif": "system-ui", "monospace": "ui-monospace", "ui-sans-serif": "system-ui"]
@@ -155,7 +171,7 @@ public final class ThemeStore: @unchecked Sendable {
     private var origins: [String: String] = [:]        // id -> bundled | file | texture
     private var order: [String] = []
     private var sourceProblems: [String: String] = [:] // source name -> reason (F5)
-    private var currentID: String
+    private var chosenID: String?                     // nil: no choice made, the default for the scheme shows
     private var mode: String                           // light | dark | system
     private var systemScheme: @Sendable () -> String
     /// The system's Reduce Motion; the host sets it (the module reads UIAccessibility).
@@ -169,7 +185,7 @@ public final class ThemeStore: @unchecked Sendable {
                 systemScheme: @escaping @Sendable () -> String = { "light" },
                 reduceMotion: @escaping @Sendable () -> Bool = { false }) {
         self.userDir = userDir; self.defaults = defaults; self.systemScheme = systemScheme; self.reduceMotion = reduceMotion
-        currentID = defaults.string(forKey: "AutoradioThemeID") ?? Self.defaultID
+        chosenID = defaults.string(forKey: "AutoradioThemeID")
         mode = defaults.string(forKey: "AutoradioThemeMode") ?? "system"
         for k in bundled.keys.sorted() { _ = add(Data(bundled[k]!.utf8), source: k, origin: "bundled") }
         reload()
@@ -191,7 +207,11 @@ public final class ThemeStore: @unchecked Sendable {
         do {
             let doc = try JSONDecoder().decode(ThemeDoc.self, from: data)
             try Self.validate(doc)
-            lock.lock(); if docs[doc.id] == nil { order.append(doc.id) }; docs[doc.id] = doc; origins[doc.id] = origin
+            lock.lock()
+            if origin != "bundled", origins[doc.id] == "bundled" {   // F9: nothing shadows a bundled theme
+                sourceProblems[source] = "id \(doc.id) is a bundled theme and cannot be replaced"; lock.unlock(); return nil
+            }
+            if docs[doc.id] == nil { order.append(doc.id) }; docs[doc.id] = doc; origins[doc.id] = origin
             sourceProblems[source] = nil; lock.unlock()
             return doc.id
         } catch {
@@ -207,6 +227,8 @@ public final class ThemeStore: @unchecked Sendable {
     public func installFromTexture(_ themeJSON: Data) throws -> String {
         let doc = try JSONDecoder().decode(ThemeDoc.self, from: themeJSON)
         try Self.validate(doc)
+        lock.lock(); let shadows = origins[doc.id] == "bundled"; lock.unlock()
+        if shadows { throw ThemeError.invalid("id \(doc.id) is a bundled theme and cannot be replaced") }   // F9
         if let userDir {
             try? FileManager.default.createDirectory(at: userDir, withIntermediateDirectories: true)
             try themeJSON.write(to: userDir.appendingPathComponent("texture-\(doc.id).json"), options: .atomic)
@@ -221,7 +243,7 @@ public final class ThemeStore: @unchecked Sendable {
         lock.lock()
         guard let o = origins[id], o != "bundled" else { lock.unlock(); return }
         docs[id] = nil; origins[id] = nil; order.removeAll { $0 == id }
-        if currentID == id { currentID = Self.defaultID; defaults.set(currentID, forKey: "AutoradioThemeID") }
+        if chosenID == id { chosenID = nil; defaults.removeObject(forKey: "AutoradioThemeID") }
         lock.unlock()
         if let userDir, let names = try? FileManager.default.contentsOfDirectory(atPath: userDir.path) {
             for n in names where n == "texture-\(id).json" || n == "\(id).json" { try? FileManager.default.removeItem(at: userDir.appendingPathComponent(n)) }
@@ -229,26 +251,52 @@ public final class ThemeStore: @unchecked Sendable {
     }
 
     public func list() -> [ThemeInfo] {
+        let cur = themeID
         lock.lock(); defer { lock.unlock() }
-        return order.map { ThemeInfo(id: $0, name: docs[$0]?.name ?? $0, current: $0 == currentID) }
+        return order.map { ThemeInfo(id: $0, name: docs[$0]?.name ?? $0, current: $0 == cur) }
     }
 
-    public var themeID: String { lock.lock(); defer { lock.unlock() }; return docs[currentID] != nil ? currentID : (order.first ?? Self.defaultID) }
-    public var schemeMode: String { lock.lock(); defer { lock.unlock() }; return mode }
+    /// The theme in force: the chosen one, else the default for the scheme wanted (the mode, or the system's).
+    public var themeID: String {
+        lock.lock(); let chosen = chosenID, m = mode; lock.unlock()
+        let wanted = m == "system" ? systemScheme() : m
+        lock.lock(); defer { lock.unlock() }
+        if let chosen, docs[chosen] != nil { return chosen }
+        let d = wanted == "dark" ? Self.defaultDarkID : Self.defaultLightID
+        return docs[d] != nil ? d : (order.first ?? Self.defaultID)
+    }
+    private func activeDoc() -> ThemeDoc? {
+        let id = themeID
+        lock.lock(); defer { lock.unlock() }
+        return docs[id] ?? order.first.flatMap { docs[$0] }
+    }
+    /// The one scheme the chosen theme can show (a theme that defines only light or only dark), else nil. While it is set the
+    /// mode control shows that scheme and refuses the other (F10): the screen is never half one scheme and half the other.
+    /// The mode the person set is kept, so choosing the Default or a two-scheme theme gives it back.
+    public var lockedScheme: String? {
+        lock.lock(); defer { lock.unlock() }
+        guard let c = chosenID, let sides = docs[c]?.schemes, sides.count == 1 else { return nil }
+        return sides[0]
+    }
+    public var schemeMode: String { let l = lockedScheme; lock.lock(); defer { lock.unlock() }; return l ?? mode }
 
+    /// A theme id, or `defaultChoice` to clear the choice and show the default pair (Chrome Pastel in light, Liquid Metal in dark).
     public func setTheme(_ id: String) {
-        lock.lock(); if docs[id] != nil { currentID = id; defaults.set(id, forKey: "AutoradioThemeID") }; lock.unlock()
+        lock.lock(); defer { lock.unlock() }
+        if id == Self.defaultChoice { chosenID = nil; defaults.removeObject(forKey: "AutoradioThemeID") }
+        else if docs[id] != nil { chosenID = id; defaults.set(id, forKey: "AutoradioThemeID") }
     }
     /// light, dark or system
     public func setMode(_ m: String) {
         guard ["light", "dark", "system"].contains(m) else { return }
+        if let l = lockedScheme, m != l { return }
         lock.lock(); mode = m; defaults.set(m, forKey: "AutoradioThemeMode"); lock.unlock()
     }
 
     /// The scheme in force: the chosen one, else the system's, limited to the sides the theme defines.
     public func effectiveScheme() -> String {
-        lock.lock(); let m = mode, doc = docs[currentID] ?? order.first.flatMap { docs[$0] }; lock.unlock()
-        return Self.limited(m == "system" ? systemScheme() : m, doc)
+        lock.lock(); let m = mode; lock.unlock()
+        return Self.limited(m == "system" ? systemScheme() : m, activeDoc())
     }
     static func limited(_ wanted: String, _ doc: ThemeDoc?) -> String {
         let sides = doc?.schemes ?? ["light", "dark"]
@@ -256,35 +304,48 @@ public final class ThemeStore: @unchecked Sendable {
     }
 
     public func current() -> Theme {
-        lock.lock(); let doc = docs[currentID] ?? order.first.flatMap { docs[$0] }; lock.unlock()
+        let doc = activeDoc()
         guard let doc else { return Theme() }
         return Self.resolve(doc, scheme: effectiveScheme(), reduced: reduceMotion())
     }
 
     public func extras() -> ThemeExtras {
-        lock.lock(); let doc = docs[currentID] ?? order.first.flatMap { docs[$0] }; lock.unlock()
+        let doc = activeDoc()
         guard let doc else { return ThemeExtras() }
         return Self.resolveExtras(doc, scheme: effectiveScheme(), reduced: reduceMotion())
     }
 
     /// Every theme as a preview card, in the scheme in force (or the theme's own side when it lacks that one).
     public func cards() -> [ThemeCard] {
-        lock.lock(); let ids = order, ds = docs, os = origins, cur = currentID; lock.unlock()
-        let wanted = effectiveSchemeRequest()
-        return ids.compactMap { id in
-            guard let d = ds[id] else { return nil }
-            let scheme = Self.limited(wanted, d)
-            let t = Self.resolve(d, scheme: scheme, reduced: false)
+        let cur = themeID
+        lock.lock(); let ids = order, ds = docs, os = origins, chosen = chosenID; lock.unlock()
+        let wanted = effectiveScheme()     // every card in the scheme in force (a locked theme leaves no mixed screen)
+        let hasChoice = chosen.map { ds[$0] != nil } ?? false
+        func card(_ id: String, _ d: ThemeDoc) -> ThemeCard {
+            let t = Self.resolve(d, scheme: Self.limited(wanted, d), reduced: false)
             var c = ThemeCard()
-            c.id = id; c.name = d.name; c.origin = os[id] ?? "bundled"; c.current = id == cur
+            c.id = id; c.name = d.name; c.origin = os[d.id] ?? "bundled"; c.current = id == cur && hasChoice
             c.schemes = t.schemes; c.contrast = Self.contrastLevel(d); c.scale = t.scale
             c.paper = t.paper; c.paper2 = t.paper2; c.fg = t.fg; c.muted = t.muted; c.accent = t.accent; c.accent2 = t.accent2
             c.onAccent = t.onAccent; c.rule = t.rule; c.fontRead = t.fontRead; c.fontUi = t.fontUi
             c.radiusCard = t.radiusCard; c.radiusControl = t.radiusControl; c.shadow = t.shadow1; c.material = t.material2
             return c
         }
+        // The Default entry comes first: the pair (Chrome Pastel in light, Liquid Metal in dark), painted as the one in force.
+        var out: [ThemeCard] = []
+        // The pair member the scheme asked for (the mode, or the system's), never the chosen theme.
+        lock.lock(); let m = mode; lock.unlock()
+        let asked = m == "system" ? systemScheme() : m
+        if let d = ds[asked == "dark" ? Self.defaultDarkID : Self.defaultLightID] ?? ds[cur] {
+            var c = card(Self.defaultChoice, d)
+            c.id = Self.defaultChoice; c.name = "Default"; c.origin = "bundled"; c.current = !hasChoice; c.schemes = "light,dark"
+            out.append(c)
+        }
+        return out + ids.compactMap { id in
+            guard let d = ds[id] else { return nil }
+            return card(id, d)
+        }
     }
-    private func effectiveSchemeRequest() -> String { lock.lock(); let m = mode; lock.unlock(); return m == "system" ? systemScheme() : m }
 
     // MARK: Validation
 
@@ -294,6 +355,7 @@ public final class ThemeStore: @unchecked Sendable {
     static func validate(_ d: ThemeDoc) throws {
         guard d.schema_version == 3 else { throw ThemeError.invalid("schema_version \(d.schema_version) is not 3") }
         guard d.id.range(of: #"^[a-z0-9][a-z0-9-]{0,39}$"#, options: .regularExpression) != nil else { throw ThemeError.invalid("id must be lower case letters, digits and dashes") }
+        guard d.id != ThemeStore.defaultChoice else { throw ThemeError.invalid("the id default is reserved for the default pair") }
         guard !d.name.isEmpty, d.name.count <= 40 else { throw ThemeError.invalid("name must be 1 to 40 characters") }
         let sides = d.schemes ?? ["light", "dark"]
         guard !sides.isEmpty, sides.allSatisfy({ $0 == "light" || $0 == "dark" }) else { throw ThemeError.invalid("schemes must be light and/or dark") }
@@ -320,6 +382,10 @@ public final class ThemeStore: @unchecked Sendable {
                 if let v = sp.damping, !(1...300).contains(v) { throw ThemeError.invalid("spring damping out of range") }
                 if let v = sp.mass, !(0.1...10).contains(v) { throw ThemeError.invalid("spring mass out of range") }
             }
+        }
+        if let l = d.lens {
+            if let st = l.style, !["A", "B", "C"].contains(st) { throw ThemeError.invalid("lens.style is A, B or C") }
+            if let w = l.wash, !(0...1).contains(w) { throw ThemeError.invalid("lens.wash is between 0 and 1") }
         }
         if let k = d.mark, let t = k.tumble, t.count != 2 || t.contains(where: { ms($0) == nil }) { throw ThemeError.invalid("mark.tumble is two durations") }
         for scheme in sides {
@@ -384,6 +450,7 @@ public final class ThemeStore: @unchecked Sendable {
             t.springStiffness = m.spring?.stiffness ?? t.springStiffness; t.springDamping = m.spring?.damping ?? t.springDamping
             t.springMass = m.spring?.mass ?? t.springMass
         }
+        if let l = d.lens { t.lensStyle = l.style ?? t.lensStyle; t.lensWash = l.wash ?? t.lensWash }
         if let k = d.mark { t.markDriftS = (ms(k.drift) ?? 0) / 1000; t.markListenScale = k.listenScale ?? 1
             t.markTumble = (k.tumble ?? []).joined(separator: ",") }
         if reduced {

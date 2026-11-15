@@ -2,34 +2,37 @@
 # Scenario 1: guest crash mid-write. Sourced by scripts/chaos/run.
 # d@e writes (file PUTs and Texture creates) and runs a prompt-bar run; its
 # firecracker process is SIGKILLed by exact pid; vmctl brings it back on the
-# next request. Contract (CLAUDE.md restarts; tape.group_commit design 9):
-# every acknowledged write survives; only queued telemetry and run-memory
-# messages may be missing, and the crash-closed run says so; open runs end
-# "interrupted_by_restart" and nothing resumes; replay is equivalent.
+# next request. Contract (CLAUDE.md restarts; tape group commit design 9):
+# every acknowledged write survives, run-memory messages included (they are
+# acknowledged only after their CAS; the run-memory window is deleted); only
+# queued telemetry may be missing, and the crash-closed run says so; open runs
+# end "interrupted_by_restart" and nothing resumes; replay is equivalent. The
+# drill has no cheap read of a run's memory log, so an acknowledged run-memory
+# message surviving the kill is proved by the store tests
+# (TestRunMemoryMessageIsAcknowledgedOnlyAfterItsCAS) and by replay-completeness
+# below, not by a check of its own.
 SCN_NAME=s1-guest-crash
 SCN_FAULT="SIGKILL d@e's firecracker process (exact pid, mapped through ownerships.json) mid-write"
 
 scn_plan() {
 	cat <<EOF
-pre:    pre-flight; map d@e -> vm -> firecracker pid (wake it first if needed); read tape.group_commit
-        and telemetry.batch; mark the console log; start writes (file PUT every 1s, Texture create
+pre:    pre-flight; map d@e -> vm -> firecracker pid (wake it first if needed); read telemetry.batch;
+        mark the console log; start writes (file PUT every 1s, Texture create
         every 4th, at most 3); start one prompt-bar run and wait for it to run; save open run ids
 fault:  re-map on Node B and kill -KILL <pid> only if the mapping is unchanged
 wait:   up to ${CHAOS_S1_TIMEOUT:-300}s for d@e active and /api/runtime/observability 200 (the API wakes it)
 post:   acknowledged writes read back; Texture replays answer the same doc_id; the prompt-bar
         replay answers the same submission; open runs cancelled with interrupted_by_restart and
-        the 'may be missing' note (when the window is on); none active or restarted; one
+        the 'may be missing' note (telemetry, when batching is on); none active or restarted; one
         crash boot and no planned boot in the console; replay-completeness equivalent
 EOF
 }
 
 scn_pre() {
 	chaos_target_up
-	S_GC=$(chaos_setting tape.group_commit)
 	S_TB=$(chaos_setting telemetry.batch)
-	chaos_event settings "tape.group_commit=$S_GC telemetry.batch=$S_TB"
+	chaos_event settings "telemetry.batch=$S_TB"
 	chaos_check "pre: d@e is active" eq active "$T_STATE"
-	chaos_check "pre: tape.group_commit on d@e (the contract under drill)" eq true "$S_GC"
 	chaos_console_mark
 	chaos_load_start "file texture"
 	chaos_start_run
@@ -73,7 +76,7 @@ scn_post() {
 $f
 EOF
 	chaos_check "open runs closed with fate interrupted_by_restart" eq "$n" "$closed"
-	if [ "$S_GC" = true ] || [ "$S_TB" = true ] || [ "$CHAOS_DRY" = 1 ]; then
+	if [ "$S_TB" = true ] || [ "$CHAOS_DRY" = 1 ]; then
 		chaos_check "crash-closed runs carry the 'may be missing' note" eq "$closed" "$noted"
 	fi
 	chaos_check "no pre-crash run left active (nothing auto-resumed)" eq 0 "$active"

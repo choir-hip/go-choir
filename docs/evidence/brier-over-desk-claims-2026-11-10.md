@@ -3,7 +3,7 @@
 Mutation class: green (evidence and proposal; no code). Exploration X6, branch
 `x6-brier`, from `origin/main` 313e5bae3. No staging access, so no live data
 was scored. It continues
-[tasks-precommit-icrl-2026-10-24](../design/tasks-precommit-icrl-2026-10-24.md)
+[tasks-precommit-icrl-2026-10-24](../archive/learning/tasks-precommit-icrl-2026-10-24.md)
 (§7.1 chose Brier; §7.3 the hidden audit),
 [calibration-seed-2026-11-03](../design/calibration-seed-2026-11-03.md) and the
 archived [ICRL experiment](../archive/reports/icrl-calibration-experiment-2026-10-14.md).

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -121,7 +122,23 @@ func (h HTTPChunks) RegisterSnapshotRoot(ctx context.Context, root string, headS
 		return err
 	}
 	defer resp.Body.Close()
+	reason, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
 	_, _ = io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode == http.StatusGone {
+		// The computer was destroyed: not retryable, and not a missing chunk.
+		return fmt.Errorf("%w (%s)", ErrSnapshotComputerDeleted, strings.TrimSpace(string(reason)))
+	}
+	if resp.StatusCode == http.StatusConflict {
+		// The host does not hold a chunk the root names: this attempt
+		// recorded nothing, and the next one re-probes and re-uploads it.
+		var apiErr struct {
+			Error string `json:"error"`
+		}
+		if _ = json.Unmarshal(reason, &apiErr); strings.TrimSpace(apiErr.Error) != "" {
+			return fmt.Errorf("%w: %s", ErrSnapshotChunkMissing, strings.TrimSpace(apiErr.Error))
+		}
+		return fmt.Errorf("%w (the host answered 409 without a reason)", ErrSnapshotChunkMissing)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("status %d", resp.StatusCode)
 	}
@@ -152,3 +169,11 @@ func (h HTTPChunks) GetChunk(ctx context.Context, digest string) ([]byte, error)
 	}
 	return data, nil
 }
+
+// ErrSnapshotChunkMissing is the host's refusal of a snapshot root whose
+// chunks it does not hold.
+var ErrSnapshotChunkMissing = errors.New("snapshot root refused: the host does not hold a chunk it names")
+
+// ErrSnapshotComputerDeleted is the host's refusal of a snapshot root for a
+// computer whose tape is archived or deleted: not retryable.
+var ErrSnapshotComputerDeleted = errors.New("snapshot root refused: the computer was destroyed")

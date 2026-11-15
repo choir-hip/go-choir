@@ -495,6 +495,9 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 		return
 	}
 	defer release()
+	// Bundles no open operation names are settled evidence: collect them after
+	// the pass, under the same lock.
+	defer rt.collectSettledBundles(ctx)
 	operations, err := rt.selfdevOperations.ListByStates(ctx, rt.selfdevComputerID, selfdev.StateAwaitingApproval, selfdev.StateAccepted, selfdev.StateMaterializing, selfdev.StateRollbackPending, selfdev.StateDegraded)
 	if err != nil {
 		return

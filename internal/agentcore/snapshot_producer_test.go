@@ -216,9 +216,9 @@ func TestProducerPassesTheBudgetAndReportsItsAbort(t *testing.T) {
 	if outcome != snapshotFailed || !strings.Contains(detail, envSnapshotMaxDuration) || !strings.Contains(detail, "pages read") || !strings.Contains(detail, "nothing recorded") {
 		t.Fatalf("outcome=%s detail=%q", outcome, detail)
 	}
-	// An abort is retried at the next tick, not closed.
+	// An abort is retried once its backoff passes, not closed.
 	h2.takeErr = nil
-	if outcome, _ := h2.run(&p2, time.Now()); outcome != snapshotTaken {
+	if outcome, _ := h2.run(&p2, time.Now().Add(snapshotBackoffCeiling)); outcome != snapshotTaken {
 		t.Fatalf("after an abort: %s", outcome)
 	}
 }
@@ -298,13 +298,15 @@ func TestProducerClearsItsAttemptWhenTheSnapshotReturns(t *testing.T) {
 	h.deps.StorePath = filepath.Join(t.TempDir(), "runtime.db")
 	h.takeErr = errors.New("platform unreachable")
 	var p snapshotProducer
+	now := time.Now()
 	for i := 0; i < snapshotAttemptLimit+2; i++ {
-		if outcome, _ := h.run(&p, time.Now()); outcome != snapshotFailed {
+		now = now.Add(snapshotBackoffCeiling)
+		if outcome, _ := h.run(&p, now); outcome != snapshotFailed {
 			t.Fatalf("attempt %d: %s, want failed (a returned failure is not a crash)", i, outcome)
 		}
 	}
 	h.takeErr = nil
-	if outcome, _ := h.run(&p, time.Now()); outcome != snapshotTaken {
+	if outcome, _ := h.run(&p, now.Add(snapshotBackoffCeiling)); outcome != snapshotTaken {
 		t.Fatalf("after the platform returned: %s", outcome)
 	}
 }
@@ -312,15 +314,15 @@ func TestProducerClearsItsAttemptWhenTheSnapshotReturns(t *testing.T) {
 func TestSnapshotSettingsFromEnv(t *testing.T) {
 	env := map[string]string{}
 	get := func(k string) string { return env[k] }
-	if s := snapshotSettingsFromEnv(get); s.Disabled || s.Interval != 7*24*time.Hour || s.MaxDuration != 30*time.Minute || s.TailEvents != snapshotDefaultTailEvents {
-		t.Fatalf("defaults (on, 168h backstop, by tape distance, 30m): %+v", s)
+	if s := snapshotSettingsFromEnv(get); s.Disabled || s.Interval != 7*24*time.Hour || s.MaxDuration != 90*time.Minute || s.TailEvents != snapshotDefaultTailEvents {
+		t.Fatalf("defaults (on, 168h backstop, by tape distance, 90m): %+v", s)
 	}
 	env[envSnapshotInterval], env[envSnapshotMaxDuration], env[envSnapshotDisable] = "6h", "2h", "1"
 	if s := snapshotSettingsFromEnv(get); !s.Disabled || s.Interval != 6*time.Hour || s.MaxDuration != 2*time.Hour {
 		t.Fatalf("overrides: %+v", s)
 	}
 	env[envSnapshotInterval], env[envSnapshotMaxDuration], env[envSnapshotDisable] = "soon", "-5s", "0"
-	if s := snapshotSettingsFromEnv(get); s.Disabled || s.Interval != 7*24*time.Hour || s.MaxDuration != 30*time.Minute || s.TailEvents != snapshotDefaultTailEvents {
+	if s := snapshotSettingsFromEnv(get); s.Disabled || s.Interval != 7*24*time.Hour || s.MaxDuration != 90*time.Minute || s.TailEvents != snapshotDefaultTailEvents {
 		t.Fatalf("garbage falls back to the defaults, never to off: %+v", s)
 	}
 }

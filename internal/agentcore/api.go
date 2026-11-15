@@ -21,6 +21,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/actgate"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/datavolume"
 	"github.com/yusefmosiah/go-choir/internal/disclosure"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/guestmem"
@@ -32,6 +33,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/steptrace"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/storetables"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -881,6 +883,9 @@ type guestObservabilityResponse struct {
 	// per-kind event counts and tape batch sizes that price batching, and the
 	// sealer's counters when it is on. Read-only.
 	TelemetryBatching *store.TelemetryStats `json:"telemetry_batching,omitempty"`
+	// RunMemoryCarry counts the carried conversation against new messages
+	// (run_memory_carry_counters.go). Always present.
+	RunMemoryCarry RunMemoryCarryStats `json:"run_memory_carry"`
 	// StreamSeqLease is the stream_seq lease: state, the durable block,
 	// whether the lease was trusted and why not, how the process seeded and
 	// how long it took (docs/problems/stream-seq-high-water-mark-design-2026-10-23.md,
@@ -894,6 +899,11 @@ type guestObservabilityResponse struct {
 	// TelemetryPartitions is the per-day telemetry files
 	// (store.telemetry_partitions), when any is open or the writer is on.
 	TelemetryPartitions *store.TelemetryPartitionStats `json:"telemetry_partitions,omitempty"`
+	// RunMemoryRetirement is the last run-memory retirement pass's census:
+	// every run group in exactly one disposition (retired, or the rule that
+	// kept it), with runs and rows. Always present; no passes and no times
+	// before the first pass since boot. Read-only.
+	RunMemoryRetirement *store.RunMemoryCensus `json:"run_memory_retirement,omitempty"`
 	// WAL is the state file's WAL size and the WAL bound's checkpoints
 	// (store/wal_bound.go).
 	WAL *store.WALStats `json:"wal,omitempty"`
@@ -946,6 +956,22 @@ type guestObservabilityResponse struct {
 	// store versus the shared nix store (SDC RES-07, launch checklist
 	// L1-02). Bounded to a few seconds; it takes no lock.
 	MemoryDetail *guestmem.Detail `json:"memory_detail,omitempty"`
+	// DataVolume is the persistent data volume: its statfs on every read
+	// (total, free, available to unprivileged, so the reserved blocks show),
+	// and with ?data_volume=detail a bounded read-only walk of allocated
+	// bytes, apparent bytes and file count per top-level directory and per
+	// listed second-level directory. A plain read shows the last walk.
+	// The volume root is the directory of the store path.
+	DataVolume *datavolume.Report `json:"data_volume,omitempty"`
+	// StoreTables is what fills state.db: the file's pages and free pages,
+	// and per table and index its pages, bytes, rows and rowid range, with
+	// each table's indexes rolled up. Only with ?store_tables=detail
+	// (optionally &store_tables_seconds=N, at most storetables.MaxBudget): a
+	// reading walks the file's pages through dbstat under a wall-time budget
+	// shared out by weight, one tree at a time, each in its own short read
+	// transaction. A tree cut at its share says partial and its numbers are
+	// a floor. A plain read shows the last reading, if any.
+	StoreTables *storetables.Report `json:"store_tables,omitempty"`
 	// ObjectGraphWriterGate is the object graph writer gate's mode and the
 	// violations it has seen since boot, keyed "kind|declared writer|reason"
 	// (ARCH-04): the gate's refusals, read here instead of over SSH. This process's counts only (corpusd keeps its own).
@@ -1016,7 +1042,23 @@ func parseGuestMeminfo(data string) *guestMemoryObservability {
 // HandleGuestObservability handles GET /api/runtime/observability: the guest's
 // build commit and a bounded recent boot log. This closes the deploy-to-guest
 // verification gap that otherwise requires shell access.
+// storeTablesBudget is the wall time the store reading may take: what asked
+// allows, capped by what is left of the server's write timeout after the
+// handler's own elapsed time and a reserve for what runs after the reading
+// (the reading's header reads, the tool-layer read, the four bounded reads of
+// observabilityReadBudget, and 5 s for serialization). ok is false when
+// nothing is left.
+func storeTablesBudget(asked, elapsed, writeTimeout time.Duration) (budget time.Duration, ok bool) {
+	reserve := storetables.HeaderBudget + toolLayerReadBudget + time.Second + 4*observabilityReadBudget + 5*time.Second
+	left := writeTimeout - reserve - elapsed
+	if left < time.Second {
+		return 0, false
+	}
+	return min(storetables.ClampBudget(asked), left), true
+}
+
 func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Request) {
+	handlerStart := observabilityNow()
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -1058,11 +1100,40 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 			{Label: "nix_store", Root: "/nix/store"},
 		}, guestmem.DefaultLimits)
 	}
+	if h.rt.cfg.StorePath != "" {
+		report := h.rt.dataVolume.Read(r.Context(), filepath.Dir(filepath.Clean(h.rt.cfg.StorePath)), datavolume.DefaultLimits, r.URL.Query().Get("data_volume") == "detail")
+		resp.DataVolume = &report
+	}
+	if h.rt.store != nil {
+		var budget time.Duration
+		if secs, err := strconv.Atoi(r.URL.Query().Get("store_tables_seconds")); err == nil && secs > 0 {
+			// Clamp before multiplying: a huge value must not wrap the Duration.
+			budget = time.Duration(min(secs, int(storetables.MaxBudget/time.Second))) * time.Second
+		}
+		var only []string
+		for _, n := range strings.Split(r.URL.Query().Get("store_tables_only"), ",") {
+			if n = strings.TrimSpace(n); n != "" {
+				only = append(only, n)
+			}
+		}
+		want := r.URL.Query().Get("store_tables") == "detail"
+		var report storetables.Report
+		if left, ok := storeTablesBudget(budget, observabilityNow().Sub(handlerStart), server.WriteTimeoutFromEnv()); ok || !want {
+			report = h.rt.storeTables.Read(r.Context(), h.rt.store.ReadDB(), storetables.Limits{Budget: left, Only: only}, want)
+		} else {
+			report = h.rt.storeTables.Read(r.Context(), h.rt.store.ReadDB(), storetables.Limits{}, false)
+			report.Skipped = "no time left under the server's write timeout; ask again without data_volume=detail or memory=detail"
+		}
+		if report.Reading != nil || report.Busy || report.Skipped != "" {
+			resp.StoreTables = &report
+		}
+	}
 	if raw, err := os.ReadFile("/proc/meminfo"); err == nil {
 		resp.Memory = parseGuestMeminfo(string(raw))
 		resp.MemCachedBytes = guestmem.Meminfo(string(raw))["Cached"]
 	}
 	resp.ToolLayerTimer = toolLayerTimer()
+	resp.RunMemoryCarry = runMemoryCarry.snapshot()
 	if layers, ok := boundedObservabilityRead(toolLayerReadBudget+time.Second, func() []toolLayerObservability {
 		return readToolLayers(r.Context(), "/nix", "/proc", "/run/choir-tool-evict")
 	}); ok {
@@ -1077,6 +1148,8 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		resp.TelemetryBatching = &telemetry
 		lease := h.rt.store.StreamSeqLeaseStats()
 		resp.StreamSeqLease = &lease
+		census := h.rt.store.RunMemoryRetirementCensus()
+		resp.RunMemoryRetirement = &census
 		if st := h.rt.eventTableStatus(); st.HostGranted || st.Setting || st.StoreFloor > 0 {
 			resp.EventTable = &st
 		}
@@ -1124,6 +1197,9 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 // observabilityReadBudget bounds each observability read that can wait on a
 // lock (the store's engine lock, the executor's).
 const observabilityReadBudget = 3 * time.Second
+
+// observabilityNow is the handler's clock; a test replaces it.
+var observabilityNow = time.Now
 
 // boundedObservabilityRead runs read and gives up after budget. A read it
 // gives up on keeps running until its lock frees and then writes only to its

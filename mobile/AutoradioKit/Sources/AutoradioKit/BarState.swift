@@ -58,7 +58,6 @@ public struct RadioInfo: Codable, Sendable, Equatable {
     public var speedChoices: [String] = ["0.8", "1", "1.25", "1.5"]
     /// button | open | hybrid
     public var mode = ""
-    public var modeLabel = ""
     public var micOpen = false
     public var heard = ""
     public var holding = ""
@@ -238,12 +237,6 @@ public final class BarTracker: @unchecked Sendable {
         r.playing = p.playing; r.paused = n > 0 && !p.playing
         r.level = s.level; r.speed = Self.speedName(speed)
         r.mode = s.addressing
-        switch s.addressing {
-        case "button": r.modeLabel = "Hold the mic button to talk"
-        case "open": r.modeLabel = "Just speak; the radio is listening"
-        case "hybrid": r.modeLabel = "Hold to talk, or speak just after"
-        default: r.modeLabel = ""
-        }
         r.micOpen = s.micActive
         r.micLevel = (level * 100).rounded() / 100
         r.heard = s.phase == "playing" ? "" : s.transcript

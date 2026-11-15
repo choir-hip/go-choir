@@ -9,6 +9,8 @@ report.
 
     node-b-growth-meter            take one reading, append it to the ledger
     node-b-growth-meter --report   print day-over-day deltas and flags
+    node-b-growth-meter --forecast journald-prefixed lines: days to the disk
+                                   floor, fast drain, top five 24 h growers
     node-b-growth-meter --stdout   take one reading, print it, write nothing
     node-b-growth-meter --memory   take one memory reading (every minute)
 
@@ -110,12 +112,24 @@ ANON_FLAG = float(ENV("GROWTH_ANON_FLAG", "0.8"))
 MAX_FILE = int(ENV("GROWTH_MAX_FILE_BYTES", str(64 << 20)))
 HEAVY_EVERY_S = float(ENV("GROWTH_HEAVY_EVERY_H", "23")) * 3600
 DU_TIMEOUT = int(ENV("GROWTH_DU_TIMEOUT_S", "900"))
+# All du and btrfs-du walks of one reading share this budget (seconds): once
+# it is spent, later walks are skipped and recorded in "errors", so the ledger
+# line is written inside the unit's TimeoutStartSec (45 min) however slow the
+# stores are. Six heavy stores at DU_TIMEOUT each would otherwise not fit.
+DU_BUDGET = float(ENV("GROWTH_DU_BUDGET_S", "2100"))
+T_START = time.time()
 PSQL_TIMEOUT = int(ENV("GROWTH_PSQL_TIMEOUT_S", "120"))
 SELF_UNIT_GLOBS = ("go-choir-*.service", "postgresql.service", "nix-daemon.service")
 NOW = float(ENV("GROWTH_NOW", "0")) or time.time()
 
 # Heavy stores: millions of small files. Measured at most once per HEAVY_EVERY_S.
-HEAVY = ("pin-receipts", "computer-event", "computer-event-payload", "file-cas-chunks")
+# file-cas-chunks (total plus the ten largest computer directories, so the
+# largest one is always named), capture-bodies and platform-update are
+# measured with the same bounded one-pass `du -x -d1` as the other heavy
+# stores, once per GROWTH_HEAVY_EVERY_H, each under DU_TIMEOUT and inside the
+# unit's 45 minute budget; a timeout is recorded in "errors", not fatal.
+HEAVY = ("pin-receipts", "computer-event", "computer-event-payload", "file-cas-chunks",
+         "capture-bodies", "platform-update")
 
 # (prefix, class). First match wins. Documented in the module docstring.
 CLASSES = (
@@ -221,6 +235,14 @@ def measure_df(items, errors):
 KEEP_CHILDREN = int(ENV("GROWTH_KEEP_CHILDREN", "10"))
 
 
+def run_du(argv, errors, label):
+    left = DU_BUDGET - (time.time() - T_START)
+    if left <= 0:
+        errors.append(f"{label}: du budget {DU_BUDGET:.0f}s spent; skipped")
+        return None
+    return run(argv, min(DU_TIMEOUT, left), errors, label)
+
+
 def top_children(kids):
     """Largest KEEP_CHILDREN children by name plus one aggregate, so a store
     with 200 computer directories does not add 200 ledger keys an hour."""
@@ -234,7 +256,7 @@ def top_children(kids):
 
 def du_children(path, errors, label):
     """Allocated bytes per immediate child plus the total, one du pass."""
-    out = run(["du", "-x", "-d1", "-B1", path], DU_TIMEOUT, errors, label)
+    out = run_du(["du", "-x", "-d1", "-B1", path], errors, label)
     res = {}
     total = None
     for line in (out or "").splitlines():
@@ -249,7 +271,7 @@ def du_children(path, errors, label):
 
 
 def du_total(path, errors, label):
-    out = run(["du", "-sx", "-B1", path], DU_TIMEOUT, errors, label)
+    out = run_du(["du", "-sx", "-B1", path], errors, label)
     if out:
         f = out.split("\t")[0].split()
         if f and f[0].isdigit():
@@ -280,12 +302,17 @@ def fs_type(path):
 
 def btrfs_du(path, errors, label):
     """(total, exclusive, set_shared) raw bytes from `btrfs filesystem du -s`."""
-    out = run(["btrfs", "filesystem", "du", "-s", "--raw", path], DU_TIMEOUT, errors, label)
+    out = run_du(["btrfs", "filesystem", "du", "-s", "--raw", path], errors, label)
     for line in reversed((out or "").splitlines()):
         f = line.split()
         if len(f) >= 4 and all(x.isdigit() for x in f[:3]):
             return int(f[0]), int(f[1]), int(f[2])
     return None
+
+
+# platform-update holds content-addressed blob files (one per sha256), not
+# computer directories: a total only, a child key per blob would be noise.
+NO_CHILDREN = ("platform-update",)
 
 
 def measure_fs(items, errors, heavy_due, state):
@@ -331,6 +358,8 @@ def measure_fs(items, errors, heavy_due, state):
         ("computer-checkpoints", f"{art}/computer-checkpoints"),
         ("computer-inputs", f"{art}/computer-inputs"),
         ("file-cas-chunks", f"{art}/sha256/file-cas-chunks"),
+        ("capture-bodies", f"{art}/capture-bodies"),
+        ("platform-update", f"{art}/sha256/platform-update"),
         ("pin-receipts", f"{art}/sha256/pin-receipts"),
         ("computer-event", f"{art}/sha256/computer-event"),
         ("computer-event-payload", f"{art}/sha256/computer-event-payload"),
@@ -342,9 +371,10 @@ def measure_fs(items, errors, heavy_due, state):
         total, kids = du_children(path, errors, sub)
         if total is not None:
             items[f"fs.artifacts.{sub}"] = total
-        for kid, v in top_children(kids).items():
-            items[f"fs.artifacts.{sub}.{kid}"] = v
-        if sub in HEAVY:
+        if sub not in NO_CHILDREN:
+            for kid, v in top_children(kids).items():
+                items[f"fs.artifacts.{sub}.{kid}"] = v
+        if sub in HEAVY and total is not None:
             heavy_ok.append(sub)
     if heavy_due and heavy_ok:
         state["heavy_at"] = NOW
@@ -958,7 +988,162 @@ def report():
     return 0
 
 
+# ---- forecast (storage assessment B2) ----------------------------------------
+# Lines carry a journald priority prefix like scripts/node-b-host-disk-alarm:
+#   journalctl -u go-choir-disk-forecast -p warning
+# Free space is fs.root.avail. The slope is a least-squares line through the
+# daily minima of the last 7 days (each at the time it was read), so a deploy
+# dip that recovers does not read as a trend.
+
+FORECAST_FLOOR = float(ENV("FORECAST_FLOOR_GIB", "60")) * GIB
+FORECAST_WARN_DAYS = float(ENV("FORECAST_WARN_DAYS", "7"))
+FORECAST_ERR_DAYS = float(ENV("FORECAST_ERR_DAYS", "3"))
+# Fast drain: free space falling more than 3 GiB in 6 hours. The storage
+# mission's acceptance is at most 3 GiB lost a day; 3 GiB in 6 h is four times
+# that pace (12 GiB a day), loose enough that a deploy, a nix build or one
+# snapshot burst does not warn every day, tight enough that a real leak is seen
+# within one window. The old 15 GiB line printed "ok" for the 14 GiB fall of
+# 2026-11-12, a pace of 56 GiB a day.
+FAST_DRAIN_BYTES = float(ENV("FORECAST_FAST_DRAIN_GIB", "3")) * GIB
+FAST_DRAIN_HOURS = 6
+STALE_HOURS = 3
+
+
+def epoch(ts):
+    import calendar
+    return calendar.timegm(time.strptime(ts, "%Y-%m-%dT%H:%M:%SZ"))
+
+
+TS_RE = re.compile(r'"ts":\s*"([0-9T:Z-]+)"')
+FORECAST_DAYS = 8
+
+
+def read_forecast_rows():
+    """(epoch, {"items": {...}}) for readings of the last FORECAST_DAYS days,
+    streamed a line at a time from the last three monthly files: a reading is
+    about 16 KB and the unit has MemoryMax 128M, so the whole ledger (read_ledger
+    holds three months, about 209 MiB) is never loaded. Only numeric items are
+    kept."""
+    cutoff = NOW - FORECAST_DAYS * 86400
+    rows = []
+    try:
+        names = sorted(n for n in os.listdir(GROWTH_DIR) if re.match(r"\d{4}-\d{2}\.jsonl$", n))
+    except OSError:
+        return rows
+    for n in names[-3:]:
+        try:
+            f = open(os.path.join(GROWTH_DIR, n))
+        except OSError:
+            continue
+        with f:
+            for ln in f:
+                m = TS_RE.search(ln)
+                if not m:
+                    continue
+                try:
+                    t = epoch(m.group(1))
+                except ValueError:
+                    continue
+                if t < cutoff:
+                    continue
+                try:
+                    items = json.loads(ln).get("items", {})
+                except ValueError:
+                    continue
+                rows.append((t, {"items": {k: v for k, v in items.items() if isinstance(v, (int, float))}}))
+    return rows
+
+
+def forecast():
+    rows = read_forecast_rows()
+    rows.sort(key=lambda x: x[0])
+    avail_rows = [(t, r["items"]["fs.root.avail"]) for t, r in rows if "fs.root.avail" in r.get("items", {})]
+    days = sorted({time.strftime("%Y-%m-%d", time.gmtime(t)) for t, _ in avail_rows if t >= (avail_rows[-1][0] - 7 * 86400)}) if avail_rows else []
+    if len(days) < 3 or avail_rows[-1][0] - avail_rows[0][0] < 2 * 86400:
+        print("<6>disk forecast: need at least 3 days of growth-meter ledger with fs.root.avail "
+              f"(have {len(days)}); no forecast yet")
+        return 0
+    tcur, cur = avail_rows[-1]
+    if NOW - tcur > STALE_HOURS * 3600:
+        print(f"<4>disk forecast WARNING: newest ledger reading is {(NOW - tcur) / 3600:.1f} h old "
+              "(the growth meter timer may not be running)")
+    # daily minima of the last 7 days, each at the time it was read
+    mins = {}
+    for t, a in avail_rows:
+        if t < tcur - 7 * 86400:
+            continue
+        d = time.strftime("%Y-%m-%d", time.gmtime(t))
+        if d not in mins or a < mins[d][1]:
+            mins[d] = (t, a)
+    pts = sorted(mins.values())
+    xs = [t / 86400.0 for t, _ in pts]
+    ys = [a for _, a in pts]
+    mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
+    sxx = sum((x - mx) ** 2 for x in xs)
+    slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sxx if sxx else 0.0  # bytes per day
+    facts = f"free {cur // GIB} GiB, slope {slope / GIB:+.1f} GiB/day over {len(pts)} daily minima"
+    floor_gib = FORECAST_FLOOR / GIB
+    if cur < FORECAST_FLOOR:
+        print(f"<3>disk forecast ERROR: {facts}, already below the {FORECAST_FLOOR / GIB:.0f} GiB floor")
+    elif slope >= 0:
+        print(f"<6>disk forecast ok: {facts}, not declining")
+    else:
+        left = max(cur - FORECAST_FLOOR, 0) / -slope
+        tail = f"{left:.1f} days to the {floor_gib:.0f} GiB floor"
+        if left < FORECAST_ERR_DAYS:
+            print(f"<3>disk forecast ERROR: {facts}, {tail}")
+        elif left < FORECAST_WARN_DAYS:
+            print(f"<4>disk forecast WARNING: {facts}, {tail}")
+        else:
+            print(f"<6>disk forecast ok: {facts}, {tail}")
+    # fast drain: the reading at the start of the last 6 h against the newest
+    start = next(((t, a) for t, a in avail_rows if t >= tcur - FAST_DRAIN_HOURS * 3600 - 1800), None)
+    if start and tcur - start[0] >= (FAST_DRAIN_HOURS - 1) * 3600:
+        fell = start[1] - cur
+        span = (tcur - start[0]) / 3600
+        line = f"free fell {fell / GIB:.1f} GiB in {span:.1f} h ({start[1] // GIB} GiB -> {cur // GIB} GiB)"
+        if fell > FAST_DRAIN_BYTES:
+            print(f"<4>disk fast drain WARNING: {line}")
+        else:
+            print(f"<6>disk fast drain ok: {line}")
+    # top five 24 h growers by ledger key (heavy keys carry from the latest
+    # reading that has them, as --report does)
+    newest = rows[-1][0]
+    base_t = min((t for t, _ in rows[:-1] if newest - t >= 20 * 3600), key=lambda t: abs(t - (newest - 86400)), default=None)
+    if base_t is None:
+        print("<6>disk growers (24 h): need about 24 h of ledger")
+        return 0
+
+    def carried(key, upto):
+        for t, r in reversed(rows):
+            if t <= upto and key in r.get("items", {}):
+                return r["items"][key]
+        return None
+
+    skip_suffix = (".rows", ".excl", ".shared")
+    grown = []
+    keys = set()
+    for _, r in rows:
+        keys.update(r.get("items", {}))
+    for k in keys:
+        if k.startswith("fs.root.") or k.endswith(skip_suffix) or "receipts_since_last" in k:
+            continue
+        if k in REFLINK_STORES and f"{k}.real" in keys:
+            continue
+        a, b = carried(k, newest), carried(k, base_t)
+        if a is None or b is None or not isinstance(a, (int, float)):
+            continue
+        if a - b > 0:
+            grown.append((a - b, k))
+    grown.sort(key=lambda x: (-x[0], x[1]))
+    top = ", ".join(f"{k} {d / GIB:+.1f} GiB" for d, k in grown[:5]) or "none"
+    print(f"<6>disk growers ({(newest - base_t) / 3600:.1f} h): {top}")
+    return 0
+
+
 def main(argv):
+    if "--forecast" in argv:
+        return forecast()
     if "--report" in argv:
         return report()
     if "--memory" in argv:

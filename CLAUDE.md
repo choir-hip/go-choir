@@ -23,7 +23,8 @@ wins unless this file carries a newer, explicitly promoted update.
 Every desk (management, engineering, research, Texture, Mail and the rest) is
 a package desk registered the same way. Each data kind has one custodian desk
 with sole read and write. Desks talk only through precommitment records
-([docs/precommitment-records.md](docs/precommitment-records.md)); grants flow
+(the forecast stroke of the four-stroke learning engine,
+[docs/learning-engine.md](docs/learning-engine.md)); grants flow
 through custodian leases. Management owns computer-wide coherence and admits
 engineering; engineering mutates only inside capsules; research has read-only
 world-evidence authority. Use the in-cell module surface, not legacy tool
@@ -132,6 +133,10 @@ A commit subject ends with its class and rollback, for example
   proof. Local tests are not proof. `origin/main` is the source of truth;
   never edit tracked files on Node B.
 - Docs-only commits skip CI and deploy by design. Do not weaken those filters.
+  Docs-like now means `docs/`, top-level `*.md`, `skills/` (except Go files)
+  and developer-side `scripts/` (owner, 2026-11-12); they ship with the next
+  deploy. Scripts that CI, nix or a deploy program reads still trigger
+  (`.github/scripts/ci-docs-like-paths`).
 - Platform deploy SHA and a computer's effective identity may differ on
   purpose after a product restore. Do not "fix" that by pushing main.
 
@@ -143,6 +148,9 @@ A commit subject ends with its class and rollback, for example
   [docs/calibration/claude-ledger.md](docs/calibration/claude-ledger.md).
   Settle it when the evidence arrives, true or false, and read the
   scorecard before stating confidence in the next claim of that kind.
+  The outcome must be one you cannot write: a CI run, a deployed proof, a
+  count, the owner's verdict. Cite it in the settlement. A claim only its
+  author can judge is not worth entering (learning engine, rule 1).
 
 - Staging (`https://choir.news`) is the acceptance environment. Local proof
   does not count for vmctl, live computers, gateway credentials, model calls,

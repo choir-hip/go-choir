@@ -449,6 +449,7 @@ func (s *Store) Reopen(path string) error {
 	// (docs/problems/selfdev-operations-replay-not-equivalent-2026-10-23.md).
 	if s.projectionTape != nil {
 		live.ogStore.SetMutationInterceptor(s.projectionTape.interceptOG)
+		s.startTapeWriteSummary() // Close stopped it; no-op if running
 	}
 	// Open bound the adopted store's write validator to live, and *live is
 	// zeroed below, so the vocabulary fence would read a zeroed vocabCutover
@@ -503,6 +504,13 @@ func (s *Store) Close() error {
 	// Graceful close seals the telemetry window first. A crash does not, which
 	// is the loss the ruling allows.
 	telemetryStopped := s.closeTelemetry()
+	// The appender's detached recovery and catch-up read and write this
+	// database on contexts that ignore their callers; interrupt them before
+	// the connection is pinned so Close is not held by them and they stop
+	// issuing statements on a store that is closing.
+	if tape := s.projectionTape; tape != nil {
+		tape.appender.InterruptDetachedWork()
+	}
 	deadline := time.Now().Add(closeDeadline)
 	// The lease goroutines end before the write connection is pinned (a
 	// statement of theirs in flight would fail the pin closed).
@@ -525,6 +533,7 @@ func (s *Store) Close() error {
 		_, _ = conn.ExecContext(pinCtx, `PRAGMA wal_checkpoint(TRUNCATE)`)
 		pinned = conn
 	}
+	s.stopTapeWriteSummary() // reads counters only; a failed close above keeps it running
 	s.closedOK = true
 	var err error
 	if closeErr := s.closeDepositUpcastLedger(); closeErr != nil {

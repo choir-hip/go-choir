@@ -1,5 +1,5 @@
 ---
-definition_version: 4
+definition_version: 7
 
 readiness: executable
 
@@ -120,57 +120,96 @@ boundaries:
 stations:
   - id: S0
     name: stop the drain, release the dead
-    scope: lane/snapshot-loop (backoff, witness before upload, 90-minute deadline, 3-hour unrooted window); apply the destroyed sweep after reading its manifest
+    scope: backoff after a failed snapshot counted from the attempt's end, witness before upload, 90-minute deadline, a free-space guard during the capture; apply the destroyed-computer sweep from a read manifest
     class: red; the sweep apply is black, owner go given 2026-11-12
     review: two seats
+    depends_on: []
+    carrier: "main 0d2f0bd46, deployed 2026-11-12T22:31Z, on the paper since 22:53Z, snapshot recorded 23:28Z; the drain stopped (claim C62 true, free space rose 6.7 GiB in the six hours to 2026-11-13T05:35Z). The sweep apply moved to S7: no dry run has finished"
+    status: proved
   - id: S1
     name: guards
-    scope: lane/storage-guards (metadata balance, forecast alarm, meter coverage, swap 16 to 4 GiB, dead config)
+    scope: metadata balance, hourly forecast with a fast-drain line, meter coverage of capture bodies and platform updates, swap 16 to 4 GiB
     class: orange
-    review: one seat
+    review: one seat (Gemini 4 Hydrogen; REPAIR, two blocking findings fixed)
+    depends_on: []
+    carrier: main cca135073, deployed 2026-11-12T20:53Z; first forecast run 21:25Z exit 0
+    status: proved
   - id: S2
     name: the appender wedge fix
-    scope: lane/appender-wedge (re-send on an unclear CAS, in-place catch-up)
+    scope: re-send on an unclear CAS reply, in-place catch-up
     class: red
     review: two seats
+    depends_on: []
+    carrier: main d6b88cd63 (both seats accepted on round 3), CI 43373203542, deployed 2026-11-13T05:55Z; scripts/chaos/run s2-corpusd-crash on d@e passed, but no re-send or catch-up ran on staging, so the lost-reply path is proved by the fault tests only (claim C63 partial)
+    status: landed
   - id: S3
     name: measure
-    scope: the writer census, the group-commit factor, a table census of the paper's store, the image's unexplained 28 GiB, capture-body repetition
+    scope: the write census (done); waiters at the appender; a table census of the paper's store; the image's unexplained 28 GiB; capture-body repetition
     class: green and yellow
+    review: none
+    depends_on: []
+    carrier: docs/evidence/tape-write-census-2026-11-12.md
+    status: working
   - id: S4
     name: snapshots cost the change, keep two
-    scope: stable chunk boundaries or a page-diff snapshot, a faster witness, replay-cost trigger, immediate collection of superseded snapshots
+    scope: stable chunk boundaries or a page-diff snapshot, a faster witness, a replay-cost trigger, immediate collection of superseded snapshots; root-time chunk verification and a capture that does not span hibernation, then the shorter unrooted-chunk window (docs/problems/snapshot-root-recorded-without-chunk-check-2026-11-12.md)
     class: red, design record first
     review: two seats
+    depends_on: [S0]
+    carrier: part 1 (the host refuses a root whose chunks it does not hold; the collector keeps a chunk a live root names) main afe50a926, both seats accepted on round 3, CI 43379521482, deployed 2026-11-13T06:54Z. Not started, the shorter chunk window and snapshots that cost the change
+    status: working
   - id: S5
-    name: group commit, then ephemeral state off the tape
-    scope: >
-      counters first (ops and bytes per kind, waiters at the appender);
-      run-memory writes batched at the call site; lossless coalescing of
-      queued writers with no setting and no loss window (decision D8); the
-      ephemeral share is about 15% of events (claim C58 false), so moving
-      state off the tape is not the lever
+    name: fewer events for the same record
+    scope: counters (ops and bytes per kind, waiters at the appender); delete tape.group_commit and both loss windows; run-memory writes batched at the call site; lossless coalescing of queued writers with no setting (ruling D8); then the four calls per event
     class: red, design record first
     review: two seats
+    depends_on: [S2]
+    carrier: "part 1 (always-on counters, the appender depth histogram, corpusd calls per event; design docs/evidence/tape-write-coalescing-design-2026-11-12.md) main e392ac824, one seat accepted on round 2, CI 43384729837 (third attempt), deployed 2026-11-13T07:54Z. The paper over 5.4 hours to 2026-11-13T16:40Z: 90% of 147,466 appends entered at depth 3 or more (53% at 5 to 8), mean call 793 ms, 6.03 corpusd calls per event (two heads and two pins per append); coalescing is being built"
+    status: working
   - id: S6
     name: receipts fold
-    scope: one signed root per sealed segment past a verified checkpoint
+    scope: one signed root per sealed segment past a verified checkpoint; per-event receipts go to the archive
     class: red
     review: two seats
+    depends_on: [S5]
+    carrier: moved 2026-11-14 to station T4 of docs/definitions/choir-storage-solutions-3-store-once-2026-11-14.md
+    status: superseded
   - id: S7
     name: the collector reaps by itself
-    scope: destroyed computers on the hourly collector with the sweep's proof; capture bodies archived past N days
+    scope: destroyed computers on the hourly collector with the sweep's proof; a sweep job that survives a service restart (the first dry run died at the 20:53Z deploy); capture bodies archived past 30 days
     class: red
     review: two seats
+    depends_on: [S0]
+    carrier: "sweep progress that survives a restart, main 421288af7, both seats accepted on round 2, CI 43376520250, deployed 2026-11-13T06:15Z. The walk is too slow to finish on the paper (docs/problems/tape-sweep-walk-probes-every-segment-per-event-2026-11-13.md); repaired by f4276a0ba and dd43ff6b1 (a digest lookup in the view, 12 times faster on the paper, claim C66). Applied 2026-11-13T12:12Z to 12:29Z in five capped rounds: all 251 destroyed computers removed, 467,913 files and 26.89 GB deleted, no errors (claim C67 true). No scheduler yet, so the collector does not reap by itself"
+    status: working
   - id: S8
-    name: cold tape and a smaller store
-    scope: tiering design and the archive-and-verify half; column compression after the table census; the floor recomputed from measured peaks
-    class: red, owner decisions first
+    name: a smaller store, and the archive half of cold tape
+    scope: column compression after the table census; the floor recomputed from measured peaks; archive and verify cold tape off-host, dropping nothing locally (ruling D1)
+    class: red
+    review: two seats
+    depends_on: [S3]
+    carrier: the compression half moved 2026-11-14 to station T5 of docs/definitions/choir-storage-solutions-3-store-once-2026-11-14.md; the archive half stays here
+    status: pending
+  - id: S9
+    name: status scripts
+    scope: scripts/paper-usage-status and scripts/storage-status, each runnable and tested alone, and a third that composes them into the hourly report; the session scratchpad script retires
+    class: yellow
+    review: none
+    depends_on: [S0, S1]
+    carrier: main 29666dc47 (scripts/status-paper-usage, scripts/status-storage, scripts/status-hourly; tests in scripts/gates); used for every hourly tick since 2026-11-13T04:35Z
+    status: proved
 
 owner_rulings:
-  - 2026-11-12, D1: "let's go with the default; don't drop the old tape segments from node b yet. We will revisit this before we ship autoradio to TestFlight."
-  - 2026-11-12, D2 to D7: "I go with your defaults"
-  - 2026-11-12, D8: "group commit, I decided it off but it should be on, huh?" Read as yes to coalescing with no loss window and no setting; the two loss windows stay deleted. Counters land first.
+  - on: 2026-11-12
+    decision: D1
+    said: "let's go with the default; don't drop the old tape segments from node b yet. We will revisit this before we ship autoradio to TestFlight."
+  - on: 2026-11-12
+    decision: D2 to D7
+    said: "I go with your defaults"
+  - on: 2026-11-12
+    decision: D8
+    said: "group commit, I decided it off but it should be on, huh?"
+    read_as: yes to coalescing with no loss window and no setting; the two loss windows stay deleted; counters land first
 
 decisions_for_the_owner:
   - id: D1
@@ -214,56 +253,80 @@ decisions_for_the_owner:
     question: A bigger disk or a second device?
     default: not needed if S4 to S6 meet the footprint; decide at the seven-day reading
 
+observation_plan: >
+  When every station has landed and passed its deployed proof, this mission
+  moves to `observing` (skills/throughline, Settlement). Readings: the hourly
+  growth ledger and the go-choir-disk-forecast line on Node B; the paper's
+  footprint by surface, daily; snapshot_recorded spacing. Reader: the forecast
+  unit on Node B, and the combined hourly status tick once it is in the repo.
+  Window: seven days from the last landing. Pass: the first two acceptance
+  items. Tripwire: a forecast warning, a failed paper snapshot, or a day with
+  more than 3 GiB lost returns the mission to `working`. Autoradio resumes
+  when this mission enters `observing`, not when it completes.
+
 now:
   status: working
-  slice: S0, with S1 and S2 in build and S3 running
-  source_ref: origin/main 2f1ed42cd
-  deploy_identity: choir.news 4faab153b182
+  slice: "the live station again (owner, 2026-11-13: take them to the point of diminishing marginal returns). Lanes: S4 design (snapshots that cost the change, the chunk window), S5 build (coalescing, two calls fewer per event), S7 build (the sweep on a schedule), small guards"
+  source_ref: origin/main dd43ff6b1
+  deploy_identity: choir.news dd43ff6b11fe
   candidate:
-    id: none yet
-    state: three lanes in build
+    id: none
+    state: none
   conjecture:
     id: SS2-C1
+    calibration_claim: C61
     claim: >
       The paper's footprint is copies and per-write overhead, not content.
-      Snapshots that cost the change, group commit and folded receipts
-      bring it from 196 GiB to at most 90 and the host's growth from about
-      7.5 GiB a day to at most 3, with no tape leaving the host.
+      Snapshots that cost the change, fewer events for the same record and
+      folded receipts bring it from 196 GiB to at most 90 and the host's
+      growth from about 7.5 GiB a day to at most 3, with no tape leaving the
+      host.
     test: the first two acceptance items, read from Node B after S4 to S6 land
     edge: missing_oracle
     delta_o: >
-      per-writer batch counts and bytes in the guest's observability, and
-      chunk, capture and update trees in the growth meter, so the share of
-      each surface is seen and not inferred
-    scope_if_supported: S8's tiering becomes an optimisation, not a rescue
-    status: proposed
-    evidence_refs: [docs/design/storage-pressure-frame-2026-11-12.md]
+      per-writer batch counts and the waiters-at-enter histogram in the
+      guest's observability (landed with e392ac824); chunk, capture and update
+      trees in the growth meter (landed with S1)
+    scope_if_supported: cold-tape tiering becomes an optimisation, not a rescue
+    status: active
+    evidence_refs: [docs/design/storage-pressure-frame-2026-11-12.md, docs/evidence/tape-write-census-2026-11-12.md]
   decision:
-    what: mechanisms that cost the change come before retention windows and before tiering
+    what: mechanisms that cost the change come before retention windows and before tiering; no tape leaves Node B
     kind: architecture
-    status: proposed
+    status: settled
     evidence_ref: docs/design/storage-pressure-frame-2026-11-12.md
-    owner_ratification_ref: none yet
+    owner_ratification_ref: owner_rulings, 2026-11-12, D1 to D8
   belief:
     believed_state: >
-      The drain is understood and its fix is in build. The dead state is
-      identified and its sweep is in dry run. The durable gains are
-      estimates from one day's measurements.
+      The drain has stopped: the paper's chunks are flat at 49.3 GiB and its
+      last snapshot (23:28Z) stands. What moves Node B's free space
+      now is deploys (about 5 GiB transient each, and 3.8 GiB guest
+      releases held for a while). The wedge fix, the root-time chunk check,
+      restart-surviving sweep progress, the counters and the status scripts
+      are deployed. The footprint itself has not shrunk: about 45 GiB of
+      unrooted paper chunks age out from 2026-11-13T08:40Z, and the destroyed
+      computers are gone: the sweep applied on 2026-11-13 (251 computers,
+      26.89 GB), and Node B has 117.9 GiB free.
     main_uncertainty: >
-      the group-commit factor and the ephemeral share (claims C57, C58);
-      whether a page-diff snapshot can keep the witness sound; what else is
-      in the paper's image
-    next_observation: the sweep manifest; the three lane reports; the write census
+      whether the paper's appender depth in steady state matches its first
+      reading (89% of appends enter at depth 3 or more, most at 5 to 8, about
+      a second each; six corpusd calls per tape event); how many of the
+      paper's events are in no segment; how many guest releases the host
+      keeps
+    next_observation: the paper's depth histogram after a day; the collector's passes as the unrooted chunks age out (about 3 GiB a pass since 09:00Z)
   blocker_or_risk: >
-    The deploy floor is about three hours away at the current drain. The
-    snapshot fix must be reviewed and deployed, or the sweep applied, before
-    then. Three red lanes land close together; each gets its own review and
-    its own deploy proof.
+    The sweep runs only when someone calls it; no scheduler exists, so newly
+    destroyed computers wait. Each apply writes a small orphan archive on Node B
+    even with no_archive set (0.6 MB so far).
+    lane/restart-cancels-capture is parked after five review rounds (a deploy
+    still waits out a capture, now rare). The lost-reply path of the wedge fix
+    has not run on staging. The failed-attempt path of the snapshot fix has
+    not been seen on the paper.
   next_action: >
-    Read the sweep manifest and apply it. Review lane/snapshot-loop with two
-    seats, land it, verify on staging that the paper records a snapshot and
-    the births stop. Then S1 and S2, then the S3 readings decide the order of
-    S4 and S5.
+    Read the paper's appender
+    depth after a day, then build coalescing and remove the second head read
+    and pin per append. Design S4's shorter chunk window. The
+    hourly status script is the tripwire while Autoradio is the live station.
 
 receipts: []
 

@@ -486,6 +486,7 @@ func Run() {
 		if err == nil {
 			appender.SetPayloadResolver(eventClient, privateCipher)
 			err = db.BindProjectionTape(computerID, appender)
+			db.SetCorpusdCallSource(eventClient.CallCounts)
 		}
 		if err == nil {
 			// Projection batches are sealed under the computer key before

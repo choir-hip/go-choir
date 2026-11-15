@@ -58,12 +58,14 @@ node_b_disk_policy_output="$(
   run_classifier \
     "scripts/node-b-nix-retention" \
     "scripts/node-b-host-disk-alarm" \
+    "scripts/node-b-growth-meter" \
     "scripts/test-node-b-nix-retention.sh" \
     "scripts/test_node_b_disk_policy.py"
 )"
 assert_contains "$node_b_disk_policy_output" "deploy_host_os=true"
 assert_contains "$node_b_disk_policy_output" "deploy_active_vm_refresh=false"
 assert_contains "$node_b_disk_policy_output" "scripts/node-b-nix-retention -> host OS activation (a host unit script read into the system closure)"
+assert_contains "$node_b_disk_policy_output" "scripts/node-b-growth-meter -> host OS activation (a host unit script read into the system closure)"
 assert_contains "$node_b_disk_policy_output" "scripts/test-node-b-nix-retention.sh -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
 assert_not_contains "$node_b_disk_policy_output" "unknown deployed path"
 
@@ -198,20 +200,37 @@ calibration_output="$(run_classifier "internal/calibration/handler.go")"
 assert_contains "$calibration_output" "host_services=gateway,autoputer"
 assert_contains "$calibration_output" "internal/calibration/handler.go -> gateway/autoputer service pointers + vmctl runtime-package endpoint restart"
 
-# A runtime-only change (no vmctl or host change) still takes the canonical
-# guest boot path: there is no platform app-layer push, so the base image and
-# every new realization move with the deploy (version skew decision
-# 2026-10-09).
+# Skill text ships into the guest (nix/autoputer-vm.nix RUNTIME_SKILLS_ROOT), so
+# the deploy classifier keeps its mapping: any deploy whose range holds a skill
+# edit rebuilds autoputer. A skills-only push never reaches this classifier
+# because the CI classifier calls it docs_only and skips the deploy plan.
 skill_runtime_output="$(run_classifier "skills/definition/SKILL.md")"
 assert_contains "$skill_runtime_output" "deploy_needed=true"
-assert_contains "$skill_runtime_output" "deploy_host_service=true"
-assert_contains "$skill_runtime_output" "deploy_host_os=true"
-assert_contains "$skill_runtime_output" "deploy_vmctl_restart=true"
-assert_contains "$skill_runtime_output" "deploy_active_vm_refresh=true"
 assert_contains "$skill_runtime_output" "host_services=autoputer"
 assert_contains "$skill_runtime_output" "skills/definition/SKILL.md -> autoputer runtime skill package"
-assert_contains "$skill_runtime_output" "autoputer runtime selected -> canonical guest boot closure + active VM refresh"
-assert_not_contains "$skill_runtime_output" "deploy_app_layer"
+skill_range_output="$(run_classifier "skills/throughline/SKILL.md" "internal/auth/service.go")"
+assert_contains "$skill_range_output" "autoputer"
+skill_go_output="$(run_classifier "skills/throughline/check/main.go")"
+assert_contains "$skill_go_output" "host_services=autoputer"
+
+# Developer-side scripts are docs-like; scripts a nix module, a deploy program
+# or CI reads keep their effect (unchanged cases follow below).
+dev_scripts_output="$(run_classifier "scripts/land" "scripts/spend-report" "scripts/system_briefing.py" "scripts/prove-autoradio-turns" "scripts/probes/x.sh")"
+assert_contains "$dev_scripts_output" "deploy_needed=false"
+assert_contains "$dev_scripts_output" "scripts/land -> ignored (docs-like"
+# The operator's index-swap script runs DDL on the live table, so it is not
+# docs-like (CI runs its self-test); it is still not a deploy by itself: it
+# reaches Node B with the next deploy that runs.
+swap_output="$(run_classifier "scripts/receipts-index-swap" "scripts/receipts-index-swap-test")"
+assert_contains "$swap_output" "deploy_needed=false"
+assert_contains "$swap_output" "scripts/receipts-index-swap -> ignored (CI/local/operator tooling"
+assert_contains "$swap_output" "scripts/receipts-index-swap-test -> ignored (CI/local/operator tooling"
+swap_with_code_output="$(run_classifier "scripts/receipts-index-swap" "internal/platform/receipt_walk.go")"
+assert_contains "$swap_with_code_output" "deploy_needed=true"
+mixed_skill_output="$(run_classifier "skills/definition/SKILL.md" "internal/store/db.go")"
+assert_contains "$mixed_skill_output" "deploy_needed=true"
+ci_script_deploys_output="$(run_classifier "scripts/ci-prune-go-cache" "scripts/selftest-store-handles")"
+assert_contains "$ci_script_deploys_output" "deploy_needed=true"
 
 tooling_scripts_output="$(
   run_classifier \
@@ -270,6 +289,18 @@ assert_not_contains "$dolt_ops_output" "unknown deployed path"
 # Operator drill and script tests: not deployed.
 dolt_ops_tooling_output="$(run_classifier "scripts/off-host-restore-drill.sh" "scripts/off-host-backup-pg-test.sh")"
 assert_contains "$dolt_ops_tooling_output" "deploy_needed=false"
+
+# CI-only tooling a CI or Go lane reads is never a deploy: the boot prune's unit
+# test, the chaos drill scripts (and their README). A host unit script is: the
+# growth meter is read into the host system closure (nix/node-b.nix).
+ci_only_output="$(run_classifier "scripts/updater-prune-unit-nix-test.sh" "scripts/chaos/s2-corpusd-crash.sh" "scripts/chaos/README.md")"
+assert_contains "$ci_only_output" "deploy_needed=false"
+assert_contains "$ci_only_output" "deploy_active_vm_refresh=false"
+assert_not_contains "$ci_only_output" "unknown deployed path"
+growth_meter_output="$(run_classifier "scripts/node-b-growth-meter")"
+assert_contains "$growth_meter_output" "deploy_host_os=true"
+assert_contains "$growth_meter_output" "deploy_active_vm_refresh=false"
+assert_not_contains "$growth_meter_output" "unknown deployed path"
 
 # D2 guest release metadata: the policy file and the floor list are inputs of
 # flake.nix (the guest image's release.json), so they rebuild the guest image;
