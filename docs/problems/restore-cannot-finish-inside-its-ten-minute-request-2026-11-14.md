@@ -206,3 +206,34 @@ time, and its restore tail stays above the bound; the producer logs
 "snapshot floor-limited" and the observability block says `floor_limited`.
 Observability `snapshot_producer` carries the state, including how long a due
 snapshot has been refused. Not verified on a live computer.
+
+### Review round 1 repairs (same lane)
+
+- The floor survives a restart: the last capture's duration and sealed bytes
+  are written beside the store (`snapshot-producer.json` on the data volume)
+  and read back for the newest snapshot only if the snapshot event falls
+  inside that capture's window. A snapshot with no matching record has an
+  unknown floor, which binds replay-time captures until the 540,000-event
+  ceiling or the interval takes one and measures it (`capture_known:false` in
+  the block). Whether the data-volume directory survives a restore flip was
+  not verified.
+- Host retention: the newest k roots stay, and so does a chain beyond them
+  covering the recovery bound (the newest root at least 720,000 events behind
+  the newest root, plus roots at least 360,000 events apart above it), so a
+  base exists for every checkpoint a restore accepts and the nearest base is
+  inside the bound. This is more than "k plus one anchor": a single anchor
+  cannot advance, because the newest k roots span hours, not the bound, and
+  the root that will be the next anchor has been dropped before it is needed.
+  At most three extra roots; on the paper about two (about 9.6 GB of unique
+  chunks at 4.8 GB each). The rows are the collector's liveness, so their
+  chunks outlive the 24 hour upload grace.
+- The replay rate used is the slowest of 113 events/s and the slowest replay
+  measured since the process started, boot and restore alike (the restore's
+  dry-run copy reports to the live appender). It is process memory and
+  re-learns downward after a restart.
+- A replay-time capture also needs free space above the floor for the WAL it
+  pins: 2 MiB/s of the last capture's duration (paper: about 4.4 GiB more).
+- Still open, not in this lane: the restore's up-front refusal. For a
+  floor-limited computer (the paper) the four-minute scan and install figure
+  is d@e's on a 1 GiB store; it is not shown to hold for a 46.7 GB store, and
+  the replay bound there is probably optimistic.

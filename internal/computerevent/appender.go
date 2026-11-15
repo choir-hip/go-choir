@@ -217,9 +217,13 @@ type ComputerEventAppender struct {
 	// replayPayloadNanos is time spent fetching projection-batch payloads
 	// from the host during a replay: one request per event.
 	replayPayloadNanos atomic.Int64
-	// replayRateBits is the float64 bits of the last replay's events/s that
-	// applied at least minReplayRateEvents (0: none yet). The snapshot
-	// producer reads it to estimate how long a restore's tail takes.
+	// replayRateBits is the float64 bits of the slowest replay rate (events/s)
+	// of the replays that applied at least minReplayRateEvents since the
+	// process started (0: none yet). The snapshot producer reads it to
+	// estimate how long a restore's tail takes; a fast boot replay must never
+	// relax what a slow restore replay showed. rateParent is the live appender
+	// a dry-run copy (the restore's replay) reports to.
+	rateParent               *ComputerEventAppender
 	replayRateBits           atomic.Uint64
 	replayCheckpointEvery    int
 	replayCheckpointInterval time.Duration
@@ -466,12 +470,26 @@ func (a *ComputerEventAppender) recordReplayRate(applied uint64, elapsed time.Du
 	if a == nil || applied < minReplayRateEvents || elapsed <= 0 {
 		return
 	}
-	a.replayRateBits.Store(math.Float64bits(float64(applied) / elapsed.Seconds()))
+	if a.rateParent != nil {
+		a.rateParent.recordReplayRate(applied, elapsed)
+	}
+	rate := float64(applied) / elapsed.Seconds()
+	for {
+		old := a.replayRateBits.Load()
+		if old != 0 && math.Float64frombits(old) <= rate {
+			return
+		}
+		if a.replayRateBits.CompareAndSwap(old, math.Float64bits(rate)) {
+			return
+		}
+	}
 }
 
-// ReplayRate is the events per second of the last replay on this computer that
-// applied at least minReplayRateEvents (the figure the "replay applied" log
-// line prints). False when no such replay has run since the process started.
+// ReplayRate is the slowest events per second among the replays on this
+// computer, boot and restore alike, that applied at least minReplayRateEvents
+// (the figure the "replay applied" log line prints). False when no such replay
+// has run since the process started. It is process memory: it re-learns
+// downward after a restart.
 func (a *ComputerEventAppender) ReplayRate() (float64, bool) {
 	if a == nil {
 		return 0, false
@@ -1834,6 +1852,7 @@ func (a *ComputerEventAppender) replayInto(ctx context.Context, projection Proje
 		cipher:           a.cipher,
 		replayProjection: true,
 		replayObserver:   a.replayObserver,
+		rateParent:       a,
 	}
 	if targetHead == "" {
 		return dryRun.Reconstruct(ctx, source)

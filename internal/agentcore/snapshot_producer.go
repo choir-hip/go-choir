@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -115,6 +116,16 @@ const (
 	// on the paper (37 min 40 s, 4.8 GB) it is 13.4 hours.
 	snapshotCaptureWallFraction = 10
 	snapshotBytesPerDay         = int64(8) << 30
+	// A replay-time capture also needs room for the WAL its read transaction
+	// pins, above snapshotFreeFloor: the paper's WAL grew 3.7 GB in 30 minutes
+	// under load (about 2 MiB/s), and a mid-capture abort after gigabytes of
+	// upload is what the check before the attempt exists to avoid. The ceiling
+	// and the interval keep the floor alone (they protect the restore bound).
+	snapshotWALBytesPerSecond = 2 << 20
+	// snapshotCaptureFileName holds the last capture's own cost beside the
+	// store (the data volume, which a restart leaves), so the floor survives
+	// a restart.
+	snapshotCaptureFileName = "snapshot-producer.json"
 
 	snapshotInitialDelay = 3 * time.Minute
 	snapshotTickEvery    = 10 * time.Minute
@@ -250,9 +261,76 @@ type snapshotEval struct {
 	Est          time.Duration
 	Due          bool
 	Why          string
+	// Kind is why it is due: first, ceiling, interval or replay.
+	Kind         string
 	FloorLimited bool
 	Floor        time.Duration
 	FloorWhy     string
+	// FloorKey names the capture facts behind FloorWhy without its countdown,
+	// so the log says it once per capture, not at every tick.
+	FloorKey string
+}
+
+// snapshotCaptureRecord is the last capture's own cost, persisted beside the
+// store. StartedAt is how the next boot knows it belongs to the newest
+// snapshot on the tape: that event was appended when the capture ended.
+type snapshotCaptureRecord struct {
+	StartedAt       time.Time `json:"started_at"`
+	DurationSeconds float64   `json:"duration_seconds"`
+	SealedBytes     int64     `json:"sealed_bytes"`
+	HeadSequence    uint64    `json:"head_sequence,omitempty"`
+}
+
+func saveSnapshotCapture(dir string, rec snapshotCaptureRecord) error {
+	raw, err := json.Marshal(rec)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, snapshotCaptureFileName+".tmp-*")
+	if err != nil {
+		return err
+	}
+	_, werr := tmp.Write(raw)
+	if cerr := tmp.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		_ = os.Remove(tmp.Name())
+		return werr
+	}
+	if err := os.Chmod(tmp.Name(), 0o600); err != nil {
+		_ = os.Remove(tmp.Name())
+		return err
+	}
+	if err := os.Rename(tmp.Name(), filepath.Join(dir, snapshotCaptureFileName)); err != nil {
+		_ = os.Remove(tmp.Name())
+		return err
+	}
+	return nil
+}
+
+// loadSnapshotCapture reads the persisted capture cost; false when there is
+// none or it is unreadable (the floor is then unknown, which binds).
+func loadSnapshotCapture(dir string) (snapshotCaptureRecord, bool) {
+	raw, err := os.ReadFile(filepath.Join(dir, snapshotCaptureFileName))
+	if err != nil {
+		return snapshotCaptureRecord{}, false
+	}
+	var rec snapshotCaptureRecord
+	if json.Unmarshal(raw, &rec) != nil || rec.StartedAt.IsZero() || rec.DurationSeconds <= 0 {
+		return snapshotCaptureRecord{}, false
+	}
+	return rec, true
+}
+
+// belongsTo reports whether this record is the cost of the snapshot whose
+// event the tape dates at: appended when the capture ended.
+func (r snapshotCaptureRecord) belongsTo(eventAt time.Time) bool {
+	dur := time.Duration(r.DurationSeconds * float64(time.Second))
+	return !eventAt.Before(r.StartedAt) && eventAt.Sub(r.StartedAt) <= dur+30*time.Minute
 }
 
 // snapshotDueInput is what the trigger reads.
@@ -283,28 +361,39 @@ func snapshotCaptureFloor(dur time.Duration, bytes int64) time.Duration {
 // interval, or a tail whose replay over the replay rate exceeds
 // snapshotReplayBound, the last only past the capture floor.
 func snapshotDue(in snapshotDueInput) snapshotEval {
-	rate := in.Rate
-	if rate <= 0 {
-		rate = snapshotAssumedReplayRate
+	// The rate used is the slowest of the assumed one and what was measured: a
+	// fast replay never relaxes the bound above the worst the records show.
+	rate := snapshotAssumedReplayRate
+	ev := snapshotEval{Tail: in.Tail}
+	if in.RateMeasured && in.Rate > 0 && in.Rate < rate {
+		rate, ev.RateMeasured = in.Rate, true
 	}
-	ev := snapshotEval{Tail: in.Tail, Rate: rate, RateMeasured: in.RateMeasured && in.Rate > 0}
+	ev.Rate = rate
 	ev.Est = time.Duration(float64(in.Tail) / rate * float64(time.Second))
 	switch {
 	case in.TailEvents > 0 && in.Tail >= in.TailEvents:
-		ev.Due, ev.Why = true, fmt.Sprintf("tail of %d events", in.Tail)
+		ev.Due, ev.Kind, ev.Why = true, "ceiling", fmt.Sprintf("tail of %d events", in.Tail)
 	case in.Since >= in.Interval:
-		ev.Due, ev.Why = true, "interval"
+		ev.Due, ev.Kind, ev.Why = true, "interval", "interval"
 	case ev.Est > snapshotReplayBound:
 		ev.Why = fmt.Sprintf("restore replay of %d events would take %s at %.0f events/s, over the %s bound", in.Tail, ev.Est.Round(time.Second), rate, snapshotReplayBound)
-		if in.HaveCapture {
-			ev.Floor = snapshotCaptureFloor(in.CaptureDur, in.CaptureBytes)
-		}
-		if in.Since >= ev.Floor {
-			ev.Due = true
-		} else {
+		switch {
+		case !in.HaveCapture:
+			// An existing snapshot whose capture cost is not recorded: the floor
+			// is unknown, and it binds until the ceiling or the interval takes
+			// one capture and measures it.
 			ev.FloorLimited = true
+			ev.FloorKey = "unknown"
+			ev.FloorWhy = ev.Why + "; the cost of the last capture is not recorded for this snapshot, so replay-time captures wait for the event ceiling or the interval to take one and measure it"
+		case in.Since < snapshotCaptureFloor(in.CaptureDur, in.CaptureBytes):
+			ev.Floor = snapshotCaptureFloor(in.CaptureDur, in.CaptureBytes)
+			ev.FloorLimited = true
+			ev.FloorKey = fmt.Sprintf("%s|%d|%s", in.CaptureDur.Round(time.Second), in.CaptureBytes, ev.Floor.Round(time.Second))
 			ev.FloorWhy = fmt.Sprintf("%s; this computer's restore tail exceeds the restore budget because captures are too expensive: the last capture took %s and wrote %d bytes, so the next replay-time capture is not before %s after the last began (%s from now)",
 				ev.Why, in.CaptureDur.Round(time.Second), in.CaptureBytes, ev.Floor.Round(time.Second), (ev.Floor - in.Since).Round(time.Second))
+		default:
+			ev.Due, ev.Kind = true, "replay"
+			ev.Floor = snapshotCaptureFloor(in.CaptureDur, in.CaptureBytes)
 		}
 	}
 	return ev
@@ -347,10 +436,18 @@ func (p *snapshotProducer) evaluate(ctx context.Context, d snapshotDeps, set sna
 		if err != nil {
 			return snapshotFailed, "read the local snapshot index: " + err.Error()
 		}
+		// The newest snapshot's own cost, persisted by the producer that took
+		// it, when it is this snapshot's (a restart keeps the floor).
+		rec, recOK := loadSnapshotCapture(d.DataDir)
 		p.mu.Lock()
 		p.lastKnow = true
 		if found {
 			p.lastSeq, p.lastAt = seq, at
+			if recOK && rec.belongsTo(at) && !p.haveCapture {
+				p.haveCapture = true
+				p.lastCaptureDuration = time.Duration(rec.DurationSeconds * float64(time.Second))
+				p.lastCaptureBytes = rec.SealedBytes
+			}
 		}
 		p.mu.Unlock()
 	}
@@ -366,7 +463,7 @@ func (p *snapshotProducer) evaluate(ctx context.Context, d snapshotDeps, set sna
 		return snapshotNotDue, "the store holds no events"
 	}
 	reason := "first"
-	ev := snapshotEval{Head: head, NewestSeq: lastSeq, NewestAt: lastAt, Tail: head - min(head, lastSeq), Due: true, Why: reason}
+	ev := snapshotEval{Head: head, NewestSeq: lastSeq, NewestAt: lastAt, Tail: head - min(head, lastSeq), Due: true, Why: reason, Kind: "first", Rate: snapshotAssumedReplayRate}
 	if !lastAt.IsZero() {
 		if head <= lastSeq+1 {
 			ev.Due = false
@@ -375,9 +472,7 @@ func (p *snapshotProducer) evaluate(ctx context.Context, d snapshotDeps, set sna
 		}
 		in := snapshotDueInput{Tail: head - lastSeq, Since: now.Sub(lastAt), Interval: set.Interval, TailEvents: set.TailEvents}
 		if d.ReplayRate != nil {
-			if rate, ok := d.ReplayRate(); ok && rate > 0 {
-				in.Rate, in.RateMeasured = rate, true
-			}
+			in.Rate, in.RateMeasured = d.ReplayRate()
 		}
 		p.mu.Lock()
 		in.HaveCapture, in.CaptureDur, in.CaptureBytes = p.haveCapture, p.lastCaptureDuration, p.lastCaptureBytes
@@ -416,6 +511,17 @@ func (p *snapshotProducer) evaluate(ctx context.Context, d snapshotDeps, set sna
 	}
 	if free < snapshotFreeFloor {
 		return snapshotRefused, fmt.Sprintf("free space %d bytes on the data volume is under the %d-byte floor the WAL needs while the stream reads", free, snapshotFreeFloor)
+	}
+
+	// A replay-time capture pins the WAL for as long as the last one did.
+	if ev.Kind == "replay" {
+		p.mu.Lock()
+		dur := p.lastCaptureDuration
+		p.mu.Unlock()
+		need := snapshotFreeFloor + uint64(dur.Seconds()*snapshotWALBytesPerSecond)
+		if free < need {
+			return snapshotRefused, fmt.Sprintf("free space %d bytes on the data volume leaves no headroom for the WAL a replay-time capture pins (the last took %s: %d bytes needed above the floor, %d in all)", free, dur.Round(time.Second), need-snapshotFreeFloor, need)
+		}
 	}
 
 	// A snapshot that crashes the computer is not retried forever.
@@ -461,12 +567,27 @@ func (p *snapshotProducer) evaluate(ctx context.Context, d snapshotDeps, set sna
 	p.failures, p.failedHead, p.retryAt = 0, 0, time.Time{}
 	p.lastAt, p.lastSeq = now, ref.Record.StoreHeadSequence
 	p.haveCapture, p.lastCaptureDuration, p.lastCaptureBytes = true, took, ref.Stats.BytesUploaded
+	// The block is current right after a capture: the newest snapshot is this
+	// one and nothing is due until the next evaluation.
+	p.eval = snapshotEval{Head: ref.Record.StoreHeadSequence, NewestSeq: ref.Record.StoreHeadSequence, NewestAt: now, Rate: ev.Rate, RateMeasured: ev.RateMeasured}
+	p.evalAt = now
 	p.mu.Unlock()
+	if d.DataDir != "" {
+		if err := saveSnapshotCapture(d.DataDir, snapshotCaptureRecord{StartedAt: started, DurationSeconds: took.Seconds(), SealedBytes: ref.Stats.BytesUploaded, HeadSequence: ref.Record.StoreHeadSequence}); err != nil {
+			log.Printf("runtime: snapshot: could not record the capture cost beside the store (the floor is unknown after a restart): %v", err)
+		}
+	}
 	st := ref.Stats
 	return snapshotTaken, fmt.Sprintf("%s snapshot at head %d: %d bytes (%d pages of %d) in %s, event %s; %d chunks, %d uploaded (%d bytes sealed), %d already held, %d repeated, %d probe errors; stream %s (%.0f pages/s), witness %s, read transaction %s",
 		reason, ref.Record.StoreHeadSequence, ref.Record.PlaintextSize, st.Pages, st.PageSize, took.Round(time.Millisecond), ref.EventID,
 		st.Chunks, st.ChunksUploaded, st.BytesUploaded, st.ChunksHeld, st.ChunksRepeated, st.ProbeErrors,
 		st.StreamTime.Round(time.Millisecond), pagesPerSecond(st), st.WitnessTime.Round(time.Millisecond), st.ReadTxTime.Round(time.Millisecond))
+}
+
+func (p *snapshotProducer) floorKey() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.eval.FloorKey
 }
 
 // setEval records the latest evaluation for status.
@@ -532,10 +653,15 @@ type snapshotProducerStatus struct {
 	ConsecutiveRefusals int     `json:"consecutive_refusals"`
 	LastCaptureSeconds  float64 `json:"last_capture_seconds"`
 	LastCaptureBytes    int64   `json:"last_capture_bytes"`
+	// CaptureKnown: the last capture's cost is known (taken in this process
+	// or persisted for the newest snapshot). False after an old snapshot is
+	// found with no record: replay-time captures then wait for the ceiling or
+	// the interval to take one and measure it.
+	CaptureKnown bool `json:"capture_known"`
 }
 
 // status is the producer's state for the observability route.
-func (p *snapshotProducer) status(now time.Time) snapshotProducerStatus {
+func (p *snapshotProducer) status(_ time.Time) snapshotProducerStatus {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	ev := p.eval
@@ -545,6 +671,10 @@ func (p *snapshotProducer) status(now time.Time) snapshotProducerStatus {
 		ReplayBoundSeconds: snapshotReplayBound.Seconds(),
 		Due:                ev.Due, FloorLimited: ev.FloorLimited, FloorWhy: ev.FloorWhy,
 		ConsecutiveRefusals: p.streakCount, LastCaptureSeconds: p.lastCaptureDuration.Seconds(), LastCaptureBytes: p.lastCaptureBytes,
+		CaptureKnown: p.haveCapture,
+	}
+	if ev.Rate == 0 {
+		st.ReplayRate = snapshotAssumedReplayRate
 	}
 	if ev.RateMeasured {
 		st.ReplayRateSource = "measured"
@@ -692,7 +822,7 @@ func (rt *Runtime) snapshotProducerTick(ctx context.Context, now time.Time) {
 		// Not due, but the replay bound is exceeded and the capture floor holds
 		// the next capture back: say so when it starts, not at every tick.
 		if st := p.status(now); outcome == snapshotNotDue && st.FloorLimited {
-			key := "floor: " + st.FloorWhy
+			key := "floor: " + p.floorKey()
 			p.mu.Lock()
 			changed := p.lastWhy != key
 			p.lastWhy = key
