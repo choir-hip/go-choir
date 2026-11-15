@@ -126,8 +126,10 @@ only when something else fires.
 **Pick (a): an unknown capture cost does not mute a replay-time capture.** One
 mechanism: the replay-time case `ev.Est > snapshotReplayBound` is due when
 `!in.HaveCapture || in.Since >= snapshotCaptureFloor(...)`. Delete the
-`case !in.HaveCapture` block (`:411-417`, 7 lines) and keep the floor test for
-the known case. The capture it takes measures the cost, and the record at
+`case !in.HaveCapture` block (`:411-417`, 7 lines) and make the floor test
+`in.HaveCapture && in.Since < floor`, so an unknown cost is due explicitly (not
+through `floor = 0`, which a negative `Since` after a clock step would leave
+floor-limited and never due). The capture it takes measures the cost, and the record at
 `:640` makes it known for every later evaluation and every restart. Change the
 comments at `:120-127` and `:728-736` and the `FloorWhy`/`CaptureKnown` text so
 they no longer promise waiting. No new constant, setting or field.
@@ -194,15 +196,16 @@ Why the others lose:
 5. **A capture starting right after boot.** The producer starts three minutes
    after boot (`:129`), and `Ready` is false while `Runtime.Start` runs
    (`bootInProgress`, `runtime.go:1272`, used at `:852`) or under a maintenance
-   hold. The static-copy design places replay and the rebase in that window
-   (lines 111-114, 398-406) [?: I read the design's statement, not `Start`]. The
+   hold. Replay runs before `Runtime.Start` (`run.go:786-808`) and the rebase earlier in
+   `autoputer.Run`, so both are done before the first tick [C]. The
    Busy gate then refuses for live self-development or a live capsule
    (`:845-847` region). An unknown-cost capture is no earlier than a known one.
 6. **d@e and small computers.** The unknown state is a one-time condition per
    old snapshot: the change gives one extra capture per such computer, then the
    known rule is what it is today. d@e: 1.1 GB store, an 11 s capture
-   (`:121-123` comment), so the floor is at least 110 s and its bytes term is
-   0.07 h per 0.1 GB sealed [E]; its steady cadence is unchanged. Whether d@e's
+   (`:121-123` comment), so the wall term is 110 s, and its bytes term is 0.28 h per 0.1 GB sealed
+   at 8 GiB a day [E], so the bytes term likely binds on d@e; its steady cadence
+   is unchanged. Whether d@e's
    tail now exceeds 27,120 events is not measured here [?].
 7. **Deploy restarts interrupt a capture.** A planned restart waits for
    `inFlight` (`planned_restart.go:516-519`, `:567`), bounded by the 90-minute
@@ -242,7 +245,48 @@ Why the others lose:
     lines 466-476) and retried at the tick. Unchanged by this design; the
     refusal shows in `refusal` with `consecutive_refusals`, and the unmuted
     trigger makes it visible earlier.
-12. **Status text.** `FloorLimited` with `FloorKey == "unknown"` stops appearing;
+13. **After a restore.** `forget()` (`:653`, `rematerialize.go:269`) clears the
+    state and re-reads a record that the flip does not move
+    (`rematerialize.go:249-253` moves only the marker, workspace, state, `-wal`
+    and `-shm`); the restored base's snapshot event is re-finalized by the replay,
+    so `belongsTo` fails and the cost is unknown. With a tail over the bound the
+    first tick after the restore takes a capture. That is intended (a restored
+    computer with a long tail has the same recovery problem). The store-sized
+    quarantine is on the volume (`rematerialize.go:232-244`) so the expected
+    outcome on a large store is `refused` for free space until it is removed; a
+    refusal is not a failure.
+14. **An understated cost record after a failure in an earlier process.** Only an
+    in-memory failure is compensated (`sealed = max(sealed, p.lastCaptureBytes)`,
+    `:625-631`). If boot 1's capture uploads 4 GB and fails, then the process
+    restarts, boot 2's capture finds those chunks held, uploads little in a shorter
+    run, and the record holds that smaller cost, so the floor is shorter than the
+    true cost of getting a snapshot. Not a storm (the floor is still at least 10 x
+    the duration). Residual, stated, no code change: the host keeps the failed
+    attempt's chunks until its grace passes.
+15. **The fleet at the deploy.** Every computer whose newest snapshot has no
+    matching record and whose tail is over 27,120 events captures a few minutes
+    after its runtime serves; the deploy's idle refresh restarts them together,
+    and the code adds no spacing between computers and none is proposed. The count
+    is not in the repo or the docs I read (it needs the host's list of snapshot
+    roots against each computer's record), so it is unknown [?]. The size of the
+    wave is the number of such computers times the changed chunks since each one's
+    last snapshot; for the paper alone, 4.04 to 4.8 GB sealed (item 8).
+16. **Deploy latency.** A planned restart waits for a capture in flight
+    (`planned_restart.go:567`), up to the 90-minute budget (`:83-87`, comment
+    `:231-237`), once per capture. A planned restart never interrupts a capture;
+    only a crash does. On a busy landing day the cost is a deploy of the paper
+    that waits up to 90 minutes after the unknown-cost capture starts, the reverse
+    of an interruption, and it matters under the expedite policy.
+17. **A planned restart between the end of `Take` and the record write.**
+    `p.inFlight` is cleared inside the `Take` closure (`:595-599`) and the record
+    is written after it (`:640`): a planned restart landing in that gap loses the
+    record and costs a second full capture on the next boot. Decision: the code
+    change keeps `inFlight` true through the record write (`defer
+    p.inFlight.Store(false)` at the function level instead of in the closure; two
+    lines, and the other reader, `memory_cache_return.go:296`, waits a few
+    milliseconds longer), with a test that observes `inFlight` after `Take`
+    returns.
+18. **Status text.** `FloorLimited` with `FloorKey == "unknown"` stops appearing;
     a test pins that `capture_known: false` and `due: true` can hold at once
     (status at `:728-736`, `:762`).
 
@@ -262,7 +306,14 @@ Why the others lose:
 | measured rate faster than assumed | the assumed rate is used, as before |
 | tail 27,120 then 27,121 at 113/s | boundary on `Est > bound` |
 
-Plus an `evaluate` test with no record file and a stub `Take`: one capture is
+Added case: `HaveCapture` false with a negative `Since`: due. Two existing
+tests pin the old behaviour and are replaced:
+`TestUnknownCaptureCostBindsReplayTimeCaptures` (asserts `not_due` and
+`FloorLimited` for this state) and `TestPersistedCostSkewAndIdentity` (asserts
+that a 150,000-event tail with another computer's record stays unknown; after the
+change that run takes a capture. Its intent, that another computer's record is
+not trusted, is kept by asserting the loaded cost before the capture and the
+record's cost after it). Plus an `evaluate` test with no record file and a stub `Take`: one capture is
 taken, `haveCapture` becomes true, the record file is written, and the next
 tick is `not_due` (floor); a failing `Take` sets the backoff and writes no
 record. Run the whole uncached suite of `internal/agentcore` by shards, per
@@ -270,18 +321,29 @@ CLAUDE.md.
 
 **Deployed proof.**
 
-- Test computer (d@e, drills allowed): with `capture_known: false` and a tail
-  over 27,120 events (d@e's tail is not measured here [?]; if smaller, write to
-  it until it is), the producer block shows `due: true`, `due_why` naming the
+- Test computer (d@e, drills allowed). Setup, because d@e may have captured
+  since `c7eabe010` and then reads `capture_known: true`: remove
+  `snapshot-producer.json` beside d@e's store and restart the runtime (a planned
+  restart; the producer reads the record on its first evaluation), then confirm
+  the block reads `capture_known: false`. The tail must be over 27,120 events
+  (not measured here [?]; if smaller, write to it until it is). Then the
+  producer block shows `due: true`, `due_why` naming the
   240 s bound, `floor_limited: false`; then `last_outcome: taken` with kind
   `replay` in `last_detail`, `capture_known: true`, and `snapshot-producer.json`
   present beside the store. Then `not_due` with a floor until it passes.
-- The paper, read-only from the console: after the deploy's boot settles
-  (three-minute initial delay plus up to one 10-minute tick, `:129-130`), the
-  first capture occurs within 60 minutes of boot unless `last_outcome` is
-  `refused` with a reason (60 minutes is [I]: a first tick, one cleared refusal,
-  one more tick, with slack). If `refused`, the reason is the finding. A planned
-  restart waits for a capture already running.
+- The paper, read-only from the console. The window counts from the runtime
+  serving (the producer's first `evaluated_at` in the block; the boot marks
+  `replay_begin` and `runtime_serving`), not from the VM boot: the tape replay
+  runs before `Runtime.Start` (`internal/autoputer/run.go:786-808` calls
+  `rt.Start` as the replay's completion callback and the producer starts inside
+  it), and the paper's replay is long [C]. Pass: `last_outcome: taken` within 60
+  minutes of the first `evaluated_at` (60 minutes is [I]: the three-minute
+  initial delay, one 10-minute tick, one cleared refusal, one more tick, slack),
+  or, if refused, `refused` with a reason that clears (the store-copy token held
+  by a compaction, or free space) and a capture after it clears. Fail:
+  `consecutive_refusals` above 6 with a reason that is neither of those, or a
+  `failed` outcome that repeats past its backoff. A planned restart waits for a
+  capture already running.
 - C99 (`docs/calibration/claude-ledger.md:181`, not edited here): this design
   makes the paper's first capture happen at the deploy rather than up to 9.9 h
   later. Read `last_pin_seconds` and `last_scratch_bytes` from that capture and
@@ -293,9 +355,23 @@ CLAUDE.md.
 or interval when the cost is unknown; a record written in the meantime is read
 by the old code (same format, no new field). **Rollback trigger** (all [I], from
 this document's arithmetic): more than one `taken` with kind `replay` on one
-computer inside its floor; a capture started while `Ready` is false;
-`consecutive_refusals` above 6 (an hour) with no state change; or the owner's
-stop.
+computer inside its floor, except the one capture after a restore (item 13);
+`consecutive_refusals` above 6 (an hour) whose reason does not name the
+store-copy token holder or free space (a compaction holds the token up to 90
+minutes, item 11, and is normal); or the owner's stop. A capture started while
+`Ready` is false is a code guarantee (`:852`), not observable from status, so it
+is not a trigger.
+
+## Round 1
+
+| Seat | Verdict | Blocking | Should-fix taken |
+| --- | --- | --- | --- |
+| omp-deepseek-v41-flash | ACCEPT | none | proof window from runtime serving (proof); the two tests named as replaced (section 5); rollback trigger excludes token and free-space refusals (proof); post-restore state (item 13); fleet (item 15); d@e bytes term corrected (item 6); the explicit `!in.HaveCapture` due branch with a `Since < 0` table case (section 3, section 5); d@e setup (proof); understated cost (item 14); inFlight through the record write (item 17) |
+| claude seat | ACCEPT | none | understated cost (item 14); a planned restart never interrupts a capture and the deploy-latency cost (item 16); fleet (item 15); d@e setup (proof); paper proof is pass or fail (proof); restore exception to the rollback trigger (proof, item 13) |
+
+Both seats noted dissent for (d): the benefit is at most 9.9 h on one computer
+and the first static-copy capture at 39 GB lands at the deploy. The owner has
+accepted the design; the dissent is recorded and not acted on.
 
 ## 6. Open questions and the conservative default
 
