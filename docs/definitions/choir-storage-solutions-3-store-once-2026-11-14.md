@@ -131,7 +131,7 @@ stations:
     review: two seats on the design (done, both REPAIR, revision 2 written); one seat on the re-ranked revision
     depends_on: []
     carrier: lane/store-size-land ceb5288c7 (one seat accepted, rounds 1 and 2); lane/rewrite-counters (building)
-    status: working
+    status: complete
   - id: T1
     name: stop copying forward
     scope: a new run carries its conversation by naming the source run and entry range, with the retirement rule keeping entries a live run names; a lifecycle command stops embedding the document, revision and events its own batch writes; a tool result names its run-memory entry
@@ -179,7 +179,7 @@ stations:
     review: two seats
     depends_on: []
     carrier: lane/updater-prune (review round 3 pending; both seats REPAIR on rounds 1 and 2)
-    status: working
+    status: complete
   - id: T8
     name: find the next one
     scope: a standing read. After each landing, read the per-table store reading, the per-op tape counters and the data volume on d@e and the paper; anything that grows without a named mechanism gets a problem record and a station here
@@ -246,9 +246,9 @@ observation_plan: >
 
 now:
   status: working
-  slice: "T0 and T7. Land coalescing and the updater prune (carried from part 2), land the store reading and read both computers, send the design to two seats, then build the per-kind rewrite counters"
-  source_ref: origin/main eecafd3f1
-  deploy_identity: choir.news eecafd3f132a
+  slice: "T1 and T2, design first. T0 (counters, the store reading, the census) and T7 (prune at boot, c1ea7a418) are deployed; stored-result steps 1 and 2 and run-memory retirement are deployed; T4's format-2 walk and index swap ran; capture on a static copy (842e0fda6) is deployed and waits for a capture (C99, C100). Carry by reference (T1) and fewer whole writes of choir.run (T2) are unbuilt: each gets a code-anchored design section and failure list on its own lane, reviewed before any code"
+  source_ref: origin/main 842e0fda6
+  deploy_identity: choir.news 842e0fda6b1e
   candidate:
     id: none
     state: none
@@ -276,17 +276,20 @@ now:
     owner_ratification_ref: none yet (the design is the lead's; T0 reviews it)
   belief:
     believed_state: >
-      The first ranking was wrong: it came from a counter that gives a
-      batch's bytes to its first op, and three of the five kinds it named
-      are written once (claim C72 false). Retirement already runs daily on
-      the guest store. The duplicates are read from code, not measured.
-    main_uncertainty: the measured share of each duplicate; what fills the paper's store after a retirement that runs; whether retirement is running on the paper at all
-    next_observation: store_tables detail on d@e and the paper (claim C73); the per-op counters; the paper's retirement log
+      Measured on the paper: carried run memory is 55.9% of message bytes
+      (C74 true) and choir.run is 22.6% of object bytes at 4.7 writes a
+      run, 18.7 KB each. Retirement runs and deletes 5,000 runs a pass.
+      A capture no longer pins the write log for the witness, by the code;
+      no deployed capture has shown it. A restore does not survive the
+      next boot.
+    main_uncertainty: whether a conversation carried by reference gives the model byte-equal input; which of the 4.7 writes of a run can go without losing a replayable state; the paper's first capture under the static copy
+    next_observation: the two design lanes' code readings; the paper's first capture (C99); d@e's captures and drills (C100)
   blocker_or_risk: >
-    No red station may build until the re-ranked design has a seat's
-    accept. Carry by reference changes what an agent's conversation is
-    built from; a mistake there changes model input silently.
-  next_action: land coalescing and the store reading, read both computers by table, land the per-op counters, re-rank.
+    Carry by reference changes what an agent's conversation is built from;
+    a mistake there changes model input silently. No code on T1 or T2
+    before two seats accept the design section and failure list. The
+    forward restore event is the owner's decision.
+  next_action: run the T1 and T2 design lanes (read-only code reading, design section, failure list), send each to two seats; read the paper's first capture when it comes.
 
 receipts: []
 
