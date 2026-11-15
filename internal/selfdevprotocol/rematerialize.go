@@ -71,14 +71,18 @@ func WitnessContentMatches(got, want VMLocalContentWitness) error {
 	if err := want.Validate(); err != nil {
 		return fmt.Errorf("rematerialize: checkpoint witness refused: %w", err)
 	}
+	if got.WitnessVersion != want.WitnessVersion || got.EventIndexTrimBoundary != want.EventIndexTrimBoundary {
+		return fmt.Errorf("%w: rematerialize: reconstructed witness form (version %d, event index boundary %d) is not the checkpoint's (version %d, boundary %d)",
+			ErrWitnessMismatch, got.WitnessVersion, got.EventIndexTrimBoundary, want.WitnessVersion, want.EventIndexTrimBoundary)
+	}
 	if got.Database != want.Database {
-		return fmt.Errorf("rematerialize: reconstructed database does not match checkpoint")
+		return fmt.Errorf("%w: rematerialize: reconstructed database does not match checkpoint", ErrWitnessMismatch)
 	}
 	if tables := differingTables(got, want); len(tables) > 0 {
-		return fmt.Errorf("rematerialize: reconstructed %s does not match checkpoint", strings.Join(tables, ", "))
+		return fmt.Errorf("%w: rematerialize: reconstructed %s does not match checkpoint", ErrWitnessMismatch, strings.Join(tables, ", "))
 	}
 	if got.ContentRoot != want.ContentRoot || got.DerivabilityDigest != want.DerivabilityDigest {
-		return fmt.Errorf("rematerialize: reconstructed content root does not match checkpoint")
+		return fmt.Errorf("%w: rematerialize: reconstructed content root does not match checkpoint", ErrWitnessMismatch)
 	}
 	return nil
 }

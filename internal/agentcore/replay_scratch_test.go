@@ -32,7 +32,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
-	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
 
@@ -309,16 +308,11 @@ func TestReplayProbeBaseTailWitnessEqualsGenesisWitness(t *testing.T) {
 	if fromGenesis.BaseSequence != 0 {
 		t.Fatalf("genesis probe used a base: %d", fromGenesis.BaseSequence)
 	}
-	baseWitness, err := selfdevprotocol.WitnessFromObservationSets(fromBase.Live, fromBase.Replay, fromBase.Result)
-	if err != nil {
-		t.Fatalf("base witness: %v", err)
+	if !fromBase.Result.Equivalent() || !fromGenesis.Result.Equivalent() {
+		t.Fatalf("a probe was not equivalent: base %v genesis %v", fromBase.Result.Differences, fromGenesis.Result.Differences)
 	}
-	genesisWitness, err := selfdevprotocol.WitnessFromObservationSets(fromGenesis.Live, fromGenesis.Replay, fromGenesis.Result)
-	if err != nil {
-		t.Fatalf("genesis witness: %v", err)
-	}
-	if !reflect.DeepEqual(baseWitness, genesisWitness) {
-		t.Fatalf("base-plus-tail witness differs from the genesis witness:\nbase    %+v\ngenesis %+v", baseWitness, genesisWitness)
+	if base, genesis := observationValues(fromBase.Replay), observationValues(fromGenesis.Replay); !reflect.DeepEqual(base, genesis) {
+		t.Fatalf("base-plus-tail replay differs from the genesis replay:\nbase    %+v\ngenesis %+v", base, genesis)
 	}
 }
 
