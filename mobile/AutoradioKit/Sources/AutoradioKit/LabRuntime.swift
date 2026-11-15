@@ -251,8 +251,12 @@ public final class LabRuntime: @unchecked Sendable {
         return await engine.typedTurn(text, front: front)
     }
 
-    /// The bar's microphone control is voice on and off, not a talk button: hands-free listening goes on until it is muted. While
-    /// muted the microphone frames are not heard (the system's microphone indicator stays on until the radio is stopped).
+    /// The bar's microphone: listening is hands-free (HandsFree.swift) and is on whenever the engine runs and the microphone is not
+    /// muted. A tap opens it (a muted microphone is heard again); the turn then ends by itself when the speaker stops, and nothing
+    /// is toggled by a second tap (Cancel drops a turn). The lab's press and release buttons still use the toggles below.
+    public func listenNow() { voiceMuted.write { $0 = false } }
+    /// The bar's former microphone control, and the lab's: voice on and off. While muted the microphone frames are not heard
+    /// (the system's microphone indicator stays on until the radio is stopped).
     public func talkDown() { voiceMuted.write { $0.toggle() } }
     public func talkUp() { voiceMuted.write { $0.toggle() } }       // one tap, one call, whichever the bar sends: it toggles
     public var isMuted: Bool { voiceMuted.value }
