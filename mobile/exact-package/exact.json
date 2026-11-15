@@ -156,7 +156,9 @@
       "sentences": "string[]",
       "next": "string",
       "items": "RadioItem[]",
-      "micLevel": "number"
+      "micLevel": "number",
+      "kind": "string",
+      "sources": "string[]"
     },
     "CardStory": {
       "route": "string",
@@ -1224,7 +1226,9 @@
           "sentences": [],
           "next": "",
           "items": [],
-          "micLevel": 0
+          "micLevel": 0,
+          "kind": "",
+          "sources": []
         }
       }
     },

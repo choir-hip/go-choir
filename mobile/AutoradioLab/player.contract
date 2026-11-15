@@ -8,6 +8,9 @@
 //     lowered/paused while you speak");
 //   - the talk mode as the engine has it (hold / just speak / hold or speak). The prompt is the bar's, not the player's.
 // Pull the header down to put it away. Everything is declarative motion (keyframes and transitions), off under Reduce Motion.
+// A programme (station P1): the title is the segment's, "NOW PLAYING · STORY" names its kind (player-kind), its labelled sources are
+// chips (player-sources, player-source-<k>), the position counts segments, the segments and rows are segments, previous and next skip
+// by segment. One article: as before.
 // testIds: player, player-scrim, player-layer, player-title, player-position, player-status, player-yield, player-passage,
 // player-sentence-<k>, player-next-passage, player-segments, player-seg-<i>, player-item-<i>, player-prev, player-play,
 // player-next, player-speed-<v>, player-mode, player-close.
@@ -66,7 +69,7 @@ component PlayerLayer
             box width=36 height=4 border-radius=2 background-color=th.rule
           row align-items="center" gap=8
             column flex=1 min-width=0 gap=2
-              text "NOW PLAYING" font-family=th.fontUi font-size=11 font-weight=600 color=th.muted
+              text (ri.kind == "" ? "NOW PLAYING" : `NOW PLAYING · ${ri.kind.toUpperCase()}`) testId="player-kind" font-family=th.fontUi font-size=11 font-weight=600 color=th.muted
               text (ri.title == "" ? "Autoradio" : ri.title) testId="player-title" role="heading" aria-level=2 line-clamp=2
                 font-size=22 font-weight=700 font-family=th.fontRead color=th.fg
             button press=hideLayer testId="player-close" aria-label="Close the player" appearance="none" width=44 height=44
@@ -92,6 +95,12 @@ component PlayerLayer
                     text s testId=`player-sentence-${k}` font-family=th.fontRead font-size=19 line-height=1.5
                       color=(k == ri.sentenceIndex ? th.fg : th.muted) font-weight=(k == ri.sentenceIndex ? 600 : 400)
                       transition=`color ${th.motionFastMs * calm}ms ease`
+            // the sources of the segment, as the server labelled them (a programme only; never raw refs)
+            if ri.sources.length > 0
+              row gap=8 flex-wrap="wrap" testId="player-sources"
+                for src, k in ri.sources key=k
+                  row padding="4px 10px" border-radius=th.radiusPill border-width=1 border-style="solid" border-color=th.rule align-items="center" testId=`player-source-${k}`
+                    text src font-family=th.fontUi font-size=12 color=th.muted line-clamp=1
             if ri.next != ""
               column gap=4 testId="player-next-passage"
                 text "NEXT" font-family=th.fontUi font-size=11 font-weight=600 color=th.muted

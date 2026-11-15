@@ -61,6 +61,14 @@ final class DemoURLProtocol: URLProtocol {
 
     override func startLoading() {
         let url = request.url ?? URL(string: "https://demo.invalid/")!
+        // The programme route (station P1): a short stretch in the wire shape, so the simulator plays segments with no computer.
+        if url.path == "/api/autoradio/programme", request.httpMethod == "POST" {
+            let resp = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "text/event-stream"])!
+            client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data(DemoStretch.sse.utf8))
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         var sent = request.httpBody ?? Data()
         if let st = request.httpBodyStream { st.open(); var buf = [UInt8](repeating: 0, count: 4096)

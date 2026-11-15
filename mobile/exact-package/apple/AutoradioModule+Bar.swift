@@ -64,10 +64,11 @@ extension AutoradioModule {
             reply(json(info))
         }
 
-        // Jump to a block of the programme (the player's segments and the up-next rows).
+        // Jump to a block of the programme (the player's segments and the up-next rows); in a programme of segments, to a segment.
         handle("radioJump") { [unowned self] args, reply in
-            if let i = Int(args["index"] as? String ?? ""), runtime.player.document.blocks.indices.contains(i) {
-                runtime.player.start(at: i)
+            if let i = Int(args["index"] as? String ?? "") {
+                if !runtime.player.document.segments.isEmpty { runtime.player.jumpToSegment(i) }
+                else if runtime.player.document.blocks.indices.contains(i) { runtime.player.start(at: i) }
             }
             touch(["radioView", "barState"])
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
