@@ -37,7 +37,7 @@ import (
 //
 // The strict form (version 3) stays for checkpoints bound before it and for
 // snapshots: a snapshot record carries a witness of its raw pages, which
-// VerifySnapshotFile recomputes strictly (LiveStoreWitnessTx).
+// VerifySnapshotFile recomputes strictly (LiveStoreWitness).
 func canonicalWitnessExtractor(db *sql.DB, boundary uint64) computerversion.SQLiteStateExtractor {
 	e := replayStateExtractor(db)
 	e.EmptyJSONArrayColumns = map[string]map[string]struct{}{

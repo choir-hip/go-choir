@@ -157,34 +157,9 @@ func TestUnknownCaptureCostBindsReplayTimeCaptures(t *testing.T) {
 	}
 }
 
-// A replay-time capture needs room for the WAL its read transaction pins
-// (about 2 MiB/s of the last capture's duration) above the free-space floor;
-// the ceiling and the interval do not.
-func TestReplayTimeCaptureNeedsWALHeadroom(t *testing.T) {
-	h, clock := capturingHarness(t, 37*time.Minute+40*time.Second, 4_800_000_000)
-	h.newestFound, h.newestAt, h.newestSeq = true, clock.now.Add(-14*time.Hour), 1_000_000
-	h.seedCapture(37*time.Minute+40*time.Second, 4_800_000_000)
-	h.head = 1_000_000 + 160_000
-	h.free = snapshotFreeFloor + 1<<30 // above the floor, under floor + 4.4 GiB
-	var p snapshotProducer
-	outcome, detail := h.run(&p, clock.now)
-	if outcome != snapshotRefused || !strings.Contains(detail, "headroom") || h.takes != 0 {
-		t.Fatalf("outcome=%s detail=%q takes=%d", outcome, detail, h.takes)
-	}
-	h.free = snapshotFreeFloor + 8<<30
-	if outcome, detail := h.run(&p, clock.now); outcome != snapshotTaken {
-		t.Fatalf("with headroom: outcome=%s detail=%q", outcome, detail)
-	}
-	// The ceiling takes the same low room (the floor of 2 GiB is the only
-	// rule there).
-	h.newestAt, h.newestSeq = clock.now, h.head
-	h.seedCapture(37*time.Minute+40*time.Second, 4_800_000_000)
-	h.free = snapshotFreeFloor + 1<<30
-	h.head += snapshotDefaultTailEvents
-	if outcome, detail := h.run(&p, clock.now); outcome != snapshotTaken {
-		t.Fatalf("ceiling: outcome=%s detail=%q", outcome, detail)
-	}
-}
+// The replay-only WAL headroom is gone with the long read transaction; every
+// trigger needs the store size plus the floor
+// (TestEveryTriggerKindNeedsTheStoreSizePlusTheFloor).
 
 // The block is current right after a capture, and reports the rate used.
 func TestStatusIsCurrentAfterACaptureAndReportsTheRateUsed(t *testing.T) {
