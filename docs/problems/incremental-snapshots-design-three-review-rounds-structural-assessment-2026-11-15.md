@@ -1,6 +1,6 @@
 # Incremental snapshots design: three review rounds without convergence (2026-11-15)
 
-Recorded 2026-11-15, about 20:35Z. The design is
+Recorded 2026-11-15, about 20:00Z. The design is
 `docs/design/incremental-snapshots-2026-11-15.md` on
 `lane/incremental-snapshots-design` (tip 3703d6c28). It went three review
 rounds with two seats (DeepSeek v4.1 flash and Sonnet) and every round ended
