@@ -340,7 +340,8 @@ func saveSnapshotCapture(dir string, rec snapshotCaptureRecord) error {
 }
 
 // loadSnapshotCapture reads the persisted capture cost; false when there is
-// none or it is unreadable (the floor is then unknown, which binds).
+// none or it is unreadable (the cost is then unknown, and a replay-time
+// capture is not held back by it).
 func loadSnapshotCapture(dir string) (snapshotCaptureRecord, bool) {
 	raw, err := os.ReadFile(filepath.Join(dir, snapshotCaptureFileName))
 	if err != nil {
@@ -389,7 +390,8 @@ func snapshotCaptureFloor(dur time.Duration, bytes int64) time.Duration {
 
 // snapshotDue decides whether a snapshot is due: the 540,000-event ceiling, the
 // interval, or a tail whose replay over the replay rate exceeds
-// snapshotReplayBound, the last only past the capture floor.
+// snapshotReplayBound, the last only past the capture floor when the last
+// capture's cost is known.
 func snapshotDue(in snapshotDueInput) snapshotEval {
 	// The rate used is the slowest of the assumed one and what was measured: a
 	// fast replay never relaxes the bound above the worst the records show.
@@ -409,12 +411,11 @@ func snapshotDue(in snapshotDueInput) snapshotEval {
 		ev.Why = fmt.Sprintf("restore replay of %d events would take %s at %.0f events/s, over the %s bound", in.Tail, ev.Est.Round(time.Second), rate, snapshotReplayBound)
 		switch {
 		case !in.HaveCapture:
-			// An existing snapshot whose capture cost is not recorded: the floor
-			// is unknown, and it binds until the ceiling or the interval takes
-			// one capture and measures it.
-			ev.FloorLimited = true
-			ev.FloorKey = "unknown"
-			ev.FloorWhy = ev.Why + "; the cost of the last capture is not recorded for this snapshot, so replay-time captures wait for the event ceiling or the interval to take one and measure it"
+			// An existing snapshot whose capture cost is not recorded (taken by a
+			// binary that did not persist it): there is no floor to wait out. The
+			// capture is taken, and it measures the cost for every later tick and
+			// restart.
+			ev.Due, ev.Kind = true, "replay"
 		case in.Since < snapshotCaptureFloor(in.CaptureDur, in.CaptureBytes):
 			ev.Floor = snapshotCaptureFloor(in.CaptureDur, in.CaptureBytes)
 			ev.FloorLimited = true
@@ -592,11 +593,12 @@ func (p *snapshotProducer) evaluate(ctx context.Context, d snapshotDeps, set sna
 		clock = d.Now
 	}
 	started := clock()
+	// inFlight holds through the cost record's write below: a planned restart
+	// between the end of the capture and the record would lose the cost and cost
+	// a second full capture at the next boot.
 	p.inFlight.Store(true)
-	ref, err := func() (snapshot.Ref, error) {
-		defer p.inFlight.Store(false)
-		return d.Take(ctx, set.MaxDuration)
-	}()
+	defer p.inFlight.Store(false)
+	ref, err := d.Take(ctx, set.MaxDuration)
 	took := clock().Sub(started)
 	if d.StorePath != "" {
 		_ = clearGuestAttempt(d.StorePath, snapshotAttemptKey, d.ComputerID)
@@ -638,7 +640,7 @@ func (p *snapshotProducer) evaluate(ctx context.Context, d snapshotDeps, set sna
 	p.mu.Unlock()
 	if d.DataDir != "" {
 		if err := saveSnapshotCapture(d.DataDir, snapshotCaptureRecord{ComputerID: d.ComputerID, StartedAt: started, DurationSeconds: took.Seconds(), SealedBytes: sealed, HeadSequence: ref.Record.StoreHeadSequence}); err != nil {
-			log.Printf("runtime: snapshot: could not record the capture cost beside the store (the floor is unknown after a restart): %v", err)
+			log.Printf("runtime: snapshot: could not record the capture cost beside the store (the cost is unknown after a restart and a replay-time capture is taken again): %v", err)
 		}
 	}
 	st := ref.Stats
@@ -731,8 +733,8 @@ type snapshotProducerStatus struct {
 	LastCaptureBytes    int64   `json:"last_capture_bytes"`
 	// CaptureKnown: the last capture's cost is known (taken in this process
 	// or persisted for the newest snapshot). False after an old snapshot is
-	// found with no record: replay-time captures then wait for the ceiling or
-	// the interval to take one and measure it.
+	// found with no record: a replay-time capture is then due without a floor,
+	// and that capture measures the cost.
 	CaptureKnown bool `json:"capture_known"`
 
 	// The last capture's pin and phases: the pin is the interval with an open

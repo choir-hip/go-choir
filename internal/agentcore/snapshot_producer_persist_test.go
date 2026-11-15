@@ -3,7 +3,6 @@ package agentcore
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -20,14 +19,28 @@ func TestPersistedCostSkewAndIdentity(t *testing.T) {
 	}
 	h, clock := capturingHarness(t, 37*time.Minute, 4_800_000_000)
 	h.newestFound, h.newestAt, h.newestSeq = true, clock.now.Add(-13*time.Hour), 1_000_000
-	h.head = 1_000_000 + 150_000
+	// A tail inside the replay bound: nothing is due, so the status shows what
+	// was loaded (an unknown cost no longer mutes a capture, so the identity is
+	// read before one is taken).
+	h.head = 1_000_000 + 20_000
 	if err := saveSnapshotCapture(h.deps.DataDir, snapshotCaptureRecord{ComputerID: "another-computer", StartedAt: h.newestAt.Add(-time.Minute), DurationSeconds: 60, SealedBytes: 1}); err != nil {
 		t.Fatal(err)
 	}
 	var p snapshotProducer
-	h.run(&p, clock.now)
+	if outcome, detail := h.run(&p, clock.now); outcome != snapshotNotDue {
+		t.Fatalf("outcome=%s detail=%q", outcome, detail)
+	}
 	if p.status(clock.now).CaptureKnown {
 		t.Fatal("another computer's capture cost was trusted")
+	}
+	// Over the bound the capture is taken and the cost it records is its own,
+	// not the other computer's one byte.
+	h.head = 1_000_000 + 150_000
+	if outcome, detail := h.run(&p, clock.now); outcome != snapshotTaken {
+		t.Fatalf("outcome=%s detail=%q", outcome, detail)
+	}
+	if st := p.status(clock.now); !st.CaptureKnown || st.LastCaptureBytes != 4_800_000_000 {
+		t.Fatalf("after the capture: %+v", st)
 	}
 }
 
@@ -120,40 +133,6 @@ func TestFloorSurvivesARestart(t *testing.T) {
 	h.head += 12_000
 	if outcome, detail := h.run(&after, clock.now); outcome != snapshotTaken {
 		t.Fatalf("past the floor: outcome=%s detail=%q", outcome, detail)
-	}
-}
-
-// An existing snapshot whose capture cost is unknown (an old snapshot, no
-// persisted figures, or figures of another snapshot): the floor is unknown and
-// binds replay-time captures until the ceiling or the interval takes one.
-func TestUnknownCaptureCostBindsReplayTimeCaptures(t *testing.T) {
-	h, clock := capturingHarness(t, 37*time.Minute, 4_800_000_000)
-	h.newestFound, h.newestAt, h.newestSeq = true, clock.now.Add(-13*time.Hour), 1_000_000
-	h.head = 1_000_000 + 150_000
-	var p snapshotProducer
-	outcome, detail := h.run(&p, clock.now)
-	if outcome != snapshotNotDue || h.takes != 0 {
-		t.Fatalf("outcome=%s detail=%q: an unknown floor must not allow a replay-time capture", outcome, detail)
-	}
-	st := p.status(clock.now)
-	if st.CaptureKnown || !st.FloorLimited || !strings.Contains(st.FloorWhy, "not recorded") {
-		t.Fatalf("status %+v", st)
-	}
-	// Figures that belong to another snapshot are not this one's.
-	if err := saveSnapshotCapture(h.deps.DataDir, snapshotCaptureRecord{StartedAt: clock.now.Add(-90 * 24 * time.Hour), DurationSeconds: 5, SealedBytes: 1}); err != nil {
-		t.Fatal(err)
-	}
-	p = snapshotProducer{}
-	if outcome, _ := h.run(&p, clock.now); outcome != snapshotNotDue || h.takes != 0 {
-		t.Fatalf("outcome=%s: figures of another snapshot were trusted", outcome)
-	}
-	// The event ceiling takes one, measures it, and the floor is then known.
-	h.head = 1_000_000 + snapshotDefaultTailEvents
-	if outcome, detail := h.run(&p, clock.now); outcome != snapshotTaken || !strings.Contains(detail, "tail of") {
-		t.Fatalf("ceiling: outcome=%s detail=%q", outcome, detail)
-	}
-	if st := p.status(clock.now); !st.CaptureKnown || st.LastCaptureBytes != 4_800_000_000 {
-		t.Fatalf("after the capture: %+v", st)
 	}
 }
 
