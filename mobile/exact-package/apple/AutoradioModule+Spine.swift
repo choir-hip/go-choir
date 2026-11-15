@@ -78,6 +78,18 @@ extension AutoradioModule {
             }
         }
 
+        // The bar's microphone: hands-free on or off, one state kept across launches. Turning it on starts the engine if it is not running;
+        // turning it off drops an open turn at once and the engine hears nothing more.
+        handle("choirHandsFreeToggle") { [unowned self] _, reply in
+            Task { [weak self] in
+                guard let self else { return }
+                let on = !HandsFreeSwitch.shared.isOn
+                if on, !self.runtime.snapshot().running { await self.runtime.start(virtual: self.virtualEngine) }
+                self.runtime.setHandsFree(on)
+                DispatchQueue.main.async { self.touch(["barState"], now: true); reply(self.json(self.runtime.snapshot())) }
+            }
+        }
+
         // "Listen": the radio reads what is in front of the listener, through the one speakText path (LabRuntime.speakText ->
         // ProgrammePlayer.speakText), with the player's own controls. The headline is read first. It replaces what is playing.
         // Text with nothing to say starts nothing.

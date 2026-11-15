@@ -28,6 +28,8 @@ public struct BarInfo: Codable, Sendable, Equatable {
     public var playing = false
     public var talking = false
     public var signedIn = false
+    /// Hands-free is on (the microphone is open and turns open and close by themselves) or off (nothing is heard). Kept across launches.
+    public var handsFree = false
     /// 0...1 along the current programme; the hairline rule on the bar's lower edge.
     public var progress = 0.0
     public init() {}
@@ -175,7 +177,7 @@ public final class BarTracker: @unchecked Sendable {
     public func barInfo(player p: ChoirPlayerView, snapshot s: LabSnapshot, now: Date = Date()) -> BarInfo {
         lock.lock(); defer { lock.unlock() }
         var b = BarInfo()
-        b.signedIn = p.signedIn; b.playing = p.playing
+        b.signedIn = p.signedIn; b.playing = p.playing; b.handsFree = HandsFreeSwitch.shared.isOn
         if s.blockCount > 0 { b.progress = min(1, (Double(s.blockIndex) + clockProgress(s, doc: nil, now: now)) / Double(s.blockCount)) }
         // A message from the listener path (sign-in, the programme) is new once; it holds the bar for the error window.
         if !p.message.isEmpty, p.message != lastMessage, p.message != "Pick a story below." {

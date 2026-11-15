@@ -93,6 +93,7 @@
    "playing": "bool",
    "talking": "bool",
    "signedIn": "bool",
+   "handsFree": "bool",
    "progress": "number"
   },
   "DemoInfo": {
@@ -226,6 +227,7 @@
      "playing": false,
      "talking": false,
      "signedIn": false,
+     "handsFree": false,
      "progress": 0
     }
    }

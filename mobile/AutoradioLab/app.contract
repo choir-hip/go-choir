@@ -46,6 +46,7 @@ component Autoradio
     micTap
     micCancel
     micOn
+    heardNow
     setTheme
     setMode
     setDemo

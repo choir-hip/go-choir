@@ -180,8 +180,8 @@ public final class ChoirApp: @unchecked Sendable {
         runtime.player.play()
         onChange?()
     }
-    /// The bar's microphone tap: start the engine if it is not running and hear the microphone (hands-free: the turn ends by itself).
-    public func talkDown() async { if !runtime.snapshot().running { await runtime.start() }; runtime.listenNow() }
+    /// The lab's talk button: start the engine if it is not running and turn hands-free on.
+    public func talkDown() async { if !runtime.snapshot().running { await runtime.start() }; runtime.setHandsFree(true) }
 
     public func signOut() async {
         await signIn.signOut()

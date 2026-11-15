@@ -867,6 +867,7 @@
       "playing": "bool",
       "talking": "bool",
       "signedIn": "bool",
+      "handsFree": "bool",
       "progress": "number"
     },
     "DemoInfo": {
@@ -1208,6 +1209,10 @@
     },
     {
       "send": "choirTalkCancel",
+      "answers": "LabState"
+    },
+    {
+      "send": "choirHandsFreeToggle",
       "answers": "LabState"
     },
     {
@@ -2285,6 +2290,7 @@
           "playing": false,
           "talking": false,
           "signedIn": false,
+          "handsFree": false,
           "progress": 0
         }
       }

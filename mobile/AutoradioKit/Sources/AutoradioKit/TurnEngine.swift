@@ -247,6 +247,12 @@ public actor TurnEngine {
             await restoreProgramme(reason: "turn cancelled")
             return
         }
+        // Hands-free: the turn being heard is the session (no `turn` exists until it is committed). Drop it and stay on.
+        if hf.session != nil || phase == .capturing {
+            env.log.emit(.turnCancelled)
+            await hfDropTurn(requireQuiet: true)
+            return
+        }
         guard turn != nil || buttonDownAt != nil else { return }
         if buttonDownAt != nil { ignoreNextButtonUp = true }
         buttonDownAt = nil
