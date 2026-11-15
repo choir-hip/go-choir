@@ -25,10 +25,13 @@ package store
 // and copies only frames no reader still needs, and the limit is a size
 // applied at commit. There is no switch: both are SQLite's own maintenance
 // with no durability or ordering effect, and the release switch cap is full.
-// The read itself is not shortened: the head, the pages and the witness of a
-// snapshot must be one state (internal/snapshot), and the SQLite backup API in
-// steps restarts whenever another connection writes the source, so under the
-// paper's write rate it would never finish.
+// The snapshot capture's read is shortened to the page copy: the pages are
+// copied to a scratch file inside the read transaction that read the head, the
+// transaction ends, and the witness and the upload run on the static copy
+// (internal/snapshot, docs/design/capture-static-copy-2026-11-15.md). The
+// SQLite backup API is not used for that copy: it restarts whenever another
+// connection writes the source, so under the paper's write rate it would never
+// finish. The compact copy (VACUUM INTO) still pins the WAL for its whole run.
 //
 // synchronous stays FULL. NORMAL in WAL mode cannot corrupt the file, and the
 // boot replay re-derives every tape-projected commit a guest kill rolls back

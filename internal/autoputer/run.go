@@ -205,6 +205,15 @@ func Run() {
 
 	// Every store step before the listener logs its start, end and duration:
 	// a boot that hangs names the step that has no end.
+	// A snapshot capture killed in flight leaves a store-sized scratch copy. It is
+	// removed before anything below needs the volume: the rebase, the store open
+	// and the replay all run before Runtime.Start (docs/design/capture-static-copy-2026-11-15.md, 2.4).
+	doneScratch := objectgraph.BootPhase("autoputer: startup", "snapshot-scratch-sweep")
+	scratchErr := store.RemoveSnapshotScratch(rtCfg.StorePath)
+	doneScratch(scratchErr)
+	if scratchErr != nil {
+		log.Printf("autoputer: %v", scratchErr)
+	}
 	// A compact copy staged while the computer ran is swapped in on a planned
 	// boot, before the store opens; the tape replay below brings it to the
 	// canonical head (store/compact.go). A crash between its renames is
