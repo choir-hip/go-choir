@@ -103,6 +103,11 @@ public enum KnownModels {
                              approxBytes: 350_000_000, license: "Apache-2.0 (model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["kokoro-82m-coreml", "kokoro"]),
             ManagedModelSpec(id: "pocket-tts", label: "PocketTTS 100M (Kyutai, Core ML)", source: "hf:FluidInference/pocket-tts-coreml",
                              approxBytes: 300_000_000, license: "CC-BY-4.0 (Kyutai model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["pocket-tts"]),
+            // Phonon 31M: the pack `pocket-tts-coreml/phonon/phonon-31m-en` (Apache-2.0, its own LICENSE; the repo's other folders are CC-BY-4.0).
+            // FluidAudio's `PocketTtsSmallDownloader` keeps 126 of its files: the MLState model, the fp32 Mimi decoder, the constants and all 103
+            // voices, 173,136,428 bytes by the Hugging Face API listing of 2026-11-15. It is asked to put the pack in `fluidRoot` (see PhononVoice).
+            ManagedModelSpec(id: "phonon-31m", label: "Phonon 31M (Gradium, Core ML)", source: "hf:FluidInference/pocket-tts-coreml/phonon/phonon-31m-en",
+                             approxBytes: 173_000_000, license: "Apache-2.0 (Gradium model); FluidAudio Apache-2.0", cachePath: c, cacheFolders: ["pocket-tts-coreml/phonon"]),
             ManagedModelSpec(id: "lfm3-audio-2b", label: "LFM3-Audio-2B (Core ML, ASR + TTS)", source: "hf:FluidInference/lfm3-audio-2b-coreml",
                              approxBytes: 2_900_000_000, license: "LFM Open License (read it: commercial use limited by revenue)", cachePath: c),
             ManagedModelSpec(id: qwen3.id, label: "Qwen3-0.6B Q8_0 (llama.cpp GGUF)", source: "hf:Qwen/Qwen3-0.6B-GGUF",

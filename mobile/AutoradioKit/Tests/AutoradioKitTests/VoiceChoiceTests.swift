@@ -92,6 +92,15 @@ final class VoiceChoiceTests: XCTestCase {
         for o in VoiceCatalog.options where !o.modelID.isEmpty { XCTAssertTrue(KnownModels.contains(o.modelID), "\(o.id) names a model the catalog lacks") }
         XCTAssertTrue(VoiceCatalog.options.last!.modelID.isEmpty, "the system voice needs no download")
     }
+    func testAPhononVoiceWhoseModelIsNotReadySpeaksWithThePhonesVoiceAndSaysWhy() async throws {
+        let neural = FakeVoice(.ok), system = FakeVoice(.ok)
+        let r = StageRegistry()
+        r.register(.voice, id: "phonon", descriptor: StageDescriptor(displayName: "p", needsModels: [VoiceCatalog.phononModel])) { _ in neural }
+        r.register(.voice, id: "avspeech", descriptor: StageDescriptor(displayName: "sys")) { _ in system }
+        let l = log()
+        _ = try r.makeSpeaker(config(VoiceCatalog.option(id: "phonon:en_us_Easton")!.setting), log: l, readiness: MemoryReadiness())
+        XCTAssertTrue(notes(l).contains { $0.contains("not ready") && $0.contains(VoiceCatalog.phononModel) }, "\(notes(l))")
+    }
     func testTheChoiceSurvivesARelaunchThroughTheRuntime() {
         let dir = tmp()
         let rt = LabRuntime(supportDir: dir, session: NullSessionOwner())
@@ -340,5 +349,46 @@ final class VoiceSamplerTests: XCTestCase {
         s.stop(); await settle(50)
         XCTAssertFalse(s.cards().contains { $0.playing })
         XCTAssertGreaterThanOrEqual(h.halts, 2)
+    }
+
+    // Phonon, an alternative to Kokoro (owner QA round 1, 2026-11-15: "Phonon as an alternative to Kokoro; I want to listen to and compare them").
+    func testPhononIsAnAlternativeBesideKokoroAndNeverTheDefault() {
+        let ids = VoiceCatalog.options.map(\.id)
+        XCTAssertEqual(VoiceCatalog.defaultOption.id, "kokoro:af_heart", "the default does not change")
+        let phonon = VoiceCatalog.options.filter { $0.stageID == "phonon" }
+        XCTAssertEqual(phonon.map(\.id), ["phonon:en_us_Easton", "phonon:en_us_Zoey", "phonon:en_gb_Maeve"])
+        for o in phonon {
+            XCTAssertEqual(o.modelID, VoiceCatalog.phononModel, "all Phonon voices share one download")
+            XCTAssertEqual(o.setting.params["voice"], .string(o.voice))
+            XCTAssertFalse(o.sample.isEmpty)
+        }
+        let lastKokoro = ids.lastIndex { $0.hasPrefix("kokoro:") }!, firstPhonon = ids.firstIndex { $0.hasPrefix("phonon:") }!
+        XCTAssertEqual(firstPhonon, lastKokoro + 1, "Phonon's cards sit right after Kokoro's so the two can be tapped back to back")
+        XCTAssertTrue(VoiceCatalog.neuralStageIDs.contains("phonon"), "a Phonon voice gets the readiness check and the fall back to the phone's voice")
+        XCTAssertEqual(VoiceCatalog.options.last?.id, "system")
+        XCTAssertEqual(VoiceCatalog.option(matching: StageSetting(id: "phonon"))?.id, "phonon:en_us_Easton")
+    }
+    func testPhononsModelIsInTheCatalogWithItsFacts() throws {
+        let m = try XCTUnwrap(KnownModels.managed.first { $0.id == VoiceCatalog.phononModel })
+        XCTAssertTrue(m.source.contains("FluidInference/pocket-tts-coreml/phonon/phonon-31m-en"), "the pack's repository and folder, not the speech recogniser's repository")
+        XCTAssertFalse(m.source.contains("phonon-2"), "FluidInference/phonon-2-coreml is a speech recogniser, not a voice")
+        XCTAssertTrue(m.license.contains("Apache-2.0"))
+        XCTAssertEqual(m.cachePath, KnownModels.fluidRoot)
+        XCTAssertEqual(m.cacheFolders, ["pocket-tts-coreml/phonon"])
+        XCTAssertGreaterThan(m.approxBytes, 150_000_000); XCTAssertLessThan(m.approxBytes, 200_000_000)
+    }
+    func testAPhononCardDownloadsTheSharedModelOnceThenPlaysOnlyThatVoice() async {
+        let h = Host(); h.fetchDelay = 150_000_000
+        let (s, r) = make(h, ready: [VoiceCatalog.kokoroModel])
+        s.pick("phonon:en_us_Zoey"); s.pick("phonon:en_gb_Maeve"); await settle(50)
+        XCTAssertEqual(s.cards().first { $0.id == "phonon:en_us_Easton" }?.state, "downloading", "the three Phonon voices share the one download")
+        XCTAssertEqual(s.cards().first { $0.id == "kokoro:af_heart" }?.state, "ready", "Kokoro's cards are unaffected")
+        await settle(500)
+        XCTAssertEqual(h.fetched, [VoiceCatalog.phononModel])
+        XCTAssertTrue(r.isReady(model: VoiceCatalog.phononModel)); XCTAssertEqual(h.said, ["phonon:en_gb_Maeve"])
+        s.pick("kokoro:af_heart"); await settle(100)
+        s.pick("phonon:en_us_Easton"); await settle(100)
+        XCTAssertEqual(h.fetched, [VoiceCatalog.phononModel], "a ready model is not fetched again")
+        XCTAssertEqual(h.said.suffix(2), ["kokoro:af_heart", "phonon:en_us_Easton"], "back to back")
     }
 }

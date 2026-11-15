@@ -21,6 +21,7 @@ public enum ModelHub {
         registry.register(.transcriber, ParakeetTDTTranscriber.self) { ParakeetTDTTranscriber($0) }
         registry.register(.voice, KokoroVoice.self) { KokoroVoice($0) }
         registry.register(.voice, PocketTTSVoice.self) { PocketTTSVoice($0) }
+        registry.register(.voice, PhononVoice.self) { PhononVoice($0) }
         registry.register(.transcriber, LFM3Transcriber.self) { LFM3Transcriber($0) }
         registry.register(.voice, LFM3Voice.self) { LFM3Voice($0) }
         registerLlamaStages(registry)

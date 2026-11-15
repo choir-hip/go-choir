@@ -96,6 +96,7 @@ public enum ModelProof {
             },
             Case(kind: .voice, id: "kokoro", model: "kokoro-82m-ane") { try await speak("kokoro") },
             Case(kind: .voice, id: "pocket-tts", model: "pocket-tts") { try await speak("pocket-tts") },
+            Case(kind: .voice, id: "phonon", model: "phonon-31m") { try await speak("phonon") },
             Case(kind: .transcriber, id: "lfm3-audio-live", model: "lfm3-audio-2b") { try await transcribe("lfm3-audio-live", label: "live") },
             Case(kind: .voice, id: "lfm3-audio-tts", model: "lfm3-audio-2b") { try await speak("lfm3-audio-tts") },
         ]

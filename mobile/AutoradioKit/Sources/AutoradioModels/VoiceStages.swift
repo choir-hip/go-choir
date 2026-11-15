@@ -84,6 +84,65 @@ public final class KokoroVoice: Voice, @unchecked Sendable {
     }
 }
 
+// MARK: Phonon 31M (Gradium), streams frames
+
+/// Gradium's Phonon 31M English voice through FluidAudio's `PocketTtsSmallManager(model: .phonon31m)` (FluidAudio 0.18.0 and later; the
+/// 0.18.3 we link has it). Autoregressive like Pocket, so audio frames (80 ms, 24 kHz) stream out while it generates. The pack is
+/// `FluidInference/pocket-tts-coreml`, folder `phonon/phonon-31m-en` (Apache-2.0), fetched by FluidAudio itself into `KnownModels.fluidRoot`.
+/// Voice ids are the pack's own (`en_us_Easton`, `en_us_Zoey`, `en_gb_Maeve`, `default`, ...). NOT the Hugging Face repository
+/// `FluidInference/phonon-2-coreml`: that is Fermion Research's Phonon-2 speech recogniser, a different model with the same word in its name.
+public final class PhononVoice: Voice, @unchecked Sendable {
+    public static let stageID = "phonon"
+    public static var descriptor: StageDescriptor {
+        StageDescriptor(
+            displayName: "Phonon 31M (streaming frames)",
+            summary: "On-device neural voice from Gradium that streams frames while it generates (Core ML via FluidAudio). English.",
+            params: [.text("voice", "Voice", "en_us_Easton")],
+            needsModels: ["phonon-31m"])
+    }
+    static let slot = ModelSlot<PocketTtsSmallManager>("phonon-31m")
+    let voice: String
+    public init(_ p: StageParams) { voice = p.string("voice", "en_us_Easton") }
+
+    /// FluidAudio puts a small-model pack at `<directory>/Models/pocket-tts-coreml/phonon/phonon-31m-en`; with the directory one above
+    /// `fluidRoot` (`.../FluidAudio/Models`) that is the folder the catalog's `cacheFolders` names, the one the progress bar watches.
+    static func load(preferring voice: String) async throws -> (PocketTtsSmallManager, @Sendable () async -> Void) {
+        let m = PocketTtsSmallManager(model: .phonon31m, defaultVoice: voice)
+        try await m.initialize(directory: KnownModels.fluidRoot.deletingLastPathComponent())
+        return (m, {})                       // the manager has no cleanup: its Core ML models go when the last reference does
+    }
+
+    public func speak(_ text: AsyncStream<String>) -> AsyncThrowingStream<AudioFrame, Error> {
+        let voice = voice
+        return AsyncThrowingStream { c in
+            let task = Task {
+                do {
+                    let m = try await Self.slot.get { try await Self.load(preferring: voice) }
+                    for await line in text {
+                        if Task.isCancelled { break }
+                        let stream = try await m.synthesizeStreaming(text: line, voice: voice)
+                        for try await f in stream {
+                            c.yield(AudioFrame(samples: f.samples, sampleRate: Double(PocketTtsConstants.audioSampleRate), t: ProcessInfo.processInfo.systemUptime))
+                        }
+                    }
+                    c.finish()
+                } catch { c.finish(throwing: error) }
+            }
+            c.onTermination = { _ in task.cancel() }
+        }
+    }
+    public static func firstFrameMs(_ text: String, voice: String = "en_us_Easton") async throws -> (firstMs: Double, totalMs: Double, seconds: Double) {
+        let m = try await slot.get { try await load(preferring: voice) }
+        let t0 = nowMs()
+        var first = 0.0, n = 0
+        for try await f in try await m.synthesizeStreaming(text: text, voice: voice) {
+            if first == 0 { first = nowMs() - t0 }
+            n += f.samples.count
+        }
+        return (first, nowMs() - t0, Double(n) / Double(PocketTtsConstants.audioSampleRate))
+    }
+}
+
 // MARK: PocketTTS (Kyutai), streams frames
 
 /// Kyutai PocketTTS 100M through FluidAudio: autoregressive, so audio frames stream out as they are generated

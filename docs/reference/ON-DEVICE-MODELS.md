@@ -60,7 +60,7 @@ untested by us.
 | System 1 | Gemma 4 E2B | not recorded | not recorded | not recorded | not recorded | 0.3 s to first token on an iPhone 17 Pro (Google's figure) |
 | System 1 (long run) | small encoder with answer heads, trained on Jev's record | not built | tens to a few hundred MB | ours | not decided | An existing router on mmBERT-small answers seven questions in about 14 ms on four server cores (its own figure) |
 | Holding conversation | any System 1 text model above, streamed into a voice | | | | | conversational quality unmeasured |
-| Voice | Phonon (Gradium) | 2026-10-21 | 31M parameters, 64 MB | Apache-2.0 | Swift and Core ML | 28 ms to first audio on Arm CPUs (vendor); English only; no iPhone measurement |
+| Voice | Phonon 31M (Gradium) | 2026-10-20 (card) | 31M parameters (the card; 41.1M with the audio tokenizer); the Core ML pack the app downloads is 173 MB, the 8-bit weights 64.5 MB | Apache-2.0 | FluidAudio `PocketTtsSmallManager` (0.18.0 and later), Core ML; see section 10 | 28 ms to first audio on Arm CPUs (vendor); English only; no iPhone measurement |
 | Voice | Kokoro; system voice; LFM3-Audio speech out; hosted voice | not recorded | not recorded | not recorded | not recorded | unmeasured |
 | Speech-to-speech | Liquid LFM3-Audio-2B | not recorded | 1.9 GB peak, 5.3 GB first-load cache (Mac) | LFM Open License | see section 4 | vendor: first token "as low as 50 ms"; FluidAudio on M5 Pro Mac: synthesis about 4.4x real time, 37 ms to first audio; no iPhone figure |
 
@@ -161,7 +161,7 @@ thermal state, outcome) so models are compared by replay, not impression.
 ## 7. Could not verify
 
 - Any iPhone figure for d1, LFM3-Audio, LFM3-1.7B in absolute terms, and
-  Phonon.
+  Phonon (the app can now play it beside Kokoro, section 10; nobody has measured it on the phone).
 - Whether Apple's model reaches context beyond a reported 4K tokens.
 - Whether llama.cpp's public interface exposes LFM3-Audio speech out.
 - Whether a 14 Pro Max runs iOS 27 and Core AI exports.
@@ -392,12 +392,14 @@ by line fall back to the system voice, with the reason on the log).
 **What the linked FluidAudio (v0.18.3, `~/.cache/autoradio-deps/xcframeworks`, built 2026-11-11) offers for speech (verified, symbol
 listing of `libFluidAudio.a` and the `.swiftmodule`; there is no `.swiftinterface` in the xcframework, only the binary module).**
 `KokoroAneManager` (`initialize(preloadVoices: Set<String>?)`, `synthesizeDetailed(text:voice:speed:)`, `setDefaultVoice`),
-`PocketTtsManager` (`synthesize`, `synthesizeStreaming`), `LuxTtsManager`, `NeuTtsManager`, `Lfm3Audio*`. For Phonon the module has only
-`PhononTextChunker`, `PhononTextNormalizer` and the `PhononChunkTokenizer` protocol, **no Phonon synthesizer class**, so the 31M voice
-that section 2 lists is not reachable through this build of FluidAudio. The library's strings name three repos (`phonon-31m-en`,
-`Muesli-HQ/phonon-2.5-coreml`, `FluidInference/phonon-2-coreml`); the listing of `FluidInference/phonon-2-coreml` (Hugging Face API,
-2026-11-15) holds Parakeet-style encoder, decoder and vocab files, not a voice. Using Phonon needs a newer FluidAudio and a rebuild of the
-xcframework; it is not done here.
+`PocketTtsManager` (`synthesize`, `synthesizeStreaming`), `LuxTtsManager`, `NeuTtsManager`, `Lfm3Audio*`, **and `PocketTtsSmallManager`, which
+speaks Phonon** (see section 10). **Correction (2026-11-15, verified, FluidAudio v0.18.3 source and the `.a`'s symbols):** an earlier version
+of this paragraph said the linked library had no Phonon synthesizer. That was wrong. The Phonon voice is not a class of its own: it is
+`PocketTtsSmallModel.phonon31m` run by `PocketTtsSmallManager` (252 `PocketTtsSmall` symbols are in `libFluidAudio.a` for the device slice),
+beside `PhononTextNormalizer` and `PhononTextChunker`, which only prepare its text. The search that found none looked for a type named
+Phonon. The three repositories in the library's strings are three different things: `phonon-31m-en` is the voice (a folder inside
+`FluidInference/pocket-tts-coreml`), `FluidInference/phonon-2-coreml` and `Muesli-HQ/phonon-2.5-coreml` are speech recognisers (Fermion
+Research's Phonon-2 and 2.5, retrained Parakeet), not voices. Two unrelated models share the word.
 
 **What the app speaks with now.** Default: Kokoro 82M, voice `af_heart` (Apache-2.0, `FluidInference/kokoro-82m-coreml`; model about 350 MB,
 relayed from `KnownModels`; the repo's `ANE-v3` folder is 728.8 MB because it also holds the Japanese and Chinese models, verified by the
@@ -412,3 +414,72 @@ the current one plays. Kokoro on a physical iPhone is **unvalidated by the vendo
 **Still to measure on the phone:** time to first sound of the first block for Kokoro `af_heart` after a cold launch (the first load compiles
 the models: the speaker gives the system voice a line when no sound has come in 25 s), memory with Kokoro plus the other models resident on
 the 6 GB 14 Pro Max (`os_proc_available_memory()` before and after), and whether the four other Kokoro voices load without a second fetch.
+
+## 10. Phonon 31M as an alternative to Kokoro (2026-11-15, owner QA round 1)
+
+The owner asked for Phonon beside Kokoro to listen to and compare, and where it is downloaded from. Everything below was fetched on
+2026-11-15 (about 22:59 UTC) and is marked: **verified** = read from the primary source on that date, **relayed** = a vendor claim not
+tested here, **not run** = needs the device.
+
+**Which Phonon.** There are two unrelated models called Phonon. (a) Gradium's Phonon, a text-to-speech model family released 2026-10-20 (the
+card; the page earlier said 2026-10-21). (b) Fermion Research's Phonon-2 and 2.5, speech recognisers that retrain NVIDIA's Parakeet; the
+FluidAudio enum cases `.phonon2` and `.phonon25` and the repositories `FluidInference/phonon-2-coreml` (CC-BY-4.0) and
+`Muesli-HQ/phonon-2.5-coreml` are these. The earlier finding that the repository `FluidInference/phonon-2-coreml` "holds speech-recognition
+files" was right and is the reason it must never be used for a voice: it is (b) (**verified**, its model card: "Core ML build of
+FermionResearch/Phonon-2 ... English automatic speech recognition", encoder 341 MB).
+
+**Where the voice weights are (verified, Hugging Face API and model cards).**
+
+| What | Repository and path | Files and sizes | Licence |
+|---|---|---|---|
+| The original (Gradium) | `gradium/phonon-31m-en` (updated 2026-10-22) | `model.q8.gguf` 64,512,352 B; `model.q4k.gguf` 55,075,168 B; `model.safetensors` 102,823,920 B; `default-voice.safetensors` 256,136 B; tokenizer and config files | Apache-2.0 for weights, tokenizer and voices (card header and text; the runtime `ptts` is MIT OR Apache-2.0) |
+| The ~100 voices | `gradium/phonon-voices` | named on the card; not downloaded | stated Apache-2.0 on the model card for "voices" |
+| **The Core ML pack the app uses** | `FluidInference/pocket-tts-coreml`, folder `phonon/phonon-31m-en` (repository last modified 2026-11-01) | 126 files, 173,136,428 B after FluidAudio's own skip rules (below); the big ones: `pocket_state.mlmodelc` weights 79,068,864 B, `mimi_decoder.mlmodelc` weights 44,897,216 B, `constants_bin/text_embed_table.bin` 8,194,048 B, four 3,073,840 B voice states, 103 voice files of 256,208 B | The folder carries its own `LICENSE` (Apache-2.0 text, 11,357 B) and a README that says so. The repository's front-page tag says `cc-by-4.0` (that is Kyutai's Pocket TTS, the other folders): the Phonon folder is the exception |
+
+The Gradium card also lists Phonon 40M models (English, French, German, Spanish, Portuguese, multilingual) under **CC BY-NC 4.0**:
+non-commercial, not for the app. Only the 31M English is Apache-2.0 (**verified**, card table). The card lists a runtime for iPhone
+(`github.com/gradium-ai/xn-ptts`, `ios/PhononTTS`): its README was not read here and the app does not use it.
+
+**The runtime the app already links (verified: v0.18.3 source, tag `c8b41f98`, 2026-11-07, and the symbols of the cached `libFluidAudio.a`).**
+FluidAudio added Phonon 31M TTS in v0.18.0 (release notes: "Gradium Phonon 31m TTS"). The API, read in
+`Sources/FluidAudio/TTS/PocketTTS/Small/PocketTtsSmallManager.swift` and `PocketTtsSmallModel.swift`:
+`PocketTtsSmallManager(model: .phonon31m, defaultVoice: String?, computeUnits:, mimiPrecision:)` (an actor, iOS 18 / macOS 15);
+`initialize(directory: URL?, progressHandler:)` downloads and loads; `synthesizeStreaming(text:voice:temperature:seed:)` returns an
+`AsyncThrowingStream<PocketTtsSynthesizer.AudioFrame, Error>` of 80 ms frames (streaming, 24 kHz, `arch.json` `sample_rate` 24000, mono);
+`synthesize` returns 24 kHz 16-bit WAV data. The first sound is the first frame, as with Pocket. Voices are named `<locale>_<Name>`
+(`en_us_Easton`) or `default`; four have ready-made KV snapshots (`default`, `en_us_Easton`, `en_us_Zoey`, `en_gb_Maeve`) and start at
+once; the other 99 are prefilled once on first use. The download keeps (`PocketTtsSmallDownloader.shouldSkipAsset`) `pocket_state.mlmodelc`,
+`mimi_decoder.mlmodelc`, the JSON descriptors, `constants_bin/` and `voices/` and skips the fp32 reference models, every `.mlpackage`,
+`constants/`, `manifest.json` and `.wav` files. The 173 MB is the sum of what that rule keeps, computed from the API listing (**verified**
+arithmetic, not a download). So the pack is 173 MB, not the 64 MB of the GGUF: it holds the Core ML model in fp16, the fp32 Mimi decoder
+the pack's README says to use ("the fp16 Mimi adds near-white noise at about -80 dBFS in pauses") and every voice. That is over the 100 MB
+line (bundling stays a later decision; it downloads).
+
+**Upgrade cost: none (verified).** The pinned FluidAudio v0.18.3 already has it; `mobile/scripts/ensure-deps.sh` and
+`build-xcframeworks.sh` (`TTS` trait on) need no change and no new xcframework is built. A newer FluidAudio exists on `main` (HEAD
+`16780f04`, 2026-11-13, not tagged; the newest tag is v0.18.3): the diff of `Sources/FluidAudio/TTS` between v0.18.3 and that head is 14
+files, +881 -60 lines, in Kokoro ANE, Paradee, `PocketTtsSynthesizer.swift` and `PhonemeChunker.swift`. The one change that touches the
+Phonon path (read in the diff) is a chunker fix in `PocketTtsSynthesizer.swift`: a chunk no longer ends on a decimal number ("a fee of
+$822.95." was cut at the point, "stopping before the decimals"). It is unreleased and not needed to hear Phonon, so it was not taken;
+a pin on the next tag is the way to get it. Nothing of the existing Kokoro, Pocket, Parakeet, Silero or LFM3 call sites changes.
+
+**What was built.** `PhononVoice` (stage `phonon`, `AutoradioModels/VoiceStages.swift`) beside `KokoroVoice` and `PocketTTSVoice`, the model
+`phonon-31m` in `KnownModels` (source `hf:FluidInference/pocket-tts-coreml/phonon/phonon-31m-en`, 173 MB), three voice cards right after
+Kokoro's (Easton, Zoey, Maeve, each marked "(Phonon)" so the cards read back to back), its fetch and check in `HubModelProvider`, a case in
+`ModelProof`. It reuses the app's existing path: `VoiceSampler` (progress bar, one download for the three cards), `Voices.readiness`
+(marked only after a fetch that ended in a spoken line), `makeSpeaker` (the phone's voice speaks a line the model cannot). The default
+stays Kokoro Heart. The pack is placed under `KnownModels.fluidRoot` (`initialize(directory:)` is given the folder above it, so the
+progress bar and the "is it on disk" check watch the folder FluidAudio writes).
+Known looseness, not fixed here: the existing `pocket-tts` entry names the cache folder `pocket-tts` but FluidAudio writes
+`Models/pocket-tts-coreml` (also, on a Mac, under `~/.cache/fluidaudio`, not the app's `fluidRoot`); its progress bar still works because
+it watches the whole `fluidRoot`, its "on disk" check likely misses. Phonon's entry avoids this.
+
+**Not run (needs the device, the lead's one build).** That the Exact build links and runs `PocketTtsSmallManager`; the real download from
+Hugging Face; the first sound time and the sound itself on the 14 Pro Max (the vendor says 28 ms to first audio on Arm CPUs and about 20x
+real time on the Neural Engine; **relayed**, unmeasured on a phone); memory beside Kokoro. The model needs iOS 18 (MLState); the
+app's minimum is 18.0.
+
+Sources: https://huggingface.co/gradium/phonon-31m-en ; https://huggingface.co/FluidInference/pocket-tts-coreml/tree/main/phonon/phonon-31m-en
+(and `/api/models/FluidInference/pocket-tts-coreml/tree/main/phonon/phonon-31m-en?recursive=true`) ;
+https://huggingface.co/FluidInference/phonon-2-coreml ; https://github.com/FluidInference/FluidAudio/releases (v0.18.0 to v0.18.3) ;
+FluidAudio tag v0.18.3 `PocketTtsSmallManager.swift`, `PocketTtsSmallModel.swift`, `PocketTtsSmallSession.swift`.
