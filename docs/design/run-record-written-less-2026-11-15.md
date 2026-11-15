@@ -1,540 +1,379 @@
-# The run record written less (T2, first slice)
+# The source-entities list leaves the run record (T2, first slice)
 
-Date: 2026-11-15. Class of this document: green (design only). The change it
-designs is orange to red: `choir.run` is a kernel kind, and the run
-acceptance and evidence surfaces read it.
+Date: 2026-11-15, rewritten after the counter's first reading
+(`6387e5dff`, largest computer, about 15 minutes after boot). Class of this
+document: green (design only). The change it designs is red: it touches
+`choir.run`, a kernel kind that run acceptance and the evidence surfaces read.
 
-Station: T2 of `docs/definitions/choir-storage-solutions-3-store-once-2026-11-14.md`,
-first slice, the `choir.run` object. Background:
-`docs/design/store-once-2026-11-14.md` (R2). Counters: `a21558f9b`.
+Station: T2 of `docs/definitions/choir-storage-solutions-3-store-once-2026-11-14.md`.
+Background: `docs/design/store-once-2026-11-14.md` (R2).
 
-Reading rule used here: every claim about code carries the file and line I
-read in this worktree. Where I did not read a function, the table says so.
-Nothing here was run; no number below is a measurement unless it says
-"measured", and the only measured figures are the owner's (22.6% of object
-bytes, 4.7 writes per run, about 18.7 KB a write, from the ledger entry C74).
+Reading rule: every claim about code carries the file and line I read in this
+worktree. What I did not read or could not run is in section 9. Anything not
+in the code or the reading is marked **invented**. Nothing here was run.
 
-## 0. Decision in one paragraph
+An earlier draft of this file chose "drop one write" (the `updated_at`-only
+write). The reading moved the weight to one metadata key, so that mechanism is
+withdrawn and is not part of this one. One mechanism only.
 
-Mechanism A: drop the one run write that changes no field but `updated_at`,
-the "persist actor initial mailbox metadata" write at
-`internal/agentcore/runtime.go:4214-4217`, and nothing else in this slice.
-B (move the unchanging fields out into a write-once object) loses because it
-changes the stored shape that about twenty decode sites read and has a silent
-failure (an empty prompt) and a rollback hazard. C (a patch op) loses because
-an old binary cannot replay a tape that holds an op kind it does not know
-(`internal/store/project.go:115-116` refuses the batch), which makes every
-rollback a replay failure. A's expected saving is smaller than B's best case
-and I say so in section 3; its failure surface is the smallest, and it needs
-no format change, no replay change and no new tape op. A step 0 (read-only,
-on the test computer) must confirm the premise before any code.
+## 1. The reading, and the one mechanism
 
-## 1. What the 18.7 KB is, and today's writes
+Reading (counter `run_writes`, 179 `choir.run` writes, 1.606 MB of body bytes):
 
-### 1.1 The bytes
+| Fact | Value |
+| --- | --- |
+| `metadata` bytes | 1.454 MB, 90% of the body |
+| `texture_available_source_entities` as the largest metadata key | 93 writes, 1,200,748 bytes, 74.8% of all run-record body bytes, mean 12.9 KB a write |
+| writes in which that key CHANGED (`metadata_key_changes`) | 19 |
+| `activation/pending/new` | 25 ops, 299 KB, about 12.0 KB a write |
+| `activation/running/updated_at_only` | 23 ops, 296 KB, about 12.9 KB a write |
+| `activation/running/metadata+state` | 19 ops, 286 KB |
+| `activation/completed/finished_at+metadata+state` | 20 ops, 215 KB |
+| `labels/running/labels` | 41 ops, 339 KB, about 8.3 KB a write |
+| `create_og`, `update_og` lines | about 2.3 KB a write (runs without the list) |
 
-A tape op for an object is `json.Marshal(obj)` of the whole
-`objectgraph.Object` (`internal/store/projection_tape.go:110-119`). The
-counter measures `len(op.Body)` of that (`internal/store/tape_write_counters.go:151-153`).
-`Object.Body` is a `[]byte` (`internal/objectgraph/object.go:30`), which
-`encoding/json` writes as base64: the run body is carried at 4/3 of its size
-on the tape. This is from the code, not measured. A second inflation
-(not part of this slice, section 7).
+**Mechanism: the list is written once, as its own immutable object of a new
+kind, and the run record names it with a short reference instead of carrying
+it.** Section 3 shows why the list cannot be derived from objects that
+already exist. Sections 4 to 6 give the form, the failures and the proof.
 
-The run body is `types.RunRecord` (`internal/types/task.go:89-155`):
+## 2. The list in code: writers, readers, lifetime
 
-| Field group | Fields | Changes after create? |
+### 2.1 Where it is written
+
+The key is `textureAvailableSourceEntitiesKey` (`internal/textureowner/texture_task_types.go:23`).
+Every write of it in non-test code:
+
+| Site | What it does |
+| --- | --- |
+| `internal/textureowner/texture_agent_revision.go:666-679` | builds the list at the start of a Texture revision run: the current revision's sources (`decodeTextureSourceEntities(currentRevision.SourceEntities)`, `:661`) plus media sources found in the revision's content (`registerTextureMediaSourceEntities`, `:662`) plus `evidenceSourceEntitiesFromCommitmentRecords(..., 12)` (`:667`), merged in order, then `metadata[key] = sourceEntities` (`:675`). `metadata` here is a local map decoded from the current revision's metadata (`:598`). |
+| `texture_agent_revision.go:680-688` | merges `req.SourceEntities`, a field of the request that is not stored elsewhere (`:34`, tagged `json:"-"`), into the same local map (`:683`). |
+| `texture_agent_revision.go:789-797` | copies every key of `durableMetadataKeys` from that local map into `runMetadata`, and `textureAvailableSourceEntitiesKey` is one of those keys (`texture_task_types.go:66`). That copy is how the list reaches the run record. |
+| `texture_agent_revision.go:823` | `rt.Core.StartRunWithMetadata(ctx, agentPrompt, ownerID, runMetadata)` creates the run with the list inside its metadata. |
+| `texture_evidence_sources.go:457-476` | `mergeTextureSourceEntitiesIntoAvailableContext` and `mergeTextureSourceEntitiesIntoRunMetadata`: no caller outside a test (grep over `internal`; the only call is `texture_evidence_sources_test.go:364`). |
+
+So the only writer of the list into a run record is the run's own start. I
+found no code that changes it after the run exists.
+
+**The 19 changes.** The counter compares the raw bytes of the key before and
+after a write. At the start the value is a typed `[]textureSourceEntity`
+marshalled in struct field order; any later read-modify-write of the run
+(`updateRunOGOnce` decodes the body into `map[string]any` and marshals it
+again, `internal/store/graph_store.go:748`, `:783`) writes the same
+content with keys in sorted order. Different bytes, same list. The number 19
+equals the `activation/running/metadata+state` count in the same reading (19
+ops), which is where the first re-encode would fall. **This is a hypothesis;
+I could not read the two bodies.** Section 5.2 gives the test that settles
+it. If it is false and the list truly changes during a run, the form in
+section 4 still holds with one more object write per real change (open
+question 1).
+
+### 2.2 Where it is read
+
+| Reader | Reads | Evidence |
 | --- | --- | --- |
-| identity scalars (about 0.7 KB raw, my estimate: six UUIDs with keys, profile, role, three timestamps) | `loop_id`, `agent_id`, `channel_id`, `requested_by_run_id`, `trajectory_id`, `agent_profile`, `agent_role`, `owner_id`, `computer_id`, `created_at` | no |
-| `state`, `updated_at`, `finished_at` | | every transition |
-| `prompt` | the submitted input | at create; rewritten only by a control-delivery refresh (`internal/store/lifecycle_control_delivery.go:578`) and kept by `preserveLifecycleControlRunAuthority` (`internal/store/lifecycle.go:3270`) |
-| `result` | final text | set at the terminal write (`internal/agentcore/runtime.go:4345`); kept by every later write (`lifecycle.go:5545-5547`) |
-| `error` | | terminal or passivation writes |
-| `metadata` (a `map[string]any`) | llm selection keys, `lifecycle_*` keys, `work_item_ids`, token counts at completion (`runtime.go:4355-4357`), `lifecycle_control_bindings` (a list that only grows, `lifecycle_control_delivery.go:597-638`), reactivation markers | a few keys per transition; most of the map is fixed at create |
-| `labels` | provenance label set, union-only | each growth (`internal/store/store.go:2448`) |
-
-Beside the body, every write carries an 11-key metadata object
-(`lifecycle.go:3468-3474`, my estimate about 0.55 KB) and the object
-envelope (ids, hash, three timestamps; my estimate about 0.45 KB).
-
-So of 18.7 KB, roughly 1.9 KB is identity, envelope and metadata that is
-unavoidable per write (estimate: 0.7 KB x 4/3 + 0.55 + 0.45). The other
-roughly 16.8 KB, base64, is `prompt` + `result` + `error` + `metadata` map +
-`labels`, about 12.6 KB raw. **I cannot split that 12.6 KB from code.** No
-file I read states the mean prompt size or the metadata map size. Step 0
-measures it.
-
-### 1.2 Every write site of a `choir.run` object
-
-All sites funnel into one of five object writers. "Reads of the state" is
-who looks at that state afterwards (section 1.3).
-
-| # | Site | Transition | Fields that change | Writer |
-| --- | --- | --- | --- | --- |
-| W1 | `internal/agentcore/runtime.go:1563` (`persistLifecycleSubmittedRun`; function body not read), `:1651`, `:1911`, `:1914`; `runtime_persistence.go:39`; `store.go:474` -> `persistLifecycleRun` or `CreateRunOG` (`graph_store.go:575-597`) | create, state pending (the conductor-decision run at `:1634-1651` is created already completed) | all; the whole body is new | `projectLifecycleRun` (`lifecycle.go:3293`, write at `:3528`) or `ogPut` |
-| W2 | `runtime.go:3966-3968` -> `persistActivationStateAndEmit` (`:2427`) -> `persistActivationStateWithEvent` (`:2368`) -> `management_controller.go:907` -> `Store.UpdateRunWithEvent` (`store.go:507`, `updateRunWithEvent` `:536`) -> `persistLifecycleRunWithEvent` (`store.go:424`) | pending -> running, with the `loop.started` event in the same batch | `state`, `updated_at` | `projectLifecycleRun` |
-| W3 | `runtime.go:4214-4217` | none (state stays running) | `updated_at` only, as far as I could read: I found no assignment to `rec` in the injectors, but did not read all of them (`coagentUpdateTurnInjectorWithDelivered`, `textureFrameInjector`, `calibrationDigestInjector`, `shotImageInjector`) | `projectLifecycleRun` |
-| W4 | `Store.UnionRunLabels` (`store.go:2448`, write at `:2501`), called from `agentcore/run_labels.go:145` (`flushRunLabels`, before an act is stamped) and `agentcore/run_memory.go:190` (labels carried from the previous run, at run start) | none | `labels`; the body is re-marshalled whole | `PutBatchConditional` on a body patched in memory |
-| W5 | `runtime.go:4344-4383` (tool-loop path), `:4609-4633` (provider path) | running -> completed, with `loop.completed` in the same batch | `state`, `result`, `finished_at`, `updated_at`, three token keys in `metadata` | `projectLifecycleRun` |
-| W6 | `runtime.go:2293` `terminalizeRunCanonical` -> `Store.TerminalizeRun` (`lifecycle.go:5520-5575`); callers: cancel (`:2276-2284`), crash-boot close (`:3068-3083`), planned-restart task close (`:3110`) | active -> cancelled / failed | `state`, `error`, `result`, `finished_at`, `updated_at` | `TerminalizeRun` |
-| W7 | `runtime.go:2330` `ReactivateRunCanonical` -> `reactivateRunOnce` (`lifecycle.go:5628`, write at `:5690-5725`); callers `actorruntime/handler.go:639`, `:686` | passivated / interrupted -> pending / running | `state`, `error`, `result`, `finished_at`, `updated_at`, a metadata patch | `reactivateRunOnce` |
-| W8 | passivation: `runtime.go:3130` (planned restart), `:3923` (provider admission), `:4443`, `:4485` (injection failure; not read past the state set) | running -> passivated | `state`, `error`, `updated_at`, `metadata["passivated_reason"]` | `UpdateRun` -> `projectLifecycleRun` |
-| W9 | `internal/store/lifecycle_control_delivery.go:569-646` | none | `prompt` (refresh), `metadata` (`lifecycle_control_bindings` and others), `updated_at` | one `PutBatchConditional` with the trajectory and receipt |
-| W10 | `internal/store/engineering_assignments.go:1639` (bind), `:1910` (terminal projection) | engineering run created / ended | all (create), `state`, `result`/`error`, `finished_at` | `lifecycleObject` |
-| W11 | `runtime.go:2718` (`CancelRunTrajectory` stamps trajectory identity), `actorruntime/handler.go:1208`, `textureowner/texture_controller.go:1093`, `textureowner/texture_handoff.go:336`, `management_controller.go:398`, `:512`, `:582`, `:1426`, `:3004` | not read; named only so no site is missed | | `UpdateRun` |
-
-W1, W2 and W5 are the floor of a lifecycle run (three writes). The measured
-mean of 4.7 means 1.7 more per run come from W3, W4, W6 to W11. **I could not
-split the 1.7 between those sites from code.** The counter is per kind, not
-per site. Step 0 splits it from the tape.
-
-One more fact from the code: `projectLifecycleRun` already skips a write
-whose body and metadata hash equal the stored object
-(`lifecycle.go:3491-3496`, "Replay: true"). W3 is not skipped, because
-`updated_at` differs.
-
-### 1.3 Who reads the intermediate states
-
-| State or field | Reader | Evidence |
-| --- | --- | --- |
-| pending | the actor wake: a pending run owes its agent an `initial_dispatch` wake derived from the run object in the same batch | `lifecycle.go:3520-3524`; `graph_store.go:600-612` |
-| pending and running | crash boot: closes both, and passivated and blocked, the same way; creates no work | `runtime.go:3066-3083` (`closePreBootRunsAfterCrash`) |
-| pending and running | planned restart: parks both | `runtime.go:3095-3098` |
-| running only | admission capacity: `RunningCountByProfile` counts running runs only | `runtime.go:2897-2933` |
-| running only | dead-loop detection: a running run unchanged for `deadRunGrace` (2 min) with no live loop | `runtime.go:5463-5480` |
-| `updated_at` of an active run | the cell terminal deadline binds the activation's `updated_at` and terminalizes only if it is unchanged | `agentcore/continuation_schedule.go:84-93`, `:169-174` |
-| `updated_at` | resume-dispatch deadline of persistent management; oldest-open surface | `management_controller.go:549-552`, `:609-612`, `:638-639`; `obligations_surface.go:285-293` |
-| `labels` | every act stamps the labels the record holds; persisted before the stamp so an act never carries a label the record lacks | `run_labels.go:127-143` (`flushRunLabels`); `store.go:2439-2447` |
-| terminal state, `result` | run acceptance (reads `root.Prompt` and run records, red surface), outcome binding, settlement | `agentcore/run_acceptance.go:109`; `research_checkpoint_fallback.go:27-66`; `lifecycle.go:464-468` |
-| whole body | about 20 decode sites of `RunRecord` in `internal/store` (`decodeLifecycleObject[types.RunRecord]`, `ogDecode`) and the list and metadata-filter readers | grep `RunRecord` with `decode`; `lifecycle.go:1925-1937`, `graph_store.go:874-` |
-
-What this says about dropping intermediate writes: pending, running and the
-terminal states each have a distinct reader. The `updated_at`-only touch W3
-has no reader of its own: the readers of `updated_at` need it to change at
-state transitions, and W2 changes it (section 4, F3).
-
-## 2. The mechanism
-
-**Chosen: A.** Delete W3. The write at `runtime.go:4214-4217` stays out; the
-`rec.UpdatedAt = time.Now().UTC()` line at `:4216` goes with it, so the
-record in memory and the stored record agree.
-
-Why it is a deletion and not a new thing: no state is added, no op kind, no
-field. The tape, replay and every reader see the same sequence minus one
-write per run that carried it.
-
-### 2.1 Why not B
-
-B names a write-once object (content-hash identity, like
-`choir.run_memory_entry` at `internal/objectgraph/registry.go:92`) that holds
-`prompt` and, in a later step, the create-time `metadata`, and the run names
-it. Costs I found in code:
-
-- Every reader of `RunRecord` must hydrate. There are about twenty decode
-  sites (section 1.3) and several list loops that decode many runs
-  (`lifecycle.go:1925-1937`), so hydrating adds one read per run to a list.
-- Every writer must keep the reference. The read-modify-write writers
-  (`TerminalizeRun`, `reactivateRunOnce`, `projectLifecycleRun`,
-  `UpdateRunOG`) decode, change and re-marshal; if a writer decodes a
-  hydrated record and marshals it, the prompt is inlined again (harmless but
-  a silent loss of the saving); if a reader forgets to hydrate, it sees an
-  empty prompt and nothing fails (the prompt feeds `openingText` at
-  `runtime.go:4088` and the acceptance source objective at `run_acceptance.go:109`).
-- `prompt` is not write-once: `lifecycle_control_delivery.go:578` replaces
-  it. It would need a new object per refresh. `metadata` has deletions
-  (`runtime.go:3922`), so a split by key needs tombstones.
-- A binary from before B reading a tape from after B decodes a run with an
-  empty prompt and, on its next write of that run, stores that. A rollback
-  with an active run loses the prompt for good. The way around it is a
-  reader-first release followed by a writer release, which is two deploys
-  for one saving.
-- The saving of B depends on a number I do not have (the prompt and metadata
-  share of the 16.8 KB).
-- B saves tape bytes only. The live `og_bodies` row holds one body per run
-  either way.
-
-B stays the follow-on if step 0 shows that W3 plus the per-site split cannot
-reach the stated number (section 5).
-
-### 2.2 Why not C
-
-A patch op needs a new `ProjectionOp` kind. The projector refuses an unknown
-kind (`internal/store/project.go:115-116`, `ErrProjectionBatchInvalid`), and
-the replay path calls the same `projectOp`. An older binary replaying a tape
-that holds a patch op does not skip it: it fails. C also needs the live write
-and the replay to read the stored body inside the transaction and reproduce
-one hash, over a batch that writes the run beside the trajectory, receipt and
-event (`lifecycle.go:5578-5589`), and a conditional write guards on the
-content hash of the object it read (`graph_store.go:786`), so the patch
-must restate its base hash. The run object's hash is not even computed one
-way: `lifecycle_control_delivery.go:645` uses `objectgraph.SHA256(runBody)`
-while every other writer uses `objectgraph.ContentHash(kind, body, metadata)`
-(`lifecycle.go:3488`, `:5575`). A witness "the patched content hash equals a
-whole write" is false today for objects written at that site. C is the
-largest change on a red surface for the same bytes B removes.
-
-## 3. Expected bytes saved per run (estimate)
-
-Baseline: 4.7 writes x 18.7 KB = 87.9 KB per run (measured, C74).
-
-A removes W3 on every run that takes it. Let f be the fraction of runs that
-reach `runtime.go:4217`. The condition at `:4202` is `initialTurns != nil`,
-which holds when a texture frame injector, the calibration digest or the
-mailbox injector returns turns, and the write needs `len(injected) > 0`
-(`:4214`). I did not establish f from code. A run that took W3 saves one
-whole write.
-
-| Case | f | Writes per run | Saved per run |
-| --- | --- | --- | --- |
-| low (my assumption) | 0.3 | 4.4 | 5.6 KB, 6% |
-| central (my assumption) | 0.7 | 4.0 | 13.1 KB, 15% |
-| high (every run) | 1.0 | 3.7 | 18.7 KB, 21% |
-
-Saving as a share of the tape's object bytes: choir.run is 22.6% of them, so
-the central case is about 3.4% of object bytes and the ceiling about 4.8%.
-On disk the saving is smaller than the plaintext count, because payloads are
-compressed singly before sealing
-(`docs/design/store-once-2026-11-14.md` item 3 context; not re-read here),
-and a repeated body inside one write compresses less than across writes.
-
-This is a small saving. It is what the code supports without a format
-change. The reasons it is still the right first slice: it deletes a write
-(CLAUDE.md "prefer deleting"), it needs no replay change, and step 0 turns
-"1.7 unexplained writes" into named sites that are each a fix or a reason.
-
-## 4. Failure list
-
-Each entry: the failure, then how the design prevents or detects it.
-
-**F1. A crash between writes leaves a run with no closing state.**
-A removes a write and adds no state, so it adds no crash window. The states a
-crash can leave a run in are still pending, running, passivated and blocked,
-and the markerless boot closes all four to cancelled with
-`interrupted_by_restart` (`runtime.go:3066-3083`). Detected by: after the
-deployed proof, a kill -9 of the runtime mid-run on the test computer (d@e
-only), then the boot closes the run and the obligations count falls to zero
-(`obligations_surface.go:285`).
-
-**F2. A reader that depended on the dropped intermediate state.**
-W3 produces no state: the record's `state` is running before and after. The
-readers of running (admission, dead-loop, crash close) read `state` and
-`updated_at`, both set by W2. Prevented by: step 0 diffs every pair of
-consecutive writes of one run on the test computer and refuses the change
-unless every W3 diff is `updated_at` alone. A diff with any other field
-means W3 carries a real change (a rec mutation I did not read in the
-injectors) and the design stops.
-
-**F3. A deadline or grace that reads `updated_at`.**
-Three readers use it (section 1.3). (a) The cell terminal deadline binds the
-`updated_at` the activation had when the cell was scheduled
-(`continuation_schedule.go:90-92`) and terminalizes only if it is still equal
-(`:169`). Cells are scheduled after the injection at `runtime.go:4202-4221`,
-so the bound value becomes W2's timestamp instead of W3's; a later state
-transition still changes it, so the stale-deadline guard still tells
-activations apart. (b) `runHasNoLiveLoop` uses a two-minute grace from
-`updated_at` and asks `rt.running`. Without W3 the clock starts at W2, before
-`memory.initialize` (`:4185`), which can take time. The loop is registered
-before the activation body (`runtime.go:3941-3945` deletes it on exit), but
-I did not read where it is set, so this stays unverified. Detected by: a test
-that holds `memory.initialize` for longer than `deadRunGrace` and asserts the
-run is not closed as dead. (c) The persistent-management resume deadline
-(`management_controller.go:549-552`) measures from `updated_at` of a parked
-run, not a running one; unaffected.
-
-**F4. Replay of an old tape that holds whole writes (and W3 writes).**
-The tape is never rewritten and old events stay readable. A's replay is
-unchanged: every op is still a whole object written by `projectObject`
-(`project.go:241-275`). Old W3 writes replay as before. Nothing to detect
-beyond the whole-tape replay in section 5.
-
-**F5. Reverting to the old binary on a tape written by A.**
-The tape holds fewer run writes and nothing new. The old binary reads it. It
-writes W3 again. No format changed. This is the reason A beats B and C.
-
-**F6. Content-hash witnesses.**
-A changes no hash computation. The proof compares, for every `choir.run`
-canonical id, the content hash of the last write on the tape before and
-after replay (section 5). Pre-existing finding recorded here: the hash at
-`lifecycle_control_delivery.go:645` is `SHA256(body)` while the other writers
-use `ContentHash(kind, body, metadata)`. A conditional write that expects one
-scheme against the other conflicts and retries, which is why `UpdateRunOG`
-re-reads (`graph_store.go:713-722`). Not fixed here (section 7).
-
-**F7. Run acceptance and the evidence surfaces (red, protected).**
-Acceptance reads terminal run records and `root.Prompt`
-(`run_acceptance.go:109`); the terminal write W5 and W6 are untouched, and
-`prompt`, `result` and `metadata` are unchanged. The change is in a
-mid-run write acceptance does not read. The red ceremony still applies to
-the landing (conjecture delta, protected surfaces, rollback); this document
-is the design half. Detected by: an accepted run on the test computer before
-and after, comparing the acceptance record's fields.
-
-**F8. Concurrent writers.**
-W3 runs inside the activation, while W4 (`UnionRunLabels`), `ReplaceLifecycleActivation`
-paths and cancels write the same object under hash conditions
-(`graph_store.go:786`, `store.go:2501`). Removing a writer cannot add a
-conflict. One consequence: W3 today loses to a concurrent label union and
-retries through `UpdateRunOG` (`runWriteAttempts`, `graph_store.go:728`);
-without it, one retry loop fewer. Detected by: the existing tests that hold
-the read-to-write window (`runUpdateAfterRead`, `runLabelsBeforeUnionWrite`)
-must pass uncached.
-
-**F9. A write I called "touch" does something I did not see.**
-`rt.store.UpdateRun` runs, besides the object write, `noteRunTerminal` for a
-non-active state (`store.go:507-534`; W3 is active, so not) and
-`rejectActiveRunOnTerminalTrajectory` for the non-lifecycle path
-(`store.go:575-583`); on the lifecycle path it reaches `projectLifecycleRun`
-and its agent projection (`lifecycle.go:3454-3466`: `ActiveRunID` changes
-only if it differs). Step 0 also compares the `choir.agent` and trajectory
-writes in the same batch as each W3. If W3 is the only writer that sets
-`agent.ActiveRunID` for some profile, the design stops.
-
-**F10. Retirement.**
-No kind is added, no object is orphaned, nothing needs retiring. Run records
-are not retired by the daily jobs I read (`telemetry_retire.go`,
-`run_memory_retire.go` act on telemetry and run memory; not re-read here).
-Fewer ops simply means fewer tape bytes to retain.
-
-**F11. The saving is a smaller share than stated.**
-If f is low or W3 is a different write than I think, the counter does not
-fall to the stated number. Detected by: the stated number in section 5 and a
-rule in section 7 that a miss opens B, not a second patch.
-
-## 5. Proof
-
-Step 0, before any code, read-only, on the deployed test computer (d@e only):
-walk the tape for 20 runs of the profiles that reach `runtime.go:4202`
-(`internal/ledgerwitness/walk.go` already walks object ops; the diff is a
-script, class yellow). For each run list its `choir.run` writes in order with
-`state`, `updated_at`, and the names of the changed fields (body keys,
-metadata keys). Output the per-site split of the 4.7 writes, the mean
-`prompt`, `result` and `metadata` sizes, and f. This replaces my assumptions
-in section 3. Record it in the calibration ledger before building (CLAUDE.md
-"Precommit, then score"): the claim is "W3 is an `updated_at`-only write on
-at least 60% of runs", probability 0.6, settled by that tape walk.
-
-Repo tests (yellow), written as failing first:
-1. A run through the activation path with injected turns: the stored run's
-   write count for that run equals the count without injection (3 plus
-   labels), and the stored body equals the in-memory record.
-2. `continuation_schedule` test: a deadline scheduled after the injection
-   still terminalizes the activation it was scheduled for and does not
-   terminalize a later one.
-3. The F3(b) test: initialization slower than `deadRunGrace` does not close
-   the run as dead.
-4. The whole uncached suites of `internal/agentcore`, `internal/store` and
-   every importer (`scripts/go-test-runtime-shards`).
-
-Deployed proof, on the test computer after the staging deploy:
-- Run N = 20 runs of one profile with injection and no new labels. The tape
-  walk shows exactly one write fewer per run than the step-0 walk of the same
-  profile (3 writes where it showed 4). The kind counter
-  `object_rewrites["choir.run"]` (served from
-  `internal/store/tape_write_counters.go:255`) shows ops per distinct object
-  falling from the step-0 reading to that reading minus 1.0 for these runs.
-  Stated number for the paper's mixed work: `choir.run` ops per run fall
-  from 4.7 to at most 4.0 on the central assumption (f = 0.7), and to 3.7 if
-  every run takes W3. A reading above 4.4 after a day of ordinary work
-  falsifies A as enough (section 7).
-- Whole-tape replay: replay the test computer's tape into a fresh store
-  (the existing replay command) and compare, for every canonical id of kind
-  `choir.run`, `content_hash` of the replayed row against the live row.
-  Required: all equal, zero missing.
-- An accepted run (acceptance record present) before and after the deploy,
-  same fields.
-- The F1 crash drill on d@e.
-
-The landing carries the `Ring-Expedite` trailer (the ledger entry C74 and
-this document name the defect: tape bytes are mostly unchanged content);
-`internal/agentcore/` is an expedited path in `.github/scripts/node-b-ci-deploy`.
-
-## 6. Rollback
-
-Revert the commit. The old binary writes W3 again; nothing on the tape or in
-the store needs repair (F5). Class: orange for the code change (runtime
-behavior, one write removed); the protected surfaces it touches are the run
-record and, indirectly, run acceptance (red read paths), so it lands with the
-red ceremony: conjecture delta (section 5's ledger claim), protected
-surfaces (this section), evidence class (tape walk and replay equality),
-rollback (this section), heresy delta (none: no switch, no limit added).
-
-## 7. Open questions, each with a conservative default
-
-1. **Is W3 really `updated_at`-only?** Default: do not build until step 0
-   shows it on a majority of runs. If a diff shows another field, stop and
-   treat that field as the state it records.
-2. **If A alone leaves choir.run above 4.4 writes per run, what next?**
-   Default: B for `prompt` only (a content-hash object the run names, reader
-   release first, writer release second, no metadata split). Not combined
-   with A in one change, and not started before the step-0 numbers say the
-   prompt is a large share. The rule that follows from a miss is a
-   structural assessment, not a second patch (CLAUDE.md, three rounds).
-3. **Carried labels at run start (W4 from `run_memory.go:190`).** Folding
-   them into W2 would remove one write, but the source run is chosen inside
-   `memory.initialize`, after W2, and the labels invariant (persisted before
-   an act is stamped) is a provenance rule. Default: leave W4 alone.
-4. **Base64 on every object op (`Object.Body []byte`).** A third of every
-   object op's bytes, for every kind, not only runs. It is a format
-   change to what the tape holds, so it is not in this slice. Default:
-   record it as a separate problem with its own design; do not touch here.
-5. **The inconsistent hash at `lifecycle_control_delivery.go:645`.**
-   Default: record it as a finding with the F6 evidence and fix it
-   in its own change; it is not needed for A.
-6. **`lifecycle_control_bindings` grows inside a mutable run.** It is the
-   run's own growing list, the case the third clause of T2 (a gate for a
-   kind that embeds a growing list) is about. Default: out of scope for this
-   slice; named for the gate's design.
-7. **Where does `owner_email`-style data sit in run metadata?** The key name
-   `owner_email` is assigned at two places in agentcore (found by grep, not
-   read). Default: not in this slice; named for the owner as a secrets
-   hygiene question, no value quoted.
-
-## 8. What I could not verify
-
-- The mean sizes of `prompt`, `result` and `metadata`: no source in the
-  repo; step 0 measures them.
-- The fraction f of runs that take W3 and the per-site split of the 1.7
-  extra writes.
-- Whether any injector mutates `rec` (read only the `shouldAppendInitial...`
-  and metadata greps).
-- Where `rt.running[runID]` is registered relative to the running write
-  (F3 b).
-- The bodies of `persistLifecycleSubmittedRun`, `runtime_persistence.go:39`,
-  `handleExecutionError`, and the W11 sites; the table names them by call
-  line only.
-- The compressed on-disk effect of the saving.
-- Nothing here was compiled or run.
-
-## 9. What the first measurement showed, and the counter needed first
-
-Measured 2026-11-15 on d@e (the test computer) through the read-only API,
-GET only, one request every 21 seconds: `GET /api/runtime/observability` once,
-`GET /api/runs?limit=20` once, `GET /api/runs/{id}` for the 20 newest runs.
-Raw responses are in the session scratchpad, not in the repo.
-
-### 9.1 Read paths that exist, and what they cannot show
-
-| Path | Shows | Cannot show |
-| --- | --- | --- |
-| `GET /api/runtime/observability`, block `telemetry_batching.object_rewrites["choir.run"]` (`internal/store/telemetry_stats.go:303`, `object_rewrite_counters.go:110`) | ops, bytes, mean bytes per op, distinct objects, writes per object, since boot | any split by site, state or field |
-| `GET /api/runs/{id}` (`internal/agentcore/api.go:610-631`) | the run's current record only | any earlier write |
-| `GET /api/runs/{id}/events` | the run's `loop.*` events with times | the object writes |
-| `cmd/ledger-witness` (`cmd/ledger-witness/main.go`) | where named inbox records sit on the host's artifacts | run writes; needs the host's artifact files, which I may not read |
-
-No existing path lists the `choir.run` writes of one run with time, size and
-changed fields. So the per-write walk the design's step 0 names, the split of
-writes by site (W1 to W11), the share of runs that take W3 and whether W3
-changes only `updated_at` **could not be done**. I did not build one.
-
-### 9.2 What was measured
-
-Counter, d@e since its last boot: `choir.run` 10 ops, 151,219 bytes, mean
-15,122 bytes per op, 2 distinct objects, 5.0 writes per object. Two runs
-only: a sample too small to say anything about the paper's 4.7.
-
-Final bodies of the 20 newest runs (JSON length of each field in the current
-record; 6 management runs, 14 texture runs; 9 completed, 11 passivated):
-
-| Field | Mean | Max | Notes |
-| --- | --- | --- | --- |
-| `prompt` | 6,157 | 16,215 | texture runs 2.4 to 16.2 KB, management 873 B |
-| `result` | 149 | 741 | zero on 15 of 20 |
-| `error` | 0 | 0 | |
-| `metadata` | 16,404 | 81,159 | the largest field by far |
-| `labels` | 40 | 115 | |
-| whole record | 23,414 | 86,842 | before base64 (x 4/3 on the tape) |
-
-Inside `metadata`, one key decides it: `texture_available_source_entities`
-is 1.4 KB in a passivated texture run and 40 to 79 KB in a completed one
-(runs 13, 14, 15, 18, 20); a completed texture run's metadata is 42 to 81 KB.
-Without it, metadata is about 1 to 2 KB (`llm_fallbacks` 291 B, `llm_policy_source`
-48 B, ids). That key is a list merged into the run as evidence arrives
-(`internal/textureowner/texture_evidence_sources.go:459-465`,
-`texture_agent_revision.go:675-683`); it only grows during a run. It is the
-growing-list-in-a-mutable-object case the third clause of T2 names, and it
-lives inside `choir.run` itself.
-
-These are end-of-run sizes, not the sizes at each write: a run's earlier
-writes carry less of the list. The paper's 18.7 KB per write is lower than
-this sample's mean 23.4 KB x 4/3, so d@e's texture-heavy runs are heavier
-than the paper's mix (this is the sample, not the paper).
-
-### 9.3 What this does to the decision
-
-It weakens section 3 and section 0 as written:
-
-- The bulk of a run write is `metadata`, mean 70% of the body, nearly all of
-  it one list in texture runs. `prompt` is 26%. Everything else is under 3%.
-- Dropping W3 (A) removes one whole write per run that takes it; the size
-  of that saving is still unknown, and it does not touch the growth of the
-  list inside the other writes.
-- B for `prompt` only (open question 2) would remove at most about 26% of
-  the body per write after the first; B for the one list key would remove
-  more on texture runs and is smaller to build than a split of the whole map
-  (one key, read in `texture_evidence_sources.go:454` and written at the two
-  sites above), but it is still a stored-shape change with the rollback
-  hazard of section 2.1.
-
-I do not re-decide here. I state that the case for A rests on one write the
-tape has not been shown to contain, while the measured weight is in a list
-this document did not name when it chose. The design should be re-taken after
-the counter below has run for a day. Until then no code on this slice.
-
-### 9.4 The counter needed first (yellow, no code written)
-
-The smallest change that answers every question above is one new counter
-beside `object_rewrites`, filled where a run write is built, because the
-interceptor at `internal/store/projection_tape.go:105-120` sees only an
-object and `tallyTapeParts` is deliberately free of JSON decoding
-(`tape_write_counters.go:128-133`). A label cannot be recovered there.
-
-What it counts, per `choir.run` write, under the key `site/state/change`:
-
-- `site`: a fixed string at each writer, from this list of file:line:
-  `create` (`internal/store/graph_store.go:597`, and the create branch of
-  `internal/store/lifecycle.go:3528`), `activate` and `activation_update`
-  (`lifecycle.go:3528`, told apart by the stored state read at `:3333-3351`),
-  `terminalize` (`lifecycle.go:5573-5589`), `reactivate`
-  (`lifecycle.go:5690-5725`), `labels` (`internal/store/store.go:2501`),
-  `control_delivery` (`internal/store/lifecycle_control_delivery.go:646`),
-  `ogupdate` (`internal/store/graph_store.go:786-790`), `engineering_bind`
-  and `engineering_terminal` (`internal/store/engineering_assignments.go:1639`,
-  `:1910`). The `W3` write arrives through `activate`/`activation_update` and
-  is told apart by `change`, not by site.
-- `state`: the run's new `state`.
-- `change`: `updated_at_only` when the new record equals the stored one in
-  every field but `updated_at`, otherwise the sorted names of the changed
-  body keys and `metadata:<key>` for changed metadata keys. Every writer
-  except the label writer and `graph_store.go:786` already holds both the
-  stored record and the new one (`storedRun` at `lifecycle.go:3336`,
-  `existingRec` at `graph_store.go:739`, `run` after decode at
-  `lifecycle.go:5528`), so the comparison costs no extra read.
-- Bytes by field of the written body: `prompt`, `result`, `error`,
-  `metadata` (and the largest metadata key's name and size), `labels`,
-  `other`.
-
-Where it goes: a `runWrites map[string]RunWriteStat` in `tapeWriteMaps`
-(`internal/store/object_rewrite_counters.go:122-150`, next to
-`addRewrite`), a method on the store called by the writers above just
-before their conditional put, and the served field next to
-`ObjectRewrites` (`internal/store/telemetry_stats.go:303`). Keys are a closed
-set (sites x states x change names); the change name is capped to a bounded
-number of keys with an `other` bucket, as `bumpKey` does
-(`tape_write_counters.go:55-60`). It counts the writes the store accepted, so
-it must run after the conditional put succeeds, not before.
-
-This is class yellow (a counter, no behavior). It is the "counter that
-answers the premise" CLAUDE.md asks for before a fix. It answers: writes per
-run by site, the share of runs that take W3, whether W3 is `updated_at`
-only, and the field-by-field bytes at each write, from the paper's own work.
-
-### 9.5 What I could not see
-
-- Any individual write, its time or its diff (section 9.1).
-- W1 to W11 split, f, and whether W3 is `updated_at`-only.
-- Sizes at each write: only the end-of-run sizes above.
-- Whether `GET /api/runs/{id}` returns the stored body unprojected: I read
-  `HandleRunResource` (`api.go:626-631`) which returns `rt.GetRun`; I did not
-  read `GetRun`. The returned keys are the `RunRecord` fields, so I treat it
-  as the record.
-- The paper's mix: d@e is a test computer with a texture-heavy history.
+| R1 `coagentTextureSourceEntities` | the parent run's list, then merges content items named by the coagent request | `internal/textureowner/coagent_route.go:416-418` |
+| R2 `buildAppagentRevisionMetadata` | the run's list, only to compute `selfDevelopmentJoinFromSourceEntities` (the operation, bundle, receipt and event-head ids of entities of kind `operation`, `capsule_bundle`, `receipt`, `event_head`) and merge the join into the revision's metadata; then deletes the key from the persisted revision | `internal/textureowner/texture_revision_metadata.go:75-81`; `texture_evidence_sources.go:797-816` |
+| R3, R4 | the local revision-metadata map, not the run record (`texture_agent_revision.go:681`; `texture_media_sources.go:196`) | |
+| the model's input | **not read.** `buildAgentRevisionRequest` reads `seed_prompt`, `owner_prompt`, `source_path`, ... and never this key (`texture_agent_revision.go:940-1030`); `runContextForRun` reads other keys (`internal/agentcore/run_context.go:54-102`) | |
+| observability, run acceptance, replay | no reader of the key in Go (`grep` of the repo: the constant appears only in `internal/textureowner/texture_task_types.go`, tests, the counter's name list and docs). The run API serves the run's `Metadata` as is (`internal/agentcore/api.go:603`); I found no consumer in the repo's non-Go files. | |
+
+Two readers in Go read the key from a run record: R1 and R2. Both can run
+long after the start (R2 at the run's completion, R1 whenever a coagent of
+that run routes).
+
+### 2.3 Lifetime
+
+Per run. A later run of the same document does not start from it: the
+persisted revision metadata drops the key (`texture_revision_metadata.go:76-81`,
+with the comment "recomputed from the actual revision's source_entities"), and
+the next run rebuilds the list at its own start (`:661-688`). The key's other
+appearances in `durableMetadataKeys` loops (`texture_revision_metadata.go:26`,
+`:38`; `texture_structure.go:55`) copy it between maps that the delete at `:81`
+then strips.
+
+## 3. Can the list be derived from objects that already exist?
+
+I looked for a per-source object whose set is this list, so that the list
+need not be stored at all.
+
+- `choir.source_entity` exists (`internal/store/texture_source_graph.go:15`),
+  content-hash identity (`internal/objectgraph/registry.go:76`), keyed by
+  owner scope, source kind and target (`:60-69`). It is written when a
+  revision commits its sources (`internal/textureowner/tools_texture.go:122-148`).
+  It holds the sources a committed revision used. The list also holds sources
+  no revision has used yet (evidence from commitment records, media found in
+  content), and the kind is listed per owner for display
+  (`ListTextureSourceEntitiesByScope`, `texture_source_graph.go:105`); putting
+  uncited candidates into it changes what that listing means.
+- The commitment records are existing objects and the list's evidence part is
+  a projection of them, "rebuilt each turn" (`texture_evidence_sources.go:746-748`).
+  But it reads only the latest 12 (`:734`, `texture_agent_revision.go:667`),
+  so the set at a later read is not the set at the start; and building an
+  entity can call the content service (`sourceEntityFromCoagentPacketSource(..., rt, ...)`,
+  `:761`), so recomputing is not a pure read.
+- `req.SourceEntities` is a request input stored nowhere.
+
+R1 and R2 read the list after the start. A recomputation at read time would
+give a different list, and the requirement is that their outputs are byte-equal
+to today's. **The list is not derivable.** It needs a stored home, and the
+smallest one is a single object written once.
+
+## 4. The form
+
+**A new kind, `choir.run_source_entities` (name invented), content-hash
+identity, one object per distinct list, written once by the object op that
+exists, and named from the run record by one short metadata key
+(`texture_source_entities_ref`, invented).**
+
+- **The object.** Body: the list exactly as `mergeTextureSourceEntities`
+  returns it, marshalled from the typed `[]types.SourceEntity` (struct order,
+  `internal/types/texture_provenance.go:132`). Identity: the content hash, the
+  shape of `choir.run_memory_entry` (`registry.go:92`), so it is immutable: a
+  changed list is another object, never a rewrite. Registered next to
+  `choir.run_memory_entry` (`registry.go:92`). A registered kind is required:
+  an unregistered write is refused (`internal/objectgraph/registry.go:383-388`,
+  `internal/objectgraph/sql_store.go:422-426`). The kind joins the lists that
+  name `choir.run_memory_entry` today: `internal/kernelservice/kernelservice.go:69`,
+  `internal/store/snapshot_to.go:400`, `internal/store/vocab_migrate_og.go:130`,
+  `internal/vocabmigrate/families.go:182` (whether the last two need it I did
+  not trace; open question 4).
+- **The write.** In `texture_agent_revision.go` at `:675`/`:683`, where the
+  list is final, the handler writes the object with the declared kernel writer
+  (as `UnionRunLabels` does, `internal/store/store.go:2451`; the writer gate
+  admits a kernel kind, `internal/objectgraph/writer.go:326-327`) **before**
+  `StartRunWithMetadata`. The key `textureAvailableSourceEntitiesKey` leaves
+  `durableMetadataKeys` (`texture_task_types.go:66`) so the loop at `:789`
+  stops copying the list, and `runMetadata["texture_source_entities_ref"]` is
+  set instead to the object's canonical id. The run record gains about 140
+  bytes (key plus canonical id; estimate, invented) and loses the list.
+- **The reads.** One function loads a run's list: inline key present (a run
+  from before this change) returns it as today; else the ref present returns
+  the object's list; else none. R1 (`coagent_route.go:418`) and R2
+  (`texture_revision_metadata.go:75`) call it. R2's function receives a
+  context it ignores today (`buildAppagentRevisionMetadata(_ context.Context, ...)`,
+  `:16`) and the handler holds the store. A ref whose object is missing is an
+  error the caller logs, not an empty list (failure 5).
+- **No patch op, no new op kind, no store floor.** The object travels as an
+  ordinary `object_recorded` op (`internal/store/projection_tape.go:105-120`).
+
+### 4.1 What an old binary does
+
+- **A tape with the new kind.** Replay hands each object op to `projectObject`,
+  which decodes the object and writes its header and body with no check of the
+  kind (`internal/store/project.go:241-275`). The object lands as an ordinary
+  row. The write gate and the read gate treat a kind they do not register as
+  admitted: `writer.go:365-368` (`err != nil` continues) and `reader.go:255-257`
+  (`err != nil` returns nil). No old code names the kind, so nothing reads
+  the row. The tape counters key it by the kind parsed from its id
+  (`tape_write_counters.go:101-107`); `ParseCanonicalID` validates the kind
+  string's shape only (`object.go:88`), not the registry.
+- **A run record without the inline key.** `decodeAvailableTextureSourceEntities`
+  on a metadata map lacking the key calls `decodeTextureSourceEntities(nil)`,
+  which returns nil (`texture_media_sources.go:352-354`), and
+  `selfDevelopmentJoinFromSourceEntities(nil)` returns an empty map
+  (`texture_evidence_sources.go:797-798`). No panic, and no error: R1 returns
+  only the content-item entities, and R2 writes a revision without the join
+  keys. That is a silent loss of the join on a run that started on the new
+  binary and ends on the old one (failure 3).
+- **The ref survives an old binary's rewrite.** The ref is a key inside
+  `RunRecord.Metadata`, a `map[string]any`. The old binary decodes and
+  re-marshals the whole map (`graph_store.go:748`, `:783`), so an
+  unknown key is kept. This is the difference from moving a struct field.
+
+## 5. Expected saving, and the proof
+
+### 5.1 Saving (estimate; the reading is 15 minutes old)
+
+- Run-record bytes: the key is 1,200,748 of 1,606,000 bytes. Left: about
+  405 KB, plus the ref on the 93 writes that carried the list (93 x 140 B =
+  about 13 KB, invented size) = about 418 KB. **Factor 3.8 fewer run-record
+  body bytes.** The mean write falls from 9.0 KB to about 2.3 KB, which is the
+  measured size of the lines that carried no list (`create_og`, `update_og`).
+- The new object: one per run that starts with a list, at most 25 in this
+  reading (the 25 `pending/new` writes; an assumption that each is a run
+  that carried the list), each at most the size of its create write, 299 KB / 25
+  = 12.0 KB. At most 300 KB, plus an envelope per object (about 0.5 KB each;
+  invented). No dedupe is assumed: the entities may carry per-run fields
+  that make equal lists differ.
+- **Net: about 1,606 KB falls to about 730 KB (418 + 311), a saving of about
+  880 KB, 55% of run-record bytes, factor 2.2.** With dedupe the saving rises
+  toward 75%. These are body bytes; the tape carries bodies in base64, a
+  third larger, in both columns alike.
+- Not saved: the live store holds one body per run either way, so the DB size
+  is unchanged. The saving is tape bytes.
+
+### 5.2 Proof
+
+Repo tests (written first, class yellow):
+1. Byte-equality of what reads the list. For one evidence sequence, run the
+   handler's start twice, once through the inline path and once through the
+   object path, and require equal: `agentPrompt`, the revision metadata JSON
+   built by `buildAppagentRevisionMetadata`, and the entities
+   `coagentTextureSourceEntities` returns. Model input does not read the key
+   (section 2.2); the test pins that by comparing the prompt bytes anyway.
+2. A run record carrying the inline key (old shape) is read by the same
+   loader, and a record with a ref to a missing object makes the loader
+   return an error that the callers log.
+3. Re-encoding: marshal a typed list, decode into `map[string]any`, marshal
+   again; assert different bytes and equal decoded content. This settles the
+   19-changes hypothesis in the repo; the deployed counter settles it live.
+4. A gate test that no Go file outside the loader and the writer names the
+   key constants, and that every file listing `choir.run_memory_entry` in a
+   kind list also lists the new kind.
+5. The whole uncached suites of `internal/textureowner`, `internal/store`,
+   `internal/objectgraph`, `internal/kernelservice` and `internal/agentcore`
+   (shards: `scripts/go-test-runtime-shards`).
+
+Deployed, on the test computer after the staging deploy:
+- `run_writes.top_metadata_key` no longer shows
+  `texture_available_source_entities` for new runs, and the mean body bytes of
+  `activation/*` lines for new Texture runs falls by a factor of about 3.5 to
+  4 (stated: at least 3). The counter's fixed key list gets the ref's name
+  (`internal/store/run_write_counters.go:86`; yellow) so the reference shows.
+- `object_rewrites["choir.run_source_entities"].ops` is at most the number of
+  Texture runs started in the window and `writes_per_object` is 1.
+- Whole-tape replay of the test computer's tape into a fresh store: every
+  `choir.run` and every `choir.run_source_entities` object has an equal
+  content hash and zero are missing.
+- An accepted run and a coagent route run before and after, comparing the
+  acceptance record and the routed entities.
+
+## 6. Failure list
+
+1. **A reader that still expects the key in the run record.** R1 and R2 are
+   the only Go readers (section 2.2); both move to the loader. Detected by
+   proof test 4 (the key constant is named in two places) and test 1. The run
+   API serves `Metadata` unfiltered (`api.go:603`): a client that read the
+   list there would lose it; I found none in the repo (section 9).
+2. **A run started on the old binary and finished on the new.** Its record
+   carries the list inline; the loader returns it as today. Later writes of
+   that run keep the inline list (the new binary rewrites what it read). No
+   loss, and no saving for that run.
+3. **A run started on the new binary and finished on the old (rollback in
+   the run's life).** The old binary reads no inline key and returns nothing
+   (section 4.1): R2 omits the join keys and R1 loses the evidence entities,
+   silently. Prevented by the rollback rule in section 7 (a rollback restart
+   carries no resume marker, so the markerless boot closes pending, running,
+   passivated and blocked runs: `internal/agentcore/runtime.go:3066-3083`),
+   not by code. Detected after the fact by the missing join keys on a
+   revision whose run record names a ref.
+4. **Replay of old tape.** Old runs carry the list inline; replay writes
+   whole objects as given (`project.go:241-275`), the loader accepts both
+   forms, and no tape op is re-encoded. The tape is never rewritten. Detected
+   by the whole-tape replay in section 5.2.
+5. **A ref whose object is missing** (a restore, a fork, a residue import or
+   a snapshot that drops the new kind). The snapshot copy empties any table
+   not mapped to a kind (`snapshot_to.go:392-398`: "a new table ships empty
+   until it is mapped"); the kind lists in section 4 must carry the new kind.
+   Prevented by proof test 4. If it still happens, the loader returns an
+   error, not an empty list, so R2 does not write a silent empty join, and
+   the caller logs it.
+6. **A crash between writing the object and writing the run.** The object is
+   written before `StartRunWithMetadata`, so the crash leaves an unnamed
+   object: harmless, immutable, found by content hash by the next run with
+   the same list. The reverse order (a run naming an object not yet written)
+   cannot occur. A crash after the run is written is the ordinary restart
+   rule: the markerless boot closes the run (`runtime.go:3066-3083`).
+7. **Retirement of the run and of the object together.** I found no retire
+   job for `choir.run` records (the daily jobs act on telemetry and run
+   memory, `internal/store/telemetry_retire.go`, `run_memory_retire.go`; not
+   re-read here). The new kind gets no retire rule: it stays while any run
+   names it, and a later rule for run records must retire it with them.
+   Named so the T3 retirement work does not orphan or drop one without the
+   other.
+8. **The growing-list gate of T2.** The gate says a new kind that embeds a
+   growing list fails. This object embeds a list, but never grows it: it is
+   immutable and content-addressed; a longer list is another object. Written
+   once per run start (at most 25 times in the reading; 19 is the number of
+   re-encodes, not of list changes), not once per write of the run (93). Whole
+   lists are rewritten across runs of one document as it accretes evidence,
+   which is the same bytes the create write carries today. To make it
+   append-only (one object per entity plus an id list) would add a mechanism
+   and N writes per start; the default is not to (open question 3).
+9. **Concurrent writers.** The object is write-once by identity: two runs
+   starting with equal lists write one object, and the upsert by canonical id
+   makes the second a no-op rewrite of the same bytes. The run record's
+   writers are unchanged (they carry a ref, not a list).
+10. **Model input must be byte-equal.** The model does not read the key
+    (section 2.2). R1 and R2 outputs are compared byte for byte in proof
+    test 1. The one change in encoding is that the object is marshalled from
+    the typed list while today the list in the run record is re-encoded by the
+    store on the first rewrite; the loader decodes both to the same typed
+    list.
+11. **A list that changes during a run.** I found no writer (section 2.1).
+    If the deployed counter shows real changes, the writer at that site makes
+    a new object and updates the ref; the form stands.
+12. **A new client of run metadata that expects the key.** The API serves it
+    as is. A client written later against the inline list sees only the ref.
+    Named, not prevented.
+
+## 7. Rollback
+
+Revert the commit. New runs written under the change keep their ref; the old
+binary does not resolve it, so a run in flight across the rollback loses its
+list (failure 3). The rollback procedure is therefore a restart without a
+resume marker, which closes open runs by the existing crash rule
+(`runtime.go:3066-3083`) instead of letting an old binary continue them. The
+objects of the new kind stay as unread rows. Rolling forward again resolves
+every ref, because the objects are on the tape. Mutation class: red (the run
+record and run-acceptance read paths are protected surfaces); the landing
+needs conjecture delta, protected surfaces, evidence class (counter and
+replay), rollback (this section) and heresy delta (none: no switch, no limit,
+no cache), and two seats.
+
+## 8. The other lines in the reading, stated and not designed
+
+With the list out of the run record, a write costs what the lines that never
+carried it cost: about 2.3 KB (the `create_og` and `update_og` lines).
+
+- **`activation/running/updated_at_only`, 23 ops, 296 KB (12.9 KB a write).**
+  At 2.3 KB a write, about 53 KB: a saving of about 240 KB. The write still
+  exists; it costs about 5.6 times less.
+- **`labels/running/labels`, 41 ops, 339 KB (8.3 KB a write).** At the same
+  floor, about 94 KB: a saving of at most 245 KB. The reading does not say
+  how many of the 93 list-carrying writes are label writes, so the real
+  saving is between 0 and 245 KB. A label write whose body carried no list
+  stays at 8.3 KB; what is left in it is the prompt (up to 16 KB on Texture
+  runs, `GET /api/runs/{id}` of d@e on 2026-11-15) and the rest of
+  `metadata`.
+
+These are bytes per write, not a claim that the writes should exist.
+
+## 9. Open questions (conservative default each) and what I could not verify
+
+Open questions:
+1. Does the list ever really change during a run? Default: assume not, per
+   section 2.1 and proof test 3; if the counter shows changes after the
+   change, write a new object per change.
+2. If the object write fails, does the run start fail? Default: yes, the
+   start returns the error like any `StartRunWithMetadata` failure; no inline
+   fallback (a fallback is a switch). Whether the caller retries a failed
+   start I did not trace.
+3. Per-entity objects (append-only) instead of per-list snapshots? Default:
+   per-list snapshots; revisit if the deployed reading shows lists that
+   overlap heavily and do not dedupe.
+4. Which of `vocab_migrate_og.go:130` and `vocabmigrate/families.go:182`
+   need the new kind? Default: add it to all four lists in section 4 and let
+   the gate test decide which are required.
+5. The declared writer for the new kind: kernel, as for the run kinds.
+   Default: kernel; the registry's `Writer` assignment for run kinds I did
+   not trace.
+6. Name and key spelling (`choir.run_source_entities`,
+   `texture_source_entities_ref`): invented; default as written.
+7. T1 (carry by reference) is parked; this slice does not depend on it.
+
+Could not verify:
+- The two bodies around the first re-encode, so the 19 changes as
+  re-encoding is a hypothesis.
+- How many of the 93 list-carrying writes are label writes (the counter's
+  top key is per write, not per line).
+- That the 25 `pending/new` writes are 25 runs each carrying the list, so
+  the object count and size are upper bounds under that assumption.
+- A consumer of the run API's `Metadata` outside Go: I searched the repo's
+  files, not deployed clients.
+- Whether the run API's current record equals the stored body (earlier note).
+- Every enumerated kind list that must name the new kind (section 4 lists
+  the four I found).
+- Everything was read, nothing was compiled or run; the reading is 15
+  minutes after a boot, one computer.
