@@ -41,6 +41,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -183,7 +185,35 @@ type Stats struct {
 	StreamTime  time.Duration
 	WitnessTime time.Duration
 	ReadTxTime  time.Duration
+	// Scaffold for the static-copy capture (docs/design/capture-static-copy-2026-11-15.md):
+	// PinTime is the interval with an open reader on the state store, CopyTime
+	// the page loop alone, UploadTime the upload from the copy, ScratchBytes the
+	// copy's size, PinWALStart and PinWALEnd the WAL file's size at both ends of
+	// the pin.
+	PinTime, CopyTime, UploadTime time.Duration
+	ScratchBytes                  int64
+	PinWALStart, PinWALEnd        int64
+	PinEvents                     uint64
 }
+
+// ErrCopyHeadMismatch means the copy's page geometry or head row is not the
+// read transaction's (scaffold: not returned yet).
+var ErrCopyHeadMismatch = errors.New("snapshot: the copy is not the transaction's head")
+
+// ErrCopyDigest means the bytes read for the upload are not the bytes written
+// to the copy (scaffold: not returned yet).
+var ErrCopyDigest = errors.New("snapshot: the copy changed between the write and the upload")
+
+// scratchWriter is what the copy writes through; a test injects ENOSPC and EIO.
+type scratchWriter interface {
+	io.Writer
+	Sync() error
+	Close() error
+}
+
+// scratchSyncBytes is how much of the copy is written between syncs, cache
+// drops and free-space checks.
+var scratchSyncBytes int64 = sourceDropBytes
 
 // Ref names a recorded snapshot.
 type Ref struct {
@@ -264,6 +294,23 @@ type Config struct {
 	// pageHook, when set, runs in the reader before each page is taken (tests
 	// commit writes in the middle of the stream).
 	pageHook func(pgno int64)
+
+	// Scaffold fields of the static-copy capture. WitnessDB is the witness on
+	// the copy's own DB (it replaces Witness in the code commit).
+	WitnessDB func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error)
+	// ScratchDir is the directory the copy lives in.
+	ScratchDir string
+	// ReadReleased runs once, from the transaction's release, on every path.
+	ReadReleased func(ctx context.Context)
+	// ScratchRemoved runs once, after the scratch is removed, on every path.
+	ScratchRemoved func()
+	// WALBytes reports the state store's WAL file size.
+	WALBytes func() int64
+
+	afterCopy    func(path string)
+	afterWitness func(path string)
+	newHash      func() hash.Hash
+	openScratch  func(path string) (scratchWriter, error)
 }
 
 func (c Config) validate() error {

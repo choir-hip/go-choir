@@ -135,6 +135,10 @@ const (
 	// snapshotLegacyTempDirName held the VACUUM INTO copy before the page
 	// stream; an attempt removes what a crashed copy left there.
 	snapshotLegacyTempDirName = "snapshot-tmp"
+	// snapshotScratchDirName is the capture's scratch directory (scaffold of
+	// docs/design/capture-static-copy-2026-11-15.md; the code commit renames the
+	// legacy constant to it).
+	snapshotScratchDirName = "snapshot-tmp"
 )
 
 type snapshotOutcome string
@@ -210,6 +214,18 @@ type snapshotDeps struct {
 	ReplayRate func() (float64, bool)
 	// Take takes the snapshot.
 	Take func(ctx context.Context, maxDuration time.Duration) (snapshot.Ref, error)
+
+	// Scaffold of the static-copy capture (inert until the code commit).
+	// StoreBytes is page_count x page_size of the state store. HoldCopy is the
+	// store-copy token (nil: none). Leftovers removes the scratch directory and a
+	// never-trusted compact staging file. StagedCopyBytes is the size of
+	// state.db.compact (0: none). afterGates runs between the read-only gates and
+	// the token (a test seam).
+	StoreBytes      func(ctx context.Context) (int64, error)
+	HoldCopy        func() (release func(), holder string, ok bool)
+	Leftovers       func() error
+	StagedCopyBytes func() int64
+	afterGates      func()
 }
 
 type snapshotProducer struct {
@@ -697,6 +713,15 @@ type snapshotProducerStatus struct {
 	// found with no record: replay-time captures then wait for the ceiling or
 	// the interval to take one and measure it.
 	CaptureKnown bool `json:"capture_known"`
+
+	// The last capture's pin and phases (scaffold: zero until the code commit).
+	LastPinSeconds        float64 `json:"last_pin_seconds"`
+	LastCopySeconds       float64 `json:"last_copy_seconds"`
+	LastWitnessSeconds    float64 `json:"last_witness_seconds"`
+	LastUploadSeconds     float64 `json:"last_upload_seconds"`
+	LastScratchBytes      int64   `json:"last_scratch_bytes"`
+	LastPinWALGrowthBytes int64   `json:"last_pin_wal_growth_bytes"`
+	LastPinEvents         uint64  `json:"last_pin_events"`
 }
 
 // status is the producer's state for the observability route.
