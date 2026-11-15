@@ -115,3 +115,164 @@ Repairs, not designed: restore as an accepted act with a status, refusing up
 front when tail events over the measured replay rate exceed its bound; a
 snapshot trigger in time to replay, not events alone; the snapshot refusal
 surfaced where someone reads it.
+
+## The canonical witness (lane/restore-witness, 2026-11-14; red change)
+
+Repair of the 23:02Z refusal (`rematerialize: reconstructed
+computer_event_index does not match checkpoint`, http 500) and of review
+round 1 of `lane/event-index-diff`. Evidence so far is code reading and
+store-level tests; nothing is proven on d@e or staging until the landing loop
+has run.
+
+### What changed
+
+- Witness version 4. A checkpoint records the event-index part of the witness
+  in a canonical form: a null in `payload_pin_receipt_digests_json` is read as
+  `[]`, and finalized `projection_batch_recorded` rows at or below the trim
+  boundary of the checkpoint head are left out. The witness carries
+  `event_index_trim_boundary`; the derivability digest, and so the checkpoint
+  digest (which is over the whole request), commits to the version, the form
+  name `canonical-v1` and the boundary. A version 3 witness is unchanged byte
+  for byte and is compared strictly; a version 3 witness with a boundary, or a
+  version relabelled either way, does not validate.
+- The bind (`liveCheckpointWitness`), the restore gate
+  (`reconstructedWitness`) and the replay-completeness probe (both sides) call
+  one function, `canonicalSnapshotDigests`, over one extractor,
+  `canonicalWitnessExtractor`, with the lane's `EventIndexWitnessFilter`,
+  `ProjectionBatchTrimBoundary` (the trim's own function) and extractor
+  options. The restore refuses a boundary that is not the trim boundary of
+  the checkpoint's head sequence.
+- Snapshot records stay strict over raw pages (`LiveStoreWitnessTx`,
+  `VerifySnapshotFile`): a record carries no witness version and old
+  snapshots must still verify. A snapshot root is not a checkpoint witness.
+- A witness mismatch and an unjudgeable witness version answer 409 with the
+  reason in the body (`ErrWitnessMismatch`, `ErrWitnessVersionRefused` in
+  `rematerializeRefusalStatus`). The proxy copies the upstream status and
+  body (read, `computer_lifecycle.go`); the CLI path was not run.
+- A store whose index holds more than one `computer_id` is refused by the
+  canonical extraction: the trim is per computer and the filter is not.
+
+### Soundness of leaving those rows out
+
+Nothing reads them: replay and restore read the host tape, and head and
+continuity come from `computer_event_projection_heads` (`event_index_trim.go`).
+The trim deletes exactly these rows on every live store, as a pure function of
+the head sequence, so a store may legitimately have them or not at a given
+moment; after a restore the staged store's own catch-up deletes any that
+remain. Excluding them cannot hide a lost event: the event is on the tape.
+The predicate keeps every row above the boundary and every other kind and
+status (tests: an extra row above the boundary, a finalized batch row at
+41,000, a prepared batch row at the boundary, an old desk row, a changed
+column, a non-null pin list, a missing row). What it cannot see is a live
+store that lost batch rows below the boundary which the tape says exist;
+those are bookkeeping rows the trim deletes anyway.
+
+### Red ceremony
+
+- Conjecture delta: before, a checkpoint's witness was a function of the
+  store's history (null versus `[]`, when a catch-up ran); after, it is a
+  function of the tape up to the head. If wrong, a restore refuses a
+  checkpoint it should accept (fails closed) or, if the exclusion is too
+  wide, accepts a store that differs only in disposable rows.
+- Protected surfaces: checkpoint and restore, the checkpoint digest and
+  witness, the restore gate, the replay-completeness probe, the refusal status
+  of restore.
+- Evidence class: code reading, store-level tests that bind and restore, one
+  full restore of a checkpoint of a store holding null pin lists, negative
+  tests. Not yet staging or d@e.
+- Rollback: a plain revert of the code, with the truth per order of
+  rollback below. The short form: a version 4 checkpoint is never restored by
+  code that does not know it; where the refusal happens, and what the
+  operator reads, depends on which side rolled back.
+- Heresy delta: a witness that names its own form is a kind of switch. It is
+  a version of a commitment, fixed by what the checkpoint says, not a setting
+  and not off by default. The strict form stays only to read old checkpoints
+  and can be deleted when none remain.
+
+### Review round 1 of lane/event-index-diff, answered
+
+- Blocking 1 and 2: the bind and the restore gate use the canonical form; a
+  pre-change checkpoint is version 3 and is compared strictly, failing closed.
+  Snapshot verification stays strict.
+- Cold recovery (`autoputer/projection_base.go`) installs a snapshot, verified
+  strictly, then replays the tail with no witness gate; with the old
+  `Prepare` that wrote null for no-payload events, so it is the likely
+  producer of null rows. Read from code.
+- Diagnostics: the live row lists are read in the probe's snapshot, which
+  cannot be after the digests are compared, because the replay does not exist
+  yet. They are bounded instead (`ObjectGraphDiagnosticRowLimit` 100,000
+  rows, `EventIndexDiagnosticRowLimit` 30,000). The two-sided peak, when the
+  result is not equivalent, is the live list, the replay list and the
+  comparison maps: about 165 MB for the object graph and 105 MB for the
+  index, about 270 MB together, on a guest whose ceiling is 1,024 MiB. A store
+  past a bound skips that diagnostic and says so in `diagnostics_skipped`; the
+  verdict does not depend on it. The live lists could be read lazily only if
+  the snapshot stayed open across the replay (minutes), which pins the
+  write-ahead log of a computer that keeps appending on a volume that may be
+  short; I did not do that. The trim keeps the index small, so a trimmed store
+  is far below the index bound; d@e's 122,000 objects are over the object
+  bound, so its object graph rows are not diffed (a digest verdict is).
+- The replay side uses the replay head's boundary and the report carries both
+  (`trim_boundary`, `replay_trim_boundary`). The one-computer invariant is
+  checked.
+- The probe at a non-zero boundary is tested end to end on a 20,010-event
+  tape (`TestProbeAtANonzeroTrimBoundary`): a null pin list on the live side
+  only is equivalent, and the bound witness has the probed head's boundary and
+  content root. A trim backlog row on the live side only, and a real
+  difference above the boundary, are tested at the function the probe, bind
+  and restore share, at head 50,000; they are not injected into the
+  20,000-event tape (every sequence there is a tape event). Named residual,
+  with the test to write if the probe's composition changes.
+
+### Rollback by order (review round 2)
+
+The version 4 witness JSON carries `witness_version: 4` and
+`event_index_trim_boundary`. "Old" is the code before this change. Read from
+the structs and decoders, not run against an old binary.
+
+- **Full revert (guest and host old).** Checkpoints bound as version 4 stay in
+  the host store. The old host serves one decoded into its struct, which keeps
+  `witness_version: 4` and drops `event_index_trim_boundary` (unknown field).
+  The old guest's `RestoreFromRequest` validates the witness first and refuses
+  by name: `/lifecycle/restore` answers 400 `witness version 4 is not
+  judgeable`; `/lifecycle/rematerialize-from-tape` answers 500 with the same
+  text (the old status map does not know the refusal). Version 3 checkpoints
+  restore as before.
+- **Guest new, host old (a guest updated before the host, or the host rolled
+  back first).** A new guest binds version 4 and publishes it. The old host's
+  `CheckpointFromRequest` refuses it by name, so nothing is stored: the bind
+  and the cadence checkpoint fail with `witness version 4 is not judgeable`,
+  and no checkpoint is made on that guest until the host is new. Fail closed;
+  a lost checkpoint, not a wrong one.
+- **Host new, guest old.** The old guest binds version 3, which the new host
+  accepts. It cannot restore a version 4 checkpoint a new guest published
+  earlier: refused by name, as in the full revert.
+- **Host-only automatic rollback mid-deploy, after new guests published
+  version 4 to the new host.** The stored version 4 checkpoints are now served
+  by the old host through its struct, which drops the boundary. A new guest
+  restoring one recomputes the derivability digest with boundary 0 and gets
+  `witness derivability digest does not match`: 400 on `/lifecycle/restore`
+  and a 500 on rematerialize (new code does not map that validation text to a
+  status). This is not "version 4 is not judgeable"; the operator is told the
+  checkpoint is corrupt, and it is not: it is unrestorable until the host is
+  new again. The old host also certifies a route projection for such a
+  checkpoint, because it never validated the witness there; the new host
+  refuses it (`RouteProjectionFromRequest` rebuilds the checkpoint). That
+  certification is a route, not a restore, and the checkpoint still cannot be
+  restored. Version 4 checkpoints published in a skew window are therefore
+  refused (fail closed) until both sides are on the new code.
+- **What this change does about it.** The host now serves a stored checkpoint
+  verbatim (`StoredCheckpointResponse` returns the stored bytes, never a
+  decoded and re-encoded copy), so a field a release does not know survives
+  transit, and the next field added will not be lost this way. It cannot
+  change the old host. The route projection rebuilds the checkpoint, so an
+  unjudgeable version or a digest that does not follow from the request is
+  refused as a route.
+- **The `Prepare` nuance.** `Prepare` now writes `[]` where an old replay
+  wrote `null`. For an ordinary store that fixes version 3 restores (live
+  rows are `[]`; the old replay's `null` was the mismatch). For a store
+  written entirely by an old replay (null in every no-payload row), a version
+  3 checkpoint that restored on the old binary now refuses (fail closed); a
+  new version 4 bind canonicalizes null and recovers. So "version 3
+  checkpoints restore on either code" holds for stores whose live rows are
+  `[]`, not for that class.

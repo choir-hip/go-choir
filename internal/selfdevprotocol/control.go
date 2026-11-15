@@ -280,6 +280,17 @@ func CheckpointFromRequest(request CheckpointRequest) (Checkpoint, []byte, error
 }
 
 func RouteProjectionFromRequest(request RouteProjectionRequest, now time.Time) (RouteProjectionCertificate, []byte, error) {
+	// A route is certified only for a checkpoint this release can judge: the
+	// request's checkpoint is rebuilt, which validates its witness (an
+	// unjudgeable version is refused by name) and recomputes the digest the
+	// receipt and the stored row were joined on.
+	rebuilt, _, rebuildErr := CheckpointFromRequest(request.Checkpoint.Checkpoint.Request)
+	if rebuildErr != nil {
+		return RouteProjectionCertificate{}, nil, fmt.Errorf("self-development route projection: checkpoint refused: %w", rebuildErr)
+	}
+	if rebuilt.Digest != request.Checkpoint.Checkpoint.Digest {
+		return RouteProjectionCertificate{}, nil, fmt.Errorf("self-development route projection: checkpoint digest does not match its request")
+	}
 	if request.Checkpoint.Checkpoint.Request.OwnerRecovery {
 		return RouteProjectionCertificate{}, nil, fmt.Errorf("self-development route projection: owner-recovery checkpoints cannot authorize route projection")
 	}

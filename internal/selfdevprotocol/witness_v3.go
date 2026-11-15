@@ -1,6 +1,7 @@
 package selfdevprotocol
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -22,12 +23,33 @@ import (
 // unjudgeable: every reader refuses them with a clear reason.
 
 const (
-	// WitnessVersionSQLite is the only witness version this release reads.
+	// WitnessVersionSQLite is the strict form: every row of
+	// computer_event_index, as the column holds it. It is the form of every
+	// checkpoint bound before the canonical form existed; it is still
+	// compared strictly, byte for byte.
 	WitnessVersionSQLite = 3
+	// WitnessVersionCanonical is the strict form with the event index read
+	// canonically: null in the pin list digested as "[]", and finalized
+	// projection_batch_recorded rows at or below EventIndexTrimBoundary left
+	// out. A release before this one refuses it (RefuseWitnessVersion), so a
+	// checkpoint in this form is never misread.
+	WitnessVersionCanonical = 4
+	// EventIndexFormCanonical names the canonical reading inside the
+	// derivability digest, so the digest commits to the form and not only to
+	// the version number.
+	EventIndexFormCanonical = "canonical-v1"
 )
 
-// VerdictReasonWitnessVersion: the checkpoint's witness is not version 3, so
-// the host cannot judge it.
+// ErrWitnessVersionRefused marks a witness whose version this release does not
+// judge. A refusal, not an internal error.
+var ErrWitnessVersionRefused = errors.New("witness version refused")
+
+// ErrWitnessMismatch marks a reconstructed store whose witness differs from the
+// checkpoint's. A refusal, not an internal error.
+var ErrWitnessMismatch = errors.New("witness mismatch")
+
+// VerdictReasonWitnessVersion: the checkpoint's witness is not version 3 or 4,
+// so the host cannot judge it.
 const VerdictReasonWitnessVersion = "witness_version"
 
 func (w VMLocalContentWitness) version() int { return w.WitnessVersion }
@@ -35,10 +57,10 @@ func (w VMLocalContentWitness) version() int { return w.WitnessVersion }
 // RefuseWitnessVersion explains why a witness of another version cannot be
 // judged, or returns nil for version 3.
 func RefuseWitnessVersion(version int) error {
-	if version == WitnessVersionSQLite {
+	if version == WitnessVersionSQLite || version == WitnessVersionCanonical {
 		return nil
 	}
-	return fmt.Errorf("self-development checkpoint: VM-local content witness version %d is not judgeable: this release reads witness version %d (SQLite store); versions 1 and 2 are witnesses of the retired Dolt store", version, WitnessVersionSQLite)
+	return fmt.Errorf("%w: self-development checkpoint: VM-local content witness version %d is not judgeable: this release reads witness versions %d (strict) and %d (canonical event index) of the SQLite store; versions 1 and 2 are witnesses of the retired Dolt store", ErrWitnessVersionRefused, version, WitnessVersionSQLite, WitnessVersionCanonical)
 }
 
 // NewWitnessV3 seals a v3 witness from the store's schema hash and per-table
@@ -70,7 +92,37 @@ func WitnessFromDigests(d computerversion.StateDigests) (VMLocalContentWitness, 
 	return NewWitnessV3(d.Database, d.SchemaHash, d.Tables)
 }
 
+// WitnessFromDigestsCanonical seals a v4 witness from an extraction whose
+// event index was read in the canonical form with trimBoundary as its trim
+// boundary. The version, the form and the boundary are inside the
+// derivability digest, and so inside the checkpoint digest.
+func WitnessFromDigestsCanonical(d computerversion.StateDigests, trimBoundary uint64) (VMLocalContentWitness, error) {
+	w := VMLocalContentWitness{
+		WitnessVersion:         WitnessVersionCanonical,
+		Database:               strings.TrimSpace(d.Database),
+		SchemaHash:             d.SchemaHash,
+		Tables:                 map[string]string{},
+		EventIndexTrimBoundary: trimBoundary,
+	}
+	for table, digest := range d.Tables {
+		w.Tables[table] = digest
+	}
+	w.ContentRoot = computerversion.WitnessV3ContentRoot(w.SchemaHash, w.Tables)
+	digest, err := witnessDerivabilityDigest(w)
+	if err != nil {
+		return VMLocalContentWitness{}, err
+	}
+	w.DerivabilityDigest = digest
+	if err := w.Validate(); err != nil {
+		return VMLocalContentWitness{}, err
+	}
+	return w, nil
+}
+
 func (w VMLocalContentWitness) validateV3() error {
+	if w.WitnessVersion != WitnessVersionCanonical && w.EventIndexTrimBoundary != 0 {
+		return fmt.Errorf("self-development checkpoint: a version %d witness carries no event index trim boundary", w.WitnessVersion)
+	}
 	database := strings.TrimSpace(w.Database)
 	if database == "" {
 		return fmt.Errorf("self-development checkpoint: VM-local content witness is required")
@@ -103,6 +155,21 @@ func (w VMLocalContentWitness) validateV3() error {
 }
 
 func witnessDerivabilityDigest(w VMLocalContentWitness) (string, error) {
+	if w.WitnessVersion == WitnessVersionCanonical {
+		proof, err := computerevent.CanonicalJSON(struct {
+			Version                int               `json:"witness_version"`
+			Database               string            `json:"database"`
+			ContentRoot            string            `json:"content_root"`
+			SchemaHash             string            `json:"schema_hash"`
+			Tables                 map[string]string `json:"tables"`
+			EventIndexForm         string            `json:"event_index_form"`
+			EventIndexTrimBoundary uint64            `json:"event_index_trim_boundary"`
+		}{w.WitnessVersion, w.Database, w.ContentRoot, w.SchemaHash, w.Tables, EventIndexFormCanonical, w.EventIndexTrimBoundary})
+		if err != nil {
+			return "", err
+		}
+		return computerevent.DigestBytes(proof), nil
+	}
 	proof, err := computerevent.CanonicalJSON(struct {
 		Version     int               `json:"witness_version"`
 		Database    string            `json:"database"`
