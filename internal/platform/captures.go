@@ -187,6 +187,19 @@ func (h *ObjectGraphHandler) ConfigureCaptureBodies(root string) {
 	h.captureBodies = newCaptureBodyStore(root, mu)
 }
 
+// ConfigureHostCaptureBodies is ConfigureCaptureBodies for the host process
+// (corpusd), where the artifact collector runs: it refuses, rather than
+// silently take no lock, when the handler's store has no CAS reuse lock to
+// share with the collector.
+func (h *ObjectGraphHandler) ConfigureHostCaptureBodies(root string) error {
+	og, ok := h.store.(*ObjectGraphStore)
+	if !ok || og == nil || og.store == nil {
+		return fmt.Errorf("capture bodies: the handler's store has no CAS reuse lock to share with the artifact collector")
+	}
+	h.captureBodies = newCaptureBodyStore(root, &og.store.casReuseMu)
+	return nil
+}
+
 // CaptureBodyStore returns the configured capture body store, or nil.
 func (h *ObjectGraphHandler) CaptureBodyStore() *CaptureBodyStore {
 	if h == nil {

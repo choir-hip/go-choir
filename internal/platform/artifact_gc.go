@@ -548,7 +548,15 @@ func addCaptureBlobIDs(v any, live map[string]struct{}) {
 			}
 		}
 	case map[string]any:
-		for _, e := range t {
+		for k, e := range t {
+			// doc_hash is "sha256:<hex>" (sourcefetch.DocHash) but names the
+			// block document's identity, not a body file. Excluding it by key
+			// at any depth keeps the walk a superset of the body fields (an
+			// unknown future blob field still counts live, the safe error)
+			// while the report's named_by_rows counts body ids only.
+			if k == "doc_hash" {
+				continue
+			}
 			addCaptureBlobIDs(e, live)
 		}
 	case []any:

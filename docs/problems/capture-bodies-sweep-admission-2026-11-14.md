@@ -97,7 +97,10 @@ Not before the owner says so on the record (D5: no delete without the owner).
    `mode` `dry-run`; no warning containing `capture-bodies`.
 3. The comparison of live against the store: `scanned` = `live` +
    `unproven` + `in_grace` + `eligible`, and `live` + `named_missing_on_disk`
-   = `named_by_rows` (the distinct body ids the rows name). Cross-check once
+   = `named_by_rows` (the distinct body ids the rows name; `doc_hash`, a
+   `sha256:<hex>` that names no file, is excluded from the walk by key at any
+   depth, so it does not inflate this; with the real writer
+   `named_missing_on_disk` is 0, a test pins it). Cross-check once
    by hand: the distinct ids `scripts/cutover/keepset-snapshot.sh` counts
    equal `named_by_rows`, and `find $ART/capture-bodies -type f -name
    '[0-9a-f]*' | wc -l` equals `scanned`. `named_missing_on_disk` should be
@@ -123,3 +126,17 @@ Not before the owner says so on the record (D5: no delete without the owner).
    reverting stops further deletion; deleted orphan bodies come back only from
    the nightly restic set of `platform-artifacts/capture-bodies`. The
    deletion log `artifact-gc-log/<day>.jsonl` names every path.
+
+## Before activation: two traps in the admission itself
+
+- `PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES=all` parses to a nil list, and nil
+  means every namespace participates (`artifact_gc.go`, the `participates`
+  test in `RunArtifactGC`). Setting `all` would activate `capture-bodies`
+  and `og` together. It is not changed in this landing; never set `all` on a
+  host before the admission above is done, and read the parsed list, not the
+  intent.
+- The eligible count assumes a capture's row is inserted within the grace
+  window of its `PutBody` (bodies are written before the row). A row that
+  lands later than the grace after its bodies (a stalled writer, a restore)
+  would leave live bodies counted eligible. Check `eligible_sample` ages and
+  the writer's lag before admitting.
