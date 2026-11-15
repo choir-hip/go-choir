@@ -16,6 +16,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/hostlink"
+	"github.com/yusefmosiah/go-choir/internal/recoveryplan"
 )
 
 // Snapshot roots make the chunks of a guest snapshot (internal/snapshot)
@@ -47,6 +48,27 @@ const (
 	// (2026-10-30). The guest's restore tries the newest first.
 	largeSnapshotChunks    = 2048
 	largeSnapshotRetention = 2
+	// The restore window (lane/snapshot-by-replay-time, review round 1). The
+	// newest k roots used to span three or more snapshot intervals of 540,000
+	// events; with snapshots due by replay time they can span a few hours, and
+	// a checkpoint inside the recovery bound (recoveryplan.MaxRecoveryTailEvents,
+	// 720,000 events, the oldest checkpoint a restore accepts) finds no base.
+	// So the named roots beyond the newest k keep a chain that covers the
+	// bound: the newest root at or past the bound behind the newest root (the
+	// anchor: it is at or below every restorable checkpoint), and between the
+	// k and the anchor roots at least snapshotRootChainGap events apart (so the
+	// replay from the nearest base below a checkpoint stays inside the bound).
+	// Nothing is kept past the anchor, and nothing beyond the k when the k
+	// already reach the bound (the old 540,000-event cadence). At most
+	// snapshotRootAnchorsMax roots (the bound over the gap, rounded up, plus
+	// one) are kept beyond the k; each costs its unique chunks on the host
+	// (about 4.8 GB on the paper), and its row is the collector's liveness.
+	snapshotRootWindow   = int64(recoveryplan.MaxRecoveryTailEvents)
+	snapshotRootChainGap = snapshotRootWindow / 2
+	// snapshotRootAnchorsMax is what the gap rule yields at most (heads strictly
+	// increasing); the window tests assert it, the prune does not truncate to it
+	// (truncating could drop the anchor).
+	snapshotRootAnchorsMax = 3
 	// maxSnapshotRootChunks bounds one declaration (65536 x 4 MiB = 256 GiB).
 	maxSnapshotRootChunks = 65536
 	maxSnapshotRootBody   = 8 << 20
@@ -192,7 +214,8 @@ type snapshotRootRow struct {
 //     tape names it, or its chunks go to the collector while the tape names a
 //     root the host does not keep.
 //
-// Every other row goes. Unnamed rows are bounded by 2 + the young cap; named
+// The named roots beyond the newest retention also keep the restore-window
+// chain (snapshotRootChain). Every other row goes. Unnamed rows are bounded by 2 + the young cap; named
 // rows by retention (plus the just-registered root or a root named since the
 // last registration, until the next prune). Registration used to prune by
 // head alone, so two registrations whose appends failed evicted the newest
@@ -240,6 +263,15 @@ func pruneSnapshotRoots(ctx context.Context, tx *sql.Tx, computerID, justRoot st
 			}
 		}
 	}
+	// The restore window: roots beyond the newest k that keep a base for every
+	// checkpoint inside the recovery bound.
+	newestHead := namedHead
+	if h, ok := heads[justRoot]; ok && h > newestHead {
+		newestHead = h
+	}
+	for _, root := range snapshotRootChain(named, retention, heads, newestHead) {
+		keep[root] = true
+	}
 	// Unnamed roots in head order: the newest above the named heads, then the
 	// young ones. The just-registered root takes neither slot.
 	top, young := false, 0
@@ -265,6 +297,49 @@ func pruneSnapshotRoots(ctx context.Context, tx *sql.Tx, computerID, justRoot st
 		}
 	}
 	return nil
+}
+
+// snapshotRootChain names the named roots beyond the newest retention that stay
+// for the restore window (see snapshotRootWindow). named is newest naming
+// event first. When one of the newest retention roots is already at or past
+// the window behind newestHead, nothing more is kept. Otherwise, of the rest
+// (oldest head first), the newest one at or past the window is the anchor and
+// older ones go; from the anchor (or the oldest, before one exists) up, a root
+// stays only if it is at least snapshotRootChainGap above the last one kept,
+// so the chain advances as roots arrive and stays bounded.
+func snapshotRootChain(named []snapshotRootRow, retention int, heads map[string]int64, newestHead int64) []string {
+	if len(named) <= retention {
+		return nil
+	}
+	cut := newestHead - snapshotRootWindow
+	if cut <= 0 {
+		// The whole history is inside the recovery bound: a genesis replay
+		// covers every checkpoint (planRestoreTarget), no base is needed.
+		return nil
+	}
+	for _, row := range named[:retention] {
+		if heads[row.root] <= cut {
+			return nil
+		}
+	}
+	rest := append([]snapshotRootRow(nil), named[retention:]...)
+	sort.SliceStable(rest, func(i, j int) bool { return heads[rest[i].root] < heads[rest[j].root] })
+	start := 0
+	for i, row := range rest {
+		if heads[row.root] <= cut {
+			start = i
+		}
+	}
+	var out []string
+	last := int64(0)
+	for i, row := range rest[start:] {
+		h := heads[row.root]
+		if i == 0 || h-last >= snapshotRootChainGap {
+			out = append(out, row.root)
+			last = h
+		}
+	}
+	return out
 }
 
 // snapshotRootDBDeadline bounds each database step the snapshot-root path
@@ -484,8 +559,9 @@ func validateSnapshotRootDeclaration(computerID, root string, headSequence int64
 }
 
 // LiveSnapshotRoots returns every snapshot root the computer keeps, newest
-// first. The prune bounds the rows at retention + 4 (retention named, one more
-// named for a moment, and up to four unnamed), and a row that
+// first. The prune bounds the rows at retention + snapshotRootAnchorsMax
+// (the restore-window chain) + 4 (one more named for a moment, and up to four
+// unnamed), and a row that
 // bundle.Import added or a concurrent registration left is protected too:
 // reading more rows is the safe direction for the collector.
 func (s *Store) LiveSnapshotRoots(ctx context.Context, computerID string) ([]SnapshotRootRecord, error) {
