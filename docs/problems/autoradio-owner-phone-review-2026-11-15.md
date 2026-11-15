@@ -77,3 +77,7 @@ portable and what state it is in; which pages scroll sideways and why.
   ruling for the phone app.
 
 The investigation is `docs/evidence/autoradio-phone-review-investigation-2026-11-15.md`.
+- **The target is confirmed**: hands-free is the default everywhere a voice
+  session is open, and one voice engine does conversation, dictation into any
+  text field, and reading any long text aloud.
+- **"Tap to talk" is removed.**
