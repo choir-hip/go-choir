@@ -362,16 +362,20 @@ func TestReplayStoreWritesEmptyPinListNotNull(t *testing.T) {
 }
 
 // The probe at a non-zero trim boundary, end to end on a tape past 20,000
-// events: a trim backlog row and a null pin list on the live side only are
-// not a difference, and a real difference above the boundary still is.
+// events (minutes: the replay of a real tail is the point): a null pin list on
+// the live side only is not a difference, and the bound witness carries the
+// boundary of the probed head and the probe's content root. Not covered end to
+// end, and named as a residual: a trim backlog row on the live side only
+// (every sequence is occupied by a tape event, so a backlog row cannot be
+// injected without changing the event; it is tested at the one function the
+// probe shares with the bind and the restore, at head 50,000, in
+// TestCanonicalWitnessBindThenRestoreGateOnNullAndTrimBacklog), and a real
+// difference above the boundary on this tape (that function's negative cases).
 func TestProbeAtANonzeroTrimBoundary(t *testing.T) {
 	const computerID = "computer-probe-boundary"
-	fx := newProbeFixtureN(t, computerID, 20040, 20030)
+	fx := newProbeFixtureN(t, computerID, 20010, 20005)
 	ctx := context.Background()
-	db := fx.rt.store.DB()
-	batch := string(computerevent.EventProjectionBatchRecorded)
-	insertIndexRow(t, fx.rt.store, computerID, "backlog-row", 7, batch, "finalized", "[]")
-	if _, err := db.Exec(`UPDATE computer_event_index SET payload_pin_receipt_digests_json = 'null' WHERE sequence = 100`); err != nil {
+	if _, err := fx.rt.store.DB().Exec(`UPDATE computer_event_index SET payload_pin_receipt_digests_json = 'null' WHERE sequence = 100`); err != nil {
 		t.Fatal(err)
 	}
 	report, err := fx.rt.ReplayCompleteness(ctx, computerID)
@@ -382,24 +386,14 @@ func TestProbeAtANonzeroTrimBoundary(t *testing.T) {
 		t.Fatalf("fixture head = %+v: the boundary is zero", report.LiveHead)
 	}
 	if !report.Result.Equivalent() {
-		t.Fatalf("a backlog row and a null pin list below the boundary made the probe not equivalent: %v", report.Result.Differences)
+		t.Fatalf("a null pin list below the boundary made the probe not equivalent: %v", report.Result.Differences)
 	}
 	bound := boundWitness(t, fx.rt, computerID)
 	if bound.EventIndexTrimBoundary != choirstore.ProjectionBatchTrimBoundary(report.LiveHead.Sequence) {
 		t.Fatalf("bound boundary %d", bound.EventIndexTrimBoundary)
 	}
-	if _, err := db.Exec(`UPDATE computer_event_index SET next_reducer_version = 99 WHERE sequence = 20035`); err != nil {
-		t.Fatal(err)
-	}
-	report, err = fx.rt.ReplayCompleteness(ctx, computerID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if report.Result.Equivalent() {
-		t.Fatal("a real difference above the boundary was hidden")
-	}
-	if report.EventIndex == nil || report.EventIndex.TrimBoundary == 0 || report.EventIndex.ReplayTrimBoundary != report.EventIndex.TrimBoundary {
-		t.Fatalf("event index comparison = %+v", report.EventIndex)
+	if observationValues(report.Live)["sqlite:texture:content_root"] != "sha256:"+bound.ContentRoot {
+		t.Fatal("the probe's live content root is not the bound witness's at a non-zero boundary")
 	}
 }
 
