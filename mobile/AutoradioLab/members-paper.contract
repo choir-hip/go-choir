@@ -1,16 +1,23 @@
 // Lane members file (paper): the composed front page. The page reads `pfront`; the layout runs in the Kit (Layout/*.swift).
-// A resource may only live in the root, so it is here, keyed by the open page (paper:front or paper:section/<id>), the
-// demo edition ("" live or default fixture, or big | even | thin) and the width the page reports.
+// A resource may only live in the root, so it is here, keyed by the VIEW (`paperView`: "front", "mine" or a category id; state, so it outlives the page
+// on top and an open article keeps the list of the view it came from), the demo edition ("" live or default fixture, or big | even | thin), the width the
+// page reports, `paperTick` (a pull to refresh: asks the server again) and `paperFocus` (paper, article or away: coming back to the paper from another
+// page, the topic screen above all, asks again so My edition is built from the picks as they are now; the Swift side answers from its kept lists).
 use paperFront, PaperFront from "@choir/autoradio"
 
 members Autoradio
   state paperEdition = ""
   state paperWidth = 0
-  derive paperSection = pg.top.startsWith("paper:section/") ? pg.top.slice(14) : ""
-  resource pfront = paperFront(section=paperSection, edition=paperEdition, width=paperWidth) as shape PaperFront else empty()
+  state paperView = "front"
+  state paperTick = 0
+  derive paperFocus = pg.top.startsWith("paper:") ? "paper" : (pg.top.startsWith("pub:") ? "article" : "away")
+  resource pfront = paperFront(view=paperView, edition=paperEdition, width=paperWidth, tick=paperTick, focus=paperFocus) as shape PaperFront else empty()
   derive paperLoading = pending(pfront)
   action paperReload
-    refresh pfront
+    paperTick = paperTick + 1
+  // Switch the paper's view. The list the article stack and the player read is the new view's (pfront.routes, PaperCurrentList).
+  action pickView(v: string)
+    paperView = v
   action paperFit(w: number, h: number)
     paperWidth = w
   action pickEdition(e: string)

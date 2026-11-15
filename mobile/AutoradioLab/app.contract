@@ -122,7 +122,8 @@ component Autoradio
     // ---- lane 2: paper layout ----
     pfront
     paperLoading
-    paperSection
+    paperView
+    pickView
     paperReload
     paperFit
     pickEdition

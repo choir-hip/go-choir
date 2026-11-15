@@ -58,12 +58,13 @@ final class NavigationTests: XCTestCase {
         XCTAssertNil(f.neighbor(of: "texture-x", step: 1), "a page outside the stack has no neighbour")
         XCTAssertNil(PaperFront.empty().neighbor(of: "a", step: 1))
     }
-    // 1.6: the contract steps through the stack of the FRONT page while an article is open.
+    // 1.6: the contract steps through the stack of the OPEN VIEW (Front page, My edition or a category) while an article is open: the view is state, not the page on top.
     func testContractStepsThroughTheFrontStack() throws {
         let stack = try String(contentsOf: Self.lab.appendingPathComponent("members-stack.contract"), encoding: .utf8)
         XCTAssertTrue(stack.contains("pfront.routes"))
         let paper = try String(contentsOf: Self.lab.appendingPathComponent("members-paper.contract"), encoding: .utf8)
-        XCTAssertTrue(paper.contains("pg.top.startsWith(\"paper:section/\")"), "an open article is not a section page: the front list is the one loaded")
+        XCTAssertTrue(paper.contains("state paperView = \"front\""), "an open article does not change the view: the list is the one the reader came from")
+        XCTAssertFalse(paper.contains("paper:section/"), "a category is a view of the paper page, not a page of the deck")
     }
 
     // 2.2: no contract draws a sideways scroller.

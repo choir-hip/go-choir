@@ -2,13 +2,14 @@
 // The Kit's layout engine (Kit/Layout/*.swift, layout document mobile/layouts/default.json) takes the edition's stories and returns
 // placed bands: lead, colead, pair (side by side when it fits, stacked when it does not), cluster ("Developing"), briefs,
 // river (by section) and opinion. This file only draws a band by its module; sizes and weights of headlines come with the
-// items, faces, colours and depth come from the theme. Pages: paper:front and paper:section/<id>.
-// testIds: page-title, paper-section-<id>, paper-band-<id>, paper-story-<route>, paper-play-<route>, paper-composition,
+// items, faces, colours and depth come from the theme. The page has views (owner QA round 1, 2026-11-15): Front page, My edition, then one per category; `paperView` (state, kept for the session) says which, and
+// the article stack reads the answer's routes, so a story swipes through the list of the view it was opened from.
+// testIds: page-title, paper-section-front, paper-section-mine, paper-section-<id>, paper-mine-from, paper-edit-edition, paper-choose-topics, paper-mine-note, paper-band-<id>, paper-story-<route>, paper-play-<route>, paper-composition,
 // paper-edition-<big|even|thin|default>, paper-signin, paper-status.
 use Theme, ChoirAuth, DemoInfo, PaperFront, PaperBand, PaperItem from "@choir/autoradio"
 use paperFront from "@choir/autoradio"
 use Card, Btn, BarClear, sectionName from "./ui.contract"
-use FirstRunCard, EditEditionLink from "./onboarding.contract"
+use FirstRunCard from "./onboarding.contract"
 
 // A headline with its dek and meta, as one story. `kicker` shows the section above, `listen` the play-from-here button.
 component Story
@@ -87,6 +88,7 @@ component Band
   inject
     th: Theme
     openPage: action
+    pickView: action
   props
     b: PaperBand
   view
@@ -129,12 +131,30 @@ component Band
       if b.module == "river"
         Card(level=1, testId=`paper-band-${b.id}`, minHeight=0)
           column padding="6px 16px 4px 16px" width="100%" box-sizing="border-box"
-            button press=openPage(`paper:section/${b.id.slice(6)}`, sectionName(b.label)) appearance="none" testId=`paper-more-${b.id.slice(6)}` width="100%"
+            button press=pickView(b.id.slice(6)) appearance="none" testId=`paper-more-${b.id.slice(6)}` width="100%"
               row align-items="center" justify-content="space-between" padding="10px 0 2px 0" width="100%" box-sizing="border-box"
                 text sectionName(b.label) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
                 image "symbol:forward-chevron" color=th.muted
             for s, i in b.items key=s.route
               BriefRow(s=s, kicker=false, first=(i == 0))
+
+// One chip of the view switcher. The row wraps (never a sideways scroller: the deck takes sideways drags). The set of chips does not change when
+// one is picked, only which one is filled, so a pick never moves the others.
+component ViewChip
+  inject
+    th: Theme
+    paperView: string
+    pickView: action
+  props
+    vid: string
+    label: string
+    strong: bool
+  derive sel = paperView == vid
+  view
+    button press=pickView(vid) appearance="none" testId=`paper-section-${vid}`
+      border-radius=th.radiusPill padding="6px 12px" flex-shrink=0 align-self="flex-start"
+      background-color=(sel ? th.accent : th.paper2)
+      text label font-family=th.fontUi font-size=13 font-weight=(strong ? 700 : 600) color=(sel ? th.onAccent : th.fg)
 
 component PaperPage
   inject
@@ -145,7 +165,7 @@ component PaperPage
     signIn: action
     openPage: action
     pfront: PaperFront
-    paperSection: string
+    paperView: string
     paperLoading: bool
     paperReload: action
     paperFit: action
@@ -153,7 +173,6 @@ component PaperPage
   props
     address: string
     title: string
-  derive sect = paperSection
   view
     column flex=1 min-height=0 width="100%" resize=paperFit
       scroll id="paper" testId="paper-scroll" overflow-x="hidden" flex=1 min-height=0 width="100%" refresh=paperReload refreshing=paperLoading
@@ -167,11 +186,31 @@ component PaperPage
             box height=1 background-color=th.fg width="100%"
             box height=1 background-color=th.fg width="100%" margin-top=2
             row justify-content="space-between" width="100%"
-              text (sect == "" ? "Front page" : sectionName(pfront.sectionLabel)) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent testId="paper-section-title"
+              text (pfront.viewLabel == "" ? "Front page" : pfront.viewLabel) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent testId="paper-section-title"
               text pfront.updated font-family=th.fontUi font-size=12 color=th.muted testId="paper-updated"
+          // the views: Front page, My edition, then the categories the paper has (its live section list, in house order)
+          row flex-wrap="wrap" gap=8 width="100%" testId="paper-sections"
+            ViewChip(vid="front", label="Front page", strong=true)
+            ViewChip(vid="mine", label="My edition", strong=true)
+            for sec in pfront.sections key=sec.id
+              ViewChip(vid=sec.id, label=sec.label, strong=false)
+          // My edition: what it is built from, and the way to change it (the edit page is `onboarding:edit`, the topic tree with the saved picks preselected; the paper has no other edit link: the owner asked for it in My edition)
+          if pfront.viewId == "mine"
+            column gap=10 width="100%" align-items="flex-start"
+              if pfront.mineFrom != ""
+                row align-items="center" gap=10 width="100%" testId="paper-mine-from"
+                  column flex=1 min-width=0
+                    text `From: ${pfront.mineFrom}` font-family=th.fontUi font-size=13 line-height=1.35 color=th.muted line-clamp=2 text-align="left"
+                  button press=openPage("onboarding:edit", "My edition") appearance="none" testId="paper-edit-edition" aria-label="Edit my edition"
+                    flex-shrink=0 padding="10px 4px"
+                    text "Edit my edition" font-family=th.fontUi font-size=13 font-weight=700 color=th.accent
+              if pfront.note != ""
+                text pfront.note font-family=th.fontRead font-size=16 line-height=1.4 color=th.fg text-align="left" testId="paper-mine-note"
+              if pfront.mineState == "nopicks"
+                button press=openPage("onboarding:edit", "My edition") appearance="none" testId="paper-choose-topics"
+                  Btn(label="Choose topics", primary=true, wide=false)
           // Not set up yet: "Make it yours" (voice setup and the edition topics) until the listener has done it or skipped it.
           FirstRunCard()
-          EditEditionLink()
           // demo mode, Settings, Developer, "Demo controls": three editions to show how the page changes with the day
           if dm.on and devDetails
             column gap=8 width="100%" padding-top=8 box-sizing="border-box"
@@ -194,17 +233,6 @@ component PaperPage
                   Btn(label="Sign in", primary=true, wide=false)
                 if au.message != ""
                   text au.message testId="paper-signin-message" font-family=th.fontUi font-size=13 color=th.muted
-          // sections: the front, then one chip per section; a chip opens that section as a page
-          row flex-wrap="wrap" gap=8 width="100%" testId="paper-sections"
-            button press=openPage("paper:front", "Paper") appearance="none" testId="paper-section-front"
-              border-radius=th.radiusPill padding="8px 14px" flex-shrink=0 align-self="flex-start"
-              background-color=(sect == "" ? th.accent : th.paper2)
-              text "Front" font-family=th.fontUi font-size=14 font-weight=600 color=(sect == "" ? th.onAccent : th.fg)
-            for sec in pfront.sections key=sec.id
-              button press=openPage(`paper:section/${sec.id}`, sectionName(sec.label)) appearance="none" testId=`paper-section-${sec.id}`
-                border-radius=th.radiusPill padding="8px 14px" flex-shrink=0 align-self="flex-start"
-                background-color=(sec.current ? th.accent : th.paper2)
-                text sectionName(sec.label) font-family=th.fontUi font-size=14 font-weight=600 color=(sec.current ? th.onAccent : th.fg)
           if pfront.status == "offline" or pfront.status == "error" or pfront.status == "empty"
             text pfront.message font-family=th.fontUi font-size=14 color=(pfront.status == "error" ? th.danger : th.muted) testId="paper-status"
           for b in pfront.bands key=b.id

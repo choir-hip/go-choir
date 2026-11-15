@@ -507,6 +507,11 @@
       "updated": "string",
       "sectionId": "string",
       "sectionLabel": "string",
+      "viewId": "string",
+      "viewLabel": "string",
+      "mineState": "string",
+      "mineFrom": "string",
+      "note": "string",
       "count": "number",
       "sections": "PaperSection[]",
       "bands": "PaperBand[]",
@@ -1855,9 +1860,11 @@
       "live": true,
       "answers": "PaperFront",
       "options": {
-        "section": "string",
+        "view": "string",
         "edition": "string",
-        "width": "number"
+        "width": "number",
+        "tick": "number",
+        "focus": "string"
       },
       "substitute": {
         "default": {
@@ -1870,6 +1877,11 @@
           "updated": "",
           "sectionId": "",
           "sectionLabel": "",
+          "viewId": "",
+          "viewLabel": "",
+          "mineState": "",
+          "mineFrom": "",
+          "note": "",
           "count": 0,
           "sections": [],
           "bands": [],
