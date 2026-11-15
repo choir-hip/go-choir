@@ -109,7 +109,7 @@ component ToolScroll
     id: string
   slot
   view
-    scroll id=id flex=1 min-height=0 width="100%" margin-bottom="calc(env(safe-area-inset-bottom) + 140px)"
+    scroll id=id overflow-x="hidden" flex=1 min-height=0 width="100%" margin-bottom="calc(env(safe-area-inset-bottom) + 140px)"
       column width="100%" box-sizing="border-box" min-width=0 padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20 padding-bottom=24 gap=12
         font-family=th.fontRead color=th.fg
         children
@@ -123,8 +123,8 @@ component PageScroll
     id: string
   slot
   view
-    scroll id=id testId=`${id}-scroll` flex=1 min-height=0 width="100%"
-      column padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20
+    scroll id=id testId=`${id}-scroll` overflow-x="hidden" flex=1 min-height=0 width="100%"
+      column width="100%" box-sizing="border-box" min-width=0 padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20
         gap=12 font-family=th.fontRead color=th.fg
         children
         BarClear()

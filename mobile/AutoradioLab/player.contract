@@ -74,8 +74,8 @@ component PlayerLayer
                 font-size=22 font-weight=700 font-family=th.fontRead color=th.fg
             button press=hideLayer testId="player-close" aria-label="Close the player" appearance="none" width=44 height=44
               image "symbol:close" color=th.muted
-        scroll flex=1 min-height=0 width="100%"
-          column padding="4px 20px 12px" gap=14
+        scroll overflow-x="hidden" flex=1 min-height=0 width="100%"
+          column width="100%" box-sizing="border-box" min-width=0 padding="4px 20px 12px" gap=14
             // what is happening now: the listener's words, the holding line, the yield
             if statusLine != "" or yieldNote != ""
               column testId="player-status" gap=6 justify-content="center" min-height=40

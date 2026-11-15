@@ -178,17 +178,17 @@ component BlockView
             contextmenu=aimAt(address, b.id, clip(b.text, 64))
             Runs(runs=b.runs, address=address, size=size, weight=400, lh=lh, hi=hi, italic=true)
       if b.kind == "code"
-        scroll overflow-x="scroll" overflow-y="hidden" width="100%" margin-bottom=remv(0.9) border-radius=th.radiusControl background-color=th.paper2
-          text b.text testId=`reader-block-${b.id}` white-space="pre" font-family=th.fontMono font-size=remv(size * 0.85) line-height=1.5 color=th.fg padding=12
+        column width="100%" margin-bottom=remv(0.9) border-radius=th.radiusControl background-color=th.paper2 box-sizing="border-box"
+          text b.text testId=`reader-block-${b.id}` white-space="pre-wrap" overflow-wrap="anywhere" min-width=0 font-family=th.fontMono font-size=remv(size * 0.85) line-height=1.5 color=th.fg padding=12
       if b.kind == "rule"
         box width="100%" height=1 margin-top=remv(0.6) margin-bottom=remv(1.1) background-color=th.rule
       if b.kind == "table"
-        scroll overflow-x="scroll" overflow-y="hidden" display="flex" flex-direction="row" width="100%" margin-bottom=remv(1.1) testId=`reader-block-${b.id}`
-          column flex-shrink=0 border-radius=th.radiusControl border-width=1 border-style="solid" border-color=th.rule
+        column width="100%" margin-bottom=remv(1.1) testId=`reader-block-${b.id}` box-sizing="border-box"
+          column width="100%" box-sizing="border-box" border-radius=th.radiusControl border-width=1 border-style="solid" border-color=th.rule
             for r in b.rows key=r.id
-              row flex-shrink=0
+              row width="100%"
                 for cell, ci in r.cells key=ci
-                  column flex-shrink=0 width=170 padding="8px 12px" border-bottom-width=1 border-bottom-style="solid" border-bottom-color=th.rule
+                  column flex=1 min-width=0 padding="8px 12px" border-bottom-width=1 border-bottom-style="solid" border-bottom-color=th.rule
                     background-color=(cell.header ? th.paper2 : "")
                     text
                       Runs(runs=cell.runs, address=address, size=(size * 0.88), weight=(cell.header ? 700 : 400), lh=1.4, hi=(0 - 1), italic=false)
@@ -219,8 +219,8 @@ component SheetFrame
       box position="absolute" inset=0 background-color=th.fg opacity=th.behindDim3 press=hideSheet testId=`${testId}-scrim`
       column position="absolute" left=0 right=0 bottom=0 height=pct
         Layer(testId=`${testId}-layer`)
-          scroll flex=1 min-height=0
-            column padding=20 gap=10
+          scroll overflow-x="hidden" flex=1 min-height=0
+            column width="100%" box-sizing="border-box" min-width=0 padding=20 gap=10
               children
               BarClear()
 
@@ -380,7 +380,7 @@ component ReaderBody
   derive sheetOn = sheet != "" and sheetFor == address
   view
     column position="absolute" inset=0
-      scroll id="reader-scroll" testId="reader-scroll" flex=1 min-height=0 width="100%"
+      scroll id="reader-scroll" testId="reader-scroll" overflow-x="hidden" flex=1 min-height=0 width="100%"
         column width="100%" align-items="center" padding-top=`calc(env(safe-area-inset-top) + ${rdoc.revising ? 72 : 12}px)`
           column width="100%" max-width="38rem" padding-left=20 padding-right=20 box-sizing="border-box" color=th.fg font-family=th.fontRead
             // header: kicker, menu, headline, standfirst, byline and version line

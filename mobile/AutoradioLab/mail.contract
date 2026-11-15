@@ -78,7 +78,7 @@ component MailboxPage
         button press=openPage("mail:new", "New message") testId="mail-compose" appearance="none" padding="8px 14px" border-radius=th.radiusPill background-color=th.paper2
           text "New message" color=th.fg font-family=th.fontUi font-size=15
       if here
-        scroll overflow-x="scroll" overflow-y="hidden" display="flex" flex-direction="row" gap=8
+        row flex-wrap="wrap" gap=8 width="100%"
           for f in mbx.folders key=f.name
             button press=openPage(f.address, `Mail · ${f.label}`) testId=`mail-folder-${f.name}` appearance="none" padding="8px 14px" border-radius=th.radiusPill
               background-color=(f.current ? th.fg : th.paper2)
