@@ -480,3 +480,115 @@ not; tests that need the probe use the production type.
   away. Until then a paper restore needs the async restore act (lane 3) or a
   capture someone decides to take. Not acted on: the last paper capture took
   37 minutes with the WAL pinned, which is what the floor protects.
+
+## Repair design: restore as an accepted act (lane/restore-act, 2026-11-15)
+
+Recorded before the build. Mutation class: red (restore, checkpoint and route
+projection, the vmctl busy reading). Nothing here is proven on a live computer.
+
+### Why this and not a longer request
+
+The paper cannot be restored: 314,364 tail events, 46m22s at 113 events a
+second, and the producer is floor-limited for about 30 hours (above). By design
+a tail reaches 540,000 events (about 80 minutes). Every request budget on the
+path is ten minutes. Making the work independent of the request costs no
+storage and lets snapshots stay rare, which is the point of the storage
+mission. The restore engine is unchanged; what changes is who waits for it.
+
+### The act
+
+- A restore (and `rematerialize-from-tape`, the same engine) is an accepted act
+  on the guest. `POST /lifecycle/restore` validates what it can without the
+  tape, appends the restore intent to the tape (the existing
+  `restore_requested` event, idempotent per checkpoint), writes the act record
+  and answers 202 with the act id and a status URL. The work runs in the
+  guest's background.
+- States: `accepted`, `fetching_base` (plan the target, install a snapshot),
+  `replaying`, `verifying` (witness, vocabulary fence), `installing` (restage
+  the pinned release, flip), then `succeeded`, `failed` or `interrupted`.
+- Where it is recorded, and by whom: the tape holds the intent (existing
+  event, existing authority). The act's progress is a record on the data
+  volume beside the store, `restore-acts/<act id>.json`, written atomically by
+  the guest runtime, the same shape as the capsule job records
+  (`internal/capsule/jobs.go`, `closeInterruptedJobs`). It is not in the store
+  because the flip replaces the store: a record in it would be quarantined with
+  the state it describes. It is not a new kind of tape event: the status is
+  progress of one process, and the tape carries the fact that was asked. No
+  parallel store: one small JSON file per act, the newest 20 kept.
+- Auth: the status route is `GET /lifecycle/restore-status[?act=ID]`, gated
+  exactly as restore is: the owner act (`owner:acts`), the computer's
+  lifecycle scope and ownership. The result carries filesystem paths and
+  witness detail an agent has no use for.
+- One at a time: a second request while an act runs answers 409 naming the
+  running act. The same idempotency key (default: the checkpoint digest, the
+  key the intent already uses) returns the running act. A restore and a replay
+  probe exclude each other (both own the appender's replay observer; the probe
+  would clear the restore's mid-run).
+- The acceptance answer carries the estimate: tail events and seconds, from
+  the replay rate measured on this computer when one is recorded (appender
+  `ReplayRate`), else the assumed 113 events a second, and says which. The tail
+  is read from the local event index (target and newest snapshot at or below
+  it); when the index does not know the target, the answer says the tail is
+  unknown until the plan. No refusal for being long. The roots the host still
+  holds are probed in `fetching_base`, before any download; a refusal there is
+  a `failed` act naming it, not a 202 that promised more (the scan is a pass
+  over the tape and is not bounded by a request).
+- Correctness refusals stay: witness version and mismatch, not derivable, base
+  refused, unavailable. One is added on the owner's brief, a disk floor: the
+  live store's size plus the 2 GiB snapshot floor must be free, because the
+  staged store grows beside the live one.
+- The status read returns: state, tail events total and applied, the rate
+  (measured in this act once it has applied events, else the estimate's) and
+  its source, estimated seconds remaining, accepted, started, updated and
+  finished times, and on the end the report the synchronous route returned
+  (`witness_matched` and the rest) or the refusal by name and the HTTP status
+  the synchronous route would have used.
+- The synchronous path is deleted. Callers named: `choir computer restore` and
+  `choir computer rematerialize-from-tape` (both move to submit and poll), the
+  proxy's ten-minute client for those two routes (deleted; the replay probe
+  keeps its own), and the guest's ten-minute write deadline for them (deleted).
+  `RematerializeFromTape` stays as the engine the act runs; it is not a route.
+
+### Restart table (CLAUDE.md "Restarts")
+
+| Event | What happens | Live state |
+| --- | --- | --- |
+| Crash or kill in `accepted`, `fetching_base`, `replaying`, `verifying` | The boot closes the act `interrupted` ("interrupted by a restart"), removes the staged store, never resumes | untouched: the restore writes only into the staging directory until the flip (the one write to the live computer before is the intent event, a tape record) |
+| Crash in `installing`, before any rename | same | untouched, except `current` may name the restored release (below) |
+| Crash in `installing`, mid-flip | the boot, before it opens the store, undoes the renames the act recorded, closes the act `interrupted` | the pre-restore state |
+| Crash in `installing`, flip complete | the boot leaves the renamed realization and closes the act `interrupted`, saying the flip had finished | the restored state (not undone: that would be a second restore) |
+| Planned restart | refused while an act runs: `restore_in_flight` is unsafe work whatever the host asks (`allow_busy` included), like a streaming snapshot | n/a |
+| Planned restart after success (the exec changed) | requested after the act record says `succeeded` | restored |
+
+An act never resumes after a restart; a restart is not a reason to start work
+nobody asked for. The owner re-submits (the intent is idempotent).
+
+### Problems found while reading, recorded with the fix
+
+1. A crash in a restore strands its staging directory (`rematerialize-staging-*`)
+   on the data volume for ever: nothing removes it at boot. On the paper that is
+   up to the size of a store. The boot now removes it.
+2. `RestagePinnedRelease` moves `current` to the restored release before the
+   flip. A crash between leaves the live store with the restored release's SPA.
+   The act records the prior release digest before the restage and the boot puts
+   it back (best effort, as the in-process failure path already does).
+3. The restore holds `currentReleaseMu` for its whole run. At 46 minutes that
+   blocks every checkpoint bind (which reads `current` under it) for 46
+   minutes. It is now held for the validation and for the restage-and-flip, not
+   the replay. The prior release is read again under the lock before the restage.
+4. Nothing told vmctl a computer was mid-restore. Its idle sweep, host stop and
+   crash restart read running runs, self-development operations and live
+   capsules; a restore is none of them. `/health` now reports `restore_in_flight`
+   and each reading treats it as busy.
+5. The replay probe and a restore both install a replay observer on the one
+   appender; a probe finishing clears the restore's. Excluded as above.
+
+### Residuals named before the build
+
+- The replay-completeness probe has the same ten-minute shape. It shares the
+  scratch and observer machinery but its result is a large report; it is not
+  converted here (named residual unless the machinery proves small).
+- A deploy that is not a planned refresh (a host reboot, an OOM kill, a vmctl
+  kill) interrupts the act by design; the table above is its answer.
+- Estimates assume the best base. A pruned root costs a longer tail than the
+  estimate says; `tail_events_total` becomes exact at the plan.
