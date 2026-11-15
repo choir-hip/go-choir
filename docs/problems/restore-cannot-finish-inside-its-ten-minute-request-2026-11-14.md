@@ -734,3 +734,121 @@ A plain revert. The truth by order:
   numbers.
 - The act record's progress is persisted every five seconds; a crash shows the
   last of them, not the exact count.
+
+## Review round 1 repair: the flip as a durable protocol (lane/restore-act, 2026-11-15)
+
+Both seats said REPAIR on the same root: the flip's state was inferred at boot
+from which files exist, against a record that was neither written durably nor
+checked. The inference failed three ways (a record lost to ENOSPC or a power
+cut with the renames surviving; a completed flip undone because the reopened
+store recreated `-wal` at the original path; a corrupt record skipped and the
+staging deleted), and a post-flip failure reported `failed` over a restored
+store. One mechanism, redone before any patch.
+
+### The protocol
+
+The act's record carries `install_phase`, a durable fact. The install facts
+(not the progress ticks) are written file fsync, atomic rename, directory
+fsync, and a failed write stops the install where it is.
+
+1. `prepared`: before anything live is touched. Holds the prior and restored
+   release digests, the quarantine directory and the full list of renames.
+   A failed write fails the restore with nothing touched.
+2. The release is restaged to the checkpoint's (the floor check can refuse here,
+   with nothing flipped), then `release_restaged` is written.
+3. The store is closed, the quarantine directory made, `flip_started` written;
+   a failed write reopens the store, puts the prior release back, fails.
+4. The renames. A failed rename undoes itself, reopens, puts the release back.
+5. `flip_completed`, written and synced right after the last rename, before
+   the reopen. A failed write undoes the renames in the process and fails; if
+   that undo fails too the act says `unresolved` and the next boot (which still
+   sees `flip_started`) undoes it.
+6. Reopen, rebind, selfdev store. A failure here is `restored`, not `failed`:
+   the computer is on the restored store and the restored release, and says a
+   restart is required. The release is never put back over a flipped store.
+7. The restart marker is requested, then `succeeded` is written.
+
+Boot decides from the fact alone, never from which files exist:
+
+- before `flip_completed` (`prepared` to `flip_started`): undo. Every recorded
+  rename is undone last first, each only when its destination exists and its
+  source does not; `current` is put back on the prior release if it moved. The
+  computer is on exactly its pre-restore state. The act ends `interrupted`
+  with `live_state: pre_restore`.
+- `flip_completed` and later: roll forward. Nothing is undone; `current` is
+  made the restored release if it is not. The act ends `restored` with
+  `live_state: restored` ("restored; the process ended before the result was
+  recorded"). The store and the release are always the same side.
+
+Why roll forward is not a boot-time resumer (CLAUDE.md "Restarts": a crash
+restart never resumes work; a planned restart may resume once, with a marker):
+what is resumed is nothing. No replay, no fetch, no staging is read; by
+`flip_completed` the work is finished and durably so, and the boot makes at most
+one pointer swap that step 2 already made. The alternative, discarding the
+restored state, would rename a store that has been serving (the reopened store
+may already have taken writes, and the quarantine holds the old one), which
+throws away the owner's 46 minutes and the writes after the flip for the sake of
+a rule about work that is not being done. I chose roll forward. The repair is
+idempotent (every step checks before it moves) and is tested killed between its
+steps.
+
+Closed-loud rules: a record in `restore-acts/` that cannot be read, or whose
+paths are not under the data volume, is not touched and is reported
+`unresolved`; while any record is unresolved and a staging or quarantine
+directory exists, nothing is deleted, the computer refuses new restore acts
+(409, `restore_unresolved`) and `/health` names the unresolved act. A boot with
+an open act whose install ended before `prepared` removes its staged store as
+before.
+
+### Beside other work
+
+- Acceptance refuses (409, `blocked_by_live_work`) while a self-development
+  operation is mid-transaction or an engineering capsule is live.
+- A restore in flight blocks a snapshot capture (the producer's busy check is
+  the planned-restart count, which includes it) and a clean rebase; apply and
+  capsule admission are not changed. Instead the restore re-checks under the
+  release lock immediately before `prepared` and fails untouched
+  (`blocked_by_live_work`) if one is live, and at boot a compaction rebase staged
+  before a restore is refused after it (read from `store/compact.go`).
+- Events appended during the replay, read from the code: they are on the tape
+  and in the live store; the flip replaces that store with the state at the
+  checkpoint's head, which does not hold them. The appender then finds its local
+  head behind the host's and catches up in place on the next append
+  (`catchup.go`), and a boot replays to the canonical head; both apply the events
+  after the target, including `restore_requested`. So nothing is lost, and the
+  restored state does not stay: this is the open problem recorded 2026-10-30
+  (`restore-is-neither-forward-nor-durable-2026-10-30.md`), which this lane does
+  not fix and now matters more, because the window is long. Not observed; the
+  deployed proof below reads the head after the restore, after one write and
+  after a restart.
+
+### The crash table
+
+| Crash point | `install_phase` | On disk | Boot does | Test |
+| --- | --- | --- | --- | --- |
+| during the replay | none | staging; live untouched | close `interrupted`, remove staging | `TestRestoreKilledMidReplayLeavesTheLiveStateUntouched` |
+| after `prepared` | prepared | live untouched | close `interrupted` (pre_restore), remove staging | `TestRestoreCrashPoints/after_prepared` |
+| after `release_restaged` | release_restaged | `current` on the restored release | put the release back, close `interrupted` | `.../after_release_restaged` |
+| after `flip_started` | flip_started | store closed, nothing renamed | undo (nothing), close | `.../after_flip_started` |
+| mid flip | flip_started | some renames made | undo them, put the release back | `.../mid_flip` |
+| after the last rename, before `flip_completed` | flip_started | all renames made | undo them (the fact says not done) | `.../before_flip_completed` |
+| after `flip_completed` | flip_completed | restored store, restored release | roll forward, close `restored` | `.../after_flip_completed` |
+| after reopen, a `-wal` at the original path | flip_completed | the same plus `state.db-wal` | roll forward, never undo | `.../after_reopen` |
+| repair killed between steps | any | partly undone | the next run finishes | `TestRepairIsIdempotentAndSafeWhenInterrupted` |
+| unreadable record, staging present | unknown | everything | touch nothing, `unresolved`, refuse acts | `TestRepairRefusesWhatItCannotRead` |
+| record writes fail (ENOSPC) | n/a | live untouched | n/a | `TestRestoreInstallRecordWriteFailureTouchesNothing` |
+
+### Failure list additions
+
+20. A failed install-record write touches nothing; each phase write has a test.
+21. The crash table, through the real engine flip, a real SIGKILL at each point.
+22. The repair twice and killed between its steps.
+23. An unreadable record or an out-of-volume path is loud and deletes nothing.
+24. `failed` only on the pre-restore state; `restored` after a failed reopen; the
+    CLI's pre-restore sentence only when `live_state` proves it.
+25. Acceptance and the pre-prepared re-check refuse live apply or capsule work.
+26. The fixture drains a running act (the second act of `TestRestoreActOneAtATime`
+    leaked and failed the cleanup).
+27. A desk's product_api cannot read the status route.
+28. The tail estimate from the local index (written after its function, found by
+    review; `internal/store/restore_tail_estimate_test.go`).
