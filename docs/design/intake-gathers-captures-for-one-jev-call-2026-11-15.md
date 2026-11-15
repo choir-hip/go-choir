@@ -24,8 +24,10 @@ Marks: **C** read from code, **M** measured (by the problem record, not by me),
 > item 3, intake's in-flush whole retry of a non-rate failure, the sleeping
 > flusher of 2.2, the lone-capture-only fix of 2.4, and the failure list of
 > 2.5. Where a section below disagrees with section 5, section 5 wins. One
-> finding of the code contradicts the repair's premise and is **the decision
-> brought back** (5.1).
+> finding of the code contradicted the repair's premise (5.1: the intake task's
+> first turn reads the label); **section 6 resolves it with a third shape**
+> (arrival held at once, released with its labels by the flush) and wins over
+> 5.1's options A and B and over 5.8.
 
 ## 1. Investigation
 
@@ -1068,4 +1070,225 @@ Claude (ACCEPT with conditions):
 5.1 (the intake task's first turn reads labels at announce time). Nothing in
 either review was contradicted except Claude's closing preference to keep the
 poll's wait, which is a choice, not a fact, and its read on `824a01aab`.
+
+## 6. The third shape: the arrival is held at once, the flush releases it with its labels
+
+The decision of 5.1 (A or B) is **resolved by this section, which the code
+supports**; neither A nor B is taken. Sections 5.1's deletions (the poll does
+not wait; no ticket) stand. Section 5.1's "(A) default" and the intake task's
+unlabelled first turn do not. Sections 5.3 to 5.6 ((a), (b), the timer shape,
+land order of (a) and (b)) are unchanged, and (a) and (b) do not depend on this
+section. Section 5.8's list is replaced by 6.6.
+
+### 6.1 The two things the poll does after the wait have different needs
+
+- **The arrival** (capture ids: `announceCaptures`,
+  `capture_arrival.go:130`; `enqueueEventResolution`, `event_layer.go:916`)
+  reads no label and is committed at once, with the poll not blocked.
+- **The intake task** needs the label (`management_tasks.go:107-124`, its
+  opening turn; the task prompt says "Feed the story Jev names unless you read
+  otherwise"). It is minted when the gather flush has written the labels, or
+  when the flush ends without them.
+
+### 6.2 Answers from code
+
+**(1) Can the arrival's commit be separated from the task mint?** Today they
+are one atomic batch by design: `withIntakeTask` (`arrival_task.go:93-175`) is
+called from `commitCapturesRecord` (`capture_arrival.go:111`) and puts the
+tasks in the arrival's own `CommitInboxRecords` request; the file header says
+"the arrival and the task are one atomic batch: there is no window between the
+record and the lease" (`arrival_task.go:25-28`), and its failure mode A1 is
+"the arrival commits and the task does not". The invariant that ties them is
+that a captures record wakes management only if it is not held and has no
+started tasks (`store/management_tasks.go:137`: `!Held && len(StartedTasks) ==
+0`), and `StartedTasks` is set on the arrival at mint
+(`arrival_task.go:215-219`); the admitter prompt says "the platform starts an
+intake task for each new arrival" (`inbox_records.go:998`). **But the code
+already has the separation, built for event wakes:** a **held** arrival wakes
+no one and mints no task (`hostStartsIntake`, `arrival_task.go:77-81`;
+the wake predicate above), and a later captures record that names the same
+captures with `Event.Reason` released or unresolved is *not* held and mints the
+task through the same `withIntakeTask` (`arrival_task.go:77-91`: only
+`official_single_outlet` is excluded). That later record is built by
+`unresolvedRequests(owner, computer, reason, inputs)` (`event_wakes.go:265-287`),
+in pages of `eventRecordItems` = `MaxTaskCaptures` = 12
+(`event_wakes.go:59`, `yaegikernel/intent.go:123`), with the deterministic id
+`event-released:<digest of the ids>` and a `CaptureEvent{Reason: released}`,
+and committed by `commitCapturesRecord`. A capture already leased is skipped by
+`captureDelegable` (`arrival_task.go:139`), so a second release of the same
+captures mints nothing. So the separation needs no new record kind and no new
+commit path: the poll commits its arrival **held** (`announceCaptures(...,
+held)`, the argument that is `held := eventWakes` at `source_schedule.go:295`
+today becomes true also when the gather is on), and the flush end commits
+`unresolvedRequests(..., types.CaptureEventReleased, items)` for the flush's
+captures.
+
+What reads an arrival expecting its task: the admitter prompt only
+(`inbox_records.go:998`), and management's own main run, which is not woken for
+a record that started a task (A7) and is not woken for a held one either. A
+held arrival is read by management on its next turn and wakes no one;
+`captureDelegable` (`arrival_task.go:139`, `management_tasks.go:741`) refuses
+to lease a capture twice if management delegates it first. Whether management's
+prompt tells it to leave held records alone is unverified (the held case is
+written for event wakes).
+
+**(2) Crash or planned restart between the arrival and the mint.**
+
+- **Planned stop:** `stopIntakeLabels` flushes what is held at once within the
+  drain deadline (5.4), and the flush's end commits the release; the store is
+  open until stop ends. If the drain deadline lands first, the captures are
+  held without a task: the sweep below.
+- **Crash:** nothing resumes at boot. The existing path is the **held-capture
+  sweep** (`event_wakes.go:422-`): a source poll, a live act and never a boot,
+  at most every `eventSweepEvery` (5 min), reads the newest 1000 records of
+  management's inbox, and releases each held capture older than
+  `eventHeldGrace` (10 min) that no event record names, as
+  `unresolvedRequests` records, which mint tasks, at most `eventSweepMax` (48)
+  a sweep, within the 24 h `eventAgedHorizon` (`event_wakes.go:415-420`,
+  `:483-488`). The captures reach a task **unlabelled**, 10 to 15 minutes late.
+  The release record the flush commits has `Event != nil`, so the sweep counts
+  its captures as named (`:459-465`) and never releases a captured flush's
+  captures again.
+- **Is there a pendingAfter path?** No: `PendingArrivals` holds only captures
+  whose append failed (`capture_arrival.go:123-129`, `source_schedule.go:303`),
+  and an arrival that committed held is not pending. The sweep is the path.
+- **One required edit, a correction not a mechanism:** the sweep returns at
+  once unless `intake.events` or `intake.event_wakes` is on
+  (`event_wakes.go:426-430`). A computer that has only labels on would strand
+  held arrivals for ever. The condition widens to include the labels setting
+  (`intakeLabelsEnabled`, `computer_settings.go:35`), and the sweep's reason is
+  already `released` when wakes are off (`:511-514`).
+- **Is that equal to today's loss when a crash lands mid-flush?** It is
+  smaller. Today the poll blocks before it announces (`source_schedule.go:280`
+  then `:305`); the captures are written by the poll's research layer and
+  nothing durable names them for management until the announce, and
+  `PendingArrivals` is written only after it (`:303-321`). A crash in that
+  window leaves captures that no arrival ever names; the planned-boot re-poll
+  reports them as already captured (DeepSeek B1; I confirmed the ordering, not a
+  boot experiment). Under this shape the arrival is durable first, so a crash
+  loses at most the labels and the prompt start of the task: the sweep delivers
+  the captures unlabelled to a task. The window is 120 s plus the flush, not 1 s,
+  but what is lost is smaller.
+
+**(3) One mechanism or two? One, with no new durable record kind and no
+resumer.** The mechanism is "the gather flush ends by releasing its captures",
+built from three pieces that exist: the held arrival, the release record
+(`unresolvedRequests` and `commitCapturesRecord`), and the sweep as the
+no-resumer recovery. The one edit outside the flush is the sweep's gate (a
+single condition). I did not find anything that needs a new record kind, a
+marker or a boot-time resumer. What is new is that the held and released path
+now serves a labels-only computer, and that "released" then means a flush that
+labelled (a future `CaptureEventLabelled` reason is possible and not needed;
+`hostStartsIntake` excludes only `official_single_outlet`).
+
+### 6.3 Is one task per flush right?
+
+From how the task is built: a captures record is a group; a group is chunked
+at `MaxTaskCaptures` = 12 and each chunk is one task with one opening turn, one
+story-library page of 50 and one 10-minute deadline
+(`arrival_task.go:128-162`, `management_tasks.go:40`, `:107-139`). Records of
+one event already open **one** task (failure mode A5): the code's own rule is
+that captures of one world event belong in one task, because two tasks racing
+on one event feed it twice. A gather flush puts the captures of every source
+that arrived in the window in one release record per 12, which is what the
+event record does. So yes: a task per flush (per 12 captures) is the shape the
+task was built for, and it is the management-side form of "one large context":
+the task sees siblings Jev labelled together, in one story page, in one run.
+**Task count:** today one per poll with captures, chunked by 12: the extract's
+212 flushes are about 212 tasks (653 captures; a flush of more than 12 gives
+more than one). At 120 s the replay gives 82 flushes; with 653 captures that is
+about 8 per flush, so about 82 to 100 tasks (the flushes over 12 add a second
+task), a fall of 50 to 60%. Each task is a model run, so this is a larger
+saving than the Jev calls. **Cost, unverified:** a task now has about 8
+captures against about 3, in the same 10-minute deadline (I did not measure
+how long a task takes per capture), and its first turn starts up to 120 s
+after the capture instead of about 1 s.
+
+### 6.4 What the poll does now
+
+`source_schedule.go:271-283`: when the gather is on, the poll calls
+`enqueueIntakeLabels` (no channel), `enqueueEventResolution`, and
+`announceCaptures(..., held = true)`. The arrival is committed held, so
+management is not woken and no task is minted. The flush later labels the
+captures and commits the release; the task opens with the labels in front of
+it. The `NextDue` change, the arrival delay, the hibernate fence and the
+crash-loop exposure of 5.1 do not return: the poll is in flight for its fetch.
+
+### 6.5 What the flush does at its end, on every exit
+
+`labelHeld` returns through a defer that commits the release for **every**
+capture of the flush, labelled or not: after a dial failure, an unread index,
+a stop, a size refusal, a timeout, a panic (the recovery path of 5.4 runs the
+same defer). This replaces `resolveIntakeHeld`, whose slot (`intake_labels.go:272-286`,
+the `defer resolveIntakeHeld(held)` in `runIntakeFlusher` and the stop path)
+it takes. A failed flush therefore mints the task with the captures unlabelled:
+today's behavior for a failed flush, as asked. The release is ordered after
+`AppendCaptureLabel` of the flush's labels, so the task's first turn reads
+them. A release that fails to commit (not a conflict) leaves the captures
+held; the sweep takes them.
+
+### 6.6 Failure list, recounted (18)
+
+1. A capture waiting forever on a quiet source: the timer is armed by the first
+   capture and not moved; fake clock, including a steady trickle.
+2. A burst larger than one call: split by `jevJob.Plan`, logged with the limit.
+3. A failed call: a dial failure fails once, never halved, never retried at
+   once, stops the flush's remaining calls; a non-rate failure is not retried
+   on intake; a rate refusal backs off; a size refusal halves; what fails stays
+   unlabelled, no default, no re-hold; the release still commits.
+4. A flush with an unread story index: every capture unlabelled, any batch
+   size (5.5); the release still commits.
+5. Ordering: arrival order across sources; release records in that order, 12 to
+   a record; labels in handle order, written before the release.
+6. The same capture held twice: deduped by `CaptureID` at the gather.
+7. A planned stop or restart: timers stopped under the lock, held captures
+   flushed at once, labels **and the release** committed within the drain
+   deadline; the test asserts both written. Past the deadline: the sweep.
+8. The liveness invariant: every non-empty queue has an in-flight flush or a
+   pending timer; asserted after each transition (5.4).
+9. A panic in a flush: recovery re-arms the queue and the defer commits the
+   release for the panicking flush's captures.
+10. A flush in flight when a deadline passes: the next starts when it ends, one
+    at a time across computers.
+11. Several computers: one queue and one timer each, serialized.
+12. Task start lateness: the task opens at most the deadline plus one flush
+    after the capture; no poll, tick, lane slot or fence is held.
+13. Larger calls: `intakeCallTimeout` scales with the request (about 69 s at
+    64k against the gateway's 2 minutes); a timeout ends unlabelled and its
+    `est_tokens` is on the failure line.
+14. A dial failure inside a multi-call flush stops the rest of the flush.
+15. **A crash between the held arrival and the release:** the sweep releases the
+    captures unlabelled after `eventHeldGrace` (10 min), from the next live poll;
+    test: a held arrival with no release, labels on and events off, expect the
+    sweep to release it (it returns early today, 6.2).
+16. **A release that cannot commit:** a conflict means the captures were already
+    released (read as done); any other error leaves them held for the sweep.
+17. **The flush's release and the sweep racing, or management delegating a
+    held capture first:** `captureDelegable` refuses a second lease and the
+    release id is deterministic (`event-released:<digest>`); a test commits both
+    and expects one task.
+18. **Management reading a held arrival:** it wakes no one and is not management's
+    to dispose of; the test asserts the wake predicate (`store/management_tasks.go:137`)
+    for a held arrival under the gather. Whether management's prompt tells it to
+    leave held records alone is unverified.
+
+(Against 5.8: item 12 changes from label lateness to task start lateness;
+items 15 to 18 are new with the held arrival; the rest stand.)
+
+### 6.7 Land order, and what is unverified
+
+1. **(a)**, 2. **(b)** as in 5.6, unchanged by this section.
+3. **(c)** the gather: timer (5.4), deadline, deleted ticket, poll decoupled
+   and its arrival held (6.4), the release defer (6.5), the sweep gate widened
+   (6.2). Orange, red surface (inbox commits and task mint). The sweep edit is
+   its own small commit before (c) so it can be reverted alone.
+
+Not verified: how long an intake task takes per capture (the 10-minute
+deadline with about 8 captures); management's behavior on a held captures
+record; the exact assertions of the tests that wait on the ticket
+(`intake_flush_test.go`, `intake_flush_safety_test.go`); whether a boot re-poll
+treats a crash-lost arrival as already captured (taken from DeepSeek B1, the
+order of writes confirmed in code); and that a computer with only labels on
+has the sweep's other inputs (`eventIndexFor` is read only when both event
+settings are on, `event_wakes.go:466-480`).
 
