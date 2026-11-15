@@ -13,7 +13,7 @@ cost in bytes and capture time per base, at the paper's scale and at ten times
 that scale. Format changes and one-time migrations are allowed. Where one would
 lose something, this record says what.
 
-Status: proposed by an Opus designer, 2026-11-15T06:10Z. Not yet reviewed. Landing
+Status: proposed by an Opus designer, 2026-11-15T05:59Z. Not yet reviewed. Landing
 0 (an offline bench) may run before review; landings 1 and later wait for a
 two-seat review of this record.
 
