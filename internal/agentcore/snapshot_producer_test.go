@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,11 +24,14 @@ import (
 //  e. two ticks run two snapshots at once;
 //  f. a snapshot that keeps crashing the computer is retried forever;
 //  g. the kill switch is ignored, or an unset environment is read as off;
-//  h. a store of any size is refused (there is no size cap and no 1.25x
-//     free-space rule: the stream writes no copy);
+//  h. a store is refused for any reason but free space: the rule is the
+//     store's size plus the floor, for every kind of capture (the copy needs
+//     both; snapshot_producer_copy_test.go);
 //  i. the time budget is dropped on the way to the capture, or its abort is
 //     read as success or logged without the reason;
-//  j. a copy left by the VACUUM INTO era stays on the volume.
+//  j. a copy left by an earlier attempt stays on the volume (the cleanup is the
+//     store's, store_copy_test.go, and runs under the token, before the free-space
+//     measurement: snapshot_producer_copy_test.go).
 
 type producerHarness struct {
 	t          *testing.T
@@ -62,7 +64,13 @@ func newProducerHarness(t *testing.T) *producerHarness {
 		HeadSequence: func(context.Context) (uint64, bool, error) { return h.head, h.head > 0, nil },
 		Busy:         func(context.Context) (string, error) { return h.busy, nil },
 		FreeBytes:    func(string) (uint64, error) { return h.free, nil },
-		Ready:        func() bool { return true },
+		// The wired shape: every hook the constructor sets is set here too, so no
+		// producer test runs without the token, the cleanup or the store-size rule.
+		StoreBytes:      func(context.Context) (int64, error) { return 1 << 20, nil },
+		HoldCopy:        func() (func(), string, bool) { return func() {}, "", true },
+		Leftovers:       func() error { return nil },
+		StagedCopyBytes: func() int64 { return 0 },
+		Ready:           func() bool { return true },
 		Take: func(ctx context.Context, maxDuration time.Duration) (snapshot.Ref, error) {
 			h.takes++
 			h.tookWithin = maxDuration
@@ -176,30 +184,9 @@ func TestProducerRefusesWithAReasonAndRetries(t *testing.T) {
 	}
 }
 
-func TestProducerFreeSpaceBoundaryIsTheWALFloorNotTheStoreSize(t *testing.T) {
-	h := newProducerHarness(t)
-	var p snapshotProducer
-	h.free = snapshotFreeFloor - 1
-	if outcome, _ := h.run(&p, time.Now()); outcome != snapshotRefused {
-		t.Fatalf("one byte under the floor must refuse, got %s", outcome)
-	}
-	h.free = snapshotFreeFloor
-	if outcome, _ := h.run(&p, time.Now()); outcome != snapshotTaken {
-		t.Fatalf("exactly the floor must take, got %s", outcome)
-	}
-}
-
-// h: there is no cap: nothing in the producer reads the store's size, so a
-// store of any size is taken as long as the floor holds.
-func TestProducerHasNoSizeCap(t *testing.T) {
-	h := newProducerHarness(t)
-	h.free = 1 << 50
-	var p snapshotProducer
-	if outcome, detail := h.run(&p, time.Now()); outcome != snapshotTaken {
-		t.Fatalf("outcome=%s detail=%q", outcome, detail)
-	}
-}
-
+// The free-space boundary is the store's size plus the floor, for every kind of
+// capture: TestEveryTriggerKindNeedsTheStoreSizePlusTheFloor (the floor-only rule
+// this test used to pin is gone).
 // i: the budget reaches the capture, and its abort is a logged failure that
 // names the budget and the knob.
 func TestProducerPassesTheBudgetAndReportsItsAbort(t *testing.T) {
@@ -220,25 +207,6 @@ func TestProducerPassesTheBudgetAndReportsItsAbort(t *testing.T) {
 	h2.takeErr = nil
 	if outcome, _ := h2.run(&p2, time.Now().Add(snapshotBackoffCeiling)); outcome != snapshotTaken {
 		t.Fatalf("after an abort: %s", outcome)
-	}
-}
-
-// j: a crashed VACUUM INTO copy is removed at the start of an attempt.
-func TestProducerRemovesTheLegacyCopyDirectory(t *testing.T) {
-	h := newProducerHarness(t)
-	legacy := filepath.Join(h.deps.DataDir, snapshotLegacyTempDirName)
-	if err := os.MkdirAll(legacy, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(legacy, "snapshot-123.db"), []byte("copy"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	var p snapshotProducer
-	if outcome, _ := h.run(&p, time.Now()); outcome != snapshotTaken {
-		t.Fatalf("outcome=%s", outcome)
-	}
-	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
-		t.Fatalf("the legacy copy directory is still there: %v", err)
 	}
 }
 
