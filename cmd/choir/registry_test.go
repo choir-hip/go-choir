@@ -49,7 +49,7 @@ var wantCLIOnly = []string{
 	"api-key create", "computer bootstrap-chain", "computer rematerialize-from-tape",
 	// Owner act: re-pin a verifier key a lost data disk regenerated.
 	"computer repin-verifier",
-	"computer restore",
+	"computer restore", "computer restore-status",
 	// Owner act (slice 3 of the checkpoint design): reopen a closed cadence.
 	"computer resume-checkpoints", "help", "login", "logout", "mcp", "mcp install",
 	// Owner acts (Library S2, S3): publishing a package release, and

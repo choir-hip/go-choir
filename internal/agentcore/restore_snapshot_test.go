@@ -1,7 +1,6 @@
 package agentcore
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -9,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -436,13 +434,8 @@ func TestRematerializeRefusesFailureClasses(t *testing.T) {
 		rt, fake, checkpoint, _ := rematerializeSeededWithFrontend(t, "computer-refuse-status")
 		fake.foreign = true
 		body, _ := json.Marshal(rematerializeAPIRequest{Checkpoint: checkpoint})
-		request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-refuse-status/lifecycle/rematerialize-from-tape", bytes.NewReader(body))
-		request.Header.Set("X-Authenticated-User", "owner-refuse")
-		request.Header.Set("X-Authenticated-Computer", "computer-refuse-status")
-		response := httptest.NewRecorder()
-		NewAPIHandler(rt).HandleComputersRouter(response, request)
-		if response.Code != http.StatusConflict {
-			t.Fatalf("refusal status=%d body=%s", response.Code, response.Body.String())
+		if code, answer := serveRestoreToEnd(t, rt, "computer-refuse-status", "/lifecycle/rematerialize-from-tape", body); code != http.StatusConflict {
+			t.Fatalf("refusal status=%d body=%s", code, answer)
 		}
 	})
 }

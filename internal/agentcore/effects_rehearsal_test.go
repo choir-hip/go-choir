@@ -1,12 +1,10 @@
 package agentcore
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -190,13 +188,8 @@ func TestEffectsRehearsalReversibleProposeConsensusPromoteRestore(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/lifecycle/restore", bytes.NewReader(body))
-	request.Header.Set("X-Authenticated-User", "owner-restore")
-	request.Header.Set("X-Authenticated-Computer", computerID)
-	response := httptest.NewRecorder()
-	NewAPIHandler(rt).HandleComputersRouter(response, request)
-	if response.Code != http.StatusOK {
-		t.Fatalf("restore status=%d body=%s", response.Code, response.Body.String())
+	if code, answer := serveRestoreToEnd(t, rt, computerID, "/lifecycle/restore", body); code != http.StatusOK {
+		t.Fatalf("restore status=%d body=%s", code, answer)
 	}
 	live = nil
 	foundIntent := false

@@ -53,6 +53,8 @@ type hostStopHealth struct {
 	SelfdevActive int
 	// LiveCapsules is nil when the guest does not report the field.
 	LiveCapsules *int
+	// RestoreInFlight: the guest is running an accepted restore act.
+	RestoreInFlight bool
 }
 
 // busyCaptureAllowed: the guest is known free of a self-development apply

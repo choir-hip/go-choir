@@ -521,9 +521,7 @@ mission. The restore engine is unchanged; what changes is who waits for it.
   witness detail an agent has no use for.
 - One at a time: a second request while an act runs answers 409 naming the
   running act. The same idempotency key (default: the checkpoint digest, the
-  key the intent already uses) returns the running act. A restore and a replay
-  probe exclude each other (both own the appender's replay observer; the probe
-  would clear the restore's mid-run).
+  key the intent already uses) returns the running act.
 - The acceptance answer carries the estimate: tail events and seconds, from
   the replay rate measured on this computer when one is recorded (appender
   `ReplayRate`), else the assumed 113 events a second, and says which. The tail
@@ -580,8 +578,11 @@ nobody asked for. The owner re-submits (the intent is idempotent).
    crash restart read running runs, self-development operations and live
    capsules; a restore is none of them. `/health` now reports `restore_in_flight`
    and each reading treats it as busy.
-5. The replay probe and a restore both install a replay observer on the one
-   appender; a probe finishing clears the restore's. Excluded as above.
+5. The replay probe (a checkpoint bind runs one every hour) and a restore both
+   install a replay observer on the one appender; a probe finishing clears the
+   restore's, and the restore then fails its exactly-once tail receipt. The
+   restore now observes through its own dry-run copy and never touches the
+   appender's.
 
 ### Residuals named before the build
 
@@ -629,8 +630,8 @@ Guest, through the real router (`NewAPIHandler(rt).HandleComputersRouter`):
     `TestPlannedRestartIsRefusedMidRestore`, `TestHealthReportsRestoreInFlight`
 13. F13 `currentReleaseMu` is free during the replay.
     `TestRestoreActDoesNotHoldTheReleaseLockDuringTheReplay`
-14. F14 A replay probe and a restore exclude each other.
-    `TestReplayProbeAndRestoreExclude`
+14. F14 A replay probe that runs during a restore does not touch its
+    observation. `TestReplayProbeDuringARestoreDoesNotTouchItsObservation`
 15. F15 Act records: unknown id 404, newest 20 kept, a record of another
     computer is not served. `TestRestoreActRecords`
 16. F16 No production capability is missing from the test wiring: the act runs
