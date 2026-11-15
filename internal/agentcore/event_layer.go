@@ -374,7 +374,7 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 	// captures in report.Left (an "unresolved" wake record, not retried again).
 	// The retries, their backoff and the halves run while resolveEvents holds
 	// idx.mu, so a failing flush holds the index for up to eight calls a
-	// chunk; only eventSummary readers wait on it, and the work is the flush's
+	// chunk (a dial failure ends a chunk's calls at once, jevTransportDown); only eventSummary readers wait on it, and the work is the flush's
 	// own.
 	for _, chunk := range chunks {
 		// Each call has its own deadline (scaled to its size); a flush has none, so
@@ -463,7 +463,8 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 // resolveEventChunkAt is resolveEventChunk for a chunk that sits depth halvings
 // below the flush's call and has been tried retries more times: a failed call
 // is handled as intake's is (jev_failure.go): a rate refusal backs off, other
-// failures are asked once more and then halved to a bounded depth.
+// failures are asked once more and then halved to a bounded depth, except a
+// dial failure, which fails at once.
 func (rt *Runtime) resolveEventChunkAt(ctx context.Context, idx *eventIndex, ownerID, computerID string, chunk []eventInput, report *eventResolveReport, depth, retries int) {
 	now := time.Now().UTC()
 	stateRaw, questions, alias, split := eventPrepareChunk(idx, chunk, now)

@@ -32,7 +32,8 @@ import (
 // questions, which candidate reports the same event (or new) and which story
 // shares the topic (or none), go in one request, split only where a vendor
 // limit forces it. Choices are short aliases (c1…, n1…) mapped back here. A
-// call that fails is asked again and then halved (jev_failure.go); what still
+// call that fails is asked again and then halved, except a dial failure,
+// which fails the flush's calls at once (jev_failure.go); what still
 // fails is left unlabelled, and labels never gate arrival.
 // Each label is its own choir.capture_label object, never part of the
 // arrival record.
@@ -1119,8 +1120,11 @@ func (rt *Runtime) labelPollWith(ctx context.Context, lib *intakeLibrary, ownerI
 	// another, and the remedy for a split is a smaller context. One failed call
 	// does not lose the flush: a request the vendor refused for size is halved
 	// and asked again (forced_by=vendor_refused, with the vendor's reason), and
-	// a timeout, 429 or 5xx is asked once more after a backoff; what still fails
-	// is unlabelled and counted on the flush line.
+	// a 429 or 529 is asked again after a backoff; a dial failure fails the call
+	// at once (never asked again, never halved) and the flush's other calls are
+	// not sent to the closed port; any other failure (a 5xx, a timeout, a short
+	// body) is asked once more and then halved to a bounded depth (jev_failure.go).
+	// What fails is unlabelled and counted on the flush line.
 	type item struct {
 		call    intakeCall
 		retries int
@@ -1131,13 +1135,19 @@ func (rt *Runtime) labelPollWith(ctx context.Context, lib *intakeLibrary, ownerI
 		work = append(work, item{call: c})
 	}
 	lib.stats = intakePollStats{}
+	// down is the dial failure that ended a call: no request left the guest,
+	// so the flush's other calls would meet the same closed port.
+	var down error
 	for len(work) > 0 {
 		it := work[0]
 		work = work[1:]
 		c := it.call
 		var ans [][]intakeCallAnswer
 		err := ctx.Err()
-		if err == nil {
+		if err == nil && down != nil {
+			err = down
+			log.Printf("intake labels: call of %d questions not sent after a dial failure: %v", len(c.questions), down)
+		} else if err == nil {
 			// The counters are the calls actually made, retries and halves
 			// included.
 			lib.stats.calls++
@@ -1146,12 +1156,15 @@ func (rt *Runtime) labelPollWith(ctx context.Context, lib *intakeLibrary, ownerI
 			lib.stats.maxTokens = max(lib.stats.maxTokens, jevbudget.Measure(c.state, c.questions).Request)
 			ans, err = rt.askIntakeCall(ctx, lib, c)
 		}
-		if err != nil && ctx.Err() == nil {
+		if err != nil && ctx.Err() == nil && down == nil {
 			var halves []intakeCall
 			if c.halve != nil {
 				halves = c.halve()
 			}
 			act, forcedBy := jevNextStep(err, it.retries, it.depth, len(halves) > 1)
+			if jevTransportDown(err) {
+				down = err
+			}
 			switch act {
 			case jevRetry:
 				log.Printf("intake labels: call of %d questions failed (%v); asking again after a backoff", len(c.questions), err)
