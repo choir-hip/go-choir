@@ -64,6 +64,13 @@ func newProducerHarness(t *testing.T) *producerHarness {
 		HeadSequence: func(context.Context) (uint64, bool, error) { return h.head, h.head > 0, nil },
 		Busy:         func(context.Context) (string, error) { return h.busy, nil },
 		FreeBytes:    func(string) (uint64, error) { return h.free, nil },
+		// The wired shape: every hook the constructor sets is set here too, so no
+		// producer test runs without the token, the cleanup or the store-size rule.
+		ScratchDir:      filepath.Join(t.TempDir(), snapshotScratchDirName),
+		StoreBytes:      func(context.Context) (int64, error) { return 1 << 20, nil },
+		HoldCopy:        func() (func(), string, bool) { return func() {}, "", true },
+		Leftovers:       func() error { return nil },
+		StagedCopyBytes: func() int64 { return 0 },
 		Ready:        func() bool { return true },
 		Take: func(ctx context.Context, maxDuration time.Duration) (snapshot.Ref, error) {
 			h.takes++
@@ -178,19 +185,9 @@ func TestProducerRefusesWithAReasonAndRetries(t *testing.T) {
 	}
 }
 
-func TestProducerFreeSpaceBoundaryIsTheWALFloorNotTheStoreSize(t *testing.T) {
-	h := newProducerHarness(t)
-	var p snapshotProducer
-	h.free = snapshotFreeFloor - 1
-	if outcome, _ := h.run(&p, time.Now()); outcome != snapshotRefused {
-		t.Fatalf("one byte under the floor must refuse, got %s", outcome)
-	}
-	h.free = snapshotFreeFloor
-	if outcome, _ := h.run(&p, time.Now()); outcome != snapshotTaken {
-		t.Fatalf("exactly the floor must take, got %s", outcome)
-	}
-}
-
+// The free-space boundary is the store's size plus the floor, for every kind of
+// capture: TestEveryTriggerKindNeedsTheStoreSizePlusTheFloor (the floor-only rule
+// this test used to pin is gone).
 // i: the budget reaches the capture, and its abort is a logged failure that
 // names the budget and the knob.
 func TestProducerPassesTheBudgetAndReportsItsAbort(t *testing.T) {

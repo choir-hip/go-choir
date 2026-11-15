@@ -8,11 +8,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
 	"github.com/yusefmosiah/go-choir/internal/snapshot"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
@@ -58,6 +62,10 @@ func TestEveryTriggerKindNeedsTheStoreSizePlusTheFloor(t *testing.T) {
 			}
 			if !strings.Contains(detail, fmt.Sprint(h.free)) || !strings.Contains(detail, fmt.Sprint(need)) {
 				t.Fatalf("the refusal must name the free space and the need (%d, %d): %q", h.free, need, detail)
+			}
+			// And it is visible in snapshot_producer.refusal (failure 17).
+			if st := p.status(now); st.ConsecutiveRefusals != 1 || !strings.Contains(st.Refusal, fmt.Sprint(need)) {
+				t.Fatalf("the refusal is not visible in status: %+v", st)
 			}
 			h.free = need
 			if outcome, detail := h.run(p, now); outcome != snapshotTaken || h.takes != 1 {
@@ -185,27 +193,41 @@ func TestTheTokenIsReleasedOnEveryReturn(t *testing.T) {
 	}
 }
 
-// Failures 26 and 41: a staged compact copy lowers the measured free space and
-// is not added again; below the need the capture refuses, naming the amounts and
-// the staged size, and nothing is removed.
+// Failures 26 and 41: a staged compact copy lowers the measured free space and is
+// not added again; below the need the capture refuses, naming the amounts and the
+// staged size. The cleanup and the size are the store's own helpers on real files:
+// the staged copy and its sidecar are byte-identical afterwards.
 func TestAStagedCopyIsNamedInTheRefusalAndNeverRemoved(t *testing.T) {
 	h, p, now := dueHarness(t, "first")
 	need := uint64(copyTestStoreBytes) + snapshotFreeFloor
-	staged := int64(42) << 30
-	h.deps.StagedCopyBytes = func() int64 { return staged }
-	removed := false
-	h.deps.Leftovers = func() error { return nil }
+	marker := filepath.Join(h.deps.DataDir, "store") // StateDBPath(marker) is DataDir/state.db
+	staged := filepath.Join(h.deps.DataDir, "state.db.compact")
+	sidecar := filepath.Join(h.deps.DataDir, "state.db.compact.json")
+	if err := os.WriteFile(staged, make([]byte, 1<<20), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sidecar, []byte(`{"sequence":7}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h.deps.Leftovers = func() error { return choirstore.RemoveCaptureLeftovers(marker) }
+	h.deps.StagedCopyBytes = func() int64 { return choirstore.CompactStagedBytes(marker) }
 	h.free = need - 1
 	outcome, detail := h.run(p, now)
-	if outcome != snapshotRefused || !strings.Contains(detail, "staged") || !strings.Contains(detail, fmt.Sprint(staged)) {
+	if outcome != snapshotRefused || !strings.Contains(detail, "staged") || !strings.Contains(detail, fmt.Sprint(1<<20)) {
 		t.Fatalf("outcome=%s detail=%q: the refusal must name the staged copy and its size", outcome, detail)
 	}
-	if removed {
-		t.Fatal("something was removed")
+	if info, err := os.Stat(staged); err != nil || info.Size() != 1<<20 {
+		t.Fatalf("the staged copy was touched: %v %v", info, err)
+	}
+	if raw, err := os.ReadFile(sidecar); err != nil || string(raw) != `{"sequence":7}` {
+		t.Fatalf("the staged copy's sidecar was touched: %q %v", raw, err)
 	}
 	h.free = need
 	if outcome, _ := h.run(p, now); outcome != snapshotTaken {
 		t.Fatalf("free = need with a staged copy present: %s", outcome)
+	}
+	if _, err := os.Stat(staged); err != nil {
+		t.Fatalf("the staged copy was removed by a capture that took: %v", err)
 	}
 }
 
@@ -306,5 +328,49 @@ func TestRuntimeStartSweepsTheSnapshotScratch(t *testing.T) {
 	probe := strings.Index(src, "rt.removeStaleReplayScratch()")
 	if start < 0 || sweep < start || sweep > probe+600 {
 		t.Fatalf("Start (at %d) must call RemoveSnapshotScratch beside removeStaleReplayScratch (sweep at %d, probe at %d)", start, sweep, probe)
+	}
+}
+
+// The production constructor sets every hook the producer requires and the
+// scratch directory (the guards for a nil hook are gone: a dropped line would
+// otherwise silently remove the compaction exclusion or the store-size rule).
+func TestTheProductionConstructorWiresEveryHook(t *testing.T) {
+	st := newStreamStore(t, 20)
+	client, err := computerevent.NewHTTPClient("http://127.0.0.1:1", http.DefaultClient,
+		func(context.Context) (string, error) { return "capability", nil }, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	rt := &Runtime{
+		store:                 st,
+		eventAppender:         &computerevent.ComputerEventAppender{},
+		privateArtifactCipher: streamCipher(t),
+		eventPayloadReader:    client,
+		cfg:                   provideriface.Config{ComputerID: streamComputer, StorePath: filepath.Join(dir, "store")},
+	}
+	deps, ok := rt.snapshotDepsForRuntime()
+	if !ok {
+		t.Fatal("the constructor refused a runtime with a store, an appender, a cipher and an event client")
+	}
+	if deps.StoreBytes == nil || deps.HoldCopy == nil || deps.Leftovers == nil || deps.StagedCopyBytes == nil {
+		t.Fatalf("a hook is not wired: StoreBytes %v, HoldCopy %v, Leftovers %v, StagedCopyBytes %v",
+			deps.StoreBytes != nil, deps.HoldCopy != nil, deps.Leftovers != nil, deps.StagedCopyBytes != nil)
+	}
+	if want := filepath.Join(filepath.Dir(st.StatePath()), snapshotScratchDirName); deps.ScratchDir != want {
+		t.Fatalf("scratch directory %q, want %q", deps.ScratchDir, want)
+	}
+	// The wired hooks do what the producer relies on: the token excludes, the size
+	// is the store's, and the cleanup removes the scratch directory.
+	release, _, got := deps.HoldCopy()
+	if !got {
+		t.Fatal("the first request for the token was refused")
+	}
+	if _, holder, again := deps.HoldCopy(); again || holder != "capture" {
+		t.Fatalf("a held token granted again (%v) or named %q", again, holder)
+	}
+	release()
+	if n, err := deps.StoreBytes(context.Background()); err != nil || n <= 0 {
+		t.Fatalf("store bytes %d, %v", n, err)
 	}
 }

@@ -246,7 +246,7 @@ another connection writes (`wal_bound.go:28-31`).
   section 4.
 - Pages go through a 4 MiB buffered writer. Every 64 MiB (`sourceDropBytes`,
   `snapshot.go:612`, made a package variable `scratchSyncBytes` so a test can
-  shrink it) the code flushes the buffer, calls `fdatasync` on the file, drops
+  shrink it) the code flushes the buffer, calls `Sync` (an `fsync`, which covers more than `fdatasync` would) on the file, drops
   that range with `adviseDropFileCache` (`internal/snapshot/cache_linux.go:14-21`;
   a no-op elsewhere, `cache_other.go`, so the proof runs on Linux guests) and
   calls `cfg.FreeSpace()`. Reason *(inferred)*: `FADV_DONTNEED` drops only clean
@@ -976,7 +976,7 @@ Questions
 3. **Copy budget:** deleted; `MaxDuration` bounds the whole capture (2.9).
 4. **Write-time digest:** included, inline (2.2); the first thing to delete if a seat
    finds the remaining failure (a disk fault between copy and upload) too remote.
-5. **`fdatasync` and cache drop every 64 MiB, no throttle:** default as in 2.2; if
+5. **`Sync` (`fsync`) and cache drop every 64 MiB, no throttle:** default as in 2.2; if
    the proof's step 5 shows the rate dropping, the answer is a smaller interval, not a
    rate limit.
 6. **Headroom constants:** deleted (2.5).

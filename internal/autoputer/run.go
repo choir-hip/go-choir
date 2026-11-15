@@ -205,10 +205,6 @@ func Run() {
 
 	// Every store step before the listener logs its start, end and duration:
 	// a boot that hangs names the step that has no end.
-	// A compact copy staged while the computer ran is swapped in on a planned
-	// boot, before the store opens; the tape replay below brings it to the
-	// canonical head (store/compact.go). A crash between its renames is
-	// finished or undone here on any boot.
 	// A snapshot capture killed in flight leaves a store-sized scratch copy. It is
 	// removed before anything below needs the volume: the rebase, the store open
 	// and the replay all run before Runtime.Start (docs/design/capture-static-copy-2026-11-15.md, 2.4).
@@ -218,6 +214,10 @@ func Run() {
 	if scratchErr != nil {
 		log.Printf("autoputer: %v", scratchErr)
 	}
+	// A compact copy staged while the computer ran is swapped in on a planned
+	// boot, before the store opens; the tape replay below brings it to the
+	// canonical head (store/compact.go). A crash between its renames is
+	// finished or undone here on any boot.
 	doneRebase := objectgraph.BootPhase("autoputer: startup", "compact-rebase")
 	rebased, rebaseErr := store.RebaseOntoCompactCopy(rtCfg.StorePath, agentcore.PlannedRestartMarkerPending(rtCfg.StorePath, bootTimelineClock.start.UTC()))
 	doneRebase(rebaseErr)

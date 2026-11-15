@@ -703,7 +703,7 @@ func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr 
 		}
 	}
 	defer closeCopy()
-	if err := crossCheckCopy(runCtx, cfg, copyDB.Read, scratchPath, pageSize, pageCount, out.head); err != nil {
+	if err := crossCheckCopy(runCtx, cfg, copyDB.Read, scratchPath, pageSize, pageCount, out.head, cause); err != nil {
 		return out, err
 	}
 	witnessStart := time.Now()
@@ -779,7 +779,7 @@ func osScratch(path string) (scratchWriter, error) {
 
 // copyPages writes every page of tx's snapshot to Config.ScratchDir/state.db and
 // returns its path and the SHA-256 of the bytes written. Every scratchSyncBytes
-// it flushes the buffer, syncs the file, drops the written range from the page
+// it flushes the buffer, syncs the file (fsync), drops the written range from the page
 // cache and checks free space. The hash is inline on the same bytes.
 func copyPages(runCtx context.Context, cfg Config, tx *sql.Tx, pageSize int, pageCount int64, cause func(error) error) (path string, sum []byte, err error) {
 	if err := os.MkdirAll(cfg.ScratchDir, 0o700); err != nil {
@@ -879,10 +879,19 @@ func copyPages(runCtx context.Context, cfg Config, tx *sql.Tx, pageSize int, pag
 // witnessed: the file size, the page size and count, and EVERY field of the
 // head row (nil equals nil and nothing else) equal the transaction's. The head
 // is read with cfg.Head on a read transaction of the copy's own DB.
-func crossCheckCopy(ctx context.Context, cfg Config, db *sql.DB, path string, pageSize int, pageCount int64, want *computerevent.Head) error {
+func crossCheckCopy(ctx context.Context, cfg Config, db *sql.DB, path string, pageSize int, pageCount int64, want *computerevent.Head, cause func(error) error) error {
+	// A read that fails because the run ended (the budget, a cancel, a worker's
+	// failure) is that cause, not a mismatch: the producer says "aborted at the
+	// time budget" only if the budget is what the error carries.
+	readErr := func(what string, err error) error {
+		if ctx.Err() != nil {
+			return fmt.Errorf("snapshot: cross-check of the copy: %s: %w", what, cause(err))
+		}
+		return fmt.Errorf("%w: %s: %w", ErrCopyHeadMismatch, what, err)
+	}
 	info, err := os.Stat(path)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrCopyHeadMismatch, err)
+		return readErr("stat the copy", err)
 	}
 	if info.Size() != int64(pageSize)*pageCount {
 		return fmt.Errorf("%w: the copy is %d bytes, the transaction had %d pages of %d", ErrCopyHeadMismatch, info.Size(), pageCount, pageSize)
@@ -890,22 +899,22 @@ func crossCheckCopy(ctx context.Context, cfg Config, db *sql.DB, path string, pa
 	var gotSize int
 	var gotCount int64
 	if err := db.QueryRowContext(ctx, `PRAGMA page_size`).Scan(&gotSize); err != nil {
-		return fmt.Errorf("%w: page size of the copy: %v", ErrCopyHeadMismatch, err)
+		return readErr("page size of the copy", err)
 	}
 	if err := db.QueryRowContext(ctx, `PRAGMA page_count`).Scan(&gotCount); err != nil {
-		return fmt.Errorf("%w: page count of the copy: %v", ErrCopyHeadMismatch, err)
+		return readErr("page count of the copy", err)
 	}
 	if gotSize != pageSize || gotCount != pageCount {
 		return fmt.Errorf("%w: the copy has %d pages of %d bytes, the transaction had %d of %d", ErrCopyHeadMismatch, gotCount, gotSize, pageCount, pageSize)
 	}
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
-		return fmt.Errorf("%w: read the copy's head: %v", ErrCopyHeadMismatch, err)
+		return readErr("read the copy's head", err)
 	}
 	defer tx.Rollback()
 	got, err := cfg.Head(ctx, tx)
 	if err != nil {
-		return fmt.Errorf("%w: read the copy's head: %v", ErrCopyHeadMismatch, err)
+		return readErr("read the copy's head", err)
 	}
 	switch {
 	case got == nil && want == nil:

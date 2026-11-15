@@ -213,12 +213,15 @@ type snapshotDeps struct {
 	Take func(ctx context.Context, maxDuration time.Duration) (snapshot.Ref, error)
 
 	// StoreBytes is page_count x page_size of the state store: the size of the
-	// scratch copy (nil: 0, a test harness). HoldCopy is the store-copy token
-	// (nil: none); it never waits. Leftovers removes the scratch directory and a
-	// never-trusted compact staging file, never the staged copy (nil: nothing).
-	// StagedCopyBytes is the size of state.db.compact, named in a refusal and never
-	// removed (nil: 0). afterGates runs between the read-only gates and the
+	// scratch copy. HoldCopy is the store-copy token; it never waits. Leftovers
+	// removes the scratch directory and a never-trusted compact staging file, never
+	// the staged copy. StagedCopyBytes is the size of state.db.compact, named in a
+	// refusal and never removed. ScratchDir is the scratch directory Take copies
+	// into. All five are required: the constructor sets them (a test pins that),
+	// and a harness sets them too, so no test runs without the token, the cleanup
+	// or the store-size rule. afterGates runs between the read-only gates and the
 	// token (a test seam).
+	ScratchDir      string
 	StoreBytes      func(ctx context.Context) (int64, error)
 	HoldCopy        func() (release func(), holder string, ok bool)
 	Leftovers       func() error
@@ -538,24 +541,20 @@ func (p *snapshotProducer) evaluate(ctx context.Context, d snapshotDeps, set sna
 	if d.afterGates != nil {
 		d.afterGates()
 	}
-	if d.HoldCopy != nil {
-		release, holder, ok := d.HoldCopy()
-		if !ok {
-			return snapshotRefused, fmt.Sprintf("the store-copy token is held by %s: its store-sized copy and this capture's scratch copy are not written together (retrying at the next tick)", holder)
-		}
-		// Every return from here gives the token back; release is idempotent.
-		defer release()
+	release, holder, ok := d.HoldCopy()
+	if !ok {
+		return snapshotRefused, fmt.Sprintf("the store-copy token is held by %s: its store-sized copy and this capture's scratch copy are not written together (retrying at the next tick)", holder)
 	}
+	// Every return from here gives the token back; release is idempotent.
+	defer release()
 	if err := os.MkdirAll(d.DataDir, 0o700); err != nil {
 		return snapshotFailed, "create the data dir: " + err.Error()
 	}
 	// What a crashed or aborted attempt left (the scratch directory, a compact
 	// staging file; never the staged copy). A removal that fails fails the
 	// attempt closed: nothing is written on top of a file it could not remove.
-	if d.Leftovers != nil {
-		if err := d.Leftovers(); err != nil {
-			return snapshotRefused, "cannot remove what an earlier attempt left (fails closed): " + err.Error()
-		}
+	if err := d.Leftovers(); err != nil {
+		return snapshotRefused, "cannot remove what an earlier attempt left (fails closed): " + err.Error()
 	}
 
 	// Correctness refusals: logged by the caller, retried at the next tick.
@@ -564,12 +563,9 @@ func (p *snapshotProducer) evaluate(ctx context.Context, d snapshotDeps, set sna
 	} else if why != "" {
 		return snapshotRefused, why
 	}
-	var storeBytes int64
-	if d.StoreBytes != nil {
-		var err error
-		if storeBytes, err = d.StoreBytes(ctx); err != nil {
-			return snapshotRefused, "cannot read the store's size (fails closed): " + err.Error()
-		}
+	storeBytes, err := d.StoreBytes(ctx)
+	if err != nil {
+		return snapshotRefused, "cannot read the store's size (fails closed): " + err.Error()
 	}
 	free, err := d.FreeBytes(d.DataDir)
 	if err != nil {
@@ -580,10 +576,8 @@ func (p *snapshotProducer) evaluate(ctx context.Context, d snapshotDeps, set sna
 	need := uint64(storeBytes) + snapshotFreeFloor
 	if free < need {
 		staged := ""
-		if d.StagedCopyBytes != nil {
-			if n := d.StagedCopyBytes(); n > 0 {
-				staged = fmt.Sprintf("; a staged compact copy of %d bytes (state.db.compact) is on the volume and a capture never removes it", n)
-			}
+		if n := d.StagedCopyBytes(); n > 0 {
+			staged = fmt.Sprintf("; a staged compact copy of %d bytes (state.db.compact) is on the volume and a capture never removes it", n)
 		}
 		return snapshotRefused, fmt.Sprintf("free space %d bytes on the data volume is under the %d bytes this capture needs: the store's %d bytes for the scratch copy plus the %d-byte floor%s", free, need, storeBytes, snapshotFreeFloor, staged)
 	}
@@ -801,11 +795,13 @@ func (p *snapshotProducer) status(_ time.Time) snapshotProducerStatus {
 	return st
 }
 
+// pagesPerSecond is the copy's rate: the state file's pages (the scratch's size
+// over the page size; Stats.Pages also counts the partitions) over the page loop.
 func pagesPerSecond(st snapshot.Stats) float64 {
-	if st.CopyTime <= 0 {
+	if st.CopyTime <= 0 || st.PageSize <= 0 {
 		return 0
 	}
-	return float64(st.Pages) / st.CopyTime.Seconds()
+	return float64(st.ScratchBytes/int64(st.PageSize)) / st.CopyTime.Seconds()
 }
 
 // snapshotDepsForRuntime binds the producer to this runtime. It returns false
@@ -823,7 +819,9 @@ func (rt *Runtime) snapshotDepsForRuntime() (snapshotDeps, bool) {
 	chunks := snapshot.HTTPChunks{BaseURL: client.BaseURL(), ComputerID: computerID, Capability: client.Capability()}
 	store := rt.store
 	dataDir := filepath.Dir(store.StatePath())
+	scratchDir := filepath.Join(dataDir, snapshotScratchDirName)
 	return snapshotDeps{
+		ScratchDir: scratchDir,
 		ComputerID: computerID,
 		StorePath:  rt.cfg.StorePath,
 		DataDir:    dataDir,
@@ -891,7 +889,7 @@ func (rt *Runtime) snapshotDepsForRuntime() (snapshotDeps, bool) {
 					store.CheckpointAfterLongRead(ctx, "snapshot capture")
 				},
 				WALBytes:   func() int64 { return store.WALStats().WALBytes },
-				ScratchDir: filepath.Join(dataDir, snapshotScratchDirName),
+				ScratchDir: scratchDir,
 				// The scratch copy and the WAL it pins grow on the data volume; the
 				// copy checks this every 64 MiB it writes and the capture every
 				// minute.

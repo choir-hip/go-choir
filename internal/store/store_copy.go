@@ -61,17 +61,18 @@ func (t *storeCopyToken) releaseFor(seq uint64) func() {
 }
 
 func (t *storeCopyToken) take(kind string) (func(), bool) {
+	// The slot and the holder's name change together under the mutex, so a refused
+	// request never reads a taken slot with no name.
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	select {
 	case t.slot <- struct{}{}:
 	default:
 		return nil, false
 	}
-	t.mu.Lock()
 	t.seq++
 	t.holder = kind
-	seq := t.seq
-	t.mu.Unlock()
-	return t.releaseFor(seq), true
+	return t.releaseFor(t.seq), true
 }
 
 func (t *storeCopyToken) holderName() string {

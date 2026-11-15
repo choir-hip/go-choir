@@ -1039,3 +1039,26 @@ func TestAStorePastOneGiBCopiesAndRestores(t *testing.T) {
 	}
 	roundTripWitness(t, f)
 }
+
+// Review of e824c5e30: a budget expiry while the copy's head is read is the
+// budget, not a head mismatch: the cross-check keeps the cause of a read error.
+func TestABudgetExpiryInTheCrossCheckIsReportedAsTheBudget(t *testing.T) {
+	f := newCopyFixture(t, ChunkSize/4)
+	f.cfg.MaxDuration = 300 * time.Millisecond
+	var calls atomic.Int32
+	f.cfg.Head = func(ctx context.Context, tx *sql.Tx) (*computerevent.Head, error) {
+		if calls.Add(1) == 1 {
+			return headFromTable(ctx, tx)
+		}
+		<-ctx.Done() // the copy's head read outlives the budget
+		return nil, ctx.Err()
+	}
+	_, err := TakeSnapshot(context.Background(), f.cfg)
+	if !errors.Is(err, ErrTimeBudget) {
+		t.Fatalf("err = %v, want ErrTimeBudget", err)
+	}
+	if errors.Is(err, ErrCopyHeadMismatch) {
+		t.Fatalf("a budget expiry was reported as a head mismatch: %v", err)
+	}
+	nothingRecorded(t, f)
+}
