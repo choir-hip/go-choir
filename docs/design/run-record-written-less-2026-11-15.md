@@ -101,8 +101,26 @@ At the start of a Texture revision run, after both merges
    run. The local map keeps the key for `:681`.
 
 R2 (`texture_revision_metadata.go:75-76`) and R1 (`coagent_route.go:418`) do
-not change. Nothing new is stored: no object, no kind, no op, no key, no
-reference, no loader. The test-only helper `mergeTextureSourceEntitiesIntoRunMetadata`
+not change. Nothing new is stored: no object, no kind, no op, no reference,
+no loader; the run record carries the list-derived join values in the keys it
+already may carry.
+
+**Every consumer of `durableMetadataKeys`, and what changes for each.** The
+list is read in four places (`texture_task_types.go:43`), so dropping the list
+key from it is not a run-record-only change:
+
+| Consumer | Today | After |
+| --- | --- | --- |
+| run start, `texture_agent_revision.go:789-797` | copies the list and the join keys from the local map into the run | copies the join keys (now list-derived) and no longer the list |
+| R2 parent-revision copy, `texture_revision_metadata.go:26-33` | copies the parent revision's durable keys, list included, into the new revision | no longer copies the list; R2 deleted it from the revision anyway (`:81`) |
+| R2 run copy, `texture_revision_metadata.go:38-44` | copies the run's durable keys, list included | copies the join keys the run now holds; no list to copy |
+| `carryForwardDurableTextureMetadata`, `texture_structure.go:35-76` (loop `:55`), reached from `carryForwardTextureMetadataForRecord` (`texture_structure.go:19`), which `texture_agent_revision.go:252`, `texture_evidence_embed.go:230` and `revise_edit.go:99` call, and from rebase (`texture.go:1152`) | a legacy parent revision whose persisted metadata still holds the list passes it to the child revision | no longer passes it. No live writer stores the key in a revision (R2 deletes it), so this only affects pre-change rows, and it matches the rule in R2's own comment that the list is run-time context and not durable revision metadata |
+
+The join keys now also appear in Texture run records that did not carry them
+before. `store.ListRunsBySelfDevelopmentOperation` (`store.go:687-720`) queries
+that key, but it has no non-test caller on main, and it is documented as
+returning the top-level Management run; a future caller would also see
+Texture runs. Named, not prevented. The test-only helper `mergeTextureSourceEntitiesIntoRunMetadata`
 (`texture_evidence_sources.go:468-477`) is deleted, so no code can write the
 key into a run record again; its one test sets the key on the record directly.
 
@@ -117,23 +135,30 @@ sees: unchanged, since it never read either.
   list, computes an empty join, merges nothing, and the join keys are already
   in `meta` from the durable-key copy of the run's metadata
   (`texture_revision_metadata.go:38-44`). The revision metadata is the same.
-- **New binary on a run started by the old one (deploy).** The record has the
-  list inline and no join keys of its own. R2 is unchanged, so it computes
-  the join from the inline list exactly as today.
+- **New binary on a run started by the old one (deploy).** The record has
+  the list inline and possibly inherited join keys (the join keys are durable,
+  so the old start copied the parent revision's values). R2 is unchanged, so
+  it computes the join from the inline list and overrides the inherited value
+  exactly as today.
 - So there is no two-step landing, and none is needed: the change is
   correct in both directions on its own, and the old tape stays readable
   because no stored shape changes.
 
 The rollback path, as read: automatic rollback is `restorePrior`, which calls
-`service.RecoveryRestart` (`internal/updater/updater.go:1266-1275`); the only
-callers of `WritePlannedRestartMarker` are the guest's planned-restart path
-(`internal/agentcore/planned_restart.go:483`) and `telemetry_batching.go:138`
-(not read), and neither is in the updater's recovery. So an automatic
-rollback restart is markerless and the boot closes open runs
-(`internal/agentcore/runtime.go:3066-3083`). An operator rollback driven
-through the guest's planned-restart endpoint would carry a marker and resume a
-run under the old binary; by the previous paragraph that resumed run is still
-correct. The rollback fact therefore no longer carries weight.
+`service.RecoveryRestart` (`internal/updater/updater.go:1266-1275`) and writes
+no marker, so the boot closes open runs (`internal/agentcore/runtime.go:3066-3083`).
+Markers are written by `WritePlannedRestartMarker` (`planned_restart.go:483`)
+and through `writeHostPlannedRestartMarker` (`telemetry_batching.go:118-153`),
+which is reached from the platform refresh (`planned_restart.go:846`) and from
+the self-development restore restart (`self_development_restore_restart.go:90`),
+a real rollback into an older release that is marker-backed. A run resumed
+under the other binary in either case still produces the same revision
+metadata by the two bullets above, so correctness does not depend on the
+rollback path.
+
+A comment at the R1 gate (`coagent_route.go:44-48`) names this design, so a
+future re-enabling of the route knows that a parent's list is no longer
+stored. That comment is the only edit at R1.
 
 ## 4. Expected saving (estimate)
 
@@ -211,26 +236,34 @@ Repo tests (written first, class yellow):
    entities, evidence entities, a parent revision with its own join keys, and
    a revision whose metadata still carries the legacy key. (After the change
    there is no inline writer to run twice, so the golden is recorded first.)
-2. An old-shape run record (inline list, no join keys) that has been through
-   one `updateRunOGOnce` re-encode gives the same revision metadata through R2.
+2. An old-shape run record (inline list, possibly inherited join keys),
+   JSON round-tripped as `Store.UpdateRunOG` does (`graph_store.go:714`; the
+   unexported `updateRunOGOnce` is not callable from the package), gives the
+   same revision metadata through R2.
 3. A new-shape run record (join keys, no list) gives the same revision
    metadata through R2.
-4. A gate test: `textureAvailableSourceEntitiesKey` is not in
-   `durableMetadataKeys`, and no non-test code assigns it into a run's
-   metadata.
-5. A re-encode test: marshal a typed list, decode to `map[string]any`,
-   marshal again; different bytes, equal content. This explains the 19
-   changes in the repo.
+4. `textureAvailableSourceEntitiesKey` is absent from
+   `durableMetadataKeys`, and a run started with a non-empty merged list and a
+   non-empty `req.SourceEntities` has stored metadata that lacks the key and
+   holds the join keys, and a body smaller than before. (The start code still
+   assigns the key in its local map at `:675` and `:683`, so a rule on source
+   assignments would fail on the design itself.)
+5. A re-encode test (an explanation of the counter's 19 changed writes, not a
+   safety test): marshal a typed list, decode to `map[string]any`, marshal
+   again; different bytes, equal content.
 6. The whole uncached suites of `internal/textureowner` and `internal/agentcore`
    (and every package that imports them); `scripts/go-test-runtime-shards`.
 
-Deployed, on the test computer after the staging deploy:
-- `run_writes.top_metadata_key` no longer names `texture_available_source_entities`
-  for new Texture runs; mean body bytes of `activation/*` lines for new
-  Texture runs fall by at least a factor of 3.
-- A Texture run on a self-development evidence sequence ends with a revision
-  whose metadata has the same join keys it had before (compared with a run on
-  the previous release).
+Deployed, on the test computer after the staging deploy, scoped to runs
+created after the deploy (runs already open keep writing the list while they
+finish, and the counter's key list keeps the old name for that reason):
+- the largest-key entry for `texture_available_source_entities` stops
+  growing after the deploy SHA, and the `activation/running/updated_at_only`
+  mean falls (no factor is promised: the counter has no profile dimension, so
+  its lines mix runs; a profile dimension is a separate change).
+- A controlled document with a known evidence set ends a Texture run with a
+  revision whose join keys equal the expected ids (not compared with a run on
+  the previous release: the evidence sequence moves between runs).
 - Whole-tape replay of the test computer's tape into a fresh store: every
   `choir.run` object has an equal content hash, none missing. (Nothing new is
   stored, so this is the check that nothing else moved.)
@@ -255,6 +288,24 @@ Deployed, on the test computer after the staging deploy:
 | DeepSeek S6 | test-only merge helper names the key | true | helper deleted (section 3) |
 | DeepSeek S7 | the object has no retire rule | true for the old design | moot |
 | DeepSeek nits | `run_write_counters.go` anchors; confusable name | | moot or fixed |
+
+## 7a. Round 2 findings and what was done
+
+Both seats ACCEPT with no blocking finding.
+
+| Seat and item | Finding | Done |
+| --- | --- | --- |
+| DeepSeek S1, Claude S2 | the fourth `durableMetadataKeys` consumer (`carryForwardDurableTextureMetadata`) and R2's parent-revision copy are unnamed | the consumer table in section 3; proof test 1 includes a legacy parent revision through `carryForwardDurableTextureMetadata` |
+| DeepSeek S2 | "no join keys of its own" is false: the join keys are durable and inherited | section 3.1 reworded; proof test 2 fixture carries inherited join keys |
+| DeepSeek S3 | marker enumeration wrong; self-development restore is marker-backed | section 3.1 corrected |
+| Claude S1 | join keys now reach Texture run records; `ListRunsBySelfDevelopmentOperation` | named in section 3; it has no non-test caller |
+| DeepSeek S4, Claude S4 | deployed proof not deterministic; counter has no profile dimension; scope to runs after deploy | section 6 rewritten |
+| DeepSeek S5 | proof 2's anchor is unexported | section 6, test 2 |
+| DeepSeek S6, Claude S3 | gate test should be behavioural and narrower | section 6, test 4 |
+| DeepSeek S7 | delete `mergeTextureSourceEntitiesIntoAvailableContext` with its sibling | both helpers are deleted in the build |
+| DeepSeek S8 | the run-event-ledger checkpoint serializer would show a different `metadata=` line if it were ever enabled | named boundary: `serializeRunEventLedgerForCheckpoint` (`run_memory.go:1308-1311`) is unreachable today (`canCheckpointRunEventLedger` needs reason `continuation_selection`, `:592`); not changed |
+| Claude S5 | pin last-wins and precedence | proof test 1 cases: two entities of one join kind (last wins); the list-derived value beats a different value on the parent revision and on the run's inherited copy; empty ids stay absent |
+| DeepSeek nits | keep the counter key list; R1 pointer comment; empty and absent identical | counter list kept; comment added at R1; tested |
 
 ## 8. Open questions and what I could not verify
 
