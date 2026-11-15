@@ -303,7 +303,13 @@ public final class ChoirClient: @unchecked Sendable {
         if authenticated, let t = trustedOrigin, !SameOrigin.matches(baseURL, t) { throw ChoirError.wrongHost(baseURL.host ?? "(none)") }
         guard var comps = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { throw ChoirError.decode("bad base URL") }
         comps.percentEncodedPath = path
-        if !query.isEmpty { comps.queryItems = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) } }
+        // Names and values are encoded by hand: URLComponents leaves `&`, `+`, `=` and `;` as they are in a value, which would split or
+        // change what the server reads (a search for "AT&T" or "C++").
+        if !query.isEmpty {
+            let keep = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~/:@,")
+            func enc(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: keep) ?? "" }
+            comps.percentEncodedQuery = query.sorted { $0.key < $1.key }.map { enc($0.key) + "=" + enc($0.value) }.joined(separator: "&")
+        }
         guard let url = comps.url else { throw ChoirError.decode("bad path") }
         var r = URLRequest(url: url, timeoutInterval: t ?? timeout)
         r.httpMethod = method
