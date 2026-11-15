@@ -195,3 +195,8 @@ The owner tested onboarding, where the app helps set up the edition.
   reader does not want their voice or background noise picked up. No
   separate transcribe or push-to-talk mode. (An on/off control for a
   microphone is a reader's control, not a feature switch.)
+- **Ruling: the visible listening state is earned.** An open microphone is
+  not "Listening". The app shows the listening state "only when there's
+  good reason to think that the user has already started saying something
+  meaningful", and it never hides the playback controls. At rest with
+  hands-free on, the bar and the player look normal.
