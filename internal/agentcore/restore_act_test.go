@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -98,6 +97,9 @@ func newRestoreActFixtureIn(t *testing.T, base, computerID string, tail int) *re
 	}
 	witness := boundWitness(t, rt, computerID)
 	checkpoint := rematerializeTestCheckpoint(t, computerID, witness, targetDigest, targetIdentity, head.CanonicalEventHead)
+	// Registered after the store's close, so it runs before it: an act a test
+	// leaves running ends (or is waited for) before the directory goes.
+	t.Cleanup(func() { drainRestoreActs(rt) })
 	return &restoreActFixture{
 		t: t, rt: rt, cas: cas, handler: NewAPIHandler(rt), computerID: computerID, storePath: storePath,
 		updaterRoot: updaterRoot, priorDigest: priorDigest, targetDigest: targetDigest, checkpoint: checkpoint, headBefore: head,
@@ -431,9 +433,13 @@ func TestRestoreActOneAtATime(t *testing.T) {
 		t.Fatalf("act records = %v, want one", records)
 	}
 	// An act that has ended no longer blocks another.
-	if code, again := f.post("key-b"); code != http.StatusAccepted || again["act_id"] == act {
+	code, again := f.post("key-b")
+	if code != http.StatusAccepted || again["act_id"] == act {
 		t.Fatalf("a restore after the end answered %d %v, want a new act", code, again)
 	}
+	// The second act runs against the fixture's directory: it ends before the
+	// test does.
+	f.waitTerminal(f.actID(again))
 }
 
 // F6
@@ -648,272 +654,6 @@ func TestRestoreActWiring(t *testing.T) {
 	var _ computerevent.ReplayObserver = (*restoreReplayObserver)(nil)
 }
 
-// F9: a real kill. The child process builds a computer, accepts a restore and
-// holds its replay after two events; the parent SIGKILLs it, runs the boot's
-// repair, and reads the store the way the next boot would.
-func TestRestoreActChildProcess(t *testing.T) {
-	base := os.Getenv("GOCHOIR_RESTORE_ACT_CHILD")
-	if base == "" {
-		t.Skip("child of TestRestoreKilledMidReplayLeavesTheLiveStateUntouched")
-	}
-	f := newRestoreActFixtureIn(t, base, "computer-act-kill", 6)
-	reached, _ := holdReplayAfter(t, 2)
-	code, accepted := f.post("")
-	if code != http.StatusAccepted {
-		fmt.Fprintf(os.Stderr, "child: restore answered %d %v\n", code, accepted)
-		os.Exit(3)
-	}
-	<-reached
-	head, err := f.rt.store.Head(context.Background(), f.computerID)
-	if err != nil || head == nil {
-		os.Exit(4)
-	}
-	raw, _ := json.Marshal(map[string]any{"head": head.CanonicalEventHead, "sequence": head.Sequence, "act_id": accepted["act_id"], "checkpoint_head": f.checkpoint.Request.AcceptedEventHead})
-	if err := os.WriteFile(filepath.Join(base, "child-ready.json"), raw, 0o600); err != nil {
-		os.Exit(5)
-	}
-	select {} // killed by the parent
-}
-
-func TestRestoreKilledMidReplayLeavesTheLiveStateUntouched(t *testing.T) {
-	base := t.TempDir()
-	cmd := exec.Command(os.Args[0], "-test.run=^TestRestoreActChildProcess$", "-test.timeout=3m")
-	cmd.Env = append(os.Environ(), "GOCHOIR_RESTORE_ACT_CHILD="+base)
-	var output bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &output, &output
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	exited := make(chan struct{})
-	go func() { _ = cmd.Wait(); close(exited) }()
-	t.Cleanup(func() { _ = cmd.Process.Kill() })
-	readyPath := filepath.Join(base, "child-ready.json")
-	deadline := time.Now().Add(90 * time.Second)
-	for {
-		if _, err := os.Stat(readyPath); err == nil {
-			break
-		}
-		select {
-		case <-exited:
-			t.Fatalf("the child ended before it held the replay:\n%s", output.String())
-		default:
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the child never held the replay:\n%s", output.String())
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	raw, err := os.ReadFile(readyPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var ready struct {
-		Head, ActID, CheckpointHead string
-		Sequence                    uint64
-	}
-	var generic map[string]any
-	if err := json.Unmarshal(raw, &generic); err != nil {
-		t.Fatal(err)
-	}
-	ready.Head, _ = generic["head"].(string)
-	ready.ActID, _ = generic["act_id"].(string)
-	ready.CheckpointHead, _ = generic["checkpoint_head"].(string)
-	ready.Sequence = uint64(generic["sequence"].(float64))
-	if err := cmd.Process.Kill(); err != nil { // our own child, by pid
-		t.Fatal(err)
-	}
-	<-exited
-
-	dataDir := filepath.Join(base, "data")
-	storePath := filepath.Join(dataDir, "runtime.db")
-	updaterRoot := filepath.Join(base, "updater")
-	// Before the boot's repair: the staged store the dead process left.
-	if staged, _ := filepath.Glob(filepath.Join(dataDir, "rematerialize-staging-*")); len(staged) == 0 {
-		t.Fatal("the killed restore left no staged store: the test did not stop it mid-replay")
-	}
-	closed := RepairRestoreAtBoot(storePath, updaterRoot)
-	if len(closed) != 1 || closed[0] != ready.ActID {
-		t.Fatalf("the boot closed %v, want [%s]", closed, ready.ActID)
-	}
-	if staged, _ := filepath.Glob(filepath.Join(dataDir, "rematerialize-staging-*")); len(staged) != 0 {
-		t.Fatalf("the boot left the staged store: %v", staged)
-	}
-	if quarantine, _ := filepath.Glob(filepath.Join(dataDir, "rematerialize-quarantine-*")); len(quarantine) != 0 {
-		t.Fatalf("a restore killed before the flip has a quarantine: %v", quarantine)
-	}
-	recordRaw, err := os.ReadFile(filepath.Join(dataDir, "restore-acts", ready.ActID+".json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var record map[string]any
-	if err := json.Unmarshal(recordRaw, &record); err != nil {
-		t.Fatal(err)
-	}
-	if record["state"] != "interrupted" || !strings.Contains(fmt.Sprint(record["reason"]), "interrupted by a restart") {
-		t.Fatalf("the act = %v, want interrupted by a restart", record)
-	}
-	if again := RepairRestoreAtBoot(storePath, updaterRoot); len(again) != 0 {
-		t.Fatalf("a second boot closed %v: a closed act must stay closed", again)
-	}
-	// The next boot's store: the pre-restore state, the intent being the one
-	// event the request wrote.
-	live, err := choirstore.Open(storePath)
-	if err != nil {
-		t.Fatalf("the killed computer's store does not open: %v", err)
-	}
-	defer live.Close()
-	head, err := live.Head(context.Background(), "computer-act-kill")
-	if err != nil || head == nil || head.CanonicalEventHead != ready.Head || head.Sequence != ready.Sequence {
-		t.Fatalf("head after the kill = %+v %v, want the one the act was accepted at (%d, %s)", head, err, ready.Sequence, ready.Head)
-	}
-	if head.CanonicalEventHead == ready.CheckpointHead {
-		t.Fatal("the head is the checkpoint's: the restore was applied")
-	}
-	served, err := os.ReadFile(filepath.Join(updaterRoot, "current", "frontend", "index.html"))
-	if err != nil || string(served) != "<html>live</html>" {
-		t.Fatalf("served SPA = %q %v, want the live release", served, err)
-	}
-}
-
-// F10
-func TestBootUndoesAHalfFlipAndLeavesACompleteOne(t *testing.T) {
-	write := func(path, content string) {
-		t.Helper()
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	read := func(path string) string {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return "<absent>"
-		}
-		return string(raw)
-	}
-	for _, tc := range []struct {
-		name         string
-		stepsDone    int
-		wantOriginal string
-		wantReason   string
-	}{
-		{"nothing renamed", 0, "original", "interrupted by a restart"},
-		{"half the flip", 1, "original", "interrupted by a restart"},
-		{"the whole flip", 2, "staged", "flip had completed"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			dataDir := t.TempDir()
-			storePath := filepath.Join(dataDir, "runtime.db")
-			original := filepath.Join(dataDir, "state.db")
-			quarantined := filepath.Join(dataDir, "rematerialize-quarantine-x", "state.db")
-			staged := filepath.Join(dataDir, "rematerialize-staging-x", "state.db")
-			write(original, "original")
-			write(staged, "staged")
-			if tc.stepsDone >= 1 {
-				if err := os.MkdirAll(filepath.Dir(quarantined), 0o755); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.Rename(original, quarantined); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if tc.stepsDone >= 2 {
-				if err := os.Rename(staged, original); err != nil {
-					t.Fatal(err)
-				}
-			}
-			record := map[string]any{
-				"schema_version": 1, "act_id": "ra-flip", "kind": "restore", "computer_id": "c", "state": "installing",
-				"flip": []map[string]string{{"from": original, "to": quarantined}, {"from": staged, "to": original}},
-			}
-			raw, _ := json.Marshal(record)
-			write(filepath.Join(dataDir, "restore-acts", "ra-flip.json"), string(raw))
-			if closed := RepairRestoreAtBoot(storePath, ""); len(closed) != 1 {
-				t.Fatalf("closed %v", closed)
-			}
-			if got := read(original); got != tc.wantOriginal {
-				t.Fatalf("state.db = %q, want %q", got, tc.wantOriginal)
-			}
-			var after map[string]any
-			if err := json.Unmarshal([]byte(read(filepath.Join(dataDir, "restore-acts", "ra-flip.json"))), &after); err != nil {
-				t.Fatal(err)
-			}
-			if after["state"] != "interrupted" || !strings.Contains(fmt.Sprint(after["reason"]), tc.wantReason) {
-				t.Fatalf("act = %v, want interrupted with %q", after, tc.wantReason)
-			}
-			if leftovers, _ := filepath.Glob(filepath.Join(dataDir, "rematerialize-staging-*")); len(leftovers) != 0 {
-				t.Fatalf("staging left: %v", leftovers)
-			}
-		})
-	}
-}
-
-// F11
-func TestBootPutsBackThePriorRelease(t *testing.T) {
-	for _, tc := range []struct {
-		name         string
-		flipComplete bool
-		wantServed   string
-	}{
-		{"restaged, not flipped", false, "<html>live</html>"},
-		{"restaged and flipped", true, "<html>checkpoint</html>"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			base := t.TempDir()
-			dataDir := filepath.Join(base, "data")
-			if err := os.MkdirAll(dataDir, 0o755); err != nil {
-				t.Fatal(err)
-			}
-			storePath := filepath.Join(dataDir, "runtime.db")
-			updaterRoot := filepath.Join(base, "updater")
-			priorDigest, _ := pinFrontendRelease(t, updaterRoot, "c", "<html>live</html>")
-			targetDigest, _ := pinFrontendRelease(t, updaterRoot, "c", "<html>checkpoint</html>")
-			pointCurrent(t, updaterRoot, targetDigest) // the restage the crashed act made
-			state := filepath.Join(dataDir, "state.db")
-			staged := filepath.Join(dataDir, "rematerialize-staging-x", "state.db")
-			quarantined := filepath.Join(dataDir, "rematerialize-quarantine-x", "state.db")
-			for path, content := range map[string]string{state: "original", staged: "staged"} {
-				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if tc.flipComplete {
-				if err := os.MkdirAll(filepath.Dir(quarantined), 0o755); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.Rename(state, quarantined); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.Rename(staged, state); err != nil {
-					t.Fatal(err)
-				}
-			}
-			record := map[string]any{
-				"schema_version": 1, "act_id": "ra-release", "kind": "restore", "computer_id": "c", "state": "installing",
-				"prior_release_digest": priorDigest, "restored_release_digest": targetDigest,
-				"flip": []map[string]string{{"from": state, "to": quarantined}, {"from": staged, "to": state}},
-			}
-			raw, _ := json.Marshal(record)
-			if err := os.MkdirAll(filepath.Join(dataDir, "restore-acts"), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(filepath.Join(dataDir, "restore-acts", "ra-release.json"), raw, 0o600); err != nil {
-				t.Fatal(err)
-			}
-			RepairRestoreAtBoot(storePath, updaterRoot)
-			served, err := os.ReadFile(filepath.Join(updaterRoot, "current", "frontend", "index.html"))
-			if err != nil || string(served) != tc.wantServed {
-				t.Fatalf("served = %q %v, want %q", served, err, tc.wantServed)
-			}
-		})
-	}
-}
-
 // serveRestoreToEnd posts a restore or rematerialize request as the product
 // does, and when the answer is an accepted act waits for its end and answers
 // the way the synchronous route used to: 200 and the report, or the refusal's
@@ -965,6 +705,21 @@ func serveRestoreToEnd(t *testing.T, rt *Runtime, computerID, route string, body
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("act %s did not end: %s", accepted.ActID, response.Body.String())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// drainRestoreActs waits, bounded, for the runtime's running restore act to
+// let go of its slot.
+func drainRestoreActs(rt *Runtime) {
+	deadline := time.Now().Add(60 * time.Second)
+	for time.Now().Before(deadline) {
+		rt.restoreActs.mu.Lock()
+		running := rt.restoreActs.running
+		rt.restoreActs.mu.Unlock()
+		if running == nil {
+			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

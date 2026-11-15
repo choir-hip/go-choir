@@ -735,7 +735,7 @@ func readRestoreActRecords(dir string) []RestoreActRecord {
 // prior release is put back when the flip did not complete, the staged stores
 // are removed, and every open act is closed "interrupted by a restart". It
 // returns the ids it closed. updaterRoot may be empty (no release to put back).
-func RepairRestoreAtBoot(storePath, updaterRoot string) []string {
+func RepairRestoreAtBoot(storePath, updaterRoot string) RestoreBootReport {
 	dir := filepath.Dir(filepath.Clean(storePath))
 	actsDir := filepath.Join(dir, restoreActDirName)
 	var closed []string
@@ -766,7 +766,7 @@ func RepairRestoreAtBoot(storePath, updaterRoot string) []string {
 		closed = append(closed, rec.ActID)
 	}
 	removeRestoreLeftovers(dir)
-	return closed
+	return RestoreBootReport{Closed: closed}
 }
 
 type flipState int

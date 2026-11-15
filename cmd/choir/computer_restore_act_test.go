@@ -198,3 +198,29 @@ func TestComputerRestoreTimeoutLeavesTheActRunning(t *testing.T) {
 		t.Fatalf("stderr does not say the act goes on and how to read it: %s", errOut)
 	}
 }
+
+// The CLI says what is on the computer only when the act's record proves it
+// (review round 1: "the computer is on the state it had before the restore"
+// was printed over a computer the boot had left on the restored state).
+func TestComputerRestoreSaysOnlyWhatIsProven(t *testing.T) {
+	run1 := func(body string) (int, string, string) {
+		stub := newRestoreActStub(t, restoreStubAnswer{http.StatusOK, body})
+		return runRestore(t, stub)
+	}
+	code, _, errOut := run1(`{"act_id":"ra-1","state":"interrupted","live_state":"pre_restore","reason":"interrupted by a restart"}`)
+	if code != 1 || !strings.Contains(errOut, "pre-restore state") {
+		t.Fatalf("interrupted and proven: code=%d stderr=%s", code, errOut)
+	}
+	code, _, errOut = run1(`{"act_id":"ra-1","state":"interrupted","reason":"interrupted by a restart"}`)
+	if code != 1 || strings.Contains(errOut, "pre-restore state") || strings.Contains(errOut, "before the restore") || !strings.Contains(errOut, "not proven") {
+		t.Fatalf("interrupted, nothing proven: code=%d stderr=%s", code, errOut)
+	}
+	code, out, errOut := run1(`{"act_id":"ra-1","state":"restored","live_state":"restored","reason":"restored; restart required: the flipped store would not open"}`)
+	if code != 1 || strings.TrimSpace(out) != "" || !strings.Contains(errOut, "restored") || !strings.Contains(errOut, "restart") || strings.Contains(errOut, "pre-restore") {
+		t.Fatalf("restored: code=%d stdout=%s stderr=%s", code, out, errOut)
+	}
+	code, _, errOut = run1(`{"act_id":"ra-1","state":"failed","live_state":"unresolved","refusal":{"name":"error","http_status":500,"message":"flip undo failed"}}`)
+	if code != 1 || strings.Contains(errOut, "pre-restore state") {
+		t.Fatalf("failed, unresolved: code=%d stderr=%s", code, errOut)
+	}
+}
