@@ -390,7 +390,7 @@ component ReaderBody
             // header: kicker, menu, headline, standfirst, byline and version line
             row align-items="center" gap=8 margin-bottom=remv(0.5)
               text rdoc.kicker testId="reader-kicker" font-family=th.fontUi font-size=12 font-weight=700 letter-spacing="0.08em" text-transform="uppercase"
-                color=th.accent flex=1
+                color=th.muted flex=1
               button press=listen(address, rdoc.title, rdoc.plain) testId="reader-listen" appearance="none" aria-label=`Listen to ${rdoc.title}`
                 Btn(label="Listen", primary=false, wide=false)
               button press=showSheet("menu") testId="reader-menu" appearance="none" aria-label="Page menu" width=44 height=44
@@ -505,7 +505,7 @@ component ReaderMessage
             box height=14 border-radius=7 background-color=th.paper2 width=`${floor(w * 100)}%`
               animation=(still ? "none" : `readerEmerge ${th.motionEnterMs}ms ${th.staggerMs * (i + 1)}ms ease-out both`)
       if message != ""
-        text message testId="reader-message" font-family=th.fontUi color=th.muted
+        text message testId="reader-message" font-family=th.fontRead font-size=18 line-height=1.4 color=th.muted
         // An error is never a dead end: a way back to the paper.
         button press=openPage("paper:front", "Paper") testId="reader-message-back" appearance="none" margin-top=8
           Btn(label="Back to the paper", primary=false, wide=false)
