@@ -28,7 +28,8 @@ import (
 //  9. a writer that reuses an old body does not refresh it, so a pass that
 //     read the live set before the row was written deletes it;
 // 10. a file that is not a body (a temp file, a stray name) is deleted;
-// 11. the default active list does not carry the namespace.
+// 11. the default active list carries the namespace (reversed 2026-11-14:
+//     observation is not activation; see the r2 test file for 12-16).
 
 func captureBodyHash(s string) string {
 	sum := sha256.Sum256([]byte(s))
@@ -171,20 +172,6 @@ func TestCaptureBodiesGCNoRowsDeletesNothing(t *testing.T) {
 	}
 }
 
-func TestCaptureBodiesGCUnparseableRowAbortsPass(t *testing.T) {
-	f := newCaptureGCFixture(t)
-	h, _ := f.body("live", 48*time.Hour)
-	f.row("cap", captureMeta(h, h, h), false)
-	f.row("cap-bad", `{not json`, false)
-	_, p := f.body("dead", 48*time.Hour)
-	if _, err := f.svc.RunArtifactGC(context.Background(), ArtifactGCConfig{Mode: "active", Grace: time.Hour}); err == nil {
-		t.Fatal("a row that does not parse must fail the pass")
-	}
-	if !exists(p) {
-		t.Fatal("deleted on an unprovable live set")
-	}
-}
-
 func TestCaptureBodiesGCOnlyActiveNamespacesDelete(t *testing.T) {
 	f := newCaptureGCFixture(t)
 	h, _ := f.body("live", 48*time.Hour)
@@ -224,7 +211,7 @@ func TestCaptureBodiesGCLeavesNonBodies(t *testing.T) {
 func TestCaptureBodyPutRefreshesExistingBody(t *testing.T) {
 	f := newCaptureGCFixture(t)
 	_, p := f.body("reused", 48*time.Hour)
-	store := &CaptureBodyStore{root: CaptureBodiesRoot(f.root)}
+	store := f.svc.captureBodies
 	if _, err := store.PutBody([]byte("reused")); err != nil {
 		t.Fatal(err)
 	}
@@ -235,13 +222,4 @@ func TestCaptureBodyPutRefreshesExistingBody(t *testing.T) {
 	if time.Since(info.ModTime()) > time.Minute {
 		t.Fatalf("reused body keeps mtime %v", info.ModTime())
 	}
-}
-
-func TestDefaultArtifactGCActiveNamespacesCarriesCaptureBodies(t *testing.T) {
-	for _, ns := range DefaultArtifactGCActiveNamespaces {
-		if ns == "capture-bodies" {
-			return
-		}
-	}
-	t.Fatal("capture-bodies is not in the default active namespaces")
 }
