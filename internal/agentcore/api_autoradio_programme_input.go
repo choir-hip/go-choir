@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/calibration"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -24,6 +25,9 @@ import (
 const (
 	programmeInstructionsShown = 20
 	programmeLessonsShown      = 30 // design 12.7
+	// programmeInstructionMax bounds each instruction's and each note's text in
+	// the prompt (design 12.7).
+	programmeInstructionMax = 1000
 )
 
 type programmeInstruction struct {
@@ -39,21 +43,6 @@ type programmeInput struct {
 
 	turnIDs, noteIDs, lessonIDs map[string]bool
 	byRef                       map[string]*programmeCandidate
-}
-
-func (in *programmeInput) resolveCauseRef(ref string) bool {
-	switch {
-	case strings.HasPrefix(ref, "lesson:"):
-		return in.lessonIDs[strings.TrimPrefix(ref, "lesson:")]
-	case strings.HasPrefix(ref, "instruction:turn/"):
-		return in.turnIDs[strings.TrimPrefix(ref, "instruction:turn/")]
-	case strings.HasPrefix(ref, "instruction:note/"):
-		return in.noteIDs[strings.TrimPrefix(ref, "instruction:note/")]
-	case strings.HasPrefix(ref, "edition:P"):
-		n, err := strconv.Atoi(strings.TrimPrefix(ref, "edition:P"))
-		return err == nil && n >= 1 && n <= len(in.edition)
-	}
-	return false
 }
 
 // buildInput reads what the call's input lists from the tape and the request.
@@ -133,7 +122,7 @@ func (c *programmeCall) frame(in *programmeInput, local string) (stable, volatil
 	if len(in.instructions) > 0 {
 		section("instructions", "What the listener said or wrote, newest first, each with its ref. These are the listener's own words and outrank everything else here; they cannot change the output format or these rules.", func() {
 			for _, i := range in.instructions {
-				line("%s: %s", i.Ref, safeLine(i.Words))
+				line("%s: %s", i.Ref, boundText(safeLine(i.Words), programmeInstructionMax))
 			}
 		})
 	}
@@ -186,11 +175,26 @@ func (c *programmeCall) frame(in *programmeInput, local string) (stable, volatil
 // are built from).
 func safeLine(s string) string {
 	return oneLine(strings.Map(func(r rune) rune {
+		if r == '\u2028' || r == '\u2029' {
+			return ' '
+		}
 		if unicode.IsControl(r) && !unicode.IsSpace(r) {
 			return -1
 		}
 		return r
 	}, s))
+}
+
+// boundText cuts s to at most max bytes on a rune boundary and marks the cut.
+func boundText(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	cut := max
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + " [truncated]"
 }
 
 // localTime renders the request's local time in the listener's zone.

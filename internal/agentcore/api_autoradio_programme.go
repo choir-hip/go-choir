@@ -167,8 +167,8 @@ func (c *programmeCandidate) check(i int) error {
 	if c.Title == "" || len(c.Title) > 300 || hasControl(c.Title) {
 		return fmt.Errorf("candidates[%d].title must be one line of 1 to 300 bytes", i)
 	}
-	if len(c.Dek) > 1000 {
-		return fmt.Errorf("candidates[%d].dek is over 1000 bytes", i)
+	if c.Dek = strings.TrimSpace(c.Dek); c.Dek == "" || len(c.Dek) > 1000 {
+		return fmt.Errorf("candidates[%d].dek must be 1 to 1000 bytes (design 12.7: each candidate has title, dek, route and version)", i)
 	}
 	if c.Text != "" {
 		if i >= programmeTextCands {
@@ -216,6 +216,10 @@ type programmeCall struct {
 	// cancelUpstream cancels the model call in flight; set when the call must
 	// stop reading.
 	cancelUpstream context.CancelFunc
+	capped         bool        // the segment cap ended the call
+	timedOut       atomic.Bool // a deadline ended the call
+	writeErr       error       // the first write error: the client went away
+	prompt         string
 }
 
 func (c *programmeCall) memberName() string {
@@ -244,7 +248,9 @@ func (c *programmeCall) begin() {
 	// this response only, as the turn route does.
 	_ = http.NewResponseController(c.w).SetWriteDeadline(time.Time{})
 	c.w.WriteHeader(http.StatusOK)
-	_, _ = io.WriteString(c.w, ": autoradio\n\n")
+	if _, err := io.WriteString(c.w, ": autoradio\n\n"); err != nil && c.writeErr == nil {
+		c.writeErr = err
+	}
 	c.flush()
 }
 
@@ -261,7 +267,9 @@ func (c *programmeCall) event(name string, v any) {
 		return
 	}
 	// One write per event, so a reader of the stream sees whole events.
-	_, _ = io.WriteString(c.w, "event: "+name+"\ndata: "+string(data)+"\n\n")
+	if _, err := io.WriteString(c.w, "event: "+name+"\ndata: "+string(data)+"\n\n"); err != nil && c.writeErr == nil {
+		c.writeErr = err
+	}
 	c.flush()
 }
 
@@ -323,6 +331,9 @@ func (h *APIHandler) HandleAutoradioProgramme(w http.ResponseWriter, r *http.Req
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
+	// autoradioInflight is process-local: a computer serves its API from one
+	// process, so it holds; two overlapping processes could each answer one
+	// request_id (a duplicate model call, not a duplicate claim).
 	key := "programme/" + ownerID + "/" + rt.cfg.ComputerID + "/" + req.RequestID
 	if _, busy := autoradioInflight.LoadOrStore(key, struct{}{}); busy {
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "this request_id is already being answered"})
@@ -352,6 +363,13 @@ func (h *APIHandler) HandleAutoradioProgramme(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	prompt, ok := programmePrompt()
+	if !ok || strings.TrimSpace(prompt) == "" {
+		log.Printf("autoradio programme: request %s: the programme prompt is not shipped", req.RequestID)
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "the programme prompt is not available"})
+		return
+	}
+	c.prompt = prompt
 	if c.input, err = c.buildInput(ctx); err != nil {
 		log.Printf("autoradio programme: request %s: reading the listener's record: %v", req.RequestID, err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "cannot read the listener's record"})
@@ -383,6 +401,9 @@ func (c *programmeCall) replay(ctx context.Context) {
 		_, _ = fmt.Sscanf(idx.SubjectRefs["segments"], "%d", &n)
 	}
 	segs, err := c.readSegments(ctx, c.stretchID, n)
+	if err == nil && idx != nil && status == "completed" && len(segs) < n {
+		err = fmt.Errorf("the stretch's records are incomplete: %d of %d segments have what they should", len(segs), n)
+	}
 	if err != nil {
 		c.event("error", map[string]any{"stretch_id": c.stretchID, "spoken": programmeFallbackLine, "reason": err.Error()})
 		return
@@ -397,7 +418,7 @@ func (c *programmeCall) replay(ctx context.Context) {
 		})
 		return
 	}
-	reason := "interrupted by a restart; use a new request_id"
+	reason := "the stretch ended without an index; use a new request_id"
 	if idx != nil {
 		reason = "the stretch ended " + status + "; use a new request_id"
 	}
@@ -419,32 +440,50 @@ func (c *programmeCall) run(ctx context.Context, streamer provideriface.TextStre
 		}
 	}()
 
-	prompt, _ := appdesk.ProgrammePrompt()
+	prompt := c.prompt
 	promptSum := sha256Hex(prompt)
 	stable, volatile := c.frame(c.input, c.localTime())
 	chain := c.rt.modelPolicy.PoolChain(ctx, c.ownerID, modelpolicy.AutoradioProgrammeRole)
 
 	reason := "no model answered"
 	status := "failed"
+	walkCtx, cancelWalk := context.WithTimeout(ctx, programmeWallDeadline)
+	defer cancelWalk()
 	for _, sel := range chain {
+		if walkCtx.Err() != nil {
+			c.finish(ctx, "deadline", "the wall-clock deadline of the walk passed", true)
+			return
+		}
 		member := sel.Provider + "/" + sel.Model
 		hopStart := time.Now()
 		c.provider, c.model = sel.Provider, sel.Model
 		c.streak = 0
 		var reader lineReader
 		effort := strings.ToLower(strings.TrimSpace(sel.ReasoningEffort))
-		callCtx, cancel := context.WithCancel(ctx)
+		callCtx, cancel := context.WithCancel(walkCtx)
 		c.cancelUpstream = cancel
+		// The idle deadline runs between deltas, from the first one (the time to
+		// the first delta is under the wall-clock deadline of the walk).
+		var idle *time.Timer
 		programmeCallsTotal.Add(1)
 		resp, err := streamer.StreamText(callCtx, provideriface.TextStreamRequest{
 			Provider: sel.Provider, Model: sel.Model, ReasoningEffort: effort,
 			ConversationID: c.stretchID, CacheKey: programmeCachePrefix + c.rt.cfg.ComputerID + ":" + promptSum[:8],
 			System: prompt, StableUser: stable, User: volatile, MaxTokens: sel.MaxTokens,
 		}, func(delta string) {
+			if idle == nil {
+				idle = time.AfterFunc(programmeIdleDeadline, func() { c.timedOut.Store(true); cancel() })
+			} else {
+				idle.Reset(programmeIdleDeadline)
+			}
 			if !c.stop {
 				reader.push(delta, c.handleLine)
 			}
 		})
+		if idle != nil {
+			idle.Stop()
+		}
+		timedOut := c.timedOut.Load() || errors.Is(walkCtx.Err(), context.DeadlineExceeded)
 		cancel()
 		hop := autoradioHop{Member: member, MS: time.Since(hopStart).Milliseconds()}
 		if err == nil && !c.stop {
@@ -460,6 +499,16 @@ func (c *programmeCall) run(ctx context.Context, streamer provideriface.TextStre
 			hop.Outcome = "invalid_run"
 			c.hops = append(c.hops, hop)
 			c.finish(ctx, "invalid_run", fmt.Sprintf("%d invalid lines in a row ended the stretch", programmeInvalidRun), true)
+			return
+		case c.capped:
+			hop.Outcome = "capped"
+			c.hops = append(c.hops, hop)
+			c.finish(ctx, "completed", "", true)
+			return
+		case timedOut:
+			hop.Outcome = "deadline"
+			c.hops = append(c.hops, hop)
+			c.finish(ctx, "deadline", "a deadline passed (wall clock of the walk, or idle between deltas)", true)
 			return
 		case err != nil && c.segCount > 0:
 			hop.Outcome = "failed_mid_stream"
@@ -509,6 +558,14 @@ func (c *programmeCall) handleLine(line string, tooLong bool) bool {
 		return true // station L3 reads lesson lines; here they are neither counted nor reset
 	case lineInvalid:
 		return c.drop(reason)
+	}
+	if c.segCount >= programmeMaxSegments {
+		c.dropped = append(c.dropped, droppedLine{N: c.lineNo, Reason: fmt.Sprintf("segment cap %d reached: the stretch ended", programmeMaxSegments)})
+		c.capped, c.stop = true, true
+		if c.cancelUpstream != nil {
+			c.cancelUpstream()
+		}
+		return false
 	}
 	// A content segment's claim is checked before anything is written, so a
 	// line the constructor refuses leaves no segment record.

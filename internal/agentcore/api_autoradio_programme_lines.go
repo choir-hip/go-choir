@@ -26,8 +26,13 @@ const (
 )
 
 // Content kinds carry a forecast (design 3.1); the others carry none.
-var programmeContentKinds = map[string]bool{"story": true, "update": true, "headlines": true, "mail": true, "podcast_note": true}
-var programmeOtherKinds = map[string]bool{"ident": true, "bridge": true, "answer": true, "result": true}
+//
+// Only what station L1 can legitimately produce is accepted: mail and
+// podcast_note wait for their sources (programme design slices 3 and 6), and
+// answer and result belong to the turn route and the hand-offs.
+var programmeContentKinds = map[string]bool{"story": true, "update": true, "headlines": true}
+var programmeOtherKinds = map[string]bool{"ident": true, "bridge": true}
+var programmeLaterKinds = map[string]bool{"mail": true, "podcast_note": true, "answer": true, "result": true}
 
 // programmeTextRange is the longest text a kind may have, in bytes. The
 // programme design says "the length is within the kind's range" and gives no
@@ -35,8 +40,7 @@ var programmeOtherKinds = map[string]bool{"ident": true, "bridge": true, "answer
 // steers, and are generous for twenty minutes of speech (about 150 words a
 // minute across ten to fifteen segments).
 var programmeTextRange = map[string]int{
-	"story": 8000, "update": 4000, "headlines": 3000, "mail": 3000, "podcast_note": 3000,
-	"answer": 3000, "result": 2000, "bridge": 500, "ident": 800,
+	"story": 8000, "update": 4000, "headlines": 3000, "bridge": 500, "ident": 800,
 }
 
 var (
@@ -154,6 +158,9 @@ func (in *programmeInput) checkLine(line string) (*programmeSegment, lineClass, 
 		return nil, lineLesson, ""
 	}
 	content := programmeContentKinds[kind]
+	if programmeLaterKinds[kind] {
+		return invalidf("kind %q is not produced until its station", kind)
+	}
 	if !content && !programmeOtherKinds[kind] {
 		return invalidf("unknown kind %q", truncate(kind, 40))
 	}
@@ -239,6 +246,9 @@ func parseP(raw json.RawMessage) (float64, string) {
 	}
 	if p < 0 || p > 1 {
 		return 0, fmt.Sprintf("p_heard %v is outside [0, 1]", p)
+	}
+	if p == 0 {
+		p = 0 // -0 is 0
 	}
 	return p, ""
 }

@@ -172,7 +172,7 @@ type droppedLine struct {
 // why lines were dropped.
 func (c *programmeCall) writeIndex(ctx context.Context, status string) (string, error) {
 	dropped := c.dropped
-	if len(dropped) > 100 {
+	if len(dropped) > 100 { // dropped_count stays exact
 		dropped = dropped[:100]
 	}
 	droppedJSON, _ := json.Marshal(dropped)
@@ -181,7 +181,7 @@ func (c *programmeCall) writeIndex(ctx context.Context, status string) (string, 
 	rec, err := c.noticeRecord(stretchIndexRecordPrefix+c.stretchID, kindStretchIndex, map[string]string{
 		"stretch_id": c.stretchID, "request_id": c.req.RequestID, "status": status, "segments": fmt.Sprint(len(c.segmentIDs)),
 		"claims": fmt.Sprint(len(c.claimIDs)), "dropped_count": fmt.Sprint(len(c.dropped)), "dropped": string(droppedJSON),
-		"provider": c.provider, "model": c.model, "timings_ms": string(timings),
+		"provider": c.provider, "model": c.model, "timings_ms": string(timings), "client_gone": fmt.Sprint(c.writeErr != nil),
 	}, "stretch "+c.stretchID+" "+status, string(ids), append([]string{}, c.claimIDs...), time.Now())
 	if err != nil {
 		return "", err
@@ -190,7 +190,10 @@ func (c *programmeCall) writeIndex(ctx context.Context, status string) (string, 
 }
 
 // readSegments reads the stored segments of a stretch in order, by their
-// deterministic ids, until one is missing or n are read (n < 0: all).
+// deterministic ids: the leading run of segments that have what they should
+// (a content segment needs its claim, read by its deterministic id), until one
+// lacks it or is missing, or n are read (n < 0: all). It never returns the
+// segment after a gap.
 func (c *programmeCall) readSegments(ctx context.Context, stretchID string, n int) ([]programmeSegment, error) {
 	var out []programmeSegment
 	for i := 0; n < 0 || i < n; i++ {
@@ -200,20 +203,33 @@ func (c *programmeCall) readSegments(ctx context.Context, stretchID string, n in
 			return nil, err
 		}
 		if rec == nil || rec.Directive == nil {
-			if n >= 0 {
-				return nil, fmt.Errorf("segment record %s is missing", id)
-			}
 			break
 		}
 		s := programmeSegment{ID: id, Kind: rec.SubjectRefs["kind"], Title: rec.Directive.Objective, Text: rec.Directive.Body, SHA256: rec.SubjectRefs["sha256"]}
 		_, _ = fmt.Sscanf(rec.SubjectRefs["blocks"], "%d", &s.Blocks)
 		_ = json.Unmarshal([]byte(rec.SubjectRefs["cites"]), &s.Cites)
 		s.Content = rec.SubjectRefs["forecast"] == "true"
+		if s.Content {
+			// A content segment is streamed only with its claim: the segment
+			// record is written first, so a record with no claim is a write
+			// that failed or a process that stopped between the two.
+			claim, err := c.get(ctx, calibration.ClaimRecordID(calibration.AutoradioAgent, stretchID+"/"+id, ""))
+			if err != nil {
+				return nil, err
+			}
+			if claim == nil {
+				break
+			}
+		}
 		out = append(out, s)
 	}
 	return out, nil
 }
 
+// listNotices fetches at most 5,000 records of the kind and then filters by id
+// prefix, so a listener with more than that of one kind is read short without
+// saying so: a known bound, left as it is.
+//
 // listNotices reads the listener's own records of one kind (turn requests,
 // notebook notes, lessons): the newest first, at most limit, with the id
 // prefix that names the record rather than a reply.
