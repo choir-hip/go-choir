@@ -49,13 +49,18 @@ public struct VoiceOption: Codable, Equatable, Sendable, Identifiable {
 public enum VoiceCatalog {
     public static let kokoroModel = "kokoro-82m-ane"
     public static let pocketModel = "pocket-tts"
+    /// Gradium's Phonon 31M English voice (Apache-2.0), the Core ML pack that FluidInference publishes in `pocket-tts-coreml/phonon/phonon-31m-en`.
+    public static let phononModel = "phonon-31m"
     /// The stage that speaks when the neural voice is not ready or fails.
     public static let fallbackStageID = "avspeech"
     /// Stages that need a model on the phone; only these get the readiness check and the fall back.
-    public static let neuralStageIDs: Set<String> = ["kokoro", "pocket-tts"]
+    public static let neuralStageIDs: Set<String> = ["kokoro", "phonon", "pocket-tts"]
 
     /// Kokoro 82M voices that FluidInference/kokoro-82m-coreml publishes (`voices/<id>.json`, listed by the Hugging Face API on 2026-11-15)
     /// and the American and British English ones to start with. Pocket's one voice is the stage's own default. The first is the default.
+    /// Phonon (an alternative to Kokoro, to be heard beside it) sits right after Kokoro's cards: three of its 103 voices, the ones the pack
+    /// ships as ready-made states, so they start without a prefill (names are the pack's own: `<locale>_<Name>`, `voices/` and `voices_catalog.jsonl`,
+    /// listed by the Hugging Face API on 2026-11-15). The system voice stays last.
     public static let options: [VoiceOption] = [
         VoiceOption(id: "kokoro:af_heart", stageID: "kokoro", voice: "af_heart", name: "Heart", blurb: "Warm and clear",
                     sample: "Hello, I'm Heart. I'll read you the paper.", modelID: kokoroModel),
@@ -67,6 +72,12 @@ public enum VoiceCatalog {
                     sample: "Hello, I'm Emma. Lovely to meet you.", modelID: kokoroModel),
         VoiceOption(id: "kokoro:bm_george", stageID: "kokoro", voice: "bm_george", name: "George", blurb: "British, deep",
                     sample: "Good day, I'm George. Let's begin.", modelID: kokoroModel),
+        VoiceOption(id: "phonon:en_us_Easton", stageID: "phonon", voice: "en_us_Easton", name: "Easton (Phonon)", blurb: "Young, punchy, American",
+                    sample: "Hi, I'm Easton. This is Phonon, a small voice that runs on your phone.", modelID: phononModel),
+        VoiceOption(id: "phonon:en_us_Zoey", stageID: "phonon", voice: "en_us_Zoey", name: "Zoey (Phonon)", blurb: "Playful and upbeat, American",
+                    sample: "Hi, I'm Zoey. This is Phonon. Shall we see what's new today?", modelID: phononModel),
+        VoiceOption(id: "phonon:en_gb_Maeve", stageID: "phonon", voice: "en_gb_Maeve", name: "Maeve (Phonon)", blurb: "Sparky and attentive, British",
+                    sample: "Hello, I'm Maeve. This is Phonon. Lovely to meet you.", modelID: phononModel),
         VoiceOption(id: "pocket-tts:alba", stageID: "pocket-tts", voice: "alba", name: "Alba", blurb: "Light and quick to start",
                     sample: "Hello, I'm Alba. I start talking quickly.", modelID: pocketModel),
         VoiceOption(id: "system", stageID: fallbackStageID, voice: "", name: "This phone's voice", blurb: "Built in, no download",
