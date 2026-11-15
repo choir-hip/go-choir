@@ -18,6 +18,15 @@ the problem record's, and every number I derive is marked **derived**.
 Marks: **C** read from code, **M** measured (by the problem record, not by me),
 **derived** computed here from M, **invented** a value with no source.
 
+> **Status after review round 1 (section 5).** A repair round repairs by
+> subtraction. Section 5 supersedes: the poll waiting on the label (so also
+> the `NextDue` change and the 120 s arrival delay of 4.1), the re-hold of 4.5
+> item 3, intake's in-flush whole retry of a non-rate failure, the sleeping
+> flusher of 2.2, the lone-capture-only fix of 2.4, and the failure list of
+> 2.5. Where a section below disagrees with section 5, section 5 wins. One
+> finding of the code contradicts the repair's premise and is **the decision
+> brought back** (5.1).
+
 ## 1. Investigation
 
 ### 1a. What triggers an intake flush, and why 44% hold one capture
@@ -741,4 +750,322 @@ flush whose call is refused by a closed port re-holds its captures once, and
 the second refusal leaves them unlabelled with one log line each. Deployed
 proof: after the next gateway restart, the paper's console shows one failed
 call per flush, no `forced_by=map[call_failed` line, and the held captures
-labelled at the next window if the gateway is back.
+labelled at the next window if the gateway is back. **(Re-hold, the rest of 4.5
+item 3, and "asked once more whole" in the amended item 3 are withdrawn by
+5.3.)**
+
+## 5. Review round 1: the repaired design
+
+Two seats read the design: omp-deepseek-v41-flash (REPAIR, five blockers) and
+claude (ACCEPT with conditions). A reproducible minority blocker outweighs the
+pass, so this is a repair round, by subtraction: no new mechanism. The
+coordinator's adjudication is applied below, each point checked against the
+code at `718ea5ed4`; one point it does not survive (5.1).
+
+### 5.1 The poll no longer waits for the label, and the one thing that needs it
+
+**Adjudication:** the poll announces its captures and enqueues the event layer
+without waiting for the gather window; the label arrives later as advice
+(`source_schedule.go:262-277`: "Labels are their own objects and never gate the
+arrival"; `yaegikernel/intent.go:290-293`: "advice, not a decision").
+
+**What changes in code (all verified):**
+
+- `source_schedule.go:279-283`: the `select` on the enqueue's channel is
+  deleted; the poll calls `enqueueIntakeLabels` and goes on to
+  `enqueueEventResolution` (`:294`) and `announceCaptures` (`:305`).
+- `intakeTicket`, `newIntakeTicket`, `resolveIntakeHeld`, the `ticket` field of
+  `intakeHeld` and the channel `enqueueIntakeLabels` returns are deleted
+  (`intake_labels.go:249-286`, `:328`). **Nothing waits on a ticket any more,**
+  so a wedged queue (5.4) can lose a label but can block no poll, no lane slot,
+  no tick and no hibernate fence.
+- Deleted with it, because they existed only for the wait: the `NextDue =
+  max(now, started + interval)` change and its commit (d); the 120 s arrival
+  delay; the cadence cost on sources with an interval under the wait (the poll
+  returns as soon as it has announced); the hibernate-fence cost (a poll is in
+  flight for its fetch, not the window); the one-source-computer delay (the
+  poll is not held; a lone source gets its label at the next window, no
+  worse); the event layer's timer starting up to 120 s late (`:294` is no
+  longer behind the wait); and the lost-arrival-on-restart defect of DeepSeek
+  B1 (a crash mid-window now loses a *label*, never an arrival: the arrival is
+  committed in the poll's own path before the poll ends, `source_schedule.go:305`).
+
+**What reads the label, and when (the check the adjudication asked for):**
+
+| Reader | Reads | What it does at announce time | With the label up to 120 s later |
+| --- | --- | --- | --- |
+| `announceCaptures` (`capture_arrival.go:130`) | the capture ids only | nothing about labels | unchanged |
+| `enqueueEventResolution` (`event_layer.go:916`) | the captured items only | nothing about labels | unchanged |
+| Management's record read (`inbox_records.go:130-135`) | the label at the time of each read, `LatestCaptureLabel` (`intake_view.go:31`) | shows `unlabelled` if none yet | a read inside the window says `unlabelled`; a later read shows the label (labels are fresh per read) |
+| Override pass (`intake_overrides.go:110-125`) | the newest label when an editor disposition commits | skips a capture with no label | a disposition inside the window records no correction, since no label existed (not a wrong one) |
+| **The intake task's opening turn** (`management_tasks.go:107-124`, via `loadCellRecords` and `captureLabelViews`) | the labels at the moment the task starts | **the arrival's own commit starts the task** (`capture_arrival.go:108-116`, `withIntakeTask`), so the task's first turn is built at announce time | **the first turn shows `unlabelled` for every gathered capture** |
+
+**This last row contradicts the adjudication's premise that the label is only
+documented advice.** It is advice, but the platform feeds it to the intake
+task in the task's *first turn*, which is built within the arrival's own
+commit, and the task prompt says "do not fetch what came" and "Feed the story
+Jev names unless you read otherwise"
+(`rlm_management_task_runtime.yaml:12-24`; the management overlay,
+`rlm_management_runtime.yaml:39-40`: "the task ... with the labels in front of
+it"). With the poll decoupled, a gathered label (arriving up to 120 s after the
+announce) is not in the task's first turn. The task decides open, feed or
+decline without the advice it was written to follow, unless it calls
+`choir.Records()` again, which its prompt does not tell it to do. I read no
+test of how often a task re-reads, and I did not measure task latency, so how
+much this costs is **unverified**; but it is the one thing the label is for.
+
+**So the repair, as ordered, cannot be taken without a decision, and I bring
+it back rather than keep the block:**
+
+- **(A) Decouple as ordered.** All of 5.1's deletions land. The label becomes
+  late advice. The intake task's first turn shows `unlabelled` for any capture
+  whose label has not landed; the gather window then makes that the normal case
+  (today it is the failure case). Management's read inside the window and the
+  override pass degrade as in the table. This keeps the design a pure
+  subtraction. Whether the first turn matters is the owner's call and needs
+  one measurement first: the share of intake tasks that call `choir.Records()`
+  a second time, or that feed against the label.
+- **(B) Keep the poll's wait**, so the label exists at the task's first turn,
+  with every cost that returns: the 120 s arrival delay, the poll in flight
+  for the window (hibernate fence, crash-loop exposure, a lane slot), the
+  `NextDue` drift (review: B1 lost arrival on a mid-window crash unless the
+  captures are persisted first, which is a new mechanism). I do not design
+  these here; they are in DeepSeek B1 and Claude 2, 4, 5.
+
+**Default taken (CLAUDE.md "no blocking asks"):** the design below is written
+for (A), because it is the subtraction ordered and the only one that adds
+nothing; and because the gather's gain (calls per capture) is independent of
+whether the poll waits. The conservative reading for the *product* is (B), and
+I record that I would not land the gather commit until the coordinator or the
+owner has chosen. Landing (a) and (b) (5.6) does not depend on the choice.
+
+### 5.2 The deadline under (A)
+
+120 s stays the value chosen from the replay (4.1), pending the owner's word.
+Under (A) it costs no poll anything; it costs only label lateness, which is
+the 5.1 question. Under (B) it would cost every poll 120 s. The deadline is
+unchanged; what it costs depends on the choice above.
+
+### 5.3 Failures: what is deleted
+
+- **Re-hold deleted** (DeepSeek B4; Claude 7). A capture whose call failed on a
+  dial error stays unlabelled; management has it as `unlabelled`, the arrival is
+  already announced, and nothing is written. Measured yield of the re-hold:
+  about 7 captures in 5 h, all during gateway restarts (the 24 calls of 4.4:
+  three clusters, the three restarts), and none recovered by a 20 s retry
+  because the drain of the credentials restart lasted 4.5 minutes. The
+  override-against-a-label-nobody-saw hazard (B4) and the double-version hazard
+  go with it. The `jevTransportDown` classification stays in (a): a dial
+  failure fails once at any depth, never halved and never retried at once.
+- **Intake's in-flush whole retry deleted.** `jevNextStep` returns `jevRetry`
+  for any non-rate, non-deterministic failure when `retries < 1`
+  (`jev_failure.go:72-73`). On the intake path that is a second call with no
+  named limit: it is the same request again, not a rate backoff and not a size
+  split. At the call site (`intake_labels.go:1154-1160`) a `jevRetry` on an
+  error that is not `jevRateRefused` becomes `jevFail`; the rate backoff
+  (`intakeRetryBackoff`, `jevRateTries`) stays, being a real provider refusal.
+  The event layer calls `jevNextStep` itself (`event_layer.go:480`) and keeps
+  its retry as it is; the change is in intake's loop, not in `jevNextStep`, so
+  there is no per-caller parameter and no new mechanism.
+- **Not changed (5):** halving on a size refusal (`vendor_refused`,
+  `gateway_body_cap`) stays as (a) says. **Residual, recorded, not designed:**
+  the gateway answers a vendor size refusal with a bare 502
+  (`internal/gateway/jev.go:433`, the reason only in the journal at `:417`), so
+  nothing halves it; the estimator is above the real tokenizer and no size
+  refusal appears in the log (13 of 13 failures were `connection refused`).
+  Relaying the vendor's size refusal as a 413 is a **separate later slice,
+  outside this design**.
+
+### 5.4 The timer: the pattern the repo already has
+
+DeepSeek B2 and B3 and Claude 1 are the same finding from the code:
+`stopIntakeLabels` waits for the flusher goroutine (`intake_labels.go:486`
+`l.flushes.Wait()`) and flushes only while `ctx.Err() == nil` (`:490-492`);
+the only cancel is the drain deadline (10 s default,
+`telemetry_batching.go:34-39`). A flusher *sleeping* on a gather deadline would
+make a planned stop wait the full drain deadline and then skip the flush, so
+every held label is lost on a planned refresh. And the enqueue starts the
+flusher only `if !l.running` (`:364`) while the flusher exits when nothing is
+due (`:424-425`), so a deadline armed only in that branch is never armed for a
+queue enqueued while another computer's flush is in flight.
+
+The repair uses the shape the event layer already has (`event_layer.go:944`
+`time.AfterFunc` per queue, `:957-968` start under the lock, `:1018-1029` stop):
+
+- **No sleeping flusher, no `running` flag.** The one flusher goroutine and
+  `l.running` are deleted. Each queue carries `timer *time.Timer` and
+  `inFlight bool`.
+- **Arming rule** (independent of anything else): after any change under
+  `l.mu` (an enqueue, the end of a flush), if the queue is non-empty and not
+  `inFlight` and has no `timer`, arm `time.AfterFunc(max(0, items[0].at +
+  deadline - now))`. A queue whose oldest capture is already past its deadline
+  (it waited behind another flush) fires at once.
+- **On fire:** under `l.mu`, `timer = nil`; unless stopped or `inFlight`, set
+  `inFlight` and start the flush goroutine, which takes the queue's captures in
+  arrival order. At the end of the flush, under the lock, `inFlight = false`
+  and the arming rule runs again, so captures that arrived during the flush
+  get a deadline measured from their own first arrival. A runtime-level mutex
+  held across a flush keeps today's serialization: a flush for one computer
+  does not run beside a flush for another (the owner's "no concurrent Jev
+  calls"); it is a lock, not a queue of calls.
+- **Liveness invariant:** every non-empty queue has either a flush in flight or
+  a pending timer. Tests assert it after every transition: enqueue into an empty
+  queue; enqueue while another computer's flush is in flight (the DeepSeek B3
+  interleaving); a flush ending with captures still held; a flush that panics.
+- **Panic recovery** (`intake_labels.go:380-392` today): the recovery sets
+  `inFlight = false` under the lock and runs the arming rule, so the held
+  captures of that queue are not stranded; the panicking flush's own captures
+  stay unlabelled, as now.
+- **Stop and a planned restart** (`stopIntakeLabels`, `:457`): under the lock,
+  every queue's timer is `Stop()`ped and the held captures taken (as `rest`
+  already is); the stop then flushes them at once, bounded by the drain
+  deadline, after the in-flight flush finishes. The test asserts **labels
+  written** (`AppendCaptureLabel` called for the held captures with a fake
+  judge), not just a log field. A crash writes nothing, and nothing resumes at
+  boot: no marker, no resumer (CLAUDE.md "Restarts").
+
+### 5.5 (b): every batch size
+
+DeepSeek B5: `(b)` as written fixed only the lone capture; with an unread
+index, a flush of two or more captures is asked against siblings only
+(`intake_labels.go:546-549`, an empty library) and writes `new` or a sibling
+label with Jev's model and probability, rendered "Jev: new (p ...)"
+(`intake_view.go:49-59`), indistinguishable from a full judgment. Verified.
+With a gather window, multi-capture flushes become the normal shape, so the
+defect would have moved from rare to common. **Repair, by subtraction: when the
+story index could not be read (the publish or the list errors at `:546-549`),
+every capture of that flush stays unlabelled, lone or not.** The "siblings
+only" path is deleted for that case; `labelHeld` sets a flag at the two error
+sites and returns each capture with its error, as it does for any capture it
+could not label, and logs once `story index unread; N captures unlabelled`. No
+new label field. A read that succeeds and returns no usable stories (the
+`index_empty` case) keeps the honest default, with the reason in the flush log
+line as 2.4 said.
+
+### 5.6 Land order, each landable and revertible alone
+
+1. **(a)** the failure rule: delete the `call_failed` halve
+   (`jev_failure.go:72-76`), classify a dial failure as `jevTransportDown`
+   (fails once, never halved), and turn intake's non-rate `jevRetry` into
+   `jevFail` (5.3). Red, two seats.
+2. **(b)** every capture of an unread-index flush stays unlabelled (5.5).
+   Orange. Independent of (a).
+3. **(c)** the gather: the AfterFunc timer (5.4), the deadline, the deleted
+   ticket and the decoupled poll (5.1, if (A) is chosen). Orange, red surface.
+   It does not need (a) or (b) to build, but it should follow them: a gathered
+   call that fails loses more captures. There is no `(d)` and no
+   `jevTransportDown` dependency in (c), since the re-hold is gone, so
+   reverting (a) alone cannot break the build of (c).
+
+Tests that pin the old contract and are **rewritten, not deleted**, in (a):
+`intake_failure_test.go:39` (`TestIntakeGateway502OnABigCallIsHalvedAndLosesNoCapture`:
+a 502 is now asked once at most, never halved, ends unlabelled),
+`:66` (`...PersistentFailureIsAFixedSmallNumberOfCalls`: the fixed number is now
+one call for a dial failure, and the rate path's tries for a 429), `:111` with
+`:127` (`TestJevNextStepOrdersTheChecks`: the `jevHalve ... "call_failed"`
+assertion becomes a `jevFail`; the 413 and 429 orderings stay). In (c) the
+tests that wait on the ticket (`intake_flush_test.go`, `intake_flush_safety_test.go`)
+are rewritten for the AfterFunc and for no wait; I have not read them, so their
+exact assertions are unverified.
+
+### 5.7 Corrections of fact adopted, and the proof targets
+
+- The label wait is a cost only under (B); under (A) it is label lateness.
+- The first replay data of 4.1 stands. Proof target 4 now reads: **`waited_ms`
+  at most the deadline plus one flush in flight**, since a queue can wait
+  behind another computer's flush (DeepSeek, should-fix).
+- Proof targets 1 to 3 of 4.3 stand (single-capture flushes at most 15%, calls
+  per capture at most 0.28, zero labels with no call and no reason). Added for
+  (b): zero labels written in a flush that logged `story index unread`.
+- The `index_empty` default stores `EventP = 1.0`
+  (`intake_labels.go:1102`); the view prints no probability for it but the
+  `P` field carries 1. Left as is, recorded as a residual (not a blocker; a
+  field change would be the new mechanism this round avoids).
+- `jevSizeRefused` is dead weight through the gateway today (its own comment,
+  `jev_failure.go:92-95`); kept, because the gateway slice that relays the size
+  refusal will use it.
+- Claude's read was on `main` (824a01aab), not on the reference page; it did
+  not check the vendor limits. DeepSeek's B1 frequency (70% of refreshes in a
+  wait) assumed the blocking shape and is moot under (A).
+- Claude 6, "after a dial failure, do not send the rest of the flush's calls":
+  adopted into (a) as a deletion of attempts (a dial failure of one call stops
+  the flush's remaining calls; they would fail the same second).
+
+### 5.8 Failure list, recounted (14)
+
+1. A capture waiting forever on a quiet source: the timer is armed by the first
+   capture and not moved; test with a fake clock, including a steady trickle.
+2. A burst larger than one call: split by `jevJob.Plan`, logged with the limit.
+3. A failed call: a dial failure fails once, never halved, never retried at
+   once, and stops the flush's remaining calls; a non-rate failure is not
+   retried on intake; a rate refusal backs off as now; a size refusal halves;
+   what fails stays unlabelled, no default, no re-hold.
+4. A flush with an unread story index: every capture unlabelled, any batch
+   size (5.5).
+5. Ordering: arrival order across sources; per-source order preserved; labels
+   in handle order.
+6. The same capture held twice: deduped by `CaptureID` at the gather.
+7. A planned stop or restart: timers stopped under the lock, held captures
+   flushed at once within the drain deadline, labels asserted written; a crash
+   drops held captures unlabelled, no resumer.
+8. The liveness invariant: every non-empty queue has an in-flight flush or a
+   pending timer, asserted after enqueue-while-another-computer-flushes, after
+   a flush ending with captures held, and after a panic.
+9. Panic recovery re-arms the queue (5.4).
+10. A flush in flight when a deadline passes: the next starts when it ends, one
+    at a time across computers (the runtime-level mutex).
+11. Several computers: one queue and one timer each, serialized.
+12. Label lateness: `waited_ms` at most the deadline plus one flush in flight;
+    under (A) no poll, tick, lane slot or fence is held, and no wait handle
+    exists to wedge; the intake task's first turn may show `unlabelled`
+    (5.1, the decision).
+13. Larger calls: `intakeCallTimeout` scales with the request (about 69 s at
+    64k, against the gateway's 2 minutes, Claude 3); a timeout of a big call
+    ends unlabelled and its `est_tokens` is on the failure line.
+14. A dial failure inside a multi-call flush stops the rest of the flush (3,
+    5.7), so a closed gateway costs one call per flush.
+
+(Dropped from the earlier list: the poll whose context ends while it waits and
+its ticket, since nothing waits; the re-hold items.)
+
+### 5.9 Every finding, and its disposition
+
+DeepSeek (REPAIR):
+
+| Finding | Check | Disposition |
+| --- | --- | --- |
+| B1 restart mid-window loses the arrival | true of the blocking shape: announce at `:305` is after the wait at `:280` | removed by 5.1 (poll no longer waits); a crash now loses a label only |
+| B2 timer makes the planned-stop flush impossible | true: `intake_labels.go:486`, `:490-492`, drain 10 s | repaired by 5.4 (AfterFunc, stop under the lock, labels asserted written) |
+| B3 liveness invariant unstated; `!l.running` at `:364` wedges a queue | true as described | repaired by 5.4 (no `running`, arming rule, invariant, test) |
+| B4 re-hold feeds a wrong learning signal | true (`intake_overrides.go:110-125`, `intake_job.go:31`) | re-hold deleted, 5.3 |
+| B5 (b) fixes only the lone capture | true (`:546-549`) | repaired by 5.5 (every capture of an unread-index flush) |
+| Relay the vendor's size refusal | gateway `jev.go:417`, `:433` | separate later slice, recorded residual, 5.3 |
+| One-source computers: window is pure delay | true | the poll no longer waits; the label is no worse than the next window; not adding a flush-at-once rule (a new mechanism) |
+| Delete intake's in-flush retry | true (`jev_failure.go:72-73`) | adopted at intake's call site, 5.3; event layer's kept |
+| `jevSizeRefused` dead weight | true | kept for the gateway slice, 5.7 |
+| Rewrite the pinning tests | `intake_failure_test.go:39`, `:66`, `:111`/`:127` | listed, 5.6 |
+| Rollback dependency of the re-hold on (a) | true | gone with the re-hold, 5.6 |
+| `(d)` leaves a 60 s source at 130 to 180 s | true | `(d)` deleted (5.1) |
+| Proof target 4 | true | corrected, 5.7 |
+| Record the residual; drop `EventP=1.0` | | residual recorded in 5.7 and for the problems doc and ledger at landing; `EventP` left |
+| Direct answer 1: not a forbidden queue | agree | none |
+
+Claude (ACCEPT with conditions):
+
+| Finding | Check | Disposition |
+| --- | --- | --- |
+| 1 stop must wake the sleeping flusher | same as DeepSeek B2 | 5.4 |
+| 2 poll parked holds the hibernate fence (`handler.go:189-193`, `hibernate.go:107-113`) | not read by me | removed by 5.1; unverified |
+| 3, 4 land (d) first; implement it as `max(now, started+interval)` | | `(d)` deleted (5.1) |
+| 5 event layer's timer starts late | true of the blocking shape | removed by 5.1 |
+| 6 stop the flush's other calls after a dial failure | | adopted, 5.7 and failure 14 |
+| 7 re-hold details | | re-hold deleted, 5.3 |
+| (a) acceptable, a 502 size refusal is a residual; timeout class lost halving | | accepted; est_tokens on the failure line, failure 13 |
+| `(b)` safe: readers handle no label | `intake_view.go:31`, `intake_overrides.go:111-115` | confirmed; the intake task's first turn is a reader of the label **it missed** (5.1) |
+| "Keep the current default" on open question 3 | | the adjudication ordered the opposite; the code finding in 5.1 is why this is the one decision returned |
+
+**Contradicted by the code:** the premise of adjudication point 1, as stated in
+5.1 (the intake task's first turn reads labels at announce time). Nothing in
+either review was contradicted except Claude's closing preference to keep the
+poll's wait, which is a choice, not a fact, and its read on `824a01aab`.
+
