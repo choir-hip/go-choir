@@ -397,6 +397,8 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     public var userPaused: Bool { st.read { $0.userPaused } }
     public var rate: Double { st.read { $0.rate } }
     public var onChange: (@Sendable () -> Void)?
+    /// Where playback is, per segment (station P1): P2 observes it.
+    public let playback = SegmentTracker()
     public var dipVolume: Float = 0.25
     /// Text the listener asked to hear (mail's "Read it to me"), behind the story now playing; each one a programme of its own.
     private var queue: [ProgrammeDocument] = []
@@ -404,26 +406,67 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     public init(audio: LiveAudio, registry: StageRegistry, log: EventLog, configuration: LabConfiguration, document: ProgrammeDocument) {
         self.audio = audio; self.registry = registry; self.log = log; self.configuration = configuration
         self.st = Locked(State(document: document))
+        playback.paused(true)                   // the player starts paused
         installRemoteCommands()
     }
     public func setConfiguration(_ c: LabConfiguration) { lock.lock(); configuration = c; lock.unlock() }
-    public func setDocument(_ d: ProgrammeDocument) { st.write { $0.document = d; $0.blockIndex = 0 } }
+    public func setDocument(_ d: ProgrammeDocument) { playback.documentReplaced(); st.write { $0.document = d; $0.blockIndex = 0 } }
 
     // MARK: Transport
 
     public func play() {
         let (lvl, hasLoop, at) = st.write { s -> (PlayLevel, Bool, Int) in s.userPaused = false; return (s.level, s.loop != nil, s.blockIndex) }
         if lvl != .pause { audio.programmePlay() }
+        playback.paused(false)
         if !hasLoop { start(at: at) }
         publishNowPlaying(); onChange?()
     }
-    public func pause() { st.write { $0.userPaused = true }; audio.programmePause(); publishNowPlaying(); onChange?() }
+    public func pause() { st.write { $0.userPaused = true }; audio.programmePause(); playback.paused(true); publishNowPlaying(); onChange?() }
     public func next() {
-        let (i, count) = st.read { ($0.blockIndex, $0.document.blocks.count) }
+        let (i, doc) = st.read { ($0.blockIndex, $0.document) }
+        let count = doc.blocks.count
+        if let si = doc.segmentIndex(containingBlock: i) {
+            // A programme: skip is to the next segment. On the last one it does nothing (no wrap), unless a text is waiting behind it.
+            if si + 1 < doc.segments.count { start(at: doc.segments[si + 1].firstBlock) }
+            else if let n = dequeue() { st.write { $0.userPaused = false }; setDocument(n); start(at: 0) }
+            return
+        }
         if i >= count - 1, let n = dequeue() { st.write { $0.userPaused = false }; setDocument(n); start(at: 0); return }
         start(at: min(i + 1, count - 1))
     }
-    public func previous() { start(at: max(blockIndex - 1, 0)) }
+    public func previous() {
+        let (i, doc) = st.read { ($0.blockIndex, $0.document) }
+        if let si = doc.segmentIndex(containingBlock: i) {
+            // The start of this segment, or the one before when already at its start.
+            let here = doc.segments[si].firstBlock
+            start(at: i > here || si == 0 ? here : doc.segments[si - 1].firstBlock)
+            return
+        }
+        start(at: max(i - 1, 0))
+    }
+    /// The segment now playing; nil for a single article.
+    public var currentSegmentIndex: Int? { st.read { $0.document.segmentIndex(containingBlock: $0.blockIndex) } }
+    /// Go to the first block of segment `i`. Outside the list: nothing.
+    public func jumpToSegment(_ i: Int) {
+        guard let at = st.read({ s in s.document.segments.indices.contains(i) ? s.document.segments[i].firstBlock : nil }) else { return }
+        start(at: at)
+    }
+
+    /// Add a segment to the end of the programme being played, if `documentID` is still the document it was made for (a late segment of an
+    /// older stretch is refused). Playback is not disturbed; when the programme had run dry and the listener has not paused, it carries on
+    /// with the new segment. False: refused, or the segment was already there.
+    @discardableResult
+    public func appendSegment(_ p: PreparedSegment, toDocument documentID: String) -> Bool {
+        let (ok, resumeAt) = st.write { s -> (Bool, Int?) in
+            guard s.document.id == documentID else { return (false, nil) }
+            let old = s.document.blocks.count
+            guard s.document.append(p) else { return (false, nil) }
+            return (true, s.loop == nil && !s.userPaused ? old : nil)
+        }
+        if let at = resumeAt { start(at: at) }
+        if ok { onChange?(); publishNowPlaying() }
+        return ok
+    }
 
     func start(at i: Int) {
         let (old, my) = st.write { s -> (Task<Void, Never>?, Int) in
@@ -437,16 +480,18 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             var n = i
             while !Task.isCancelled {
                 // One look at the state per block: the block to play, and whether this loop is still the current one.
-                let step = self.st.write { s -> (ProgrammeBlock, Bool, PlayLevel)? in
+                let step = self.st.write { s -> (ProgrammeBlock, Bool, PlayLevel, ProgrammeDocument)? in
                     guard s.epoch == my, n < s.document.blocks.count else { return nil }
                     s.blockIndex = n
-                    return (s.document.blocks[n], s.userPaused, s.level)
+                    return (s.document.blocks[n], s.userPaused, s.level, s.document)
                 }
-                guard let (block, paused, lvl) = step else { break }
+                guard let (block, paused, lvl, doc) = step else { break }
                 self.audio.clearPlayhead(); self.onChange?(); self.publishNowPlaying()
                 if paused { self.audio.programmePause() } else if lvl != .pause { self.audio.programmePlay() }
-                await self.playBlock(block, index: n)
+                self.playback.unitBegan(n, in: doc)
+                let played = await self.playBlock(block, index: n)
                 if Task.isCancelled { break }
+                self.playback.unitEnded(n, played: played, in: self.st.read { $0.document })
                 n += 1
             }
             if !Task.isCancelled {
@@ -503,27 +548,34 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     public var queuedTexts: [String] { lock.lock(); defer { lock.unlock() }; return queue.map(\.id) }
     private func dequeue() -> ProgrammeDocument? { lock.lock(); defer { lock.unlock() }; return queue.isEmpty ? nil : queue.removeFirst() }
 
-    func playBlock(_ b: ProgrammeBlock) async { await playBlock(b, index: blockIndex) }
+    func playBlock(_ b: ProgrammeBlock) async { _ = await playBlock(b, index: blockIndex) }
 
     /// `index` tags the audio so the position answers for this block even if the index moves on while it plays.
-    func playBlock(_ b: ProgrammeBlock, index tag: Int) async {
+    /// True when the block's audio was played (to its end, or until a transport change stopped it); false when it made no sound
+    /// (no voice, a voice that failed, a clip that is not there): that is not a finish.
+    @discardableResult
+    func playBlock(_ b: ProgrammeBlock, index tag: Int) async -> Bool {
         switch b {
         case .speech(let t), .listenerPassage(let t, _):
             lock.lock(); let cfg = configuration; lock.unlock()
-            guard let voice = try? registry.make(.voice, as: Voice.self, cfg) else { return }
+            guard let voice = try? registry.make(.voice, as: Voice.self, cfg) else { return false }
             var samples: [Float] = []; var rate = 22050.0
+            var failed = false
             do { for try await f in voice.speak(AsyncStream { $0.yield(t); $0.finish() }) { samples += f.samples; rate = f.sampleRate } } catch {
-                log.emit(.error(stage: "voice", message: "\(error)"))
+                log.emit(.error(stage: "voice", message: "\(error)")); failed = true
             }
-            if Task.isCancelled { return }
+            if Task.isCancelled { return false }
+            if failed || samples.isEmpty { return false }
             log.emit(.programmeAudioStart(block: tag))      // the trace reads "desk audio start" from the first of these after a revision
             await audio.playProgramme(samples, rate: rate, tag: tag)
+            return true
         case .clip(let url, let start, let end, _):
             guard let u = FixtureResources.resolve(url), let all = try? AudioFiles.readMono(u, rate: 16_000) else {
-                log.emit(.error(stage: "player", message: "clip not found: \(url)")); return
+                log.emit(.error(stage: "player", message: "clip not found: \(url)")); return false
             }
             let a = Int(start * 16_000), z = min(all.count, end.map { Int($0 * 16_000) } ?? all.count)
-            if a < z { log.emit(.programmeAudioStart(block: tag)); await audio.playProgramme(Array(all[a..<z]), rate: 16_000, tag: tag) }
+            if a < z { log.emit(.programmeAudioStart(block: tag)); await audio.playProgramme(Array(all[a..<z]), rate: 16_000, tag: tag); return true }
+            return false
         }
     }
 
@@ -544,6 +596,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     }
     public func setLevel(_ l: PlayLevel) async {
         let paused = st.write { s -> Bool in s.level = l; return s.userPaused }
+        playback.cut(l == .pause)
         switch l {
         case .play: audio.setProgrammeVolume(1); if !paused { audio.programmePlay() }
         case .dip: audio.setProgrammeVolume(dipVolume)
@@ -577,9 +630,9 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     }
     func publishNowPlaying() {
         let (doc, idx, paused, speed) = st.read { ($0.document, $0.blockIndex, $0.userPaused, $0.rate) }
-        let text = doc.blocks.indices.contains(idx) ? doc.blocks[idx].summary : ""
+        let np = ProgrammeNowPlaying.describe(document: doc, blockIndex: idx)
         MPNowPlayingInfoCenter.default().nowPlayingInfo = [
-            MPMediaItemPropertyTitle: text, MPMediaItemPropertyArtist: doc.title.isEmpty ? "Autoradio" : doc.title,
+            MPMediaItemPropertyTitle: np.title, MPMediaItemPropertyArtist: np.artist,
             MPNowPlayingInfoPropertyPlaybackRate: paused ? 0.0 : speed,
         ]
     }

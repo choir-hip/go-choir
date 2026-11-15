@@ -4,6 +4,7 @@ extension StageRegistry {
     public static func registerChoirStages(_ r: StageRegistry) {
         r.register(.system1, ChoirSystem1.self) { ChoirSystem1($0) }
         r.register(.programme, ChoirFrontProgramme.self) { ChoirFrontProgramme($0) }
+        r.register(.programme, RadioProgramme.self) { RadioProgramme($0) }
         r.register(.desk, ChoirDeskStage.self) { ChoirDeskStage($0) }
         r.register(.desk, AutoradioDeskStage.self) { AutoradioDeskStage($0) }
     }
@@ -15,7 +16,7 @@ extension StageRegistry {
             .micSource: .init(id: "builtin"), .addressing: .init(id: "button"), .speechBounds: .init(id: "energy-vad"),
             .speakerCheck: .init(id: "none"), .transcriber: .init(id: "apple-speech"), .yieldPolicy: .init(id: "dip-then-pause"),
             .system1: .init(id: ChoirSystem1.stageID), .holder: .init(id: "local-ack"), .voice: .init(id: "avspeech"),
-            .desk: .init(id: AutoradioDeskStage.stageID), .programme: .init(id: ChoirFrontProgramme.stageID),
+            .desk: .init(id: AutoradioDeskStage.stageID), .programme: .init(id: RadioProgramme.stageID),
         ])
     }
 }
@@ -46,6 +47,8 @@ public final class ChoirApp: @unchecked Sendable {
     private var loading = false
     private var currentRoute = ""
     private var eventTask: Task<Void, Never>?
+    /// Reads the rest of the stretch into the player; cancelled by a reload and by sign-out, so a late segment never lands in a newer programme.
+    private var followTask: Task<Void, Never>?
     public var onChange: (@Sendable () -> Void)?
 
     public init(runtime: LabRuntime, keys: KeyStore, baseURL: String = ChoirEnvironment.defaultBaseURL, openURL: (@Sendable (URL) -> Void)?) {
@@ -106,12 +109,21 @@ public final class ChoirApp: @unchecked Sendable {
     /// Load the configured programme stage into the player (the real front page, or a fixture picked in the Lab).
     public func loadProgramme() async {
         lock.lock(); loading = true; message = ""; lock.unlock(); onChange?()
+        lock.lock(); followTask?.cancel(); followTask = nil; lock.unlock()
         do {
             let prog = try runtime.registry.make(.programme, as: Programme.self, runtime.configuration)
-            let doc = try await prog.load()
+            var doc: ProgrammeDocument
+            var follow: (@Sendable (ProgrammePlayer) async -> Void)?
+            if let radio = prog as? RadioProgramme { let o = try await radio.open(); doc = o.document; follow = o.follow }
+            else { doc = try await prog.load() }
             runtime.player.setDocument(doc)
             runtime.player.start(at: 0)
             lock.lock(); currentRoute = ChoirEnvironment.shared.playing(doc.id)?.route ?? ""; lock.unlock()
+            if let follow {
+                let player = runtime.player
+                let t = Task { await follow(player) }
+                lock.lock(); followTask = t; lock.unlock()
+            }
         } catch is CancellationError {
         } catch {
             runtime.player.setDocument(ProgrammeDocument(id: "none", title: "", blocks: []))
@@ -126,6 +138,7 @@ public final class ChoirApp: @unchecked Sendable {
         runtime.setParam(.programme, name: "route", value: route)
         await loadProgramme()
         await startPlaying()
+        runtime.setStage(.programme, id: RadioProgramme.stageID)           // the next reload is the programme again, not this one story
     }
 
     /// Play/pause from the big button: starts the audio engine on first use.
@@ -151,6 +164,7 @@ public final class ChoirApp: @unchecked Sendable {
 
     public func signOut() async {
         await signIn.signOut()
+        lock.lock(); followTask?.cancel(); followTask = nil; lock.unlock()
         runtime.player.pause()
         runtime.player.setDocument(ProgrammeDocument(id: "none", title: "", blocks: []))
         lock.lock(); stories = []; message = ""; lock.unlock()
@@ -164,6 +178,7 @@ public final class ChoirApp: @unchecked Sendable {
         v.signedIn = signIn.current.signedIn
         lock.lock(); v.loading = loading; v.message = message; lock.unlock()
         v.title = p.document.title
+        if let si = p.document.segmentIndex(containingBlock: p.blockIndex) { v.title = p.document.segments[si].title }   // a programme: the segment's title
         if p.document.blocks.indices.contains(p.blockIndex) { v.passage = p.document.blocks[p.blockIndex].spokenText ?? p.document.blocks[p.blockIndex].summary }
         v.position = p.document.blocks.isEmpty ? "" : "\(p.blockIndex + 1) of \(p.document.blocks.count)"
         v.playing = snap.running && !p.userPaused

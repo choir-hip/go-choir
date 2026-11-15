@@ -92,7 +92,7 @@ final class StretchDecoderTests: XCTestCase {
         var d = StretchDecoder()
         func title(_ t: Any?, kind: String = "story") -> String {
             var o: [String: Any] = ["kind": kind, "text": "Words."]; if let t { o["title"] = t }
-            return segs(d.feed(segmentLine(o) + "\n")).first?.title ?? "<none>"
+            return segs(d.feed(segmentLine(o) + "\n")).first.flatMap { SegmentPrep.prepare($0)?.segment.title } ?? "<none>"
         }
         XCTAssertEqual(title("a\nb"), "a b")
         XCTAssertEqual(title("a\u{07}b"), "a b")
@@ -109,8 +109,8 @@ final class StretchDecoderTests: XCTestCase {
         let line = segmentLine(["kind": "story", "title": "T", "text": "Words.",
                                 "cites": ["pub:a", ["ref": "pub:b", "role": "subject", "label": "The harbour story"], ["ref": "pub:b", "role": "quoted", "label": "The harbour story"], ["ref": "mail:1", "role": "mentioned"]]])
         let s = segs(d.feed(line + "\n")).first
-        XCTAssertEqual(s?.cites.map(\.ref), ["pub:a", "pub:b", "mail:1"], "one ref once")
         let prepared = s.flatMap { SegmentPrep.prepare($0) }
+        XCTAssertEqual(prepared?.segment.cites.map(\.ref), ["pub:a", "pub:b", "mail:1"], "one ref once")
         XCTAssertEqual(prepared?.segment.sources, ["The harbour story"], "a chip only for a cite with a label; never a raw ref")
     }
 
@@ -340,9 +340,11 @@ final class SegmentTrackerTests: XCTestCase {
         let (t, s) = make()
         t.paused(true); XCTAssertTrue(s.events.isEmpty, "nothing open: nothing to report")
         t.unitBegan(0, in: d)
+        XCTAssertTrue(s.events.isEmpty, "begun while the listener is paused: not heard, so not announced")
+        t.paused(false)
         t.paused(true); t.paused(true); t.paused(false)
         t.cut(true); t.cut(true); t.cut(false)
-        XCTAssertEqual(s.events.map(\.kind), [.segmentBegan, .blockBegan, .paused, .resumed, .cut, .cutEnded], "each transition once")
+        XCTAssertEqual(s.events.map(\.kind), [.segmentBegan, .blockBegan, .paused, .resumed, .cut, .cutEnded], "each transition once; the beginning came when the listener played")
         t.documentReplaced()
         XCTAssertEqual(s.events.last?.kind, .superseded)
         t.documentReplaced(); XCTAssertEqual(s.events.filter { $0.kind == .superseded }.count, 1)
@@ -410,11 +412,11 @@ final class SegmentPlayerTests: XCTestCase {
     func testF15_ASegmentAfterTheProgrammeRanDryResumesPlaying() async {
         let (p, s) = makePlayer(doc: segmentedDocument(["One."]))
         p.play()
-        XCTAssertTrue(await poll(10) { s.kinds.contains("finished:0") })
+        let ok1 = await poll(10) { s.kinds.contains("finished:0") }; XCTAssertTrue(ok1)
         try? await Task.sleep(nanoseconds: 200_000_000)
         let extra = SegmentPrep.prepare(IncomingSegment(stretchID: "st1", segmentID: "st1/1", kind: "story", title: "Next", text: "Next words.", cites: [], blockCount: nil))!
         XCTAssertTrue(p.appendSegment(extra, toDocument: "radio:t"))
-        XCTAssertTrue(await poll(10) { s.kinds.contains("finished:1") }, "it carried on by itself")
+        let ok2 = await poll(10) { s.kinds.contains("finished:1") }; XCTAssertTrue(ok2, "it carried on by itself")
         XCTAssertEqual(p.document.segments.map(\.firstBlock), [0, 1])
     }
 
@@ -430,9 +432,9 @@ final class SegmentPlayerTests: XCTestCase {
     func testF16_SkipReportsOnlyTheSkipThatHappened() async {
         let (p, s) = makePlayer(voice: "long-voice", doc: segmentedDocument(["A1.", "B1."]))
         p.play()
-        XCTAssertTrue(await poll { s.kinds.contains("blockBegan:0") })
+        let ok3 = await poll { s.kinds.contains("blockBegan:0") }; XCTAssertTrue(ok3)
         p.next()
-        XCTAssertTrue(await poll { s.kinds.contains("blockBegan:1") })
+        let ok4 = await poll { s.kinds.contains("blockBegan:1") }; XCTAssertTrue(ok4)
         p.next()                                            // the last segment: nothing happens
         try? await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertEqual(s.kinds, ["segmentBegan:0", "blockBegan:0", "skipped:0", "segmentBegan:1", "blockBegan:1"])
@@ -459,14 +461,14 @@ final class SegmentPlayerTests: XCTestCase {
     func testF17_NoVoiceIsNotAFinish() async {
         let (p, s) = makePlayer(voice: "no-such-voice", doc: segmentedDocument(["One."]))
         p.play()
-        XCTAssertTrue(await poll(4) { s.kinds.contains("failed:0") })
+        let ok5 = await poll(4) { s.kinds.contains("failed:0") }; XCTAssertTrue(ok5)
         XCTAssertFalse(s.kinds.contains("finished:0"))
     }
 
     func testF18_PauseAndYieldAreObserved() async {
         let (p, s) = makePlayer(voice: "long-voice", doc: segmentedDocument(["One."]))
         p.play()
-        XCTAssertTrue(await poll(4) { s.kinds.contains("blockBegan:0") })
+        let ok6 = await poll(4) { s.kinds.contains("blockBegan:0") }; XCTAssertTrue(ok6)
         p.pause(); p.play()
         await p.setLevel(.pause); await p.setLevel(.play)
         XCTAssertEqual(s.events.map(\.kind).suffix(4), [.paused, .resumed, .cut, .cutEnded])
@@ -476,7 +478,7 @@ final class SegmentPlayerTests: XCTestCase {
     func testReplacingTheDocumentMidSegmentSupersedes() async {
         let (p, s) = makePlayer(voice: "long-voice", doc: segmentedDocument(["One."]))
         p.play()
-        XCTAssertTrue(await poll(4) { s.kinds.contains("blockBegan:0") })
+        let ok7 = await poll(4) { s.kinds.contains("blockBegan:0") }; XCTAssertTrue(ok7)
         p.setDocument(ProgrammeDocument(id: "choir:x", title: "T", blocks: [.speech(text: "Other.")]))
         XCTAssertEqual(s.events.last?.kind, .superseded)
         p.pause()
@@ -523,7 +525,7 @@ final class RadioProgrammeTests: XCTestCase {
             let opened = try await RadioProgramme(StageParams()).open()
             XCTAssertTrue(opened.usedFallback, "\(status)")
             XCTAssertEqual(opened.document.id, "choir:pv-1"); XCTAssertEqual(opened.document.segments, [])
-            XCTAssertEqual(opened.document.blocks.map { $0.spokenText ?? "" }, ["Harbour", "The cranes moved inland."])
+            XCTAssertEqual(opened.document.blocks.map { $0.spokenText ?? "" }, ["Harbour.", "The cranes moved inland."])
             XCTAssertNil(opened.follow)
         }
         // and as a plain Programme stage
@@ -553,21 +555,35 @@ final class RadioProgrammeTests: XCTestCase {
         XCTAssertEqual(p.document.segments.map(\.serverBlockCount), [1, 2, 1])
     }
 
-    func testAStretchThatFailsAfterSomeSegmentsKeepsThem() async throws {
-        StubProtocol.handler = { req in req.path == "/api/autoradio/programme" ? .init(headers: ["Content-Type": "text/event-stream"], raw: self.sse([("One", "First."), ("Two", "Second.")], done: false), dropAfter: true) : self.front(req) }
-        let opened = try await RadioProgramme(StageParams()).open()
-        XCTAssertFalse(opened.usedFallback)
-        let p = player(opened.document)
-        await opened.follow?(p)
-        XCTAssertEqual(p.document.segments.count, 2)
-    }
-
     /// A source the test drives by hand.
     final class Manual: StretchSource, @unchecked Sendable {
         var cont: AsyncThrowingStream<StretchEvent, Error>.Continuation!
         func events(cause: String) async throws -> AsyncThrowingStream<StretchEvent, Error> { AsyncThrowingStream { self.cont = $0 } }
     }
     func incoming(_ n: Int) -> StretchEvent { .segment(IncomingSegment(stretchID: "m", segmentID: "m/\(n)", kind: "story", title: "S\(n)", text: "Words \(n).", cites: [], blockCount: nil)) }
+
+    func testF20_AStretchThatFailsAfterSomeSegmentsKeepsThemAndOneThatFailsAtOnceFallsBack() async throws {
+        let src = Manual()
+        let stage = RadioProgramme(source: src, fallback: { throw ChoirError.empty("x") })
+        let opening = Task { try await stage.open() }
+        _ = await poll { src.cont != nil }
+        src.cont.yield(incoming(0))
+        let opened = try await opening.value
+        XCTAssertFalse(opened.usedFallback)
+        let p = player(opened.document)
+        src.cont.yield(incoming(1))
+        src.cont.finish(throwing: URLError(.networkConnectionLost))        // dropped with no done
+        await opened.follow?(p)
+        XCTAssertEqual(p.document.segments.count, 2, "what arrived is kept")
+        // a stream that fails before any segment: the article
+        let src2 = Manual()
+        let stage2 = RadioProgramme(source: src2, fallback: { ProgrammeDocument(id: "choir:a", title: "A", blocks: [.speech(text: "Article.")]) })
+        let opening2 = Task { try await stage2.open() }
+        _ = await poll { src2.cont != nil }
+        src2.cont.finish(throwing: URLError(.networkConnectionLost))
+        let o2 = try await opening2.value
+        XCTAssertTrue(o2.usedFallback); XCTAssertEqual(o2.document.id, "choir:a")
+    }
 
     func testF21_AReloadStopsTheOldFollowerAndALateSegmentNeverLands() async throws {
         let src = Manual()
@@ -579,7 +595,7 @@ final class RadioProgrammeTests: XCTestCase {
         let p = player(opened.document)
         let follower = Task { await opened.follow?(p) }
         src.cont.yield(incoming(1))
-        XCTAssertTrue(await poll { p.document.segments.count == 2 })
+        let ok8 = await poll { p.document.segments.count == 2 }; XCTAssertTrue(ok8)
         follower.cancel()                                   // a reload cancels it
         _ = await follower.value
         src.cont.yield(incoming(2))
