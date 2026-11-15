@@ -2,7 +2,7 @@
 
 Status: station L1 of
 [the learning-engine goal file](../definitions/choir-autoradio-learning-engine-2026-11-14.md),
-built on `lane/arl-l1`, not deployed. Design:
+landed as 45bf7ce4c and deployed 2026-11-15 (proof: calibration claim C98). Design:
 [autoradio-learning-engine-2026-11-14.md](../design/autoradio-learning-engine-2026-11-14.md)
 (sections 3, 9 and 12; section 12 is normative) and the programme design's
 slice 2. Failure list and its tests:
