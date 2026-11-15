@@ -45,7 +45,7 @@ reason for each is from our data.
 | 4 | **No limiter, pool, reserve, quota or hard-coded vendor rate.** Too many calls is a code problem. Backing off after a real 429, deadlines and the op-ed gate's bound on strangers stay. | The vendor publishes no rate limit; our 15/s bucket rested on a relayed 20 rps (section 4, item 2). Upstream 429s seen: 0 in 16,133 calls M. |
 | 5 | **Record every call** (`judgeCall`, `internal/jevrecord`) and keep the decision id so outcomes can settle it. | Thresholds are guesses until joined to outcomes (section 6). |
 | 6 | **Keep the state to what the questions need and under 30,000 bytes; split the overflow, never trim.** | Vendor long-context mode is "slower and less accurate" and starts near 32,000 bytes on OpenRouter [V]. A 1.14 intake call reached about 9,000 tokens from repeated criteria M. |
-| 7 | **Measure before raising a batch size.** | Accuracy against questions per call is unpublished and unmeasured by us above 12 (section 9). |
+| 7 | **Ask everything in one call; measure accuracy, do not cap for it.** A fixed questions-per-call or batch constant of ours is a defect (owner, 2026-11-15). | The vendor states no maximum on questions per request; only the token budgets bind. Accuracy at large counts is unmeasured by us above 12 captures (section 9): run the comparison, and fix a loss by changing the context, not by adding calls. |
 | 8 | **Do not answer about Jev's limits, prices or accuracy from memory.** Read this page and the subpage. | The old page carried a $1/day cost that was 7.5x low M. |
 
 **The owner's rule on call count (2026-11-15, restating 2026-11-12).** Jev
