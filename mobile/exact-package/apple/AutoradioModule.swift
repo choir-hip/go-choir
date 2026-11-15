@@ -129,11 +129,21 @@ public final class AutoradioModule: ExactPackage {
     func handle(_ name: String, _ h: @escaping AutoradioHandler) { handlers[name] = h }
 
     /// Coalesce change notifications to a few per second. `names` are source names without the "autoradio." prefix.
-    func touch(_ names: [String]) {
+    /// `now`: the change goes out on the next turn of the main loop instead of after the 0.2 s coalescing wait (the page list: a swipe
+    /// must not wait for it; the open-page list changes once per gesture, so there is no storm to coalesce).
+    func touch(_ names: [String], now: Bool = false) {
         // `dirty` is only touched on the main thread: a background caller (found by a real-data run: readServerBuild called this from a
         // cooperative thread and crashed in Set.insert, EXC_BAD_ACCESS) is moved over first.
-        if !Thread.isMainThread { DispatchQueue.main.async { [weak self] in self?.touch(names) }; return }
+        if !Thread.isMainThread { DispatchQueue.main.async { [weak self] in self?.touch(names, now: now) }; return }
         dirty.formUnion(names)
+        if now {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                let d = self.dirty; self.dirty = []
+                for n in d { self.context.changed("autoradio.\(n)") }
+            }
+            return
+        }
         guard !scheduled else { return }
         scheduled = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in

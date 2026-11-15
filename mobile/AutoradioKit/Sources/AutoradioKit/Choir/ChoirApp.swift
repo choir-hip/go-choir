@@ -179,7 +179,8 @@ public final class ChoirApp: @unchecked Sendable {
         runtime.player.play()
         onChange?()
     }
-    public func talkDown() async { if !runtime.snapshot().running { await runtime.start() }; runtime.talkDown() }
+    /// The bar's microphone tap: start the engine if it is not running and hear the microphone (hands-free: the turn ends by itself).
+    public func talkDown() async { if !runtime.snapshot().running { await runtime.start() }; runtime.listenNow() }
 
     public func signOut() async {
         await signIn.signOut()

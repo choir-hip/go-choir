@@ -22,7 +22,9 @@ members Autoradio
   state layer = ""
   // The Ask field in the bar.
   state ask = ""
-  // The microphone button: a tap starts talking, a tap again sends. (The hold-to-talk of the first build is gone, owner 2026-11-11.)
+  // The microphone button (owner, 2026-11-15: no tap to talk): voice is hands-free, so a tap opens the microphone and the turn ends
+  // by itself when the speaker stops (one second of quiet, HandsFree.swift). `voiceTalking` is only the instant between the tap and
+  // the engine's own "listening"; the engine's state (bi.state) takes over, and the turn's end or a quiet 12 seconds closes it.
   state voiceTalking = false
 
   action showLayer(name: string)
@@ -55,15 +57,23 @@ members Autoradio
     send acct = choirAsk(text=ask, aim=pg.top)
     ask = ""
   derive micOn = voiceTalking or bi.state == "listening" or bi.state == "talking"
+  // A tap while listening is Cancel: the turn is dropped and nothing is sent. A tap otherwise opens the microphone (hands-free).
   action micTap
     if micOn
       voiceTalking = false
-      send up = choirTalkUp()
+      send up = choirTalkCancel()
     else
       voiceTalking = true
       send down = choirTalkDown(aim=pg.top)
-  // Cancel: the microphone closes and the turn is discarded, not sent: the engine drops the audio and the words and calls nothing
-  // (choirTalkCancel; Send is micTap again).
+  // Cancel: the microphone closes for this turn and the turn is discarded, not sent: the engine drops the audio and the words and
+  // calls nothing (choirTalkCancel).
   action micCancel
     voiceTalking = false
     send up = choirTalkCancel()
+  action micEnded
+    voiceTalking = false
+  // The turn is over (heard, answered, failed): the tap's moment is over. Nothing heard for 12 seconds: it closes too.
+  task micEnd when voiceTalking and (bi.state == "heard" or bi.state == "holding" or bi.state == "revised" or bi.state == "error") key=bi.state
+    after(1, micEnded)
+  task micQuiet when voiceTalking key=voiceTalking
+    after(12000, micEnded)

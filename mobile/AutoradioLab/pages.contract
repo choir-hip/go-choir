@@ -5,8 +5,8 @@
 // replaces the body of its component; it takes whatever else it needs with `inject` (the root `provide`s it; a lane
 // adds its names to its own band in app.contract) and reads its page's model with the `pageModel` source.
 use Theme from "@choir/autoradio"
-use NotYetPage, StackVp, kindOf, kindWord, stackName, isFixed from "./ui.contract"
-use PageList from "@choir/autoradio"
+use NotYetPage, StackVp, kindOf, kindWord, stackName, frontTitle, isFixed from "./ui.contract"
+use PageList, PaperFront from "@choir/autoradio"
 use PaperPage from "./paper.contract"
 use ReaderPage from "./reader.contract"
 use TexturesPage from "./textures.contract"
@@ -67,23 +67,28 @@ component Placard
   inject
     th: Theme
     pg: PageList
+    pfront: PaperFront
   props
     address: string
+  // A story the paper's list knows shows its real title, never one made from its address.
+  derive listed = frontTitle(pfront.routes, pfront.titles, address)
   view
     column testId=`page-placard-${address}` position="absolute" inset=0 align-items="center" justify-content="center" gap=10 padding=40 box-sizing="border-box"
       text kindWord(kindOf(address), address) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
-      text stackName(pg.rows, address) font-family=th.fontRead font-size=26 font-weight=700 color=th.fg text-align="center" line-clamp=3
+      text (listed != "" ? listed : stackName(pg.rows, address)) font-family=th.fontRead font-size=26 font-weight=700 color=th.fg text-align="center" line-clamp=3
 
 // A page of the deck. A story has a visible "More of this" button on it (it was a swipe once).
 component PageFrame
   inject
     th: Theme
     pg: PageList
+    pfront: PaperFront
     moreOfThis: action
     moreFor: string
   props
     address: string
-  derive name = stackName(pg.rows, address)
+  derive listed = frontTitle(pfront.routes, pfront.titles, address)
+  derive name = listed != "" ? listed : stackName(pg.rows, address)
   view
     column position="absolute" inset=0
       PageHost(address=address, kind=kindOf(address), title=name)

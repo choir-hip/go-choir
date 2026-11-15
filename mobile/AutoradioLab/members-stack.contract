@@ -10,7 +10,8 @@
 // read; the deck keeps the ORDER, which the Kit does not model. A move updates `order` at once and tells the Kit (pageOpen); the
 // page on top is drawn for real only when the Kit's focus has caught up (pg.top == the top), a placard before. If the Kit's focus is
 // ever somewhere else for half a second (something outside the deck opened a page) the deck follows it (task syncTop).
-use pageOpen, pageClose from "@choir/autoradio"
+use pageOpen, pageClose, readerPrefetch from "@choir/autoradio"
+use ReaderAck from "@choir/autoradio"
 use StackVp, stackName, isFixed, kindOf, kindWord from "./ui.contract"
 
 members Autoradio
@@ -20,6 +21,8 @@ members Autoradio
   state pdrag = false
   state flying = false
   state flyDir = 1
+  // The neighbours of the card on top are fetched and decoded ahead (readerPrefetch), so a swipe finds them held.
+  mutation rpf as shape ReaderAck
 
   // Onboarding (the setup page and the interview) takes over the deck as before: one page, nothing to swipe.
   derive onbd = pg.top.startsWith("onboarding:")
@@ -111,3 +114,12 @@ members Autoradio
   action syncDeck
     if pg.top != "" and order.includes(pg.top) == false and pg.top.startsWith("onboarding:") == false
       order = [pg.top].concat(order.filter(a => a != pg.top))
+
+  // Whenever a story is on top, the story before it and the one after it are fetched now (the Kit holds them; at most 40 stories).
+  // The paper's list may arrive after the story was opened, so the task also waits on the list (key: the top and the count).
+  derive warmKey = `${topAddr}|${pfront.count}`
+  task warmStack when inStack key=warmKey
+    after(1, warmNeighbours)
+  action warmNeighbours
+    if inStack
+      send rpf = readerPrefetch(prev=prevAddr, next=nextAddr)

@@ -13,22 +13,86 @@ import Foundation
 //  4. The same address requested twice at once: both get a result; the cache keeps the latest.
 //  5. The listener stops a revision that already finished: the cancel error is swallowed and the document is re-read.
 //  6. Follow-along text that matches no block: nothing is highlighted (never the wrong block).
+//  7. Prefetch of a neighbour fails: nothing is cached for it and the card loads on demand when it is reached.
+//  8. The listener swipes before a prefetch is done: the page asks for the same address and waits for the fetch in flight (one request).
+//  9. A long session: the cache holds at most `limit` documents, the least recently used goes first, the one just stored never does.
+// 10. The paper republishes while a story is held: the held copy is shown for the session (reload in the page menu re-reads it).
 
 public final class ReaderStore: @unchecked Sendable {
     public static let shared = ReaderStore()
+    /// How many documents the session keeps (the least recently used goes first). A story is a few tens of kilobytes decoded.
+    public static let defaultLimit = 40
     private let lock = NSLock()
     private var cache: [String: ReaderDoc] = [:]
-    public init() {}
+    /// Addresses in cache, least recently used first.
+    private var recency: [String] = []
+    /// A fetch in progress for an address, so the page, the page model and a prefetch share one request instead of three.
+    private var inflight: [String: Task<ReaderDoc, Never>] = [:]
+    private let limit: Int
+    private let fetcher: (@Sendable (String) async throws -> ReaderDoc)?
+    /// `fetcher` replaces the network (tests).
+    public init(limit: Int = ReaderStore.defaultLimit, fetcher: (@Sendable (String) async throws -> ReaderDoc)? = nil) {
+        self.limit = max(1, limit); self.fetcher = fetcher
+    }
 
-    public func cached(_ address: String) -> ReaderDoc? { lock.lock(); defer { lock.unlock() }; return cache[address] }
-    public func put(_ d: ReaderDoc) { lock.lock(); cache[d.address] = d; lock.unlock() }
-    public func invalidate(_ address: String) { lock.lock(); cache[address] = nil; lock.unlock() }
+    public func cached(_ address: String) -> ReaderDoc? {
+        lock.lock(); defer { lock.unlock() }
+        guard let d = cache[address] else { return nil }
+        use(address)
+        return d
+    }
+    public func put(_ d: ReaderDoc) {
+        lock.lock(); defer { lock.unlock() }
+        cache[d.address] = d
+        use(d.address)
+        while cache.count > limit, let oldest = recency.first, oldest != d.address {
+            recency.removeFirst(); cache[oldest] = nil
+        }
+    }
+    public func invalidate(_ address: String) {
+        lock.lock(); defer { lock.unlock() }
+        cache[address] = nil; recency.removeAll { $0 == address }
+    }
+    public var cachedCount: Int { lock.lock(); defer { lock.unlock() }; return cache.count }
+    private func use(_ address: String) { recency.removeAll { $0 == address }; recency.append(address) }
 
-    /// The document at an address, from the cache unless `force`.
+    /// The document at an address, from the cache unless `force`. A request for an address already being fetched waits for that fetch.
     public func doc(_ address: String, force: Bool = false) async -> ReaderDoc {
         if !force, let c = cached(address), c.status == "ready" { return c }
+        if force { return await load(address) }
+        return await sharedFetch(address).value
+    }
+
+    /// The fetch in flight for an address, or a new one.
+    private func sharedFetch(_ address: String) -> Task<ReaderDoc, Never> {
+        lock.lock(); defer { lock.unlock() }
+        if let t = inflight[address] { return t }
+        let t = Task<ReaderDoc, Never> { [self] in
+            let d = await load(address)
+            finish(address)
+            return d
+        }
+        inflight[address] = t
+        return t
+    }
+    private func finish(_ address: String) { lock.lock(); inflight[address] = nil; lock.unlock() }
+
+    /// Fetch and decode stories ahead of the listener (the neighbours of the card on top). A story already held, a document that is
+    /// not a publication, and an empty address are skipped. A fetch that fails is not kept: the card loads on demand when it is reached.
+    @discardableResult
+    public func prefetch(_ addresses: [String]) -> [Task<Void, Never>] {
+        var seen = Set<String>()
+        return addresses.compactMap { a in
+            guard !a.isEmpty, seen.insert(a).inserted, TextureAddress.parse(a).kind == .publication else { return nil }
+            if let c = cached(a), c.status == "ready" { return nil }
+            return Task { [self] in _ = await doc(a) }
+        }
+    }
+
+    func load(_ address: String) async -> ReaderDoc {
         do {
-            let d = try await fetch(address)
+            let d: ReaderDoc
+            if let fetcher { d = try await fetcher(address) } else { d = try await fetch(address) }
             put(d)
             return d
         } catch is CancellationError {
@@ -52,11 +116,13 @@ public final class ReaderStore: @unchecked Sendable {
         case .none:
             return .failed(address, "This address does not name a story or a document.")
         case .publication:
+            // The related list does not depend on the story, so both are asked at once (they were one after the other).
+            let bare = TextureAddress.splitRoute(a.route).bare
+            async let rel = related(client: client, route: bare)
             let r = try await client.send("GET", "/api/platform/publications/resolve", query: ["route": a.route],
                                           authenticated: false, route: "/api/platform/publications/resolve")
             var d = TextureDocParser.parseBundle(try r.object(), address: address)
-            let bare = TextureAddress.splitRoute(a.route).bare
-            d.related = await related(client: client, route: bare)
+            d.related = await rel
             return d
         case .document:
             let docResp = try await client.send("GET", "/api/texture/documents/\(enc(a.doc))", route: "/api/texture/documents/{id}")

@@ -179,7 +179,7 @@ component BarShell
               button press=micCancel testId="bar-cancel" appearance="none" aria-label="Cancel listening"
                 row padding="4px 10px" border-radius=th.radiusPill border-width=1 border-style="solid" border-color=th.rule align-items="center"
                   text "Cancel" font-family=th.fontUi font-size=12 font-weight=600 color=th.fg
-            text ((bi.text == "" or bi.text.startsWith("Listening")) ? "Tap the microphone again to send." : bi.text) testId="bar-text" font-family=th.fontRead font-size=15 font-style="italic" color=th.fg line-clamp=3
+            text ((bi.text == "" or bi.text.startsWith("Listening")) ? "Listening. Just talk; I'll answer when you stop." : bi.text) testId="bar-text" font-family=th.fontRead font-size=15 font-style="italic" color=th.fg line-clamp=3
         if lineMode == "heard"
           text bi.text testId="bar-text" font-family=th.fontRead font-size=15 color=th.fg line-clamp=3 padding-left=4 animation=enter
         if lineMode == "holding"
@@ -206,7 +206,7 @@ component BarShell
             button testId="bar-send" press=sendAsk appearance="none" width=52 height=48 aria-label="Send"
               BarGlyph(glyph="send", caption="Send", on=true)
           else
-            button testId="bar-mic" press=micTap appearance="none" width=52 height=48 aria-label="Mute or unmute the microphone"
+            button testId="bar-mic" press=micTap appearance="none" width=52 height=48 aria-label=(micOn ? "Stop listening" : "Start listening")
               box position="relative" width=52 height=48
                 if micOn
                   box position="absolute" left=9 top=3 width=34 height=28 border-radius=14 border-width=2 border-style="solid" border-color=th.danger pointer-events="none"
