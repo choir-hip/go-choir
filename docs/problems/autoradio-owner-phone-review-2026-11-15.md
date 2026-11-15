@@ -133,3 +133,7 @@ The owner tested onboarding, where the app helps set up the edition.
   "Listening" (seen in the same screenshots), against the ruling that tap to
   talk is gone. Not yet traced: stale wording, or the bar's microphone still
   on the button path.
+- **Problem: the in-app browser opens as a separate sheet "off to the
+  side".** Ruling: the source page opens in place, expanding from inside the
+  story, with the prompt bar, the mark and the audio controls kept at the
+  bottom, "so that way it doesn't feel like you're going anywhere".
