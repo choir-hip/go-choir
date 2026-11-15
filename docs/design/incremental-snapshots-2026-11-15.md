@@ -1,8 +1,9 @@
 # Incremental snapshots: smaller page groups in the chunk store we already have, and one recovery-time trigger
 
-Status: proposed, unreviewed. Written 2026-11-15 (19:10 UTC). Design only; no
-code is changed by this document. Line numbers are from `origin/main` at
-`7b186ba66`.
+Status: proposed; review round 1 (two seats, both REPAIR) repaired by
+subtraction, see "Review round 1" at the end. Written 2026-11-15 (19:10 UTC).
+Design only; no code is changed by this document. Line numbers are from
+`origin/main` at `6263d0b25` (the same code as `7b186ba66` for every file cited).
 
 Readers: a builder and two reviewers who have seen none of the discussion
 behind it. Everything needed is here or cited.
@@ -11,8 +12,11 @@ behind it. Everything needed is here or cited.
 
 The owner accepted this recommendation on 2026-11-15: page deltas over a
 periodic full base, a re-base when the deltas grow to a fraction of the base,
-and one recovery-time objective as the trigger, with a capture before any
-planned restart. The tape stays canonical and whole.
+and one recovery-time objective as the trigger. The tape stays canonical and
+whole. The owner's fourth element, a capture before a planned restart, is not
+in this design: a planned restart keeps the data volume, so the restart does
+not need the snapshot, and the request handler writes the marker and answers
+before any capture could run (review round 1).
 
 Reading the code changes how that is best built. The snapshot format is
 already a content-addressed store of fixed, page-aligned chunks, and a capture
@@ -36,9 +40,8 @@ Two things this design does not deliver, said plainly:
   the paper today, which no trigger changes (section 2).
 
 Slices, in order: S1 a page-churn meter in the capture; S2 the trigger as one
-recovery-time rule; S3 smaller page groups, gated on S1's numbers; S4 a
-capture before a planned restart; S5 the host's root limits, only if S1 picks
-a group size that needs them.
+recovery-time rule; S3 smaller page groups, gated on S1's numbers; S4 the
+host's root limits, only if S1 picks a group size that needs them.
 
 ## 1. What exists
 
@@ -120,15 +123,17 @@ built; a search for `pagehash` in `internal/` finds nothing.
    sealed bytes spread over 8 GiB a day (`snapshotCaptureFloor`, `:381-388`).
 
 When the last capture's cost is not recorded for the newest snapshot, case 3
-is muted until case 1 or 2 fires (`:411-417`). That is the paper's state now:
-its tail is about 441,000 events, the replay rule has been over its bound for
-days, and nothing is due. The cost is kept in `snapshot-producer.json` beside
-the store (`:126`, `:304`, `:344`). The measured replay rate is held in
-memory only (`computerevent/appender.go:493`) and is lost at every restart.
+is muted until case 1 or 2 fires (`:411-417`; the branch
+`origin/lane/capture-trigger` removes that mute). That is the paper's state
+now: its tail is about 441,000 events, the replay rule has been over its bound
+for days, and nothing is due. The cost is kept in `snapshot-producer.json`
+beside the store (`:126`, `:304`, `:344`), together with the capture's head
+sequence, which seeds the tail's start after a boot (`:489`). The measured
+replay rate is the slowest of the replays in this process
+(`computerevent/appender.go:466-500`, only replays of at least 1,000 events
+count) and is lost at every restart; `snapshotDue` keeps the lower of it and
+the assumed 113 (`:406-409`), so a fast reading never relaxes the bound.
 
-A planned restart is refused while a snapshot is in flight
-(`plannedRestartWork.SnapshotInFlight`, `planned_restart.go:516-519`, `:567`),
-and the host retries.
 
 ## 2. Physical bounds
 
@@ -183,19 +188,26 @@ If changes cluster (appends, a few hot tables), every row moves toward the
 last one. The gap between the rows is the whole question, and it is a
 property of the store's writes that only a measurement gives.
 
-**Capture frequency the objective needs.** The trigger rule (section 5) gives
-a start-to-start interval `T = R * μ / λ - d`, with `d` the capture
-duration. With `μ` = 77 and `d` = 10 minutes:
+**Capture frequency the objective needs.** The trigger rule (section 5) fires
+when the tail reaches `R * mu_min`, with `mu_min` the slowest replay rate
+measured on the computer, so captures start `R * mu_min / λ` apart. With
+`mu_min` = 77 (the paper's measured rate), at the paper's 9,400 events an hour
+(2.6 events/s, the owner's figure of 2026-11-15) and at the busy end of 32,400
+an hour (9 events/s):
 
-| `R` | `λ` = 2.8 | `λ` = 9 |
-| --- | --- | --- |
-| 30 min | 13.6 h (1.8 a day) | 4.1 h (5.8 a day) |
-| 10 min | 4.4 h (5.4 a day) | 76 min (19 a day) |
+| `R` | Threshold | Apart at 9,400 an hour | Apart at 32,400 an hour |
+| --- | --- | --- | --- |
+| 30 min | 138,600 events | 14.7 h (1.6 a day) | 4.3 h (5.6 a day) |
+| 10 min | 46,200 events | 4.9 h (4.9 a day) | 86 min (16.8 a day) |
+
+Until a replay of at least 1,000 events has been measured on the computer,
+`mu_min` is the code's 113 (section 5): 203,400 events at `R` = 30 and 67,800
+at `R` = 10 (21.6 h and 7.2 h apart at 9,400 an hour).
 
 With today's 4 MiB chunks a capture uploads about 5 GB sealed, so 30 minutes
-costs 9 to 29 GB a day and 10 minutes costs 27 to 95 GB a day. That is why
-the owner's interim objective is 30 minutes on full captures and 10 minutes
-once captures cost the change.
+costs about 8 to 28 GB a day and 10 minutes costs about 24 to 84 GB a day.
+That is why the owner's interim objective is 30 minutes on full captures and
+10 minutes once captures cost the change.
 
 ## 3. Options
 
@@ -217,6 +229,10 @@ held chunks.
 | 128 | 75,800 | 5.4 MB | 5.1 MB | no: over 65,536 chunks |
 | 64 | 151,600 | 10.8 MB | 10.2 MB | no: both limits |
 | 32 | 303,000 | 21.6 MB | 20.3 MB | no: both limits |
+
+  The limits and counts in this table are per declaration, and the declaration
+  and the record also carry the telemetry partitions' chunks
+  (`snapshot.go:402-406`), so the partitions share them.
 
   The record is in the tape forever. At 32 pages and 19 captures a day that
   is 410 MB of tape a day for manifests alone, more than the paper's events.
@@ -260,21 +276,41 @@ daily upload inside the budget. It does not if the scatter is like the table
 above: at `p` = 0.2% a capture, 256-page groups save only half and 32-page
 groups still upload 30 times what the pages weigh. The evidence so far (19%
 reuse at 1,024 pages) is what both cases predict. So the choice is made by
-measurement, and the rule is fixed now, before the numbers exist:
+measurement, and the rule is fixed now, before the numbers exist.
 
-> For each group size `g` in {256, 128, 64, 32}, let
+The gate considers only the group sizes S1 measures, 256 and 32 pages, each
+against today's 1,024. S1 logs the zstd size of changed groups at exactly
+those three sizes; 128 and 64 pages are not sampled, so they are not
+candidates.
+
+> For `g` in {256, 32}, let
 > `U_g = (changed groups * group bytes) / c_g + record bytes + declaration bytes`,
-> measured by S1 over at least three captures on the paper spaced by the
-> trigger. Take the `g` with the smallest `U_g`. If `U_g` times the captures
-> a day that the 10-minute objective needs (section 2) is at most the daily
-> upload budget (owner decision 2), build (a) at that `g`. If no `g` meets
-> it, do not build (a) below 256; write the design for (b) with S1's
-> numbers, and hold the objective at the interim value.
+> with `c_g` the compression ratio S1 sampled at `g` and the changed groups
+> read from the meter over the intervals S2's rule produced on the paper: at
+> least three, not counting the first interval after S2 deploys, which spans
+> the paper's 441,000-event backlog. Multiply `U_g` by the captures a day the
+> 10-minute objective needs (section 2) and compare it with the daily upload
+> budget (owner decision 2). Build (a) at 256 if that passes; otherwise at 32
+> if that passes and S4 (the host's limits) is built; otherwise S3 is not
+> built: the objective stays at 30 minutes, and page-delta files (option (b))
+> get their own design from S1's numbers.
 
-**Default chosen now:** 256 pages (1 MiB). It never uploads more groups'
-worth of bytes than today, needs no host change at the paper's size, and
-keeps the record under 3 MB. Its one cost is a single full upload when the
-cut changes (about 6.5 GB sealed).
+**How the interval is scaled.** The meter measures churn over one interval
+between two captures. Under S2's rule that interval is `R * mu_min / λ` at
+the 30-minute objective, 14.7 hours on the paper. The gate multiplies that
+`U_g` by the captures a day at the 10-minute objective, whose intervals are
+about a third as long. The groups changed over a shorter interval are a
+subset of those changed over a longer one, so `U_g` measured over the long
+interval is at least `U_g` over the short one. The gate is therefore
+conservative: it may reject a size that would have passed at 10 minutes and
+cannot accept one that would fail there. No scaling rule is used and none is
+invented. If the gate fails only at the 10-minute objective, taking `R` = 30
+with S3 anyway is the owner's call under decision 1.
+
+**Default if S1 does not separate the sizes:** 256 pages (1 MiB). It never
+uploads more groups' worth of bytes than today, needs no host change at the
+paper's size, and keeps the record under 3 MB. Its one cost is a single full
+upload when the cut changes (about 6.5 GB sealed).
 
 ## 4. The slices
 
@@ -298,17 +334,23 @@ appended, writes them to a sidecar beside the store with a header: the
 store's inode and device, page size, page count, the snapshot's head
 sequence and the capture's start time. The next capture reads the sidecar,
 and if the header matches the same file, logs and reports in the producer's
-status: pages changed; groups changed at 1, 8, 32, 64, 128, 256 and 1,024
-pages; the zstd size of the changed groups at 32, 256 and 1,024 (sampled:
-every 16th changed group, to bound the cost; the sampling is stated in the
-log); the events and seconds between the two captures.
+status: pages changed; groups changed at 32, 256 and 1,024 pages; the zstd
+size of the changed groups at those same three sizes (sampled: every 16th
+changed group, to bound the cost; the sampling is stated in the log); the
+events and seconds between the two captures.
+
+Why S1 stays (review round 1, DeepSeek should-fix 10): the gate chooses
+between 256 and 32 pages from the paper's own writes over several real
+intervals, and one trial size at S3's first capture (a full upload anyway,
+in a red slice) cannot compare two sizes. The 76 MB hash is 0.2% of the
+store and the pass already reads every page.
 
 Nothing reads the sidecar except this log. A missing, unreadable or
 mismatched sidecar logs "no baseline" and is replaced.
 
 The synthetic bench on `origin/lane/bases-bench`
 (`internal/store/page_churn_measure_test.go`, claim C97) measures the same
-quantity on a generated store at units of 1, 32, 128 and 1,024. Run it on the
+quantity on a generated store. Run it on the
 build VM for an early reading. It does not replace the meter: the gate in
 section 3 reads the paper.
 
@@ -345,15 +387,23 @@ caused captures there.
 ### S2. The trigger is one recovery-time rule (orange; rollback: revert)
 
 Section 5 is this slice's design. It lands second because it is what makes
-the paper capture at all, and those captures are S1's data.
+the paper capture at all, and those captures are S1's data. S2 and S1 do not
+depend on each other in code.
 
 ### S3. Smaller page groups for the state file (red; rollback: revert)
 
-One mechanism: `streamScratch` cuts the state file at `g` pages a chunk, with
-`g` from the rule in section 3 (256 unless S1 says otherwise), where it now
-computes `ChunkSize / pageSize` (`snapshot.go:937`). Partitions keep the
-4 MiB cut (`capturePartition` is not touched): they are separate files with
-their own write pattern, and changing them is a second mechanism.
+One mechanism: `streamScratch` cuts the state file at `g` pages a chunk,
+where it now computes `ChunkSize / pageSize` (`snapshot.go:937`). The group
+is `g = min(chosen, ChunkSize / pageSize)`, with `chosen` from the gate in
+section 3 (256 unless S1 says otherwise). The clamp matters because
+`storeGeometry` accepts any page size that divides 4 MiB up to 65,536
+(`snapshot.go:769`) and the store's page size is not pinned: at 64 KiB pages
+today's cut is 64 pages, and 256 pages would be a 16 MiB chunk that
+`restoreOne` refuses (`PageSize*PagesPerChunk > 2*ChunkSize`, `:1414`) and
+the host refuses to store (`maxFileCASChunkBytes = 8 << 20`,
+`internal/platform/file_cas_http.go:17`). Partitions keep the 4 MiB cut
+(`capturePartition` is not touched): they are separate files with their own
+write pattern, and changing them is a second mechanism.
 
 The record already states `PagesPerChunk`; nothing else in it changes.
 
@@ -367,14 +417,17 @@ declaration, the guest-security epoch.
 
 Old binaries and old snapshots: a record at 1,024 pages restores as before.
 A record at `g` pages is restored correctly by today's binary, because
-`restoreOne` reads the cut from the record (`:1411-1418`). The first test
-written in this slice builds a `g`-page record by hand and restores it with
-the unchanged restore code, before the capture is changed. A binary from the
-VACUUM INTO era, which has no geometry fields, would mis-size the chunks;
-those are refused by the record version check or fail the manifest size
-check loudly. The builder confirms which, and if neither holds, stops and
-reports: that is the case for bumping `Version` (`:73`), which makes old
-binaries refuse.
+`restoreOne` reads the cut from the record (`:1411-1418`), and the host
+inspects digests and counts only. A binary that ignores the geometry fields
+cuts at `ChunkSize`, but it concatenates the chunks in order, so the bytes are
+the same file; the worst case is a loud size refusal. The first test written
+in this slice builds a `g`-page record by hand and restores it with the
+unchanged restore code, before the capture is changed. There is no `Version`
+bump: `restoreOne` accepts only `Version` 1 (`:1390`), so a bump would make
+the new binary refuse every existing record unless it accepted both, which
+is a restore-side change this design does not make. If the builder finds an
+older binary that would restore a `g`-page record wrongly and silently, S3
+stops and reports.
 
 Rollback: revert. Records written at `g` stay restorable by the reverted
 binary. The next capture uploads in full once at the old cut.
@@ -384,127 +437,183 @@ Failure list:
 1. The first capture after the change shares no chunk with the last root: a
    full upload, about 6.5 GB sealed on the paper. Expected once; the proof
    states it.
-2. The chunk count exceeds the host's limit (a store over 64 GiB at 256
-   pages): the guest computes the count before copying and refuses with the
-   limit named, instead of failing at the declaration after the upload. The
-   limit is a shared constant, not a second copy of the number.
-3. The host's "large store" rule counts chunks (`largeSnapshotChunks = 2048`,
-   `snapshot_roots.go:49`), so at 256 pages a store over 2 GiB is "large"
-   and keeps 2 roots where it kept 4. State this in the change. Changing
-   retention is owner decision 3 and not part of this slice.
-4. The record grows fourfold. It must stay under the 64 MiB payload cap:
-   at 256 pages that holds to about 900 GB. Test the refusal.
-5. The uploader's buffers are sized by `ChunkSize` (`newChunkUploader`,
+2. A store with large pages: the group is clamped (above), so no chunk
+   exceeds `ChunkSize`. Test a 64 KiB-page store (the existing page-size test
+   at `snapshot_pages_test.go:633` already includes 65,536) and a 16 KiB one,
+   and that each record restores and passes the geometry check.
+3. The chunk count exceeds the host's limit (65,536 per declaration, shared
+   with the partitions; a store over about 64 GiB at 256 pages): the guest
+   computes the count of state and partition chunks before copying and
+   refuses with the limit named, instead of failing at the declaration after
+   the upload. The limit is a shared constant, not a second copy of the
+   number.
+4. Retention. The host keeps 2 roots instead of 4 when a root names more than
+   `largeSnapshotChunks = 2048` chunks (`snapshot_roots.go:49`), and the
+   comment calls that 8 GiB, which is true only at 4 MiB chunks. At 1 MiB
+   chunks it is 2 GiB: a store between 2 and 8 GiB goes from four kept roots
+   to two (the paper already keeps two, at 9,470 chunks), and at 32 pages the
+   limit is 256 MiB. State this in the change and correct the comment. Changing
+   the constant is owner decision 3 and not part of this slice.
+5. The record grows fourfold. It must stay under the 64 MiB payload cap
+   (`computerevent/privacy.go:51`): at 256 pages that holds to about 900 GB.
+   Test the refusal.
+6. The uploader's buffers are sized by `ChunkSize` (`newChunkUploader`,
    `:938`): size them by the cut, or four workers hold 16 MiB for 1 MiB
    chunks. Not a correctness fault; fix it in the same change.
-6. The last group is short: the existing short-chunk path handles it; test
+7. The last group is short: the existing short-chunk path handles it; test
    a page count that is not a multiple of `g`.
-7. The registration's stat pass and Postgres write take four times as long
-   under the host's deadline: measure on d@e at the paper's chunk count
-   with a synthetic declaration before the paper takes it.
-8. Four times the `HEAD` requests: measure the stream time; it must not
+8. The registration's stat pass and Postgres write take four times as long
+   under the host's 30-second deadline (`snapshotRootDBDeadline`,
+   `snapshot_roots.go:348`): measure on d@e at the paper's chunk count with a
+   synthetic declaration before the paper takes it.
+9. Four times the `HEAD` requests: measure the stream time; it must not
    raise the capture duration by more than the meter's reading predicts.
-9. A restore fetches four times as many chunks in sequence: measure the
-   d@e restore before and after.
-10. The copy digest check (`ErrCopyDigest`, `:212`, checked in `streamScratch`) reads in chunk-sized
-    cuts: the digest must not depend on the cut. Test both cuts give one
-    digest.
-11. Compression is worse at 1 MiB than S1's sample said: the proof compares
+10. The host's live-check recheck. `chunkProtectedBySnapshotRoot`
+    (`snapshot_roots.go:524-546`) runs `chunks LIKE '%"digest"%'` once per
+    candidate chunk, with the 30-second deadline per query, over root rows
+    that grow about fourfold to about 2.5 MB of text. When a root cut at 4 MiB
+    ages out, about 9,470 candidates are rechecked (the query is skipped only
+    while the root generation is unchanged). Measure on d@e before S3 lands:
+    seed five roots of 37,900 chunks and recheck 9,470 candidates. Stop S3 if
+    a single query takes more than 10 seconds (a third of the deadline; this
+    number is invented) or the pass takes longer than the host's GC interval
+    allows, which the builder reads from the collector and states.
+11. A restore fetches four times as many chunks in sequence. `assemble`
+    fetches one chunk at a time (`snapshot.go:1554-1580`); only the existence
+    probe is eight wide (`:1515`). At 256 pages that is 37,900 requests
+    instead of 9,470. The restore request is one blocking request of ten
+    minutes with about one minute of margin (`snapshot_producer.go:100-111`).
+    Measure on d@e with a synthetic record of the paper's chunk count, before
+    and after. Stop S3 at that size if the restore takes more than 60 seconds
+    longer (the margin); a bounded parallel fetch would then be its own slice.
+12. The copy digest check (`ErrCopyDigest`, `:212`, checked in
+    `streamScratch`) reads in chunk-sized cuts: the digest must not depend on
+    the cut. Test both cuts give one digest.
+13. Compression is worse at 1 MiB than S1's sample said: the proof compares
     sealed bytes, not raw.
-12. A compaction between captures still forces a full upload: unchanged, and
+14. A compaction between captures still forces a full upload: unchanged, and
     named so nobody reads it as a regression.
+15. Tests and a comment that assert the 1,024 cut change with the code:
+    `snapshot_pages_test.go:88-91` (page size 4,096, 1,024 pages, the chunk
+    count), `:476-477` (a page range is `ChunkSize` bytes), `:667`
+    (`PagesPerChunk == ChunkSize/pageSize`), and the package comment at
+    `snapshot.go:24-31`. No other test file names `PagesPerChunk`. The
+    old-record test keeps the 1,024 assertions as its fixture.
+16. The restore geometry check has a ceiling and no floor (`:1414`): a corrupt
+    record can name tiny chunks, bounded by the manifest count. Not a
+    regression; not changed here.
 
 Proof: repo tests first (the old-binary restore test, each failure above);
 then on d@e two captures and a restore that matches its witness, with the
 second capture's uploaded bytes read from its log; then the paper,
 read-only: the second capture after the deploy uploads at most what S1
-predicted for 256 pages, within a factor of 1.5.
+predicted for the chosen size, within a factor of 1.5.
 
-### S4. A capture before a planned restart (orange; rollback: revert)
+### S4. The host's root limits (red; rollback: revert), only if needed
 
-Section 5 gives the rule. One mechanism: when the host asks for a planned
-restart, a capture that would shorten the tail runs first, and the restart
-waits for it through the refusal that already exists.
-
-It lands after S3 so that these captures cost the change.
-
-Failure list:
-
-1. The capture fails or is refused: the restart must not wait again. One
-   attempt per restart target, remembered in memory only.
-2. The process crashes during the capture: nothing resumes; the next boot is
-   a crash boot, and the next tick is new work. No marker is written before
-   the capture finishes, because the marker is written only when the restart
-   is granted (`planned_restart.go:737` onward).
-3. The host stops retrying before the capture ends: read the host's retry
-   schedule (`.github/scripts/node-b-ci-deploy` and the vmctl refresh) and
-   state the bound; not verified here.
-4. A self-development operation or live capsule also refuses the restart:
-   the capture does not start while `Busy` reports one
-   (`snapshot_producer.go:836-848`), as now.
-5. Six deploys in a day: section 5.
-6. The marker's 15-minute age limit (`plannedRestartMaxAge`,
-   `planned_restart.go:28`) is not involved, because the capture precedes
-   the marker. Test that a restart granted after a long capture writes a
-   fresh marker.
-7. A hibernate request during the capture: the existing fence order holds;
-   test it.
-
-Proof: repo tests; then on d@e a planned refresh with a tail present,
-showing the refusal with `snapshot_in_flight`, the capture, then the granted
-restart and a planned boot.
-
-### S5. The host's root limits (red; rollback: revert), only if needed
-
-Built only if the rule in section 3 picks a group under 256 pages, or the
-paper's store nears 64 GiB. One mechanism: raise `maxSnapshotRootChunks` and
+Built only if the gate in section 3 picks 32 pages, or the paper's store
+nears 64 GiB. One mechanism: raise `maxSnapshotRootChunks` and
 `maxSnapshotRootBody` (`snapshot_roots.go:72-74`) to cover a 256 GiB store at
 the chosen group (the bound today's numbers were written for). The host
-deploys before any guest that needs it. Its failure list starts from the
-earlier design's (the stat pass, the Postgres row under the 30 s deadline,
-the `LIKE` live check over a larger text, sequential restore fetches) and
-each is benchmarked at the new size on d@e first.
+deploys before any guest that needs it. Its failure list is S3's items 8, 10
+and 11 at the new size, benchmarked on d@e first, and the host's per-chunk
+file count (303,000 files a root at 32 pages).
 
 If S1 points below 32 pages, stop: the per-capture record no longer belongs
 in a tape event, and that is option (b)'s design, not a limit to raise.
 
-## 5. The trigger (S2 and S4)
+## 5. The trigger (S2)
 
 ### The rule
 
-One objective, `R`: the replay of the tail after a recovery takes at most `R`.
-
-A capture started now is usable `d` later, and events keep arriving while it
-runs. So a capture is due when the tail at that later moment would replay in
-`R`:
+One objective, `R`: the replay of the tail after a recovery takes at most
+about `R`. A capture is due when
 
 ```
-(tail + λ * d) / μ >= R
+tail >= min(R * mu_min, 540000)
 ```
 
 - `tail` = the head sequence minus the newest snapshot's head sequence.
   Both are already read (`snapshot_producer.go:826-834`).
-- `λ` = `tail / since`, where `since` is the time since the newest
-  snapshot's capture began. This is the measured arrival rate over the
-  interval in question, and it needs no window constant.
-- `d` = the last capture's measured duration on this computer, from
-  `snapshot-producer.json`. Unknown (no capture yet, or the file is lost):
-  zero. The first capture then starts slightly late, once, and measures it.
-- `μ` = the replay rate measured on this computer. It is in memory only
-  today, so this slice stores it in the same file when a replay measures
-  it, and reads it at boot. Never measured: 77 events/s, the slowest replay
-  measured on any computer (the paper, 2026-11-15). A measurement above 77
-  replaces it; this drops the present rule that a fast reading never
-  relaxes the bound, because the measured value is the fact.
-
-The threshold `R * μ` is capped at 540,000 events, three quarters of the
-recovery bound (`recoveryplan.MaxRecoveryTailEvents`,
-`internal/recoveryplan/recovery_plan.go:22`). Past the bound a boot refuses
-to recover at all, so this is a correctness limit, and a fast replay rate
-must not carry the threshold through it.
+- `mu_min` = the slowest replay rate ever measured on this computer, in
+  events a second. Today `ReplayRate()` is the slowest of the replays in this
+  process, and `snapshotDue` keeps the lower of it and 113 (`:406-409`). The
+  slice keeps that ratchet and makes it durable: when the process's reading
+  is below the stored value, the lower value is written, and it is read at
+  boot. It is never raised. The start value is the existing 113
+  (`snapshotAssumedReplayRate`). It is stored in its own small file beside the
+  store, written by the same temp-and-rename as `saveSnapshotCapture`; it is
+  not a field of `snapshot-producer.json`, which is discarded whenever it does
+  not match the newest snapshot (`belongsTo`). The existing guard stays: only
+  a replay that applied at least 1,000 events counts
+  (`minReplayRateEvents`, `appender.go:462`).
+- The ceiling 540,000 events (`snapshotDefaultTailEvents`, three quarters of
+  `recoveryplan.MaxRecoveryTailEvents`, `recovery_plan.go:22`) is the cap on
+  the threshold. Past the recovery bound a boot refuses to recover, so this
+  is a correctness limit. With `mu_min` never above 113 the cap cannot bind
+  while `R` is under 80 minutes; it stays so that changing `R` cannot carry
+  the threshold through the bound.
 
 `R` is 30 minutes when this slice lands (owner decision 1). It is one
 constant in the code with the owner's date beside it.
+
+The rule has no `λ`, no `since`, and no capture duration. A burst right after
+a capture cannot trigger it unless the tail is really at the threshold, and
+there is no division by an elapsed time.
+
+### What the rule does, stated from the code
+
+- **The replay time a recovery sees** is `R` plus the events appended while
+  the capture ran: the new snapshot's head is the store head when the copy
+  was taken (`ref.Record.StoreHeadSequence`, `:624`), so the capture's own
+  duration `d` leaves a tail of `λ * d` behind it, and the worst moment is
+  just before a capture completes, at a tail of `R * mu_min + λ * d` events.
+  At the paper's 9,400 an hour and `d` of 10 minutes that is 1,570 events,
+  about 20 seconds at 77 events/s. At the busy end (9 events/s) and `d` of 26
+  minutes (the longest measured) it is 14,040 events, about 3 minutes. `R`
+  is chosen with that in mind: the objective is `R` plus up to about 3
+  minutes of replay on the paper.
+- **When it cannot hold.** If the events appended during one capture already
+  exceed the threshold (`λ * d >= R * mu_min`, which at `R` = 10, 77 events/s
+  and `d` = 26 minutes needs λ above about 30 events/s, more than three times
+  the busiest rate seen), a capture is due again at the first evaluation after
+  it. The bound is one capture per evaluation, and the evaluation is not
+  always ten minutes away: a ticker holds one pending tick
+  (`snapshotTickEvery`, `:130`; the loop at `:996-1009`), so after a capture
+  longer than ten minutes the next evaluation follows at once. Captures then
+  run back to back, each bounded by the 90-minute deadline, the backoff after
+  a failure and the free-space refusal. The status says the objective is not
+  being met (a capture was due at the first evaluation after one finished),
+  with the tail, the threshold and the last capture's duration. There is no
+  setting for this case.
+- **A low `mu_min`.** One slow replay of 1,000 events, for example a cold
+  cache, lowers `mu_min` for good, and the threshold falls with it. The code
+  has no clamp beyond the 1,000-event minimum, and none is added here. The
+  bound this gives, in events and hours apart at the paper's 9,400 an hour:
+
+  | `mu_min` | `R` = 30 | `R` = 10 |
+  | --- | --- | --- |
+  | 113 (start value) | 203,400 events, 21.6 h | 67,800 events, 7.2 h |
+  | 77 (paper's measured) | 138,600 events, 14.7 h | 46,200 events, 4.9 h |
+  | 20 (pessimistic) | 36,000 events, 3.8 h | 12,000 events, 1.3 h |
+  | 10 (very pessimistic) | 18,000 events, 1.9 h | 6,000 events, 38 min |
+
+  Captures cannot come closer than the threshold over the event rate, and
+  never faster than the evaluation. At 10 events/s and `R` = 10 the paper
+  would spend about a quarter of its wall time capturing. That is a residual
+  to watch, not a bug: the stored value is a real measurement of how slowly
+  this computer replayed, and a slower replay needs a shorter tail. Every
+  lowering is logged with the applied events, the elapsed time and the old
+  and new value, and the status shows `mu_min`; deleting the file resets it.
+- **Right after boot.** The first evaluation is after `snapshotInitialDelay`
+  (3 minutes) and once `Ready` (`:457`). The tail starts at the persisted
+  head sequence; `mu_min` is read from its file; the boot's own replay may
+  lower it. Nothing resumes: a crash boot is a crash boot.
+- **After a failed capture.** The existing backoff holds: 20 minutes, doubling
+  to 3 hours, reset by a success (`snapshotBackoffWait`, `:433`; `retryAt`,
+  `:531`). The tail grows meanwhile, by about 97,000 events in 3 hours at 9
+  events/s, which the code's own comment accepts.
+- **With no measurement yet.** `mu_min` is 113.
 
 ### What is deleted
 
@@ -513,66 +622,50 @@ constant in the code with the owner's date beside it.
   short tail, and the tape replays it inside `R`; a snapshot there buys
   nothing.
 - The floor (`snapshotCaptureFloor`, `snapshotCaptureWallFraction`,
-  `snapshotBytesPerDay`) and the "cost unknown" mute. The floor is why the
-  paper's tail is 441,000 events. It was a spending rule placed inside a
-  recovery rule. Spending is owner decision 2.
-- The assumed rate of 113 and the 4-minute bound.
-- The status fields `floor_limited` and `floor_why`. The status gains `λ`,
-  `d`, `μ` with where each came from, the threshold, and the time the rule
-  expects to fire.
+  `snapshotBytesPerDay`), the "cost unknown" mute, and the 4-minute bound
+  (`snapshotReplayBound`). The floor is why the paper's tail is 441,000
+  events. It was a spending rule placed inside a recovery rule. Spending is
+  owner decision 2.
+- The status fields `floor_limited` and `floor_why`. The status gains the
+  tail, the threshold, `R`, `mu_min` with where it came from (start value or
+  measured), and whether the objective is being met.
 
 What stays: the tick, the backoff after a failed capture, the 90-minute
 deadline, the free-space refusal, the refusal while self-development or a
 capsule is live, and `CHOIR_SNAPSHOT_DISABLE` as the emergency override.
 
-### When the objective cannot be met
+**The capture cost record.** Capture cost is not a trigger input in this
+rule, so the smaller lane `origin/lane/capture-trigger` (an unknown cost no
+longer mutes a replay-time capture, `9e00f6829`) is consistent with it and
+moot once S2 lands: that branch's `!HaveCapture` case is deleted with the
+rest of `snapshotDue`, in either landing order. The record
+`snapshot-producer.json` stays, because it also carries the head sequence that
+seeds the tail's start at boot (`:489`). Its duration and sealed bytes remain
+as logged and status measures (`last_capture_duration`,
+`last_capture_bytes`); no decision reads them. Deleting them would touch the
+file's validity check (`DurationSeconds <= 0`, `loadSnapshotCapture`) and
+`belongsTo`, which is more code than keeping them.
 
-If `λ * d / μ >= R`, a capture cannot finish before the tail it leaves
-already exceeds `R`. At the paper's worst figures (`λ` = 9, `μ` = 77, `d` =
-26 minutes) that needs `R` under 3 minutes, so it does not arise at 10 or 30.
-The rule still handles it without a setting: it is due at every tick, the
-producer runs one capture after another, and the status says the objective
-is not reachable and gives the three numbers.
-
-### Capture before a planned restart (S4)
-
-A planned restart keeps the data volume, so the snapshot is not needed for
-the restart itself. It is taken because a deploy is the moment a new binary
-is most likely to damage the store, and a short tail then makes the recovery
-short.
-
-Rule: when the host's request arrives (`noteRefreshAsked`,
-`planned_restart.go:797`), a capture runs first if `tail > λ * d`. Below
-that, a capture would end with as long a tail as it started with, so it
-cannot help. The restart request is refused with `snapshot_in_flight` until
-the capture ends, as it already is for any capture, and the host's retry
-grants it. One attempt per target; a failed or refused capture lets the
-restart go.
-
-A crash never resumes any of this. No state is written for the pending
-capture, and the marker is written only when the restart is granted.
-
-**A six-deploy day.** Each deploy waits for one capture of duration `d` on
-each busy computer: about 8 to 26 minutes on the paper, so 50 minutes to 2.6
-hours of deploy delay for that computer across the day. Each capture resets
-the tail, so the recovery-time rule fires that much less. In bytes, six
-extra captures cost six deltas after S3 (unknown until S1) and six full
-uploads, about 30 GB sealed, before it. That is the reason S4 follows S3.
-If the delay is not acceptable, the alternative with no new mechanism is to
-not build S4; the recovery-time rule alone still holds `R`.
+**Why no capture before a planned restart.** The owner's accepted shape had
+one; it is not in this design. The restart keeps the data volume, so it does
+not need a snapshot, and the request handler writes the marker and answers
+in one call, after which the host kills the VM
+(`planned_restart.go:834-846`), so no capture could run first without a new
+refusal state. The recovery rule alone holds `R`.
 
 ### Node B cost a day
 
-At `R` = 30 minutes with today's chunks: 1.8 to 5.8 captures a day at about
-5 GB sealed, so 9 to 29 GB uploaded a day. Stored bytes do not grow at that
-rate: the host keeps 2 roots (plus up to 3 for the recovery window) and
-collects the rest after the grace period, so the stock is a few roots' worth
-of unique chunks plus up to a day in grace. Node B had 192 GB free on
-2026-11-15.
+At `R` = 30 minutes with today's chunks: 1.6 to 5.6 captures a day at about
+5 GB sealed, so about 8 to 28 GB uploaded a day. Stored bytes do not grow at
+that rate: the host keeps the newest 2 roots plus up to 3 anchors for the
+recovery window and collects the rest after the grace period. By the code's
+own comments that is about 25 GB of unique chunks for each of the 2 newest
+and about 4.8 GB for each anchor (`snapshot_roots.go:41-70`), about 64 GB,
+plus up to a day in grace. Node B had 192 GB free on 2026-11-15.
 
-At `R` = 10 minutes after S3: 5.4 to 19 captures a day times `U_g`. `U_g` is
-S1's output. At 256 pages each capture also adds 2.7 MB to the tape and 2.5
-MB of declaration: 15 to 51 MB of tape a day.
+At `R` = 10 minutes after S3: 4.9 to 16.8 captures a day times `U_g`. `U_g`
+is S1's output. At 256 pages each capture also adds 2.7 MB to the tape and
+2.5 MB of declaration: 13 to 45 MB of tape a day.
 
 ## 6. The witness: whole store every capture
 
@@ -598,9 +691,10 @@ So the witness stays whole, at capture and at restore. Consequences:
   sealing pass: 7 min 30 s measured at 31.3 GB, so about 9 to 10 minutes at
   38.8 GB if it scales with size, and 26 minutes was measured on the larger
   uncompacted store. Smaller groups do not reduce it.
-- **The objective.** `d` enters the rule only through `λ * d / μ`, which is
-  0.3 to 3 minutes of replay on the paper. A 10-minute objective is
-  reachable with whole-store witnesses. The floor does not block it.
+- **The objective.** `d` is not an input to the rule. It adds `λ * d / μ` to
+  the realized tail (section 5), 0.3 to 3 minutes of replay on the paper. A
+  10-minute objective is reachable with whole-store witnesses. The floor
+  does not block it.
 - **The fixed recovery cost** of section 2 stands. Shortening it is a
   different problem (a faster witness, or a restore that serves before it
   finishes verifying) and is out of scope.
@@ -636,8 +730,9 @@ needs four things from it and designs none of them:
 
 1. **The objective `R`** (replay of the tail). Default: 30 minutes when S2
    lands; 10 minutes when S3's proof on the paper passes. Both are the
-   owner's interim figures of 2026-11-15. The fixed 8 to 25 minutes of
-   install and witness are on top.
+   owner's interim figures of 2026-11-15. The realized tail is `R` plus up to
+   about 3 minutes (section 5), and the fixed 8 to 25 minutes of install and
+   witness are on top.
 2. **Daily upload budget to Node B.** Default: 8 GiB a day, the figure
    already in the code (`snapshotBytesPerDay`), used here only as the gate
    in section 3, not as a runtime limit. The runtime has no cap; it logs
@@ -645,16 +740,18 @@ needs four things from it and designs none of them:
    wants a runtime cap, it is an owner-set spending cap and a separate
    slice.
 3. **Retention on Node B.** Default: unchanged (2 roots for a large store,
-   plus the recovery-window chain). After S3 each extra root costs only its
-   changed groups, so keeping more becomes cheap; the suggested later value
-   is a day of roots, and it is invented.
-4. **Whether a deploy waits for a capture (S4).** Default: yes, after S3.
+   plus the recovery-window chain). At 1 MiB chunks the host's "large store"
+   line moves from 8 GiB to 2 GiB (S3, failure 4). After S3 each extra root
+   costs only its changed groups, so keeping more becomes cheap; the
+   suggested later value is a day of roots, and it is invented.
 
 Numbers in this document that are invented, not measured: the candidate
-group sizes {256, 128, 64, 32}; the meter's "every 16th group" sampling;
-"three captures" for the gate; the factor 1.5 in S3's proof; the "day of
-roots" above. The 77 events/s fallback and the 540,000-event cap are
-measured or derived, as stated where they appear.
+group sizes {256, 32}; the meter's "every 16th group" sampling; "three
+captures" for the gate; the factor 1.5 in S3's proof; the 10-second query
+stop in S3 failure 10; the "day of roots" above. The 113 start value, the 77
+events/s paper reading and the 540,000-event cap are measured or taken from
+the code, as stated where they appear; the 60-second stop in S3 failure 11 is
+the restore request's margin in the code.
 
 ## 9. Calibration claims to enter before each slice lands
 
@@ -667,15 +764,12 @@ after reading the scorecard; none is entered by this document.
   that clustering exists.
 - **S2.** Within 24 hours of the deploy the paper takes a capture with kind
   "recovery time", and for the following 48 hours its tail never exceeds
-  `R * μ` plus the events of one capture, read from the producer's status
-  every hour.
+  `R * mu_min` plus the events of one capture, read from the producer's
+  status every hour.
 - **S3.** The paper's second capture after the deploy uploads less than half
   the sealed bytes of its last capture before the deploy, and a restore on
   d@e from a 256-page record matches its witness.
-- **S4.** On d@e a planned refresh with a tail present is refused once with
-  `snapshot_in_flight` and granted within one capture duration plus the
-  host's retry interval.
-- **S5.** If built: a declaration at the new limit registers on d@e inside
+- **S4.** If built: a declaration at the new limit registers on d@e inside
   the host's deadline.
 
 ## 10. Not verified
@@ -687,13 +781,53 @@ after reading the scorecard; none is entered by this document.
   and no capture has reported it.
 - That restore streaming reaches 15 GB/min on Node B; it is the research
   report's figure.
-- The host's retry schedule for a refused planned restart, and so the real
-  deploy delay in S4.
 - The host's grace period before an unnamed chunk is collected, and so the
   exact stock on Node B at a given upload rate.
 - How a binary older than the page-cut record treats a 256-page record
   (S3, old binaries).
+- Whether a persisted `mu_min` is driven low in practice by short replays;
+  the logged lowerings answer it.
 - Whether witness time scales with store size or with something else; the
   two readings (4 min 12 s at 31.3 GB, 22 min 37 s at 44.1 GB) do not fit a
   line, and the second was on a live file before the static copy.
 - The synthetic bench (C97) has not reported.
+
+## Review round 1
+
+Two seats reviewed the first version: Sonnet (the file `claude.out`) and
+DeepSeek v4.1 flash (`omp-deepseek-v41-flash.out`), both REPAIR. Each finding
+was checked against the code before it was taken. The round repairs by
+subtraction; no mechanism was added.
+
+| Seat | Finding | Disposition |
+| --- | --- | --- |
+| both | S4 (capture before a planned restart) does not work: marker written and VM killed in one call; vacuous gate; delays deploys; stated reason false | Deleted with S4 and owner decision 4. Code confirms: `planned_restart.go:834-846`, `unsafe()` at `:567`. |
+| Sonnet B1 | Burst makes `λ` huge; `since` can be zero or negative; no brake between captures; "one after another" case stated as acceptable | Adopted by deleting `λ`, `since` and `d` from the rule. The back-to-back case is stated with its bound and a status flag (section 5). A cooldown is rejected: a new constant and a new mechanism. |
+| Sonnet B1 | No clamp on a persisted `mu` | Rejected as a new mechanism; the bound is tabulated and the logged value is a named residual. |
+| Sonnet B1 | The unreachable condition is `2λd/μ >= R`, not `λd/μ >= R` | Correct for the old rule; moot under the new one, where it is `λ * d >= R * mu_min`. |
+| Sonnet B2 | S4 contradicts expedite | Deleted with S4. |
+| Sonnet B3 / DeepSeek should-fix 1 | The gate is not decidable: `c_g` sampled only at 32, 256, 1,024; interval scaling; fallback contradicts the default | Adopted: candidates {256, 32}; scaling stated (conservative); S3 not built if the gate fails; the default applies only if the sizes are not separated. |
+| Sonnet should-fix | `largeSnapshotChunks` means 2 GiB at 1 MiB chunks | Adopted (S3 failure 4). |
+| Sonnet should-fix | Sequential restore fetch, 37,900 requests | Adopted with a stop number (S3 failure 11). |
+| Sonnet should-fix / DeepSeek should-fix 3 | `LIKE` recheck cost | Adopted into S3's list (failure 10). |
+| Sonnet should-fix | Restore geometry check is a ceiling only | Noted, not changed (S3 failure 16). |
+| Sonnet should-fix | A failed capture does not record `d` | Moot: `d` is not a trigger input. |
+| Sonnet note 2 | The 540,000 cap must apply to the comparison | Adopted (the rule). |
+| Sonnet note 4 | A one-off diff on the build VM instead of the sidecar | Rejected: the gate needs the paper's writes over several real intervals; the sidecar is read only by a log. |
+| DeepSeek B1 | S4 cannot work | Deleted with S4. |
+| DeepSeek B2 | Dropping the `mu` ratchet makes `R` not a bound | Adopted: the minimum ever measured, persisted, start 113. |
+| DeepSeek B3 | `g` as a raw count breaks large-page stores | Adopted: `g = min(chosen, ChunkSize/pageSize)`, 64 KiB test. Checked: `restoreOne` `:1414`, `file_cas_http.go:17`. |
+| DeepSeek should-fix 2 | `λ` uses the capture's end as its start | Moot: `λ` and `since` are deleted. |
+| DeepSeek should-fix 4 | Restore fetch not bounded | Adopted (S3 failure 11). |
+| DeepSeek should-fix 5 | `refreshHoldMax` shorter than a capture | Moot with S4. |
+| DeepSeek should-fix 6 | Give the stock a number | Adopted (about 64 GB, section 5). |
+| DeepSeek should-fix 7 | Partitions share the chunk-count limits | Adopted (section 3, S3 failure 3). |
+| DeepSeek should-fix 8 | Tests asserting the 1,024 cut | Adopted (S3 failure 15). |
+| DeepSeek should-fix 9 | A `Version` bump is not a fallback | Adopted: no bump; stop and report. |
+| DeepSeek should-fix 10 | S1's hash and sidecar are deletable | Considered; S1 kept, one line why (S1). |
+| DeepSeek Q2 | One capture per ten-minute tick rules out back-to-back runs | Wrong against the code: the ticker holds one pending tick, so after a capture longer than ten minutes the next evaluation is immediate. Section 5 says so. |
+| DeepSeek Q1, Q3, Q5, Q6 | Verified positives (restore reads the cut from the record; deploys cannot be failed by refusals; record size under the cap; retention) | Confirmed or moot; no change. |
+
+Recount after the round: S1 has 9 failures, S3 has 16, S4 (the host's
+limits) shares S3's items; the owner decisions are three: the objective `R`,
+the upload budget (as the design gate), and retention.
