@@ -43,7 +43,7 @@ Route and request
   none of them reaches a model or writes a record.
 - F2. A body over 256 KB is 413; an unknown field (`heard`, `after`, `model`),
   trailing data, a bad `request_id`, a `cause` outside `open`, `extend`, `turn`,
-  `result`, a bad `local_time` or an unknown `tz` is 400; none reaches a model
+  `result`, a bad `local_time` or a `tz` over 64 bytes is 400 (a `tz` the guest cannot resolve is not refused: the local time is then shown by its own offset); none reaches a model
   or writes a record.
 - F3. Candidates over the bounds of 12.7 answer 400 from the parser: 41 items;
   text on the eleventh item; item text over 8 KB; a duplicate ref; a missing
@@ -182,6 +182,11 @@ Wiring and boundaries
 - F43. The L1a fixture `mobile/fixtures/learning/stretch_lines.json` is run
   through the handler: each segment line is kept or dropped as the fixture says,
   and the fixture's runs end the call where it says.
+
+- F44. The stream the handler writes for the request and the model lines of
+  `mobile/fixtures/learning/programme_stream.json` equals the events that
+  fixture holds (the phone's contract for the `stretch`, `segment` and `done`
+  events).
 
 ## Known and left
 
