@@ -1,0 +1,247 @@
+package platform
+
+// Podcast clips in Store B (docs/design/podcast-clips-2026-11-15.md). Ways
+// it can fail, written before the code:
+//   1. an episode with a URL that carries credentials, or is not http(s), is
+//      stored (the service stores URLs and the phone streams them);
+//   2. a bad item in a request leaves the good ones before it written;
+//   3. a re-poll of a feed forgets that an episode has a transcript, so it is
+//      transcribed twice;
+//   4. a transcript for an unknown episode is accepted;
+//   5. a clip for a story that is not on the front, a range under 5 s or over
+//      120 s, or one past the end of the episode is accepted;
+//   6. the public read leaks transcript text, or a quote over 280 runes;
+//   7. the public read shows more than three clips for one story, or clips
+//      of a story that was asked for by another route;
+//   8. a clip survives the same (story, episode, start) written twice as two
+//      clips;
+//   9. the write routes answer a caller that is not the host.
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+)
+
+func podcastFixtureEpisode(guid string, secs float64) PodcastEpisodeIn {
+	return PodcastEpisodeIn{
+		FeedURL: "https://feeds.example.test/news.xml", GUID: guid, Show: "Test Show", Title: "Episode " + guid,
+		Published: time.Now().UTC().Add(-2 * time.Hour).Format(time.RFC3339), DurationSeconds: secs,
+		EnclosureURL: "https://cdn.example.test/" + guid + ".mp3", Notes: "show notes",
+	}
+}
+
+func TestPodcastEpisodesRefuseBadURLsWhole(t *testing.T) {
+	f := newFrontFixture(t)
+	ctx := context.Background()
+	good := podcastFixtureEpisode("g1", 600)
+	for name, mutate := range map[string]func(*PodcastEpisodeIn){
+		"credentials": func(e *PodcastEpisodeIn) { e.EnclosureURL = "https://user:pw@cdn.example.test/a.mp3" },
+		"ftp":         func(e *PodcastEpisodeIn) { e.EnclosureURL = "ftp://cdn.example.test/a.mp3" },
+		"feed":        func(e *PodcastEpisodeIn) { e.FeedURL = "javascript:alert(1)" },
+		"no guid":     func(e *PodcastEpisodeIn) { e.GUID = "" },
+		"bad date":    func(e *PodcastEpisodeIn) { e.Published = "yesterday" },
+		"huge":        func(e *PodcastEpisodeIn) { e.EnclosureURL = "https://x.example.test/" + strings.Repeat("a", 3000) },
+	} {
+		bad := podcastFixtureEpisode("g2", 600)
+		mutate(&bad)
+		_, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{good, bad})
+		if !errors.Is(err, ErrPodcastInvalid) {
+			t.Fatalf("%s: err = %v, want ErrPodcastInvalid", name, err)
+		}
+	}
+	list, err := f.svc.ListPodcastEpisodes(ctx, false, time.Time{}, 50)
+	if err != nil || len(list) != 0 {
+		t.Fatalf("after refused requests the store holds %d episodes (err %v), want 0", len(list), err)
+	}
+}
+
+func TestPodcastRepollKeepsTranscriptFlag(t *testing.T) {
+	f := newFrontFixture(t)
+	ctx := context.Background()
+	ep := podcastFixtureEpisode("g1", 600)
+	if rec, fresh, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{ep}); err != nil || rec != 1 || fresh != 1 {
+		t.Fatalf("first record: %d %d %v", rec, fresh, err)
+	}
+	id := PodcastEpisodeID(ep.FeedURL, ep.GUID)
+	if _, err := f.svc.PutPodcastTranscript(ctx, PodcastTranscript{EpisodeID: "ep-unknown", Engine: "t", AudioSeconds: 60, Segments: []PodcastSegment{{Start: 0, End: 5, Text: "x"}}}); !errors.Is(err, ErrPodcastInvalid) {
+		t.Fatalf("a transcript of an unknown episode: err = %v", err)
+	}
+	if n, err := f.svc.PutPodcastTranscript(ctx, PodcastTranscript{EpisodeID: id, Engine: "t", AudioSeconds: 600, FileSeconds: 655.5, Segments: []PodcastSegment{{Start: 0, End: 5, Text: "one"}, {Start: 5, End: 9, Text: "two"}}}); err != nil || n != 2 {
+		t.Fatalf("put transcript: %d %v", n, err)
+	}
+	need, _ := f.svc.ListPodcastEpisodes(ctx, true, time.Time{}, 50)
+	if len(need) != 0 {
+		t.Fatalf("an episode with a transcript is still listed as needing one: %+v", need)
+	}
+	if rec, fresh, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{ep}); err != nil || rec != 1 || fresh != 0 {
+		t.Fatalf("re-record: %d %d %v", rec, fresh, err)
+	}
+	need, _ = f.svc.ListPodcastEpisodes(ctx, true, time.Time{}, 50)
+	if len(need) != 0 {
+		t.Fatalf("a re-poll forgot the transcript: %+v", need)
+	}
+	all, _ := f.svc.ListPodcastEpisodes(ctx, false, time.Time{}, 50)
+	if len(all) != 1 || !all[0].HasTranscript {
+		t.Fatalf("episodes = %+v", all)
+	}
+	// Ad insertion: the length measured on the transcribed file (655.5 s) is
+	// the one a clip is valid for, not the feed's 600 s, and a re-poll keeps it.
+	if all[0].DurationSeconds != 655.5 {
+		t.Fatalf("duration_seconds = %v, want the measured 655.5", all[0].DurationSeconds)
+	}
+	// Out of order or empty segments are refused.
+	for name, segs := range map[string][]PodcastSegment{
+		"empty text":   {{Start: 0, End: 5, Text: " "}},
+		"backwards":    {{Start: 5, End: 4, Text: "x"}},
+		"out of order": {{Start: 10, End: 20, Text: "x"}, {Start: 1, End: 3, Text: "y"}},
+		"no segments":  nil,
+		"past a day":   {{Start: 0, End: 90000, Text: "x"}},
+	} {
+		if _, err := f.svc.PutPodcastTranscript(ctx, PodcastTranscript{EpisodeID: id, Engine: "t", Segments: segs}); !errors.Is(err, ErrPodcastInvalid) {
+			t.Fatalf("%s: err = %v, want ErrPodcastInvalid", name, err)
+		}
+	}
+}
+
+func TestPodcastClipsValidationAndPublicRead(t *testing.T) {
+	f := newFrontFixture(t)
+	ctx := context.Background()
+	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{podcastFixtureEpisode("g1", 900)}); err != nil {
+		t.Fatal(err)
+	}
+	id := PodcastEpisodeID("https://feeds.example.test/news.xml", "g1")
+	harbor, bridge := f.routes["doc-harbor"], f.routes["doc-bridge"]
+	long := strings.Repeat("harbor ", 100)
+	clip := func(route string, start, end float64) PodcastClipIn {
+		return PodcastClipIn{StoryRoute: route, EpisodeID: id, Start: start, End: end, Quote: "the harbor reopened", Support: 0.9}
+	}
+	for name, in := range map[string]PodcastClipIn{
+		"not on the front": clip("/nope", 10, 50),
+		"under five":       clip(harbor, 10, 12),
+		"over two minutes": clip(harbor, 10, 200),
+		"past the episode": clip(harbor, 880, 930),
+		"unknown episode":  {StoryRoute: harbor, EpisodeID: "ep-x", Start: 1, End: 30, Quote: "q", Support: 0.9},
+		"support too high": {StoryRoute: harbor, EpisodeID: id, Start: 1, End: 30, Quote: "q", Support: 1.5},
+		"empty quote":      {StoryRoute: harbor, EpisodeID: id, Start: 1, End: 30, Quote: "  ", Support: 0.9},
+	} {
+		if _, err := f.svc.PutPodcastClips(ctx, []PodcastClipIn{clip(harbor, 100, 140), in}); !errors.Is(err, ErrPodcastInvalid) {
+			t.Fatalf("%s: err = %v, want ErrPodcastInvalid", name, err)
+		}
+	}
+	got, err := f.svc.ListPodcastClips(ctx, nil, 0)
+	if err != nil || len(got.Clips) != 0 {
+		t.Fatalf("refused requests left %d clips (err %v)", len(got.Clips), err)
+	}
+
+	in := []PodcastClipIn{clip(harbor, 100, 140), clip(harbor, 100.2, 140), clip(harbor, 300, 350), clip(harbor, 500, 540), clip(harbor, 700, 740)}
+	in[3].Quote = long
+	if n, err := f.svc.PutPodcastClips(ctx, in); err != nil || n != 5 {
+		t.Fatalf("put clips: %d %v", n, err)
+	}
+	if n, err := f.svc.PutPodcastClips(ctx, []PodcastClipIn{clip(bridge, 20, 60)}); err != nil || n != 1 {
+		t.Fatalf("put bridge clip: %d %v", n, err)
+	}
+	f.svc.podcastCache.reset()
+
+	// One story asked for: at most three clips, and only its own.
+	one, err := f.svc.ListPodcastClips(ctx, []string{harbor}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(one.Clips) != podcastClipsPerStory {
+		t.Fatalf("harbor shows %d clips, want %d", len(one.Clips), podcastClipsPerStory)
+	}
+	seen := map[string]bool{}
+	for _, c := range one.Clips {
+		if c.Story.Route != harbor || c.Story.Title != "Harbor reopens" || c.Story.Version != 3 {
+			t.Fatalf("clip story = %+v", c.Story)
+		}
+		if c.Show != "Test Show" || c.AudioURL != "https://cdn.example.test/g1.mp3" || c.EpisodeGUID != "g1" || c.DurationSeconds != 900 || c.FeedURL == "" || c.Published.IsZero() {
+			t.Fatalf("clip is not joined with its episode: %+v", c)
+		}
+		if seen[c.ClipID] {
+			t.Fatalf("clip %s listed twice", c.ClipID)
+		}
+		seen[c.ClipID] = true
+		if len([]rune(c.Quote)) > podcastQuoteMaxRunes {
+			t.Fatalf("quote is %d runes", len([]rune(c.Quote)))
+		}
+	}
+	// Written twice at nearly the same start is one clip (id by whole second).
+	all, _ := f.svc.allPodcastClips(ctx)
+	harborClips := 0
+	for _, c := range all {
+		if c.Story.Route == harbor {
+			harborClips++
+		}
+	}
+	if harborClips != 4 {
+		t.Fatalf("harbor holds %d stored clips, want 4 (100 and 100.2 are one)", harborClips)
+	}
+
+	// No routes: the recent front, both stories.
+	bulk, err := f.svc.ListPodcastClips(ctx, nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	routes := map[string]int{}
+	for _, c := range bulk.Clips {
+		routes[c.Story.Route]++
+	}
+	if routes[harbor] != 3 || routes[bridge] != 1 || len(routes) != 2 {
+		t.Fatalf("bulk read by story = %v", routes)
+	}
+	// The public shape carries no transcript field at all.
+	raw, _ := json.Marshal(bulk)
+	if bytes.Contains(raw, []byte("segments")) || bytes.Contains(raw, []byte("transcript")) {
+		t.Fatalf("public clips leak the transcript: %s", raw)
+	}
+	// Bounds on what a stranger can ask.
+	many := make([]string, podcastClipsMaxRoutes+1)
+	for i := range many {
+		many[i] = "/r"
+	}
+	if _, err := f.svc.ListPodcastClips(ctx, many, 0); !errors.Is(err, ErrPodcastInvalid) {
+		t.Fatalf("too many routes: err = %v", err)
+	}
+	capped, _ := f.svc.ListPodcastClips(ctx, nil, 1)
+	if len(capped.Clips) != 1 {
+		t.Fatalf("limit 1 gave %d clips", len(capped.Clips))
+	}
+}
+
+func TestPodcastRoutesRefuseAnyoneButTheHost(t *testing.T) {
+	f := newFrontFixture(t)
+	h := NewHandler(f.svc)
+	for _, tc := range []struct {
+		method, path string
+		fn           http.HandlerFunc
+	}{
+		{http.MethodGet, PodcastClipsPath, h.HandlePodcastClips},
+		{http.MethodPost, PodcastEpisodesPath, h.HandlePodcastEpisodes},
+		{http.MethodGet, PodcastEpisodesPath, h.HandlePodcastEpisodes},
+		{http.MethodPut, PodcastTranscriptsPath, h.HandlePodcastTranscripts},
+		{http.MethodPut, PodcastClipsWritePath, h.HandlePodcastClipsWrite},
+	} {
+		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(`{}`))
+		req.RemoteAddr = "10.200.0.9:4444"
+		rec := httptest.NewRecorder()
+		tc.fn(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("%s %s from a guest address answered %d, want 403", tc.method, tc.path, rec.Code)
+		}
+		wrong := httptest.NewRequest(http.MethodDelete, tc.path, nil)
+		rec = httptest.NewRecorder()
+		tc.fn(rec, wrong)
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("DELETE %s answered %d, want 405", tc.path, rec.Code)
+		}
+	}
+}

@@ -990,6 +990,12 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case path == "/api/platform/retrieval/search":
 		h.HandlePlatformRetrievalSearch(w, r)
 		return
+	case path == podcastClipsPublicPath:
+		h.HandlePlatformPodcastClips(w, r)
+		return
+	case isPodcastOperatorPath(path):
+		h.HandlePlatformOperatorPodcasts(w, r)
+		return
 	case path == platformOperatorYankPath:
 		h.HandlePlatformOperatorYank(w, r)
 		return

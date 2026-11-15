@@ -39,6 +39,8 @@ type Service struct {
 	artifactsRoot string
 	signingKey    *SigningKey
 	writeMu       sync.Mutex
+	// podcastCache is the public clips read's short-lived join (podcast.go).
+	podcastCache podcastReadCache
 	// The notice sequence (publication_links.go): seeded from storage before
 	// the first one is issued or read.
 	seedMu        sync.Mutex

@@ -1,0 +1,49 @@
+{
+  "_note": "Public podcast feed URLs the operator's podcast worker polls (cmd/podcast-worker --feeds). Feed URLs are facts, not content. Edit this list to change what the paper's stories are matched against. Checked 2026-11-15: every enclosure answered a byte-range request. Shows that insert ads dynamically (NPR, NYT, Vox, Marketplace) serve a different file on each download, so a clip is valid only for the file that was transcribed.",
+  "feeds": [
+    {
+      "show": "Up First",
+      "url": "https://feeds.npr.org/510318/podcast.xml"
+    },
+    {
+      "show": "NPR News Now",
+      "url": "https://feeds.npr.org/500005/podcast.xml"
+    },
+    {
+      "show": "Consider This",
+      "url": "https://feeds.npr.org/510355/podcast.xml"
+    },
+    {
+      "show": "BBC Global News Podcast",
+      "url": "https://podcasts.files.bbci.co.uk/p02nq0gn.rss"
+    },
+    {
+      "show": "The Daily",
+      "url": "https://feeds.simplecast.com/54nAGcIl"
+    },
+    {
+      "show": "PBS News Hour",
+      "url": "https://www.pbs.org/newshour/feeds/rss/podcasts/show"
+    },
+    {
+      "show": "Today, Explained",
+      "url": "https://feeds.megaphone.fm/VMP5705694065"
+    },
+    {
+      "show": "Marketplace",
+      "url": "https://feeds.publicradio.org/public_feeds/marketplace"
+    },
+    {
+      "show": "Marketplace Morning Report",
+      "url": "https://feeds.publicradio.org/public_feeds/marketplace-morning-report"
+    },
+    {
+      "show": "WSJ What's News",
+      "url": "https://video-api.shdsvc.dowjones.io/api/podcasts/the%20wall%20street%20journal%20whats%20news/feed"
+    },
+    {
+      "show": "Pod Save America",
+      "url": "https://audioboom.com/channels/5166624.rss"
+    }
+  ]
+}
