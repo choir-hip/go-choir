@@ -67,3 +67,32 @@ and the edition.
 Not known: why the interview hears nothing and repeats its question; whether
 any text-to-speech path exists in the app today; what of Mike's voice work is
 portable and what state it is in; which pages scroll sideways and why.
+
+## Owner rulings, 2026-11-15 (after the investigation)
+
+- **The other voice versions are deprecated, not deleted yet**, once Mike's
+  loop is in. Deletion waits for the owner's word.
+- **Models: a model under 100 MB may be bundled in the app. A larger one is
+  downloaded during onboarding.** This replaces the earlier no-bundled-models
+  ruling for the phone app.
+
+The investigation is `docs/evidence/autoradio-phone-review-investigation-2026-11-15.md`.
+- **The target is confirmed**: hands-free is the default everywhere a voice
+  session is open, and one voice engine does conversation, dictation into any
+  text field, and reading any long text aloud.
+- **"Tap to talk" is removed.**
+- **The app is pre-TestFlight and runs only on the owner's phone: hard
+  cutover, no backwards compatibility.** No preference migration, no shim,
+  no old path kept alive for a transition.
+- **Hands-free voice works first; four existing pieces are then worked back
+  in gradually**, because they have value: the local Qwen3 model that thinks
+  aloud as a holding line; the second set of parts (Silero, Parakeet, Kokoro,
+  Pocket TTS, LFM3 audio, the llama.cpp responder); the voice setup and
+  configurator with its model store; and the unmerged voice branches (the
+  responder ladder). They are kept for later, not merely deprecated.
+- **Be practical; the happy path is the main thing** (same day, later). The
+  configurator, the model store and the onboarding download are needed and
+  stay in use. Fallback voices and more available models are good. The work
+  is ordered by what makes hands-free voice work end to end soonest, not by
+  removing the other implementations. A model or voice picker is a feature,
+  not a switch.

@@ -80,8 +80,8 @@ component Launcher
     openPage: action
   view
     Layer(testId="launcher-layer")
-      scroll testId="launcher-scroll" flex=1 min-height=0 width="100%"
-        column padding=20 gap=6 padding-bottom=24 box-sizing="border-box" width="100%"
+      scroll testId="launcher-scroll" overflow-x="hidden" flex=1 min-height=0 width="100%"
+        column padding=20 gap=6 padding-bottom=24 box-sizing="border-box" width="100%" min-width=0
           input type="search" value=lq input=editLq placeholder="Search pages, files, mail" aria-label="Search" testId="launcher-search"
             font-family=th.fontUi padding="10px 4px"
           if lnc.hasQuery
@@ -96,7 +96,7 @@ component Launcher
               text "Nothing found." testId="launcher-nohits" font-family=th.fontUi font-size=15 color=th.muted
           if lnc.hasQuery == false
             text "Key pages" font-family=th.fontUi font-size=13 color=th.muted margin-top=4
-            scroll overflow-x="scroll" overflow-y="hidden" display="flex" flex-direction="row" gap=8 width="100%" testId="launcher-key-pages"
+            row flex-wrap="wrap" gap=8 width="100%" testId="launcher-key-pages"
               ChipPlace(slug="paper", name="Paper", address="paper:front")
               ChipPlace(slug="textures", name="Textures", address="textures:")
               ChipPlace(slug="files", name="Files", address="file:/")

@@ -150,7 +150,7 @@ component FilesPlace
         Chip(label="Grid", active=fsGrid, testId="files-view-grid", press=fsSetGrid(true))
       if fsMode == "browse"
         // Sort, direction and the two things you can add: one scrolling row.
-        scroll overflow-x="scroll" overflow-y="hidden" display="flex" flex-direction="row" gap=8 testId="files-sorts"
+        row flex-wrap="wrap" gap=8 width="100%" testId="files-sorts"
           Chip(label="Name", active=(fsSort == "name"), testId="files-sort-name", press=fsSortBy("name"))
           Chip(label="Modified", active=(fsSort == "modified"), testId="files-sort-modified", press=fsSortBy("modified"))
           Chip(label="Size", active=(fsSort == "size"), testId="files-sort-size", press=fsSortBy("size"))
@@ -159,7 +159,7 @@ component FilesPlace
           Chip(label="New folder", active=fsNewing, testId="files-new-toggle", press=fsNewToggle)
           Chip(label="Add a file", active=false, testId="files-upload", press=fsUpload)
         // Breadcrumbs: Files / Documents / ...
-        scroll overflow-x="scroll" overflow-y="hidden" display="flex" flex-direction="row" gap=4 align-items="center" testId="files-crumbs"
+        row flex-wrap="wrap" gap=4 align-items="center" width="100%" testId="files-crumbs"
           for c, i in fsList.crumbs key=c.path
             if i > 0
               image "symbol:forward-chevron" width=10 height=10 color=th.muted flex-shrink=0
