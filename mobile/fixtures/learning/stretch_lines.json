@@ -1,0 +1,667 @@
+{
+ "about": "Stretch lines for the validators of design 3.2, each with a valid and an invalid case. `input` is what the call listed. Hand-written against the design: no code runs them until station L1 (the programme handler). `valid` is whether the line is kept; `drop_reason` is descriptive only. Segment lines are processed first, then lesson lines. A run is consecutive: three invalid segment lines in a row end the call, three scattered ones do not; an invalid lesson line never counts toward the run.",
+ "input": {
+  "candidates": [
+   "pub:harbour-1",
+   "pub:harbour-2",
+   "pub:budget-3"
+  ],
+  "active_lessons": [
+   "L1"
+  ],
+  "struck_lessons": {
+   "L2": [
+    "air:ev-7",
+    "air:ev-8"
+   ]
+  },
+  "turns": [
+   "turn-1"
+  ],
+  "notes": [
+   "ab12"
+  ],
+  "edition_paragraphs": 3,
+  "listed_air_events": [
+   "ev-1",
+   "ev-2",
+   "ev-3",
+   "ev-7",
+   "ev-8"
+  ]
+ },
+ "segment_lines": [
+  {
+   "name": "valid story",
+   "validator": "all",
+   "valid": true,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "lesson:L1"
+   }
+  },
+  {
+   "name": "valid update citing a turn",
+   "validator": "caused_by resolves",
+   "valid": true,
+   "line": {
+    "kind": "update",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "instruction:turn/turn-1"
+   }
+  },
+  {
+   "name": "valid note ref",
+   "validator": "caused_by resolves",
+   "valid": true,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "instruction:note/ab12"
+   }
+  },
+  {
+   "name": "valid edition ref",
+   "validator": "caused_by resolves",
+   "valid": true,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "edition:P3"
+   }
+  },
+  {
+   "name": "valid importance (no ref)",
+   "validator": "caused_by is a ref or a class word",
+   "valid": true,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "importance"
+   }
+  },
+  {
+   "name": "valid explore (no ref)",
+   "validator": "caused_by is a ref or a class word",
+   "valid": true,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "explore"
+   }
+  },
+  {
+   "name": "p_heard endpoint 0",
+   "validator": "p_heard in [0,1]",
+   "valid": true,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0,
+    "caused_by": "lesson:L1"
+   }
+  },
+  {
+   "name": "p_heard endpoint 1",
+   "validator": "p_heard in [0,1]",
+   "valid": true,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 1,
+    "caused_by": "lesson:L1"
+   }
+  },
+  {
+   "name": "unknown kind",
+   "validator": "kind known",
+   "valid": false,
+   "line": {
+    "kind": "weather",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "lesson:L1"
+   },
+   "drop_reason": "unknown kind"
+  },
+  {
+   "name": "empty text",
+   "validator": "text non-empty",
+   "valid": false,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "  ",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "lesson:L1"
+   },
+   "drop_reason": "empty text"
+  },
+  {
+   "name": "cite outside the candidate set",
+   "validator": "every cite in the candidate set",
+   "valid": false,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:unknown-9"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "lesson:L1"
+   },
+   "drop_reason": "cite not in candidates"
+  },
+  {
+   "name": "no p_heard",
+   "validator": "content kind has p_heard and caused_by",
+   "valid": false,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "caused_by": "lesson:L1"
+   },
+   "drop_reason": "missing p_heard"
+  },
+  {
+   "name": "no caused_by",
+   "validator": "content kind has p_heard and caused_by",
+   "valid": false,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7
+   },
+   "drop_reason": "missing caused_by"
+  },
+  {
+   "name": "title with a newline",
+   "validator": "title one line, no control character",
+   "valid": false,
+   "line": {
+    "kind": "story",
+    "title": "a\nb",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "lesson:L1"
+   },
+   "drop_reason": "title not one line"
+  },
+  {
+   "name": "title with a control character",
+   "validator": "title one line, no control character",
+   "valid": false,
+   "line": {
+    "kind": "story",
+    "title": "a\u0007b",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "lesson:L1"
+   },
+   "drop_reason": "title control character"
+  },
+  {
+   "name": "title over 200 bytes",
+   "validator": "title at most 200 bytes",
+   "valid": false,
+   "line": {
+    "kind": "story",
+    "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "lesson:L1"
+   },
+   "drop_reason": "title too long"
+  },
+  {
+   "name": "p_heard 1.7",
+   "validator": "p_heard in [0,1]",
+   "valid": false,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 1.7,
+    "caused_by": "lesson:L1"
+   },
+   "drop_reason": "p_heard out of range"
+  },
+  {
+   "name": "p_heard negative",
+   "validator": "p_heard in [0,1]",
+   "valid": false,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": -0.1,
+    "caused_by": "lesson:L1"
+   },
+   "drop_reason": "p_heard out of range"
+  },
+  {
+   "name": "p_heard a string",
+   "validator": "p_heard a finite number",
+   "valid": false,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": "NaN",
+    "caused_by": "lesson:L1"
+   },
+   "drop_reason": "p_heard not a number"
+  },
+  {
+   "name": "caused_by unknown class",
+   "validator": "caused_by grammar",
+   "valid": false,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "hunch"
+   },
+   "drop_reason": "caused_by not a ref"
+  },
+  {
+   "name": "caused_by names a missing turn",
+   "validator": "caused_by resolves",
+   "valid": false,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "instruction:turn/turn-404"
+   },
+   "drop_reason": "unresolved instruction"
+  },
+  {
+   "name": "caused_by names a missing note",
+   "validator": "caused_by resolves",
+   "valid": false,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "instruction:note/zz"
+   },
+   "drop_reason": "unresolved instruction"
+  },
+  {
+   "name": "caused_by edition paragraph out of range",
+   "validator": "caused_by resolves",
+   "valid": false,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "edition:P9"
+   },
+   "drop_reason": "edition paragraph out of range"
+  },
+  {
+   "name": "caused_by an unknown lesson",
+   "validator": "caused_by resolves",
+   "valid": false,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "lesson:L99"
+   },
+   "drop_reason": "unknown lesson"
+  },
+  {
+   "name": "caused_by a struck lesson",
+   "validator": "caused_by names an active lesson",
+   "valid": false,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "lesson:L2"
+   },
+   "drop_reason": "lesson not active"
+  },
+  {
+   "name": "caused_by a lesson written in this response",
+   "validator": "same-response lesson cite",
+   "valid": false,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "lesson:L3"
+   },
+   "drop_reason": "same-response lesson"
+  },
+  {
+   "name": "segment id sent by the model is discarded",
+   "validator": "ids are minted by the handler",
+   "valid": true,
+   "line": {
+    "kind": "story",
+    "title": "A quiet harbour",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "lesson:L1",
+    "segment_id": "fx.s9",
+    "lesson_id": "L9"
+   }
+  },
+  {
+   "name": "ident with a forecast field",
+   "validator": "ident, bridge, answer, result carry no forecast",
+   "valid": false,
+   "line": {
+    "kind": "ident",
+    "text": "This is the radio.",
+    "p_heard": 0.5
+   },
+   "drop_reason": "forecast on a non-content kind"
+  },
+  {
+   "name": "bridge with caused_by",
+   "validator": "ident, bridge, answer, result carry no forecast",
+   "valid": false,
+   "line": {
+    "kind": "bridge",
+    "text": "And now.",
+    "caused_by": "explore"
+   },
+   "drop_reason": "forecast on a non-content kind"
+  },
+  {
+   "name": "valid ident",
+   "validator": "ident, bridge, answer, result carry no forecast",
+   "valid": true,
+   "line": {
+    "kind": "ident",
+    "text": "This is the radio."
+   }
+  }
+ ],
+ "lesson_lines": [
+  {
+   "name": "valid lesson, two air cites",
+   "validator": "lesson",
+   "valid": true,
+   "line": {
+    "kind": "lesson",
+    "text": "Harbour stories are heard through in the morning.",
+    "cites": [
+     "air:ev-1",
+     "air:ev-2"
+    ]
+   }
+  },
+  {
+   "name": "valid lesson, one instruction",
+   "validator": "lesson",
+   "valid": true,
+   "line": {
+    "kind": "lesson",
+    "text": "Harbour stories are heard through in the morning.",
+    "cites": [
+     "instruction:turn/turn-1"
+    ]
+   }
+  },
+  {
+   "name": "valid replace of an active lesson",
+   "validator": "replaces an active lesson",
+   "valid": true,
+   "line": {
+    "kind": "lesson",
+    "text": "Harbour stories are heard through in the morning.",
+    "cites": [
+     "air:ev-1",
+     "air:ev-2"
+    ],
+    "replaces": "L1"
+   }
+  },
+  {
+   "name": "one air cite only",
+   "validator": "at least two air events or one instruction",
+   "valid": false,
+   "line": {
+    "kind": "lesson",
+    "text": "Harbour stories are heard through in the morning.",
+    "cites": [
+     "air:ev-1"
+    ]
+   },
+   "drop_reason": "too few cites"
+  },
+  {
+   "name": "cite not listed in the input",
+   "validator": "every cite listed in this call's input",
+   "valid": false,
+   "line": {
+    "kind": "lesson",
+    "text": "Harbour stories are heard through in the morning.",
+    "cites": [
+     "air:ev-1",
+     "air:ev-404"
+    ]
+   },
+   "drop_reason": "cite not listed"
+  },
+  {
+   "name": "text over 300 characters",
+   "validator": "text one line, at most 300",
+   "valid": false,
+   "line": {
+    "kind": "lesson",
+    "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "cites": [
+     "air:ev-1",
+     "air:ev-2"
+    ]
+   },
+   "drop_reason": "lesson text too long"
+  },
+  {
+   "name": "text on two lines",
+   "validator": "text one line",
+   "valid": false,
+   "line": {
+    "kind": "lesson",
+    "text": "a\nb",
+    "cites": [
+     "air:ev-1",
+     "air:ev-2"
+    ]
+   },
+   "drop_reason": "lesson text not one line"
+  },
+  {
+   "name": "replaces a struck lesson",
+   "validator": "replaces an existing active lesson",
+   "valid": false,
+   "line": {
+    "kind": "lesson",
+    "text": "Harbour stories are heard through in the morning.",
+    "cites": [
+     "air:ev-1",
+     "air:ev-2"
+    ],
+    "replaces": "L2"
+   },
+   "drop_reason": "replaces a struck lesson"
+  },
+  {
+   "name": "replaces an unknown lesson",
+   "validator": "replaces an existing active lesson",
+   "valid": false,
+   "line": {
+    "kind": "lesson",
+    "text": "Harbour stories are heard through in the morning.",
+    "cites": [
+     "air:ev-1",
+     "air:ev-2"
+    ],
+    "replaces": "L77"
+   },
+   "drop_reason": "replaces an unknown lesson"
+  },
+  {
+   "name": "every cite already cited by a struck lesson",
+   "validator": "not rewritten from the same evidence",
+   "valid": false,
+   "line": {
+    "kind": "lesson",
+    "text": "Harbour stories are heard through in the morning.",
+    "cites": [
+     "air:ev-7",
+     "air:ev-8"
+    ]
+   },
+   "drop_reason": "struck evidence"
+  },
+  {
+   "name": "lesson id sent by the model is discarded",
+   "validator": "ids are minted by the handler",
+   "valid": true,
+   "line": {
+    "kind": "lesson",
+    "text": "Harbour stories are heard through in the morning.",
+    "cites": [
+     "air:ev-1",
+     "air:ev-2"
+    ],
+    "lesson_id": "L55"
+   }
+  }
+ ],
+ "runs": [
+  {
+   "name": "three scattered invalid lines do not end the call",
+   "sequence": [
+    "invalid",
+    "valid",
+    "invalid",
+    "valid",
+    "invalid"
+   ],
+   "ends_after_index": null
+  },
+  {
+   "name": "a run of three ends the call at the third",
+   "sequence": [
+    "valid",
+    "invalid",
+    "invalid",
+    "invalid",
+    "valid"
+   ],
+   "ends_after_index": 3
+  }
+ ]
+}
