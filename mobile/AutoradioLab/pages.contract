@@ -16,7 +16,7 @@ use ActivityPage from "./activity.contract"
 use SettingsPage from "./settings.contract"
 use ComponentsPage, TracePage from "./components.contract"
 use MotionPage, WaitPage from "./motion.contract"
-use OnboardingPage from "./onboarding.contract"
+use OnboardingPage, EditEditionPage from "./onboarding.contract"
 
 // A "lab" page is known only at the four addresses below; any other lab:* address shows the not-yet page, not a blank screen.
 component PageHost
@@ -52,8 +52,10 @@ component PageHost
         MotionPage()
       if kind == "lab" and address == "lab:wait"
         WaitPage()
-      if kind == "onboarding"
+      if kind == "onboarding" and address != "onboarding:edit"
         OnboardingPage(address=address, title=title)
+      if address == "onboarding:edit"
+        EditEditionPage(address=address, title=title)
       // ---- end of kinds ----
       if known == false
         NotYetPage(address=address, title=title)

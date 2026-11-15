@@ -309,6 +309,8 @@ component Autoradio
     obDemoSay
     obEditionRetry
     obContinueAnyway
+    obEditDone
+    obEditLeave
     obSkip
     obReset
     obOpenEdition

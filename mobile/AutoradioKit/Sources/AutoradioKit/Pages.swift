@@ -20,6 +20,14 @@ public struct Page: Codable, Sendable, Equatable {
 }
 
 public enum PageAddress {
+    /// The address the reader's edition opens at. The server holds no edition document that this app creates (the writer is local),
+    /// so "texture:my-edition" would be fetched as a document id and answer 404. Every open of it, and every saved page list
+    /// that holds it, lands on the local edit page instead.
+    public static let edition = "onboarding:edit"
+    public static func canonical(_ address: String) -> String {
+        address.trimmingCharacters(in: .whitespaces).lowercased() == "texture:my-edition" ? edition : address
+    }
+
     /// The renderer family for an address. One line per family; a lane adds its own here only if it adds a scheme.
     public static func kind(of address: String) -> String {
         let scheme = address.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
@@ -54,6 +62,7 @@ public enum PageAddress {
         case "lab:components": return "Components"
         case "lab:trace": return "Trace"
         case "onboarding:setup": return "Make it yours"
+        case "onboarding:edit": return "My edition"
         case "mailbox:inbox": return "Mail"
         case "file:/", "file:": return "Files"
         default: break
@@ -111,6 +120,7 @@ public final class OpenPages: @unchecked Sendable {
     @discardableResult
     public func open(_ address: String, title: String? = nil, opener: String? = nil) -> Page {
         lock.lock()
+        let address = PageAddress.canonical(address)
         let p = openLocked(Page(address: address, kind: PageAddress.kind(of: address),
                                 title: (title?.isEmpty == false ? title! : PageAddress.defaultTitle(address)),
                                 opener: opener ?? recency.first ?? ""), record: true)
@@ -183,8 +193,11 @@ public final class OpenPages: @unchecked Sendable {
     }
     private func load() {
         guard let file, let d = try? Data(contentsOf: file), let s = try? JSONDecoder().decode(Saved.self, from: d) else { return }
-        pages = s.pages.map { var p = $0; p.kind = PageAddress.kind(of: p.address); return p }
-        recency = s.recency.filter { a in pages.contains { $0.address == a } }
+        var seen = Set<String>()
+        pages = s.pages.map { var p = $0; p.address = PageAddress.canonical(p.address); p.kind = PageAddress.kind(of: p.address); return p }
+            .filter { seen.insert($0.address).inserted }
+        var inRecency = Set<String>()
+        recency = s.recency.map { PageAddress.canonical($0) }.filter { a in pages.contains { $0.address == a } && inRecency.insert(a).inserted }
         for p in pages where !recency.contains(p.address) { recency.append(p.address) }
     }
 }

@@ -47,6 +47,8 @@ final class OnboardingController: @unchecked Sendable {
     // edition topics
     private var session: EditionSetupSession?
     private var talking = false
+    /// The edit page is open: Done rewrites the edition without touching the first-run step.
+    private var editing = false
     // edition
     private var edition: Edition?
     private var editionStatus = ""       // "" | writing | failed | ready
@@ -70,6 +72,11 @@ final class OnboardingController: @unchecked Sendable {
         } else if progress.editionDone { step = "done" }
         else if progress.skipped { step = "skipped" }
         else if progress.setupDone { step = "ready" }
+        // The saved picks are always there for the edit page, whether or not the first-run step was ever shown.
+        if session == nil {
+            let s = EditionSetupSession(suggestions: EditionTopics.suggestions(), file: topicsFile, liveSections: [])
+            session = s; EditionSetupSession.shared = s
+        }
         wire(session)
     }
 
@@ -299,12 +306,38 @@ final class OnboardingController: @unchecked Sendable {
 
     // MARK: The edition
 
+    /// The edit page (`onboarding:edit`) opened: the saved picks are there, preselected, whether or not onboarding ever ran.
+    func prepareEdit() {
+        let live = sections()
+        lock.lock(); let s = session; lock.unlock()
+        s?.setLiveSections(live)
+        EditionSetupSession.shared = s
+        wire(s)
+        set { editing = true; message = "" }
+    }
+
+    /// Done on the edit page: the same completion path as onboarding's Continue (deadline, progress, Retry).
+    func finishEdit() {
+        stopVoice()
+        set { editing = true }  // also when the page's load never ran
+        writeEdition()
+    }
+
+    /// Leave the edit page without rewriting (after a failure): the picks stay saved, the edition stays as it was.
+    func leaveEdit() {
+        stopVoice()
+        set { editing = false; editionStatus = (edition != nil || progress.editionDone) ? "ready" : ""; editionError = "" }
+        module.pages.close("onboarding:edit")
+        module.touch(["openPages"])
+    }
+
     func writeEdition() {
         guard let s = session else { return }
         lock.lock(); let busy = editionStatus == "writing"; lock.unlock()
         guard !busy else { return }
         let topics = s.topics
-        set { step = "writing"; editionStatus = "writing"; writingLine = "Writing your edition…"; editionError = "" }
+        lock.lock(); let edit = editing; lock.unlock()
+        set { if !edit { step = "writing" }; editionStatus = "writing"; writingLine = "Writing your edition…"; editionError = "" }
         let w = writer
         Task { [weak self, w] in
             guard let self else { return }
@@ -324,10 +357,18 @@ final class OnboardingController: @unchecked Sendable {
     }
 
     private func editionReady(_ e: Edition) {
+        lock.lock(); let edit = editing; lock.unlock()
+        if edit {
+            // Editing after the first run: the step stays as it was; the edit page closes and the reader is back where they came from.
+            set { edition = e; editionStatus = "ready"; progress.editionDone = true; editing = false }
+            save()
+            module.pages.close("onboarding:edit")
+            module.touch(["openPages"])
+            return
+        }
         set { edition = e; editionStatus = "ready"; step = "done"; progress.editionDone = true }
         save()
-        module.pages.open("texture:my-edition", title: e.title)
-        module.pages.focus("onboarding:setup")
+        // The edition is a local page (onboarding:edit), not a server document: nothing is opened here, the done screen is shown.
         module.touch(["openPages"])
     }
 
@@ -349,13 +390,13 @@ final class OnboardingController: @unchecked Sendable {
 
     func reset() {
         stopVoice()
-        set { progress = OnboardingProgress(); step = "welcome"; setup = nil; session = nil; EditionSetupSession.shared = nil; edition = nil; editionStatus = ""; mic = "unasked"; message = "" }
+        set { progress = OnboardingProgress(); step = "welcome"; setup = nil; edition = nil; editionStatus = ""; mic = "unasked"; message = ""; editing = false }
         try? FileManager.default.removeItem(at: topicsFile)
+        let fresh = EditionSetupSession(suggestions: EditionTopics.suggestions(), file: topicsFile, liveSections: [])
+        wire(fresh); EditionSetupSession.shared = fresh
+        set { session = fresh }
         save()
     }
-
-    func editionLines() -> [String]? { lock.lock(); defer { lock.unlock() }; return edition?.lines }
-    func editionTitle() -> String { lock.lock(); defer { lock.unlock() }; return edition?.title ?? "My edition" }
 
     // MARK: What the contract sees
 
@@ -391,23 +432,22 @@ final class OnboardingController: @unchecked Sendable {
         d["demo"] = demo; d["demoWords"] = "add space and chess"
         d["editionStatus"] = editionStatus; d["writingLine"] = writingLine; d["editionError"] = editionError
         d["editionTitle"] = edition?.title ?? "My edition"; d["editionIntro"] = edition?.intro ?? ""
-        d["editionLines"] = edition?.lines ?? []; d["editionAddress"] = "texture:my-edition"
+        d["editionLines"] = edition?.lines ?? []; d["editionAddress"] = PageAddress.edition
         d["card"] = card; d["cardBody"] = cardBody; d["aim"] = progress.editionDone ? "" : "Make it yours"
-        d["skipped"] = progress.skipped; d["editionDone"] = progress.editionDone
+        d["skipped"] = progress.skipped; d["editionDone"] = progress.editionDone; d["editing"] = editing
         return d
     }
 }
 
-/// `onboarding:*` pages and the edition Texture the topics step wrote (`texture:my-edition`, until the server has an edition marker).
+/// `onboarding:*` pages: the first-run setup and the edition's edit page (`onboarding:edit`; the old `texture:my-edition` address
+/// is rewritten to it by `PageAddress.canonical`, because no server document of that name exists).
 struct OnboardingPageSource: PageSource {
     let controller: OnboardingController
     func handles(_ address: String) -> Bool {
-        address.hasPrefix("onboarding:") || (address == "texture:my-edition" && controller.editionLines() != nil)
+        address.hasPrefix("onboarding:")
     }
     func load(_ address: String) async throws -> PageModel {
-        if address == "texture:my-edition" {
-            return PageModel(address: address, kind: "reader", title: controller.editionTitle(), status: "ready", lines: controller.editionLines() ?? [])
-        }
+        if address == "onboarding:edit" { controller.prepareEdit(); return PageModel(address: address, kind: "onboarding", title: "Edit my edition", status: "ready") }
         return PageModel(address: address, kind: "onboarding", title: "Make it yours", status: "ready")
     }
 }
@@ -431,6 +471,8 @@ extension AutoradioModule {
         handle("onboardingTopics") { args, reply in c.startTopics(); reply(c.view()) }
         handle("onboardingTopicToggle") { args, reply in c.toggleTopic(args["label"] as? String ?? ""); reply(c.view()) }
         handle("onboardingTopicExpand") { args, reply in c.expandTopic(args["label"] as? String ?? ""); reply(c.view()) }
+        handle("onboardingEditDone") { args, reply in c.finishEdit(); reply(c.view()) }
+        handle("onboardingEditLeave") { args, reply in c.leaveEdit(); reply(c.view()) }
         handle("onboardingTopicAdd") { args, reply in c.addTopic(args["text"] as? String ?? ""); reply(c.view()) }
         handle("onboardingTalk") { args, reply in c.toggleTalk(); reply(c.view()) }
         handle("onboardingTopicsDone") { args, reply in c.finishTopics(); reply(c.view()) }
