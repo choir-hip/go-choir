@@ -232,3 +232,20 @@ The owner tested onboarding, where the app helps set up the edition.
   from the screenshot: ten category chips as large saturated blobs, one per
   row, all filled so selection says nothing; three unrelated left edges;
   chips showing through the bottom bar.
+- **Rulings, about 00:00Z on the 16th.**
+  - "As soon as you open autoradio, it should start playing. Eventually we
+    will have multiple stations available but for now one station per user."
+  - "The play queue should be a real data structure but also controlled by
+    the ai dj. You should be able to queue something to it in the app, but
+    also change the playback order by talking, and the ai dj (autoradio
+    desk) changes the queue struct in its go repl cell."
+  - The EPUB and PDF app is called Reader, not Library: on choir.news
+    Library is a different app.
+  - Voice: with podcast audio playing it "should be no different than the
+    regular voice on". Thinking aloud: hands-free turns off after the user
+    is silent for some time; it turns on manually, at app start, and when
+    the user unlocks and opens the app. "Figuring out the voice situation is
+    something we will keep iterating on since it is legit hard, but the
+    other features we sprint forward." The lead's reading for tonight: on at
+    app open and by the button; off by the button and after three minutes
+    with no turn from the reader. The three minutes is the lead's number.

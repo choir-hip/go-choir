@@ -104,11 +104,12 @@ conjecture:
 stations:
   - id: Q   # lane/autoradio-queue: PlayQueue, remote audio, Up next, URL in the bar
   - id: P   # lane/autoradio-podcasts: the podcast app
-  - id: R   # lane/autoradio-reader: the library, EPUB and PDF
+  - id: R   # lane/autoradio-reader: the Reader app, EPUB and PDF
   - id: T   # lane/autoradio-talk: asking fixed, on-device first answer, the reader's voice
   - id: D   # lane/autoradio-dj-clips: clips in the programme, Play hands the stack to the DJ
   - id: V   # lane/autoradio-design: the design pass, with a screenshot round from the lead
   - id: S   # lane/podcast-clips: the server pipeline and the operator proof
+  - id: K   # lane/autoradio-queue-desk: the desk sees the queue and returns ordered changes to it (server)
   - id: M   # lead: merges and builds as lanes push; last merge 09:00Z; final install by 10:30Z; report
 
 now:
