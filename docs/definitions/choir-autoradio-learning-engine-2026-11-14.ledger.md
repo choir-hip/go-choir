@@ -106,3 +106,23 @@ Append only. One entry per pass.
   | 9: programme body cap | Adopted (12.7): 256 KB. |
   | 10: candidates shape | Adopted (12.7): 40 items by importance, text on the first ten. |
   | 11: false "only mobile moved"; wrong ParseGroupBy cite | Adopted: "mobile/ and three docs files; no Go file"; `handler.go:379`. Fixed in the design header and goal start. |
+- 2026-11-15T05:40Z. **L0 round 4 and the change of gate.** The Sonnet seat returned REPAIR with two new blockers and a should-fix list; the DeepSeek seat timed out and returned nothing. The round 3 blocker (the tally tag) is closed and nothing from rounds 1 to 3 was found dropped. Four rounds each found real defects, and each in stations that are not yet being built, so the whole-design gate is the wrong unit (the lead's conservative decision, recorded). L0 is closed for the scope the first builds need: stations L1a and L1, and P1 on fixtures. Each of L2, L3, L4, P2 and P3 now has a first acceptance line: its seats re-review that station's sections of the design, with the round 4 findings as inputs, before its tests are written. There is no fifth whole-design review. Owner rulings added: none.
+
+  | Round 4 finding (Sonnet seat) | Disposition |
+  |---|---|
+  | B1: block count rule, and the phone deleting refused events | Adopted. `SplitBlocks` is one server function with edge-text fixtures, and the segment event carries `block_count` (12.3, 3.4). The phone deletes only on accepted, duplicate, ignored or conflict-recorded and keeps and surfaces refused and changed (4.2, 12.3). P2 acceptance: a simulator plays a deployed stretch to the end and the tape holds a settlement for every played segment. |
+  | B2: replay after a crash between the air append and the settlement | Adopted (4.2): on duplicate the handler settles if no settlement exists; the handler re-reads and compares after every conditional append, since the store answers success on a conflict (`commitment.go:47-50`). Fixture and L2 acceptance added. |
+  | 12.3 status column contradicts "HTTP status is 200" | Adopted: the column is dropped; the table shows the phone's action. |
+  | 12.2 read-by columns | Adopted: air, settlement and forecast rows list the notebook, input builder, dedupe and the point read. |
+  | no code for a repeat non-terminal event | Adopted: `accepted` now means stored while the segment was unsettled (12.3). |
+  | 4.4 vs 12.3 on segments | Adopted: a signal names a stretch and segment or none; a correction carries `turn_id` (4.4, 12.3). |
+  | title can kill the stretch | Adopted: a title validator and a fixture (3.2, 12.7). |
+  | heard-through gaming by one-block segments | Design choice, conservative option: the reading is stratified by block-count class (5, 12.7). |
+  | lesson ids race | Adopted: compare-and-append (6.2). |
+  | replay semantics | Adopted: a request record maps request_id to the stretch; claim writes compare with `SameClaim` after the append (3.3, 12.2, 12.5). |
+  | L3 evidence is local only | Design choice, conservative option: L3 gains a deployed proof on d@e that the real model's output parses into lessons (goal L3). |
+  | batch bound handling | Adopted: refused whole with 400; the phone chunks (4.2, 12.7). |
+  | which lookup the heard handler uses | Adopted: a point read by claim id; the tag query is for the notebook and listings (4.2). |
+  | nits | Adopted: stale "round" wording fixed in the goal file; candidates aggregate bound removed (80 KB follows from the item bound); strike and clear id grammar (12.2, 12.5); invalid lesson lines never count toward the run of three nor end the call (3.2); unknown type and `ended_at` before `started_at` are refusals (12.3). |
+
+  C90's wording in `docs/calibration/claude-ledger.md` said "that listener's base rate"; it now names the causal base rate of design section 5, as one claim. The goal file already did.

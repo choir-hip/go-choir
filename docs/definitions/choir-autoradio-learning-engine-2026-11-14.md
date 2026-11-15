@@ -52,20 +52,38 @@ finish:
     - action: L1. Run the programme route with a fake provider that emits valid lines and one line each for p_heard 1.7, no p_heard, an unknown cause, an unresolved instruction, an edition paragraph out of range, a same-response lesson cite, an unknown cite, a run of three invalid lines, and a claim write that fails; then a crash mid-stretch followed by a retry; then candidates over the bounds of design 12.7 (by size and by item count)
       proves: only valid lines are streamed; each streamed segment has exactly one claim carrying the tags of design 12.1 and one segment record, committed before its segment event (order read from the tape and the event stream); a dropped line has no claim; a failed claim write ends the call with no segment; the stretch index lists its claims; a replay writes nothing new; a run of three invalid lines ends the call and three scattered ones do not; the deadline derives from the stretch start record; the crash leaves claims and texts for streamed segments and no index, and the retry has a new stretch id and never re-streams a claimed segment id; over-bound candidates answer 400 from the parser
       evidence_class: local test in CI; then deployed proof on d@e with the real route, the stretch, the claim ids and the index
-    - action: L2. Drive the heard route from a script with the fixture batches of design 12.7, covering every event type and every result code of 12.3, a finish and a first-block skip of a one-block segment and of a many-block segment, a late report after lapse, a replay after settlement, two batches with conflicting terminal events in both arrival orders, and every ordering of one batch
-      proves: the settlements the rule of design 4.2 gives; one batch settles the same under every ordering of its events; replaying the same events settles and writes nothing new; across batches the first terminal event received settles and the settlement is not rewritten whichever append wins; each later event gets exactly one of the three codes duplicate, conflict-recorded and ignored as design 4.2 defines, and a disagreeing terminal event writes its conflict record, shown in the notebook's air log and not shown to the DJ as an outcome; refusals and a changed event_id answer as body codes; each settlement's evidence resolves to an air event written by the heard route; the classes of 12.4 are read correctly at and after the deadline, including abandoned and stopped late, and the second reading counts them as 12.4 says
+    - action: L2. Before any test is written, the station's seats re-read this station's sections of the design
+      proves: this station's sections of the design are re-reviewed by the station's seats, with the L0 round 4 findings as inputs, before its tests are written
+      evidence_class: review output recorded in the ledger file
+    - action: L2. Drive the heard route from a script with the fixture batches of design 12.7, covering every event type and every result code of 12.3, a finish and a first-block skip of a one-block segment and of a many-block segment, a late report after lapse, a replay after settlement, two batches with conflicting terminal events in both arrival orders, and every ordering of one batch, an air record with no settlement followed by a replay, a repeat cut with a new event id, a batch over the bound, and the edge texts of design 12.3
+      proves: the settlements the rule of design 4.2 gives; one batch settles the same under every ordering of its events; replaying the same events settles and writes nothing new; across batches the first terminal event received settles and the settlement is not rewritten whichever append wins; each later event gets exactly one of the three codes duplicate, conflict-recorded and ignored as design 4.2 defines, and a disagreeing terminal event writes its conflict record, shown in the notebook's air log and not shown to the DJ as an outcome; refusals and a changed event_id answer as body codes; a replay that finds an air record with no settlement settles it, and the handler re-reads and compares after each conditional append; a repeat non-terminal event is accepted; a batch over the bound is refused whole with 400; each settlement's evidence resolves to an air event written by the heard route; the server's block split of the edge texts gives the fixture counts and the segment event carries it; the classes of 12.4 are read correctly at and after the deadline, including abandoned and stopped late, and the second reading counts them as 12.4 says
       evidence_class: local test in CI; then deployed proof on d@e, the event ids and settlement ids read from the tape
     - action: L2. Run the test that drives the programme call with a provider that tries to emit an air event and a settlement, send a programme request carrying a heard field, and grep the call sites of the reserved settle method
       proves: the programme call has no path that writes an outcome (rule 1b); the heard field answers 400; the settle method has one caller, the heard handler
       evidence_class: local tests in CI
+    - action: L3. Before any test is written, the station's seats re-read this station's sections of the design
+      proves: this station's sections of the design are re-reviewed by the station's seats, with the L0 round 4 findings as inputs, before its tests are written
+      evidence_class: review output recorded in the ledger file
     - action: L3. Assemble the programme input for a fixture history holding a case of every class of design 12.4 and compare it with the golden prompt; drive the lesson validators with a fake provider (a positive case first, two new air cites taken from settled cases and a gesture; then a cite shown for no class but a settled case, a cite not in the input, fewer than two air events, replaces a struck or unknown lesson, every cite already on a struck lesson, a model-sent lesson id, a lesson line past its bound); put an instruction holding a fence look-alike and a candidate title that says to ignore the edition through the frame
       proves: the input holds marked cases only (no band table, count, rate, total or streak) in the exact shape of the golden file, only a settled case carrying an air id; the positive lesson is accepted; each invalid lesson line is dropped, with the struck lessons' cites visible in the input; ids are minted by the handler; the hostile strings stay inside their fences as data
       evidence_class: local tests in CI. A change to the golden file needs a seat to read it
+    - action: L3. On d@e, open stretches with the real model after a scripted session that settles at least six forecasts and records two gestures, and read the lesson lines it returns
+      proves: the real model's output parses under the validators of design 3.2 into at least one stored lesson record, or every dropped line is listed with its reason; nothing is passed or failed on the lessons' quality
+      evidence_class: deployed proof on d@e, the response trace, the lesson records and the drop reasons
+    - action: L4. Before any test is written, the station's seats re-read this station's sections of the design
+      proves: this station's sections of the design are re-reviewed by the station's seats, with the L0 round 4 findings as inputs, before its tests are written
+      evidence_class: review output recorded in the ledger file
     - action: L4. Read GET /api/autoradio/notebook on d@e after a scripted session with turns, a gesture, a correction, a strike and a clear, and after a fixture of one heard and one not heard forecast caused by one lesson; compare each section with a listing of the tape
       proves: the notebook returns every lesson, forecast with its class, air event, turn record with its words and instruction on the tape, cleared ones marked; the tally of that lesson reads one heard and one not heard, counted from the tape by the tally tags of design 12.1 (a tally of zero against a tape that holds tagged settled forecasts fails); the struck lesson is absent from the next call's input and is not accepted again from the same cites; clear removes events from the next input and deletes nothing; the operational traces are named under held_elsewhere
       evidence_class: deployed proof on d@e; the completeness and tally comparison is a rerunnable script
+    - action: P2. Before any test is written, the station's seats re-read this station's sections of the design
+      proves: this station's sections of the design are re-reviewed by the station's seats, with the L0 round 4 findings as inputs, before its tests are written
+      evidence_class: review output recorded in the ledger file
+    - action: P3. Before any test is written, the station's seats re-read this station's sections of the design
+      proves: this station's sections of the design are re-reviewed by the station's seats, with the L0 round 4 findings as inputs, before its tests are written
+      evidence_class: review output recorded in the ledger file
     - action: P1, P2 and P3 against the fixtures, the simulator and a script against d@e (D3, no phone install until the owner says go)
-      proves: the phone plays the programme, sends the batch, deletes acknowledged lines from its local signals file, and shows what the notebook route returns
+      proves: the phone plays the programme, sends the batch in chunks within the bound, deletes a line only on accepted, duplicate, ignored or conflict-recorded and keeps and surfaces refused and changed ones, and shows what the notebook route returns; a simulator plays a deployed stretch to the end and the tape then holds a settlement for every played segment, so a block-count mismatch cannot pass
       evidence_class: simulator run and script output; a real iPhone only after the owner's go (D3), recorded in the ledger file
     - action: observation, not acceptance. Run a scripted listener on d@e until 100 forecasts are settled, read the lessons the real model wrote, and compute the reading of design section 5
       proves: nothing is passed or failed. It records whether the forecasts separate heard from skipped better than the causal base rate, per segment kind, with coverage and the per-lesson tallies, and it settles ARL-C1 only. The owner's verdict on each lesson (true, false, unclear) goes in the ledger file, and a lesson the owner marks false is struck
@@ -138,7 +156,7 @@ boundaries:
 stations:
   - id: L0
     name: design review
-    scope: two seats read docs/design/autoradio-learning-engine-2026-11-14.md and this file; findings are adopted, deferred or rejected in the ledger file. Round 1 returned REPAIR from both seats (ledger); this revision answers it and goes back to the same two seats
+    scope: two seats read docs/design/autoradio-learning-engine-2026-11-14.md and this file; findings are adopted, deferred or rejected in the ledger file. Four rounds ran (ledger). L0 is closed for stations L1a and L1 (and P1 on fixtures); each later station's sections are re-reviewed by its own seats at its start, with the round 4 findings as inputs
     class: green
     review: two seats
     depends_on: []
@@ -257,7 +275,7 @@ owner_rulings:
 
 now:
   status: working
-  slice: L0 second round; P1 starts when L1a delivers the fixtures
+  slice: L0 closed for L1a and L1 (and P1 on fixtures); L1a first
   source_ref: origin/main 955d4527f
   deploy_identity: unknown
   candidate:
@@ -298,7 +316,7 @@ now:
     kind: architecture
     status: proposal
     evidence_ref: docs/design/autoradio-learning-engine-2026-11-14.md
-    owner_ratification_ref: the owner's discussion of 2026-11-13 and 2026-11-14 set the frame and the rules; the design is in its second round of L0
+    owner_ratification_ref: the owner's discussion of 2026-11-13 and 2026-11-14 set the frame and the rules; the design closed L0 for L1a and L1 after four rounds
   belief:
     believed_state: >
       Nothing of this mission is built. The route it extends (fast turns)
@@ -308,15 +326,14 @@ now:
       Whether a small fast model writes lessons worth reading from twenty
       outcomes. The claim path is decided (design 3.3, 12).
     next_observation: >
-      L0's two verdicts on this revision; then L1a's failure list.
+      L1a's failure list, written before its tests.
   blocker_or_risk: >
     None for L0 and P1. Risks: River unregistered (D1), no install go (D3),
     deploy headroom on Node B (D4). Review seats are the two the owner set
     (owner_rulings, 2026-11-15).
   next_action: >
-    Run L0 again: put the revised design and this file before the same two
-    seats, adjudicate every finding in the ledger file, then start L1a with
-    its failure list.
+    Start L1a with its failure list. Before L2, L3, L4, P2 and P3 start, their
+    seats re-review that station's sections (acceptance, first line).
 ---
 
 # Autoradio learns its listener: the four-stroke engine, first build
