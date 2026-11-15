@@ -121,6 +121,16 @@ type GroupStats struct {
 	// learning signal) but are not oversight evidence: self never
 	// governs anything that gates action (docs/precommitment-records.md §5.2).
 	SelfOnly int `json:"self_only"`
+	// The causal base rate (causal.go; learning-engine design 5): over the
+	// resolved forecasts of the group, the Brier of the pooled, per-kind
+	// shrunk running base rate known at each forecast's commit, and the
+	// paired mean difference (Brier of p minus Brier of that base rate, so
+	// negative is better than the base rate) with its standard error. nil
+	// when nothing is resolved; the standard error needs two pairs.
+	CausalN             int      `json:"causal_n"`
+	CausalBaseRateBrier *float64 `json:"causal_base_rate_brier"`
+	CausalBrierDiff     *float64 `json:"causal_brier_diff"`
+	CausalBrierDiffSE   *float64 `json:"causal_brier_diff_se"`
 }
 
 // Miss is a settled claim with a large Brier score, for the context text.
@@ -173,12 +183,14 @@ type scored struct {
 	outcome  string
 	y        float64
 	resolved bool
+	// settledAt is the governing settlement's time, for the causal base rate.
+	settledAt string
 }
 
 func scoreClaim(c ClaimView, scorer string, now time.Time) scored {
 	s := scored{claim: c, status: statusOf(c, scorer, now)}
 	if g, ok := Governing(c.Settlements, scorer); ok {
-		s.outcome = g.Outcome
+		s.outcome, s.settledAt = g.Outcome, g.SettledAt
 		s.y, s.resolved, _ = OutcomeValue(g.Outcome)
 	}
 	return s
@@ -359,9 +371,12 @@ func Summarize(claims []ClaimView, opts SummaryOptions, now time.Time) Summary {
 		groups[key] = append(groups[key], it)
 	}
 	sum.Overall = stats(all)
+	pool := causalPool(causalPoints(all))
+	applyCausal(&sum.Overall, pool, causalPoints(all))
 	sort.Strings(order)
 	for _, key := range order {
 		g := stats(groups[key])
+		applyCausal(&g, pool, causalPoints(groups[key]))
 		label := labels[key]
 		g.Agent, g.Model, g.Type, g.Project = label.Agent, label.Model, label.Type, label.Project
 		sum.Groups = append(sum.Groups, g)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,6 +29,11 @@ func (s *Store) AppendCommitmentRecord(ctx context.Context, ownerID, computerID 
 	}
 	if rec.Provenance.AgentID == "" {
 		return "", fmt.Errorf("commitment record %s requires a committing agent", rec.RecordID)
+	}
+	// Every Autoradio record kind is owner-private by label (design 12.2): a
+	// record of a kind outside the table, or without its label, is not stored.
+	if err := types.CheckAutoradioLabel(rec); err != nil {
+		return "", err
 	}
 	now := time.Now().UTC()
 	metadata := map[string]any{
@@ -353,6 +359,152 @@ func (s *Store) ListCalibrationRecords(ctx context.Context, ownerID, computerID,
 		records = append(records, rec)
 	}
 	return records, nil
+}
+
+// calibrationBodyPage runs a BodyPageQuery over the owner's calibration
+// records of one computer and decodes them. It asks for one row more than
+// limit: next is the cursor of the last returned row when that extra row
+// exists, and "" when this page is the last (an exact multiple of the page
+// size costs no extra page).
+func (s *Store) calibrationBodyPage(ctx context.Context, q objectgraph.BodyPageQuery) (records []types.CommitmentRecord, next string, err error) {
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	if graph == nil {
+		return nil, "", fmt.Errorf("store: object graph not initialized")
+	}
+	limit := q.Limit
+	q.Limit = limit + 1
+	rows, err := graph.ListObjectsByOwnerBodyPage(ctx, q)
+	if err != nil {
+		return nil, "", err
+	}
+	more := len(rows) > limit
+	if more {
+		rows = rows[:limit]
+	}
+	records = make([]types.CommitmentRecord, 0, len(rows))
+	for _, row := range rows {
+		var rec types.CommitmentRecord
+		if err := ogDecode(row.Object, &rec); err != nil {
+			return nil, "", fmt.Errorf("calibration record decode %s: %w", row.Object.CanonicalID, err)
+		}
+		records = append(records, rec)
+	}
+	if more {
+		next = strconv.FormatInt(rows[len(rows)-1].ObjID, 10)
+	}
+	return records, next, nil
+}
+
+func calibrationCursor(after string) (int64, error) {
+	after = strings.TrimSpace(after)
+	if after == "" {
+		return 0, nil
+	}
+	id, err := strconv.ParseInt(after, 10, 64)
+	if err != nil || id <= 0 {
+		return 0, fmt.Errorf("calibration page cursor %q is not a cursor this store issued", after)
+	}
+	return id, nil
+}
+
+func calibrationScope(ownerID, computerID string) (string, string, error) {
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	if ownerID == "" || computerID == "" {
+		return "", "", fmt.Errorf("calibration record list requires owner and computer")
+	}
+	return ownerID, computerID, nil
+}
+
+func calibrationSchemaMatch() objectgraph.JSONFieldMatch {
+	return objectgraph.JSONFieldMatch{JSONPath: "$.calibration.schema", Value: types.CalibrationSchemaV1}
+}
+
+// ListCalibrationRecordsExcludingAgentPrefix is ListCalibrationRecords with
+// the claims of one agent namespace left out in the query, before the limit:
+// a record whose stored claimant agent, trimmed and lower-cased, begins with
+// excludePrefix is not returned, and does not use up a place in limit. The
+// generic claims routes read through it so that one listener's day of
+// Autoradio forecasts cannot evict another agent's calibration from the
+// limit (design 4.3). Newest first. An empty excludePrefix excludes nothing.
+func (s *Store) ListCalibrationRecordsExcludingAgentPrefix(ctx context.Context, ownerID, computerID, agent, excludePrefix string, limit int) ([]types.CommitmentRecord, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	ownerID, computerID, err := calibrationScope(ownerID, computerID)
+	if err != nil {
+		return nil, err
+	}
+	q := objectgraph.BodyPageQuery{
+		Kind: string(ogKindCommitmentRecord), OwnerID: ownerID, ComputerID: computerID,
+		Matches: []objectgraph.JSONFieldMatch{calibrationSchemaMatch()}, Descending: true, Limit: limit,
+	}
+	if agent = strings.TrimSpace(agent); agent != "" {
+		q.Matches = append(q.Matches, objectgraph.JSONFieldMatch{JSONPath: "$.calibration.agent", Value: agent})
+	}
+	if prefix := strings.ToLower(strings.TrimSpace(excludePrefix)); prefix != "" {
+		q.ExcludePrefix = []objectgraph.JSONPrefix{{JSONPath: "$.calibration.agent", LowerPrefix: prefix}}
+	}
+	records, _, err := s.calibrationBodyPage(ctx, q)
+	return records, err
+}
+
+// ListCalibrationRecordsPage reads the owner's calibration records (claims
+// and settlements) of one claimant agent, oldest first, one page at a time.
+// after is "" for the first page and the previous call's next after that;
+// next is "" on the last page. A record written between two pages is read by
+// a later one, never skipped. This is the read the notebook and the
+// measurement page through, so neither is cut at a record limit.
+func (s *Store) ListCalibrationRecordsPage(ctx context.Context, ownerID, computerID, agent, after string, limit int) ([]types.CommitmentRecord, string, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	ownerID, computerID, err := calibrationScope(ownerID, computerID)
+	if err != nil {
+		return nil, "", err
+	}
+	cursor, err := calibrationCursor(after)
+	if err != nil {
+		return nil, "", err
+	}
+	q := objectgraph.BodyPageQuery{
+		Kind: string(ogKindCommitmentRecord), OwnerID: ownerID, ComputerID: computerID,
+		Matches: []objectgraph.JSONFieldMatch{calibrationSchemaMatch()}, AfterObjID: cursor, Limit: limit,
+	}
+	if agent = strings.TrimSpace(agent); agent != "" {
+		q.Matches = append(q.Matches, objectgraph.JSONFieldMatch{JSONPath: "$.calibration.agent", Value: agent})
+	}
+	return s.calibrationBodyPage(ctx, q)
+}
+
+// ListCalibrationClaimsByTagPage reads the owner's calibration claims that
+// carry tag (an exact element of the claim's tags, never a prefix), oldest
+// first, one page at a time, as ListCalibrationRecordsPage does.
+// JSONFieldMatch has only an exact value, so a tag held in an array needs
+// this query: it is how a stretch's forecasts are listed (design 3.3, 12.1).
+func (s *Store) ListCalibrationClaimsByTagPage(ctx context.Context, ownerID, computerID, tag, after string, limit int) ([]types.CommitmentRecord, string, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	ownerID, computerID, err := calibrationScope(ownerID, computerID)
+	if err != nil {
+		return nil, "", err
+	}
+	if tag = strings.TrimSpace(tag); tag == "" {
+		return nil, "", fmt.Errorf("calibration claims by tag requires a tag")
+	}
+	cursor, err := calibrationCursor(after)
+	if err != nil {
+		return nil, "", err
+	}
+	return s.calibrationBodyPage(ctx, objectgraph.BodyPageQuery{
+		Kind: string(ogKindCommitmentRecord), OwnerID: ownerID, ComputerID: computerID,
+		Matches:    []objectgraph.JSONFieldMatch{calibrationSchemaMatch()},
+		ArrayHas:   []objectgraph.JSONArrayHas{{JSONPath: "$.calibration.claim.tags", Value: tag}},
+		AfterObjID: cursor, Limit: limit,
+	})
 }
 
 // dropCalibrationRecords removes agent calibration records (a non-empty
