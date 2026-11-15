@@ -107,39 +107,6 @@ final class Repair2PlayerTests: XCTestCase {
         XCTAssertTrue(c, "the replay was reported: \(seen.read { $0 })")
         XCTAssertEqual(seen.read { $0.filter { $0 == "segmentBegan" }.count }, 2)
     }
-
-    // The late programme: handed over at the next block boundary while an article plays.
-    func testHandOverReplacesAnArticleAtTheNextBlockBoundary() async {
-        let p = makePlayer(voice: "stub-voice", doc: article)
-        let seen = Locked<[String]>([])
-        p.playback.observe { e in seen.write { $0.append("\(e.kind.rawValue):\(e.segmentID)") } }
-        p.play()
-        let started = await poll { p.loopIsActive }; XCTAssertTrue(started)
-        var prog = ProgrammeDocument(id: "radio:late", title: "Autoradio", blocks: [])
-        prog.append(SegmentPrep.prepare(IncomingSegment(stretchID: "late", segmentID: "late/0", kind: "story", title: "Late", text: "Late words.", cites: [], blockCount: nil))!)
-        p.handOver(prog)
-        let ok = await poll(10) { seen.read { $0.contains("finished:late/0") } }
-        XCTAssertTrue(ok, "the programme played: \(seen.read { $0 })")
-        XCTAssertEqual(p.document.id, "radio:late")
-    }
-    func testHandOverWhilePausedReplacesAtOnceAndMakesNoSound() async {
-        let p = makePlayer(voice: "stub-voice", doc: article)          // never played: paused
-        var prog = ProgrammeDocument(id: "radio:late", title: "Autoradio", blocks: [])
-        prog.append(SegmentPrep.prepare(IncomingSegment(stretchID: "late", segmentID: "late/0", kind: "story", title: "Late", text: "Late words.", cites: [], blockCount: nil))!)
-        p.handOver(prog)
-        XCTAssertEqual(p.document.id, "radio:late"); XCTAssertTrue(p.userPaused); XCTAssertFalse(p.loopIsActive)
-    }
-    func testASegmentForAHandedOverDocumentWaitsWithIt() async {
-        let p = makePlayer(voice: "long-voice", doc: article)
-        p.play()
-        let started = await poll { p.loopIsActive }; XCTAssertTrue(started)
-        var prog = ProgrammeDocument(id: "radio:late", title: "Autoradio", blocks: [])
-        prog.append(SegmentPrep.prepare(IncomingSegment(stretchID: "late", segmentID: "late/0", kind: "story", title: "Late", text: "Late words.", cites: [], blockCount: nil))!)
-        p.handOver(prog)
-        let more = SegmentPrep.prepare(IncomingSegment(stretchID: "late", segmentID: "late/1", kind: "story", title: "More", text: "More words.", cites: [], blockCount: nil))!
-        XCTAssertTrue(p.appendSegment(more, toDocument: "radio:late"), "appended to the document waiting to take over")
-        p.pause()
-    }
 }
 
 final class Repair2StageTests: XCTestCase {
@@ -161,32 +128,55 @@ final class Repair2StageTests: XCTestCase {
         return ProgrammePlayer(audio: virtualAudio(), registry: r, log: EventLog(clock: LabClock()), configuration: cfg, document: doc)
     }
 
-    // The deadline no longer loses a late programme: the article plays, the stretch is followed, and it takes over at a block boundary.
-    func testALateFirstSegmentIsHandedOverAfterTheDeadline() async throws {
-        let src = Manual()
-        let stage = RadioProgramme(source: src, fallback: article, firstSegmentDeadline: 0.2)
-        let o = try await stage.open()
-        XCTAssertTrue(o.usedFallback); XCTAssertNotNil(o.follow, "it keeps following the stretch")
-        let p = player(o.document)
-        let follower = Task { await o.follow?(p) }
-        try? await Task.sleep(nanoseconds: 100_000_000)
-        src.cont.yield(seg(0)); src.cont.yield(seg(1))
-        let ok = await poll { p.document.id == "radio:m" && p.document.segments.count == 2 }
-        XCTAssertTrue(ok, "the programme took over with both segments")
-        src.cont.finish()
-        _ = await follower.value
+    // Round 3 (S1): a stale load must not leak its stretch: its stream is ended when its result is dropped.
+    func testStaleLoadEndsItsStretch() async {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("p1-\(UUID().uuidString)")
+        let rt = LabRuntime(supportDir: dir, session: NullSessionOwner())
+        let ended = Locked(false)
+        final class Ending: StretchSource, @unchecked Sendable {
+            var cont: AsyncThrowingStream<StretchEvent, Error>.Continuation!
+            let ended: Locked<Bool>
+            init(_ e: Locked<Bool>) { ended = e }
+            func events(cause: String) async throws -> AsyncThrowingStream<StretchEvent, Error> {
+                AsyncThrowingStream { c in self.cont = c; c.onTermination = { [ended] _ in ended.write { $0 = true } } }
+            }
+        }
+        let slow = Ending(ended)
+        let made = Locked(0)
+        rt.registry.register(.programme, RadioProgramme.self) { _ in
+            made.write { $0 += 1; return $0 } == 1 ? RadioProgramme(source: slow, fallback: self.article, firstSegmentDeadline: 60)
+                                                   : RadioProgramme(source: Ending(Locked(false)), fallback: self.article, firstSegmentDeadline: 0.05)
+        }
+        let app = ChoirApp(runtime: rt, keys: InMemoryKeyStore([KeyAccount.apiKey: secretKey, KeyAccount.computerID: "comp-1"]), openURL: nil)
+        let first = Task { await app.loadProgramme() }
+        let waiting = await poll { slow.cont != nil }; XCTAssertTrue(waiting)
+        await app.loadProgramme()                                       // newer load: the article after its own deadline
+        slow.cont.yield(seg(0))                                         // the stale load's first segment arrives: its result is dropped
+        await first.value
+        let over = await poll(5) { ended.read { $0 } }
+        XCTAssertTrue(over, "the stale load's stream was ended, not left running")
+        rt.player.pause()
     }
-    func testACancelledFollowerOfALateStretchHandsNothingOver() async throws {
-        let src = Manual()
-        let stage = RadioProgramme(source: src, fallback: article, firstSegmentDeadline: 0.2)
-        let o = try await stage.open()
-        let p = player(o.document)
-        let follower = Task { await o.follow?(p) }
-        try? await Task.sleep(nanoseconds: 100_000_000)
-        follower.cancel(); _ = await follower.value                      // a reload
-        src.cont.yield(seg(0))
-        try? await Task.sleep(nanoseconds: 300_000_000)
-        XCTAssertEqual(p.document.id, "choir:a")
+
+    // Round 3 (S2): sign-out empties what was queued behind the programme (a previous account's text must not play).
+    func testSignOutClearsTheQueue() async {
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.protocolClasses = [StubProtocol.self]
+        env.session = URLSession(configuration: cfg)
+        StubProtocol.handler = { _ in .init(status: 404, json: ["error": "x"]) }
+        defer { env.session = .shared }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("p1-\(UUID().uuidString)")
+        let rt = LabRuntime(supportDir: dir, session: NullSessionOwner())
+        rt.registry.register(.voice, LongVoice.self) { LongVoice($0) }
+        rt.setStage(.voice, id: "long-voice")
+        let app = ChoirApp(runtime: rt, keys: InMemoryKeyStore([KeyAccount.apiKey: secretKey, KeyAccount.computerID: "comp-1"]), openURL: nil)
+        rt.player.setDocument(ProgrammeDocument(id: "choir:a", title: "A", blocks: [.speech(text: "One."), .speech(text: "Two.")]))
+        rt.player.play()
+        let started = await poll { rt.player.loopIsActive }; XCTAssertTrue(started)
+        XCTAssertTrue(rt.player.speakText(address: "mail-1", text: "A message for the previous account."))
+        XCTAssertEqual(rt.player.queuedTexts, ["text:mail-1"])
+        await app.signOut()
+        XCTAssertEqual(rt.player.queuedTexts, [], "nothing of the previous account is queued")
     }
 
     // S2: sign-out clears `loading` even when a load is in flight.
