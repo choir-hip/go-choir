@@ -81,3 +81,6 @@ The investigation is `docs/evidence/autoradio-phone-review-investigation-2026-11
   session is open, and one voice engine does conversation, dictation into any
   text field, and reading any long text aloud.
 - **"Tap to talk" is removed.**
+- **The app is pre-TestFlight and runs only on the owner's phone: hard
+  cutover, no backwards compatibility.** No preference migration, no shim,
+  no old path kept alive for a transition.
