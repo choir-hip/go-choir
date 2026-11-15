@@ -373,7 +373,7 @@ the unchanged restore code, before the capture is changed. A binary from the
 VACUUM INTO era, which has no geometry fields, would mis-size the chunks;
 those are refused by the record version check or fail the manifest size
 check loudly. The builder confirms which, and if neither holds, stops and
-reports: that is the case for bumping `Version` (`:62`), which makes old
+reports: that is the case for bumping `Version` (`:73`), which makes old
 binaries refuse.
 
 Rollback: revert. Records written at `g` stay restorable by the reverted
@@ -406,7 +406,7 @@ Failure list:
    raise the capture duration by more than the meter's reading predicts.
 9. A restore fetches four times as many chunks in sequence: measure the
    d@e restore before and after.
-10. The copy digest check (`ErrCopyDigest`, `:993`) reads in chunk-sized
+10. The copy digest check (`ErrCopyDigest`, `:212`, checked in `streamScratch`) reads in chunk-sized
     cuts: the digest must not depend on the cut. Test both cuts give one
     digest.
 11. Compression is worse at 1 MiB than S1's sample said: the proof compares
