@@ -1,717 +1,761 @@
 # Restore bases that cost the change (2026-11-15)
 
-Class: green. This is a design record and changes nothing. It covers the "going
-forward" half of the owner's ask of 2026-11-15: "we need to solve the paper
-restore issue in a storage efficient way now and going forward." The "now" half
-is being built elsewhere: restore becomes an accepted asynchronous act with a
-status poll, and this record does not design it.
+Status: revised after review round 1. That round had one seat, DeepSeek v4.1
+flash; the Gemini seat failed on quota. It returned REPAIR with four blocking
+findings. Section 8 lists each finding, my verdict and what changed.
 
-The owner clarified on 2026-11-15: "I'm more interested in the going forward.
-We don't need to restore right now. Autopaper data isn't precious yet." So each
-option is weighed by whether it is the right long-term mechanism, and by its
-cost in bytes and capture time per base, at the paper's scale and at ten times
-that scale. Format changes and one-time migrations are allowed. Where one would
-lose something, this record says what.
+Class: green. This is a design record and changes nothing. It covers the
+"going forward" half of the owner's ask of 2026-11-15: "we need to solve the
+paper restore issue in a storage efficient way now and going forward." The
+"now" half (restore as an accepted asynchronous act with a status poll) is
+being built elsewhere and is not designed here. The owner clarified the same
+day: "I'm more interested in the going forward. We don't need to restore
+right now. Autopaper data isn't precious yet." So options are weighed as
+long-term mechanisms, by bytes and capture time per base at the paper's
+scale and at ten times that scale. Format changes and one-time migrations are
+allowed. Where one would lose something, this record says what.
 
-Status: proposed by an Opus designer, 2026-11-15T05:59Z. Not yet reviewed. Landing
-0 (an offline bench) may run before review; landings 1 and later wait for a
-two-seat review of this record.
+Labels:
 
-Labels used below:
-
-- **[M]** measured, with its source.
-- **[C]** read in code at origin/main f6c8176e0.
-- **[W]** a primary web source.
-- **[E]** an estimate, with the arithmetic shown.
-- **[I]** inferred.
+- **[M]** measured, with its source;
+- **[C]** read in code at origin/main f6c8176e0;
+- **[W]** a primary web source;
+- **[E]** an estimate, arithmetic shown;
+- **[I]** inferred;
 - **[?]** not known.
 
 Only [M], [C] and [W] are facts.
 
 ## 0. The answer in brief
 
-1. **A base is a cache of replay**
-   ([snapshots-cost-the-change](snapshots-cost-the-change-2026-11-13.md)
-   section 1). The tape already records every change. A base is worth its
-   bytes only because applying stored pages is far faster than replaying
-   events. The real question is therefore: what is the cheapest encoding of
-   "the store at head M, given the base at head N"?
-2. **The paper's capture is expensive because of a whole-store logical
-   witness, not because of the bytes.** The page stream takes 3 minutes. The
-   witness takes 22 to 35 minutes and keeps the WAL pinned the whole time.
-   Every whole-store mechanism (today's capture, VACUUM INTO, a logical
-   export) costs time proportional to the size of the store. None of them
-   survives ten times the paper's scale: at about 400 GB, the witness alone
-   would take about 4 hours against a 90-minute budget.
-3. **Recommendation: page-delta bases.** Each base after the first ships only
-   the pages whose content changed since the base before it. Changed pages are
-   found by comparing page hashes, not by trusting a log of writes. The deltas
-   are packed densely, and a chain ends at a full base. A full base comes from
-   the compact copy whenever one is staged, so the planned-restart rebase and
-   the full snapshot are one artifact, written once. A delta carries a page
-   root, not a whole-store witness. The logical end-to-end check stays where it
-   already is: the restore gate's checkpoint witness.
-4. **Before anything is built, one number decides the size of the win.** That
-   number is p(T): the share of the paper's pages whose content changes in an
-   interval T. It has never been measured. Landing 1 measures it, and an
-   offline bench can give a first reading before that.
-5. **Faster replay does not make the base question go away.** The paper's
-   replay, measured for the first time tonight, runs at 77 events a second, not
-   113. Its cost is the projection writes (59%) and the host fetch (26%), not
-   signature checks (1.3%). 2,000 events a second is out of reach without
-   changing what replay is. The relationship runs the other way: once bases
-   are cheap, replay speed matters little, because the tail stays short.
+1. **A base is a cache of replay.** It adds no information. Its value is the
+   restore time it saves; its cost is the bytes and capture time it takes.
+2. **The first draft recommended page-delta bases. The corrected arithmetic
+   does not support building them now.** A page delta beats today's
+   fixed-chunk full capture on bytes only when the share of changed pages,
+   p_1, is well under half the share of changed 4 MiB ranges, p_1024, at the
+   same interval. Nobody has measured p_1. Two structural features of the
+   paper's store push p_1 up:
+   - 19 `og_objects` indexes, several keyed by values that scatter;
+   - a daily `incremental_vacuum` that moves up to 250,000 pages
+     (`telemetry_retire.go:333`, `compact.go:105`).
+
+   At the four-minute replay bound the paper would take 13 deltas a day. At
+   p(24 h) = 50% that is about 12 GB a day, worse than today (the reviewer's
+   figure, confirmed in section 3).
+3. **The capture-time problem and the byte problem are separate, and the
+   capture-time problem has a cheap answer.** The paper's capture takes 37
+   minutes because the whole-store logical witness runs inside the live read
+   transaction. The page stream itself takes 3 minutes.
+
+   If every install path ended at the restore gate's checkpoint witness,
+   capture would need no witness: the page root, computed from the pages
+   read, proves the bytes. Today the cold boot path has no such gate. That
+   change, "one restore path", takes the paper's capture pin from about 37
+   to about 3 minutes whatever the base format.
+4. **"Doing less" now ranks first at the paper's scale.** The new ranking:
+   - Make the replay budget an explicit asynchronous restore budget (60 to
+     120 minutes, not 4) and take full bases on that cadence, without the
+     live witness pin.
+   - Delete the copying of `co_super_slots` and `agent_evidence` into the
+     compact copy (`carryDirectTables`). Those tables are not on the tape,
+     and they break restores today, not just in this design.
+
+   Expected cost on today's 39.6 GB store: about 3 to 5 GB a day with a pin
+   of about 3 minutes per capture [E]. After storage mission T3 shrinks the
+   store toward its 10 GiB target, about 1 to 1.5 GB a day [E].
+5. **At ten times the scale, no full-capture scheme survives**, whether
+   today's, the compact copy or a logical export. An incremental base is
+   necessary there. Whether it should be page deltas or logical row deltas
+   is decided by measurement (landings 0 and 1), against an explicit rule in
+   sealed bytes a day. The page-delta design is kept, with the reviewer's
+   corrections, behind that gate.
+6. **The largest lever is outside this design: the store's size.** About half
+   of the store is copies of tape payloads (`og_bodies`,
+   `run_memory_entries`). Every base, delta and capture shrinks with it.
 
 ## 1. The frame, and why it was chosen
 
 The record applies four transforms
 ([cognitive-transform-portfolio](../../skills/cognitive-transform-portfolio/SKILL.md)).
 
-- **Teleology (what is a snapshot for?)** A snapshot bounds how long a
-  rebuild takes. It adds no information. Its cost should therefore follow
-  what changed, not how large the store is. Today it follows size: each
-  capture reads and witnesses all 39.6 GB.
-- **Limit case (ten times the scale).** Take about 101,000 events an hour and
-  a store of about 400 GB if nothing bounds it. Any mechanism with
-  O(store) capture time then fails its own budget. This rules out options on
-  structural grounds before their constants matter.
-- **Physical bounds.** Two rates set the trade:
-  - Replaying events costs about 13 ms an event on the paper [M, section 2].
-  - Writing pages costs about 4 µs a page at disk speed [E: 4 KiB at about
-    1 GB/s].
+- **Teleology.** A base bounds how long a rebuild takes. With restore
+  asynchronous and the data not precious, the bound is a choice: R minutes
+  of replay at the measured rate. Today's four-minute bound was set to fit a
+  ten-minute request that is going away. The cadence follows from R:
+  - interval I(R) = R × 77 × 60 / 10,100 hours = 0.457 × R hours [E];
+  - R = 4 min gives 1.83 h; R = 60 min gives 27.4 h; R = 120 min gives
+    54.9 h.
+- **Limit case.** Take ten times the scale: 101,000 events an hour, and a
+  store of 396 GB unbounded or about 100 GB if T3 bounds it. Any O(store)
+  capture then fails its budget. This separates the mechanism that is right
+  now from the one that is right at scale.
+- **Physical bounds.** Replay costs about 13 ms an event on the paper [M].
+  Writing pages costs microseconds. So a page or row image is the right
+  encoding for a base, and the floor on bytes is what changed.
 
-  So a page image of the change is the right encoding whenever a base is
-  needed at all. The floor on bytes is the distinct changed pages,
-  compressed. The ceiling is the whole store.
-- **One mechanism, several jobs.** A per-page hash table beside the store does
-  four jobs:
-  - it is the meter for p(T);
-  - it chooses which pages a delta must carry;
-  - it is the page root a restore verifies;
-  - it lets the compact copy serve as the full base, because after the swap
-    the live file is page-for-page the copy.
+  Three things inflate what changed at page grain:
+  - index leaves keyed by scattered values;
+  - page moves from incremental vacuum;
+  - renumbering by VACUUM INTO.
 
-  The compact copy does two jobs as well: it compacts the store, and it is
-  the full base. Today it does the first and is often thrown away by a
-  restart before it does anything else
-  ([problem](../problems/compact-copy-grows-the-host-image-and-restarts-discard-it-2026-11-15.md)).
-
-Two frames were rejected:
-
-- **"Make replay fast enough that bases do not matter."** Section 4 explains
-  why this fails.
-- **"Store only rows, never pages."** Section 3, option 5, explains why this
-  is deferred rather than chosen.
+  Row grain is immune to all three but costs index maintenance at restore.
+- **Deletion-first and one mechanism.** The same check, the restore gate's
+  canonical checkpoint witness, can serve every install path. Then the
+  separate capture-time witness, the install-time witness
+  (`VerifySnapshotFile`) and the capture floor become unnecessary.
 
 ## 2. Facts, with sources, and corrections to the brief
 
-### The paper's store and capture
+### The paper's store, compaction and replay
 
 - **The store is 39.6 GB.** Guest observability at 2026-11-15T05:49:12Z:
   `page_count` 9,669,301 at 4,096 bytes, `freelist_count` 1, `auto_vacuum` 2
-  [M, `store_tables` header]. The compaction staged 38,811,598,848 bytes, and
-  the store has grown since.
-- **The compaction and its timings**, from the paper's console:
-  - 00:42:04Z: "compact copy: due by freelist, 1356242 of 11628568 pages free,
-    live ~42075447296 bytes";
-  - 02:08:45Z: "staged 38811598848 bytes at sequence 11823018 in 45m13s (copy
-    17m17s)";
+  [M].
+- **Compaction**, from the paper's console:
+  - 00:42:04Z: "compact copy: due by freelist, 1356242 of 11628568 pages
+    free, live ~42075447296 bytes";
+  - 02:08:45Z: "staged 38811598848 bytes at sequence 11823018 in 45m13s
+    (copy 17m17s)";
   - 03:43:13Z: "rebased onto the compact copy at sequence 11823018:
-    46605361152 -> 38811598848 bytes, 13782 events to replay".
+    46605361152 -> 38811598848 bytes, 13782 events to replay" [M].
 
-  So VACUUM INTO took 17 minutes for 42 GB live [M]. The rest of the
-  45 minutes was `PRAGMA quick_check` and fsync on the private copy
-  (`compact.go:482`) [C].
+  VACUUM INTO took 17 minutes for 42 GB live. The remaining 28 minutes were
+  `quick_check` and fsync on the private copy (`compact.go:482`) [C].
 - **The paper's replay rate, measured for the first time.** Console line at
   03:46:13Z: "replay applied 13782 events through seq=11836800 in 2m59.439s
   (77 events/s; fetch 45.834s in 14 pages, payload prefetch 17.167s, apply
   1m56.296s: reduce 1.213s, verify 2.351s, prepare 6.582s, finalize 1m46.139s
-  of which payload fetch 3.03s; commit 126ms)" [M]. This replay ran on a cold
-  page cache straight after the rebase.
-  - **Correction:** the brief's 113 events a second is d@e's rate, which the
-    producer assumes (`snapshot_producer.go:108`). The paper's tail of
-    315,882 events therefore replays in about 68 minutes, not 46 [E:
-    315,882 / 77].
-- **The event rate.** The producer block at 05:46:26Z reads newest sequence
-  11,537,493 (taken 2026-11-13T22:36:18Z) and head 11,853,375 [M]. That is
-  315,882 events in 31.2 hours, about **10,100 events an hour** on average
-  [E]. Over the ten minutes from 05:36Z to 05:46Z the tail grew by 1,518,
-  about 9,100 an hour [M, two readings].
-  - **Correction:** the brief's 7,400 an hour is low for this window.
-- **The last full capture.** At 2026-11-13T22:36Z: 46.7 GB in 37 min 40 s,
-  4.8 GB of sealed chunks added
-  ([store doubles](../problems/the-papers-store-doubles-in-eleven-days-2026-11-13.md))
-  [M]. The capture before it (11-12): witness 22 min 37 s, stream 3 min
-  02 s, read transaction 25 min 51 s, 5,858 of 10,524 chunks uploaded,
-  4.04 GB sealed, about 6x compression
-  ([snapshots-cost-the-change](snapshots-cost-the-change-2026-11-13.md)
-  section 2) [M].
-  - **Not verified:** the brief's 11,144 chunks and 11.5 GiB for the 22:36Z
-    root. 11,144 chunks of 4 MiB is 46.7 GB of plaintext, which matches. I
-    found no record of 11.5 GiB and did not read the host tables.
+  of which payload fetch 3.03s; commit 126ms)" [M]. This was a cold cache
+  after the rebase.
+  - **What the producer uses.** `snapshotDue` takes the slower of 113 and
+    the measured rate (`snapshot_producer.go:379-381`) [C]. But the
+    measurement lives in process memory. The paper restarted at 05:32:51Z,
+    so its block at 05:46:26Z reads `replay_rate_source: assumed`, 113 [M].
+- **The event rate.** The producer block at 05:46:26Z reads newest 11,537,493
+  (taken 2026-11-13T22:36:18Z) and head 11,853,375 [M]. That is 315,882
+  events in 31.2 hours, about **10,100 an hour** [E]. Over the ten minutes
+  from 05:36Z to 05:46Z the tail grew by 1,518 [M].
+  - **Correction:** not 7,400. The current tail replays in about 68 minutes
+    at 77/s, not 46 [E].
+- **The last full captures.**
+  - 2026-11-13T22:36Z: 46.7 GB in 37 min 40 s, 4.8 GB sealed added
+    ([store doubles](../problems/the-papers-store-doubles-in-eleven-days-2026-11-13.md))
+    [M].
+  - 11-12: witness 22 min 37 s, stream 3 min 02 s, read transaction
+    25 min 51 s; 5,858 of 10,524 chunks uploaded (24.6 GB of plaintext,
+    4.04 GB sealed, about 6x on uploaded chunks); 64,433 events after the
+    previous root
+    ([snapshots-cost-the-change](snapshots-cost-the-change-2026-11-13.md)
+    section 2) [M].
 
-### What fills the store
-
-- On 11-14 the store was 47.5 GB. Of that, `og_bodies` was at least
-  12.4 GB, `run_memory_entries` at least 11.2 GB, `og_objects` 5.4 GB, and
-  its 19 indexes at least 7.7 GB
+  So on a grown file, p_1024 over about 4.5 hours of paper events was about
+  0.56 [E: 5,858 / 10,524].
+- **Not verified:** the brief's 11,144 chunks and 11.5 GiB for the 22:36Z
+  root.
+- **What fills the store** (11-14, on a 47.5 GB file): `og_bodies` at least
+  12.4 GB; `run_memory_entries` at least 11.2 GB; `og_objects` 5.4 GB plus
+  its 19 indexes at least 7.7 GB; 2.17 M of 11.6 M pages overflow
   ([bounding the guest store](bounding-the-guest-store-2026-11-14.md)
-  section 0) [M].
-- Tables are about 70% of the file and indexes about 30% [E from those
-  floors].
-- 2.17 M of 11.6 M pages were overflow pages [M, the same readings].
+  section 0) [M]. Tables are about 70% and indexes about 30% [E].
+- **The compaction bench** (synthetic, 3.38 GB, the paper's full hourly write
+  volume). 4 MiB ranges unchanged on a compacted file: 83.4% at 1 h, 80.6%
+  at 12 h, 49.0% at 24 h. On a grown file, 0% at every reading
+  ([paper-compaction](paper-compaction-2026-10-31.md) section 5) [M,
+  synthetic]. So the bench's p_1024(24 h) is about 0.51 on a compacted file.
 
-### How capture and replay work
+### Capture, restore and replay code
 
-- **Capture** (`snapshot.go`):
-  - one read transaction streams `SELECT pgno, data FROM sqlite_dbpage`
-    (`snapshot.go:696`);
-  - the stream is cut into fixed 4 MiB page ranges (`ChunkSize`,
-    `snapshot.go:67`);
-  - the witness v3 is computed in the same transaction (`snapshot.go:12`,
-    `:240`) [C].
-- **The witness** streams every row of every table, ordered by primary key
-  (`sqlite_state_extractor.go:412-447`). For `og_objects` that key is
-  `obj_id INTEGER PRIMARY KEY` (`objectgraph/sql_store.go:231`), which is
-  the rowid, so this witness is already a logical export in insertion order
-  that is thrown away after hashing [C].
-- **Replay finalize** opens one transaction per event (`finalizeBatch`,
-  `computer_events.go:248`) and runs at `synchronous=NORMAL` during replay
-  (`replay_durability.go:26`) [C]. Commit cost is negligible (126 ms in
-  total). The finalize time is projection writes into a store about five
-  times the guest's 8.3 GB of RAM, with a cold cache (`memory` block:
-  `mem_total_bytes` 8,325,382,144) [M]. That cause is [I].
-
-### The producer and the compact copy
-
-- **The producer** (`snapshot_producer.go`):
-  - the ceiling fires at 540,000 events (`:71`) and the interval at 7 days
-    (`:66`);
-  - the replay bound is 4 minutes (`:101`);
-  - between replay-time captures, a floor is computed from the last capture's
-    cost (`:117-118`, `snapshotDue` at `:376-413`);
-  - there is WAL headroom of 2 MiB/s (`:124`);
-  - the paper is `floor_limited` because the cost of its last capture is not
-    recorded [M, block at 05:46:26Z].
-- **The compact copy** (`compact.go`):
-  - copy budget 90 minutes (`:60`), check budget 4 hours (`:67`);
-  - rebase tail bound 450,000 events (`:80-82`);
-  - the copy is renamed into place at a planned boot
-    (`RebaseOntoCompactCopy`, `:590`), which gives the file a new inode and
-    renumbers every page [C].
+- **Capture** reads the head as the read transaction's first statement
+  (`snapshot.go:547`), then streams `SELECT pgno, data FROM sqlite_dbpage`
+  (`:696`) in fixed 4 MiB ranges (`:67`), and computes witness v3 in the
+  same transaction (`:240`) [C].
+- **The witness** streams every row of every table ordered by primary key
+  (`sqlite_state_extractor.go:412-447`). `og_objects` is keyed
+  `obj_id INTEGER PRIMARY KEY` (`objectgraph/sql_store.go:231`).
+  `run_memory_entries` is keyed `entry_id TEXT` (`store/schema.go:94-95`)
+  [C].
+- **Restore** (`restore_snapshot.go`):
+  - `planRestoreTarget` filters candidates by the snapshot event's sequence
+    (`:108-136`, `snapshot.PlanCandidates`, `snapshot.go:945`);
+  - the event is appended at head + 1 (`appender.go:984`), after the
+    capture;
+  - `Install` refuses a record whose version is not `Version`
+    (`snapshot.go:1002`);
+  - it probes only the candidate's own chunks (`:1035-1045`);
+  - it refuses an existing destination (`:878`);
+  - it empties the partition directory before installing (`:1210-1214`)
+    [C].
+- **The cold boot path** installs with `Verify: agentcore.VerifySnapshotFile`
+  and no checkpoint gate after replay (`autoputer/projection_base.go:190-199`)
+  [C]. The staged restore runs the canonical checkpoint witness before the
+  flip (`rematerialize.go`, per the review; the gate's existence is
+  confirmed in the [restore problem](../problems/restore-cannot-finish-inside-its-ten-minute-request-2026-11-14.md))
+  [C].
+- **The compact swap** copies `co_super_slots` and `agent_evidence` from the
+  original into the copy (`compact.go:700-720`, `compactCarriedTables`). They
+  are written by direct SQL, not by tape ops, and the witness excludes only
+  `DerivedKeysTable` (`restore_snapshot.go:218-232`) [C]. On the paper:
+  `agent_evidence` 150 rows, `co_super_slots` 0 rows [M, `store_tables` at
+  05:49Z].
+- **Host retention** (`platform/snapshot_roots.go`):
+  - retention 2 for a store over 2,048 chunks (`:43-49`);
+  - chain gap 360,000 events (`:63-64`);
+  - a root may name at most 65,536 chunks (256 GiB at 4 MiB), in a body of
+    at most 8 MiB (`:73-74`) [C].
+- **Replay** opens one transaction per event (`computer_events.go:248`) at
+  `synchronous=NORMAL` (`replay_durability.go:26`) [C].
+- **Guest memory** is 8.3 GB (`memory` block) [M].
 
 ### Host and disk
 
-- `df` on Node B at about 05:50Z: 195 GiB free of 476 GiB [M].
-- The paper's `data.img`: 128 GiB apparent, **42 GiB allocated** [M, `du`].
-  - **Correction:** the problem record of 01:35Z gave 88.5 GiB allocated.
-    The image shrank since, so some discard path reached the host. How was
-    not investigated.
+- `df` on Node B at about 05:50Z: 195 GiB free [M].
+- The paper's `data.img`: 128 GiB apparent, 42 GiB allocated [M].
+  **Correction:** the 01:35Z problem record gave 88.5 GiB. The cause was not
+  investigated.
 
 ### SQLite and chunking, from primary sources
 
 - "The VACUUM INTO command is transactional in the sense that the generated
   output database is a consistent snapshot of the original database." The
-  page says nothing about page layout or determinism of the output
+  page says nothing about output layout
   (https://www.sqlite.org/lang_vacuum.html) [W].
 - **Page pointers** (https://www.sqlite.org/fileformat.html) [W]:
-  - interior b-tree pages hold child page numbers;
-  - the first four bytes of an overflow page name the next overflow page;
-  - each ptrmap entry is "a 4-byte big-endian page number" of the parent;
-  - a WAL frame header carries the page number at offset 0.
-
-  So a file whose pages are renumbered changes the bytes of every interior,
-  overflow and ptrmap page, whether or not their rows changed.
-- **The session extension** monitors changes "via a single sqlite3* database
-  handle", works only on tables with a declared PRIMARY KEY, and ignores rows
-  with a NULL in the key (https://www.sqlite.org/sessionintro.html) [W].
-- `sqlite3_snapshot_open` fails once "the specified snapshot has been
-  overwritten by a checkpoint". It needs `SQLITE_ENABLE_SNAPSHOT`
+  - interior pages hold child page numbers;
+  - overflow pages begin with the next overflow page number;
+  - ptrmap entries hold parent page numbers;
+  - a WAL frame header holds the page number.
+- **Incremental vacuum** moves pages and "The database file is truncated by
+  the same amount" (https://www.sqlite.org/pragma.html#pragma_incremental_vacuum,
+  quoted by the review) [W, not re-fetched by me].
+- **The session extension** sees one database handle's changes, and only on
+  tables with a declared primary key
+  (https://www.sqlite.org/sessionintro.html) [W].
+- **`sqlite3_snapshot_open`** fails once a checkpoint overwrote the snapshot,
+  and needs `SQLITE_ENABLE_SNAPSHOT`
   (https://www.sqlite.org/c3ref/snapshot_open.html) [W].
-- **Litestream**, the production design closest to option 2:
-  - it "continuously copies write-ahead log pages" into transaction files;
-  - it takes a full snapshot every 24 hours by default;
-  - it restores from "the most recent snapshot that does not overshoot the
-    requested restore point" plus later files in order;
-  - it takes over checkpointing with "a long-running read transaction".
-
-  Source: https://litestream.io/how-it-works/ [W].
-- **FastCDC** (Xia et al., USENIX ATC 2016,
+- **Litestream** ships WAL pages into transaction files, takes daily full
+  snapshots, restores from the newest snapshot at or below the target plus
+  later files, and holds a long read transaction to own checkpointing
+  (https://litestream.io/how-it-works/) [W].
+- **FastCDC** (USENIX ATC 2016,
   https://www.usenix.org/conference/atc16/technical-sessions/presentation/xia)
-  is Gear-based CDC, reported about 10x faster than Rabin CDC with nearly the
-  same dedupe ratio [W, abstract].
+  [W].
 
 ## 3. The options, with numbers
 
-Paper inputs:
+### The cost model
 
-- S = 39.6 GB [M];
-- c = 4 to 6 (seal ratio) [M, 6 on 11-12; about 4 if the brief's 11.5 GiB
-  for 46.7 GB holds];
-- events = 10,100 an hour [M];
-- replay = 77 events/s cold [M];
-- stream = 245 MB/s (44.1 GB in 3 min 02 s) [M].
+Inputs:
 
-Ten-times inputs:
+- paper: S = 39.6 GB; full sealed F ≈ S / 6 = 6.6 GB [E]; 10,100 events an
+  hour; 77 events/s;
+- ten times: 101,000 events an hour; S = 396 GB (F ≈ 66 GB) unbounded, or
+  100 GB (F ≈ 17 GB) bounded.
 
-- 101,000 events an hour;
-- S = 396 GB if the store stays unbounded, or about 100 GB if storage
-  mission T3 bounds it (its acceptance target is under 10 GiB at today's
-  scale).
+n(R) = 24 / I(R) bases a day.
 
-**p(T)** is the share of pages whose content changed in an interval T. It is
-**[?]**, and everything that follows is written with it as a variable. Three
-cases are used: p(24 h) = 5%, 20% and 50%.
+- A fixed-chunk full writes p_1024(I) × F per capture.
+- A page-delta chain writes p_1(I) × F × (1 + 1/k) per delta. A full refresh
+  happens whenever the packs reach k × F. Bytes kept are about (1 + k) × F
+  plus the previous chain. I use k = 1 throughout.
+- The seal ratio of packed changed pages is assumed equal to the whole
+  store's [?].
 
-Two bounds on p are known:
+**Sealed bytes a day on the paper (today's store), by restore budget R:**
 
-- p is at least about 0.2%: the 11-12 measurement that 88% of 4 MiB ranges
-  change in 30 minutes needs only about 11,000 scattered pages
-  ([snapshots-cost-the-change](snapshots-cost-the-change-2026-11-13.md)
-  section 3a) [E].
-- p is at most 1.
+| R (replay) | I | n/day | Fixed-chunk full, live (p_1024 0.56 to 0.9) | Fixed-chunk full, compacted (p_1024 0.5) | Page delta at p_1 = 1% / 5% / 20% / 50% |
+| --- | --- | --- | --- | --- | --- |
+| 4 min | 1.83 h | 13.1 | 48 to 78 GB [E]; 13 captures | about 43 GB [E] | 1.7 / 8.7 / 35 / 87 GB [E] |
+| 60 min | 27.4 h | 0.88 | 3.2 to 5.2 GB [E] | about 2.9 GB [E] | 0.12 / 0.58 / 2.3 / 5.8 GB [E] |
+| 120 min | 54.9 h | 0.44 | 1.6 to 2.6 GB [E] | about 1.5 GB [E] | 0.06 / 0.29 / 1.2 / 2.9 GB [E] |
+
+At R = 4 min, p_1 is the per-delta share over 1.83 h. At R = 60 and 120 it
+is the share over about a day or two, so the columns are not one variable.
+
+**The decision rule this table yields.** At equal R, page deltas win on
+bytes iff 2 × p_1(I) < p_1024(I). On a grown file p_1024 is near 1 within
+hours. On a compacted file it is about 0.5 at a day (bench). So page deltas
+need p_1(1 day) under about 0.25. The figure the reviewer computed, about
+12 GB a day at p(24 h) = 50% at the four-minute cadence, is this table's
+first row.
+
+**Ten times, R = 60 min:** I = 2.7 h, 8.8 bases a day.
+
+- Fixed-chunk full: 8.8 × 0.9 × 66 ≈ 520 GB a day unbounded, and about
+  135 GB a day at 100 GB [E]. Capture reads the whole store each time.
+  This fails.
+- Page delta: about 1,160 × p_1 GB a day unbounded, and about 300 × p_1 GB
+  a day bounded [E]. This needs p_1(2.7 h) of about 1% to stay near 3 GB a
+  day.
+- At ten times, nothing works unless the store is bounded and its page
+  churn per change is low (the append-clustered layout), or the base is
+  logical.
 
 ### Option 1: content-defined chunking of the whole-store capture
 
-- **Live file.** SQLite rewrites pages in place and never shifts bytes. CDC
-  therefore matches small fixed page groups and adds a rolling hash. This was
-  rejected on 11-13 ([snapshots-cost-the-change](snapshots-cost-the-change-2026-11-13.md)
-  section 3c) [C].
-- **Successive VACUUM INTO copies.** These do shift: each b-tree starts after
-  the ones before it in the file, so a page added early moves everything
-  after it [I]. Shifting is the case CDC handles, but the bytes change as
-  well as move: every interior page, every overflow page (19% of the
-  paper's pages) and every ptrmap page carries page numbers that move with
-  the shift [W, file format]. Copy-to-copy dedupe is **[?]**, probably low
-  [I].
-- **Capture time** is unchanged at about 37 minutes: the witness is still
-  whole-store [M].
-- **Ten times:** about 4 hours of witness [E: 25 min × 10]. This fails.
-- **Deletes nothing.** Rejected.
+- On the live file, SQLite rewrites pages in place. CDC is then equivalent to
+  small fixed page groups plus a rolling hash (rejected on 11-13) [C].
+- On successive VACUUM INTO copies, the bytes shift and also change: every
+  pointer-bearing page changes with its page number, and 19% of the paper's
+  pages are overflow pages [W, M]. Capture time stays whole-store.
+- **Rejected at every scale.**
 
 ### Option 2: page-delta bases
 
-A delta carries the pages whose content changed since the parent base,
-packed densely and sorted by page number. Three ways to know which pages
-changed:
+How the changed pages are found:
 
-- **(a) Compare page hashes.** Keep an 8-byte hash per page beside the store
-  (9.67 M × 8 B = 77 MB on the paper). At capture, read every page in one
-  read transaction, hash it, and ship the pages whose hash differs.
-  - Capture is about 2.7 minutes of read [E: 39.6 GB / 245 MB/s] plus
-    hashing, and the WAL is pinned for about 3 minutes.
-  - This needs no change to the write path. It cannot miss a change, because
-    it compares contents rather than trusting a log.
-- **(b) Read WAL frame headers before each checkpoint** into a dirty-page
-  bitmap (1.2 MB). The store must take over checkpointing (autocheckpoint
-  is SQLite's default today: `dbx.go` sets only `journal_size_limit` [C]),
-  as Litestream does [W].
-  - Capture reads only the dirty pages.
-  - It can miss a page if any path checkpoints without the scan, which would
-    be a silent defect. A crash or an unknown state must force a full base.
-- **(c) The session extension.** It sees only one connection's changes,
-  only tables with a declared key, and it is not exposed by
-  `modernc.org/sqlite` as far as I found [W; driver exposure [?]].
-  Rejected.
+- (a) by comparing page hashes in one read transaction;
+- (b) by reading WAL frame headers before each checkpoint (Litestream-like;
+  needs a checkpoint takeover);
+- (c) the session extension, rejected (one handle, keyed tables only).
 
-Costs for (a):
+Costs: the table above. Capture is about 3 minutes of pin on the paper for
+(a), and about 27 minutes at 396 GB [E]. (b) reads only dirty pages.
+Restore applies packs at disk speed.
 
-- **Bytes per delta:** p(T) × S / c. At p(24 h) = 5%, 20%, 50% that is
-  0.33 to 0.5, 1.3 to 2.0, and 3.3 to 5.0 GB sealed [E]. The last full
-  capture added 4.8 GB [M], so the win is large only if p(24 h) is well
-  under 50%.
-- **Bytes kept:** one full base (6.6 to 9.9 GB sealed [E: S / c]) plus its
-  deltas, plus the previous chain until the new full is on the tape.
-- **Restore:**
-  1. fetch the full base and the deltas;
-  2. write the full image, then overwrite with each delta in order;
-  3. hash every page against the record's page root (about 3 minutes [E]);
-  4. replay the tail, which is at most one delta interval: one hour of
-     paper events is 131 s at 77/s [E];
-  5. pass the restore gate (unchanged, and not this design's).
-- **Ten times, (a):** reading 396 GB per delta is about 27 minutes of WAL
-  pin [E], which is acceptable a few times a day. For deltas every 15
-  minutes, (b) is needed: at 101,000 events an hour, one hour of tail is
-  22 minutes of replay [E].
-- **Complexity:**
-  - a new record version naming its parent and page root;
-  - a pack format;
-  - a restore that assembles a chain;
-  - one sidecar.
-- **Deletes:**
-  - the whole-store live witness pass from routine capture;
-  - the capture floor and its persisted record;
-  - the WAL headroom rule;
-  - the `floor_limited` state;
-  - the 360,000-event chain retention, replaced by "the newest chain and the
-    one before it".
+Structural risks to its byte cost on this store:
+
+- scattered index keys;
+- incremental vacuum moving up to 250,000 pages a run (1 GB of raw pages,
+  2.6% of the file, in one interval) [C, E];
+- every compaction renumbering every page.
+
+**Ranked third:** right at ten times only if measured p_1 is low. Kept behind
+a gate (landing 2), with the review's corrections in its specification.
 
 ### Option 3: the compact copy as the base
 
-- **Capture.** VACUUM INTO pins the live WAL for 17 minutes [M]. Everything
-  after that reads a private, static file and pins nothing:
-  - quick_check, about 28 minutes [M: 45m13s − 17m17s];
-  - the logical witness, about 25 minutes [E, as on the live store];
-  - the page stream, about 3 minutes [E].
-- **Bytes:** a full S / c = 6.6 to 9.9 GB sealed for every copy. Successive
-  copies renumber pages, so dedupe against the previous copy is near zero
-  [I, W].
-- **Cadence:** only when compaction is due (freelist over 10% or 2 GiB, or a
-  layout age of 7 days; `compact.go:47-51`, `:92`). On its own it does not
-  bound the tail: at 10,100 events an hour, 7 days is 1.7 M events, past
-  the 720,000-event recovery bound [E].
-- **Combined with option 2:** after the swap the live file is the copy, byte
-  for byte. The copy's page hashes therefore seed the sidecar, and the first
-  delta costs only the pages the rebase replay wrote. The synthetic bench
-  found 83% of 4 MiB ranges of a compacted file unchanged after 1 hour and
-  49% after 24 hours at the paper's hourly write volume
-  ([paper-compaction](paper-compaction-2026-10-31.md) section 5) [M,
-  synthetic]. Page-level survival is higher than range survival [I].
-- **Ten times:** VACUUM INTO of 396 GB is about 2.8 hours of pin, and
-  quick_check about 4.7 hours [E]. Fulls must become rare, which they are
-  in a delta chain.
-- **Deletes:** the separate live full capture, and the waste of a copy that a
-  restart discards locally, since it is already uploaded.
+- Capture: VACUUM INTO pins the live WAL for 17 minutes [M]. The rest runs
+  on a static private file and pins nothing.
+- Bytes: a full F (6.6 GB) per copy, with no dedupe between copies [I, W].
+- It is not a state at its own sequence until the carry is removed (B3).
+- At ten times, a 396 GB VACUUM INTO is about 2.8 hours [E], beyond
+  `compactCopyBudget` = 90 minutes (`compact.go:60`). quick_check is about
+  4.7 hours [E], beyond `compactCheckBudget` = 4 hours (`:67`). It does not
+  fit today's budgets at ten times.
+- **Ranked as an optional source of fulls at the paper's scale**, after
+  landing 6 (landing 3).
 
 ### Option 4: tape-only restore made fast
 
-Where the measured time goes [M, the 03:46:13Z line], per event:
+Measured per-event cost: finalize 7.7 ms, fetch 3.3 ms, prefetch 1.2 ms,
+prepare 0.48 ms, verify 0.17 ms, reduce 0.09 ms [M].
 
-| Phase | Per event |
-| --- | --- |
-| finalize | 7.7 ms |
-| fetch | 3.3 ms, serial pages of 1,024 events |
-| payload prefetch | 1.2 ms |
-| prepare | 0.48 ms |
-| verify | 0.17 ms |
-| reduce | 0.09 ms |
-| commit | about 0 |
-
-Signature and receipt verification is not the bound. The bounds are the
-projection writes into a 39.6 GB store larger than memory, and the serial
-fetch.
-
-Reachable improvements:
-
-- **Overlap fetch with apply:** at most the 26% fetch share, giving about
-  104 events/s [E].
-- **Apply many events per transaction, with secondary indexes dropped and
-  rebuilt afterwards:** the header/body split rebuilt the indexes of a
-  22.4 GB store in 379 s (`store.split.summary` `build-indexes` 378,750 ms)
-  [M]. This could take finalize from 7.7 ms to perhaps 1 to 2 ms
+- Overlapping fetch with apply gives at most about 104 events/s [E].
+- Deferred-index bulk apply might take finalize to 1 to 2 ms
   [E, unmeasured].
+- 2,000 events/s is out of reach without replacing event-by-event apply with
+  net-row application, which is a logical delta by another name.
 
-2,000 events/s means 0.5 ms an event in total, which is below today's fetch
-cost alone. **Not reachable** without replacing event-by-event apply with
-something that is no longer replay: applying net row images, which is a
-base by another name. Tail replay also grows with event rate, so at ten
-times scale replay speed is a constant factor against a tenfold tail.
-
-Deletes nothing. A fetch-overlap landing is worth doing for its own sake
-(landing 5), but it is not the base answer.
+**A side landing (5)**, not the base answer.
 
 ### Option 5: logical bases (rows, not pages)
 
-- **A full base** would be the witness's own row stream, kept rather than
-  hashed and dropped. Tables only, about 28 GB of plaintext [E: 70% of S],
-  4.7 to 7 GB sealed [E]. No index bytes are shipped, which is about 30%
-  less than a page base. The format survives schema and index changes.
-- **Capture:** the witness pass, 22 to 35 minutes with the WAL pinned on a
-  grown file [M], or unpinned if read from the staged compact copy.
-- **Restore:** import plus index build. The split rebuilt 22.4 GB in 579 s
-  [M], so about 18 minutes for the paper [E].
-- **Deltas** need per-row change tracking on every table: a change sequence
-  column and tombstones, a schema change on about 15 tables with deletes in
-  `run_memory_retire.go` and the object retire paths. Rowid order gives good
-  age locality for appends, but whether `og_objects` updates keep their
-  `obj_id` was not read [?]. CDC would handle the shifts caused by deletes.
-- **Ten times:** a full logical export takes hours, as option 1 does, and
-  deltas carry high complexity.
-- **Deferred.** It becomes the better choice only if landing 1 shows that
-  index pages dominate p(T), so that page deltas are mostly index churn.
-  It is also what storage mission T3 does to the store itself: payloads
-  named rather than copied shrink every page base by the same factor.
+- **Full.** The witness's own row stream, kept: tables only, about 28 GB of
+  plaintext, 4.7 to 7 GB sealed [E]. It ships no index pages, and it is
+  immune to page moves and renumbering. Restore imports and builds indexes:
+  the split rebuilt 22.4 GB in 579 s, of which index build was 379 s [M],
+  so about 18 minutes for the paper [E].
+- **Dedupe across bases.** Successive full exports chunked by CDC in
+  insertion order dedupe on appends; a delete or update costs about one
+  chunk. Unmeasured [?].
+  - `run_memory_entries`' text key means primary-key order is not insertion
+    order for that table, so the export and the witness disagree on order
+    there [C].
+- **Logical deltas** need per-row change tracking on about 15 tables, or a
+  coalesced net-row form of the tape tail. Applying net rows still pays
+  index maintenance, so restore gains over replay are 2 to 3 times at most
+  [E].
+- **Ranked second for ten times.** It wins over page deltas if landing 0
+  shows index pages dominate p_1, or if incremental vacuum makes p_1 spiky.
 
 ### Option 6: doing less
 
-- An asynchronous restore of 46 to 80 minutes is acceptable while paper data
-  is not precious.
-- A base only at each compaction is not acceptable. At a 7-day layout
-  cadence the tail reaches 1.7 M events: 6.1 hours of replay [E], and past
-  the recovery bound, so the restore refuses.
-- At ten times scale it fails outright.
+Full bases at an explicit asynchronous budget R (60 to 120 minutes), taken
+without the live witness pin (landing 7), with fixed chunks as today.
 
-Acceptable as the interim the other lane is building, not as the mechanism.
+- Bytes: about 1.6 to 5.2 GB a day on today's store, by R and file state [E,
+  table]. Capture pin: about 3 minutes, not 37 [E].
+- Restore: fetch, page-root check, at most R minutes of replay, then the
+  checkpoint gate.
+- At T3's bounded store (10 GiB, F about 1.7 GB), about 0.4 to 1.5 GB a day
+  [E].
+- At ten times it fails, as shown above.
 
-### Summary
+**Ranked first at the paper's scale.** It is the interim and, if T3 lands,
+possibly the steady state for every computer below a few tens of GB.
 
-| Option | Bytes per base, paper | Capture and WAL pin, paper | Restore, paper | Ten times | Complexity | Deletes | Verdict |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| today (fixed 4 MiB, whole) | 4.0 to 4.8 GB [M] | 26 to 38 min, all pinned [M] | fetch + witness 22 to 35 min [M] + tail at 77/s [M] | witness about 4 h, over budget [E] | none | none | replace |
-| 1 CDC whole | [?], low on vacuumed copies [I] | 37 min [M] | as today | fails [E] | medium | none | reject |
-| 2a page delta, hash compare | p·S/c: 0.3 to 5 GB [E] | about 3 min pinned [E] | full + deltas + page-root check about 3 min [E] + at most 1 h tail, 131 s [E] | 27 min pin per delta [E] | medium | floor, live witness pass, chain rule | **choose** |
-| 2b page delta, WAL bitmap | as 2a | dirty pages only [E] | as 2a | needed below 1 h cadence [E] | high (checkpoint takeover) | as 2a | later, gated |
-| 3 compact copy as full | 6.6 to 9.9 GB [E] | 17 min pinned [M] + 56 min unpinned [E] | as today, minus the witness | 2.8 h pin [E] | low (reuses the copy) | separate full capture | **choose, as the full of 2** |
-| 4 faster replay | 0 | 0 | about 1.35x with fetch overlap [E] | constant factor against a 10x tail | low to medium | none | small side landing |
-| 5 logical rows | 4.7 to 7 GB full [E] | 22 to 35 min [M] | about 18 min import [E] | hours [E] | high for deltas | page format | defer, gated on landing 1 |
-| 6 do less | 0 | 0 | 6 h, past the bound [E] | fails | none | none | interim only |
+### Summary (re-ranked)
+
+| Rank | Option | Paper, bytes a day | Paper, pin per capture | Ten times | Deletes | Gate |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 6 do less: fulls at budget R, no live witness, one restore path | 1.6 to 5.2 GB [E] | about 3 min [E] | fails | live witness pass, install witness, capture floor, 4-min bound | landings 6 and 7 first |
+| 2 | 5 logical bases | full 4.7 to 7 GB; deltas [?] | witness-pass length, or 0 from a static copy | possible with deltas | page format, VACUUM INTO compaction (import is a compaction) | landing 0 shows index-page dominance |
+| 3 | 2 page deltas | 2 × p_1 × F × n [E] | about 3 min (a); dirty pages (b) | possible if p_1(2.7 h) ≈ 1% | full captures as routine | measured bytes a day at the R cadence < 0.5 × the fixed-chunk full's |
+| — | 3 compact copy as full | 6.6 GB per copy | 17 min pin | fails budgets | separate live full | after landing 6 |
+| — | 4 faster replay | 0 | 0 | constant factor | none | side landing |
+| — | 1 CDC whole | as today | 37 min | fails | none | rejected |
+| — | today | 2.2 GB a day at the ceiling [E: 4.8 GB per 53 h] | 37 min [M] | fails | — | — |
 
 ## 4. Why not "make replay fast"
 
-The paper replays one hour of its own events in about 131 seconds. A base
-written every hour at a capture cost of about 3 minutes keeps a restore's
-tail at one hour or less. If replay were 25 times faster (2,000/s), the
-restore would still have to install a full image of the store: 39.6 GB, or
-396 GB at ten times. Without a base, it would replay 11.8 M events from
-genesis: 1.6 hours at 2,000/s, and 43 hours at the measured 77 [E]. Fast
-replay shortens the tail but cannot replace the base, while cheap bases make
-replay speed nearly irrelevant. That asymmetry is why the base is where the
-design effort goes.
+Even at 2,000 events/s, a restore without a base replays 11.8 M events, 1.6
+hours. At 77 events/s it is 43 hours [E]. Fast replay shortens the tail but
+cannot replace the base. Cheap bases make replay speed nearly irrelevant.
+The asymmetry still holds.
 
 ## 5. Recommendation: ordered landings
 
-Every landing ships on, with no setting. The paper takes each one through an
-ordinary deploy. Proofs run on d@e. Paper observations are read-only.
+Every landing ships on, with no setting. Proofs run on d@e. Paper
+observations are read-only.
+
+**Order of execution:** 0 and 1 (measure) → 6 (carry) → 7 (one restore path,
+fulls at budget R) → 5 at any time → 2 or a logical-base design only behind
+the gate → 3 optional → 4 only at scale. The numbering is kept from the
+first draft so that references stay stable.
 
 ### Landing 0 (yellow, offline): a first reading of p before any production change
 
-Extend the synthetic churn bench used for the compaction design
-(`TestCompactMeasure`, `compact_measure_test.go`; 3.38 GB at the paper's
-hourly write volume). Hash every page before and after 1, 6 and 24 hours of
-writes, and report:
+Extend `TestCompactMeasure` (`compact_measure_test.go`). Hash every page at
+0, 1.8, 6 and 24 hours of the paper's hourly volume, and report:
 
 - p at 1, 32, 128 and 1,024 pages;
-- the split between index trees and table trees, using `dbstat` page owners;
-- zstd's ratio on the packed changed pages.
+- the changed pages split by tree type (index or table, from `dbstat`
+  owners);
+- the zstd-sealed size of the packed changed pages;
+- the new bytes when two full logical exports (insertion order, FastCDC at
+  an average of 64 KiB) are compared.
 
-Run it on the build VM. There is no production surface, and nothing is
-deleted. Rollback: none needed.
+Run on the build VM. No production surface, and nothing is deleted.
 
-**Prediction (for the claude ledger, settle by 2026-11-18):** on the
-compacted synthetic file, p_1(24 h) ≤ 0.25 and p_1024(24 h) ≥ 0.45.
-Probability 0.55. The second half is anchored on the measured 49%
-range-change at 24 hours.
+**What the bench can and cannot decide.** Each difference from the paper
+biases it in a known direction:
+
+- **About a sixth of the paper's size at the full hourly volume.** The share
+  p is biased high, because the same writes land on fewer pages. Absolute
+  changed bytes are about right, slightly low, because collisions are more
+  frequent in a small file.
+- **Two tables, with bodies inline.** The paper has `og_objects` with 19
+  indexes, a separate `og_bodies`, and `run_memory_entries` with 5 indexes.
+  Fewer scattered index leaves per write bias changed pages **low**.
+- **Almost no in-place updates.** The paper rewrites `choir.run` about 19
+  times per run, and each update moves `updated_at` index entries. Biased
+  **low**.
+- **No deletes.** The paper retires daily and then moves up to 250,000 pages
+  with incremental vacuum. Biased **low**, and the bench cannot show the
+  spike on retirement days at all.
+
+Net: absolute bytes are biased low. The bench can **falsify** page deltas
+(if even its bytes a day at R = 60 fail the rule, stop). It **cannot confirm**
+them, and it says little about logical dedupe under deletes.
+
+**Prediction** (claude ledger, settle by 2026-11-18): on the compacted
+synthetic file, p_1(24 h) ≤ 0.25, and the share of 4 MiB ranges *unchanged*
+at 24 h is at most 0.55 (p_1024 ≥ 0.45, anchored on the bench's 49.0%).
+Probability 0.55.
 
 ### Landing 1 (orange; rollback: revert): the page-hash meter on every computer
 
-**What it does.** On the producer's tick, when no capture is due, and at most
-every 6 hours:
+**What it does.** Every 6 hours, when no capture is running:
 
-- stream `sqlite_dbpage` in one read transaction;
-- write the 8-byte page hashes to a sidecar beside the store, keyed by inode,
-  page count and page size;
-- compare with the previous sidecar of the same inode;
-- log p at 1, 32, 128 and 1,024 pages, the read time, and the WAL bytes
-  pinned;
-- report the same in the `snapshot_producer` block.
+- stream `sqlite_dbpage` in one read transaction, head first;
+- keep a ring of four sidecars (6 h, 24 h, 72 h, 7 d), each holding
+  16-byte truncated SHA-256 page hashes keyed by inode, page count and page
+  size (154 MB each on the paper, 616 MB in all);
+- compare against each slot, and log:
+  - p_1 and p_1024;
+  - the sealed size of a 1% sample of changed pages, extrapolated;
+  - the **predicted sealed bytes a day** for page deltas and for
+    fixed-chunk fulls at the R = 60 cadence, using the measured rate and
+    events an hour, including the k = 1 refresh;
+- report the same in the `snapshot_producer` block, as added fields (none
+  removed);
+- mark a slot that spans a file swap or a retirement run, so the spike is
+  visible, not averaged away.
 
-It reads nothing else and changes no restore path.
+**Proof on d@e.** Readings at 6 h and 24 h. The page count equals the
+`store_tables` header's. The bytes-a-day lines are present. (p_1 ≤ p_1024
+holds by construction and is only a wiring check.)
 
-**Proof on d@e.** Two readings, six hours apart, show p_1 ≤ p_1024 and a
-page count equal to the `store_tables` header's.
+**Rollback.** Revert and delete the sidecars.
 
-**Rollback.** Revert. The sidecar is harmless and is removed by the next
-landing or by hand.
+**Deletes nothing.**
 
-**Deletes nothing.** This is the measurement.
+**Prediction for the paper** (settle 48 hours after the deploy, from its
+log):
 
-**Prediction for the paper.** Settle by 48 hours after the deploy, from its
-log:
+- each read takes at most 5 minutes and pins at most 1 GB of WAL;
+- the 24-hour slot shows p_1024 ≥ 0.45 (the file was compacted at 03:43Z;
+  bench 0.51) and p_1 ≤ 0.30.
 
-- the read takes at most 5 minutes and pins at most 1 GB of WAL;
-- the first 24-hour reading shows p_1 ≤ 0.30 and p_1024 ≥ 0.80.
+Probability 0.45.
 
-Probability 0.5. The p_1024 half is anchored on C59's 88% at 30 minutes on a
-grown file. The paper's file was compacted at 03:43Z, so this half could
-fail low.
+**Gate for landing 2.** Measured page-delta bytes a day at the R cadence,
+including refresh, must be under half the fixed-chunk full's, on two
+readings that each span a retirement run. If index trees hold more than two
+thirds of changed pages, write option 5 up instead.
 
-**Gate.** If p_1(24 h) > 0.5, stop. Page deltas then save little, and the
-lever moves to the store's own size and layout (T3, the append-clustered
-note) or to option 5. If index trees hold more than two thirds of the
-changed pages, write option 5 up properly before building landing 2.
+### Landing 2 (red, two seats; built only behind landing 1's gate): page-delta bases
 
-### Landing 2 (red, two seats): page-delta bases
+The specification, as corrected by review:
 
-**What it does.**
+- **B1 invariant.** The page root is computed only from pages read in the
+  capture's own read transaction, whose first statement reads the head
+  (`snapshot.go:547`). The sidecar only selects which pages ship and is
+  never a source of hashes.
 
-- **The record.** A new snapshot record version names:
-  - its parent root;
-  - the page count;
-  - the sorted list of changed pages;
-  - a page root, the Merkle root over all 8-byte page hashes.
+  The root covers every page: a delta's root is computed over the parent's
+  hashes for unselected pages *as re-read and re-hashed in this
+  transaction*. That means a full read, which is option (a); option (b)
+  requires a periodic full re-hash to keep this invariant.
 
-  Packs are dense 4 MiB runs of (page number, page), sealed by the existing
-  `filecas.SealChunk`.
-- **The root's chunk list is cumulative.** It holds the full base's chunks
-  plus every pack of the chain so far. The host's collector and its
-  live-root rule then need no change.
-- **The producer** takes a delta when:
-  - the sidecar's inode matches the live file;
-  - its page root equals the parent record's;
-  - the chain's packs sum to under half of the full base.
+  **Test:** a sidecar that claims one changed page is unchanged makes the
+  restore refuse on the page root.
+- **The root's domain.** It binds page size, page count, hash size and
+  arity, and is content-deterministic (not `filecas.BuildManifest`'s root,
+  which hashes `CreatedAt`, `filecas.go:114`). Restore truncates to the
+  record's page count, because incremental vacuum shrinks files.
+- **Hashes.** 16 bytes of SHA-256.
+- **B2.**
+  - The record carries `BaseSequence`, the content head of the chain's full
+    base, and `StoreHeadSequence`.
+  - `PlanCandidates` and `PlanRecovery` use the chain base for the bound and
+    the content head for dating.
+  - `Install` probes every chunk of the whole chain before downloading.
+  - Record fetches per candidate count against `CandidateBudget`.
+- **The record carries no changed-page list.** Packs carry page numbers; a
+  list would be 38 MB on the tape against a 64 MiB cap
+  (`privacy.go:51`).
+- **Partitions.** Deltas carry none. The full's partitions are installed
+  once. Partition capture drops to the full cadence.
+- **Witness.** The full's witness, if kept, is verified on the full before
+  packs are applied. The chain is checked by its page root and then the
+  checkpoint gate (landing 7).
+- **Host.** The root is a tree of chunk lists, so that 396 GB stores fit
+  inside `maxSnapshotRootChunks` and `maxSnapshotRootBody`
+  (`snapshot_roots.go:73-74`). The host's chain rule
+  (`snapshotRootChainGap`, `:63-64`) is kept. **Test:** a restore to a
+  checkpoint between two fulls finds a base.
+- **Versions.** The version gate widens to a supported set
+  (`snapshot.go:1002`). A discarded compact copy deletes its sidecar.
+- **Observability.** The fields stay for one release.
+- **Rollback.** An old binary's producer reads the newest snapshot event,
+  whatever its version, as current, so it takes no full until its bound
+  fires. Its restores refuse v2 candidates until `CandidateBudget` runs out.
+  Restores can therefore refuse for hours after a rollback. Landing 2
+  publishes a v1-readable full before its first delta, so an old binary has
+  a base.
 
-  Otherwise it takes a full base: the existing page stream plus a page root.
-- **The trigger is the replay bound alone.** The floor, the capture record
-  file, the WAL headroom rule and `floor_limited` are deleted. The ceiling
-  and the interval stay only as backstops.
-- **Restore:**
-  1. install the full base;
-  2. apply the packs in order;
-  3. check the page root;
-  4. then run the unchanged path: replay, then the checkpoint witness gate.
-- **Fulls keep the logical witness. Deltas carry none.** A delta read
-  happens inside one read transaction, so mixed state cannot occur. A stale
-  sidecar is caught by the page-root equality. The logical end-to-end check
-  is the restore gate's canonical checkpoint witness, which already
-  recomputes over the result.
+**Prediction** (enter only after landing 1): the bytes a day it reports
+within 1.5 times landing 1's prediction. No probability is set until then.
 
-**Protected surfaces.** The snapshot record and chunks, restore base
-selection, root retention.
+### Landing 3 (red, two seats; after landing 6): the compact copy may be a full base
 
-**Conjecture delta.** Before: a base is a whole store, witnessed logically at
-capture. After: a base is a whole store or a chain to one, verified by its
-page root, and checked logically at the restore gate.
+**What it does.** After `checkCompactCopy`, the witness and the page stream
+are computed on the static staged copy and published as a v2 full whose
+`StoreHeadSequence` is the copy's sequence. The v2 version exists so that a
+rolled-back binary refuses it.
 
-**Evidence class.** d@e restores and the paper's capture logs.
+**Requires landing 6.** Before it, the copy is not a state at its own
+sequence once the carry writes later rows into it.
 
-**Heresy delta.** A delta trusts the page hash of unchanged pages. The
-residual is a hash collision on 8 bytes, about 2^-64 per page. Use 16 bytes
-if a seat asks (154 MB sidecar).
+**Rebase bound.** Re-derived from the measured rate: 450,000 events is
+97 minutes at 77/s, not 30 minutes. The bound becomes about 140,000 events
+for 30 minutes [E].
 
-**What is lost.** Nothing on the paper. Old v1 records stay readable, because
-the reader for them is kept. An old binary after a rollback cannot read v2
-deltas. Its producer would see the newest v1 root as old and take a full at
-once: one full capture, about 37 minutes on the paper.
+**Not at ten times** unless the store is bounded: the budgets in option 3
+fail.
 
-**Proof on d@e.**
+**Prediction:** none until built.
 
-1. Take a full base, then two deltas an hour apart.
-2. Run `choir computer restore` to a checkpoint above the second delta.
-3. It answers with `witness_matched: true`, and the log shows "applied 2
-   delta packs, page root ok".
-4. Corrupt one pack on a test host and see a refusal by name. This step is
-   test-level, not a drill.
+### Landing 4 (red, two seats; built only at scale): WAL-frame dirty tracking
 
-**Rollback.** Revert, as described under "what is lost".
+**Gate:** a landing 2 read takes more than 15 minutes, or deltas are needed
+more often than every 2 hours.
 
-**Prediction for the paper** (claude ledger; settle 72 hours after the
-deploy, from the paper's log and the host's root rows, read-only):
-
-- every delta captured in the window takes at most 6 minutes with at most
-  6 minutes of read transaction;
-- the deltas' sealed bytes sum to at most 2.5 GB a day;
-- the producer block never reads `floor_limited`.
-
-Probability 0.5, to be revised from landing 1's number before entry.
-
-### Landing 3 (red, two seats): the compact copy is the full base
-
-**What it does.** After `checkCompactCopy` passes:
-
-- compute the logical witness on the staged copy (a private, static file:
-  no live pin);
-- stream its pages as a full base with its page root;
-- register the root and append `snapshot_recorded` at the copy's head;
-- write the copy's page hashes as the sidecar for the file the swap will
-  create.
-
-At the planned rebase the live file becomes that file, and the sidecar
-follows it. The next delta then carries only the pages the rebase replay and
-later writes changed. A full base from the live store remains only for a
-computer that has never compacted, or whose chain grew past half a full.
-
-**Deletes:**
-
-- the live-store full capture as the routine way to start a chain;
-- the second whole-store read every compaction cycle;
-- the "copy discarded by a restart is pure waste" problem: the copy is a
-  base on the host whether or not it is swapped in.
-
-**Protected surfaces.** Snapshot records, the compact staging, the
-planned-boot swap.
-
-**Proof on d@e.** Force a compaction on d@e only (`store.compact_force` was
-used this way on 11-01, and `compactReason` still reads it). Then:
-
-- a full root is registered at the copy's sequence;
-- after the planned refresh, the first delta is small;
-- a restore to a checkpoint above that delta answers
-  `witness_matched: true`.
-
-**Rollback.** Revert. Copies are still made and swapped as today.
-
-**Prediction for the paper.** At its next compaction (not forced), the first
-delta after the rebase carries at most 25% of the full base's sealed bytes,
-and the copy-to-registered-root time is at most 70 minutes after the copy
-finishes. Probability 0.45.
-
-### Landing 4 (red, two seats; built only behind its gate): WAL-frame dirty tracking
-
-**Gate:** landing 2's read time on any computer exceeds 15 minutes, or a
-computer needs deltas more often than hourly.
-
-**What it does.** The store takes over checkpoints, and reads frame headers
-since the last scan before each checkpoint into a persisted bitmap. Any
-unclean boot, file swap or scan gap marks the bitmap unknown, which forces a
-full read (landing 2's comparison). The comparison remains the fallback and
-the verifier.
-
-**Deletes:** the full read per delta. Not built at the paper's present
-scale.
+**What it does.** The store takes over checkpoints. Any unclean boot, swap
+or scan gap forces landing 2's full comparison. A periodic full re-hash
+keeps the B1 invariant.
 
 ### Landing 5 (orange; rollback: revert): overlap replay fetch with apply
 
-**What it does.** Fetch page k+1 while page k applies.
+**Proof.** d@e's replay line shows fetch hidden under apply.
 
-**Proof.** d@e's replay line shows fetch time hidden under apply.
+**Prediction:** the paper's next cold replay after a planned rebase reads
+at least 95 events/s (77 measured). Probability 0.6.
 
-**Prediction.** The paper's next cold replay after a planned rebase reads at
-least 95 events/s (77 measured). Probability 0.6.
+### Landing 6 (red, two seats): the carried tables become tape-derived, and the carry is deleted
 
-**Deletes nothing.** It is independent of the base work and may be dropped
-if review time is short.
+**The defect, which exists today.** `co_super_slots` and `agent_evidence`
+are written by direct SQL with no tape op (`compact.go:700-716`), and they
+are inside the witness (`restore_snapshot.go:218-232`) [C]. So:
+
+- any restore whose base predates a write to them, and whose target
+  checkpoint follows it, fails the witness;
+- the compact swap fills the copy with rows from a later head.
+
+That the first failure has happened is [I], not observed. `agent_evidence`
+has 150 rows on the paper [M].
+
+**What it does.** Route both tables' writers through tape ops. The graph
+paths `evidence.graph` and `engineering.slots_graph` exist and are off by
+default (`compact.go:708-711`), which is also a no-switches violation. Then
+delete `carryDirectTables` and `compactCarriedTables`.
+
+**What is lost:** the paper's 150 `agent_evidence` rows, unless the landing
+migrates them with a one-time tape write. Data is not precious, so a
+migration op is preferred but not required. Say which in the commit.
+
+**Proof on d@e.** Write an evidence row after a snapshot, bind a checkpoint,
+and restore: the answer is `witness_matched: true`.
+
+**Rollback.** Revert. Rows written as ops stay readable through the graph
+path only if the old binary has it on: name that in the rollback.
+
+**Prediction:** the d@e restore above answers 200 with
+`witness_matched: true` on the first deployed attempt. Probability 0.55.
+
+### Landing 7 (red, two seats): one restore path, and fulls at an explicit asynchronous budget
+
+**What it does.**
+
+- **One restore path.** Cold boot recovery becomes the staged restore to the
+  newest checkpoint at or above the base, gated by the canonical checkpoint
+  witness, then the ordinary catch-up to head. A failed gate falls back to
+  the next older base. With no base, it falls back to genesis replay, and
+  says so by name.
+- **Fulls.** They are captured with a page root computed from the pages
+  read, head first (the B1 invariant), and no whole-store witness in the
+  live read transaction.
+- **The cadence.** Due when the tail's replay at the slowest measured rate
+  exceeds R. R is a constant derived from the asynchronous restore budget
+  (60 minutes proposed; the owner may set it) and replaces
+  `snapshotReplayBound` (`snapshot_producer.go:101`). A replay rate measured
+  at boot is persisted beside the store, so a restart does not fall back to
+  113.
+
+**Deletes:**
+
+- the live witness pass in capture;
+- `VerifySnapshotFile` at install;
+- the capture floor, its persisted record and the WAL headroom rule (the
+  observability fields stay one release, reading `floor_limited: false`);
+- the separate cold-install verification design.
+
+**Protected surfaces.** Snapshot records and capture, both restore paths,
+the restore gate, recovery admission.
+
+**Conjecture delta.** Before: each base is witnessed logically at capture
+and at install. After: each base proves its bytes by page root, and each
+restore proves its result by the checkpoint witness before anything serves.
+
+**Heresy delta.** This overrules section 7 of
+[snapshots-cost-the-change](snapshots-cost-the-change-2026-11-13.md) ("the
+witness stays"). It is acceptable only because every path now ends at a
+logical gate. It needs the owner's word, because it depends on checkpoints
+being bound regularly on every computer. The paper's cadence binding is
+[?].
+
+**What is lost.** A rolled-back binary cannot restore from v2 fulls, and as
+in landing 2 its producer may not take a v1 full for hours. Publish one v1
+full at the switch.
+
+**Proof on d@e.**
+
+1. Destroy and cold-recover d@e (the N7 drill).
+2. The log shows the checkpoint gate pass, then the catch-up.
+3. A forced bad base (test-level) refuses by name and falls back.
+
+**Prediction for the paper** (72 hours after the deploy, read-only):
+
+- every capture's read transaction is at most 6 minutes;
+- sealed bytes per capture are at most 5 GB;
+- captures fire at most twice a day at R = 60;
+- the block never reads `floor_limited: true`.
+
+Probability 0.5.
 
 ## 6. Measure first
 
-The deciding number is p(T) for the paper, together with the split of
-changed pages between index and table trees. In order of cost:
+The deciding numbers:
 
-1. **Landing 0, on the build VM:** an hour of work and no production surface.
-2. **Landing 1, a read-only meter on the paper:** about 3 minutes of read
-   transaction every 6 hours.
+- p_1 and p_1024 at the R-implied interval;
+- the sealed bytes of the packed changed pages, with the index or table
+  split;
+- the logical-export dedupe.
 
-No read-only experiment on the host can give p: the host holds only sealed
-4 MiB chunks, and reading them would need the computer's key, which this
-design does not touch. The second number, the restore install time for a
-40 GB base on the paper, is unmeasured [?]. d@e's 3 minutes 44 seconds of
-scan and install for a 1 GB store suggests the scan, not the bytes,
-dominated there. Measure it in the "now" lane's first paper restore, if one
-is ever run.
+In order of cost:
+
+1. **Landing 0 on the build VM.** It can only falsify, for the reasons in
+   landing 0.
+2. **Landing 1 on every computer.** Its 24-hour and 72-hour slots must span
+   a retirement run.
+
+Two further cheap reads:
+
+- the paper's next `snapshot_producer` block after a boot replay, to see
+  whether it plans at 77 or 113;
+- d@e checkpoint bind regularity, as a precondition for landing 7.
+
+Restore install time for a 40 GB base remains [?]. Time `snapshot.Install`
+against a synthetic 40 GB root on the build VM rather than restoring the
+paper.
 
 ## 7. Residual risks
 
-- **Page churn.** If p(24 h) is high, page deltas cost nearly a full base,
-  and the lever is store size and layout, not snapshot format. Landing 1's
-  gate exists for this.
-- **The check at cold recovery.** A delta carries no logical witness. Cold
-  boot recovery (lost disk, no checkpoint target) today installs a base and
-  replays with no witness gate
-  ([restore problem](../problems/restore-cannot-finish-inside-its-ten-minute-request-2026-11-14.md),
-  "Cold recovery"). With deltas, that path rests on the page root alone.
-  Running the replay-completeness probe after a cold recovery would close
-  this; it is not in these landings.
-- **Root size.** A cumulative chunk list grows with the chain: at most about
-  1.5 × the full's chunk count, about 17,000 entries on the paper, inside
-  `maxSnapshotRootChunks` = 65,536 [C, per the 11-13 design].
-- **Pinned WAL.** The 3-minute pin per delta on the paper becomes about 27
-  minutes at 396 GB, which is landing 4's gate.
-- **VACUUM INTO's own pin.** It stays at 17 minutes on the paper and becomes
-  hours at ten times scale. Compaction frequency is then the risk, not the
-  base.
-- **Unverified facts.** The brief's 11.5 GiB of host chunks for the 22:36Z
-  root. Whether `og_objects` updates keep `obj_id`. Whether
-  `modernc.org/sqlite` exposes sessions. Why the paper's `data.img`
-  allocation fell from 88.5 to 42 GiB.
-- **The largest lever is not in this design.** Storage mission T3 (payloads
-  named rather than copied into `og_bodies` and `run_memory_entries`, about
-  half the store) shrinks every base, delta and capture by the same factor.
+- **The checkpoint cadence becomes load-bearing.** If a computer binds no
+  checkpoint above its base, landing 7's cold path falls back to genesis
+  replay (43 hours on the paper at 77/s).
+- **The checkpoint witness's blind spots** (derived tables, ignored columns)
+  become the only logical check. Index and freelist corruption were
+  invisible to the old witness as well. The page root covers bytes.
+- **A failed cold install that left a non-empty state file** is not cleared
+  by a retry (`snapshot.go:878`). Under landing 7, cold recovery stages,
+  so the live path is protected. The operator step for a pre-landing-7
+  wreck is to remove the file.
+- **The incremental-vacuum spike** may make page deltas unattractive
+  whatever the mean p. Landing 1 marks it.
+- **The ten-times caps** fail as written:
+  - the root caps at 396 GB (`snapshot_roots.go:73-74`);
+  - the compact budgets (`compact.go:60`, `:67`).
+
+  Landing 2's tree of lists addresses the first. A bounded store addresses
+  the second.
+- **Unverified facts:**
+  - the brief's 11.5 GiB;
+  - whether `og_objects` updates keep `obj_id`;
+  - whether `modernc.org/sqlite` exposes sessions;
+  - why `data.img` allocation fell;
+  - the incremental vacuum quote, taken from the review.
+- **The largest lever is not in this design:** storage mission T3. Every
+  number above scales with S.
+
+## 8. Review round 1 and what changed
+
+Seat: DeepSeek v4.1 flash, REPAIR. I checked each finding against the code
+before deciding.
+
+| Finding | Verdict | Change |
+| --- | --- | --- |
+| B1: the page root must come from pages read, never the sidecar | Accepted. Head first is at `snapshot.go:547`. | The invariant and its test are in landing 2. The same invariant governs landing 7's fulls. |
+| B2: the bound and the filter use the event sequence; probing covers only the candidate's own chunks | Accepted. `restore_snapshot.go:108-136`, `snapshot.go:945`, `:1035-1045`, `appender.go:984`. One nuance: mis-dating by the event sequence only loses candidates. `Install` refuses a record above `MaxSequence` (`snapshot.go:1002` area), so it is a coverage defect, not a safety one. The bound against a chain base is a real safety defect. | `BaseSequence`, content dating and a whole-chain probe in landing 2. |
+| B3: the compact copy is not a state at its sequence after the carry | Accepted, and it is wider than the design: the tables are off the tape, so restores across a write to them fail today. `compact.go:700-720`, `restore_snapshot.go:218-232`. | New landing 6 (tape-derive the tables, delete the carry). Landing 3 depends on it and publishes v2. "Nothing is lost" is withdrawn; the 150 rows are named. |
+| B4: landing 1 cannot measure p(24 h); the p_1024 prediction contradicts the bench; the gate is on the wrong variable | Accepted. The first draft read 49.0% unchanged as changed. | A sidecar ring. The gate is on predicted sealed bytes a day at the R cadence, including refresh. The predictions are corrected. Section 3 gives the cost model; page deltas drop to rank 3, and doing less with one restore path ranks first. |
+| Ten-times caps | Accepted (`snapshot_roots.go:73-74`, `compact.go:60`, `:67`). | Section 3, option 3, landing 2 (tree of lists), section 7. |
+| Keep the full's witness verified on the full | Accepted for landing 2. Landing 7 removes it, which only the one restore path justifies. | Landing 2 and landing 7. |
+| Page-count shrink, the root's domain, `CreatedAt` in the manifest root | Accepted (`telemetry_retire.go:333`, `filecas.go:114`). | Landing 2. |
+| Drop the changed-page list from the record | Accepted. | Landing 2. |
+| The rollback claim is false | Accepted. | A v1 full is published at the switch (landings 2 and 7). |
+| The host chain rule conflict | Accepted. The rule is the host's `snapshotRootChainGap`. | Kept, with a test (landing 2). |
+| 16-byte cryptographic hash | Accepted. | Landings 1 and 2. |
+| Partitions | Accepted (`snapshot.go:1210-1214`). | Landing 2. |
+| Observability deletion | Accepted. | The fields stay one release (landings 2 and 7). |
+| The rebase tail at the measured rate | Accepted. 97 minutes at 77/s. | Landing 3. |
+| The producer already uses the measured rate | Partly accepted. It does (`snapshot_producer.go:379-381`), but the rate is process memory and the paper's block reads `assumed` after its 05:32Z restart [M]. | Section 2. Landing 7 persists the rate. |
+| Recoverability after a failed cold install | Accepted. | Landing 7 stages cold recovery. Section 7 gives the operator step. |
+| The witness question | Accepted as framed. The cold path lacks a logical gate. | Landing 7 makes the checkpoint gate cover the cold path. That is what allows the capture witness to go. |
+| Nits: the p floor 0.11%; 6x is on uploaded chunks; the "49% changed" label; a tautological proof; 2.8 h against a 90-minute abort; the version gate; `MaxCandidates` cost; the discard-path sidecar | All accepted. | Corrected in sections 2 and 3 and landings 0 to 3. |
+
+Nothing in the review was rejected. One part was narrowed: the mis-dating
+half of B2 is a coverage defect, not a safety defect.
