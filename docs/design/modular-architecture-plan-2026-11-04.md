@@ -20,7 +20,7 @@ Inputs consolidated here:
   `docs/design/app-agent-desks-2026-11-04.md` (branch `appdesk`, not on main);
 - the four-seat red-team of community app agents;
 - the Bayesian trust draft, copied in as
-  [bayesian-trust-2026-11-04.md](bayesian-trust-2026-11-04.md);
+  [bayesian-trust-2026-11-04.md](../archive/learning/bayesian-trust-2026-11-04.md);
 - the custody inventory, copied in as
   [../evidence/custody-inventory-2026-11-04.md](../evidence/custody-inventory-2026-11-04.md);
 - the D0 protocol-lock build (branch `d0-protocol`, three unpushed commits:
@@ -156,7 +156,7 @@ spawner refuses to start an unconfined worker, with no opt-out
 | MA0.3 | This plan | `docs/design/modular-architecture-plan-2026-11-04.md`, the two copied docs | none | green / 0 | committed on branch `modplan`, not pushed | revert |
 | MA0.4 | Devin review of this plan (one seat; the plan is a design, so it is reviewed like the change it designs) | none | MA0.1 to MA0.3 | n/a / 1 | a verdict file | n/a |
 | MA0.7 | Commit round 1 of the ledger (predictions for Phase 1) before MA1.1 lands; each later phase repeats this as its first step (rule 7 of the ledger, section 0 item 7) | `docs/definitions/choir-modular-architecture-2026-11-04.precommit.md` (append a round; no earlier record changes) | the previous round's settlements | green / 0 | the commit that adds the round precedes the phase's first slice commit | n/a |
-| MA0.6 | Pre-register the hypotheses before any data exists: H4 (`docs/precommitment-records.md` line 878, section 8.4: "a prior, domain-specific history of resolved records predicts future performance better than success rates, benchmarks, popularity or uncalibrated ratings") and the trust conjecture of the trust draft section 11 (per-class, materiality-weighted posteriors predict a resident agent's next material failure better than a fixed allowlist or a popularity signal, at a usable owner-tap rate), each with its test, baselines, metrics, stopping rule and the edge cases the draft names (`missing_oracle`); and from the scoring research: frozen against outcome-built weights (H-A1), flip-rate relevance (H-A2), tempered against capped weights (H-C1), spot-checks against peer agreement (H-B3), PPI coverage (H-B4), and the lead hypothesis "satisfice, then diversify" (Goodhart survey H8, with H1 kept for the Autopaper unit). Committed with a date before MA1.3 lands | `docs/evidence/preregistration-2026-11-0x.md` (new) | MA0.3 | green / 1 (a design) | the file is committed and later edits are append-only with dates | revert |
+| MA0.6 | Pre-register the hypotheses before any data exists: H4 (`docs/archive/learning/precommitment-records.md` line 878, section 8.4: "a prior, domain-specific history of resolved records predicts future performance better than success rates, benchmarks, popularity or uncalibrated ratings") and the trust conjecture of the trust draft section 11 (per-class, materiality-weighted posteriors predict a resident agent's next material failure better than a fixed allowlist or a popularity signal, at a usable owner-tap rate), each with its test, baselines, metrics, stopping rule and the edge cases the draft names (`missing_oracle`); and from the scoring research: frozen against outcome-built weights (H-A1), flip-rate relevance (H-A2), tempered against capped weights (H-C1), spot-checks against peer agreement (H-B3), PPI coverage (H-B4), and the lead hypothesis "satisfice, then diversify" (Goodhart survey H8, with H1 kept for the Autopaper unit). Committed with a date before MA1.3 lands | `docs/evidence/preregistration-2026-11-0x.md` (new) | MA0.3 | green / 1 (a design) | the file is committed and later edits are append-only with dates | revert |
 | MA0.8 | Mac guest experiment (R40): boot the aarch64 guest (`nix/guest-aarch64.nix`, Apple Virtualization.framework), run a desk worker under `runsc` systrap on arm64, measure cell time and memory. If it fails, Mac computers fall back to process confinement and refuse non-first-party desks until fixed | same evidence file, an arm64 section | MA0.1 harness | green / 0 | the arm64 cell time and resident memory, or the failure and the fallback taken | delete the section |
 | MA0.5 | Owner walkthrough and sign-off | none | MA0.4 | n/a | owner statement recorded in the goal file | n/a |
 
@@ -1221,7 +1221,7 @@ precommitment record:
    unresolved is not random.
 5. *Calibration.* Fit a per-type temperature, or isotonic regression where
    the data allows, on settled routes, per pinned model
-   (`docs/precommitment-records.md` section 5.3: miscalibration sign depends on
+   (`docs/archive/learning/precommitment-records.md` section 5.3: miscalibration sign depends on
    question type; calibrate per type; clamp probabilities before logging).
    Report reliability and sharpness together, since calibration can improve
    simply by becoming vaguer. A new pinned model starts uncalibrated and
@@ -1295,7 +1295,7 @@ track record in the action class `route/I1`, and a destination desk may use it.
 
 ## 10. Trust and scoring: how the plan revises the draft
 
-The draft [bayesian-trust-2026-11-04.md](bayesian-trust-2026-11-04.md) is folded
+The draft [bayesian-trust-2026-11-04.md](../archive/learning/bayesian-trust-2026-11-04.md) is folded
 into this section: this plan is the authority, and the draft stays as the
 detailed companion, with the scoring fixes of item 5 and the three scores of
 10.1 made in its text. The plan changes five things in it, and sections 10.1 to 10.3 set the scoring
@@ -1304,7 +1304,7 @@ citation-checked surveys,
 [scoring and materiality](../research/scoring-and-materiality-2026-11-04.md)
 and [Goodhart and metric design](../research/goodhart-and-metric-design-2026-11-04.md),
 summarized for the owner in
-[keeping score without fooling ourselves](../reports/keeping-score-without-fooling-ourselves-2026-11-04.md).
+[keeping score without fooling ourselves](../archive/learning/keeping-score-without-fooling-ourselves-2026-11-04.md).
 The owner agreed to their defaults (R32 to R36).
 
 1. **Two layers of authority, not "trust never adds a capability".** The draft
@@ -1944,7 +1944,7 @@ precommitment records are the practice and engineering (R23). Two docs are
 written after this plan is signed off (MA0.5), not before:
 
 1. **A theory doc, PSA** (`docs/psa-theory-<date>.md`, extending
-   `docs/precommitment-records.md` sections 1 and 3, or beside them). Contents:
+   `docs/archive/learning/precommitment-records.md` sections 1 and 3, or beside them). Contents:
    Bayesian trust from materiality-weighted track records; custody and leases
    as earned authority (ceiling in the manifest, leases within it, trust sets
    duration and scope); messages as predictions; generated code equals stranger
@@ -1959,7 +1959,7 @@ written after this plan is signed off (MA0.5), not before:
    inter-desk protocol and its lock (MA1.4), leases (MA3.4), the disclosure
    path (MA3.6), the trust view (MA7.2) and the act gate (MA7.8), with the
    engineering of each (files, invariants, failure modes, how to extend it).
-   The existing `docs/precommitment-records.md` keeps its role until the
+   The existing `docs/archive/learning/precommitment-records.md` keeps its role until the
    practice doc replaces its engineering sections; the split of its text is
    decided when the docs are written.
 

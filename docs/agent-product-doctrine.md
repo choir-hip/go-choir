@@ -48,8 +48,11 @@ operating update.
   materialize, checkpoint, or route an event.
 - The **commitment ledger** is the management supervision surface: commitment
   objects live on the tape, never in a third store; reports resolve commitments;
-  scores stay outside the acting desk's context. Desks talk through
-  precommitment records ([precommitment-records.md](precommitment-records.md)).
+  the acting desk cannot write its own score, and may read what is held about
+  it (owner, 2026-11-13: no hidden dossiers; this replaces "scores stay
+  outside the acting desk's context"). Desks talk through precommitment
+  records, the forecast stroke of the
+  [four-stroke learning engine](learning-engine.md).
 
 One stable `ComputerID` plus its canonical event chain is the evolving
 computer. A frozen capsule effect bundle is speculative and inert. Canonical

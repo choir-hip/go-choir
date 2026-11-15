@@ -3,7 +3,7 @@ definition_version: 4
 
 # Station L3 of the ledger metamission
 # (docs/archive/definitions/choir-ledger-metamission-2026-10-13.md): hypotheses
-# settled and scored. The design is settled in docs/precommitment-records.md
+# settled and scored. The design is settled in docs/archive/learning/precommitment-records.md
 # §5.1 (settlement is separate from scoring; a committing desk never settles
 # its own hypotheses; a score uses the committed version and its original
 # probability; the commitment's seq precedes the earliest capture its
@@ -120,7 +120,7 @@ finish:
     per-source analytics.
   artifact: >-
     kind ("assertion" | "forecast", the vocabulary of
-    docs/precommitment-records.md §5.5 and types.CalibrationClaim),
+    docs/archive/learning/precommitment-records.md §5.5 and types.CalibrationClaim),
     criterion, and resolves_by (forecasts only) on CastHypothesis and on
     HypothesisState, projected by the inbox fold into ConversationHead.
     - A settlement record with settler identity and evidence refs,
@@ -221,7 +221,7 @@ homotopy:
 boundaries:
   mutation_class: red
   authority_sources:
-    - owner rulings in docs/precommitment-records.md §5 (2026-10-14)
+    - owner rulings in docs/archive/learning/precommitment-records.md §5 (2026-10-14)
     - docs/archive/definitions/choir-ledger-metamission-2026-10-13.md (spine)
     - docs/choir-doctrine.md
   must_preserve:
@@ -285,7 +285,7 @@ now:
     delta_o: the cross-inbox ordering witness and settlement evidence refs (L3-2) make "settled from later evidence" observable rather than asserted
     scope_if_supported: the paper's current 28 sources, one week
     status: proposed
-    evidence_refs: [docs/precommitment-records.md]
+    evidence_refs: [docs/archive/learning/precommitment-records.md]
   decision: {what: "two kinds (assertion, forecast) per precommitment-records §5.5; L3-1 (clock) may start before the off-host copy as the spine's clock-only exception; L3-2 (settler records, ordering witness) waits for the recoverable off-host copy; L3-3 (scorer records, views) after L3-2", kind: operational, status: proposal, evidence_ref: .agentic-consensus/l3-drafted-review-2026-10-15/, owner_ratification_ref: not_applicable}
   belief:
     believed_state: >-

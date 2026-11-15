@@ -1,15 +1,20 @@
 # Prospective Self-Alignment: the theory (2026-11-08)
 
+> **Archived 2026-11-14.** Superseded by [the four-stroke learning engine](../../learning-engine.md),
+> which is the current home of this mechanism and its vocabulary (forecast,
+> outcome, lesson, trust). Kept as the record of how the mechanism was reasoned
+> out; where the two disagree, the learning engine wins.
+
 Status: written at MA8.0 of the modular architecture mission, from the plan
-([modular-architecture-plan-2026-11-04.md](design/modular-architecture-plan-2026-11-04.md))
+([modular-architecture-plan-2026-11-04.md](../../design/modular-architecture-plan-2026-11-04.md))
 and the mission ledger
-([choir-modular-architecture-2026-11-04.ledger.md](definitions/choir-modular-architecture-2026-11-04.ledger.md)).
+([choir-modular-architecture-2026-11-04.ledger.md](../../definitions/choir-modular-architecture-2026-11-04.ledger.md)).
 It describes what main does at the date above. Where the plan said more than
 main does, this document says so and marks the item open (section 9).
 
 PSA (prospective self-alignment) names the theory and the science. Precommitment
 records name the practice and the engineering; that half is in
-[precommitment-records-practice-2026-11-08.md](precommitment-records-practice-2026-11-08.md).
+[precommitment-records-practice-2026-11-08.md](../../precommitment-records-practice-2026-11-08.md).
 The earlier, longer statement of the idea is
 [precommitment-records.md](precommitment-records.md), sections 1 and 3. This
 document extends it and replaces one claim of it (section 4). The owner writes

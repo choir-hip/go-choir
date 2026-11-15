@@ -20,7 +20,7 @@ Key claims confirmed against the sources: Gao, Wright and Leyton-Brown (peer pre
 Unverifiable (not checked, mostly books and standards): Buja et al. 2005, Raiffa and Schlaifer 1961, Swaminathan and Joachims 2015, Radanovic and Faltings, Plackett/Luce/Thurstone, Krippendorff 2004, Tetlock and Gardner clairvoyance wording, FASB CON 8, ISA 320/PCAOB AS 2105, audit risk model, FMEA reviews, Elkan 2001, SAB 99 motive claim.
 
 
-Date: 2026-11-04. Read-only research; no repo touched. Inputs read first: `docs/precommitment-records.md` sections 1, 3, 5 and `go-choir-plan/docs/design/bayesian-trust-2026-11-04.md`.
+Date: 2026-11-04. Read-only research; no repo touched. Inputs read first: `docs/archive/learning/precommitment-records.md` sections 1, 3, 5 and `go-choir-plan/docs/design/bayesian-trust-2026-11-04.md`.
 
 ## 0. How to read this, and how far to trust it
 

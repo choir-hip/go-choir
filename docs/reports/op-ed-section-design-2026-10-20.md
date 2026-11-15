@@ -119,7 +119,7 @@ argues from story X at version n".
 which need a criterion and a `resolves_by` date after the commit and at
 most seven days later (`internal/types/commitment.go:325-362`; refusals at
 `internal/store/inbox.go:216-263`). Settlement of hypotheses on the live
-paper is not built (`docs/precommitment-records.md` §8, line 761). A public
+paper is not built (`docs/archive/learning/precommitment-records.md` §8, line 761). A public
 track record needs commitment hashes published when made with a signed
 receipt (same document, §6). The last report found almost every recent
 hypothesis was an assertion and one was a dated forecast

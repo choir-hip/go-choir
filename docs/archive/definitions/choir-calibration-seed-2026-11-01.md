@@ -1,5 +1,10 @@
 # Choir calibration seed: a desk's own scored record in place of the deleted prior-run seed (2026-11-01)
 
+> **Archived 2026-11-14.** Superseded by [the four-stroke learning engine](../../learning-engine.md),
+> which is the current home of this mechanism and its vocabulary (forecast,
+> outcome, lesson, trust). Kept as the record of how the mechanism was reasoned
+> out; where the two disagree, the learning engine wins.
+
 Not executable. Kept so the direction is not lost.
 
 The owner gave this direction on 2026-11-01, while deleting the desk prior-run seed
@@ -29,7 +34,7 @@ start:
   observed_at: 2026-11-01
   artifact: >-
     The prior-run seed is being deleted, and nothing replaces it. Precommitment
-    records exist (docs/precommitment-records.md, the canonical mechanism and
+    records exist (docs/archive/learning/precommitment-records.md, the canonical mechanism and
     theory). There is no per-model, per-facet statistics pipeline over
     self-development, and no calibration seed.
 finish:
