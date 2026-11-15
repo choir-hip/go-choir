@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/recoveryplan"
+	"github.com/yusefmosiah/go-choir/internal/snapshot"
 )
 
 // Failure modes of snapshot-root retention once snapshots are due by replay
@@ -19,7 +20,11 @@ import (
 //  3. the kept chain is frozen: one old anchor kept forever, never advancing;
 //  4. the chain is unbounded: every root kept, so storage is not bounded;
 //  5. the extra roots are collectable: a kept row is the artifact collector's
-//     liveness, so a row dropped is a chunk collected.
+//     liveness, so a row dropped is a chunk collected;
+//  6. the kept chain exists on the host but the guest's selection cannot reach
+//     it (review round 2): the tests run the real plan, snapshot.PlanCandidates
+//     over every snapshot event on the tape, with restoreOne's own filter (the
+//     record's head at or below the restore point) and the host's live roots.
 
 func registerWindowRoots(t *testing.T, store *Store, computer string, n int, spacing int64, chunkCount int) []int64 {
 	t.Helper()
@@ -40,36 +45,62 @@ func registerWindowRoots(t *testing.T, store *Store, computer string, n int, spa
 	return heads
 }
 
-func assertRestoreWindowHeld(t *testing.T, store *Store, computer string, newest int64, spacing int64, maxRows int) {
+// selectBase is the guest's choice for a checkpoint: the plan's candidates
+// (every snapshot event on the tape at or below the target within the
+// recovery bound), newest first, the first whose record head is at or below the
+// target (restoreOne's MaxSequence filter) and whose chunks the host still
+// holds (the install's probe: the root is live). Event sequences are 2 above
+// their heads, as a capture's append is.
+func selectBase(heads []int64, live map[int64]bool, cp int64) (head int64, attempts int, ok bool) {
+	var tape []snapshot.Candidate
+	for _, h := range heads {
+		tape = append(tape, snapshot.Candidate{Sequence: uint64(h) + 2, EventID: fmt.Sprint(h)})
+	}
+	plan := snapshot.PlanCandidates(tape, uint64(cp), recoveryplan.MaxRecoveryTailEvents)
+	for i := len(plan) - 1; i >= 0; i-- {
+		attempts++
+		var h int64
+		fmt.Sscan(plan[i].EventID, &h)
+		if h <= cp && live[h] {
+			return h, attempts, true
+		}
+	}
+	return 0, attempts, false
+}
+
+func assertRestoreWindowHeld(t *testing.T, store *Store, computer string, heads []int64, spacing int64, maxRows int) {
 	t.Helper()
-	live, err := store.LiveSnapshotRoots(t.Context(), computer)
+	newest := heads[len(heads)-1]
+	liveRows, err := store.LiveSnapshotRoots(t.Context(), computer)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(live) > maxRows {
-		t.Fatalf("%d roots kept, want at most %d (storage must stay bounded)", len(live), maxRows)
+	if len(liveRows) > maxRows {
+		t.Fatalf("%d roots kept, want at most %d (storage must stay bounded)", len(liveRows), maxRows)
+	}
+	live := map[int64]bool{}
+	for _, r := range liveRows {
+		live[r.HeadSequence] = true
 	}
 	bound := int64(recoveryplan.MaxRecoveryTailEvents)
-	// Every checkpoint inside the recovery bound of the newest snapshot's
-	// head (the store head is at least that) has a kept base at or below it,
-	// and the nearest one is no further than the recovery bound.
+	// Every checkpoint inside the recovery bound of the newest snapshot's head
+	// is restorable by the guest's own selection, from a base no further than
+	// the bound below it, within the attempt cap.
 	for cp := newest - bound; cp <= newest; cp += spacing / 3 {
-		base := int64(-1)
-		for _, r := range live {
-			if r.HeadSequence <= cp && r.HeadSequence > base {
-				base = r.HeadSequence
-			}
-		}
-		if base < 0 {
-			t.Fatalf("checkpoint %d (%d events behind the newest root) has no kept base; kept %+v", cp, newest-cp, live)
+		base, attempts, ok := selectBase(heads, live, cp)
+		if !ok {
+			t.Fatalf("checkpoint %d (%d events behind the newest root): the guest's selection finds no live base after %d attempts; kept %+v", cp, newest-cp, attempts, liveRows)
 		}
 		if cp-base > bound {
-			t.Fatalf("checkpoint %d: nearest kept base %d is %d events below, past the recovery bound", cp, base, cp-base)
+			t.Fatalf("checkpoint %d: selected base %d is %d events below, past the recovery bound", cp, base, cp-base)
+		}
+		if attempts > snapshot.MaxRestoreAttempts {
+			t.Fatalf("checkpoint %d took %d attempts, over the cap %d", cp, attempts, snapshot.MaxRestoreAttempts)
 		}
 	}
 	// The chain advances: the oldest kept root is the first one at or past
 	// the window, not an old frozen anchor.
-	oldest := live[len(live)-1].HeadSequence
+	oldest := liveRows[len(liveRows)-1].HeadSequence
 	if newest-oldest < bound || newest-oldest > bound+bound/2+spacing {
 		t.Fatalf("oldest kept root is %d events behind the newest; want between the bound %d and %d (frozen or unbounded chain)", newest-oldest, bound, bound+bound/2+spacing)
 	}
@@ -80,8 +111,34 @@ func assertRestoreWindowHeld(t *testing.T, store *Store, computer string, newest
 func TestSnapshotRetentionKeepsTheRecoveryWindowOnASmallStore(t *testing.T) {
 	store, _ := openTestPlatformStore(t)
 	const spacing = 25920
-	registerWindowRoots(t, store, "computer-window-small", 60, spacing, 3)
-	assertRestoreWindowHeld(t, store, "computer-window-small", 60*spacing, spacing, snapshotRootRetention+snapshotRootAnchorsMax)
+	heads := registerWindowRoots(t, store, "computer-window-small", 60, spacing, 3)
+	assertRestoreWindowHeld(t, store, "computer-window-small", heads, spacing, snapshotRootRetention+snapshotRootAnchorsMax)
+}
+
+// The reviewer's case: the kept roots are 829,440, 1,192,320 and the newest
+// four, and a checkpoint at 1,100,000 must select 829,440 although the four
+// snapshots just below it are pruned rows.
+func TestSnapshotRetentionSelectsTheChainRootBelowAPrunedRun(t *testing.T) {
+	store, _ := openTestPlatformStore(t)
+	const spacing = 25920
+	heads := registerWindowRoots(t, store, "computer-window-case", 60, spacing, 3)
+	liveRows, err := store.LiveSnapshotRoots(t.Context(), "computer-window-case")
+	if err != nil {
+		t.Fatal(err)
+	}
+	live := map[int64]bool{}
+	for _, r := range liveRows {
+		live[r.HeadSequence] = true
+	}
+	for _, want := range []int64{829440, 1192320, 1477440, 1503360, 1529280, 1555200} {
+		if !live[want] {
+			t.Fatalf("kept roots %+v lack %d", liveRows, want)
+		}
+	}
+	base, attempts, ok := selectBase(heads, live, 1_100_000)
+	if !ok || base != 829440 {
+		t.Fatalf("checkpoint 1,100,000 selected %d (ok=%v) after %d attempts, want 829,440", base, ok, attempts)
+	}
 }
 
 // The paper: a large store, two newest roots, a capture every 13.4 hours at
@@ -89,8 +146,8 @@ func TestSnapshotRetentionKeepsTheRecoveryWindowOnASmallStore(t *testing.T) {
 func TestSnapshotRetentionKeepsTheRecoveryWindowOnALargeStore(t *testing.T) {
 	store, _ := openTestPlatformStore(t)
 	const spacing = 159000
-	registerWindowRoots(t, store, "computer-window-large", 14, spacing, largeSnapshotChunks+1)
-	assertRestoreWindowHeld(t, store, "computer-window-large", 14*spacing, spacing, largeSnapshotRetention+snapshotRootAnchorsMax)
+	heads := registerWindowRoots(t, store, "computer-window-large", 14, spacing, largeSnapshotChunks+1)
+	assertRestoreWindowHeld(t, store, "computer-window-large", heads, spacing, largeSnapshotRetention+snapshotRootAnchorsMax)
 }
 
 // Roots kept at the old 540,000-event cadence behave as before: nothing past
