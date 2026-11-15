@@ -9,10 +9,12 @@ here as a hypothesis; every claim about code below was read from the code, with
 file and line. A claim marked *(inferred)* was not read or measured.
 
 Rule for this lane (from the assessment): no mechanism beyond this one. The
-only additions that are not the copy itself are the ones the copy cannot be
-correct without: a cleanup that runs before the free-space measurement, an
-exclusion with the compact copy (both are store-sized files on one volume), and
-the metrics the proof needs. Section 5 lists what was left out.
+additions that are not the copy itself are the ones the copy cannot be correct
+without: a cleanup that runs, under an exclusion token, before the free-space
+measurement and at the earliest boot step; the exclusion with the compact copy
+(both are store-sized files on one volume); and the metrics the proof needs.
+Section 5 lists residuals; section 7 is review round 1's findings and what was
+done with each.
 
 ## 1. What the code does today
 
@@ -192,195 +194,293 @@ today (`snapshot.go:696`). Reasons it is a consistent image:
    already assembles and opens exactly these bytes
    (`snapshot.go:1067-1105`, `restore_snapshot.go:203-216`), so the property
    holds today; the lane changes where the bytes are written, not which bytes.
-3. **Experiment (this lane's first test).**
+3. **Experiment (this lane's first test, updated in review round 1).**
    `internal/snapshot/static_copy_consistency_test.go`, run on the build VM
-   (Linux, go1.26.4, modernc sqlite from this module): a store whose main file is
-   4,096 bytes while 17.6 MB sits in the WAL (autocheckpoint off, so the copy
-   cannot be a read of the file), a writer committing constantly, a head read
-   first and 2,008 pages copied with a 5 ms pause every 50 pages. 54 commits
-   landed during the copy; the live head moved 600 to 654; none leaked. The copy
-   opened with `dbx.OpenSQLite(..., ReadOnly: true)` held exactly 600 x 10 rows,
-   its head row was 600, `quick_check` was `ok`, and the main file's SHA-256 differed from the copy's (so
-   the WAL content did reach the copy). Opening, querying and closing the copy
-   read-only left its SHA-256 unchanged. Two sidecars (`-wal`, `-shm`) were
-   left beside the copy after close, so the cleanup must remove them with it. A
-   copy missing its last page was refused when opened (`database disk image is
-   malformed`), before any cross-check; a same-size copy of the wrong head is
-   only caught by the cross-check below.
+   (Linux, go1.26.4, modernc sqlite from this module), in two configurations.
+   (a) The pinned state lives only in the WAL: main file 4,096 bytes, 17.6 MB
+   in the WAL, autocheckpoint off, so the copy cannot be a read of the file.
+   (b) Production defaults: autocheckpoint on, a concurrent
+   `wal_checkpoint(PASSIVE)` every 20 ms, and a freelist from deleted rows
+   (main file 7.7 MB, WAL 4.1 MB). In both: a writer commits constantly, the head
+   (ten columns, like `store.Head`) is read first, 2,009 pages are copied, and
+   the copy loop paces on writer progress (it waits for one more commit every 50
+   pages, 30 s limit) instead of sleeping. 42 commits landed during each copy
+   (head 600 to 642); none leaked. (The first version of the test, with 5 ms
+   sleeps, saw 54 commits in the author's run and 1,294 in a reviewer's: the
+   count depends on the machine, which is why pacing is on progress now.) The
+   copy opened with `dbx.OpenSQLite(..., ReadOnly: true)` held exactly the rows
+   of head 600, its ten head columns equalled the transaction's, `quick_check`
+   was `ok`, and in (a) the main file's SHA-256 differed from the copy's (the WAL
+   content reached the copy). Opening, querying and closing the copy read-only
+   left its SHA-256 unchanged. `-wal` and `-shm` were left beside the copy after
+   close. A copy missing its last page was refused when opened (`database disk
+   image is malformed`) before any cross-check. A same-size copy of the same
+   sequence whose `effective_state_commitment` alone differs is refused by the
+   cross-check, and a nil head is equal only to a nil head. Not covered by this
+   test, so listed in section 3: auto_vacuum/`incremental_vacuum` truncation,
+   page sizes other than 4096, a store past 1 GiB (the lock-byte page), and the
+   read/write open that `VerifySnapshotFile` uses. (A reviewer's throwaway check
+   of the read/write open, `computerversion` digests on the copy and a copy after
+   `incremental_vacuum` all matched; that was not mine and is not in the tree,
+   so failures 7 and 8 pin it.)
 
 Alternatives, rejected on what the code says: `VACUUM INTO` renumbers pages (the
 `compact.go` copy: "each B-tree written contiguously", `:388-391`), so a copy
 never dedupes against live-file chunks; the SQLite backup API restarts whenever
 another connection writes (`wal_bound.go:28-31`).
 
+
 ### 2.2 The write
 
-- The scratch is a directory `snapshot-tmp` under the data dir (the same name
-  the legacy cleanup uses, `snapshot_producer.go:137`), holding one file
-  `state.db`. It is on the data volume, beside the store, never `/tmp`
-  (`replay_scratch.go:17-23`). Created `0700`/`0600`, `O_EXCL`, in a directory
-  that was removed first.
-- Reusing the legacy name has one reason: after a rollback (section 4) the
-  previous binary's attempt start removes it (`:553`), so a rollback needs no
-  operator step for a scratch left by a new binary.
-- Pages are written through a 4 MiB buffered writer. Every 64 MiB
-  (`sourceDropBytes` is already that size, `snapshot.go:612`) the writer calls
-  `fdatasync` and then drops that range from the page cache with the existing
-  `adviseDropFileCache` (`internal/snapshot/cache_linux.go:14-21`). Reason
-  *(inferred)*: `FADV_DONTNEED` drops only clean pages, 40 GB of dirty pages
-  would fill a guest's memory, and a synchronous commit of the live WAL must not
-  wait behind more than one 64 MiB writeback. The cost (sync per chunk) is
-  measured in the d@e proof, section 4.
-- Every 64 MiB the copy also calls `cfg.FreeSpace()` (section 2.5).
-- A SHA-256 over the bytes written is computed in a second goroutine fed by the
-  writer (so it does not extend the pin when the disk is the slower side). On the
-  build VM Go's SHA-256 ran at about 450 MB/s single core, 2 GiB in 4.57 s,
-  against 2 GiB written and fsynced in 3.65 s and read in 0.94 s *(build VM,
-  one run, not a guest)*. The digest is checked again while the upload reads
-  the file (2.4), so "the bytes uploaded are the bytes witnessed" is kept without
-  a second pass over the disk. It is a mechanism only because the copy removed the
-  one-transaction construction that gave the property for free; section 5 lists
-  it as an open question.
-- The transaction ends as soon as `pages == page_count` and the writer has
-  closed the file. The "read transaction" metric then equals head read plus copy.
+- The scratch is a directory `snapshot-tmp` under the data dir (the name the
+  legacy cleanup uses, `snapshot_producer.go:137`), holding one file `state.db`.
+  It is on the data volume beside the store, never `/tmp`
+  (`replay_scratch.go:17-23`). Directory `0700`, file `0600`, `O_EXCL`, in a
+  directory that was removed first; an existing file at that path is an error,
+  never reused.
+- Rollback caveat, stated plainly: reusing the name means a rolled-back binary
+  removes a scratch left by the new one, but its removal runs after its own
+  free-space refusal (`snapshot_producer.go:527-553`) and it has no boot sweep. A
+  rollback onto a volume with less than the old rule's floor free, with a
+  leftover scratch, needs an operator to delete `snapshot-tmp`. See 2.8 and
+  section 4.
+- Pages go through a 4 MiB buffered writer. Every 64 MiB (`sourceDropBytes`,
+  `snapshot.go:612`, made a package variable `scratchSyncBytes` so a test can
+  shrink it) the code flushes the buffer, calls `fdatasync` on the file, drops
+  that range with `adviseDropFileCache` (`internal/snapshot/cache_linux.go:14-21`;
+  a no-op elsewhere, `cache_other.go`, so the proof runs on Linux guests) and
+  calls `cfg.FreeSpace()`. Reason *(inferred)*: `FADV_DONTNEED` drops only clean
+  pages, 40 GB of dirty pages would fill a guest's memory, and a synchronous
+  commit of the live WAL must not wait behind more than one 64 MiB writeback.
+- The SHA-256 of the bytes written is computed **inline**, on the same buffer,
+  by the goroutine that writes. It is not a second goroutine: a bounded queue
+  would make the slower side (hash, about 450 MB/s on the build VM, 2 GiB in
+  4.57 s, against 2 GiB written and fsynced in 3.65 s there) the pin, and an
+  unbounded one holds memory. The cost is therefore a bounded, named addition to
+  the pin: `S / 450 MB/s`, about 88 s for 39.6 GB *(build VM figure, one run; a
+  guest may differ)*. The digest is compared at the end of the upload (2.4 step
+  6); it is what re-establishes "the bytes uploaded are the bytes witnessed"
+  once one transaction no longer produces both.
+- The pin (`PinTime`) is the interval from the `BeginTx` return to the return of
+  the transaction's rollback, taken by `capture` with its own clock, not by the
+  copy loop. `CopyTime` is the page loop alone. They are different timers; a
+  test pins that `PinTime >= CopyTime` and that an outside probe sees the reader
+  for `PinTime` (failure 12).
+- The transaction ends when `pages == page_count` and the writer is flushed,
+  synced and closed.
+- Writes go through a small interface (`scratchWriter`: `Write`, `Sync`,
+  `Close`) so a test can inject `ENOSPC` and `EIO`, which cannot be forced
+  portably.
 
 ### 2.3 How the copy is tied to the head
 
-Before the witness, on the opened copy:
+Before the witness, on the opened copy (opened read-only,
+`dbx.OpenSQLite(path, {ReadOnly: true, ReadConns: 1})`, `dbx.go:99-130`; the
+experiment shows it does not change the file):
 
 1. `PRAGMA page_size` and `PRAGMA page_count` equal the values read in the
    transaction (`streamFile` reads both, `snapshot.go:662-667`), and the file
    size equals `pageSize x pageCount`.
-2. The head row read from the copy equals the head read first in the
-   transaction, on every column `Head` returns. The check calls `cfg.Head` with
-   a read transaction of the copy's own DB, so it reuses `store.HeadTx` and adds
-   no second query.
+2. The head read from the copy equals the head read first in the transaction on
+   **every field `Head` carries**: `ComputerID`, `Sequence`,
+   `CanonicalEventHead`, `DesiredEventHead`, `EffectiveEventHead`,
+   `PendingTransitionRef`, `DesiredStateCommitment`, `EffectiveStateCommitment`,
+   `ReducerVersion`, `CredentialRevocationEpoch`
+   (`internal/computerevent/reducer.go:16-27`; the columns of the `SELECT`,
+   `internal/store/computer_events.go:60`). The comparison is by value over the
+   whole struct (`*got == *want`; every field is a string or integer, so the
+   struct is comparable); a check of the sequence alone is a defect. It reuses
+   `cfg.Head` with a read transaction on the copy's own DB, so it adds no
+   second query. `Head` returns nil for an empty store (`scanProjectionHead`,
+   `computer_events.go:62-67`): nil equals nil and nothing else; nil on one side
+   only fails the attempt.
 3. The pages written equal the transaction's `page_count` (today's equivalent,
    `snapshot.go:749`).
-4. The copy is opened read-only (`dbx.OpenSQLite(path, {ReadOnly: true,
-   ReadConns: 1})`, `dbx.go:99-130`). The experiment showed that this does not
-   change the file.
 
-A mismatch fails the attempt with the name of the check; nothing was uploaded,
-nothing registered, the scratch is removed.
+A mismatch fails the attempt with the name of the check; nothing was uploaded or
+registered, the scratch is removed. What this check catches is a writer-side
+defect (a dropped or duplicated page, a wrong size, a wrong file), not a mix of
+two snapshots inside one transaction, which cannot happen. Things produced at a
+different instant than the copy are unchanged: the partitions (read after,
+`snapshot.go:598-606`), `CreatedAt`, the manifest time, `RegisterSnapshotRoot` and
+the append (`snapshot.go:341`, `:365`).
 
-The witness is then `LiveStoreWitness(ctx, copyDB)`, i.e. the code
-`VerifySnapshotFile` runs on an installed base (`restore_snapshot.go:243-246`).
-The recorded witness and the install's witness are the same function over the
-same bytes. (`VerifySnapshotFile` opens read/write; the capture opens read-only.
-Both read the same pages; failure F7 pins the equality.)
+The witness is then `LiveStoreWitness(ctx, copyDB)`, the code `VerifySnapshotFile`
+runs on an installed base (`restore_snapshot.go:243-246`, `:203-216`).
+`VerifySnapshotFile` opens read/write and the capture read-only; both read the
+same pages, and failures 7 and 8 pin the equality.
 
 ### 2.4 Order of an attempt (new)
 
-In `evaluate` (`snapshot_producer.go:432-`):
+In `evaluate` (`snapshot_producer.go:432-`), the due evaluation and the backoff
+gate (`:440-515`, `Ready` at `:440`) are reads only and stay first. Then, as the first act of an
+attempt that is going to run (the coordinator asked for "right after the tick
+lock"; the lock is taken at `:436`, and the evaluation between them only reads and
+cannot touch a file; taking the token on a not-due tick would refuse and count a
+streak for a snapshot nobody wanted):
 
-1. After `tick.TryLock` (`:436`), before `Ready` and before anything is
-   measured: remove the scratch directory, and any `.compact-staging` file when
-   no compaction is running (2.6). The tick mutex means no capture of this
-   process is live; nothing else writes the data dir's scratch. This is the
-   cleanup the free-space check must follow (the leftover of a crashed attempt
-   is removed even when the snapshot is not due, so 40 GB never waits for the
-   next due capture).
-2. `Runtime.Start` also removes it, next to `removeStaleReplayScratch`
-   (`runtime.go:1278`), so a crash's scratch is gone before boot-time disk users
-   (rebase, restore staging) need the space.
-3. Busy, free-space rule (2.5), acquire the exclusion (2.6), spend the attempt,
-   `inFlight = true`, `Take`.
-4. `capture`: hold the partitions, begin the transaction, head, page size and
-   count, partition list, copy (2.2), end the transaction, call a new
-   `Config.ReadReleased` hook (production: `store.CheckpointAfterLongRead`, moved
-   from the `defer` on `Take`, `snapshot_producer.go:798`, to here), open the
-   copy, cross-check (2.3), witness, close the copy's DB.
-5. Upload from the file: read the scratch in `ChunkSize` blocks (the same cut:
-   `snapshot.go:660-672`), hashing as read, seal, probe, PUT with the existing
-   uploader (`:420-470`). At the end compare the hash with the copy's; mismatch
+1. **Take the store-copy token** (`TryHoldStoreCopy("capture")`, 2.6). Refused:
+   return `snapshotRefused` naming the holder; nothing is deleted, measured or
+   started.
+2. **Clean**: `RemoveAll` of `snapshot-tmp` (scratch and, inside it, the copy's
+   `-wal`/`-shm`), and, because the token proves no compaction in this process is
+   writing it, `removeSQLiteFiles(state.db.compact-staging)`
+   (`compact.go:239-243`, the same call `prepareCompactCopy` makes first,
+   `:267-269`). A removal that fails fails the attempt closed (log, no capture);
+   nothing proceeds on top of a file it could not remove.
+3. **Measure**: `Busy`, then free space and `page_count` (2.5). The old order
+   put the free-space refusals before the only cleanup (`snapshot_producer.go:527-543`
+   against `:553`); this is the new order.
+4. `spendGuestAttempt`, `inFlight = true`, `Take`.
+5. In `Take`/`capture`: hold the partitions, begin the transaction, head, page
+   size and count, partition list, copy (2.2). Then the transaction ends:
+   `rollback()` is the one place that ends it (`snapshot.go:538-546`; it is
+   idempotent through `txOpen`, and `defer rollback()` runs it on every return).
+   **The `ReadReleased` hook fires from that closure, once, on every path**: a
+   successful copy, a copy error, a cancel, the time budget, `ENOSPC`, a head or
+   cross-check failure. It is called with `context.WithoutCancel(ctx)` of the
+   caller's context (not `runCtx`, which the budget or a cancel may already have
+   ended, which is when the WAL is largest). In production it runs
+   `store.CheckpointAfterLongRead` (`wal_bound.go:86-93`) and reads the head
+   sequence for the proof (4). It runs in its own goroutine, so the witness
+   does not wait for it (the witness reads the copy's own DB, not the live
+   store); `capture` joins it before it returns, so `Take` returning still means
+   the checkpoint finished, as the old `defer` did (`snapshot_producer.go:798`).
+   It does take the store's single write connection for its duration, so appends
+   queue behind a PASSIVE checkpoint of the pinned WAL, exactly as they did at
+   the end of every old capture; the proof measures that (4).
+6. Open the copy read-only, cross-check (2.3), witness, close the copy's DB.
+   Upload from the file: read the scratch in `ChunkSize` blocks (the same cut,
+   `snapshot.go:660-672`), hash as read, seal, probe, PUT with the existing
+   uploader (`:408-470`). At the end compare the hash with the copy's; a mismatch
    fails the attempt before `RegisterSnapshotRoot`.
-6. Delete the scratch directory immediately after the upload (not at the end of
-   `Take`), so the partitions, the append and the next disk user do not wait for
-   it. A `defer` also deletes it on every error path.
-7. Partitions (unchanged), manifest, `RegisterSnapshotRoot`, append
-   (`snapshot.go:341`, `:365`), release the exclusion.
+7. **Delete the scratch right after the upload** (`RemoveAll` of the directory) and
+   on every error path (a `defer`), then call the `ScratchRemoved` hook once on
+   every path; in production it releases the token. The token is held from step
+   1 to here, not to the end of `Take`.
+8. Partitions (unchanged), manifest, `RegisterSnapshotRoot`, append
+   (`snapshot.go:341`, `:365`).
 
 `inFlight` stays true for the whole `Take` (`snapshot_producer.go:559-562`). A
-planned restart still waits for the whole capture, not only the copy, because a
-restart after the copy would discard the scratch and the witness for nothing
-(`planned_restart.go:516-519` gives the same reasoning for the stream).
+planned restart still waits for the whole capture, because a restart after the
+copy would discard the scratch and the witness for nothing
+(`planned_restart.go:516-519` gives the same reason for the stream).
+
+**Boot (second defence first).** `autoputer.Run` does the compact rebase at
+`internal/autoputer/run.go:213` (`RebaseOntoCompactCopy`), opens the store at
+`:236` and replays the tape (`:900-910`) before `rt.Start` (`:786`, `:817`), so
+`Runtime.Start`'s sweep (`runtime.go:1278`, where `removeStaleReplayScratch`
+runs) comes after the disk users the sweep is for. The scratch removal therefore
+moves to the earliest boot step: a store helper
+`RemoveSnapshotScratch(storePath)` (the directory is
+`filepath.Dir(StateDBPath(storePath))/snapshot-tmp`, `state_path.go:13-15`) called in
+`autoputer.Run` before `RebaseOntoCompactCopy`. `Runtime.Start` calls the same
+helper too, as a second defence (it is the earlier, simpler call site for tests
+that construct a runtime without `autoputer.Run`). Nothing runs in the
+`Start`-less window that could be writing a scratch (no capture runs before a
+boot has settled: `Ready`, `snapshot_producer.go:440`).
 
 ### 2.5 Free-space rule, every trigger kind
 
-The old replay-only headroom (`:536-543`) is deleted; one rule applies to
-first, ceiling, interval and replay, because every capture copies:
+One rule for first, ceiling, interval and replay, because every capture copies:
 
 ```
-need = S + snapshotFreeFloor + copyHeadroom
-S            = page_count x page_size read from the read pool at evaluation
-copyHeadroom = copyEstimate x snapshotWALBytesPerSecond
-copyEstimate = 2 x the last copy duration of this computer, when the persisted
-               capture record has one; otherwise S / 50 MiB/s; at most the copy budget
+need = S + snapshotFreeFloor          (2 GiB, snapshot_producer.go:93)
+S    = page_count x page_size from the read pool, read after the token and cleanup
 ```
 
-- `snapshotWALBytesPerSecond` (2 MiB/s) is kept: it is the existing measured
-  figure (`snapshot_producer.go:120-124`). The 50 MiB/s and the factor 2 are
-  inferred defaults, to be replaced by the first measured copy; they are
-  conservative, not measured.
-- A small store: S = 1.1 GB gives about 2 GiB + 1.1 GB + 22 s x 2 MiB/s x 2,
-  about 3.2 GB (the figure "about 3.1 GB" appears in the set-aside design).
+- The old replay-only headroom (`snapshot_producer.go:536-543`) is **deleted**,
+  and no new headroom is added (review round 1 deleted the constants 50 MiB/s and
+  the factor 2 I had invented). The headroom existed to avoid "a mid-capture
+  abort after gigabytes of upload" (`:116-124`); an abort during the copy now
+  uploads nothing, and the 64 MiB guard (below) stops the copy before the floor.
 - Unreadable `page_count` or free space fails closed, as today (`:527-530`).
-- During the copy: `FreeSpace()` is called every 64 MiB written and fails the
-  attempt under the floor (the minute-interval goroutine, `snapshot.go:492-517`,
-  stays for the witness and upload). Reason: the copy writes at disk speed, so a
-  one-minute interval can be 10 GB or more between readings, against a 2 GiB
-  floor *(inferred from the write rate measured on the build VM above)*.
-- Staged compact copy (`state.db.compact`, complete): no separate rule. Its bytes
-  are already missing from the measured free space; the refusal text names it
-  when it exists so the operator sees the cause. The capture does not delete it
-  (compaction does that itself, `compact.go:312-316`).
-- Compact copy in progress (`state.db.compact-staging`): the exclusion of 2.6.
-  A leftover staging file with no compaction running is removed at the attempt
-  start (2.4), which is exactly what `prepareCompactCopy` does first anyway
-  (`compact.go:267-269`).
-- The replay probe's scratch (`replay_scratch.go:124-142`) and rematerialize
-  staging share the volume; they admit by measured free space, so a capture's
-  scratch makes them refuse by name, and theirs makes the capture refuse by name.
-  No mechanism is added for that *(inferred from `admitReplayScratch`)*.
+- During the copy: `FreeSpace()` runs every 64 MiB written and fails the attempt
+  under the floor. The minute-interval goroutine (`snapshot.go:492-517`) stays
+  for the witness and upload. Reason *(inferred)*: the copy writes at disk speed,
+  so one minute can be 10 GB or more against a 2 GiB floor. A `statfs` error
+  during the copy fails closed (as `:816`).
+- **The new disk requirement.** A computer with free space above the floor but
+  below `S` can no longer capture at all; today it captures with the floor alone
+  because nothing is written locally. This is a regression for such a computer
+  and is a named residual (section 5, R1, and failure 17): its tail grows until
+  the ceiling, then until the recovery bound, with the refusal visible in
+  `snapshot_producer.refusal` and `consecutive_refusals` (`snapshot_producer.go:665`,
+  status). No computer in the records I read is in that state; the paper's
+  numbers from the set-aside design (39.6 GB store, 85.9 GB available at
+  2026-11-15T05:49:12Z; not re-measured here) leave it 46 GB.
+- **Staged compact copy (`state.db.compact`, complete).** The arithmetic: the
+  admission test is `free < S + floor`, where `free` is measured *after* the
+  staged file exists. Its bytes are not added again. On the paper's figures, with
+  a staged copy of about the 42 GB the set-aside design names (staged size is
+  not recorded; inferred), `free` is about 85.9 - 42 = 43.9 GB against `need` =
+  39.6 + 2.1 = 41.7 GB: admitted with about 2 GB to spare, then the 64 MiB guard
+  decides; a staged copy a little larger refuses. Both seats found refusing here
+  the wrong default (a capture is the recovery base, compaction is derivable), so
+  the rule mirrors compaction's own (`compact.go:312-316`): under the token,
+  when `free < need` and `free + size(state.db.compact) >= need`, remove
+  `state.db.compact` and its sidecar (`.compact.json`) and measure again;
+  compaction restages at its next pass. If removing it would not be enough, it is
+  left alone and the attempt refuses with the amounts named. This is one
+  decision the owner may reverse by deleting one branch (question 1).
+- Compact copy in progress: the token (2.6); a leftover staging file is removed
+  at step 2 of 2.4 once the token is held.
+- The replay probe's scratch admits by measured free space
+  (`admitReplayScratch`, `replay_scratch.go:124-142`, called from
+  `replay_completeness.go:302`). Rematerialize staging does **not**: it creates
+  `rematerialize-staging-*` beside the store (`rematerialize.go:93`) and
+  `admitReplayScratch` has no other caller. A restore during a capture can
+  therefore fill the volume the capture's guard is watching; the capture's
+  guard aborts the capture (the copy is lost, nothing is uploaded) and the
+  restore proceeds. Named residual R2; no mechanism is added.
 
 ### 2.6 The exclusion with compaction
 
-Both are store-sized writes to one volume. Today nothing orders them (1.5), and
-the disk check is a one-time reading before each starts. Mechanism: a single
-in-process token on `store.Store`, `TryHoldStoreCopy(kind string) (release func(),
-holder string, ok bool)`, taken by `prepareCompactCopy` around staging (from
-before `removeSQLiteFiles(staging)` at `compact.go:269` until the staged file is
-renamed or removed) and by the capture around `Take`. The second to ask is
-refused with the holder's name: the capture reports "refused: a compact copy is
-being written" and the next tick retries (10 minutes, `snapshotTickEvery`);
-compaction returns `skipped: a snapshot capture holds its scratch copy` and runs
-at its next pass (24 hours, `telemetry_retire.go:30`). Being in-process, a crash
-releases it. This is the only new shared state in the lane.
+Both are store-sized writes to one volume and nothing orders them today (1.5).
+An in-process token on `store.Store`, with two entry points:
+`TryHoldStoreCopy(kind) (release func(), holder string, ok bool)` (never blocks;
+the capture uses it) and `HoldStoreCopy(ctx, kind) (release func(), err error)`
+(waits for the holder, bounded by the context; compaction uses it).
+
+- Compaction takes it at the top of `prepareCompactCopy`, **before**
+  `removeSQLiteFiles(staging)` (`compact.go:267-269`), and holds it until the
+  staged file is renamed or removed (the end of the function). It waits rather
+  than skipping, so a collision does not cost a 24-hour pass
+  (`telemetry_retire.go:30`; the retirement goroutine already runs for tens of
+  minutes in this call, `compact.go:306-385`). Its wait is bounded by its context.
+- The capture takes it with `TryHold` at step 1 of 2.4 and holds it through the
+  scratch removal (step 7). A refused capture is `snapshotRefused` with the
+  holder's name and retries at the next tick (10 minutes).
+- Because the token is taken before any deletion and any reading of free space, a
+  compaction that starts after the capture took it waits; one that started first
+  made the capture refuse before it deleted anything. The race the first draft
+  had (the capture unlinking the file compaction is writing, or measuring space
+  compaction is about to consume) cannot occur.
+- Being in-process, a crash releases it. One agentcore process runs per guest
+  *(assumption, from `Runtime`/`autoputer.Run`)*.
 
 ### 2.7 What still pins the WAL, and for how long
 
-- The state store's read transaction: head read plus copy. This is the pin the
-  lane shortens. From today's witness plus stream to the copy time. The copy
-  time is bounded below by the read rate and above by the guest disk's write
-  rate (unmeasured on a guest; the build VM wrote about 560 MB/s). WAL growth is
-  proportional: the set-aside design cites 2.6 to 3.7 GB over 37 minutes,
-  about 1.2 to 1.7 MiB/s, so a 3 to 13 minute copy would pin about 0.2 to 1.3 GB
-  *(inferred from figures taken from that design, not re-measured here)*.
+- The state store's read transaction: head read, page count, partition list and
+  copy, plus the inline hash. This is the pin the lane shortens, from today's
+  witness plus stream to the copy. Its lower bound is the slower of the read, the
+  write and the hash (build VM: 450 MB/s hash, 560 MB/s write+fsync, 2.1 GB/s read;
+  a guest is unmeasured). WAL growth is proportional to the pin; the set-aside
+  design's cited growth (2.6 to 3.7 GB over a 37-minute capture) is a different
+  rate from the code's 2 MiB/s (`snapshot_producer.go:120-124`), and neither is
+  measured here. The proof therefore reports growth normalised by the events
+  appended during the pin (4), and predicts nothing in bytes.
 - Each telemetry partition's read transaction pins that partition's own WAL for
-  that partition's stream and upload, one after another, after the state
-  transaction has ended and after the state upload (1.3). They are unchanged;
-  the lane adds a metric for the longest of them (section 4). Their size is not
-  recorded anywhere I read.
-- The partition hold (`gcMu.RLock`) lasts from before the transaction to the
-  end of `capture`, as today (`snapshot.go:528-531`), so partition garbage
-  collection waits for the whole capture, now including the witness and upload.
-  It already did (the witness and stream were inside the same function).
-- After the transaction: nothing of the capture pins the state WAL. The explicit
-  PASSIVE checkpoint moves to the moment of release (2.4 step 4); ordinary
-  autocheckpoints continue behind it. The file's size stays at its high-water
-  mark until a writer restarts the WAL and truncates to 64 MiB
-  (`wal_bound.go:20-24`).
+  its stream and upload, sequentially, after the state transaction and after the
+  state upload (1.3). Unchanged and still unmeasured; no metric is added for it
+  (round 1: the proof does not need it).
+- The partition hold (`gcMu.RLock`) lasts from before the transaction to the end
+  of `capture`, as today (`snapshot.go:528-531`); partition GC waits for the
+  whole capture, as it already did.
+- After the transaction nothing of the capture pins the state WAL. The PASSIVE
+  checkpoint runs at release (2.4 step 5); ordinary autocheckpoints continue.
+  The file keeps its high-water size until a writer restarts the WAL and
+  truncates to 64 MiB (`wal_bound.go:20-24`).
 - Other long readers are unchanged: the compaction copy (1.5) and the checkpoint
   bind's witness (outside this lane).
 
@@ -388,293 +488,445 @@ releases it. This is the only new shared state in the lane.
 
 | Step | State left | Next attempt or boot |
 | --- | --- | --- |
-| before the copy | nothing | normal |
-| during the copy (transaction open) | partial scratch, no WAL pin (process gone), attempt counter at +1 | `Start` removes the scratch (2.4 step 2); the first tick removes it again before the free-space check |
+| before the token | nothing | normal |
+| token held, cleanup or measurement | the token dies with the process | normal |
+| during the copy (transaction open) | partial scratch, no WAL pin (process gone), attempt counter at +1 | `autoputer.Run` removes the scratch before the rebase and the store open (2.4); `Start` again; the attempt's step 2 again |
 | after the copy, before or during the witness | full-size scratch | same; the witness is repeated from a new copy (nothing resumes: CLAUDE.md "A crash restart never resumes work") |
-| during the upload | scratch, some chunks on the host | same; the host sweeps unregistered chunks after its grace (`snapshot_producer.go:111-114`) |
-| after the scratch delete, before `RegisterSnapshotRoot` or the append | no scratch, chunks on the host | existing behaviour (`snapshot.go:341`, `:365`) |
+| during the upload | scratch, some chunks on the host | same; the host sweeps unregistered chunks after its grace (comment `snapshot_producer.go:81-89`) |
+| during or after the scratch delete | none or partial directory | same sweep; a partial `RemoveAll` is finished by the next one |
+| after the delete, before `RegisterSnapshotRoot` or the append | no scratch, chunks on the host | existing behaviour (`snapshot.go:341`, `:365`) |
 | after the append | complete | `clearGuestAttempt` runs when `Take` returns; a crash between append and return leaves the attempt counted (existing) |
-| a failed delete of the scratch | scratch | logged; the next attempt start retries before measuring |
-| rollback to the previous binary | `snapshot-tmp/` | removed at its attempt start (`:553`); that check follows its free-space check, so a rollback on a volume too full for the previous rule to pass needs the operator to delete the directory *(inferred; a volume that full has other problems)* |
+| a failed delete of the scratch | scratch | logged; the next attempt fails closed at step 2 until it can be removed (2.4) |
+| **boot with a leftover scratch and low free space** | scratch of up to S bytes | removed first in `autoputer.Run`, before the rebase (`run.go:213`), the store open (`:236`) and the replay; without the early removal the rebase, open or replay could fail on a full volume before any sweep |
+| rollback to the previous binary | `snapshot-tmp/` | removed at the old attempt start (`:553`), which follows the old free-space refusal (`:527-543`): on a volume too full for the old floor an operator deletes the directory; the old binary has no boot sweep |
 
 A crash costs the attempt counter: three crashed starts close the producer
-(`snapshot_producer.go:134`, `:547-550`). That is existing behaviour and is not
-changed; a deploy restart is not a crash because the planned restart waits for
-`inFlight`.
+(`snapshot_producer.go:134`, `:547-550`), existing behaviour. A deploy restart is
+not a crash because the planned restart waits for `inFlight`. The d@e drill
+(section 4) therefore kills at most twice between normal attempts.
 
 ### 2.9 What is deleted
 
 - `LiveStoreWitnessTx` and `Config.Witness`'s transaction form
   (`restore_snapshot.go:251-262`; `snapshot.go:240-244`, `:571`); `Config.Witness`
   takes the copy's `*sql.DB`. `DigestsTx` stays (`Digests` uses it).
+  Callers to change, because the gate runs every package importing the changed
+  one: `internal/agentcore/snapshot_producer.go:808`,
+  `internal/agentcore/snapshot_stream_test.go:185-192`,
+  `internal/agentcore/restore_snapshot_test.go:254-261`,
+  `internal/agentcore/restore_probe_production_test.go:151-157`,
+  `internal/autoputer/projection_base_test.go:213-223` and `:274-280`, the
+  fixtures in `internal/snapshot/*_test.go` (12 files call `TakeSnapshot`), and the
+  comment at `internal/agentcore/canonical_witness.go:40`.
 - The state file's use of the `sqlite_dbpage` loop in `streamFile`
-  (`snapshot.go:696-760`) is replaced by a file reader for the state file; the
-  loop remains once, in the copy, and for partitions. The in-transaction witness
-  and its ordering comment (`:562-570`) go.
-- The replay-only WAL headroom (`snapshot_producer.go:536-543`) and the single
-  "the stream writes no copy" comments (`snapshot_producer.go:38-41`, `:91-92`;
-  `snapshot.go:13-14`; `wal_bound.go:28-31`) are rewritten. The producer header
-  failure item 4 ("the stream writes a temporary copy of the store (it writes
-  nothing...)") is rewritten as "the scratch copy is on the data volume, removed
-  at the start of every attempt and of every boot".
-- The 90-minute budget comment (`snapshot_producer.go:70-80`) is rewritten: the
-  budget no longer bounds a pin. `CHOIR_SNAPSHOT_MAX_DURATION` is not touched
-  (existing environment value, `:164-178`); a new constant bounds the copy
-  (section 5, question 3). No new environment variable.
+  (`snapshot.go:696-760`) is replaced by a file reader for the state file; the loop
+  remains once, in the copy, and for partitions. The in-transaction witness and its
+  ordering comment (`:564-570`) go.
+- The replay-only WAL headroom (`snapshot_producer.go:536-543`).
+- The comments that say the opposite of the new design are rewritten, not left:
+  `snapshot.go:13-14` ("no temporary copy"), `snapshot_producer.go:38-41` (failure
+  item 4) and `:91-92` ("The stream writes no copy"), `wal_bound.go:28-31` ("not
+  shortened"; the backup-API half stays true) and the 90-minute reason at
+  `snapshot_producer.go:72-79`.
+- `CHOIR_SNAPSHOT_MAX_DURATION` stays and stays the one deadline for the whole
+  capture, which also bounds the pin: the 30-minute copy budget I had proposed is
+  **deleted** (it was an invented number; the existing 90 minutes already gives a
+  pin no worse than today's, and the 64 MiB free-space guard is the real bound).
+  No new environment variable, no new constant for a budget.
 - `snapshotLegacyTempDirName` is renamed `snapshotScratchDirName`, same value;
-  the one `RemoveAll` at `:553` becomes the start-of-attempt cleanup. The doc
-  comment at `:135-137` changes.
+  the one `RemoveAll` at `:553` becomes the step-2 cleanup and the boot helper.
+- Not added (round 1 removed them): the persisted copy-seconds field and its
+  headroom use, `last_partition_pin_max_seconds`, the tick-level cleanup on a
+  not-due evaluation.
 - Not deleted: `VerifySnapshotFile`, `Restore`, `Install`, the record, the chunk
-  cut and every existing restore path. A record from the new code is the record
-  of today's code.
+  cut and every restore path. A record from the new code is the record of today's
+  code; `DurationSeconds` in the persisted capture record stays the whole
+  capture's, because `snapshotCaptureFloor` and `snapshotDue` read it
+  (`snapshot_producer.go:~345-410`, `:590-606`).
 
 ## 3. Failure list (tests are written from this list, before the code)
 
-Test 0 already exists: `TestStaticCopyIsAConsistentImageOfThePinnedHead` (section
-2.1). It is the lane's first test. Each below is a scenario one test pins.
+Test 0 exists: `TestStaticCopyIsAConsistentImageOfThePinnedHead` (two
+configurations, section 2.1). Seams the tests need, named so the builder writes
+them first: `Config.pageHook` (exists) called in the copy loop; unexported
+`Config.afterCopy(path)` and `Config.afterWitness(path)` hooks; the
+`scratchSyncBytes` variable (2.2); the `scratchWriter` interface (2.2);
+`Config.ReadReleased(ctx)` and `Config.ScratchRemoved()`; `Config.MaxDuration`
+(exists) for budgets; `FreeSpace` (a func, exists) for space.
 
 Consistency and the tie to the head
-1. Writers commit throughout the copy; the copy opens as exactly the head read
-   first (test 0).
-2. A copy whose head row differs from the transaction's head (a hook rewrites it
-   between copy and cross-check) is refused; nothing uploaded, no root, no event,
-   scratch gone.
-3. A copy that is short, long or of another page size than the transaction read
-   is refused by the cross-check or by open (test 0's short copy).
+1. Writers commit throughout the copy, in both configurations (WAL-only state;
+   production defaults with concurrent PASSIVE checkpoints and a freelist); the
+   copy opens as exactly the head read first (test 0).
+2. A copy whose head differs from the transaction's in **one column other than
+   the sequence** (a hook rewrites `effective_state_commitment`, then another
+   test `canonical_event_head`) is refused; nothing uploaded, no root, no event,
+   scratch gone. A test per column of the ten is a table test.
+3. A copy that is short, long or of another page size than the transaction read is
+   refused by the cross-check or by open.
 4. Pages copied differ from `page_count`: the attempt fails by name.
-5. The copy's SHA-256 recorded at write time differs from the one computed while
-   uploading (a hook flips a byte after the witness): the attempt fails before
-   `RegisterSnapshotRoot`.
+5. A byte flipped in the scratch after the copy and before the witness (hook
+   `afterCopy`), and one flipped after the witness (`afterWitness`), each fail the
+   attempt through the digest compare before `RegisterSnapshotRoot`.
 6. The record's `StoreHeadSequence` is the head row of the copy; a restore of the
-   base replays exactly (head, target] (`tailReceipt`, `restore_snapshot.go:331-357`).
-7. Equality of witnesses: the witness computed on the read-only copy equals
-   `VerifySnapshotFile` on the reassembled file, equals `LiveStoreWitness` of the
-   live store at a quiet head.
-8. A snapshot from the new code installs through the unchanged `Restore` with
-   `VerifySnapshotFile` and its chunk digests equal those of the page sequence cut
-   by `ChunkSize/pageSize` (dedupe against earlier bases is preserved).
+   base replays exactly (head, target] (`tailReceipt`,
+   `restore_snapshot.go:331-357`).
+7. Witness equality, under concurrent writers: the witness of the copy equals
+   `DigestsTx` run inside the capture transaction at the pinned head while writers
+   commit, and equals `LiveStoreWitness` of the live store at a quiet head.
+8. The copy opened **read/write** as `VerifySnapshotFile` does
+   (`restore_snapshot.go:203-216`): main-file SHA unchanged, geometry, head and
+   `quick_check` unchanged, witness equal to the read-only open's; the same after
+   `auto_vacuum=INCREMENTAL` with `incremental_vacuum` shrinking the file before the
+   capture (stale in-header size).
+9. A store whose page size is 512, 8192 and 65536 copies and restores (the last
+   partial chunk, `snapshot.go:660-672`); a store past 1 GiB (the lock-byte page)
+   copies and restores equal (a test that creates a file just over 1 GiB, skipped
+   under `-short`, run once on the build VM).
+10. A snapshot from the new code installs through the unchanged `Restore` with
+    `VerifySnapshotFile`, and its chunk digests equal those of the page sequence cut
+    by `ChunkSize/pageSize` (dedupe against earlier bases is preserved).
+11. A nil head on both sides is accepted and recorded as today; nil on one side
+    refuses.
 
 The pin
-9. In the witness callback the WAL can be truncated (`wal_checkpoint(TRUNCATE)`
-   reports busy 0, `assertWALReleased`, `snapshot_pages_test.go:120-129`), i.e. no
-   read transaction of the capture is open during the witness and the upload.
-10. `ReadTxTime` is the head read plus the copy and not the witness; `CopyTime`,
-    `WitnessTime`, `UploadTime`, `ScratchBytes` are reported.
-11. `ReadReleased` runs after the transaction ends and before the witness starts,
-    and the producer's checkpoint is not deferred to the end of `Take`.
-12. Appends and writes proceed during the copy, the witness and the upload (the
-    no-hold test, `snapshot_nohold_test.go`, extended to the scratch phases).
-13. A telemetry partition retired after the head and before its read is kept by
-    the hold until it is read (the existing partitions test), and the longest
-    partition transaction is reported.
+12. An outside probe (a goroutine that tries `wal_checkpoint(TRUNCATE)` every
+    millisecond on the live write connection; busy not zero means a reader is
+    open) sees a reader for `PinTime` within 50 ms, `PinTime >= CopyTime`, and sees
+    none during the witness and the upload (this replaces the earlier failure
+    that tested the witness callback with the copy's handle; the test holds the
+    live handle itself). It is the independent timing of the pin.
+13. `ReadReleased` fires exactly once, from the rollback closure, on: a successful
+    copy, a copy error, cancellation during the copy, `MaxDuration` during the
+    copy, an injected `ENOSPC`, an injected `EIO`, a cross-check failure and a head
+    read failure; each time with a context that is not cancelled even though
+    `runCtx` is; and the producer's checkpoint is not deferred to the end of `Take`.
+14. The witness starts while the hook's checkpoint is still running (the hook
+    blocks on a channel; the witness must not wait), and `capture` joins the hook
+    before returning.
+15. Appends and writes proceed during the copy, the witness and the upload (the
+    no-hold test, `snapshot_nohold_test.go`, extended to the scratch phases), and
+    during the PASSIVE checkpoint no append is lost (only delayed).
+16. A telemetry partition retired after the head and before its read is kept by
+    the hold until it is read (the existing partitions test).
 
-Space and cleanup
-14. A scratch directory left by a crash is removed at the start of an attempt
-    BEFORE the free-space measurement: with free space equal to
-    `need - leftover`, the attempt proceeds; with the old order it would refuse
-    for ever (the wedge the review found).
-15. The same leftover is removed by `Runtime.Start` and by an evaluation that
-    finds the snapshot not due.
-16. The scratch's `-wal` and `-shm` sidecars are removed with it (test 0 observed
-    them left after close).
-17. The free-space rule table: for each of first, ceiling, interval, replay, free
-    just under `S + floor + headroom` refuses with the amounts named, and just
-    over it takes the capture; nothing is created on refusal.
-18. Free space falling under the floor mid-copy (checked every 64 MiB) aborts the
-    copy; the transaction is released, the scratch removed, no root, no event.
-19. `ENOSPC` or `EIO` on write or sync names the error; transaction released,
-    scratch removed.
-20. A staged compact copy (`state.db.compact`) lowers measured free space and the
-    refusal names it; the capture does not delete it.
-21. A leftover `.compact-staging` file with no compaction running is removed at
-    the attempt start; one with a compaction running is not touched.
-22. Exclusion: a capture refuses while compaction holds the token and compaction
-    skips while a capture holds it; both release on success, error, panic and
-    context cancellation.
-23. The scratch is deleted right after the upload and on every error path
-    (witness error, upload error, `RegisterSnapshotRoot` error, append error,
-    cancellation), including before the partitions are read.
+Space, ordering and cleanup
+17. A capture on a volume with `floor <= free < S` is refused with the amounts
+    named, for every kind (first, ceiling, interval, replay), creates nothing,
+    and the refusal appears in `snapshot_producer.refusal` (the named
+    regression R1). The same table: just under `S + floor` refuses, just over
+    takes the capture.
+18. Order: a scratch directory left by a crash is removed BEFORE the free-space
+    measurement. With `free = need - leftover` the attempt proceeds; with the old
+    order it refuses for ever.
+19. The token is taken before any deletion or measurement. A compaction holding the
+    token when the capture starts makes the capture refuse with the holder named
+    and **nothing deleted** (a `.compact-staging` file written by that compaction
+    is intact afterwards). A compaction that starts between the capture's
+    evaluation and its step 1 waits for the capture's token and then proceeds
+    after the scratch is removed. A compaction that starts between the capture's
+    cleanup and its free-space measurement waits (the race the first draft had).
+20. A leftover `.compact-staging` file with no compaction running is removed at
+    step 2 using `removeSQLiteFiles` (its `-wal`, `-shm` and `-journal` too); one
+    with a compaction holding the token is not touched.
+21. The scratch's `-wal` and `-shm` are removed with the directory (test 0 saw them
+    left after close).
+22. Boot: `autoputer.Run` removes the scratch before `RebaseOntoCompactCopy`, the
+    store open and the replay; with a leftover of S bytes on a volume whose free
+    space is below S the boot's rebase and open succeed; `Runtime.Start` removes
+    it again if it exists.
+23. A scratch whose removal fails, a `.compact-staging` whose removal fails, and an
+    existing file at the scratch path with `O_EXCL` each fail the attempt closed:
+    no copy starts.
+24. Free space falling under the floor mid-copy (checked every
+    `scratchSyncBytes`) aborts the copy; the transaction is released, the scratch
+    removed, no root, no event; a `statfs` error mid-copy fails closed.
+25. `ENOSPC` or `EIO` on write or sync (injected writer) names the error;
+    transaction released, scratch removed, hook fired once.
+26. A staged compact copy lowers measured free space and is not double counted: free
+    `= need + 1` with a staged file present takes the capture; free `< need` with
+    `free + staged >= need` removes `.compact` and `.compact.json` under the token
+    and takes the capture; `free + staged < need` removes nothing and refuses; a
+    compaction running (token held) is never touched.
+27. The scratch is deleted right after the upload and on every error path (witness
+    error, upload error, `RegisterSnapshotRoot` error, append error, cancellation),
+    including before the partitions are read; `ScratchRemoved` fires once on each.
+28. The token is released on success, error, panic and context cancellation of both
+    the capture and compaction.
+29. A restore or replay probe refused during a capture's scratch, and a capture
+    aborted by a restore filling the volume (R2), leave no scratch and no registered
+    root; the capture is not wedged afterwards.
 
 Budgets, restarts, observability
-24. The copy budget ends the copy with `ErrTimeBudget` naming the copy phase;
-    the transaction is released and the scratch removed; the producer backs off
-    (`snapshotBackoffWait`).
-25. `MaxDuration` still ends a slow witness or upload with nothing registered, and
-    a witness aborted by the budget uploads and probes nothing (the existing W1
-    test, `snapshot_witness_first_test.go`, rewritten for the new order; the W2
-    test about the witness sharing the transaction is deleted with the mechanism it
-    pinned).
-26. `inFlight` is true from before the copy until `Take` returns, and a planned
+30. `MaxDuration` ending the copy releases the transaction and removes the scratch;
+    ending the witness or upload leaves no chunk registered, and a witness aborted
+    by the budget uploads and probes nothing (the existing W1 test,
+    `snapshot_witness_first_test.go`, rewritten for the new order; the W2 test about
+    the witness sharing the transaction is deleted with the mechanism it pinned).
+31. `inFlight` is true from before the copy until `Take` returns, and a planned
     restart is refused during the witness (`planned_restart.go:566-568`).
-27. Context cancellation during the copy releases the transaction, closes the file
+32. Context cancellation during the copy releases the transaction, closes the file
     and removes the scratch.
-28. The persisted capture record carries the copy seconds, a restart reads them,
-    and the headroom uses them (and uses `S / 50 MiB/s` when absent).
-29. Observability: `snapshot_producer` reports `last_read_tx_seconds`,
+33. `DurationSeconds` in the persisted capture record is the whole capture's and
+    `snapshotCaptureFloor` still reads it; a record written by the new code is read
+    by the old reader (an extra field is ignored; here none is added).
+34. Observability: `snapshot_producer` reports `last_pin_seconds`,
     `last_copy_seconds`, `last_witness_seconds`, `last_upload_seconds`,
-    `last_partition_pin_max_seconds` and `last_scratch_bytes` after a capture and
-    zeros before the first.
-30. The scratch directory name equals the previous binary's cleanup name
-    (`snapshotScratchDirName == "snapshot-tmp"`), so a rollback removes it.
-31. Geometry: a page size that does not divide `ChunkSize` or a zero page count is
+    `last_scratch_bytes`, `last_pin_wal_growth_bytes` and `last_pin_events` after
+    a capture and zeros before the first; `last_detail` uses the word "pin" for
+    the new value and never the old "read transaction", so the two are not
+    conflated by a reader.
+35. The scratch directory name equals the previous binary's cleanup name
+    (`snapshotScratchDirName == "snapshot-tmp"`).
+36. Geometry: a page size that does not divide `ChunkSize` or a zero page count is
     refused before any byte is written (`snapshot.go:669-671`).
+37. The hash is inline: a slow hasher (injected) lengthens `PinTime` by its own
+    time and holds no extra buffer beyond the write buffer (no queue to bound).
+38. A flush happens before each sync (an injected writer records that `Sync` is
+    never called with unflushed buffered bytes).
 
 ## 4. Class, surfaces, rollback, proof
 
 - **Mutation class: red.** The change writes the base every restore starts from
   and the record that names it on the tape (`snapshot_recorded`,
-  `snapshot.go:365`), and changes disk use on every computer's data volume.
-  Orange behaviour (runtime) with a red surface (tape and evidence: the
-  snapshot is part of the restore chain; checkpoint and route projection are not
-  touched). Two review seats before landing; the author is not one
-  (`CLAUDE.md`, Review).
+  `snapshot.go:365`), and changes disk use on every computer's data volume. Orange
+  behaviour with a red surface (tape and evidence; the snapshot is part of the
+  restore chain; checkpoint and route projection are not touched). Two review seats
+  before landing; the author is not one (`CLAUDE.md`, Review).
 - **Conjecture delta.** Today: a capture's head, pages and witness are one state
-  because one read transaction produced all three. New: they are one state
-  because the pages were copied in the transaction that read the head, the copy's
-  head row and geometry are checked equal before the witness, and a digest taken
-  at write time is checked at upload. The witness on the copy is the install-time
-  check.
-- **Protected surfaces.** Snapshot capture and `snapshot_recorded`; the
-  guest data volume and its free-space floor; the store's WAL; compaction's
-  staging; telemetry partition GC (the hold). Unchanged and listed so a reviewer
-  does not look for change: the record, the chunk cut and sealing, the file
-  CAS, `Restore`, `Install`, `VerifySnapshotFile`, the checkpoint bind, vmctl,
-  the platform's snapshot roots.
-- **Heresy delta.** The header comment's "no temporary copy" is retired; the
-  producer's failure item 4 is rewritten. Nothing is added as an off switch;
-  the free-space and exclusion refusals are correctness refusals
-  (`CLAUDE.md`, Delivery).
+  because one read transaction produced all three. New: they are one state because
+  the pages were copied in the transaction that read the head, the copy's page
+  geometry and ten head columns are checked equal before the witness, and a digest
+  taken at write time is checked at upload. The witness on the copy is also the
+  install-time check.
+- **Protected surfaces.** Snapshot capture and `snapshot_recorded`; the guest data
+  volume and its free-space floor; the store's WAL; compaction's staging and staged
+  files (the token and the staged-copy removal); telemetry partition GC (the hold);
+  the boot sequence in `autoputer.Run` (one added call). Unchanged and listed so a
+  reviewer does not look for change: the record, the chunk cut and sealing, the file
+  CAS, `Restore`, `Install`, `VerifySnapshotFile`, the checkpoint bind, vmctl, the
+  platform's snapshot roots.
+- **Heresy delta.** The "no temporary copy" and "not shortened" comments are
+  retired. Nothing is added as an off switch; the free-space and exclusion refusals
+  are correctness refusals (`CLAUDE.md`, Delivery). No new limit on any model call.
 - **Rollback.** Revert the commit. The record is unchanged, so an older binary
   restores a base the new binary wrote (`restoreOne` reads the same fields,
-  `snapshot.go:989-1031`). A scratch left by a new binary is under the old name
-  and is removed by the old binary's attempt start (`snapshot_producer.go:553`).
-  The persisted capture record gains a field an older reader ignores
-  (`json.Unmarshal` into a struct, `:333`).
+  `snapshot.go:989-1031`). A scratch left by a new binary is under the old name and
+  the old attempt start removes it (`snapshot_producer.go:553`), after its own
+  free-space refusal; on a volume below the old floor, an operator deletes
+  `snapshot-tmp` (section 2.8, 2.2). No persisted field is added.
 - **Expedite.** Every non-docs landing in this lane carries `Ring-Expedite:` with
-  the defect it unblocks (the pinned WAL on the largest computers). The path
-  `internal/agentcore/` is already an expedited deploy path
-  (`CLAUDE.md`, Delivery). Stage one is docs plus one test file and ships none
-  to a computer.
+  the defect it unblocks (the pinned WAL on the largest computers);
+  `internal/agentcore/` is already an expedited deploy path (`CLAUDE.md`, Delivery).
+  Stage one ships no code to a computer.
 
-### Deployed proof (d@e only; never the paper)
+### What d@e can and cannot prove
 
-Metric: `GET /api/runtime/observability`, `snapshot_producer`. The block today
-exposes `last_capture_seconds` and the text `last_detail`, which contains
-"stream ..., witness ..., read transaction ..."
-(`snapshot_producer.go:608`, status struct `:665`), but no structured
-read-transaction length, so this lane adds the structured fields of failure 29.
-The existing WAL block is the second witness of the pin: `wal.last_checkpoint`
-with `reason: "snapshot capture"` carries `wal_bytes_before`, the WAL's size when
-the pin ended (`wal_bound.go:86-93`, `api.go:1167-1169`).
+d@e's store is about 1.1 GB (the set-aside design's figure; not re-measured). That
+is two orders of magnitude under the computers this lane is for. d@e therefore
+proves **correctness** (the copy is the head, the witness matches, restore matches,
+the scratch is removed, crash and space paths work, appends continue). It does
+**not** prove that the pin is short at tens of GB: on a store this small the copy
+plus fsync plus hash can take longer than the old witness plus stream, and the pin
+may be longer than before. Nothing below predicts otherwise on d@e. Constructing a
+large store on d@e is not done (it would mutate a live computer, and its disk size
+is unknown to me). The size effect is first seen on the largest computer's next
+capture, read-only from the console, and before any deploy a build-VM bench on a
+synthetic 10 GB store (the VM has about 16 GB free) measures copy time against
+witness time as a rate, not on a guest disk.
 
-Procedure, after the deployed commit on d@e is verified:
-1. Before the deploy, read `snapshot_producer.last_detail` and `wal` of d@e and
-   record the old read transaction, witness and `wal_bytes_before` (read only).
-2. After the deploy, let two captures occur naturally (d@e takes them by the tail
-   rule; the producer's `due` and `due_why` say when). No computer is forced.
-3. Predicted, per capture: `last_read_tx_seconds <= last_copy_seconds + 2` and
-   `last_read_tx_seconds` at most half the pre-deploy read transaction;
-   `last_witness_seconds` reported separately and nonzero; `wal.last_checkpoint.
-   wal_bytes_before` below the pre-deploy value; head sequence advancing during
-   the capture; the scratch directory absent afterwards (`data_volume` free bytes
-   back to the pre-capture value within the WAL's size).
-4. A restore to a checkpoint above the second capture reports the witness matched
-   (the set-aside design's proof command; the CLI wording is not verified here).
-5. Adversarial drill on d@e only: kill the runtime mid-copy and mid-witness; the
-   next boot removes the scratch before the first tick and the next capture
-   succeeds.
-6. Measure on d@e the append latency during the copy against outside it; the
-   floor-and-sync parameters of 2.2 are justified only if it does not worsen
-   (there is no existing append-latency field I found in the observability block;
-   if none exists the test records head-sequence timestamps from the event index).
+### Deployed proof
 
-Precommitted claim (to be entered in `docs/calibration/claude-ledger.md` at the
-landing, not before): on d@e, the first capture after the deploy has
-`last_read_tx_seconds <= last_copy_seconds + 2` and at most half of the old read
-transaction. Probability 0.8. The scoring outcome is a field of the deployed
-observability block, which the author cannot write. Not entered in stage one
-(no code is deployed).
+Metric (all in `GET /api/runtime/observability`, `snapshot_producer`, added by
+failure 34): `last_pin_seconds` is the primary metric, the interval with an open
+reader on the state store, timed by `capture` independently of `last_copy_seconds`.
+`last_pin_wal_growth_bytes` (the `-wal` size at release minus at the pin's start)
+and `last_pin_events` (head sequence at release minus the capture's head) give WAL
+growth normalised by the write rate: bytes of WAL per event during the pin. The
+existing `wal.last_checkpoint` (`wal_bound.go:101`; reason "snapshot capture")
+can be overwritten by a compact copy that runs after, so it is read at once or
+not used; the new fields are the record.
 
-## 5. Open questions and the conservative default
+On d@e (correctness; read-only reads plus the capture's own writes):
+1. Before the deploy, read `last_detail` and `wal` of d@e: the old read
+   transaction, witness and stream (text; the old wording "read transaction").
+2. After the deploy, two captures occur naturally (the producer's `due` and
+   `due_why` say when; no computer is forced). For each: `last_witness_seconds`
+   nonzero, `last_scratch_bytes` equal to `page_count x page_size` of that head,
+   `data_volume` free bytes back within the WAL's size after, head sequence
+   advanced during the capture.
+3. A restore to a checkpoint above the second capture:
+   `choir computer restore --host=<host> --computer=<d@e id>
+   --checkpoint-file=<file>` (`cmd/choir/commands.go:462`; use in
+   `cmd/choir/main_test.go:1029`); the response must contain `"witness_matched":true`.
+4. Adversarial drill on d@e only: kill the runtime mid-copy, then mid-witness: the
+   next boot removes the scratch before the rebase, and the next capture takes.
+   Two kills at most between normal attempts (`snapshotAttemptLimit` 3,
+   `snapshot_producer.go:134`).
+5. Append rate during the pin, with a baseline and a tolerance: sample
+   `head_sequence` every 10 s for the hour before and through each pin and
+   checkpoint; the events per second inside the pin and inside the checkpoint
+   must be at least 0.8 of the preceding hour's mean. (0.8 is inferred, flagged for
+   the seats; no append-latency field exists in the observability block, which is
+   why the rate is used.)
+6. Whatever `last_pin_seconds` reads on d@e is recorded next to the old read
+   transaction; no direction is predicted for it there.
 
-1. **A staged compact copy can starve captures on a large computer.** The
-   compact copy is staged "for the next planned restart" and kept until one
-   (`compact.go:11-18`, `:249-250`). If it is of the order of the store, then
-   `S + staged + floor + headroom` can exceed the volume and captures are refused
-   for as long as it stays. The set-aside design's paper figures (39.6 GB store,
-   85.9 GB available, 42 GB compact copy; taken from that document, not
-   re-measured) put the sum at about 81.6 GB plus floor and headroom against
-   85.9 GB. Default: refuse, with the amounts and the staged copy named, record
-   it as a residual with the d@e proof not covering it, and do not delete the
-   staged copy. The way out (using the staged copy as the static copy, the set-aside
-   design's landing 5) is a separate lane.
-2. **Partitions keep their own transactions.** Their pins are unchanged and
-   unmeasured. Default: unchanged, with `last_partition_pin_max_seconds` added;
-   copying them too would be the same mechanism applied to other files, and is
-   decided after that number exists.
-3. **Copy budget.** The set-aside design proposed 20 minutes (unmeasured). Default:
-   30 minutes as a constant, at which the pin at 1.2 to 1.7 MiB/s of WAL growth is
-   about 2.2 to 3.1 GB, no worse than today's 3.7 GB. Replace by the d@e and
-   paper measurements. It is a deadline, not a switch.
-4. **The write-time digest.** It re-establishes "the bytes uploaded are the bytes
-   witnessed". Cost: one goroutine, about 450 MB/s on the build VM. Default:
-   include. If a reviewer finds the failure it prevents (a disk fault between
-   copy and upload) too remote, it is the first thing to delete.
-5. **fdatasync and cache drop every 64 MiB, no throttle.** Default as in 2.2;
-   if append latency worsens during the copy on d@e (proof step 6), the answer is
-   a smaller sync interval, not a rate limit.
-6. **Headroom constants.** 50 MiB/s assumed copy rate and the factor 2 are
-   inferred. Default as in 2.5, overwritten by the first measured copy.
-7. **The exclusion's shape.** An in-process token on `Store` (2.6) against two
-   `stat` calls on file names. Default: the token, because a name check is wrong
-   after a crash (the leftover staging file blocks for a day, `telemetry_retire.go:30`).
-8. **Reading the copy read-only versus the install's read/write open.** Default:
-   read-only (the experiment shows it leaves the bytes unchanged); failure 7 pins
-   the equality of the two witnesses.
-9. **The legacy `snapshot-tmp` cleanup becomes the scratch cleanup** and keeps its
-   name. Default: yes; the rollback story depends on it.
-10. **`inFlight` over the whole `Take`.** The set-aside design says a restart
-    "waits only for the copy"; the code sets `inFlight` around `Take`
-    (`snapshot_producer.go:559-562`). Default: keep the code's behaviour; a
-    restart during the witness would discard 40 GB of scratch and the witness.
-11. **Existing `CHOIR_SNAPSHOT_DISABLE` and `CHOIR_SNAPSHOT_MAX_DURATION`**
-    (`snapshot_producer.go:56-58`, `:163-181`) are switches by the rule's own
-    wording; not touched here (different lane); stated so a reviewer does not
-    attribute them to this change.
-12. **The ledger entry** of section 4 is made at the landing commit. Default: made
-    then.
-13. **Page cache pressure on small guests during the witness.** The witness reads
-    the copy through SQLite with the live store's page cache already warm.
-    Default: after the witness, drop the whole scratch file's cache
-    (`dropSourceCache`, `snapshot.go:621-626`) and drop ranges while uploading; no
-    cache control during the witness itself *(inferred; measured on d@e as free
-    memory in the guest memory block if one exists)*.
+On the largest computer (read-only, the console only), at its next capture after
+the deploy:
+7. `last_pin_seconds <= 0.5 x last_witness_seconds` of the same capture (that
+   capture is its own control: the old code's pin was witness plus stream, always
+   more than the witness), and `last_pin_wal_growth_bytes / last_pin_events` within
+   1.5x of the per-event growth of the last old capture (2026-11-13, 2.6 to
+   3.7 GB over its events; from the set-aside design, unverified).
+
+**Precommitted claim, re-stated so that it can fail** (entered in
+`docs/calibration/claude-ledger.md` at the landing, not before): on the largest
+computer's first capture after the deploy, `last_pin_seconds` is at most half of
+`last_witness_seconds` of that capture. Probability 0.5. It fails when the guest
+disk writes slower than about `S / (0.5 x witness)`: with S = 39.6 GB and a 25
+minute witness, below about 53 MB/s. A separate claim for d@e, probability 0.9:
+the two captures after the deploy both record, `witness_matched` is true, and the
+scratch is gone after each. The outcomes are fields of the deployed observability
+block and a response of the restore command; the author cannot write them.
+
+## 5. Open questions, residuals and the conservative default
+
+Residuals (named, not solved here)
+- **R1. A computer with `floor <= free < S` takes no snapshot** (2.5, failure 17).
+  Consequence: its tail grows to the ceiling and then toward the recovery bound,
+  visible as `refusal` and `consecutive_refusals`. Today it captures. It is the
+  price of a local copy; the data-volume bound (the set-aside design's T7) is the
+  guard. Default: accept, say so in the report, do not add a fallback to the
+  in-transaction path (that would keep both mechanisms).
+- **R2. A restore or rematerialize during a capture's scratch** competes for the
+  volume; rematerialize staging does not admit by free space (2.5). Default: the
+  capture's own guard aborts the capture first; no mechanism added.
+- **R3. Partition pins** are unchanged and unmeasured (2.7). Default: a separate
+  lane after the state pin is measured.
+- **R4. The paper's staged compact copy** and the staged-copy removal policy are
+  not covered by the d@e proof (question 1).
+
+Questions
+1. **Staged compact copy.** Both seats disagreed with refusing. Default adopted
+   (2.5): remove the staged copy only when it is why `free < need`, under the
+   token, mirroring `compact.go:312-316`. Reversing it is deleting one branch plus
+   failure 26's removal case. The owner may rule otherwise; the paper's numbers
+   (from the set-aside design, not re-measured) are in 2.5.
+2. **Partitions:** unchanged (R3).
+3. **Copy budget:** deleted; `MaxDuration` bounds the whole capture (2.9).
+4. **Write-time digest:** included, inline (2.2); the first thing to delete if a seat
+   finds the remaining failure (a disk fault between copy and upload) too remote.
+5. **`fdatasync` and cache drop every 64 MiB, no throttle:** default as in 2.2; if
+   the proof's step 5 shows the rate dropping, the answer is a smaller interval, not a
+   rate limit.
+6. **Headroom constants:** deleted (2.5).
+7. **Exclusion shape:** the in-process token with a blocking and a non-blocking
+   entry (2.6).
+8. **Read-only versus read/write open of the copy:** read-only; failure 8 pins the
+   equality.
+9. **Name `snapshot-tmp`:** kept, with the rollback caveat (2.2, 2.8).
+10. **`inFlight` over the whole `Take`:** kept.
+11. **`CHOIR_SNAPSHOT_DISABLE` and `CHOIR_SNAPSHOT_MAX_DURATION`:** existing, not
+    touched (`snapshot_producer.go:56-58`, `:163-181`).
+12. **Ledger entry:** at the landing; the claim is in section 4.
+13. **Page-cache pressure on small guests during the witness:** after the witness the
+    copy's whole range is dropped (`dropSourceCache`, `snapshot.go:621-626`) and
+    ranges while uploading; none during the witness *(inferred)*.
+14. **The pending-byte page (a store past 1 GiB)** and page sizes other than 4096 are
+    covered by failure 9 only on the build VM; d@e's store (about 1.1 GB) is just
+    past 1 GiB, so its capture is also that test in production.
 
 ## 6. What the set-aside design and the reviews have wrong, against the code
 
-- "A planned restart waits only for the copy (the existing `inFlight`)" is
-  wrong: `inFlight` is set around the whole `Take` (`snapshot_producer.go:559-562`).
-- A review (deepseek B3) gives `snapshot_producer.go:553` as "precedent" for
-  cleaning before the free-space check. It is the opposite: the legacy removal
-  runs after the free-space refusals (`:527-543`) and after `spendGuestAttempt`
-  (`:547`). A cleanup before the measurement is new. The other review's "boot
-  deletes ... as `snapshotLegacyTempDirName` does today" is also not today's
-  behaviour: it is removed at an attempt, not at boot; the boot sweep is
-  `removeStaleReplayScratch` (`runtime.go:1278`), a different precedent.
-- The review's "refuse while a staged or staging copy exists" and "gate on both:
-  2 x 42 GB against 83.9 GB" is replaced by the measured free space (which
-  already nets out a staged file) plus an in-process exclusion for the copy being
-  written. The staged copy still starves large captures in practice (question 1).
-- The set-aside design says the "WAL headroom rule (`:124`) is computed from the
-  copy's duration". Today it applies to the replay trigger only (`:536-543`);
-  first, ceiling and interval captures get the floor alone, so the rule here is
-  a change for three of the four kinds.
-- `wal_bound.go:28-31` and the producer and snapshot headers state the opposite
-  of the new design ("not shortened", "no temporary copy"); they are in the
-  delete list (2.9). The set-aside design does not list the `wal_bound.go` one.
-- The set-aside design's "Record, restore and `VerifySnapshotFile` are unchanged"
-  holds, but it leaves out that nothing in restore compares the file's head row
-  with `StoreHeadSequence` (1.8): the head tie must be made at capture.
-- The review's Claude "page-cache" point is right for the scratch but the code's
-  existing drop is of the *source* (`snapshot.go:612-626`, `:733`); the
-  scratch needs its own (2.2).
+- "A planned restart waits only for the copy (the existing `inFlight`)" is wrong:
+  `inFlight` is set around the whole `Take` (`snapshot_producer.go:559-562`).
+- A first-round review gave `snapshot_producer.go:553` as precedent for cleaning
+  before the free-space check. It is the opposite: the legacy removal runs after the
+  free-space refusals (`:527-543`) and after `spendGuestAttempt` (`:547`). The other
+  review's "boot deletes ... as `snapshotLegacyTempDirName` does today" is not
+  today's behaviour either: it is removed at an attempt, not at boot, and the boot
+  sweep that exists (`runtime.go:1278`) is for the replay probe and runs after the
+  rebase, open and replay (`autoputer/run.go:213`, `:236`, `:900-910`, `:786`).
+- My own first draft said `Runtime.Start` runs "before boot-time disk users
+  (rebase, restore staging)". That was false for the rebase, the store open and the
+  replay; fixed (2.4).
+- The WAL headroom rule today applies to the replay trigger only
+  (`snapshot_producer.go:536-543`). The set-aside design says it is "computed from
+  the copy's duration"; it is deleted here, and the rule `S + floor` is a change for
+  all four kinds.
+- `wal_bound.go:28-31` and the producer and snapshot headers state the opposite of
+  the new design; they are in the delete list (2.9). The set-aside design does not
+  list the `wal_bound.go` one.
+- "Record, restore and `VerifySnapshotFile` are unchanged" holds, but nothing in
+  restore compares the file's head row with `StoreHeadSequence` (1.8): the head tie
+  must be made at capture, on every column.
+- The set-aside design and my first draft said rematerialize and the replay probe
+  both admit by free space. Only the replay probe does (`replay_scratch.go:124`,
+  `replay_completeness.go:302`); `rematerialize.go:93` does not.
+- The set-aside design's "2 x 42 GB against 83.9 GB" and my first draft's
+  "`S + staged + floor + headroom` against the volume" both count the staged file
+  twice: measured free space is net of it (2.5).
+- The existing drop is of the *source* (`snapshot.go:612-626`, `:733`); the scratch
+  needs its own (2.2).
+
+## 7. Review round 1: findings and dispositions
+
+Two seats (Claude: REPAIR; DeepSeek v4.1 flash: REPAIR). Both found the mechanism
+sound. Where a review and the code differ, the code is cited.
+
+### Blocking (all five closed)
+
+| # | Finding | Disposition | Where |
+| --- | --- | --- | --- |
+| B1 | Token after cleanup and after measurement; compaction races | Adopted. Token first, then cleanup, then measure; held to scratch removal; refused token deletes nothing; compaction takes it before `removeSQLiteFiles(staging)` (`compact.go:267-269`) and holds to rename/remove; `removeSQLiteFiles` for sidecars | 2.4 steps 1-3 and 7, 2.6; failures 19, 20, 28 |
+| B2 | `ReadReleased` only on the happy path; cancelled context | Adopted. Fires from the rollback closure once on every path (`snapshot.go:538-546`), with `context.WithoutCancel`; runs in its own goroutine so the witness does not wait; joined before `capture` returns | 2.4 step 5; failures 13, 14 |
+| B3 | Proof metric cannot fail; d@e small | Adopted. Primary metric is `last_pin_seconds`, independently timed; WAL growth per event; d@e is correctness only, size effect on the largest computer, read-only; claim restated | 2.2, 4 (two subsections); failure 12, 34 |
+| B4 | Boot cleanup after rebase/open/replay | Verified true in `internal/autoputer/run.go:213` (rebase), `:236` (open), `:786` (`rt.Start`), `:900-910` (replay). Scratch removal moved to the first boot step; `Start` second defence | 2.4 "Boot"; 2.8; failure 22 |
+| B5 | Head tie sequence-only in the tests | Adopted. Ten fields named in 2.3 and failure 2; test helper compares the whole struct, nil handled; lane test updated | 2.3; failures 2, 11; test 0 |
+
+### Should-fix (both seats)
+
+| Finding | Disposition |
+| --- | --- |
+| Hash goroutine can extend the pin / backpressure (both) | Adopted: inline; the extra pin is `S / 450 MB/s` (88 s at 39.6 GB, build VM), named. 2.2, failure 37 |
+| Nil head (Claude 2) | Adopted. 2.3, failure 11, test 0 |
+| Test 0 pacing and production pragmas (Claude 3, 4) | Adopted: paced on writer progress; second configuration with default autocheckpoint, concurrent PASSIVE checkpoints and a freelist. Not covered and added to the list: `incremental_vacuum`, page sizes, 1 GiB (failures 8, 9) |
+| Seams the list assumes (Claude 5) | Adopted: named at the head of section 3 |
+| Callers of `Config.Witness` (Claude 6) | Adopted: named in 2.9 |
+| Recovery paths need the same space (Claude 7) | Adopted as R2 plus failure 29; the rematerialize claim corrected (DeepSeek, verified `rematerialize.go:93`) |
+| `ReadTxTime` meaning changed; do not reuse "read transaction" (Claude 8) | Adopted: `PinTime`, `last_detail` says "pin". Failure 34 |
+| Proof step 6 needs baseline and tolerance (Claude 9, DeepSeek) | Adopted as the event rate against the preceding hour, 0.8 (inferred; there is no append-latency field) |
+| Crash drill vs the 3-start limit (Claude 10) | Adopted: at most two kills. 2.8, 4 step 4 |
+| New disk requirement `free < S` is unstated (DeepSeek) | Adopted as R1 with its consequence and failure 17 |
+| Staged-copy arithmetic double counts (DeepSeek) | Adopted. 2.5 |
+| Staged-copy default: refuse (Claude, DeepSeek both against) | Adopted: remove only when it is why `free < need`. Reversible; flagged question 1. **This is the one place I went beyond "repair text only"**: both reviewers asked for the policy and it adds one branch to an existing step, not a mechanism |
+| `ReadReleased` blocks appends on the write connection (DeepSeek) | Adopted: stated in 2.4, measured by proof step 5, failure 15 |
+| Read/write open of the copy; stale in-header size, shrink (DeepSeek) | Adopted: failure 8 |
+| Witness equality under writers, not at quiet head (DeepSeek) | Adopted: failure 7 |
+| Compaction can lose a 24 h pass (DeepSeek) | Adopted: compaction waits for the token (2.6). Claude's "skip" in the first draft is replaced |
+| Rollback claim "no operator step" false (DeepSeek, Claude's rollback caveat) | Adopted: removed; 2.2, 2.8, 4 |
+| `copyHeadroom` fallback `max(...)` (DeepSeek) | Rejected as moot: the headroom is deleted (Claude verdict 6; it protected against an upload abort, which no longer exists) |
+| Flush before `fdatasync`; cache drop no-op off Linux (DeepSeek) | Adopted: 2.2, failure 38 |
+| Proof command unverified (DeepSeek) | Adopted: `choir computer restore --host --computer --checkpoint-file` (`cmd/choir/commands.go:462`, `main_test.go:1029`) |
+| `wal.last_checkpoint` can be overwritten (DeepSeek) | Adopted: the new fields are the record (4) |
+| Copy budget 30 min invented; 3.75 GB arithmetic (Claude 3; DeepSeek 3) | Adopted: budget deleted; `MaxDuration` stays the one deadline |
+| Test 0 numbers stale: 54 commits vs 1,294 (DeepSeek) | Adopted: the count is machine dependent; section 2.1 states it and the test paces on progress |
+| "37 minutes on a 38.8 GB store" conflicts with the code's 21 GiB, 22-35 min (DeepSeek) | Adopted: the doc cites the code's comment (`snapshot_producer.go:72-80`) and calls the set-aside figures unverified |
+| "Bounded below by the read rate" loose (DeepSeek) | Adopted: 2.7 says the slower of read, write and hash |
+| Drop `last_partition_pin_max_seconds` (Claude) vs add it (DeepSeek) | Claude's: dropped, R3. The proof does not need it; the lane that touches partitions measures them |
+| Drop the persisted copy-seconds field and failure 28 (Claude) | Adopted: removed with the headroom; failure 33 keeps `DurationSeconds` whole-capture |
+| Tick-level cleanup before `Ready` duplicates others (Claude) | Adopted for the not-due path (removed); the cleanup runs at step 2 of an attempt, at boot and at `Start` |
+| Copy seconds vs capture seconds in `snapshotDue` (Claude 6) | Adopted: failure 33 |
+| Missing entries 1-17 (DeepSeek) and Claude's 6 list | Covered by failures 2, 5, 7-9, 13-15, 17-29, 33, 37, 38; the `incremental_vacuum` and page-size cases are in 8 and 9 |
+| A crash drill at each witness and upload step on d@e (Claude 6) | Partly: mid-copy and mid-witness (4 step 4). Mid-upload adds nothing new on d@e (the scratch is already complete); not added |
+| A reviewer may want the staged-copy removal in a separate lane (Claude dissent) | Not taken: both seats asked for the policy in this lane; flagged question 1 |
+
+### Open-question verdicts
+
+1 staged copy: both disagreed with refuse; adopted (above). 2 partitions: agree.
+3 copy budget: delete (Claude) adopted; DeepSeek "deadline, 25 min" not taken (invented).
+4 digest: agree, inline. 5 fdatasync: agree with the flush fix. 6 headroom: delete.
+7 token: agree, with the order. 8 read-only: agree. 9 name: agree with the caveat.
+10 `inFlight`: agree. 11 switches: agree. 12 ledger: agree, restated. 13 cache drop:
+agree.
