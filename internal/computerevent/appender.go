@@ -1834,15 +1834,10 @@ func (a *ComputerEventAppender) ReconstructThroughTarget(ctx context.Context, pr
 	return a.replayInto(ctx, projection, targetHead)
 }
 
-func (a *ComputerEventAppender) replayInto(ctx context.Context, projection ProjectionStore, targetHead string) error {
-	if a == nil || projection == nil {
-		return fmt.Errorf("computer event appender: replay projection is required")
-	}
-	source, ok := a.cas.(EventSource)
-	if !ok {
-		return fmt.Errorf("computer event appender: CAS does not expose event replay")
-	}
-	dryRun := &ComputerEventAppender{
+// dryRunCopy is the appender a replay into another projection runs on. Its
+// replay rate is the restore path's rate, so it reports to the live appender.
+func (a *ComputerEventAppender) dryRunCopy(projection ProjectionStore) *ComputerEventAppender {
+	return &ComputerEventAppender{
 		computerID:       a.computerID,
 		pins:             a.pins,
 		projection:       projection,
@@ -1854,6 +1849,17 @@ func (a *ComputerEventAppender) replayInto(ctx context.Context, projection Proje
 		replayObserver:   a.replayObserver,
 		rateParent:       a,
 	}
+}
+
+func (a *ComputerEventAppender) replayInto(ctx context.Context, projection ProjectionStore, targetHead string) error {
+	if a == nil || projection == nil {
+		return fmt.Errorf("computer event appender: replay projection is required")
+	}
+	source, ok := a.cas.(EventSource)
+	if !ok {
+		return fmt.Errorf("computer event appender: CAS does not expose event replay")
+	}
+	dryRun := a.dryRunCopy(projection)
 	if targetHead == "" {
 		return dryRun.Reconstruct(ctx, source)
 	}

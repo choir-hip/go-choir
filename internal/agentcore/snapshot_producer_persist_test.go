@@ -1,10 +1,85 @@
 package agentcore
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/snapshot"
 )
+
+// Review round 2 should-fixes: skew and identity of the persisted cost, the
+// floor after a failed-then-retried capture, and the producer after a restore.
+func TestPersistedCostSkewAndIdentity(t *testing.T) {
+	start := time.Date(2026, 11, 14, 0, 0, 0, 0, time.UTC)
+	rec := snapshotCaptureRecord{StartedAt: start, DurationSeconds: 60, SealedBytes: 1}
+	if !rec.belongsTo(start.Add(-30*time.Second)) || rec.belongsTo(start.Add(-5*time.Minute)) || !rec.belongsTo(start.Add(2*time.Minute)) || rec.belongsTo(start.Add(2*time.Hour)) {
+		t.Fatal("belongsTo: a minute of skew before the start, and the capture's own window after it")
+	}
+	h, clock := capturingHarness(t, 37*time.Minute, 4_800_000_000)
+	h.newestFound, h.newestAt, h.newestSeq = true, clock.now.Add(-13*time.Hour), 1_000_000
+	h.head = 1_000_000 + 150_000
+	if err := saveSnapshotCapture(h.deps.DataDir, snapshotCaptureRecord{ComputerID: "another-computer", StartedAt: h.newestAt.Add(-time.Minute), DurationSeconds: 60, SealedBytes: 1}); err != nil {
+		t.Fatal(err)
+	}
+	var p snapshotProducer
+	h.run(&p, clock.now)
+	if p.status(clock.now).CaptureKnown {
+		t.Fatal("another computer's capture cost was trusted")
+	}
+}
+
+// A failed attempt uploads chunks the retry then finds held: the retry's own
+// bytes understate the cost, so the floor keeps what was known.
+func TestFloorKeepsTheKnownCostAfterAFailedThenRetriedCapture(t *testing.T) {
+	h, clock := capturingHarness(t, 11*time.Second, 0)
+	h.newestFound, h.newestAt, h.newestSeq = true, clock.now.Add(-8*24*time.Hour), 1000
+	h.head = 5000
+	h.seedCapture(37*time.Minute, 4_800_000_000)
+	var p snapshotProducer
+	failing := true
+	inner := h.deps.Take
+	h.deps.Take = func(ctx context.Context, d time.Duration) (snapshot.Ref, error) {
+		if failing {
+			h.takes++
+			return snapshot.Ref{}, errors.New("snapshot: witness: exceeded the time budget")
+		}
+		return inner(ctx, d)
+	}
+	if outcome, _ := h.run(&p, clock.now); outcome != snapshotFailed {
+		t.Fatalf("outcome=%s", outcome)
+	}
+	failing = false
+	clock.now = clock.now.Add(snapshotBackoffWait(1) + time.Minute)
+	if outcome, detail := h.run(&p, clock.now); outcome != snapshotTaken {
+		t.Fatalf("retry: outcome=%s detail=%q", outcome, detail)
+	}
+	if st := p.status(clock.now); st.LastCaptureBytes < 4_800_000_000 {
+		t.Fatalf("the retry's 0 uploaded bytes became the floor's input: %+v", st)
+	}
+}
+
+// After a restore replaces the store the producer reads the newest snapshot
+// and head again.
+func TestProducerForgetsAfterARestore(t *testing.T) {
+	h, clock := capturingHarness(t, 11*time.Second, 1<<20)
+	h.newestFound, h.newestAt, h.newestSeq = true, clock.now.Add(-time.Hour), 1000
+	h.head = 1100
+	var p snapshotProducer
+	h.run(&p, clock.now)
+	h.newestSeq, h.head = 100, 150 // the restored store is behind
+	h.run(&p, clock.now)
+	if p.status(clock.now).NewestSequence != 1000 {
+		t.Fatal("test premise: the producer remembers the pre-restore snapshot")
+	}
+	p.forget()
+	h.run(&p, clock.now)
+	if st := p.status(clock.now); st.NewestSequence != 100 || st.HeadSequence != 150 {
+		t.Fatalf("after forget: %+v, want the restored store's snapshot 100 and head 150", st)
+	}
+}
 
 // Review round 1 of lane/snapshot-by-replay-time, finding 1 and its
 // should-fixes. See the failure list in snapshot_producer_replay_test.go

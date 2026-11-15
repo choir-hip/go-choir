@@ -63,8 +63,11 @@ const (
 	// snapshotRootAnchorsMax roots (the bound over the gap, rounded up, plus
 	// one) are kept beyond the k; each costs its unique chunks on the host
 	// (about 4.8 GB on the paper), and its row is the collector's liveness.
-	snapshotRootWindow     = int64(recoveryplan.MaxRecoveryTailEvents)
-	snapshotRootChainGap   = snapshotRootWindow / 2
+	snapshotRootWindow   = int64(recoveryplan.MaxRecoveryTailEvents)
+	snapshotRootChainGap = snapshotRootWindow / 2
+	// snapshotRootAnchorsMax is what the gap rule yields at most (heads strictly
+	// increasing); the window tests assert it, the prune does not truncate to it
+	// (truncating could drop the anchor).
 	snapshotRootAnchorsMax = 3
 	// maxSnapshotRootChunks bounds one declaration (65536 x 4 MiB = 256 GiB).
 	maxSnapshotRootChunks = 65536
@@ -211,7 +214,8 @@ type snapshotRootRow struct {
 //     tape names it, or its chunks go to the collector while the tape names a
 //     root the host does not keep.
 //
-// Every other row goes. Unnamed rows are bounded by 2 + the young cap; named
+// The named roots beyond the newest retention also keep the restore-window
+// chain (snapshotRootChain). Every other row goes. Unnamed rows are bounded by 2 + the young cap; named
 // rows by retention (plus the just-registered root or a root named since the
 // last registration, until the next prune). Registration used to prune by
 // head alone, so two registrations whose appends failed evicted the newest
@@ -555,8 +559,9 @@ func validateSnapshotRootDeclaration(computerID, root string, headSequence int64
 }
 
 // LiveSnapshotRoots returns every snapshot root the computer keeps, newest
-// first. The prune bounds the rows at retention + 4 (retention named, one more
-// named for a moment, and up to four unnamed), and a row that
+// first. The prune bounds the rows at retention + snapshotRootAnchorsMax
+// (the restore-window chain) + 4 (one more named for a moment, and up to four
+// unnamed), and a row that
 // bundle.Import added or a concurrent registration left is protected too:
 // reading more rows is the safe direction for the collector.
 func (s *Store) LiveSnapshotRoots(ctx context.Context, computerID string) ([]SnapshotRootRecord, error) {

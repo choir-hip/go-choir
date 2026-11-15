@@ -46,6 +46,14 @@ func TestReplayRateKeepsTheSlowestMeasurement(t *testing.T) {
 	}
 }
 
+// The wiring itself: the copy a replay-into runs on reports to its parent.
+func TestDryRunCopyReportsToTheLiveAppender(t *testing.T) {
+	a := &ComputerEventAppender{}
+	if a.dryRunCopy(nil).rateParent != a {
+		t.Fatal("the dry-run copy does not report to the live appender")
+	}
+}
+
 // The restore replays through a dry-run copy of the appender; its rate is the
 // restore path's rate and must land on the parent.
 func TestDryRunReplayRateIsRecordedOnTheParent(t *testing.T) {

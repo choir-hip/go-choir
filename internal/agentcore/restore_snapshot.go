@@ -92,7 +92,7 @@ func planRestoreTarget(ctx context.Context, tape restoreTape, computerID, target
 	}
 	var target uint64
 	var found bool
-	candidates, err := snapshot.Scan(ctx, tape, computerID, func(d computerevent.DurableEvent) bool {
+	candidates, err := snapshot.ScanAll(ctx, tape, computerID, func(d computerevent.DurableEvent) bool {
 		if d.Request.Next.CanonicalEventHead == targetHead {
 			target, found = d.Request.Event.Sequence, true
 			return true
@@ -105,6 +105,10 @@ func planRestoreTarget(ctx context.Context, tape restoreTape, computerID, target
 	if !found {
 		return restorePlan{}, fmt.Errorf("%w: rematerialize: recovery target is not on the canonical chain", recoveryplan.ErrBaseRefused)
 	}
+	// Every snapshot event below the target within the recovery bound, not the
+	// newest four: the host keeps a chain of older roots and prunes the ones
+	// between, and the install probes the host for which are live.
+	candidates = snapshot.PlanCandidates(candidates, target, recoveryplan.MaxRecoveryTailEvents)
 	if len(candidates) == 0 && target > recoveryplan.MaxRecoveryTailEvents {
 		return restorePlan{}, fmt.Errorf("%w: no snapshot at or below recovery target %d, which exceeds the %d-event replay bound", recoveryplan.ErrBaseRefused, target, recoveryplan.MaxRecoveryTailEvents)
 	}

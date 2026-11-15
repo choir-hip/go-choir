@@ -115,9 +115,10 @@ func TestSnapshotRetentionKeepsTheRecoveryWindowOnASmallStore(t *testing.T) {
 	assertRestoreWindowHeld(t, store, "computer-window-small", heads, spacing, snapshotRootRetention+snapshotRootAnchorsMax)
 }
 
-// The reviewer's case: the kept roots are 829,440, 1,192,320 and the newest
-// four, and a checkpoint at 1,100,000 must select 829,440 although the four
-// snapshots just below it are pruned rows.
+// The reviewer's case on the 60-root fixture: a checkpoint at 1,100,000 must
+// select the nearest live root below it although the snapshots just below it
+// are pruned rows (the reviewer's hand-built kept set had 829,440 there; the
+// real prune's set is read from the host rows).
 func TestSnapshotRetentionSelectsTheChainRootBelowAPrunedRun(t *testing.T) {
 	store, _ := openTestPlatformStore(t)
 	const spacing = 25920
@@ -130,14 +131,21 @@ func TestSnapshotRetentionSelectsTheChainRootBelowAPrunedRun(t *testing.T) {
 	for _, r := range liveRows {
 		live[r.HeadSequence] = true
 	}
-	for _, want := range []int64{829440, 1192320, 1477440, 1503360, 1529280, 1555200} {
-		if !live[want] {
-			t.Fatalf("kept roots %+v lack %d", liveRows, want)
+	const cp = 1_100_000
+	var want int64 = -1
+	for h := range live {
+		if h <= cp && h > want {
+			want = h
 		}
 	}
-	base, attempts, ok := selectBase(heads, live, 1_100_000)
-	if !ok || base != 829440 {
-		t.Fatalf("checkpoint 1,100,000 selected %d (ok=%v) after %d attempts, want 829,440", base, ok, attempts)
+	base, attempts, ok := selectBase(heads, live, cp)
+	if !ok || base != want {
+		t.Fatalf("checkpoint %d selected %d (ok=%v) after %d attempts, want the nearest live root %d", cp, base, ok, attempts, want)
+	}
+	// The case that matters: the snapshots just below the checkpoint are pruned
+	// rows, so the live base is further down than the newest-four rule reached.
+	if attempts <= snapshot.MaxCandidates {
+		t.Fatalf("the base was found in %d attempts: the fixture no longer shows a pruned run below the checkpoint", attempts)
 	}
 }
 

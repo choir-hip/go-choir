@@ -265,6 +265,9 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	if err := rt.eventAppender.RebindProjection(rt.store); err != nil {
 		return report, fmt.Errorf("rematerialize: rebind event projection: %w", err)
 	}
+	// The restored store has its own newest snapshot and head: the producer
+	// reads them again rather than believing the pre-restore ones.
+	rt.snapshots.forget()
 	if operations, err := selfdev.NewStore(rt.store, rt.store); err == nil {
 		rt.selfdevOperations = operations
 		if rt.store.ProjectionTapeBound() {

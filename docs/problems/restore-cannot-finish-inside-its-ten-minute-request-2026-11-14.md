@@ -237,3 +237,44 @@ snapshot has been refused. Not verified on a live computer.
   floor-limited computer (the paper) the four-minute scan and install figure
   is d@e's on a 1 GiB store; it is not shown to hold for a 46.7 GB store, and
   the replay bound there is probably optimistic.
+
+### Review round 2 repair: one selection (same lane)
+
+Round 1's chain could not be reached: `snapshot.Scan` kept the newest four
+`snapshot_recorded` events at or below the target from the tape, which knows
+nothing of the roots the host pruned, so with frequent snapshots the four were
+usually pruned rows and a live chain root a few events lower was never tried.
+
+- The plan now offers every snapshot event on the tape at or below the target
+  and not further than `MaxRecoveryTailEvents` behind it (`ScanAll`,
+  `PlanCandidates`), newest first, at most 256. The install probes the host
+  (the existing chunk HEAD route, `ChunkProber`) for every chunk of a
+  candidate before downloading any, so a pruned root costs a record fetch and
+  a few probes and the next older one is tried. No new guest-host route: the
+  guest had no way to ask the host for its live roots, and a list-roots route
+  would have been a new one; the probe gives the same answer, the live roots
+  at or below the target, from the route that exists.
+- What a lying or stale host can and cannot cause. Candidates come only from
+  the tape, and a record opens only under the event identity it was sealed
+  for, its manifest root verifies, every chunk opens under the computer's key
+  at its digest, and the unsealed file is checked against the record's witness
+  before install. A host cannot hand the guest a root the tape does not
+  record (tested: a host that holds the chunks and the sealed record of an
+  unrecorded snapshot installs nothing), nor wrong state. It can deny: say
+  "not held" for a held chunk (an older base, longer replay, or a refusal) or
+  fail downloads (a refusal). An unreachable host or a probe error is "unknown"
+  and the download decides; an empty answer leaves the tape's candidates, as
+  before.
+- A target whose only snapshots are older than the bound now refuses where the
+  old plan installed an older base and replayed more than the bound.
+
+Named residual, not fixed here: a restore from a chain root replays up to
+360,000 events (the chain gap), about 53 minutes at 113 events/s, far over the
+ten-minute request. The chain does not meet the restore budget. Old
+checkpoints become restorable in principle with this change, and in practice
+only when restore is an accepted act with a status (the next lane), which must
+also refuse up front when its replay estimate exceeds its budget.
+
+Open for the owner: the chain keeps up to three extra roots per computer, about
+9.6 to 14.4 GB of unique chunks on the paper (4.8 GB each; not measured). The
+host's free space on the paper belongs in the landing proof.

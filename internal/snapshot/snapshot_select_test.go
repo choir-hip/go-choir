@@ -60,7 +60,7 @@ func TestPlanCandidatesBoundsByTargetAndByTheReplayBound(t *testing.T) {
 		return out
 	}
 	got := PlanCandidates(mk(10, 100, 500, 900, 1200), 1000, 600)
-	if want := []uint64{500, 900}; len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+	if want := []uint64{500, 900}; len(got) != 2 || got[0].Sequence != want[0] || got[1].Sequence != want[1] {
 		t.Fatalf("got %v, want %v: above the target and older than target-bound are out, oldest first", seqs(got), want)
 	}
 	if got := PlanCandidates(mk(10, 100), 500, 600); len(got) != 2 {

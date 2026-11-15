@@ -275,6 +275,9 @@ type snapshotEval struct {
 // store. StartedAt is how the next boot knows it belongs to the newest
 // snapshot on the tape: that event was appended when the capture ended.
 type snapshotCaptureRecord struct {
+	// ComputerID is whose capture it is: a copied data directory is not
+	// another computer's cost.
+	ComputerID      string    `json:"computer_id,omitempty"`
 	StartedAt       time.Time `json:"started_at"`
 	DurationSeconds float64   `json:"duration_seconds"`
 	SealedBytes     int64     `json:"sealed_bytes"`
@@ -294,6 +297,9 @@ func saveSnapshotCapture(dir string, rec snapshotCaptureRecord) error {
 		return err
 	}
 	_, werr := tmp.Write(raw)
+	if serr := tmp.Sync(); werr == nil {
+		werr = serr
+	}
 	if cerr := tmp.Close(); werr == nil {
 		werr = cerr
 	}
@@ -330,7 +336,10 @@ func loadSnapshotCapture(dir string) (snapshotCaptureRecord, bool) {
 // event the tape dates at: appended when the capture ended.
 func (r snapshotCaptureRecord) belongsTo(eventAt time.Time) bool {
 	dur := time.Duration(r.DurationSeconds * float64(time.Second))
-	return !eventAt.Before(r.StartedAt) && eventAt.Sub(r.StartedAt) <= dur+30*time.Minute
+	// A minute of slack before the start: the event is stamped by the appender,
+	// the start by this clock, and a suspend or a step between them is not a
+	// different snapshot.
+	return !eventAt.Before(r.StartedAt.Add(-time.Minute)) && eventAt.Sub(r.StartedAt) <= dur+30*time.Minute
 }
 
 // snapshotDueInput is what the trigger reads.
@@ -443,7 +452,7 @@ func (p *snapshotProducer) evaluate(ctx context.Context, d snapshotDeps, set sna
 		p.lastKnow = true
 		if found {
 			p.lastSeq, p.lastAt = seq, at
-			if recOK && rec.belongsTo(at) && !p.haveCapture {
+			if recOK && (rec.ComputerID == "" || rec.ComputerID == d.ComputerID) && rec.belongsTo(at) && !p.haveCapture {
 				p.haveCapture = true
 				p.lastCaptureDuration = time.Duration(rec.DurationSeconds * float64(time.Second))
 				p.lastCaptureBytes = rec.SealedBytes
@@ -460,6 +469,7 @@ func (p *snapshotProducer) evaluate(ctx context.Context, d snapshotDeps, set sna
 		return snapshotFailed, "read the store head: " + err.Error()
 	}
 	if !hasHead {
+		p.setEval(now, snapshotEval{Rate: snapshotAssumedReplayRate})
 		return snapshotNotDue, "the store holds no events"
 	}
 	reason := "first"
@@ -564,16 +574,24 @@ func (p *snapshotProducer) evaluate(ctx context.Context, d snapshotDeps, set sna
 		return snapshotFailed, fmt.Sprintf("%s (attempt at head %d; failure %d; next attempt not before %s)", cause, head, n, next.UTC().Format(time.RFC3339))
 	}
 	p.mu.Lock()
+	priorFailures := p.failures
 	p.failures, p.failedHead, p.retryAt = 0, 0, time.Time{}
 	p.lastAt, p.lastSeq = now, ref.Record.StoreHeadSequence
-	p.haveCapture, p.lastCaptureDuration, p.lastCaptureBytes = true, took, ref.Stats.BytesUploaded
+	// After a failed attempt the retry finds the failed one's uploads already
+	// held and writes little: the cost of getting this snapshot is at least
+	// what the last known capture was.
+	sealed := ref.Stats.BytesUploaded
+	if priorFailures > 0 {
+		sealed = max(sealed, p.lastCaptureBytes)
+	}
+	p.haveCapture, p.lastCaptureDuration, p.lastCaptureBytes = true, took, sealed
 	// The block is current right after a capture: the newest snapshot is this
 	// one and nothing is due until the next evaluation.
 	p.eval = snapshotEval{Head: ref.Record.StoreHeadSequence, NewestSeq: ref.Record.StoreHeadSequence, NewestAt: now, Rate: ev.Rate, RateMeasured: ev.RateMeasured}
 	p.evalAt = now
 	p.mu.Unlock()
 	if d.DataDir != "" {
-		if err := saveSnapshotCapture(d.DataDir, snapshotCaptureRecord{StartedAt: started, DurationSeconds: took.Seconds(), SealedBytes: ref.Stats.BytesUploaded, HeadSequence: ref.Record.StoreHeadSequence}); err != nil {
+		if err := saveSnapshotCapture(d.DataDir, snapshotCaptureRecord{ComputerID: d.ComputerID, StartedAt: started, DurationSeconds: took.Seconds(), SealedBytes: sealed, HeadSequence: ref.Record.StoreHeadSequence}); err != nil {
 			log.Printf("runtime: snapshot: could not record the capture cost beside the store (the floor is unknown after a restart): %v", err)
 		}
 	}
@@ -582,6 +600,18 @@ func (p *snapshotProducer) evaluate(ctx context.Context, d snapshotDeps, set sna
 		reason, ref.Record.StoreHeadSequence, ref.Record.PlaintextSize, st.Pages, st.PageSize, took.Round(time.Millisecond), ref.EventID,
 		st.Chunks, st.ChunksUploaded, st.BytesUploaded, st.ChunksHeld, st.ChunksRepeated, st.ProbeErrors,
 		st.StreamTime.Round(time.Millisecond), pagesPerSecond(st), st.WitnessTime.Round(time.Millisecond), st.ReadTxTime.Round(time.Millisecond))
+}
+
+// forget makes the next evaluation read the newest snapshot, the head and the
+// persisted capture cost afresh (the store was replaced by a restore).
+func (p *snapshotProducer) forget() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.lastKnow, p.lastAt, p.lastSeq = false, time.Time{}, 0
+	p.haveCapture, p.lastCaptureDuration, p.lastCaptureBytes = false, 0, 0
+	p.eval, p.evalAt = snapshotEval{}, time.Time{}
+	p.streakCount, p.streakSince, p.streakWhy = 0, time.Time{}, ""
+	p.failures, p.failedHead, p.retryAt = 0, 0, time.Time{}
 }
 
 func (p *snapshotProducer) floorKey() string {
