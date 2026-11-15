@@ -9,6 +9,7 @@ final class EditionSetupTests: XCTestCase {
 
     func testSuggestionsAreGenerousAndStartWithTheHouseSections() {
         XCTAssertGreaterThanOrEqual(sug.count, 18)
+        XCTAssertEqual(EditionTopics.tree.count, 10, "ten top-level rows when collapsed")
         XCTAssertEqual(Array(sug.prefix(10)), ["World", "U.S.", "Politics", "Business", "Technology", "Science", "Health", "Climate", "Culture", "Sports"])
         XCTAssertEqual(Set(sug.map(EditionTopics.key)).count, sug.count, "no duplicates")
     }
@@ -24,6 +25,64 @@ final class EditionSetupTests: XCTestCase {
         let words = (sug + [EditionSetupText.explainer, EditionSetupText.voiceHint, EditionSetupText.emptyLine, EditionSetupText.spokenOpen]).joined(separator: " ").lowercased()
         for bad in ["tired of", "do not want", "don't want", "avoid", "less of", "anything you"] { XCTAssertFalse(words.contains(bad), bad) }
         XCTAssertTrue(EditionSetupText.explainer.contains("any time"))
+    }
+
+    func rows(_ exp: [String], _ sel: [String], live: [String] = []) -> [TopicRow] {
+        TopicTree.rows(liveSections: live, expanded: Set(exp.map(EditionTopics.key)), selection: EditionSelection(topics: sel), own: [])
+    }
+
+    func testT2TheGraphIsSound() {
+        let tops = EditionTopics.tree.map(\.label)
+        XCTAssertEqual(Set(tops.map(EditionTopics.key)).count, tops.count)
+        for c in EditionTopics.tree {
+            XCTAssertEqual(Set(c.children.map(EditionTopics.key)).count, c.children.count, "no child twice under \(c.label)")
+            for k in c.children { XCTAssertFalse(tops.contains(k), "\(k) is both a category and a subtopic: a cycle risk"); XCTAssertFalse(EditionTopics.parents(of: k).isEmpty) }
+        }
+        XCTAssertEqual(Set(EditionTopics.parents(of: "AI")), ["Technology", "Business"])
+        XCTAssertEqual(Set(EditionTopics.parents(of: "Public health")), ["Health", "Politics"])
+        XCTAssertEqual(Set(EditionTopics.parents(of: "Energy")), ["Climate", "Business"])
+        XCTAssertEqual(Set(EditionTopics.parents(of: "Security")), ["Technology", "World"])
+        XCTAssertEqual(EditionTopics.parents(of: "ai"), EditionTopics.parents(of: "AI"))
+        XCTAssertEqual(sug.filter { EditionTopics.key($0) == "ai" }.count, 1, "one AI in the universe")
+        var s = EditionSelection(); XCTAssertEqual(s.add("add ai".replacingOccurrences(of: "add ", with: ""), among: sug), "AI")
+        var v = EditionSelection(); XCTAssertEqual(v.apply(spoken: "add AI", among: sug).added, ["AI"])
+    }
+
+    func testT1ASharedSubtopicIsOneTopicLitEverywhere() {
+        let r = rows(["Technology", "Business"], ["AI"])
+        let ai = r.filter { $0.label == "AI" }
+        XCTAssertEqual(ai.count, 2)
+        XCTAssertTrue(ai.allSatisfy { $0.selected })
+        XCTAssertEqual(ai.map(\.note), ["also in Technology", "also in Business"])
+        XCTAssertEqual(EditionSelection(topics: ["AI", "ai", "AI"]).topics, ["AI"])
+        XCTAssertEqual(r.first { $0.label == "Technology" }?.note, "1 picked")
+        XCTAssertEqual(r.first { $0.label == "Business" }?.note, "1 picked")
+    }
+
+    func testT3PartialSelectionAndNothingMovesOnPicking() {
+        XCTAssertEqual(rows([], []).count, 10)
+        let before = rows(["Culture"], []).map(\.key)
+        let after = rows(["Culture"], ["Film", "Music", "Culture", "Sports"]).map(\.key)
+        XCTAssertEqual(before, after, "picking changes no row")
+        let r = rows([], ["Film"])
+        XCTAssertEqual(r.first { $0.label == "Culture" }?.partial, true)
+        XCTAssertEqual(r.first { $0.label == "Culture" }?.selected, false, "a child does not pick its parent")
+        let p = rows([], ["Culture"])
+        XCTAssertEqual(p.first { $0.label == "Culture" }?.selected, true)
+        XCTAssertEqual(p.first { $0.label == "Culture" }?.partial, false)
+        XCTAssertTrue(rows(["Culture"], ["Culture"]).filter { $0.kind == "sub" }.allSatisfy { !$0.selected }, "a parent does not pick its children")
+        XCTAssertEqual(rows(["Sports"], []).count, 10, "Sports has nothing to open")
+        XCTAssertEqual(rows(["Culture"], []).count, 10 + 7)
+        XCTAssertFalse(rows([], []).first { $0.label == "Sports" }!.expandable)
+    }
+
+    func testSessionExpandAndLiveSections() {
+        let s = EditionSetupSession(suggestions: EditionTopics.suggestions(), file: nil)
+        s.toggleExpanded("Business"); XCTAssertEqual(s.treeRows().count, 10 + 7)
+        s.toggleExpanded("business"); XCTAssertEqual(s.treeRows().count, 10)
+        s.setLiveSections(["housing_market", "world"])
+        XCTAssertEqual(s.treeRows().last?.label, "Housing market")
+        XCTAssertEqual(s.treeRows().count, 11)
     }
 
     func testE1TheSameTopicTwiceIsOne() {
@@ -113,10 +172,10 @@ final class EditionSetupTests: XCTestCase {
         XCTAssertTrue(a.hasSaved)
         let b = EditionSetupSession(suggestions: sug, file: f)        // coming back to the step
         XCTAssertEqual(b.topics, ["Space", "Chess", "Film"])
-        let chips = b.chips()
-        XCTAssertEqual(chips.first?.label, "Chess", "the reader's own topic is a chip, first")
-        XCTAssertTrue(chips.first { $0.label == "Space" }!.selected)
-        XCTAssertFalse(chips.first { $0.label == "World" }!.selected)
+        let rows = b.treeRows()
+        XCTAssertEqual(rows.first { $0.kind == "yours" }?.label, "Chess", "the reader's own topic is under Yours")
+        XCTAssertEqual(rows.first { $0.label == "Science" }?.partial, true, "Space is picked under Science")
+        XCTAssertEqual(rows.first { $0.label == "World" }?.selected, false)
     }
 
     func testE7CorruptFileStartsEmpty() throws {
@@ -131,8 +190,8 @@ final class EditionSetupTests: XCTestCase {
         let s = EditionSetupSession(suggestions: sug, file: nil)
         _ = s.addTyped("Chess"); s.toggle("Chess")
         XCTAssertEqual(s.topics, [])
-        let c = s.chips().first { $0.label == "Chess" }
-        XCTAssertNotNil(c); XCTAssertFalse(c!.selected); XCTAssertTrue(c!.own)
+        let c = s.treeRows().first { $0.label == "Chess" }
+        XCTAssertNotNil(c); XCTAssertFalse(c!.selected); XCTAssertEqual(c!.kind, "yours")
     }
 
     func testFinishByVoiceCallsBack() {

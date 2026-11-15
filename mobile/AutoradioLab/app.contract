@@ -299,6 +299,7 @@ component Autoradio
     obHearingNo
     obTopics
     obToggleTopic
+    obExpandTopic
     obAddTopic
     editObTopic
     obTopicText
