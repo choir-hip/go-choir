@@ -184,3 +184,14 @@ The owner tested onboarding, where the app helps set up the edition.
   hierarchical tree. Not entirely a tree since many topics overlap." Taken
   as: about ten top-level categories that expand to subtopics; a subtopic
   may sit under more than one parent and is one topic wherever shown.
+- **Problem: while the bar is listening it cannot be cancelled and the
+  controls are hidden.** Evidence: owner screenshot (23:01Z build): red
+  "Listening", the prompt field gone, Cancel had no effect; a TV was on in
+  the room. Belief: with continuous background speech the one second of
+  quiet that ends a turn never comes; why Cancel did nothing is not traced.
+- **Ruling: hands-free is one thing that is on or off.** "Not two different
+  modes, but just either hands-free voice is on or hands-free voice is off."
+  On gives conversation, dictation and transcription; off is for when the
+  reader does not want their voice or background noise picked up. No
+  separate transcribe or push-to-talk mode. (An on/off control for a
+  microphone is a reader's control, not a feature switch.)
