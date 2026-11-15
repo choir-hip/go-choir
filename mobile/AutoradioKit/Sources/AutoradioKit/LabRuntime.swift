@@ -172,13 +172,14 @@ public final class LabRuntime: @unchecked Sendable {
     public var startRequest: (@Sendable () async -> Void)?
 
     /// Speak arbitrary text as a programme item (mail's "Read it to me"): it queues like a story, shows in now-playing, and the
-    /// listener can cut into it like any speech. Returns false for text with nothing to say.
+    /// listener can cut into it like any speech. `now`: the listener pressed Listen on what is in front of them, so it replaces what
+    /// is playing instead of waiting behind it. Returns false for text with nothing to say.
     @discardableResult
-    public func speakText(address: String, text: String, title: String? = nil) async -> Bool {
+    public func speakText(address: String, text: String, title: String? = nil, now: Bool = false) async -> Bool {
         if !snapshot().running, let go = startRequest { await go() }
         let running = snapshot().running
         // Not running: the text is the loaded programme, played when the radio starts (the engine is not there to play it).
-        return player.speakText(address: address, text: text, title: title, startNow: !running, play: running)
+        return player.speakText(address: address, text: text, title: title, startNow: !running || now, play: running)
     }
 
     public func stop() {

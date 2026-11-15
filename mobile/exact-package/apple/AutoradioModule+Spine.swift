@@ -78,6 +78,22 @@ extension AutoradioModule {
             }
         }
 
+        // "Listen": the radio reads what is in front of the listener, through the one speakText path (LabRuntime.speakText ->
+        // ProgrammePlayer.speakText), with the player's own controls. The headline is read first. It replaces what is playing.
+        // Text with nothing to say starts nothing.
+        handle("choirListen") { [unowned self] args, reply in
+            let address = args["address"] as? String ?? ""
+            let title = (args["title"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = ListenText.compose(title: title, body: args["text"] as? String ?? "")
+            guard !address.isEmpty, !text.isEmpty else { return reply(self.json(self.runtime.snapshot())) }
+            Task { [weak self] in
+                guard let self else { return }
+                _ = await self.runtime.speakText(address: address, text: text, title: title.isEmpty ? nil : title, now: true)
+                self.signals.record(SignalEvent(kind: "read-aloud", subject: address, detail: "listen"))
+                DispatchQueue.main.async { reply(self.json(self.runtime.snapshot())) }
+            }
+        }
+
         // The bar's typed question: one turn, like a spoken one (the engine starts virtually under the agent, as for the buttons above).
         // `aim` carries the address of the page in front when the bar sent (absent before lane SHELL's interface lands: the page in front now).
         for name in ["choirAsk"] {

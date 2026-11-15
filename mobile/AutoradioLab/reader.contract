@@ -368,6 +368,7 @@ component ReaderBody
     clearAim: action
     mdPress: action
     toggleCite: action
+    listen: action
   props
     address: string
   resource vp = exactViewport() as shape ReaderViewport
@@ -387,6 +388,8 @@ component ReaderBody
             row align-items="center" gap=8 margin-bottom=remv(0.5)
               text rdoc.kicker testId="reader-kicker" font-family=th.fontUi font-size=12 font-weight=700 letter-spacing="0.08em" text-transform="uppercase"
                 color=th.accent flex=1
+              button press=listen(address, rdoc.title, rdoc.plain) testId="reader-listen" appearance="none" aria-label=`Listen to ${rdoc.title}`
+                Btn(label="Listen", primary=false, wide=false)
               button press=showSheet("menu") testId="reader-menu" appearance="none" aria-label="Page menu" width=44 height=44
                 image "symbol:more" color=th.muted
             text rdoc.title role="heading" aria-level=1 testId="page-title" text-wrap="balance"
