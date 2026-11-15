@@ -107,6 +107,14 @@ component Autoradio
     barBlur
     jumpTo
     setSpeed
+    nextStory
+    previousStory
+    speedShown
+    speedPct
+    speedMove
+    speedEnd
+    speedNudge
+    speedReset
     sheetMove
     sheetEnd
     sheetPull

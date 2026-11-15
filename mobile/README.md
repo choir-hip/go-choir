@@ -107,6 +107,44 @@ Fixtures: `mobile/fixtures/learning/` (from the server builder, `lane/arl-l1a`).
 - The slow relaunch (round 1 drive): a temporary probe (not committed) timed the path in the simulator on two launches, one fresh and one with kept storage, in demo mode: `refresh` to `loadProgramme` returned in 0.04 s, and the request plus first segment took 0.01 s. So the stretch path itself is not slow, and the more than 9 seconds seen earlier did not reproduce; the Mac's load average was in the tens to the nineties then, which is the only explanation left (not proven). Real latency against a computer is unmeasured until L1 deploys the route; a computer slower than the 8-second deadline leaves the listener on the article for that load.
 - The deadline covers the request and the first segment, not the article fetch after it. Some tests wait with short sleeps and polling.
 
+## Player controls: speed to 3x, next and previous story, autoplay, the DJ's candidates (ways it can fail, written before the code)
+
+Owner QA round 1, 2026-11-15. Tests: `PlayerControlsTests.swift` (the numbers are in the test names).
+
+### Speed (0.5x to 3x, a slider)
+1. A speed outside the range, or NaN, reaches the audio: it clamps to 0.5...3 in the one place (`PlaybackSpeed.clamp`) that the tracker, the player and the audio all call; NaN is 1.
+2. The slider sends a value that is not on a step (1.2345): it snaps to 0.05, so the label and the stored value agree.
+3. Speed changes mid-sentence: the time-pitch unit sits after the player node, so the position (counted in source frames) does not jump or restart; the fraction never goes backwards.
+4. 3x with a voice that cannot go that fast: every voice (the system voice, Kokoro, Pocket, LFM) is rendered to buffers and played through the one time-pitch unit (`LiveAudio.timePitch`, range 1/32 to 32), so the voice's own rate is never used and no voice has a lower ceiling than 3x. The ceiling is the unit's, and the audio's, not the synthesizer's.
+5. The chosen speed is forgotten at the next launch: it is saved (`SpeedStore`) and applied at start.
+6. A saved speed that is garbage (0, negative, 99, a string) is ignored and the speed is 1.
+
+### Next and previous story
+7. Next at the last story does nothing and does not wrap; previous at the first story restarts it.
+8. Previous within the first 3 seconds of a story goes to the previous story; later it restarts the current one.
+9. The current story is not in the list (opened from search, or a text from mail): the buttons do not guess; a list is only taken for a story that is in it.
+10. The list is the paper's article stack order when the story was started from the paper; the front list when no stack was seen; a programme (the DJ) skips by segment.
+11. Lock-screen next and previous do the same as the buttons.
+
+### Autoplay
+12. A story ends and the next in the list starts by itself; no setting.
+13. The reader paused: nothing starts. The reader is talking to the radio (a turn is open): nothing starts over them; it starts when the turn is over, once.
+14. The next story fails to load: skip to the one after it, once, and say so; if that fails too, stop and say so.
+15. Nothing was played (the voice failed for every block): the story did not "finish"; autoplay does not run through the whole list failing.
+16. The last story ends: stop cleanly.
+17. A text queued behind the story (mail's "Read it to me") plays before the next story is chosen (the player's queue runs first). Known limit: when the text ends nothing continues the list; a text is not a story of it.
+18. The app is in the background: the audio session keeps the app alive; the loop is the same as in the foreground (nothing to build; to check on the phone).
+
+### The DJ's candidates (the programme request)
+19. The request carried no `candidates`, so the server's prompt said "write only ident and bridge segments": the listener got station breaks, never a story. The request now carries the front list, ordered by the paper's weight, with the text of the first ten.
+20. A candidate the server would refuse (no dek, a route with a space, @ or #, a title over 300 bytes, text over 8 KB, a 41st item) is shaped or dropped on the phone so one bad story does not make the whole request 400.
+21. The text of a story cannot be fetched: that candidate goes without text; the request still goes.
+22. No candidates at all (the front list did not load): no request is made; the front page's story plays, as before.
+23. A stretch ends (the stream is done and the last segment played): one more request with cause `extend`, with the routes already told left out; nothing left to tell: stop.
+24. "Start the radio" after onboarding (owner, 2026-11-15) spoke "there's nothing to report now, so I'm just going to let the music play": the request had no candidates, the server's prompt then says "write only ident and bridge segments", and the model wrote a station break. Fixed at the request (19) and by holding breaks until the first story, update or headlines arrives; a stretch of only breaks is not a programme and the paper's story plays instead.
+25. Play pressed before any programme was loaded (sign-in just done, the launch load slow or failed) played the Lab's fixture edition ("written only to test the radio"): Play and Start the radio now wait for a load in flight, or load, and never play the fixture or an empty document.
+26. No network and nothing cached: the words are "I can't reach the paper right now", never an announcement that there is nothing to report.
+
 ## Acknowledgement timing (`ackTiming`): ways it can fail (written before the code)
 
 `LabConfiguration.ackTiming` is `immediate` (default) or `afterSystem1`. Measured on staging, the acknowledgement

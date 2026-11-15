@@ -144,6 +144,7 @@
       "paused": "bool",
       "level": "string",
       "speed": "string",
+      "speedValue": "number",
       "speedChoices": "string[]",
       "mode": "string",
       "micOpen": "bool",
@@ -1249,6 +1250,7 @@
           "paused": false,
           "level": "play",
           "speed": "1",
+          "speedValue": 1,
           "speedChoices": [
             "0.8",
             "1",
@@ -1283,6 +1285,13 @@
       "send": "radioSpeed",
       "options": {
         "speed": "string"
+      },
+      "answers": "RadioInfo"
+    },
+    {
+      "send": "radioStory",
+      "options": {
+        "move": "string"
       },
       "answers": "RadioInfo"
     },

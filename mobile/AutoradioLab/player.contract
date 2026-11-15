@@ -13,7 +13,12 @@
 // by segment. One article: as before.
 // testIds: player, player-scrim, player-layer, player-title, player-position, player-status, player-yield, player-passage,
 // player-sentence-<k>, player-next-passage, player-segments, player-seg-<i>, player-item-<i>, player-prev, player-play,
-// player-next, player-speed-<v>, player-mode, player-close.
+// player-next, player-prev-story, player-next-story, player-speed, player-speed-slider, player-speed-down, player-speed-up,
+// player-speed-reset, player-mode, player-close.
+// Owner QA round 1 (2026-11-15): previous and next STORY flank the two skip buttons (the skip buttons still move one passage, or one
+// segment in a programme); the speed is a slider from 0.5x to 3x in steps of 0.05, dragged anywhere along the track (the move is
+// relative: `pan` gives the move since its last event), with a minus and a plus for one step and 1x to reset. The speed is sent when
+// the finger lifts, so the voice does not stutter while it is dragged.
 use Theme, BarInfo, RadioInfo from "@choir/autoradio"
 use Layer, Card from "./ui.contract"
 
@@ -28,20 +33,6 @@ keyframes playerIn
 keyframes playerBlink
   50% opacity=0.25
 
-component SpeedChip
-  inject
-    th: Theme
-    ri: RadioInfo
-    setSpeed: action
-  props
-    v: string
-  view
-    button press=setSpeed(v) testId=`player-speed-${v}` appearance="none" aria-label=`Speed ${v} times`
-      row padding="6px 12px" border-radius=th.radiusPill align-items="center" justify-content="center"
-        background-color=(v == ri.speed ? th.accent : "transparent")
-        transition=`background-color ${th.motionFastMs}ms ease`
-        text `${v}×` font-family=th.fontUi font-size=13 font-weight=600 color=(v == ri.speed ? th.onAccent : th.muted)
-
 component PlayerLayer
   inject
     th: Theme
@@ -51,8 +42,15 @@ component PlayerLayer
     radioPlay: action
     previous: action
     next: action
+    previousStory: action
+    nextStory: action
     jumpTo: action
-    setSpeed: action
+    speedShown: number
+    speedPct: number
+    speedMove: action
+    speedEnd: action
+    speedNudge: action
+    speedReset: action
     sheetMove: action
     sheetEnd: action
   derive still = th.reducedMotion
@@ -126,7 +124,10 @@ component PlayerLayer
                       text "You" font-family=th.fontUi font-size=11 font-weight=600 color=th.accent
         // transport
         column gap=8 padding="6px 20px 4px" align-items="center"
-          row gap=28 justify-content="center" align-items="center"
+          row gap=14 justify-content="center" align-items="center"
+            button press=previousStory testId="player-prev-story" aria-label="Previous story" appearance="none" width=44 height=44
+              row width=44 height=44 align-items="center" justify-content="center"
+                image "symbol:sf/backward.end.fill" color=th.fg
             button press=previous testId="player-prev" aria-label="Previous passage" appearance="none" width=44 height=44
               image "symbol:skip-back-15" color=th.fg
             button press=radioPlay testId="player-play" aria-label=(ri.playing ? "Pause" : "Play") appearance="none" width=60 height=60
@@ -138,8 +139,27 @@ component PlayerLayer
                   image "symbol:play-fill" color=th.onAccent
             button press=next testId="player-next" aria-label="Next passage" appearance="none" width=44 height=44
               image "symbol:skip-forward-15" color=th.fg
-          row gap=4 justify-content="center"
-            for v in ri.speedChoices key=v
-              SpeedChip(v=v)
+            button press=nextStory testId="player-next-story" aria-label="Next story" appearance="none" width=44 height=44
+              row width=44 height=44 align-items="center" justify-content="center"
+                image "symbol:sf/forward.end.fill" color=th.fg
+          // the speed: a slider from 0.5x to 3x
+          row gap=8 width="100%" align-items="center"
+            text "Speed" font-family=th.fontUi font-size=12 font-weight=600 color=th.muted
+            text `${speedShown}×` testId="player-speed" font-family=th.fontUi font-size=13 font-weight=700 color=th.fg flex=1
+            button press=speedReset testId="player-speed-reset" appearance="none" aria-label="Reset the speed to 1 times"
+              row padding="6px 12px" border-radius=th.radiusPill align-items="center" justify-content="center" border-width=1 border-style="solid" border-color=th.rule
+                text "1×" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
+          row gap=6 width="100%" align-items="center"
+            button press=speedNudge(0 - 0.05) testId="player-speed-down" appearance="none" aria-label="Slower" width=44 height=44
+              row width=44 height=44 align-items="center" justify-content="center"
+                text "−" font-family=th.fontUi font-size=22 font-weight=600 color=th.fg
+            column flex=1 min-width=0 height=44 justify-content="center" pan=speedMove panrelease=speedEnd testId="player-speed-slider" aria-label="Speed"
+              row width="100%" height=22 align-items="center" padding-left=11
+                box width=`${speedPct}%` height=6 border-radius=3 background-color=th.accent
+                box width=22 height=22 border-radius=11 margin-left=-11 background-color=th.accent box-shadow=th.shadow2
+                box flex=1 height=6 border-radius=3 background-color=th.rule
+            button press=speedNudge(0.05) testId="player-speed-up" appearance="none" aria-label="Faster" width=44 height=44
+              row width=44 height=44 align-items="center" justify-content="center"
+                text "+" font-family=th.fontUi font-size=22 font-weight=600 color=th.fg
         // the prompt is the bar's (one field, not two), so the player has none
 

@@ -55,6 +55,8 @@ public struct RadioInfo: Codable, Sendable, Equatable {
     /// play | dip | pause: what the yield policy is doing to the programme right now.
     public var level = "play"
     public var speed = "1"
+    /// The same speed as a number, for the slider (0.5 to 3).
+    public var speedValue = 1.0
     public var speedChoices: [String] = ["0.8", "1", "1.25", "1.5"]
     /// button | open | hybrid
     public var mode = ""
@@ -157,7 +159,7 @@ public final class BarTracker: @unchecked Sendable {
     }
 
     public func setSpeed(_ s: Double) {
-        lock.lock(); speed = s.isNaN ? 1 : min(max(s, 0.5), 2.0); let v = speed; let sink = speedSink; lock.unlock()
+        lock.lock(); speed = PlaybackSpeed.snap(s); let v = speed; let sink = speedSink; lock.unlock()
         sink?(v)
     }
 
@@ -247,7 +249,7 @@ public final class BarTracker: @unchecked Sendable {
             r.position = "\(si + 1) of \(d.segments.count)"
         }
         r.playing = p.playing; r.paused = n > 0 && !p.playing
-        r.level = s.level; r.speed = Self.speedName(speed)
+        r.level = s.level; r.speed = Self.speedName(speed); r.speedValue = speed
         r.mode = s.addressing
         r.micOpen = s.micActive
         r.micLevel = (level * 100).rounded() / 100
@@ -290,7 +292,7 @@ public final class BarTracker: @unchecked Sendable {
         return r
     }
 
-    static func speedName(_ s: Double) -> String { s == s.rounded() ? String(Int(s)) : String(s) }
+    static func speedName(_ s: Double) -> String { PlaybackSpeed.name(s) }
 }
 
 public enum BarState {
