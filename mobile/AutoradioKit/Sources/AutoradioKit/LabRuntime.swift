@@ -159,14 +159,17 @@ public final class LabRuntime: @unchecked Sendable {
             try await session.claim(.talking, preferBuiltInMic: true, reason: "start")    // voice processing from the start: the radio's voice is not the listener's
             let micOK = virtual ? true : await LiveAudio.requestMicPermission()
             if !micOK { log.emit(.error(stage: "mic", message: "microphone permission denied; button/typing only")) }
+            HandsFreeSwitch.shared.decideFirstRun(micGranted: micOK)         // the default: ON when the microphone is granted, OFF when declined
             try audio.start(bus: bus, clock: clock, wantMic: micOK, voiceProcessing: coordinator.current == .talking, virtual: virtual)
             if virtual { log.emit(.note("virtual audio: no hardware is opened; mic frames are injected")) }
             started = true
             let mic = bus.mic()
-            let echo = audio.voiceProcessing, muted = voiceMuted
+            let echo = audio.voiceProcessing
+            let on = handsFreeOverride ?? HandsFreeSwitch.shared.isOn
             micTask = Task { [engine] in
                 await engine.handsFreeConfigure(echoCancelled: echo)
-                for await f in mic where !muted.value { await engine.ingestHandsFree(f) }      // hands-free: no button, the policy decides (HandsFree.swift)
+                await engine.handsFreeSet(on)
+                for await f in mic { await engine.ingestHandsFree(f) }      // hands-free: no button, the policy decides (HandsFree.swift); off: the engine looks at nothing
             }
             player.play()
             lock.lock(); snap.running = true; snap.message = ""; lock.unlock()
@@ -206,7 +209,9 @@ public final class LabRuntime: @unchecked Sendable {
     public var pageTextProvider: (@Sendable (String) async -> String)?
     private var warmTask: Task<Void, Never>?
     private let warmKeys = Locked<(done: String, running: String)>(("", ""))
-    let voiceMuted = Locked<Bool>(false)
+    /// Hands-free for one screen only (onboarding's "Talk to it" while the switch is off): not stored.
+    private let overrideBox = Locked<Bool?>(nil)
+    var handsFreeOverride: Bool? { overrideBox.value }
     static func warmKey(_ address: String, _ text: String) -> String { "\(address)|\(text.utf8.count)|\(text.hashValue)" }
     /// A page's text has arrived (or changed) while the page may already be in front: read it into the responder's cache unless that
     /// exact page and text has been read or is being read now.
@@ -257,15 +262,19 @@ public final class LabRuntime: @unchecked Sendable {
         return await engine.typedTurn(text, front: front)
     }
 
-    /// The bar's microphone: listening is hands-free (HandsFree.swift) and is on whenever the engine runs and the microphone is not
-    /// muted. A tap opens it (a muted microphone is heard again); the turn then ends by itself when the speaker stops, and nothing
-    /// is toggled by a second tap (Cancel drops a turn). The lab's press and release buttons still use the toggles below.
-    public func listenNow() { voiceMuted.write { $0 = false } }
-    /// The bar's former microphone control, and the lab's: voice on and off. While muted the microphone frames are not heard
-    /// (the system's microphone indicator stays on until the radio is stopped).
-    public func talkDown() { voiceMuted.write { $0.toggle() } }
-    public func talkUp() { voiceMuted.write { $0.toggle() } }       // one tap, one call, whichever the bar sends: it toggles
-    public var isMuted: Bool { voiceMuted.value }
+    /// Hands-free on or off (one state, kept across launches): on, the microphone is open and the turn policy opens and closes turns; off,
+    /// the engine hears nothing and an open turn is dropped now. `persist: false` is for one screen only (onboarding's "Talk to it").
+    public func setHandsFree(_ on: Bool, persist: Bool = true) {
+        if persist { overrideBox.write { $0 = nil }; HandsFreeSwitch.shared.set(on) } else { overrideBox.write { $0 = on } }
+        Task { [engine] in await engine.handsFreeSet(on) }
+        refresh()
+    }
+    /// The stored state again, after a screen's own turn-on.
+    public func restoreHandsFree() { setHandsFree(HandsFreeSwitch.shared.isOn) }
+    public var handsFreeIsOn: Bool { handsFreeOverride ?? HandsFreeSwitch.shared.isOn }
+    /// The lab's press and release buttons (not in the normal app): press turns hands-free on, release turns it off.
+    public func talkDown() { setHandsFree(true) }
+    public func talkUp() { setHandsFree(false) }
     /// Discard the turn being talked (Cancel beside Send): stop the capture, drop the audio and words, call nothing.
     public func cancelTalk() { Task { await engine.cancelTurn() } }
 

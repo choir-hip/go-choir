@@ -178,6 +178,7 @@ final class OnboardingController: @unchecked Sendable {
         set { mic = "checking"; message = "" }
         AVAudioApplication.requestRecordPermission { [weak self] granted in
             guard let self else { return }
+            HandsFreeSwitch.shared.decideFirstRun(micGranted: granted)        // the default for the whole app: ON after the grant, OFF if declined
             if !granted {
                 self.set { self.mic = "refused"; self.progress.micRefused = true; self.message = "Talking to the radio needs the microphone. You can allow it in Settings; you can always tap instead." }
                 self.save(); return
@@ -271,6 +272,7 @@ final class OnboardingController: @unchecked Sendable {
         Task { [weak self] in
             guard let self else { return }
             await rt.start(virtual: self.module.virtualEngine)
+            if !HandsFreeSwitch.shared.isOn { rt.setHandsFree(true, persist: false) }       // off: the reader tapped it, so it listens on this screen only
             await self.module.choir.loadProgramme()
         }
     }
@@ -284,6 +286,7 @@ final class OnboardingController: @unchecked Sendable {
             rt.setStage(.programme, id: RadioProgramme.stageID)
             rt.player.pause()
             rt.player.setDocument(ProgrammeDocument(id: "none", title: "", blocks: []))
+            rt.restoreHandsFree()                                                           // back to the stored state
         }
         changed()
     }

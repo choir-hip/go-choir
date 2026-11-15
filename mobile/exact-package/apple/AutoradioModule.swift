@@ -83,6 +83,7 @@ public final class AutoradioModule: ExactPackage {
         owner = ExactSessionOwner(context: context) { [weak self] s in self?.context.log("AUTORADIO \(s)"); NSLog("AUTORADIO %@", s) }
         runtime = LabRuntime(supportDir: support, session: owner)
         runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["labState", "labAudio", "labEvents", "labTrace", "labTurns", "labStages", "labParams", "labConfigs", "choirPlayer", "choirStories", "choirAuth", "barState"]) } }
+        HandsFreeSwitch.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["barState"], now: true) } }
         // Demo mode first: the Choir environment then talks to the bundled fixtures, signed in as the demo listener.
         if Demo.isOn { Demo.install() }
         // The listener path: sign-in (Keychain), the front page, the real stages.

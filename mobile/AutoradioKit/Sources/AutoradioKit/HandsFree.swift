@@ -40,11 +40,20 @@ struct HandsFreeState {
     var heardCounts: [Int] = []
     /// What the listener cut into, for the turn that follows a cut-in.
     var cut: SpokenCut?
+    /// Hands-free on or off (HandsFreeSwitch). Off: no frame is looked at.
+    var enabled = true
+    /// After Cancel: no new turn opens until the speech that was running has paused (a TV goes on talking).
+    var needQuiet = false
+    /// Speech heard in the open session, in ms (what `ListeningVisibility` calls sustained).
+    var speechMs = 0
 
     static var voiceConfig: VoiceConfig {
         var c = VoiceConfig.defaults
         // No Smart Turn model yet: silence alone ends the turn, after this long (the default 1.5 s feels slow).
         c.fallbackSilenceMs = 1000
+        // Speech that never goes quiet (a TV) cannot hold a turn open: at 30 s the turn closes and is sent as it stands (the policy's
+        // `maxTurn` commit; the stock limit is 60 s).
+        c.maxTurnMs = 30_000
         return c
     }
 }
@@ -55,6 +64,7 @@ extension TurnEngine {
 
     /// One microphone frame in a voice session.
     public func ingestHandsFree(_ f: AudioFrame) async {
+        guard hf.enabled else { return }        // off: the microphone is closed, nothing is looked at
         lastFrameT = f.t
         if !hf.ready { await hfPrepare() }
         let startMs = hf.nowMs
@@ -67,18 +77,21 @@ extension TurnEngine {
         }
         if let bounds = hf.bounds {
             switch await bounds.feed(f) {
+            case .speechStarted where hf.needQuiet:
+                break                          // speech that was running when the turn was cancelled: not a new turn
             case .speechStarted:
                 hf.inSpeech = true
                 env.log.emit(.speechStarted)
                 await hfBeginSession()
                 if pipeline == nil, hf.cut == nil { hf.cut = await env.playback.spoken() }   // a programme line the listener cut into
             case .speechEnded(_, let secs):
+                hf.needQuiet = false
                 hf.inSpeech = false
                 env.log.emit(.speechEnded(seconds: secs))
             case .none: break
             }
         }
-        if hf.inSpeech { hf.lastSpeechMs = endMs }
+        if hf.inSpeech { hf.lastSpeechMs = endMs; if hf.session != nil { hf.speechMs += endMs - startMs } }
         await hfFeed(.vad(probability: hf.inSpeech ? 0.9 : 0, startMs: startMs, endMs: endMs))
         await hfNoteSpokenLines()
         await hfFeed(.tick(nowMs: endMs))
@@ -87,6 +100,44 @@ extension TurnEngine {
            endMs - hf.lastSpeechMs > 3000 {
             hfEndSession(cancel: true)
         }
+        hfUpdateVisibility()
+    }
+
+    /// The listening state (the bar's "talking") shows only when there is good reason to think the reader has begun saying something
+    /// meant for the radio: sustained speech with words (`ListeningVisibility`). Voice activity alone shows nothing.
+    func hfUpdateVisibility() {
+        let words = max(0, hf.lastWords.count - hf.wordBase)
+        let show = hf.session != nil && ListeningVisibility.visible(handsFree: hf.enabled, speechMs: hf.speechMs, words: words, addressed: false, notATurn: false)
+        if show { if pipeline == nil, turn == nil { setPhase(.capturing) } }
+        else if phase == .capturing, pipeline == nil, turn == nil { setPhase(.playing) }
+    }
+
+    func hfNewPolicy() -> TurnPolicy {
+        var p = TurnPolicy(config: HandsFreeState.voiceConfig)
+        p.echoCancelled = hf.echoCancelled
+        p.smartTurnAvailable = false      // no Smart Turn model yet: silence alone ends a turn
+        p.checksSpeaker = false
+        return p
+    }
+
+    /// Hands-free on or off, at once, in the middle of a turn too: off drops the open turn and hears nothing more.
+    public func handsFreeSet(_ on: Bool) async {
+        let was = hf.enabled
+        hf.enabled = on
+        if !on && was { await hfDropTurn(requireQuiet: false) }
+        if on && !was { hf.needQuiet = false; await hf.bounds?.reset() }
+    }
+
+    /// Drop the turn being heard (Cancel, or hands-free off). Nothing is sent; the switch is not touched. `requireQuiet`: the speech
+    /// that is going on must pause before another turn can open.
+    func hfDropTurn(requireQuiet: Bool) async {
+        hfEndSession(cancel: true)
+        hf.speechMs = 0; hf.inSpeech = false; hf.needQuiet = requireQuiet; hf.cut = nil
+        preroll = []
+        if hf.answerTurnID == nil { hf.policy = hfNewPolicy() }
+        await hf.bounds?.reset()
+        await env.playback.setLevel(.play)
+        if phase == .capturing, pipeline == nil, turn == nil { setPhase(.playing) }
     }
 
     func hfPrepare() async {
@@ -96,10 +147,7 @@ extension TurnEngine {
             hf.transcriber = try env.registry.make(.transcriber, as: Transcriber.self, config)
             await hf.bounds?.reset()
         } catch { env.log.emit(.error(stage: "hands-free", message: "\(error)")) }
-        hf.policy = TurnPolicy(config: HandsFreeState.voiceConfig)
-        hf.policy.echoCancelled = hf.echoCancelled
-        hf.policy.smartTurnAvailable = false      // no Smart Turn model yet: silence alone ends a turn
-        hf.policy.checksSpeaker = false
+        hf.policy = hfNewPolicy()
     }
 
     func hfBeginSession() async {
@@ -122,6 +170,7 @@ extension TurnEngine {
         hf.partialTask?.cancel(); hf.partialTask = nil
         if cancel { hf.session?.cancel() }
         hf.session = nil
+        hf.speechMs = 0
         hf.generation += 1
         hf.wordBase = 0
         hf.lastWords = []
@@ -162,7 +211,7 @@ extension TurnEngine {
         switch d {
         case .state(let s):
             switch s {
-            case .userSpeaking: setPhase(.capturing)
+            case .userSpeaking: break          // voice activity alone shows nothing (hfUpdateVisibility decides)
             case .listening: if pipeline == nil { setPhase(.playing) }
             default: break
             }
