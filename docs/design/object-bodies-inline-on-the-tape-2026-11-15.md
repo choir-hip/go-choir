@@ -88,8 +88,12 @@ never touched.
   (`internal/storeschema/floor.go:70-107`); `CheckFloor` refuses a store whose
   floor is above the build epoch, at `Open` before any DDL
   (`floor.go:109-120`, `internal/store/open.go:219-225`); the updater refuses
-  `Apply`, `restorePrior`, `RestagePinnedRelease` to a release below the floor
-  or declaring no epoch (`internal/updater/updater.go:552-612`). The current
+  `Apply` and `restorePrior` to a release below the floor or declaring no epoch
+  (`internal/updater/updater.go:552-560`, `579-600`, `restorePrior` at `1233`).
+  `RestagePinnedRelease` and the baseline stage and import pass
+  `allowUndeclared=true` (`updater.go:689`, `908`, `1010`): they refuse a
+  release declaring an epoch below the floor but let one that declares **no**
+  epoch (`StoreSchemaVersion == 0`) through (`updater.go:590-593`). The current
   epoch is 6 (`internal/storeschema/schema.go`, `const Version uint64 = 6`).
 - The bodies. Kinds I could find with non-JSON bodies: platform-side
   `choir.review_record` (`internal/platform/publication_graph.go:255-260`, the
@@ -240,6 +244,30 @@ checks the exact bytes it is about to hand to the appender:
 Both fall back to the same thing, so there is one fallback, not two. Each is a
 correctness refusal of the new form for that batch, not a switch.
 
+Fallback mechanics (round 2):
+
+- **The checks run once.** Rules A and B run on the version 3 bytes only. The
+  version 2 fallback is written **unchecked**: it is today's encoding, and
+  re-running rule A on it would not terminate in the `AIza` case below (a
+  base64 body token can itself match `google_api_key`, so "fall back again"
+  has nowhere to go). "One fallback, not two" means one-shot.
+- **Rule B compares against a carrier of the pre-encode bytes, never against
+  `body_json`.** The writer's per-op value carries the original body bytes in a
+  Go-only field (`json:"-"`, **invented**, replacing the `InlineBody bool` of
+  section 2). Comparing the decoded `Object.Body` with the `body_json` it was
+  decoded from would be a tautology that never exercises the outer batch
+  marshal. Test 2 makes a tautological check harmless for eligible bodies, but
+  the design does not rely on that.
+- **The version is derived from the final bytes.** The constructor sets
+  version 3 iff some marshalled object op carries `body_json`, and rule B
+  asserts "version 3 if and only if some op is inline" on the same decode, so
+  a copy that drops the Go-only field cannot produce a version 2 batch holding
+  `body_json`.
+- **How the fallback rebuilds base64 ops.** The ops hold already-marshalled
+  bytes. The fallback decodes each object op through the reader and
+  re-marshals it with `Object`'s default encoder, and a test asserts the
+  version 2 output contains no `body_json`.
+
 **Which bytes `Encrypt` receives.** The payload that `projection_tape.go:212`
 marshals is passed unchanged to `AppendNewPrivatePayload`
 (`projection_tape.go:256`), which hands it as `plaintext`
@@ -265,8 +293,9 @@ string).
 The sealed path redacts the whole batch plaintext before compressing
 (`privacy.go:310-350`). `redactJSONPayload` (`redaction.go:183-280`) runs
 `findSecretMatches` over the entire batch and replaces whole string tokens
-that any match overlaps. Two patterns are `(?s)` PEM forms
-(`redaction.go:26-29`) whose `.` matches `"` and `,`, so one match **can
+that any match overlaps. One pattern, `private_key`, is a `(?s)` PEM form
+(`redaction.go:27`; `private_key_header` at `:28` is not `(?s)` and matches only
+the header line) whose `.` matches `"` and `,`, so one match **can
 cross ops**: a `-----BEGIN ... PRIVATE KEY-----` in a run-memory text (shell
 output, no END) and the matching END in an inline body in the same batch. A
 per-op test passes the body; the batch-level match then covers the body's
@@ -328,7 +357,10 @@ Two fences, independent of each other:
 ### Epochs (the two releases)
 
 - Release 1 (reader): `storeschema.Version = 7`, `min_store_schema_version`
-  6, `Validate` accepts (3,2), `Object.UnmarshalJSON` accepts both forms.
+  6 (the field is set only by the platform update request,
+  `internal/platform/platform_update.go:48,236`; nothing else in the repo
+  produces it, so confirm the release pipeline sets it before treating it as a
+  fence), `Validate` accepts (3,2), `Object.UnmarshalJSON` accepts both forms.
   **It writes no floor and no version 3 batch.**
 - Release 2 (writer): `MarshalTapeObject` on the three writers; version 3
   constructor; floor 7 asserted at `Open` and `Reopen`. Epoch stays 7.
@@ -352,7 +384,16 @@ renames a staged workspace over the live one and drops the floor file; the
 re-writes it) for this floor without a new mechanism: there is nothing to
 remember, only an idempotent write on the path every adoption passes through.
 The existing hook is conditional on the event-table writer switch
-(`open.go:408`); the inline floor line is not.
+(`open.go:409`); the inline floor line is not.
+
+**A floor-write failure fails `Open` and `Reopen`** in the writer release. The
+existing hook logs and turns the event-table writer off when its floor write
+fails (`open.go:409-414`); the inline floor line must not be treated that way,
+because a floor that is absent while version 3 writes proceed removes F2's
+pre-mutation fence (F1 would still refuse old binaries, loudly). So the
+failure is returned, the store does not open, and the computer never writes
+version 3 without floor 7. Test: a floor directory that refuses the write makes
+`Open` and `Reopen` return the error.
 
 What this costs, stated: automatic rollback below the reader release is refused
 from the writer release's first boot, not from its first inline write. The
@@ -369,9 +410,17 @@ below the reader, which the first version 3 batch would refuse anyway (F1).
   is the loud outcome the floor exists for. Rollback from the writer lands on
   the reader release, which is allowed.
 - **Product restore.** A restore restages the checkpoint's pinned release
-  (`RestagePinnedRelease`). A checkpoint whose release is below epoch 7 is
-  refused on a floored computer (`updater.go:552-576`). So restore to a
-  checkpoint older than release 1 is refused, loudly. A restore to a newer
+  (`RestagePinnedRelease`). A checkpoint whose release **declares** an epoch below 7 is
+  refused on a floored computer (`checkManifestAgainstFloor`,
+  `updater.go:595-597`). A pinned release that declares **no** epoch is not:
+  `RestagePinnedRelease` passes `allowUndeclared=true` (`updater.go:1010`) and
+  `StoreSchemaVersion == 0` returns nil (`updater.go:590-593`). The outcome is
+  safe: a pre-release-1 tape holds no version 3 batch, and a tape that does hits
+  F1 loudly on the restored binary. But the stated refusal is not universal, and
+  F1 is its backstop. Either keep the qualification or add a restage check that
+  refuses an undeclared epoch on a floored computer (a choice for release 2's
+  author; the reader release does not touch the updater). So restore to a
+  checkpoint older than release 1 that declares an epoch is refused, loudly. A restore to a newer
   checkpoint works. The refusal must reach the owner as a named refusal
   (failure 20).
 - **Capsule copies.** A capsule whose release epoch is below 7 fails
@@ -390,6 +439,19 @@ and the epoch). Red surfaces touched: Texture canonical writes only through
 the decode path, tape and evidence (the batch validator), checkpoint
 projection (the version check). That is red; the two seats apply (CLAUDE.md
 "Review").
+
+**Landing gate for both releases: the builder that builds release 1 and
+release 2 is itself at epoch 7.** `builder/request.go:275` stamps
+`storeschema.Version` of the builder **process**, and `builder/builder.go:56-62`
+says that is exact only on the same-commit path. A release built by an epoch-6
+builder declares `store_schema_version` 6 in its manifest even when its source
+has the reader. Then release 2 is refused on a store whose receipt reads 7
+(`checkStateCompatibility`, `updater.go:524-527`), and after release 2 writes
+floor 7 a failed probe cannot `restorePrior` to release 1 (`updater.go:596-597`,
+call at `1248`). The failure is loud, not silent, but the landing report must
+show that the release manifests of both releases declare
+`store_schema_version` 7. This is not only a statement about self-development
+layers.
 
 Rollback from release 1 lands on the pre-reader release. Safe for tape (no
 version 3 batch exists). `Apply` of that epoch-6 release is refused once the
@@ -475,10 +537,14 @@ I found no existing way, and I will not invent a switch.
   guards run inside a walk, but they test whether a computer boots and
   appends, not whether tape is equivalent on replay.
 - Options, none of which is a switch:
-  1. **Land release 2 without `Ring-Expedite` and with no change in the
-     paths the deploy auto-expedites.** The walk then goes R0 (d@e), R1
-     (test, three healthy members), and only then R2..R5. It proves boot and
-     append, not replay.
+  1. **Not available.** The operating contract (CLAUDE.md, "Delivery")
+     requires `Ring-Expedite: <the defect it unblocks>` on every landing that is
+     not docs-only, so there is no untrailered option for release 2. (The
+     deploy also auto-expedites the paths in `.github/scripts/node-b-ci-deploy`;
+     `internal/store`, `internal/computerevent` and `internal/objectgraph` are
+     not among them, but that does not make the trailer optional.) A ring walk
+     without an expedite would need an owner waiver of that rule. Release 1 and
+     release 2 are both expedited and both name it in the report.
   2. **Reader release 1 first, then a d@e-only drill** (CLAUDE.md allows
      adversarial drills on d@e): run the whole-tape replay equivalence
      (section 9) on d@e **before** landing release 2, using a repo test that
@@ -491,7 +557,7 @@ I found no existing way, and I will not invent a switch.
      forgotten.
   5. **A per-computer canary by tape position or by kind** is an allowlist
      that gates a feature (CLAUDE.md "No switches"): not allowed.
-- Conservative recommendation: 1, 2 and 3 together. If the owner wants more,
+- Conservative recommendation: 2 and 3 together (option 1 needs an owner waiver). If the owner wants more,
   it is an owner decision about the soak constants. (Open question O3.)
 
 ## 6. Everything else that reads the op length or the body
@@ -543,8 +609,10 @@ and I will not narrow it by argument. A before/after counter would compare
 different workloads, so it could not settle the number alone.
 
 What settles it, with no new code: **the envelope already records it.**
-`PlaintextLength` is in every private envelope's metadata (`privacy.go:34`)
-and `len(envelope)` is the stored size, so stored bytes per plaintext byte, by
+`PlaintextLength` is in every private envelope's metadata (`privacy.go:34`);
+it is the length **after redaction** (`len(redacted)`, `privacy.go:341`), not
+the raw batch length, which differs for a batch the redactor touched.
+`len(envelope)` is the stored size, so stored bytes per plaintext byte, by
 batch version, is readable from existing tape with no counter and without
 shipping release-1 code. Two readings:
 
@@ -610,12 +678,15 @@ Recounted after the round-1 deletions: 28 items (the first draft had 35).
     `appender.go:1801`). Fence: a guard test, as `event_table_guard_test.go`
     does for `Table`, that the only constructor of a batch that holds
     `body_json` is the version 3 path. No `Validate`-time refusal of a version
-    1 or 2 batch containing `body_json`: the reader sees `body_json` only
-    through the `Object` decode of an op (an op is a `RawMessage` to
-    `Validate`), so such a check would need a text scan of every old batch,
-    which could refuse valid old tape that quotes the string; and a version 1
-    or 2 batch with `body_json`, if one ever existed, is read correctly by the
-    reader anyway.
+    1 or 2 batch containing `body_json`. This is not because the check is
+    impossible: `Validate` already parses every op body into a map
+    (`projection_batch.go:425-432`, `rejectProjectionPresence`), so a
+    parse-based check scoped to object ops would not false-positive on old
+    tape. It is dropped on impact: no producer can emit it without bypassing the
+    constructor (the guard test fences that), the reader reads `body_json` in
+    any batch version correctly anyway, and after the release gate no
+    pre-reader binary can read such a batch in the first place, so a refusal
+    would protect no reader that exists.
 16. The upcaster (`vocab_upcast_deposit.go:560-675`) re-encodes with
     `json.Marshal`; after decoding an inline op it re-emits base64. Fine in
     memory. Test the upcaster over an inline op and over a mixed batch.
@@ -626,19 +697,27 @@ Recounted after the round-1 deletions: 28 items (the first draft had 35).
     `Object`, is never JSON-decoded.
 18. `Object.UnmarshalJSON` slows every object decode (alias struct plus
     `RawMessage` copy), and each write adds `json.Valid`, a marshal, a batch
-    decode and a batch regex scan. Estimate a few percent of decode cost and
+    decode and a batch regex scan (rule A's `findSecretMatches` duplicates the
+    redactor's own scan, so two regex passes run per batch). Estimate a few percent of decode cost and
     some write CPU; measure with the existing bench. Not a correctness risk.
 19. A decoder that disallows unknown fields would refuse `body_json` on an old
-    type. Grep for `DisallowUnknownFields` on object decodes before release 1
-    (`floor.go:54` uses it for the floor file only).
-20. Product restore to a checkpoint pinned to a release below epoch 7 is
-    refused after the floor exists (section 4). Verify the restore path shows
-    the owner a named refusal, not an opaque failure.
+    type. Grep for `DisallowUnknownFields` on object decodes before release 1.
+    It is used in many places (for example `internal/selfdevprotocol/control.go`,
+    `internal/deskprotocol/surface.go`), not only the floor file; none was found
+    that decodes `objectgraph.Object` directly, and a custom `UnmarshalJSON`
+    bypasses strict unknown-field checking on the type anyway.
+20. Product restore to a checkpoint pinned to a release that declares an epoch
+    below 7 is refused after the floor exists (section 4); a release declaring
+    no epoch produces no refusal (`updater.go:590-593`, `1010`). Verify the
+    restore path shows the owner a named refusal, not an opaque failure, for
+    the refused case.
 21. Snapshot chunks or any other consumer that copies `ProjectionOp.Body` into
     a place an older decoder reads (section 6, not verified).
-22. A **platform** path that reads the guest tape (a purge/archive tool,
-    `tape_purge.go:367` writes `rows/*.jsonl`) and parses object ops for their
-    body would see `body_json`. I did not read it. Grep before release 2.
+22. A **platform** path that reads the guest tape (a purge/archive tool)
+    and parses object ops for their body would see `body_json`. The anchor
+    `tape_purge.go:367` is a SQL `row_to_json` row dump (`:348`) written to
+    `rows/*.jsonl`, not a tape-op parser, so it shows no such reader; the grep
+    for a platform op-body reader is still open. Grep before release 2.
 23. Telemetry sealer's `recheckTelemetryOp` (`telemetry_sealer.go:540-560`)
     runs `json.Unmarshal(obj.Body, &ev)`: with the reader, `obj.Body` is the
     raw bytes; unchanged. Test the sealer over inline.
@@ -718,7 +797,7 @@ Deployed:
 - **O1. Version pair (3,2) vs (3,3).** Default (3,2): the projector did not
   change.
 - **O3. Proof on the test computer before the largest.** Default: section 5
-  options 1, 2 and 3 together, no new mechanism. Owner decides whether to
+  options 2 and 3 together, no new mechanism. Owner decides whether to
   restore a soak floor for this release.
 - **O5. Restore past an abandoned branch.** Default: treat as loud-refusal
   and verify in the restore drill.
@@ -767,7 +846,7 @@ added.
 | The first draft's stated consequence ("the probe fails") was wrong; live and replay agree and the hash is stale | DeepSeek | Accepted, verified at `appender.go:689` vs `:1755`; rationale rewritten. |
 | "Base64 is opaque to the patterns" is false (`AIza`) | DeepSeek | Accepted; stated in 3.2 and O7, not fixed here. |
 | Floor memo, stat identity, `inlineSeen`, rules 1 to 3, O2, O4 | both | Accepted, all deleted; unconditional write from the `Reopen` hook (`open.go:391-415`). F1 stays as the independent backstop; F3 was a restatement of F1 and is folded into it. |
-| Refuse `body_json` in a v2 batch (Sonnet: drop; DeepSeek: extend to every version below 3) | disagree | Dropped (failure 15): `Validate` sees ops as `RawMessage`, so the check is a text scan that can refuse valid old tape. DeepSeek's extension rejected for the same reason; the guard test remains. |
+| Refuse `body_json` in a v2 batch (Sonnet: drop; DeepSeek: extend to every version below 3) | disagree | Dropped (failure 15). Round 1's reason ("a text scan that can refuse valid old tape") was wrong: `Validate` already parses op bodies, so a parse-based check is possible. The drop stands on impact, stated in failure 15 (round 2). The guard test remains. |
 | Epoch gate incomplete; "platform needs no change" false | DeepSeek B2, Sonnet 2 | Accepted; section 5 states what is refused, the operator action and the d@e layered release; "has the reader" checked from the binary. DeepSeek's dissent (a known cost of every bump) is correct and stated as such. |
 | Depth: batch decode fails on a body near 10,000 deep | Sonnet | Accepted; rule B decodes the final batch bytes and compares bodies; the depth cap and the per-op self-check are deleted. |
 | Self-check decodes the op, not the batch | DeepSeek | Accepted; subsumed by rule B. |
@@ -786,3 +865,32 @@ added.
 | O8 omits `check-store-schema-floor.sh` | DeepSeek | Accepted (O8, section 10). |
 | Reduce to a core of four or five pieces | both | Accepted: reader, eligibility test, batch version 3 with the two batch checks, unconditional floor 7. |
 | Sonnet: a depth failure is a `SyntaxError` silently downgraded on sealed replay | Sonnet | Checked: `appender.go:1805` does downgrade it, as stated. But on a sealed live write the existing decode at `projection_tape.go:240` already fails the write loudly, so the reviewer's silent case needs a batch that decodes live and not at replay, which I could not construct. Rule B is kept because it turns that loud failure into a fallback and covers the unsealed path. |
+
+## 14. Review round 2
+
+Two seats (Sonnet, DeepSeek v4.1 flash). Both **ACCEPT**; neither found a
+blocking defect, and all three round-1 blockers (the redaction fence, the epoch
+gate statement, the dropped version 2 check) were found closed. Every
+should-fix was checked against the code at the cited line and is adopted above
+as a correction; none adds a mechanism to the reader release.
+
+| Should-fix | Seat | Disposition |
+| --- | --- | --- |
+| 1. The gate must say the builder used for releases 1 and 2 is at epoch 7; `builder/request.go:275` stamps the builder process, so an epoch-6 builder declares 6 and release 2 is refused on a receipt-7 store | DeepSeek | Accepted, verified (`request.go:275`, `builder.go:56-62`, `updater.go:524-527`, `596-597`). Landing gate in section 5: both release manifests declare `store_schema_version` 7. |
+| 2. Restage allows an undeclared epoch (`updater.go:590-593`, `1010`), so "below epoch 7 is refused" is not universal | DeepSeek | Accepted, verified. Sections 1 and 4 and failure 20 qualified; F1 is the backstop; a restage check is a release 2 choice. |
+| 3. The rationale for dropping the version 2 `body_json` check was wrong (`Validate` parses op bodies, `projection_batch.go:425-432`) | DeepSeek | Accepted. Failure 15 and the round 1 table rewritten to the true reason. |
+| 4. State the fallback mechanics: checks run once on the version 3 bytes, the version 2 fallback is written unchecked, the self-decode compares against a carrier of the pre-encode bytes | DeepSeek | Accepted. Section 3, "Fallback mechanics". |
+| 5. A floor-write failure must fail `Open`/`Reopen`, not log and continue as the existing hook does (`open.go:409-414`) | DeepSeek | Accepted. Section 4. |
+| 6. Only one pattern, `private_key` (`redaction.go:27`), is `(?s)` | DeepSeek | Accepted, verified. Section 3.2; the cross-op scenario stands. |
+| Note: `PlaintextLength` is post-redaction (`privacy.go:341`) | DeepSeek | Accepted. Section 7. |
+| Note: failure 19's `floor.go:54` parenthetical is wrong | DeepSeek | Accepted; `DisallowUnknownFields` is used widely. Failure 19. |
+| Note: failure 22's anchor is a SQL row dump, not an op parser | DeepSeek | Accepted, verified (`tape_purge.go:348`, `367`). Failure 22. |
+| Note: `min_store_schema_version` has no producer outside the platform update request | DeepSeek | Accepted, verified (`platform_update.go:48,236`). Section 5. |
+| Note: section 5 option 1 (no `Ring-Expedite`) conflicts with the operating contract | DeepSeek | Accepted. Every non-docs landing carries the trailer; there is no untrailered option. Section 5 option 1 and the recommendation rewritten. |
+| 1. Derive the batch version from the bytes, not from a side flag | Sonnet | Accepted, in section 3 "Fallback mechanics": rule B asserts version 3 iff some op is inline. |
+| 2. Specify how the fallback rebuilds base64 ops | Sonnet | Accepted, section 3, with a test that the version 2 output holds no `body_json`. |
+| 3. Name rule A's duplicate scan cost in failure 18 | Sonnet | Accepted. Failure 18. |
+| 4. Writing floor 7 at every `Open` also floors tool opens, capsule copies and test directories; check for tests that assert a floor file's absence | Sonnet | Accepted as a release 2 task: grep the tests before the writer lands. Not a reader release item (the reader writes no floor). |
+
+Not verified in round 2 (as in round 1): snapshot chunk writers (failure 21)
+and any platform reader of tape op bodies (failure 22).
