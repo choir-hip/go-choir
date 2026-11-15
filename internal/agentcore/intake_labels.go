@@ -1161,6 +1161,10 @@ func (rt *Runtime) labelPollWith(ctx context.Context, lib *intakeLibrary, ownerI
 				}
 				work = append([]item{{call: c, retries: it.retries + 1, depth: it.depth}}, work...)
 				continue
+			case jevFail:
+				// The call is given up on; each of its captures is then logged
+				// unlabelled with this error (labelHeld).
+				log.Printf("intake labels: call of %d questions failed and is not asked again: %v", len(c.questions), err)
 			case jevHalve:
 				log.Printf("jev split: site=intake_labels items=%d calls=%d forced_by=map[%s:1] error=%q", len(c.questions), len(halves), forcedBy, err.Error())
 				next := make([]item, 0, len(halves)+len(work))
@@ -1275,7 +1279,7 @@ func (rt *Runtime) askIntakeCall(ctx context.Context, lib *intakeLibrary, call i
 		} `json:"usage"`
 	}
 	if err := json.Unmarshal(raw, &distribution); err != nil {
-		return nil, &jevUndecodable{fmt.Errorf("decode Jev's answer: %w", err)}
+		return nil, &jevUndecodable{cause: fmt.Errorf("decode Jev's answer: %w", err)}
 	}
 	total := len(call.questions)
 	out := make([][]intakeCallAnswer, len(call.asks))

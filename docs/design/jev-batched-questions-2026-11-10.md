@@ -811,8 +811,11 @@ in this order:
 2. A refusal whose text names a size (`max_tokens_exceeded`, "context length"
    and similar; a secondary hint the gateway does not relay today) halves the
    call at once, logged `forced_by=vendor_refused`.
-3. A failure the client says is not transient (a 400 invalid request) or an
-   undecodable answer is deterministic: it fails once, visibly.
+3. A gateway 413 (a body over its transport cap) halves at once, logged
+   `forced_by=gateway_body_cap`. A deterministic status (400, 401, 403, 404, 422)
+   or an answer that parsed and has the wrong shape fails once, visibly (the
+   caller logs the call and each capture); a short body is a transient drop and
+   gets the ordinary retry.
 4. Any other failure is asked once more after a backoff. If it fails again and
    the call carries more than one unit, it is halved at a unit boundary, to two
    levels, logged `forced_by=call_failed` with the error. A half that fails

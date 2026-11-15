@@ -157,3 +157,50 @@ func TestIntakeGateway400FailsOnceAndIsNeitherRetriedNorHalved(t *testing.T) {
 		t.Fatalf("%d requests on a 400; want exactly 1", got)
 	}
 }
+
+// The gateway 413 (a body over its transport cap) is the one 4xx that halving
+// cures: it halves at once, and is not asked whole twice.
+func TestIntakeGateway413HalvesAtOnceAndLosesNoCapture(t *testing.T) {
+	fastRetries(t)
+	rt, _ := testRuntime(t)
+	gw, judge := newFakeGateway(t, &fakeIntakeJudge{}, func(n, questions int) int {
+		if questions > 12 {
+			return http.StatusRequestEntityTooLarge
+		}
+		return 0
+	})
+	rt.SetCandidateJudge(judge)
+	labels := mustLabels(t, rt.labelPoll(context.Background(), pollLib(rt, 5), "owner", "computer", "src", flushTestItems(12, "s"), intakeBatchCaptures))
+	if len(labels) != 12 {
+		t.Fatalf("%d of 12 captures labelled after a 413", len(labels))
+	}
+	if got := gw.count(); got != 3 {
+		t.Fatalf("%d requests; want the 413 once and two halves", got)
+	}
+}
+
+// A 200 that parses but has the wrong shape is deterministic: it fails once.
+func TestIntakeGatewayWrongShapedAnswerFailsOnce(t *testing.T) {
+	fastRetries(t)
+	rt, _ := testRuntime(t)
+	gw, judge := newFakeGateway(t, &fakeIntakeJudge{}, func(n, questions int) int { return wrongShape })
+	rt.SetCandidateJudge(judge)
+	results := rt.labelPoll(context.Background(), pollLib(rt, 5), "owner", "computer", "src", flushTestItems(12, "s"), intakeBatchCaptures)
+	for i, r := range results {
+		if r.Err == nil {
+			t.Fatalf("capture %d labelled from a wrong-shaped answer", i)
+		}
+	}
+	if got := gw.count(); got != 1 {
+		t.Fatalf("%d requests; a wrong-shaped answer fails once", got)
+	}
+}
+
+// A cleanly closed short body (the client invalid JSON response) is a
+// transient drop, so it gets the ordinary retry and halving.
+func TestJevNextStepTreatsAShortBodyAsTransient(t *testing.T) {
+	short := jevErr("judgment client: invalid JSON response")
+	if act, _ := jevNextStep(short, 0, 0, true); act != jevRetry {
+		t.Fatal("a short body is asked once more")
+	}
+}

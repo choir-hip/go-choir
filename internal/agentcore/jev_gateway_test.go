@@ -21,6 +21,9 @@ import (
 // sees no vendor reason, so no fake in these tests may return an error shape
 // production cannot (docs/problems/jev-misuse-structural-assessment-2026-11-15.md).
 
+// wrongShape makes the fake gateway answer 200 with a body of the wrong shape.
+const wrongShape = 299
+
 // fakeGateway serves /provider/v1/judgments. answer decides per request: nil to
 // answer through inner, or a status and body to answer with.
 type fakeGateway struct {
@@ -51,6 +54,14 @@ func newFakeGateway(t *testing.T, inner CandidateJudge, refuse func(n, questions
 		case http.StatusBadGateway:
 			w.WriteHeader(http.StatusBadGateway)
 			_, _ = w.Write([]byte(`{"error":"Jev judgment provider unavailable"}`))
+			return
+		case http.StatusRequestEntityTooLarge:
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			_, _ = w.Write([]byte(`{"error":"request body too large"}`))
+			return
+		case wrongShape:
+			// A 200 that parses as JSON but is not a distribution.
+			_, _ = w.Write([]byte(`{"answers":"nope"}`))
 			return
 		case http.StatusBadRequest:
 			w.WriteHeader(http.StatusBadRequest)

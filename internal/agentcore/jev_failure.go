@@ -18,9 +18,15 @@ import (
 //     rate-limited call only makes more calls.
 //   - A refusal known to be for size (a hint in the text, secondary: the
 //     gateway does not relay it today) halves the call at once.
-//   - A failure the client says is not transient (a 400 invalid request) or an
-//     answer that cannot be decoded is deterministic: asking again or halving
-//     cannot change it, so it fails once, visibly.
+//   - A gateway 413 (a body over its transport cap) is a refusal for size that
+//     halving cures: it halves at once, forced_by=gateway_body_cap.
+//   - A failure the client types with a deterministic status (400, 401, 403,
+//     404, 422), or an answer that arrived, parsed and has the wrong shape
+//     (jevUndecodable), is deterministic: asking again or halving cannot change
+//     it, so it fails once, visibly (the caller logs it). A short body that
+//     fails to parse as JSON is a transient drop, not this case: it gets the
+//     ordinary retry. Any other status the client calls non-transient keeps
+//     the ordinary path.
 //   - Any other failure is asked once more after a backoff; if it fails again
 //     and the call carries more than one unit, it is halved at a unit
 //     boundary, to jevHalvingDepth levels. A half that fails without a rate
@@ -59,6 +65,8 @@ func jevNextStep(err error, retries, depth int, halvable bool) (act jevAction, f
 		return jevFail, ""
 	case jevSizeRefused(err) && canHalve:
 		return jevHalve, "vendor_refused"
+	case jevStatus(err) == 413 && canHalve:
+		return jevHalve, "gateway_body_cap"
 	case jevDeterministic(err):
 		return jevFail, ""
 	case retries < 1:
@@ -94,20 +102,30 @@ func jevSizeRefused(err error) bool {
 	return false
 }
 
-// jevDeterministic reports a failure that asking again cannot change: the
-// client's typed error says its status is not transient (not 429 or 5xx), or
-// the answer was undecodable.
+// jevStatus is the HTTP status the client's typed error carries, or 0.
+func jevStatus(err error) int {
+	var typed interface{ StatusCode() int }
+	if errors.As(err, &typed) {
+		return typed.StatusCode()
+	}
+	return 0
+}
+
+// jevDeterministic reports a failure that asking again cannot change: a
+// gateway 400, 401, 403, 404 or 422, or an answer that parsed and has the
+// wrong shape.
 func jevDeterministic(err error) bool {
-	var typed interface{ Transient() bool }
-	if errors.As(err, &typed) && !typed.Transient() {
+	switch jevStatus(err) {
+	case 400, 401, 403, 404, 422:
 		return true
 	}
 	var bad *jevUndecodable
-	return errors.As(err, &bad) || strings.Contains(strings.ToLower(err.Error()), "invalid json response")
+	return errors.As(err, &bad)
 }
 
-// jevUndecodable is an answer that arrived and could not be read.
-type jevUndecodable struct{ err error }
+// jevUndecodable is an answer that arrived, parsed as JSON and had the wrong
+// shape.
+type jevUndecodable struct{ cause error }
 
-func (e *jevUndecodable) Error() string { return e.err.Error() }
-func (e *jevUndecodable) Unwrap() error { return e.err }
+func (e *jevUndecodable) Error() string { return e.cause.Error() }
+func (e *jevUndecodable) Unwrap() error { return e.cause }
