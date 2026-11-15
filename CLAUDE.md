@@ -209,8 +209,13 @@ record lands alone first. See
 ## Safety and hygiene
 
 - Assume the worktree holds other people's changes. Never commit in the
-  primary checkout; use a worktree. Never use a bare `git stash`. Do not
-  revert or destroy work that is not yours.
+  primary checkout; use a worktree, made with `lane new <name> --base
+  origin/main` ([docs/reference/LANE.md](docs/reference/LANE.md)). Never use
+  a bare `git stash`. Do not revert or destroy work that is not yours.
+- **One Mac build at a time, run by the lead** (2026-11-15). A mobile worker
+  writes code in a lane and may run one Swift package test; it never runs an
+  Exact build, a device build or a simulator. A simulator the lead needs
+  is slimmed first with `mobile/scripts/sim-slim.sh`.
 - No secrets, tokens or the owner's email addresses in the repo or in output.
   Per-developer secrets live in the gitignored `.envrc.local`.
 - Risky mutation happens in disposable capsules inside the stable computer.
