@@ -71,8 +71,7 @@ so two at once fit and three would contend with the load-sensitive tests
 
 Tonight (the patch): the agents VM at 4 GiB, the runner unchanged at 10 GiB,
 so the configured sum is 26,624 MiB plus the 5,120 MiB reserve, 31,744 of
-31,865. The config states what runs; nothing waits on a restart to become
-true. Plus the assertion, the OOM order, Mike's VMs out of swap, and the zram
+31,865. The agents VM's new size takes effect when it restarts (see Applied). Plus the assertion, the OOM order, Mike's VMs out of swap, and the zram
 cushion. A guard unit sets the runtime parts at boot and every minute, so it
 never edits Mike's units and a restarted VM gets its settings back within a
 minute.
@@ -191,6 +190,37 @@ pushing is the owner's call).
 4. The agents VM returns to 10 GiB only on its next restart, which brings
    back the overcommit unless the runner is shrunk first; do not restart it at
    10 GiB.
+
+## Applied (2026-11-15)
+
+- 04:06Z: backup `/root/mike-infra.before-memory-20261115`; patch (sha256
+  a452fb34...) applied with `patch -p2`. MemAvailable 7.18 GB, 13 GiB free on
+  `/` (the build fetched 0.35 MiB and built 17 small derivations).
+- `systemd-run` needs `--setenv=PATH="$PATH"`: without it nixos-rebuild
+  fails after the build ("No such file or directory: 'test'"), harmlessly.
+- 04:06Z dry-activate: nothing to stop, restart or start was listed. 04:07:31Z
+  `test`: new units started were zram (dev-zram0.swap and its setup) and the
+  guard's timer; no microvm@ unit was touched. Fresh login at 04:07:40Z: all
+  five VMs active with their baseline start times, PIDs and NRestarts 0;
+  `ssh choir-runner true` worked. 04:07:55Z `switch` (generation 78,
+  `1lc0lyjh...-nixos-system-node-a`, the evaluated path); same five readings.
+- Mike's VMs before and after (start time, PID, NRestarts): ws-owner
+  2026-10-23 01:03:58, 635435, 0; ws-03 01:02:58, 634347, 0; ws-04 01:03:27,
+  634862, 0. Unchanged. Runner 2026-11-14 01:57:11, 3259151, 0, unchanged.
+- Guard readings (comm/oom_score_adj/oom_score per process): ws-owner, ws-03
+  and ws-04 `cloud-hyperviso` and `socat` at -1000, score 0, swap.max 0;
+  agents `cloud-hyperviso` 900 (score 1358); runner `cloud-hyperviso` 0
+  (score 852). zram0 4.7G, 0 used. MemAvailable 6.84 GB at 04:08Z.
+- **The agents VM was not restarted.** At 04:08Z it held a `claude` and its
+  `2.1.307` binary under tmux (the remote-control service, which may carry a
+  live session), no logins and no go or test process. Its `current` runner
+  is the 4 GiB one; `booted` is still the 10 GiB one. Until it restarts, the
+  host is still overcommitted by up to about 6 GiB in the worst case, the
+  agents VM must not run heavy suites, and if memory runs out the kernel now
+  kills the agents VM (score 1358) and never Mike's VMs. Who releases it: the
+  owner (the remote-control session runs on the owner's Claude login). Then
+  `systemctl restart microvm@agents` on Node A, and check that `booted`
+  carries `size=4096M`.
 
 ## Heresy delta
 
