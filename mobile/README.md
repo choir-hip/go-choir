@@ -74,6 +74,13 @@ Fixtures: `mobile/fixtures/learning/` (from the server builder, `lane/arl-l1a`).
 20. No stretch (route 404 or 503, 401, a transport failure, a stream with no speakable segment): the front-page article plays exactly as before. A stretch that fails after some segments keeps what it has and is not retried by itself.
 21. A reload (sign-in, a story picked) cancels the follower of the old stretch; a late segment of the old stretch never lands in the new document (13).
 
+### What P1 is, where it lives, and what it leaves to P2
+
+- `Choir/RadioProgramme.swift`: `StretchDecoder` (SSE or one JSON object per line), `SplitBlocks`, `SegmentPrep`, `ProgrammeDocument.append`, `RouteStretchSource` (`POST /api/autoradio/programme`, `cause: open`), and the `RadioProgramme` stage (the listener's default programme; with no stretch it plays `ChoirFrontProgramme`'s article exactly as before). `SegmentTracker.swift`: the playback observer. `DemoStretch.swift`: what demo mode answers on the route.
+- `ProgrammePlayer`: `appendSegment`, `next`/`previous`/`jumpToSegment` by segment, `playback` (the tracker). `RadioInfo` gains `kind` and `sources`; with segments its title, position and list are the segment's; `player.contract` shows the kind and the source chips.
+- For P2: `player.playback.observe { PlaybackEvent }`. `lastBlock` is the server's block index; `blockCount` is the server's count. `finished` means the last playback block played to its end; the server refuses a `finished` whose `last_block` is not `block_count - 1` (a mismatch the segment records as `blockCountMismatch`). P2 owns `seq`, ids, hashes, `started_at`/`ended_at`, the buffer and what to send on each kind.
+- Readings taken where the designs were open: the wire shape of a `segment` event is the segment fields of design 1.3 plus `stretch_id`, `segment_id`, `block_count` (nothing pins it until L1); the request body is `request_id`, `cause`, `local_time`, `tz` only (`after`, `heard` and the edition fields are for later stations); the player waits for the first segment before it starts (no time limit but the transport's idle timeout), then appends the rest; the cold-start ladder (design 2.1) and play-on-open are not P1; the first block of a segment is not subdivided to one sentence (only paragraphs over 600 characters are split).
+
 ## Acknowledgement timing (`ackTiming`): ways it can fail (written before the code)
 
 `LabConfiguration.ackTiming` is `immediate` (default) or `afterSystem1`. Measured on staging, the acknowledgement
