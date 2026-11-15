@@ -88,10 +88,12 @@ component BarShell
     barFocus: action
     barBlur: action
   derive st = bi.state
-  // One neutral placeholder on every page (people instruct as well as ask: play, skip, open mail, rewrite this, more like this).
+  // One neutral placeholder on every page. What the field does: the words go to the Autoradio desk with the page in front (its title,
+  // text and what was just heard), and the radio answers aloud in a few sentences. Today's route (docs/reference/AUTORADIO-TURNS.md) answers
+  // and has no tools, so the wording says "ask" and promises no action.
   // The aim is shown apart, as a short label on the glass: "On: <the page's title>" (never an address). The address itself goes with
   // the turn (`aim=`), unchanged.
-  derive aim = "Prompt Autoradio…"
+  derive aim = "Ask about this page…"
   derive aimTitle = topAddr == "paper:front" ? "Front page" : ((raim.address == pg.top and raim.blockId != "") ? raim.label : frontName)
   derive onSetup = pg.top == "onboarding:setup"
   derive setupLine = ob.step == "interview" ? (ob.paused ? "Interview paused" : ((st == "listening" or st == "talking" or st == "heard") ? "Interview: listening…" : "Interview: speaking…")) : (ob.step == "setup" ? "Setting up the voice…" : (ob.step == "mic" ? "Check the microphone" : (ob.step == "hearing" ? "Check that you can hear me" : (ob.step == "ready" ? "Voice is set up" : (ob.step == "writing" ? "Writing your edition…" : (ob.step == "done" ? "Your edition is ready" : "Voice setup"))))))
@@ -147,6 +149,8 @@ component BarShell
                 row padding="3px 10px" border-radius=th.radiusPill border-width=1 border-style="solid" border-color=th.rule align-items="center"
                   text (moreFor == topAddr ? "Noted" : "More of this") font-family=th.fontUi font-size=12 font-weight=600 color=th.fg
         // ---- the line above the controls
+        if lineMode == "aim"
+          text `The radio answers aloud, from ${aimTitle}. Try “Summarize this” or “Who is involved?”` testId="bar-aim" font-family=th.fontUi font-size=13 color=th.muted line-clamp=2 padding-left=4 animation=enter
         if lineMode == "setup"
           text setupLine testId="bar-setup" font-family=th.fontUi font-size=14 font-weight=600 color=th.fg line-clamp=1 padding-left=4 animation=enter
         if lineMode == "playing" or lineMode == "paused"
