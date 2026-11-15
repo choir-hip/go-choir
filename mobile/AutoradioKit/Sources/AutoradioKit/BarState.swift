@@ -70,6 +70,10 @@ public struct RadioInfo: Codable, Sendable, Equatable {
     public var items: [RadioItem] = []
     /// 0...1, the smoothed microphone level while the mic is open (the mark breathes with it); 0 when nothing is heard.
     public var micLevel = 0.0
+    /// What the segment now playing is ("Story", "Headlines", "Station break"); empty for a single article.
+    public var kind = ""
+    /// The labels of the segment's sources (chips). Never raw refs.
+    public var sources: [String] = []
     public init() {}
 }
 
@@ -234,6 +238,14 @@ public final class BarTracker: @unchecked Sendable {
         r.title = d.title; r.source = route
         r.index = idx; r.count = n
         r.position = n == 0 ? "" : "\(idx + 1) of \(n)"
+        // A programme (station P1): the header, the position and the list are the segments; the passage below is still the block.
+        let seg = n == 0 ? nil : d.segmentIndex(containingBlock: idx)
+        if let si = seg {
+            let np = ProgrammeNowPlaying.describe(document: d, blockIndex: idx)
+            r.title = np.title; r.kind = np.kind; r.sources = np.sources
+            r.index = si; r.count = d.segments.count
+            r.position = "\(si + 1) of \(d.segments.count)"
+        }
         r.playing = p.playing; r.paused = n > 0 && !p.playing
         r.level = s.level; r.speed = Self.speedName(speed)
         r.mode = s.addressing
@@ -249,6 +261,18 @@ public final class BarTracker: @unchecked Sendable {
             let text = b.spokenText ?? b.summary
             r.sentences = Self.sentences(text)
             r.sentenceIndex = Self.sentenceIndex(r.sentences, progress: bp)
+            if let si = seg {
+                // The programme list is the segments: a window of at most 40 that holds the current one.
+                if si + 1 < d.segments.count { r.next = d.segments[si + 1].title }
+                let m = d.segments.count
+                let lo = max(0, min(si - 5, m - 40)), hi = min(m, lo + 40)
+                for i in lo..<hi {
+                    var it = RadioItem()
+                    it.i = i; it.current = i == si; it.done = i < si; it.text = d.segments[i].title; it.kind = "speech"
+                    r.items.append(it)
+                }
+                return r
+            }
             if idx + 1 < n { r.next = d.blocks[idx + 1].spokenText ?? d.blocks[idx + 1].summary }
             // A window of at most 40 items that always holds the current block.
             let lo = max(0, min(idx - 5, n - 40)), hi = min(n, lo + 40)

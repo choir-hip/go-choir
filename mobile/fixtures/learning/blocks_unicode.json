@@ -1,0 +1,108 @@
+{
+ "about": "SplitBlocks edge texts with non-ASCII whitespace (design 12.3). The outputs are what calibration.SplitBlocks (internal/calibration/autoradio.go on origin/lane/arl-l1a) returns, produced by running that function, not written by hand. The phone must match: strings.TrimSpace counts Unicode White_Space (U+0085, U+00A0, U+2028, U+3000, vertical tab, form feed) as blank, and does not count U+200B or a space plus a combining mark. Same shape as blocks.json; kept in its own file so the L1a lane file is not edited.",
+ "cases": [
+  {
+   "name": "nel_line_is_blank",
+   "text": "A first.\n\u0085\nA second.",
+   "blocks": [
+    "A first.",
+    "A second."
+   ],
+   "block_count": 2
+  },
+  {
+   "name": "nel_inside_a_line_is_not_a_break",
+   "text": "A first.\u0085A second.",
+   "blocks": [
+    "A first.\u0085A second."
+   ],
+   "block_count": 1
+  },
+  {
+   "name": "line_separator_blank_line",
+   "text": "A first.\n\u2028\nA second.",
+   "blocks": [
+    "A first.",
+    "A second."
+   ],
+   "block_count": 2
+  },
+  {
+   "name": "line_separator_inside_a_line",
+   "text": "A first.\u2028still first.\n\nA second.",
+   "blocks": [
+    "A first.\u2028still first.",
+    "A second."
+   ],
+   "block_count": 2
+  },
+  {
+   "name": "nbsp_only_line_is_blank",
+   "text": "A first.\n\u00a0\u00a0\nA second.",
+   "blocks": [
+    "A first.",
+    "A second."
+   ],
+   "block_count": 2
+  },
+  {
+   "name": "nbsp_trimmed_at_the_edges",
+   "text": "\u00a0A first.\u00a0\n\n\u00a0A second.",
+   "blocks": [
+    "A first.",
+    "A second."
+   ],
+   "block_count": 2
+  },
+  {
+   "name": "ideographic_space_only_line_is_blank",
+   "text": "A first.\n\u3000\u3000\nA second.",
+   "blocks": [
+    "A first.",
+    "A second."
+   ],
+   "block_count": 2
+  },
+  {
+   "name": "ideographic_space_trimmed",
+   "text": "\u3000A first.\u3000",
+   "blocks": [
+    "A first."
+   ],
+   "block_count": 1
+  },
+  {
+   "name": "space_plus_combining_mark_is_not_blank",
+   "text": "A first.\n \u0301\nA second.",
+   "blocks": [
+    "A first.\n \u0301\nA second."
+   ],
+   "block_count": 1
+  },
+  {
+   "name": "space_plus_combining_mark_alone",
+   "text": " \u0301",
+   "blocks": [
+    "\u0301"
+   ],
+   "block_count": 1
+  },
+  {
+   "name": "zero_width_space_line_is_not_blank",
+   "text": "A first.\n\u200b\nA second.",
+   "blocks": [
+    "A first.\n\u200b\nA second."
+   ],
+   "block_count": 1
+  },
+  {
+   "name": "vertical_tab_and_form_feed_line_is_blank",
+   "text": "A first.\n\u000b\f\nA second.",
+   "blocks": [
+    "A first.",
+    "A second."
+   ],
+   "block_count": 2
+  }
+ ]
+}

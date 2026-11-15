@@ -38,6 +38,75 @@ Design: `docs/design/autoradio-lab-2026-11-10.md`. This directory holds `Autorad
 6. A replay mutates the kept turn: it never writes into the turn folder; `--out` is separate.
 7. Apple recognition needs authorization on the Mac: the command embeds usage strings; a missing authorization is an `error` event and a non-zero exit in the proof.
 
+## Programme player (station P1): ways it can fail (written before the code)
+
+Design: `docs/design/autoradio-dj-programme-2026-11-11.md` section 6; vocabulary: `docs/design/autoradio-learning-engine-2026-11-14.md` 12.3.
+Fixtures: `mobile/fixtures/learning/` (from the server builder, `lane/arl-l1a`). Tests: `ProgrammePlayerTests.swift`; the numbers below are in the test names.
+
+### Reading the stretch
+1. A network chunk ends inside a line (JSON or SSE): nothing is parsed until the line is complete; the line ending is LF, CRLF or a lone CR.
+2. Blank lines, SSE comments (`: autoradio`), unknown event names (`stretch`, `handoff`), a line that is not JSON, a JSON value that is not an object: ignored and counted, never a crash, never a gap in the programme.
+3. A line the phone cannot speak (unknown `kind`, text empty or only blanks) is dropped. The server is the validator of everything else (`p_heard`, `caused_by`, cites in the candidate set): the phone does not judge those, so a fixture line that is server-invalid but speakable is queued.
+4. A title with a newline, a control character, or over 200 bytes becomes one clean line; no title falls back to a plain label of the kind. A raw ref is never a title or a chip label.
+5. `cites` as plain strings (the fixture) or as `{ref, role, label}`: a chip exists only for a cite with a label; one ref is listed once.
+6. A line with no `stretch_id` or `segment_id` (the fixture has none) gets local ids; a segment id seen twice is appended once.
+7. `done` ends the stretch; `error` is logged and keeps what is queued; a stream that ends with no `done` keeps what it has.
+
+### Blocks
+8. `SplitBlocks` is mirrored exactly (blocks.json): CRLF and lone CR are line endings, a whitespace-only line is blank, leading, trailing and many blank lines vanish, a single newline joins, empty text has no blocks.
+9. The server's `block_count` is kept and is the count reported; the phone computes a count only when none was sent (fixtures). A sent count of zero or less is treated as not sent. A differing count is noted in the segment (`blockCountMismatch`) and the reported `lastBlock` is clamped inside the server's count.
+10. A paragraph over 600 characters is spoken as several playback units; every unit maps to the one server block it came from, so the reported `last_block` is the server's index, never a unit index.
+
+### The document
+11. A document saved before this change has no `segments`: it decodes as empty and plays as one article.
+12. A revision applied to a segmented document keeps every remaining segment's range right (inserted blocks shift later ranges; a segment cut through by a replacement is dropped).
+13. A segment appended to a document whose id changed meanwhile (the listener asked for something else) is refused, not mixed in.
+
+### The player
+14. A segment arriving while one plays does not restart, skip or repeat the block now playing.
+15. A segment arriving after the programme ran dry starts at its first block when not paused; while the listener has paused, it queues and makes no sound.
+16. Skip goes to the first block of the next segment; on the last segment it does nothing (it never wraps and never reports a skip that did not happen). Previous goes to the start of this segment, or to the one before when already at its start. A jump to a segment outside the list does nothing.
+17. A block that did not play (the voice is missing or failed) is not a finish: the segment gets `failed`, never `finished`.
+18. Observers (station P2): `segmentBegan`, `blockBegan(lastBlock)` once per server block (not once per unit), `finished` only when the last unit of the last server block played to its end, `skipped` only for a forward skip, `rewound` for a backward jump, `superseded` when the document is replaced mid-segment, `paused` and `resumed` for the listener, `cut` and `cutEnded` when the engine yields to a turn. No event is emitted twice for one transition.
+19. Now playing shows the segment title and kind and the labelled sources, never raw refs; the lock-screen title is the segment title and the artist is "Autoradio" with the kind; the player's programme list is segments, not blocks, once a document has segments.
+
+### The stage
+20. No stretch (route 404 or 503, 401, a transport failure, a stream with no speakable segment): the front-page article plays exactly as before. A stretch that fails after some segments keeps what it has and is not retried by itself.
+21. A reload (sign-in, a story picked) cancels the follower of the old stretch; a late segment of the old stretch never lands in the new document (13).
+
+### What P1 is, where it lives, and what it leaves to P2
+
+- `Choir/RadioProgramme.swift`: `StretchDecoder` (SSE or one JSON object per line), `SplitBlocks`, `SegmentPrep`, `ProgrammeDocument.append`, `RouteStretchSource` (`POST /api/autoradio/programme`, `cause: open`), and the `RadioProgramme` stage (the listener's default programme; with no stretch it plays `ChoirFrontProgramme`'s article exactly as before). `SegmentTracker.swift`: the playback observer. `DemoStretch.swift`: what demo mode answers on the route.
+- `ProgrammePlayer`: `appendSegment`, `next`/`previous`/`jumpToSegment` by segment, `playback` (the tracker). `RadioInfo` gains `kind` and `sources`; with segments its title, position and list are the segment's; `player.contract` shows the kind and the source chips.
+- For P2: `player.playback.observe { PlaybackEvent }`. `lastBlock` is the server's block index; `blockCount` is the server's count. `finished` means the last playback block played to its end; the server refuses a `finished` whose `last_block` is not `block_count - 1` (a mismatch the segment records as `blockCountMismatch`). P2 owns `seq`, ids, hashes, `started_at`/`ended_at`, the buffer and what to send on each kind.
+- Readings taken where the designs were open: the wire shape of a `segment` event is the segment fields of design 1.3 plus `stretch_id`, `segment_id`, `block_count` (nothing pins it until L1); the request body is `request_id`, `cause`, `local_time`, `tz` only (`after`, `heard` and the edition fields are for later stations); the player waits for the first segment before it starts (no time limit but the transport's idle timeout), then appends the rest; the cold-start ladder (design 2.1) and play-on-open are not P1; the first block of a segment is not subdivided to one sentence (only paragraphs over 600 characters are split).
+
+### Review round 1 repairs (tests in `ProgrammePlayerRepairTests.swift`, written first)
+
+- R1 a segment closed as `failed` or `finished` reports nothing more from its later blocks until another segment begins or the document is replaced (a multi-block segment with no voice on block 0 was `failed`, then `segmentBegan`, then `finished`).
+- R2 after the programme ran dry, pause, append, play starts at the first unplayed block (it replayed the last old block and reported its segment twice). With nothing new, play still replays the last block.
+- R3 the loop ends in one write that also looks at the document, so a segment appended in the window between its last read and its end is played (test hook: `beforeLoopTail`).
+- Load token in `ChoirApp.loadProgramme`: a stale open drops its result and a new load cancels the old follower; sign-out invalidates loads in flight. `RadioProgramme.open` re-throws a cancel instead of fetching the article. A first-segment deadline of 8 seconds (the design names none; it covers the request and the first segment) falls back to the article and lets the stretch go; late segments of that stretch are not used.
+- A bare `event: done` or `event: error` with no `data:` line is dispatched when the next line or the end of the stream arrives. Titles lose Unicode format characters (zero-width, bidi). `block_count` is a whole JSON number only (not a bool, a fraction or a string). The player view counts segments in a programme.
+- `SplitBlocks` works on scalars with Go's `unicode.IsSpace` set, so it matches `calibration.SplitBlocks`. `fixtures/learning/blocks_unicode.json` holds 12 cases whose outputs came from running that Go function; it is a separate file so the L1a lane's `blocks.json` is not edited.
+- Left as is: `looksLikeRef` turns a one-word title such as "Note:important" into the kind's label (noted at the function). Some tests still wait with short sleeps and polling.
+
+### Review round 2 repairs (tests in `ProgrammePlayerRepair2Tests.swift`, written first)
+
+- B1 `resumeAt` is cleared by `setDocument`, which `speakText` uses, so a text read after a dry programme starts at its first paragraph.
+- S1 the tracker's closed marker holds the unit it closed on and swallows only a later unit of the same segment; a unit at or before it is a seek (previous, rewind, jump back, play at the end) and is reported as a new play (`segmentBegan`, `blockBegan`, `finished`).
+- S2 sign-out sets `loading` false. S3 titles lose only bidi controls (U+202A to U+202E, U+2066 to U+2069, U+200E, U+200F, U+061C), U+200B and U+FEFF; ZWJ and ZWNJ stay. The server's title rule (design 3.2: one line, no control character, 200 bytes) is about control characters only, so the phone strips more than the server checks; the two do not disagree, the phone is stricter on what it shows.
+- The 8-second first-segment deadline (request and first segment together): after it the article plays and the stretch is let go (the reader is cancelled, nothing is followed). A late programme is not handed over: there is no hand-over in P1 (round 3 removed the one round 2 added). A computer that is slow to wake leaves the listener on the article for that load; the programme comes at the next load.
+- Where per-document state lives and dies. `ProgrammePlayer`: `blockIndex` and `resumeAt` are reset by `setDocument` (also reached from `speakText` and the queue); `resumeAt` is also cleared by `start(at:)` and set when the loop ends dry; the queue of texts is cleared by `ChoirApp.signOut` (`clearQueue`). `SegmentTracker`: the open segment and the closed marker are cleared by `documentReplaced()` (from `setDocument`); the marker also by a block of another segment or of no segment, and by a seek (a block at or before the unit it closed on). `ChoirApp`: the load token and `followTask` are replaced by every `loadProgramme` and by `signOut`, which also sets `loading` false.
+
+### Residuals (known, left as they are)
+
+- An `id:` or `retry:` line between `event:` and `data:` flushes the pending event early and the data line dispatches it again (a repeated `done` or `error` is harmless).
+- `appendSegment` can see `loop == nil` in the microseconds inside `start(at:)` between clearing the loop and storing the new task; its `start(at: old)` could then skip blocks a just-pressed skip was about to play.
+- A stale open (an older load) is not cancelled: it runs to its first segment or the deadline and may fetch the article for nothing; its result is dropped by the load token.
+- The slow relaunch (round 1 drive): a temporary probe (not committed) timed the path in the simulator on two launches, one fresh and one with kept storage, in demo mode: `refresh` to `loadProgramme` returned in 0.04 s, and the request plus first segment took 0.01 s. So the stretch path itself is not slow, and the more than 9 seconds seen earlier did not reproduce; the Mac's load average was in the tens to the nineties then, which is the only explanation left (not proven). Real latency against a computer is unmeasured until L1 deploys the route; a computer slower than the 8-second deadline leaves the listener on the article for that load.
+- The deadline covers the request and the first segment, not the article fetch after it. Some tests wait with short sleeps and polling.
+
 ## Acknowledgement timing (`ackTiming`): ways it can fail (written before the code)
 
 `LabConfiguration.ackTiming` is `immediate` (default) or `afterSystem1`. Measured on staging, the acknowledgement

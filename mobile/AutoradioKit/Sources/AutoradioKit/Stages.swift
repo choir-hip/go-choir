@@ -30,13 +30,33 @@ public struct ProgrammeDocument: Codable, Sendable, Equatable {
     public var id: String
     public var title: String
     public var blocks: [ProgrammeBlock]
-    public init(id: String, title: String, blocks: [ProgrammeBlock]) { self.id = id; self.title = title; self.blocks = blocks }
+    /// The segments of a programme (station P1): ranges of `blocks`. Additive: a document saved before this decodes as empty and is one article.
+    public var segments: [ProgrammeSegment]
+    public init(id: String, title: String, blocks: [ProgrammeBlock], segments: [ProgrammeSegment] = []) {
+        self.id = id; self.title = title; self.blocks = blocks; self.segments = segments
+    }
+    private enum CodingKeys: String, CodingKey { case id, title, blocks, segments }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id); title = try c.decode(String.self, forKey: .title)
+        blocks = try c.decode([ProgrammeBlock].self, forKey: .blocks)
+        segments = try c.decodeIfPresent([ProgrammeSegment].self, forKey: .segments) ?? []
+    }
 
     /// A revision replaces everything from `fromBlock` on (the desk revises "from that place onward").
+    /// Segments keep their ranges: an insertion shifts the later ones, and a segment the change cuts through is dropped.
     public func applying(_ r: Revision) -> ProgrammeDocument {
         var d = self
         let from = min(max(r.fromBlock, 0), d.blocks.count)
         d.blocks = Array(d.blocks[..<from]) + r.blocks + (r.keepRest ? Array(d.blocks[from...]) : [])
+        d.segments = segments.compactMap { s in
+            let end = s.firstBlock + s.blockCount
+            if end <= from { return s }                                  // wholly before the change
+            if s.firstBlock >= from, r.keepRest {                        // wholly after an insertion
+                var t = s; t.firstBlock += r.blocks.count; return t
+            }
+            return nil                                                   // cut through, or replaced
+        }
         return d
     }
 }
