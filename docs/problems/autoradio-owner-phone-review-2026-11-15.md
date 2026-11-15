@@ -99,3 +99,22 @@ The investigation is `docs/evidence/autoradio-phone-review-investigation-2026-11
 - **QA builds may be installed on the owner's phone without asking first**
   (2026-11-15, for the Autoradio QA rounds): install when a build is ready,
   then notify the owner.
+
+## QA round 1 (owner, 2026-11-15, about 22:20Z, build of `lane/autoradio-qa` 6fb2efb68)
+
+The owner tested onboarding, where the app helps set up the edition.
+
+- **Problem: the question-and-answer script is poor.** Evidence: the owner's
+  words: it "doesn't really ask good questions". Rulings:
+  - Topics are chosen graphically: buttons to select and deselect, with
+    suggestions offered. People will want more than two topics.
+  - Talking to it stays possible, beside the buttons.
+  - Never ask what the reader does not want ("I don't want people to be
+    asked to think negative like that").
+  - It should explain more of what is happening and what the choices do.
+- **Problem, the biggest: the voice is the built-in Apple fallback.** Ruling:
+  use a better on-device voice; small ones exist that sound much better.
+  Belief: the app speaks through the system voice everywhere (the
+  investigation of the same day traced Play to `AVSpeechVoice`); the
+  reference page lists Phonon at about 64 MB, under the 100 MB bundling
+  line. Remaining error: no better voice has run on the phone.
