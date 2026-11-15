@@ -1,7 +1,7 @@
 # Incremental snapshots: smaller page groups in the chunk store we already have, and one recovery-time trigger
 
-Status: proposed; review round 1 (two seats, both REPAIR) repaired by
-subtraction, see "Review round 1" at the end. Written 2026-11-15 (19:10 UTC).
+Status: proposed; review rounds 1 and 2 (two seats each, all REPAIR) repaired,
+see "Review round 1" and "Review round 2" at the end. Written 2026-11-15 (19:10 UTC).
 Design only; no code is changed by this document. Line numbers are from
 `origin/main` at `6263d0b25` (the same code as `7b186ba66` for every file cited).
 
@@ -188,26 +188,34 @@ If changes cluster (appends, a few hot tables), every row moves toward the
 last one. The gap between the rows is the whole question, and it is a
 property of the store's writes that only a measurement gives.
 
-**Capture frequency the objective needs.** The trigger rule (section 5) fires
-when the tail reaches `R * mu_min`, with `mu_min` the slowest replay rate
-measured on the computer, so captures start `R * mu_min / λ` apart. With
-`mu_min` = 77 (the paper's measured rate), at the paper's 9,400 events an hour
-(2.6 events/s, the owner's figure of 2026-11-15) and at the busy end of 32,400
-an hour (9 events/s):
+**Capture frequency the objective needs.** The trigger (section 5) is due
+when the tail reaches `R * mu_min` and the existing floor allows it. The floor
+is ten times the last successful capture's duration, start to start. With
+`mu_min` = 77 (the paper's measured rate) and `d` = 26 minutes (the longest
+measured capture), the floor is 4.3 hours. The paper's present rate is 9,400
+events an hour (2.6 events/s, the owner's figure of 2026-11-15); the busy end
+is 32,400 an hour (9 events/s). Hours between capture starts are
+`max(threshold / λ, floor)`:
 
-| `R` | Threshold | Apart at 9,400 an hour | Apart at 32,400 an hour |
+| `R` | Threshold | 9,400 an hour | 32,400 an hour |
 | --- | --- | --- | --- |
-| 30 min | 138,600 events | 14.7 h (1.6 a day) | 4.3 h (5.6 a day) |
-| 10 min | 46,200 events | 4.9 h (4.9 a day) | 86 min (16.8 a day) |
+| 30 min | 138,600 events | 14.7 h (1.6 a day); floor does not bind | 4.3 h (the threshold is 4.28 h, the floor 4.33 h) |
+| 10 min | 46,200 events | 4.9 h (4.9 a day); floor does not bind | 4.3 h, the floor binds (the threshold would be 86 min) |
 
-Until a replay of at least 1,000 events has been measured on the computer,
-`mu_min` is the code's 113 (section 5): 203,400 events at `R` = 30 and 67,800
-at `R` = 10 (21.6 h and 7.2 h apart at 9,400 an hour).
+At 32,400 an hour and `R` = 10 the floor holds a capture the rule wants, so
+the tail at the start is about 140,000 events (30 minutes of replay at 77)
+and `R` is not met; the status says so (section 5). The floor binds at `R` =
+10 above 10,700 events an hour (46,200 over 4.33 h), and at `R` = 30 above
+32,000 an hour. With `d` = 10 minutes the floor is 100 minutes and binds only
+above 27,700 an hour at `R` = 10. Before the paper has measured a replay of at
+least 1,000 events, `mu_min` is the code's 113: 203,400 events at `R` = 30
+and 67,800 at `R` = 10 (21.6 h and 7.2 h apart at 9,400 an hour).
 
-With today's 4 MiB chunks a capture uploads about 5 GB sealed, so 30 minutes
-costs about 8 to 28 GB a day and 10 minutes costs about 24 to 84 GB a day.
-That is why the owner's interim objective is 30 minutes on full captures and
-10 minutes once captures cost the change.
+With today's 4 MiB chunks a capture uploads about 5 GB sealed. At the paper's
+present rate that is about 8 GB a day at `R` = 30 (1.6 captures) and 24 GB a
+day at `R` = 10 (4.9); at the busy end about 27 GB at either `R` (the floor caps
+captures near 5.5 a day). The owner's interim objective is 30 minutes
+on full captures and 10 minutes once captures cost the change.
 
 ## 3. Options
 
@@ -384,11 +392,14 @@ Proof: repo tests for each failure first; then two captures on d@e and the
 meter's line read from its log; then the paper, read-only, after S2 has
 caused captures there.
 
-### S2. The trigger is one recovery-time rule (orange; rollback: revert)
+### S2. The trigger states the recovery-time objective (orange; rollback: revert)
 
-Section 5 is this slice's design. It lands second because it is what makes
-the paper capture at all, and those captures are S1's data. S2 and S1 do not
-depend on each other in code.
+Section 5 is this slice's design. Stated truthfully, it is today's rule with
+three changes: `R` is the stated objective in place of the 4-minute bound
+(`snapshotReplayBound`), the weekly interval is deleted, and `mu_min` is
+persisted. It also drops the bytes part of the floor (section 5). It lands
+second because it is what makes the paper capture at all, and those captures
+are S1's data. S2 and S1 do not depend on each other in code.
 
 ### S3. Smaller page groups for the state file (red; rollback: revert)
 
@@ -513,8 +524,12 @@ predicted for the chosen size, within a factor of 1.5.
 
 Built only if the gate in section 3 picks 32 pages, or the paper's store
 nears 64 GiB. One mechanism: raise `maxSnapshotRootChunks` and
-`maxSnapshotRootBody` (`snapshot_roots.go:72-74`) to cover a 256 GiB store at
-the chosen group (the bound today's numbers were written for). The host
+`maxSnapshotRootBody` (`snapshot_roots.go:72-74`) to cover the store at
+the chosen group, up to what the record can carry: the tape record is about
+70 bytes a chunk against the 64 MiB payload cap (`computerevent/privacy.go:51`),
+so about 958,000 chunks, which is about 120 GiB at 32 pages (S3 failure 5). The
+bound today's numbers were written for, 256 GiB, is not reachable at 32 pages.
+The host
 deploys before any guest that needs it. Its failure list is S3's items 8, 10
 and 11 at the new size, benchmarked on d@e first, and the host's per-chunk
 file count (303,000 files a root at 32 pages).
@@ -530,7 +545,7 @@ One objective, `R`: the replay of the tail after a recovery takes at most
 about `R`. A capture is due when
 
 ```
-tail >= min(R * mu_min, 540000)
+tail >= min(R * mu_min, 540000)   AND   the existing floor allows it
 ```
 
 - `tail` = the head sequence minus the newest snapshot's head sequence.
@@ -538,58 +553,98 @@ tail >= min(R * mu_min, 540000)
 - `mu_min` = the slowest replay rate ever measured on this computer, in
   events a second. Today `ReplayRate()` is the slowest of the replays in this
   process, and `snapshotDue` keeps the lower of it and 113 (`:406-409`). The
-  slice keeps that ratchet and makes it durable: when the process's reading
-  is below the stored value, the lower value is written, and it is read at
-  boot. It is never raised. The start value is the existing 113
-  (`snapshotAssumedReplayRate`). It is stored in its own small file beside the
-  store, written by the same temp-and-rename as `saveSnapshotCapture`; it is
-  not a field of `snapshot-producer.json`, which is discarded whenever it does
-  not match the newest snapshot (`belongsTo`). The existing guard stays: only
-  a replay that applied at least 1,000 events counts
-  (`minReplayRateEvents`, `appender.go:462`).
+  slice keeps that ratchet and makes it durable, as below. It is never
+  raised. The start value is the existing 113 (`snapshotAssumedReplayRate`).
+  The existing guard stays: only a replay that applied at least 1,000 events
+  counts (`minReplayRateEvents`, `appender.go:466`).
 - The ceiling 540,000 events (`snapshotDefaultTailEvents`, three quarters of
-  `recoveryplan.MaxRecoveryTailEvents`, `recovery_plan.go:22`) is the cap on
-  the threshold. Past the recovery bound a boot refuses to recover, so this
-  is a correctness limit. With `mu_min` never above 113 the cap cannot bind
-  while `R` is under 80 minutes; it stays so that changing `R` cannot carry
-  the threshold through the bound.
+  `recoveryplan.MaxRecoveryTailEvents`, `recovery_plan.go:22`) caps the
+  threshold. Past the recovery bound a boot refuses to recover, so this is a
+  correctness limit. With `mu_min` never above 113 the cap cannot bind while
+  `R` is under 80 minutes; it stays so that changing `R` cannot carry the
+  threshold through the bound.
+- **The floor** is the existing one (`snapshotCaptureFloor`, `:381-388`,
+  `snapshotCaptureWallFraction` = 10): no capture starts before ten times the
+  last successful capture's duration has passed since the last one began.
+  Its inputs are the duration of the last successful capture, kept in
+  `snapshot-producer.json`. A failed capture records no duration
+  (`:640`, on success only), so the floor keeps using the last successful
+  one, and the failure backoff (below) applies on top. With the smaller
+  lane's change (`origin/lane/capture-trigger`, an unknown duration does not
+  mute) a capture with no recorded duration is due at once, and it measures
+  the duration.
+- **The bytes part of the floor goes** (sealed bytes spread over 8 GiB a day,
+  `snapshotBytesPerDay`). At today's chunks a capture seals about 5 GB, so
+  that part alone is 14.6 hours, longer than the 4.9-hour interval `R` = 10
+  asks for, and it is the reason the paper's tail is 441,000 events. It is a
+  spending rule inside a recovery rule, and spending is owner decision 2. The
+  deletion is the smaller change: the function loses one block and the
+  constant goes. Bytes stay logged.
 
 `R` is 30 minutes when this slice lands (owner decision 1). It is one
 constant in the code with the owner's date beside it.
 
-The rule has no `λ`, no `since`, and no capture duration. A burst right after
-a capture cannot trigger it unless the tail is really at the threshold, and
-there is no division by an elapsed time.
+The rule has no `λ` and no `since` division, so a burst cannot trigger it
+unless the tail is really at the threshold.
+
+**The duty bound.** Because the floor is ten times the last successful
+capture's duration, start to start, captures take at most about one tenth of
+wall time, whatever `mu_min` is, including a corrupt or a legitimately very
+low one. There is no continuous capture loop, and a deploy refresh (refused
+while a capture is in flight, `planned_restart.go:566-568`) finds a capture
+running at most a tenth of the time.
+
+**The honest consequence: when the floor binds, `R` is not met.** The floor
+holds back a capture the threshold wants whenever `λ` is high enough that the
+threshold is reached before the floor ends (the 32,400-an-hour, `R` = 10
+case in section 2). Then the tail at the start is `λ * 10 * d`, the worst tail
+a recovery faces is `λ * 11 * d`, and the replay is that over the recovery's
+rate: about 33 minutes at 9 events/s, `d` = 26 minutes and 77 events/s. The
+status says so: it reports the tail, the threshold, `mu_min`, the estimated
+replay of the tail (`tail / mu_min`), whether the rule wants a capture, and,
+when the floor holds one, "the objective is not being met" with the time
+until the floor ends (the existing `floor_limited` and `floor_why` fields
+carry it).
+
+**Where `R` holds.** `R` bounds the tail only if the recovery's own replay is
+no slower than the slowest past replay. The first replay after an install is
+measured during that recovery (`appender.go:1466-1472`), too late to move
+the trigger.
+
+### The persisted `mu_min`
+
+- It is a small file beside the store, with the computer's id. It is loaded
+  and checked like the capture record (`snapshot_producer.go:294-302`,
+  `:332`, `:476`): a file whose `ComputerID` is another computer's (a fork
+  or a restored volume) is discarded, and so is a value that is not finite
+  and above zero; the start value 113 is then used.
+- It is written by the existing temp-and-rename, with the file and
+  directory sync (`saveSnapshotCapture`, `:312-339`): the slice extracts that
+  body so both files use it, and adds no second writer. It is written from
+  the top of `evaluate`, before the `Ready` return (`:457`), whenever the
+  process's `ReplayRate()` is below the stored value. A crash before the
+  first evaluation loses only a reading the next boot measures again.
+- Every lowering is logged with the applied events, the elapsed time and the
+  old and new value, and the status shows `mu_min`. Deleting the file resets
+  it. No clamp is added: the floor bounds what a low value can cost.
 
 ### What the rule does, stated from the code
 
 - **The replay time a recovery sees** is `R` plus the events appended while
   the capture ran: the new snapshot's head is the store head when the copy
-  was taken (`ref.Record.StoreHeadSequence`, `:624`), so the capture's own
-  duration `d` leaves a tail of `λ * d` behind it, and the worst moment is
-  just before a capture completes, at a tail of `R * mu_min + λ * d` events.
-  At the paper's 9,400 an hour and `d` of 10 minutes that is 1,570 events,
-  about 20 seconds at 77 events/s. At the busy end (9 events/s) and `d` of 26
-  minutes (the longest measured) it is 14,040 events, about 3 minutes. `R`
-  is chosen with that in mind: the objective is `R` plus up to about 3
-  minutes of replay on the paper.
-- **When it cannot hold.** If the events appended during one capture already
-  exceed the threshold (`λ * d >= R * mu_min`, which at `R` = 10, 77 events/s
-  and `d` = 26 minutes needs λ above about 30 events/s, more than three times
-  the busiest rate seen), a capture is due again at the first evaluation after
-  it. The bound is one capture per evaluation, and the evaluation is not
-  always ten minutes away: a ticker holds one pending tick
-  (`snapshotTickEvery`, `:130`; the loop at `:996-1009`), so after a capture
-  longer than ten minutes the next evaluation follows at once. Captures then
-  run back to back, each bounded by the 90-minute deadline, the backoff after
-  a failure and the free-space refusal. The status says the objective is not
-  being met (a capture was due at the first evaluation after one finished),
-  with the tail, the threshold and the last capture's duration. There is no
-  setting for this case.
-- **A low `mu_min`.** One slow replay of 1,000 events, for example a cold
-  cache, lowers `mu_min` for good, and the threshold falls with it. The code
-  has no clamp beyond the 1,000-event minimum, and none is added here. The
-  bound this gives, in events and hours apart at the paper's 9,400 an hour:
+  was taken (`ref.Record.StoreHeadSequence`, `:624`), so the capture leaves a
+  tail of `λ * d` behind it, and the worst moment is just before a capture
+  completes, at `R * mu_min + λ * d` events. At the paper's 9,400 an hour and
+  `d` of 10 minutes that is 1,570 events, about 20 seconds at 77. At the
+  busy end (9 events/s) and `d` of 26 minutes it is 14,040 events, about 3
+  minutes. After a boot with no matching capture record (the file absent or
+  `belongsTo` failing), the tail starts at the snapshot event's sequence, not
+  the capture's head (`:476-485`), so it is understated by `λ * d` and the
+  worst realized tail is `R + 2 * λ * d / μ`. `R` is chosen with that in
+  mind.
+- **A low `mu_min`.** One slow replay of 1,000 events lowers `mu_min` for
+  good, and the threshold falls with it. The bound, in events and hours apart
+  at 9,400 an hour, without the floor:
 
   | `mu_min` | `R` = 30 | `R` = 10 |
   | --- | --- | --- |
@@ -598,13 +653,12 @@ there is no division by an elapsed time.
   | 20 (pessimistic) | 36,000 events, 3.8 h | 12,000 events, 1.3 h |
   | 10 (very pessimistic) | 18,000 events, 1.9 h | 6,000 events, 38 min |
 
-  Captures cannot come closer than the threshold over the event rate, and
-  never faster than the evaluation. At 10 events/s and `R` = 10 the paper
-  would spend about a quarter of its wall time capturing. That is a residual
-  to watch, not a bug: the stored value is a real measurement of how slowly
-  this computer replayed, and a slower replay needs a shorter tail. Every
-  lowering is logged with the applied events, the elapsed time and the old
-  and new value, and the status shows `mu_min`; deleting the file resets it.
+  The floor then spaces the starts by ten times `d`: with `d` = 10 minutes,
+  100 minutes, so the 1.3-hour and 38-minute rows are held to 100 minutes
+  and the capture takes a tenth of wall time. The tail at the start is then
+  about 15,700 events at 2.6 events/s, which at 10 events/s replay is 26
+  minutes: `R` = 10 is not met in that row, and the status says so. That is
+  a residual to watch with the logged `mu_min`, not a loop.
 - **Right after boot.** The first evaluation is after `snapshotInitialDelay`
   (3 minutes) and once `Ready` (`:457`). The tail starts at the persisted
   head sequence; `mu_min` is read from its file; the boot's own replay may
@@ -612,8 +666,14 @@ there is no division by an elapsed time.
 - **After a failed capture.** The existing backoff holds: 20 minutes, doubling
   to 3 hours, reset by a success (`snapshotBackoffWait`, `:433`; `retryAt`,
   `:531`). The tail grows meanwhile, by about 97,000 events in 3 hours at 9
-  events/s, which the code's own comment accepts.
-- **With no measurement yet.** `mu_min` is 113.
+  events/s, which the code's own comment accepts. The floor uses the last
+  successful capture's duration.
+- **With no measurement yet.** `mu_min` is 113, and an unknown capture
+  duration does not hold a capture.
+- **Back to back.** A ticker holds one pending tick (`snapshotTickEvery`,
+  `:130`; the loop at `:996-1009`), so the evaluation after a capture longer
+  than ten minutes is immediate. The floor, not the tick, spaces successful
+  captures.
 
 ### What is deleted
 
@@ -621,30 +681,21 @@ there is no division by an elapsed time.
 - The weekly interval and `CHOIR_SNAPSHOT_INTERVAL`. A quiet computer has a
   short tail, and the tape replays it inside `R`; a snapshot there buys
   nothing.
-- The floor (`snapshotCaptureFloor`, `snapshotCaptureWallFraction`,
-  `snapshotBytesPerDay`), the "cost unknown" mute, and the 4-minute bound
-  (`snapshotReplayBound`). The floor is why the paper's tail is 441,000
-  events. It was a spending rule placed inside a recovery rule. Spending is
-  owner decision 2.
-- The status fields `floor_limited` and `floor_why`. The status gains the
-  tail, the threshold, `R`, `mu_min` with where it came from (start value or
-  measured), and whether the objective is being met.
+- The 4-minute bound (`snapshotReplayBound`) and the "cost unknown" mute
+  (the smaller lane removes the mute first); the bytes part of the floor,
+  `snapshotBytesPerDay`.
+- The status gains the tail, the threshold, `R`, `mu_min` with where it came
+  from (start value or measured), and whether the objective is being met.
+  `floor_limited` and `floor_why` stay.
 
-What stays: the tick, the backoff after a failed capture, the 90-minute
-deadline, the free-space refusal, the refusal while self-development or a
-capsule is live, and `CHOIR_SNAPSHOT_DISABLE` as the emergency override.
+What stays: the floor on duration, the tick, the backoff after a failed
+capture, the 90-minute deadline, the free-space refusal, the refusal while
+self-development or a capsule is live, and `CHOIR_SNAPSHOT_DISABLE` as the
+emergency override.
 
-**The capture cost record.** Capture cost is not a trigger input in this
-rule, so the smaller lane `origin/lane/capture-trigger` (an unknown cost no
-longer mutes a replay-time capture, `9e00f6829`) is consistent with it and
-moot once S2 lands: that branch's `!HaveCapture` case is deleted with the
-rest of `snapshotDue`, in either landing order. The record
-`snapshot-producer.json` stays, because it also carries the head sequence that
-seeds the tail's start at boot (`:489`). Its duration and sealed bytes remain
-as logged and status measures (`last_capture_duration`,
-`last_capture_bytes`); no decision reads them. Deleting them would touch the
-file's validity check (`DurationSeconds <= 0`, `loadSnapshotCapture`) and
-`belongsTo`, which is more code than keeping them.
+**The capture cost record.** `snapshot-producer.json` stays, with its duration
+(the floor's input), its sealed bytes (logged only now) and its head
+sequence (the tail's start at boot, `:489`).
 
 **Why no capture before a planned restart.** The owner's accepted shape had
 one; it is not in this design. The restart keeps the data volume, so it does
@@ -655,17 +706,27 @@ refusal state. The recovery rule alone holds `R`.
 
 ### Node B cost a day
 
-At `R` = 30 minutes with today's chunks: 1.6 to 5.6 captures a day at about
-5 GB sealed, so about 8 to 28 GB uploaded a day. Stored bytes do not grow at
-that rate: the host keeps the newest 2 roots plus up to 3 anchors for the
-recovery window and collects the rest after the grace period. By the code's
-own comments that is about 25 GB of unique chunks for each of the 2 newest
-and about 4.8 GB for each anchor (`snapshot_roots.go:41-70`), about 64 GB,
-plus up to a day in grace. Node B had 192 GB free on 2026-11-15.
+At `R` = 30 minutes with today's chunks and the paper's present rate: about
+1.6 captures a day at 5 GB sealed, 8 GB (7.6 GiB) a day, under the 8 GiB
+budget but not by much; at the busy end the floor caps it near 5.5 captures,
+about 27 GB (25 GiB). That already exceeds the 8 GiB a day design budget of
+owner decision 2, so the budget is a gate on S3's group size only and S2's
+upload is today's upload plus what the lower threshold adds. Today's
+upload on the paper is none: its capture is muted. Had the rule run, the
+13.4-hour floor would allow about 1.8 captures, 9 GB a day. What S2 adds at
+the paper's present rate is therefore close to nothing past that cadence
+(8 GB against 9 GB), and at the busy end up to about 18 GB a day more.
 
-At `R` = 10 minutes after S3: 4.9 to 16.8 captures a day times `U_g`. `U_g`
-is S1's output. At 256 pages each capture also adds 2.7 MB to the tape and
-2.5 MB of declaration: 13 to 45 MB of tape a day.
+Stored bytes do not grow at the upload rate: the host keeps the newest 2
+roots plus up to 3 anchors for the recovery window and collects the rest
+after the grace period. By the code's own comments that is about 25 GB of
+unique chunks for each of the 2 newest and about 4.8 GB for each anchor
+(`snapshot_roots.go:41-70`), about 64 GB, plus up to a day in grace. Node B
+had 192 GB free on 2026-11-15.
+
+At `R` = 10 minutes after S3: 4.9 to 5.5 captures a day times `U_g`. `U_g` is
+S1's output. At 256 pages each capture also adds 2.7 MB to the tape and 2.5
+MB of declaration: about 13 to 15 MB of tape a day.
 
 ## 6. The witness: whole store every capture
 
@@ -691,10 +752,11 @@ So the witness stays whole, at capture and at restore. Consequences:
   sealing pass: 7 min 30 s measured at 31.3 GB, so about 9 to 10 minutes at
   38.8 GB if it scales with size, and 26 minutes was measured on the larger
   uncompacted store. Smaller groups do not reduce it.
-- **The objective.** `d` is not an input to the rule. It adds `λ * d / μ` to
-  the realized tail (section 5), 0.3 to 3 minutes of replay on the paper. A
-  10-minute objective is reachable with whole-store witnesses. The floor
-  does not block it.
+- **The objective.** `d` enters the rule through the floor (ten times `d`
+  between starts) and adds `λ * d / μ` to the realized tail (section 5), 0.3
+  to 3 minutes of replay on the paper. At the paper's present rate a
+  10-minute objective is reachable with whole-store witnesses and the floor
+  does not bind; at the busy end it does (section 2).
 - **The fixed recovery cost** of section 2 stands. Shortening it is a
   different problem (a faster witness, or a restore that serves before it
   finishes verifying) and is out of scope.
@@ -735,7 +797,9 @@ needs four things from it and designs none of them:
    witness are on top.
 2. **Daily upload budget to Node B.** Default: 8 GiB a day, the figure
    already in the code (`snapshotBytesPerDay`), used here only as the gate
-   in section 3, not as a runtime limit. The runtime has no cap; it logs
+   in section 3, not as a runtime limit. S2 at `R` = 30 already uploads
+   about 8 GB a day at the paper's present rate and about 27 GB at the busy
+   end (section 5), so the budget is a gate on S3's group size only. The runtime has no cap; it logs
    bytes uploaded per capture and per day so a spike is seen. If the owner
    wants a runtime cap, it is an owner-set spending cap and a separate
    slice.
@@ -763,9 +827,9 @@ after reading the scorecard; none is entered by this document.
   1,024-page groups changed. Test: the meter's log lines. This is the claim
   that clustering exists.
 - **S2.** Within 24 hours of the deploy the paper takes a capture with kind
-  "recovery time", and for the following 48 hours its tail never exceeds
-  `R * mu_min` plus the events of one capture, read from the producer's
-  status every hour.
+  "replay", and for the following 48 hours its tail never exceeds
+  `R * mu_min` plus the events of one capture, or the status says the floor
+  holds one, read from the producer's status every hour.
 - **S3.** The paper's second capture after the deploy uploads less than half
   the sealed bytes of its last capture before the deploy, and a restore on
   d@e from a 256-page record matches its witness.
@@ -802,8 +866,8 @@ subtraction; no mechanism was added.
 | Seat | Finding | Disposition |
 | --- | --- | --- |
 | both | S4 (capture before a planned restart) does not work: marker written and VM killed in one call; vacuous gate; delays deploys; stated reason false | Deleted with S4 and owner decision 4. Code confirms: `planned_restart.go:834-846`, `unsafe()` at `:567`. |
-| Sonnet B1 | Burst makes `λ` huge; `since` can be zero or negative; no brake between captures; "one after another" case stated as acceptable | Adopted by deleting `λ`, `since` and `d` from the rule. The back-to-back case is stated with its bound and a status flag (section 5). A cooldown is rejected: a new constant and a new mechanism. |
-| Sonnet B1 | No clamp on a persisted `mu` | Rejected as a new mechanism; the bound is tabulated and the logged value is a named residual. |
+| Sonnet B1 | Burst makes `λ` huge; `since` can be zero or negative; no brake between captures; "one after another" case stated as acceptable | Adopted by deleting `λ` and `since` from the rule. The first version also rejected a spacing between successful captures; that was wrong (round 2): the existing floor stays and spaces them. |
+| Sonnet B1 | No clamp on a persisted `mu` | Rejected as a clamp; the floor bounds what a low value costs and the file is validated (round 2). |
 | Sonnet B1 | The unreachable condition is `2λd/μ >= R`, not `λd/μ >= R` | Correct for the old rule; moot under the new one, where it is `λ * d >= R * mu_min`. |
 | Sonnet B2 | S4 contradicts expedite | Deleted with S4. |
 | Sonnet B3 / DeepSeek should-fix 1 | The gate is not decidable: `c_g` sampled only at 32, 256, 1,024; interval scaling; fallback contradicts the default | Adopted: candidates {256, 32}; scaling stated (conservative); S3 not built if the gate fails; the default applies only if the sizes are not separated. |
@@ -831,3 +895,31 @@ subtraction; no mechanism was added.
 Recount after the round: S1 has 9 failures, S3 has 16, S4 (the host's
 limits) shares S3's items; the owner decisions are three: the objective `R`,
 the upload budget (as the design gate), and retention.
+
+## Review round 2
+
+Two seats reviewed the round 1 repair, both REPAIR. They converged on one
+defect that round 1's adjudication caused: with `λ`, `d` and the floor
+deleted, nothing spaced two successful captures, so a low `mu_min` (a corrupt
+file, or one slow replay made permanent) gave continuous capturing that also
+refused every deploy refresh (`planned_restart.go:566-568`). The fix uses what
+the code has: the existing floor stays. This is the last repair round.
+
+| Seat | Finding | Disposition |
+| --- | --- | --- |
+| both | No spacing between successful captures; a low `mu_min` makes a 100% duty loop (DeepSeek B1, Sonnet blocking) | Adopted: the floor (ten times the last successful capture's duration) stays; duty is at most a tenth of wall time (section 5). The round 1 rejection of a spacing is corrected. |
+| DeepSeek B1 | Even `mu_min` = 20 at `R` = 10 loops at the longest `d` and busy `λ` | Same fix; the floor binds, `R` is not met, and the status says so. |
+| DeepSeek B1 | "A quarter of wall time at 10 events/s" is 4 times wrong | Corrected: at 10 events/s the 6,000-event threshold arrives in 10 minutes; the quarter belongs to 2.6 events/s. Section 5 reworked. |
+| DeepSeek B1 | `CHOIR_SNAPSHOT_DISABLE` is not a safe exit; deploy refresh refused during the loop | Moot with the duty bound. |
+| both | The `mu_min` file has no validation or `ComputerID` | Adopted: id checked like the capture record, non-finite or non-positive values discarded to 113. |
+| Sonnet | Writer placement: lowering must run before the `Ready` return | Adopted: from the top of `evaluate`. |
+| Sonnet | Temp-file leak on a crash | Same as the existing writer; not changed. |
+| Sonnet | A clamp is wrong for a file-loaded value, defensible for a measurement | The validation covers the file; the floor bounds the measured case. No clamp. |
+| DeepSeek should-fix 2 | `R` bounds the tail only if the recovery replay is no slower than the slowest past replay | Stated (section 5). |
+| DeepSeek should-fix 3 | After a boot fallback the realized tail is `R + 2 * λ * d / μ` | Adopted (section 5). |
+| DeepSeek should-fix 4 | S4's 256 GiB claim is unreachable at 32 pages against the 64 MiB record cap | Adopted: about 958,000 chunks, about 120 GiB at 32 pages (S4). |
+| DeepSeek should-fix 5 | The 8 GiB budget is not applied to S2 | Stated: the budget gates S3's group size only; S2 at `R` = 30 is about 8 GB a day at the paper's rate (section 5, decision 2). |
+| DeepSeek should-fix 6 | A failed capture records no duration | Stated: the floor uses the last successful one, and the backoff applies. |
+| DeepSeek note | `minReplayRateEvents` is `appender.go:466` | Corrected. |
+| DeepSeek | Round 1 closures (S4 deleted, gate decidable, group clamp, no `Version` bump, ticker, cap, host limits) | Confirmed; no change. |
+| Sonnet | After-boot behavior at the start value 113, and the failed-capture backoff | Confirmed; no change. |
