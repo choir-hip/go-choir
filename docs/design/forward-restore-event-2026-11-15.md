@@ -144,6 +144,15 @@ rewritten (and the table already takes bulk updates of its stored receipt
 column, `receipt_compaction.go:511`). It is derived data: a pure function of
 the restore events on the tape, rebuilt on import (reader table, row 13).
 
+Ordinals are used where a **count** meets a bound: `PlanRecovery`'s start,
+watermark and target, `tailReceipt`, the bound argument of `PlanCandidates`
+and the snapshot cadence. Physical sequences stay where a **position** is
+compared: `snapshot.Install`'s `MaxSequence` against `StoreHeadSequence`
+(`snapshot.go:1393`), `Candidate.Sequence` and `PlanCandidates`' target. Line
+events keep their physical order, so a position comparison between two live
+sequences is the same in either unit; applying ordinals literally to them would
+exclude valid bases.
+
 Two numbers follow from it, and everything else uses only these:
 
 - `live(s)`: row s exists and its column is NULL.
@@ -200,9 +209,13 @@ receipt for N inside the admission (as `admitEffectAccepted` verifies
 authority in the same transaction, `computer_events.go:~225`). The kind then
 has an explicit `Reduce` case: pending at H must be empty (as
 `EventEffectAccepted`, `reducer.go:~83`) and the next head is
-`restoredHead(head(N), ...)`. `isCausalEvent` (`reducer.go:~194`) is a
-default that would treat the kind as head-neutral; a test asserts every entry
-of `validEventKinds` has an explicit decision.
+`restoredHead(head(N), ...)`. The reducer's default refuses a kind it does not list
+(`reducer.go:169-172`, "unsupported reducer event" unless `isCausalEvent`
+lists it); the hazard is someone adding `computer_restored` to the causal list
+(`reducer.go:~194-206`, next to `EventRestoreRequested`), which would make the
+platform apply it as head-neutral. A test asserts every entry of
+`validEventKinds` has an explicit decision and that the kind is not in the
+causal list.
 
 **2. Replay and boot** (`applyDurableEvent`, `appender.go:1663`, called by
 `reconstruct`, `appender.go:1426`). The local head is N. For this kind the
@@ -215,6 +228,16 @@ are H's, not N's): it verifies
 2. `event.sequence > local.sequence`;
 3. `restoredHead(local, event, digest)` equals the receipt's `Next` (`sameHead`);
 4. the signed head receipt (`VerifyEventHeadReceipt`, unchanged).
+
+`Reduce` normally does three more things before the head comparison
+(`reducer.go:~56-64`): it calls `event.Validate()`, recomputes `event.Digest()`
+and requires `event.ReducerVersion == current.ReducerVersion`. Skipping
+`Reduce` must not drop them, so the shared function does all three itself: it
+validates the event, recomputes the digest (the new head's
+`canonical_event_head`, which `restoredHead` takes as input and `sameHead`
+compares with the receipt's `Next`; the receipt's signed `event_digest`
+therefore binds the new `restore_target_*` fields, since they are in the
+digested bytes), and requires the reducer version equal to the local head's.
 
 **3. Catch-up** (`catchup.go:130`). The check there is
 `event.Sequence != headSeq(current)+1 || event.PreviousHead != headCanonical(current)`.
@@ -282,7 +305,8 @@ is an owner act; a restore abandons the owner's work).
   5. (guest side, before it asks) a live capsule, run or apply
      (`restoreRestartBusy`, `self_development_restore_restart.go:121-130`).
 - The act stops appending `restore_requested`. A refused or failed restore
-  leaves nothing on the tape; the owner-act receipt table audits attempts.
+  leaves nothing on the tape (a lost CAS costs a full dry-run retry, review
+  round 2, Sonnet 5); the owner-act receipt table audits attempts.
 - **The platform stamps what was abandoned**: in the admission transaction it
   counts the rows it is about to mark by event kind and stores the counts on
   A's row. The act's answer and `choir` output read them from there. H may
@@ -299,8 +323,12 @@ is an owner act; a restore abandons the owner's work).
   itself on the line. A page spans the skipped range: it is full unless the
   line ends. There is no `ErrNotOnLine`. The gapless check
   (`event_replay.go:64`) becomes "no gap between consecutive served events
-  except across rows marked abandoned". The query is a range over a partial
-  index on live rows `(computer_id, sequence) WHERE abandoned_at_sequence IS
+  except across rows marked abandoned". The page enumeration today is a window of consecutive
+  sequences (`event_replay.go:47`, `last := min(head.Sequence, after+pageSize)`,
+  then point lookups `IN (after+1..last)`); it must become a live-range scan
+  that **fills the page past skipped sequences** (a window would return a short
+  page across the gap, which `appender.go:1599` reads as the end of the
+  line). The query is a range over a partial index on live rows `(computer_id, sequence) WHERE abandoned_at_sequence IS
   NULL`; the point-lookup technique of `event_replay.go:24` was a Dolt planner
   workaround and the platform is PostgreSQL (`receipt_walk.go:89`); the plan is
   to be measured in slice 3.
@@ -347,7 +375,7 @@ purpose and is correct to; **N** is not a tape reader.
 | 3 | `snapshot.scan`, `Scan`, `ScanAll` (`snapshot.go:1354`, via `projection_base.go:165`, `restore_snapshot.go:116`) | S+C | Pages are lines. Candidate filter adds `live(store head)` (B.6.1). |
 | 4 | `platformRestoreTape.EventsPage` (`restore_snapshot.go:39`) and `planRestoreTarget` (`:108`) | S+C | Finds the target in the served line: a target not served (abandoned or absent) is refused, which is B.10's refusal for free. Counts ordinals. |
 | 5 | `replay_completeness` (`replay_completeness.go:391-393`, `:401`) | S+C | Replays through the appender: line. `tailReceipt` (`restore_snapshot.go:313`) compares applied count to `target - base`: ordinals. |
-| 6 | `http_client.go` `EventsPage` / `Events` | S | The client of row 7. |
+| 6 | `http_client.go` `EventsPage` (`:350`) and `Events` (`:345-375`) | S / C | `EventsPage` is the client of row 7. `Events` is the non-paged fallback (`HTTPClient` implements `EventsPage`, so production never takes it) and its contiguity check `sequence != previous+1` (`:361`) would refuse the skip. **Decided:** relax it to "strictly greater than the previous" and keep the path (tests' fakes implement only `EventSource`); loud today, correct after. |
 | 7 | `platform.EventsPage` / `HandleComputerEventReplay` (`event_replay.go:14`, `event_handlers.go:329`) | C | The serving rule of B.6.1; slice 3. |
 | 8 | `catchup.go:130` | C | B.4.3. |
 | 9 | `applyDurableEvent` (`appender.go:1663`) | C | B.4.2. |
@@ -361,12 +389,12 @@ purpose and is correct to; **N** is not a tape reader.
 | 17 | `platform/clean_rebase.go:181` (prior decision "on this computer's tape") | C | Add the clause: a decision abandoned by a restore is not a prior decision to rebase. |
 | 18 | `bundle/export.go:189-192`, `verify.go`, `scan.go`, `readReceipts` (`store.go:38`) | P | Physical chain verification and copy: R chains to H, `projectHead` (`follow.go:~55`) reads R's receipt fields, which carry N's heads. Correct unchanged. |
 | 19 | `tapefollow` (`store.go`, `syncer.go`) and `cmd/desktop/sync*.go` | P | Copies and verifies bundles; no `Reduce` or replay anywhere in them (grep). A future follower that reconstructs state must apply B.6.1; named in G. |
-| 20 | `platform/tape_sweep.go` (`:705-852`), `tape_purge.go` (`:82, :328`), `receipt_compaction.go` (`:462-522`), `receipt_walk.go` | P | Retention, sweep, purge and compaction work on the physical chain on purpose; abandoned events are history under the same windows. |
+| 20 | `platform/tape_sweep.go` (`:705-852`), `tape_purge.go` (`:82, :328`), `receipt_compaction.go` (`:462-522`), `receipt_walk.go` | P | Retention, sweep, purge and compaction work on the physical chain on purpose; abandoned events are history under the same windows. Compaction rewrites only `event_head_receipt_json` in place and verifies the row expands to the original (`receipt_compaction.go:500-528`); it never reinserts a row, so `abandoned_at_sequence` survives. Test: compact a tape with R, then serve and mark-check. |
 | 21 | `platform/verifier_key_pin.go:174` (`MAX(sequence)`) | P | Key windows are in physical sequence, the platform's clock. |
 | 22 | `platform/receipt_indexes.go` (`receiptKeyRevokedCountSQL`, kind and sequence lookups) | P | Physical. The revoked-count equals the line's because B.5.2 forbids any revocation in an abandoned range (test, failure 11). |
 | 23 | `platform/owner_acts.go:395` (offer base head equals `previous_head`) | P | Physical; an offer minted on an abandoned head cannot match a post-R `previous_head`. |
 | 24 | `platform/checkpoint_list.go:98` (sequence by digest) | P | Physical lookup of a digest; the act refuses abandoned targets (B.5.3). |
-| 25 | `event_handlers.go:279` (payload by digest) | P | Content-addressed. |
+| 25 | `event_handlers.go:279` (payload by digest), `platform/event_artifacts.go:197-204`, `checkpoints.go` reads by digest | P | Content-addressed reads: the digest names one object whatever line it is on. |
 | 26 | `agentcore/api_trajectory.go`, `routekinds/routekinds.go` | N | `streamLifecycleEvents` reads the local store; routekinds' `EventSource` is the browser SSE API. **Neither reads the tape.** |
 | 27 | `appdesk/required.go:156`, `agentcore/desk_install.go:191` | N | Desk logs, not the tape. |
 | 28 | `internal/vmctl`, `internal/proxy` | N | No tape reads (grep for the receipts table, `EventsPage`, `PreviousHead`). Route projection joins checkpoint certificates, not the tape. |
@@ -383,14 +411,22 @@ and the 5-minute owner-act TTL (B.5) were not visible before reading.
 ### B.7 The act, and the running process
 
 1. Refuse beside live work (B.5.5); take the act lock and the append fence.
-2. Validate the checkpoint; check the target's release is pinned and not
+2. Validate the checkpoint; **read `live(N)` from the `line` endpoint now**
+   and refuse an abandoned target here, not at admission after a five-minute
+   dry run (review round 2, Sonnet 4; `checkpoint_list.go:98` is left alone:
+   the act's refusal is the one place that matters); check the target's release is pinned and not
    pruned and is at or above the floor R will raise (B.12). Refuse before
    anything is written.
 3. **Dry run**: build the staged store at N and check the canonical witness
    (A.1 step 4, up to `rematerialize.go:~190`), unchanged. It is the proof
    that the restore is derivable; once R is on the tape a restore that cannot
    reproduce W would be irreversible.
-4. Raise the store floor (B.12).
+4. Count the rows of the two non-tape tables again and refuse if non-empty
+   (the step-1 check cannot see rows written during the dry run, review round 2,
+   DeepSeek 5; the counts go to A's row), then raise the store floor (B.12).
+   The floor write is the last step before R: after a failed append the floor
+   stays raised and the updater's `restorePrior` to a release below it is
+   refused (loud, and harmless to the tape); the owner retries or rolls forward.
 5. Append R in a **tape-only mode** **(invented)**: the pins and the CAS, and
    neither `projection.Prepare` nor finalize. The running store holds state(H)
    and R says state(N); skipping Prepare also means the old store never holds a
@@ -421,10 +457,15 @@ boot reaches the same verdict. **Order**: the decision runs in
 store by an in-flight append of the abandoned line is moved away with it.
 
 1. Local head live: resume as today, on ordinals.
-2. Local head not live: the store is **not a base**. If the newest restore
-   event's release differs from `current`, **restage `current` first**
+2. **The restage is keyed on the newest restore event R that this store has
+   not applied** (local head sequence below R's), not on liveness: a restore
+   to the head itself (N == H, a different release) leaves the local head live
+   and still needs the restage. If R's release differs from `current`,
+   **restage `current` first**
    (`RestagePinnedRelease`, `updater.go:987`) and, if it execs another binary,
-   exit for a normal restart into it (nothing resumes). Then move the state
+   exit for a normal restart into it (nothing resumes). If the local head is
+   live, resume and replay the line to R (R applies at N); if it is not live
+   the store is **not a base**: move the state
    file, WAL, SHM and marker to the quarantine name (the shape of the compact
    rebase's `.precompact`, `store/compact.go:595-614`, removed at
    `telemetry_retire.go:281-295`) and take the existing empty-store-with-chain
@@ -598,7 +639,7 @@ Each has prevent and detect. "T:" names the test that must exist first.
 | 2 | An old decoder drops the new fields and recomputes another digest. | The kind check precedes (`decode.go:123` does not disallow unknown fields). | T: decode R without the fields; the digest differs and `Validate` refuses first. |
 | 3 | The new envelope fields change the canonical bytes of old events. | `omitempty`. | T: golden digests over real historic events. |
 | 4 | `TransitionInput.RestoreTarget` changes old pin-intent commitments (`request.go:12`). | Nil pointer, `omitempty`. | Golden `ComputePinIntentCommitment` and `ComputeRequestCommitment`. |
-| 5 | The kind falls into the causal default (`reducer.go:~194`). | Explicit case. | T: exhaustiveness over `validEventKinds`. |
+| 5 | The kind is added to the causal list (`reducer.go:~194-206`), so the platform applies it head-neutral (the default itself refuses, `:169-172`). | Explicit case; the test says it is not in the list. | T: exhaustiveness over `validEventKinds`. |
 | 6 | Replay applies R to a store not at N. | B.4.2 checks head digest and sequence; `ErrRestoreBase`. | T: R with local head at N-1, N+1 and an abandoned head. |
 | 7 | A retained store at an abandoned head resumes. | The plan reads `live(local)` (B.6.1); served pages hand it R first, which refuses. | T: boot with a store at H after R rebuilds. |
 | 8 | The store's finalize rejects R (`computer_events.go:297`). | Relaxed for this kind only. | T: finalize R at N; at another head refuses. |
@@ -627,7 +668,7 @@ Each has prevent and detect. "T:" names the test that must exist first.
 | 25 | A page straddles the skip and ends early (a short page read as end of replay, `appender.go:1599`) or applies abandoned events. | Pages span the skip; short means end of line (B.6.1). | T: page sizes 1, 2 and larger, with a page ending exactly at N, across the gap, through `reconstruct`, catch-up, `Scan` and `finalizedEventBody`. |
 | 26 | Page serving cost on the range query. | Partial index on live rows. | Plan measured in slice 3. |
 | 27 | Replay progress and `/health` show events behind as sequence difference. | Ordinals. | T. |
-| 28 | A reader assumes the local event index is contiguous or each row's `previous_head` is present. | Audit in slice 2: the witness's event-index digest, `NewestEventOfKind`, trim, `EventByIdempotency`, the snapshot manifest. | T: witness equality live versus replay across R (304a81277's canonical witness is the oracle). |
+| 28 | A reader assumes the local event index is contiguous or each row's `previous_head` is present. | Audit in slice 2: the witness's event-index digest, `NewestEventOfKind`, trim, `EventByIdempotency`, the snapshot manifest, and `compactTail`'s `sequence+1` index read (`store/compact.go:579`). | T: witness equality live versus replay across R (304a81277's canonical witness is the oracle). |
 | 29 | The store's witness at R is compared to W for N and differs by design. | W is checked at N (B.9.3); after R the oracle is replay-completeness. | T. |
 | 30 | `finalizedEventBody` cannot read R after the rebuild (review B1). | Any-`after` serving (B.6.1); no `ErrNotOnLine`. | T: cold-cache read of R and of an event after R. |
 | 31 | `ledgerwitness.Walk` follows `previous_head` into the abandoned range (review B2). | Jump via `restore_target_head` (B.6.2 row 12). | T: record in the abandoned range is `Missing`; one before N is `Found`. |
@@ -643,7 +684,7 @@ Each has prevent and detect. "T:" names the test that must exist first.
 | 36 | The running process serves or appends after R with state(H). | Tape-only append, then the fence; catch-up's divergent-chain refusal. | T. |
 | 37 | The act restages `current` before R and R is never written. | Restage happens at the boot that sees R. | T: kill before R; `current` unchanged. |
 | 38 | A restore resumes the abandoned line's open work. | No planned-restart marker. | T: an open run at H is closed "interrupted" after the restore boot, as an event after R. |
-| 39 | A staged compact copy is swapped over the rebuilt store. | No marker, so `planned=false` (the collision the lane found, restore-boot-install 2.7). | T. |
+| 39 | A staged compact copy is swapped over the rebuilt store. | No marker, so `planned=false` (the collision the lane found, restore-boot-install 2.7); and the crash branch finishes an interrupted swap **whatever `planned` says** when the state file is missing (`store/compact.go:615-627`), so the rebuild boot may install a staged copy of the abandoned branch first; the same boot's `live(local)` check then quarantines it (or resumes it if its head is live) and rebuilds. | T: a staged copy and a missing state file at the rebuild boot. |
 | 40 | The restored release is pruned between the act and the boot (`updater/prune.go:20-61`). | Checked at the act and at the restage; the boot then refuses loudly with the old store in quarantine and the owner restores to another checkpoint. | T. |
 | 41 | The release is below the floor or predates the event. | Refused at the act. | T. |
 | 42 | The restored release execs another binary and the rebuild runs under the wrong one. | Restage, restart, then rebuild. | T: across two boots with kills between. |
@@ -761,6 +802,9 @@ Preconditions: the d@e rows in `co_super_slots` and `agent_evidence` counted
 7. Adversarial kills (d@e only): after R before the restart; during the
    restage; during the install; during the replay; after `replay_done` before
    the quarantine removal. Each boots to the same witness, nothing resumed.
+7a. The runtime unit parks failed after 5 starts in 10 minutes
+   (`nix/autoputer-vm.nix:~814`): space the kills or restart externally, or the
+   drill looks like a restore defect.
 8. Refusals: a checkpoint of a release below the floor; a target beyond a
    revocation; a restore beside a live run; a replayed A.
 
@@ -820,8 +864,9 @@ Open questions (the rest were decided and left the list; section I):
    may prefer to restore and report the loss.
 2. How custodian desks (Mail, Autopaper) react to R; until decided, only the
    counts in the answer.
-3. The witness at R's boundary on a large store: its cost is to be measured on
-   d@e; required for every boot that applied events until then.
+3. The witness at R's boundary on a large store: its cost, per live restore
+   event crossed per boot (a chain of restores to restores crosses several), is
+   to be measured on d@e; required for every boot that applied events until then.
 4. Credential refusal granularity: any `key_revoked` above N (decided default)
    versus only revocations of credentials the store at N holds.
 
@@ -893,3 +938,29 @@ Recount: failure list 67 entries plus 18a (68). Open questions: 4, down from 11
 watchdog; restore anchor not needed; host-release floor, answered by the
 rollback story; end-of-replay witness; skipped-envelope fetch, no). Slices:
 7, down from 9.
+
+## J. Review round 2
+
+Both seats ACCEPT with no blocker: the Sonnet seat (confidence 80%, read to
+line 722 of 896) and the DeepSeek seat (high on the closures and the R rule,
+medium on reader completeness, grepped by symbol). Every should-fix below was
+checked at its `file:line`; none is rejected.
+
+| Should-fix | Verified | Disposition |
+| --- | --- | --- |
+| Sonnet: the guest must recompute `event.Digest()` for R and `sameHead` compare it, since R skips `Reduce` | Yes (`reducer.go:~56-64`) | B.4.2 now lists validate, digest recompute and reducer-version equality. |
+| Sonnet 1 / DeepSeek 1: `HTTPClient.Events` contiguity (`http_client.go:361`); row 6 wrong | Yes | Row 6 corrected; the check is relaxed to strictly increasing, the path kept (fakes use it). |
+| DeepSeek 1: the page must fill past skipped sequences (`event_replay.go:47`) | Yes | B.6.1 states the live-range scan and why a window returns a short page. |
+| DeepSeek 7: sentence on `isCausalEvent` is inverted | Yes (`reducer.go:169-172`) | B.4.1 and failure 5 corrected; the hazard is adding the kind to the causal list. |
+| DeepSeek 4 / row 20: compaction must not unmark | Yes (`receipt_compaction.go:500-528`, in-place update) | Row 20 says so; test added. |
+| DeepSeek: content-addressed reads are row 25's class | Yes (`event_artifacts.go:197-204`, `checkpoints.go`) | Row 25 names them. |
+| Sonnet 3: restage keyed on "local head not live" misses N == H | Yes | B.9.2 keys it on the newest restore event the store has not applied. |
+| Sonnet 4: check `live(N)` at the start; filter the list | Yes (a refusal after a 5-minute dry run) | Act step 2 reads `live(N)` first; the list is left alone, reason given. |
+| Sonnet 5: a lost CAS costs a dry-run retry | Yes | Said in B.5. |
+| DeepSeek 2: name the ordinal/physical boundary | Yes (`snapshot.go:1393`, `:1333-1341`) | B.2 names every site. |
+| DeepSeek 3: `compact.go:579` and the unplanned finish at `:615-627` | Yes | Failures 28 and 39. |
+| DeepSeek 5: non-tape rows written during the dry run | Yes | Recount immediately before the floor write; counts on A's row (B.7.4). |
+| DeepSeek 6: after a failed append the floor blocks `restorePrior` | Yes | Named in B.7.4. |
+| DeepSeek 8: boot-loop guard versus five kills | Yes | Drill step 7a. |
+| DeepSeek note: witness cost per live restore crossed | Yes | Open question 3. |
+| DeepSeek: `restore_authorizations` is defensible, not forced | Agreed | Kept; the justification stays the 5-minute TTL with the dry run before the append. |
