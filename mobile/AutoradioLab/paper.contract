@@ -169,7 +169,7 @@ component PaperPage
             row justify-content="space-between" width="100%"
               text (sect == "" ? "Front page" : sectionName(pfront.sectionLabel)) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent testId="paper-section-title"
               text pfront.updated font-family=th.fontUi font-size=12 color=th.muted testId="paper-updated"
-          // Not set up yet: "Make it yours" (voice setup and the interview) until the listener has done it or skipped it.
+          // Not set up yet: "Make it yours" (voice setup and the edition topics) until the listener has done it or skipped it.
           FirstRunCard()
           // demo mode, Settings, Developer, "Demo controls": three editions to show how the page changes with the day
           if dm.on and devDetails

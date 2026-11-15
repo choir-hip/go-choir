@@ -1,18 +1,18 @@
-// First run: sign in, voice setup, the interview, the edition (plan section 2). Lane 8 owns this file.
+// First run: sign in, voice setup, the edition's topics, the edition (plan section 2). Lane 8 owns this file.
 //
 // Sign-in is the screen the listener-first app already had (SignInScreen), restyled. After it, `OnboardingPage` is ONE page
 // (address onboarding:setup) that shows the step the controller is on: voice setup (configuring the voice and audio models:
 // download with honest progress, check each model on this phone, fall back), the microphone asked in context with one live
-// check, a hearing check, then the interview (voice only, microphone open, interruptible) and the edition. It is a page, so
+// check, a hearing check, then the edition's topics (chips to tap, a field to type your own, "Talk to it") and the edition. It is a page, so
 // it can be left and returned to; the paper stays usable meanwhile. `FirstRunCard` is the card other places show.
 //
 // The mark: the TetraMark and the alive wait are lane 9's. `ob-mark-slot` and `ob-wait-slot` hold the spine's Mark glyph.
 //
 // testIds: signin, signin-intro, signin-code, signin-open, signin-cancel, signin-message (unchanged);
 //   ob-steps, ob-mark-slot, ob-begin, ob-begin-mobile, ob-skip, ob-row-<stage>, ob-retry-<stage>, ob-fallback-<stage>,
-//   ob-summary, ob-mic-ask, ob-mic-level, ob-heard, ob-mic-next, ob-route, ob-hearing-yes, ob-hearing-no, ob-interview,
-//   ob-listening, ob-now-saying, ob-talk, ob-paused, ob-continue, ob-demo, ob-demo-next, ob-wait-slot, ob-writing-line,
-//   ob-edition-retry, ob-edition, ob-edition-open, ob-start-radio, firstrun-card, firstrun-open.
+//   ob-summary, ob-mic-ask, ob-mic-level, ob-heard, ob-mic-next, ob-route, ob-hearing-yes, ob-hearing-no, ob-topics-start,
+//   ob-topics, ob-explainer, ob-topic-<label>, ob-topic-input, ob-topic-add, ob-selection, ob-talk, ob-topics-done, ob-demo, ob-demo-say, ob-wait-slot, ob-writing-line,
+//   ob-edition-retry, ob-continue-anyway, ob-edition, ob-edition-open, ob-start-radio, firstrun-card, firstrun-open.
 use Theme, ChoirAuth, Onboarding from "@choir/autoradio"
 use Card, PaperCard, PageScroll, Btn from "./ui.contract"
 use Mark from "./mark.contract"
@@ -115,19 +115,21 @@ component SetupRowItem
               button press=obFallback(stage) testId=`ob-fallback-${stage}` appearance="none"
                 Btn(label="Use the fallback", primary=false, wide=false)
 
-component TalkLine
+// One topic: a pill the reader taps to select, and taps again to deselect. A selected pill is filled with the accent.
+component TopicChip
   inject
     th: Theme
+    obToggleTopic: action
   props
-    who: string
-    line: string
-    interrupted: bool
-  derive label = who == "you" ? (interrupted ? "You, cutting in" : "You") : (interrupted ? "Radio, cut off" : "Radio")
+    label: string
+    selected: bool
   view
-    column gap=2 align-items=(who == "you" ? "flex-end" : "flex-start") width="100%"
-      text label font-family=th.fontUi font-size=11 color=th.muted
-      column padding="8px 12px" border-radius=th.radiusControl max-width="86%" background-color=(who == "you" ? th.accent : th.paper2)
-        text line font-family=th.fontRead font-size=16 line-height=1.4 color=(who == "you" ? th.onAccent : th.fg)
+    button press=obToggleTopic(label) testId=`ob-topic-${label}` role="radio" aria-checked=selected aria-label=label appearance="none" flex-shrink=0
+      row padding="10px 14px" border-radius=th.radiusPill align-items="center" justify-content="center" min-height=44 gap=6
+        background-color=(selected ? th.accent : th.paper2) border-width=1 border-style="solid" border-color=(selected ? th.accent : th.rule)
+        if selected
+          image "symbol:checkmark" color=th.onAccent
+        text label font-family=th.fontUi font-size=15 font-weight=600 color=(selected ? th.onAccent : th.fg)
 
 component OnboardingPage
   inject
@@ -139,22 +141,28 @@ component OnboardingPage
     obMicNext: action
     obHearingYes: action
     obHearingNo: action
-    obInterview: action
-    obContinue: action
-    obDemoNext: action
+    obTopics: action
+    obAddTopic: action
+    editObTopic: action
+    obTopicText: string
+    obTalk: action
+    obTopicsDone: action
+    obDemoSay: action
     obEditionRetry: action
+    obContinueAnyway: action
     obSkip: action
     obOpenEdition: action
     obFinish: action
   props
     address: string
     title: string
-  derive n = ob.step == "mic" ? 2 : ob.step == "hearing" ? 3 : (ob.step == "ready" or ob.step == "interview" or ob.step == "writing" or ob.step == "done") ? 4 : 1
-  derive markState = ob.step == "writing" ? "holding" : (ob.step == "interview" and ob.listening) ? "listening" : "idle"
+  derive n = ob.step == "mic" ? 2 : ob.step == "hearing" ? 3 : (ob.step == "ready" or ob.step == "topics" or ob.step == "writing" or ob.step == "done") ? 4 : 1
+  derive markState = ob.step == "writing" ? "holding" : (ob.step == "topics" and ob.talking) ? "listening" : "idle"
   derive beginLabel = ob.setupStarted ? "Continue voice setup" : "Set up the voice"
   derive deviceLine = ob.device == "" ? "Choosing the models that fit this phone." : `Chosen for this phone: ${ob.device}.`
   derive micLabel = ob.mic == "unasked" ? "Allow the microphone" : "Try again"
-  derive pausedTitle = ob.pauseReason == "loud" ? "Waiting for a quieter place" : ob.pauseReason == "silent" ? "Paused" : "Your interview is paused"
+  derive talkLabel = ob.talking ? "Stop talking" : "Talk to it"
+  derive addLabel = ob.talking ? `Listening. ${ob.voiceHint}` : ob.voiceHint
   derive eyebrow = ob.step == "done" ? "ALL SET" : ob.step == "skipped" ? "WHEN YOU ARE READY" : `STEP ${n} OF 4`
   view
     PageScroll(id="onboarding")
@@ -170,7 +178,7 @@ component OnboardingPage
       if ob.step == "welcome" or ob.step == "skipped"
         Card(level=1, testId="ob-welcome", minHeight=0)
           column padding=18 gap=12
-            text "Autoradio can learn what you care about in a short spoken conversation, then write your paper to match." font-size=18 line-height=1.45
+            text "Autoradio can arrange your paper around what you care about: you pick topics, or just tell it." font-size=18 line-height=1.45
             text "First it sets up the voice on this phone: a few audio models to download, and a check that each one works here." font-size=16 line-height=1.45 color=th.muted
             text ob.totalLabel font-family=th.fontUi font-size=14 color=th.muted testId="ob-total"
             button press=obBegin testId="ob-begin" appearance="none"
@@ -245,10 +253,10 @@ component OnboardingPage
         Card(level=1, testId="ob-ready", minHeight=0)
           column padding=18 gap=12
             text "The voice is set up." font-size=20 font-weight=700
-            text "Next, a short conversation about what you care about. Three to six minutes, out loud. You can cut in any time." font-size=17 line-height=1.45
-            text "It is spoken, so it works best somewhere quiet, or with headphones." font-family=th.fontUi font-size=14 color=th.muted
-            button press=obInterview testId="ob-interview" appearance="none"
-              Btn(label="Start the interview", primary=true, wide=true)
+            text "Next, choose what your edition covers. Tap the topics you like, or tell me." font-size=17 line-height=1.45
+            text "You can change it later, any time." font-family=th.fontUi font-size=14 color=th.muted
+            button press=obTopics testId="ob-topics-start" appearance="none"
+              Btn(label="Choose your topics", primary=true, wide=true)
             text ob.message font-family=th.fontUi font-size=14 color=th.danger
         if ob.setupStarted
           text "The models" font-family=th.fontUi font-size=13 color=th.muted testId="ob-summary"
@@ -257,39 +265,36 @@ component OnboardingPage
         button press=obSkip testId="ob-skip" appearance="none" padding=10
           text "Skip for now" font-family=th.fontUi font-size=15 color=th.muted
 
-      // ---- the interview: microphone open, interruptible, voice only
-      if ob.step == "interview"
+      // ---- the edition's topics: tap to select and deselect, type your own, or say it. Any number; none is the general edition.
+      if ob.step == "topics"
+        Card(level=1, testId="ob-explainer", minHeight=0)
+          column padding=16 gap=8
+            text ob.explainer font-family=th.fontRead font-size=17 line-height=1.45 color=th.fg
+        row flex-wrap="wrap" gap=8 width="100%" testId="ob-topics"
+          for c in ob.chips key=c.label
+            TopicChip(label=c.label, selected=c.selected)
+        row gap=8 align-items="center" width="100%"
+          input value=obTopicText input=editObTopic submit=obAddTopic placeholder="Add your own topic" aria-label="Add your own topic" testId="ob-topic-input" enterkeyhint="done" flex=1 min-width=0 min-height=44
+            font-family=th.fontRead font-size=17 color=th.fg padding="8px 12px" border-width=1 border-style="solid" border-color=th.rule border-radius=th.radiusControl background-color=th.paper2
+            ::placeholder
+              color=th.muted
+          button press=obAddTopic testId="ob-topic-add" appearance="none" aria-label="Add this topic"
+            Btn(label="Add", primary=false, wide=false)
+        Card(level=2, testId="ob-selection", minHeight=0)
+          column padding=16 gap=6
+            text ob.selectionLine font-family=th.fontRead font-size=17 line-height=1.4 color=th.fg
+        button press=obTalk testId="ob-talk" appearance="none" aria-label=talkLabel
+          Btn(label=talkLabel, primary=false, wide=true)
+        text addLabel font-family=th.fontUi font-size=14 color=th.muted
         if ob.demo
           Card(level=1, testId="ob-demo", minHeight=0)
             column padding=14 gap=8
               text "Demo: no microphone here" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
-              text ob.demoNote font-family=th.fontUi font-size=14 color=th.muted
-              if ob.demoWords != ""
-                text `“${ob.demoWords}”` font-family=th.fontRead font-size=17 color=th.fg
-              if ob.demoLeft > 0
-                button press=obDemoNext testId="ob-demo-next" appearance="none"
-                  Btn(label=`Play the next recorded turn (${ob.demoLeft} left)`, primary=false, wide=true)
-        if ob.paused
-          Card(level=2, testId="ob-paused", minHeight=0)
-            column padding=18 gap=10
-              text pausedTitle font-size=19 font-weight=700
-              text ob.nowSaying font-size=17 line-height=1.45 color=th.muted
-              button press=obContinue testId="ob-continue" appearance="none"
-                Btn(label="Continue your interview", primary=true, wide=true)
-        if ob.paused == false
-          row gap=10 align-items="center" testId="ob-listening"
-            if th.reducedMotion == false
-              box width=10 height=10 border-radius=5 background-color=th.danger animation="obBreathe 1100ms ease-in-out infinite alternate"
-            if th.reducedMotion
-              box width=10 height=10 border-radius=5 background-color=th.danger
-            text "The microphone is open. Talk any time, even over me." font-family=th.fontUi font-size=14 color=th.muted flex=1
-          PaperCard(testId="ob-now", minHeight=0)
-            column padding=18 gap=6
-              text ob.nowSaying testId="ob-now-saying" font-family=th.fontRead font-size=24 line-height=1.3 color=th.fg
-        text "So far" font-family=th.fontUi font-size=13 color=th.muted
-        column testId="ob-talk" gap=10 width="100%"
-          for t, i in ob.talk key=i
-            TalkLine(who=t.who, line=t.text, interrupted=t.interrupted)
+              button press=obDemoSay testId="ob-demo-say" appearance="none"
+                Btn(label=`Say: ${ob.demoWords}`, primary=false, wide=true)
+        text ob.message font-family=th.fontUi font-size=14 color=th.danger
+        button press=obTopicsDone testId="ob-topics-done" appearance="none"
+          Btn(label="Continue", primary=true, wide=true)
         button press=obSkip testId="ob-skip" appearance="none" padding=10
           text "Skip for now" font-family=th.fontUi font-size=15 color=th.muted
 
@@ -301,12 +306,14 @@ component OnboardingPage
               Mark(state="holding")
             if ob.editionStatus == "writing"
               text ob.writingLine testId="ob-writing-line" font-family=th.fontRead font-size=20 text-align="center"
-              text "This takes about fifteen seconds." font-family=th.fontUi font-size=13 color=th.muted
+              text "This takes a few seconds." font-family=th.fontUi font-size=13 color=th.muted
             if ob.editionStatus == "failed"
               text ob.editionError testId="ob-edition-error" font-family=th.fontRead font-size=19 text-align="center" line-height=1.35
-              text "The paper carries on with the default edition meanwhile." font-family=th.fontUi font-size=13 color=th.muted text-align="center"
+              text "Your topics are saved. The paper carries on with the general edition meanwhile." font-family=th.fontUi font-size=13 color=th.muted text-align="center"
               button press=obEditionRetry testId="ob-edition-retry" appearance="none"
                 Btn(label="Retry", primary=true, wide=true)
+              button press=obContinueAnyway testId="ob-continue-anyway" appearance="none"
+                Btn(label="Continue anyway", primary=false, wide=true)
         button press=obSkip testId="ob-skip" appearance="none" padding=10
           text "Skip for now" font-family=th.fontUi font-size=15 color=th.muted
 
@@ -322,14 +329,14 @@ component OnboardingPage
             for l, i in ob.editionLines key=i
               text l font-family=th.fontRead font-size=16 line-height=1.45 color=th.fg
 
-// The card other places show while the edition does not exist: "Make your edition" (Textures place), "Continue your interview",
+// The card other places show while the edition does not exist: "Make your edition" (Textures place), "Choose your topics",
 // "Finish voice setup", or the microphone note. Opens the same page; nothing resumes by itself.
 component FirstRunCard
   inject
     th: Theme
     ob: Onboarding
     openPage: action
-  derive act = ob.card == "Continue your interview" ? "Continue" : "Open"
+  derive act = ob.card == "Choose your topics" ? "Continue" : "Open"
   view
     if ob.card != ""
       Card(level=1, testId="firstrun-card", minHeight=0)

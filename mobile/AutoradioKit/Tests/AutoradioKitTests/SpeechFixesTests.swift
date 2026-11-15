@@ -3,14 +3,6 @@ import XCTest
 
 // Autoradio phone review slice (2026-11-15): the failure list, written before the code. Each fails on origin/main 62383b472.
 //
-// S1  The interview asks its first question twice and never speaks its open line. startInterview called session.start() and
-//     threw the lines away; InterviewProgramme.load then saw a running session and resumed it, so a first interview spoke
-//     "Welcome back." and the question, and the question was recorded twice. continueInterview resumed directly and then
-//     again through the loader. The loader is the one place that starts or resumes a session on the engine; the module no
-//     longer pre-starts or pre-resumes there.
-//       S1a a fresh session loaded by the programme speaks the open line first, then the question, records the question once
-//       S1b a paused session loaded by the programme speaks the resume line first, then the question, records it once more
-//       S1c (the module's two call sites are in the Exact package, not in this target: read, not run here)
 // S2  The system voice ends a paragraph at the synthesizer's first empty buffer. AVSpeechSynthesizer.write sends empty buffers
 //     between phrases (Mike's speech README: it "cut every chunk off after about 13 seconds"). The end of an utterance is the
 //     delegate's didFinish (or didCancel) for that utterance; an empty buffer counts as the end only when nothing at all
@@ -34,36 +26,6 @@ final class SpeechFixesTests: XCTestCase {
         private let l = NSLock(); private var n = 0
         func bump() { l.lock(); n += 1; l.unlock() }
         var value: Int { l.lock(); defer { l.unlock() }; return n }
-    }
-
-    func testS1a_AFreshSessionLoadedByTheProgrammeSpeaksTheOpenLineAndTheQuestionOnce() async throws {
-        let s = InterviewSession(interview: Interview(), file: nil)
-        InterviewSession.shared = s
-        defer { InterviewSession.shared = nil }
-        let doc = try await InterviewProgramme(StageParams()).load()      // no start() before it: the loader starts the session
-        let spoken = doc.blocks.compactMap(\.spokenText)
-        let bank = InterviewBank.default
-        XCTAssertEqual(spoken.first, bank.line("open"), "a first interview opens with its open line")
-        XCTAssertFalse(spoken.contains(bank.line("resume")), "and never says welcome back")
-        XCTAssertEqual(spoken.last, s.snapshot.current!.ask)
-        let q = s.snapshot.current!.id
-        XCTAssertEqual(s.snapshot.state.turns.filter { $0.who == "radio" && $0.questionID == q }.count, 1)
-    }
-
-    func testS1b_APausedSessionLoadedByTheProgrammeSpeaksTheResumeLineAndTheQuestion() async throws {
-        let s = InterviewSession(interview: Interview(), file: nil)
-        InterviewSession.shared = s
-        defer { InterviewSession.shared = nil }
-        _ = s.start()
-        _ = s.silence(); _ = s.silence(); _ = s.silence(); _ = s.silence()
-        XCTAssertEqual(s.snapshot.status, .paused)
-        let q = s.snapshot.current!.id
-        let before = s.snapshot.state.turns.filter { $0.who == "radio" && $0.questionID == q }.count
-        let doc = try await InterviewProgramme(StageParams()).load()
-        let spoken = doc.blocks.compactMap(\.spokenText)
-        XCTAssertEqual(spoken.first, InterviewBank.default.line("resume"))
-        XCTAssertEqual(spoken.last, s.snapshot.current!.ask)
-        XCTAssertEqual(s.snapshot.state.turns.filter { $0.who == "radio" && $0.questionID == q }.count, before + 1)
     }
 
     func testS2a_AnEmptyBufferFollowedByAudioIsNotTheEnd() async throws {

@@ -96,7 +96,7 @@ component BarShell
   derive aim = "Ask about this page…"
   derive aimTitle = topAddr == "paper:front" ? "Front page" : ((raim.address == pg.top and raim.blockId != "") ? raim.label : frontName)
   derive onSetup = pg.top == "onboarding:setup"
-  derive setupLine = ob.step == "interview" ? (ob.paused ? "Interview paused" : ((st == "listening" or st == "talking" or st == "heard") ? "Interview: listening…" : "Interview: speaking…")) : (ob.step == "setup" ? "Setting up the voice…" : (ob.step == "mic" ? "Check the microphone" : (ob.step == "hearing" ? "Check that you can hear me" : (ob.step == "ready" ? "Voice is set up" : (ob.step == "writing" ? "Writing your edition…" : (ob.step == "done" ? "Your edition is ready" : "Voice setup"))))))
+  derive setupLine = ob.step == "topics" ? "Choose your topics" : (ob.step == "setup" ? "Setting up the voice…" : (ob.step == "mic" ? "Check the microphone" : (ob.step == "hearing" ? "Check that you can hear me" : (ob.step == "ready" ? "Voice is set up" : (ob.step == "writing" ? "Writing your edition…" : (ob.step == "done" ? "Your edition is ready" : "Voice setup"))))))
   // What the line above the controls shows.
   derive lineMode = micOn ? "listen" : (st == "heard" ? "heard" : (st == "holding" ? "holding" : (st == "revised" ? "revised" : (st == "error" ? "error" : (st == "playing" ? "playing" : (st == "paused" ? "paused" : (onSetup ? "setup" : (typing ? "aim" : "none"))))))))
   derive loaded = ri.title != "" ? ri.title : bi.text

@@ -415,11 +415,6 @@
       "canRetry": "bool",
       "canFallback": "bool"
     },
-    "TalkRow": {
-      "who": "string",
-      "text": "string",
-      "interrupted": "bool"
-    },
     "Onboarding": {
       "step": "string",
       "title": "string",
@@ -429,11 +424,6 @@
       "mic": "string",
       "heard": "string",
       "route": "string",
-      "interviewStatus": "string",
-      "pauseReason": "string",
-      "nowSaying": "string",
-      "demoNote": "string",
-      "demoKind": "string",
       "demoWords": "string",
       "editionStatus": "string",
       "writingLine": "string",
@@ -448,17 +438,24 @@
       "setupFinished": "bool",
       "setupStarted": "bool",
       "hearingOK": "bool",
-      "paused": "bool",
-      "listening": "bool",
       "demo": "bool",
       "skipped": "bool",
       "editionDone": "bool",
       "level": "number",
-      "demoLeft": "number",
       "rows": "SetupRowView[]",
       "summary": "string[]",
-      "talk": "TalkRow[]",
-      "editionLines": "string[]"
+      "editionLines": "string[]",
+      "selectionLine": "string",
+      "explainer": "string",
+      "voiceHint": "string",
+      "talking": "bool",
+      "pickedCount": "number",
+      "chips": "TopicChipView[]"
+    },
+    "TopicChipView": {
+      "label": "string",
+      "selected": "bool",
+      "own": "bool"
     },
     "PaperItem": {
       "route": "string",
@@ -1679,11 +1676,6 @@
           "mic": "unasked",
           "heard": "",
           "route": "",
-          "interviewStatus": "notStarted",
-          "pauseReason": "",
-          "nowSaying": "",
-          "demoNote": "",
-          "demoKind": "",
           "demoWords": "",
           "editionStatus": "",
           "writingLine": "",
@@ -1698,17 +1690,19 @@
           "setupFinished": false,
           "setupStarted": false,
           "hearingOK": false,
-          "paused": false,
-          "listening": false,
           "demo": false,
           "skipped": false,
           "editionDone": false,
           "level": 0,
-          "demoLeft": 0,
           "rows": [],
           "summary": [],
-          "talk": [],
-          "editionLines": []
+          "editionLines": [],
+          "selectionLine": "",
+          "explainer": "",
+          "voiceHint": "",
+          "talking": false,
+          "pickedCount": 0,
+          "chips": []
         }
       }
     },
@@ -1749,19 +1743,41 @@
       "answers": "Onboarding"
     },
     {
-      "send": "onboardingInterview",
+      "send": "onboardingTopics",
       "answers": "Onboarding"
     },
     {
-      "send": "onboardingContinue",
+      "send": "onboardingTopicToggle",
+      "options": {
+        "label": "string"
+      },
       "answers": "Onboarding"
     },
     {
-      "send": "onboardingDemoNext",
+      "send": "onboardingTopicAdd",
+      "options": {
+        "text": "string"
+      },
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingTalk",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingTopicsDone",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingDemoSay",
       "answers": "Onboarding"
     },
     {
       "send": "onboardingEditionRetry",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingContinueAnyway",
       "answers": "Onboarding"
     },
     {

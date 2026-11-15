@@ -541,7 +541,7 @@ integrator's (`signin`, `lab-talk`, `inject`, `stage-<kind>-<id>`, `trace-*`, ..
 | 5 Files and viewers | `files.contract`, `viewers.contract`, `members-files.contract`, `AutoradioModule+Files.swift`, `Kit/ChoirFiles.swift`, `Kit/Epub.swift`, package views `PDFPage.swift`, `QuickLookPage.swift`, `interface/files.json` | its band in `provide` |
 | 6 Mail | `mail.contract`, `members-mail.contract`, `AutoradioModule+Mail.swift`, `Kit/ChoirMail.swift`, package view `MailOriginal.swift`, `interface/mail.json` | its band in `provide` |
 | 7 Settings, themes, accounts | `settings.contract`, `activity.contract`, `members-settings.contract`, `AutoradioModule+Settings.swift`, `Kit/ThemeLoader.swift`, `mobile/themes/*.json`, `Kit/Accounts.swift`, `interface/settings.json` | its band in `provide` |
-| 8 Onboarding and the interview | `onboarding.contract`, `members-onboarding.contract`, `AutoradioModule+Onboarding.swift`, `Kit/Interview.swift`, `mobile/interview/questions.md`, `interface/onboarding.json` | its band in `provide` |
+| 8 Onboarding and the edition topics | `onboarding.contract`, `members-onboarding.contract`, `AutoradioModule+Onboarding.swift`, `interface/onboarding.json` | its band in `provide` |
 | 9 Motion and the mark | `mark.contract`, `mark.ts` (if a canvas is used), `AutoradioModule+Mark.swift`, `interface/mark.json`, motion tokens in the themes | its band in `provide` |
 | Integrator | engine, `lab.contract`, `components.contract` (Components and Trace pages), audio session, `Kit/*` engine files | none |
 | Spine (done) | `app.contract` view, `spine.contract`, `ui.contract`, `pages.contract`, `AutoradioModule.swift`, `AutoradioModule+Spine.swift`, `Pages.swift`, `Demo.swift`, `scripts/*` | - |
@@ -647,8 +647,8 @@ and again in dark. The scheme really switches: the Settings mode control (`setti
 Decisions made at the seams:
 - **Generated files** (`BundledThemes.generated.swift`, `DemoFixtures.generated.swift`, `exact-package/exact.json`) are never hand-merged: take a side and
   run `python3 scripts/embed-assets.py` / `gen-exact-interface.py`. The build runs both again.
-- **One owner per thing.** Talk mode: Settings (`AppSettings` `talkMode`); the bar and the interview read the engine's addressing stage that Settings
-  applies (the interview no longer forces "open"). Gesture meanings: Settings' `swipeLeft`/`swipeRight`, handed to lane 4's `Preferences`
+- **One owner per thing.** Talk mode: Settings (`AppSettings` `talkMode`); the bar and the topics step read the engine's addressing stage that Settings
+  applies (the setup no longer forces "open"). Gesture meanings: Settings' `swipeLeft`/`swipeRight`, handed to lane 4's `Preferences`
   (`syncGestureMeanings`), and lane 4's own buttons write back to Settings. "What the paper has learned": `PreferencesLearned`, over lane 4's acts.
 - **Signed out** the paper is the root; sign-in is a code screen over the app that appears when `au.status == "pending"` (the paper's Sign in button).
 - **Bar**: a page-colour backing under the glass (`th.paper`, 0.82), the aim reads `readerAim` (a block of the open document) and `ob.aim` before setup;

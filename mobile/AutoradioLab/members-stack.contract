@@ -21,7 +21,7 @@ members Autoradio
   state flying = false
   state flyDir = 1
 
-  // Onboarding (the setup page and the interview) takes over the deck as before: one page, nothing to swipe.
+  // Onboarding (the setup page and the edition topics) takes over the deck as before: one page, nothing to swipe.
   derive onbd = pg.top.startsWith("onboarding:")
   derive topAddr = order.slice(0, 1).join("")
   derive stackAddrs = order
