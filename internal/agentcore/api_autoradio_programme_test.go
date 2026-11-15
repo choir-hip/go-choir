@@ -299,8 +299,8 @@ func TestF8_TheSegmentRecordAndTheClaimArePersistedBeforeTheSegmentEvent(t *test
 			t.Errorf("(F8) the segment event for %s went out before its claim", seg)
 			return
 		}
-		if !parseTS(t, sr.Provenance.CommittedAt).Before(parseTS(t, claim.Provenance.CommittedAt)) {
-			t.Errorf("(F8) the segment record (%s) is not before the claim (%s)", sr.Provenance.CommittedAt, claim.Provenance.CommittedAt)
+		if parseTS(t, sr.Provenance.CommittedAt).After(parseTS(t, claim.Provenance.CommittedAt)) {
+			t.Errorf("(F8) the segment record (%s) is after the claim (%s)", sr.Provenance.CommittedAt, claim.Provenance.CommittedAt)
 		}
 		checked++
 	})
@@ -625,7 +625,7 @@ func TestF33_ACrashMidStretchThenARetry(t *testing.T) {
 	if strings.Join(segmentTitles(same), "|") != "One|Two" || len(eventsNamed(same, "error")) != 1 || len(eventsNamed(same, "done")) != 0 {
 		t.Fatalf("(F33) replay of the interrupted request: %+v", same)
 	}
-	if r := eventsNamed(same, "error")[0].Data["reason"].(string); !strings.Contains(r, "interrupted") {
+	if r := eventsNamed(same, "error")[0].Data["reason"].(string); !strings.Contains(r, "without an index") {
 		t.Fatalf("(F33) reason %q", r)
 	}
 

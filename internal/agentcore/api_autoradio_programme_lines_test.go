@@ -453,8 +453,8 @@ func TestF41_TheProgrammeHandlerHasNoPathToAnOutcome(t *testing.T) {
 				}
 			case *ast.BasicLit:
 				if x.Kind == token.STRING {
-					for _, bad := range []string{"autoradio.air", "autoradio.settlement", "autoradio.conflict", "autoradio-air:", "autoradio_heard", "heard"} {
-						if strings.Contains(strings.ToLower(x.Value), bad) && bad != "heard" {
+					for _, bad := range []string{"autoradio.air", "autoradio.settlement", "autoradio.conflict", "autoradio-air:", "autoradio_heard"} {
+						if strings.Contains(strings.ToLower(x.Value), bad) {
 							t.Errorf("(F41) %s holds the literal %s", f, x.Value)
 						}
 					}

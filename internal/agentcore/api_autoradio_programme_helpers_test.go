@@ -9,6 +9,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -280,11 +281,40 @@ type wrapLedger struct {
 	autoradioLedger
 	failClaimAppend bool
 	changeClaimRead bool
+	// failClaimFrom > 0 refuses the claim appends from the nth on (1-based).
+	failClaimFrom int
+	claimAppends  int
+	// panicClaimAppend panics instead of appending a claim: the process dies
+	// between the segment record and its claim.
+	panicClaimAppend bool
 }
 
+// errWriter is a ResponseWriter whose writes fail after the first okWrites
+// (the client went away).
+type errWriter struct {
+	*httptest.ResponseRecorder
+	okWrites, writes int
+}
+
+func (w *errWriter) Write(p []byte) (int, error) {
+	w.writes++
+	if w.writes > w.okWrites {
+		return 0, io.ErrClosedPipe
+	}
+	return w.ResponseRecorder.Write(p)
+}
+
+func (w *errWriter) WriteString(s string) (int, error) { return w.Write([]byte(s)) }
+
 func (l *wrapLedger) AppendCommitmentRecord(ctx context.Context, ownerID, computerID string, rec types.CommitmentRecord) (string, error) {
-	if l.failClaimAppend && rec.Calibration != nil && rec.Calibration.Claim != nil {
-		return "", context.DeadlineExceeded
+	if rec.Calibration != nil && rec.Calibration.Claim != nil {
+		l.claimAppends++
+		if l.panicClaimAppend {
+			panic("simulated crash between the segment record and its claim")
+		}
+		if l.failClaimAppend || (l.failClaimFrom > 0 && l.claimAppends >= l.failClaimFrom) {
+			return "", context.DeadlineExceeded
+		}
 	}
 	return l.autoradioLedger.AppendCommitmentRecord(ctx, ownerID, computerID, rec)
 }

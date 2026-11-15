@@ -58,6 +58,22 @@ var (
 	programmeDroppedTotal   atomic.Int64
 )
 
+// Deadlines and a bound on output. These are not limits on our model calls
+// (CLAUDE.md: no rate bucket, in-flight cap, spacing or call quota); they end
+// a call that has stalled or runs away, and are bounds on what the model can
+// cause. The values are invented: neither the design nor the turn route names
+// one (the gateway client's own deadline is 10m30s). Variables so a test can
+// shorten them.
+var (
+	programmeWallDeadline = 120 * time.Second // the whole walk of the pool
+	programmeIdleDeadline = 30 * time.Second  // between two deltas
+)
+
+const programmeMaxSegments = 30 // the prompt asks for 10 to 15
+
+// programmePrompt is the programme prompt; a variable so a test can empty it.
+var programmePrompt = appdesk.ProgrammePrompt
+
 var programmeCauses = map[string]bool{"open": true, "extend": true, "turn": true, "result": true}
 var programmeVersionRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 var programmeIntRe = regexp.MustCompile(`^[0-9]{1,12}$`)
