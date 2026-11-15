@@ -12,6 +12,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -222,7 +223,7 @@ func TestF23_ForecastFieldsOnNonContentKinds(t *testing.T) {
 }
 
 func TestF24_KindTextAndTitle(t *testing.T) {
-	long := strings.Repeat("w ", 4000)
+	long := strings.Repeat("w ", 4600) // over every kind's range
 	runLineCases(t, []lineCase{
 		{"unknown kind advert", titled("a", map[string]any{"kind": "advert"}), false},
 		{"kind lesson as a segment", titled("a2", map[string]any{"kind": "lesson"}), false},
@@ -523,6 +524,64 @@ func TestF36_ThePromptShipsAndSaysWhatTheInputDoes(t *testing.T) {
 	for _, banned := range []string{"finish rate", "streak", "be less confident", "be more confident", "raise your"} {
 		if strings.Contains(strings.ToLower(prompt), banned) {
 			t.Errorf("the prompt says %q", banned)
+		}
+	}
+}
+
+// F44: the stream the handler writes is the stream the phone's fixture
+// (mobile/fixtures/learning/programme_stream.json) pins.
+func TestF44_TheStreamIsTheFixturesStream(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "mobile", "fixtures", "learning", "programme_stream.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fx struct {
+		Request    json.RawMessage   `json:"request"`
+		ModelLines []json.RawMessage `json:"model_lines"`
+		Events     []struct {
+			Event string         `json:"event"`
+			Data  map[string]any `json:"data"`
+		} `json:"events"`
+		DoneFields map[string]any `json:"done_fields"`
+	}
+	if err := json.Unmarshal(raw, &fx); err != nil {
+		t.Fatal(err)
+	}
+	var lines []string
+	for _, l := range fx.ModelLines {
+		lines = append(lines, string(l))
+	}
+	rt, _ := radioRuntime(t, linesScript(lines...))
+	_, evs := progRun(t, rt, string(fx.Request))
+	sid := stretchIDOf(t, evs)
+	var got []sseEvent
+	for _, e := range evs {
+		if e.Name == "stretch" || e.Name == "segment" {
+			b, _ := json.Marshal(e.Data)
+			var data map[string]any
+			_ = json.Unmarshal([]byte(strings.ReplaceAll(string(b), sid, "S")), &data)
+			got = append(got, sseEvent{Name: e.Name, Data: data})
+		}
+	}
+	if len(got) != len(fx.Events) {
+		t.Fatalf("(F44) %d events, the fixture has %d: %+v", len(got), len(fx.Events), got)
+	}
+	for i, want := range fx.Events {
+		if got[i].Name != want.Event || !reflect.DeepEqual(got[i].Data, want.Data) {
+			t.Errorf("(F44) event %d:\n got %s %v\nwant %s %v", i, got[i].Name, got[i].Data, want.Event, want.Data)
+		}
+	}
+	done := eventsNamed(evs, "done")
+	if len(done) != 1 {
+		t.Fatalf("(F44) done events %d", len(done))
+	}
+	for k, want := range fx.DoneFields {
+		g := done[0].Data[k]
+		if s, ok := g.(string); ok {
+			g = strings.ReplaceAll(s, sid, "S")
+		}
+		if !reflect.DeepEqual(g, want) {
+			t.Errorf("(F44) done.%s = %v, want %v", k, g, want)
 		}
 	}
 }

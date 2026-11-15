@@ -72,7 +72,7 @@ func TestF2_RequestParserRefusals(t *testing.T) {
 		"no cause":         {progBody(func(m map[string]any) { delete(m, "cause") }), http.StatusBadRequest},
 		"unknown cause":    {progBody(func(m map[string]any) { m["cause"] = "window" }), http.StatusBadRequest},
 		"bad local_time":   {progBody(func(m map[string]any) { m["local_time"] = "yesterday" }), http.StatusBadRequest},
-		"unknown tz":       {progBody(func(m map[string]any) { m["tz"] = "Mars/Olympus" }), http.StatusBadRequest},
+		"tz too long":      {progBody(func(m map[string]any) { m["tz"] = strings.Repeat("Z", 65) }), http.StatusBadRequest},
 		"unknown candidate key": {progBody(func(m map[string]any) {
 			m["candidates"] = []any{map[string]any{"route": "a", "version": 1, "title": "t", "dek": "d", "html": "x"}}
 		}), http.StatusBadRequest},
@@ -128,6 +128,17 @@ func TestF3_CandidateBounds(t *testing.T) {
 		if rec.Code != c.want {
 			t.Errorf("%s: status %d, want %d: %.200s", name, rec.Code, c.want, rec.Body.String())
 		}
+	}
+}
+
+func TestF2_AnUnknownTzIsNotARefusal(t *testing.T) {
+	rt, fake := radioRuntime(t, twoStoryScript())
+	rec, evs := progRun(t, rt, progBody(func(m map[string]any) { m["tz"] = "Mars/Olympus" }))
+	if rec.Code != http.StatusOK || len(segmentEvents(evs)) == 0 {
+		t.Fatalf("an unresolvable tz refused the programme: %d", rec.Code)
+	}
+	if u := fake.calls[0].req.User; !strings.Contains(u, "2026-11-15 07:40") || !strings.Contains(u, "+01:00") {
+		t.Fatalf("the local time is not shown by its own offset: %q", u)
 	}
 }
 

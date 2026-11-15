@@ -264,6 +264,9 @@ func (w *hookWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// WriteString is promoted from the recorder and would bypass Write.
+func (w *hookWriter) WriteString(s string) (int, error) { return w.Write([]byte(s)) }
+
 func (w *hookWriter) body() string {
 	w.mu.Lock()
 	defer w.mu.Unlock()

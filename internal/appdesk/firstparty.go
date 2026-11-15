@@ -79,5 +79,14 @@ func FirstPartyPrompt(pkg string) (string, bool) {
 	return string(raw), true
 }
 
-// ProgrammePrompt is the prompt of the Autoradio programme call (STUB).
-func ProgrammePrompt() (string, bool) { return "", false }
+// ProgrammePrompt is the prompt of the Autoradio programme call (role
+// autoradio_programme, design docs/design/autoradio-learning-engine-2026-11-14.md
+// section 3), shipped with the image beside the desk's own prompt. It is the
+// desk's behaviour, so the call runs on this text and no other.
+func ProgrammePrompt() (string, bool) {
+	raw, err := firstPartyPrompts.ReadFile("firstparty_prompts/autoradio_programme.md")
+	if err != nil {
+		return "", false
+	}
+	return string(raw), true
+}
