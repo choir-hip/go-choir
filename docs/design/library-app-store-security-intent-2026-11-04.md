@@ -28,7 +28,7 @@ model is essential to the app store, not an add-on.
 3. **Enterprise setting.** A deployment can keep third-party installs off
    until a code review has run locally on its own machine.
 4. **Precommitment records for apps.** Reuse the precommitment record
-   mechanism (docs/precommitment-records.md): attach records to Library
+   mechanism (docs/archive/learning/precommitment-records.md): attach records to Library
    releases, focused on security questions, and keep them across an
    app's version history. Statistics across installs and versions build
    a track record. A positive track record is evidence, never proof that

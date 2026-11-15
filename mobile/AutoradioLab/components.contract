@@ -17,7 +17,6 @@ component ComponentsPage
     configs: Names
     cfgName: string
     cfgUrl: string
-    modeLabel: string
     yieldLabel: string
     openPage: action
     signOut: action
@@ -56,7 +55,7 @@ component ComponentsPage
         text "Audio" role="heading" aria-level=2 font-family=th.fontUi font-size=13 font-weight=700 color=th.accent2 text-transform="uppercase" margin-top=8
         text `State ${aud.state} · engine ${aud.engine} · voice processing ${aud.voiceProcessing ? "on" : "off"}` testId="audio-state"
         text `Programme ${aud.audible ? "audible" : "silent"} at volume ${aud.volume.toFixed(2)} · last switch ${aud.lastSwitchMs.toFixed(0)} ms` testId="audio-level" color=th.muted
-        text aud.route testId="audio-route" font-family=th.fontMono font-size=12 color=th.muted
+        text aud.route testId="audio-route" font-family=th.fontMono font-size=12 color=th.muted width="100%" min-width=0
         for pol in aud.policies key=pol
           button press=setPolicy(pol) role="radio" aria-checked=(aud.policy == pol) testId=`policy-${pol}` appearance="none"
             Btn(label=`${aud.policy == pol ? "● " : "○ "}${pol}`, primary=false, wide=false)
@@ -65,13 +64,12 @@ component ComponentsPage
           button press=setAckTiming(tm) role="radio" aria-checked=(aud.ackTiming == tm) testId=`ack-${tm}` appearance="none"
             Btn(label=`${aud.ackTiming == tm ? "● " : "○ "}${tm == "immediate" ? "Say it at once" : "Wait for System 1"}`, primary=false, wide=false)
         text yieldLabel testId="yield"
-        text modeLabel testId="mode" color=th.muted
         text `Phase: ${st.phase} · mic ${st.micActive ? "on" : "off"} · config ${st.configName}` testId="phase" color=th.muted
         text st.message testId="lab-message" color=th.muted
         text (st.transcript == "" ? "(listening)" : st.transcript) testId="lab-transcript"
         button pointerdown=talkDown pointerup=talkUp testId="lab-talk" appearance="none"
-          width="100%" padding=40 background-color=th.paper2 border-radius=th.radiusControl box-shadow=th.shadow1
-          text (st.phase == "playing" ? "Hold to talk" : st.phase)
+          width="100%" box-sizing="border-box" padding=40 background-color=th.paper2 border-radius=th.radiusControl box-shadow=th.shadow1
+          text (st.phase == "playing" ? "Talk" : st.phase)
         row gap=8 align-items="center"
           button press=inject testId="inject" appearance="none"
             Btn(label="Inject fixture turn", primary=false, wide=false)
@@ -131,6 +129,8 @@ component TracePage
         row gap=8 align-items="center"
           button press=exportTurn(trace.id) testId="trace-export" appearance="none"
             Btn(label="Export JSON", primary=false, wide=false)
+          button press=exportTurn("last") testId="trace-export-last" appearance="none"
+            Btn(label="Export last 5 turns", primary=false, wide=false)
           if expPath != ""
             button press=shareExport(expPath) testId="trace-share" appearance="none"
               Btn(label="Share", primary=false, wide=false)

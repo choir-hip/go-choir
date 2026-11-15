@@ -40,7 +40,7 @@ From resource-fabric-2026-10-31.md (§0, §2, §4, §9, §10) and branching-tape
 - Choir in Choir (§4): a controller grant (verbs, scope, budget, expiry/revocable by the controlled computer's owner), addressed publication into the controlled computer's Texture, results returned by publication and adoption; lifecycle verbs go to the home/platform, not to the guest; no cycles; quotas; subtree kill switch. A grant cannot be wider than its granter.
 - An actuator writes a precommit, act, resolve triple on the tape (§5.2, §5.4).
 
-Terminology hazard worth flagging: in `docs/precommitment-records.md` a "precommitment record" is a prospective-self-alignment object (a registered prediction/expectation scored later). In the fabric doc it is used in the write-ahead intent-log sense (record intent durably before the act). The prior art below is about the second sense; the two senses may be one mechanism or two, which is a design question, not a research finding.
+Terminology hazard worth flagging: in `docs/archive/learning/precommitment-records.md` a "precommitment record" is a prospective-self-alignment object (a registered prediction/expectation scored later). In the fabric doc it is used in the write-ahead intent-log sense (record intent durably before the act). The prior art below is about the second sense; the two senses may be one mechanism or two, which is a design question, not a research finding.
 
 ## 1. The actor model and its descendants
 

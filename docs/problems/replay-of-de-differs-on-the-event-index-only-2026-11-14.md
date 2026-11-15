@@ -59,48 +59,39 @@ rows left by the 21:46:09Z restart, when d@e applied its own layered release.
   the lifecycle code alone is not confirmed.
 - The diagnostic should read its samples in the snapshot.
 
-## Code investigation and repair (lane/event-index-diff, same day)
+## Code reading, 22:18Z (nothing run, no live computer touched)
 
-Neither cause below is confirmed on d@e: the deployed proof is a probe
-reading after this lands, and its `event_index` field if it still differs.
+- The probe replays a tail onto the newest snapshot (`restore_snapshot.go:117`),
+  not from sequence 1; a snapshot copies the index whole
+  (`snapshot_to.go:424`). Most replay-side rows are therefore an old live
+  index, and only tail rows go through replay's own write path.
+- Confirmed from code, not yet by a test: live normalizes a no-payload event's
+  payload pin digests to `[]` (`appender.go:974`, `:1056`); replay leaves the
+  slice nil (`internal/platform/event_replay.go:96`) and `Prepare` marshals it
+  to `null`. The probe hashes the raw text. Whether d@e's tail holds such an
+  event is not known.
+- Suspected: the incremental trim removes one slice at a time and leaves older
+  backlog to the catch-up that starts two minutes after boot. A base snapshot
+  taken before a catch-up finished, or the staged store's own catch-up racing
+  the four-minute probe, would leave batch rows on one side only.
+- Not a cause, from code: the timestamp columns (excluded), receipt digests,
+  any time-based trim condition.
 
-- Cause 2, a null where live has `[]` (reproduced by a test, not on d@e). The
-  live append normalizes `PayloadPinReceiptDigests` with `nonNilStrings`, so
-  an event with no payload pins stores `[]` in
-  `payload_pin_receipt_digests_json`. The tape replay
-  (`platform/event_replay.go`) sets the list only when an event has payload
-  pins, so `Store.Prepare` marshalled nil to `null`. The probe hashes the raw
-  text. An end to end probe test with one tail event of that kind answered
-  not_equivalent on `computer_event_index` and `content_root`, the two keys of
-  this record, and is equivalent after `Prepare` writes `[]` for both.
-  d@e's own rows: unread. A tail of 216 events on d@e almost certainly holds
-  such events, but that is a belief.
-- Cause 1, trim timing (mechanism tested, not seen on d@e). The incremental
-  trim deletes the last slice at each trim point; the older backlog goes in a
-  catch-up two minutes after each open, on the live store and on the probe's
-  staged store, and a base snapshot copied before a catch-up finished
-  carries the backlog. The two sides then differ by rows the trim defines as
-  disposable. The probe now leaves those rows (finalized
-  `projection_batch_recorded` at or below the trim boundary of the pinned
-  head) out of its index digest on both sides and reports their counts.
-- Stores written by an earlier replay keep `null` in that column inside their
-  base snapshots; the probe reads null as `[]` there. The stored witness is
-  unchanged, so recorded checkpoints still verify.
-- The report has `event_index` (schema_version 5): the per-row diff, filled
-  only when the result is not equivalent. The object graph diagnostic now
-  reads its live rows in the pinned snapshot (telemetry partition rows, which
-  are separate files, are still read at the time of the call).
+A builder lane (`lane/event-index-diff`) is writing the tests for both, the
+fix for the first, and a per-row diff of the index in the probe report with
+the object-graph samples read in the snapshot.
 
-Remaining error, as first written and corrected (review round 1): the stored
-witness stayed strict, so the probe could say equivalent while a restore
-refused. This was wrong about where. It is the restore gate, not only the
-bind, that disagreed: a restore replays the tail with the new `Prepare`
-(`[]`) onto a base whose rows may hold `null`, and compares with the strict
-digest a checkpoint recorded; and the trim backlog differs between a live
-store, a base snapshot and a staged store whose own catch-up has not run.
-Both are repaired by the canonical witness, witness version 4, which the bind
-records and the restore recomputes, and which the probe uses on both sides
-(`restore-cannot-finish-inside-its-ten-minute-request-2026-11-14.md`, the
-canonical witness section). Cold recovery (`autoputer/projection_base.go`
+## Residual corrected (lane/restore-witness, review round 1)
+
+The lane's first reading, that the stored witness stayed strict so a checkpoint
+still verified against the live store, was wrong about where the disagreement
+is. It is the restore gate, not only the bind: a restore replays the tail with
+the new `Prepare` (`[]`) onto a base whose rows may hold `null`, and compares
+with the strict digest a checkpoint recorded; and the trim backlog differs
+between a live store, a base snapshot and a staged store whose own catch-up has
+not run. Both are repaired by the canonical witness, witness version 4, which
+the bind records and the restore recomputes and which the probe uses on both
+sides (see `restore-cannot-finish-inside-its-ten-minute-request-2026-11-14.md`,
+the canonical witness section). Cold recovery (`autoputer/projection_base.go`
 installs a snapshot, then replays a tail with no witness gate) is the likely
 producer of `null` rows, read from code. Whether d@e holds any is unread.

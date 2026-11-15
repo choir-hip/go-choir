@@ -166,7 +166,7 @@ now:
     status: active
     evidence_refs:
       - docs/archive/desk-rlm-rectification-plan-2026-09-23.md §2 (foliation), §11 (R4)
-      - docs/precommitment-records.md (score semantics)
+      - docs/archive/learning/precommitment-records.md (score semantics)
   belief:
     believed_state: >-
       CHARTERED. Every non-wire desk is on the carrier; the ledger

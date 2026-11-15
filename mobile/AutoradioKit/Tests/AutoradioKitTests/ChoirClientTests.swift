@@ -4,7 +4,7 @@ import XCTest
 /// A local stand-in for choir.news: every request goes to `handler`; no network.
 final class StubProtocol: URLProtocol, @unchecked Sendable {
     struct Req { let method: String; let path: String; let query: [String: String]; let headers: [String: String]; let body: [String: Any] }
-    struct Resp { var status = 200; var headers: [String: String] = [:]; var json: Any = [String: Any]() }
+    struct Resp { var status = 200; var headers: [String: String] = [:]; var json: Any = [String: Any](); var raw: String?; var dropAfter = false }
     nonisolated(unsafe) static var handler: (Req) -> Resp = { _ in Resp() }
     nonisolated(unsafe) static var seen: [Req] = []
     static let lock = NSLock()
@@ -27,8 +27,9 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
         let r = Self.handler(req)
         let resp = HTTPURLResponse(url: request.url!, statusCode: r.status, httpVersion: "HTTP/1.1", headerFields: r.headers)!
         client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: (try? JSONSerialization.data(withJSONObject: r.json)) ?? Data())
-        client?.urlProtocolDidFinishLoading(self)
+        client?.urlProtocol(self, didLoad: r.raw.map { Data($0.utf8) } ?? ((try? JSONSerialization.data(withJSONObject: r.json)) ?? Data()))
+        if r.dropAfter { client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost)) }       // the connection drops with no `done`
+        else { client?.urlProtocolDidFinishLoading(self) }
     }
     override func stopLoading() {}
 }

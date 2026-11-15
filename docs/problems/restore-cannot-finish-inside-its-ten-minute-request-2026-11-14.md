@@ -116,7 +116,6 @@ front when tail events over the measured replay rate exceed its bound; a
 snapshot trigger in time to replay, not events alone; the snapshot refusal
 surfaced where someone reads it.
 
-
 ## The canonical witness (lane/restore-witness, 2026-11-14; red change)
 
 Repair of the 23:02Z refusal (`rematerialize: reconstructed

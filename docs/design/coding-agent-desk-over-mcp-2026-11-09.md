@@ -108,7 +108,7 @@ activation identity (`choir.go:1450`).
 The cursor advances only when the cell's acts commit, and only over the
 records a `Records()` call actually returned (`choir.go:1404-1408`;
 `recordsShown`, `choir.go:91-94`). Delivery is "by cursor, as in Kafka"
-(`docs/precommitment-records.md:431-434`).
+(`docs/archive/learning/precommitment-records.md:431-434`).
 
 A capsule job's end is also a record in the same inbox, from `job:<id>`, with
 state, exit code, receipt and output tail (`intent.go:255-257`;

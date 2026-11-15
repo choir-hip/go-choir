@@ -7,34 +7,12 @@ import AutoradioKit
 /// and every load is measured (bytes fetched, load time, resident memory before and after, memory after unload).
 public enum ModelHub {
     /// Where FluidAudio caches its Core ML bundles (its own default).
-    public static var fluidRoot: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("FluidAudio/Models", isDirectory: true)
-    }
-    public static let store: ModelStore = {
-        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("AutoradioLab/models", isDirectory: true)
-        return ModelStore(root: root)
-    }()
+    public static var fluidRoot: URL { KnownModels.fluidRoot }
+    /// The one store of the app (the kit's): voice setup, these stages and the proof all use it, with the whole catalog in it.
+    public static var store: ModelStore { .shared }
 
-    /// Every model the lab can load, with the facts from the model cards (sizes are the cards' figures, not measurements).
-    public static var catalog: [ManagedModelSpec] {
-        let c = fluidRoot
-        return [
-            ManagedModelSpec(id: "silero-vad-v6.2.1", label: "Silero VAD v6.2.1 (256 ms, Core ML)", source: "hf:FluidInference/silero-vad-coreml",
-                             approxBytes: 2_000_000, license: "MIT (model); FluidAudio Apache-2.0", cachePath: c),
-            ManagedModelSpec(id: "parakeet-eou-120m", label: "Parakeet EOU 120M (streaming, Core ML)", source: "hf:FluidInference/parakeet-realtime-eou-120m-coreml",
-                             approxBytes: 250_000_000, license: "NVIDIA Open Model License (model); FluidAudio Apache-2.0", cachePath: c),
-            ManagedModelSpec(id: "parakeet-tdt-0.6b-v2", label: "Parakeet TDT 0.6B v2 (English, Core ML)", source: "hf:FluidInference/parakeet-tdt-0.6b-v2-coreml",
-                             approxBytes: 480_000_000, license: "CC-BY-4.0 (NVIDIA model); FluidAudio Apache-2.0", cachePath: c),
-            ManagedModelSpec(id: "kokoro-82m-ane", label: "Kokoro 82M ANE v3 (Core ML)", source: "hf:FluidInference/kokoro-82m-coreml",
-                             approxBytes: 350_000_000, license: "Apache-2.0 (model); FluidAudio Apache-2.0", cachePath: c),
-            ManagedModelSpec(id: "pocket-tts", label: "PocketTTS 100M (Kyutai, Core ML)", source: "hf:FluidInference/pocket-tts-coreml",
-                             approxBytes: 300_000_000, license: "CC-BY-4.0 (Kyutai model); FluidAudio Apache-2.0", cachePath: c),
-            ManagedModelSpec(id: "lfm3-audio-2b", label: "LFM3-Audio-2B (Core ML, ASR + TTS)", source: "hf:FluidInference/lfm3-audio-2b-coreml",
-                             approxBytes: 2_900_000_000, license: "LFM Open License (read it: commercial use limited by revenue)", cachePath: c),
-        ] + LlamaCatalog.specs
-    }
+    /// Every model the lab can load: the kit's one catalog.
+    public static var catalog: [ManagedModelSpec] { KnownModels.managed }
 
     /// Register every model stage into `registry` and the catalog into the store.
     public static func register(into registry: StageRegistry) {
@@ -44,11 +22,8 @@ public enum ModelHub {
         registry.register(.voice, KokoroVoice.self) { KokoroVoice($0) }
         registry.register(.voice, PocketTTSVoice.self) { PocketTTSVoice($0) }
         registry.register(.transcriber, LFM3Transcriber.self) { LFM3Transcriber($0) }
-        registry.register(.holder, LFM3Holder.self) { LFM3Holder($0) }
         registry.register(.voice, LFM3Voice.self) { LFM3Voice($0) }
         registerLlamaStages(registry)
-        let specs = catalog
-        Task { for s in specs { await store.register(managed: s) } }
     }
 }
 
@@ -128,6 +103,10 @@ public final class AutoradioModelsRegistrar: NSObject {
     @objc public static func register(_ registry: AnyObject) {
         guard let r = registry as? StageRegistry else { return }
         ModelHub.register(into: r)
+        ModelProviders.current = HubModelProvider.shared          // voice setup fetches and checks through this
+        #if canImport(llama)
+        LocalLanguage.model = LlamaLocalModel.shared              // the acknowledgement is written by this
+        #endif
         ModelProof.runFromLaunchArguments()
         fputs("autoradio models: registered \(ModelHub.catalog.count) models, \(r.all.count) stages\n", stderr)
     }

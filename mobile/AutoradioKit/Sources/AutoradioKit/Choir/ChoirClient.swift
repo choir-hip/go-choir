@@ -192,7 +192,7 @@ public final class ChoirEnvironment: @unchecked Sendable {
     /// `baseURL` (a lab setting, or a configuration fetched from a link); a client made for it still refuses to carry the key.
     public var configuredBaseURL: String { get { lock.lock(); defer { lock.unlock() }; return _configuredBase } set { lock.lock(); _configuredBase = newValue; lock.unlock() } }
 
-    public func client(baseURL: String? = nil, timeout: Double = 15) -> ChoirClient {
+    public func client(baseURL: String? = nil, timeout: Double = ChoirClient.idleTimeout) -> ChoirClient {
         ChoirClient(baseURL: (baseURL?.isEmpty == false ? baseURL! : configuredBaseURL), keys: keys, session: session, log: log, timeout: timeout,
                     trustedOrigin: URL(string: configuredBaseURL))
     }
@@ -241,6 +241,10 @@ public struct ChoirResponse: Sendable {
 }
 
 public final class ChoirClient: @unchecked Sendable {
+    /// The one transport timeout left: `URLRequest.timeoutInterval` is an IDLE timeout (seconds with no bytes at all), not a deadline on
+    /// the whole request, so a slow answer that keeps sending is never cut. It exists only so a dead connection (no bytes at all) ends
+    /// with a transport error instead of hanging forever. 60 s is URLSession's own default for it. No model call is bounded by it.
+    public static let idleTimeout = 60.0
     public let baseURL: URL
     let keys: KeyStore
     let session: URLSession
@@ -249,7 +253,7 @@ public final class ChoirClient: @unchecked Sendable {
     /// When set, a request that carries the key goes only if `baseURL` has this scheme, host and port.
     let trustedOrigin: URL?
 
-    public init(baseURL: String, keys: KeyStore, session: URLSession = .shared, log: EventLog? = nil, timeout: Double = 15,
+    public init(baseURL: String, keys: KeyStore, session: URLSession = .shared, log: EventLog? = nil, timeout: Double = ChoirClient.idleTimeout,
                 trustedOrigin: URL? = nil) {
         self.trustedOrigin = trustedOrigin
         self.baseURL = URL(string: baseURL.hasSuffix("/") ? String(baseURL.dropLast()) : baseURL) ?? URL(string: ChoirEnvironment.defaultBaseURL)!
@@ -264,22 +268,7 @@ public final class ChoirClient: @unchecked Sendable {
     public func send(_ method: String, _ path: String, query: [String: String] = [:], body: Data? = nil,
                      authenticated: Bool = true, route: String? = nil, timeout t: Double? = nil,
                      okStatuses: Set<Int> = []) async throws -> ChoirResponse {
-        if authenticated, let t = trustedOrigin, !SameOrigin.matches(baseURL, t) { throw ChoirError.wrongHost(baseURL.host ?? "(none)") }
-        guard var comps = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { throw ChoirError.decode("bad base URL") }
-        comps.percentEncodedPath = path
-        if !query.isEmpty { comps.queryItems = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) } }
-        guard let url = comps.url else { throw ChoirError.decode("bad path") }
-        var r = URLRequest(url: url, timeoutInterval: t ?? timeout)
-        r.httpMethod = method
-        r.setValue("application/json", forHTTPHeaderField: "Accept")
-        if body != nil { r.setValue("application/json", forHTTPHeaderField: "Content-Type"); r.httpBody = body }
-        if authenticated {
-            guard let key = keys.get(KeyAccount.apiKey) else { throw ChoirError.notSignedIn }
-            r.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-            if !path.hasPrefix("/auth/") && path != Self.statusPath {
-                r.setValue(try await computerID(), forHTTPHeaderField: "X-Choir-Computer")
-            }
-        }
+        let r = try await request(method, path, query: query, body: body, authenticated: authenticated, timeout: t)
         let label = "choir \(method) \(route ?? path)"
         let start = log?.clock.now
         let t0 = ProcessInfo.processInfo.systemUptime
@@ -306,6 +295,52 @@ public final class ChoirClient: @unchecked Sendable {
             return ChoirResponse(status: h.statusCode, data: data, ms: ms, headers: hs)
         }
         throw Self.error(status: h.statusCode, data: data, headers: h, path: route ?? path)
+    }
+
+    /// The URLRequest for a call: the base URL, the headers, the key and the computer. The timeout is URLRequest's idle timeout.
+    func request(_ method: String, _ path: String, query: [String: String] = [:], body: Data? = nil, authenticated: Bool = true,
+                 timeout t: Double? = nil, accept: String = "application/json") async throws -> URLRequest {
+        if authenticated, let t = trustedOrigin, !SameOrigin.matches(baseURL, t) { throw ChoirError.wrongHost(baseURL.host ?? "(none)") }
+        guard var comps = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { throw ChoirError.decode("bad base URL") }
+        comps.percentEncodedPath = path
+        if !query.isEmpty { comps.queryItems = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) } }
+        guard let url = comps.url else { throw ChoirError.decode("bad path") }
+        var r = URLRequest(url: url, timeoutInterval: t ?? timeout)
+        r.httpMethod = method
+        r.setValue(accept, forHTTPHeaderField: "Accept")
+        if body != nil { r.setValue("application/json", forHTTPHeaderField: "Content-Type"); r.httpBody = body }
+        if authenticated {
+            guard let key = keys.get(KeyAccount.apiKey) else { throw ChoirError.notSignedIn }
+            r.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+            if !path.hasPrefix("/auth/") && path != Self.statusPath {
+                r.setValue(try await computerID(), forHTTPHeaderField: "X-Choir-Computer")
+            }
+        }
+        return r
+    }
+
+    /// POST a JSON body and read a server-sent-events response line by line. Throws the typed error for a non-200 before any line is
+    /// read. The idle transport timeout applies (no bytes at all); a stream that keeps sending is never cut.
+    public func postEventStream(_ path: String, _ body: [String: Any], route: String? = nil) async throws -> (status: Int, lines: AsyncLineSequence<URLSession.AsyncBytes>) {
+        let data = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+        let r = try await request("POST", path, body: data, accept: "text/event-stream")
+        let label = "choir POST \(route ?? path)"
+        let start = log?.clock.now
+        do {
+            let (bytes, resp) = try await session.bytes(for: r)
+            guard let h = resp as? HTTPURLResponse else { throw ChoirError.decode("no HTTP response") }
+            if let log, let start { log.emit(.stageTiming(stage: label + " (headers)", startedAt: start, endedAt: log.clock.now)) }
+            guard h.statusCode == 200 else {
+                var body = Data()
+                for try await b in bytes { body.append(b); if body.count > 4096 { break } }
+                throw Self.error(status: h.statusCode, data: body, headers: h, path: route ?? path)
+            }
+            return (h.statusCode, bytes.lines)
+        } catch let e as URLError {
+            if e.code == .cancelled { throw CancellationError() }
+            if e.code == .timedOut { throw ChoirError.timeout(route ?? path) }
+            throw ChoirError.transport(e.localizedDescription)
+        }
     }
 
     static let statusPath = "/api/compute/status"

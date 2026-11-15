@@ -28,8 +28,8 @@ Read in this order, about an hour in total:
    and [`reports/owner-notes-2026-10-14.md`](reports/owner-notes-2026-10-14.md)
    are the latest owner direction.
 3. [`choir-vision.md`](choir-vision.md) — the automatic computer, in two pages.
-4. [`precommitment-records.md`](precommitment-records.md) — the core mechanism
-   (precommitment records and prospective self-alignment).
+4. [`learning-engine.md`](learning-engine.md) — the core mechanism, the
+   four-stroke learning engine: forecast, outcome, lesson, trust.
 5. [`learn/`](learn/README.md) — the teaching series, one document per substrate.
 
 ## Default reading packet (agents)

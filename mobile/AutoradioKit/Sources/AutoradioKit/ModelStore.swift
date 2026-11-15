@@ -20,8 +20,12 @@ public struct ManagedModelSpec: Codable, Sendable {
     public var approxBytes: Int64      // from the model card; the measured size is in the load report
     public var license: String
     public var cachePath: URL?         // where the library caches it, to measure bytes fetched
-    public init(id: String, label: String, source: String, approxBytes: Int64, license: String, cachePath: URL? = nil) {
+    /// The folders under `cachePath` that belong to this model alone (FluidAudio names them by its own rules). Deleting a rejected
+    /// configuration's model removes exactly these, never `cachePath` itself, which other models share. nil: the kit does not delete it.
+    public var cacheFolders: [String]?
+    public init(id: String, label: String, source: String, approxBytes: Int64, license: String, cachePath: URL? = nil, cacheFolders: [String]? = nil) {
         self.id = id; self.label = label; self.source = source; self.approxBytes = approxBytes; self.license = license; self.cachePath = cachePath
+        self.cacheFolders = cacheFolders
     }
 }
 public struct ModelLoadReport: Codable, Sendable {
@@ -41,25 +45,75 @@ public actor ModelStore {
     private var specs: [String: ModelSpec] = [:]
     private var unloaders: [String: @Sendable () -> Void] = [:]
     private var loaded: Set<String> = []
-    private let log: EventLog?
-    public init(root: URL, log: EventLog? = nil) {
-        self.root = root; self.log = log
+    private var log: EventLog?
+    let session: URLSession
+    /// The one store of the app: voice setup, the engine's stages and the proof all use it. It is created with the whole
+    /// catalog (`KnownModels`) registered, so no model setup can ask for is ever "not registered".
+    public static let shared = ModelStore(root: KnownModels.storeRoot, registerKnown: true)
+    public init(root: URL, log: EventLog? = nil, registerKnown: Bool = false, session: URLSession = .shared) {
+        self.root = root; self.log = log; self.session = session
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        if registerKnown {
+            for s in KnownModels.pinned { specs[s.id] = s }
+            for m in KnownModels.managed { managed[m.id] = m }
+        }
+    }
+    /// The runtime attaches its event log so loads show in the trace.
+    public func attach(log: EventLog) { self.log = log }
+    public func isRegistered(_ id: String) -> Bool { specs[id] != nil || managed[id] != nil }
+
+    /// Delete a pinned model's weights (the file and any partial download). The configurator removes what a rejected configuration fetched.
+    public func delete(_ id: String) {
+        guard let s = specs[id] else { return }
+        let final = root.appendingPathComponent(s.fileName)
+        try? FileManager.default.removeItem(at: final)
+        try? FileManager.default.removeItem(at: final.appendingPathExtension("part"))
+        loaded.remove(id)
+        log?.emit(.note("model \(id) deleted"))
+    }
+
+    /// The model's file if it is on the phone already, whole (the file is moved into place only after its SHA-256 matched, so
+    /// the size is enough here). Never fetches.
+    public func localFileIfPresent(_ id: String) -> URL? {
+        guard let s = specs[id] else { return nil }
+        let final = root.appendingPathComponent(s.fileName)
+        let size = ((try? FileManager.default.attributesOfItem(atPath: final.path)[.size]) as? NSNumber)?.int64Value ?? -1
+        return size == s.bytes ? final : nil
     }
     public func register(_ s: ModelSpec) { specs[s.id] = s }
     public var registered: [ModelSpec] { Array(specs.values) }
 
     /// Fetch (or resume) and verify; returns the local file. `progress` receives bytes so far.
     public func ensure(_ id: String, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
-        guard let s = specs[id] else { throw LabError.badInput("model \(id) not registered") }
+        guard let s = specs[id] else {
+            if managed[id] != nil { throw LabError.badInput("model \(id) is fetched by its own library, not by the store") }
+            throw LabError.badInput("model \(id) not registered")
+        }
         let final = root.appendingPathComponent(s.fileName)
         if FileManager.default.fileExists(atPath: final.path), try sha(final) == s.sha256.lowercased() { return final }
         let part = final.appendingPathExtension("part")
-        let have = ((try? FileManager.default.attributesOfItem(atPath: part.path)[.size]) as? NSNumber)?.int64Value ?? 0
-        var req = URLRequest(url: s.url)
-        if have > 0 { req.setValue("bytes=\(have)-", forHTTPHeaderField: "Range") }
-        let (bytes, resp) = try await URLSession.shared.bytes(for: req)
-        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        var have = ((try? FileManager.default.attributesOfItem(atPath: part.path)[.size]) as? NSNumber)?.int64Value ?? 0
+        // WAYS THIS CAN FAIL (round 3): the partial file is already the whole file (a Range request past the end is HTTP 416 on every
+        // retry): check it and move it into place, or drop it and start over. The server may also answer 416 for a smaller partial.
+        if have > 0, have >= s.bytes {
+            if (try? sha(part)) == s.sha256.lowercased() {
+                try? FileManager.default.removeItem(at: final)
+                try FileManager.default.moveItem(at: part, to: final)
+                return final
+            }
+            try? FileManager.default.removeItem(at: part); have = 0
+        }
+        func request(from offset: Int64) async throws -> (URLSession.AsyncBytes, Int) {
+            var req = URLRequest(url: s.url)
+            if offset > 0 { req.setValue("bytes=\(offset)-", forHTTPHeaderField: "Range") }
+            let (b, r) = try await session.bytes(for: req)
+            return (b, (r as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+        var (bytes, code) = try await request(from: have)
+        if code == 416, have > 0 {                                       // the partial file is not usable: start from the first byte
+            try? FileManager.default.removeItem(at: part); have = 0
+            (bytes, code) = try await request(from: 0)
+        }
         guard code == 200 || code == 206 else { throw LabError.http(code) }
         if code == 200 { try? FileManager.default.removeItem(at: part) }   // server ignored Range: restart
         if !FileManager.default.fileExists(atPath: part.path) { FileManager.default.createFile(atPath: part.path, contents: nil) }
@@ -120,7 +174,7 @@ public actor ModelStore {
     /// Unload everything except `keep` (used before a model that needs the whole budget loads).
     public func unloadAll(except keep: Set<String>) { for id in loaded.subtracting(keep) { unload(id) } }
 
-    static func directoryBytes(_ url: URL) -> Int64 {
+    public static func directoryBytes(_ url: URL) -> Int64 {
         guard let e = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.totalFileAllocatedSizeKey, .isRegularFileKey]) else { return 0 }
         var n: Int64 = 0
         for case let u as URL in e {

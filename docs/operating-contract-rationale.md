@@ -7,23 +7,23 @@ where it and `CLAUDE.md` differ, `CLAUDE.md` wins. Links are relative to the
 repo root, as they were written.
 
 This file is the repo-level contract for coding agents working on Choir, loaded
-every session. It inherits [Choir Doctrine](docs/choir-doctrine.md) and must not
+every session. It inherits [Choir Doctrine](choir-doctrine.md) and must not
 become a competing doctrine source. When they conflict, follow Choir Doctrine
 unless this file is carrying a newer explicitly promoted operating update.
 
 Product direction: the vision is the automatic computer — a persistent computer
 for supervised self-development first, the World Wire downstream
-([docs/choir-vision.md](docs/choir-vision.md), argued in
-[docs/signal-is-sparse-not-the-learner-2026-08-01.md](docs/signal-is-sparse-not-the-learner-2026-08-01.md)).
+([docs/choir-vision.md](choir-vision.md), argued in
+[docs/signal-is-sparse-not-the-learner-2026-08-01.md](signal-is-sparse-not-the-learner-2026-08-01.md)).
 Product names are never camel case: Autopaper (or autopaper),
 Autoputer, Autoradio (owner, 2026-10-09). "World Wire", "Universal Wire"
 and "sourcecycled" are retired names for Autopaper; the code rename is a
-TODO in [docs/autopaper-sw-design-2026-10-09.md](docs/autopaper-sw-design-2026-10-09.md) §9.
+TODO in [docs/autopaper-sw-design-2026-10-09.md](autopaper-sw-design-2026-10-09.md) §9.
 The shared graph of published objects that computers adopt onto their own
 tapes is **the Autopaper object graph** (owner, 2026-10-14), never "the
 World Wire object graph".
 The README is the open-source front door; this file is the operating contract,
-and [docs/choir-doctrine.md](docs/choir-doctrine.md) is the normative
+and [docs/choir-doctrine.md](choir-doctrine.md) is the normative
 architecture. Do not let this file drift into doctrine.
 
 ## Operating Tempo: The Data System Cutover (owner, 2026-10-30)
@@ -38,7 +38,7 @@ slowly thinking that will improve safety. Thats false. We do our best with
 planning then execute with pace and overwhelming force."
 
 The data system build
-([docs/definitions/choir-data-system-build-2026-10-30.md](docs/definitions/choir-data-system-build-2026-10-30.md))
+([docs/definitions/choir-data-system-build-2026-10-30.md](definitions/choir-data-system-build-2026-10-30.md))
 runs under these rules. Where this section conflicts with the rest of this
 file, it wins for that work.
 
@@ -100,7 +100,7 @@ file, it wins for that work.
 
 There are no special desks or apps (doctrine I26, amended by the owner,
 2026-11-04, per
-[the modular architecture plan](docs/design/modular-architecture-plan-2026-11-04.md)).
+[the modular architecture plan](design/modular-architecture-plan-2026-11-04.md)).
 Every desk, **management**, **engineering**, **research**, **Texture**, Mail
 and the rest, is a package desk registered the same way; "system" or "app"
 says only who publishes it. Each data kind has one custodian desk with sole
@@ -115,33 +115,33 @@ owner-facing supervision surface. Use the desk-specific in-cell module surface
 rather than legacy tool-call channels.
 
 Before authoring or executing any mission Definition, read
-[docs/standing-questions.md](docs/standing-questions.md) — the pre-flight
+[docs/standing-questions.md](standing-questions.md) — the pre-flight
 question set (decision provenance, settled-decision conformance, deletion
 citers, single state authority, artifact-verified success, fate-sharing,
 restart durability, no-SSH operability, registry hygiene). Each question is
 backed by a dated failure receipt; a mission that cannot answer them is not
 ready to execute.
 
-Product architecture rules live in [docs/agent-product-doctrine.md](docs/agent-product-doctrine.md)
+Product architecture rules live in [docs/agent-product-doctrine.md](agent-product-doctrine.md)
 (authority boundaries, harness minimalism, Texture control plane, runtime
 configuration, product-path verification, run acceptance). Long-running mission
-rules live in [skills/throughline/SKILL.md](skills/throughline/SKILL.md)
+rules live in [skills/throughline/SKILL.md](../skills/throughline/SKILL.md)
 (throughline: the current executable `/goal <doc>.md` mission format — goal
 file, value criterion, realism axis, typed conjecture, current-state card).
-[skills/throughline/SKILL.md](skills/throughline/SKILL.md) is the only
+[skills/throughline/SKILL.md](../skills/throughline/SKILL.md) is the only
 authoring discipline for new `/goal` files and the goal-file contract the
 existing corpus is written in. The earlier generations of the lineage
 (mission-gradient → parallax → definition → throughline) are deprecated and
 kept for reference only under `docs/archive/skills/` (mirrored in the
 `choir-hip/skills` repo under `archived/`) — do not author new `/goal` files
 with them; existing goal files remain valid. The
-roadmap to launch is [docs/roadmap-2026-10-31.md](docs/roadmap-2026-10-31.md)
-(owner, 2026-10-31), and the live station is in [docs/ACTIVE.md](docs/ACTIVE.md);
-the product mechanism is precommitment records
-(`docs/precommitment-records.md`). For multi-agent review
+roadmap to launch is [docs/roadmap-2026-10-31.md](roadmap-2026-10-31.md)
+(owner, 2026-10-31), and the live station is in [docs/ACTIVE.md](ACTIVE.md);
+the product mechanism is the four-stroke learning engine
+(`docs/learning-engine.md`; precommitment records are its forecast stroke). For multi-agent review
 panels used at definition or phase gates (code review is risk-tiered; see
 Mutation Classes below), see
-[skills/agentic-consensus/SKILL.md](skills/agentic-consensus/SKILL.md). Load those on demand.
+[skills/agentic-consensus/SKILL.md](../skills/agentic-consensus/SKILL.md). Load those on demand.
 
 ## No Blocking Asks
 
@@ -226,7 +226,7 @@ Playwright/Chromium. For source-opening doctrine, default durable web-derived
 reading to Source Viewer/reader artifacts and use Web Lens only for explicit
 live/original inspection.
 
-Read [docs/computer-ontology.md](docs/computer-ontology.md) before changing VM,
+Read [docs/computer-ontology.md](computer-ontology.md) before changing VM,
 autoputer, candidate-world, promotion, package, or persistent-state behavior. The
 product object is a persistent user computer; `autoputer` is an implementation
 service name, not the product ontology.
@@ -285,7 +285,7 @@ whenever the previous round found a blocking-real defect; not when it found
 only doc, nit or test-only items. After three rounds on one mechanism, stop
 adding rounds and look at the substrate ("Escalate on dead ends" below). Sol
 does not run code review. The allocation follows the measured review yield
-([docs/evidence/review-yield-2026-10-23.md](docs/evidence/review-yield-2026-10-23.md),
+([docs/evidence/review-yield-2026-10-23.md](evidence/review-yield-2026-10-23.md),
 confidence medium). Panels for decisions (`skills/agentic-consensus`) are a
 separate use and unchanged.
 
@@ -426,7 +426,7 @@ that rule.
 "when having a recurring problem, ask foundational questions, redefine it, go
 to the physics... we should be calling this more"). When a problem recurs,
 resists two attempts, or is a design question with no settled answer, run
-the cognitive transforms ([skills/cognitive-transform-portfolio](skills/cognitive-transform-portfolio/SKILL.md))
+the cognitive transforms ([skills/cognitive-transform-portfolio](../skills/cognitive-transform-portfolio/SKILL.md))
 before writing code. At least:
 - **Ask the foundational question.** What is this thing, really? What job
   does it do, and what is the record of truth it serves?
@@ -480,7 +480,7 @@ their own judgment.
 Exceptions require explicit justification in the commit message, naming why the
 problem could not be documented before being fixed.
 
-See [docs/memo-problem-documentation-first.md](docs/memo-problem-documentation-first.md)
+See [docs/memo-problem-documentation-first.md](memo-problem-documentation-first.md)
 for the finding that motivated this invariant.
 
 ## Landing Loop

@@ -37,10 +37,10 @@ public struct SettingDef: Sendable {
 public enum SettingsCatalog {
     public static let all: [SettingDef] = [
         SettingDef(id: "talkMode", group: "talk", label: "How you talk to the radio",
-                   help: "You can always hold the voice button. This chooses whether the radio also listens on its own.",
+                   help: "You can always tap the talk button. This chooses whether the radio also listens on its own.",
                    defaultValue: "button",
-                   options: [("button", "Hold the button", "The radio hears you only while you hold the button, or after you tap it once."),
-                             ("word", "Hold, or speak after a turn", "After each turn the radio keeps listening for five minutes, so you can answer without the button."),
+                   options: [("button", "Tap to talk", "The radio hears you only after you tap the talk button."),
+                             ("word", "Tap, or speak after a turn", "After each turn the radio keeps listening for five minutes, so you can answer without the button."),
                              ("open", "Always listening", "Anything you say to the radio counts when it has enough words. Uses the microphone the whole time.")]),
         SettingDef(id: "swipeLeft", group: "gestures", label: "Swipe left on a story",
                    help: "A change applies to the next swipe. Closing never costs a story its place unless you choose it.",

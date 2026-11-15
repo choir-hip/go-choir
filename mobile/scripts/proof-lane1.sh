@@ -106,7 +106,7 @@ fresh light
 run_drive C \
   "clock data" "clock +1500 real" "clock data" \
   "tap bar-pages" "clock +600 real" "tap pile-places" "clock +600 real" "tap place-components" "clock +800 real" "clock data" \
-  "tap stage-addressing-hybrid" "tap stage-transcriber-scripted" "tap stage-system1-fixed" "tap stage-holder-fixed-lines" \
+  "tap stage-addressing-hybrid" "tap stage-transcriber-scripted" "tap stage-system1-fixed" "tap stage-holder-local-ack" \
     "tap stage-desk-stub-echo" "tap stage-programme-fixture" "tap ack-immediate" "clock data" \
   "tap start" "clock +1500 real" "clock data" \
   "tap inject" "clock +1200 real" "clock data" tree "screenshot $SHOTS/30-turn-1.png" \
