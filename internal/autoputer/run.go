@@ -209,6 +209,15 @@ func Run() {
 	// boot, before the store opens; the tape replay below brings it to the
 	// canonical head (store/compact.go). A crash between its renames is
 	// finished or undone here on any boot.
+	// A snapshot capture killed in flight leaves a store-sized scratch copy. It is
+	// removed before anything below needs the volume: the rebase, the store open
+	// and the replay all run before Runtime.Start (docs/design/capture-static-copy-2026-11-15.md, 2.4).
+	doneScratch := objectgraph.BootPhase("autoputer: startup", "snapshot-scratch-sweep")
+	scratchErr := store.RemoveSnapshotScratch(rtCfg.StorePath)
+	doneScratch(scratchErr)
+	if scratchErr != nil {
+		log.Printf("autoputer: %v", scratchErr)
+	}
 	doneRebase := objectgraph.BootPhase("autoputer: startup", "compact-rebase")
 	rebased, rebaseErr := store.RebaseOntoCompactCopy(rtCfg.StorePath, agentcore.PlannedRestartMarkerPending(rtCfg.StorePath, bootTimelineClock.start.UTC()))
 	doneRebase(rebaseErr)

@@ -1138,3 +1138,87 @@ budget (with R5), 4 inline digest, 5 sync and drop, 6 no headroom, 7 token with 
 `defer`, 8 read-only open, 9 name `snapshot-tmp`, 10 `inFlight`, 11 env values
 untouched, 12 ledger with the new baseline, 13 cache drop, 14 lock-byte page: all as
 in round 1, which both seats agreed with.
+
+## 9. The build-VM bench (precondition of the deploy, section 4 step 8)
+
+Run 2026-11-15 on `choir-agents` (a 4 GiB build VM, not a guest disk), with
+`TestBenchCopyRate` (`internal/snapshot/snapshot_bench_copy_test.go`, skipped
+unless `SNAPSHOT_BENCH_BYTES` and `SNAPSHOT_BENCH_DIR` are set), through the real
+`TakeSnapshot` with a chunk store that keeps nothing. The size is the section 4
+rule `(free - 2.1 GB) / 2`: the volume had 14 GB free, so about 6 GB, not the 10 GB
+first named (that needed 22.1 GB).
+
+| store | pages | copy (page loop, inline hash, write, sync) | pin | witness | upload |
+| --- | --- | --- | --- | --- | --- |
+| 6,007,803,904 bytes | 1,466,749 | 41.0 s = **146 MB/s** | 41.0 s | 24.1 s | 17.3 s = 348 MB/s |
+
+Applied to the paper's S = 39.6 GB (the set-aside design's figure, unverified), the
+copy would take about 271 s (4.5 minutes) at 146 MB/s. The three rates of step 8
+and 2.5, on the same unverified inputs: the completion rate (about 12.8 MB/s), the
+no-worse rate (about 17.5 MB/s) and the abort-band rate (about 37 MB/s) are all
+under 146 MB/s, so on this VM's disk the bench passes all three. It is necessary,
+not sufficient: a guest disk may write far slower than this VM's, and the synthetic
+store is one 4 KiB random page then zero pages per megabyte, so its witness (24 s)
+is cheap and says nothing about the paper's 22 to 35 minutes. On this store the
+pin (41 s) is longer than the witness (24 s); the claim of step 7 is against the
+computer's own pre-deploy read transaction, not against this witness. One run; no
+repeat.
+
+## 10. Failure list to tests (stage two)
+
+Tests are in `internal/snapshot/snapshot_static_copy_test.go` (S),
+`internal/snapshot/static_copy_consistency_test.go` (C, the lane's test 0),
+`internal/agentcore/snapshot_producer_copy_test.go` (P),
+`internal/store/store_copy_test.go` (T) and
+`internal/autoputer/boot_scratch_order_test.go` (A). "Existing" names a test that
+was already in the tree and pins the preserved property.
+
+| # | Test |
+| --- | --- |
+| 1 | C `TestStaticCopyIsAConsistentImageOfThePinnedHead`; existing `TestWritesInsideTheStreamStayOutOfTheSnapshot` |
+| 2 | S `TestACopyWithADifferentHeadColumnIsRefused` (ten columns) |
+| 3 | S `TestACopyOfAnotherSizeIsRefused` |
+| 4 | none: the order and count checks are reused from the old stream (`page stream out of order`, `the page stream held N pages`) and no seam can make `sqlite_dbpage` lie |
+| 5 | S `TestAByteChangedAfterTheCopyOrTheWitnessIsRefused` |
+| 6 | S `TestTheUploadFromTheCopyIsTheLivePageSequence` (restore with the witness check); `tailReceipt` is existing |
+| 7 | S `TestTheCopyOpenedReadWriteIsUnchangedAndWitnessesAlike` (copy equals live at a quiet head); under writers, existing `TestWritesInsideTheStreamStayOutOfTheSnapshot` (the in-transaction `DigestsTx` it would be compared to no longer exists) |
+| 8 | S `TestTheCopyOpenedReadWriteIsUnchangedAndWitnessesAlike`, `TestAnIncrementallyVacuumedStoreCopiesAndRestores` |
+| 9 | S `TestOtherPageSizesCopyAndRestore` (512, 8192, 65536), `TestAStorePastOneGiBCopiesAndRestores` (skipped under `-short`) |
+| 10 | S `TestTheUploadFromTheCopyIsTheLivePageSequence` |
+| 11 | S `TestANilHeadIsEqualOnlyToANilHead` |
+| 12 | S `TestThePinEndsBeforeTheWitness` (order-based probe) |
+| 13 | S `TestReadReleasedFiresOnceOnEveryPath` (success, head failure, cancel, budget, ENOSPC, EIO, cross-check) |
+| 14 | S `TestTheWitnessDoesNotWaitForTheReadReleasedHook` |
+| 15 | S `TestThePinEndsBeforeTheWitness` (a write during the witness); existing `snapshot_nohold_test.go` |
+| 16 | existing `TestSnapshotCarriesPartitionsAndDedupsClosedOnes` and the partitions tests |
+| 17 | P `TestEveryTriggerKindNeedsTheStoreSizePlusTheFloor` |
+| 18 | P `TestALeftoverScratchIsRemovedBeforeFreeSpaceIsMeasured` |
+| 19 | P `TestAHeldTokenRefusesBeforeAnythingIsDeletedOrMeasured` (with the `afterGates` seam); T `TestCompactionWaitsForTheTokenAndTouchesNothingWhileItWaits` |
+| 20 | T `TestTheCaptureCleanupNeverTouchesTheStagedCopy` |
+| 21 | S `TestTheScratchIsRemovedOnEveryPath` (the directory and its sidecars) |
+| 22 | A `TestTheScratchIsSweptBeforeTheRebaseTheOpenAndTheReplay` (source order; no full-volume boot is simulated), P `TestRuntimeStartSweepsTheSnapshotScratch`, T `TestTheBootSweepRemovesOnlyTheScratch` |
+| 23 | P `TestAFailedCleanupFailsTheAttemptClosed`; S `TestAnExistingScratchFileFailsTheAttemptClosed` |
+| 24 | S `TestFreeSpaceIsCheckedEveryScratchSyncBytes` (low and statfs error) |
+| 25 | S `TestReadReleasedFiresOnceOnEveryPath/ENOSPC...`, `/EIO...` |
+| 26 | P `TestAStagedCopyIsNamedInTheRefusalAndNeverRemoved`; T `TestTheCaptureCleanupNeverTouchesTheStagedCopy` |
+| 27 | S `TestTheScratchIsRemovedOnEveryPath`, `TestTheScratchIsRemovedBeforeThePartitionsAreRead` |
+| 28 | T `TestTheStoreCopyTokenIsExclusiveAndReleasesIdempotently`, `TestTheTokenSurvivesConcurrentUse`; P `TestTheTokenIsReleasedOnEveryReturn` |
+| 29 | none: R2 (a restore filling the volume) cannot be simulated; the capture's own abort is failure 24 |
+| 30 | S `TestMaxDurationEndsTheCopyAndTheWitnessWithNothingUploaded`; existing `TestABudgetAbortInTheWitnessUploadsNothing` |
+| 31 | P `TestInFlightSpansTheWholeTake`; the planned-restart refusal is existing |
+| 32 | S `TestReadReleasedFiresOnceOnEveryPath/cancel...`, `TestTheScratchIsRemovedOnEveryPath/cancellation` |
+| 33 | P `TestThePersistedCaptureDurationIsTheWholeCapture` |
+| 34 | P `TestTheStatusReportsThePinAndThePhases` |
+| 35 | P `TestTheScratchDirectoryNameIsThePreviousBinarysCleanupName` |
+| 36 | none: a fresh WAL store already has one page (a test tried and skipped), page sizes are powers of two up to 64 KiB and `ChunkSize` is 4 MiB, so no unusable geometry is reachable through SQLite; the check (`storeGeometry`) runs before any byte is written |
+| 37 | S `TestTheInlineHashLengthensThePin` |
+| 38 | S `TestSyncNeverRunsWithUnflushedBytes` |
+| 39 | P `TestTheTokenIsReleasedOnEveryReturn` |
+| 40 | S `TestABlockedReadReleasedHookIsBoundedByMaxDuration` (also `MaxDuration == 0`) |
+| 41 | P `TestAStagedCopyIsNamedInTheRefusalAndNeverRemoved` |
+| 42 | T `TestAWaiterIsCancelledWithoutTakingTheTokenAndAnotherProceedsOnRelease`, `TestCompactionWaitsForTheTokenAndTouchesNothingWhileItWaits` |
+| 43 | P `TestRefusalsForAHeldTokenEscalateNothing` |
+| 44 | S `TestFreeSpaceIsCheckedEveryScratchSyncBytes` (the first check) |
+| 45 | S `TestTheCopyOpenedReadWriteIsUnchangedAndWitnessesAlike` |
+| 46 | none: as failure 4 |
+| 47 | S `TestMaxDurationEndsTheCopyAndTheWitnessWithNothingUploaded/witness` |

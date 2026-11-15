@@ -9,11 +9,18 @@
 // the event head as its first statement, so the head belongs to the
 // transaction's WAL snapshot. It then reads every database page of that
 // snapshot through SQLite's sqlite_dbpage virtual table (pages as the snapshot
-// sees them, WAL included) and computes the witness v3 in the same
-// transaction: head, pages and witness are one state. There is no temporary
-// copy of the store and no size cap; memory is a handful of 4 MiB buffers.
-// Writers and appends never wait for the stream, but the open transaction pins
-// the WAL until it ends, so the stream has a time budget.
+// sees them, WAL included) into a scratch copy on the data volume
+// (docs/design/capture-static-copy-2026-11-15.md) and ends the transaction: the
+// pin on the WAL lasts the copy, not the witness. The copy is tied to the head
+// before anything is witnessed (page size, page count and every column of the
+// head row read from the opened copy equal the transaction's), the witness v3 is
+// computed on the static copy, and the chunks are cut, sealed and uploaded from
+// the copy; a digest taken while writing is checked while uploading, so the
+// bytes uploaded are the bytes witnessed. The scratch is removed right after
+// the upload and on every error path. Writers and appends never wait for the
+// copy, but the open transaction pins the WAL until it ends, so the capture has
+// a time budget. The telemetry partitions are streamed afterwards, each from
+// its own read transaction, without a copy.
 //
 // Storage reuses the file CAS: the page stream is cut into chunks of a fixed
 // number of pages (ChunkSize / page size, so 1024 pages of 4 KiB: chunk i is
@@ -36,7 +43,10 @@
 package snapshot
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -52,6 +62,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/dbx"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/filecas"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
@@ -76,9 +87,9 @@ const (
 	uploadWorkers = 4
 )
 
-// ErrTimeBudget means the page stream and the witness did not finish within
-// Config.MaxDuration. The read transaction is rolled back, nothing is
-// registered and no event is appended.
+// ErrTimeBudget means the copy, the witness and the upload did not finish
+// within Config.MaxDuration. The read transaction is rolled back, the scratch
+// is removed, nothing is registered and no event is appended.
 var ErrTimeBudget = errors.New("snapshot: exceeded the time budget")
 
 // ErrNoSnapshot means the tape holds no usable snapshot_recorded event.
@@ -179,29 +190,25 @@ type Stats struct {
 	// PartitionFiles is the telemetry partitions streamed; their pages and
 	// chunks are in the counts above.
 	PartitionFiles int
-	// StreamTime is the time to read every page, WitnessTime the time to
-	// compute the witness, ReadTxTime how long the read transaction (and so
-	// the WAL pin) lasted.
-	StreamTime  time.Duration
-	WitnessTime time.Duration
-	ReadTxTime  time.Duration
-	// Scaffold for the static-copy capture (docs/design/capture-static-copy-2026-11-15.md):
-	// PinTime is the interval with an open reader on the state store, CopyTime
-	// the page loop alone, UploadTime the upload from the copy, ScratchBytes the
+	// PinTime is the interval with an open reader on the state store, timed
+	// from the transaction's start to its release and independently of
+	// CopyTime, the page loop alone. WitnessTime is the witness on the copy,
+	// UploadTime the upload of the state file from the copy, ScratchBytes the
 	// copy's size, PinWALStart and PinWALEnd the WAL file's size at both ends of
-	// the pin.
-	PinTime, CopyTime, UploadTime time.Duration
-	ScratchBytes                  int64
-	PinWALStart, PinWALEnd        int64
-	PinEvents                     uint64
+	// the pin (Config.WALBytes), PinEvents the events appended during it
+	// (filled by the producer).
+	PinTime, CopyTime, WitnessTime, UploadTime time.Duration
+	ScratchBytes                               int64
+	PinWALStart, PinWALEnd                     int64
+	PinEvents                                  uint64
 }
 
 // ErrCopyHeadMismatch means the copy's page geometry or head row is not the
-// read transaction's (scaffold: not returned yet).
+// read transaction's.
 var ErrCopyHeadMismatch = errors.New("snapshot: the copy is not the transaction's head")
 
 // ErrCopyDigest means the bytes read for the upload are not the bytes written
-// to the copy (scaffold: not returned yet).
+// to the copy.
 var ErrCopyDigest = errors.New("snapshot: the copy changed between the write and the upload")
 
 // scratchWriter is what the copy writes through; a test injects ENOSPC and EIO.
@@ -267,10 +274,10 @@ type Config struct {
 	// state the head names (the projection head commits with the rows it
 	// summarizes). It returns nil for an empty store.
 	Head func(ctx context.Context, tx *sql.Tx) (*computerevent.Head, error)
-	// Witness computes the witness v3 inside the same transaction, with the
+	// Witness computes the witness v3 on the copy's own read-only DB, with the
 	// same extractor configuration the restore check uses on the reassembled
 	// file.
-	Witness func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error)
+	Witness func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error)
 	// FileTreeRoot optionally names the Files tree root to record.
 	FileTreeRoot func(ctx context.Context) (string, error)
 	// Partitions, when set, adds the store's telemetry partitions.
@@ -278,14 +285,15 @@ type Config struct {
 	Cipher     *computerevent.PrivateArtifactCipher
 	Chunks     ChunkStore
 	Appender   Appender
-	// MaxDuration, when positive, bounds the read transaction and the chunk
-	// uploads (a long read pins the WAL). The stream aborts with
+	// MaxDuration, when positive, bounds the whole capture: the copy (which pins
+	// the WAL), the witness and the uploads. The capture aborts with
 	// ErrTimeBudget, which leaves no root and no event.
 	MaxDuration time.Duration
 	// FreeSpace, when set, is checked every FreeSpaceEvery (default a minute)
-	// while the capture runs: the read transaction pins the WAL, which grows
-	// on the guest's disk. A non-nil result ends the capture with that error
-	// as its cause, so a snapshot cannot push the guest to ENOSPC.
+	// while the capture runs and, during the copy, every scratchSyncBytes
+	// written: the pinned WAL and the scratch grow on the guest's disk. A
+	// non-nil result ends the capture with that error as its cause, so a
+	// snapshot cannot push the guest to ENOSPC.
 	FreeSpace      func() error
 	FreeSpaceEvery time.Duration
 	// Now overrides the clock in tests.
@@ -295,16 +303,20 @@ type Config struct {
 	// commit writes in the middle of the stream).
 	pageHook func(pgno int64)
 
-	// Scaffold fields of the static-copy capture. WitnessDB is the witness on
-	// the copy's own DB (it replaces Witness in the code commit).
-	WitnessDB func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error)
-	// ScratchDir is the directory the copy lives in.
+	// ScratchDir is the directory the copy lives in (required). The producer
+	// removes it before the attempt; the capture creates it and removes it
+	// again on every path.
 	ScratchDir string
-	// ReadReleased runs once, from the transaction's release, on every path.
+	// ReadReleased runs once, from the transaction's release, on every path
+	// (success, error, cancellation, budget). It runs in its own goroutine with
+	// a context the caller cannot cancel and, when MaxDuration is positive, a
+	// fresh MaxDuration deadline; the witness does not wait for it and the
+	// capture joins it before returning. A timeout is the hook's own concern: it
+	// never fails the attempt.
 	ReadReleased func(ctx context.Context)
 	// ScratchRemoved runs once, after the scratch is removed, on every path.
 	ScratchRemoved func()
-	// WALBytes reports the state store's WAL file size.
+	// WALBytes reports the state store's WAL file size, for the pin's growth.
 	WALBytes func() int64
 
 	afterCopy    func(path string)
@@ -321,6 +333,8 @@ func (c Config) validate() error {
 		return errors.New("snapshot: store is required")
 	case c.Head == nil || c.Witness == nil:
 		return errors.New("snapshot: head and witness readers are required")
+	case strings.TrimSpace(c.ScratchDir) == "":
+		return errors.New("snapshot: a scratch directory is required")
 	case c.Cipher == nil || c.Chunks == nil || c.Appender == nil:
 		return errors.New("snapshot: cipher, chunk store and appender are required")
 	}
@@ -525,8 +539,16 @@ func (u *chunkUploader) finish() {
 	u.wg.Wait()
 }
 
-// capture opens the one read transaction and does everything that must see one
-// state: the head (first statement), the witness, the page stream.
+// scratchFileName is the copy's file inside Config.ScratchDir.
+const scratchFileName = "state.db"
+
+// copyBufferBytes is the writer's buffer.
+const copyBufferBytes = 4 << 20
+
+// capture opens the one read transaction, takes the head (first statement), the
+// page geometry and the partition list, copies every page of the transaction's
+// snapshot to the scratch file and ends the transaction. Everything after that
+// runs on the static copy: the tie to the head, the witness, the upload.
 func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr error) {
 	budgetCtx := ctx
 	if cfg.MaxDuration > 0 {
@@ -576,17 +598,59 @@ func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr 
 		release := cfg.Partitions.Hold()
 		defer release()
 	}
-	started := time.Now()
+
+	// The scratch is removed on every path (once), and its hook fires once.
+	var removeOnce sync.Once
+	removeScratch := func() {
+		removeOnce.Do(func() {
+			if err := os.RemoveAll(cfg.ScratchDir); err != nil {
+				log.Printf("snapshot: could not remove the scratch directory %s (the next attempt fails closed until it can): %v", cfg.ScratchDir, err)
+			}
+			if cfg.ScratchRemoved != nil {
+				cfg.ScratchRemoved()
+			}
+		})
+	}
+	defer removeScratch()
+
+	// The read-released hook is joined before capture returns. This defer is
+	// registered before the rollback's, so it runs after it.
+	var hookWG sync.WaitGroup
+	defer hookWG.Wait()
+
 	tx, err := cfg.DB.BeginTx(runCtx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return out, fmt.Errorf("snapshot: begin read transaction: %w", cause(err))
 	}
+	pinStart := time.Now()
+	if cfg.WALBytes != nil {
+		out.stats.PinWALStart = cfg.WALBytes()
+	}
 	txOpen := true
+	// rollback is the one place the transaction ends, on every return. It takes
+	// PinTime first, then starts the hook, so the hook is outside the timed span.
 	rollback := func() {
-		if txOpen {
-			txOpen = false
-			_ = tx.Rollback()
-			out.stats.ReadTxTime = time.Since(started)
+		if !txOpen {
+			return
+		}
+		txOpen = false
+		_ = tx.Rollback()
+		out.stats.PinTime = time.Since(pinStart)
+		if cfg.WALBytes != nil {
+			out.stats.PinWALEnd = cfg.WALBytes()
+		}
+		if cfg.ReadReleased != nil {
+			hookWG.Add(1)
+			go func() {
+				defer hookWG.Done()
+				hookCtx := context.WithoutCancel(ctx)
+				if cfg.MaxDuration > 0 {
+					var stop context.CancelFunc
+					hookCtx, stop = context.WithTimeout(hookCtx, cfg.MaxDuration)
+					defer stop()
+				}
+				cfg.ReadReleased(hookCtx)
+			}()
 		}
 	}
 	defer rollback()
@@ -608,29 +672,68 @@ func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr 
 		}
 	}
 
-	// The witness runs first, in the same transaction as the head: the WAL
-	// snapshot the head fixed is the one the witness and then the pages read,
-	// so all three are one state. It is the long step on a large store (22 to
-	// 35 minutes on the paper), so an attempt that cannot finish inside its
-	// budget dies here with nothing uploaded; the pages upload only once the
-	// witness is in hand.
-	witnessStart := time.Now()
-	if out.witness, err = cfg.Witness(runCtx, tx); err != nil {
-		return out, fmt.Errorf("snapshot: witness of the snapshot: %w", cause(err))
-	}
-	out.stats.WitnessTime = time.Since(witnessStart)
-
-	streamStart := time.Now()
-	fs, err := streamFile(runCtx, cfg, dek, cancel, cause, tx, cfg.pageHook)
+	pageSize, pageCount, err := storeGeometry(runCtx, tx, cause)
 	if err != nil {
 		return out, err
 	}
-	out.stats.StreamTime = time.Since(streamStart)
-	rollback()
 
+	// The copy: every page of the snapshot to the scratch file, then the pin
+	// ends. Nothing after this holds the WAL.
+	copyStart := time.Now()
+	scratchPath, digest, copyErr := copyPages(runCtx, cfg, tx, pageSize, pageCount, cause)
+	out.stats.CopyTime = time.Since(copyStart)
+	rollback()
+	if copyErr != nil {
+		return out, copyErr
+	}
+	out.stats.ScratchBytes = int64(pageSize) * pageCount
+	if cfg.afterCopy != nil {
+		cfg.afterCopy(scratchPath)
+	}
+
+	// The tie, then the witness, on the static copy.
+	copyDB, err := dbx.OpenSQLite(scratchPath, dbx.SQLiteOptions{ReadOnly: true, ReadConns: 1})
+	if err != nil {
+		return out, fmt.Errorf("%w: open the copy: %v", ErrCopyHeadMismatch, err)
+	}
+	closeCopy := func() {
+		if copyDB != nil {
+			_ = copyDB.Close()
+			copyDB = nil
+		}
+	}
+	defer closeCopy()
+	if err := crossCheckCopy(runCtx, cfg, copyDB.Read, scratchPath, pageSize, pageCount, out.head); err != nil {
+		return out, err
+	}
+	witnessStart := time.Now()
+	if out.witness, err = cfg.Witness(runCtx, copyDB.Read); err != nil {
+		return out, fmt.Errorf("snapshot: witness of the snapshot: %w", cause(err))
+	}
+	out.stats.WitnessTime = time.Since(witnessStart)
+	closeCopy()
+	// The whole copy's cache goes now: the upload re-reads it from disk, which
+	// is also what makes its digest check mean something.
+	dropSourceCache(scratchPath, 0, 0)
+	if cfg.afterWitness != nil {
+		cfg.afterWitness(scratchPath)
+	}
+
+	uploadStart := time.Now()
+	fs, err := streamScratch(runCtx, cfg, dek, cancel, cause, scratchPath, pageSize, pageCount, digest)
+	if err != nil {
+		return out, err
+	}
+	out.stats.UploadTime = time.Since(uploadStart)
 	if err := fs.finish(runCtx); err != nil {
 		return out, err
 	}
+	if fs.digestErr != nil {
+		return out, fs.digestErr
+	}
+	// The scratch is no longer needed: remove it before the partitions, the
+	// manifest and the append.
+	removeScratch()
 	out.pageSize, out.pageCount, out.pagesPerChunk = fs.pageSize, fs.pageCount, fs.pagesPerChunk
 	out.entry = filecas.FileEntry{Path: StateFileName, Mode: 0o600, Size: int64(fs.pageSize) * fs.pageCount, Chunks: fs.up.digests}
 	out.stats.Pages = fs.pageCount
@@ -652,6 +755,235 @@ func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr 
 		out.stats.PartitionFiles++
 	}
 	return out, nil
+}
+
+// storeGeometry reads the page size and count of tx's snapshot and refuses a
+// geometry the cut cannot use, before any byte is written.
+func storeGeometry(runCtx context.Context, tx *sql.Tx, cause func(error) error) (pageSize int, pageCount int64, err error) {
+	if err := tx.QueryRowContext(runCtx, `PRAGMA page_size`).Scan(&pageSize); err != nil {
+		return 0, 0, fmt.Errorf("snapshot: page size: %w", cause(err))
+	}
+	if err := tx.QueryRowContext(runCtx, `PRAGMA page_count`).Scan(&pageCount); err != nil {
+		return 0, 0, fmt.Errorf("snapshot: page count: %w", cause(err))
+	}
+	if pageSize <= 0 || pageSize > ChunkSize || ChunkSize%pageSize != 0 || pageCount <= 0 {
+		return 0, 0, fmt.Errorf("snapshot: unusable store geometry: %d pages of %d bytes", pageCount, pageSize)
+	}
+	return pageSize, pageCount, nil
+}
+
+// osScratch opens the scratch file; an existing file is an error.
+func osScratch(path string) (scratchWriter, error) {
+	return os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+}
+
+// copyPages writes every page of tx's snapshot to Config.ScratchDir/state.db and
+// returns its path and the SHA-256 of the bytes written. Every scratchSyncBytes
+// it flushes the buffer, syncs the file, drops the written range from the page
+// cache and checks free space. The hash is inline on the same bytes.
+func copyPages(runCtx context.Context, cfg Config, tx *sql.Tx, pageSize int, pageCount int64, cause func(error) error) (path string, sum []byte, err error) {
+	if err := os.MkdirAll(cfg.ScratchDir, 0o700); err != nil {
+		return "", nil, fmt.Errorf("snapshot: create the scratch directory: %w", err)
+	}
+	path = filepath.Join(cfg.ScratchDir, scratchFileName)
+	open := cfg.openScratch
+	if open == nil {
+		open = osScratch
+	}
+	w, err := open(path)
+	if err != nil {
+		return path, nil, fmt.Errorf("snapshot: create the scratch copy: %w", err)
+	}
+	closed := false
+	defer func() {
+		if !closed {
+			_ = w.Close()
+		}
+	}()
+	bw := bufio.NewWriterSize(w, copyBufferBytes)
+	newHash := cfg.newHash
+	if newHash == nil {
+		newHash = sha256.New
+	}
+	h := newHash()
+
+	rows, err := tx.QueryContext(runCtx, `SELECT pgno, data FROM sqlite_dbpage`)
+	if err != nil {
+		return path, nil, fmt.Errorf("snapshot: read pages: %w", cause(err))
+	}
+	defer rows.Close()
+	started := time.Now()
+	var pages, syncedTo int64
+	progress := func(err error) error {
+		return fmt.Errorf("%w (%d of %d pages copied, %s into the copy)", cause(err), pages, pageCount, time.Since(started).Round(time.Second))
+	}
+	for rows.Next() {
+		if err := runCtx.Err(); err != nil {
+			return path, nil, fmt.Errorf("snapshot: copy pages: %w", progress(err))
+		}
+		var pgno int64
+		var data sql.RawBytes
+		if err := rows.Scan(&pgno, &data); err != nil {
+			return path, nil, fmt.Errorf("snapshot: scan page: %w", progress(err))
+		}
+		if pgno != pages+1 || len(data) != pageSize {
+			return path, nil, fmt.Errorf("snapshot: page stream out of order or short: got page %d of %d bytes after %d pages (page size %d)", pgno, len(data), pages, pageSize)
+		}
+		if cfg.pageHook != nil {
+			cfg.pageHook(pgno)
+		}
+		if _, err := h.Write(data); err != nil {
+			return path, nil, fmt.Errorf("snapshot: hash page %d: %w", pgno, err)
+		}
+		if _, err := bw.Write(data); err != nil {
+			return path, nil, fmt.Errorf("snapshot: write the scratch copy: %w", err)
+		}
+		pages++
+		if written := pages * int64(pageSize); written-syncedTo >= scratchSyncBytes {
+			// Flush before the sync, so the sync covers every byte handed over.
+			if err := bw.Flush(); err != nil {
+				return path, nil, fmt.Errorf("snapshot: write the scratch copy: %w", err)
+			}
+			if err := w.Sync(); err != nil {
+				return path, nil, fmt.Errorf("snapshot: sync the scratch copy: %w", err)
+			}
+			dropSourceCache(path, syncedTo, written-syncedTo)
+			syncedTo = written
+			if cfg.FreeSpace != nil {
+				if err := cfg.FreeSpace(); err != nil {
+					return path, nil, fmt.Errorf("snapshot: copy aborted after %d of %d pages: %w", pages, pageCount, err)
+				}
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return path, nil, fmt.Errorf("snapshot: read pages: %w", progress(err))
+	}
+	if pages != pageCount {
+		return path, nil, fmt.Errorf("snapshot: the page stream held %d pages, the snapshot has %d", pages, pageCount)
+	}
+	if err := bw.Flush(); err != nil {
+		return path, nil, fmt.Errorf("snapshot: write the scratch copy: %w", err)
+	}
+	if err := w.Sync(); err != nil {
+		return path, nil, fmt.Errorf("snapshot: sync the scratch copy: %w", err)
+	}
+	closed = true
+	if err := w.Close(); err != nil {
+		return path, nil, fmt.Errorf("snapshot: close the scratch copy: %w", err)
+	}
+	return path, h.Sum(nil), nil
+}
+
+// crossCheckCopy ties the opened copy to the transaction before it is
+// witnessed: the file size, the page size and count, and EVERY field of the
+// head row (nil equals nil and nothing else) equal the transaction's. The head
+// is read with cfg.Head on a read transaction of the copy's own DB.
+func crossCheckCopy(ctx context.Context, cfg Config, db *sql.DB, path string, pageSize int, pageCount int64, want *computerevent.Head) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrCopyHeadMismatch, err)
+	}
+	if info.Size() != int64(pageSize)*pageCount {
+		return fmt.Errorf("%w: the copy is %d bytes, the transaction had %d pages of %d", ErrCopyHeadMismatch, info.Size(), pageCount, pageSize)
+	}
+	var gotSize int
+	var gotCount int64
+	if err := db.QueryRowContext(ctx, `PRAGMA page_size`).Scan(&gotSize); err != nil {
+		return fmt.Errorf("%w: page size of the copy: %v", ErrCopyHeadMismatch, err)
+	}
+	if err := db.QueryRowContext(ctx, `PRAGMA page_count`).Scan(&gotCount); err != nil {
+		return fmt.Errorf("%w: page count of the copy: %v", ErrCopyHeadMismatch, err)
+	}
+	if gotSize != pageSize || gotCount != pageCount {
+		return fmt.Errorf("%w: the copy has %d pages of %d bytes, the transaction had %d of %d", ErrCopyHeadMismatch, gotCount, gotSize, pageCount, pageSize)
+	}
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return fmt.Errorf("%w: read the copy's head: %v", ErrCopyHeadMismatch, err)
+	}
+	defer tx.Rollback()
+	got, err := cfg.Head(ctx, tx)
+	if err != nil {
+		return fmt.Errorf("%w: read the copy's head: %v", ErrCopyHeadMismatch, err)
+	}
+	switch {
+	case got == nil && want == nil:
+		return nil
+	case got == nil || want == nil:
+		return fmt.Errorf("%w: the copy's head is %v, the transaction's is %v", ErrCopyHeadMismatch, got, want)
+	case *got != *want:
+		return fmt.Errorf("%w: the copy's head is %+v, the transaction's is %+v", ErrCopyHeadMismatch, *got, *want)
+	}
+	return nil
+}
+
+// streamScratch reads the copy in ChunkSize cuts of whole pages, hashes what it
+// reads and hands each cut to a new uploader. The digest must equal the one
+// taken while the copy was written (fileStream.digestErr, ErrCopyDigest). On an
+// error it stops and drains the uploader itself; on success the caller finishes
+// it (fileStream.finish).
+func streamScratch(runCtx context.Context, cfg Config, dek []byte, cancel context.CancelCauseFunc, cause func(error) error, path string, pageSize int, pageCount int64, want []byte) (*fileStream, error) {
+	fs := &fileStream{pageSize: pageSize, pageCount: pageCount}
+	fs.pagesPerChunk = ChunkSize / pageSize
+	fs.chunkCount = int((pageCount + int64(fs.pagesPerChunk) - 1) / int64(fs.pagesPerChunk))
+	up := newChunkUploader(cfg, dek, ChunkSize, fs.chunkCount, cancel)
+	up.start(runCtx)
+	fs.up = up
+	fail := func(err error) (*fileStream, error) {
+		cancel(err)
+		up.finish()
+		return nil, err
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return fail(fmt.Errorf("snapshot: open the copy for upload: %w", err))
+	}
+	defer f.Close()
+	newHash := cfg.newHash
+	if newHash == nil {
+		newHash = sha256.New
+	}
+	h := newHash()
+	total := int64(pageSize) * pageCount
+	chunkBytes := int64(fs.pagesPerChunk) * int64(pageSize)
+	var read, dropFrom int64
+	chunkIndex := 0
+	buf := <-up.free
+	for read < total {
+		n := min(chunkBytes, total-read)
+		buf = buf[:n]
+		if _, err := io.ReadFull(f, buf); err != nil {
+			return fail(fmt.Errorf("snapshot: read the copy: %w (after %d of %d bytes)", cause(err), read, total))
+		}
+		if _, err := h.Write(buf); err != nil {
+			return fail(fmt.Errorf("snapshot: hash the copy: %w", err))
+		}
+		read += n
+		if read-dropFrom >= sourceDropBytes {
+			dropSourceCache(path, dropFrom, read-dropFrom)
+			dropFrom = read
+		}
+		select {
+		case up.jobs <- chunkJob{index: chunkIndex, data: buf}:
+		case <-runCtx.Done():
+			return fail(fmt.Errorf("snapshot: %w", cause(runCtx.Err())))
+		}
+		chunkIndex++
+		if read < total {
+			select {
+			case buf = <-up.free:
+			case <-runCtx.Done():
+				return fail(fmt.Errorf("snapshot: %w", cause(runCtx.Err())))
+			}
+		}
+	}
+	dropSourceCache(path, 0, 0)
+	fs.cut = chunkIndex
+	if !bytes.Equal(h.Sum(nil), want) {
+		fs.digestErr = fmt.Errorf("%w (%d bytes read for the upload)", ErrCopyDigest, read)
+	}
+	return fs, nil
 }
 
 // sourceDropBytes is how much of the page stream is read between drops of the
@@ -699,12 +1031,15 @@ type fileStream struct {
 	pagesPerChunk int
 	chunkCount    int
 	cut           int
+	// digestErr is set when the bytes read for the upload are not the bytes
+	// written to the copy (streamScratch).
+	digestErr error
 }
 
-// streamFile reads every page of tx's database snapshot into chunks handed to
-// a new uploader. On an error it stops and drains the uploader itself; on
+// streamFile reads every page of tx's database snapshot (a telemetry partition's)
+// into chunks handed to a new uploader. On an error it stops and drains the uploader itself; on
 // success the caller finishes it (fileStream.finish).
-func streamFile(runCtx context.Context, cfg Config, dek []byte, cancel context.CancelCauseFunc, cause func(error) error, tx *sql.Tx, hook func(int64)) (*fileStream, error) {
+func streamFile(runCtx context.Context, cfg Config, dek []byte, cancel context.CancelCauseFunc, cause func(error) error, tx *sql.Tx) (*fileStream, error) {
 	fs := &fileStream{}
 	if err := tx.QueryRowContext(runCtx, `PRAGMA page_size`).Scan(&fs.pageSize); err != nil {
 		return nil, fmt.Errorf("snapshot: page size: %w", cause(err))
@@ -770,9 +1105,6 @@ func streamFile(runCtx context.Context, cfg Config, dek []byte, cancel context.C
 		if pgno != pages+1 || len(data) != pageSize {
 			_ = rows.Close()
 			return fail(fmt.Errorf("snapshot: page stream out of order or short: got page %d of %d bytes after %d pages (page size %d)", pgno, len(data), pages, pageSize))
-		}
-		if hook != nil {
-			hook(pgno)
 		}
 		buf = append(buf, data...)
 		pages++
@@ -845,7 +1177,7 @@ func capturePartition(runCtx context.Context, cfg Config, dek []byte, cancel con
 		_ = ptx.Rollback()
 		return capturedPartition{}, fmt.Errorf("snapshot: read %s: %w", part.Path, cause(err))
 	}
-	fs, err := streamFile(runCtx, cfg, dek, cancel, cause, ptx, nil)
+	fs, err := streamFile(runCtx, cfg, dek, cancel, cause, ptx)
 	_ = ptx.Rollback()
 	if err != nil {
 		return capturedPartition{}, fmt.Errorf("%s: %w", part.Path, err)

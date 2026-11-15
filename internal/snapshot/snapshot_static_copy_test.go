@@ -5,6 +5,7 @@ package snapshot
 // comment above each names the failure entry it pins.
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -21,7 +22,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/dbx"
 	"github.com/yusefmosiah/go-choir/internal/filecas"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
@@ -59,7 +59,7 @@ func newCopyFixture(t *testing.T, bytesApprox int) *fixture {
 		}
 	}
 	f.cfg.ScratchDir = filepath.Join(t.TempDir(), "snapshot-tmp")
-	f.cfg.WitnessDB = witnessOf
+	f.cfg.Witness = witnessOf
 	f.cfg.Head = func(ctx context.Context, tx *sql.Tx) (*computerevent.Head, error) { return headFromTable(ctx, tx) }
 	return f
 }
@@ -183,19 +183,28 @@ func TestANilHeadIsEqualOnlyToANilHead(t *testing.T) {
 // Failure 5: a byte changed after the copy, or after the witness, is caught by
 // the digest before the root is registered.
 func TestAByteChangedAfterTheCopyOrTheWitnessIsRefused(t *testing.T) {
-	flip := func(t *testing.T, path string) {
+	// flip changes one byte inside a row's blob data (found by content), a byte no
+	// b-tree page and no cross-check reads, so only the digest can see it.
+	flip := func(t *testing.T, f *fixture, path string) {
+		var body []byte
+		if err := f.db.Read.QueryRow(`SELECT body FROM blobs WHERE id = 3`).Scan(&body); err != nil {
+			t.Fatal(err)
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		at := bytes.Index(raw, body[2048:2112])
+		if at < 0 {
+			t.Fatal("the row's data is not contiguous in the copy")
+		}
 		fh, err := os.OpenFile(path, os.O_RDWR, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer fh.Close()
-		info, _ := fh.Stat()
-		b := make([]byte, 1)
-		if _, err := fh.ReadAt(b, info.Size()-1); err != nil {
-			t.Fatal(err)
-		}
-		b[0] ^= 0xff
-		if _, err := fh.WriteAt(b, info.Size()-1); err != nil {
+		b := []byte{raw[at+10] ^ 0xff}
+		if _, err := fh.WriteAt(b, int64(at+10)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -203,19 +212,25 @@ func TestAByteChangedAfterTheCopyOrTheWitnessIsRefused(t *testing.T) {
 		t.Run(phase, func(t *testing.T) {
 			f := newCopyFixture(t, ChunkSize/2)
 			if phase == "after the copy" {
-				f.cfg.afterCopy = func(path string) { flip(t, path) }
+				f.cfg.afterCopy = func(path string) { flip(t, f, path) }
 			} else {
-				f.cfg.afterWitness = func(path string) { flip(t, path) }
+				f.cfg.afterWitness = func(path string) { flip(t, f, path) }
 			}
 			if _, err := TakeSnapshot(context.Background(), f.cfg); !errors.Is(err, ErrCopyDigest) {
 				t.Fatalf("err = %v, want ErrCopyDigest", err)
 			}
-			nothingRecorded(t, f)
+			// The digest is compared at the end of the upload, so chunks may have
+			// been put; none may be registered or named by an event.
 			f.chunks.mu.Lock()
-			defer f.chunks.mu.Unlock()
-			if len(f.chunks.roots) != 0 {
-				t.Fatal("a root was registered for a changed copy")
+			roots := len(f.chunks.roots)
+			f.chunks.mu.Unlock()
+			if roots != 0 || len(f.tape.events) != 0 {
+				t.Fatalf("a changed copy registered %d roots and %d events", roots, len(f.tape.events))
 			}
+			if _, err := os.Stat(f.cfg.ScratchDir); !os.IsNotExist(err) {
+				t.Fatalf("scratch left: %v", err)
+			}
+			assertWALReleased(t, f)
 		})
 	}
 }
@@ -273,7 +288,7 @@ func TestThePinEndsBeforeTheWitness(t *testing.T) {
 			}
 		}
 	}()
-	f.cfg.WitnessDB = func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
+	f.cfg.Witness = func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
 		// A write commits during the witness (failure 15) and nothing pins the WAL.
 		mark(&duringWitness, pinned(t, f))
 		return witnessOf(ctx, db)
@@ -438,7 +453,7 @@ func TestTheWitnessDoesNotWaitForTheReadReleasedHook(t *testing.T) {
 		}
 		hookDone.Store(true)
 	}
-	f.cfg.WitnessDB = func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
+	f.cfg.Witness = func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
 		close(witnessStarted)
 		return witnessOf(ctx, db)
 	}
@@ -523,7 +538,7 @@ func TestTheScratchIsRemovedOnEveryPath(t *testing.T) {
 	}{
 		{"success", func(*fixture, context.CancelFunc) {}, false},
 		{"witness error", func(f *fixture, _ context.CancelFunc) {
-			f.cfg.WitnessDB = func(context.Context, *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
+			f.cfg.Witness = func(context.Context, *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
 				return selfdevprotocol.VMLocalContentWitness{}, errors.New("witness failed")
 			}
 		}, true},
@@ -533,7 +548,7 @@ func TestTheScratchIsRemovedOnEveryPath(t *testing.T) {
 		{"register error", func(f *fixture, _ context.CancelFunc) { f.cfg.Chunks = failingRoots{f.chunks} }, true},
 		{"append error", func(f *fixture, _ context.CancelFunc) { f.cfg.Appender = failingAppender{f.tape} }, true},
 		{"cancellation", func(f *fixture, cancel context.CancelFunc) {
-			f.cfg.WitnessDB = func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
+			f.cfg.Witness = func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
 				cancel()
 				<-ctx.Done()
 				return selfdevprotocol.VMLocalContentWitness{}, ctx.Err()
@@ -744,7 +759,7 @@ func TestMaxDurationEndsTheCopyAndTheWitnessWithNothingUploaded(t *testing.T) {
 	t.Run("witness", func(t *testing.T) {
 		f := newCopyFixture(t, ChunkSize/2)
 		f.cfg.MaxDuration = 300 * time.Millisecond
-		f.cfg.WitnessDB = func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
+		f.cfg.Witness = func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
 			<-ctx.Done()
 			return selfdevprotocol.VMLocalContentWitness{}, ctx.Err()
 		}
@@ -944,16 +959,8 @@ func pagedFixture(t *testing.T, pageSize int, incremental bool, rows int, rowByt
 	return &fixture{db: db, tape: tape, chunks: chunks, cipher: cipher, cfg: Config{
 		ComputerID: testComputer, DB: db.Read, Cipher: cipher, Chunks: chunks, Appender: tape,
 		ScratchDir: filepath.Join(t.TempDir(), "snapshot-tmp"),
-		WitnessDB:  witnessOf,
-		// Witness is the pre-copy form; the code commit deletes it.
-		Witness: func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
-			digests, err := computerversion.SQLiteStateExtractor{Database: "texture"}.DigestsTx(ctx, tx)
-			if err != nil {
-				return selfdevprotocol.VMLocalContentWitness{}, err
-			}
-			return selfdevprotocol.WitnessFromDigests(digests)
-		},
-		Head: func(ctx context.Context, tx *sql.Tx) (*computerevent.Head, error) { return headFromTable(ctx, tx) },
+		Witness:    witnessOf,
+		Head:       func(ctx context.Context, tx *sql.Tx) (*computerevent.Head, error) { return headFromTable(ctx, tx) },
 	}}
 }
 

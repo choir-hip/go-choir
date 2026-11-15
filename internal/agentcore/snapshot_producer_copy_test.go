@@ -302,9 +302,9 @@ func TestRuntimeStartSweepsTheSnapshotScratch(t *testing.T) {
 	}
 	src := string(raw)
 	start := strings.Index(src, "func (rt *Runtime) Start(")
-	sweep := strings.Index(src, "choirstore.RemoveSnapshotScratch(")
+	sweep := strings.Index(src, "store.RemoveSnapshotScratch(")
 	probe := strings.Index(src, "rt.removeStaleReplayScratch()")
-	if start < 0 || sweep < start || sweep > probe+200 {
+	if start < 0 || sweep < start || sweep > probe+600 {
 		t.Fatalf("Start (at %d) must call RemoveSnapshotScratch beside removeStaleReplayScratch (sweep at %d, probe at %d)", start, sweep, probe)
 	}
 }

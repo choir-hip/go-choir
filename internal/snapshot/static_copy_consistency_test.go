@@ -272,7 +272,7 @@ func runStaticCopyCase(t *testing.T, production bool) {
 	if err != nil {
 		t.Fatalf("open the copy: %v", err)
 	}
-	if err := crossCheckCopy(ctx, copyDB.Read, pageSize, pageCount, head); err != nil {
+	if err := crossCheckSketch(ctx, copyDB.Read, pageSize, pageCount, head); err != nil {
 		t.Fatalf("cross-check of a faithful copy: %v", err)
 	}
 	var rowCount int64
@@ -308,7 +308,7 @@ func runStaticCopyCase(t *testing.T, production bool) {
 		t.Fatal(err)
 	}
 	if shortDB, err := dbx.OpenSQLite(short, dbx.SQLiteOptions{ReadOnly: true, ReadConns: 1}); err == nil {
-		err = crossCheckCopy(ctx, shortDB.Read, pageSize, pageCount, head)
+		err = crossCheckSketch(ctx, shortDB.Read, pageSize, pageCount, head)
 		_ = shortDB.Close()
 		if err == nil {
 			t.Fatal("a copy missing its last page passed the cross-check")
@@ -328,7 +328,7 @@ func runStaticCopyCase(t *testing.T, production bool) {
 	if _, err := otherDB.Write.ExecContext(ctx, `UPDATE heads SET effective_state_commitment = 'tampered' WHERE computer_id = 'c'`); err != nil {
 		t.Fatal(err)
 	}
-	if err := crossCheckCopy(ctx, otherDB.Read, pageSize, int64(fileSize(t, other))/int64(pageSize), head); err == nil {
+	if err := crossCheckSketch(ctx, otherDB.Read, pageSize, int64(fileSize(t, other))/int64(pageSize), head); err == nil {
 		t.Fatal("a copy with the same sequence and a different effective_state_commitment passed the cross-check")
 	} else {
 		t.Logf("a different column is refused: %v", err)
@@ -337,19 +337,19 @@ func runStaticCopyCase(t *testing.T, production bool) {
 	if _, err := otherDB.Write.ExecContext(ctx, `DELETE FROM heads`); err != nil {
 		t.Fatal(err)
 	}
-	if err := crossCheckCopy(ctx, otherDB.Read, pageSize, int64(fileSize(t, other))/int64(pageSize), head); err == nil {
+	if err := crossCheckSketch(ctx, otherDB.Read, pageSize, int64(fileSize(t, other))/int64(pageSize), head); err == nil {
 		t.Fatal("a copy with no head row passed against a non-nil head")
 	}
-	if err := crossCheckCopy(ctx, otherDB.Read, pageSize, int64(fileSize(t, other))/int64(pageSize), nil); err != nil {
+	if err := crossCheckSketch(ctx, otherDB.Read, pageSize, int64(fileSize(t, other))/int64(pageSize), nil); err != nil {
 		t.Fatalf("nil head on both sides must be equal: %v", err)
 	}
 	_ = otherDB.Close()
 }
 
-// crossCheckCopy is the check the design puts between the copy and its
+// crossCheckSketch is the check the design puts between the copy and its
 // witness: the opened copy's page size, page count and head row (every
 // column; nil equals nil only) must be the transaction's.
-func crossCheckCopy(ctx context.Context, db *sql.DB, pageSize int, pageCount int64, want *copyHead) error {
+func crossCheckSketch(ctx context.Context, db *sql.DB, pageSize int, pageCount int64, want *copyHead) error {
 	var gotSize int
 	var gotCount int64
 	if err := db.QueryRowContext(ctx, `PRAGMA page_size`).Scan(&gotSize); err != nil {
