@@ -64,8 +64,8 @@ drive() { # <mode: light|dark> <attempt-file>
     "tap bar-pages drag 0 -200" "$L" "tap place-paper" "$L" "tap paper-story-demo-grid-storage" "clock +1000 real" "clock data" tree "screenshot $SHOTS/$M-08-plain-story.png" \
     "tap reader-scroll drag 0 -400" "$L" "tap reader-scroll drag 0 -400" "$L" "tap reader-related-pub:demo-ev-charging" "clock +1200 real" "clock data" tree "screenshot $SHOTS/$M-09-story-top.png" \
     "tap reader-cite-a1" "$L" "clock data" tree "screenshot $SHOTS/$M-10-cite-open.png" \
-    "tap reader-card-source-a1" "$L" "clock data" tree "screenshot $SHOTS/$M-11-source-sheet.png" \
-    "tap reader-sheet-close" "$L" \
+    "tap reader-card-source-a1" "$L" "clock data" tree "screenshot $SHOTS/$M-11-source-in-place.png" \
+    "tap reader-web-close" "$L" \
     "tap reader-ref-t1" "$L" "clock data" tree "screenshot $SHOTS/$M-12-transclusion.png" \
     "tap reader-card-open-t1" "clock +1200 real" "clock data" tree "screenshot $SHOTS/$M-13-transclusion-page.png" \
     "tap bar-pages drag 0 -200" "$L" "tap launcher-open-pub:demo-ev-charging" "clock +900 real" \
@@ -75,7 +75,7 @@ drive() { # <mode: light|dark> <attempt-file>
     "tap reader-menu" "$L" "tap reader-menu-markdown" "$L" "clock data" tree "screenshot $SHOTS/$M-18-markdown-atoms.png" \
     "tap reader-menu" "$L" "tap reader-menu-markdown" "$L" \
     "tap reader-source-3" "$L" "clock data" tree "screenshot $SHOTS/$M-14-source-from-list.png" \
-    "tap reader-sheet-close" "$L" \
+    "tap reader-web-close" "$L" \
     "tap reader-source-4" "$L" "clock data" tree "screenshot $SHOTS/$M-15-sources-list.png" \
     logs > "$OUT" 2>&1
 }
@@ -112,7 +112,7 @@ must "related stories" '[reader-related-pub:demo-ev-charging]'
 must "story: title" '[page-title] "A city rewires its kerbs for electric cars"'
 must "story: a citation mark" '[reader-cite-a1]'
 must "citation: card opens in place" '[reader-card-a1]'
-must "citation: source sheet" '[reader-source-context]'
+must "citation: source page opens in place above the bar" '[reader-web-host]'
 must "transclusion: card" '[reader-card-t1]'
 must "transclusion: opens as its own page" '[page-title] "Charging pilot: working notes"'
 must "sources list" '[reader-source-3]'

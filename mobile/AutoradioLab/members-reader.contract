@@ -2,7 +2,7 @@
 // Owned by the reader lane. The child components (reader.contract, textures.contract) `inject` these by name; each name is
 // in lane 3's band of the `provide` list in app.contract.
 use readerDoc, texturesList, readerFollow, readerAim from "@choir/autoradio"
-use readerAimSet, readerStop, readerRestore, readerReload, readerOpenLink, readerFollowSet from "@choir/autoradio"
+use readerAimSet, readerStop, readerRestore, readerReload, readerOpenExternal, readerFollowSet from "@choir/autoradio"
 use ReaderDoc, TextureList, ReaderFollowInfo, ReaderAimInfo, ReaderAck from "@choir/autoradio"
 
 members Autoradio
@@ -19,11 +19,14 @@ members Autoradio
 
   // Open citation cards, keyed "<address>|<anchor>": several can be open, and a card is open for one page only.
   state openCites: string[] = []
-  // The sheet over the reader: "" | "menu" | "versions" | "source", for the page `sheetFor`; `sheetAnchor` is the citation
-  // the source sheet shows.
+  // The sheet over the reader: "" | "menu" | "versions", for the page `sheetFor`.
   state sheet = ""
   state sheetFor = ""
-  state sheetAnchor = ""
+  // The source page shown in place over the story (WebLayer): its address, host, the page it was opened from, and whether it is loading.
+  state webUrl = ""
+  state webHost = ""
+  state webFor = ""
+  state webBusy = false
   // Experiments, offered in the page menu in demo mode: the side note that text flows around (textflow), and the document
   // drawn as one Markdown text with citations as atom pills.
   state sideNotes = false
@@ -33,10 +36,6 @@ members Autoradio
     openCites = openCites.includes(key) ? openCites.filter(k => k != key) : openCites.concat([key])
   action showSheet(name: string)
     sheet = name
-    sheetFor = pg.top
-  action showSource(anchor: string)
-    sheetAnchor = anchor
-    sheet = "source"
     sheetFor = pg.top
   action hideSheet
     sheet = ""
@@ -65,9 +64,24 @@ members Autoradio
   action reloadDoc(address: string)
     send rack = readerReload(address=address)
     sheet = ""
-  // A web page opens in a browser sheet inside the app (the module presents it); closing it returns to this card.
-  action openLink(u: string)
-    send rack = readerOpenLink(url=u)
+  // A web page opens in place, over the story and above the bar; anything else (mailto, tel, sms) goes to the system, and
+  // the native side refuses what is neither (readerOpenExternal decides with SourceLink.route).
+  action openLink(u: string, host: string)
+    if u.startsWith("https://") or u.startsWith("http://")
+      webUrl = u
+      webHost = host
+      webFor = pg.top
+      webBusy = true
+      sheet = ""
+    else
+      send rack = readerOpenExternal(url=u)
+  action closeWeb
+    webUrl = ""
+    webBusy = false
+  action webMsg(m: string)
+    webBusy = m == "loading"
+  action openExternal(u: string)
+    send rack = readerOpenExternal(url=u)
   action shareDoc
     share(title=rdoc.title, text=rdoc.plain, url=(rdoc.permalink == "" ? "" : `https://choir.news/${rdoc.permalink}`))
     sheet = ""

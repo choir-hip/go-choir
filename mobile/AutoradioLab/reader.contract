@@ -5,10 +5,10 @@
 // Reading type: every size is `rem` (it follows Dynamic Type), scaled by the theme's `scale`; the body face is the theme's
 // `fontRead`; the headings and labels are `fontUi`; the measure is `max-width` in rem. No colour or font is named here.
 // A citation is a tappable pill (no hover): the card opens under its paragraph and pushes the text down; "Open source" opens
-// the source sheet. A transclusion of another Texture is a nested card that opens as its own page.
+// the source page in place, over the story and above the bar (WebLayer), with no sheet between. A transclusion of another Texture is a nested card that opens as its own page.
 // testIds: page-title, reader-menu, reader-versions, reader-block-<id>, reader-cite-<anchor>, reader-card-<anchor>,
 //          reader-card-source-<anchor>, reader-card-open-<anchor>, reader-source-<n>, reader-sources, reader-related-<address>,
-//          reader-sheet(-layer, -scrim), reader-revising, reader-stop, reader-aim, reader-aim-clear, reader-md, reader-newer.
+//          reader-sheet(-layer, -scrim), reader-web(-close, -host, -safari, -view), reader-revising, reader-stop, reader-aim, reader-aim-clear, reader-md, reader-newer.
 use Theme, ReaderDoc, ReaderBlock, ReaderRun, ReaderCite from "@choir/autoradio"
 use ReaderFollowInfo, ReaderAimInfo, DemoInfo from "@choir/autoradio"
 use PageScroll, Card, Layer, Btn, BarClear from "./ui.contract"
@@ -70,7 +70,7 @@ component CiteCard
   inject
     th: Theme
     toggleCite: action
-    showSource: action
+    openLink: action
     openPage: action
   props
     c: ReaderCite
@@ -102,8 +102,8 @@ component CiteCard
               if c.kind == "texture"
                 button press=openPage(c.target, c.title) testId=`reader-card-open-${c.anchor}` appearance="none"
                   Btn(label="Open as page", primary=true, wide=false)
-              else
-                button press=showSource(c.anchor) testId=`reader-card-source-${c.anchor}` appearance="none"
+              else if c.url != ""
+                button press=openLink(c.url, c.host) testId=`reader-card-source-${c.anchor}` appearance="none"
                   Btn(label="Open source", primary=false, wide=false)
 
 // A small note for a wide layout: the paragraph's text flows around this box (wrap-flow, shape-outside).
@@ -111,7 +111,7 @@ component SideNote
   inject
     th: Theme
     toggleCite: action
-    showSource: action
+    openLink: action
   props
     c: ReaderCite
     address: string
@@ -120,7 +120,7 @@ component SideNote
       background-color=th.paper2 box-shadow=th.shadow1
       text (c.kind == "texture" ? c.title : `${c.number}  ${c.host}`) font-family=th.fontUi font-size=12 font-weight=700 color=th.accent line-clamp=2
       text c.quote font-family=th.fontRead font-style="italic" font-size=13 line-height=1.35 color=th.fg line-clamp=5
-      button press=showSource(c.anchor) testId=`reader-note-source-${c.anchor}` appearance="none"
+      button press=openLink(c.url, c.host) testId=`reader-note-source-${c.anchor}` appearance="none"
         text "Source" font-family=th.fontUi font-size=12 font-weight=600 color=th.accent
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -224,42 +224,38 @@ component SheetFrame
               children
               BarClear()
 
-component SourceSheet
+keyframes sourceGrow
+  from opacity=0 scale=0.94
+keyframes sourceFade
+  from opacity=0
+
+// The source page, in place: it grows out of the story (a fade only under Reduced Motion), fills the page down to the top of
+// the bar (the bar is the app's layer above the deck, so it stays visible and live, and the radio keeps playing), and
+// closes back to the same story at the same scroll position, because the story is never removed. The page itself is the
+// package view `web-page` (a WKWebView); it sends `message` "loading" and "done" while a page loads.
+component WebLayer
   inject
     th: Theme
-    rdoc: ReaderDoc
-    sheetAnchor: string
-    hideSheet: action
-    openLink: action
-    openPage: action
+    webUrl: string
+    webHost: string
+    webBusy: bool
+    closeWeb: action
+    webMsg: action
+    openExternal: action
   view
-    column width="100%" gap=10
-      for c in rdoc.cites.filter(c => c.anchor == sheetAnchor) key=c.anchor
-        column gap=10 width="100%"
-          row align-items="center" gap=8
-            text (c.kind == "texture" ? "Another Texture" : c.host) font-family=th.fontUi font-size=13 color=th.muted flex=1
-            button press=hideSheet testId="reader-sheet-close" appearance="none" aria-label="Close" width=36 height=36
-              image "symbol:close" color=th.muted
-          text c.title font-family=th.fontRead font-size=22 font-weight=700 line-height=1.2 color=th.fg testId="reader-source-title"
-          row align-items="center" gap=6
-            image "symbol:checkmark" color=(c.check == "exact" or c.check == "tolerant" ? th.success : (c.check == "failed" ? th.danger : th.muted))
-            text c.checkLabel font-family=th.fontUi font-size=13 font-weight=500
-              color=(c.check == "exact" or c.check == "tolerant" ? th.success : (c.check == "failed" ? th.danger : th.muted))
-          text "THE QUOTE IN ITS SOURCE" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing="0.08em" color=th.muted margin-top=6
-          if c.hit != ""
-            text testId="reader-source-context" font-family=th.fontRead font-size=17 line-height=1.55 color=th.fg
-              text c.before font-family=th.fontRead font-size=17 line-height=1.55 color=th.muted
-              text c.hit font-family=th.fontRead font-size=17 line-height=1.55 font-weight=700 color=th.fg background-color=tint(th.accent, "33") border-radius=3
-              text c.after font-family=th.fontRead font-size=17 line-height=1.55 color=th.muted
-          else
-            text (c.before != "" ? c.before : c.quote) font-family=th.fontRead font-size=17 line-height=1.55 color=th.fg
-          if c.kind == "texture"
-            button press=openPage(c.target, c.title) testId="reader-source-open-page" appearance="none"
-              Btn(label="Open as page", primary=true, wide=false)
-          if c.kind == "web" and c.url != ""
-            button press=openLink(c.url) testId="reader-source-original" appearance="none"
-              Btn(label="Open original", primary=false, wide=false)
-            text c.url font-family=th.fontMono font-size=12 color=th.muted line-clamp=2
+    column testId="reader-web" position="absolute" left=0 right=0 top=0 bottom="calc(env(safe-area-inset-bottom) + 72px)" z-index=8
+      background-color=th.paper box-shadow=th.shadow2 border-bottom-left-radius=th.radiusCard border-bottom-right-radius=th.radiusCard
+      overflow="hidden"
+      animation=(th.reducedMotion ? `sourceFade ${th.motionEnterMs}ms ease-out both` : `sourceGrow ${th.motionEnterMs * 2}ms ease-out both`)
+      row align-items="center" gap=8 padding="calc(env(safe-area-inset-top) + 6px) 8px 6px 8px" width="100%" box-sizing="border-box"
+        button press=closeWeb testId="reader-web-close" appearance="none" aria-label="Close source" width=40 height=40
+          image "symbol:close" color=th.fg
+        text webHost testId="reader-web-host" font-family=th.fontUi font-size=15 font-weight=600 color=th.fg flex=1 min-width=0 line-clamp=1
+        if webBusy
+          progress aria-label="Loading" width=18 height=18 color=th.accent
+        button press=openExternal(webUrl) testId="reader-web-safari" appearance="none"
+          Btn(label="Open in Safari", primary=false, wide=false)
+      web-page page=webUrl message=webMsg testId="reader-web-view" width="100%" flex=1 min-height=0
 
 component VersionsSheet
   inject
@@ -332,7 +328,7 @@ component MenuSheet
           text "Share" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
           image "symbol:share" color=th.muted
       if rdoc.permalink != ""
-        button press=openLink(`https://choir.news/${rdoc.permalink}`) testId="reader-menu-web" appearance="none" width="100%"
+        button press=openLink(`https://choir.news/${rdoc.permalink}`, "choir.news") testId="reader-menu-web" appearance="none" width="100%"
           row padding="12px 0" align-items="center" width="100%"
             text "Open on the web" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
             image "symbol:forward-chevron" color=th.muted
@@ -359,10 +355,12 @@ component ReaderBody
     openCites: string[]
     sheet: string
     sheetFor: string
+    webUrl: string
+    webFor: string
     sideNotes: bool
     mdMode: bool
     showSheet: action
-    showSource: action
+    openLink: action
     openPage: action
     stopRevision: action
     clearAim: action
@@ -433,7 +431,7 @@ component ReaderBody
                           text s.title font-family=th.fontUi font-size=15 font-weight=600 color=th.fg text-align="left"
                           text "Another Texture. Opens as a page" font-family=th.fontUi font-size=13 color=th.muted text-align="left"
                   else
-                    button press=showSource(s.anchor) testId=`reader-source-${s.number}` appearance="none" width="100%"
+                    button press=openLink(s.url, s.host) testId=`reader-source-${s.number}` appearance="none" width="100%"
                       row padding="8px 0" gap=10 align-items="flex-start" width="100%"
                         text `${s.number}` font-family=th.fontUi font-size=12 font-weight=700 color=th.accent width=24 text-align="center"
                           background-color=tint(th.accent, "22") border-radius=6
@@ -477,9 +475,9 @@ component ReaderBody
       if sheetOn and sheet == "versions"
         SheetFrame(testId="reader-sheet", pct="62%")
           VersionsSheet(address=address)
-      if sheetOn and sheet == "source"
-        SheetFrame(testId="reader-sheet", pct="74%")
-          SourceSheet()
+      // a source or article page, in place above the bar
+      if webUrl != "" and webFor == address
+        WebLayer()
 
 component ReaderMessage
   inject

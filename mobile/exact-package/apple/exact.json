@@ -8,7 +8,7 @@
   "shapes": {},
   "options": {},
   "names": [],
-  "views": [],
+  "views": ["web-page"],
   "hatches": [],
   "sources": {
     "swift": [

@@ -124,12 +124,17 @@ component Autoradio
     openCites
     sheet
     sheetFor
-    sheetAnchor
+    webUrl
+    webHost
+    webFor
+    webBusy
     sideNotes
     mdMode
     toggleCite
     showSheet
-    showSource
+    closeWeb
+    webMsg
+    openExternal
     hideSheet
     jumpSources
     toggleSideNotes

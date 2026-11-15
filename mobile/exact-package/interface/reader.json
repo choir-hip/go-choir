@@ -233,7 +233,7 @@
    "answers": "ReaderAck"
   },
   {
-   "send": "readerOpenLink",
+   "send": "readerOpenExternal",
    "options": {
     "url": "string"
    },
@@ -254,5 +254,15 @@
    },
    "answers": "ReaderFollowInfo"
   }
- ]
+ ],
+ "views": {
+  "web-page": {
+   "props": {
+    "page": "string"
+   },
+   "events": [
+    "message"
+   ]
+  }
+ }
 }
