@@ -1,9 +1,8 @@
 import Foundation
 
-// Settings that are data (lane 7): the talk mode and the gesture meanings are a catalog of choices (id, label, options),
+// Settings that are data (lane 7): the gesture meanings are a catalog of choices (id, label, options),
 // kept in UserDefaults and shown by one component, so a new choice is a catalog line and not a new screen. Other lanes read
 // the value, never the screen:
-//   AppSettings.shared.value("talkMode")     button | word | open        (lane 1/8: the addressing in force)
 //   AppSettings.shared.value("swipeLeft")    close | closeLess | lessInStack   (lane 4: what a left swipe on a story means)
 //   AppSettings.shared.value("swipeRight")   more | nothing              (lane 4)
 // "What the paper has learned" reads a LearnedProvider; the default one is derived from the gesture events in `Signals`
@@ -12,9 +11,7 @@ import Foundation
 // Ways it can fail (written before the code; tests in SettingsDataTests):
 //  S1 A stored value that is no longer an option (the catalog changed) shows nothing selected: value() falls back to the
 //     default, and set() refuses an id that is not an option.
-//  S2 Talk mode applies at the wrong time or never: it is applied when set and once at launch (`apply`), mapped to the
-//     addressing stage ids the engine has: button -> "button", word -> "hybrid" (the engine has no wake-word stage; the
-//     hybrid window is the nearest), open -> "open".
+//  (The talk mode setting is gone: hands-free is the only way to talk, HandsFree.swift. A stored "talkMode" is never read.)
 //  L1 The learned list shows acts from before a Reset: the list is cut at the newest "learned-reset" event.
 //  L2 Reset deletes the gesture events: it only records a marker; the lab records stay (they are lab records, not the list).
 //  L3 A subject that is a private address is shown in full: lines use the detail text lane 4 wrote, else the bare address.
@@ -36,12 +33,6 @@ public struct SettingDef: Sendable {
 
 public enum SettingsCatalog {
     public static let all: [SettingDef] = [
-        SettingDef(id: "talkMode", group: "talk", label: "How you talk to the radio",
-                   help: "You can always tap the talk button. This chooses whether the radio also listens on its own.",
-                   defaultValue: "button",
-                   options: [("button", "Tap to talk", "The radio hears you only after you tap the talk button."),
-                             ("word", "Tap, or speak after a turn", "After each turn the radio keeps listening for five minutes, so you can answer without the button."),
-                             ("open", "Always listening", "Anything you say to the radio counts when it has enough words. Uses the microphone the whole time.")]),
         SettingDef(id: "swipeLeft", group: "gestures", label: "Swipe left on a story",
                    help: "A change applies to the next swipe. Closing never costs a story its place unless you choose it.",
                    defaultValue: "close",
@@ -81,11 +72,6 @@ public final class AppSettings: @unchecked Sendable {
             return r
         }
     }
-    /// The engine's addressing stage for a talk mode (S2).
-    public static func addressingStage(forTalkMode m: String) -> String {
-        switch m { case "open": return "open"; case "word": return "hybrid"; default: return "button" }
-    }
-    public func apply(to runtime: LabRuntime) { runtime.setStage(.addressing, id: Self.addressingStage(forTalkMode: value("talkMode"))) }
 }
 
 // MARK: What the paper has learned

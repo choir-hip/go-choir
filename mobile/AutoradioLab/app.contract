@@ -264,7 +264,6 @@ component Autoradio
     tx
     acctInfo
     cmpt
-    talkRows
     gestureRows
     learnt
     act
