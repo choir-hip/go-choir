@@ -1,13 +1,95 @@
 package snapshot
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"log"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/filecas"
 )
+
+// Review round 3: the probe covers the partition chunks too, a candidate phase
+// has a deadline, and a store that cannot probe says so once.
+
+func TestRecordChunkDigestsIncludeThePartitions(t *testing.T) {
+	rec := Record{}
+	rec.Manifest.Files = []filecas.FileEntry{{Path: "state.db", Chunks: []string{"a", "b"}}}
+	rec.Partitions = []PartitionEntry{{Path: "telemetry/x.db", Chunks: []string{"c", "d"}}}
+	got := recordChunkDigests(rec)
+	if len(got) != 4 || got[2] != "c" || got[3] != "d" {
+		t.Fatalf("probe covers %v: partition chunks must be probed with the state file's", got)
+	}
+}
+
+type downSource struct {
+	*fakeTape
+	mu      sync.Mutex
+	fetches int
+}
+
+func (s *downSource) FetchPayload(context.Context, string, string) ([]byte, error) {
+	s.mu.Lock()
+	s.fetches++
+	s.mu.Unlock()
+	return nil, errors.New("host is down")
+}
+
+func TestInstallStopsStartingCandidatesPastItsBudget(t *testing.T) {
+	ctx := context.Background()
+	f := newFixture(t, 64<<10)
+	src := &downSource{fakeTape: f.tape}
+	cfg := f.restoreConfig(filepath.Join(t.TempDir(), "state.db"))
+	cfg.Source = src
+	cfg.CandidateBudget = time.Nanosecond
+	cands := []Candidate{{EventID: "a", Digest: strings.Repeat("a", 64)}, {EventID: "b", Digest: strings.Repeat("b", 64)}, {EventID: "c", Digest: strings.Repeat("c", 64)}}
+	if _, err := Install(ctx, cfg, cands); err == nil || !strings.Contains(err.Error(), "budget") {
+		t.Fatalf("Install = %v, want a refusal naming the candidate budget", err)
+	}
+	if src.fetches != 1 {
+		t.Fatalf("%d candidates were tried after the budget was spent, want only the first", src.fetches)
+	}
+}
+
+// plainChunks has no HasChunk.
+type plainChunks struct{ m *memChunks }
+
+func (p plainChunks) PutChunk(ctx context.Context, d string, b []byte) error {
+	return p.m.PutChunk(ctx, d, b)
+}
+
+func (p plainChunks) GetChunk(ctx context.Context, d string) ([]byte, error) {
+	return p.m.GetChunk(ctx, d)
+}
+
+func TestInstallSaysOnceWhenTheChunkStoreCannotProbe(t *testing.T) {
+	ctx := context.Background()
+	f := newFixture(t, 64<<10)
+	if _, err := TakeSnapshot(ctx, f.cfg); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+	noProbeOnce = sync.Once{}
+	for i := 0; i < 2; i++ {
+		cfg := f.restoreConfig(filepath.Join(t.TempDir(), "state.db"))
+		cfg.Chunks = plainChunks{f.chunks}
+		if _, err := Restore(ctx, cfg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := strings.Count(buf.String(), "cannot probe"); n != 1 {
+		t.Fatalf("the skipped probe was logged %d times, want once: %q", n, buf.String())
+	}
+}
 
 // Ways the restore's candidate selection could fail (lane/snapshot-by-replay-time,
 // review round 2: the host keeps a chain of roots the newest-4 scan cannot reach):
