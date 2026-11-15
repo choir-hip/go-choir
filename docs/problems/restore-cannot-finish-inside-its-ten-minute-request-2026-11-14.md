@@ -247,10 +247,22 @@ usually pruned rows and a live chain root a few events lower was never tried.
 
 - The plan now offers every snapshot event on the tape at or below the target
   and not further than `MaxRecoveryTailEvents` behind it (`ScanAll`,
-  `PlanCandidates`), newest first, at most 256. The install probes the host
-  (the existing chunk HEAD route, `ChunkProber`) for every chunk of a
-  candidate before downloading any, so a pruned root costs a record fetch and
-  a few probes and the next older one is tried. No new guest-host route: the
+  `PlanCandidates`), newest first, at most 1,024. The install probes the host
+  (the existing chunk HEAD route, `ChunkProber`) for the chunks of a candidate
+  (the state file's and the telemetry partitions') before downloading any. As
+  first landed (round 2) this was false of production: `platformRestoreTape`
+  had no `HasChunk`, so the probe was skipped silently and a pruned candidate
+  downloaded until its first missing chunk (round 3 found it). Now the tape
+  forwards `HasChunk`, and a pruned root costs a record fetch and probes that
+  stop at the first missing chunk (8 concurrent HEADs; at most one HEAD per
+  chunk of the candidate, about 1,150 on the paper's 4.8 GB-per-capture store,
+  about 11,400 for its whole file), then the next older one is tried. The
+  failed candidates share a two-minute budget (`restoreCandidateBudget`), after
+  which no further candidate is started, so a run of failures cannot starve the
+  replay. The 1,024 cap only keeps the list finite: the base up to 360,000
+  events below a checkpoint is reached within it iff the cadence in the window
+  is at least 352 events, and the producer's fastest cadence is the tick bound
+  (about 1,100 events at d@e's 1.8/s). A store that cannot probe logs that once. No new guest-host route: the
   guest had no way to ask the host for its live roots, and a list-roots route
   would have been a new one; the probe gives the same answer, the live roots
   at or below the target, from the route that exists.
@@ -265,8 +277,9 @@ usually pruned rows and a live chain root a few events lower was never tried.
   fail downloads (a refusal). An unreachable host or a probe error is "unknown"
   and the download decides; an empty answer leaves the tape's candidates, as
   before.
-- A target whose only snapshots are older than the bound now refuses where the
-  old plan installed an older base and replayed more than the bound.
+- A target whose only snapshots are older than the bound now refuses up front;
+  before, the old plan installed that base and `PlanRecovery` then refused the
+  tail over the bound, after the install.
 
 Named residual, not fixed here: a restore from a chain root replays up to
 360,000 events (the chain gap), about 53 minutes at 113 events/s, far over the
@@ -278,3 +291,16 @@ also refuse up front when its replay estimate exceeds its budget.
 Open for the owner: the chain keeps up to three extra roots per computer, about
 9.6 to 14.4 GB of unique chunks on the paper (4.8 GB each; not measured). The
 host's free space on the paper belongs in the landing proof.
+
+### Round 3 structural note
+
+Twice the tests modelled production instead of running it. Round 2: the
+retention tests passed because they asserted a base existed, not that the
+guest's selection could reach it. Round 3: the probe tests passed because their
+fakes implemented `HasChunk` and production's `platformRestoreTape` did not.
+From now each restore-path claim in this lane has a test through the production
+wiring: the production tape type (built by `newPlatformRestoreTape`, the one
+constructor the runtime also uses), the real HTTP clients, a fake host that only
+speaks HTTP, and a compile-time assertion that the production type is a
+`ChunkProber`. The older `restoreTapeFake` has no `HasChunk`, as production did
+not; tests that need the probe use the production type.

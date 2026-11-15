@@ -58,14 +58,14 @@ func TestInstallStopsStartingCandidatesPastItsBudget(t *testing.T) {
 	}
 }
 
-// plainChunks has no HasChunk.
-type plainChunks struct{ m *memChunks }
+// noProbeChunks has no HasChunk.
+type noProbeChunks struct{ m *memChunks }
 
-func (p plainChunks) PutChunk(ctx context.Context, d string, b []byte) error {
+func (p noProbeChunks) PutChunk(ctx context.Context, d string, b []byte) error {
 	return p.m.PutChunk(ctx, d, b)
 }
 
-func (p plainChunks) GetChunk(ctx context.Context, d string) ([]byte, error) {
+func (p noProbeChunks) GetChunk(ctx context.Context, d string) ([]byte, error) {
 	return p.m.GetChunk(ctx, d)
 }
 
@@ -81,7 +81,7 @@ func TestInstallSaysOnceWhenTheChunkStoreCannotProbe(t *testing.T) {
 	noProbeOnce = sync.Once{}
 	for i := 0; i < 2; i++ {
 		cfg := f.restoreConfig(filepath.Join(t.TempDir(), "state.db"))
-		cfg.Chunks = plainChunks{f.chunks}
+		cfg.Chunks = noProbeChunks{f.chunks}
 		if _, err := Restore(ctx, cfg); err != nil {
 			t.Fatal(err)
 		}

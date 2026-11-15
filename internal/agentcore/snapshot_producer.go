@@ -315,6 +315,10 @@ func saveSnapshotCapture(dir string, rec snapshotCaptureRecord) error {
 		_ = os.Remove(tmp.Name())
 		return err
 	}
+	if d, err := os.Open(dir); err == nil {
+		_ = d.Sync()
+		_ = d.Close()
+	}
 	return nil
 }
 
@@ -453,6 +457,11 @@ func (p *snapshotProducer) evaluate(ctx context.Context, d snapshotDeps, set sna
 		if found {
 			p.lastSeq, p.lastAt = seq, at
 			if recOK && (rec.ComputerID == "" || rec.ComputerID == d.ComputerID) && rec.belongsTo(at) && !p.haveCapture {
+				// The tail starts at the capture's head, not at the event the
+				// append wrote after it (the events of the capture's own length).
+				if rec.HeadSequence > 0 && rec.HeadSequence < seq {
+					p.lastSeq = rec.HeadSequence
+				}
 				p.haveCapture = true
 				p.lastCaptureDuration = time.Duration(rec.DurationSeconds * float64(time.Second))
 				p.lastCaptureBytes = rec.SealedBytes
