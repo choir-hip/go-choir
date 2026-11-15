@@ -1752,6 +1752,20 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild, optio
     while (Date.now() < restoreDeadline) {
       tries++;
       r = await c.api(lc('restore'), 'POST', { checkpoint: pinned, operand_scopes: ['vm_local', 'computer_surface_frontend'] }, Math.max(60_000, restoreDeadline - Date.now()));
+      // A restore is an accepted act: 202 with an act id, then its status is
+      // read until it ends. The report the old route answered with is the
+      // act's result (a refusal is the act's refusal and its http status).
+      if (r.status === 202 && r.body?.act_id) {
+        let act = r.body;
+        while (Date.now() < restoreDeadline && !['succeeded', 'failed', 'interrupted', 'restored'].includes(act.state)) {
+          await sleep(5_000);
+          const s = await c.api(`${lc('restore-status')}?act=${encodeURIComponent(r.body.act_id)}`, 'GET', undefined, 60_000);
+          if (s.status === 200 && s.body) act = s.body;
+        }
+        r = act.state === 'succeeded'
+          ? { status: 200, body: act.result }
+          : { status: act.refusal?.http_status || 500, body: { error: act.refusal?.message || act.reason || `restore act ${act.state}` } };
+      }
       if (![0, 502, 503, 504].includes(r.status)) break;
       await sleep(10_000);
     }

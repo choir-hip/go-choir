@@ -214,7 +214,7 @@ func Run() {
 	// put back, its staged store is removed and its act is closed "interrupted
 	// by a restart". Nothing resumes it (CLAUDE.md, "Restarts").
 	doneRestoreRepair := objectgraph.BootPhase("autoputer: startup", "restore-act-repair")
-	agentcore.RepairRestoreAtBoot(rtCfg.StorePath, os.Getenv("CHOIR_UPDATER_ROOT"))
+	restoreBoot := agentcore.RepairRestoreAtBoot(rtCfg.StorePath, os.Getenv("CHOIR_UPDATER_ROOT"))
 	doneRestoreRepair(nil)
 	doneRebase := objectgraph.BootPhase("autoputer: startup", "compact-rebase")
 	rebased, rebaseErr := store.RebaseOntoCompactCopy(rtCfg.StorePath, agentcore.PlannedRestartMarkerPending(rtCfg.StorePath, bootTimelineClock.start.UTC()))
@@ -302,6 +302,9 @@ func Run() {
 	coreOpts := []agentcore.RuntimeOption{
 		agentcore.WithDesktopStateOwner(desktopHandler),
 		agentcore.WithContentService(contentService),
+		// An act the repair could not resolve refuses new restore acts and is
+		// named in /health; nothing of its staged or quarantined stores was deleted.
+		agentcore.WithRestoreUnresolved(restoreBoot.Unresolved),
 	}
 	deskReconcile, err := deskReconcileOption(db, os.Getenv("CHOIR_OWNER_ID"))
 	if err != nil {

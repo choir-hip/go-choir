@@ -170,7 +170,10 @@ type runtimeHealthResponse struct {
 	// on the guest looks like work to vmctl once the restore's request has
 	// been answered: no run, no operation, no capsule. A guest that predates
 	// the field is not mid-restore, so absent reads false.
-	RestoreInFlight       bool                   `json:"restore_in_flight,omitempty"`
+	RestoreInFlight bool `json:"restore_in_flight,omitempty"`
+	// RestoreUnresolved names the restore acts the boot could not resolve; the
+	// computer refuses new restore acts until they are resolved by hand.
+	RestoreUnresolved     []string               `json:"restore_unresolved,omitempty"`
 	ActiveProvider        string                 `json:"active_provider"`
 	PersistentDisk        *persistentdisk.Status `json:"persistent_disk,omitempty"`
 	Build                 buildinfo.Info         `json:"build"`
@@ -726,6 +729,7 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		SelfdevActiveOps:     reads.selfdevActive,
 		LiveCapsules:         reads.liveCapsules,
 		RestoreInFlight:      h.rt.restoreInFlight(),
+		RestoreUnresolved:    h.rt.restoreUnresolved,
 		ActiveProvider:       h.rt.provider.ProviderName(),
 		Build:                buildinfo.Snapshot("autoputer"),
 	}

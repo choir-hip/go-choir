@@ -774,19 +774,7 @@ func (rt *Runtime) snapshotDepsForRuntime() (snapshotDeps, bool) {
 			}
 			return head.Sequence, true, nil
 		},
-		Busy: func(ctx context.Context) (string, error) {
-			work, err := rt.plannedRestartBusy(ctx, true)
-			if err != nil {
-				return "", err
-			}
-			if work.SelfdevActive > 0 {
-				return fmt.Sprintf("%d self-development operation(s) in flight", work.SelfdevActive), nil
-			}
-			if work.LiveCapsules > 0 {
-				return fmt.Sprintf("%d engineering capsule(s) live", work.LiveCapsules), nil
-			}
-			return "", nil
-		},
+		Busy: rt.snapshotBusyReason,
 		FreeBytes:  freeBytesOnVolume,
 		ReplayRate: rt.eventAppender.ReplayRate,
 		Ready: func() bool {

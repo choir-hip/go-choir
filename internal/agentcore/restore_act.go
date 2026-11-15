@@ -44,14 +44,19 @@ import (
 
 // Act states. The first five are open; the last three end the act.
 const (
-	restoreStateAccepted      = "accepted"
-	restoreStateFetchingBase  = "fetching_base"
-	restoreStateReplaying     = "replaying"
-	restoreStateVerifying     = "verifying"
-	restoreStateInstalling    = "installing"
-	restoreStateSucceeded     = "succeeded"
-	restoreStateFailed        = "failed"
-	restoreStateInterrupted   = "interrupted"
+	restoreStateAccepted     = "accepted"
+	restoreStateFetchingBase = "fetching_base"
+	restoreStateReplaying    = "replaying"
+	restoreStateVerifying    = "verifying"
+	restoreStateInstalling   = "installing"
+	restoreStateSucceeded    = "succeeded"
+	restoreStateFailed       = "failed"
+	restoreStateInterrupted  = "interrupted"
+	// restoreStateRestored ends an act whose flip completed but that did not
+	// finish as a success: a failed reopen (the computer needs a restart), or a
+	// process that ended after the flip (the boot rolled it forward). The
+	// computer is on the restored store and the restored release, together.
+	restoreStateRestored      = "restored"
 	restoreActKindRestore     = "restore"
 	restoreActKindRematerial  = "rematerialize"
 	restoreActSchemaVersion   = 1
@@ -62,7 +67,35 @@ const (
 )
 
 func restoreStateTerminal(state string) bool {
-	return state == restoreStateSucceeded || state == restoreStateFailed || state == restoreStateInterrupted
+	return state == restoreStateSucceeded || state == restoreStateFailed || state == restoreStateInterrupted || state == restoreStateRestored
+}
+
+// The install's durable facts, in order. Each is written (file fsync, atomic
+// rename, directory fsync) before the step it announces, except
+// flip_completed, written right after the last rename. Boot decides from the
+// last one written, never from which files exist.
+const (
+	restoreInstallPrepared        = "prepared"
+	restoreInstallReleaseRestaged = "release_restaged"
+	restoreInstallFlipStarted     = "flip_started"
+	restoreInstallFlipCompleted   = "flip_completed"
+)
+
+// What the act says is on the computer when it ends.
+const (
+	restoreLivePreRestore = "pre_restore"
+	restoreLiveRestored   = "restored"
+	restoreLiveUnresolved = "unresolved"
+)
+
+// restoreInstallPhaseKnown is a phase boot understands (empty: the install had
+// not begun).
+func restoreInstallPhaseKnown(phase string) bool {
+	switch phase {
+	case "", restoreInstallPrepared, restoreInstallReleaseRestaged, restoreInstallFlipStarted, restoreInstallFlipCompleted:
+		return true
+	}
+	return false
 }
 
 // restoreActApplyHook, when set, is called after each tail event a restore
@@ -145,9 +178,15 @@ type RestoreActRecord struct {
 	// PriorReleaseDigest and Flip are what the installing step is about to
 	// change, written before it changes them: the boot puts the release back
 	// and undoes a half flip from them.
-	PriorReleaseDigest string               `json:"prior_release_digest,omitempty"`
-	Flip               []RestoreActFlipStep `json:"flip,omitempty"`
-	Result             *RematerializeReport `json:"result,omitempty"`
+	PriorReleaseDigest    string               `json:"prior_release_digest,omitempty"`
+	RestoredReleaseDigest string               `json:"restored_release_digest,omitempty"`
+	QuarantineDir         string               `json:"quarantine_dir,omitempty"`
+	Flip                  []RestoreActFlipStep `json:"flip,omitempty"`
+	// InstallPhase is the last durable install fact; LiveState is what the
+	// computer is on when the act ends: pre_restore, restored or unresolved.
+	InstallPhase string               `json:"install_phase,omitempty"`
+	LiveState    string               `json:"live_state,omitempty"`
+	Result       *RematerializeReport `json:"result,omitempty"`
 	// AlreadyRunning is set only on an acceptance answer that returned the act
 	// already running for the same request.
 	AlreadyRunning bool `json:"already_running,omitempty"`
@@ -162,6 +201,16 @@ func (e errRestoreInProgress) Error() string {
 
 // errRestoreInsufficientDisk is the disk floor.
 var errRestoreInsufficientDisk = errors.New("restore: not enough free space")
+
+// errRestoreUnresolved is a boot that left an act it could not resolve.
+var errRestoreUnresolved = errors.New("restore: an earlier restore act is unresolved")
+
+// errRestoreBlocked is live work a restore must not run beside.
+var errRestoreBlocked = errors.New("restore: blocked by live work")
+
+// errRestoredRestartRequired is a failure after the flip completed: the
+// computer is on the restored store and release and needs a restart.
+var errRestoredRestartRequired = errors.New("restored; restart required")
 
 // errRestoreInvalid is a request whose checkpoint the engine's own validation
 // refuses (it was a 500 from the synchronous route, for want of a name).
@@ -243,6 +292,55 @@ func writeRestoreActRecord(dir string, rec RestoreActRecord) error {
 	return os.Rename(tmp, filepath.Join(dir, rec.ActID+".json"))
 }
 
+// writeRestoreActRecordDurable is writeRestoreActRecord for the records that
+// decide what boot does: the temporary file is synced before the rename and the
+// directory after it, so a record that was written is a record a power cut
+// finds. phase names the fact for the test seam that fails a write.
+func writeRestoreActRecordDurable(dir string, rec RestoreActRecord, phase string) error {
+	if hook := restoreInstallWriteFault; hook != nil {
+		if err := hook(phase); err != nil {
+			return err
+		}
+	}
+	rec.AlreadyRunning = false
+	data, err := json.MarshalIndent(rec, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	tmpPath := filepath.Join(dir, "."+rec.ActID+".json.tmp")
+	tmp, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := tmp.Write(append(data, '\n')); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, filepath.Join(dir, rec.ActID+".json")); err != nil {
+		return err
+	}
+	return syncDirectory(dir)
+}
+
+func syncDirectory(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	return d.Sync()
+}
+
 // ---- progress, as the engine reports it ----
 
 type restoreActCtxKey struct{}
@@ -288,21 +386,40 @@ func (r *restoreActRun) planned(base, target uint64) {
 	r.persistLocked()
 }
 
-// beginInstall records what the install is about to change, durably, before it
-// changes it.
-func (r *restoreActRun) beginInstall(prior string, flip []renameStep) {
+// install writes one durable install fact: the record, with the phase and
+// whatever mutate sets, is written file fsync, atomic rename, directory fsync.
+// A failed write returns the error and changes nothing, in memory or on disk,
+// so the caller stops where it is. A nil act (a direct call of the engine)
+// records nothing.
+func (r *restoreActRun) install(phase string, mutate func(*RestoreActRecord)) error {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	next := r.rec
+	next.Flip = append([]RestoreActFlipStep(nil), r.rec.Flip...)
+	next.State, next.InstallPhase = restoreStateInstalling, phase
+	next.TailEventsApplied = r.applied.Load()
+	if mutate != nil {
+		mutate(&next)
+	}
+	next.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	if err := writeRestoreActRecordDurable(r.dir, next, phase); err != nil {
+		return fmt.Errorf("restore: record the %s fact before going on: %w", phase, err)
+	}
+	r.rec, r.persistedAt = next, time.Now()
+	return nil
+}
+
+// setLiveState records what the computer is on, for the end of the act.
+func (r *restoreActRun) setLiveState(state string) {
 	if r == nil {
 		return
 	}
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.rec.State = restoreStateInstalling
-	r.rec.PriorReleaseDigest = prior
-	r.rec.Flip = r.rec.Flip[:0]
-	for _, step := range flip {
-		r.rec.Flip = append(r.rec.Flip, RestoreActFlipStep{From: step.from, To: step.to})
-	}
-	r.persistLocked()
+	r.rec.LiveState = state
+	r.mu.Unlock()
 }
 
 // onApplied is the replay observer's per-event callback.
@@ -348,6 +465,10 @@ func restoreActRefusalOf(err error) RestoreActRefusal {
 		name = "restore_in_progress"
 	case errors.Is(err, errRestoreInvalid):
 		name = "invalid_checkpoint"
+	case errors.Is(err, errRestoreUnresolved):
+		name = "restore_unresolved"
+	case errors.Is(err, errRestoreBlocked):
+		name = "blocked_by_live_work"
 	}
 	return RestoreActRefusal{Name: name, HTTPStatus: rematerializeRefusalStatus(err), Message: err.Error()}
 }
@@ -418,6 +539,9 @@ func (rt *Runtime) acceptRestoreAct(ctx context.Context, kind, computerID string
 	if err != nil {
 		return RestoreActRecord{}, err
 	}
+	if len(rt.restoreUnresolved) > 0 {
+		return RestoreActRecord{}, fmt.Errorf("%w: %s; read /health, resolve it by hand (the staged and quarantined stores were kept) and restart", errRestoreUnresolved, strings.Join(rt.restoreUnresolved, ", "))
+	}
 	key = strings.TrimSpace(key)
 	if key == "" {
 		key = strings.TrimSpace(checkpoint.Digest)
@@ -441,8 +565,13 @@ func (rt *Runtime) acceptRestoreAct(ctx context.Context, kind, computerID string
 		}
 		return RestoreActRecord{}, errRestoreInProgress{act: view}
 	}
-	// The disk floor, with the claim held so two requests cannot both pass it.
+	// The disk floor and the live work, with the claim held so two requests
+	// cannot both pass them.
 	if err := rt.restoreDiskFloor(); err != nil {
+		acts.mu.Unlock()
+		return RestoreActRecord{}, err
+	}
+	if err := rt.restoreLiveWork(ctx); err != nil {
 		acts.mu.Unlock()
 		return RestoreActRecord{}, err
 	}
@@ -527,6 +656,58 @@ func (rt *Runtime) restoreDiskFloor() error {
 	return nil
 }
 
+// restoreLiveWork refuses while a self-development operation is mid-transaction,
+// an engineering capsule is live or a snapshot is streaming. Acceptance asks
+// it, and the engine asks it again under the release lock immediately before
+// it touches anything live: the flip closes the store, and a store closed under
+// an apply, a capsule or a snapshot's read transaction ends them half done.
+func (rt *Runtime) restoreLiveWork(ctx context.Context) error {
+	work, err := rt.plannedRestartBusy(ctx, true)
+	if err != nil {
+		return fmt.Errorf("restore: the work a restore must not run beside cannot be counted: %w", err)
+	}
+	var why []string
+	if work.SelfdevActive > 0 {
+		why = append(why, fmt.Sprintf("%d self-development operation(s) mid-transaction", work.SelfdevActive))
+	}
+	if work.LiveCapsules > 0 {
+		why = append(why, fmt.Sprintf("%d engineering capsule(s) live", work.LiveCapsules))
+	}
+	if work.SnapshotInFlight {
+		why = append(why, "a snapshot is streaming")
+	}
+	if len(why) > 0 {
+		return fmt.Errorf("%w: %s", errRestoreBlocked, strings.Join(why, "; "))
+	}
+	return nil
+}
+
+// snapshotBusyReason is why a snapshot capture must not run now: work a
+// snapshot must not run beside is live, or a restore is in flight (the capture
+// holds a read transaction the flip's store close would meet).
+func (rt *Runtime) snapshotBusyReason(ctx context.Context) (string, error) {
+	work, err := rt.plannedRestartBusy(ctx, true)
+	if err != nil {
+		return "", err
+	}
+	if work.RestoreInFlight {
+		return "a restore is in flight", nil
+	}
+	if work.SelfdevActive > 0 {
+		return fmt.Sprintf("%d self-development operation(s) in flight", work.SelfdevActive), nil
+	}
+	if work.LiveCapsules > 0 {
+		return fmt.Sprintf("%d engineering capsule(s) live", work.LiveCapsules), nil
+	}
+	return "", nil
+}
+
+// WithRestoreUnresolved tells the runtime which acts the boot's repair could
+// not resolve: it refuses new restore acts and /health names them.
+func WithRestoreUnresolved(ids []string) RuntimeOption {
+	return func(rt *Runtime) { rt.restoreUnresolved = append([]string(nil), ids...) }
+}
+
 // restoreEstimate is the acceptance answer's estimate. The tail is read from
 // the local event index; the rate is this computer's measured replay rate
 // when it has one, else the assumed one.
@@ -595,29 +776,40 @@ func (rt *Runtime) runRestoreAct(run *restoreActRun, release func(), checkpoint 
 		report, err = rt.RematerializeFromTape(ctx, run.rec.ComputerID, checkpoint)
 	}()
 	close(stopPersist)
-	if err != nil {
+	switch {
+	case err == nil:
+		// The restart marker first, then the record that says succeeded: the
+		// flip_completed fact is already durable, so a restart that races the
+		// record rolls the act forward at boot instead of losing it.
+		if report.ExecChanged {
+			report.RestartScheduled, report.RestartDeferred = rt.requestRestoreRestart(ctx, checkpoint.Digest)
+		}
+		run.finish(restoreStateSucceeded, nil, &report, "", restoreLiveRestored)
+	case errors.Is(err, errRestoredRestartRequired):
+		log.Printf("restore act %s: %v", run.rec.ActID, err)
+		run.finish(restoreStateRestored, nil, &report, err.Error(), restoreLiveRestored)
+	default:
 		refusal := restoreActRefusalOf(err)
 		log.Printf("restore act %s failed: %s: %v", run.rec.ActID, refusal.Name, err)
-		run.finish(restoreStateFailed, &refusal, nil, "")
-	} else {
-		run.finish(restoreStateSucceeded, nil, &report, "")
-		if report.ExecChanged {
-			// The marker is written after the record says succeeded: the
-			// restart that follows closes nothing.
-			report.RestartScheduled, report.RestartDeferred = rt.requestRestoreRestart(ctx, checkpoint.Digest)
-			run.finish(restoreStateSucceeded, nil, &report, "")
-		}
+		run.finish(restoreStateFailed, &refusal, nil, "", "")
 	}
 	acts.mu.Lock()
 	release()
 	acts.mu.Unlock()
 }
 
-// finish ends the act (or, for a succeeded act, rewrites its result).
-func (r *restoreActRun) finish(state string, refusal *RestoreActRefusal, result *RematerializeReport, reason string) {
+// finish ends the act. liveState is what the computer is on; empty means the
+// pre-restore state unless the engine said otherwise (unresolved).
+func (r *restoreActRun) finish(state string, refusal *RestoreActRefusal, result *RematerializeReport, reason, liveState string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.rec.State, r.rec.Refusal, r.rec.Result, r.rec.Reason = state, refusal, result, reason
+	switch {
+	case liveState != "":
+		r.rec.LiveState = liveState
+	case r.rec.LiveState == "":
+		r.rec.LiveState = restoreLivePreRestore
+	}
 	if r.rec.FinishedAt == "" {
 		r.rec.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
@@ -625,7 +817,11 @@ func (r *restoreActRun) finish(state string, refusal *RestoreActRefusal, result 
 		r.rec.TailEventsApplied = r.applied.Load()
 		r.rec.EstimatedSecondsRemaining = 0
 	}
-	r.persistLocked()
+	r.rec.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	if err := writeRestoreActRecordDurable(r.dir, r.viewLocked(), "finish"); err != nil {
+		log.Printf("restore act %s: persist its end: %v", r.rec.ActID, err)
+	}
+	r.persistedAt = time.Now()
 	r.pruneLocked()
 }
 
@@ -727,110 +923,205 @@ func readRestoreActRecords(dir string) []RestoreActRecord {
 
 // ---- the boot ----
 
+// RestoreBootReport is what the boot's repair found: the acts it closed and
+// the acts it could not resolve (it touched nothing of theirs).
+type RestoreBootReport struct {
+	Closed     []string
+	Unresolved []string
+}
+
 // RepairRestoreAtBoot is the boot's pass over what a restore left behind, run
-// before the store opens. A process that died mid-restore leaves an open act
-// record, maybe a staged store (on the paper, the size of a store), and, if
-// it died in the install, a half-made flip and a `current` release already
-// moved. Nothing is resumed: the flip is undone when it stopped half way, the
-// prior release is put back when the flip did not complete, the staged stores
-// are removed, and every open act is closed "interrupted by a restart". It
-// returns the ids it closed. updaterRoot may be empty (no release to put back).
+// before the store opens. It decides from the install fact the act's record
+// holds, never from which files exist:
+//
+//   - before flip_completed the install is undone: every recorded rename last
+//     first (each only when its destination exists and its source does not),
+//     and `current` put back on the prior release. The computer is on exactly
+//     its pre-restore state and the act is closed "interrupted by a restart".
+//   - at flip_completed the install is rolled forward: nothing is undone and
+//     `current` is made the restored release if it is not. The act is closed
+//     "restored". This is not a resumer of work: no replay, no fetch and no
+//     staged store is read; by the fact the work finished, and the boot makes
+//     at most the one pointer swap an earlier step made.
+//
+// Nothing is resumed. The repair is idempotent: every step checks before it
+// moves, and the act is closed last. What it cannot read, or whose paths leave
+// the data volume, it does not touch: the act is reported unresolved and the
+// staged and quarantined stores are kept. updaterRoot may be empty.
 func RepairRestoreAtBoot(storePath, updaterRoot string) RestoreBootReport {
+	var report RestoreBootReport
+	storePath = strings.TrimSpace(storePath)
+	if storePath == "" {
+		log.Printf("restore boot repair: no store path; nothing to repair")
+		return report
+	}
 	dir := filepath.Dir(filepath.Clean(storePath))
 	actsDir := filepath.Join(dir, restoreActDirName)
-	var closed []string
-	for _, rec := range readRestoreActRecords(actsDir) {
+	records, unreadable := readRestoreActRecordsStrict(actsDir)
+	leftovers := restoreLeftoverDirs(dir)
+	for _, id := range unreadable {
+		log.Printf("restore boot repair: the act record %s cannot be read", id)
+		if len(leftovers) > 0 {
+			report.Unresolved = append(report.Unresolved, id)
+		}
+	}
+	for _, rec := range records {
 		if restoreStateTerminal(rec.State) {
 			continue
 		}
-		reason := restoreInterruptedReason
-		if rec.State == restoreStateInstalling {
-			switch flipProgress(rec.Flip) {
-			case flipComplete:
-				reason += "; the flip had completed, so the computer is on the restored state"
-			case flipPartial:
-				undoFlip(rec.Flip)
-				restoreReleaseOf(updaterRoot, rec.PriorReleaseDigest)
-				reason += "; a flip half made was undone and the computer is on its pre-restore state"
-			default:
-				restoreReleaseOf(updaterRoot, rec.PriorReleaseDigest)
-			}
-		}
-		now := time.Now().UTC().Format(time.RFC3339Nano)
-		rec.State, rec.Reason, rec.FinishedAt, rec.UpdatedAt = restoreStateInterrupted, reason, now, now
-		if err := writeRestoreActRecord(actsDir, rec); err != nil {
-			log.Printf("restore act %s: close its record: %v", rec.ActID, err)
+		if err := validateRestoreActRecord(dir, rec); err != nil {
+			log.Printf("restore boot repair: act %s is left as it is: %v", rec.ActID, err)
+			report.Unresolved = append(report.Unresolved, rec.ActID)
 			continue
 		}
-		log.Printf("restore act %s (%s) was open before this boot: closed as %s", rec.ActID, rec.Kind, reason)
-		closed = append(closed, rec.ActID)
+		closed, stopped, err := repairRestoreAct(actsDir, updaterRoot, rec)
+		switch {
+		case stopped:
+			return report
+		case err != nil:
+			log.Printf("restore boot repair: act %s is unresolved: %v", rec.ActID, err)
+			report.Unresolved = append(report.Unresolved, rec.ActID)
+		case closed:
+			report.Closed = append(report.Closed, rec.ActID)
+		}
+	}
+	if len(report.Unresolved) > 0 {
+		log.Printf("restore boot repair: %d act(s) unresolved (%s): the staged and quarantined stores are kept and restore acts are refused until they are resolved", len(report.Unresolved), strings.Join(report.Unresolved, ", "))
+		return report
 	}
 	removeRestoreLeftovers(dir)
-	return RestoreBootReport{Closed: closed}
+	return report
 }
 
-type flipState int
-
-const (
-	flipUntouched flipState = iota
-	flipPartial
-	flipComplete
-)
-
-// flipProgress reads how far the recorded renames got: a step is done when its
-// destination exists and its source does not, not done when the source still
-// exists; a step whose source never existed is skipped (the flip skips it too).
-func flipProgress(steps []RestoreActFlipStep) flipState {
-	done, notDone := 0, 0
-	for _, step := range steps {
-		_, fromErr := os.Lstat(step.From)
-		_, toErr := os.Lstat(step.To)
-		switch {
-		case fromErr != nil && toErr == nil:
-			done++
-		case fromErr == nil && toErr != nil:
-			notDone++
+// repairRestoreAct repairs one open act. stopped is the test seam standing in
+// for a kill between steps.
+func repairRestoreAct(actsDir, updaterRoot string, rec RestoreActRecord) (closed, stopped bool, err error) {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if rec.InstallPhase == restoreInstallFlipCompleted {
+		if restoreRepairStops("release") {
+			return false, true, nil
 		}
-	}
-	switch {
-	case done == 0:
-		return flipUntouched
-	case notDone == 0:
-		return flipComplete
-	}
-	return flipPartial
-}
-
-// undoFlip puts back the renames that were made, last first.
-func undoFlip(steps []RestoreActFlipStep) {
-	for i := len(steps) - 1; i >= 0; i-- {
-		step := steps[i]
-		_, fromErr := os.Lstat(step.From)
-		_, toErr := os.Lstat(step.To)
-		if fromErr != nil && toErr == nil {
-			if err := os.Rename(step.To, step.From); err != nil {
-				log.Printf("restore boot repair: undo %s -> %s: %v", step.To, step.From, err)
+		ensureReleaseOf(updaterRoot, rec.RestoredReleaseDigest)
+		rec.State, rec.LiveState = restoreStateRestored, restoreLiveRestored
+		rec.Reason = "restored; the process ended after the flip completed and before the result was recorded: the computer is on the restored store and the restored release"
+	} else {
+		// Renames exist to undo only once flip_started is written; before it the
+		// record's list is a plan and nothing was moved. A step was made when its
+		// source is gone and its destination is there; a source still present
+		// means it was not made (the live store's -wal and -shm are present
+		// before the flip and at its start), whatever the destination holds.
+		for i := len(rec.Flip) - 1; i >= 0 && rec.InstallPhase == restoreInstallFlipStarted; i-- {
+			step := rec.Flip[i]
+			_, fromErr := os.Lstat(step.From)
+			_, toErr := os.Lstat(step.To)
+			if fromErr != nil && toErr == nil {
+				if restoreRepairStops("undo") {
+					return false, true, nil
+				}
+				if err := os.Rename(step.To, step.From); err != nil {
+					return false, false, fmt.Errorf("undo %s -> %s: %w", step.To, step.From, err)
+				}
 			}
 		}
+		if restoreRepairStops("release") {
+			return false, true, nil
+		}
+		restoreReleaseOf(updaterRoot, rec.PriorReleaseDigest)
+		rec.State, rec.LiveState = restoreStateInterrupted, restoreLivePreRestore
+		rec.Reason = restoreInterruptedReason + "; the computer is on its pre-restore state"
 	}
+	if restoreRepairStops("close") {
+		return false, true, nil
+	}
+	rec.FinishedAt, rec.UpdatedAt = now, now
+	if err := writeRestoreActRecordDurable(actsDir, rec, "closed"); err != nil {
+		return false, false, fmt.Errorf("close the record: %w", err)
+	}
+	log.Printf("restore act %s (%s) was open before this boot at %q: closed as %s (%s)", rec.ActID, rec.Kind, rec.InstallPhase, rec.State, rec.LiveState)
+	return true, false, nil
+}
+
+// readRestoreActRecordsStrict reads every record in dir and names the files it
+// cannot read (a record that does not parse, or whose id is not its file's).
+func readRestoreActRecordsStrict(dir string) (records []RestoreActRecord, unreadable []string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, nil
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".json") || strings.HasPrefix(name, ".") {
+			continue
+		}
+		id := strings.TrimSuffix(name, ".json")
+		raw, err := os.ReadFile(filepath.Join(dir, name))
+		var rec RestoreActRecord
+		if err != nil || json.Unmarshal(raw, &rec) != nil || rec.ActID != id {
+			unreadable = append(unreadable, id)
+			continue
+		}
+		records = append(records, rec)
+	}
+	return records, unreadable
+}
+
+// restoreDigestPattern is a release digest as a record may name one: it is
+// handed to the updater, so nothing path-like is.
+var restoreDigestPattern = regexp.MustCompile(`^[A-Za-z0-9:._-]{1,128}$`)
+
+// validateRestoreActRecord refuses a record whose paths leave the data volume
+// or whose digests are not digests: the repair renames what a record names.
+func validateRestoreActRecord(dir string, rec RestoreActRecord) error {
+	if !restoreActIDPattern.MatchString(rec.ActID) {
+		return fmt.Errorf("act id %q", rec.ActID)
+	}
+	if !restoreInstallPhaseKnown(rec.InstallPhase) {
+		return fmt.Errorf("install phase %q is not one this release knows", rec.InstallPhase)
+	}
+	within := func(path string) bool {
+		clean := filepath.Clean(path)
+		return filepath.IsAbs(clean) && strings.HasPrefix(clean, filepath.Clean(dir)+string(filepath.Separator))
+	}
+	for _, step := range rec.Flip {
+		if !within(step.From) || !within(step.To) {
+			return fmt.Errorf("the rename %q -> %q leaves the data volume %s", step.From, step.To, dir)
+		}
+	}
+	for _, digest := range []string{rec.PriorReleaseDigest, rec.RestoredReleaseDigest} {
+		if digest != "" && !restoreDigestPattern.MatchString(digest) {
+			return fmt.Errorf("release digest %q", digest)
+		}
+	}
+	return nil
 }
 
 // restoreReleaseOf puts `current` back on the release an act moved it from.
-func restoreReleaseOf(updaterRoot, prior string) {
-	updaterRoot, prior = strings.TrimSpace(updaterRoot), strings.TrimSpace(prior)
-	if updaterRoot == "" || prior == "" {
+func restoreReleaseOf(updaterRoot, prior string) { ensureReleaseOf(updaterRoot, prior) }
+
+// ensureReleaseOf makes `current` the release, if it is not.
+func ensureReleaseOf(updaterRoot, digest string) {
+	updaterRoot, digest = strings.TrimSpace(updaterRoot), strings.TrimSpace(digest)
+	if updaterRoot == "" || digest == "" {
 		return
 	}
-	if current, err := updater.ReadCurrentManifest(updaterRoot); err == nil && current.ContentDigest == prior {
+	if current, err := updater.ReadCurrentManifest(updaterRoot); err == nil && current.ContentDigest == digest {
 		return
 	}
-	if err := updater.RestagePinnedReleaseBestEffort(updaterRoot, prior); err != nil {
-		log.Printf("restore boot repair: put back release %s: %v", shortDigest(prior), err)
+	if err := updater.RestagePinnedReleaseBestEffort(updaterRoot, digest); err != nil {
+		log.Printf("restore boot repair: make release %s current: %v", shortDigest(digest), err)
 	}
 }
 
+// restoreLeftoverDirs are the staged and quarantined stores beside the store.
+func restoreLeftoverDirs(dir string) []string {
+	staged, _ := filepath.Glob(filepath.Join(dir, "rematerialize-staging-*"))
+	quarantined, _ := filepath.Glob(filepath.Join(dir, "rematerialize-quarantine-*"))
+	return append(staged, quarantined...)
+}
+
 // removeRestoreLeftovers removes the staged stores and the empty quarantine
-// directories no running restore owns (none runs at boot).
+// directories no running restore owns (none runs at boot). A quarantine with
+// the old store in it stays.
 func removeRestoreLeftovers(dir string) {
 	staged, _ := filepath.Glob(filepath.Join(dir, "rematerialize-staging-*"))
 	for _, path := range staged {

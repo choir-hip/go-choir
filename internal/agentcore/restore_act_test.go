@@ -158,7 +158,7 @@ func (f *restoreActFixture) status(act string) (int, map[string]any) {
 }
 
 func restoreActTerminal(state string) bool {
-	return state == "succeeded" || state == "failed" || state == "interrupted"
+	return state == "succeeded" || state == "failed" || state == "interrupted" || state == "restored"
 }
 
 func (f *restoreActFixture) waitTerminal(act string) map[string]any {
@@ -700,7 +700,7 @@ func serveRestoreToEnd(t *testing.T, rt *Runtime, computerID, route string, body
 		case "failed":
 			out, _ := json.Marshal(map[string]string{"error": view.Refusal.Message})
 			return view.Refusal.HTTPStatus, out
-		case "interrupted":
+		case "interrupted", "restored":
 			return http.StatusInternalServerError, response.Body.Bytes()
 		}
 		if time.Now().After(deadline) {

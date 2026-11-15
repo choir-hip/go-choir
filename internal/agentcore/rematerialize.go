@@ -218,10 +218,17 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 
 	// From here the restore writes to the live computer: `current`, then the
 	// flip. The release lock is held for this part only (the replay above
-	// takes minutes to an hour), and the prior release is read again under
-	// it: an apply may have moved `current` since the check at the start.
+	// takes minutes to an hour), and everything that can change under it is
+	// read again under it: an apply may have moved `current`, and an apply, a
+	// capsule or a snapshot may have started during the replay. The flip closes
+	// the store, which any of them would meet half done, so a restore that finds
+	// one fails here, untouched.
 	rt.currentReleaseMu.Lock()
 	defer rt.currentReleaseMu.Unlock()
+	if err := rt.restoreLiveWork(ctx); err != nil {
+		_ = os.RemoveAll(stagingRoot)
+		return report, err
+	}
 	priorReleaseDigest := ""
 	if current, err := updater.ReadCurrentManifest(rt.selfdevUpdaterRoot); err == nil {
 		priorReleaseDigest = current.ContentDigest
@@ -241,19 +248,36 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		{stagedMarker, originalMarker}, {stagedWorkspace, originalWorkspace},
 		{stagedState, originalState}, {stagedState + "-wal", originalState + "-wal"}, {stagedState + "-shm", originalState + "-shm"},
 	}
-	// The act's record says what is about to change, durably, before it
-	// changes: a boot that finds this process dead puts the release back and
-	// undoes a half flip from it (RepairRestoreAtBoot).
-	progress.beginInstall(priorReleaseDigest, flip)
+
+	// The install is a protocol of durable facts (restore_act.go): prepared
+	// before anything live is touched; release_restaged, flip_started before
+	// the renames they announce; flip_completed right after the last. Boot
+	// decides from the last one written. A fact that cannot be written stops the
+	// install where it is: with disk full during a replay that took an hour,
+	// that is the realistic failure, and it must leave the computer as it was.
+	if err := progress.install(restoreInstallPrepared, func(r *RestoreActRecord) {
+		r.PriorReleaseDigest, r.RestoredReleaseDigest, r.QuarantineDir = priorReleaseDigest, checkpoint.Request.ReleaseDigest, quarantineDir
+		r.Flip = r.Flip[:0]
+		for _, step := range flip {
+			r.Flip = append(r.Flip, RestoreActFlipStep{From: step.from, To: step.to})
+		}
+	}); err != nil {
+		_ = os.RemoveAll(stagingRoot)
+		return report, err
+	}
+	restoreInstallCrash("after_prepared")
 
 	// Both floors: the live workspace carries the floor; the staged one gets it
 	// only if Open found rows, and on the genesis-replay path the stamped ops
-	// arrive after Open (bunch 152, Devin 1).
+	// arrive after Open (bunch 152, Devin 1). A floor refusal is here, before
+	// the flip, so a refusal leaves the computer as it was.
 	if err := updater.RestagePinnedRelease(rt.selfdevUpdaterRoot, checkpoint.Request.ReleaseDigest,
 		filepath.Join(originalWorkspace, storeschema.File), filepath.Join(stagedWorkspace, storeschema.File)); err != nil {
 		_ = os.RemoveAll(stagingRoot)
 		return report, fmt.Errorf("rematerialize: restage served SPA: %w", err)
 	}
+	// keepRestaged turns true at the flip: from then the prior release is
+	// never put back over a flipped store.
 	keepRestaged := false
 	defer func() {
 		if keepRestaged || priorReleaseDigest == "" || priorReleaseDigest == checkpoint.Request.ReleaseDigest {
@@ -263,36 +287,92 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		// putting it back is not a step toward an older binary.
 		_ = updater.RestagePinnedReleaseBestEffort(rt.selfdevUpdaterRoot, priorReleaseDigest)
 	}()
+	if err := progress.install(restoreInstallReleaseRestaged, nil); err != nil {
+		_ = os.RemoveAll(stagingRoot)
+		return report, err
+	}
+	restoreInstallCrash("after_release_restaged")
 
 	if err := rt.store.Close(); err != nil {
 		_ = os.RemoveAll(stagingRoot)
 		return report, fmt.Errorf("rematerialize: close original realization: %w", err)
 	}
-	// A refusal from here to the reopen leaves the live realization where it
-	// was, so the store is opened again on it: the closed store a failed flip
-	// used to leave behind answered nothing until the next restart.
+	// A refusal from here to the flip's end leaves the live realization where
+	// it was, so the store is opened again on it: the closed store a failed
+	// flip used to leave behind answered nothing until the next restart.
+	reopenLive := func(why string) {
+		if reopenErr := rt.store.Reopen(originalMarker); reopenErr != nil {
+			log.Printf("rematerialize: reopen the live realization after %s: %v", why, reopenErr)
+			progress.setLiveState(restoreLiveUnresolved)
+		}
+	}
 	if err := os.Mkdir(quarantineDir, 0o755); err != nil {
 		_ = os.RemoveAll(stagingRoot)
-		if reopenErr := rt.store.Reopen(originalMarker); reopenErr != nil {
-			log.Printf("rematerialize: reopen the live realization after a refused quarantine: %v", reopenErr)
-		}
+		reopenLive("a refused quarantine")
 		return report, fmt.Errorf("rematerialize: create quarantine: %w", err)
 	}
-	if err := applyRenames(flip); err != nil {
+	if err := progress.install(restoreInstallFlipStarted, nil); err != nil {
 		_ = os.RemoveAll(stagingRoot)
 		_ = os.Remove(quarantineDir)
-		if reopenErr := rt.store.Reopen(originalMarker); reopenErr != nil {
-			log.Printf("rematerialize: reopen the live realization after a refused flip: %v", reopenErr)
+		reopenLive("a flip fact that could not be written")
+		return report, err
+	}
+	restoreInstallCrash("after_flip_started")
+	if err := applyRenamesObserved(flip, func(done int) {
+		if done == 2 {
+			restoreInstallCrash("mid_flip")
 		}
+	}); err != nil {
+		_ = os.RemoveAll(stagingRoot)
+		_ = os.Remove(quarantineDir)
+		reopenLive("a refused flip")
 		return report, fmt.Errorf("rematerialize: flip staged realization: %w", err)
 	}
+	restoreInstallCrash("before_flip_completed")
+	keepRestaged = true
+	if err := progress.install(restoreInstallFlipCompleted, nil); err != nil {
+		// The flip is made and its completion cannot be recorded. A crash now
+		// is undone by boot (it still reads flip_started), so undo it here and
+		// stay on the pre-restore state; if the undo itself fails the computer
+		// is unresolved and says so.
+		keepRestaged = false
+		if undoErr := undoRenameSteps(flip); undoErr != nil {
+			progress.setLiveState(restoreLiveUnresolved)
+			return report, fmt.Errorf("rematerialize: flip completion could not be recorded (%v) and undoing the flip failed: %w", err, undoErr)
+		}
+		_ = os.RemoveAll(stagingRoot)
+		_ = os.Remove(quarantineDir)
+		reopenLive("an unrecorded flip")
+		return report, err
+	}
+	restoreInstallCrash("after_flip_completed")
 	_ = os.RemoveAll(stagingRoot)
 
+	report.ComputerID = computerID
+	report.CheckpointDigest = checkpoint.Digest
+	report.QuarantineDir = quarantineDir
+	report.QuarantinedMarker = quarantinedMarker
+	report.QuarantinedWorkspace = quarantinedWorkspace
+	report.WitnessMatched = true
+	report.OriginalDenied = true
+	report.FrontendRestaged = true
+	report.StoreClosed = true
+	report.PinCheckoutUsed = false
+	// From here a failure is "restored; restart required", never "failed": the
+	// computer is on the restored store and the restored release.
+	restored := func(err error) (RematerializeReport, error) {
+		return report, fmt.Errorf("%w: %v", errRestoredRestartRequired, err)
+	}
+	if hook := restoreReopenFault; hook != nil {
+		if err := hook(); err != nil {
+			return restored(err)
+		}
+	}
 	if err := rt.store.Reopen(originalMarker); err != nil {
-		return report, fmt.Errorf("rematerialize: reopen flipped realization: %w", err)
+		return restored(fmt.Errorf("reopen flipped realization: %w", err))
 	}
 	if err := rt.eventAppender.RebindProjection(rt.store); err != nil {
-		return report, fmt.Errorf("rematerialize: rebind event projection: %w", err)
+		return restored(fmt.Errorf("rebind event projection: %w", err))
 	}
 	// The restored store has its own newest snapshot and head: the producer
 	// reads them again rather than believing the pre-restore ones.
@@ -303,19 +383,10 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 			operations.BindProjectionSink(rt.store)
 		}
 	}
+	restoreInstallCrash("after_reopen")
 
-	report.ComputerID = computerID
-	report.CheckpointDigest = checkpoint.Digest
-	report.QuarantineDir = quarantineDir
-	report.QuarantinedMarker = quarantinedMarker
-	report.QuarantinedWorkspace = quarantinedWorkspace
-	report.WitnessMatched = true
-	report.OriginalDenied = true
-	report.FrontendRestaged = true
 	report.StoreClosed = false
-	report.PinCheckoutUsed = false
 	report.ExecChanged = rt.restoreExecChanged(checkpoint.Request.ReleaseDigest)
-	keepRestaged = true
 	// PM27: `current` now names the restored release, which this process
 	// does not run; no migration moves it before the restart into it.
 	rt.restoreRestaged.Store(true)
@@ -394,7 +465,7 @@ func rematerializeRefusalStatus(err error) int {
 	// refusals of the checkpoint, answered with their reason; not server errors.
 	if errors.Is(err, recoveryplan.ErrBaseRefused) || errors.Is(err, ErrCheckpointNotDerivable) ||
 		errors.Is(err, selfdevprotocol.ErrWitnessMismatch) || errors.Is(err, selfdevprotocol.ErrWitnessVersionRefused) ||
-		isRestoreInProgress(err) {
+		isRestoreInProgress(err) || errors.Is(err, errRestoreUnresolved) || errors.Is(err, errRestoreBlocked) {
 		return http.StatusConflict
 	}
 	// A volume without room for the staged store is a refusal the owner can
@@ -848,7 +919,11 @@ type renameStep struct{ from, to string }
 
 // applyRenames performs the steps in order, skipping a source that does not
 // exist, and undoes the ones already made when a step fails.
-func applyRenames(steps []renameStep) error {
+func applyRenames(steps []renameStep) error { return applyRenamesObserved(steps, nil) }
+
+// applyRenamesObserved is applyRenames that calls after with the number of
+// renames made so far, after each one.
+func applyRenamesObserved(steps []renameStep, after func(done int)) error {
 	var done []renameStep
 	for _, step := range steps {
 		if _, err := os.Lstat(step.from); err != nil {
@@ -863,6 +938,29 @@ func applyRenames(steps []renameStep) error {
 			return err
 		}
 		done = append(done, step)
+		if after != nil {
+			after(len(done))
+		}
+	}
+	return nil
+}
+
+// undoRenameSteps puts the renames back, last first, each only when its
+// destination exists and its source does not: it is safe to run again after it
+// was interrupted, and it skips a step that was never made.
+func undoRenameSteps(steps []renameStep) error {
+	var failed []string
+	for i := len(steps) - 1; i >= 0; i-- {
+		_, fromErr := os.Lstat(steps[i].from)
+		_, toErr := os.Lstat(steps[i].to)
+		if fromErr != nil && toErr == nil {
+			if err := os.Rename(steps[i].to, steps[i].from); err != nil {
+				failed = append(failed, err.Error())
+			}
+		}
+	}
+	if len(failed) > 0 {
+		return errors.New(strings.Join(failed, "; "))
 	}
 	return nil
 }

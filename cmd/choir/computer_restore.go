@@ -40,6 +40,7 @@ type restoreActView struct {
 	ActID                     string          `json:"act_id"`
 	State                     string          `json:"state"`
 	Reason                    string          `json:"reason"`
+	LiveState                 string          `json:"live_state"`
 	StatusURL                 string          `json:"status_url"`
 	TailEventsTotal           uint64          `json:"tail_events_total"`
 	TailEventsApplied         uint64          `json:"tail_events_applied"`
@@ -54,7 +55,7 @@ type restoreActView struct {
 }
 
 func (v restoreActView) ended() bool {
-	return v.State == "succeeded" || v.State == "failed" || v.State == "interrupted"
+	return v.State == "succeeded" || v.State == "failed" || v.State == "interrupted" || v.State == "restored"
 }
 
 // progressLine is the one line printed when the act's state or count moves.
@@ -141,7 +142,9 @@ func restoreStatusTransient(err error) bool {
 	return true
 }
 
-// restoreActOutcome is the end of the wait: the result, or the refusal.
+// restoreActOutcome is the end of the wait: the result, or the refusal. What
+// it says is on the computer, it says only from the act's own record
+// (live_state), never from the state name alone.
 func restoreActOutcome(label string, view restoreActView) (any, error) {
 	switch view.State {
 	case "succeeded":
@@ -149,13 +152,32 @@ func restoreActOutcome(label string, view restoreActView) (any, error) {
 			return nil, fmt.Errorf("act %s succeeded and carries no result", view.ActID)
 		}
 		return view.Result, nil
+	case "restored":
+		return nil, fmt.Errorf("act %s ended restored, not succeeded: %s. The computer is on the restored store and the restored release; read the result with `choir computer restore-status` and restart the computer if it says so", view.ActID, view.Reason)
 	case "failed":
+		line := fmt.Sprintf("act %s failed", view.ActID)
 		if view.Refusal != nil {
-			return nil, fmt.Errorf("act %s failed: %s (http %d): %s", view.ActID, view.Refusal.Name, view.Refusal.HTTPStatus, view.Refusal.Message)
+			line += fmt.Sprintf(": %s (http %d): %s", view.Refusal.Name, view.Refusal.HTTPStatus, view.Refusal.Message)
+		} else if view.Reason != "" {
+			line += ": " + view.Reason
 		}
-		return nil, fmt.Errorf("act %s failed: %s", view.ActID, view.Reason)
+		return nil, errors.New(line + restoreLiveStateSentence(view.LiveState))
 	default:
-		return nil, fmt.Errorf("act %s was %s: %s; the computer is on the state it had before the restore, and nothing resumes it: submit the restore again", view.ActID, view.State, view.Reason)
+		return nil, fmt.Errorf("act %s was %s: %s%s; nothing resumes it", view.ActID, view.State, view.Reason, restoreLiveStateSentence(view.LiveState))
+	}
+}
+
+// restoreLiveStateSentence is what the act's record proves is on the computer.
+func restoreLiveStateSentence(liveState string) string {
+	switch liveState {
+	case "pre_restore":
+		return ". The computer is on its pre-restore state; submit the restore again to retry"
+	case "restored":
+		return ". The computer is on the restored state"
+	case "unresolved":
+		return ". The state of the computer is unresolved: read /health and the act's record before doing anything else"
+	default:
+		return ". What the computer is on is not proven by this act's record: read it before submitting again"
 	}
 }
 

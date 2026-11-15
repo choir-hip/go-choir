@@ -250,6 +250,11 @@ func validateProductAPIRouteFor(ctx context.Context, method, requestURI string) 
 	// acts (operation decisions, restore, replace-workspace, bootstrap-chain,
 	// rematerialize, residue import), fenced off agents in 5b17bb572; the
 	// computer binding above must not hand them to the management desk.
+	// The status of a restore act carries quarantine paths, digests and witness
+	// detail: the owner's read, not a desk's (the proxy gates it as an owner act).
+	if strings.HasPrefix(path, "/api/computers/") && strings.HasSuffix(path, "/lifecycle/restore-status") {
+		return fmt.Errorf("product_api refuses non-product route %s: the status of a restore act is the owner's read", path)
+	}
 	if method != http.MethodGet && strings.HasPrefix(path, "/api/computers/") {
 		return fmt.Errorf("product_api refuses %s %s: computer routes are read-only to a desk; their writes are owner acts", method, path)
 	}

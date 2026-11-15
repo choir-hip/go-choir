@@ -219,6 +219,9 @@ type Runtime struct {
 	// restoreActs is the registry of restore acts (restore_act.go); its zero
 	// value is ready.
 	restoreActs restoreActs
+	// restoreUnresolved are the acts the boot's repair could not resolve
+	// (restore_act.go): new restore acts are refused and /health names them.
+	restoreUnresolved []string
 	// engineeringAssignmentOpenMu serializes the per-runtime open/spawn/bind
 	// saga so a duplicate revision wake cannot drive a second saga against an
 	// in-flight durable open (each delivery's cleanup would otherwise write

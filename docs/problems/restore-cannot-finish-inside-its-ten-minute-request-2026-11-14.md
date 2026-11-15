@@ -852,3 +852,46 @@ before.
 27. A desk's product_api cannot read the status route.
 28. The tail estimate from the local index (written after its function, found by
     review; `internal/store/restore_tail_estimate_test.go`).
+
+### Round 1 repair as built, and the answers to the review's lists
+
+- The install protocol is `install_phase` in the act's record (`restore_act.go`
+  `install`, `rematerialize.go`). Order as built: `prepared`, then the release
+  is restaged (its floor check can refuse with nothing flipped), then
+  `release_restaged`, `flip_started`, the renames, `flip_completed`. The release
+  is restaged before the flip, not after, so a floor refusal leaves nothing
+  changed; boot makes the store and the release agree from the fact in either
+  direction, so the order costs nothing.
+- Boot undoes only at `flip_started`; before it the record's rename list is a
+  plan and nothing moved. A step was made when its source is gone and its
+  destination is there; a source still present means not made, whatever the
+  destination holds (the live store's `-wal` and `-shm` are present before the
+  flip, which the first version of the repair read as a conflict).
+- An unreadable record is `unresolved` only when a staging or quarantine
+  directory exists to protect; with none, boot logs it.
+- Events appended during the replay: see the note above; the restored state is
+  not forward-durable, the open problem of 2026-10-30. Not changed here.
+- An ineligible computer: up-front validation does not read replay eligibility
+  (that judgement, `replay_eligibility.go`, belongs to the probe that runs at a
+  checkpoint bind). A checkpoint exists only for a state the probe judged
+  equivalent, so a computer that never was eligible has no checkpoint to submit;
+  one that stopped being eligible after its checkpoint gets a `failed` act,
+  `witness_mismatch`, named, after the replay.
+- Should-fix and nits, one line each. Act deadline: declined, a replay legitimately
+  runs 80 minutes and a stall is the owner's `choir computer restart`, named as a
+  residual (a stalled tape fetch holds `restore_in_flight`). `succeeded` before the
+  marker: fixed, the marker is requested first and a race rolls forward at boot.
+  Status authority: `product_api` refuses the route, the guest route relies on the
+  proxy's owner-act gate and the in-guest binding. Test after the function:
+  recorded as failure item 28. Both-exist steps: now "not made", with the reason
+  above. Version skew: a field an old CLI rejects was declined (it would break the
+  accepted answer for every client); the rollout order is vmctl and proxy with the
+  platform release, guests on refresh, CLI from the same release, and an old vmctl
+  does not read `restore_in_flight`. `restored_release_digest` in the old boot test:
+  the test was replaced and the field is now real. `restoreActStatus`'s running
+  branch not filtering by computer: one runtime per guest, left. `pruneLocked`
+  string sort: harmless, left. `dryRunCopy` reading `replayObserver` unlocked:
+  pre-existing, left. A 200 with a `state` and no `act_id` printing as a result:
+  no route produces one, left. The 2 h default wait: `--timeout` exists, left.
+  Callers of the deleted synchronous path: `scripts/reeng_tracer.mjs` was one and
+  now reads the act.
