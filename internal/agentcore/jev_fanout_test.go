@@ -365,7 +365,10 @@ func TestStoryAnalysisChunksAreAskedOneAtATime(t *testing.T) {
 	peak.assertSerial(t, 2)
 }
 
-func TestSupportRevisionsAreJudgedOneAtATime(t *testing.T) {
+// Two revisions are two states: their Jev calls are in flight together and
+// neither queues behind the other (owner, 2026-11-15: Jev is not serial; no
+// cap on calls).
+func TestSupportRevisionsAreJudgedAtTheSameTime(t *testing.T) {
 	jev := &fakeSupportJudge{choice: "yes"}
 	hold := newHeldJudge(jev)
 	rt, s := supportRuntime(t, hold)
@@ -375,8 +378,16 @@ func TestSupportRevisionsAreJudgedOneAtATime(t *testing.T) {
 	rt.JudgeRevisionSupport(owner, computer, one.RunID, one.RevisionID, one.Pairs)
 	rt.JudgeRevisionSupport(owner, computer, two.RunID, two.RevisionID, two.Pairs)
 	hold.waitStarted(t)
-	hold.drain(t, 2)
+	hold.waitStarted(t) // the second is in flight while the first is held
+	if cur := hold.cur.Load(); cur != 2 {
+		t.Fatalf("calls in flight = %d, want 2: independent revisions must not queue", cur)
+	}
+	hold.release <- struct{}{}
+	hold.release <- struct{}{}
 	rt.WaitSupportJudgements()
+	if got := hold.calls.Load(); got != 2 {
+		t.Fatalf("judge calls = %d, want 2", got)
+	}
 }
 
 // A revision queued behind a slow one waits as long as it takes; the queue has
@@ -421,7 +432,7 @@ func TestSupportRevisionQueuedBehindOneThatJudgedItsPairCallsNobody(t *testing.T
 	}
 }
 
-func TestSupportRevisionOverTheVendorBoundSplitsIntoSequentialCalls(t *testing.T) {
+func TestSupportRevisionOverTheVendorBoundSplitsIntoCallsAskedTogether(t *testing.T) {
 	jev := &fakeSupportJudge{choice: "yes"}
 	peak := &peakJudge{inner: jev, delay: 10 * time.Millisecond}
 	rt, _ := testRuntime(t)
@@ -444,9 +455,14 @@ func TestSupportRevisionOverTheVendorBoundSplitsIntoSequentialCalls(t *testing.T
 		t.Fatalf("judged %d of 3 pairs", len(judged))
 	}
 	// Two passages of 40,000 bytes (about 14,000 estimated tokens each) do not
-	// fit the vendor's 32k per-question limit together, so each goes alone,
-	// one after another.
-	peak.assertSerial(t, 3)
+	// fit the vendor's 32k per-question limit together, so each goes alone;
+	// the three are separate states and are asked together.
+	if got := int(peak.calls.Load()); got != 3 {
+		t.Fatalf("judge calls = %d, want 3", got)
+	}
+	if got := peak.peak.Load(); got < 2 {
+		t.Fatalf("most calls in flight = %d; independent calls must not queue", got)
+	}
 }
 
 type scopeJudge struct {

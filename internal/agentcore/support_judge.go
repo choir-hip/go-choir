@@ -58,29 +58,17 @@ const candidateJudgmentModel = "~typesafe/jev-latest"
 
 // Budgets. Vars so a test can shorten them.
 var (
-	// supportJudgeConcurrency is the revisions judged at once on this
-	// computer: one. Revisions are separate contexts, the one case the owner
-	// allows concurrent Jev calls for, but not as plan A (2026-11-10); the
-	// waiting revisions queue and are judged in the order they arrived.
-	supportJudgeConcurrency = 1
 	supportJudgeCallTimeout = 90 * time.Second
 )
 
-// supportJudging is the runtime's support-judgement state: the semaphore
-// bounding concurrent jobs, the pairs in flight, the jobs running (for
-// tests and shutdown), and the legacy support_pairs records already handed
-// to Jev.
+// supportJudging is the runtime's support-judgement state: the pairs in
+// flight (a pair is judged by one job at a time), the jobs running (for tests
+// and shutdown), and the legacy support_pairs records already handed to Jev.
+// Revisions are separate states and are judged together, with no cap.
 type supportJudging struct {
-	once     sync.Once
-	sem      chan struct{}
 	inflight sync.Map
 	jobs     sync.WaitGroup
 	legacy   sync.Map
-}
-
-func (s *supportJudging) slots() chan struct{} {
-	s.once.Do(func() { s.sem = make(chan struct{}, supportJudgeConcurrency) })
-	return s.sem
 }
 
 // supportJudgeQuestion is the one typed question asked of each pair.
@@ -129,18 +117,6 @@ func (rt *Runtime) WaitSupportJudgements() {
 }
 
 func (rt *Runtime) judgeSupportJob(ownerID, computerID, runID, revisionID string, keys []string) {
-	slots := rt.support.slots()
-	// Wait for the slot as long as it takes: a queued revision is judged in
-	// its turn. Only the runtime stopping ends the wait, and then the pairs
-	// stay pending (restarts end work; nothing resumes it).
-	select {
-	case slots <- struct{}{}:
-	case <-rt.backgroundStop():
-		log.Printf("support judge: %s: the runtime is stopping; %d pairs stay pending for the next commit that cites them", revisionID, len(keys))
-		return
-	}
-	defer func() { <-slots }()
-
 	// Claim the pairs no other job is judging.
 	var claimed []string
 	for _, key := range keys {
@@ -361,7 +337,7 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 		return nil, nil
 	}
 	// One call per revision, or, when the pairs are over the token budget,
-	// several calls one after another (never at once; owner, 2026-11-10).
+	// several calls, which are separate states and are asked together.
 	ordered := make([]string, 0, len(names))
 	for name := range names {
 		ordered = append(ordered, name)
@@ -374,8 +350,25 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 	}
 	var judged []types.SupportVerdict
 	var firstErr error
-	for _, batch := range splitSupportBatches(ordered, sizes) {
-		got, err := rt.askJevForSupportBatch(ctx, owner, runID, pending, names, batch, pairs, questions)
+	// The batches are disjoint sets of pairs, so each is its own state: they
+	// are asked together, and their verdicts are read in batch order.
+	batches := splitSupportBatches(ordered, sizes)
+	type batchResult struct {
+		got []types.SupportVerdict
+		err error
+	}
+	results := make([]batchResult, len(batches))
+	var wg sync.WaitGroup
+	for i, batch := range batches {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i].got, results[i].err = rt.askJevForSupportBatch(ctx, owner, runID, pending, names, batch, pairs, questions)
+		}()
+	}
+	wg.Wait()
+	for i, batch := range batches {
+		got, err := results[i].got, results[i].err
 		if err != nil {
 			// A failed call leaves its own pairs pending; the batches before
 			// and after it still settle.

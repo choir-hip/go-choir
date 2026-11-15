@@ -1098,8 +1098,8 @@ func TestIntakeLabelsAskALongWindowInChunksAndKeepEveryCandidate(t *testing.T) {
 			seen[a] = true
 		}
 	}
-	if judge.maxSeen.Load() != 1 {
-		t.Errorf("C3: chunks ran %d at a time; want one after another", judge.maxSeen.Load())
+	if judge.maxSeen.Load() < 2 {
+		t.Errorf("C3: chunks ran %d at a time; the chunks are separate states and are asked together", judge.maxSeen.Load())
 	}
 
 	// No chunk matches: new.

@@ -622,7 +622,12 @@ work. Each is closed:
 
 ## 9. Intake flush: ways it can fail (2026-11-10, orange; rollback: revert)
 
-Owner rule (2026-11-10): never call Jev concurrently; put many questions in
+Owner rule (2026-11-10, superseded as to serial calls by the rulings of
+2026-11-12 and 2026-11-15: "jev isnt supposed to be serial. the point is to
+use the same large context for many questions, not call it in sequence with
+the same context"; calls over different states are asked together, with no
+cap; the group commit below remains because it merges captures that arrive
+while a flush is in flight into the next call over one state): put many questions in
 single calls. Intake labels are one sequential stream of calls per runtime,
 a **group commit with no timer**:
 
@@ -701,7 +706,7 @@ Failure list:
   unmeasured). Revised 2026-11-14; before, this said at most
   `intakeCallCaptures` = 6 captures (12 questions) to a call, raised only
   after the shadow comparison measured accuracy at the larger size. What
-  governs the size now: CLAUDE.md (Delivery, owner, 2026-11-12) says every
+  governs the size now: CLAUDE.md (Delivery, owner, 2026-11-12) and the owner's ruling of 2026-11-15 (Jev is not serial; the point is one large context for many questions) say every
   question about a state goes in the one call that carries that state, and a
   second call over the same or an overlapping state is the defect. A cap of 6
   would make two calls over one state on every full flush, which is that

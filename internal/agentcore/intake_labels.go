@@ -93,8 +93,9 @@ const (
 	intakeCallCaptures = intakeFlushCaptures
 	// intakeBatchCaptures is the count handed to labelPoll's grouping.
 	intakeBatchCaptures = intakeCallCaptures
-	// Owner rule 2026-11-10: never call Jev concurrently, put many questions
-	// in single calls. The flush is a group commit with no timer: the first
+	// Owner rules 2026-11-10 and 2026-11-12/15: put many questions in single
+	// calls over one context; Jev is not serial, and a call is never made to
+	// wait for another over a different state. The flush is a group commit with no timer: the first
 	// capture is asked at once, and captures that arrive while a call is in
 	// flight go out together in the next, so a burst batches by itself and a
 	// quiet moment costs one call. Compiled constants, not settings.
@@ -517,7 +518,7 @@ func (rt *Runtime) stopIntakeLabels() {
 
 // labelHeld is the flush: it labels the held captures, in the order held, and
 // reports how many were labelled and how many were left unlabelled. Its calls
-// run one after another and it returns within the flush budget whatever Jev
+// (one per state) are asked together and it returns within the flush budget whatever Jev
 // does.
 func (rt *Runtime) labelHeld(ctx context.Context, ownerID, computerID string, held []intakeHeld) (labelled, unlabelled int) {
 	if len(held) == 0 {
@@ -1129,14 +1130,37 @@ func (rt *Runtime) labelPollWith(ctx context.Context, lib *intakeLibrary, ownerI
 	// answers[i] are capture i's answers, one per part of its options in
 	// each call that asked it.
 	answers := make([][]intakeCallAnswer, len(items))
-	// One call after another, never concurrently: Jev answers a call's
-	// questions in parallel, so the way to go faster is a bigger call.
-	for _, c := range calls {
-		var ans [][]intakeCallAnswer
-		err := ctx.Err()
-		if err == nil {
-			ans, err = rt.askIntakeCall(ctx, lib, c)
-		}
+	// The calls are separate states (a window's chunks hold different
+	// stories, a split group holds different captures), so they are asked
+	// together, with no cap; a call is split at all only where the vendor's
+	// limits force it. Their answers are read in the calls' order (owner,
+	// 2026-11-15: Jev is not serial; the point is one large context for many
+	// questions).
+	type callResult struct {
+		ans [][]intakeCallAnswer
+		err error
+	}
+	results := make([]callResult, len(calls))
+	var wg sync.WaitGroup
+	for n, c := range calls {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					results[n].ans, results[n].err = nil, fmt.Errorf("intake call panicked: %v", r)
+				}
+			}()
+			if err := ctx.Err(); err != nil {
+				results[n].err = err
+				return
+			}
+			results[n].ans, results[n].err = rt.askIntakeCall(ctx, lib, c)
+		}()
+	}
+	wg.Wait()
+	for n, c := range calls {
+		ans, err := results[n].ans, results[n].err
 		for a, ask := range c.asks {
 			if err != nil {
 				answers[ask.capture] = append(answers[ask.capture], intakeCallAnswer{err: err})
