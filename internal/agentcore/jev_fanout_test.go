@@ -228,13 +228,13 @@ func TestInertTrayOfFortyThreeRecordsIsOneCall(t *testing.T) {
 	}
 }
 
-func TestEventLayerChunksAreAskedOneAtATime(t *testing.T) {
-	// Every answer is omitted: no chunk mints an event, and each chunk costs
-	// exactly one call, asked after the previous chunk was resolved.
+func TestEventLayerFlushOfThirtySixCapturesIsOneCall(t *testing.T) {
+	// Every answer is omitted: no capture mints an event, and the 36 captures
+	// cost exactly one call.
 	judge := &eventJudge{answers: map[string]eventAnswer{}, omit: map[string]bool{}, delay: 20 * time.Millisecond}
 	rt, owner, computer := eventRuntime(t, judge)
 	var inputs []eventInput
-	for i := 0; i < eventChunkSize*3; i++ {
+	for i := 0; i < 36; i++ {
 		title := fmt.Sprintf("Story number %d about topic", i)
 		judge.omit[title] = true
 		inputs = append(inputs, capItem(fmt.Sprintf("p%d", i), title, fmt.Sprintf("https://outlet%d.com/a", i), ""))
@@ -246,8 +246,8 @@ func TestEventLayerChunksAreAskedOneAtATime(t *testing.T) {
 	judge.mu.Lock()
 	peak := judge.maxIn
 	judge.mu.Unlock()
-	if judge.callCount() != 3 || r.Calls != 3 || peak != 1 {
-		t.Fatalf("judge calls = %d, report calls = %d, most in flight = %d; want 3, 3 and 1", judge.callCount(), r.Calls, peak)
+	if judge.callCount() != 1 || r.Calls != 1 || peak != 1 {
+		t.Fatalf("judge calls = %d, report calls = %d, most in flight = %d; want 1, 1 and 1", judge.callCount(), r.Calls, peak)
 	}
 }
 
@@ -257,7 +257,7 @@ func TestEventLayerLongFlushResolvesEveryChunk(t *testing.T) {
 	judge := &eventJudge{answers: map[string]eventAnswer{}, omit: map[string]bool{}}
 	rt, owner, computer := eventRuntime(t, judge)
 	var inputs []eventInput
-	for i := 0; i < eventChunkSize*40; i++ {
+	for i := 0; i < 450; i++ {
 		title := fmt.Sprintf("Story number %d about topic", i)
 		inputs = append(inputs, capItem(fmt.Sprintf("long%d", i), title, fmt.Sprintf("https://outlet%d.com/a", i), ""))
 	}
@@ -265,18 +265,20 @@ func TestEventLayerLongFlushResolvesEveryChunk(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Calls < 40 || r.Unresolved != 0 || len(r.Left) != 0 {
-		t.Fatalf("report = calls %d, unresolved %d, left %d; want at least 40 (splits add more), 0, 0", r.Calls, r.Unresolved, len(r.Left))
+	// 450 captures are three calls under the 255-choice limit (199 each); the
+	// 64k request limit forces about seven more (logged, named); none is left.
+	if r.Calls < 3 || r.Calls > 12 || r.Unresolved != 0 || len(r.Left) != 0 {
+		t.Fatalf("report = calls %d, unresolved %d, left %d; want 3 to 12 calls, 0, 0", r.Calls, r.Unresolved, len(r.Left))
 	}
 }
 
-func TestEventLayerLaterChunkIsAskedAfterTheEarlierCommit(t *testing.T) {
+func TestEventLayerSiblingJoinNeedsNoLaterChunk(t *testing.T) {
 	// The first chunk mints events, so the second chunk's question offers
 	// them and the cross-chunk join happens: two calls, one at a time.
 	judge := &eventJudge{answers: map[string]eventAnswer{}, delay: 10 * time.Millisecond}
 	rt, owner, computer := eventRuntime(t, judge)
 	var inputs []eventInput
-	for i := 0; i < eventChunkSize+3; i++ {
+	for i := 0; i < 15; i++ {
 		inputs = append(inputs, capItem(fmt.Sprintf("y%d", i), fmt.Sprintf("Story number %d about topic", i), fmt.Sprintf("https://outlet%d.com/a", i), ""))
 	}
 	judge.answers[inputs[len(inputs)-1].Item.Title] = eventAnswer{target: inputs[0].Item.Title}
@@ -284,14 +286,14 @@ func TestEventLayerLaterChunkIsAskedAfterTheEarlierCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Calls != 2 || len(r.Corroborated) != 1 {
-		t.Fatalf("report = %+v; want 2 chunks and the cross-chunk join", r)
+	if r.Calls != 1 || len(r.Corroborated) != 1 {
+		t.Fatalf("report = %+v; want 1 call and the sibling join", r)
 	}
 	judge.mu.Lock()
 	peak := judge.maxIn
 	judge.mu.Unlock()
-	if judge.callCount() != 2 || peak != 1 {
-		t.Fatalf("judge calls = %d, most in flight = %d; want 2 and 1", judge.callCount(), peak)
+	if judge.callCount() != 1 || peak != 1 {
+		t.Fatalf("judge calls = %d, most in flight = %d; want 1 and 1", judge.callCount(), peak)
 	}
 }
 
@@ -315,28 +317,32 @@ func TestStoryAnalysisChunksAreAskedOneAtATime(t *testing.T) {
 	peak.assertSerial(t, 2)
 }
 
-// Two revisions are two states: their Jev calls are in flight together and
-// neither queues behind the other (owner, 2026-11-15: Jev is not serial; no
-// cap on calls).
-func TestSupportRevisionsAreJudgedAtTheSameTime(t *testing.T) {
+// Revisions that wait while a call is in flight are one call, not one each
+// (owner, 2026-11-15: as many questions in the same call as possible, neither
+// concurrently nor in sequence): the first revision is asked at once, and the
+// two that arrive during its call go out together in the next.
+func TestSupportRevisionsThatWaitAreOneCall(t *testing.T) {
 	jev := &fakeSupportJudge{choice: "yes"}
 	hold := newHeldJudge(jev)
 	rt, s := supportRuntime(t, hold)
-	owner, computer := "owner-support-serial", rt.cfg.ComputerID
-	one := seedListedSupportPairs(t, s, owner, computer, "doc-serial-1", "cid-1")
-	two := seedListedSupportPairs(t, s, owner, computer, "doc-serial-2", "cid-2")
+	owner, computer := "owner-support-group", rt.cfg.ComputerID
+	one := seedListedSupportPairs(t, s, owner, computer, "doc-group-1", "cid-1")
+	two := seedListedSupportPairs(t, s, owner, computer, "doc-group-2", "cid-2")
+	three := seedListedSupportPairs(t, s, owner, computer, "doc-group-3", "cid-3")
 	rt.JudgeRevisionSupport(owner, computer, one.RunID, one.RevisionID, one.Pairs)
-	rt.JudgeRevisionSupport(owner, computer, two.RunID, two.RevisionID, two.Pairs)
 	hold.waitStarted(t)
-	hold.waitStarted(t) // the second is in flight while the first is held
-	if cur := hold.cur.Load(); cur != 2 {
-		t.Fatalf("calls in flight = %d, want 2: independent revisions must not queue", cur)
-	}
+	rt.JudgeRevisionSupport(owner, computer, two.RunID, two.RevisionID, two.Pairs)
+	rt.JudgeRevisionSupport(owner, computer, three.RunID, three.RevisionID, three.Pairs)
+	hold.assertNoSecondCall(t)
 	hold.release <- struct{}{}
+	hold.waitStarted(t)
 	hold.release <- struct{}{}
 	rt.WaitSupportJudgements()
 	if got := hold.calls.Load(); got != 2 {
-		t.Fatalf("judge calls = %d, want 2", got)
+		t.Fatalf("judge calls = %d for three revisions; want 2 (the first, then the two that waited together)", got)
+	}
+	if peak := hold.peak.Load(); peak != 1 {
+		t.Fatalf("most calls in flight = %d, want 1", peak)
 	}
 }
 
@@ -382,7 +388,7 @@ func TestSupportRevisionQueuedBehindOneThatJudgedItsPairCallsNobody(t *testing.T
 	}
 }
 
-func TestSupportRevisionOverTheVendorBoundSplitsIntoCallsAskedTogether(t *testing.T) {
+func TestSupportRevisionOverTheVendorBoundSplitsIntoTheFewestCalls(t *testing.T) {
 	jev := &fakeSupportJudge{choice: "yes"}
 	peak := &peakJudge{inner: jev, delay: 10 * time.Millisecond}
 	rt, _ := testRuntime(t)
@@ -406,12 +412,12 @@ func TestSupportRevisionOverTheVendorBoundSplitsIntoCallsAskedTogether(t *testin
 	}
 	// Two passages of 40,000 bytes (about 14,000 estimated tokens each) do not
 	// fit the vendor's 32k per-question limit together, so each goes alone;
-	// the three are separate states and are asked together.
+	// three is the fewest calls (state_plus_question_tokens_32k forces the splits).
 	if got := int(peak.calls.Load()); got != 3 {
 		t.Fatalf("judge calls = %d, want 3", got)
 	}
-	if got := peak.peak.Load(); got < 2 {
-		t.Fatalf("most calls in flight = %d; independent calls must not queue", got)
+	if got := peak.peak.Load(); got != 1 {
+		t.Fatalf("most calls in flight = %d; a split's calls are not a reason to run them at once", got)
 	}
 }
 

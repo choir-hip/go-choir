@@ -41,10 +41,20 @@ var (
 )
 
 const (
-	// eventChunkSize is the most captures one Jev call resolves; chunks of
-	// a flush commit in order, so an event minted in one chunk is a
-	// candidate in the next.
-	eventChunkSize        = 12
+	// eventFlushCaptures is how many queued captures start a flush before the
+	// flush interval ends. It is when a flush runs, not how many captures one
+	// call carries: a flush resolves every queued capture.
+	eventFlushCaptures = 12
+	// eventChunkSize is the most captures one Jev call resolves: every
+	// waiting capture, up to what the vendor's 255 choices a question allow.
+	// A question offers the other captures of its call, up to
+	// eventShortlistRecent+eventShortlistOverlap+eventShortlistCorroborated
+	// known events, eventLinkChoices after_ choices and new. A call over the
+	// token limits is halved (eventPrepareChunk) and says so. The sequential
+	// chunks existed so a later chunk would see events an earlier one minted;
+	// a question already offers the call's other captures, and their union is
+	// resolved after the answers, so minting waits for the answers.
+	eventChunkSize        = jevbudget.VendorMaxChoices - 50 - eventLinkChoices - 1 - 2
 	eventShortlistRecent  = 30
 	eventShortlistOverlap = 10
 	// eventShortlistCorroborated is the overlap budget of corroborated
@@ -341,17 +351,37 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 		}
 		pending = append(pending, in)
 	}
+	// The fewest calls: the longest run of waiting captures whose one request
+	// fits the vendor's limits (jevbudget), at most eventChunkSize (the
+	// 255-choice limit); a split names its limit in the log.
 	var chunks [][]eventInput
-	for len(pending) > 0 {
-		n := eventChunkSize
-		if n > len(pending) {
-			n = len(pending)
+	if len(pending) > 0 {
+		now := time.Now().UTC()
+		bounds := [][2]int{}
+		for lo := 0; lo < len(pending); {
+			hi := min(lo+eventChunkSize, len(pending))
+			sub, err := planJevCalls("event_layer", hi-lo, func(a, b int) (json.RawMessage, map[string]json.RawMessage, error) {
+				state, questions, _ := eventBuildChunk(idx, pending[lo+a:lo+b], now)
+				return state, questions, nil
+			})
+			if err != nil || len(sub.Ranges) == 0 {
+				bounds = append(bounds, [2]int{lo, hi})
+				lo = hi
+				continue
+			}
+			// Only the first range is taken: the next is planned after this
+			// one, against the events it will have minted.
+			first := sub.Ranges[0]
+			bounds = append(bounds, [2]int{lo + first[0], lo + first[1]})
+			lo += first[1]
 		}
-		chunks = append(chunks, pending[:n])
-		pending = pending[n:]
+		for _, b := range bounds {
+			chunks = append(chunks, pending[b[0]:b[1]])
+		}
 	}
-	// One call at a time (owner, 2026-11-10): each chunk is asked after the
-	// previous chunk committed, so it sees the events that chunk minted.
+	// One call for every waiting capture; a split (past the choices or the
+	// token limits) is rare and asks the next chunk after the previous one
+	// committed, so it sees the events that chunk minted.
 	// Each chunk has its own deadline, so a long flush never starves the
 	// chunks behind it; a chunk whose call fails leaves its captures in
 	// report.Left (an "unresolved" wake record, not retried).
@@ -369,19 +399,30 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 	return report, nil
 }
 
-// eventPrepareChunk builds the call for chunk against the index as it stands.
-// split is true when the request is over the token budget and the chunk must be
-// halved first (the halves are prepared one after the other, each seeing the
-// previous half's events).
-func eventPrepareChunk(idx *eventIndex, chunk []eventInput, now time.Time) (state json.RawMessage, questions map[string]json.RawMessage, alias eventAliases, split bool) {
+// eventShortlistFor is the known events a chunk's questions offer.
+func eventShortlistFor(idx *eventIndex, chunk []eventInput, now time.Time) []*eventView {
 	tokens := map[string]bool{}
 	for _, in := range chunk {
 		for w := range titleTokens(in.Item.Title) {
 			tokens[w] = true
 		}
 	}
-	candidates := eventShortlist(idx, tokens, now)
-	state, questions, alias = eventQuestion(chunk, candidates, eventSummaryRunes)
+	return eventShortlist(idx, tokens, now)
+}
+
+// eventBuildChunk is the request for chunk against the index as it stands,
+// with no bound applied.
+func eventBuildChunk(idx *eventIndex, chunk []eventInput, now time.Time) (json.RawMessage, map[string]json.RawMessage, eventAliases) {
+	return eventQuestion(chunk, eventShortlistFor(idx, chunk, now), eventSummaryRunes)
+}
+
+// eventPrepareChunk builds the call for chunk against the index as it stands.
+// split is true when the request is over the token budget and the chunk must be
+// halved first (the halves are prepared one after the other, each seeing the
+// previous half's events).
+func eventPrepareChunk(idx *eventIndex, chunk []eventInput, now time.Time) (state json.RawMessage, questions map[string]json.RawMessage, alias eventAliases, split bool) {
+	state, questions, alias = eventBuildChunk(idx, chunk, now)
+	candidates := eventShortlistFor(idx, chunk, now)
 	// The bound counts the questions too: each repeats every candidate's
 	// criteria, so they grow with chunk x candidates (code review, Devin
 	// B2). Split the chunk first; a single capture over the bound drops its
@@ -771,7 +812,9 @@ func eventQuestion(chunk []eventInput, candidates []*eventView, summaryRunes int
 		eventChoices = append(eventChoices, a)
 	}
 	captures := map[string]any{}
+	titles := make([]string, len(chunk))
 	for j, in := range chunk {
+		titles[j] = in.Item.Title
 		a := fmt.Sprintf("k%d", j+1)
 		alias.captures[a] = j + 1
 		c := map[string]any{"title": intakeClip(in.Item.Title, 200)}
@@ -798,29 +841,30 @@ func eventQuestion(chunk []eventInput, candidates []*eventView, summaryRunes int
 	questions := map[string]json.RawMessage{}
 	for j := range chunk {
 		a := fmt.Sprintf("k%d", j+1)
-		criteria := map[string]string{"new": "No known event and no other capture reports this incident."}
+		// The options are handles, read by name alone (a null description, as
+		// intake's are): a sentence under every option of every question put
+		// quadratically many tokens in the request, so a flush of a few dozen
+		// captures crossed the 64k limit and split.
+		criteria := map[string]any{"new": "No known event and no other capture reports this incident."}
 		choices := append([]string(nil), eventChoices...)
 		for _, e := range eventChoices {
-			criteria[e] = "state.events." + e + " reports the same incident as state.captures." + a + "."
+			criteria[e] = nil
 		}
 		for _, e := range eventLinkCandidates(chunk[j], candidates, aliasOf) {
 			after := "after_" + e
 			alias.after[after] = alias.events[e]
-			criteria[after] = "state.captures." + a + " reports a later development, or another incident, of the story state.events." + e + " reports, and not that incident itself: a new event that follows state.events." + e + "."
+			criteria[after] = "A later development of state.events." + e + ", not that incident itself."
 			choices = append(choices, after)
 		}
-		for i := range chunk {
-			if i == j {
-				continue
-			}
+		for _, i := range siblingIndexes(titles, j) {
 			other := fmt.Sprintf("k%d", i+1)
-			criteria[other] = "state.captures." + other + " reports the same incident, and no known event does."
+			criteria[other] = nil
 			choices = append(choices, other)
 		}
 		choices = append(choices, "new")
 		raw, _ := json.Marshal(map[string]any{
 			"type":         "choice",
-			"instructions": eventDefinition + " Which known event or other capture reports the same incident as state.captures." + a + "? Prefer a known event over another capture when both match. Choose an after_ choice only for a later development of a known event.",
+			"instructions": eventDefinition + " Which known event or other capture reports the same incident as state.captures." + a + "? Prefer a known event over another capture when both match. The options are handles: e1, e2, … are the known events in state.events, k1, k2, … the other captures in state.captures, and new. Choose an after_ choice only for a later development of a known event.",
 			"criteria":     criteria,
 			"choices":      choices,
 		})
@@ -831,7 +875,7 @@ func eventQuestion(chunk []eventInput, candidates []*eventView, summaryRunes int
 }
 
 // enqueueEventResolution queues a poll's new captures for the next flush,
-// when intake.events is on. A flush runs at eventChunkSize queued captures
+// when intake.events is on. A flush runs at eventFlushCaptures queued captures
 // or eventFlushInterval after the first, whichever comes first, so captures
 // from many sources share calls. One flush at a time drains a computer's
 // queue, in order; captures queued meanwhile are drained by the same flush.
@@ -864,7 +908,7 @@ func (rt *Runtime) enqueueEventResolution(ctx context.Context, ownerID, computer
 	if q.inFlight || len(q.items) == 0 {
 		return true
 	}
-	if len(q.items) >= eventChunkSize {
+	if len(q.items) >= eventFlushCaptures {
 		rt.startEventFlushLocked(ownerID, computerID, q)
 		return true
 	}

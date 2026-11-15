@@ -107,9 +107,8 @@ func TestIntakeFlushCallsShareNoDeadline(t *testing.T) {
 	rt, _ := testRuntime(t)
 	judge := &deadlineJudge{}
 	rt.SetCandidateJudge(judge)
-	per := storiesPerChunk(t, rt)
 	items := flushTestItems(12, "s")
-	labels := mustLabels(t, rt.labelPoll(context.Background(), pollLib(rt, 6*per), "owner", "computer", "src", items, intakeBatchCaptures))
+	labels := mustLabels(t, rt.labelPoll(context.Background(), pollLib(rt, storiesForCalls(t, rt, 12, items...)), "owner", "computer", "src", items, intakeBatchCaptures))
 	if len(labels) != 12 {
 		t.Fatalf("%d labels for 12 captures", len(labels))
 	}

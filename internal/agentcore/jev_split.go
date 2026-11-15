@@ -3,7 +3,6 @@ package agentcore
 import (
 	"encoding/json"
 	"log"
-	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/jevbudget"
 )
@@ -56,16 +55,22 @@ func planJevCalls(site string, n int, build func(lo, hi int) (json.RawMessage, m
 				}
 			}
 			hi = a
-			if limit, err = limitOf(lo, hi+1); err != nil {
-				return plan, err
+			if hi < n {
+				if limit, err = limitOf(lo, hi+1); err != nil {
+					return plan, err
+				}
+				plan.Limits = append(plan.Limits, limit)
 			}
-			plan.Limits = append(plan.Limits, limit)
 		}
 		plan.Ranges = append(plan.Ranges, [2]int{lo, hi})
 		lo = hi
 	}
 	if len(plan.Ranges) > 1 {
-		log.Printf("jev split: site=%s items=%d calls=%d limits=%s", site, n, len(plan.Ranges), strings.Join(plan.Limits, ","))
+		counts := map[string]int{}
+		for _, l := range plan.Limits {
+			counts[l]++
+		}
+		log.Printf("jev split: site=%s items=%d calls=%d forced_by=%v", site, n, len(plan.Ranges), counts)
 	}
 	return plan, nil
 }

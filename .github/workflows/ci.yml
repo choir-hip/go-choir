@@ -533,6 +533,12 @@ jobs:
           scripts/selftest-desk-names
           python3 -I scripts/check-desk-names
 
+      # A Jev call goes through the job entry point (owner, 2026-11-15): a direct
+      # call outside it or its listed, shrinking set of unmoved sites fails.
+      - name: Run Jev entry gate
+        shell: bash
+        run: scripts/check-jev-entry
+
       # No raw read of the object graph outside the packages that own one (plan
       # MA3.3, R15): desk code reads through typed store methods the reader gate sees.
       - name: Run store handles gate

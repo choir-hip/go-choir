@@ -256,23 +256,23 @@ func TestEventLayerLowConfidenceMatchIsTentativeAndUncounted(t *testing.T) {
 	}
 }
 
-func TestEventLayerRetryIsIdempotentAndChunksSeeEarlierChunks(t *testing.T) {
+func TestEventLayerRetryIsIdempotentAndOneCallJoinsASiblingCapture(t *testing.T) {
 	judge := &eventJudge{answers: map[string]eventAnswer{}}
 	rt, owner, computer := eventRuntime(t, judge)
 	ctx := context.Background()
 	var inputs []eventInput
-	for i := 0; i < eventChunkSize+3; i++ {
+	for i := 0; i < 15; i++ {
 		inputs = append(inputs, capItem(fmt.Sprintf("x%d", i), fmt.Sprintf("Story number %d about topic", i), fmt.Sprintf("https://outlet%d.com/a", i), ""))
 	}
-	// The last capture reports the first chunk's first event.
+	// The last capture reports the first capture's event, in the same call.
 	judge.answers[inputs[len(inputs)-1].Item.Title] = eventAnswer{target: inputs[0].Item.Title}
 	r, err := rt.resolveEvents(ctx, owner, computer, inputs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// R2: two sequential calls; the second saw the first's events.
-	if r.Calls != 2 || len(r.Corroborated) != 1 {
-		t.Fatalf("report = %+v; want 2 calls and the cross-chunk join corroborating", r)
+	// R2: one call for all 15 captures; the sibling join corroborates.
+	if r.Calls != 1 || len(r.Corroborated) != 1 {
+		t.Fatalf("report = %+v; want 1 call and the sibling join corroborating", r)
 	}
 	// R3: resolving the same captures again writes nothing new.
 	again, err := rt.resolveEvents(ctx, owner, computer, inputs)
@@ -280,8 +280,8 @@ func TestEventLayerRetryIsIdempotentAndChunksSeeEarlierChunks(t *testing.T) {
 		t.Fatalf("retry: %+v %v; want no calls and no writes", again, err)
 	}
 	events, _ := rt.store.RecentWorldEvents(ctx, owner, computer, 100)
-	if len(events) != eventChunkSize+2 {
-		t.Fatalf("events = %d, want %d", len(events), eventChunkSize+2)
+	if len(events) != 14 {
+		t.Fatalf("events = %d, want 14", len(events))
 	}
 }
 
@@ -382,7 +382,7 @@ func TestEventLayerKeepsEachCallUnderTheContextBound(t *testing.T) {
 	}
 	judge.bytes, judge.fits = nil, nil
 	var inputs []eventInput
-	for i := 0; i < eventChunkSize*2; i++ {
+	for i := 0; i < 24; i++ {
 		inputs = append(inputs, capItem(fmt.Sprintf("l%d", i), fmt.Sprintf("Long item %d", i), fmt.Sprintf("https://l%d.example.com/x", i), long))
 	}
 	r, err := rt.resolveEvents(context.Background(), owner, computer, inputs)

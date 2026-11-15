@@ -744,3 +744,72 @@ Label counts live on the flush log line (`intake labels: flush captures=
 calls= questions= bytes_max= waited_ms= unlabelled= cancelled=`);
 `SourcePollUsage.Labelled` and `.Unlabelled` were deleted because the poll
 no longer knows them.
+
+## 10. One entry point per job (2026-11-15, orange; rollback: revert)
+
+Why this section exists: `docs/problems/jev-misuse-structural-assessment-2026-11-15.md`.
+Five rounds went wrong the same way because every site built and sent its own
+request for its own unit, so nothing owned "the job's state and all its
+questions". Owner, 2026-11-15: "jev should run as many questions in the same
+call as possible. not multiple calls to the jev api. not concurrently or
+sequentially"; efficiency is the job done with as few Jev calls as possible.
+
+**The entry point.** `jevJob` (`internal/agentcore/jev_job.go`). A site makes
+one per job (a capture flush, a judge pass), adds the job's state as keyed
+entries (`Entry(group, key, levels...)`, a group rendered as a list or a
+map; a level is a short or full rendering) and its questions
+(`Ask(name, question, decision, needs...)`, each naming the entries it
+reads), and calls `Plan()`. The plan is one call when the whole job fits
+`jevbudget` (64k request, 32k state plus one question, 255 options a choice
+question), otherwise the fewest calls, each carrying only the entries its
+questions read. Every split names the limit that forced it
+(`jevbudget.Limit`: `request_tokens_64k`, `state_plus_question_tokens_32k`,
+`choices_255`) and is logged, with one `jev job: site= calls= questions=
+est_tokens_max=` line per job. The site reads answers back by question name.
+No constant of ours bounds questions or items per call. Concurrency and
+queues are not offered: a split that remains is answered by shrinking the
+context, not by sending the calls in parallel.
+
+**Closest existing type and what it replaces.** `intakeCall` (state,
+questions, decisions) is the shape of a call; `planJevCalls` (the longest
+prefix that fits, by bisection) is the splitter. `jevJob` generalizes
+`intakeCall` and `buildIntakeCall`, and replaces for intake: the story chunks
+(`p.cuts`, `chunk(k)`), the group closing in `planIntakeCalls`, the
+`reserve` and `chunkRequest/chunkQuestion` policy fields, and the per-call
+loop. The byte policy and slicing stay only as the shadow comparison's old arm
+until it has been run, then are deleted. Every other site still ends in
+`rt.judgeCall`, the single funnel; `scripts/check-jev-entry` fails a new
+direct call and lists the sites not yet moved with their calls per job.
+
+**Calls per job, before and after.**
+
+| Job | Before | After | Remaining split and its limit |
+| --- | --- | --- | --- |
+| Capture poll, labels (flush of N captures over S stories) | 3 to 5 per 6 captures, per 15 KB slice | 1 | none until the entries cross 24k tokens (a question plus its entries) or 64k |
+| Capture poll, events | 1 per 12 captures, in sequence | 1 per flush (all waiting captures, to `choices_255`) | `choices_255`: siblings plus candidates |
+| Support pass (revisions waiting) | 1 per revision, queued one at a time behind a one-slot semaphore | 1 per queue pass: the first revision at once, those that arrive during its call together in the next (group commit); owners are never mixed | `state_plus_question_tokens_32k` |
+| Sub-call, desk cast, inert pass | 1 per 20 | 1 | `state_plus_question_tokens_32k` (inert at the full clip: 2 for 43) |
+| Story analysis (24 questions) | 2 (System 1 verb cap of 12) | 2 | our cap in `yaegikernel.System1MaxQuestions`, residual |
+
+A capture poll is labels then events: two calls where one unified state might
+do. They ask over different states (stories against known events), so one
+call needs the story and event entries unified; that is not a contained change
+and stays a residual at 2 calls per poll.
+
+**Can the event layer's minting wait for the answers?** Yes. Its sequential
+chunks existed so a later chunk would see events an earlier chunk minted; but
+a question already offers the other captures of its call as options (the
+sibling union), and the union is resolved after the answers. So the whole set
+of waiting captures can be one call, and chunking is needed only for
+`choices_255` (captures minus one siblings, plus up to 53 candidates and
+`new`). The event layer is moved to a flush of every waiting capture, bounded
+by that limit; it is not yet on `jevJob` (its candidates are one list shared by
+all captures; per-capture shortlists are the larger change). Its context is
+reduced instead: option descriptions are null (handles, as intake's), and a
+capture offers at most `intakeSiblingOptions` (24) other captures by title
+overlap, because a sentence under every option of every question put the
+request past 64k at three dozen captures.
+
+**Accuracy.** It is unmeasured at large question counts. The shadow
+comparison measures it; a loss is fixed in the context (fewer candidates, a
+shorter entry), not with a cap.

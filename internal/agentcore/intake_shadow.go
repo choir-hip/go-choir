@@ -155,7 +155,7 @@ func shadowPlanArm(rt *Runtime, in IntakeShadowInput, name string, policy intake
 			live = append(live, i)
 		}
 	}
-	calls, err := rt.planIntakeCalls(lib, p, batch, live, policy)
+	calls, err := rt.planCalls(lib, p, batch, live, policy)
 	if err != nil {
 		return IntakeShadowArm{}, err
 	}

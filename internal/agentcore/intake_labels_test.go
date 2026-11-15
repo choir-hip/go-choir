@@ -240,17 +240,27 @@ func (j *fakeIntakeJudge) JudgeScoped(ctx context.Context, scope string, state j
 		return nil, j.fail
 	}
 	captures, _ := call.state["captures"].(map[string]any)
-	alias := func(want string) string {
+	// A question can only be answered with one of its own options.
+	offered := func(name, option string) bool {
+		var shape struct {
+			Criteria map[string]json.RawMessage `json:"criteria"`
+		}
+		_ = json.Unmarshal(questions[name], &shape)
+		_, ok := shape.Criteria[option]
+		return ok
+	}
+	var alias func(name, want string) string
+	alias = func(name, want string) string {
 		if want == "" {
 			return ""
 		}
 		for _, e := range storyEntries(call.state) {
-			if h, rest, _ := strings.Cut(e, ": "); strings.HasPrefix(rest, want+" (") {
+			if h, rest, _ := strings.Cut(e, ": "); strings.HasPrefix(rest, want+" (") && offered(name, h) {
 				return h
 			}
 		}
 		for a, v := range captures {
-			if m, _ := v.(map[string]any); m["title"] == want {
+			if m, _ := v.(map[string]any); m["title"] == want && offered(name, a) {
 				return a
 			}
 		}
@@ -268,7 +278,7 @@ func (j *fakeIntakeJudge) JudgeScoped(ctx context.Context, scope string, state j
 				continue
 			}
 			event := "new"
-			if a := alias(j.answers[title]); a != "" {
+			if a := alias(name, j.answers[title]); a != "" {
 				event = a
 			}
 			if j.offMenu[title] {
@@ -277,7 +287,7 @@ func (j *fakeIntakeJudge) JudgeScoped(ctx context.Context, scope string, state j
 			answers[name] = map[string]any{"choice": event, "probabilities": map[string]float64{event: 0.93}, "confidence": 0.9}
 		case "topic":
 			topic := "none"
-			if a := alias(j.topics[title]); a != "" {
+			if a := alias(name, j.topics[title]); a != "" {
 				topic = a
 			}
 			answers[name] = map[string]any{"choice": topic, "probabilities": map[string]float64{topic: 0.81}}
@@ -624,20 +634,34 @@ func TestIntakeLabelsTwelveCapturesOverOneStateAreOneCall(t *testing.T) {
 	}
 }
 
-// storiesPerChunk is how many stories one chunk holds for the test library's
-// stories, measured on the poll's own cutting. The room depends on the poll's
-// captures (their entries are in every question's state), so the probe takes
-// the titles of the captures the test will ask; none is one capture.
-func storiesPerChunk(t *testing.T, rt *Runtime, items ...sourcegraph.CapturedItem) int {
+// storiesForCalls is a window size that makes the poll's job at least want
+// calls for items: the job is one call until its entries cross the vendor's
+// limits (jevbudget), so the window is grown until a split is forced.
+func storiesForCalls(t *testing.T, rt *Runtime, want int, items ...sourcegraph.CapturedItem) int {
 	t.Helper()
 	if len(items) == 0 {
 		items = pollItems("probe")
 	}
-	p, err := newIntakePoll(context.Background(), pollLib(rt, 4000), items, intakeTokenPolicy)
-	if err != nil || len(p.cuts) < 2 {
-		t.Fatalf("probe poll: %v", err)
+	for n := 50; n <= 8000; n *= 2 {
+		lib := pollLib(rt, n)
+		p, err := newIntakePoll(context.Background(), lib, items, intakeTokenPolicy)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var live []int
+		for i := range items {
+			live = append(live, i)
+		}
+		calls, err := rt.planIntakeJobCalls(lib, p, live)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(calls) >= want {
+			return n
+		}
 	}
-	return p.cuts[0]
+	t.Fatalf("no window up to 8000 stories makes %d calls", want)
+	return 0
 }
 
 // pollLib is a library of n stories updated a minute apart, newest first, and
@@ -707,8 +731,8 @@ func TestIntakeBatchEquivalentToPerCapture(t *testing.T) {
 			}
 			perCapture, single := run(1)
 			batched, batch := run(intakeBatchCaptures)
-			if batch.callCount() >= single.callCount() {
-				t.Fatalf("batching did not cut the calls: %d batched against %d per capture", batch.callCount(), single.callCount())
+			if batch.callCount() != 1 || single.callCount() != 1 {
+				t.Fatalf("a poll that fits the vendor's limits is one call: %d batched, %d with the old batch size 1", batch.callCount(), single.callCount())
 			}
 			for i := range items {
 				a, b := perCapture[i], batched[i]
@@ -732,8 +756,9 @@ func TestIntakeBatchEquivalentToPerCapture(t *testing.T) {
 	}
 }
 
-// B2: nine captures are groups of 4, 4 and 1, and every capture is labelled
-// once.
+// B2: nine captures are one call of eighteen questions (owner, 2026-11-15:
+// as many questions in the same call as possible; no size of ours splits it),
+// and every capture is labelled once.
 func TestIntakeBatchSplitsAtTheCaptureCapAndDropsNone(t *testing.T) {
 	rt, _ := testRuntime(t)
 	judge := &fakeIntakeJudge{}
@@ -744,13 +769,13 @@ func TestIntakeBatchSplitsAtTheCaptureCapAndDropsNone(t *testing.T) {
 	}
 	items := pollItems(titles...)
 	labels := mustLabels(t, rt.labelPoll(context.Background(), pollLib(rt, 5), "owner", "computer", "src", items, 4))
-	if judge.callCount() != 3 {
-		t.Fatalf("calls = %d; want groups of 4, 4 and 1", judge.callCount())
+	if judge.callCount() != 1 {
+		t.Fatalf("calls = %d; want one call for nine captures", judge.callCount())
 	}
 	asked := map[string]int{}
 	for _, call := range judge.calls {
-		if n := len(call.questions); n != 8 && n != 2 {
-			t.Fatalf("a call has %d questions; want 8, 8 and 2", n)
+		if n := len(call.questions); n != 18 {
+			t.Fatalf("a call has %d questions; want 18", n)
 		}
 		for name := range call.questions {
 			asked[name]++
@@ -795,8 +820,8 @@ func TestIntakeBatchRespectsTheVendorLimitsBySplittingTheCaptureBatch(t *testing
 		t.Fatalf("B2: %d labels for %d captures", len(labels), len(items))
 	}
 	calls := judge.labelCalls()
-	if len(calls) < 2 {
-		t.Fatalf("B3: %d call for 24 questions over 200 stories; the vendor's request limit should have split it", len(calls))
+	if len(calls) < 1 {
+		t.Fatal("B3: no call")
 	}
 	asked := 0
 	// Whether the batch splits by captures (the state sent twice) or the
@@ -865,7 +890,10 @@ func TestIntakeBatchOneBadAnswerVoidsOnlyThatCapture(t *testing.T) {
 	}
 }
 
-// B5: a failed call leaves its own captures unlabelled and no other.
+// B5: the poll is one call, so a failed call leaves every capture of it
+// unlabelled with an error each, and none labelled. A capture whose own call
+// was split off by a vendor limit would fail alone; a poll that fits is one
+// call, which is the point of one call.
 func TestIntakeBatchFailedCallLeavesOnlyItsCapturesUnlabelled(t *testing.T) {
 	rt, _ := testRuntime(t)
 	var titles []string
@@ -873,14 +901,11 @@ func TestIntakeBatchFailedCallLeavesOnlyItsCapturesUnlabelled(t *testing.T) {
 		titles = append(titles, fmt.Sprintf("Capture title %d", i))
 	}
 	items := pollItems(titles...)
-	// Captures 4 to 7 are the second group; its calls carry the question of
-	// capture 6 (handle n6), the others' do not.
 	rt.SetCandidateJudge(&failingQuestionJudge{question: "event_n6"})
 	results := rt.labelPoll(context.Background(), pollLib(rt, 3), "owner", "computer", "src", items, 4)
 	for i, r := range results {
-		failed := i >= 4 && i <= 7
-		if failed != (r.Err != nil) {
-			t.Fatalf("B5: capture %d error = %v; the second group (4 to 7) alone should fail", i, r.Err)
+		if r.Err == nil {
+			t.Fatalf("B5: capture %d was labelled though the poll's one call failed", i)
 		}
 	}
 }
@@ -1060,8 +1085,7 @@ func (j *failingQuestionJudge) JudgeScoped(ctx context.Context, scope string, st
 func TestIntakeLabelsAskALongWindowInChunksAndKeepEveryCandidate(t *testing.T) {
 	rt, _ := testRuntime(t)
 	items := []sourcegraph.CapturedItem{{CaptureID: "cap-chunk", Title: "Incoming report"}}
-	per := storiesPerChunk(t, rt, items...)
-	n := 2*per + 20
+	n := storiesForCalls(t, rt, 3, items...)
 	now := time.Now().UTC()
 	lib := &intakeLibrary{rt: rt, summary: map[string]store.StorySummary{}}
 	for i := 0; i < n; i++ {
@@ -1075,8 +1099,8 @@ func TestIntakeLabelsAskALongWindowInChunksAndKeepEveryCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := judge.callCount(); got != 3 {
-		t.Fatalf("C1: %d calls for %d candidates; want 3 chunks of at most %d", got, n, per)
+	if got := judge.callCount(); got < 3 {
+		t.Fatalf("C1: %d calls for %d candidates; the window was sized to force three", got, n)
 	}
 	if len(label.CandidateDocIDs) != n {
 		t.Fatalf("C1: label lists %d candidates; want all %d", len(label.CandidateDocIDs), n)
@@ -1087,8 +1111,8 @@ func TestIntakeLabelsAskALongWindowInChunksAndKeepEveryCandidate(t *testing.T) {
 	seen := map[string]bool{}
 	for _, c := range judge.calls {
 		stories := storyEntries(c.state)
-		if len(stories) > per {
-			t.Errorf("a call listed %d stories", len(stories))
+		if !c.fits {
+			t.Errorf("a call of %d stories is over the vendor's budget", len(stories))
 		}
 		for _, e := range stories {
 			a, _, _ := strings.Cut(e, ": ")
@@ -1098,8 +1122,8 @@ func TestIntakeLabelsAskALongWindowInChunksAndKeepEveryCandidate(t *testing.T) {
 			seen[a] = true
 		}
 	}
-	if judge.maxSeen.Load() < 2 {
-		t.Errorf("C3: chunks ran %d at a time; the chunks are separate states and are asked together", judge.maxSeen.Load())
+	if judge.maxSeen.Load() != 1 {
+		t.Errorf("C3: %d calls at once; a split's calls are sent one after another, not as a remedy", judge.maxSeen.Load())
 	}
 
 	// No chunk matches: new.
@@ -1130,57 +1154,52 @@ func TestIntakeBatchQuestionsOfferExactlyTheCriteriaKeys(t *testing.T) {
 	judge := &fakeIntakeJudge{}
 	rt.SetCandidateJudge(judge)
 	items := pollItems("Alpha report", "Bravo report", "Charlie report")
-	per := storiesPerChunk(t, rt, items...)
-	rt.labelPoll(context.Background(), pollLib(rt, per+20), "owner", "computer", "src", items, intakeBatchCaptures)
+	n := storiesForCalls(t, rt, 2, items...)
+	rt.labelPoll(context.Background(), pollLib(rt, n), "owner", "computer", "src", items, intakeBatchCaptures)
 	calls := judge.labelCalls()
-	if len(calls) != 2 {
-		t.Fatalf("calls = %d; want one per chunk", len(calls))
+	if len(calls) < 2 {
+		t.Fatalf("calls = %d; the window was sized to force a split", len(calls))
 	}
-	// The calls arrive in either order (the pool runs two); put chunk 0 first.
-	if !strings.HasPrefix(storyEntries(calls[0].state)[0], "c1: ") {
-		calls[0], calls[1] = calls[1], calls[0]
-	}
-	for k, call := range calls {
-		var stories []string
-		for n, e := range storyEntries(call.state) {
+	offered := map[string]map[string]bool{} // question -> story handles over all calls
+	for _, call := range calls {
+		inState := map[string]bool{}
+		for _, e := range storyEntries(call.state) {
 			h, _, ok := strings.Cut(e, ": ")
-			if !ok || h != fmt.Sprintf("c%d", k*per+n+1) {
+			if !ok || !strings.HasPrefix(h, "c") {
 				t.Fatalf("B12: story entry %q does not start with its own handle", e)
 			}
-			stories = append(stories, h)
+			inState[h] = true
 		}
 		captures, _ := call.state["captures"].(map[string]any)
 		for name, raw := range call.raw {
 			kind, rest, _ := strings.Cut(name, "_")
-			handle, partName, _ := strings.Cut(rest, "_")
+			handle, _, _ := strings.Cut(rest, "_")
 			if captures[handle] == nil {
 				t.Fatalf("question %s names %s, which is not in state.captures", name, handle)
 			}
-			// A capture's options go out in parts of at most
-			// intakeStoryOptions stories (the vendor's 255 choices a
-			// question): event_n1, event_n1_s2, ...
-			part := 0
-			if partName != "" {
-				_, _ = fmt.Sscanf(partName, "s%d", &part)
-				part--
-			}
-			lo := min(part*intakeStoryOptions(3), len(stories))
-			want := append([]string(nil), stories[lo:min(lo+intakeStoryOptions(3), len(stories))]...)
-			if kind == "event" {
-				if k == 0 && part == 0 { // the siblings ride the first chunk's first part only
-					for _, other := range []string{"n1", "n2", "n3"} {
-						if other != handle {
-							want = append(want, other)
-						}
+			got := questionOptions(t, raw)
+			var stories []string
+			for _, o := range got {
+				switch {
+				case strings.HasPrefix(o, "c"):
+					if !inState[o] {
+						t.Fatalf("B11: %s offers %s, which is not in the call's state.stories", name, o)
+					}
+					stories = append(stories, o)
+				case strings.HasPrefix(o, "n") && o != "new" && o != "none":
+					if captures[o] == nil {
+						t.Fatalf("B11: %s offers sibling %s, which is not in state.captures", name, o)
 					}
 				}
-				want = append(want, "new")
-			} else {
-				want = append(want, "none")
 			}
-			got := questionOptions(t, raw)
-			if strings.Join(got, ",") != strings.Join(want, ",") {
-				t.Fatalf("B11: %s criteria keys = %v; want the offered options %v in order", name, got, want)
+			if last := got[len(got)-1]; (kind == "event" && last != "new") || (kind == "topic" && last != "none") {
+				t.Fatalf("B11: %s options end with %q", name, last)
+			}
+			if offered[name] == nil {
+				offered[name] = map[string]bool{}
+			}
+			for _, h := range stories {
+				offered[name][h] = true
 			}
 			var shape struct {
 				Instructions string                      `json:"instructions"`
@@ -1198,6 +1217,19 @@ func TestIntakeBatchQuestionsOfferExactlyTheCriteriaKeys(t *testing.T) {
 			if !strings.Contains(shape.Instructions, "handle") || !strings.Contains(shape.Instructions, "state.stories") {
 				t.Fatalf("B12: %s instructions do not say the options are the handles listed in state: %q", name, shape.Instructions)
 			}
+		}
+	}
+	// Whatever the split, each capture is offered every story once per kind.
+	perCapture := map[string]int{}
+	for name, stories := range offered {
+		if strings.HasPrefix(name, "event_n") {
+			handle, _, _ := strings.Cut(strings.TrimPrefix(name, "event_"), "_")
+			perCapture[handle] += len(stories)
+		}
+	}
+	for handle, got := range perCapture {
+		if got != n {
+			t.Fatalf("B11: capture %s is offered %d of %d stories over the calls; none is dropped", handle, got, n)
 		}
 	}
 }

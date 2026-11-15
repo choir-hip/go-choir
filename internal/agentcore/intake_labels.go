@@ -9,7 +9,6 @@ import (
 	"math"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -706,13 +705,10 @@ func newIntakePoll(ctx context.Context, lib *intakeLibrary, items []sourcegraph.
 	// The stories are one chunk unless they cannot be: a chunk closes only
 	// when the next story would take a one-capture call past the policy's
 	// limits (the vendor's, in production). Never by a count, never trimmed.
-	var request, question, reserve int
-	if policy.reserve != nil {
-		reserve = policy.reserve(items)
-	}
+	var request, question int
 	for n, s := range p.stories {
 		r, q := policy.storyCost(s, len(items))
-		if n > 0 && (request+r > policy.chunkRequest-reserve || question+q > policy.chunkQuestion-reserve) {
+		if n > 0 && (request+r > policy.chunkRequest || question+q > policy.chunkQuestion) {
 			p.cuts = append(p.cuts, n)
 			request, question = 0, 0
 		}
@@ -722,13 +718,69 @@ func newIntakePoll(ctx context.Context, lib *intakeLibrary, items []sourcegraph.
 		p.cuts = append(p.cuts, len(p.stories))
 	}
 	for i := range items {
-		for j := range items {
-			if j != i {
-				p.views[i].siblings = append(p.views[i].siblings, p.handles[j])
-			}
-		}
+		p.views[i].siblings = intakeSiblings(items, p.handles, i)
 	}
 	return p, nil
+}
+
+// intakeSiblingOptions is how many other captures one capture's event
+// question offers: all of them in a flush of up to this many plus one, and in
+// a bigger flush the ones whose titles share the most words with it. It is a
+// reduction of the context, not a cap on calls or questions: every question of
+// a call reads the entries of its siblings, so offering all of 150 captures
+// would put 36k tokens in every question and cross the 32k limit; a capture
+// can be the same event as a handful of others, and those share words.
+const intakeSiblingOptions = 24
+
+func intakeSiblings(items []sourcegraph.CapturedItem, handles []string, i int) []string {
+	titles := make([]string, len(items))
+	for j, it := range items {
+		titles[j] = it.Title
+	}
+	var out []string
+	for _, j := range siblingIndexes(titles, i) {
+		out = append(out, handles[j])
+	}
+	return out
+}
+
+// siblingIndexes are the other captures capture i's question offers: all of
+// them when there are few, otherwise those whose titles share the most words.
+func siblingIndexes(titles []string, i int) []int {
+	var out []int
+	if len(titles)-1 <= intakeSiblingOptions {
+		for j := range titles {
+			if j != i {
+				out = append(out, j)
+			}
+		}
+		return out
+	}
+	want := titleTokens(titles[i])
+	type scored struct{ j, score int }
+	var hits []scored
+	for j := range titles {
+		if j == i {
+			continue
+		}
+		score := 0
+		for w := range titleTokens(titles[j]) {
+			if want[w] {
+				score++
+			}
+		}
+		if score > 0 {
+			hits = append(hits, scored{j, score})
+		}
+	}
+	sort.SliceStable(hits, func(a, b int) bool { return hits[a].score > hits[b].score })
+	for _, h := range hits {
+		if len(out) == intakeSiblingOptions {
+			break
+		}
+		out = append(out, h.j)
+	}
+	return out
 }
 
 // candidatesOf lists a capture's candidate stories in its own order.
@@ -971,43 +1023,29 @@ type intakePolicy struct {
 	storyCost func(s intakeStory, captures int) (request, question int)
 	// chunkRequest and chunkQuestion are the most a chunk's stories may add.
 	chunkRequest, chunkQuestion int
-	// reserve is what a poll's captures need beside the stories, in the same
-	// unit as the chunk limits, taken from both limits; nil is nothing.
-	reserve func(items []sourcegraph.CapturedItem) int
+	// job is the production policy: the poll is one jevJob (intake_job.go).
+	job bool
 	// fits reports whether a call is within the policy's size limit.
 	fits func(c intakeCall) bool
 }
 
-// intakeTokenPolicy sizes calls by the vendor's token limits (jevbudget):
-// 64k tokens a request, 32k for the state plus any one question, less a
-// quarter margin. Stories are chunked only when one capture's call could not
-// carry them all; a group of captures is split when the estimate says the
-// request or one of its questions would cross the budget.
+// intakeTokenPolicy is the production policy: the poll is one jevJob
+// (intake_job.go), so the stories are not chunked up front; the job's calls are
+// as few as jevbudget's limits allow, and a split names its limit.
 var intakeTokenPolicy = intakePolicy{
-	storyCost: func(s intakeStory, captures int) (int, int) {
-		entry, _ := json.Marshal(s.entry)
-		key := jevbudget.Tokens([]byte(strconv.Quote(s.handle) + ":null,"))
-		state := jevbudget.Tokens(entry) + 1
-		// Each capture asks the story in an event and a topic question, and
-		// the instructions of each part of 241 stories (about 150 tokens a
-		// question) add a token a capture to a story.
-		return state + max(captures, 1)*(2*key+1), state
-	},
-	chunkRequest: jevbudget.RequestBudgetTokens,
-	// A question offers at most 255 keys, however many stories the state lists.
-	chunkQuestion: jevbudget.QuestionBudgetTokens - jevbudget.VendorMaxChoices*intakeOptionTokens,
-	// A poll's captures are in the state of every question of its calls, so
-	// their entries, at the full summary clip and as the estimator weighs
-	// their script, come off the stories' room.
-	reserve: func(items []sourcegraph.CapturedItem) int {
-		n := intakeCallFixedTokens
-		for _, item := range items {
-			raw, _ := json.Marshal(intakeCaptureState(item, intakeSummaryRunes))
-			n += jevbudget.Tokens(raw) + intakeCaptureKeyTokens
-		}
-		return n
-	},
+	job:          true,
+	storyCost:    func(intakeStory, int) (int, int) { return 0, 0 },
+	chunkRequest: math.MaxInt / 2, chunkQuestion: math.MaxInt / 2,
 	fits: func(c intakeCall) bool { return jevbudget.Fits(c.state, c.questions) },
+}
+
+// planCalls plans the poll's calls: on the job entry point for production
+// (policy.job), and by the old slicing for the shadow comparison's old arm.
+func (rt *Runtime) planCalls(lib *intakeLibrary, p *intakePoll, batch int, live []int, policy intakePolicy) ([]intakeCall, error) {
+	if policy.job {
+		return rt.planIntakeJobCalls(lib, p, live)
+	}
+	return rt.planIntakeCalls(lib, p, batch, live, policy)
 }
 
 // planIntakeCalls lists the poll's calls, chunk by chunk: a chunk's captures
@@ -1107,7 +1145,7 @@ func (rt *Runtime) labelPollWith(ctx context.Context, lib *intakeLibrary, ownerI
 		}
 		live = append(live, i)
 	}
-	calls, err := rt.planIntakeCalls(lib, p, batch, live, policy)
+	calls, err := rt.planCalls(lib, p, batch, live, policy)
 	if err != nil {
 		for _, i := range live {
 			out[i].Err = err
@@ -1123,37 +1161,16 @@ func (rt *Runtime) labelPollWith(ctx context.Context, lib *intakeLibrary, ownerI
 	// answers[i] are capture i's answers, one per part of its options in
 	// each call that asked it.
 	answers := make([][]intakeCallAnswer, len(items))
-	// The calls are separate states (a window's chunks hold different
-	// stories, a split group holds different captures), so they are asked
-	// together, with no cap; a call is split at all only where the vendor's
-	// limits force it. Their answers are read in the calls' order (owner,
-	// 2026-11-15: Jev is not serial; the point is one large context for many
-	// questions).
-	type callResult struct {
-		ans [][]intakeCallAnswer
-		err error
-	}
-	results := make([]callResult, len(calls))
-	var wg sync.WaitGroup
-	for n, c := range calls {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					results[n].ans, results[n].err = nil, fmt.Errorf("intake call panicked: %v", r)
-				}
-			}()
-			if err := ctx.Err(); err != nil {
-				results[n].err = err
-				return
-			}
-			results[n].ans, results[n].err = rt.askIntakeCall(ctx, lib, c)
-		}()
-	}
-	wg.Wait()
-	for n, c := range calls {
-		ans, err := results[n].ans, results[n].err
+	// The job's calls: one when it fits the vendor's limits. A split is forced
+	// by a named limit (logged by the job); its calls are sent one after
+	// another and neither queued nor fanned out as a remedy: the remedy is a
+	// smaller context.
+	for _, c := range calls {
+		var ans [][]intakeCallAnswer
+		err := ctx.Err()
+		if err == nil {
+			ans, err = rt.askIntakeCall(ctx, lib, c)
+		}
 		for a, ask := range c.asks {
 			if err != nil {
 				answers[ask.capture] = append(answers[ask.capture], intakeCallAnswer{err: err})
