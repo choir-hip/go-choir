@@ -178,3 +178,9 @@ The owner tested onboarding, where the app helps set up the edition.
   never say there is nothing to report; "there's always material". Belief
   (owner's and the lead's): the radio's start is not wired to the paper's
   stories. Not yet traced.
+- **Ruling on the topic screen: fewer, hierarchical categories.** "We have
+  too many separate categories. Instead, we should have fewer but
+  hierarchical categories. And then visually, it should be like a
+  hierarchical tree. Not entirely a tree since many topics overlap." Taken
+  as: about ten top-level categories that expand to subtopics; a subtopic
+  may sit under more than one parent and is one topic wherever shown.
