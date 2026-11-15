@@ -369,7 +369,8 @@ production gateway client for failures as in `intake_failure_test.go`).
     `source_schedule.go:279-283`); the label is written, unread by that poll.
     Test: cancel the poll's context inside the window.
 11. **Several computers.** One timer per computer queue; the one flusher
-    serializes flushes, oldest deadline first (as it orders now). Test: two
+    serializes flushes (corrected in round 2: not oldest deadline first; see
+    7.3, the order is whatever order the runtime mutex is acquired). Test: two
     computers with different first arrivals.
 12. **Larger calls and the call deadline.** `intakeCallTimeout` already scales
     with estimated tokens (5 s plus 1 s per thousand, about 69 s at 64k,
@@ -1119,18 +1120,22 @@ and committed by `commitCapturesRecord`. A capture already leased is skipped by
 captures mints nothing. So the separation needs no new record kind and no new
 commit path: the poll commits its arrival **held** (`announceCaptures(...,
 held)`, the argument that is `held := eventWakes` at `source_schedule.go:295`
-today becomes true also when the gather is on), and the flush end commits
+today becomes `eventWakes || accepted`, where `accepted` is the enqueue's own
+answer; see 7.1), and the flush end commits
 `unresolvedRequests(..., types.CaptureEventReleased, items)` for the flush's
 captures.
 
 What reads an arrival expecting its task: the admitter prompt only
 (`inbox_records.go:998`), and management's own main run, which is not woken for
-a record that started a task (A7) and is not woken for a held one either. A
-held arrival is read by management on its next turn and wakes no one;
-`captureDelegable` (`arrival_task.go:139`, `management_tasks.go:741`) refuses
-to lease a capture twice if management delegates it first. Whether management's
-prompt tells it to leave held records alone is unverified (the held case is
-written for event wakes).
+a record that started a task (A7) and is not woken for a held one either.
+**A held arrival is not shown to management at all** (corrected in round 2):
+the record view skips a held record with no event and the cursor passes it
+(`inbox_records.go:110-115`); the only trace is the `Held` tally on the stories
+page, which the sweep alone writes (`intake_view.go:157-159`,
+`event_wakes.go`, the `tally` it sets). So management cannot delegate a held
+capture, and the recovery path after a crash is the sweep alone (7.2).
+`captureDelegable` (`arrival_task.go:139`, `management_tasks.go:741`) still
+refuses a second lease.
 
 **(2) Crash or planned restart between the arrival and the mint.**
 
@@ -1206,9 +1211,11 @@ after the capture instead of about 1 s.
 
 ### 6.4 What the poll does now
 
-`source_schedule.go:271-283`: when the gather is on, the poll calls
-`enqueueIntakeLabels` (no channel), `enqueueEventResolution`, and
-`announceCaptures(..., held = true)`. The arrival is committed held, so
+`source_schedule.go:271-283`: the poll calls `enqueueIntakeLabels`, which now
+returns **whether it accepted** the captures (not a channel), then
+`enqueueEventResolution`, and `announceCaptures(..., held)` with
+`held = eventWakes || accepted` (7.1). When accepted, the arrival is committed
+held, so
 management is not woken and no task is minted. The flush later labels the
 captures and commits the release; the task opens with the labels in front of
 it. The `NextDue` change, the arrival delay, the hibernate fence and the
@@ -1267,13 +1274,14 @@ held; the sweep takes them.
     held capture first:** `captureDelegable` refuses a second lease and the
     release id is deterministic (`event-released:<digest>`); a test commits both
     and expects one task.
-18. **Management reading a held arrival:** it wakes no one and is not management's
-    to dispose of; the test asserts the wake predicate (`store/management_tasks.go:137`)
-    for a held arrival under the gather. Whether management's prompt tells it to
-    leave held records alone is unverified.
+18. **Management and a held arrival:** it wakes no one (the wake predicate,
+    `store/management_tasks.go:137`) and management is not shown it
+    (`inbox_records.go:110-115`); the test asserts both for a held arrival
+    under the gather. (Round 2 corrected the earlier "read on its next turn".)
 
 (Against 5.8: item 12 changes from label lateness to task start lateness;
-items 15 to 18 are new with the held arrival; the rest stand.)
+items 15 to 18 are new with the held arrival; the rest stand. Section 7.4
+recounts the list with round 2's additions.)
 
 ### 6.7 Land order, and what is unverified
 
@@ -1284,11 +1292,162 @@ items 15 to 18 are new with the held arrival; the rest stand.)
    its own small commit before (c) so it can be reverted alone.
 
 Not verified: how long an intake task takes per capture (the 10-minute
-deadline with about 8 captures); management's behavior on a held captures
-record; the exact assertions of the tests that wait on the ticket
+deadline with about 8 captures); the exact assertions of the tests that wait on the ticket
 (`intake_flush_test.go`, `intake_flush_safety_test.go`); whether a boot re-poll
 treats a crash-lost arrival as already captured (taken from DeepSeek B1, the
 order of writes confirmed in code); and that a computer with only labels on
 has the sweep's other inputs (`eventIndexFor` is read only when both event
 settings are on, `event_wakes.go:466-480`).
+
+## 7. Review round 2 (the last repair round)
+
+Seats: omp-deepseek-v41-flash ACCEPT, claude REPAIR with one new blocker. Both
+confirm the five round 1 blockers closed and the held-arrival, release and
+sweep mechanics sound. This round repairs only.
+
+### 7.1 The held rule, as written (the blocker)
+
+**An arrival is committed held only when its enqueue was accepted, or when
+event wakes already hold it.** Today's `source_schedule.go:295` is `held :=
+eventWakes`; the rule becomes:
+
+```
+accepted := false
+if len(report.Captured) > 0 && !eventWakes && rt.intakeLabelsEnabled(...) {
+    accepted = rt.enqueueIntakeLabels(...)      // now returns bool
+}
+held := eventWakes || accepted
+```
+
+`enqueueIntakeLabels` returns true only when it queued at least one capture. It
+refuses silently, and so must return false, in the four cases of the code:
+`rt == nil || rt.candidateJudge == nil || rt.store == nil`
+(`intake_labels.go:329-331`), a capture list with no ids (`:338-341`, the empty
+`valid`), and `l.stopped` (`:346-351`). `intakeLabelsEnabled`
+(`computer_settings.go:35-49`) checks none of these (it defaults on for any
+computer with a source schedule), so the setting cannot decide the hold: a
+computer with no judge, or a poll landing after stop, would commit held with no
+flush to release it and wait for the sweep (10 to 15 minutes, at most 48
+captures a sweep). A refused enqueue announces **unheld** and mints the task at
+once through `withIntakeTask`, exactly as a refused enqueue does today (a closed
+ticket channel and an immediate announce). With labels off the enqueue is not
+called, `accepted` stays false and the arrival is unheld, as today. DeepSeek's
+should-fix 1 (`eventWakes || intakeLabelsEnabled`) is the same hole from the
+other side and is closed by the same rule; I use `accepted` rather than the
+setting because the setting alone is what it names.
+
+One consequence, named: `announceCaptures` takes the poll's pending captures
+(a previously failed append, `sched.PendingArrivals`) together with the new
+ones in one record (`capture_arrival.go:130-149`), so `held` covers old
+pending captures that are not in this flush; they are recovered by the sweep
+like any held capture.
+
+Failure items and tests added for it (7.4): a computer with no judge announces
+unheld and mints at once; a poll landing after stop does the same; labels off
+does the same.
+
+### 7.2 The recovery path after a crash is the sweep alone, and its bounds
+
+Corrected: 6.2 and 6.6 item 18 said management reads a held arrival on its next
+turn. It does not: the record view skips a held record with no event
+(`inbox_records.go:110-115`), so management cannot delegate it and sees nothing
+(the `Held` tally on the stories page, `intake_view.go:157-159`, is set only by
+the sweep, `event_wakes.go`, `tally`). The only recovery, after a crash or after
+the drain deadline lands first, is the held-capture sweep. **Named residual,
+its bounds, all from `event_wakes.go`:** it runs from a live source poll at most
+every `eventSweepEvery` (5 min, `:416`); releases captures held at least
+`eventHeldGrace` (10 min, `:417`); reads the newest `eventSweepScan` = 1,000
+records of management's inbox (`:418`, `:448`), so an older held arrival is not
+seen; ignores anything older than `eventAgedHorizon` = 24 h (`:488`); releases
+at most `eventSweepMax` = 48 captures a sweep (`:419`); and returns at once
+unless events or event wakes are on (`:426-430`), the gate widened for
+labels-only computers by its own small commit. A backlog above 48 captures
+per 5 minutes grows; a computer that never polls again does not recover until it
+does. Not a blocker (both seats): the normal path is the flush, 120 s in
+process.
+
+### 7.3 Flush order and the waited_ms bound, as built
+
+Corrected: 2.5 item 11 said the flusher serializes flushes oldest deadline
+first. That was the deleted single flusher (`intake_labels.go:419-423` picks the
+queue whose first capture waited longest). Per-queue timers each start a flush
+goroutine that takes the runtime-wide mutex of 5.4, so the order among
+computers whose deadlines are due together is the order the mutex is acquired,
+not ordered. **No dispatcher is added.** The bound (4.3 item 4, 5.7, 6.6 item 12)
+reads: `waited_ms` is at most the deadline plus the flushes of the other
+computers on this runtime that hold or contend the mutex ahead of it, one flush
+each; for a runtime serving one computer that is the deadline plus one flush in
+flight. (`waited_ms` is `time.Since(held[0].at)`, `intake_labels.go:534`; under
+the design it measures the window.)
+
+### 7.4 Same release id, and the failure list (21)
+
+**A sweep and a flush releasing the same ids produce the same record id, so a
+double release is a replay.** `unresolvedRequests` names the record
+`event-released:` plus `idsDigest(ids)` (`event_wakes.go:278`), and `idsDigest`
+sorts the ids before hashing (`event_wakes.go:56-60`). The same twelve ids give
+the same id and the same command digest; the second commit conflicts and
+`commitCapturesRecord`'s callers read `ErrLifecycleCommandConflict` as already
+done (`event_wakes.go:380`, `capture_arrival.go:130-141`). Different chunk
+boundaries (the sweep releases oldest-first from a different list) give a
+different id; then `withIntakeTask` finds nothing delegable
+(`captureDelegable`, `arrival_task.go:139`), returns the request unchanged, and
+the record commits **plain**, which wakes management's main run for captures
+already in a task (A7). That is a spurious wake, not a loss, and bounded; it is
+accepted and named, not fixed here (committing nothing when no capture is
+delegable is a change to `withIntakeTask`, outside this design).
+
+The list of 6.6 stands with 18 items, plus:
+
+19. **A refused enqueue** (no judge, no store, no ids, stopped): `enqueueIntakeLabels`
+    returns false and the arrival is unheld; tests for a computer with no judge,
+    a poll landing after stop, and labels off, each asserting the arrival is
+    committed unheld with `StartedTasks` set and no flush queued.
+20. **A failed release** (not a conflict): the flush's captures are removed from
+    the queue at flush start, as today (`intake_labels.go:430`), so a failed
+    release is not re-flushed every window; they stay held for the sweep. The
+    test asserts the queue is empty after a flush whose release fails.
+21. **The release at stop:** the drain-bound cancel (`intake_labels.go:503`)
+    cancels the flush's context and the release commit with it; the release
+    uses a short context detached from the cancel (`context.WithoutCancel` with
+    a timeout inside `intakeStopGrace`, 2 s), or else the captures wait for the
+    sweep. The test holds a call across the drain deadline, not only an idle
+    flusher, and asserts the release is written (or, past the grace, that the
+    sweep takes them).
+
+Pinned in tests, from the notes of both seats: the flush goroutine takes its
+captures under `l.mu` after taking the runtime mutex and refuses when stopped
+(a timer firing as stop takes the items must not yield two `labelHeld` over
+the same captures); `l.flushes.Add(1)` is called under `l.mu` after the
+`stopped` check, as `startEventFlushLocked` does (`event_layer.go:975-987`);
+and the stop test (item 7) asserts the release record is written, not only the
+labels. `types.CaptureEventReleased`'s comment ("released when production
+stopped", `internal/types/story.go:75`) is updated to say a labelled flush also
+releases; `hostStartsIntake` does not care.
+
+### 7.5 Every round 2 finding, and its disposition
+
+| Seat | Finding | Check | Disposition |
+| --- | --- | --- | --- |
+| claude | **Blocker:** held decided by the setting, not by whether the enqueue was accepted | true: `intake_labels.go:329-331`, `:338-351`; `computer_settings.go:35-49` | closed by 7.1 (`held = eventWakes \|\| accepted`; refusal announces unheld) |
+| deepseek | Should-fix 1: `held = eventWakes \|\| intakeLabelsEnabled` | same hole | closed by 7.1, with `accepted` |
+| deepseek | Should-fix 2: "held arrival read by management" is false; state the sweep bounds | true: `inbox_records.go:110-115` | corrected in 6.2 and 6.6 item 18; bounds in 7.2 |
+| deepseek | Should-fix 3: "oldest deadline first" not what is built | true: `intake_labels.go:419-423` is the deleted flusher | corrected in 2.5 item 11 and 7.3; no dispatcher |
+| deepseek | Same record id for the same ids | true: `event_wakes.go:56-60`, `:278` | stated in 7.4 |
+| deepseek | Should-fix 4: queue state on a failed release | true: `intake_labels.go:430` removes items at flush start | failure 20 |
+| deepseek | Should-fix 5: stop during an in-flight call abandons the pending queue at the drain deadline | true: `intake_labels.go:488-496` | failure 21, test holds a call across the drain |
+| deepseek | Note: gate the take on `stopped`; two `labelHeld` | | pinned test, 7.4 |
+| deepseek | Note: update the `CaptureEventReleased` comment | `types/story.go:75` | adopted, 7.4 |
+| deepseek | Note: a duplicate release with different chunking wakes management | true | accepted and named, 7.4 |
+| claude | Should-fix 1: spurious management wake on a second release | same | same: named, not fixed |
+| claude | Should-fix 2: release at stop needs its own context | true: `intake_labels.go:503` | failure 21 |
+| claude | Should-fix 3: test item 7 must assert the release is written, and when the drain lands first | | pinned, 7.4 |
+| claude | Note 1: take items under `l.mu` after the mutex; `flushes.Add(1)` under `l.mu` after `stopped` | `event_layer.go:975-987` | pinned, 7.4 |
+| claude | Note 2: drain-first and crash both fall to the sweep, 10 to 15 minutes late | | named, 7.2 |
+| claude | Sweep for labels-only is a behavior change on a red surface: name it in the commit and the report | | stated in 6.7 (own commit) and 7.2; the landing report names it |
+| claude | Task per flush: nothing keyed to one task per poll; id from the release record's `CommandID` | `arrival_task.go:172` | agrees with 6.3 |
+| both | Round 1 blockers closed | | none |
+
+Contradicted by the code: nothing in either review. One correction of my own
+section 6 (the "read on its next turn" statement), made above.
 
