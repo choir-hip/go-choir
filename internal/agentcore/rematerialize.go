@@ -227,7 +227,7 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		}
 		// The prior release was current on this computer before the restage;
 		// putting it back is not a step toward an older binary.
-		_ = updater.RestagePinnedRelease(rt.selfdevUpdaterRoot, priorReleaseDigest)
+		_ = updater.RestagePinnedReleaseBestEffort(rt.selfdevUpdaterRoot, priorReleaseDigest)
 	}()
 
 	quarantineDir := filepath.Join(filepath.Dir(originalMarker), "rematerialize-quarantine-"+time.Now().UTC().Format("20060102T150405.000000000Z"))

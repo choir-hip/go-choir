@@ -28,3 +28,11 @@ deleted files, their reasons and the moves are listed in
 from Git history. Landed station goal files are under `definitions/`, the
 precommitment-record predecessors under `precommitment/`, and the lineage
 skills under `skills/`.
+
+## 2026-11-14 prune
+
+The learning-mechanism documents that the four-stroke learning engine
+([`../learning-engine.md`](../learning-engine.md)) replaces moved to
+[`learning/`](learning/README.md). 38 archive files that nothing else in the
+repository names were deleted; they are listed in
+[`PRUNED-2026-11-14.md`](PRUNED-2026-11-14.md).

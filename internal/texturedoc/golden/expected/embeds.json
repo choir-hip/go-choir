@@ -1,0 +1,38 @@
+{
+  "blocks" : [
+    {
+      "kind" : "paragraph",
+      "text" : "Media in the page."
+    },
+    {
+      "embed" : "image",
+      "kind" : "embed",
+      "text" : "Dawn over the harbour"
+    },
+    {
+      "embed" : "audio",
+      "kind" : "embed",
+      "text" : "Episode 42: the morning shipping forecast"
+    },
+    {
+      "embed" : "video",
+      "kind" : "embed",
+      "text" : "A talk about tides"
+    },
+    {
+      "embed" : "file",
+      "kind" : "embed",
+      "text" : "Quarterly summary"
+    },
+    {
+      "embed" : "capsule_evidence",
+      "kind" : "embed",
+      "text" : "Home screen after the change"
+    },
+    {
+      "kind" : "paragraph",
+      "text" : "Text after the media."
+    }
+  ],
+  "name" : "embeds"
+}

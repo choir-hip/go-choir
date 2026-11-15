@@ -64,7 +64,7 @@ func (a *CheckpointAuthority) VerifierKeyPreflight(ctx context.Context, request 
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		var genesisSeq uint64
-		genErr := a.cas.store.db.QueryRowContext(ctx, `SELECT sequence FROM computer_event_append_receipts WHERE computer_id=? AND event_kind=? ORDER BY sequence LIMIT 1`, computerID, string(computerevent.EventGenesisImported)).Scan(&genesisSeq)
+		genErr := a.cas.store.db.QueryRowContext(ctx, receiptFirstOfKindSQL, computerID, string(computerevent.EventGenesisImported)).Scan(&genesisSeq)
 		switch {
 		case errors.Is(genErr, sql.ErrNoRows):
 			pin.State = selfdevprotocol.VerifierKeyUnpinnedNoGenesis

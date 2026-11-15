@@ -31,7 +31,10 @@ type recordingTape struct {
 	pinErr func(payload []byte) error
 	// casErr, when set and non-nil for a request, fails the CAS after the pin.
 	casErr func(request computerevent.CASRequest) error
-	pins   int
+	// casAfter, when set and non-nil for a request, fails the CAS AFTER the
+	// platform accepted it: the reply is lost.
+	casAfter func(request computerevent.CASRequest) error
+	pins     int
 	// leaseDigests are the payload digests of projection batches that carry
 	// only the stream_seq lease object. The lease is store bookkeeping, not
 	// part of the workload a test scripts: its batches are recorded apart
@@ -117,12 +120,28 @@ func (c recordingCAS) CompareAndSwap(ctx context.Context, request computerevent.
 			IdempotencyKey: e.IdempotencyKey, ActorProfile: e.ActorProfile, PrivacyClass: e.PrivacyClass,
 			PayloadDigest: e.PayloadCommitment,
 		}
-		if c.tape.leaseDigests[e.PayloadCommitment] {
+		// The platform is idempotent on the key: a re-send of an accepted
+		// request returns the receipt and adds no row.
+		seen := false
+		for _, existing := range append(append([]tapeRecord(nil), c.tape.records...), c.tape.leaseRecords...) {
+			if existing.IdempotencyKey == e.IdempotencyKey {
+				seen = true
+			}
+		}
+		if seen {
+			// no new row
+		} else if c.tape.leaseDigests[e.PayloadCommitment] {
 			c.tape.leaseRecords = append(c.tape.leaseRecords, record)
 		} else {
 			c.tape.records = append(c.tape.records, record)
 		}
+		after := c.tape.casAfter
 		c.tape.mu.Unlock()
+		if after != nil {
+			if aerr := after(request); aerr != nil {
+				return computerevent.Receipt{}, aerr
+			}
+		}
 	}
 	return receipt, err
 }
@@ -191,6 +210,15 @@ type tapeHarness struct {
 	// finalize after the platform accepted the event: a crash between the CAS
 	// and the local commit.
 	finalizeFail *atomic.Bool
+	// hostChain, when set, makes the platform keep its own head, as the host
+	// does: a request whose previous head is not the host's is refused, and a
+	// commit whose reply is lost still moves the host's head (the local
+	// projection stays behind until it settles the prepared row).
+	hostChain *hostChain
+	// sealed, when set, makes the harness the production shape: batches are
+	// sealed under a computer key, and the store dry-runs them before the
+	// appender mutex (appendDirectParts).
+	sealed *sealedKit
 }
 
 // hookedProjection is the store as the appender's projection, with a scriptable
@@ -207,6 +235,17 @@ func (p hookedProjection) DryRunProjectionBatch(ctx context.Context, computerID 
 		}
 	}
 	return p.Store.DryRunProjectionBatch(ctx, computerID, batch)
+}
+
+// DryRunProjectionBatchAt keeps the hook on the path the appender uses (the
+// embedded store's own At would skip it).
+func (p hookedProjection) DryRunProjectionBatchAt(ctx context.Context, computerID string, batch *computerevent.ProjectionBatch) (uint64, error) {
+	if fn := p.hook(); fn != nil {
+		if err := fn(batch); err != nil {
+			return 0, err
+		}
+	}
+	return p.Store.DryRunProjectionBatchAt(ctx, computerID, batch)
 }
 
 func newTapeHarness(t *testing.T) *tapeHarness {
@@ -230,6 +269,9 @@ func newTapeHarness(t *testing.T) *tapeHarness {
 func (h *tapeHarness) bind() {
 	h.t.Helper()
 	var cas computerevent.HeadCAS = recordingCAS{liveTapeCAS: liveTapeCAS{signer: h.tape.signer, projection: h.store}, tape: h.tape}
+	if h.hostChain != nil {
+		cas = hostChainCAS{HeadCAS: cas, chain: h.hostChain, tape: h.tape, local: h.store}
+	}
 	if h.platformSkew != nil {
 		cas = skewedCAS{HeadCAS: cas, skew: h.platformSkew}
 	}
@@ -237,9 +279,13 @@ func (h *tapeHarness) bind() {
 	if h.finalizeFail != nil {
 		projection = finalizeFailingProjection{ProjectionStore: projection, store: h.store, fail: h.finalizeFail}
 	}
+	var pinner computerevent.ArtifactPinner = recordingPinner{liveTapePinner: liveTapePinner{signer: h.tape.signer}, tape: h.tape}
+	if h.sealed != nil {
+		pinner = sealedHarnessPinner{recordingPinner: pinner.(recordingPinner), kit: h.sealed}
+	}
 	appender, err := computerevent.NewComputerEventAppender(
 		h.computerID,
-		recordingPinner{liveTapePinner: liveTapePinner{signer: h.tape.signer}, tape: h.tape},
+		pinner,
 		projection,
 		cas,
 		liveTapeVerifier{},
@@ -247,8 +293,16 @@ func (h *tapeHarness) bind() {
 	if err != nil {
 		h.t.Fatal(err)
 	}
+	if h.sealed != nil {
+		appender.SetPayloadResolver(h.sealed.reader, h.sealed.cipher)
+	}
 	if err := h.store.BindProjectionTape(h.computerID, appender); err != nil {
 		h.t.Fatal(err)
+	}
+	if h.sealed != nil {
+		if err := h.store.SetProjectionSealer(h.sealed.cipher); err != nil {
+			h.t.Fatal(err)
+		}
 	}
 	h.appender = appender
 }
@@ -353,4 +407,40 @@ func waitFor(t *testing.T, what string, timeout time.Duration, cond func() bool)
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("timed out after %s waiting for %s", timeout, what)
+}
+
+// sealedKit is what a sealed harness needs: the computer key and a reader
+// holding every pinned envelope (the host's artifact store).
+type sealedKit struct {
+	cipher *computerevent.PrivateArtifactCipher
+	reader *computerevent.MemoryArtifactReader
+}
+
+// useSealing makes the harness seal every projection batch, as production
+// does. Call it before the first write; it rebinds the appender.
+func (h *tapeHarness) useSealing() {
+	h.t.Helper()
+	cipher, err := computerevent.NewPrivateArtifactCipher(h.computerID, make([]byte, 32))
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	h.sealed = &sealedKit{cipher: cipher, reader: computerevent.NewMemoryArtifactReader()}
+	h.bind()
+}
+
+type sealedHarnessPinner struct {
+	recordingPinner
+	kit *sealedKit
+}
+
+func (p sealedHarnessPinner) PreparePrivatePayload(ctx context.Context, cipher *computerevent.PrivateArtifactCipher, computerID, eventID, mediaType string, plaintext []byte) ([]byte, computerevent.PrivateArtifactMetadata, error) {
+	return cipher.Encrypt(ctx, computerID, eventID, mediaType, "private", plaintext)
+}
+
+func (p sealedHarnessPinner) PinPrivatePayload(ctx context.Context, cipher *computerevent.PrivateArtifactCipher, computerID, eventID string, envelope []byte, intent string) (computerevent.PinResult, error) {
+	if _, _, err := cipher.Decrypt(ctx, envelope, computerID, eventID); err != nil {
+		return computerevent.PinResult{}, err
+	}
+	p.kit.reader.Put(envelope)
+	return p.recordingPinner.liveTapePinner.PinNonPrivatePayload(ctx, computerID, envelope, computerevent.PrivateArtifactMediaType, "private", intent)
 }

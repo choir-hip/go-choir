@@ -22,9 +22,9 @@ import (
 // may be missing instead of inferring it from a sequence gap (design 5.2).
 const telemetryMissingWindowNote = "the last window of this run's trace may be missing"
 
-// runMemoryMissingWindowNote replaces it while tape.group_commit is on: the
-// run's newest memory messages waited in the same window
-// (internal/store/run_memory_batch.go).
+// runMemoryMissingWindowNote replaces it for the one boot that follows a marker
+// an older build wrote with a failed drain under an open run-memory window: the
+// run's newest memory messages waited in that window.
 const runMemoryMissingWindowNote = "the last window of this run's trace and run memory may be missing"
 
 // defaultTelemetryDrainDeadline bounds the planned-restart drain, like the
@@ -125,7 +125,6 @@ func (rt *Runtime) drainTelemetryForRestart() (failed bool, restore func()) {
 func (rt *Runtime) writeHostPlannedRestartMarker(storePath string, marker PlannedRestart) (PlannedRestart, error) {
 	rt.hostRestartTelemetryMu.Lock()
 	defer rt.hostRestartTelemetryMu.Unlock()
-	wasOpen := rt.store != nil && rt.store.TapeGroupCommitOn() // before the drain
 	if rt.store != nil && rt.store.TelemetryBatchingOn() {
 		failed, restore := rt.drainTelemetryForRestart()
 		previous := rt.hostRestartTelemetryRestore
@@ -135,16 +134,7 @@ func (rt *Runtime) writeHostPlannedRestartMarker(storePath string, marker Planne
 			previous()
 		}
 	}
-	marker.TelemetryDrainFailed = (rt.hostRestartTelemetryRestore != nil && rt.hostRestartDrainFailed) ||
-		(rt.store != nil && rt.store.AnyRunMemoryDamaged())
-	marker.RunMemoryWindowOpen = rt.runMemoryWindowStamp(wasOpen, marker.TelemetryDrainFailed)
-	if marker.TelemetryDrainFailed && rt.hostRestartWindowWasOpen {
-		open := true // an earlier request's failed drain, under an open window
-		marker.RunMemoryWindowOpen = &open
-	}
-	if marker.TelemetryDrainFailed && markerWindowOpen(marker) {
-		rt.hostRestartWindowWasOpen = true
-	}
+	marker.TelemetryDrainFailed = rt.hostRestartTelemetryRestore != nil && rt.hostRestartDrainFailed
 	if err := WritePlannedRestartMarker(storePath, marker); err != nil {
 		// The write can fail after the rename: only an empty marker path
 		// proves nothing will boot as planned on it.
@@ -188,7 +178,7 @@ func (rt *Runtime) releaseHostRestartTelemetryIfNoMarkerLocked(storePath string)
 
 func (rt *Runtime) releaseHostRestartTelemetryLocked() {
 	if restore := rt.hostRestartTelemetryRestore; restore != nil {
-		rt.hostRestartTelemetryRestore, rt.hostRestartDrainFailed, rt.hostRestartWindowWasOpen = nil, false, false
+		rt.hostRestartTelemetryRestore, rt.hostRestartDrainFailed = nil, false
 		restore()
 	}
 }
@@ -201,18 +191,14 @@ func crashClosePayload(telemetryBatching, runMemoryWindow bool) json.RawMessage 
 		return json.RawMessage(`{"fate":"interrupted_by_restart"}`)
 	}
 	note := telemetryMissingWindowNote
-	if runMemoryWindow {
-		note = runMemoryMissingWindowNote
-	}
-	fields := map[string]string{
-		"fate":      runFateInterruptedByRestart,
-		"telemetry": note,
-	}
+	fields := map[string]string{"fate": runFateInterruptedByRestart}
 	if runMemoryWindow {
 		// Additive: a reader keying on "run_memory" finds the run-memory
 		// sentence; "telemetry" keeps its old reader (the note covers both).
+		note = runMemoryMissingWindowNote
 		fields["run_memory"] = note
 	}
+	fields["telemetry"] = note
 	raw, _ := json.Marshal(fields)
 	return raw
 }

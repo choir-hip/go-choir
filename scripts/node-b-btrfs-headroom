@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Node B btrfs headroom: the daily decision behind go-choir-btrfs-headroom
+# (nix/node-b.nix). Two independent balances, each bounded and online:
+#   data      unallocated space under 30 GiB: relocate at most 20 data chunks
+#             that are at most 20% used (btrfs balance -dusage=20,limit=20)
+#   metadata  metadata Size over three times metadata Used: relocate at most
+#             10 metadata chunks that are at most 40% used
+#             (btrfs balance -musage=40,limit=10). Metadata chunks that
+#             emptied stay allocated to metadata until a balance returns them;
+#             38 GiB sat stranded this way
+#             (docs/problems/node-b-storage-clustering-assessment-2026-11-11.md B1).
+# Data runs first because a metadata balance needs one unallocated chunk.
+# Test: scripts/test-node-b-btrfs-headroom.sh (canned `btrfs filesystem usage -b`).
+# Exit 1 if a reading or a balance failed (after trying the other balance).
+set -u
+
+mount="${HEADROOM_MOUNT:-/}"
+GiB=1073741824
+rc=0
+
+usage="$(btrfs filesystem usage -b "$mount")" || { echo "btrfs headroom: cannot read usage of $mount" >&2; exit 1; }
+unalloc="$(awk '/Device unallocated:/ {print $3; exit}' <<<"$usage")"
+read -r meta_size meta_used < <(awk -F'[:, ]+' '/^Metadata,/ {for (i = 1; i <= NF; i++) { if ($i == "Size") s = $(i+1); if ($i == "Used") u = $(i+1) } print s, u; exit}' <<<"$usage")
+if ! [[ "$unalloc" =~ ^[0-9]+$ ]]; then
+  echo "btrfs headroom: cannot parse unallocated space" >&2
+  exit 1
+fi
+echo "btrfs unallocated: $((unalloc / GiB)) GiB"
+
+if [ "$unalloc" -lt $((30 * GiB)) ]; then
+  btrfs balance start -dusage=20,limit=20 "$mount" || { echo "btrfs headroom: data balance failed" >&2; rc=1; }
+fi
+
+if [[ "${meta_size:-}" =~ ^[0-9]+$ ]] && [[ "${meta_used:-}" =~ ^[0-9]+$ ]]; then
+  echo "btrfs metadata: size $((meta_size / GiB)) GiB, used $((meta_used / GiB)) GiB"
+  if [ "$meta_size" -gt $((3 * meta_used)) ]; then
+    btrfs balance start -musage=40,limit=10 "$mount" || { echo "btrfs headroom: metadata balance failed" >&2; rc=1; }
+  fi
+else
+  echo "btrfs headroom: cannot parse metadata size and used; metadata balance skipped" >&2
+  rc=1
+fi
+
+btrfs filesystem usage -b "$mount" 2>/dev/null | awk '/Device unallocated:/ {print "btrfs unallocated after: " int($3 / 1073741824) " GiB"}'
+exit "$rc"

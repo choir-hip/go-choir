@@ -47,7 +47,7 @@ unavailable. Raw outputs, unsynthesized.
 - Irreversible effects are the output-commit problem. After an equivocation
   the same precommit could fire from two branches, so the effect actuator
   must deduplicate by intent and occurrence id. "Precommitment" also names
-  a scored prediction in docs/precommitment-records.md; the two uses need
+  a scored prediction in docs/archive/learning/precommitment-records.md; the two uses need
   separate words.
 - Confidential computing does not protect employee A's work from employee
   B's own workstation (physical attacks are out of scope by vendor

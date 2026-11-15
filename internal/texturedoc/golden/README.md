@@ -104,17 +104,23 @@ the only look at that.
   (`build`) is shared, so block and inline drawing is covered; revision
   versions and authorship are not.
 
-## Differences the first run found
+## Differences
 
-`known-differences.json` lists each one with the renderer that departs and a
-reason. The comparison fails on any difference not listed and on any listed
-difference that stops appearing, so the list is a worklist, not a tolerance.
-Fixing a renderer means deleting its entries. The first run (24 entries in 9 of
-11 documents) found: web ignores `ordered_list` `start`, concatenates the
-paragraphs of a list item, flattens nested Markdown lists and draws `---` after
-a code fence as text; native numbers unpublished citations by first use where
-web uses the entity list order, ignores a citation's own `ref.quote`, shows the
-check outcome word ("exact") as the quote of a checked citation, draws an
-embed's alt instead of its caption, raises a heading in a quote to level 3 and
-joins a code block's text nodes with nothing. Identical on both sides:
-`headings-and-marks`, `long-text`, `non-latin`.
+`known-differences.json` lists each difference with the reason. The comparison
+fails on any difference not listed and on any listed difference that stops
+appearing, so the list is a worklist, not a tolerance.
+
+The first run found 24 entries. The native reader model was brought to the web
+rule for quotes, embed captions, quote headings, code joins, adjacent
+citations and legacy bold. The web reader was then brought to the page format
+for source numbering (reading order, as the text projection and a published
+citation do), `ordered_list` `start`, a list item's several paragraphs, nested
+Markdown lists and Markdown rules (`---`). Left: the first heading equal to the
+title (native drops it, the page shows the headline) and empty paragraphs
+(the editor needs them; they have no height in the reader).
+
+`expected/` holds the native reader's projections. `scripts/golden-docs` with
+`GOLDEN_WEB_ONLY=1` compares the web reader with them without a native run (that
+is what a web-only change checks); regenerate them with the native proof
+(`mobile/scripts/proof-golden.sh` on the app branch) whenever the native model
+changes.

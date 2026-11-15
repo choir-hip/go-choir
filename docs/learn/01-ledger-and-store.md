@@ -446,7 +446,7 @@ prediction before the evidence exists: hypothesis, assumptions,
 alternatives, probabilities. When the outcome arrives, a separate record
 resolves and scores it. The memo grounds this in Dawid's *prequential*
 principle: judge a forecaster only by forecasts made before outcomes are
-seen (doc: [Precommitment Records — Engineering Memo](../precommitment-records.md)).
+seen (doc: [Precommitment Records — Engineering Memo](../archive/learning/precommitment-records.md)).
 
 For a storage engineer, this is a requirement on the ledger, not just a
 product idea. A precommitment is worthless unless you can prove it existed
@@ -1301,7 +1301,7 @@ next mechanism only when the current one stops moving the number.
   [computer ontology](../computer-ontology.md),
   [state and vision](../archive/reports/choir-state-and-vision-2026-10-14.md),
   [claims, events and entities](../reports/claims-events-entities-ontology-2026-10-14.md),
-  [Precommitment Records — Engineering Memo](../precommitment-records.md).
+  [Precommitment Records — Engineering Memo](../archive/learning/precommitment-records.md).
 - **Upstream:** Dolt's documentation on
   [prolly trees](https://docs.dolthub.com/architecture/storage-engine/prolly-tree)
   and [querying history](https://docs.dolthub.com/sql-reference/version-control/querying-history);

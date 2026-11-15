@@ -75,7 +75,7 @@ func TestFileCASHTTPFlowAndWatermarkMonotonicity(t *testing.T) {
 		root string
 		head int64
 	}{{newer, 12}, {older, 11}} {
-		if err := store.RecordSnapshotRoot(context.Background(), "computer-filecas", r.root, r.head, []string{strings.Repeat("d", 64)}); err != nil {
+		if err := store.recordSnapshotRoot(context.Background(), "computer-filecas", r.root, r.head, []string{strings.Repeat("d", 64)}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -187,7 +187,7 @@ func TestProjectionBaseRoutesAreNotRegistered(t *testing.T) {
 			t.Fatalf("GET %s = %d, want 404 (route not registered)", path, code)
 		}
 	}
-	if err := store.RecordSnapshotRoot(context.Background(), "c", digest, 3, []string{digest}); err != nil {
+	if err := store.recordSnapshotRoot(context.Background(), "c", digest, 3, []string{digest}); err != nil {
 		t.Fatal(err)
 	}
 	if code := call(http.MethodGet, "/internal/computers/files/watermark?computer_id=c"); code != http.StatusOK {

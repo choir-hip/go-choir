@@ -34,7 +34,7 @@ gives a slow signal that the paper does not control.
 
 Today the materiality formula is a stipulation. The precommitment doc writes
 `w(c) = P(c|a) * impact(c) * relevance(c)` and calls it a proposed design
-(`docs/precommitment-records.md` section 3.1). The scoring research found the
+(`docs/archive/learning/precommitment-records.md` section 3.1). The scoring research found the
 first flaw in it: if the set of consequences that count is chosen after the
 outcomes are seen, the score is dishonest (the forecaster's dilemma). The
 fix, which the owner accepted on 2026-11-04, is that weights are frozen at

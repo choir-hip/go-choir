@@ -546,6 +546,13 @@ func TestRestoreRefusesGeometryThatContradictsTheManifest(t *testing.T) {
 func TestTheTimeBudgetAbortsTheStreamAndRecordsNothing(t *testing.T) {
 	f := newFixture(t, ChunkSize*3)
 	f.cfg.MaxDuration = 100 * time.Millisecond
+	// The witness runs before the pages; with the real one the budget can end
+	// inside it (a slow race build), which TestABudgetAbortInTheWitness
+	// covers. Here the stream is what runs out.
+	fixed := liveWitness(t, f)
+	f.cfg.Witness = func(context.Context, *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
+		return fixed, nil
+	}
 	f.cfg.pageHook = func(pgno int64) {
 		if pgno%16 == 0 {
 			time.Sleep(2 * time.Millisecond)

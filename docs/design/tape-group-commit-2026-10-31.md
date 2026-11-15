@@ -84,7 +84,7 @@ Each has a test in `internal/store/tape_group_commit_test.go`.
 | F2 | One member's refusal fails the others | a refused group (`ErrBatchRefused`, nothing pinned) is split: pending telemetry is sealed first, then each member is written alone in arrival order and gets its own result | `TestGroupCommitRefusalSplitsToSingles` |
 | F3 | Unknown outcome (pin or CAS failed after something may have landed) appended twice | never retried, as today: every member gets the error; `RecoverPrepared` settles the prepared event at boot | `TestGroupCommitUnknownOutcomeIsNotRetried` |
 | F4 | A guarded op (expected state, create-only) fails inside a group and drags others | only unconditional ops group: `object_recorded`, `object_edge_recorded`, `run_memory_entry_recorded` (upserts by key). Every other op kind takes the direct path | `TestGroupCommitOnlyUnconditionalOpsGroup` |
-| F5 | A semantic write lands on the tape ahead of earlier telemetry | the group leader holds the sealer's flush lock and puts every queued telemetry record in the same event, ahead of the members' ops; older chunks beyond the batch cap are sealed first in order | `TestGroupCommitTelemetryRidesAheadOfMembers` |
+| F5 | A semantic write lands on the tape ahead of earlier telemetry | the group leader holds the sealer's flush lock and puts every queued telemetry record in the same event, ahead of the members' ops; older chunks beyond the batch cap are sealed first in order; the leader takes its members before it reads the queue, so a record acknowledged before a member arrived is always in what it reads (section 4) | `TestGroupCommitTelemetryRidesAheadOfMembers`, `TestGroupCommitLateTakeNeverPassesAcknowledgedTelemetry` |
 | F6 | Ordering across streams | ops in the event are telemetry (enqueue order), then members (arrival order under the group lock). A write that causally follows another (issued after its ack) arrives after the earlier group is done, so it lands in a later event | `TestGroupCommitCausalOrderAcrossGoroutines` |
 | F7 | Deadlock: leader and sealer, or the sealer's own class-violation fallback | lock order is always flushMu -> appender mutex; the leader appends with the barrier exemption (it is the barrier); the sealer's internal singles bypass grouping | `TestGroupCommitNoDeadlockUnderLoad` (race, 32 writers, telemetry on) |
 | F8 | Replay or witness diverges | the event is an ordinary `projection_batch_recorded` batch; live finalize and replay apply the same ops in the same order; positions (`pos`, op index) of stamped ops are fixed by the tape. No reducer, payload or witness change | `TestGroupCommitReplayMatchesLive` |
@@ -124,10 +124,23 @@ Leader and followers on `projectionTape.appendOps`, no timer:
 - A write whose ops are all unconditional joins the pending list and then
   either finds its result already set (a leader took it) or takes the leader
   token.
-- The leader takes the pending list (up to the caps), takes the sealer's
-  flush lock and its queue, builds one batch (telemetry ops, then members'
-  ops), and appends it once with the barrier exemption. It then sets every
-  member's result and hands the token on.
+- The leader takes the sealer's flush lock, then takes the pending list (up
+  to the caps) and only then reads the sealer's queue (2026-11-14: the take
+  was first made when the leader won the token, before the wait for the flush
+  lock, so writers arriving during that wait queued for the next group; mean
+  group size on the paper was 1.37). It builds one batch (telemetry ops, then
+  members' ops) and appends it once with the barrier exemption. It then sets
+  every member's result and hands the token on.
+- Ordering invariant of the take point: a telemetry record acknowledged
+  before a member arrived was enqueued before that member joined the pending
+  list, hence before the take, hence before the queue read that follows the
+  take under the same flush lock hold; so it is sealed ahead of the group or
+  rides in the group's event ahead of the members' ops. A record enqueued
+  after the take may land after the members taken (it is later than all of
+  them). The take must stay before the queue read: taking after it lets a
+  member that arrived after an acknowledged record reach the tape ahead of
+  it. A take that finds nobody (every pending writer withdrew) returns
+  without touching the queue. The group's deadline starts after the take.
 - On `ErrBatchRefused` it splits (F2). On any other error every member gets
   it (F3).
 - Run memory: the global `runMemoryMu` becomes 64 stripes keyed by run, so
@@ -258,3 +271,69 @@ agentcore, textureowner). With the switch forced on for every store (a local,
 uncommitted switch), textureowner passes whole and agentcore fails only two
 tests that assume the switch off or the 1 s window; the store failures are the
 section 8 set, all shape assertions.
+
+## As built after owner ruling D8 (2026-11-13, lane/s5-coalesce)
+
+Everything above about the setting, the 10 s telemetry window and the
+run-memory window is superseded: coalescing is always on, there is no setting,
+and run-memory messages are acknowledged after their CAS. What the build adds
+beyond the design:
+
+- **Leader panic.** The leader token is freed by a defer. If a leader panics,
+  every member it took gets an error (never an acknowledgement; the append may
+  or may not have landed) and the panic goes on.
+- **Cancelled callers.** A caller whose context is cancelled at entry, before it
+  tries for the token, or right after it wins the token (the token is handed
+  back) returns `ctx.Err()` and writes nothing. A member already taken returns
+  its group's outcome.
+- **Refusal split.** Each single gets its own deadline, not what is left of the
+  group's.
+- **`telemetry_ridden`** is a lower bound: it counts records that rode a
+  committed event only; a ride whose commit failed or whose outcome is unknown
+  is counted under the seal failure counters instead.
+- **A stale batch never reaches the CAS (the head check).** A batch is
+  numbered from, and dry-run against, local state; an append whose outcome was
+  unknown can leave the host ahead of the local projection, and any other
+  writer's finalize or recovery moves the local head between a writer's dry run
+  and its turn under the appender mutex. A retried run-memory write that reused
+  a landed entry's (run, seq) reached the CAS and wedged the tape on
+  UNIQUE(loop_id, seq). Three mechanisms that tried to detect the event that
+  makes a batch stale (a latch, a settle, "this append recovered") each missed
+  another such event
+  (`docs/problems/stale-batch-after-unclear-append-structural-assessment-2026-11-13.md`).
+  The rule now asks whether the state is still the state the batch was
+  validated against: the store's dry run reports the projection head sequence
+  it validated against (`DryRunProjectionBatchAt`; the store carries it into the
+  append in the context, `computerevent.WithValidatedHead`). Under the appender
+  mutex, before the event is pinned or prepared, and again after any in-place
+  recovery at either site, `batchGuard.check` compares it with the current local
+  head. Equal: nothing more. Different, for any reason: the dry run is repeated
+  against the current state (`Revalidations()`) and the batch is refused with
+  `ErrBatchRefused` if the state no longer accepts it (counted in
+  `tape_batches_refused`). A projection that cannot report a head is
+  re-validated after a recovery only (the earlier rule). If a recovery cannot
+  level the heads the append already refuses, and `recoveryFailedAt` keeps
+  further writes refusing for up to 30 s after a failed recovery with
+  `ErrNeedsProjectionRepair`; the tape is not poisoned.
+  Why equal head means unchanged state: the head row and the projected rows are
+  written by one transaction (`finalizeBatch`), and the dry run reads the head
+  in the same transaction that applies the batch to roll it back. The only
+  writers of run-memory or object rows outside `finalizeBatch` are the unbound
+  test seam (`s.projectionTape == nil`) and run-memory retirement, which is a
+  tape op that goes through `finalizeBatch` too.
+  Where the dry run runs: a group leader dry-runs outside the mutex (it holds
+  the leader token, so its dry run and its turn are adjacent); every other
+  append is dry-run once, under the mutex, by the appender (writers queue on
+  the mutex after validating, so an outside dry run would be repeated nearly
+  every time: measured 0.995 revalidations per direct append). Measured on the
+  sealed harness, 8 writers: grouped 0.000 revalidations per tape event
+  (50 events); direct 0 (200 events, one dry run each under the mutex); half the
+  writers direct, half grouped: 0.17 per tape event (26 in 150), about half of
+  the grouped events.
+  The run-memory writer has no latch and no internal retry: after an unclear
+  outcome its next call may be refused once (`ErrBatchRefused`, an error every
+  caller already handles as a failed append) and numbers from the caught-up
+  table on the attempt after. A refused group splits to singles, each through
+  the same check. After a prepare-failure recovery that moved the local head
+  past the event's bound sequence the append is refused cleanly (not counted as
+  a wedge) and the next append binds to the head as it is now.

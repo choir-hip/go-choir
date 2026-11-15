@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -25,7 +26,10 @@ type projectionTape struct {
 	// dryRun validates a batch against committed state before the private
 	// path pins it: AppendNewPrivatePayload, unlike AppendNewPayload, does not
 	// run the appender's dry run.
-	dryRun func(ctx context.Context, batch *computerevent.ProjectionBatch) error
+	dryRun func(ctx context.Context, batch *computerevent.ProjectionBatch) (headSequence uint64, err error)
+	// afterDryRun, set only by tests, runs between the store's dry run and the
+	// append (the gap another writer can use to move the local head).
+	afterDryRun func()
 	// group is the store's group-commit state (tape_group_commit.go) and
 	// telemetryQueue its telemetry sealer, nil until batching is configured.
 	group          *groupCommit
@@ -45,13 +49,16 @@ func (s *Store) BindProjectionTape(computerID string, appender *computerevent.Co
 	}
 	tape := &projectionTape{computerID: computerID, appender: appender, stats: &s.telemetryStats, group: &s.tapeGroup}
 	tape.telemetryQueue = func() *telemetrySealer { return s.telemetry.Load() }
-	tape.dryRun = func(ctx context.Context, batch *computerevent.ProjectionBatch) error {
-		return s.DryRunProjectionBatch(ctx, computerID, batch)
+	tape.dryRun = func(ctx context.Context, batch *computerevent.ProjectionBatch) (uint64, error) {
+		return s.DryRunProjectionBatchAt(ctx, computerID, batch)
 	}
 	if prior := s.projectionTape; prior != nil {
 		tape.sealer.Store(prior.sealer.Load()) // a rebind keeps the sealer
 	}
 	s.projectionTape = tape
+	revalidations := appender.Revalidations
+	s.revalidationSource.Store(&revalidations)
+	s.startTapeWriteSummary()
 	if sl := s.telemetry.Load(); sl != nil {
 		appender.SetAppendBarrier(sl.appendBarrier) // a rebind keeps the barrier
 	}
@@ -148,12 +155,19 @@ func (t *projectionTape) appendOps(ctx context.Context, ops []computerevent.Proj
 	return t.appendOpsAs(ctx, ops, projectionAuthority)
 }
 
-// appendOpsAs writes ops as one acknowledged tape event, or, with
-// tape.group_commit on and every op an unconditional upsert, as a member of a
-// shared one (tape_group_commit.go). Either way it returns after the event is
-// durable.
+// appendOpsAs writes ops as one acknowledged tape event, or, when every op is
+// an unconditional upsert, as a member of a shared one (tape_group_commit.go):
+// the writers queued behind the append in flight go out in one event, in
+// arrival order. Either way it returns after the event is durable.
 func (t *projectionTape) appendOpsAs(ctx context.Context, ops []computerevent.ProjectionOp, authority string) error {
-	if t != nil && t.appender != nil && authority == projectionAuthority && t.group != nil && t.group.on.Load() && groupableOps(ops) {
+	if t != nil && t.appender != nil && len(ops) > 0 {
+		defer t.stats.enterTapeWrite()()
+	}
+	// A guarded batch (PutBatchConditional and its kin) never shares an event:
+	// its conditions were read from committed state before it got here, and
+	// the interceptor sees plain object ops, so only the context says it was
+	// guarded. It takes the direct path, alone in its event.
+	if t != nil && t.appender != nil && authority == projectionAuthority && t.group != nil && groupableOps(ops) && !objectgraph.ConditionalBatch(ctx) {
 		return t.appendGrouped(ctx, ops)
 	}
 	return t.appendDirect(ctx, ops, authority)
@@ -161,11 +175,35 @@ func (t *projectionTape) appendOpsAs(ctx context.Context, ops []computerevent.Pr
 
 // appendDirect writes ops as their own tape event.
 func (t *projectionTape) appendDirect(ctx context.Context, ops []computerevent.ProjectionOp, authority string) error {
+	return t.appendDirectParts(ctx, [][]computerevent.ProjectionOp{ops}, authority, false, false)
+}
+
+// appendDirectParts writes the parts' ops, in order, as one tape event. Each
+// part is one writer's ops (a group's members); firstIsTelemetry marks the
+// first part as telemetry that rode the event. The parts only matter to the
+// counters: the tape sees one flat op list.
+//
+// validateOutside says where a sealed batch is dry-run. A group leader holds
+// the leader token, so its dry run and its turn under the appender mutex are
+// adjacent, and the dry run goes outside the mutex (shorter critical section);
+// the appender compares the head it saw (see computerevent.batchGuard) and
+// validates again only if another writer moved it. Every other append has no
+// such adjacency (writers queue on the mutex after validating, so the head
+// would nearly always have moved): its dry run runs once, under the mutex.
+func (t *projectionTape) appendDirectParts(ctx context.Context, parts [][]computerevent.ProjectionOp, authority string, firstIsTelemetry, validateOutside bool) error {
 	if t == nil || t.appender == nil {
 		return fmt.Errorf("store: projection tape is not bound")
 	}
-	if len(ops) == 0 {
+	n := 0
+	for _, part := range parts {
+		n += len(part)
+	}
+	if n == 0 {
 		return nil
+	}
+	ops := make([]computerevent.ProjectionOp, 0, n)
+	for _, part := range parts {
+		ops = append(ops, part...)
 	}
 	eventID, err := computerevent.NewEventID()
 	if err != nil {
@@ -202,9 +240,17 @@ func (t *projectionTape) appendDirect(ctx context.Context, ops []computerevent.P
 		if err := json.Unmarshal(payload, &batch); err != nil {
 			return fmt.Errorf("store: decode projection batch for dry run: %w", err)
 		}
-		if t.dryRun != nil {
-			if err := t.dryRun(ctx, &batch); err != nil {
+		if t.dryRun != nil && validateOutside {
+			head, err := t.dryRun(ctx, &batch)
+			if err != nil {
+				t.stats.tapeBatchesRefused.Add(1)
 				return fmt.Errorf("store: append projection batch: %w: %v", computerevent.ErrBatchRefused, err)
+			}
+			// The appender compares this head with the local head under its
+			// mutex and validates again if another writer moved it.
+			ctx = computerevent.WithValidatedHead(ctx, head)
+			if t.afterDryRun != nil {
+				t.afterDryRun()
 			}
 		}
 		_, _, err = t.appender.AppendNewPrivatePayload(ctx, event, computerevent.TransitionInput{}, payload, computerevent.ProjectionBatchMediaType, cipher)
@@ -212,9 +258,12 @@ func (t *projectionTape) appendDirect(ctx context.Context, ops []computerevent.P
 		_, _, err = t.appender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, payload, computerevent.ProjectionBatchMediaType, "owner")
 	}
 	if err != nil {
+		if errors.Is(err, computerevent.ErrBatchRefused) {
+			t.stats.tapeBatchesRefused.Add(1)
+		}
 		return fmt.Errorf("store: append projection batch: %w", err)
 	}
-	t.stats.recordTapeEvent(event.AuthorityRef, ops)
+	t.stats.recordTapeEvent(event.AuthorityRef, parts, firstIsTelemetry, len(payload))
 	return nil
 }
 

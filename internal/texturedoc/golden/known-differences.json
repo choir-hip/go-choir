@@ -2,42 +2,6 @@
  "about": "Every known difference between the web and native renderers on the golden documents. key: web#i is the i-th web block, native#j the j-th native block, .field the differing field. side: which renderer departs from the format or the other renderer (web, native) or by-design. A difference not listed here fails scripts/golden-docs; an entry that stops matching also fails, so the list cannot rot.",
  "differences": [
   {
-   "doc": "citations",
-   "key": "web#1~native#1.cites",
-   "side": "web",
-   "reason": "web numbers an unpublished marker by its position in source_entities (renderInlineSourceRef: indexOf+1), native numbers by first citation in reading order (Builder.addCite); the published path (manifest anchors) also numbers by reading order, so the web unpublished path is the odd one"
-  },
-  {
-   "doc": "citations",
-   "key": "web#1~native#1.text",
-   "side": "web",
-   "reason": "web numbers an unpublished marker by its position in source_entities (renderInlineSourceRef: indexOf+1), native numbers by first citation in reading order (Builder.addCite); the published path (manifest anchors) also numbers by reading order, so the web unpublished path is the odd one"
-  },
-  {
-   "doc": "citations",
-   "key": "web#2~native#2.cites",
-   "side": "web",
-   "reason": "numbering only (see the entry above): web numbers by position in source_entities, native by first citation. The quote part of this difference is fixed on native"
-  },
-  {
-   "doc": "citations",
-   "key": "web#2~native#2.text",
-   "side": "web",
-   "reason": "web numbers an unpublished marker by its position in source_entities (renderInlineSourceRef: indexOf+1), native numbers by first citation in reading order (Builder.addCite); the published path (manifest anchors) also numbers by reading order, so the web unpublished path is the odd one"
-  },
-  {
-   "doc": "citations",
-   "key": "web#3~native#3.cites",
-   "side": "web",
-   "reason": "numbering only (see the entry above): web numbers by position in source_entities, native by first citation. The quote part of this difference is fixed on native"
-  },
-  {
-   "doc": "citations",
-   "key": "web#3~native#3.text",
-   "side": "web",
-   "reason": "web numbers an unpublished marker by its position in source_entities (renderInlineSourceRef: indexOf+1), native numbers by first citation in reading order (Builder.addCite); the published path (manifest anchors) also numbers by reading order, so the web unpublished path is the odd one"
-  },
-  {
    "doc": "edge-shapes",
    "key": "web#0",
    "side": "by-design",
@@ -46,56 +10,14 @@
   {
    "doc": "edge-shapes",
    "key": "web#1",
-   "side": "web",
-   "reason": "an empty paragraph is valid in the schema; web draws an empty <p> (a blank gap), native drops it (failure item 4). Native's behaviour is the better one; web should skip empty paragraphs"
+   "side": "by-design",
+   "reason": "an empty or whitespace-only paragraph is valid in the schema. The web draws an empty <p>, which has no height in the reader and which the editor needs (an owner's blank line must hold the cursor and round-trip); native drops it from the reading model. Both read the same page, so this is left as a difference of model, not of look"
   },
   {
    "doc": "edge-shapes",
    "key": "web#2",
-   "side": "web",
-   "reason": "a whitespace-only paragraph: same as the empty paragraph"
-  },
-  {
-   "doc": "lists",
-   "key": "web#8~native#8.marker",
-   "side": "web",
-   "reason": "ordered_list attrs.start: web renders <ol> without a start attribute, so a list that starts at 3 counts from 1; native honours start"
-  },
-  {
-   "doc": "lists",
-   "key": "web#9~native#9.marker",
-   "side": "web",
-   "reason": "same: second item of the list that starts at 3"
-  },
-  {
-   "doc": "lists",
-   "key": "web#16~native#16.text",
-   "side": "web",
-   "reason": "a list_item with two paragraphs: web concatenates their inline content with no separator (\"item.Second\"); native keeps two blocks, the second without a marker"
-  },
-  {
-   "doc": "lists",
-   "key": "native#17",
-   "side": "web",
-   "reason": "the second paragraph of the list item exists only on native (see the previous entry)"
-  },
-  {
-   "doc": "markdown-fallback",
-   "key": "web#5~native#5.depth",
-   "side": "web",
-   "reason": "web's Markdown renderer flattens a nested list item to depth 1; native keeps depth 2"
-  },
-  {
-   "doc": "markdown-fallback",
-   "key": "web#11~native#11.kind",
-   "side": "web",
-   "reason": "a Markdown rule (---) after a fenced code block: web draws a paragraph holding \"---\", native a rule"
-  },
-  {
-   "doc": "markdown-fallback",
-   "key": "web#11~native#11.text",
-   "side": "web",
-   "reason": "same as the previous entry"
+   "side": "by-design",
+   "reason": "an empty or whitespace-only paragraph is valid in the schema. The web draws an empty <p>, which has no height in the reader and which the editor needs (an owner's blank line must hold the cursor and round-trip); native drops it from the reading model. Both read the same page, so this is left as a difference of model, not of look"
   }
  ]
 }

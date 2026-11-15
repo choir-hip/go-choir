@@ -18,7 +18,7 @@ the reports [surface audit](surface-audit-cli-mcp-api-2026-10-14.md),
 [self-development update architecture](selfdev-update-architecture-2026-10-15.md)
 and [computer isolation security review](computer-isolation-security-review-2026-10-14.md),
 and two earlier key studies this report builds on rather than repeats:
-[precommitment-records.md §6](../../precommitment-records.md) and its archived
+[precommitment-records.md §6](../learning/precommitment-records.md) and its archived
 code audit
 [precommitment-signing-and-computer-keys-2026-10-11.md](../precommitment/precommitment-signing-and-computer-keys-2026-10-11.md).
 

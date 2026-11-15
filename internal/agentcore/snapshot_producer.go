@@ -68,9 +68,25 @@ const (
 	// tick). Not half: each of the paper's snapshots writes about 25 GB of new
 	// chunks to the host, and at half it would take two a day.
 	snapshotDefaultTailEvents = recoveryplan.MaxRecoveryTailEvents / 4 * 3
-	// The read transaction of the stream pins the WAL; past this the stream
-	// aborts with a logged reason and the next tick tries again.
-	snapshotDefaultMaxDuration = 30 * time.Minute
+	// The read transaction pins the WAL; past this the attempt aborts with a
+	// logged reason and the next attempt waits out its backoff. The witness
+	// alone measured 22 to 35 minutes on the paper's 21 GiB store (2026-11-12),
+	// so 30 minutes could never finish; 90 minutes holds the witness, the
+	// 3.5 minute stream and the partitions. The cost is the WAL pin: it grew
+	// to 3.7 GB in 30 minutes under load, so it may reach about 11 GB in 90;
+	// the free-space floor and CheckpointAfterLongRead bound the damage. This
+	// is a deadline, not a switch.
+	snapshotDefaultMaxDuration = 90 * time.Minute
+	// After a failed attempt the next one waits snapshotBackoffFloor, doubling
+	// per consecutive failure up to snapshotBackoffCeiling; a success resets
+	// it. Every attempt uploads most of a live store's chunks, which the host
+	// keeps until the grace passes, so a failure must not be retried at the
+	// tick (6 GiB an hour on the paper, 2026-11-12). At 6 events/s the
+	// ceiling adds about 65,000 events to the tail, inside the margin between
+	// the trigger and the recovery bound. A backoff after our own failure, not
+	// a call limit.
+	snapshotBackoffFloor   = 2 * snapshotTickEvery
+	snapshotBackoffCeiling = 3 * time.Hour
 	// The stream writes no copy, but the WAL grows while it reads. Below this
 	// much free space on the data volume the producer waits.
 	snapshotFreeFloor = uint64(2) << 30
@@ -93,6 +109,8 @@ const (
 	snapshotRefused snapshotOutcome = "refused"
 	snapshotFailed  snapshotOutcome = "failed"
 	snapshotSkipped snapshotOutcome = "skipped"
+	// snapshotBackoff: due, but waiting out the backoff after a failure.
+	snapshotBackoff snapshotOutcome = "backoff"
 )
 
 // snapshotSettings are the producer's tunables, read from the environment.
@@ -148,6 +166,9 @@ type snapshotDeps struct {
 	FreeBytes func(dir string) (uint64, error)
 	// Ready reports whether boot has settled and the runtime is not held.
 	Ready func() bool
+	// Now is the clock (nil: time.Now). The backoff counts from the time an
+	// attempt ENDS, which a 90 minute attempt makes far later than `now`.
+	Now func() time.Time
 	// Take takes the snapshot.
 	Take func(ctx context.Context, maxDuration time.Duration) (snapshot.Ref, error)
 }
@@ -167,6 +188,21 @@ type snapshotProducer struct {
 	lastSeq  uint64
 	lastKnow bool
 	lastWhy  string
+
+	// failures counts consecutive failed attempts; failedHead is the store
+	// head the last one began at; retryAt is when the next may begin.
+	failures   int
+	failedHead uint64
+	retryAt    time.Time
+}
+
+// snapshotBackoffWait is the wait after the nth consecutive failure (n >= 1).
+func snapshotBackoffWait(n int) time.Duration {
+	wait := snapshotBackoffFloor
+	for i := 1; i < n && wait < snapshotBackoffCeiling; i++ {
+		wait *= 2
+	}
+	return min(wait, snapshotBackoffCeiling)
 }
 
 // run is one evaluation: take a snapshot if one is due and nothing refuses.
@@ -223,6 +259,14 @@ func (p *snapshotProducer) run(ctx context.Context, d snapshotDeps, set snapshot
 		}
 	}
 
+	// A failed attempt uploaded chunks the host keeps: wait before the next.
+	p.mu.Lock()
+	failures, failedHead, retryAt := p.failures, p.failedHead, p.retryAt
+	p.mu.Unlock()
+	if failures > 0 && now.Before(retryAt) {
+		return snapshotBackoff, fmt.Sprintf("backing off after %d failed attempt(s), the last at head %d; the next attempt is not before %s", failures, failedHead, retryAt.UTC().Format(time.RFC3339))
+	}
+
 	// Correctness refusals: logged by the caller, retried at the next tick.
 	if why, err := d.Busy(ctx); err != nil {
 		return snapshotRefused, "cannot tell whether work is live (fails closed): " + err.Error()
@@ -258,12 +302,24 @@ func (p *snapshotProducer) run(ctx context.Context, d snapshotDeps, set snapshot
 		_ = clearGuestAttempt(d.StorePath, snapshotAttemptKey, d.ComputerID)
 	}
 	if err != nil {
-		if errors.Is(err, snapshot.ErrTimeBudget) {
-			return snapshotFailed, fmt.Sprintf("aborted at the %s time budget (%s) with nothing recorded: %s", set.MaxDuration, envSnapshotMaxDuration, err.Error())
+		p.mu.Lock()
+		p.failures++
+		p.failedHead = head
+		ended := time.Now()
+		if d.Now != nil {
+			ended = d.Now()
 		}
-		return snapshotFailed, err.Error()
+		p.retryAt = ended.Add(snapshotBackoffWait(p.failures))
+		n, next := p.failures, p.retryAt
+		p.mu.Unlock()
+		cause := err.Error()
+		if errors.Is(err, snapshot.ErrTimeBudget) {
+			cause = fmt.Sprintf("aborted at the %s time budget (%s) with nothing recorded: %s", set.MaxDuration, envSnapshotMaxDuration, cause)
+		}
+		return snapshotFailed, fmt.Sprintf("%s (attempt at head %d; failure %d; next attempt not before %s)", cause, head, n, next.UTC().Format(time.RFC3339))
 	}
 	p.mu.Lock()
+	p.failures, p.failedHead, p.retryAt = 0, 0, time.Time{}
 	p.lastAt, p.lastSeq = now, ref.Record.StoreHeadSequence
 	p.mu.Unlock()
 	st := ref.Stats
@@ -294,10 +350,11 @@ func (rt *Runtime) snapshotDepsForRuntime() (snapshotDeps, bool) {
 	}
 	chunks := snapshot.HTTPChunks{BaseURL: client.BaseURL(), ComputerID: computerID, Capability: client.Capability()}
 	store := rt.store
+	dataDir := filepath.Dir(store.StatePath())
 	return snapshotDeps{
 		ComputerID: computerID,
 		StorePath:  rt.cfg.StorePath,
-		DataDir:    filepath.Dir(store.StatePath()),
+		DataDir:    dataDir,
 		Newest: func(ctx context.Context) (uint64, time.Time, bool, error) {
 			return store.NewestEventOfKind(ctx, computerID, computerevent.EventSnapshotRecorded)
 		},
@@ -341,6 +398,18 @@ func (rt *Runtime) snapshotDepsForRuntime() (snapshotDeps, bool) {
 				Witness: func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
 					return LiveStoreWitnessTx(ctx, tx)
 				},
+				// The WAL grows on the data volume while the read runs; the
+				// check before the attempt is not enough for 90 minutes.
+				FreeSpace: func() error {
+					free, err := freeBytesOnVolume(dataDir)
+					if err != nil {
+						return fmt.Errorf("snapshot: cannot measure free space during the capture (fails closed): %w", err)
+					}
+					if free < snapshotFreeFloor {
+						return fmt.Errorf("snapshot: free space %d bytes on the data volume fell under the %d-byte floor during the capture (the WAL is pinned)", free, snapshotFreeFloor)
+					}
+					return nil
+				},
 				Partitions:  telemetryPartitionSource(store),
 				Cipher:      rt.privateArtifactCipher,
 				Chunks:      chunks,
@@ -362,7 +431,7 @@ func (rt *Runtime) snapshotProducerTick(ctx context.Context, now time.Time) {
 	switch outcome {
 	case snapshotTaken:
 		log.Printf("runtime: snapshot taken: %s", detail)
-	case snapshotRefused, snapshotFailed:
+	case snapshotRefused, snapshotFailed, snapshotBackoff:
 		// A refusal repeats at every tick until it clears; say it when it
 		// changes so the log stays readable.
 		key := string(outcome) + ": " + detail
@@ -371,7 +440,12 @@ func (rt *Runtime) snapshotProducerTick(ctx context.Context, now time.Time) {
 		p.lastWhy = key
 		p.mu.Unlock()
 		if changed {
-			log.Printf("runtime: snapshot %s (retry in %s): %s", outcome, snapshotTickEvery, detail)
+			switch outcome {
+			case snapshotFailed, snapshotBackoff:
+				log.Printf("runtime: snapshot %s: %s", outcome, detail)
+			default:
+				log.Printf("runtime: snapshot %s (retry in %s): %s", outcome, snapshotTickEvery, detail)
+			}
 		}
 	default:
 		p.mu.Lock()

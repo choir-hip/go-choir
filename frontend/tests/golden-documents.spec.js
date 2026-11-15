@@ -144,7 +144,12 @@ for (const file of files) {
             run = [];
           };
           for (const child of li.childNodes) {
-            if (child.nodeType === 1 && BLOCK_TAGS.has(child.tagName)) { flush(); if (first) { push('list_item', [], { depth: listDepth + 1, marker }); first = false; } block(child, listDepth + 1, quoteDepth); }
+            if (child.nodeType === 1 && child.tagName === 'P') {
+              // a paragraph of the item: a block of its own, the first one carries the marker
+              flush();
+              push('list_item', [...child.childNodes], { depth: listDepth + 1, marker: first ? marker : '' });
+              first = false;
+            } else if (child.nodeType === 1 && BLOCK_TAGS.has(child.tagName)) { flush(); if (first) { push('list_item', [], { depth: listDepth + 1, marker }); first = false; } block(child, listDepth + 1, quoteDepth); }
             else run.push(child);
           }
           flush();

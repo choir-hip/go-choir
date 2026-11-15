@@ -25,20 +25,19 @@ skill://agentic-consensus/agentic-consensus-model-probe.sh --all      # every an
 
 ## Default Panel
 
-The default panel is 11 members, all verified live with exact served-model
+The default panel is 10 members, all verified live with exact served-model
 identity:
 
 1. `codex` CLI with its configured default model.
-2. Devin CLI/API with its configured default model/agent (currently `swe-2-max`; the runner passes no `--model` pin, so it tracks the account default).
-3. `claude` CLI pinned to `opus` (`--model opus`).
-4. `opencode` CLI with its configured default model.
-5. OMP `openai-codex/gpt-6.1-sol` with `--thinking xhigh` — the flagship.
-6. OMP `openai-codex/gpt-6-luna` with `--thinking max` — the cost champion; fastest/cheapest GPT-6 tier (weak long-context recall).
-7. OMP `google-antigravity/gemini-3.8-flash` with `--thinking high`.
-8. OMP `opencode-go/muse-spark-1.3-contributor` with `--thinking max`.
-9. OMP `opencode-go/deepseek-v4.1-flash` with `--thinking max`.
-10. OMP `opencode-go/glm-5.3-flash` with `--thinking high`.
-11. OMP `opencode-go/minimax-m3.1-flash-free` with `--thinking high` (added 2026-10-22 by owner direction; free tier, probed OK).
+2. `claude` CLI pinned to `opus` (`--model opus`).
+3. `opencode` CLI with its configured default model.
+4. OMP `openai-codex/gpt-6.1-sol` with `--thinking xhigh` — the flagship.
+5. OMP `openai-codex/gpt-6-luna` with `--thinking max` — the cost champion; fastest/cheapest GPT-6 tier (weak long-context recall).
+6. OMP `google-antigravity/gemini-4-hydrogen-high` with `--thinking high` (replaced gemini-3.8-flash on 2026-11-12 by owner direction; probed OK). Review seat 1.
+7. OMP `opencode-go/muse-spark-1.3-contributor` with `--thinking max`.
+8. OMP `opencode-go/deepseek-v4.1-flash` with `--thinking max`. Review seat 2.
+9. OMP `opencode-go/glm-5.3-flash` with `--thinking high`.
+10. OMP `opencode-go/minimax-m3.1-flash-free` with `--thinking high` (added 2026-10-22 by owner direction; free tier, probed OK).
 
 `claude` is in the default panel, pinned to `opus`. `fable` is request-only: pass `--claude-model fable` when the user explicitly asks for it — never in the default panel.
 
@@ -79,7 +78,7 @@ cursor          (quota-gated; not default)
 opencode
 omp-gpt61-sol   (default)
 omp-gpt6-luna   (default)
-omp-gemini38    (default)
+omp-gemini4-hydrogen    (default)
 omp-claude-opus46
 omp-muse-spark  (default)
 omp-deepseek-v41-flash (default)
@@ -118,6 +117,11 @@ the panel was simply trimmed):
 | `omp-grok47` | `opencode-go/grok-4.7` |
 | `omp-space-bunny` | `opencode-go/space-bunny-free` (removed 2026-10-07) |
 | `omp-qwen38max` | `opencode-go/qwen3.8-max` (removed 2026-10-07) |
+| `omp-gemini38` | `google-antigravity/gemini-3.8-flash` (replaced by `omp-gemini4-hydrogen` on 2026-11-12) |
+
+`devin` left the default panel on 2026-11-12 (owner: Devin does not run code
+review). It stays a supported id for an explicit `--include devin` on a
+decision panel, never for review.
 
 The whole `opencode-zen/*-free` tier is unusable from OMP with that 403. The
 `opencode-go/*` equivalents serve the same model families and are verified, so
@@ -315,7 +319,7 @@ Runner contracts:
 ```bash
 omp -p --mode text --model openai-codex/gpt-6.1-sol --thinking xhigh --no-session "$PROMPT"
 omp -p --mode text --model openai-codex/gpt-6-luna --thinking max --no-session "$PROMPT"
-omp -p --mode text --model google-antigravity/gemini-3.8-flash --thinking high --no-session "$PROMPT"
+omp -p --mode text --model google-antigravity/gemini-4-hydrogen-high --thinking high --no-session "$PROMPT"
 omp -p --mode text --model opencode-go/muse-spark-1.3-contributor --thinking max --no-session "$PROMPT"
 omp -p --mode text --model opencode-go/deepseek-v4.1-flash --thinking max --no-session "$PROMPT"
 omp -p --mode text --model opencode-go/glm-5.3-flash --thinking high --no-session "$PROMPT"
@@ -330,7 +334,7 @@ Optional overrides — one `--<id-without-omp->-model` and
 ```bash
 --omp-gpt61-sol-model MODEL       --omp-gpt61-sol-thinking LEVEL
 --omp-gpt6-luna-model MODEL       --omp-gpt6-luna-thinking LEVEL
---omp-gemini38-model MODEL        --omp-gemini38-thinking LEVEL
+--omp-gemini4-hydrogen-model MODEL        --omp-gemini4-hydrogen-thinking LEVEL
 --omp-claude-opus46-model MODEL   --omp-claude-opus46-thinking LEVEL
 --omp-muse-spark-model MODEL      --omp-muse-spark-thinking LEVEL
 --omp-deepseek-v41-flash-model MODEL --omp-deepseek-v41-flash-thinking LEVEL
@@ -687,11 +691,11 @@ synthesis clusters, lateral synthesis collects reframes):
 ## Code Review Allocation
 
 Code review is risk-tiered (owner, 2026-10-23: "allocating code review to
-hard stuff and trusting that we can handle the easy stuff cold"). The review
-seat is Gemini, not Devin (owner, 2026-11-11: "we shouldn't use devin for
-review since we are using it for autopaper. use gemini instead"); Devin's
-quota serves the paper. Sonnet is the second seat. The repo contract
-(`CLAUDE.md`, Review) is the authority; the runner shapes are:
+hard stuff and trusting that we can handle the easy stuff cold"). The seats
+(owner, 2026-11-12): seat 1 is Gemini 4 Hydrogen (`omp-gemini4-hydrogen`),
+seat 2 is DeepSeek v4.1 flash (`omp-deepseek-v41-flash`), both through OMP.
+Devin does not run code review. The repo contract (`CLAUDE.md`, Review) is
+the authority; the runner shapes are:
 
 - Cheap checks before any review, every time: the repo gates
   (`check-v1-writer-purity`, `check-decode-roots`, `check-test-hang-guards`,
@@ -707,13 +711,12 @@ quota serves the paper. Sonnet is the second seat. The repo contract
   is not tier 0; it gets the deploy's own review.
 - Tier 1, one seat: orange changes, and red changes that are additive, behind
   a data/config switch, with a one-act rollback that shows on staging within
-  minutes. `--include omp-gemini38` (or Gemini through `agy`).
+  minutes. `--include omp-gemini4-hydrogen`.
 - Tier 2, two seats: red where a defect would be silent or irreversible
   (deletes, tape/evidence, Texture canonical writes, auth/session, store
   schema, boot path, new concurrency).
-  `--include omp-gemini38` plus a Sonnet subagent as the second seat.
-  Do not include `devin` in a review or a panel while the paper runs on it
-  (`--exclude devin` on a default panel).
+  `--include omp-gemini4-hydrogen,omp-deepseek-v41-flash`.
+  Never include `devin` in a review.
 - Re-review a red delta, one seat (Gemini), whenever the previous round found
   a blocking-real defect; not when it found only doc, nit or test-only items.
   After three rounds on one mechanism, stop adding rounds and look at the

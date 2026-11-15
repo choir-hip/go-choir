@@ -1,0 +1,32 @@
+{
+  "blocks" : [
+    {
+      "cites" : [
+        {
+          "n" : 1,
+          "quote" : "The harbour closed at noon.",
+          "title" : "The harbour log"
+        }
+      ],
+      "kind" : "paragraph",
+      "text" : "This paragraph pulls a passage from another Texture[1]"
+    },
+    {
+      "cites" : [
+        {
+          "n" : 2,
+          "quote" : "",
+          "title" : "Tide tables"
+        },
+        {
+          "n" : 1,
+          "quote" : "",
+          "title" : "The harbour log"
+        }
+      ],
+      "kind" : "paragraph",
+      "text" : "And a web source beside it[2], then the Texture again[1]."
+    }
+  ],
+  "name" : "transclusion"
+}

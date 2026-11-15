@@ -94,8 +94,9 @@ func main() {
 	svc.SetArtifactGCPolicy(gcPolicy)
 	platform.NewGCRunner(svc, gcPolicy, gcInterval).Start(context.Background())
 	// Tape sweep (orphan pins, destroyed computers' tapes): dry-run unless
-	// PLATFORM_TAPE_SWEEP_MODE=active; on demand only, at
-	// /internal/platform/artifact-gc/tape. The destroyed proof needs vmctl.
+	// PLATFORM_TAPE_SWEEP_MODE=active; on demand at
+	// /internal/platform/artifact-gc/tape and, for destroyed computers, daily.
+	// The destroyed proof needs vmctl.
 	svc.SetTapeSweepPolicy(platform.TapeSweepPolicy{Mode: cfg.TapeSweepMode, ArchiveDir: cfg.TapeSweepArchiveDir})
 	// Tape segments (stage A2): off unless PLATFORM_TAPE_SEGMENTS=write. The
 	// read path is segment first, legacy second whatever this says.
@@ -117,7 +118,6 @@ func main() {
 	}
 	store.SetReceiptCompaction(receiptPolicy)
 	log.Printf("corpusd: receipt compaction: %s", receiptPolicy)
-	platform.NewReceiptCompactor(store).Start(context.Background())
 	handler := platform.NewHandler(svc)
 	if cfg.VmctlURL != "" {
 		svc.SetComputerRegistry(platform.NewVmctlComputerRegistry(vmctl.NewClient(cfg.VmctlURL)))
@@ -125,6 +125,14 @@ func main() {
 			log.Fatalf("corpusd guest binding: %v", err)
 		}
 	}
+	// The destroyed-computer tape sweep on its own, daily, beside the hourly
+	// artifact collector (station S7). No setting: it follows
+	// PLATFORM_TAPE_SWEEP_MODE as the route does, never acknowledges
+	// unrecorded fork lineage and never passes no_archive.
+	tapeSweepCtx, cancelTapeSweep := context.WithCancel(context.Background())
+	tapeSweepSched := platform.NewTapeSweepScheduler(svc)
+	tapeSweepSched.Start(tapeSweepCtx)
+	defer cancelTapeSweep()
 	eventCAS, eventArtifacts, eventAuth, err := svc.ComputerEventRuntime()
 	if err != nil {
 		log.Fatalf("corpusd computer event runtime: %v", err)
@@ -214,6 +222,16 @@ func main() {
 	}
 	s := server.NewServer("corpusd", cfg.Port)
 	platform.RegisterRoutes(s, handler)
+	// A scheduled tape sweep is stopped at a batch boundary and waited for
+	// up to the shutdown deadline, before the store closes (its tombstone
+	// counts are written per batch, so a wait that runs out leaves them
+	// truthful: an under-count, the rest re-listed by the next dry run).
+	s.AddShutdownHook(func(ctx context.Context) {
+		cancelTapeSweep()
+		if err := tapeSweepSched.Wait(ctx); err != nil {
+			log.Printf("corpusd: tape sweep schedule still running at the shutdown deadline")
+		}
+	})
 
 	// Object graph API: allows VMs to project and query
 	// object graph data stored in the platform PostgreSQL databases (corpusd).
@@ -230,6 +248,13 @@ func main() {
 	ogHandler.ConfigureCaptureBodies(platform.CaptureBodiesRoot(cfg.ArtifactsRoot))
 	ogHandler.ConfigureCaptureIndex(store)
 	platform.RegisterObjectGraphRoutes(s, ogHandler)
+
+	// The receipt backfill walk and the append timing line start as the
+	// listener does: the walk waits its boot delay and then only for free space
+	// (receipt_walk.go), and the timing line is what an operator watches while
+	// the receipt table's indexes are swapped by hand.
+	platform.NewReceiptCompactor(store).Start(context.Background())
+	store.StartAppendTimingLog(context.Background())
 
 	s.Start()
 }

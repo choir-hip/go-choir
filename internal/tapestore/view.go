@@ -2,6 +2,7 @@ package tapestore
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,9 +27,10 @@ type SegLoc struct {
 // entries of the open segment, so a join over 256 buckets holds about 1/256
 // of the records at a time. Read verifies a located record completely.
 //
-// A view never writes. It is a snapshot of the file list: a segment created
-// after OpenView is not seen, and the open segment is rescanned by every
-// Bucket call, so records appended later are. It is not safe for concurrent
+// A view never writes. Bucket and SegmentLocs use the file list as of OpenView:
+// a segment created after it is not seen, and the open segment is rescanned
+// by every Bucket call, so records appended later are. ReadObject re-lists
+// when a read finds no intact copy (see there). It is not safe for concurrent
 // use.
 type SegmentView struct {
 	r        *Reader
@@ -36,6 +38,17 @@ type SegmentView struct {
 	dir      string
 	segs     []segFiles
 	sealed   map[uint64]*sealedSeg
+
+	hint   int    // index into segs of the last ReadObject hit
+	probes uint64 // segment lookups made by ReadObject
+
+	reloads, fallbacks uint64
+	absent, skipped    uint64   // reads with no intact copy; of those, listings skipped
+	names              []string // raw directory names at the last listing
+	sealedProbes       uint64
+
+	index *digestIndex // nil unless OpenIndexedView
+	segAt map[uint64]int
 }
 
 // OpenView lists the computer's segments and validates every sealed index
@@ -44,26 +57,262 @@ type SegmentView struct {
 // segment, or an unsealed segment below the highest one (a state the writer
 // refuses to extend) is ErrCorrupt.
 func (r *Reader) OpenView(computerID string) (*SegmentView, error) {
-	dir, segs, err := r.list(computerID)
-	if err != nil {
+	v := &SegmentView{r: r, computer: computerID}
+	if err := v.load(); err != nil {
 		return nil, err
 	}
-	v := &SegmentView{r: r, computer: computerID, dir: dir, segs: segs, sealed: map[uint64]*sealedSeg{}}
+	return v, nil
+}
+
+// load lists the computer's directory and validates every sealed index. The
+// reader's sealed-index cache makes a reload cost the listing plus the
+// indexes not seen before.
+func (v *SegmentView) load() error {
+	r, computerID := v.r, v.computer
+	dir, segs, names, err := r.listNames(computerID)
+	if err != nil {
+		return err
+	}
+	sealed := map[uint64]*sealedSeg{}
 	r.retireSealed(dir, segs)
 	for i, f := range segs {
 		if f.hasIdx {
 			s, err := r.loadSealed(dir, computerID, f.segno)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			v.sealed[f.segno] = s
+			sealed[f.segno] = s
 			continue
 		}
 		if i != len(segs)-1 {
-			return nil, corruptf("computer %s: segment %d is unsealed below the highest segment %d", computerID, f.segno, segs[len(segs)-1].segno)
+			return corruptf("computer %s: segment %d is unsealed below the highest segment %d", computerID, f.segno, segs[len(segs)-1].segno)
 		}
 	}
-	return v, nil
+	add, err := v.indexAdditions(segs, sealed)
+	if err != nil {
+		return err
+	}
+	v.commitIndex(add)
+	v.dir, v.segs, v.sealed, v.names = dir, segs, sealed, names
+	if v.index != nil {
+		v.segAt = make(map[uint64]int, len(segs))
+		for i, f := range segs {
+			v.segAt[f.segno] = i
+		}
+	}
+	if v.hint >= len(segs) {
+		v.hint = 0
+	}
+	return nil
+}
+
+// Probes is the number of segment lookups ReadObject has made: one per
+// segment index consulted or open segment rescanned.
+func (v *SegmentView) Probes() uint64 { return v.probes }
+
+// Reloads is the number of times a read found the directory changed and
+// reloaded the view; Fallbacks the number of reads the per-call Reader path
+// answered because the view could not (a reload failed, or a segment file the
+// view listed was gone).
+func (v *SegmentView) Reloads() uint64   { return v.reloads }
+func (v *SegmentView) Fallbacks() uint64 { return v.fallbacks }
+
+// ReadObject is Reader.Read for one object of this computer: the same
+// segment-then-legacy order, digest check, counters and legacy fallback on a
+// segment error, but the segments come from the view's listing and validated
+// indexes, probed from the segment of the last hit and the next one, then
+// every segment newest first. Events are appended in order, so a walk in
+// order finds the next one in the same or the next segment.
+//
+// The outcome never depends on the hint or the walk order. For a digest, the
+// view returns the verified bytes if any segment holds an intact copy;
+// otherwise the error of the newest damaged copy (ErrCorrupt, as
+// Reader.Read); otherwise absent, and then the legacy file as Reader.Read
+// does. Reader.Read decides by the newest copy alone, which would need a
+// probe of every newer segment on every read. The two differ in one case: a
+// digest stored twice, the newer copy damaged and an older copy intact.
+// Reader.Read reports the damage; the view returns the intact copy, checked
+// against the digest and the record crc, so the bytes are the object's.
+// Damage with no intact copy anywhere still stops the walk. A copy in a
+// format this binary does not know (ErrUnsupportedVersion) counts as damage
+// here: a newer copy in an unsupported format is skipped for an intact older
+// copy, where Reader.Read refuses; with no intact copy the error is returned.
+// A view from OpenIndexedView probes, for its namespace, only the segments
+// the digest index names plus the open segment; the answer is the same (see
+// view_index.go for why an absence is still proof).
+//
+// When no intact copy is found, the directory is listed again; if it changed
+// (a segment created or sealed since the view loaded) the view reloads and
+// probes again, so a walk that runs while the tape grows sees what
+// Reader.Read would. A reload that fails, or an error that is not damage (a
+// segment or index file the view listed is gone), is answered by
+// Reader.readSegment on a fresh listing, exactly as Reader.Read answers. A
+// view holds no files open and needs no Close. It is not safe for concurrent
+// use.
+func (v *SegmentView) ReadObject(ns NS, digest string) ([]byte, Source, error) {
+	if !ns.valid() {
+		return nil, 0, fmt.Errorf("tapestore: invalid namespace %d", uint8(ns))
+	}
+	if !ValidDigest(digest) {
+		return nil, 0, fmt.Errorf("tapestore: invalid digest %q", digest)
+	}
+	return v.r.readWith(v.computer, ns, digest, v.lookup)
+}
+
+// isDamage reports a segment error that is a verdict on the store (as
+// opposed to a path error from a stale listing).
+func isDamage(err error) bool {
+	return errors.Is(err, ErrCorrupt) || errors.Is(err, ErrUnsupportedVersion) || errors.Is(err, ErrDigestMismatch)
+}
+
+func (v *SegmentView) lookup(ns NS, digest string) ([]byte, bool, error) {
+	var want [32]byte
+	if err := decodeHex32(&want, digest); err != nil {
+		return nil, false, err
+	}
+	for pass := 0; pass < 2; pass++ {
+		var body []byte
+		var found bool
+		var err error
+		if v.index != nil && ns == v.index.ns {
+			body, found, err = v.searchIndexed(ns, want)
+		} else {
+			body, found, err = v.search(ns, want)
+		}
+		if found {
+			return body, true, nil
+		}
+		if err != nil && !isDamage(err) {
+			return v.fallback(ns, digest)
+		}
+		if pass == 1 {
+			return nil, false, err
+		}
+		// No intact copy: has the tape grown since the view loaded?
+		// Raw names equal to those of the listing the view was built from
+		// mean the same files, so the same parsed listing; any difference
+		// (a segment, a compaction temp file) takes the full compare.
+		if v.namesUnchanged() {
+			if err == nil {
+				v.absent++
+			}
+			v.skipped++
+			return nil, false, err
+		}
+		_, now, names, lerr := v.r.listNames(v.computer)
+		if lerr != nil {
+			return nil, false, lerr
+		}
+		if sameSegFiles(now, v.segs) {
+			v.names = names
+			if err == nil {
+				v.absent++
+			}
+			return nil, false, err
+		}
+		if v.load() != nil {
+			return v.fallback(ns, digest)
+		}
+		v.reloads++
+	}
+	return nil, false, nil
+}
+
+// namesUnchanged reports whether the directory holds exactly the entries the
+// last listing saw, by name, without parsing or allocating per entry beyond
+// what os.ReadDir does.
+func (v *SegmentView) namesUnchanged() bool {
+	entries, err := readSegDir(v.dir)
+	if err != nil || len(entries) != len(v.names) {
+		return false
+	}
+	for i, e := range entries {
+		if e.Name() != v.names[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// Absent is the number of reads that found no intact copy in any segment and
+// no change of the directory (they go on to the legacy file); ListingsSkipped
+// how many of those, and of reads that found only damage, were settled by the
+// raw name compare instead of a full listing.
+func (v *SegmentView) Absent() uint64          { return v.absent }
+func (v *SegmentView) ListingsSkipped() uint64 { return v.skipped }
+
+// fallback answers one read with the per-call Reader path, and refreshes the
+// view if it can.
+func (v *SegmentView) fallback(ns NS, digest string) ([]byte, bool, error) {
+	v.fallbacks++
+	_ = v.load()
+	return v.r.readSegment(v.computer, ns, digest)
+}
+
+// search probes the hinted segment and the next, then every segment newest
+// first. An intact copy is returned at once. Damage is remembered and the
+// search goes on; with no intact copy it returns the newest damaged
+// segment's error. A path error is returned at once.
+func (v *SegmentView) search(ns NS, want [32]byte) ([]byte, bool, error) {
+	var damage error
+	damageAt := -1
+	try := func(i int) ([]byte, bool, error, bool) {
+		body, found, err := v.probe(i, ns, want)
+		switch {
+		case found:
+			v.hint = i
+			return body, true, nil, true
+		case err != nil && !isDamage(err):
+			return nil, false, err, true
+		case err != nil && i > damageAt:
+			damage, damageAt = err, i
+		}
+		return nil, false, nil, false
+	}
+	first := v.hint
+	for i := first; i <= first+1; i++ {
+		if i >= len(v.segs) {
+			continue
+		}
+		if body, found, err, done := try(i); done {
+			return body, found, err
+		}
+	}
+	for i := len(v.segs) - 1; i >= 0; i-- {
+		if i == first || i == first+1 {
+			continue
+		}
+		if body, found, err, done := try(i); done {
+			return body, found, err
+		}
+	}
+	return nil, false, damage
+}
+
+func sameSegFiles(a, b []segFiles) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// probe looks (ns, want) up in segment i of the view.
+func (v *SegmentView) probe(i int, ns NS, want [32]byte) ([]byte, bool, error) {
+	v.probes++
+	if v.segs[i].hasIdx {
+		v.sealedProbes++
+	}
+	f := v.segs[i]
+	if f.hasIdx {
+		return v.sealed[f.segno].read(ns, want)
+	}
+	o := v.r.openFor(filepath.Join(v.dir, SegmentFileName(f.segno)), f.segno)
+	return o.read(v.computer, i == len(v.segs)-1, ns, want)
 }
 
 // Segments is the number of segments listed.

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Goal-file gate: docs/definitions/*.md frontmatter parses (any
+# definition_version) and meets the version 7 schema (integer >= 7).
+# Usage: scripts/check-goal-files [DIR...]
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+exec go run ./skills/throughline/check "$@"

@@ -84,10 +84,17 @@ func TestTelemetryStatsAreRaceFree(t *testing.T) {
 	if total := stats.EventsAppendedBatchable + stats.EventsAppendedAcknowledged; total != workers*each {
 		t.Fatalf("counted %d appends, want %d", total, workers*each)
 	}
-	// One tape event per append, plus the stream_seq lease the first
-	// allocation wrote.
-	if stats.TapeEvents != workers*each+1 {
-		t.Fatalf("counted %d tape events, want %d", stats.TapeEvents, workers*each+1)
+	// Every append is one op on the tape, plus the stream_seq lease the first
+	// allocation wrote; queued writers share events, so the event count is
+	// between one and one per op.
+	if stats.TapeOps != workers*each+1 {
+		t.Fatalf("counted %d tape ops, want %d", stats.TapeOps, workers*each+1)
+	}
+	if stats.TapeEvents < 1 || stats.TapeEvents > workers*each+1 {
+		t.Fatalf("counted %d tape events, want 1 to %d", stats.TapeEvents, workers*each+1)
+	}
+	if got := sumCounts(stats.TapeEventsByFamily); got != stats.TapeEvents {
+		t.Fatalf("tape_events_by_family sums to %d, want %d", got, stats.TapeEvents)
 	}
 }
 

@@ -1,0 +1,65 @@
+{
+  "blocks" : [
+    {
+      "cites" : [
+        {
+          "n" : 1,
+          "quote" : "",
+          "title" : "The C report"
+        }
+      ],
+      "kind" : "heading",
+      "level" : 2,
+      "text" : "Findings[1]"
+    },
+    {
+      "cites" : [
+        {
+          "n" : 2,
+          "quote" : "",
+          "title" : "The A report"
+        }
+      ],
+      "kind" : "paragraph",
+      "text" : "The first claim rests on report A[2]."
+    },
+    {
+      "cites" : [
+        {
+          "n" : 3,
+          "quote" : "Output rose in the third quarter.",
+          "title" : "The B report"
+        },
+        {
+          "n" : 2,
+          "quote" : "",
+          "title" : "The A report"
+        }
+      ],
+      "kind" : "paragraph",
+      "text" : "The second claim rests on report B[3], and the third returns to A[2]."
+    },
+    {
+      "cites" : [
+        {
+          "n" : 3,
+          "quote" : "",
+          "title" : "The B report"
+        },
+        {
+          "n" : 3,
+          "quote" : "",
+          "title" : "The B report"
+        },
+        {
+          "n" : 2,
+          "quote" : "Quoted words from the A report.",
+          "title" : "The A report"
+        }
+      ],
+      "kind" : "paragraph",
+      "text" : "Two cites in a row[3][3] and an expanded one[2]."
+    }
+  ],
+  "name" : "citations"
+}

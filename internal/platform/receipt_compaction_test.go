@@ -210,7 +210,7 @@ func TestReceiptCompactionDryRunWritesNothing(t *testing.T) {
 	}
 	var mode string
 	var rewritten int64
-	if err := d.store.db.QueryRow(`SELECT mode, rows_rewritten FROM computer_event_receipt_compaction WHERE computer_id=?`, d.id).Scan(&mode, &rewritten); err != nil || mode != ReceiptCompactDryRun || rewritten != 6 {
+	if err := d.store.db.QueryRow(`SELECT mode, rows_rewritten FROM computer_event_receipt_compaction_v2 WHERE computer_id=?`, d.id).Scan(&mode, &rewritten); err != nil || mode != ReceiptCompactDryRun || rewritten != 6 {
 		t.Fatalf("dry-run progress = %q %d %v", mode, rewritten, err)
 	}
 }
@@ -294,25 +294,13 @@ func TestAppendReceiptJSONReadersExpand(t *testing.T) {
 		"internal/bundle/store.go":                true, // receiptColumns; readReceipts expands
 		"internal/bundle/bundle.go":               true, // the bundle line's field tag
 	}
-	root := filepath.Join("..", "..")
-	for _, dir := range []string{"internal", "cmd"} {
-		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, entry fs.DirEntry, err error) error {
-			if err != nil || entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-				return err
-			}
-			raw, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			rel, _ := filepath.Rel(root, path)
-			rel = filepath.ToSlash(rel)
-			if strings.Contains(string(raw), "event_head_receipt_json") && !allowed[rel] {
-				t.Errorf("%s names event_head_receipt_json: select appendReceiptRowColumns and expand with scanExpandedAppendReceipt (receipt_compaction.go)", rel)
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
+	allowed["scripts/chaos/s2-corpusd-crash.sh"] = true // counts rows by the c1: prefix, which every format shares
+	allowed["scripts/receipts-index-swap-test"] = true  // creates a throwaway table with this column; reads no receipt
+	sourceFiles(t, func(path string, raw []byte) {
+		rel, _ := filepath.Rel(filepath.Join("..", ".."), path)
+		rel = filepath.ToSlash(rel)
+		if strings.Contains(string(raw), "event_head_receipt_json") && !allowed[rel] {
+			t.Errorf("%s names event_head_receipt_json: select appendReceiptRowColumns and expand with scanExpandedAppendReceipt (receipt_compaction.go)", rel)
 		}
-	}
+	})
 }

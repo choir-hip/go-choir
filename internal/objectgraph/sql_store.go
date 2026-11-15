@@ -322,6 +322,22 @@ type SQLStore struct {
 	derived *DerivedKeys
 }
 
+type conditionalBatchKey struct{}
+
+func withConditionalBatch(ctx context.Context) context.Context {
+	return context.WithValue(ctx, conditionalBatchKey{}, true)
+}
+
+// ConditionalBatch reports whether ctx belongs to a batch whose conditions
+// were evaluated before the interceptor was called (PutBatchConditional,
+// PutBatchSegments with conditions). The interceptor sees only plain object
+// ops, so this is how the projection tape learns that the batch is guarded and
+// must not share a tape event with other writers' ops.
+func ConditionalBatch(ctx context.Context) bool {
+	v, _ := ctx.Value(conditionalBatchKey{}).(bool)
+	return v
+}
+
 // MutationInterceptor receives durable object/edge mutations before SQL.
 // When set, PutObject/PutEdge/PutBatch/DeleteObject do not write SQL;
 // the interceptor must append+project instead. Projector SQL bypasses this.
@@ -1022,6 +1038,9 @@ func (s *SQLStore) putBatchChecked(ctx context.Context, conditions []ObjectCondi
 	if s.intercept != nil {
 		if err := s.evaluateConditions(ctx, conditions); err != nil {
 			return err
+		}
+		if len(conditions) > 0 {
+			ctx = withConditionalBatch(ctx)
 		}
 		return s.intercept(ctx, batch.Objects, batch.Edges)
 	}

@@ -255,6 +255,17 @@ type derivableSelfDevFixture struct {
 	// reconcile drains the post-commit observer runs: the observer drains
 	// under the read lock, configure writes under the write lock.
 	reconfigure sync.RWMutex
+	// observers tracks the drains the post-commit observer runs. The
+	// appender starts each observer call in a goroutine of its own
+	// (computerevent appender.go, after finalizeProjection) and never joins
+	// it, so without this a drain still running when the test returns uses
+	// the closed store and reports through a finished t (the 2026-11-14
+	// "Fail in goroutine after TestShotReuseForeignJobDoesNotUnlockTheSwap
+	// has completed" panic). observersClosed refuses calls that start after
+	// cleanup began, so Add never races the Wait.
+	observersMu     sync.Mutex
+	observersClosed bool
+	observers       sync.WaitGroup
 }
 
 // configure applies late runtime wiring (fields set after genesis) with no
@@ -633,6 +644,14 @@ func newDerivableSelfDevFixtureBooted(t *testing.T, computerID, buildCommit stri
 	// the observer's own goroutine under fx.reconfigure, so configure can
 	// wait out every drain; the coalescing flag is the production one.
 	appender.SetPostCommitObserver(func(computerevent.EventKind) {
+		fx.observersMu.Lock()
+		if fx.observersClosed {
+			fx.observersMu.Unlock()
+			return
+		}
+		fx.observers.Add(1)
+		fx.observersMu.Unlock()
+		defer fx.observers.Done()
 		fx.reconfigure.RLock()
 		defer fx.reconfigure.RUnlock()
 		if rt.selfdevOperations == nil || rt.eventAppender == nil || rt.selfdevComputerID == "" {
@@ -642,6 +661,15 @@ func newDerivableSelfDevFixtureBooted(t *testing.T, computerID, buildCommit stri
 		if rt.selfdevReconcileRunning.CompareAndSwap(false, true) {
 			rt.selfdevReconcileDrain()
 		}
+	})
+	// Registered after the store and server cleanups, so it runs before them:
+	// every drain has finished before the store closes, and a drain's hook
+	// that reports through t does so before the test completes.
+	t.Cleanup(func() {
+		fx.observersMu.Lock()
+		fx.observersClosed = true
+		fx.observersMu.Unlock()
+		fx.observers.Wait()
 	})
 	fx.rt = rt
 	fx.operations = operations

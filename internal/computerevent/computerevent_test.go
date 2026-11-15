@@ -703,12 +703,42 @@ type memoryProjection struct {
 	failFinalizeOnce   bool
 	failFinalizeAlways error
 	uniqueSequence     bool
+
+	// Fault injection (fault_injection_test.go): fail the next N calls.
+	failPrepareN  int
+	failDiscardN  int
+	failFinalizeN int
+	// finalizeHook runs first in Finalize with the prepared row's sequence.
+	finalizeHook func(sequence uint64) error
+	// ctxAware makes every call honour its context, as the SQLite store does
+	// (BeginTx and QueryContext fail on a cancelled ctx).
+	ctxAware bool
+	// Call counters.
+	prepares, discards, finalizes int
 }
 
-func (p *memoryProjection) Head(context.Context, string) (*Head, error) {
+func (p *memoryProjection) ctxErr(ctx context.Context) error {
+	if p.ctxAware {
+		return ctx.Err()
+	}
+	return nil
+}
+
+func (p *memoryProjection) Head(ctx context.Context, _ string) (*Head, error) {
+	if err := p.ctxErr(ctx); err != nil {
+		return nil, err
+	}
 	return cloneHead(p.head), nil
 }
-func (p *memoryProjection) Prepare(_ context.Context, request CASRequest) error {
+func (p *memoryProjection) Prepare(ctx context.Context, request CASRequest) error {
+	if err := p.ctxErr(ctx); err != nil {
+		return err
+	}
+	p.prepares++
+	if p.failPrepareN > 0 {
+		p.failPrepareN--
+		return errors.New("injected prepare failure")
+	}
 	if p.uniqueSequence {
 		for _, existing := range p.prepared {
 			if existing.Event.Sequence == request.Event.Sequence {
@@ -719,16 +749,36 @@ func (p *memoryProjection) Prepare(_ context.Context, request CASRequest) error 
 	p.prepared = append(p.prepared, request)
 	return nil
 }
-func (p *memoryProjection) Prepared(context.Context, string) ([]CASRequest, error) {
+func (p *memoryProjection) Prepared(ctx context.Context, _ string) ([]CASRequest, error) {
+	if err := p.ctxErr(ctx); err != nil {
+		return nil, err
+	}
 	return append([]CASRequest(nil), p.prepared...), nil
 }
-func (p *memoryProjection) Finalize(_ context.Context, _ string, digest string, _ Receipt) error {
+func (p *memoryProjection) Finalize(ctx context.Context, _ string, digest string, _ Receipt) error {
+	if err := p.ctxErr(ctx); err != nil {
+		return err
+	}
+	p.finalizes++
 	if p.failFinalizeAlways != nil {
 		return p.failFinalizeAlways
 	}
 	if p.failFinalizeOnce {
 		p.failFinalizeOnce = false
 		return errors.New("injected finalize crash")
+	}
+	if p.failFinalizeN > 0 {
+		p.failFinalizeN--
+		return errors.New("injected finalize failure")
+	}
+	if p.finalizeHook != nil {
+		for _, request := range p.prepared {
+			if request.EventDigest == digest {
+				if err := p.finalizeHook(request.Event.Sequence); err != nil {
+					return err
+				}
+			}
+		}
 	}
 	for index, request := range p.prepared {
 		if request.EventDigest == digest {
@@ -739,7 +789,15 @@ func (p *memoryProjection) Finalize(_ context.Context, _ string, digest string, 
 	}
 	return errors.New("prepared event absent")
 }
-func (p *memoryProjection) DiscardPrepared(_ context.Context, _ string, digest string) error {
+func (p *memoryProjection) DiscardPrepared(ctx context.Context, _ string, digest string) error {
+	if err := p.ctxErr(ctx); err != nil {
+		return err
+	}
+	p.discards++
+	if p.failDiscardN > 0 {
+		p.failDiscardN--
+		return errors.New("injected discard failure")
+	}
 	for index, request := range p.prepared {
 		if request.EventDigest == digest {
 			p.prepared = append(p.prepared[:index], p.prepared[index+1:]...)
@@ -748,19 +806,99 @@ func (p *memoryProjection) DiscardPrepared(_ context.Context, _ string, digest s
 	return nil
 }
 
+// casStep scripts one CompareAndSwap call, consumed in order. With an empty
+// script the CAS behaves as it always has.
+type casStep struct {
+	// commit: the host commits the request, then the call returns err (a lost
+	// reply: reset, cancelled caller, 5xx after commit).
+	commit bool
+	// late: the host commits the request only when landLate runs, after the
+	// call has returned err (an in-flight request the host processes late).
+	late bool
+	// headDown: Head fails from this step on, until the test clears headErr.
+	headDown bool
+	// hook runs when the call arrives (a test cancels the caller's ctx here).
+	hook func()
+	err  error
+}
+
 type memoryCAS struct {
 	head     *Head
 	signer   SigningKey
 	receipts map[string]Receipt
+	requests map[string]CASRequest
 	records  []DurableEvent
+
+	mu          sync.Mutex
+	script      []casStep
+	headErr     error
+	pendingLate []CASRequest
+	// onEventsPage runs before each EventsPage read, outside the lock.
+	onEventsPage func(ctx context.Context, afterSequence uint64) error
+	// Call counters.
+	casCalls, headCalls, pageCalls int
 }
 
-func (c *memoryCAS) Head(context.Context, string) (*Head, error) { return cloneHead(c.head), nil }
+func (c *memoryCAS) Head(context.Context, string) (*Head, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.headCalls++
+	if c.headErr != nil {
+		return nil, c.headErr
+	}
+	return cloneHead(c.head), nil
+}
+
 func (c *memoryCAS) CompareAndSwap(_ context.Context, request CASRequest) (Receipt, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.casCalls++
+	if len(c.script) > 0 {
+		step := c.script[0]
+		c.script = c.script[1:]
+		if step.hook != nil {
+			step.hook()
+		}
+		if step.headDown {
+			c.headErr = errors.New("injected head failure")
+		}
+		switch {
+		case step.commit:
+			if _, err := c.commitLocked(request); err != nil {
+				return Receipt{}, err
+			}
+			return Receipt{}, step.err
+		case step.late:
+			c.pendingLate = append(c.pendingLate, request)
+			return Receipt{}, step.err
+		default:
+			return Receipt{}, step.err
+		}
+	}
+	return c.commitLocked(request)
+}
+
+// landLate commits every request a late step left in flight.
+func (c *memoryCAS) landLate() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	pending := c.pendingLate
+	c.pendingLate = nil
+	for _, request := range pending {
+		_, _ = c.commitLocked(request)
+	}
+}
+
+func (c *memoryCAS) commitLocked(request CASRequest) (Receipt, error) {
 	if c.receipts == nil {
 		c.receipts = make(map[string]Receipt)
 	}
 	if receipt, ok := c.receipts[request.Event.IdempotencyKey]; ok {
+		// As the host does: the same key with a changed commitment is a
+		// conflict, not a replay.
+		if stored, ok := c.requests[request.Event.IdempotencyKey]; ok && stored.Event.RequestCommitment != request.Event.RequestCommitment {
+			return Receipt{}, ErrCASConflict
+		}
 		return receipt, nil
 	}
 	if (c.head == nil && request.Event.PreviousHead != ZeroHead) || (c.head != nil && request.Event.PreviousHead != c.head.CanonicalEventHead) {
@@ -780,11 +918,17 @@ func (c *memoryCAS) CompareAndSwap(_ context.Context, request CASRequest) (Recei
 	}
 	c.head = cloneHead(&request.Next)
 	c.receipts[request.Event.IdempotencyKey] = receipt
+	if c.requests == nil {
+		c.requests = make(map[string]CASRequest)
+	}
+	c.requests[request.Event.IdempotencyKey] = request
 	c.records = append(c.records, DurableEvent{Request: request, Receipt: receipt})
 	return receipt, nil
 }
 
 func (c *memoryCAS) Events(_ context.Context, _ string, afterSequence uint64) ([]DurableEvent, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	var records []DurableEvent
 	for _, record := range c.records {
 		if record.Request.Event.Sequence > afterSequence {
@@ -792,6 +936,31 @@ func (c *memoryCAS) Events(_ context.Context, _ string, afterSequence uint64) ([
 		}
 	}
 	return records, nil
+}
+
+// EventsPage makes memoryCAS a PagedEventSource, as the production client is.
+func (c *memoryCAS) EventsPage(ctx context.Context, _ string, afterSequence uint64, pageSize int) ([]DurableEvent, error) {
+	c.mu.Lock()
+	c.pageCalls++
+	hook := c.onEventsPage
+	c.mu.Unlock()
+	if hook != nil {
+		if err := hook(ctx, afterSequence); err != nil {
+			return nil, err
+		}
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var page []DurableEvent
+	for _, record := range c.records {
+		if record.Request.Event.Sequence > afterSequence {
+			page = append(page, record)
+			if len(page) == pageSize {
+				break
+			}
+		}
+	}
+	return page, nil
 }
 
 func cloneHead(head *Head) *Head {
@@ -1080,7 +1249,10 @@ func (p *batchCountingProjection) FinalizeBatch(ctx context.Context, computerID 
 		return err
 	}
 	p.applied = append(p.applied, batch.EventID)
-	return nil
+	// Finalize for real: the head advances and the row is released, as in the
+	// store. (This fake used to leave the row prepared forever, which made
+	// the next append recover it instead of failing its own finalize.)
+	return p.memoryProjection.Finalize(ctx, computerID, digest, receipt)
 }
 
 // Failure modes (docs/problems/guest-appender-retains-every-projection-

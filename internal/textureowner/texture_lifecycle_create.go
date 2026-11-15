@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -92,6 +93,9 @@ func (h *Handler) HandleTextureLifecycleCreate(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		if errors.Is(err, store.ErrLifecycleCommandConflict) {
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "create occurrence conflicts with its durable receipt"})
+		} else if storedRevisionBroken(err) {
+			log.Printf("texture api: lifecycle Texture create: %v", err)
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: storedRevisionBrokenMessage})
 		} else {
 			log.Printf("texture api: lifecycle Texture create rejected: %v", err)
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "lifecycle Texture create rejected"})
@@ -140,6 +144,14 @@ func (h *Handler) startLifecycleTextureDocument(ctx context.Context, ownerID, co
 	result, err := h.Store.StartLifecycle(ctx, start)
 	if err != nil {
 		return textureLifecycleCreateResponse{}, err
+	}
+	// The revision id is derived from the client request id, so the revision the
+	// store returns must be that one. A start that returns none, or another,
+	// is the stored result failing to name this create's revision: a server
+	// fault, and the check that makes a create re-submit prove the stored
+	// revision rather than echo the derived id.
+	if result.Revision == nil || result.Revision.RevisionID != revisionID {
+		return textureLifecycleCreateResponse{}, fmt.Errorf("%w: start returned a revision other than the derived %q", store.ErrLifecycleStoredRevisionUnavailable, revisionID)
 	}
 	return textureLifecycleCreateResponse{Schema: "choir.texture_create.v1", RequestID: requestID, DocID: docID, RevisionID: revisionID, TrajectoryID: trajectoryID, TargetAgentID: agentID, TargetWorkItemID: workID, Cursor: result.Trajectory.ReducerSeq, Replay: result.Replay}, nil
 }

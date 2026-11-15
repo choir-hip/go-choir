@@ -13,8 +13,8 @@ hybrid (a stub in prompt)?" Delivery is therefore the first axis below.
 
 Binding inputs, read in full:
 [calibration-seed-2026-11-03.md](calibration-seed-2026-11-03.md),
-[choir-calibration-seed-2026-11-01.md](../definitions/choir-calibration-seed-2026-11-01.md),
-[precommitment-records.md](../precommitment-records.md). Code read at
+[choir-calibration-seed-2026-11-01.md](../archive/definitions/choir-calibration-seed-2026-11-01.md),
+[precommitment-records.md](../archive/learning/precommitment-records.md). Code read at
 origin/main `ed2e54c6b` (cut 2, `bd83082b9`, is in that tree; staging still
 served cut 1 at 06:2xZ: `GET /api/calibration/claims` returned 404 on all
 five arms). The engineer-reuse design read at the `engineer-reuse` branch

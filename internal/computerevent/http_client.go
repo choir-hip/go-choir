@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
+	"sync"
 
 	"github.com/yusefmosiah/go-choir/internal/hostlink"
 )
@@ -25,6 +25,10 @@ type HTTPClient struct {
 	baseURL    *url.URL
 	http       *http.Client
 	capability CapabilitySource
+
+	// calls counts requests sent to corpusd by endpoint (CallCounts).
+	callsMu sync.Mutex
+	calls   map[string]int64
 }
 
 func NewHTTPClient(baseURL string, client *http.Client, capability CapabilitySource, allowInsecureLoopback bool) (*HTTPClient, error) {
@@ -45,6 +49,57 @@ func NewHTTPClient(baseURL string, client *http.Client, capability CapabilitySou
 	}
 	return &HTTPClient{baseURL: parsed, http: client, capability: capability}, nil
 }
+
+// CallCounts is the number of requests this client has sent to corpusd, by a fixed
+// endpoint name ("head", "pin", "append", ... and "other"). It counts
+// every attempt, successful or not. Observability only: nothing branches on it
+// (storage solutions 2, S5: the calls a tape event costs).
+func (c *HTTPClient) CallCounts() map[string]int64 {
+	if c == nil {
+		return nil
+	}
+	c.callsMu.Lock()
+	defer c.callsMu.Unlock()
+	out := make(map[string]int64, len(c.calls))
+	for k, v := range c.calls {
+		out[k] = v
+	}
+	return out
+}
+
+// callLabels is the fixed set of corpusd endpoints that get their own count.
+// Every other path counts under "other": no string taken from a request (a
+// job id in a host-build status poll, say) can become a key, and the counts
+// are served on the observability endpoint. FetchBlobRaw sends its request
+// without doWithResponseLimit and is not counted.
+var callLabels = map[string]string{
+	"/internal/computers/events/head":    "head",
+	"/internal/computers/events/pin":     "pin",
+	"/internal/computers/events/append":  "append",
+	"/internal/computers/events/payload": "payload",
+	"/internal/computers/events/replay":  "replay",
+}
+
+// maxCallKeys is a backstop; the allowlist already bounds the keys.
+const maxCallKeys = 64
+
+func (c *HTTPClient) countCall(path string) {
+	path, _, _ = strings.Cut(path, "?")
+	label, ok := callLabels[path]
+	if !ok {
+		label = "other"
+	}
+	c.callsMu.Lock()
+	if c.calls == nil {
+		c.calls = map[string]int64{}
+	}
+	if _, seen := c.calls[label]; !seen && len(c.calls) >= maxCallKeys-1 {
+		label = "other"
+	}
+	c.calls[label]++
+	c.callsMu.Unlock()
+}
+
 func (c *HTTPClient) BaseURL() string {
 	if c == nil || c.baseURL == nil {
 		return ""
@@ -135,13 +190,53 @@ func (c *HTTPClient) PinNonPrivatePayload(ctx context.Context, computerID string
 	return c.pinPayload(ctx, computerID, payload, mediaType, privacyClass, requestCommitment)
 }
 
+// CASError is the typed failure of a head CAS call. Definite is true when the
+// host answered 400, 403, 409 or 422. For the FIRST send of a request that is
+// a refusal: the append is not on the tape, and the appender may drop its
+// prepared row. It does not prove the same for a RE-SEND: the host runs
+// authorization and pin validation before it looks up the idempotency key, and
+// maps unclassified internal errors to 400, so a refusal of a re-send can
+// follow a first send that committed. The appender therefore keeps its row on
+// any failure of a re-send. Every other failure (a transport error, a
+// cancelled caller, a 5xx, a reply that did not decode) leaves the outcome
+// unknown even for a first send, because the host may have committed before
+// the reply was lost. Status is 0 when no HTTP status was received.
+type CASError struct {
+	Status   int
+	Definite bool
+	Err      error
+}
+
+func (e *CASError) Error() string { return e.Err.Error() }
+func (e *CASError) Unwrap() error { return e.Err }
+
+// CASRefusedDefinitely reports whether err proves the host did not commit the
+// request. An error of unknown type is not a refusal: the caller must treat
+// its outcome as unknown.
+func CASRefusedDefinitely(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, ErrCASConflict) {
+		return true
+	}
+	var casErr *CASError
+	return errors.As(err, &casErr) && casErr.Definite
+}
+
 func (c *HTTPClient) CompareAndSwap(ctx context.Context, request CASRequest) (Receipt, error) {
 	var receipt Receipt
 	status, err := c.do(ctx, http.MethodPost, "/internal/computers/events/append", request, &receipt)
-	if status == http.StatusConflict {
-		return Receipt{}, fmt.Errorf("%w: %v", ErrCASConflict, err)
+	if err == nil {
+		return receipt, nil
 	}
-	return receipt, err
+	switch status {
+	case http.StatusConflict:
+		return Receipt{}, &CASError{Status: status, Definite: true, Err: fmt.Errorf("%w: %v", ErrCASConflict, err)}
+	case http.StatusBadRequest, http.StatusForbidden, http.StatusUnprocessableEntity:
+		return Receipt{}, &CASError{Status: status, Definite: true, Err: err}
+	}
+	return Receipt{}, &CASError{Status: status, Err: err}
 }
 
 func (c *HTTPClient) FetchPayload(ctx context.Context, computerID, artifactDigest string) ([]byte, error) {
@@ -299,6 +394,7 @@ func (c *HTTPClient) do(ctx context.Context, method, path string, body any, resp
 // payload envelopes to be read in full. A response that crosses that bound is
 // rejected before JSON decoding, so truncation cannot masquerade as valid data.
 func (c *HTTPClient) doWithResponseLimit(ctx context.Context, method, path string, body any, response any, maxResponseBytes int) (int, error) {
+	c.countCall(path)
 	var encoded []byte
 	if body != nil {
 		var err error
@@ -386,7 +482,7 @@ func NewGuestHTTPClient(baseURL string, capability CapabilitySource) (*HTTPClien
 		// Host-tap traffic is fast, but a ~150MB blob fetch can exceed a tight
 		// deadline under load; the request context remains the real bound.
 		// hostlink resends a refused dial across a host restart.
-		http:       hostlink.NewClient(10 * time.Minute),
+		http:       hostlink.NewClient(GuestAttemptTimeout),
 		capability: capability,
 	}, nil
 }

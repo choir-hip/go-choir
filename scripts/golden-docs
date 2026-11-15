@@ -6,6 +6,9 @@
 #                                              (on the shared Mac: shared-proof.sh <branch> proof-golden.sh,
 #                                              then point this at the proof's directory)
 #   GOLDEN_SKIP_WEB_BUILD=1                    reuse frontend/dist
+#   GOLDEN_WEB_ONLY=1                          no native run: compare the web projections with the committed
+#                                              internal/texturedoc/golden/expected/ (the native reader's projections,
+#                                              written by the native proof; the web side must match them)
 #
 # Web: pnpm build, vite preview on port 4174, one Playwright spec (frontend/tests/golden-documents.spec.js).
 # Native: mobile/scripts/proof-golden.sh (swift test, AutoradioKit GoldenDocumentsTests; no Exact app build).
@@ -35,7 +38,9 @@ tail -3 "$OUT/web-spec.log"
 
 cd "$ROOT" || exit 2
 NATIVE="${GOLDEN_NATIVE_DIR:-}"
-if [ -z "$NATIVE" ]; then
+if [ -n "${GOLDEN_WEB_ONLY:-}" ]; then
+  mkdir -p "$OUT/native" && cp internal/texturedoc/golden/expected/*.json "$OUT/native/" || { echo "GOLDEN FAILED: no expected projections"; exit 1; }
+elif [ -z "$NATIVE" ]; then
   echo "golden-docs: native test"
   mobile/scripts/proof-golden.sh > "$OUT/native.log" 2>&1 || { tail -20 "$OUT/native.log"; echo "GOLDEN FAILED at native test"; exit 1; }
   tail -3 "$OUT/native.log"

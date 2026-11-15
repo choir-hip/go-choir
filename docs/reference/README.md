@@ -26,4 +26,5 @@ Pages:
   Autoradio phone app; sources fetched 2026-11-11 (section 8); only Silero
   and Parakeet EOU are measured on a phone by us.
 - [EXACT.md](EXACT.md): the Exact app-shell runtime (pinned commit, model, surprises, decision guide), with subpages in [exact/](exact/): ui-model, native-modules, audio, build-and-ship, testing-and-debugging, internals, gaps. The runnable example is [mobile/exact-spike/](../../mobile/exact-spike/README.md).
+- [RIVER.md](RIVER.md): River, the host for DeepSeek V4.1 Flash 1017: the one model we use, Chat Completions versus Responses, reasoning values, caching, the gateway variables and the procedure to register the key on Node B (not yet done on 2026-11-14).
 - [AUTORADIO-TURNS.md](AUTORADIO-TURNS.md): `POST /api/autoradio/turns`, the Autoradio desk's fast answer: request, server-sent event shapes, records, pool order, measuring (slice 1).

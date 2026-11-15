@@ -59,7 +59,7 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 	if err != nil || head.PendingTransitionRef != "" || head.CanonicalEventHead != request.AcceptedEventHead || head.EffectiveEventHead != request.EffectiveEventHead || head.EffectiveStateCommitment != request.EffectiveStateCommitment || head.ReducerVersion != request.ReducerVersion {
 		return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: current accepted/effective head does not match request")
 	}
-	_, storedReceipt, err := scanExpandedAppendReceipt(a.cas.store.db.QueryRowContext(ctx, `SELECT `+appendReceiptRowColumns+` FROM computer_event_append_receipts WHERE computer_id=? AND event_head_receipt_id=?`, request.ComputerID, request.EventHeadReceiptID))
+	headRow, storedReceipt, err := headAppendReceipt(ctx, a.cas.store.db, request.ComputerID, head.Sequence, request.EventHeadReceiptID)
 	if err != nil {
 		return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: accepted event receipt is unavailable: %w", err)
 	}
@@ -79,8 +79,7 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 			(request.OwnerRecovery && request.MaterializationReceiptDigest != "") {
 			return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: non-verifier checkpoint must present exactly one evidence class and no verifier evidence")
 		}
-		var headEventDigest string
-		if err := a.cas.store.db.QueryRowContext(ctx, `SELECT event_digest FROM computer_event_append_receipts WHERE computer_id=? AND event_head_receipt_id=?`, request.ComputerID, request.EventHeadReceiptID).Scan(&headEventDigest); err != nil || headEventDigest != request.AcceptedEventHead {
+		if headRow.EventDigest != request.AcceptedEventHead {
 			return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: non-verifier head receipt does not bind the accepted head")
 		}
 		if request.PlatformFollow {
@@ -134,7 +133,7 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 			// volume and cannot be observed host-side); a wrong key is at most
 			// as bad as the verifier socket itself being compromised.
 			var genesisSeq uint64
-			if genErr := a.cas.store.db.QueryRowContext(ctx, `SELECT sequence FROM computer_event_append_receipts WHERE computer_id=? AND event_kind=? ORDER BY sequence LIMIT 1`, request.ComputerID, string(computerevent.EventGenesisImported)).Scan(&genesisSeq); genErr != nil {
+			if genErr := a.cas.store.db.QueryRowContext(ctx, receiptFirstOfKindSQL, request.ComputerID, string(computerevent.EventGenesisImported)).Scan(&genesisSeq); genErr != nil {
 				return selfdevprotocol.CheckpointResponse{}, errors.New(selfdevprotocol.CheckpointRefusalVerifierKeyNotPinned)
 			}
 			legacyFirstPin = true
@@ -350,8 +349,7 @@ func (a *CheckpointAuthority) PublishRouteProjection(ctx context.Context, reques
 	if err != nil || head.CanonicalEventHead != request.CanonicalEventHead || head.EffectiveEventHead != request.Checkpoint.Checkpoint.Request.EffectiveEventHead || head.PendingTransitionRef != "" {
 		return selfdevprotocol.RouteProjectionResponse{}, fmt.Errorf("route projection authority: checkpoint is not the current effective head")
 	}
-	var routeEventDigest string
-	if err := a.cas.store.db.QueryRowContext(ctx, `SELECT event_digest FROM computer_event_append_receipts WHERE computer_id=? AND event_head_receipt_id=?`, request.ComputerID, request.EventHeadReceiptID).Scan(&routeEventDigest); err != nil || routeEventDigest != request.CanonicalEventHead {
+	if routeEventDigest, err := headAppendReceiptDigest(ctx, a.cas.store.db, request.ComputerID, head.Sequence, request.EventHeadReceiptID); err != nil || routeEventDigest != request.CanonicalEventHead {
 		return selfdevprotocol.RouteProjectionResponse{}, fmt.Errorf("route projection authority: current event head receipt is unavailable")
 	}
 	certificate, artifact, err := selfdevprotocol.RouteProjectionFromRequest(request, a.now())
@@ -559,4 +557,42 @@ func (h *Handler) HandleComputerCheckpoint(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusCreated, response)
+}
+
+// receiptRowQuerier is what the head receipt lookups read through.
+type receiptRowQuerier interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// headAppendReceipt returns the append-receipt row at the head's sequence and
+// its expanded receipt, only when that row's receipt is receiptID. A request
+// names the receipt of the current canonical head, so the row is found by
+// (computer, sequence), the unique key every reader of the tape walks, and the
+// id is checked against it: no index on the receipt id exists for this. A row
+// of another receipt, or no row, is sql.ErrNoRows, the error a lookup by id
+// gave when no row had that id. The caller read head.Sequence from the head
+// row, so a head that moved on before this read finds the old head's receipt
+// at the old sequence and the request is judged against that, as a lookup by
+// id was; a request naming any other receipt is refused here.
+func headAppendReceipt(ctx context.Context, db receiptRowQuerier, computerID string, sequence uint64, receiptID string) (computerevent.HeadReceiptRow, []byte, error) {
+	row, raw, err := scanExpandedAppendReceipt(db.QueryRowContext(ctx, receiptAtSequenceSQL, computerID, sequence))
+	if err != nil {
+		return row, nil, err
+	}
+	if row.ReceiptID != receiptID {
+		return computerevent.HeadReceiptRow{}, nil, sql.ErrNoRows
+	}
+	return row, raw, nil
+}
+
+// headAppendReceiptDigest is headAppendReceipt for the event digest alone.
+func headAppendReceiptDigest(ctx context.Context, db receiptRowQuerier, computerID string, sequence uint64, receiptID string) (string, error) {
+	var digest, id string
+	if err := db.QueryRowContext(ctx, receiptDigestAtSequenceSQL, computerID, sequence).Scan(&digest, &id); err != nil {
+		return "", err
+	}
+	if id != receiptID {
+		return "", sql.ErrNoRows
+	}
+	return digest, nil
 }

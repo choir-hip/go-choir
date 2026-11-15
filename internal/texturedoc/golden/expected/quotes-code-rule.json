@@ -1,0 +1,82 @@
+{
+  "blocks" : [
+    {
+      "kind" : "paragraph",
+      "text" : "An introduction before the quotation."
+    },
+    {
+      "depth" : 1,
+      "kind" : "quote",
+      "text" : "The sea does not care about our schedules."
+    },
+    {
+      "depth" : 1,
+      "kind" : "quote",
+      "spans" : [
+        {
+          "style" : "emphasis",
+          "text" : "It keeps its own"
+        },
+        {
+          "style" : "strong",
+          "text" : "time"
+        },
+        {
+          "style" : "emphasis",
+          "text" : "."
+        }
+      ],
+      "text" : "It keeps its own time."
+    },
+    {
+      "kind" : "paragraph",
+      "text" : "A reply, then a nested quotation:"
+    },
+    {
+      "depth" : 1,
+      "kind" : "quote",
+      "text" : "Outer quotation."
+    },
+    {
+      "depth" : 2,
+      "kind" : "quote",
+      "text" : "Inner quotation, one level deeper."
+    },
+    {
+      "depth" : 1,
+      "kind" : "heading",
+      "level" : 2,
+      "text" : "A heading inside a quote"
+    },
+    {
+      "depth" : 1,
+      "kind" : "quote",
+      "text" : "And a paragraph below it."
+    },
+    {
+      "kind" : "rule",
+      "text" : ""
+    },
+    {
+      "kind" : "paragraph",
+      "text" : "Code follows."
+    },
+    {
+      "kind" : "code",
+      "text" : "def tide(n):\n    return n * 2\n\n# two blank lines above"
+    },
+    {
+      "kind" : "code",
+      "text" : "first text node\nsecond text node"
+    },
+    {
+      "kind" : "rule",
+      "text" : ""
+    },
+    {
+      "kind" : "paragraph",
+      "text" : "The end."
+    }
+  ],
+  "name" : "quotes-code-rule"
+}

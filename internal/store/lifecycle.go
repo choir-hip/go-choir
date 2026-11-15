@@ -24,7 +24,12 @@ import (
 var (
 	ErrLifecycleCommandConflict   = errors.New("lifecycle command digest conflict")
 	ErrLifecycleInvalidTransition = errors.New("lifecycle invalid transition")
-	ErrLifecycleCursorExpired     = errors.New("lifecycle cursor expired")
+	// ErrLifecycleStoredRevisionUnavailable is a command that names a revision
+	// the store cannot read. It is deliberately not ErrNotFound: callers read
+	// ErrNotFound as "no such command or turn", and a command that exists but
+	// cannot return its revision is a broken invariant, not an absent turn.
+	ErrLifecycleStoredRevisionUnavailable = errors.New("lifecycle stored revision unavailable")
+	ErrLifecycleCursorExpired             = errors.New("lifecycle cursor expired")
 )
 
 type lifecycleSequence struct {
@@ -1296,10 +1301,14 @@ func (s *Store) replayLifecycleCommand(ctx context.Context, ownerID, computerID,
 	if receipt.StoredResult != nil {
 		stored := receipt.StoredResult
 		receipt.StoredResult = nil
+		revision, revisionErr := s.lifecycleStoredRevision(ctx, ownerID, computerID, commandID, stored)
+		if revisionErr != nil {
+			return types.LifecycleResult{}, true, revisionErr
+		}
 		return types.LifecycleResult{
 			Receipt: receipt, Trajectory: stored.Trajectory, Schema: stored.Schema,
 			WorkItem: stored.WorkItem, Agent: stored.Agent, Update: stored.Update,
-			Events: stored.Events, Replay: true, Document: stored.Document, Revision: stored.Revision,
+			Events: stored.Events, Replay: true, Document: stored.Document, Revision: revision,
 			TextureTurn: stored.TextureTurn, Controls: stored.Controls, TargetWorkItems: stored.TargetWorkItems,
 		}, true, nil
 	}
@@ -1342,6 +1351,72 @@ func (s *Store) replayLifecycleCommand(ctx context.Context, ownerID, computerID,
 		}
 	}
 	return result, true, nil
+}
+
+// lifecycleStoredRevision returns the revision a command's stored result
+// carries: the embedded copy, or the revision object the command names by id.
+// A revision is immutable and is read by its own id, never as the document's
+// latest head, so a later revision cannot leak into an earlier command's
+// result. A revision a command names must never be retired; a missing one is
+// an error, never a nil revision.
+//
+// The read declares the revision's custodian as reader. That is not a
+// widening: the caller already read this command (choir.lifecycle_command is
+// kernel-owned, readable by any reader), and a command written before
+// store-once carried this very revision inside it. The store is rebuilding a
+// value the command held, not opening Texture's revisions to a new reader.
+func (s *Store) lifecycleStoredRevision(ctx context.Context, ownerID, computerID, commandID string, stored *types.LifecycleStoredResult) (*types.Revision, error) {
+	if stored.Revision != nil || strings.TrimSpace(stored.RevisionID) == "" {
+		return stored.Revision, nil
+	}
+	revision, err := s.GetLifecycleRevision(objectgraph.WithCustodianReader(ctx, ogKindTexRev), ownerID, computerID, stored.RevisionID)
+	if err != nil {
+		// The cause is formatted with %v, deliberately not wrapped with %w: a
+		// chain would re-match ErrNotFound, which callers read as "no such
+		// turn". So errors.Is on the cause never fires; the revision id and
+		// command id in the message carry the detail.
+		return nil, fmt.Errorf("%w: revision %q named by command %q: %v", ErrLifecycleStoredRevisionUnavailable, stored.RevisionID, commandID, err)
+	}
+	return &revision, nil
+}
+
+// The forms a stored result takes, counted per committed command.
+const (
+	lifecycleFormSlim             = "slim"              // the revision is named by id
+	lifecycleFormEmbeddedMismatch = "embedded_mismatch" // the batch writes the revision, but its object body is not the revision's own JSON
+	lifecycleFormEmbeddedHead     = "embedded_head"     // the revision was written by an earlier batch (a head the command read)
+	lifecycleFormNoRevision       = "no_revision"       // the command carries no revision
+)
+
+// lifecycleBatchRevisionForm decides the form of a command's stored result:
+// slim only when the batch writes exactly this revision, meaning an object at
+// the revision's canonical id whose body is the revision's own JSON. Only
+// then is a second copy in the command redundant; any doubt keeps it embedded.
+// The second json.Marshal of the revision below is the proof of "the revision's
+// own JSON": it is the same call lifecycleObject made for the object body, so
+// byte equality means the reader will decode exactly what the command would
+// have embedded. Do not replace it with a cheaper check.
+func lifecycleBatchRevisionForm(objects []objectgraph.Object, ownerID, computerID string, revision *types.Revision) string {
+	if revision == nil || strings.TrimSpace(revision.RevisionID) == "" {
+		return lifecycleFormNoRevision
+	}
+	canonicalID, err := lifecycleCanonicalID(ogKindTexRev, ownerID, computerID, revision.RevisionID)
+	if err != nil {
+		return lifecycleFormEmbeddedMismatch
+	}
+	body, err := json.Marshal(revision)
+	if err != nil {
+		return lifecycleFormEmbeddedMismatch
+	}
+	for _, obj := range objects {
+		if obj.ObjectKind == ogKindTexRev && obj.CanonicalID == canonicalID {
+			if bytes.Equal(obj.Body, body) {
+				return lifecycleFormSlim
+			}
+			return lifecycleFormEmbeddedMismatch
+		}
+	}
+	return lifecycleFormEmbeddedHead
 }
 
 func validateLifecycleCommand(commandID, digest, trajectoryID string) error {
@@ -2692,6 +2767,15 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 		Document: result.Document, Revision: result.Revision, TextureTurn: result.TextureTurn,
 		Controls: result.Controls, TargetWorkItems: result.TargetWorkItems,
 	}
+	// A revision this batch writes is named, not copied: the revision object
+	// is the one home of its body (store once, R1). The form of every command
+	// is counted, so a byte mismatch that keeps the revision embedded shows
+	// as embedded_mismatch instead of a silent zero saving.
+	form := lifecycleBatchRevisionForm(objects, ownerID, computerID, result.Revision)
+	if form == lifecycleFormSlim {
+		storedReceipt.StoredResult.Revision = nil
+		storedReceipt.StoredResult.RevisionID = result.Revision.RevisionID
+	}
 	receiptObj, err := lifecycleObject(ogKindLifecycleCmd, ownerID, computerID, commandID, storedReceipt,
 		lifecycleMetadata("command_id", commandID, computerID, result.Receipt.TrajectoryID, result.Receipt.ReducerSeq),
 		result.Receipt.CreatedAt, result.Receipt.CreatedAt)
@@ -2722,6 +2806,9 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 		}
 		return types.LifecycleResult{}, err
 	}
+	// Counted on the success path only: a lost condition or a failed outbox
+	// append commits nothing and counts nothing.
+	s.telemetryStats.countLifecycleCommandForm(form)
 	s.signalActorWakesIfAny(objects)
 	return result, nil
 }

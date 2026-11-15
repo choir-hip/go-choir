@@ -70,14 +70,25 @@ type telemetryCounters struct {
 	tapeEventsByAuthority map[string]int64
 	tapeOpsByKind         map[string]int64
 	tapeOpsByTable        map[string]int64
+	tapeWrites            tapeWriteMaps // tape_write_counters.go
 
 	appendedBatchable    atomic.Int64
 	appendedAcknowledged atomic.Int64
 	tapeEvents           atomic.Int64
 	tapeOps              atomic.Int64
-	tapeOpsHist          [opsHistogramBuckets]atomic.Int64
-	readsConsistent      atomic.Int64
-	readsRelaxed         atomic.Int64
+	tapeBytes            atomic.Int64
+	// The callers inside a tape write now, the depth each found on arrival
+	// (itself included) and the time a write call took, queue included.
+	appenderInflight  atomic.Int64
+	appenderDepthHist [opsHistogramBuckets]atomic.Int64
+	appenderCalls     atomic.Int64
+	// tapeBatchesRefused counts projection batches refused before the host saw
+	// them (the store's dry run, or the appender's under its mutex).
+	tapeBatchesRefused atomic.Int64
+	appenderCallNanos  atomic.Int64
+	tapeOpsHist        [opsHistogramBuckets]atomic.Int64
+	readsConsistent    atomic.Int64
+	readsRelaxed       atomic.Int64
 
 	recordsEnqueued       atomic.Int64
 	batchesSealed         atomic.Int64
@@ -154,28 +165,37 @@ func (c *telemetryCounters) recordAppend(kind types.EventKind, payloadBytes int)
 }
 
 // recordTapeEvent counts one accepted projection-batch tape event.
-func (c *telemetryCounters) recordTapeEvent(authority string, ops []computerevent.ProjectionOp) {
+func (c *telemetryCounters) recordTapeEvent(authority string, parts [][]computerevent.ProjectionOp, firstIsTelemetry bool, payloadBytes int) {
 	if c == nil {
 		return
 	}
+	tally := tallyTapeParts(authority, parts, firstIsTelemetry, payloadBytes) // before any lock
+	nOps := 0
+	for _, part := range parts {
+		nOps += len(part)
+	}
 	c.tapeEvents.Add(1)
-	c.tapeOps.Add(int64(len(ops)))
-	c.tapeOpsHist[opsBucket(len(ops))].Add(1)
+	c.tapeOps.Add(int64(nOps))
+	c.tapeBytes.Add(int64(payloadBytes))
+	c.tapeOpsHist[opsBucket(nOps)].Add(1)
 	c.mu.Lock()
 	if c.tapeEventsByAuthority == nil {
 		c.tapeEventsByAuthority = map[string]int64{}
 		c.tapeOpsByKind = map[string]int64{}
 	}
 	c.tapeEventsByAuthority[authority]++
-	for _, op := range ops {
-		c.tapeOpsByKind[string(op.Kind)]++
-		if op.Table != "" {
-			if c.tapeOpsByTable == nil {
-				c.tapeOpsByTable = map[string]int64{}
+	for _, part := range parts {
+		for _, op := range part {
+			c.tapeOpsByKind[string(op.Kind)]++
+			if op.Table != "" {
+				if c.tapeOpsByTable == nil {
+					c.tapeOpsByTable = map[string]int64{}
+				}
+				c.tapeOpsByTable[op.Table]++
 			}
-			c.tapeOpsByTable[op.Table]++
 		}
 	}
+	c.tapeWrites.add(tally)
 	c.mu.Unlock()
 }
 
@@ -263,7 +283,45 @@ type TelemetryStats struct {
 
 	Batching BatchingStats `json:"batching"`
 
-	// GroupCommit is tape.group_commit (tape_group_commit.go).
+	// The tape write counters (tape_write_counters.go): events and bytes by
+	// writer family, ops and bytes by object kind, run memory entries by kind,
+	// and the corpusd requests the guest has sent.
+	TapeBytes               int64            `json:"tape_bytes"`
+	TapeEventsByFamily      map[string]int64 `json:"tape_events_by_family"`
+	TapeOpsByFamily         map[string]int64 `json:"tape_ops_by_family"`
+	TapeBytesByFamily       map[string]int64 `json:"tape_bytes_by_family"`
+	TapeOpsByObjectKind     map[string]int64 `json:"tape_ops_by_object_kind"`
+	TapeOpBytesByObjectKind map[string]int64 `json:"tape_op_bytes_by_object_kind"`
+	RunMemoryOpsByKind      map[string]int64 `json:"run_memory_ops_by_kind"`
+	// RunMemoryBytesByKind is the body bytes of run memory ops under the same
+	// keys as RunMemoryOpsByKind. A carried conversation tail is not told apart
+	// from new messages in the op (no marker in the entry), so only the carried
+	// checkpoint shows, as compaction/actor_rewarm.
+	RunMemoryBytesByKind map[string]int64 `json:"run_memory_bytes_by_kind"`
+	// ObjectRewrites is per object kind: ops, bytes, mean bytes per op, distinct
+	// objects written since boot and writes per object (object_rewrite_counters.go).
+	ObjectRewrites map[string]ObjectKindRewrites `json:"object_rewrites"`
+	// LifecycleCommandForms counts committed lifecycle commands by stored
+	// result form: slim, embedded_mismatch, embedded_head, no_revision.
+	LifecycleCommandForms    map[string]int64 `json:"lifecycle_command_forms"`
+	CorpusdCalls             map[string]int64 `json:"corpusd_calls"`
+	CorpusdCallsPerTapeEvent float64          `json:"corpusd_calls_per_tape_event"`
+	// AppenderDepthAtEnter is the number of callers inside the tape write
+	// (dry run, queue for the appender, append) when a new one arrived, itself
+	// included: "1" arrived alone. Labels are the ops histogram's. The share at
+	// 3 and over predicts what coalescing the queued writers would save.
+	// AppenderCallMeanMS is the mean time a write call took, queue included.
+	AppenderDepthAtEnter map[string]int64 `json:"appender_depth_at_enter"`
+	AppenderInflight     int64            `json:"appender_inflight"`
+	AppenderCallMeanMS   float64          `json:"appender_call_mean_ms"`
+	// TapeBatchesRefused counts batches refused before the host saw them, and
+	// AppenderRevalidations the dry runs the appender repeated under its mutex
+	// because the local head moved since the store's dry run. A refusal storm
+	// or a revalidation rate that climbs shows here.
+	TapeBatchesRefused    int64 `json:"tape_batches_refused"`
+	AppenderRevalidations int64 `json:"appender_revalidations"`
+
+	// GroupCommit is the coalescing of queued tape writers (tape_group_commit.go).
 	GroupCommit GroupCommitStats `json:"group_commit"`
 }
 
@@ -299,6 +357,7 @@ func (s *Store) TelemetryStats() TelemetryStats {
 	if len(c.tapeOpsByTable) > 0 {
 		out.TapeOpsByTable = copyCounts(c.tapeOpsByTable)
 	}
+	c.tapeWrites.copyInto(&out)
 	c.mu.Unlock()
 	out.EventTableWrites = s.EventTableWritesOn()
 	out.EventsAppendedBatchable = c.appendedBatchable.Load()
@@ -308,6 +367,22 @@ func (s *Store) TelemetryStats() TelemetryStats {
 	}
 	out.TapeEvents = c.tapeEvents.Load()
 	out.TapeOps = c.tapeOps.Load()
+	out.TapeBytes = c.tapeBytes.Load()
+	out.CorpusdCalls = s.corpusdCalls()
+	out.AppenderInflight = c.appenderInflight.Load()
+	out.AppenderDepthAtEnter = map[string]int64{}
+	for i := range c.appenderDepthHist {
+		if n := c.appenderDepthHist[i].Load(); n > 0 {
+			out.AppenderDepthAtEnter[opsBucketLabel(i)] = n
+		}
+	}
+	out.TapeBatchesRefused = c.tapeBatchesRefused.Load()
+	if n := c.appenderCalls.Load(); n > 0 {
+		out.AppenderCallMeanMS = float64(c.appenderCallNanos.Load()) / float64(n) / 1e6
+	}
+	if out.TapeEvents > 0 {
+		out.CorpusdCallsPerTapeEvent = float64(totalCount(out.CorpusdCalls)) / float64(out.TapeEvents)
+	}
 	out.OpsPerTapeEvent = map[string]int64{}
 	for i := range c.tapeOpsHist {
 		if n := c.tapeOpsHist[i].Load(); n > 0 {
@@ -351,5 +426,8 @@ func (s *Store) TelemetryStats() TelemetryStats {
 	b.CapacityFlushes = c.capacityFlushes.Load()
 	b.BootWatermarks = c.watermarkWrites.Load()
 	out.GroupCommit = s.groupCommitStats()
+	if src := s.revalidationSource.Load(); src != nil {
+		out.AppenderRevalidations = (*src)()
+	}
 	return out
 }

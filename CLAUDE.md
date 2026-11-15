@@ -23,7 +23,8 @@ wins unless this file carries a newer, explicitly promoted update.
 Every desk (management, engineering, research, Texture, Mail and the rest) is
 a package desk registered the same way. Each data kind has one custodian desk
 with sole read and write. Desks talk only through precommitment records
-([docs/precommitment-records.md](docs/precommitment-records.md)); grants flow
+(the forecast stroke of the four-stroke learning engine,
+[docs/learning-engine.md](docs/learning-engine.md)); grants flow
 through custodian leases. Management owns computer-wide coherence and admits
 engineering; engineering mutates only inside capsules; research has read-only
 world-evidence authority. Use the in-cell module surface, not legacy tool
@@ -87,10 +88,10 @@ A commit subject ends with its class and rollback, for example
 - Green and yellow: no model review. Orange: one seat. Red where a defect
   would be silent or irreversible: two seats. Re-review a red change after a
   blocking finding.
-- Any second agent may be the seat; the author may not. The default seat is
-  Gemini 3.8 flash (high) through `agy`. Sonnet is the second seat. Opus, Sol
-  and Luna do not run code review. Devin does not run review or sit on a
-  panel while the paper runs on its quota (owner, 2026-11-11).
+- The author may not be a seat. Seat 1 is Gemini 4 Hydrogen (high) and seat
+  2 is DeepSeek v4.1 flash (max), both through OMP
+  (`--include omp-gemini4-hydrogen,omp-deepseek-v41-flash`; owner,
+  2026-11-12). Devin, Opus, Sol and Luna do not run code review.
 - Guest-security paths need the `Security-Effect` and
   `Security-Effect-Reviewed-By` trailers (`scripts/check-guest-security-epoch`).
   Never write a review trailer that no review backs.
@@ -111,9 +112,12 @@ A commit subject ends with its class and rollback, for example
   calls is a code problem to fix, not a limit to impose", enforced
   consistently). No rate bucket, in-flight cap, spacing or call quota on our
   own code's calls to a model or to Jev. When calls are too many, fix the
-  caller. For Jev: one call asks many questions; calls are not issued
-  concurrently. Separate contexts can justify concurrent calls, but that
-  is never plan A. What stays:
+  caller. For Jev: one context, many questions. Every question about a
+  state goes in the one call that carries that state; a second call over
+  the same or an overlapping state is the defect (owner, 2026-11-12: the
+  point was never to serialize calls, it is to reuse the context).
+  Separate contexts can justify separate calls, but that is never plan A.
+  What stays:
   backing off after a provider's real refusal, an owner-set spending cap,
   bounds on what strangers can cause, and deadlines. Log volume so a spike
   is seen.
@@ -129,6 +133,10 @@ A commit subject ends with its class and rollback, for example
   proof. Local tests are not proof. `origin/main` is the source of truth;
   never edit tracked files on Node B.
 - Docs-only commits skip CI and deploy by design. Do not weaken those filters.
+  Docs-like now means `docs/`, top-level `*.md`, `skills/` (except Go files)
+  and developer-side `scripts/` (owner, 2026-11-12); they ship with the next
+  deploy. Scripts that CI, nix or a deploy program reads still trigger
+  (`.github/scripts/ci-docs-like-paths`).
 - Platform deploy SHA and a computer's effective identity may differ on
   purpose after a product restore. Do not "fix" that by pushing main.
 
@@ -140,6 +148,9 @@ A commit subject ends with its class and rollback, for example
   [docs/calibration/claude-ledger.md](docs/calibration/claude-ledger.md).
   Settle it when the evidence arrives, true or false, and read the
   scorecard before stating confidence in the next claim of that kind.
+  The outcome must be one you cannot write: a CI run, a deployed proof, a
+  count, the owner's verdict. Cite it in the settlement. A claim only its
+  author can judge is not worth entering (learning engine, rule 1).
 
 - Staging (`https://choir.news`) is the acceptance environment. Local proof
   does not count for vmctl, live computers, gateway credentials, model calls,
