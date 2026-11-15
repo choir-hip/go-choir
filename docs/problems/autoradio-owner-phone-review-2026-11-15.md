@@ -204,3 +204,8 @@ The owner tested onboarding, where the app helps set up the edition.
   owner's question; from code, the only way back is Settings, "Set up
   voice", which walks the whole setup. Ruling: editing an edition is the
   same screen as creating it.
+- **Problem: opening the edition gives "HTTP 404: document not found".**
+  Evidence: owner screenshot, page "My edition", reached from Settings,
+  set up voice, open edition. Belief: the edition is written on the phone
+  now and the button still opens a server document that was never created.
+  Not yet traced.
