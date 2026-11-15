@@ -154,3 +154,17 @@ The owner tested onboarding, where the app helps set up the edition.
   screenshot of step 4 of 4: after "No that's it" the radio says "Good.
   Writing your edition now." and the screen stays there. The summary held
   only two topics. Cause not yet traced.
+- **Problem: asking through the prompt bar, typed and by voice, "didn't
+  seem to work right"** (owner; "hard to describe exactly"). Known cause of
+  part of it, found the same hour from code: the bar's microphone was still
+  on the button path, and after the hands-free change its first tap muted
+  the microphone while the bar said "Listening" (fixed on
+  `lane/autoradio-stack-load`, not yet on the phone). Not known: what went
+  wrong with a typed ask; no trace has been read from the phone.
+- **Direction from the owner (true Autoradio):** the first response to the
+  listener comes from an on-device model for low latency, "probably using
+  rag from the articles saved to the device, until the server response
+  streams in". Not built. The earlier on-device holding line (Qwen3) was
+  set aside on 2026-11-15 to come back after hands-free works; this ruling
+  says what it comes back as: an answer grounded in the saved articles, then
+  the server's answer.
