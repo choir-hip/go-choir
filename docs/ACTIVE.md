@@ -152,6 +152,15 @@ mission, Autopaper improvements.
 
 ## Paused / closed
 
+- **Held (owner, 2026-11-15): the Take writer change, to revisit the week of
+  2026-11-16.** `origin/lane/take-writer-land` (`fc7b270fd`, from the local
+  branch `fix-take-writer-2` of 2026-11-10) puts the choice of writer for
+  Texture take, verbatim fork and merge commits in one helper and adds tests
+  and a source scan. Two seats accepted it as no behavior change. The owner
+  is not sure the behavior it pins is the correct one ("i dont know that it
+  has correct behavior but it is something important"). Do not land it. The
+  revisit starts from what Take should do, then judges the branch.
+
 Moved here from the live view on 2026-11-09 evening. Each status is the goal
 file's own. Nothing is deleted; the goal files stay where they are.
 

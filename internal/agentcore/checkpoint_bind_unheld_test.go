@@ -81,7 +81,7 @@ func TestCheckpointBindScanDoesNotBlockWritesAndWitnessIsTheBoundHeadsState(t *t
 	ctx := context.Background()
 	fx.appendDeskEvent(t, "before-bind")
 	headBefore := fx.liveHead(t)
-	witnessBefore, err := LiveStoreWitness(ctx, fx.rt.store.DB())
+	witnessBefore, err := canonicalLiveWitness(ctx, fx.rt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestCheckpointBindScanDoesNotBlockWritesAndWitnessIsTheBoundHeadsState(t *t
 	if fx.liveHead(t) == headBefore {
 		t.Fatal("the append during the scan did not advance the live head")
 	}
-	witnessAfter, err := LiveStoreWitness(ctx, fx.rt.store.DB())
+	witnessAfter, err := canonicalLiveWitness(ctx, fx.rt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestCheckpointBindWitnessBytesUnchanged(t *testing.T) {
 	fx.appendDeskEvent(t, "desk-turn-1")
 	fx.appendDeskEvent(t, "desk-turn-2")
 	ctx := context.Background()
-	old, err := LiveStoreWitness(ctx, fx.rt.store.DB())
+	old, err := canonicalLiveWitness(ctx, fx.rt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +221,7 @@ func TestCheckpointBindMovedHeadRebindsPinnedAndPublishesCurrentHead(t *testing.
 	if len(publishedHeads) != 1 || publishedHeads[0] != fx.liveHead(t) || binding.Head.CanonicalEventHead != publishedHeads[0] {
 		t.Fatalf("published heads %v, binding head %+v, live head %s: want exactly the live head", publishedHeads, binding.Head, fx.liveHead(t))
 	}
-	live, err := LiveStoreWitness(ctx, fx.rt.store.DB())
+	live, err := canonicalLiveWitness(ctx, fx.rt)
 	if err != nil {
 		t.Fatal(err)
 	}

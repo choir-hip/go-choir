@@ -58,3 +58,47 @@ Whether every job's sites can share one state without the event layer's
 dependency on earlier answers (a later chunk reads events an earlier chunk
 minted) is not yet known; the builder on `lane/jev-one-state-r2` is to
 answer it with calls-per-job numbers.
+
+## The lane after three review rounds (2026-11-15T04:10Z)
+
+`lane/jev-one-state-r2` has had three two-seat rounds: REPAIR from both,
+REPAIR from both, then Sonnet ACCEPT and DeepSeek REPAIR. The contract says
+stop patching after three and change the approach.
+
+**What round 3 found.** The round 2 findings are closed in the code. The new
+blocker is reproducible from the code: the fallback for a vendor size refusal
+matches the error text, and the gateway answers every upstream failure with
+502 "Jev judgment provider unavailable" (`internal/gateway/jev.go:433`), so
+the caller never sees the vendor's reason. With our margin under the vendor
+limits removed, an under-estimated request is retried unchanged, fails again,
+and the whole flush is unlabelled. On main the same failure loses at most 12
+captures. The test passed because its fake error carried the text the real
+path never delivers.
+
+**What recurred.** Each round fixed its findings and exposed the next layer:
+call planning, then context trimming and blast radius, then the gateway's
+error contract. Two causes:
+
+1. The lane is too large. It replaces intake's planner, adds an entry point,
+   removes our margin, adds failure handling that depends on another
+   service's error contract, and adds a CI gate, in one change.
+2. For the second time tonight a test passed against a fake that had
+   something production lacks (the snapshot lane's probe was the first).
+
+**Change of approach.**
+
+- Failure handling must not depend on reading the vendor's reason. A call of
+  more than one unit that fails twice is halved, whatever the reason, to a
+  bounded depth, and each halving is logged with the error it followed. The
+  worst case is then smaller than main's, and no text match is load-bearing.
+- A fake may not return an error shape production cannot. The failure tests
+  run through the real gateway client against a fake gateway that answers as
+  `internal/gateway/jev.go` does.
+- The gateway relaying the vendor's status and reason is a separate, later
+  change on the gateway (a red surface), not part of this lane.
+- The lane lands as it stands after that repair, with its named residuals
+  (labels and events two calls per poll; story analysis at 12 questions; the
+  desk judge and the front-page scorer). Each residual becomes its own lane
+  with a calls-per-job number, in the order the gate's list gives.
+- If the dissenting seat does not accept the delta, the lane stops and goes
+  to the owner with this record.

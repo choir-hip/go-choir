@@ -53,10 +53,7 @@ func TestRematerializeFromTapeQuarantinesOriginalAndDropsLiveOnlyRows(t *testing
 	if !report.Result.Equivalent() {
 		t.Fatalf("clean projections were not equivalent: %#v", report.Result)
 	}
-	witness, err := selfdevprotocol.WitnessFromObservationSets(report.Live, report.Replay, report.Result)
-	if err != nil {
-		t.Fatal(err)
-	}
+	witness := boundWitness(t, rt, computerID)
 	checkpoint := rematerializeTestCheckpoint(t, computerID, witness, targetDigest, targetIdentity, acceptedHead)
 
 	if _, err := live.DB().ExecContext(ctx, "CREATE TABLE rematerialize_live_only (id VARCHAR(64) PRIMARY KEY, value VARCHAR(64) NOT NULL)"); err != nil {
@@ -143,20 +140,17 @@ func TestRematerializeFromTapeKeepsOriginalOnWitnessMismatch(t *testing.T) {
 	rt.selfdevUpdaterRoot = updaterRoot
 	ctx := context.Background()
 	seedRestoreBase(t, ctx, rt, cas, computerID, 1)
-	report, err := rt.ReplayCompleteness(ctx, computerID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	witness, err := selfdevprotocol.WitnessFromObservationSets(report.Live, report.Replay, report.Result)
-	if err != nil {
-		t.Fatal(err)
-	}
+	witness := boundWitness(t, rt, computerID)
 	// A valid witness of a different state: one table's digest altered.
-	for table := range witness.Tables {
-		witness.Tables[table] = strings.Repeat("0", 64)
+	altered := map[string]string{}
+	for table, digest := range witness.Tables {
+		altered[table] = digest
+	}
+	for table := range altered {
+		altered[table] = strings.Repeat("0", 64)
 		break
 	}
-	witness, err = selfdevprotocol.NewWitnessV3(witness.Database, witness.SchemaHash, witness.Tables)
+	witness, err = selfdevprotocol.WitnessFromDigestsCanonical(computerversion.StateDigests{Database: witness.Database, SchemaHash: witness.SchemaHash, Tables: altered}, witness.EventIndexTrimBoundary)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,11 +302,8 @@ func TestRematerializeFromTapeRefusesMissingFrontend(t *testing.T) {
 		selfdevUpdaterRoot: updaterRoot,
 	}
 	ctx := context.Background()
-	report, err := rt.ReplayCompleteness(ctx, computerID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	witness, err := selfdevprotocol.WitnessFromObservationSets(report.Live, report.Replay, report.Result)
+	// An empty store has no head to bind a checkpoint at: its strict witness.
+	witness, err := LiveStoreWitness(ctx, live.ReadDB())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -472,14 +463,7 @@ func TestRestoreFromTapeAppendsIntentAndStopsAtTarget(t *testing.T) {
 	rt.selfdevUpdaterRoot = updaterRoot
 	ctx := context.Background()
 	seedRestoreBase(t, ctx, rt, cas, computerID, 1)
-	report, err := rt.ReplayCompleteness(ctx, computerID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	witness, err := selfdevprotocol.WitnessFromObservationSets(report.Live, report.Replay, report.Result)
-	if err != nil {
-		t.Fatal(err)
-	}
+	witness := boundWitness(t, rt, computerID)
 	checkpoint := rematerializeTestCheckpoint(t, computerID, witness, targetDigest, targetIdentity, acceptedHead)
 	laterID, err := computerevent.NewEventID()
 	if err != nil {
@@ -683,14 +667,7 @@ func TestRematerializeFromTapeAcceptsOwnerRecoveryCheckpoint(t *testing.T) {
 	rt.selfdevUpdaterRoot = updaterRoot
 	ctx := context.Background()
 	seedRestoreBase(t, ctx, rt, cas, computerID, 1)
-	report, err := rt.ReplayCompleteness(ctx, computerID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	witness, err := selfdevprotocol.WitnessFromObservationSets(report.Live, report.Replay, report.Result)
-	if err != nil {
-		t.Fatal(err)
-	}
+	witness := boundWitness(t, rt, computerID)
 	checkpoint := rematerializeOwnerRecoveryCheckpoint(t, computerID, witness, targetDigest, targetIdentity, acceptedHead, acceptedHead)
 	result, err := rt.RematerializeFromTape(ctx, computerID, checkpoint)
 	if err != nil {
@@ -733,14 +710,7 @@ func TestRematerializeFromTapeRefusesAReleaseBelowTheLiveFloor(t *testing.T) {
 	rt.selfdevUpdaterRoot = updaterRoot
 	ctx := context.Background()
 	seedRestoreBase(t, ctx, rt, cas, computerID, 1)
-	report, err := rt.ReplayCompleteness(ctx, computerID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	witness, err := selfdevprotocol.WitnessFromObservationSets(report.Live, report.Replay, report.Result)
-	if err != nil {
-		t.Fatal(err)
-	}
+	witness := boundWitness(t, rt, computerID)
 	checkpoint := rematerializeTestCheckpoint(t, computerID, witness, targetDigest, targetIdentity, acceptedHead)
 
 	// The live store has been floored by a writer that stamped.

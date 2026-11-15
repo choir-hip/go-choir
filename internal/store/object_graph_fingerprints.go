@@ -32,7 +32,28 @@ type ObjectGraphFingerprint struct {
 // position (event-table design 3.3 item 3), so a replay inequivalence names
 // the rows of either table.
 func (s *Store) ListObjectGraphFingerprints(ctx context.Context) ([]ObjectGraphFingerprint, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	return s.listObjectGraphFingerprints(ctx, s.db)
+}
+
+// ListObjectGraphFingerprintsTx is ListObjectGraphFingerprints for the
+// og_objects and choir_events rows inside a caller's read snapshot
+// (ReadSnapshotTx), so a replay diagnostic names the rows of the state it
+// pinned and not the writes made since. The rows of the telemetry
+// partitions are separate files outside any one snapshot: they are read at
+// the time of the call, so a sample of table "telemetry" may postdate the
+// snapshot.
+func (s *Store) ListObjectGraphFingerprintsTx(ctx context.Context, tx *sql.Tx) ([]ObjectGraphFingerprint, error) {
+	if tx == nil {
+		return nil, fmt.Errorf("object graph fingerprints: transaction is required")
+	}
+	return s.listObjectGraphFingerprints(ctx, tx)
+}
+
+func (s *Store) listObjectGraphFingerprints(ctx context.Context, q readQuerier) ([]ObjectGraphFingerprint, error) {
+	if err := diagnosticRowsWithinLimit(ctx, q, "object graph", ObjectGraphDiagnosticRowLimit, "og_objects", "choir_events"); err != nil {
+		return nil, err
+	}
+	rows, err := q.QueryContext(ctx, `
 		SELECT h.canonical_id, h.object_kind, h.version_id, h.content_hash, COALESCE(b.body, ''), h.metadata,
 		       h.updated_at, h.tombstone, h.superseded_by
 		  FROM og_objects h LEFT JOIN og_bodies b ON b.obj_id = h.obj_id
@@ -63,7 +84,7 @@ func (s *Store) ListObjectGraphFingerprints(ctx context.Context) ([]ObjectGraphF
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate object graph fingerprints: %w", err)
 	}
-	events, err := s.eventTableFingerprints(ctx)
+	events, err := s.eventTableFingerprints(ctx, q)
 	if err != nil {
 		return nil, err
 	}
@@ -108,8 +129,8 @@ func (s *Store) telemetryPartitionFingerprints(ctx context.Context) ([]ObjectGra
 	return out, nil
 }
 
-func (s *Store) eventTableFingerprints(ctx context.Context) ([]ObjectGraphFingerprint, error) {
-	rows, err := s.db.QueryContext(ctx, `
+func (s *Store) eventTableFingerprints(ctx context.Context, q readQuerier) ([]ObjectGraphFingerprint, error) {
+	rows, err := q.QueryContext(ctx, `
 		SELECT h.tape_seq, h.op_index, h.object_kind, h.version_id, h.content_hash, b.body, h.metadata,
 		       h.updated_at, h.tombstone, h.superseded_by
 		  FROM choir_events h LEFT JOIN choir_event_bodies b ON b.ev_id = h.ev_id
@@ -143,4 +164,65 @@ func (s *Store) eventTableFingerprints(ctx context.Context) ([]ObjectGraphFinger
 		return nil, fmt.Errorf("iterate %s fingerprints: %w", choirEventsTable, err)
 	}
 	return out, nil
+}
+
+// ObjectGraphDiagnosticRowLimit and EventIndexDiagnosticRowLimit bound the
+// replay-completeness row diagnostics. The live lists are read inside the
+// probe's snapshot, before the replay exists (the snapshot cannot be held
+// open across a replay of minutes: it would pin the write-ahead log of a
+// computer that keeps appending, on a volume that may be short), so whether
+// they are needed is known only afterwards. They are therefore bounded. A
+// fingerprint is about 0.7 KB (object graph) or 1.5 KB (event index). The
+// peak, when the result is not equivalent, holds the live list, the replay
+// list and the comparison's maps for each diagnostic in turn: about
+// (2 x 0.7 KB + 0.25 KB) x 100,000 = 165 MB for the object graph and
+// (2 x 1.5 KB + 0.5 KB) x 30,000 = 105 MB for the index, about 270 MB in the
+// worst case, on a guest whose ceiling is 1,024 MiB. Past the bound a list is
+// skipped and the report says so (DiagnosticTooLargeError, and
+// diagnostics_skipped); the verdict rests on the table digests and does not
+// depend on it. (The telemetry partitions' rows are not counted: they are
+// read outside the snapshot, as before.)
+const (
+	ObjectGraphDiagnosticRowLimit = 100000
+	EventIndexDiagnosticRowLimit  = 30000
+)
+
+// DiagnosticTooLargeError says a row diagnostic was skipped for its size.
+type DiagnosticTooLargeError struct {
+	What  string
+	Rows  int
+	Limit int
+}
+
+func (e *DiagnosticTooLargeError) Error() string {
+	return fmt.Sprintf("%s row diagnostic skipped: %d rows exceed the limit of %d", e.What, e.Rows, e.Limit)
+}
+
+// diagnosticRowsWithinLimit counts the rows of the tables and returns a
+// DiagnosticTooLargeError when they exceed limit.
+func diagnosticRowsWithinLimit(ctx context.Context, q readQuerier, what string, limit int, tables ...string) error {
+	total := 0
+	for _, table := range tables {
+		rows, err := q.QueryContext(ctx, `SELECT COUNT(*) FROM `+table)
+		if err != nil {
+			return fmt.Errorf("count %s rows: %w", table, err)
+		}
+		var n int
+		if rows.Next() {
+			if err := rows.Scan(&n); err != nil {
+				_ = rows.Close()
+				return err
+			}
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		_ = rows.Close()
+		total += n
+	}
+	if total > limit {
+		return &DiagnosticTooLargeError{What: what, Rows: total, Limit: limit}
+	}
+	return nil
 }

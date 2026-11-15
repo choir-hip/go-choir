@@ -35,9 +35,15 @@ type VMLocalContentWitness struct {
 	// Tables is the per-table SHA-256 over the rows in primary-key order.
 	Tables             map[string]string `json:"tables"`
 	DerivabilityDigest string            `json:"derivability_digest"`
-	// WitnessVersion is 3. A reader refuses every other version
-	// (RefuseWitnessVersion): 1 and 2 were Dolt witnesses.
+	// WitnessVersion is 3 (strict) or 4 (canonical event index). A reader
+	// refuses every other version (RefuseWitnessVersion): 1 and 2 were Dolt
+	// witnesses. A checkpoint without a version 4 witness is compared strictly.
 	WitnessVersion int `json:"witness_version"`
+	// EventIndexTrimBoundary is, in a version 4 witness, the trim boundary of
+	// the checkpoint's head sequence: the digest of computer_event_index
+	// leaves out finalized projection_batch_recorded rows at or below it and
+	// reads a null pin list as "[]". Always zero in a version 3 witness.
+	EventIndexTrimBoundary uint64 `json:"event_index_trim_boundary,omitempty"`
 }
 
 // FrontendIdentity names the served computer-surface SPA. A checkpoint without
@@ -119,10 +125,15 @@ func RestoreFromRequest(request RestoreRequest, checkpoint Checkpoint) error {
 	return nil
 }
 
-// WitnessFromObservationSets seals the v3 witness of a live store that a
+// witnessFromObservationSets seals the v3 witness of a live store that a
 // replay reproduced exactly: it refuses unless the two sets are equivalent and
-// carry the same root.
-func WitnessFromObservationSets(live, replay computerversion.ObservationSet, result computerversion.EquivalenceResult) (VMLocalContentWitness, error) {
+// carry the same root. It is not exported: it seals the strict form (version
+// 3) from the observation sets of a probe that reads the event index
+// canonically, and a checkpoint sealed that way would be refused by its own
+// restore whenever the store holds a null pin list or a trim backlog. A
+// checkpoint is sealed from the bind's own extraction
+// (WitnessFromDigestsCanonical).
+func witnessFromObservationSets(live, replay computerversion.ObservationSet, result computerversion.EquivalenceResult) (VMLocalContentWitness, error) {
 	notDerivable := fmt.Errorf("self-development checkpoint: behavior-bearing VM-local rows are not event- or receipt-derivable")
 	if !result.Equivalent() {
 		return VMLocalContentWitness{}, notDerivable
@@ -153,9 +164,9 @@ func WitnessFromObservationSets(live, replay computerversion.ObservationSet, res
 	return sealed, nil
 }
 
-// WitnessFromObservationSet seals a v3 witness from one extraction's
+// witnessFromObservationSet seals a v3 witness from one extraction's
 // observations (computerversion.SQLiteStateExtractor.Extract).
-func WitnessFromObservationSet(set computerversion.ObservationSet) (VMLocalContentWitness, error) {
+func witnessFromObservationSet(set computerversion.ObservationSet) (VMLocalContentWitness, error) {
 	witness, err := witnessFromObservations(set)
 	if err != nil {
 		return VMLocalContentWitness{}, err

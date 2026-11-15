@@ -149,6 +149,9 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 		return selfdevprotocol.CheckpointResponse{}, err
 	}
 	response := selfdevprotocol.CheckpointResponse{Checkpoint: checkpoint, Receipt: receipt}
+	// Stored with json.Marshal, not canonical JSON: the digest is computed over
+	// the canonical form of the request, and a reader serves these bytes
+	// verbatim (StoredCheckpointResponse), never re-encoded.
 	checkpointJSON, _ := json.Marshal(checkpoint)
 	receiptJSON, _ := json.Marshal(receipt)
 	receiptDigest, _ := selfdevprotocol.Digest(receipt)

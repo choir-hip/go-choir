@@ -168,14 +168,7 @@ func TestEffectsRehearsalReversibleProposeConsensusPromoteRestore(t *testing.T) 
 	rt.selfdevUpdaterRoot = updaterRoot
 	ctx := context.Background()
 	seedRestoreBase(t, ctx, rt, cas, computerID, 1)
-	report, err := rt.ReplayCompleteness(ctx, computerID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	witness, err := selfdevprotocol.WitnessFromObservationSets(report.Live, report.Replay, report.Result)
-	if err != nil {
-		t.Fatal(err)
-	}
+	witness := boundWitness(t, rt, computerID)
 	checkpoint := rematerializeTestCheckpoint(t, computerID, witness, targetDigest, targetIdentity, acceptedHead)
 	laterID, err := computerevent.NewEventID()
 	if err != nil {

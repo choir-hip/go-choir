@@ -150,3 +150,39 @@ func TestCheckpointFetchByDigestReturnsThePublishedResponse(t *testing.T) {
 		t.Fatalf("unknown digest = %d", rec.Code)
 	}
 }
+
+// The stored checkpoint is served as it was stored: a field the struct does
+// not know survives transit, so a newer witness field is never dropped (and
+// the digest never stops matching) on the way to a restore.
+func TestCheckpointFetchServesTheStoredCheckpointVerbatim(t *testing.T) {
+	authority, request, _, _ := ownerRecoveryPlatformFixture(t)
+	published, err := authority.Publish(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored string
+	if err := authority.cas.store.db.QueryRowContext(t.Context(), `SELECT checkpoint_json FROM computer_checkpoints WHERE checkpoint_digest=?`, published.Checkpoint.Digest).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	withUnknown := strings.Replace(stored, `"request":{`, `"request":{"field_from_a_newer_release":"kept",`, 1)
+	if withUnknown == stored {
+		t.Fatalf("fixture did not inject a field: %s", stored)
+	}
+	if _, err := authority.cas.store.db.ExecContext(t.Context(), `UPDATE computer_checkpoints SET checkpoint_json=? WHERE checkpoint_digest=?`, withUnknown, published.Checkpoint.Digest); err != nil {
+		t.Fatal(err)
+	}
+	h := NewHandler(authority.service)
+	rec := listCheckpoints(t, h, "computer_id="+request.ComputerID+"&checkpoint_digest="+published.Checkpoint.Digest, true)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("fetch = %d %s", rec.Code, rec.Body.String())
+	}
+	var envelope struct {
+		Checkpoint json.RawMessage `json:"checkpoint"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if string(envelope.Checkpoint) != withUnknown {
+		t.Fatalf("served checkpoint differs from the stored bytes:\nserved %s\nstored %s", envelope.Checkpoint, withUnknown)
+	}
+}
