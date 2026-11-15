@@ -71,6 +71,7 @@ type telemetryCounters struct {
 	tapeOpsByKind         map[string]int64
 	tapeOpsByTable        map[string]int64
 	tapeWrites            tapeWriteMaps // tape_write_counters.go
+	runWrites             runWriteMaps  // run_write_counters.go
 
 	appendedBatchable    atomic.Int64
 	appendedAcknowledged atomic.Int64
@@ -301,6 +302,10 @@ type TelemetryStats struct {
 	// ObjectRewrites is per object kind: ops, bytes, mean bytes per op, distinct
 	// objects written since boot and writes per object (object_rewrite_counters.go).
 	ObjectRewrites map[string]ObjectKindRewrites `json:"object_rewrites"`
+	// RunWrites is the choir.run write counter: per writer site, run state and
+	// changed fields, with body bytes by field (run_write_counters.go). A count
+	// since boot.
+	RunWrites RunWriteStats `json:"run_writes"`
 	// LifecycleCommandForms counts committed lifecycle commands by stored
 	// result form: slim, embedded_mismatch, embedded_head, no_revision.
 	LifecycleCommandForms    map[string]int64 `json:"lifecycle_command_forms"`
@@ -358,6 +363,7 @@ func (s *Store) TelemetryStats() TelemetryStats {
 		out.TapeOpsByTable = copyCounts(c.tapeOpsByTable)
 	}
 	c.tapeWrites.copyInto(&out)
+	out.RunWrites = c.runWrites.stats()
 	c.mu.Unlock()
 	out.EventTableWrites = s.EventTableWritesOn()
 	out.EventsAppendedBatchable = c.appendedBatchable.Load()
