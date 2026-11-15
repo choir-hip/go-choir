@@ -233,6 +233,13 @@
    "answers": "ReaderAck"
   },
   {
+   "send": "readerOpenLink",
+   "options": {
+    "url": "string"
+   },
+   "answers": "ReaderAck"
+  },
+  {
    "send": "readerReload",
    "options": {
     "address": "string"

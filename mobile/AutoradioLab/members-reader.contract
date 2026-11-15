@@ -2,7 +2,7 @@
 // Owned by the reader lane. The child components (reader.contract, textures.contract) `inject` these by name; each name is
 // in lane 3's band of the `provide` list in app.contract.
 use readerDoc, texturesList, readerFollow, readerAim from "@choir/autoradio"
-use readerAimSet, readerStop, readerRestore, readerReload, readerFollowSet from "@choir/autoradio"
+use readerAimSet, readerStop, readerRestore, readerReload, readerOpenLink, readerFollowSet from "@choir/autoradio"
 use ReaderDoc, TextureList, ReaderFollowInfo, ReaderAimInfo, ReaderAck from "@choir/autoradio"
 
 members Autoradio
@@ -65,8 +65,9 @@ members Autoradio
   action reloadDoc(address: string)
     send rack = readerReload(address=address)
     sheet = ""
+  // A web page opens in a browser sheet inside the app (the module presents it); closing it returns to this card.
   action openLink(u: string)
-    openURL(u)
+    send rack = readerOpenLink(url=u)
   action shareDoc
     share(title=rdoc.title, text=rdoc.plain, url=(rdoc.permalink == "" ? "" : `https://choir.news/${rdoc.permalink}`))
     sheet = ""
