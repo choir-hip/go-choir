@@ -197,8 +197,8 @@ ms and status. Tokens and dollars come from R (receipts exist for every success)
 
 Bounds, until 2026-11-12: intake 30,000 bytes, event layer 24 KiB, support judge 30,000 bytes, gateway 1
 MiB. Since 2026-11-12 the three sites are bounded by the vendor's token limits through `internal/jevbudget`
-(75% of 64k a request and of 32k for the state plus one question, estimated from the text; intake
-`intakeTokenPolicy`, `intake_labels.go:969`), and a capture's options are cut into parts of at most 252 options
+(64k a request and 32k for the state plus one question, the vendor's limits, estimated from the text; intake
+is one `jevJob`, `intake_job.go`), and a capture's options are cut into parts of at most 252 options
 (`intakeOptionsMax`) because a question takes at most 255 choices. Bytes per token is **not logged**
 (the receipt holds a request digest, not a size); the flush line now carries `est_tokens_max` beside
 `bytes_max`. Observed input: max 17,481 tokens, p99 15,766; 8,651 of 16,137 calls (54%) over 8,000
@@ -245,8 +245,8 @@ Options and bounds are from code; no question text is quoted.
 
 | # | Site, call at | Unit and question shapes | State and bound | Answer to action | On failure | Rec |
 |---|---|---|---|---|---|---|
-| 1 | Intake `agentcore/intake_labels.go:1188` (`askIntakeCall`; plan :987) | every waiting capture, 2 `choice` each (event, topic) per part of at most 243 stories; options are `criteria` keys: stories + siblings + `none`; criteria used | story list once under handles (the window, split into chunks only when one capture's call cannot carry it); vendor token budget (`intakeTokenPolicy` :969); was 7.9k-13.7k tokens (11-10) | max-p choice; p stored (`EventP`, `TopicP` :815-822, `store/capture_label.go:54`); no threshold at read | capture stays unlabelled; 5 s (:57) | yes `intake_labels` |
-| 2 | Event layer `event_layer.go:460` | every queued capture, 1 `choice` each (`k1..kN`) over events, siblings, `none`; queued at `source_schedule.go:284` | vendor token budget (`event_layer.go:389`), summaries clipped, chunk halves past it; was 24 KiB | `p>=0.92` join (:71), `0.5<=p<0.92` tentative (:72), else none; applied :535-545 | unanswered skip the fold (:560); 30 s (:41) | yes, threshold text recorded |
+| 1 | Intake `agentcore/intake_job.go` (`planIntakeJobCalls`), `intake_labels.go` (`askIntakeCall`) | every waiting capture, 2 `choice` each (event, topic) per part of at most 252 options; options are `criteria` keys: stories + every other capture + `none`; criteria used | story list once under handles (each call carries only the stories its questions read); vendor limits (`jevbudget`); was 7.9k-13.7k tokens (11-10) | max-p choice; p stored (`EventP`, `TopicP` :815-822, `store/capture_label.go:54`); no threshold at read | a failed call is asked once more, then halved to two levels; what still fails is unlabelled; 5 s plus 1 s per 1k estimated tokens | yes `intake_labels` |
+| 2 | Event layer `event_layer.go:460` | every queued capture, 1 `choice` each (`k1..kN`) over events, siblings, `none`; queued at `source_schedule.go:284` | vendor limits (`jevbudget`), summaries clipped, chunk split past them; was 24 KiB | `p>=0.92` join (:71), `0.5<=p<0.92` tentative (:72), else none; applied :535-545 | unanswered skip the fold; a failed call is asked once more then halved to two levels; 30 s plus 1 s per 1k estimated tokens | yes, threshold text recorded |
 | 3 | Support judge `support_judge.go:369` | 1 `choice` yes/no per citation pair of a revision, `p1..pN`, N bounded by the token budget (one call per batch of pairs) | sentence, quote, cited passage; bounded by jevbudget, section 3.2 | `yes` and `p(yes)>=0.5` supported (:408); p kept in basis points | pairs stay pending; 90 s (:62), 8 at once (:60) | yes |
 | 4 | System 1 verb `system1_verb.go:286` (`system1Call` :216, `Ask` :134,150) | a desk's closed `choice` questions, 2-6 options, up to 12 (`yaegikernel/system1.go:26`) | host-resolved refs: 4 a question, 16 a call (:31-32) | returned to the cell with probabilities; replay by digest | request on the tape then answered or `failed`; 60 s (:74) | yes (NoText) |
 | 5 | Story analysis `story_analysis.go:355` (via 4) | novelty, entity type, role per candidate; chunks of 12, 2 chunks | story text, host side | probabilities and top choice (:382) to the cell | `a.Error`; no answer | yes (via 4) |

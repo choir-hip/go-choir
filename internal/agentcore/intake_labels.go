@@ -28,11 +28,12 @@ import (
 // computer's intake.labels setting is on, a poll's new captures are each
 // labelled by Jev against a shortlist of the computer's stories and the
 // poll's other new captures, after the captures are written and before the
-// arrival record is minted. One request per capture carries two questions:
-// which candidate reports the same event (or new), and which story shares
-// the topic (or none). Choices are short aliases (c1…, n1…) mapped back
-// here. Labels run in parallel within a per-poll budget; a failure or
-// timeout leaves the capture unlabelled, and labels never gate arrival.
+// arrival record is minted. A flush is one job (jevJob, intake_job.go): every waiting capture's two
+// questions, which candidate reports the same event (or new) and which story
+// shares the topic (or none), go in one request, split only where a vendor
+// limit forces it. Choices are short aliases (c1…, n1…) mapped back here. A
+// call that fails is asked again and then halved (jev_failure.go); what still
+// fails is left unlabelled, and labels never gate arrival.
 // Each label is its own choir.capture_label object, never part of the
 // arrival record.
 
@@ -89,8 +90,8 @@ const (
 	// bound one question's options, not the job: a capture's options are cut
 	// into parts of at most intakeOptionsMax (255 less new and a margin).
 	intakeOptionsMax = jevbudget.VendorMaxChoices - intakeChoiceMargin - 1
-	// intakeBatchCaptures is the old per-call batch size; the job ignores it.
-	// It only feeds the shadow comparison's old arm.
+	// intakeBatchCaptures is no bound: the job ignores the batch argument. The
+	// shadow comparison passes it to its new arm; the old arm has its own.
 	intakeBatchCaptures = 1 << 20
 	// Owner rules 2026-11-10 and 2026-11-12/15: put many questions in single
 	// calls over one context; Jev is not serial, and a call is never made to
@@ -511,7 +512,7 @@ func (rt *Runtime) stopIntakeLabels() {
 
 // labelHeld is the flush: it labels the held captures, in the order held, and
 // reports how many were labelled and how many were left unlabelled. Its calls
-// (one per state) are asked together and it returns within the flush budget whatever Jev
+// (one per state, usually one) are asked in sequence and it returns within the flush budget whatever Jev
 // does.
 func (rt *Runtime) labelHeld(ctx context.Context, ownerID, computerID string, held []intakeHeld) (labelled, unlabelled int) {
 	if len(held) == 0 {
@@ -1110,12 +1111,6 @@ func (rt *Runtime) labelPollWith(ctx context.Context, lib *intakeLibrary, ownerI
 		}
 		return out
 	}
-	lib.stats = intakePollStats{calls: len(calls)}
-	for _, c := range calls {
-		lib.stats.questions += len(c.questions)
-		lib.stats.maxBytes = max(lib.stats.maxBytes, c.bytes())
-		lib.stats.maxTokens = max(lib.stats.maxTokens, jevbudget.Measure(c.state, c.questions).Request)
-	}
 	// answers[i] are capture i's answers, one per part of its options in
 	// each call that asked it.
 	answers := make([][]intakeCallAnswer, len(items))
@@ -1127,13 +1122,15 @@ func (rt *Runtime) labelPollWith(ctx context.Context, lib *intakeLibrary, ownerI
 	// a timeout, 429 or 5xx is asked once more after a backoff; what still fails
 	// is unlabelled and counted on the flush line.
 	type item struct {
-		call  intakeCall
-		tried bool
+		call    intakeCall
+		retries int
+		depth   int
 	}
 	work := make([]item, 0, len(calls))
 	for _, c := range calls {
 		work = append(work, item{call: c})
 	}
+	lib.stats = intakePollStats{}
 	for len(work) > 0 {
 		it := work[0]
 		work = work[1:]
@@ -1141,27 +1138,36 @@ func (rt *Runtime) labelPollWith(ctx context.Context, lib *intakeLibrary, ownerI
 		var ans [][]intakeCallAnswer
 		err := ctx.Err()
 		if err == nil {
+			// The counters are the calls actually made, retries and halves
+			// included.
+			lib.stats.calls++
+			lib.stats.questions += len(c.questions)
+			lib.stats.maxBytes = max(lib.stats.maxBytes, c.bytes())
+			lib.stats.maxTokens = max(lib.stats.maxTokens, jevbudget.Measure(c.state, c.questions).Request)
 			ans, err = rt.askIntakeCall(ctx, lib, c)
 		}
 		if err != nil && ctx.Err() == nil {
-			if jevSizeRefused(err) && c.halve != nil {
-				if halves := c.halve(); len(halves) > 1 {
-					log.Printf("jev split: site=intake_labels items=%d calls=%d forced_by=map[vendor_refused:1] reason=%q", len(c.questions), len(halves), err.Error())
-					next := make([]item, 0, len(halves)+len(work))
-					for _, h := range halves {
-						next = append(next, item{call: h})
-					}
-					work = append(next, work...)
-					continue
-				}
+			var halves []intakeCall
+			if c.halve != nil {
+				halves = c.halve()
 			}
-			if jevTransient(err) && !it.tried {
-				log.Printf("intake labels: call of %d questions failed (%v); asking once more", len(c.questions), err)
+			act, forcedBy := jevNextStep(err, it.retries, it.depth, len(halves) > 1)
+			switch act {
+			case jevRetry:
+				log.Printf("intake labels: call of %d questions failed (%v); asking again after a backoff", len(c.questions), err)
 				select {
-				case <-time.After(intakeRetryBackoff):
+				case <-time.After(intakeRetryBackoff * time.Duration(it.retries+1)):
 				case <-ctx.Done():
 				}
-				work = append([]item{{call: c, tried: true}}, work...)
+				work = append([]item{{call: c, retries: it.retries + 1, depth: it.depth}}, work...)
+				continue
+			case jevHalve:
+				log.Printf("jev split: site=intake_labels items=%d calls=%d forced_by=map[%s:1] error=%q", len(c.questions), len(halves), forcedBy, err.Error())
+				next := make([]item, 0, len(halves)+len(work))
+				for _, h := range halves {
+					next = append(next, item{call: h, retries: 1, depth: it.depth + 1})
+				}
+				work = append(next, work...)
 				continue
 			}
 		}
@@ -1427,38 +1433,5 @@ func callJudgeWithin(ctx context.Context, judge CandidateJudge, scope string, ti
 // allowance for its estimated size.
 func intakeCallTimeout(call intakeCall) time.Duration {
 	est := jevbudget.Measure(call.state, call.questions).Request
-	return intakeLabelCallTimeout + time.Duration(est/1000)*intakeLabelTimeoutPerKToken
-}
-
-// jevSizeRefused reports whether the vendor or the gateway refused a request
-// for its size, although the estimate said it fit.
-func jevSizeRefused(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	for _, s := range []string{"413", "too large", "too long", "context length", "context window", "maximum context", "exceeds the", "token limit", "too many tokens"} {
-		if strings.Contains(msg, s) {
-			return true
-		}
-	}
-	return false
-}
-
-// jevTransient reports a failure worth one more try: a deadline, a 429 or a
-// 5xx. Backing off after a provider's real refusal is allowed.
-func jevTransient(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	msg := strings.ToLower(err.Error())
-	for _, s := range []string{"429", "rate limit", "rate_limit", "too many requests", "timeout", "timed out", "500", "502", "503", "504", "unavailable", "overloaded"} {
-		if strings.Contains(msg, s) {
-			return true
-		}
-	}
-	return false
+	return intakeLabelCallTimeout + time.Duration((est+999)/1000)*intakeLabelTimeoutPerKToken
 }

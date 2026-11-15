@@ -81,8 +81,8 @@ import (
 //     (marker present) re-runs it once (closeOpenJudgeWorkAtBoot). An open
 //     work record found outside boot, with no work in flight, is closed
 //     interrupted too, never resumed.
-//  7. Cost blowup. One call per fan-out (chunks of subCallJudgeBatchMax
-//     children at most), a child contributes at most MaxSubCallQuestions + 1
+//  7. Cost blowup. One call per fan-out (split only on a vendor limit,
+//     planJevCalls), a child contributes at most MaxSubCallQuestions + 1
 //     questions, each report is bounded to subCallReportRunes, a child whose
 //     Report is empty is settled by its rule alone and not sent, and the
 //     usage is on the work close and on the parent's run costs. There is no

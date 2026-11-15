@@ -16,6 +16,14 @@
 #   - with --base REF: a file is added or a count is raised against REF's list.
 # A base that cannot be read fails (a check that passes when it cannot see the
 # base is open exactly then).
+# What it cannot catch (it counts regex matches of call sites per file, not a
+# syntax tree): a loop or a second caller around an existing call site (a
+# second `for` that calls askIntakeCall, or a wrapper that calls the listed
+# function again), a call the pattern does not name, a comment edited so the
+# count stays equal, and an edited list in the same change (the --base check
+# catches a raised count or a new file against the base, but a base with no
+# list, on first adoption, stands alone). It is a tripwire for the shape of the
+# mistake, not a proof; the tests that assert calls per job are the proof.
 #
 #   scripts/check-jev-entry [--base REF] [--root DIR]
 set -euo pipefail

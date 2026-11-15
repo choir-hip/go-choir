@@ -173,7 +173,7 @@ descriptions, not the numbers or neighboring levels" [V score].
 
 Update 2026-11-12: we no longer keep requests under that figure. Intake labels,
 the event layer and the support judge are sized by the 64k and 32k token limits
-(three quarters, `internal/jevbudget`), and a choice question's 255-option limit
+(the vendor's limits themselves, `internal/jevbudget`), and a choice question's 255-option limit
 is met by cutting a capture's options into parts, every part a question over the
 same state. Before the change no call of ours exceeded 30,046 bytes, so the
 logs held no evidence about the line either way.

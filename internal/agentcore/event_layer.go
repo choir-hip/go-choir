@@ -372,7 +372,9 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 	// chunks behind it; a chunk whose call fails leaves its captures in
 	// report.Left (an "unresolved" wake record, not retried).
 	for _, chunk := range chunks {
-		chunkCtx, cancel := context.WithTimeout(ctx, 2*eventCallTimeout)
+		// Each call has its own deadline (scaled to its size); a flush has none, so
+		// retries and halves never starve the chunks behind it.
+		chunkCtx, cancel := context.WithCancel(ctx)
 		rt.resolveEventChunk(chunkCtx, idx, ownerID, computerID, chunk, &report)
 		cancel()
 	}
@@ -441,23 +443,52 @@ func (rt *Runtime) askEventChunk(ctx context.Context, chunk []eventInput, state 
 	if len(chunk) > 0 {
 		meta.DecisionID = "event_chunk:" + strings.TrimSpace(chunk[0].Item.CaptureID)
 	}
-	return rt.judgeCall(ctx, meta, eventCallTimeout, state, questions)
+	// The deadline scales with the request: 30 s plus 1 s per thousand
+	// estimated tokens (a deadline is not a call limit).
+	timeout := eventCallTimeout + time.Duration(jevbudget.Measure(state, questions).Request/1000)*time.Second
+	return rt.judgeCall(ctx, meta, timeout, state, questions)
 }
 
 // resolveEventChunk asks Jev once about chunk and writes the result. The
 // caller holds idx.mu.
 func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, ownerID, computerID string, chunk []eventInput, report *eventResolveReport) {
+	rt.resolveEventChunkAt(ctx, idx, ownerID, computerID, chunk, report, 0, 0)
+}
+
+// resolveEventChunkAt is resolveEventChunk for a chunk that sits depth halvings
+// below the flush's call and has been tried retries more times: a failed call
+// is handled as intake's is (jev_failure.go): a rate refusal backs off, other
+// failures are asked once more and then halved to a bounded depth.
+func (rt *Runtime) resolveEventChunkAt(ctx context.Context, idx *eventIndex, ownerID, computerID string, chunk []eventInput, report *eventResolveReport, depth, retries int) {
 	now := time.Now().UTC()
 	stateRaw, questions, alias, split := eventPrepareChunk(idx, chunk, now)
 	if split {
 		half := len(chunk) / 2
 		log.Printf("jev split: site=event_layer items=%d calls=2 forced_by=map[%s:1]", len(chunk), jevbudget.Limit(eventBuildChunkState(idx, chunk, now)))
-		rt.resolveEventChunk(ctx, idx, ownerID, computerID, chunk[:half], report)
-		rt.resolveEventChunk(ctx, idx, ownerID, computerID, chunk[half:], report)
+		rt.resolveEventChunkAt(ctx, idx, ownerID, computerID, chunk[:half], report, depth, retries)
+		rt.resolveEventChunkAt(ctx, idx, ownerID, computerID, chunk[half:], report, depth, retries)
 		return
 	}
 	raw, err := rt.askEventChunk(ctx, chunk, stateRaw, questions)
 	report.Calls++
+	if err != nil && ctx.Err() == nil {
+		switch act, forcedBy := jevNextStep(err, retries, depth, len(chunk) > 1); act {
+		case jevRetry:
+			log.Printf("event layer: call of %d captures failed (%v); asking again after a backoff", len(chunk), err)
+			select {
+			case <-time.After(intakeRetryBackoff * time.Duration(retries+1)):
+			case <-ctx.Done():
+			}
+			rt.resolveEventChunkAt(ctx, idx, ownerID, computerID, chunk, report, depth, retries+1)
+			return
+		case jevHalve:
+			half := len(chunk) / 2
+			log.Printf("jev split: site=event_layer items=%d calls=2 forced_by=map[%s:1] error=%q", len(chunk), forcedBy, err.Error())
+			rt.resolveEventChunkAt(ctx, idx, ownerID, computerID, chunk[:half], report, depth+1, 1)
+			rt.resolveEventChunkAt(ctx, idx, ownerID, computerID, chunk[half:], report, depth+1, 1)
+			return
+		}
+	}
 	if err != nil {
 		report.Unresolved += len(chunk)
 		log.Printf("event layer: %d captures unresolved: %v", len(chunk), err)

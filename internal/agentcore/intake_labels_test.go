@@ -896,11 +896,12 @@ func TestIntakeBatchOneBadAnswerVoidsOnlyThatCapture(t *testing.T) {
 	}
 }
 
-// B5: the poll is one call, so a failed call leaves every capture of it
-// unlabelled with an error each, and none labelled. A capture whose own call
-// was split off by a vendor limit would fail alone; a poll that fits is one
-// call, which is the point of one call.
+// B5: a call that keeps failing because of one question is halved, to two
+// levels, so the failure costs the captures of the quarter that holds the bad
+// question, not the poll: the capture whose question fails is unlabelled, the
+// others in other quarters are labelled.
 func TestIntakeBatchFailedCallLeavesOnlyItsCapturesUnlabelled(t *testing.T) {
+	fastRetries(t)
 	rt, _ := testRuntime(t)
 	var titles []string
 	for i := 0; i < 9; i++ {
@@ -909,10 +910,20 @@ func TestIntakeBatchFailedCallLeavesOnlyItsCapturesUnlabelled(t *testing.T) {
 	items := pollItems(titles...)
 	rt.SetCandidateJudge(&failingQuestionJudge{question: "event_n6"})
 	results := rt.labelPoll(context.Background(), pollLib(rt, 3), "owner", "computer", "src", items, 4)
-	for i, r := range results {
-		if r.Err == nil {
-			t.Fatalf("B5: capture %d was labelled though the poll's one call failed", i)
+	if results[5].Err == nil {
+		t.Fatal("B5: the capture whose question fails was labelled")
+	}
+	failed := 0
+	for _, r := range results {
+		if r.Err != nil {
+			failed++
 		}
+	}
+	if failed == 0 || failed > 3 {
+		t.Fatalf("B5: %d of 9 captures unlabelled; want only the quarter holding the bad question (at most 3)", failed)
+	}
+	if results[0].Err != nil {
+		t.Fatalf("B5: capture 0 is in another quarter and must be labelled: %v", results[0].Err)
 	}
 }
 

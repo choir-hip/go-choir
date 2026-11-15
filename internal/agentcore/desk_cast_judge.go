@@ -23,7 +23,7 @@ import (
 // observation. The store writes the round's judge work with the first such
 // Cast and the round's outcome with the record that closes it
 // (store/desk_cast_judge.go), and tells this settler after commit. The
-// settler shares the sub-call settler's context, wait group, pacing gate and
+// settler shares the sub-call settler's context, wait group, and
 // Stop: one judge service.
 //
 // Ways it can fail, and how each is handled (written before the code):
@@ -35,7 +35,7 @@ import (
 //     is not queued twice, and checkDeskCastSettler refuses any party.
 //  2. Settling before the outcome exists. A round with no outcome record is
 //     left alone: its work stays open.
-//  3. Cost. One call per deskCastJudgeBatchMax Casts of the rounds that
+//  3. Cost. One call for all the Casts of the rounds that
 //     closed within deskCastJudgeCoalesce; per Cast its own typed questions,
 //     the p_success question and "did the answer achieve it"; the
 //     recipient's answer text shared by every Cast of a round, bounded, and

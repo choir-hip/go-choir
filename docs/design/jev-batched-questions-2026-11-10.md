@@ -787,9 +787,8 @@ choice question (`jevbudget.Limit` checks all three, in that order of
 naming: `choices_255`, `request_tokens_64k`,
 `state_plus_question_tokens_32k`). The budgets are the vendor's limits
 themselves, not a margin of ours. Where the estimate under-counts and the
-vendor refuses a request for size, the intake caller halves the call at a unit
-boundary, logs `jev split: ... forced_by=map[vendor_refused:1] reason=...`
-with the vendor's reason, and asks the halves. No count of captures,
+vendor refuses a request for size, the caller halves the call (see Failure of
+one big call). No count of captures,
 questions or items is a bound: a flush takes every capture waiting for the
 computer, and the job gives all of them to the planner. The 255 limit is per
 question, so a capture's options (its candidate stories, then every other
@@ -797,24 +796,39 @@ capture of the poll) are cut into parts of at most 252 (255 less `new` and a
 margin of two), each part as large as the limit and the token limit allow;
 nothing is trimmed, so a reworded or translated duplicate is always offered.
 
-**Failure of one big call.** A deadline bounds how long we wait, not what a
-call may carry: an intake call's deadline is 5 s plus 1 s for every thousand
-estimated request tokens (`intakeCallTimeout`; a 48k-token call waits about
-53 s), a constant to calibrate from the gateway's `upstream_ms` for
-`site=intake_labels`. A size refusal halves the call (above). A timeout, a 429
-or a 5xx is asked once more after a backoff (backing off after a provider's
-real refusal is allowed). What fails twice is unlabelled, counted on the flush
-line, and not retried again: the next poll sees the capture as captured.
-Worst case on a failure is therefore the captures of one half-call after a
-size refusal (none lost), and, after two transient failures of one call, that
-call's captures.
+**Failure of one big call, independent of the reason.** The gateway answers
+every upstream failure, a vendor refusal for size included, with 502 "Jev
+judgment provider unavailable" (`internal/gateway/jev.go`), and the client's
+error carries no vendor reason, so handling must not read one
+(`jev_failure.go`, `jevNextStep`). A deadline bounds how long we wait, not what
+a call may carry: an intake call's is 5 s plus 1 s per thousand estimated
+request tokens, an event call's 30 s plus the same; constants to calibrate from
+the gateway's `upstream_ms`. For a call that fails (not a cancelled context),
+in this order:
+1. A rate refusal (429, 529) backs off and is asked again, whole, up to two
+   more times. It is never halved: halving a rate-limited call only makes more
+   calls.
+2. A refusal whose text names a size (`max_tokens_exceeded`, "context length"
+   and similar; a secondary hint the gateway does not relay today) halves the
+   call at once, logged `forced_by=vendor_refused`.
+3. Any other failure is asked once more after a backoff. If it fails again and
+   the call carries more than one unit, it is halved at a unit boundary, to two
+   levels, logged `forced_by=call_failed` with the error. A half that fails
+   halves again without a retry of its own.
+The worst case on a persistent failure is eight calls (the call twice, its
+two halves, their four quarters) and every capture of it unlabelled (events:
+unresolved, reported in `Left`); on a failure that a smaller request avoids,
+nothing is lost. A persistent 429 is three calls. The failure tests run the
+production `gatewayruntime.JudgmentClient` against an httptest gateway that
+answers as the real one does. The flush line counts the calls actually made,
+retries and halves included.
 
 **Calls per job, before and after, and the most questions one call can carry.**
 
 | Job | Before | After | Most questions in a call | Worst case on a failure |
 | --- | --- | --- | --- | --- |
-| Capture poll, labels | 3 to 5 per 6 captures, per 15 KB slice | 1 call per flush (every waiting capture) when the entries fit; else the fewest, named | no constant: the token limits | a size refusal halves; a transient failure is asked once more; then that call's captures are unlabelled |
-| Capture poll, events | 1 per 12 captures, in sequence | 1 per flush (a flush runs 60 s after the first waiting capture; the count trigger of 12 is gone) when it fits; else the fewest | no constant: `choices_255` (siblings plus candidates) and the token limits | the flush's captures that call carried stay unresolved (reported in `Left`), not retried |
+| Capture poll, labels | 3 to 5 per 6 captures, per 15 KB slice | 1 call per flush (every waiting capture) when the entries fit; else the fewest, named | no constant: the token limits | asked once more, then halved to two levels (8 calls at most); a 429 is asked up to 3 times, never halved; what still fails is unlabelled |
+| Capture poll, events | 1 per 12 captures, in sequence | 1 per flush (a flush runs 60 s after the first waiting capture; the count trigger of 12 is gone) when it fits; else the fewest | no constant: `choices_255` (siblings plus candidates) and the token limits | as labels: asked once more, then halved to two levels (8 calls at most); what still fails stays unresolved (`Left`) |
 | Support pass | 1 per revision, queued behind a one-slot semaphore | 1 per queue pass: revisions waiting during a call are one call, owners never mixed | all waiting pairs, to `state_plus_question_tokens_32k` | that call's pairs stay pending for the next commit that cites them |
 | Sub-call, desk cast, inert | 1 per 20 behind a gate of one | 1 per round or pass; the gate is gone | no constant | that call's Casts stay unsettled |
 | Story analysis (24 questions) | 2 | 2 | 12, our cap `yaegikernel.System1MaxQuestions` | one call's slots fail |
@@ -858,3 +872,10 @@ a count raised fails. It counts `judgeCall`, `callJudgeWithin`,
 `callSubCallJudge`, `.JudgeScoped`, `.Judge`, `jevrecord.Observe` and
 `JudgmentRequest{`, which reaches the front-page scorer and the desk judge.
 The list is the sites not yet moved, each with its calls per job.
+
+**Residuals named by the third review round.** The support pass has no overall
+deadline (each call has its own), so a stuck store or call holds the queue until
+a stop cancels it. One intake flusher serves all computers of a runtime, so a
+slow flush delays another computer's labels (no lock is held). The gateway
+relaying the vendor's status and reason is a separate, later change on the
+gateway, which is a red surface and not part of this lane.

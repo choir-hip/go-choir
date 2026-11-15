@@ -223,7 +223,7 @@ func TestIntakeFlushFailedCallIsAskedOnceMoreThenLeavesCapturesUnlabelled(t *tes
 	f := newIntakeFixture(t, "owner-flush-fail")
 	f.enable(t)
 	openTestStory(t, f.s, f.owner, f.computer, "Pope has lung surgery")
-	judge := &fakeIntakeJudge{fail: fmt.Errorf("gateway: 429")}
+	judge := &fakeIntakeJudge{fail: fmt.Errorf("gateway client: Jev judgment rate limit exceeded")}
 	f.rt.SetCandidateJudge(judge)
 	t.Cleanup(f.rt.Stop)
 	items := flushTestItems(3, "s")
@@ -233,8 +233,8 @@ func TestIntakeFlushFailedCallIsAskedOnceMoreThenLeavesCapturesUnlabelled(t *tes
 			t.Fatalf("F3: capture %d labelled by a failing Jev", i)
 		}
 	}
-	if got := judge.callCount(); got != 2 {
-		t.Fatalf("F3: %d calls; a 429 is asked once more, then the captures are unlabelled", got)
+	if got := judge.callCount(); got != 3 {
+		t.Fatalf("F3: %d calls; a 429 is asked twice more after a backoff, then the captures are unlabelled", got)
 	}
 }
 

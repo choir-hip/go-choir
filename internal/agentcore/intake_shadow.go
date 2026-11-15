@@ -70,7 +70,12 @@ type IntakeShadowInput struct {
 	Captures []IntakeShadowCapture `json:"captures"`
 }
 
-// IntakeShadowArm is one policy's plan, and its bill when it was run.
+// IntakeShadowArm is one policy's plan, and its bill when it was run. The
+// "old" arm is a reconstruction, not main's code: 15,000-byte story slices, a
+// 30,000-byte guard and 6 captures a call, built by the lane's own parts loop
+// with every other capture offered, as main's builder did for a poll of up to 12.
+// It is a baseline for call count and agreement, and is deleted once the
+// comparison has run.
 type IntakeShadowArm struct {
 	Name      string `json:"name"`
 	Calls     int    `json:"calls"`
