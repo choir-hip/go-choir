@@ -245,7 +245,9 @@ func main() {
 			log.Fatalf("corpusd object graph guest binding: %v", err)
 		}
 	}
-	ogHandler.ConfigureCaptureBodies(platform.CaptureBodiesRoot(cfg.ArtifactsRoot))
+	if err := ogHandler.ConfigureHostCaptureBodies(platform.CaptureBodiesRoot(cfg.ArtifactsRoot)); err != nil {
+		log.Fatalf("corpusd capture bodies: %v", err)
+	}
 	ogHandler.ConfigureCaptureIndex(store)
 	platform.RegisterObjectGraphRoutes(s, ogHandler)
 
