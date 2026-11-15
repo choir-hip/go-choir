@@ -181,9 +181,6 @@ func PlanIntakeShadow(in IntakeShadowInput) (IntakeShadowReport, error) {
 // planIntakeShadowWith is PlanIntakeShadow over rt; a test gives rt a judge to
 // see that planning never reaches it.
 func planIntakeShadowWith(rt *Runtime, in IntakeShadowInput) (IntakeShadowReport, error) {
-	if len(in.Captures) > intakeFlushCaptures {
-		return IntakeShadowReport{}, fmt.Errorf("a flush is at most %d captures; the input has %d", intakeFlushCaptures, len(in.Captures))
-	}
 	var rep IntakeShadowReport
 	for n, arm := range intakeShadowArms {
 		got, err := shadowPlanArm(rt, in, arm.name, arm.policy, arm.batch)
@@ -311,4 +308,11 @@ func intakeShadowAgreement(in IntakeShadowInput, old, cur []intakeLabelResult) *
 	}
 	sort.Strings(a.Disagreements)
 	return a
+}
+
+// intakeStoryOptions is the most stories one question of the old arm offers
+// when the poll has captures captures: 255 choices less the other captures and
+// new. Only the shadow comparison's old arm uses it.
+func intakeStoryOptions(captures int) int {
+	return max(1, jevbudget.VendorMaxChoices-intakeChoiceMargin-max(captures, 1))
 }

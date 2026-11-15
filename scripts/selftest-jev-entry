@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Self-test of scripts/check-jev-entry on a scratch repo: a clean tree passes;
+# a new file with a direct Jev call, a second call site in a listed file, a
+# removed call site whose count is not lowered, a count raised against the
+# base and a file added against the base each fail.
+set -euo pipefail
+here="$(cd "$(dirname "$0")" && pwd)"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+mkdir -p "$tmp/scripts" "$tmp/internal/agentcore"
+cp "$here/check-jev-entry" "$tmp/scripts/check-jev-entry"
+cd "$tmp"
+git init -q .
+git config user.email t@example.invalid
+git config user.name t
+printf 'package agentcore\nfunc a() { _ = rt.judgeCall(1) }\n' >internal/agentcore/site.go
+printf '# list\ninternal/agentcore/site.go|1|UNMOVED site: 1 call per job\n' >scripts/jev-entry-baseline.txt
+git add -A
+git commit -q -m base
+check() { scripts/check-jev-entry "$@" >/dev/null 2>&1; }
+expect_ok() { if ! check "$@"; then echo "selftest-jev-entry: expected ok: $*" >&2; exit 1; fi; }
+expect_fail() { if check "$@"; then echo "selftest-jev-entry: expected failure: $*" >&2; exit 1; fi; }
+
+expect_ok --base HEAD
+
+printf 'package agentcore\nfunc b() { _ = rt.judgeCall(2) }\n' >internal/agentcore/new.go
+expect_fail
+rm internal/agentcore/new.go
+
+printf 'package agentcore\nfunc a() { _ = rt.judgeCall(1) }\nfunc c() { _ = rt.judgeCall(3) }\n' >internal/agentcore/site.go
+expect_fail
+printf 'package agentcore\nfunc a() { _ = rt.judgeCall(1) }\n' >internal/agentcore/site.go
+expect_ok
+
+printf 'package agentcore\nfunc a() {}\n' >internal/agentcore/site.go
+expect_fail
+printf 'package agentcore\nfunc a() { _ = rt.judgeCall(1) }\n' >internal/agentcore/site.go
+
+printf 'package agentcore\nfunc a() { _ = rt.judgeCall(1); _ = jevrecord.Observe(x) }\n' >internal/agentcore/site.go
+printf '# list\ninternal/agentcore/site.go|2|UNMOVED site: 2 calls per job\n' >scripts/jev-entry-baseline.txt
+expect_ok
+expect_fail --base HEAD
+git checkout -q -- .
+
+printf 'package agentcore\nfunc b() { _ = rt.judgeCall(2) }\n' >internal/agentcore/new.go
+printf '# list\ninternal/agentcore/site.go|1|UNMOVED site: 1 call per job\ninternal/agentcore/new.go|1|UNMOVED new\n' >scripts/jev-entry-baseline.txt
+expect_ok
+expect_fail --base HEAD
+echo "selftest-jev-entry: ok"

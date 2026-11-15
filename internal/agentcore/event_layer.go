@@ -41,20 +41,6 @@ var (
 )
 
 const (
-	// eventFlushCaptures is how many queued captures start a flush before the
-	// flush interval ends. It is when a flush runs, not how many captures one
-	// call carries: a flush resolves every queued capture.
-	eventFlushCaptures = 12
-	// eventChunkSize is the most captures one Jev call resolves: every
-	// waiting capture, up to what the vendor's 255 choices a question allow.
-	// A question offers the other captures of its call, up to
-	// eventShortlistRecent+eventShortlistOverlap+eventShortlistCorroborated
-	// known events, eventLinkChoices after_ choices and new. A call over the
-	// token limits is halved (eventPrepareChunk) and says so. The sequential
-	// chunks existed so a later chunk would see events an earlier one minted;
-	// a question already offers the call's other captures, and their union is
-	// resolved after the answers, so minting waits for the answers.
-	eventChunkSize        = jevbudget.VendorMaxChoices - 50 - eventLinkChoices - 1 - 2
 	eventShortlistRecent  = 30
 	eventShortlistOverlap = 10
 	// eventShortlistCorroborated is the overlap budget of corroborated
@@ -352,14 +338,14 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 		pending = append(pending, in)
 	}
 	// The fewest calls: the longest run of waiting captures whose one request
-	// fits the vendor's limits (jevbudget), at most eventChunkSize (the
-	// 255-choice limit); a split names its limit in the log.
+	// fits the vendor's limits (jevbudget: 255 choices a question, 64k tokens a
+	// request, 32k state plus a question); a split names its limit in the log.
 	var chunks [][]eventInput
 	if len(pending) > 0 {
 		now := time.Now().UTC()
 		bounds := [][2]int{}
 		for lo := 0; lo < len(pending); {
-			hi := min(lo+eventChunkSize, len(pending))
+			hi := len(pending)
 			sub, err := planJevCalls("event_layer", hi-lo, func(a, b int) (json.RawMessage, map[string]json.RawMessage, error) {
 				state, questions, _ := eventBuildChunk(idx, pending[lo+a:lo+b], now)
 				return state, questions, nil
@@ -408,6 +394,12 @@ func eventShortlistFor(idx *eventIndex, chunk []eventInput, now time.Time) []*ev
 		}
 	}
 	return eventShortlist(idx, tokens, now)
+}
+
+// eventBuildChunkState is eventBuildChunk's state and questions, for naming the limit.
+func eventBuildChunkState(idx *eventIndex, chunk []eventInput, now time.Time) (json.RawMessage, map[string]json.RawMessage) {
+	state, questions, _ := eventBuildChunk(idx, chunk, now)
+	return state, questions
 }
 
 // eventBuildChunk is the request for chunk against the index as it stands,
@@ -459,6 +451,7 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 	stateRaw, questions, alias, split := eventPrepareChunk(idx, chunk, now)
 	if split {
 		half := len(chunk) / 2
+		log.Printf("jev split: site=event_layer items=%d calls=2 forced_by=map[%s:1]", len(chunk), jevbudget.Limit(eventBuildChunkState(idx, chunk, now)))
 		rt.resolveEventChunk(ctx, idx, ownerID, computerID, chunk[:half], report)
 		rt.resolveEventChunk(ctx, idx, ownerID, computerID, chunk[half:], report)
 		return
@@ -856,7 +849,10 @@ func eventQuestion(chunk []eventInput, candidates []*eventView, summaryRunes int
 			criteria[after] = "A later development of state.events." + e + ", not that incident itself."
 			choices = append(choices, after)
 		}
-		for _, i := range siblingIndexes(titles, j) {
+		for i := range chunk {
+			if i == j {
+				continue
+			}
 			other := fmt.Sprintf("k%d", i+1)
 			criteria[other] = nil
 			choices = append(choices, other)
@@ -875,9 +871,9 @@ func eventQuestion(chunk []eventInput, candidates []*eventView, summaryRunes int
 }
 
 // enqueueEventResolution queues a poll's new captures for the next flush,
-// when intake.events is on. A flush runs at eventFlushCaptures queued captures
-// or eventFlushInterval after the first, whichever comes first, so captures
-// from many sources share calls. One flush at a time drains a computer's
+// when intake.events is on. A flush runs eventFlushInterval after the first
+// capture, so captures from many sources share one call; no count of queued
+// captures starts a flush early. One flush at a time drains a computer's
 // queue, in order; captures queued meanwhile are drained by the same flush.
 //
 // It reports whether it queued the captures.
@@ -906,10 +902,6 @@ func (rt *Runtime) enqueueEventResolution(ctx context.Context, ownerID, computer
 		}
 	}
 	if q.inFlight || len(q.items) == 0 {
-		return true
-	}
-	if len(q.items) >= eventFlushCaptures {
-		rt.startEventFlushLocked(ownerID, computerID, q)
 		return true
 	}
 	if q.timer == nil {

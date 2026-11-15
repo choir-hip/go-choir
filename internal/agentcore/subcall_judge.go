@@ -104,7 +104,6 @@ var (
 	subCallStopWait = 10 * time.Second
 )
 
-
 // subCallRuleCitationsMax is the most citations one Report's rule checks.
 const subCallRuleCitationsMax = 20
 

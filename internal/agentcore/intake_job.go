@@ -53,45 +53,55 @@ func (rt *Runtime) planIntakeJobCalls(lib *intakeLibrary, p *intakePoll, live []
 	baseTokens := jevbudget.Tokens(baseRaw)
 	key := func(h string) int { return jevbudget.Tokens([]byte(strconv.Quote(h) + ":null,")) }
 
-	// Cut each live capture's candidates into parts.
+	// Cut each live capture's options into parts: its candidate stories in its
+	// own order, then every other capture of the poll (none is trimmed, so a
+	// reworded or translated duplicate is always offered). A part is as large
+	// as the vendor allows: at most intakeOptionsMax options (255 choices less
+	// new and a margin), and the part's entries, the capture's own entry and
+	// the question text inside the per-question token limit. A split between
+	// parts is named by the limit that forced it when the job is planned.
 	parts := make([][]intakePart, len(p.items))
 	maxParts := 0
 	for _, i := range live {
-		own := p.views[i].order
-		sibs := 0
-		for j := range p.items {
-			if j != i {
-				sibs += siblingTokens[j] + key(p.handles[j])
-			}
+		type option struct {
+			handle string
+			story  bool
+			tokens int
 		}
-		perCount := intakeStoryOptions(len(p.items))
-		// What a part's stories may add to the state a question reads: the
-		// per-question budget less the intercept, the shared state, the
-		// capture's own entry, the question text and its keys.
+		var options []option
+		for _, h := range p.views[i].order {
+			options = append(options, option{h, true, storyTokens[h] + 2*key(h)})
+		}
+		for _, h := range p.views[i].siblings {
+			options = append(options, option{h, false, siblingTokens[siblingIndex(h)] + key(h)})
+		}
+		// What a part's options may add to the state a question reads: the
+		// per-question limit less the intercept, the shared state, the
+		// capture's own entry and the question text.
 		avail := jevbudget.QuestionBudgetTokens - 412 - baseTokens - fullTokens[i] - 600
-		for n, start := 0, 0; n == 0 || start < len(own); n++ {
-			room := avail
-			if n == 0 {
-				room -= sibs
-			}
+		for n, start := 0, 0; n == 0 || start < len(options); n++ {
 			end, used := start, 0
-			for end < len(own) && end-start < perCount {
-				c := storyTokens[own[end]] + 2*key(own[end])
-				if used+c > room && end > start {
+			for end < len(options) && end-start < intakeOptionsMax {
+				if used+options[end].tokens > avail && end > start {
 					break
 				}
-				used += c
+				used += options[end].tokens
 				end++
 			}
-			part := intakePart{eventName: "event_" + p.handles[i], storyChoices: own[start:end]}
+			part := intakePart{eventName: "event_" + p.handles[i]}
 			if n > 0 {
 				part.eventName += fmt.Sprintf("_s%d", n+1)
 			}
 			var siblings []string
-			if n == 0 {
-				siblings = p.views[i].siblings
+			for _, o := range options[start:end] {
+				if o.story {
+					part.storyChoices = append(part.storyChoices, o.handle)
+				} else {
+					siblings = append(siblings, o.handle)
+				}
 			}
 			part.eventChoices = append(append(append([]string(nil), part.storyChoices...), siblings...), store.CaptureLabelEventNew)
+			part.siblingChoices = siblings
 			if len(part.storyChoices) > 0 {
 				part.topicName = "topic_" + p.handles[i]
 				if n > 0 {
@@ -100,7 +110,7 @@ func (rt *Runtime) planIntakeJobCalls(lib *intakeLibrary, p *intakePoll, live []
 			}
 			parts[i] = append(parts[i], part)
 			start = end
-			if end == len(own) {
+			if end >= len(options) {
 				break
 			}
 		}
@@ -124,10 +134,10 @@ func (rt *Runtime) planIntakeJobCalls(lib *intakeLibrary, p *intakePoll, live []
 				topicNeeds = append(topicNeeds, jevRef{"stories", h, 0})
 			}
 			needs := topicNeeds
-			siblings := n == 0 && len(p.views[i].siblings) > 0
+			siblings := len(part.siblingChoices) > 0
 			if siblings {
 				needs = append([]jevRef(nil), topicNeeds...)
-				for _, h := range p.views[i].siblings {
+				for _, h := range part.siblingChoices {
 					needs = append(needs, jevRef{"captures", h, 0})
 				}
 			}
@@ -159,8 +169,8 @@ func (rt *Runtime) planIntakeJobCalls(lib *intakeLibrary, p *intakePoll, live []
 	if err != nil {
 		return nil, err
 	}
-	var calls []intakeCall
-	for _, jc := range jobCalls {
+	var mk func(jc jevCall) intakeCall
+	mk = func(jc jevCall) intakeCall {
 		c := intakeCall{first: jc.Decisions[jc.Names[0]], state: jc.State, questions: jc.Questions, decisions: jc.Decisions}
 		byCapture := map[int]*intakeAsk{}
 		var order []int
@@ -179,7 +189,23 @@ func (rt *Runtime) planIntakeJobCalls(lib *intakeLibrary, p *intakePoll, live []
 		for _, i := range order {
 			c.asks = append(c.asks, *byCapture[i])
 		}
-		calls = append(calls, c)
+		// halve is the refusal fallback: the same questions in two calls.
+		c.halve = func() []intakeCall {
+			halves, ok := job.Halve(jc)
+			if !ok {
+				return nil
+			}
+			out := make([]intakeCall, 0, len(halves))
+			for _, h := range halves {
+				out = append(out, mk(h))
+			}
+			return out
+		}
+		return c
+	}
+	var calls []intakeCall
+	for _, jc := range jobCalls {
+		calls = append(calls, mk(jc))
 	}
 	return calls, nil
 }

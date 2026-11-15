@@ -56,7 +56,6 @@ import (
 // shorten it.
 var deskCastJudgeCoalesce = 3 * time.Second
 
-
 // deskCastAnswerRunes bounds the recipient's text per round, and a Cast's own
 // targeted answers.
 const deskCastAnswerRunes = subCallReportRunes

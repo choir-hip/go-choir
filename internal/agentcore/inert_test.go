@@ -408,11 +408,9 @@ func TestInertJudgeCallIsOneCallAndBounded(t *testing.T) {
 	if err := rt.judgeInertness(context.Background(), "owner-ch", "computer-ch", recs); err != nil {
 		t.Fatal(err)
 	}
-	// 43 records at the full prediction clip are about 2x the 32k state limit,
-	// so two calls is the fewest; the split is named in the log (limit
-	// state_plus_question_tokens_32k).
-	if judge.inertCallCount() != 2 {
-		t.Fatalf("%d judge calls for %d records at the full clip, want 2 (the fewest the 32k state limit allows)", judge.inertCallCount(), n)
+	// 43 records at the full prediction clip fit the vendor's 32k state limit.
+	if judge.inertCallCount() != 1 {
+		t.Fatalf("%d judge calls for %d records at the full clip, want 1", judge.inertCallCount(), n)
 	}
 	for _, st := range judge.inertStates {
 		if len(st) > n*(inertPredictionRunes*2+2000) {

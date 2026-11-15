@@ -4,70 +4,91 @@
 # 2026-11-10.md section 10).
 #
 # A job asks Jev once: it builds one jevJob (internal/agentcore/jev_job.go),
-# adds every question, and sends the job's calls, which are one call unless a
-# vendor limit forces a split. A site that builds and sends its own request is
-# the defect that was corrected five times. This gate fails a direct Jev call
-# in a file that is neither the entry point nor on the list below.
+# adds every question, and sends the job's calls, one unless a vendor limit
+# forces a split. A site that builds and sends its own request is the defect
+# that was corrected five times.
 #
-# The list is the sites not yet moved onto the entry point, each with its
-# calls per job today. It only shrinks: a site that moves is deleted from the
-# list (the gate fails on a listed file that no longer calls Jev, so the list
-# cannot go stale), and nothing may be added.
+# scripts/jev-entry-baseline.txt lists, per file, how many direct Jev call
+# sites it has and what each file is. The gate fails when
+#   - a file with a direct Jev call is not listed (a new site);
+#   - a listed file has more call sites than its count (a second call loop in a
+#     listed file) or fewer (lower the count so the list shrinks visibly);
+#   - with --base REF: a file is added or a count is raised against REF's list.
+# A base that cannot be read fails (a check that passes when it cannot see the
+# base is open exactly then).
 #
-#   scripts/check-jev-entry
+#   scripts/check-jev-entry [--base REF] [--root DIR]
 set -euo pipefail
-cd "$(dirname "$0")/.."
+root="$(cd "$(dirname "$0")/.." && pwd)"
+base=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --base) base="$2"; shift 2 ;;
+    --root) root="$2"; shift 2 ;;
+    *) echo "usage: check-jev-entry [--base REF] [--root DIR]" >&2; exit 2 ;;
+  esac
+done
+cd "$root"
+baseline=scripts/jev-entry-baseline.txt
+pattern='(^|[^A-Za-z0-9_])(judgeCall|callJudgeWithin|callSubCallJudge)\(|\.JudgeScoped\(|\.Judge\(|jevrecord\.Observe\(|JudgmentRequest\{'
+fail=0
 
-# Files that may call Jev directly: the entry point's sender and the adapters
-# that carry a call to the gateway.
-entry=(
-  internal/agentcore/intake_labels.go   # judgeCall and callJudgeWithin; sends the jevJob's calls
-  internal/agentcore/intake_shadow.go   # the shadow comparison's usage wrapper
-  cmd/intake-shadow/main.go             # the shadow tool's gateway adapter
-  internal/autoputer/run.go             # the guest's gateway adapter
-)
-
-# Sites not yet moved, with calls per job. Delete a line when its site moves.
-unmoved=(
-  "internal/agentcore/event_layer.go|capture poll, events: 1 call per flush (every waiting capture, to choices_255; request_tokens_64k splits); runs after labels, so 2 calls per capture poll"
-  "internal/agentcore/support_judge.go|support pass: 1 call per queued pass (every waiting revision's pairs); state_plus_question_tokens_32k splits"
-  "internal/agentcore/subcall_judge.go|sub-call, desk-cast and inert passes: 1 call per round, tray or pass; state_plus_question_tokens_32k splits (inert: 2 for 43 records at the full clip)"
-  "internal/agentcore/desk_cast_judge.go|desk-cast pass: 1 call per pass (via callSubCallJudge); state_plus_question_tokens_32k splits"
-  "internal/agentcore/inert_judge.go|inert tray: 1 call per tray (via callSubCallJudge); state_plus_question_tokens_32k splits"
-  "internal/agentcore/system1_verb.go|choir.System1: 1 call per verb call, at most 12 questions (our cap, yaegikernel.System1MaxQuestions); story analysis is 2 calls for 24 questions"
-  "internal/agentcore/api_system1.go|System 1 API: 1 call per request"
-  "internal/agentcore/oped_gate.go|op-ed gate: 1 call per verdict"
-  "internal/deskjudge/choice.go|desk judge: 1 call per question (a job asking several questions makes several calls)"
-)
-
-pattern='(\<judgeCall\(|\<callJudgeWithin\(|\<callSubCallJudge\(|\.JudgeScoped\(|\.Judge\()'
-mapfile -t hits < <(grep -rlE "$pattern" internal cmd --include='*.go' 2>/dev/null | grep -v '_test\.go$' | sort)
-
-listed() { # file -> 0 when entry or unmoved
-  local f="$1" e
-  for e in "${entry[@]}"; do [[ "${e%% *}" == "$f" ]] && return 0; done
-  for e in "${unmoved[@]}"; do [[ "${e%%|*}" == "$f" ]] && return 0; done
-  return 1
+listed_count() { # file -> its count in the list, or empty
+  awk -F'|' -v f="$1" '$0 !~ /^#/ && $1 == f { print $2 }' "$baseline"
+}
+listed_files() {
+  awk -F'|' '$0 !~ /^#/ && NF >= 3 { print $1 }' "$baseline"
 }
 
-fail=0
-for f in "${hits[@]}"; do
-  # Interface declarations and adapters in jev_job/jev_split are not calls.
-  case "$f" in internal/agentcore/jev_job.go | internal/agentcore/jev_split.go) continue ;; esac
-  if ! listed "$f"; then
-    echo "check-jev-entry: $f calls Jev directly. Build one jevJob for the job and ask through it (docs/design/jev-batched-questions-2026-11-10.md section 10)." >&2
+hits="$(grep -rlE "$pattern" internal cmd --include='*.go' 2>/dev/null | grep -v '_test\.go$' | sort || true)"
+for f in $hits; do
+  want="$(listed_count "$f")"
+  got="$(grep -oE "$pattern" "$f" | wc -l | tr -d " ")"
+  if [ -z "$want" ]; then
+    echo "check-jev-entry: $f calls Jev directly and is not on the list. Build one jevJob for the job and ask through it (docs/design/jev-batched-questions-2026-11-10.md section 10)." >&2
+    fail=1
+  elif [ "$got" -gt "$want" ]; then
+    echo "check-jev-entry: $f has $got direct Jev call sites; the list allows $want. A second call over the same job is the defect: add the questions to the job's one request." >&2
+    fail=1
+  elif [ "$got" -lt "$want" ]; then
+    echo "check-jev-entry: $f has $got direct Jev call sites, fewer than the listed $want; lower its count in $baseline." >&2
     fail=1
   fi
 done
-for e in "${unmoved[@]}"; do
-  f="${e%%|*}"
-  if ! printf '%s\n' "${hits[@]}" | grep -qx "$f"; then
-    echo "check-jev-entry: $f is on the unmoved list but no longer calls Jev directly; delete its line from scripts/check-jev-entry." >&2
+for f in $(listed_files); do
+  if ! printf '%s\n' "$hits" | grep -qx "$f"; then
+    echo "check-jev-entry: $f is on the list but no longer calls Jev directly; delete its line from $baseline." >&2
     fail=1
   fi
 done
-if [[ $fail -eq 0 ]]; then
-  echo "check-jev-entry: ok; ${#unmoved[@]} sites not yet on the entry point:"
-  for e in "${unmoved[@]}"; do echo "  ${e%%|*}: ${e#*|}"; done
+
+if [ -n "$base" ]; then
+  if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+    echo "check-jev-entry: FAIL: base $base cannot be read here" >&2
+    exit 1
+  fi
+  if git cat-file -e "$base:$baseline" 2>/dev/null; then
+    basefile="$(mktemp)"
+    git show "$base:$baseline" >"$basefile"
+    for f in $(listed_files); do
+      now="$(listed_count "$f")"
+      was="$(awk -F'|' -v f="$f" '$0 !~ /^#/ && $1 == f { print $2 }' "$basefile")"
+      if [ -z "$was" ]; then
+        echo "check-jev-entry: $f is new on the list against $base; the list only shrinks." >&2
+        fail=1
+      elif [ "$now" -gt "$was" ]; then
+        echo "check-jev-entry: $f went from $was to $now direct Jev call sites against $base; the list only shrinks." >&2
+        fail=1
+      fi
+    done
+    rm -f "$basefile"
+  else
+    echo "check-jev-entry: $base has no list (first adoption); the head's list stands alone"
+  fi
 fi
-exit $fail
+
+if [ "$fail" -eq 0 ]; then
+  echo "check-jev-entry: ok. Sites not yet on the entry point, with calls per job:"
+  awk -F'|' '$0 !~ /^#/ && $3 ~ /^UNMOVED/ { printf "  %s (%s): %s\n", $1, $2, $3 }' "$baseline"
+fi
+exit "$fail"

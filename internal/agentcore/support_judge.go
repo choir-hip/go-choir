@@ -182,7 +182,16 @@ func (rt *Runtime) judgeSupportJobs(jobs []supportJob) {
 			}
 			claimed = append(claimed, keys)
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 3*supportJudgeCallTimeout+30*time.Second)
+		// Each call has its own deadline (supportJudgeCallTimeout); the pass has
+		// none, so a split into many calls never drops the tail. A stop cancels it.
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			select {
+			case <-rt.backgroundStop():
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
 		if err := rt.judgePendingSupportJobs(ctx, k.owner, k.computer, group, claimed); err != nil {
 			log.Printf("support judge: %d revisions: %v; their pairs stay pending for the next commit that cites them", len(group), err)
 		}

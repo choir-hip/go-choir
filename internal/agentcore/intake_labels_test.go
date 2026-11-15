@@ -569,6 +569,12 @@ func TestIntakeLabelsMapAliasesBackLabelSiblingsAndStayOutOfTheArrival(t *testin
 func TestIntakeLabelsFailingOrSlowJevLeavesCapturesUnlabelledWithinBudget(t *testing.T) {
 	prevCall := intakeLabelCallTimeout
 	intakeLabelCallTimeout = 100 * time.Millisecond
+	prevPerK := intakeLabelTimeoutPerKToken
+	intakeLabelTimeoutPerKToken = 0
+	t.Cleanup(func() { intakeLabelTimeoutPerKToken = prevPerK })
+	prevRetry := intakeRetryBackoff
+	intakeRetryBackoff = time.Millisecond
+	t.Cleanup(func() { intakeRetryBackoff = prevRetry })
 	t.Cleanup(func() { intakeLabelCallTimeout = prevCall })
 	for _, c := range []struct {
 		name  string
@@ -705,7 +711,7 @@ func mustLabels(t *testing.T, results []intakeLabelResult) []store.CaptureLabel 
 // B9, B1, B8: the batched path labels a poll exactly as one call per capture
 // does, given the same answers, over a window of one chunk and of two, with
 // per-capture title-overlap picks in the last chunk.
-func TestIntakeBatchEquivalentToPerCapture(t *testing.T) {
+func TestIntakeBatchSizeArgumentDoesNotChangeTheJob(t *testing.T) {
 	for _, stories := range []int{6, 100} {
 		t.Run(fmt.Sprintf("%d stories", stories), func(t *testing.T) {
 			rt, _ := testRuntime(t)
@@ -1380,6 +1386,12 @@ func TestIntakeLabelsLogOneLinePerPoll(t *testing.T) {
 	// A slow Jev that ends the budget still leaves the line.
 	prevCall := intakeLabelCallTimeout
 	intakeLabelCallTimeout = 100 * time.Millisecond
+	prevPerK := intakeLabelTimeoutPerKToken
+	intakeLabelTimeoutPerKToken = 0
+	t.Cleanup(func() { intakeLabelTimeoutPerKToken = prevPerK })
+	prevRetry := intakeRetryBackoff
+	intakeRetryBackoff = time.Millisecond
+	t.Cleanup(func() { intakeRetryBackoff = prevRetry })
 	t.Cleanup(func() { intakeLabelCallTimeout = prevCall })
 	g := newIntakeFixture(t, "owner-labels-pollline-slow")
 	g.enable(t)

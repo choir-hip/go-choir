@@ -124,11 +124,11 @@ func TestIntakeBoundFollowsTheTextNotTheByteCount(t *testing.T) {
 	_ = cc
 	// The same count of bytes: English is inside the vendor's budget and
 	// Cyrillic is not, so the bound follows the script, not the byte count.
-	en := strings.Repeat("the quick brown fox jumps over a lazy dog ", 1450)
-	ru := strings.Repeat("быстрая бурая лиса прыгает через ленивую ", 1450)
-	enState, _ := json.Marshal(map[string]string{"text": en[:56000]})
-	ruState, _ := json.Marshal(map[string]string{"text": string([]rune(ru)[:30000])})
-	if len(ruState) < len(enState)-1500 || len(ruState) > len(enState)+1500 {
+	en := strings.Repeat("the quick brown fox jumps over a lazy dog ", 1700)
+	ru := strings.Repeat("быстрая бурая лиса прыгает через ленивую ", 1700)
+	enState, _ := json.Marshal(map[string]string{"text": en[:66000]})
+	ruState, _ := json.Marshal(map[string]string{"text": string([]rune(ru)[:36000])})
+	if len(ruState) < len(enState)-2500 || len(ruState) > len(enState)+2500 {
 		t.Fatalf("O2: fixtures are %d and %d bytes; want the same count", len(enState), len(ruState))
 	}
 	if !jevbudget.Fits(enState, nil) {

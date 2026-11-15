@@ -130,8 +130,8 @@ func TestIntakeFlushBurstDuringACallGoesOutTogether(t *testing.T) {
 	for i, h := range handles {
 		waitClosed(t, fmt.Sprintf("capture %d", i+1), h)
 	}
-	if got, want := len(judge.labelCalls()), 1+(14+intakeCallCaptures-1)/intakeCallCaptures; got != want {
-		t.Fatalf("%d calls; want %d (the held one, then the burst in flushes of at most intakeFlushCaptures)", got, want)
+	if got, want := len(judge.labelCalls()), 2; got != want {
+		t.Fatalf("%d calls; want %d (the held one, then the whole burst in one)", got, want)
 	}
 	if got := judge.maxSeen.Load(); got != 1 {
 		t.Fatalf("F1: %d Jev calls in flight at once; want 1", got)
@@ -216,7 +216,10 @@ func TestIntakeFlushPollAnnouncesAfterLabelsAndEvenWhenTheCallFails(t *testing.T
 	}
 }
 
-func TestIntakeFlushFailedCallLeavesCapturesUnlabelledAndNothingRetries(t *testing.T) {
+func TestIntakeFlushFailedCallIsAskedOnceMoreThenLeavesCapturesUnlabelled(t *testing.T) {
+	prev := intakeRetryBackoff
+	intakeRetryBackoff = time.Millisecond
+	t.Cleanup(func() { intakeRetryBackoff = prev })
 	f := newIntakeFixture(t, "owner-flush-fail")
 	f.enable(t)
 	openTestStory(t, f.s, f.owner, f.computer, "Pope has lung surgery")
@@ -230,8 +233,8 @@ func TestIntakeFlushFailedCallLeavesCapturesUnlabelledAndNothingRetries(t *testi
 			t.Fatalf("F3: capture %d labelled by a failing Jev", i)
 		}
 	}
-	if got := judge.callCount(); got != 1 {
-		t.Fatalf("F3: %d calls; a failed capture is not retried", got)
+	if got := judge.callCount(); got != 2 {
+		t.Fatalf("F3: %d calls; a 429 is asked once more, then the captures are unlabelled", got)
 	}
 }
 

@@ -108,6 +108,8 @@ type jevCall struct {
 	Questions map[string]json.RawMessage
 	Decisions map[string]string
 	Names     []string
+	// Lo and Hi are the range of the job's questions this call carries.
+	Lo, Hi int
 }
 
 // build is the request for the questions names[lo:hi].
@@ -150,7 +152,7 @@ func (j *jevJob) build(lo, hi int) (jevCall, error) {
 	if err != nil {
 		return jevCall{}, err
 	}
-	c := jevCall{State: raw, Questions: map[string]json.RawMessage{}, Decisions: map[string]string{}, Names: append([]string(nil), j.names[lo:hi]...)}
+	c := jevCall{State: raw, Questions: map[string]json.RawMessage{}, Decisions: map[string]string{}, Names: append([]string(nil), j.names[lo:hi]...), Lo: lo, Hi: hi}
 	for _, name := range c.Names {
 		c.Questions[name] = j.questions[name]
 		c.Decisions[name] = j.decisions[name]
@@ -202,4 +204,44 @@ func (j *jevJob) Plan() ([]jevCall, error) {
 		return nil, fmt.Errorf("jev job %s: %d calls but %d named limits", j.site, len(calls), len(plan.Limits))
 	}
 	return calls, nil
+}
+
+// Halve splits a call at the unit boundary nearest its middle, for a request
+// the vendor refused for size although the estimate said it fit. It reports
+// false when the call is one unit and cannot be split.
+func (j *jevJob) Halve(c jevCall) ([]jevCall, bool) {
+	best, bestDist := -1, 1<<30
+	mid := (c.Lo + c.Hi) / 2
+	starts := j.starts
+	if len(starts) == 0 {
+		for i := range j.names {
+			starts = append(starts, i)
+		}
+	}
+	for _, b := range starts {
+		if b > c.Lo && b < c.Hi {
+			if d := abs(b - mid); d < bestDist {
+				best, bestDist = b, d
+			}
+		}
+	}
+	if best < 0 {
+		return nil, false
+	}
+	left, err := j.build(c.Lo, best)
+	if err != nil {
+		return nil, false
+	}
+	right, err := j.build(best, c.Hi)
+	if err != nil {
+		return nil, false
+	}
+	return []jevCall{left, right}, true
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }

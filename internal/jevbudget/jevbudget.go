@@ -32,14 +32,14 @@ const (
 	VendorMaxChoices = 255
 
 	// RequestBudgetTokens and QuestionBudgetTokens are what a caller may use:
-	// three quarters of each vendor limit. The estimate below is weighted
-	// above the measured tokenizer (it is never under the densest ratio we
-	// observed), so the quarter left over covers what the estimate cannot
-	// see, mainly JSON structure and rare scripts. The failure it avoids is
-	// not a degradation but a refusal: the vendor rejects the request and a
-	// whole group of captures stays unlabelled.
-	RequestBudgetTokens  = VendorRequestTokens * 3 / 4
-	QuestionBudgetTokens = VendorQuestionTokens * 3 / 4
+	// the vendor's limits themselves, so a split's logged limit is the
+	// vendor's. The estimate below is weighted above the measured tokenizer
+	// (it is never under the densest ratio we observed), and a request the
+	// vendor refuses for size is halved and asked again (the callers' refusal
+	// fallback, logged forced_by=vendor_refused), so no margin of ours decides
+	// a call count.
+	RequestBudgetTokens  = VendorRequestTokens
+	QuestionBudgetTokens = VendorQuestionTokens
 
 	// baseTokens is the intercept of the independent fit, input tokens =
 	// 412 + 0.224 x state characters + 0.210 x question characters
@@ -113,10 +113,9 @@ func Measure(state json.RawMessage, questions map[string]json.RawMessage) Estima
 	return Estimate{Request: total, WorstQuestion: baseTokens + s + worst}
 }
 
-// Fits reports whether the request is inside both budgets.
+// Fits reports whether the request is inside every vendor limit.
 func Fits(state json.RawMessage, questions map[string]json.RawMessage) bool {
-	e := Measure(state, questions)
-	return e.Request <= RequestBudgetTokens && e.WorstQuestion <= QuestionBudgetTokens
+	return Limit(state, questions) == ""
 }
 
 // The names of the limits a split can be forced by, as logged.
@@ -126,8 +125,15 @@ const (
 	LimitChoices  = "choices_255"
 )
 
-// Limit names the limit a request crosses, or "" when it fits.
+// Limit names the limit a request crosses, or "" when it fits: a choice
+// question with more than 255 options, the request total (64k tokens), then the
+// state plus one question (32k).
 func Limit(state json.RawMessage, questions map[string]json.RawMessage) string {
+	for _, q := range questions {
+		if MaxOptions(q) > VendorMaxChoices {
+			return LimitChoices
+		}
+	}
 	e := Measure(state, questions)
 	switch {
 	case e.Request > RequestBudgetTokens:
@@ -136,4 +142,18 @@ func Limit(state json.RawMessage, questions map[string]json.RawMessage) string {
 		return LimitQuestion
 	}
 	return ""
+}
+
+// MaxOptions is the number of options a choice question offers: the keys of
+// its criteria (the vendor reads the option set from them) or, for a question
+// that lists choices, those. Other questions offer none.
+func MaxOptions(question json.RawMessage) int {
+	var q struct {
+		Criteria map[string]json.RawMessage `json:"criteria"`
+		Choices  []json.RawMessage          `json:"choices"`
+	}
+	if json.Unmarshal(question, &q) != nil {
+		return 0
+	}
+	return max(len(q.Criteria), len(q.Choices))
 }

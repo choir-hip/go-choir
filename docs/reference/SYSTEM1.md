@@ -133,7 +133,7 @@ cannot paste evidence text.
 | Context per request / per question | 64k / 32k tokens; the per-question limit binds | [V] |
 | Long-context mode | direct: header `TypeSafe-Danger-Zone-Long-Context: true`, 262k tokens, same price, "slower and less accurate"; OpenRouter: "more than about 32,000 bytes of text" or any image | [V] |
 | Questions per request | no stated limit | [V] |
-| Choice options / score levels | 255 / 1 to 10 | [V]; a state may list more candidates than one question may offer, so intake offers a capture's stories in parts of 243 (255 less 11 siblings and `new`), every part a question over the same state (`intakeMaxStoryOptions`) C |
+| Choice options / score levels | 255 / 1 to 10 | [V]; a state may list more candidates than one question may offer, so intake offers a capture's options (stories, then every other capture) in parts of at most 252 (255 less 11 siblings and `new`), every part a question over the same state (`intakeMaxStoryOptions`) C |
 | Rate limits | per organisation, tokens/s and requests/s, 429 when exceeded, **no numbers published** | [V] |
 | Our request size bound (intake, event layer, support judge) | 75% of the vendor's limits: 48,000 tokens a request, 24,000 for the state plus one question, estimated by script from the text (`internal/jevbudget`); was 30,000 B / 24 KiB / 30,000 B | C |
 | Gateway body | 1 MiB | C |
@@ -178,8 +178,8 @@ counted 13 because it merged the router and classifier):
 
 | # | Site (`internal/...`) | Unit | Questions per call | Action rule |
 |---|---|---|---|---|
-| 1 | intake labels `agentcore/intake_labels.go:1188` (`askIntakeCall`; plan `:987`) | the whole flush, up to 12 captures, one call per state | 2 per capture per 243-story part: 24 for a window of up to 243 stories, split into more calls by captures when the estimate crosses the budget | max-p choice over parts and chunks, p stored |
-| 2 | event layer `event_layer.go:460` | up to 12 captures | 1 each | join at p>=0.92, tentative 0.5 to 0.92 |
+| 1 | intake labels `agentcore/intake_labels.go:1188` (`askIntakeCall`; plan `:987`) | every waiting capture, one job (`jevJob`), one call unless a vendor limit splits it | 2 per capture per 243-story part: 24 for a window of up to 243 stories, split into more calls by captures when the estimate crosses the budget | max-p choice over parts and chunks, p stored |
+| 2 | event layer `event_layer.go` | every queued capture of a flush (a flush runs 60 s after the first) | 1 each | join at p>=0.92, tentative 0.5 to 0.92 |
 | 3 | support judge `support_judge.go:369` | citation pairs of a revision | one per pair, uncapped | yes and p>=0.5 |
 | 4 | System 1 verb `system1_verb.go:286` | a desk's ask | up to 12 | returned with probabilities |
 | 5 | story analysis `story_analysis.go:355` | candidate stories | chunks of 12 | via 4 |
@@ -350,7 +350,7 @@ order they should change a decision.
     slices.** A question offers at most 255 options and the window is up to 480
     stories, so one question cannot list it. The slices of 15,000 bytes (about
     100 to 150 stories) kept each question under 255; the single state keeps the
-    stories once and puts them in questions of 243 each (`intakeMaxStoryOptions`)
+    stories once and puts a capture's options in questions of at most 252 each (`intakeOptionsMax`)
     C.
 
 ## 5. Patterns
@@ -391,7 +391,7 @@ The gallery of 13 bad/good pairs is at
   candidates once in `state`, name the handle in each question, keep criteria
   short and parallel.
 - Batch different items of one kind (support judge: all pairs of a revision;
-  event layer: up to 12 captures) and pack one unit's questions together
+  event layer: every waiting capture) and pack one unit's questions together
   (front importance: one story, 12 questions).
 - Questions answered per second per call in flight: about 11 at 2 per call, 42 at
   5 to 8 and 81 at 9 to 12 M.

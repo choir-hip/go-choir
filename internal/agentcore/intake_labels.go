@@ -70,26 +70,28 @@ var (
 	// changed by a commit with that number, not by a setting.
 	intakeLabelPrepBudget  = 15 * time.Second
 	intakeLabelCallTimeout = 5 * time.Second
+	// intakeLabelTimeoutPerKToken is added to the call's deadline for every
+	// thousand estimated request tokens. A deadline bounds how long we wait; it
+	// is not a limit on the call, so it grows with the request: a 48k-token,
+	// 300-question call waits about 53 s, a small one 5 s. The constant is a
+	// guess to be set from the gateway's upstream_ms for site=intake_labels.
+	intakeLabelTimeoutPerKToken = time.Second
+	// intakeRetryBackoff is the wait before a call that timed out or met a 429
+	// or a 5xx is asked once more.
+	intakeRetryBackoff = 2 * time.Second
 )
 
 const (
-	// intakeFlushCaptures is the most captures one flush takes from the
-	// queue, and one call carries: every waiting capture, up to what the
-	// vendor's 255 choices a question allow. An event question offers the
-	// poll's other captures (captures-1) and new beside the stories, so with
-	// intakeMinStoryOptions stories of room left that is 152 captures, 304
-	// questions. The only other bound on questions in a call is jevbudget's
-	// token limits (the vendor sets no maximum on questions). Past this a
-	// split is forced by the limit choices_255 and logged. Owner, 2026-11-15:
-	// as many questions in the same call as possible. Accuracy at large
-	// question counts is unmeasured (SYSTEM1.md rule 7): the shadow comparison
-	// (intake_shadow.go, cmd/intake-shadow) measures it; it is not a cap.
-	intakeMinStoryOptions = 100
-	intakeFlushCaptures   = jevbudget.VendorMaxChoices - intakeChoiceMargin - 1 - intakeMinStoryOptions
-	// intakeCallCaptures is the most captures one call carries: all of them.
-	intakeCallCaptures = intakeFlushCaptures
-	// intakeBatchCaptures is the count handed to labelPoll's grouping.
-	intakeBatchCaptures = intakeCallCaptures
+	// A flush takes every capture waiting for a computer, and the job asks all
+	// of them in one call; nothing of ours bounds captures or questions a
+	// call. jevJob.Plan splits only where a vendor token limit refuses the one
+	// call, and each split names its limit. The 255 choices a question takes
+	// bound one question's options, not the job: a capture's options are cut
+	// into parts of at most intakeOptionsMax (255 less new and a margin).
+	intakeOptionsMax = jevbudget.VendorMaxChoices - intakeChoiceMargin - 1
+	// intakeBatchCaptures is the old per-call batch size; the job ignores it.
+	// It only feeds the shadow comparison's old arm.
+	intakeBatchCaptures = 1 << 20
 	// Owner rules 2026-11-10 and 2026-11-12/15: put many questions in single
 	// calls over one context; Jev is not serial, and a call is never made to
 	// wait for another over a different state. The flush is a group commit with no timer: the first
@@ -423,7 +425,7 @@ func (rt *Runtime) runIntakeFlusher(ctx context.Context) {
 			l.mu.Unlock()
 			return
 		}
-		n := min(len(next.items), intakeFlushCaptures)
+		n := len(next.items)
 		held := append([]intakeHeld(nil), next.items[:n]...)
 		next.items = append([]intakeHeld(nil), next.items[n:]...)
 		owner, computer := next.owner, next.computer
@@ -483,7 +485,7 @@ func (rt *Runtime) stopIntakeLabels() {
 		l.flushes.Wait()
 		for _, h := range rest {
 			for len(h.items) > 0 && ctx.Err() == nil {
-				n := min(len(h.items), intakeFlushCaptures)
+				n := len(h.items)
 				func() {
 					defer resolveIntakeHeld(h.items[:n])
 					rt.labelHeld(ctx, h.owner, h.computer, h.items[:n])
@@ -723,62 +725,13 @@ func newIntakePoll(ctx context.Context, lib *intakeLibrary, items []sourcegraph.
 	return p, nil
 }
 
-// intakeSiblingOptions is how many other captures one capture's event
-// question offers: all of them in a flush of up to this many plus one, and in
-// a bigger flush the ones whose titles share the most words with it. It is a
-// reduction of the context, not a cap on calls or questions: every question of
-// a call reads the entries of its siblings, so offering all of 150 captures
-// would put 36k tokens in every question and cross the 32k limit; a capture
-// can be the same event as a handful of others, and those share words.
-const intakeSiblingOptions = 24
-
 func intakeSiblings(items []sourcegraph.CapturedItem, handles []string, i int) []string {
-	titles := make([]string, len(items))
-	for j, it := range items {
-		titles[j] = it.Title
-	}
+	// Every other capture of the poll is offered; none is trimmed.
 	var out []string
-	for _, j := range siblingIndexes(titles, i) {
-		out = append(out, handles[j])
-	}
-	return out
-}
-
-// siblingIndexes are the other captures capture i's question offers: all of
-// them when there are few, otherwise those whose titles share the most words.
-func siblingIndexes(titles []string, i int) []int {
-	var out []int
-	if len(titles)-1 <= intakeSiblingOptions {
-		for j := range titles {
-			if j != i {
-				out = append(out, j)
-			}
+	for j := range items {
+		if j != i {
+			out = append(out, handles[j])
 		}
-		return out
-	}
-	want := titleTokens(titles[i])
-	type scored struct{ j, score int }
-	var hits []scored
-	for j := range titles {
-		if j == i {
-			continue
-		}
-		score := 0
-		for w := range titleTokens(titles[j]) {
-			if want[w] {
-				score++
-			}
-		}
-		if score > 0 {
-			hits = append(hits, scored{j, score})
-		}
-	}
-	sort.SliceStable(hits, func(a, b int) bool { return hits[a].score > hits[b].score })
-	for _, h := range hits {
-		if len(out) == intakeSiblingOptions {
-			break
-		}
-		out = append(out, h.j)
 	}
 	return out
 }
@@ -833,6 +786,8 @@ type intakePart struct {
 	topicName    string
 	eventChoices []string
 	storyChoices []string
+	// siblingChoices are the other captures this part offers.
+	siblingChoices []string
 }
 
 // intakeCall is one Jev call: a chunk's stories (the state, sent once) and
@@ -847,6 +802,9 @@ type intakeCall struct {
 	state     json.RawMessage
 	questions map[string]json.RawMessage
 	decisions map[string]string
+	// halve splits the call in two for a request the vendor refused for size;
+	// nil for a call that cannot be split.
+	halve func() []intakeCall
 }
 
 func (c intakeCall) bytes() int {
@@ -1163,13 +1121,49 @@ func (rt *Runtime) labelPollWith(ctx context.Context, lib *intakeLibrary, ownerI
 	answers := make([][]intakeCallAnswer, len(items))
 	// The job's calls: one when it fits the vendor's limits. A split is forced
 	// by a named limit (logged by the job); its calls are sent one after
-	// another and neither queued nor fanned out as a remedy: the remedy is a
-	// smaller context.
+	// another, and the remedy for a split is a smaller context. One failed call
+	// does not lose the flush: a request the vendor refused for size is halved
+	// and asked again (forced_by=vendor_refused, with the vendor's reason), and
+	// a timeout, 429 or 5xx is asked once more after a backoff; what still fails
+	// is unlabelled and counted on the flush line.
+	type item struct {
+		call  intakeCall
+		tried bool
+	}
+	work := make([]item, 0, len(calls))
 	for _, c := range calls {
+		work = append(work, item{call: c})
+	}
+	for len(work) > 0 {
+		it := work[0]
+		work = work[1:]
+		c := it.call
 		var ans [][]intakeCallAnswer
 		err := ctx.Err()
 		if err == nil {
 			ans, err = rt.askIntakeCall(ctx, lib, c)
+		}
+		if err != nil && ctx.Err() == nil {
+			if jevSizeRefused(err) && c.halve != nil {
+				if halves := c.halve(); len(halves) > 1 {
+					log.Printf("jev split: site=intake_labels items=%d calls=%d forced_by=map[vendor_refused:1] reason=%q", len(c.questions), len(halves), err.Error())
+					next := make([]item, 0, len(halves)+len(work))
+					for _, h := range halves {
+						next = append(next, item{call: h})
+					}
+					work = append(next, work...)
+					continue
+				}
+			}
+			if jevTransient(err) && !it.tried {
+				log.Printf("intake labels: call of %d questions failed (%v); asking once more", len(c.questions), err)
+				select {
+				case <-time.After(intakeRetryBackoff):
+				case <-ctx.Done():
+				}
+				work = append([]item{{call: c, tried: true}}, work...)
+				continue
+			}
 		}
 		for a, ask := range c.asks {
 			if err != nil {
@@ -1258,7 +1252,7 @@ func (rt *Runtime) mergeIntakeAnswers(p *intakePoll, i int, label store.CaptureL
 // question count.
 func (rt *Runtime) askIntakeCall(ctx context.Context, lib *intakeLibrary, call intakeCall) ([][]intakeCallAnswer, error) {
 	meta := jevrecord.Meta{Site: "intake_labels", DecisionID: call.first, Scope: judgmentScopeIntakeLabels, QuestionDecisions: call.decisions}
-	raw, err := rt.judgeCall(ctx, meta, intakeLabelCallTimeout, call.state, call.questions)
+	raw, err := rt.judgeCall(ctx, meta, intakeCallTimeout(call), call.state, call.questions)
 	if err != nil {
 		return nil, err
 	}
@@ -1429,10 +1423,42 @@ func callJudgeWithin(ctx context.Context, judge CandidateJudge, scope string, ti
 	}
 }
 
-// intakeStoryOptions is the most stories one question offers when the poll
-// has captures captures: the vendor takes 255 choices a question, and an event
-// question also offers the other captures (captures-1) and new. A capture with
-// more candidates in a call is asked in parts, every part over the same state.
-func intakeStoryOptions(captures int) int {
-	return max(1, jevbudget.VendorMaxChoices-intakeChoiceMargin-max(captures, 1))
+// intakeCallTimeout is the call's deadline: the base plus the per-thousand-token
+// allowance for its estimated size.
+func intakeCallTimeout(call intakeCall) time.Duration {
+	est := jevbudget.Measure(call.state, call.questions).Request
+	return intakeLabelCallTimeout + time.Duration(est/1000)*intakeLabelTimeoutPerKToken
+}
+
+// jevSizeRefused reports whether the vendor or the gateway refused a request
+// for its size, although the estimate said it fit.
+func jevSizeRefused(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	for _, s := range []string{"413", "too large", "too long", "context length", "context window", "maximum context", "exceeds the", "token limit", "too many tokens"} {
+		if strings.Contains(msg, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// jevTransient reports a failure worth one more try: a deadline, a 429 or a
+// 5xx. Backing off after a provider's real refusal is allowed.
+func jevTransient(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	for _, s := range []string{"429", "rate limit", "rate_limit", "too many requests", "timeout", "timed out", "500", "502", "503", "504", "unavailable", "overloaded"} {
+		if strings.Contains(msg, s) {
+			return true
+		}
+	}
+	return false
 }

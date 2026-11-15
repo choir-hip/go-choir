@@ -46,10 +46,10 @@ func TestPlanJevCallsSplitsOnlyWhereALimitForcesItAndNamesIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// About 22 items fit under the 24k state-plus-question budget, so 100
-	// items are the fewest calls that cover them, in order and with no gap.
-	if len(plan.Ranges) < 5 || len(plan.Ranges) > 6 {
-		t.Fatalf("%d calls for 100k tokens under a 24k budget; the fewest is 5", len(plan.Ranges))
+	// About 30 items fit under the 32k state-plus-question limit, so 100 items
+	// are the fewest calls that cover them, in order and with no gap.
+	if len(plan.Ranges) < 3 || len(plan.Ranges) > 4 {
+		t.Fatalf("%d calls for 100k tokens under a 32k limit; the fewest is 4", len(plan.Ranges))
 	}
 	next := 0
 	for _, r := range plan.Ranges {

@@ -84,7 +84,7 @@ func TestJ4BothVendorLimitsBind(t *testing.T) {
 	// A big state and one tiny question: only the per-question limit binds,
 	// and the request total (one question) is the same size, so add a second
 	// question the request total sees but the per-question limit does not.
-	big := raw(strings.Repeat("word ", 18000)) // about 27k tokens: over the 24k question budget
+	big := raw(strings.Repeat("word ", 28000)) // about 42k tokens: over the 32k question limit
 	if Fits(big, map[string]json.RawMessage{"q": raw("which")}) {
 		t.Errorf("J4: a state over the per-question budget fits")
 	}
@@ -95,8 +95,8 @@ func TestJ4BothVendorLimitsBind(t *testing.T) {
 }
 
 func TestJ5BudgetLine(t *testing.T) {
-	if RequestBudgetTokens != VendorRequestTokens*3/4 || QuestionBudgetTokens != VendorQuestionTokens*3/4 {
-		t.Fatalf("J5: the margin is a quarter of each vendor limit")
+	if RequestBudgetTokens != VendorRequestTokens || QuestionBudgetTokens != VendorQuestionTokens {
+		t.Fatalf("J5: the budgets are the vendor's limits, with no margin of ours")
 	}
 	// 30,000 bytes of Latin prose (the old line) fits easily.
 	if !Fits(raw(strings.Repeat("a b c ", 5000)), map[string]json.RawMessage{"q": raw("which")}) {

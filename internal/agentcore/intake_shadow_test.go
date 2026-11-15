@@ -92,14 +92,3 @@ func TestIntakeShadowAgreementSeesADisagreementAndAnUnlabelledCapture(t *testing
 		t.Fatalf("H4: %+v", a)
 	}
 }
-
-// A flush is at most intakeFlushCaptures captures: an input with more would put
-// more than the vendor takes in a question and is refused, not planned.
-func TestIntakeShadowRefusesMoreCapturesThanAFlush(t *testing.T) {
-	if _, err := PlanIntakeShadow(shadowFlush(20, intakeFlushCaptures+1)); err == nil {
-		t.Fatal("a 13-capture input was planned")
-	}
-	if _, err := RunIntakeShadow(context.Background(), &fakeIntakeJudge{}, shadowFlush(20, intakeFlushCaptures+1)); err == nil {
-		t.Fatal("a 13-capture input was run")
-	}
-}

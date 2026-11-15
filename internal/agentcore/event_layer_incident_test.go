@@ -249,7 +249,7 @@ func TestEventLayerLinkChoicesAreBounded(t *testing.T) {
 	before := len(judge.calls)
 	judge.mu.Unlock()
 	var chunk []eventInput
-	for i := 0; i < eventFlushCaptures; i++ {
+	for i := 0; i < 12; i++ {
 		chunk = append(chunk, capItem(fmt.Sprintf("n%d", i), fmt.Sprintf("Storm aftermath %d coast recovery", i), fmt.Sprintf("https://new%d.example.net/%d", i, i), ""))
 	}
 	if _, err := rt.resolveEvents(ctx, owner, computer, chunk); err != nil {
