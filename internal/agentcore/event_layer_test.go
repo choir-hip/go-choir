@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/jevbudget"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 )
@@ -65,12 +66,14 @@ import (
 // eventJudge answers each capture question by title: target is an event
 // headline, a recent title of one, or another capture's title; "" is new.
 type eventJudge struct {
-	mu       sync.Mutex
-	answers  map[string]eventAnswer
-	omit     map[string]bool // capture titles whose answer is left out
-	calls    []map[string]any
-	asked    []map[string]json.RawMessage // each call's questions
-	bytes    []int
+	mu      sync.Mutex
+	answers map[string]eventAnswer
+	omit    map[string]bool // capture titles whose answer is left out
+	calls   []map[string]any
+	asked   []map[string]json.RawMessage // each call's questions
+	bytes   []int
+	// fits[i] is whether call i was inside the vendor's token budgets.
+	fits     []bool
 	delay    time.Duration
 	inFlight int
 	maxIn    int
@@ -112,6 +115,7 @@ func (j *eventJudge) JudgeScoped(_ context.Context, _ string, stateRaw json.RawM
 	j.calls = append(j.calls, generic)
 	j.asked = append(j.asked, questions)
 	j.bytes = append(j.bytes, total)
+	j.fits = append(j.fits, jevbudget.Fits(stateRaw, questions))
 	j.inFlight++
 	if j.inFlight > j.maxIn {
 		j.maxIn = j.inFlight
@@ -252,23 +256,23 @@ func TestEventLayerLowConfidenceMatchIsTentativeAndUncounted(t *testing.T) {
 	}
 }
 
-func TestEventLayerRetryIsIdempotentAndChunksSeeEarlierChunks(t *testing.T) {
+func TestEventLayerRetryIsIdempotentAndOneCallJoinsASiblingCapture(t *testing.T) {
 	judge := &eventJudge{answers: map[string]eventAnswer{}}
 	rt, owner, computer := eventRuntime(t, judge)
 	ctx := context.Background()
 	var inputs []eventInput
-	for i := 0; i < eventChunkSize+3; i++ {
+	for i := 0; i < 15; i++ {
 		inputs = append(inputs, capItem(fmt.Sprintf("x%d", i), fmt.Sprintf("Story number %d about topic", i), fmt.Sprintf("https://outlet%d.com/a", i), ""))
 	}
-	// The last capture reports the first chunk's first event.
+	// The last capture reports the first capture's event, in the same call.
 	judge.answers[inputs[len(inputs)-1].Item.Title] = eventAnswer{target: inputs[0].Item.Title}
 	r, err := rt.resolveEvents(ctx, owner, computer, inputs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// R2: two sequential calls; the second saw the first's events.
-	if r.Calls != 2 || len(r.Corroborated) != 1 {
-		t.Fatalf("report = %+v; want 2 calls and the cross-chunk join corroborating", r)
+	// R2: one call for all 15 captures; the sibling join corroborates.
+	if r.Calls != 1 || len(r.Corroborated) != 1 {
+		t.Fatalf("report = %+v; want 1 call and the sibling join corroborating", r)
 	}
 	// R3: resolving the same captures again writes nothing new.
 	again, err := rt.resolveEvents(ctx, owner, computer, inputs)
@@ -276,8 +280,8 @@ func TestEventLayerRetryIsIdempotentAndChunksSeeEarlierChunks(t *testing.T) {
 		t.Fatalf("retry: %+v %v; want no calls and no writes", again, err)
 	}
 	events, _ := rt.store.RecentWorldEvents(ctx, owner, computer, 100)
-	if len(events) != eventChunkSize+2 {
-		t.Fatalf("events = %d, want %d", len(events), eventChunkSize+2)
+	if len(events) != 14 {
+		t.Fatalf("events = %d, want 14", len(events))
 	}
 }
 
@@ -356,6 +360,13 @@ func TestEventLayerIndexRebuildsFromTheStore(t *testing.T) {
 	}
 }
 
+// R8 is a guard, not a proof of the split: with the vendor's token budget
+// (jevbudget) and the event layer's clips (eventSummaryRunes, 30 recent
+// candidates, 12 captures a chunk) a chunk's call does not reach the budget on
+// any input this layer can build (a twelve-capture chunk of dense-script
+// titles and summaries measured 86 to 93 KB and fit), so eventPrepareChunk's split,
+// summary drop and candidate drop are not exercised here. The test asserts
+// the bound on a long-summary fixture and fails if a clip is raised past it.
 func TestEventLayerKeepsEachCallUnderTheContextBound(t *testing.T) {
 	judge := &eventJudge{answers: map[string]eventAnswer{}}
 	rt, owner, computer := eventRuntime(t, judge)
@@ -369,9 +380,9 @@ func TestEventLayerKeepsEachCallUnderTheContextBound(t *testing.T) {
 	if _, err := rt.resolveEvents(context.Background(), owner, computer, fill); err != nil {
 		t.Fatal(err)
 	}
-	judge.bytes = nil
+	judge.bytes, judge.fits = nil, nil
 	var inputs []eventInput
-	for i := 0; i < eventChunkSize*2; i++ {
+	for i := 0; i < 24; i++ {
 		inputs = append(inputs, capItem(fmt.Sprintf("l%d", i), fmt.Sprintf("Long item %d", i), fmt.Sprintf("https://l%d.example.com/x", i), long))
 	}
 	r, err := rt.resolveEvents(context.Background(), owner, computer, inputs)
@@ -381,9 +392,12 @@ func TestEventLayerKeepsEachCallUnderTheContextBound(t *testing.T) {
 	if r.Unresolved != 0 || r.Minted != len(inputs) {
 		t.Fatalf("report = %+v", r)
 	}
-	for i, n := range judge.bytes { // R8
-		if n > eventStateMaxBytes {
-			t.Fatalf("call %d state and questions = %d bytes, over %d", i, n, eventStateMaxBytes)
+	if len(judge.fits) == 0 {
+		t.Fatal("no call was made")
+	}
+	for i, ok := range judge.fits { // R8
+		if !ok {
+			t.Fatalf("call %d state and questions = %d bytes, over the vendor's token budget", i, judge.bytes[i])
 		}
 	}
 }

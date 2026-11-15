@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/jevbudget"
 	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"log"
 	"math"
@@ -57,29 +58,26 @@ const candidateJudgmentModel = "~typesafe/jev-latest"
 
 // Budgets. Vars so a test can shorten them.
 var (
-	// supportJudgeConcurrency is the revisions judged at once on this
-	// computer: one. Revisions are separate contexts, the one case the owner
-	// allows concurrent Jev calls for, but not as plan A (2026-11-10); the
-	// waiting revisions queue and are judged in the order they arrived.
-	supportJudgeConcurrency = 1
 	supportJudgeCallTimeout = 90 * time.Second
 )
 
-// supportJudging is the runtime's support-judgement state: the semaphore
-// bounding concurrent jobs, the pairs in flight, the jobs running (for
-// tests and shutdown), and the legacy support_pairs records already handed
-// to Jev.
+// supportJudging is the runtime's support-judgement state: the revisions
+// waiting to be judged (a group commit: the first is asked at once, and the
+// ones that arrive during a call go out together in the next, one call over
+// every pair they cite), the jobs running (for tests and shutdown), and the
+// legacy support_pairs records already handed to Jev.
 type supportJudging struct {
-	once     sync.Once
-	sem      chan struct{}
-	inflight sync.Map
-	jobs     sync.WaitGroup
-	legacy   sync.Map
+	mu      sync.Mutex
+	queue   []supportJob
+	running bool
+	jobs    sync.WaitGroup
+	legacy  sync.Map
 }
 
-func (s *supportJudging) slots() chan struct{} {
-	s.once.Do(func() { s.sem = make(chan struct{}, supportJudgeConcurrency) })
-	return s.sem
+// supportJob is one committed revision's pairs, waiting to be judged.
+type supportJob struct {
+	owner, computer, runID, revisionID string
+	keys                               []string
 }
 
 // supportJudgeQuestion is the one typed question asked of each pair.
@@ -114,10 +112,14 @@ func (rt *Runtime) JudgeRevisionSupport(ownerID, computerID, runID, revisionID s
 	}
 	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
 	rt.support.jobs.Add(1)
-	go func() {
-		defer rt.support.jobs.Done()
-		rt.judgeSupportJob(ownerID, computerID, strings.TrimSpace(runID), strings.TrimSpace(revisionID), keys)
-	}()
+	rt.support.mu.Lock()
+	rt.support.queue = append(rt.support.queue, supportJob{owner: ownerID, computer: computerID, runID: strings.TrimSpace(runID), revisionID: strings.TrimSpace(revisionID), keys: keys})
+	start := !rt.support.running
+	rt.support.running = true
+	rt.support.mu.Unlock()
+	if start {
+		go rt.drainSupportJobs()
+	}
 }
 
 // WaitSupportJudgements waits for the support judgements started so far.
@@ -127,59 +129,99 @@ func (rt *Runtime) WaitSupportJudgements() {
 	}
 }
 
-func (rt *Runtime) judgeSupportJob(ownerID, computerID, runID, revisionID string, keys []string) {
-	slots := rt.support.slots()
-	// Wait for the slot as long as it takes: a queued revision is judged in
-	// its turn. Only the runtime stopping ends the wait, and then the pairs
-	// stay pending (restarts end work; nothing resumes it).
-	select {
-	case slots <- struct{}{}:
-	case <-rt.backgroundStop():
-		log.Printf("support judge: %s: the runtime is stopping; %d pairs stay pending for the next commit that cites them", revisionID, len(keys))
-		return
-	}
-	defer func() { <-slots }()
-
-	// Claim the pairs no other job is judging.
-	var claimed []string
-	for _, key := range keys {
-		flight := ownerID + "\x00" + computerID + "\x00" + key
-		if _, busy := rt.support.inflight.LoadOrStore(flight, struct{}{}); busy {
-			continue
+// drainSupportJobs judges the queued revisions, every revision waiting in one
+// call, until the queue is empty.
+func (rt *Runtime) drainSupportJobs() {
+	for {
+		rt.support.mu.Lock()
+		jobs := rt.support.queue
+		rt.support.queue = nil
+		if len(jobs) == 0 {
+			rt.support.running = false
+			rt.support.mu.Unlock()
+			return
 		}
-		claimed = append(claimed, key)
-		defer rt.support.inflight.Delete(flight)
-	}
-	if len(claimed) == 0 {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*supportJudgeCallTimeout+30*time.Second)
-	defer cancel()
-	if err := rt.judgePendingSupport(ctx, ownerID, computerID, runID, revisionID, claimed); err != nil {
-		log.Printf("support judge: %s: %v; its pairs stay pending for the next commit that cites them", revisionID, err)
+		rt.support.mu.Unlock()
+		func() {
+			defer func() {
+				for range jobs {
+					rt.support.jobs.Done()
+				}
+			}()
+			rt.judgeSupportJobs(jobs)
+		}()
 	}
 }
 
-// judgePendingSupport judges the listed, unjudged pairs among keys and
-// records their verdicts.
-func (rt *Runtime) judgePendingSupport(ctx context.Context, ownerID, computerID, runID, revisionID string, keys []string) error {
+// judgeSupportJobs judges the pairs of every job in one call per owner and
+// computer (a call never reads two owners' captures), then records each
+// revision's verdicts under its own command.
+func (rt *Runtime) judgeSupportJobs(jobs []supportJob) {
+	type scope struct{ owner, computer string }
+	var order []scope
+	groups := map[scope][]supportJob{}
+	for _, j := range jobs {
+		k := scope{j.owner, j.computer}
+		if _, ok := groups[k]; !ok {
+			order = append(order, k)
+		}
+		groups[k] = append(groups[k], j)
+	}
+	for _, k := range order {
+		group := groups[k]
+		// A pair cited by two revisions is asked once, for the first.
+		seen := map[string]bool{}
+		var claimed [][]string
+		for _, j := range group {
+			var keys []string
+			for _, key := range j.keys {
+				if !seen[key] {
+					seen[key] = true
+					keys = append(keys, key)
+				}
+			}
+			claimed = append(claimed, keys)
+		}
+		// Each call has its own deadline (supportJudgeCallTimeout); the pass has
+		// none, so a split into many calls never drops the tail. A stop cancels it.
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			select {
+			case <-rt.backgroundStop():
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+		if err := rt.judgePendingSupportJobs(ctx, k.owner, k.computer, group, claimed); err != nil {
+			log.Printf("support judge: %d revisions: %v; their pairs stay pending for the next commit that cites them", len(group), err)
+		}
+		cancel()
+	}
+}
+
+// judgePendingSupportJobs judges the listed, unjudged pairs of the jobs in one
+// call (the cost rides on the first job's run) and records each job's
+// verdicts under its own revision.
+func (rt *Runtime) judgePendingSupportJobs(ctx context.Context, ownerID, computerID string, jobs []supportJob, keys [][]string) error {
 	ctx = withKindReader(ctx, "choir.support_verdict")
 	var pending []types.SupportVerdict
-	for _, key := range keys {
-		if _, judged, err := rt.store.SupportVerdict(ctx, ownerID, computerID, key); err != nil {
-			return err
-		} else if judged {
-			continue
+	for _, jobKeys := range keys {
+		for _, key := range jobKeys {
+			if _, judged, err := rt.store.SupportVerdict(ctx, ownerID, computerID, key); err != nil {
+				return err
+			} else if judged {
+				continue
+			}
+			check, listed, err := rt.store.CitationCheck(ctx, ownerID, computerID, key)
+			if err != nil {
+				return err
+			}
+			if !listed {
+				continue
+			}
+			pair := check.Pair
+			pending = append(pending, types.SupportVerdict{Key: key, Pair: &pair})
 		}
-		check, listed, err := rt.store.CitationCheck(ctx, ownerID, computerID, key)
-		if err != nil {
-			return err
-		}
-		if !listed {
-			continue
-		}
-		pair := check.Pair
-		pending = append(pending, types.SupportVerdict{Key: key, Pair: &pair})
 	}
 	if len(pending) == 0 {
 		return nil
@@ -187,10 +229,38 @@ func (rt *Runtime) judgePendingSupport(ctx context.Context, ownerID, computerID,
 	if rt.candidateJudge == nil {
 		return fmt.Errorf("no decision model (Jev) is bound on this computer")
 	}
+	runID := ""
+	for _, j := range jobs {
+		if j.runID != "" {
+			runID = j.runID
+			break
+		}
+	}
 	judged, err := rt.askJevForSupport(ctx, ownerID, runID, pending)
 	if err != nil {
 		return err
 	}
+	var firstErr error
+	for n, job := range jobs {
+		mine := map[string]bool{}
+		for _, key := range keys[n] {
+			mine[key] = true
+		}
+		var verdicts []types.SupportVerdict
+		for _, v := range judged {
+			if mine[v.Key] {
+				verdicts = append(verdicts, v)
+			}
+		}
+		if err := rt.recordSupportVerdicts(ctx, ownerID, computerID, job.revisionID, verdicts); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+// recordSupportVerdicts commits one revision's verdicts.
+func (rt *Runtime) recordSupportVerdicts(ctx context.Context, ownerID, computerID, revisionID string, judged []types.SupportVerdict) error {
 	if len(judged) == 0 {
 		return nil
 	}
@@ -205,6 +275,7 @@ func (rt *Runtime) judgePendingSupport(ctx context.Context, ownerID, computerID,
 		CommandID: "support-judge:" + revisionID + ":" + hex.EncodeToString(sum[:8]),
 		Judge:     types.SupportSystemAgentID, Verdicts: judged,
 	}
+	var err error
 	if req.CommandDigest, err = store.ComputeCommitInboxRecordsDigest(req); err != nil {
 		return err
 	}
@@ -359,8 +430,8 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 	if len(questions) == 0 {
 		return nil, nil
 	}
-	// One call per revision, or, when the pairs are over the byte bound,
-	// several calls one after another (never at once; owner, 2026-11-10).
+	// One call for every pair of the pass, or, when the pairs are over the
+	// token budget, the fewest calls that carry them.
 	ordered := make([]string, 0, len(names))
 	for name := range names {
 		ordered = append(ordered, name)
@@ -369,11 +440,17 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 	sizes := make(map[string]int, len(ordered))
 	for _, name := range ordered {
 		pj, _ := json.Marshal(pairs[name])
-		sizes[name] = len(pj) + len(questions[name]) + len(name) + 8
+		sizes[name] = jevbudget.Tokens(pj) + jevbudget.Tokens(questions[name]) + jevbudget.Tokens([]byte(name)) + 4
 	}
 	var judged []types.SupportVerdict
 	var firstErr error
-	for _, batch := range splitSupportBatches(ordered, sizes) {
+	// One call carries every pair; the batches are only the split the vendor's
+	// per-question limit forces (splitSupportBatches), logged with the limit.
+	batches := splitSupportBatches(ordered, sizes)
+	if len(batches) > 1 {
+		log.Printf("jev split: site=support_judge items=%d calls=%d forced_by=%v", len(ordered), len(batches), map[string]int{jevbudget.LimitQuestion: len(batches) - 1})
+	}
+	for _, batch := range batches {
 		got, err := rt.askJevForSupportBatch(ctx, owner, runID, pending, names, batch, pairs, questions)
 		if err != nil {
 			// A failed call leaves its own pairs pending; the batches before
@@ -392,21 +469,23 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 	return judged, nil
 }
 
-// supportRequestMaxBytes is the most one support call's state and questions
-// may hold: the same line intake uses (Jev's long-context mode starts above
-// about 32,000 bytes and is slower and less accurate).
-const supportRequestMaxBytes = 30000
+// supportEnvelopeTokens is the task text and the envelope of a support call.
+const supportEnvelopeTokens = 400
 
-// splitSupportBatches packs names, in order, into batches of at most
-// supportRequestMaxBytes (a lone over-size pair is its own batch).
+// splitSupportBatches packs names, in order, into batches whose pairs and
+// questions, sizes in estimated tokens, stay inside the vendor's per-question
+// budget (the state of a support call is its pairs, so that limit binds; the
+// request total is larger). It replaced a 30,000-byte guard that came from
+// OpenRouter's long-context line. A lone over-size pair
+// is its own batch.
 func splitSupportBatches(ordered []string, sizes map[string]int) [][]string {
 	var batches [][]string
 	var cur []string
-	total := 1000 // the task text and the envelope
+	total := supportEnvelopeTokens
 	for _, name := range ordered {
-		if len(cur) > 0 && total+sizes[name] > supportRequestMaxBytes {
+		if len(cur) > 0 && total+sizes[name] > jevbudget.QuestionBudgetTokens {
 			batches = append(batches, cur)
-			cur, total = nil, 1000
+			cur, total = nil, supportEnvelopeTokens
 		}
 		cur = append(cur, name)
 		total += sizes[name]

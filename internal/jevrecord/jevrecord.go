@@ -31,7 +31,10 @@ const (
 	Schema = "choir.jev_call.v1"
 	// MaxRecordBytes bounds one record; a larger one sheds its excerpts,
 	// then its trailing answers.
-	MaxRecordBytes = 8 << 10
+	// 32 KiB: an intake call carries up to 24 questions, and the answers of the
+	// big calls are what the accuracy comparison reads. The log is bounded by
+	// MaxFileBytes and KeepFiles, not by the record.
+	MaxRecordBytes = 32 << 10
 	// MaxFileBytes and KeepFiles bound the log: at most KeepFiles files of
 	// MaxFileBytes each.
 	MaxFileBytes = 32 << 20

@@ -397,10 +397,27 @@ func (e *gatewayHTTPStatusError) Transient() bool {
 		return false
 	}
 	code := e.status
-	if len(code) >= 3 && code[3] == ' ' {
+	if len(code) > 3 && code[3] == ' ' {
 		code = code[:3]
 	}
 	return code == "429" || (len(code) == 3 && code[0] == '5')
+}
+
+// StatusCode is the HTTP status the gateway returned, or 0 when it cannot be
+// read. A caller that must tell a deterministic refusal (400) from one a
+// smaller request cures (413) reads it.
+func (e *gatewayHTTPStatusError) StatusCode() int {
+	if e == nil || len(e.status) < 3 {
+		return 0
+	}
+	n := 0
+	for _, c := range e.status[:3] {
+		if c < '0' || c > '9' {
+			return 0
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
 }
 
 func gatewayStatusError(status string, body []byte) error {
