@@ -455,6 +455,8 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         }
         start(at: max(i - 1, 0))
     }
+    /// Scaffolding (round 2 tests first): replaced by the real hand-over.
+    public func handOver(_ d: ProgrammeDocument) {}
     /// The segment now playing; nil for a single article.
     public var currentSegmentIndex: Int? { st.read { $0.document.segmentIndex(containingBlock: $0.blockIndex) } }
     /// Go to the first block of segment `i`. Outside the list: nothing.

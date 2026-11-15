@@ -26,9 +26,10 @@ final class RepairTrackerTests: XCTestCase {
         let (t, s) = make()
         for u in 0..<3 { t.unitBegan(u, in: d); t.unitEnded(u, played: true, in: d) }
         XCTAssertEqual(s.kinds.last, .finished)
+        // Round 2 (S1): begun again at or before the unit it closed on, the last block is a seek, which is a play: it is reported again.
         let n = s.events.count
         t.unitBegan(2, in: d); t.unitEnded(2, played: true, in: d)
-        XCTAssertEqual(s.events.count, n, "no second segmentBegan or finished for the same segment")
+        XCTAssertEqual(Array(s.kinds[n...]), [.segmentBegan, .blockBegan, .finished])
         t.unitBegan(3, in: d)                                              // another segment begins
         XCTAssertEqual(s.kinds.suffix(2), [.segmentBegan, .blockBegan])
         let m = s.events.count
