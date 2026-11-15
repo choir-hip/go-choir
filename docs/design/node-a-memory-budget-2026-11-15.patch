@@ -1,0 +1,178 @@
+--- a/infra/node-a/choir-agents.nix
++++ b/infra/node-a/choir-agents.nix
+@@ -37,12 +37,15 @@
+   proxyUrl = "http://${subnet}.1:3128";
+   tmpDir = "/home/agent/.tmp";
+   stateDir = "/var/lib/microvms/${name}";
+-  # 10 GiB beside the workstations' 18: 28 of the host's 31 (owner,
+-  # 2026-10-21). The workstations idle far below their 18, and if memory runs
+-  # out the OOM killer picks the largest guest, this one. CPU is shared: the
+-  # workstations sit near idle.
++  # 4 GiB while the runner holds 10 (memory-budget.nix: the configured sum
++  # must fit the host, because guest memory is never given back; 2026-11-14).
++  # Measured on the runner that night: the agentcore race suite's test
++  # binary 0.7 to 1.2 GiB, a builder's compile beside it 1.7 GiB, 3.0 GiB of
++  # anonymous memory at peak; so 4 GiB holds one heavy job at a time. When
++  # the runner is next idle and restarted, the two are meant to be 6 GiB
++  # each. CPU is shared: the workstations sit near idle.
+   vcpu = 8;
+-  mem = 10240;
++  mem = 4096;
+   homeMiB = 131072;
+   ownerKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILN3IIn6TzBBExWiJTJ7aDlA/LlEMXvjFlSfkKkV02TZ wiz@choiros-ovh";
+ 
+--- a/infra/node-a/choir-runner.nix
++++ b/infra/node-a/choir-runner.nix
+@@ -25,8 +25,9 @@
+   proxyUrl = "http://${subnet}.1:3128";
+   tmpDir = "/home/agent/.tmp";
+   stateDir = "/var/lib/microvms/${name}";
+-  # The agents VM's size, so a suite that fits there fits here. With it the
+-  # host is overcommitted by about 1 GiB (workstations.nix).
++  # Unchanged on 2026-11-14 because it was running landings; its 10 GiB is
++  # resident until it restarts. memory-budget.nix holds the sum of all VMs
++  # under the host's RAM; the agents VM gives way meanwhile.
+   vcpu = 8;
+   mem = 10240;
+   homeMiB = 65536;
+--- a/infra/node-a/configuration.nix
++++ b/infra/node-a/configuration.nix
+@@ -20,6 +20,8 @@
+     # A scratch VM where Claude Code works on go-choir (owner, 2026-10-21).
+     ./choir-agents.nix
+     ./choir-runner.nix
++    # Every VM's configured memory must fit the host (2026-11-14).
++    ./memory-budget.nix
+   ];
+ 
+   boot.loader.efi.canTouchEfiVariables = true;
+--- a/infra/node-a/memory-budget.nix
++++ b/infra/node-a/memory-budget.nix
+@@ -0,0 +1,111 @@
++# node-a memory budget (Choir owner, 2026-11-14, after the 06:42Z kill of the
++# agents VM; go-choir docs/problems/node-a-oom-killed-the-agents-build-vm-2026-11-14.md).
++#
++# What a guest costs here. Guest RAM is a shared memfd (chv-shared-memory.nix),
++# so every page a guest touches is host shmem: with no swap the host cannot
++# reclaim it, and a Linux guest touches all of its RAM as page cache within one
++# heavy run and never gives it back (no balloon). A guest's configured size is
++# therefore a commitment, not an average, and the only safe rule is
++#
++#   sum of the configured memory of every VM that starts + host reserve <= RAM.
++#
++# The assertion below makes that rule part of the build: a configuration that
++# would overcommit the host does not evaluate. The reserve is what node-a runs
++# outside the guests (measured in the kernel's report at the 06:42Z kill: 2.5 GiB
++# anonymous, about 0.6 GiB kernel, 0.8 GiB tmpfs), plus about 1 GiB of page cache
++# so the host does not thrash.
++#
++# Two backstops for what the reserve does not cover (Node B's remote builds,
++# Mike's container builds): a small zram swap as a cushion, so a burst becomes
++# slowness instead of a kill, and an OOM order, so that if the kernel must still
++# kill, it kills a Node B build first, then a Choir VM, and never one of Mike's
++# workstations. Mike's workstations are also kept out of swap entirely.
++#
++# Rollback: drop ./memory-budget.nix from configuration.nix and rebuild
++# (test, fresh login, switch). The guard's runtime settings last until the next
++# reboot or until `systemctl revert` of the units named below; nothing in a
++# guest changes.
++{ config, lib, pkgs, ... }:
++
++let
++  # MemTotal on node-a, 32630604 kB.
++  hostMiB = 31865;
++  reserveMiB = 5120;
++
++  vms = config.microvm.vms;
++  started = lib.filter (n: vms.${n}.autostart) (lib.attrNames vms);
++  memOf = n: vms.${n}.config.config.microvm.mem;
++  guestMiB = lib.foldl' (sum: n: sum + memOf n) 0 started;
++  budgetLine = lib.concatMapStringsSep ", " (n: "${n} ${toString (memOf n)}") started;
++
++  # Mike's workstations: never the OOM victim, never swapped.
++  mikeVms = lib.filter (n: lib.hasPrefix "ws-" n) started;
++  # Choir's VMs: the victims, scratch first.
++  choirOom = { agents = 500; runner = 300; };
++
++  guard = pkgs.writeShellApplication {
++    name = "node-a-memory-guard";
++    runtimeInputs = [ pkgs.systemd pkgs.coreutils ];
++    text = ''
++      # Idempotent; runs at boot and every minute, so a VM that restarts gets
++      # its settings back within a minute. Prints only what it changes.
++      adj() { # unit value
++        local pid cur
++        pid=$(systemctl show -p MainPID --value "$1" 2>/dev/null || echo 0)
++        [ "''${pid:-0}" -gt 0 ] || return 0
++        cur=$(cat "/proc/$pid/oom_score_adj" 2>/dev/null) || return 0
++        [ "$cur" = "$2" ] && return 0
++        echo "$2" >"/proc/$pid/oom_score_adj" && echo "$1 (pid $pid): oom_score_adj $cur -> $2"
++      }
++      noswap() { # unit
++        systemctl is-active -q "$1" || return 0
++        [ "$(systemctl show -p MemorySwapMax --value "$1")" = 0 ] && return 0
++        systemctl set-property --runtime "$1" MemorySwapMax=0 && echo "$1: MemorySwapMax=0"
++      }
++      for vm in ${lib.escapeShellArgs mikeVms}; do
++        adj "microvm@$vm.service" -1000
++        noswap "microvm@$vm.service"
++      done
++      ${lib.concatStrings (lib.mapAttrsToList (vm: v: lib.optionalString (lib.elem vm started) ''
++        adj "microvm@${vm}.service" ${toString v}
++      '') choirOom)}
++      # Node B's remote builds run under nix-daemon; its children inherit this
++      # at fork, so a build dies before any VM.
++      adj nix-daemon.service 800
++    '';
++  };
++in
++{
++  assertions = [{
++    assertion = guestMiB + reserveMiB <= hostMiB;
++    message = ''
++      node-a memory budget: the VMs that start are configured for ${toString guestMiB} MiB
++      (${budgetLine}); with the ${toString reserveMiB} MiB host reserve that is more than
++      the host's ${toString hostMiB} MiB. Guest memory is never given back, so this would
++      end in an out-of-memory kill (memory-budget.nix). Shrink or park a VM.
++    '';
++  }];
++
++  # A cushion, not capacity: at most about 4.7 GiB of compressed pages, used only
++  # under pressure. Mike's workstations are excluded by the guard (swap max 0).
++  zramSwap = {
++    enable = true;
++    algorithm = "zstd";
++    memoryPercent = 15;
++  };
++
++  systemd.services.node-a-memory-guard = {
++    description = "Keep Mike's workstations out of the OOM killer's reach and out of swap";
++    after = [ "microvms.target" "nix-daemon.service" ];
++    wantedBy = [ "multi-user.target" ];
++    serviceConfig = {
++      Type = "oneshot";
++      ExecStart = "${guard}/bin/node-a-memory-guard";
++    };
++  };
++  systemd.timers.node-a-memory-guard = {
++    description = "Re-apply the memory guard after any VM restart";
++    wantedBy = [ "timers.target" ];
++    timerConfig = { OnBootSec = "1min"; OnUnitActiveSec = "1min"; AccuracySec = "10s"; };
++  };
++}
+--- a/infra/node-a/workstations.nix
++++ b/infra/node-a/workstations.nix
+@@ -27,9 +27,10 @@
+   # ws-owner belongs to the owner (WORKSTATION_USER_IDS); ws-01 and up are the
+   # pool the backend hands out, one per account (WORKSTATION_POOL in
+   # staging.nix, recorded in workstation_assignments). Memory (owner,
+-  # 2026-11-14): 6 + 2 x 3 GiB running here, 10 for the Choir agents VM
+-  # (choir-agents.nix) and 10 for the Choir runner VM (choir-runner.nix): 32
+-  # of the host's 31, overcommitted on purpose while Mike is paused.
++  # 2026-11-14): 6 + 2 x 3 GiB running here. The Choir VMs (choir-agents.nix,
++  # choir-runner.nix) take what is left; memory-budget.nix refuses any
++  # configuration whose VMs add up to more than the host (the overcommit of
++  # the morning of 2026-11-14 ended in an out-of-memory kill).
+   workstations = {
+     ws-owner = { index = 1; vcpu = 4; mem = 6144; homeMiB = 65536; directEgress = false; };
+   } // poolVms;
