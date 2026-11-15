@@ -344,10 +344,7 @@ func rematerializeSeededWithFrontend(t *testing.T, computerID string) (*Runtime,
 	if report.BaseSequence != 1 {
 		t.Fatalf("probe snapshot = %d, want 1", report.BaseSequence)
 	}
-	witness, err := selfdevprotocol.WitnessFromObservationSets(report.Live, report.Replay, report.Result)
-	if err != nil {
-		t.Fatal(err)
-	}
+	witness := boundWitness(t, rt, computerID)
 	checkpoint := rematerializeTestCheckpoint(t, computerID, witness, targetDigest, targetIdentity, acceptedHead)
 	fake, ok := rt.restoreTape.(*restoreTapeFake)
 	if !ok {

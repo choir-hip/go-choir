@@ -80,3 +80,18 @@ rows left by the 21:46:09Z restart, when d@e applied its own layered release.
 A builder lane (`lane/event-index-diff`) is writing the tests for both, the
 fix for the first, and a per-row diff of the index in the probe report with
 the object-graph samples read in the snapshot.
+
+## Residual corrected (lane/restore-witness, review round 1)
+
+The lane's first reading, that the stored witness stayed strict so a checkpoint
+still verified against the live store, was wrong about where the disagreement
+is. It is the restore gate, not only the bind: a restore replays the tail with
+the new `Prepare` (`[]`) onto a base whose rows may hold `null`, and compares
+with the strict digest a checkpoint recorded; and the trim backlog differs
+between a live store, a base snapshot and a staged store whose own catch-up has
+not run. Both are repaired by the canonical witness, witness version 4, which
+the bind records and the restore recomputes and which the probe uses on both
+sides (see `restore-cannot-finish-inside-its-ten-minute-request-2026-11-14.md`,
+the canonical witness section). Cold recovery (`autoputer/projection_base.go`
+installs a snapshot, then replays a tail with no witness gate) is the likely
+producer of `null` rows, read from code. Whether d@e holds any is unread.

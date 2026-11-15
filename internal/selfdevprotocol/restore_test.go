@@ -72,7 +72,7 @@ func TestWitnessFromObservationSetsRefusesLiveOnlyRowsAndOutOfScopeStores(t *tes
 	live := observationSet("choir", "agents", "a", "b")
 	replay := live
 	equivalent := computerversion.EquivalenceResult{Status: computerversion.EquivalenceEquivalent}
-	witness, err := WitnessFromObservationSets(live, replay, equivalent)
+	witness, err := witnessFromObservationSets(live, replay, equivalent)
 	if err != nil {
 		t.Fatalf("equivalent VM-local observations refused: %v", err)
 	}
@@ -83,12 +83,12 @@ func TestWitnessFromObservationSetsRefusesLiveOnlyRowsAndOutOfScopeStores(t *tes
 	mismatched := computerversion.EquivalenceResult{Status: computerversion.EquivalenceNotEquivalent, Differences: []computerversion.Difference{{
 		Kind: computerversion.ObservationDoltHead, Key: "sqlite:choir:table:agents", Left: "live-only", Right: "", Reason: "live-only row",
 	}}}
-	if _, err := WitnessFromObservationSets(live, observationSet("choir", "agents", "a", "c"), mismatched); err == nil {
+	if _, err := witnessFromObservationSets(live, observationSet("choir", "agents", "a", "c"), mismatched); err == nil {
 		t.Fatal("witness accepted live-only behavior-bearing rows")
 	}
 
 	platform := observationSet("platform", "computers", "a", "b")
-	if _, err := WitnessFromObservationSets(platform, platform, equivalent); err == nil {
+	if _, err := witnessFromObservationSets(platform, platform, equivalent); err == nil {
 		t.Fatal("witness accepted platform store observations")
 	}
 }

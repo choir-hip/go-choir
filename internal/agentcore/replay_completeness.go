@@ -21,30 +21,40 @@ import (
 // failure, not a clean replay result.
 var ErrReplayCompletenessUnavailable = errors.New("replay completeness probe unavailable")
 
-const replayCompletenessSchemaVersion = 4
+// replayCompletenessSchemaVersion 5 added event_index (the row diff of
+// computer_event_index), made the probe digest read the index in the canonical
+// witness form (without its trim backlog, a null pin list as "[]"), and moved
+// the object graph diagnostic's live rows into the pinned snapshot.
+const replayCompletenessSchemaVersion = 5
 
 // ReplayCompletenessReport is the read-only evidence returned by the product
 // replay probe. Replay state is built in a disposable SQLite store; the live
 // runtime store is only observed.
 type ReplayCompletenessReport struct {
-	SchemaVersion      int                               `json:"schema_version"`
-	ComputerID         string                            `json:"computer_id"`
-	CapturedAt         string                            `json:"captured_at"`
-	LiveHead           *computerevent.Head               `json:"live_head"`
-	ReplayHead         *computerevent.Head               `json:"replay_head"`
-	Live               computerversion.ObservationSet    `json:"live"`
-	Replay             computerversion.ObservationSet    `json:"replay"`
-	Result             computerversion.EquivalenceResult `json:"result"`
-	Eligibility        ReplayEligibility                 `json:"eligibility"`
-	ProbeDigest        string                            `json:"probe_digest"`
-	RunMemory          ReplayRunMemoryComparison         `json:"run_memory"`
-	ObjectGraph        *ReplayObjectGraphComparison      `json:"object_graph,omitempty"`
-	DepositMode        string                            `json:"deposit_mode,omitempty"`
-	BaseSequence       uint64                            `json:"base_sequence"`
-	BaseBlobSHA256     string                            `json:"base_blob_sha256"`
-	TailTargetSequence uint64                            `json:"tail_target_sequence"`
-	TailEventsApplied  int                               `json:"tail_events_applied"`
-	TailPagesFetched   int                               `json:"tail_pages_fetched"`
+	SchemaVersion int                               `json:"schema_version"`
+	ComputerID    string                            `json:"computer_id"`
+	CapturedAt    string                            `json:"captured_at"`
+	LiveHead      *computerevent.Head               `json:"live_head"`
+	ReplayHead    *computerevent.Head               `json:"replay_head"`
+	Live          computerversion.ObservationSet    `json:"live"`
+	Replay        computerversion.ObservationSet    `json:"replay"`
+	Result        computerversion.EquivalenceResult `json:"result"`
+	Eligibility   ReplayEligibility                 `json:"eligibility"`
+	ProbeDigest   string                            `json:"probe_digest"`
+	RunMemory     ReplayRunMemoryComparison         `json:"run_memory"`
+	ObjectGraph   *ReplayObjectGraphComparison      `json:"object_graph,omitempty"`
+	// EventIndex is present only when the result is not equivalent and the
+	// event index differs row by row.
+	EventIndex *ReplayEventIndexComparison `json:"event_index,omitempty"`
+	// DiagnosticsSkipped names a row diagnostic left out for its size
+	// (store.DiagnosticTooLargeError); the verdict does not depend on it.
+	DiagnosticsSkipped []string `json:"diagnostics_skipped,omitempty"`
+	DepositMode        string   `json:"deposit_mode,omitempty"`
+	BaseSequence       uint64   `json:"base_sequence"`
+	BaseBlobSHA256     string   `json:"base_blob_sha256"`
+	TailTargetSequence uint64   `json:"tail_target_sequence"`
+	TailEventsApplied  int      `json:"tail_events_applied"`
+	TailPagesFetched   int      `json:"tail_pages_fetched"`
 }
 
 // ReplayRunMemoryComparison summarizes row-level run-memory projection drift
@@ -211,9 +221,11 @@ func differingReplayRunMemoryFields(live, replay map[string]string) []string {
 
 // ReplayCompleteness performs the effects Definition's pre-drop measurement.
 // It reconstructs the canonical event chain into a fresh workspace, hashes
-// that projection and the live store through SQLiteStateExtractor, and
-// returns the exact deterministic diff. No event is appended and the live
-// store is never used as the replay projection.
+// that projection and the live store through SQLiteStateExtractor in the
+// canonical witness form (canonicalWitnessExtractor: the form a checkpoint
+// records and a restore recomputes, so equivalent here is a witness that
+// restore can match), and returns the exact deterministic diff. No event is
+// appended and the live store is never used as the replay projection.
 func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (ReplayCompletenessReport, error) {
 	probe, err := rt.openReplayProbe(ctx, computerID)
 	if err != nil {
@@ -302,10 +314,19 @@ func (rt *Runtime) openReplayProbe(ctx context.Context, computerID string) (_ *r
 		liveHead      *computerevent.Head
 		live          computerversion.ObservationSet
 		liveRunMemory []choirstore.RunMemoryEntryFingerprint
-		version       computerversion.ComputerVersion
+		// The diagnostic rows of the pinned snapshot, read in the hook and
+		// used only when the result is not equivalent.
+		liveObjects       []choirstore.ObjectGraphFingerprint
+		liveObjectsErr    error
+		liveEventIndex    []choirstore.EventIndexFingerprint
+		liveEventIndexOff int
+		liveEventIndexErr error
+		version           computerversion.ComputerVersion
 	)
-	extractor := replayStateExtractor(rt.store.ReadDB())
-	extractor.SnapshotHook = func(ctx context.Context, tx *sql.Tx) error {
+	// The live digests are the canonical witness form at the trim boundary of
+	// the pinned head (canonicalSnapshotDigests sets the filter after the
+	// hook has read the head, in the same snapshot).
+	liveDigests, _, err := canonicalSnapshotDigests(ctx, rt.store.ReadDB(), func(ctx context.Context, tx *sql.Tx) (uint64, error) {
 		if err := rt.eventAppender.HoldAppends(func() error {
 			var err error
 			if liveHead, err = rt.store.HeadTx(ctx, tx, computerID); err != nil {
@@ -313,16 +334,23 @@ func (rt *Runtime) openReplayProbe(ctx context.Context, computerID string) (_ *r
 			}
 			return nil
 		}); err != nil {
-			return err
+			return 0, err
 		}
 		version = replayCompletenessVersion(rt, liveHead)
 		var err error
 		if liveRunMemory, err = rt.store.ListRunMemoryEntryFingerprintsTx(ctx, tx); err != nil {
-			return fmt.Errorf("replay completeness: fingerprint live run memory: %w", err)
+			return 0, fmt.Errorf("replay completeness: fingerprint live run memory: %w", err)
 		}
-		return nil
-	}
-	liveDigests, err := extractor.Digests(ctx)
+		// Diagnostics of the same snapshot. Their failure does not fail the
+		// probe: the report is then as it was without them. The lists are
+		// bounded (store.ObjectGraphDiagnosticRowLimit and
+		// EventIndexDiagnosticRowLimit): whether they are needed is known only
+		// after the replay, which cannot run inside this snapshot, so a store
+		// past the bound skips them and says so.
+		liveObjects, liveObjectsErr = rt.store.ListObjectGraphFingerprintsTx(ctx, tx)
+		liveEventIndex, liveEventIndexOff, liveEventIndexErr = rt.store.ListEventIndexFingerprintsTx(ctx, tx, replayTrimBoundary(liveHead))
+		return replayHeadSequence(liveHead), nil
+	})
 	if err != nil {
 		return nil, fmt.Errorf("replay completeness: extract live store state: %w", err)
 	}
@@ -379,7 +407,10 @@ func (rt *Runtime) openReplayProbe(ctx context.Context, computerID string) (_ *r
 	if err != nil {
 		return nil, fmt.Errorf("replay completeness: read replay event head: %w", err)
 	}
-	replayExtractor := replayStateExtractor(replayStore.ReadDB())
+	// The replay's own head sets its boundary: a replay that stopped short
+	// is then not compared under the live head's boundary.
+	replayBoundary := replayTrimBoundary(replayHead)
+	replayExtractor := canonicalWitnessExtractor(replayStore.ReadDB(), replayBoundary)
 	replay, err := replayExtractor.Extract(ctx, computerversion.ExtractRequest{Name: "event-replay-projection", Version: version})
 	if err != nil {
 		return nil, fmt.Errorf("replay completeness: extract replay store state: %w", err)
@@ -393,13 +424,27 @@ func (rt *Runtime) openReplayProbe(ctx context.Context, computerID string) (_ *r
 
 	result := (computerversion.EquivalenceChecker{}).CheckObservationSets(live, replay)
 	var objectGraph *ReplayObjectGraphComparison
+	var eventIndex *ReplayEventIndexComparison
+	var skipped []string
 	if !result.Equivalent() {
 		// Diagnostic only: name the object-graph rows replay cannot
 		// reproduce. Failure to list leaves the report as it was.
-		liveObjects, liveErr := rt.store.ListObjectGraphFingerprints(ctx)
+		// The live rows were read in the pinned snapshot. (Its telemetry
+		// partition rows are separate files: see
+		// ListObjectGraphFingerprintsTx.)
 		replayObjects, replayErr := replayStore.ListObjectGraphFingerprints(ctx)
-		if liveErr == nil && replayErr == nil {
+		if liveObjectsErr == nil && replayErr == nil {
 			objectGraph = compareReplayObjectGraph(liveObjects, replayObjects)
+		}
+		replayIndex, replayIndexOff, replayIndexErr := replayStore.ListEventIndexFingerprints(ctx, replayBoundary)
+		if liveEventIndexErr == nil && replayIndexErr == nil {
+			eventIndex = compareReplayEventIndex(liveEventIndex, replayIndex, liveEventIndexOff, replayIndexOff, replayTrimBoundary(liveHead), replayBoundary)
+		}
+		for _, e := range []error{liveObjectsErr, replayErr, liveEventIndexErr, replayIndexErr} {
+			var tooLarge *choirstore.DiagnosticTooLargeError
+			if errors.As(e, &tooLarge) {
+				skipped = append(skipped, tooLarge.Error())
+			}
 		}
 	}
 	report := ReplayCompletenessReport{
@@ -414,6 +459,8 @@ func (rt *Runtime) openReplayProbe(ctx context.Context, computerID string) (_ *r
 		Eligibility:        replayEligibility(liveHead, replayHead, live, replay, result),
 		RunMemory:          runMemory,
 		ObjectGraph:        objectGraph,
+		EventIndex:         eventIndex,
+		DiagnosticsSkipped: skipped,
 		DepositMode:        depositMode,
 		BaseSequence:       baseSequence,
 		BaseBlobSHA256:     baseBlob,
@@ -501,6 +548,17 @@ func (rt *Runtime) openProbeReplayStore(ctx context.Context, computerID, tempRoo
 		return nil, 0, "", 0, nil, err
 	}
 	return staged, record.StoreHeadSequence, record.Manifest.Root, plan.sequence, observer, nil
+}
+
+func replayHeadSequence(head *computerevent.Head) uint64 {
+	if head == nil {
+		return 0
+	}
+	return head.Sequence
+}
+
+func replayTrimBoundary(head *computerevent.Head) uint64 {
+	return choirstore.ProjectionBatchTrimBoundary(replayHeadSequence(head))
 }
 
 func replayCompletenessVersion(rt *Runtime, head *computerevent.Head) computerversion.ComputerVersion {

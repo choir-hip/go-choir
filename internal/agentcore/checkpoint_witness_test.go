@@ -17,6 +17,7 @@ package agentcore
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
@@ -36,7 +37,17 @@ func tapeReplayWitness(t *testing.T, fx *checkpointHeadFixture) selfdevprotocol.
 	if err := fx.rt.eventAppender.ReconstructInto(ctx, replay); err != nil {
 		t.Fatal(err)
 	}
-	w, err := LiveStoreWitness(ctx, replay.DB())
+	// The canonical form at the replayed head's boundary: the form the bind
+	// records and restore recomputes.
+	head, err := replay.Head(ctx, fx.rt.cfg.ComputerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digests, boundary, err := canonicalSnapshotDigests(ctx, replay.ReadDB(), func(context.Context, *sql.Tx) (uint64, error) { return head.Sequence, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := selfdevprotocol.WitnessFromDigestsCanonical(digests, boundary)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +55,7 @@ func tapeReplayWitness(t *testing.T, fx *checkpointHeadFixture) selfdevprotocol.
 }
 
 // Failure mode 1: the live v3 witness equals a tape replay's.
-func TestCheckpointBindV3WitnessEqualsTapeReplay(t *testing.T) {
+func TestCheckpointBindCanonicalWitnessEqualsTapeReplay(t *testing.T) {
 	fx := newCheckpointHeadFixture(t, "computer-witness-v3-replay")
 	fx.appendDeskEvent(t, "desk-turn-1")
 	fx.appendDeskEvent(t, "desk-turn-2")
@@ -57,8 +68,8 @@ func TestCheckpointBindV3WitnessEqualsTapeReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if binding.Witness.WitnessVersion != selfdevprotocol.WitnessVersionSQLite {
-		t.Fatalf("the bind produced witness version %d, want %d", binding.Witness.WitnessVersion, selfdevprotocol.WitnessVersionSQLite)
+	if binding.Witness.WitnessVersion != selfdevprotocol.WitnessVersionCanonical {
+		t.Fatalf("the bind produced witness version %d, want %d", binding.Witness.WitnessVersion, selfdevprotocol.WitnessVersionCanonical)
 	}
 	for _, table := range []string{"computer_event_index", "computer_event_projection_heads"} {
 		if _, hashed := binding.Witness.Tables[table]; !hashed {
@@ -75,7 +86,7 @@ func TestCheckpointBindV3WitnessEqualsTapeReplay(t *testing.T) {
 }
 
 // Failure mode 2: the witness read under the hold is bounded.
-func TestCheckpointBindV3WitnessReadIsBounded(t *testing.T) {
+func TestCheckpointBindCanonicalWitnessReadIsBounded(t *testing.T) {
 	fx := newCheckpointHeadFixture(t, "computer-witness-v3-hold")
 	fx.appendDeskEvent(t, "desk-turn-1")
 	ctx := context.Background()

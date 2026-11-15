@@ -107,7 +107,16 @@ func (s *Store) Prepare(ctx context.Context, request computerevent.CASRequest) e
 	if err != nil {
 		return err
 	}
-	pinsJSON, err := json.Marshal(request.PayloadPinReceiptDigests)
+	// A nil list marshals to JSON null and an empty one to "[]". The live
+	// append hands an empty list and the replay of a tape leaves it nil for
+	// an event with no payload pins, so the column is normalized here, where
+	// every writer passes: no caller can store null and the index of a
+	// replay equals the live index byte for byte.
+	pins := request.PayloadPinReceiptDigests
+	if pins == nil {
+		pins = []string{}
+	}
+	pinsJSON, err := json.Marshal(pins)
 	if err != nil {
 		return err
 	}

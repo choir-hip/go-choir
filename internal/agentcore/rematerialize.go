@@ -104,11 +104,8 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	if err := selfdevprotocol.RematerializeFromRequest(request); err != nil {
 		return report, err
 	}
-	// A checkpoint whose witness is not version 3 was bound against the retired
-	// Dolt store; it cannot be judged and is refused before anything is read.
-	if err := selfdevprotocol.RefuseWitnessVersion(checkpoint.Request.VMLocalContentWitness.WitnessVersion); err != nil {
-		return report, err
-	}
+	// RematerializeFromRequest rebuilt the checkpoint, which validates its
+	// witness: a version this release does not judge was refused there.
 	priorReleaseDigest, err := rt.verifyPinnedFrontend(checkpoint)
 	if err != nil {
 		return report, err
@@ -178,7 +175,9 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	}
 	report.TailEventsApplied = applied
 	report.TailPagesFetched = observer.pages
-	got, err := storeWitness(ctx, staged.ReadDB(), replayStateExtractor(staged.ReadDB()))
+	// The form the checkpoint names decides how the reconstructed store is
+	// read: a checkpoint without the canonical form is compared strictly.
+	got, err := reconstructedWitness(ctx, staged.ReadDB(), checkpoint.Request.VMLocalContentWitness, targetSequence)
 	if err != nil {
 		_ = staged.Close()
 		_ = os.RemoveAll(stagingRoot)
@@ -344,13 +343,15 @@ func (h *APIHandler) restoreComputer(w http.ResponseWriter, r *http.Request, com
 		CheckpointDigest: request.Checkpoint.Digest,
 		OperandScopes:    scopes,
 	}, request.Checkpoint); err != nil {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
-		return
-	}
-	// A witness of another version is refused before anything is written: a
-	// refused restore leaves no restore intent on the tape.
-	if err := selfdevprotocol.RefuseWitnessVersion(request.Checkpoint.Request.VMLocalContentWitness.WitnessVersion); err != nil {
-		writeAPIJSON(w, rematerializeRefusalStatus(err), apiError{Error: err.Error()})
+		// A witness of a version this release does not judge is a refusal of
+		// the checkpoint (409), refused before anything is written: a refused
+		// restore leaves no restore intent on the tape. Any other malformed
+		// request is a 400.
+		status := http.StatusBadRequest
+		if errors.Is(err, selfdevprotocol.ErrWitnessVersionRefused) {
+			status = http.StatusConflict
+		}
+		writeAPIJSON(w, status, apiError{Error: err.Error()})
 		return
 	}
 	if err := h.rt.appendRestoreIntent(r.Context(), computerID, request.Checkpoint); err != nil {
@@ -372,7 +373,10 @@ func (h *APIHandler) restoreComputer(w http.ResponseWriter, r *http.Request, com
 // refused required base is a conflict the operator resolves by publishing or
 // selecting a compatible base, never a server error to retry blindly.
 func rematerializeRefusalStatus(err error) int {
-	if errors.Is(err, recoveryplan.ErrBaseRefused) || errors.Is(err, ErrCheckpointNotDerivable) {
+	// A witness mismatch and a witness version this release does not judge are
+	// refusals of the checkpoint, answered with their reason; not server errors.
+	if errors.Is(err, recoveryplan.ErrBaseRefused) || errors.Is(err, ErrCheckpointNotDerivable) ||
+		errors.Is(err, selfdevprotocol.ErrWitnessMismatch) || errors.Is(err, selfdevprotocol.ErrWitnessVersionRefused) {
 		return http.StatusConflict
 	}
 	if errors.Is(err, ErrRematerializeUnavailable) {
