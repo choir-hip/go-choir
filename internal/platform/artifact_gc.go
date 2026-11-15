@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -81,6 +82,26 @@ type ArtifactGCNamespaceReport struct {
 	// Retired counts file_cas root rows retired (active) or that would be
 	// retired (dry-run) this run (file-cas-roots only).
 	Retired int `json:"retired,omitempty"`
+
+	// The fields below are the capture-bodies admission numbers (read before
+	// the namespace is ever made active; docs/problems/
+	// capture-bodies-sweep-admission-2026-11-14.md). LiveSetIncomplete marks
+	// a namespace whose live set could not be computed completely: nothing
+	// in it was classified or made eligible. NamedByRows is how many distinct
+	// body ids the capture rows name; NamedMissingOnDisk how many of those
+	// are not on disk. EligibleSample is the oldest and the youngest eligible
+	// ids with their ages.
+	LiveSetIncomplete  bool                    `json:"live_set_incomplete,omitempty"`
+	NamedByRows        int                     `json:"named_by_rows,omitempty"`
+	NamedMissingOnDisk int                     `json:"named_missing_on_disk,omitempty"`
+	EligibleSample     []ArtifactGCEligibleAge `json:"eligible_sample,omitempty"`
+}
+
+// ArtifactGCEligibleAge is one sampled eligible entry: its id and age.
+type ArtifactGCEligibleAge struct {
+	ID       string `json:"id"`
+	AgeHours int    `json:"age_hours"`
+	Bytes    int64  `json:"bytes"`
 }
 
 // ArtifactGCReport is the deployed-proof receipt for one sweep.
@@ -128,7 +149,12 @@ const captureBodiesNamespace = "capture-bodies"
 // PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES is unset. og is excluded: the
 // pre-teardown corpus bodies are unreferenced since 2026-10-09 and their
 // collection is an explicit owner step (the corpus dump may still name them).
-var DefaultArtifactGCActiveNamespaces = []string{"projection-base", basemanifest.PartsNamespace, "platform-update", captureBodiesNamespace, "file-cas-roots", "file-cas-chunks"}
+// capture-bodies is excluded for the same kind of reason: it is swept and
+// reported on every pass, and admitted only after its report is read on the
+// live store and the owner says so (docs/problems/
+// capture-bodies-sweep-admission-2026-11-14.md). This is the collector's
+// per-namespace admission of an irreversible deletion, not a feature switch.
+var DefaultArtifactGCActiveNamespaces = []string{"projection-base", basemanifest.PartsNamespace, "platform-update", "file-cas-roots", "file-cas-chunks"}
 
 // ParseArtifactGCNamespaces reads a comma list. Empty selects the default
 // allowlist; "all" selects every swept namespace.
@@ -282,6 +308,14 @@ func (s *Service) runArtifactGC(ctx context.Context, cfg ArtifactGCConfig) (Arti
 			return report, err
 		}
 		rep := ArtifactGCNamespaceReport{}
+		if ns == captureBodiesNamespace && live[ns] == nil {
+			// The live set could not be computed completely (artifactGCLiveSets
+			// warned): classify nothing, mark nothing eligible.
+			rep.Mode = ArtifactGCModeDryRun
+			rep.LiveSetIncomplete = true
+			report.Namespaces[ns] = rep
+			continue
+		}
 		candidates, nsWarnings, err := s.classifyArtifactNamespace(ctx, ns, live[ns], cutoff, &rep)
 		report.Warnings = append(report.Warnings, nsWarnings...)
 		participates := len(cfg.ActiveNamespaces) == 0 || allowed[ns]
@@ -462,9 +496,12 @@ func (s *Service) artifactGCLiveSets(ctx context.Context) (map[string]map[string
 	// rows included (a body is evidence while any row names it). Any string
 	// value of the metadata shaped sha256:<64 hex> counts, so a blob field
 	// added later is protected before this list learns its name. A row whose
-	// metadata does not parse aborts the sweep: what it names is unprovable.
+	// metadata does not parse, or a query that fails, leaves the live set
+	// incomplete: it is set to nil (not empty), the namespace classifies and
+	// marks nothing, and the other namespaces still sweep.
 	if err := s.captureBodyLiveSet(ctx, live[captureBodiesNamespace]); err != nil {
-		return nil, append(warnings, "capture-bodies live set: "+err.Error())
+		live[captureBodiesNamespace] = nil
+		warnings = append(warnings, "capture-bodies live set: "+err.Error()+" (namespace not swept)")
 	}
 
 	// og: exact body_ref reachability (basename of sha256/og/<digest>.bin).
@@ -496,15 +533,29 @@ func (s *Service) captureBodyLiveSet(ctx context.Context, live map[string]struct
 		if err := json.Unmarshal([]byte(metadata), &doc); err != nil {
 			return fmt.Errorf("capture %s: metadata does not parse: %w", id, err)
 		}
-		for _, v := range doc {
-			if str, ok := v.(string); ok && strings.HasPrefix(str, "sha256:") {
-				if h := strings.TrimPrefix(str, "sha256:"); validHexDigest(h) {
-					live[strings.ToLower(strings.TrimSpace(h))] = struct{}{}
-				}
-			}
-		}
+		addCaptureBlobIDs(doc, live)
 	}
 	return rows.Err()
+}
+
+// addCaptureBlobIDs adds every sha256:<64 hex> string in v, at any depth.
+func addCaptureBlobIDs(v any, live map[string]struct{}) {
+	switch t := v.(type) {
+	case string:
+		if strings.HasPrefix(t, "sha256:") {
+			if h := strings.TrimPrefix(t, "sha256:"); validHexDigest(h) {
+				live[strings.ToLower(strings.TrimSpace(h))] = struct{}{}
+			}
+		}
+	case map[string]any:
+		for _, e := range t {
+			addCaptureBlobIDs(e, live)
+		}
+	case []any:
+		for _, e := range t {
+			addCaptureBlobIDs(e, live)
+		}
+	}
 }
 
 // classifyCaptureBodies walks capture-bodies/<2 hex>/<sha256>. Only a regular
@@ -545,11 +596,13 @@ func (s *Service) classifyCaptureBodies(ctx context.Context, live map[string]str
 				rep.Live++
 				continue
 			}
-			rep.Unreachable++
 			info, err := entry.Info()
 			if err != nil {
+				// Not provably unreachable-and-old: kept, and said so.
+				rep.Unproven++
 				continue
 			}
+			rep.Unreachable++
 			if !info.ModTime().Before(cutoff) {
 				rep.InGrace++
 				continue
@@ -557,7 +610,29 @@ func (s *Service) classifyCaptureBodies(ctx context.Context, live map[string]str
 			s.addCandidate(captureBodiesNamespace, filepath.Join(dir, name), info, rep, &out)
 		}
 	}
+	rep.NamedByRows = len(live)
+	rep.NamedMissingOnDisk = len(live) - rep.Live
+	rep.EligibleSample = sampleEligibleAges(out, time.Now())
 	return out, nil
+}
+
+// sampleEligibleAges returns the five oldest and the five youngest candidates
+// (oldest first), so the report shows the span of ages a deletion would take.
+func sampleEligibleAges(c []gcCandidate, now time.Time) []ArtifactGCEligibleAge {
+	if len(c) == 0 {
+		return nil
+	}
+	sorted := append([]gcCandidate(nil), c...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].mtime.Before(sorted[j].mtime) })
+	pick := sorted
+	if len(sorted) > 10 {
+		pick = append(append([]gcCandidate(nil), sorted[:5]...), sorted[len(sorted)-5:]...)
+	}
+	out := make([]ArtifactGCEligibleAge, 0, len(pick))
+	for _, x := range pick {
+		out = append(out, ArtifactGCEligibleAge{ID: filepath.Base(x.path), AgeHours: int(now.Sub(x.mtime).Hours()), Bytes: x.size})
+	}
+	return out
 }
 
 // scanStrings runs a one-column query and reports any query, scan or

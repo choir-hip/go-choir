@@ -255,6 +255,9 @@ Settles: which dirs are older than their computer's current job, and which belon
 
 ### capture-bodies (F7)
 
+> 2026-11-14: the orphan sweep (bodies no capture row names) is in the collector, report-only; its admission procedure is [capture-bodies-sweep-admission-2026-11-14.md](capture-bodies-sweep-admission-2026-11-14.md). F7 itself (referenced raw blobs past N days) is still unbuilt and an owner decision.
+
+
 ```sh
 # size distribution: raw vs small blobs
 find $A/capture-bodies -type f -printf '%s\n' | awk '{n++; s+=$1; if($1>262144){b+=$1;bn++}} END{printf "files=%d total=%.2f GB; >256KiB files=%d bytes=%.2f GB\n",n,s/1e9,bn,b/1e9}'
