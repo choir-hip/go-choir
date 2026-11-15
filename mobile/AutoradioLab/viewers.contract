@@ -195,12 +195,14 @@ component EpubViewer
     fvToc: bool
     fvChapGo: action
     fvTocToggle: action
+    listen: action
   view
     PageScroll(id="epub")
       text fvInfo.title role="heading" aria-level=1 testId="page-title" font-size=28 font-weight=700
       text (fvInfo.author.length > 0 ? `${fvInfo.author} · ${fvInfo.chapters.length.toFixed(0)} chapters` : `${fvInfo.chapters.length.toFixed(0)} chapters`) font-family=th.fontUi font-size=14 color=th.muted
       row gap=8 align-items="center"
         Chip(label="Contents", active=fvToc, testId="epub-toc", press=fvTocToggle)
+        Chip(label="Listen", active=false, testId="epub-listen", press=listen(`${fvInfo.address}#${fvChap}`, fvChapter.title, fvChapter.markdown))
         text `Chapter ${(fvChap + 1).toFixed(0)} of ${fvInfo.chapters.length.toFixed(0)}` testId="epub-position" font-family=th.fontUi font-size=13 color=th.muted
       if fvToc
         Card(level=1, testId="epub-contents", minHeight=0)
@@ -223,12 +225,15 @@ component TextViewer
     th: Theme
     fvInfo: FileInfo
     fvShare: action
+    listen: action
   view
     PageScroll(id="text")
       text fvInfo.name role="heading" aria-level=1 testId="page-title" font-size=26 font-weight=700
       text `${fvInfo.kindLabel} · ${fvInfo.sizeLabel} · ${fvInfo.modifiedLabel}` font-family=th.fontUi font-size=13 color=th.muted
       row gap=8 align-items="center"
         Chip(label="Share", active=false, testId="text-share", press=fvShare(fvInfo.name, fvInfo.src))
+        if fvInfo.kind != "code"
+          Chip(label="Listen", active=false, testId="text-listen", press=listen(fvInfo.address, fvInfo.name, fvInfo.text))
       if fvInfo.kind == "markdown"
         text fvInfo.text markup="markdown" testId="text-body" font-family=th.fontRead font-size=18 line-height=1.6 color=th.fg
       else if fvInfo.kind == "code"

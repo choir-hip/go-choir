@@ -1195,6 +1195,15 @@
       "answers": "LabState"
     },
     {
+      "send": "choirListen",
+      "options": {
+        "address": "string",
+        "title": "string",
+        "text": "string"
+      },
+      "answers": "LabState"
+    },
+    {
       "source": "radioView",
       "live": true,
       "answers": "RadioInfo",

@@ -75,6 +75,7 @@ names = [
     snd("choirPlayPause"), snd("choirStartRadio"), snd("choirTalkDown", {"aim": S}), snd("choirTalkUp"), snd("choirTalkCancel"),
     snd("choirPlay", {"route": S}),
     snd("choirAsk", {"text": S, "aim": S}),
+    snd("choirListen", {"address": S, "title": S, "text": S}),
 ]
 # Per-lane fragments: exact-package/interface/<lane>.json = {"shapes": {...}, "names": [...]}. Each lane owns its own
 # file, so no two lanes edit the same one. A shape or a source/send name declared twice is an error.
