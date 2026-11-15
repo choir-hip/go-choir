@@ -623,3 +623,17 @@ A final report for behavior-changing missions should name:
 - residual risks and the next realism axis.
 
 - 2026-11-10 (owner): "from now on we don't use Exa at all for ordinary search. We remove it as an ordinary search provider, and we just use it for the podcast stuff." The Exa provider is deleted from the gateway; EXA_API_KEY is no longer deployed to the gateway and is reserved for a future podcast-search feature.
+
+### Jev: one call, as many questions as possible (owner, 2026-11-15)
+
+The owner, on reading that a repair had made intake's Jev calls run
+concurrently: "jev should run as many questions *in the same call* as
+possible. not multiple calls to the jev api. not concurrently or
+sequentially. thats the whole point of how it works. this should be
+documented and implemented. ive been insistent". Earlier the same night:
+"jev isnt supposed to be serial. the point is to use the same large context
+for many questions, not call it in sequence with the same context". The lead
+had read the 2026-11-12 ruling as "do not serialize" and let a builder
+answer it with concurrency. The rule is about the number of calls: one
+large context, every question in it, and a second call only where a vendor
+limit forces one.

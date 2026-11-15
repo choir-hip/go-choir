@@ -48,6 +48,15 @@ reason for each is from our data.
 | 7 | **A batch size is bounded by the vendor and checked by measurement.** Intake labels now carry a whole flush (up to 12 captures, 24 questions and more when a window needs parts) in one call, on the owner's 2026-11-12 ruling; `cmd/intake-shadow` is the measurement. | Accuracy against questions per call is unpublished and unmeasured by us above 12 (section 9). |
 | 8 | **Do not answer about Jev's limits, prices or accuracy from memory.** Read this page and the subpage. | The old page carried a $1/day cost that was 7.5x low M. |
 
+**The owner's rule on call count (2026-11-15, restating 2026-11-12).** Jev
+runs as many questions in the same call as possible. Not several calls in
+sequence, and not several calls at once: one call, with one large context and
+every question that context can answer. Minimize the number of calls. A
+split is right only where a vendor limit (section 3.3) forces it, and each
+split names the limit. A call site that asks per capture, per story, per
+revision or per batch, when one context could carry them together, is a
+defect to fix, whether those calls run in sequence or concurrently.
+
 ## 3. The wire shape and how we call it
 
 ### 3.1 Request and response

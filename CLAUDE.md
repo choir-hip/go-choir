@@ -112,11 +112,15 @@ A commit subject ends with its class and rollback, for example
   calls is a code problem to fix, not a limit to impose", enforced
   consistently). No rate bucket, in-flight cap, spacing or call quota on our
   own code's calls to a model or to Jev. When calls are too many, fix the
-  caller. For Jev: one context, many questions. Every question about a
-  state goes in the one call that carries that state; a second call over
-  the same or an overlapping state is the defect (owner, 2026-11-12: the
-  point was never to serialize calls, it is to reuse the context).
-  Separate contexts can justify separate calls, but that is never plan A.
+  caller. For Jev: as many questions as possible in the same call (owner,
+  2026-11-15: "not multiple calls to the jev api. not concurrently or
+  sequentially. thats the whole point of how it works"). Build one large
+  context and put every question it can answer in that one call, up to the
+  vendor's real limits. The count of Jev calls is the thing to minimize.
+  Running several calls at once is not a fix, and neither is queuing them:
+  both are the defect. A second call is right only when the vendor's
+  limits refuse the first, and the code says which limit. Do not split by
+  capture, story, revision, batch or site when one context can hold them.
   What stays:
   backing off after a provider's real refusal, an owner-set spending cap,
   bounds on what strangers can cause, and deadlines. Log volume so a spike
