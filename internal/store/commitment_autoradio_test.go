@@ -15,13 +15,14 @@ import (
 // Failure list for the Autoradio store queries and the label guard (design
 // 4.3, 12.2), written before the code:
 //
-//  1. ListCalibrationRecordsExcludingAgentPrefix returns a record whose stored
+//  1. ListCalibrationRecordsExcludingAgentPrefixPage returns a record whose stored
 //     agent begins with the prefix in any case or padded, or applies the limit
 //     before the exclusion (more reserved records than the limit hide an
 //     ordinary one); or drops an ordinary agent that merely contains the prefix.
 //  2. The claims-by-tag page matches a tag by prefix or substring (stretch:s1
 //     matches stretch:s10), returns settlements, or another computer's or
-//     owner's records.
+//     owner's records, an ordinary claim that carries the stretch tag, or a
+//     record of another kind (review round 1, DeepSeek 4).
 //  3. A cursor-paged read repeats a record, skips one, or returns a record
 //     out of order across page sizes 1, 2, 3 and larger than the set; the
 //     cursor of the last page is not empty; an exact multiple of the page size
@@ -86,7 +87,7 @@ func TestListCalibrationRecordsExcludesAnAgentPrefixBeforeTheLimit(t *testing.T)
 		arPut(t, s, arOwner, arComputer, arForecast(t, "st1", i, at.Add(time.Duration(i+1)*time.Second)))
 	}
 	// Legacy variants stored directly (the generic route no longer writes them).
-	for i, agent := range []string{"Autoradio-DJ", " autoradio-dj", "AUTORADIO"} {
+	for i, agent := range []string{"Autoradio-DJ", " autoradio-dj", "AUTORADIO", "-autoradio-dj"} {
 		rec := ordinaryClaim(t, "plain", fmt.Sprintf("v%d", i), at.Add(time.Minute))
 		rec.Calibration.Agent = agent
 		rec.Provenance.AgentID = "agent:" + agent
@@ -96,9 +97,12 @@ func TestListCalibrationRecordsExcludesAnAgentPrefixBeforeTheLimit(t *testing.T)
 	arPut(t, s, arOwner, "computer-other", ordinaryClaim(t, "elsewhere", "e1", at))
 	arPut(t, s, "owner-other", arComputer, ordinaryClaim(t, "elsewhere", "e2", at))
 
-	recs, err := s.ListCalibrationRecordsExcludingAgentPrefix(ctx, arOwner, arComputer, "", "autoradio", 5)
-	if err != nil {
-		t.Fatal(err)
+	// SQL leaves out what its trimmed, lower-cased prefix test sees; a variant that
+	// only Slug folds in (hyphen-led) comes through and is the caller's to drop
+	// while it pages until its limit is filled (calibration handler test).
+	recs, next, err := s.ListCalibrationRecordsExcludingAgentPrefixPage(ctx, arOwner, arComputer, "", "autoradio", "", 5)
+	if err != nil || next != "" {
+		t.Fatalf("page: next=%q err=%v", next, err)
 	}
 	got := map[string]bool{}
 	for _, r := range recs {
@@ -107,22 +111,36 @@ func TestListCalibrationRecordsExcludesAnAgentPrefixBeforeTheLimit(t *testing.T)
 			t.Fatalf("returned reserved agent %q", r.Calibration.Agent)
 		}
 	}
-	if len(recs) != 2 || !got["claude-code/lead"] || !got["my-autoradio"] {
-		t.Fatalf("with limit 5 and 15 reserved records newer, got %d records %v: the limit was applied before the exclusion", len(recs), got)
+	if len(recs) != 3 || !got["claude-code/lead"] || !got["my-autoradio"] || !got["-autoradio-dj"] {
+		t.Fatalf("with 15 reserved records newer than the limit of 5, got %d records %v: the limit was applied before the exclusion", len(recs), got)
+	}
+	// Paged newest first with a cursor: one at a time yields the same three, once.
+	var order []string
+	before := ""
+	for i := 0; i < 10; i++ {
+		page, nx, err := s.ListCalibrationRecordsExcludingAgentPrefixPage(ctx, arOwner, arComputer, "", "autoradio", before, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range page {
+			order = append(order, r.Calibration.Agent)
+		}
+		if nx == "" {
+			break
+		}
+		before = nx
+	}
+	if len(order) != 3 || order[0] != "-autoradio-dj" || order[2] != "claude-code/lead" {
+		t.Fatalf("paged order = %v", order)
 	}
 	// An agent filter composes with the exclusion.
-	recs, err = s.ListCalibrationRecordsExcludingAgentPrefix(ctx, arOwner, arComputer, "claude-code/lead", "autoradio", 10)
+	recs, _, err = s.ListCalibrationRecordsExcludingAgentPrefixPage(ctx, arOwner, arComputer, "claude-code/lead", "autoradio", "", 10)
 	if err != nil || len(recs) != 1 {
 		t.Fatalf("agent filter: %d %v", len(recs), err)
 	}
-	recs, err = s.ListCalibrationRecordsExcludingAgentPrefix(ctx, arOwner, arComputer, "autoradio-dj", "autoradio", 10)
+	recs, _, err = s.ListCalibrationRecordsExcludingAgentPrefixPage(ctx, arOwner, arComputer, "autoradio-dj", "autoradio", "", 10)
 	if err != nil || len(recs) != 0 {
 		t.Fatalf("a reserved agent filter with the exclusion returned %d (%v)", len(recs), err)
-	}
-	// Newest first, as ListCalibrationRecords.
-	recs, _ = s.ListCalibrationRecordsExcludingAgentPrefix(ctx, arOwner, arComputer, "", "autoradio", 10)
-	if len(recs) != 2 || recs[0].Calibration.Agent != "my-autoradio" {
-		t.Fatalf("order: %v", recs)
 	}
 }
 
@@ -142,11 +160,20 @@ func TestListCalibrationClaimsByTagPage(t *testing.T) {
 	if err != nil || !res.Won {
 		t.Fatalf("settle: %v", err)
 	}
+	// An ordinary claim of another agent that carries the same stretch tag is
+	// not a stretch forecast; nor is an autoradio-dj claim of another record kind.
+	foreign := ordinaryClaim(t, "someone", "foreign", at)
+	foreign.Calibration.Claim.Tags = []string{"stretch:s1"}
+	arPut(t, s, arOwner, arComputer, foreign)
+	notForecast := arForecast(t, "s1", 8, at)
+	notForecast.SubjectRefs["record_kind"] = "autoradio.segment"
+	notForecast.Provenance.Labels = []string{types.OwnerPrivateLabel("autoradio_segment")}
+	arPut(t, s, arOwner, arComputer, notForecast)
 	other := arForecast(t, "s1", 7, at)
 	arPut(t, s, arOwner, "computer-other", other)
 	arPut(t, s, "owner-other", arComputer, other)
 
-	page, next, err := s.ListCalibrationClaimsByTagPage(ctx, arOwner, arComputer, "stretch:s1", "", 100)
+	page, next, err := s.ListCalibrationClaimsByTagPage(ctx, arOwner, arComputer, "autoradio-dj", "autoradio.forecast", "stretch:s1", "", 100)
 	if err != nil || next != "" {
 		t.Fatalf("page: next=%q err=%v", next, err)
 	}
@@ -159,15 +186,15 @@ func TestListCalibrationClaimsByTagPage(t *testing.T) {
 		}
 	}
 	for _, tag := range []string{"stretch:s", "stretch", "s1", "STRETCH:s1", "autoradio-x"} {
-		page, _, err := s.ListCalibrationClaimsByTagPage(ctx, arOwner, arComputer, tag, "", 100)
+		page, _, err := s.ListCalibrationClaimsByTagPage(ctx, arOwner, arComputer, "autoradio-dj", "autoradio.forecast", tag, "", 100)
 		if err != nil || len(page) != 0 {
 			t.Fatalf("tag %q matched %d (%v): a tag is matched exactly", tag, len(page), err)
 		}
 	}
-	if page, _, _ := s.ListCalibrationClaimsByTagPage(ctx, arOwner, arComputer, "autoradio", "", 100); len(page) != 5 {
+	if page, _, _ := s.ListCalibrationClaimsByTagPage(ctx, arOwner, arComputer, "autoradio-dj", "autoradio.forecast", "autoradio", "", 100); len(page) != 5 {
 		t.Fatalf("tag autoradio matched %d, want 5", len(page))
 	}
-	if _, _, err := s.ListCalibrationClaimsByTagPage(ctx, arOwner, arComputer, "", "", 10); err == nil {
+	if _, _, err := s.ListCalibrationClaimsByTagPage(ctx, arOwner, arComputer, "autoradio-dj", "autoradio.forecast", "", "", 10); err == nil {
 		t.Fatal("empty tag accepted")
 	}
 }

@@ -1,5 +1,5 @@
 {
- "about": "Heard-route fixtures for design 12.3, 4.2 and 12.7. Each scenario starts empty: its segments are forecast claims the server wrote (stretch fx) with the text named in `texts`; its batches are sent in order. `results` is the code (and reason of a refusal) per event, in the batch's own order; `settlements` is the segment's settlement ('yes' or 'no') after all batches, absent when none. `pre.air_without_settlement` is events already stored whose settlement was never written. Reason tokens are defined by these fixtures. A segment has `blocks` from its text by SplitBlocks.",
+ "about": "Heard-route fixtures for design 12.3, 4.2 and 12.7. Each scenario starts empty: its segments are forecast claims the server wrote (stretch fx) with the text named in `texts`; its batches are sent in order. `results` is the code (and reason of a refusal) per event, in the batch's own order; `settlements` is the segment's settlement ('yes' or 'no') after all batches, absent when none. `pre.air_without_settlement` is events already stored whose settlement was never written. Reason tokens are defined by these fixtures. Timestamps are RFC 3339 instants. The hash is 64 hex digits in either case. A segment has `blocks` from its text by SplitBlocks.",
  "texts": {
   "one": {
    "text": "Only one paragraph here.",
@@ -777,6 +777,19 @@
        "block_count": 3,
        "started_at": "2026-11-15T10:00:00Z",
        "ended_at": "2026-11-15T10:00:05Z"
+      },
+      {
+       "event_id": "g6",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "969973c59c9d3d6396e0b33459e1bfa7beab63c91a24ef80f6e48decf3dc1fd0",
+       "seq": 6,
+       "type": "less",
+       "last_block": 7,
+       "block_count": 0,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
       }
      ],
      "results": [
@@ -800,11 +813,175 @@
        "event_id": "g5",
        "code": "refused",
        "reason": "no_forecast"
+      },
+      {
+       "event_id": "g6",
+       "code": "accepted"
       }
      ]
     }
    ],
    "settlements": {}
+  },
+  {
+   "name": "signal_checks_are_the_forecast_check_only",
+   "about": "design 4.4: a signal naming a stretch and segment gets the forecast check of 12.3 (a forecast claim exists) and no hash, block_count or last_block check; this is a reading, pinned here so the phone and L2 agree",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "g1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+       "seq": 1,
+       "type": "corrected",
+       "last_block": 9,
+       "block_count": 9,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z",
+       "turn_id": "turn-1"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "g1",
+       "code": "accepted"
+      }
+     ]
+    }
+   ],
+   "settlements": {}
+  },
+  {
+   "name": "hash_uppercase_accepted",
+   "about": "the hash is compared case-insensitively: 64 hex digits in either case",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1A3188F2B2B90622BDEB23305AD9AD94C87987D2C496A36898FF13BEEE8CEE9B",
+       "seq": 1,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "accepted"
+      }
+     ]
+    }
+   ],
+   "settlements": {
+    "fx.s0": "yes"
+   }
+  },
+  {
+   "name": "hash_not_hex",
+   "about": "64 characters that are not hex digits are a hash mismatch",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+       "seq": 1,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00Z",
+       "ended_at": "2026-11-15T10:00:05Z"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "refused",
+       "reason": "hash_mismatch"
+      }
+     ]
+    }
+   ],
+   "settlements": {}
+  },
+  {
+   "name": "timestamps_with_offsets",
+   "about": "started_at and ended_at are RFC 3339 instants compared as times, not strings: an offset that reads earlier as text can be later as time",
+   "segments": {
+    "fx.s0": "three"
+   },
+   "batches": [
+    {
+     "http_status": 200,
+     "events": [
+      {
+       "event_id": "e1",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 1,
+       "type": "finished",
+       "last_block": 2,
+       "block_count": 3,
+       "started_at": "2026-11-15T10:00:00+02:00",
+       "ended_at": "2026-11-15T09:00:00Z"
+      },
+      {
+       "event_id": "e2",
+       "session_id": "sess-fx",
+       "stretch_id": "fx",
+       "segment_id": "fx.s0",
+       "text_sha256": "1a3188f2b2b90622bdeb23305ad9ad94c87987d2c496a36898ff13beee8cee9b",
+       "seq": 2,
+       "type": "cut",
+       "last_block": 0,
+       "block_count": 3,
+       "started_at": "2026-11-15T09:00:00Z",
+       "ended_at": "2026-11-15T10:00:00+02:00"
+      }
+     ],
+     "results": [
+      {
+       "event_id": "e1",
+       "code": "accepted"
+      },
+      {
+       "event_id": "e2",
+       "code": "refused",
+       "reason": "ended_before_started"
+      }
+     ]
+    }
+   ],
+   "settlements": {
+    "fx.s0": "yes"
+   }
   },
   {
    "name": "replay_is_duplicate",

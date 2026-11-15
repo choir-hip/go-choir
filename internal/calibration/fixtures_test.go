@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Failure list for the wire fixtures (design 12.7), written before the
@@ -133,6 +134,8 @@ type fxFile struct {
 	Scenarios []fxScenario `json:"scenarios"`
 }
 
+var fxHex64 = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
 var fxEventID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$`)
 
 type fxClaim struct {
@@ -190,7 +193,12 @@ func (st *fxState) one(e fxEvent) fxResult {
 	default:
 		return refuse("unknown_type")
 	}
-	if e.EndedAt < e.StartedAt {
+	started, err1 := time.Parse(time.RFC3339, e.StartedAt)
+	ended, err2 := time.Parse(time.RFC3339, e.EndedAt)
+	if err1 != nil || err2 != nil {
+		return refuse("bad_timestamp")
+	}
+	if ended.Before(started) {
 		return refuse("ended_before_started")
 	}
 	signal := e.Type == "more" || e.Type == "less" || e.Type == "corrected"
@@ -202,7 +210,7 @@ func (st *fxState) one(e fxEvent) fxResult {
 		}
 		claim = c
 		if !signal {
-			if len(e.TextSHA256) != 64 || e.TextSHA256[:32] != claim.sha32 {
+			if h := strings.ToLower(e.TextSHA256); !fxHex64.MatchString(h) || h[:32] != claim.sha32 {
 				return refuse("hash_mismatch")
 			}
 			if e.BlockCount == 0 {
@@ -352,7 +360,8 @@ func TestHeardFixturesMatchTheRulesOfThe12Dot3(t *testing.T) {
 		names[sc.Name] = true
 	}
 	for _, want := range []string{"one_block_finish", "first_block_skip_many_blocks", "first_block_skip_one_block", "wrong_block_count", "hash_mismatch_full", "hash_32_digit_form",
-		"conflict_finish_then_skip", "conflict_skip_then_finish", "non_terminal_then_finish", "air_without_settlement_then_replay", "batch_over_event_bound", "one_batch_order_a", "one_batch_order_b"} {
+		"conflict_finish_then_skip", "conflict_skip_then_finish", "non_terminal_then_finish", "air_without_settlement_then_replay", "batch_over_event_bound", "one_batch_order_a", "one_batch_order_b",
+		"hash_uppercase_accepted", "hash_not_hex", "timestamps_with_offsets", "signal_checks_are_the_forecast_check_only"} {
 		if !names[want] {
 			t.Fatalf("scenario %s missing", want)
 		}
