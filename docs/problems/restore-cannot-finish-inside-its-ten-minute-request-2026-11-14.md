@@ -657,3 +657,80 @@ CLI:
     `TestComputerRestoreWaits`, `TestComputerRestoreNoWait`,
     `TestComputerRestoreStatus`, `TestComputerRestoreFailedExitsOne`,
     `TestComputerRestoreToleratesATransientPollError`
+
+### As built (lane/restore-act)
+
+Not run on a live computer. What is proven is in the tests named above; the
+deployed proof is a list of commands for d@e (below), run after landing.
+
+- Guest: `internal/agentcore/restore_act.go` (the act, its record, the boot
+  repair), `rematerialize.go` (the engine reports its state and progress to the
+  act through the context; the two routes accept), `restore_snapshot.go` (the
+  observer's per-event callback). Host: the proxy forwards the two POSTs on the
+  ordinary client and the new `GET .../lifecycle/restore-status` as an owner
+  act; vmctl reads `restore_in_flight` from `/health` in its idle sweep, host
+  stop and automatic restart, and names it in a deploy refusal. CLI:
+  `computer restore` and `computer rematerialize-from-tape` wait by default,
+  `--no-wait` returns the act, `computer restore-status` reads one.
+- Both routes are acts, not only restore: `rematerialize-from-tape` is the
+  same engine and had the same ten-minute shape. The synchronous routes are
+  deleted. The CLI still prints a plain answer that carries no act id as the
+  result, which is what a guest not yet refreshed onto this release sends: that
+  is the client tolerating an old server, not a synchronous path kept.
+- The replay observer moved off the shared appender
+  (`ReconstructThroughTargetObserved`): a replay probe's `SetReplayObserver(nil)`
+  used to clear the restore's observer mid-run, and the exactly-once receipt
+  then refused the restore. A checkpoint bind runs a probe every hour.
+- A flip that fails after the live store is closed (the quarantine directory
+  cannot be made, or a rename fails) now reopens the live store on the
+  original realization. It used to return with the store closed, answering
+  nothing until the next restart. Read from code; not observed.
+- The release lock (`currentReleaseMu`) is held for the check at the start and
+  for the restage-and-flip, not for the replay. The prior release is read again
+  under it before the restage.
+- The CLI's wait is `--timeout` when it is given (or `$CHOIR_TIMEOUT`), else two
+  hours; a poll is a small read with its own 60 second bound. `--interval` is
+  the poll (default 5 s, floor 100 ms).
+
+#### Rollback
+
+A plain revert. The truth by order:
+
+- Guest reverted, host and CLI new: the CLI reads a 200 with no act id as the
+  result, as before. The status route does not exist on the old guest (404).
+- CLI old, guest new: an old CLI sends the restore, receives the 202 body and
+  prints it as the result with exit 0. It looks like a success and is not: the
+  restore is running. Use a CLI from this release or read the status route.
+- A restore act in flight at the revert is interrupted by the restart that
+  deploys the revert (the planned refresh is refused while it runs; a forced
+  one closes it at the next boot only on a guest that has this code). An old
+  guest booting after such a kill finds a staged store it never removes: remove
+  `rematerialize-staging-*` beside the store by hand, and put `current` back if
+  it names the restored release (`restore-acts/<id>.json` records the prior
+  digest).
+- The act records (`restore-acts/`) are ignored by old code.
+
+#### Residuals
+
+- The replay-completeness probe has the same ten-minute shape and is not
+  converted: its answer is a large diagnostic report, the proxy keeps its
+  budget for it, and the accepted-act machinery here is shaped around a result
+  of one fixed report and a one-writer slot.
+- The roots the host still holds are probed in `fetching_base`, before any
+  download; a refusal there is a `failed` act, not a refused request. The scan is
+  a pass over the tape and is not bounded by a request.
+- The estimate is the best case (the newest snapshot at or below the target).
+  A snapshot the host pruned means a longer tail; `tail_events_total` is exact
+  once the plan has run, and the act's own measured rate replaces the assumed
+  one as soon as an event has applied.
+- A desk can read the status through `product_api` (it is a GET; the guest does
+  not distinguish a desk from the owner's proxy). It carries quarantine paths
+  and witness detail, not secrets.
+- A new guest under an old vmctl keeps itself safe from a planned restart (the
+  guest refuses) but not from the idle sweep or host stop, which need vmctl on
+  this release.
+- The disk floor is the live store plus 2 GiB. On the paper that is about 49 GB
+  free; whether the paper's volume has it is not known. A refusal says the
+  numbers.
+- The act record's progress is persisted every five seconds; a crash shows the
+  last of them, not the exact count.
