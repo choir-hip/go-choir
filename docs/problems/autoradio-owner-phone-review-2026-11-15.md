@@ -209,3 +209,13 @@ The owner tested onboarding, where the app helps set up the edition.
   set up voice, open edition. Belief: the edition is written on the phone
   now and the button still opens a server document that was never created.
   Not yet traced.
+- **Ruling on the paper's front:** it shows the global front page, then My
+  edition, then each vertical category. In My edition there is an option to
+  edit the edition. Known gap at the time of the ruling: the picks are saved
+  on the phone and nothing shapes the paper from them; the server writes no
+  edition.
+- **Phonon, corrected the same hour:** it is in the FluidAudio the app
+  already links (as the small Pocket TTS manager with the Phonon model); the
+  "no synthesizer" finding searched for the wrong type name. Its weights are
+  the folder `phonon/phonon-31m-en` of `FluidInference/pocket-tts-coreml`,
+  about 173 MB, Apache-2.0 for that folder.
