@@ -515,9 +515,11 @@ mission. The restore engine is unchanged; what changes is who waits for it.
   the state it describes. It is not a new kind of tape event: the status is
   progress of one process, and the tape carries the fact that was asked. No
   parallel store: one small JSON file per act, the newest 20 kept.
-- Auth: the status route is `GET /lifecycle/restore-status[?act=ID]`, gated
-  exactly as restore is: the owner act (`owner:acts`), the computer's
-  lifecycle scope and ownership. The result carries filesystem paths and
+- Auth: the status route is `GET /lifecycle/restore-status[?act=ID]`. The
+  proxy gates it as restore is gated: the owner act (`owner:acts`), the
+  computer's lifecycle scope and ownership. The guest route itself checks only
+  the computer binding (as every guest route does); `product_api` refuses the
+  path so a desk cannot read it. The result carries filesystem paths and
   witness detail an agent has no use for.
 - One at a time: a second request while an act runs answers 409 naming the
   running act. The same idempotency key (default: the checkpoint digest, the
@@ -895,3 +897,151 @@ before.
   no route produces one, left. The 2 h default wait: `--timeout` exists, left.
   Callers of the deleted synchronous path: `scripts/reeng_tracer.mjs` was one and
   now reads the act.
+
+## Review round 2 repair: one repair routine (lane/restore-act, 2026-11-15)
+
+Both seats said REPAIR again; every round-1 blocker was closed and the new
+defects were all in the gaps between two repair implementations that disagreed:
+the in-process failure paths (which undid the renames and deleted the staging
+and quarantine directories) and the boot repair (which read the record). A kill
+between the in-process deletion and the in-process record write left boot
+unable to repair and `current` on the wrong release; a terminal record with an
+unresolved live state was never repaired; the undo inferred "step made" from
+which files exist. The frame changes, not the patches.
+
+### One routine, driven by the durable record
+
+`undoInstall(updaterRoot, facts)` is the only code that undoes an install. Its
+input is the install facts the record holds (phase, the renames, the prior
+release); the boot calls it with the record it read, and the engine's failure
+path calls it with the same facts it has just written. It is idempotent, safe
+to kill between any two steps, and it deletes nothing:
+
+1. At `flip_started` only: undo the renames, last first. A step was made when
+   its source is gone and its destination is there; the list holds only the
+   renames whose source existed when `flip_started` was written, so a step
+   whose source never existed is not in it and a sidecar the live store left is
+   never moved by inference.
+2. Sync the directories the renames touched.
+3. From `release_restaged` on: make `current` the prior release again, and
+   check it is. A release that cannot be put back, or an empty prior digest, is
+   an error, and an error is `unresolved`.
+
+Everything else follows from who calls what:
+
+- The engine, on any failure, returns after calling `undoInstall` and
+  reopening the live store if it closed it. It deletes nothing: no staging, no
+  quarantine. A panic is a failure (recovered in the engine).
+- The one place that removes the staged store and the empty quarantine is the
+  end of an act, after the outcome is durably recorded (`finish`), and the boot
+  after it has closed what it found. A kill anywhere before that leaves the
+  directories for the boot, whose repair is the same routine.
+- An act is never written terminal while its live state is unresolved. The
+  record stays open (`installing`, `live_state: unresolved`), so the boot repairs
+  it and, with no boot needed, acceptance refuses: acceptance reads the records
+  (any open record, any unreadable record beside a staging or quarantine
+  directory) and the boot's list, not the list alone. `/health` reports the
+  same set.
+- Roll forward at `flip_completed` is bookkeeping only: it closes the record
+  `restored` and does not swap `current` (the release was restaged durably
+  before the flip), which settles the resumer question: it moves nothing.
+- If the `flip_completed` write fails, the engine first writes a corrective
+  `flip_started` fact. If that succeeds it undoes through the routine. If it
+  fails too (a double write failure) it does not undo: the files stay flipped, the
+  store stays closed, the act stays open and unresolved, and whichever fact the
+  disk holds agrees with the files (`flip_started` is undone at boot,
+  `flip_completed` rolled forward).
+- A flip's renames are made durable before `flip_completed` is: the data
+  directory, the quarantine and the staging directories are synced after the
+  last rename and before the fact, and after the undo before the close record.
+  A directory sync that fails is a failed install, handled as above.
+- The first `accepted` record is written durably too (a torn first record read
+  as unreadable, which with staging present refuses restores).
+- A `restored` act (reopen failed) requests the restart as a success does and
+  sets the restaged flag, so a migration cannot move `current` under the
+  restored store.
+- A success says, in its reason, that the restored state is not forward-durable
+  (the 2026-10-30 problem), so no act reads clean over a state the next
+  catch-up changes.
+
+### The crash table, additions
+
+| Crash or fault | On disk | Boot (or the same routine in-process) | Test |
+| --- | --- | --- | --- |
+| kill after the in-process undo, before the record | renames undone, staging present, `current` restored release, record `flip_started` | undo finds nothing to do, puts the release back, closes `interrupted`, removes staging | `TestRestoreCrashPoints/after_undo` |
+| panic between `flip_started` and the renames | nothing moved | the engine undoes (nothing), reopens, act `failed` on the pre-restore state, no deletion by the engine | `TestRestoreEnginePanicsAreSettledByTheRoutine/before_renames` |
+| panic after the renames | all renames made | the engine undoes them, reopens, `failed` pre_restore | `.../after_renames` |
+| live `-wal` present when `flip_started` is written, kill before any rename | sidecar at the original path, staged sidecar never existed | the live sidecar is left where it is | `TestRestoreCrashPoints/live_wal_at_flip_started` |
+| `flip_completed` write fails, corrective write fails (double failure) | files flipped, store closed, record open | act open and unresolved, acceptance refuses; the next boot undoes from the fact on disk | `TestRestoreDoubleWriteFailureIsUnresolvedNotTerminal` |
+| prior release cannot be put back | store undone, `current` on the restored release | `unresolved`, record open | `TestRepairIsUnresolvedWhenThePriorReleaseCannotBePutBack` |
+| unresolved act, no boot since | open record | a new restore is refused from the record | same test |
+| reopen failed, then boot | restored store, restored release | `restored` stays, nothing moved | `TestRestoreReopenFailureIsRestoredNotFailed` (extended) |
+| first record unwritable | nothing | acceptance refused | `TestRestoreAcceptRefusedWhenItsFirstRecordCannotBeWritten` |
+| directory syncs | n/a | renames synced before `flip_completed` | `TestRestoreSyncsTheFlipsDirectoriesBeforeItsFact` |
+
+### The runbook for an unresolved act
+
+`/health` lists `restore_unresolved`, and `choir computer restore-status` shows
+an act `installing` with `live_state: unresolved`. The computer refuses new
+restore acts. Nothing is deleted while any act is unresolved.
+
+1. Read the act's record (`restore-acts/<id>.json` beside the store) and note
+   `install_phase`, `flip` (the renames) and the two release digests.
+2. Look at the data volume: `rematerialize-staging-*` (the staged store),
+   `rematerialize-quarantine-*` (the pre-restore store, or empty), and the
+   store at its normal path.
+3. If the record says `flip_started`: the pre-restore store is wanted. For each
+   rename in `flip`, last first, where the source is missing and the
+   destination exists, move the destination back to the source. Make `current`
+   the release in `prior_release_digest` (the updater's restage, or re-point
+   `current` by hand).
+4. If the record says `flip_completed`: the restored store is wanted. Leave
+   the files; `current` must be `restored_release_digest`.
+5. Set the record's `state` to `interrupted` (undone) or `restored` (kept),
+   `live_state` to match, and give it a `finished_at`; or delete the record.
+6. Restart the computer. The boot repair finds nothing open, removes the staged
+   store and empty quarantine, and restore acts are accepted again.
+
+If step 3 or 4 cannot be done, the quarantine holds the pre-restore store and
+the staging directory the restored one: neither is deleted by anything.
+
+### Round 2 should-fix and nit answers
+
+- Roll forward's unconditional release swap: deleted (bookkeeping only).
+- Directory fsync around the renames and after the undo: done; failure is a
+  failed install.
+- Corrective record before an undo after a failed `flip_completed` write: done,
+  with the double failure left open (above).
+- First progress record unsynced: the `accepted` record is durable; later
+  progress ticks stay plain writes (a torn tick leaves the older record).
+- `ensureReleaseOf` silent: returns an error and verifies; an empty prior
+  release is an error.
+- Boot proceeds to open a mixed store when unresolved: declined. The guest still
+  refuses restore acts and `/health` reports it; refusing to serve would turn a
+  rare unresolved restore into an outage, and an absent state file is the
+  existing lost-disk boot.
+- Admission-side gate for apply and capsule: declined and named. An apply or
+  capsule admitted between the pre-flip check and the store close fails (the
+  close waits 10 s for the writer); it does not corrupt. The restore's replay
+  time is lost in that case.
+- A restore leaves a store-sized quarantine each time (pre-existing, nothing
+  prunes it): the disk floor does not account for it. A restore is a rare owner
+  act; pruning is left to the storage mission.
+- Two readers of `restore-acts/`: the strict one decides repair and acceptance,
+  the lenient one serves status; left.
+- `restoreInstallPhaseKnown("")` for a pre-protocol record: unreachable, no
+  deployed release wrote one; commented.
+- The `mid_flip` branch in the engine is a nil-hook call; left. The seam
+  variables are plain: run under `-race`, below.
+- `repairRestoreAct`'s `stopped` return skips the rest on purpose (a kill);
+  commented.
+
+### Failure list additions
+
+29. A kill after the in-process undo and before the record leaves the boot able
+    to finish (one routine, nothing deleted by the engine).
+30. A terminal record never holds an unresolved live state; acceptance checks
+    records.
+31. A sidecar the live store left is never moved by inference.
+32. The renames' directories are synced before the fact.
+33. A double write failure leaves the act open, unresolved, refused.
