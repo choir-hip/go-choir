@@ -228,6 +228,8 @@ entered below as lapsed, not scored.
 | C92 | 2026-11-15T06:01Z | false | first report on cc8ea803d, corpusd journal 05:44:19Z (sweep started 05:39:54Z, 265 s): `capture-bodies` mode dry-run, scanned 416,916, live 416,864 (all named by rows), unreachable 52, in grace 6, eligible 46 with 5,814,768 bytes, deleted 0, errors 0. The nothing-deleted half held; the eligible count is 46, far under the 1,000 I set as the floor. Capture bodies are 99.99% referenced: their growth is live data, and activating deletion would return 5.8 MB | 0.25 |
 | C95 | 2026-11-15T11:17Z | true | landed 10:07Z (1f160b0ba, 2ad3cc9d2, b40edecb4), CI 43702528075, d@e on e9a0b757a at 10:28Z. First run at 10:32Z with the d@e key: `autoradio-dj`, ` autoradio-dj`, `Autoradio-DJ`, `-autoradio-dj` and a claim tagged `AUTORADIO:x` each 403 "the autoradio namespace is reserved for the server"; `my-autoradio` 201; an ordinary claim 201 and settled; GET claims (200 rows) and GET calibration name agents drill, l1a-proof, my-autoradio only | 0.0625 |
 | C98 | 2026-11-15T11:30Z | true | landed 11:15Z as 45bf7ce4c (CI 43708149004, d@e on b8b741f9f). Three requests on d@e with four candidates each (request ids c98-proof-20261115-1 to 3): each status completed, 7, 7 and 8 segments, 4 claims each, first segment 3,760, 4,206 and 4,633 ms, done 4,172 to 5,104 ms; River refused in 0 ms (unregistered) and Bedrock Haiku 5.5 answered. A replay of the first returned the same 7 segments with replayed true. The generic claims list names no autoradio agent. The deadlines were not approached; Bedrock does not stream, so the idle deadline was not exercised | 0.25 |
+| C96 | 2026-11-15T12:31Z | true | landed 10:07Z as 8b15ec2e9, CI 43702528075, the paper booted it at 10:31Z. Console log 10:31Z to 12:31Z: 73 intake flushes; 70 `jev job: site=intake_labels` lines, 57 with calls=1 and 13 with calls=2; all 13 `jev split:` lines `forced_by=map[request_tokens_64k:1]`; no flush reports unlabelled above 0; paper calls per hour 1,255 and 1,530 against 1,483 before (status-hourly); no revert. Not in the claim and recorded as problems: 32 of the 73 flushes were one capture in its own call; 3 flushes wrote a label with no call (two after a timed-out index read, one with no logged cause) | 0.16 |
+| C68 | 2026-11-15T12:31Z | false | the coalescing landed (d81cb98b4 and the storage ledger: groups stay single, 1.16 writes per commit) and the paper wrote about 10,100 tape events an hour on 2026-11-15, 2.7-fold under the 27,000 of 2026-11-13, short of 3-fold and not attributable to coalescing; the corpusd-calls ratio was not measured | 0.2025 |
 
 ### Scorecard
 
@@ -237,6 +239,6 @@ false, 1 partial), 7 lapsed.
 | band | claims settled | came true |
 |---|---|---|
 | 0.0 to 0.3 | 0 | n/a |
-| 0.3 to 0.6 | 12 | 3, and 2 partial |
-| 0.6 to 0.8 | 19 | 15, and 1 partial |
+| 0.3 to 0.6 | 13 | 3, and 2 partial |
+| 0.6 to 0.8 | 20 | 16, and 1 partial |
 | 0.8 to 1.0 | 0 | n/a |

@@ -45,3 +45,19 @@ not traced.
 The share of intake calls that are single-capture over a full day is not
 counted; fifteen minutes after a boot may not be typical. Count it over the
 C96 window before sizing the fix.
+
+## Count over two hours, 2026-11-15T12:31Z
+
+Console log 10:31Z to 12:31Z: 73 flushes; 32 were one capture in one call
+(44%); 13 were twelve captures in two calls, split by the 64k request
+limit; 25 others carried two to four captures in one call. So the fix is
+worth making: nearly half the calls carry one capture and about 23,400
+tokens of shared state each.
+
+A second thing, not explained: 3 flushes of one capture made no call and
+still report unlabelled=0, so a label was written with no question asked.
+Two follow a timed-out story-index read ("labelling against siblings
+only": a lone capture has no siblings), at 10:34:26 and 11:42:34. One, at
+12:11:09, has no logged cause. A label written without a judgment after a
+timeout looks like any other label. Read `labelPoll` for what it writes in
+that case before deciding whether this is a defect.
