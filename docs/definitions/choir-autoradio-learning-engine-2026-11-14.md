@@ -235,11 +235,15 @@ owner_rulings:
   - on: 2026-11-14
     decision: start
     said: "I want you to actually make this into a PR, and we'll merge that PR, and then we'll get to work on it from our main worker thread."
+  - on: 2026-11-15
+    decision: review seats, D4, and the first phone build
+    said: "Sounds good. DeepSeek and sonnet for review. And build after pr 110. I want to build once tonight (I'll be up for 2-4 more hours) then let you work overnight."
+    read_as: while the Gemini seat is out of quota the two seats for this mission are DeepSeek V4.1 Flash and Sonnet (a Sonnet seat never reviews a change a Sonnet builder of this session wrote alone; DeepSeek always sits); the mission runs overnight beside storage solutions (D4, beside it); the owner builds the phone app from main after PR 110 (0157fd919) tonight and again tomorrow; no install is made by the lead
 
 now:
   status: working
   slice: L0, with P1 free to start on fixtures
-  source_ref: origin/main 21e7860bd
+  source_ref: origin/main 0157fd919
   deploy_identity: unknown
   candidate:
     id: none
