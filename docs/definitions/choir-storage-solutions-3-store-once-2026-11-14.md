@@ -289,7 +289,7 @@ now:
     a mistake there changes model input silently. No code on T1 or T2
     before two seats accept the design section and failure list. The
     forward restore event is the owner's decision.
-  next_action: run the T1 and T2 design lanes (read-only code reading, design section, failure list), send each to two seats; read the paper's first capture when it comes.
+  next_action: land the run-write counter and read it on the paper (C101); choose T2's mechanism from that reading; read what choir.event writes (17% of tape bytes). T1 is parked after three review rounds; carried messages are 12.8% of tape bytes.
 
 receipts: []
 
