@@ -38,6 +38,42 @@ Design: `docs/design/autoradio-lab-2026-11-10.md`. This directory holds `Autorad
 6. A replay mutates the kept turn: it never writes into the turn folder; `--out` is separate.
 7. Apple recognition needs authorization on the Mac: the command embeds usage strings; a missing authorization is an `error` event and a non-zero exit in the proof.
 
+## Programme player (station P1): ways it can fail (written before the code)
+
+Design: `docs/design/autoradio-dj-programme-2026-11-11.md` section 6; vocabulary: `docs/design/autoradio-learning-engine-2026-11-14.md` 12.3.
+Fixtures: `mobile/fixtures/learning/` (from the server builder, `lane/arl-l1a`). Tests: `ProgrammePlayerTests.swift`; the numbers below are in the test names.
+
+### Reading the stretch
+1. A network chunk ends inside a line (JSON or SSE): nothing is parsed until the line is complete; the line ending is LF, CRLF or a lone CR.
+2. Blank lines, SSE comments (`: autoradio`), unknown event names (`stretch`, `handoff`), a line that is not JSON, a JSON value that is not an object: ignored and counted, never a crash, never a gap in the programme.
+3. A line the phone cannot speak (unknown `kind`, text empty or only blanks) is dropped. The server is the validator of everything else (`p_heard`, `caused_by`, cites in the candidate set): the phone does not judge those, so a fixture line that is server-invalid but speakable is queued.
+4. A title with a newline, a control character, or over 200 bytes becomes one clean line; no title falls back to a plain label of the kind. A raw ref is never a title or a chip label.
+5. `cites` as plain strings (the fixture) or as `{ref, role, label}`: a chip exists only for a cite with a label; one ref is listed once.
+6. A line with no `stretch_id` or `segment_id` (the fixture has none) gets local ids; a segment id seen twice is appended once.
+7. `done` ends the stretch; `error` is logged and keeps what is queued; a stream that ends with no `done` keeps what it has.
+
+### Blocks
+8. `SplitBlocks` is mirrored exactly (blocks.json): CRLF and lone CR are line endings, a whitespace-only line is blank, leading, trailing and many blank lines vanish, a single newline joins, empty text has no blocks.
+9. The server's `block_count` is kept and is the count reported; the phone computes a count only when none was sent (fixtures). A sent count of zero or less is treated as not sent. A differing count is noted in the segment (`blockCountMismatch`) and the reported `lastBlock` is clamped inside the server's count.
+10. A paragraph over 600 characters is spoken as several playback units; every unit maps to the one server block it came from, so the reported `last_block` is the server's index, never a unit index.
+
+### The document
+11. A document saved before this change has no `segments`: it decodes as empty and plays as one article.
+12. A revision applied to a segmented document keeps every remaining segment's range right (inserted blocks shift later ranges; a segment cut through by a replacement is dropped).
+13. A segment appended to a document whose id changed meanwhile (the listener asked for something else) is refused, not mixed in.
+
+### The player
+14. A segment arriving while one plays does not restart, skip or repeat the block now playing.
+15. A segment arriving after the programme ran dry starts at its first block when not paused; while the listener has paused, it queues and makes no sound.
+16. Skip goes to the first block of the next segment; on the last segment it does nothing (it never wraps and never reports a skip that did not happen). Previous goes to the start of this segment, or to the one before when already at its start. A jump to a segment outside the list does nothing.
+17. A block that did not play (the voice is missing or failed) is not a finish: the segment gets `failed`, never `finished`.
+18. Observers (station P2): `segmentBegan`, `blockBegan(lastBlock)` once per server block (not once per unit), `finished` only when the last unit of the last server block played to its end, `skipped` only for a forward skip, `rewound` for a backward jump, `superseded` when the document is replaced mid-segment, `paused` and `resumed` for the listener, `cut` and `cutEnded` when the engine yields to a turn. No event is emitted twice for one transition.
+19. Now playing shows the segment title and kind and the labelled sources, never raw refs; the lock-screen title is the segment title and the artist is "Autoradio" with the kind; the player's programme list is segments, not blocks, once a document has segments.
+
+### The stage
+20. No stretch (route 404 or 503, 401, a transport failure, a stream with no speakable segment): the front-page article plays exactly as before. A stretch that fails after some segments keeps what it has and is not retried by itself.
+21. A reload (sign-in, a story picked) cancels the follower of the old stretch; a late segment of the old stretch never lands in the new document (13).
+
 ## Acknowledgement timing (`ackTiming`): ways it can fail (written before the code)
 
 `LabConfiguration.ackTiming` is `immediate` (default) or `afterSystem1`. Measured on staging, the acknowledgement
