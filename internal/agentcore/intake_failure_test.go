@@ -138,3 +138,22 @@ func TestJevNextStepOrdersTheChecks(t *testing.T) {
 type jevErr string
 
 func (e jevErr) Error() string { return string(e) }
+
+// A deterministic failure (the gateway's 400 for an invalid request) is not
+// transient: asking again or halving cannot change it, so it fails once,
+// visibly, through the real client's Transient().
+func TestIntakeGateway400FailsOnceAndIsNeitherRetriedNorHalved(t *testing.T) {
+	fastRetries(t)
+	rt, _ := testRuntime(t)
+	gw, judge := newFakeGateway(t, &fakeIntakeJudge{}, func(n, questions int) int { return http.StatusBadRequest })
+	rt.SetCandidateJudge(judge)
+	results := rt.labelPoll(context.Background(), pollLib(rt, 5), "owner", "computer", "src", flushTestItems(12, "s"), intakeBatchCaptures)
+	for i, r := range results {
+		if r.Err == nil {
+			t.Fatalf("a 400 labelled capture %d", i)
+		}
+	}
+	if got := gw.count(); got != 1 {
+		t.Fatalf("%d requests on a 400; want exactly 1", got)
+	}
+}

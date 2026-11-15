@@ -368,9 +368,14 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 	// One call for every waiting capture; a split (past the choices or the
 	// token limits) is rare and asks the next chunk after the previous one
 	// committed, so it sees the events that chunk minted.
-	// Each chunk has its own deadline, so a long flush never starves the
-	// chunks behind it; a chunk whose call fails leaves its captures in
-	// report.Left (an "unresolved" wake record, not retried).
+	// Each call has its own deadline, so a long flush never starves the chunks
+	// behind it. A chunk whose call fails is asked again and halved
+	// (resolveEventChunkAt, jev_failure.go); what still fails leaves its
+	// captures in report.Left (an "unresolved" wake record, not retried again).
+	// The retries, their backoff and the halves run while resolveEvents holds
+	// idx.mu, so a failing flush holds the index for up to eight calls a
+	// chunk; only eventSummary readers wait on it, and the work is the flush's
+	// own.
 	for _, chunk := range chunks {
 		// Each call has its own deadline (scaled to its size); a flush has none, so
 		// retries and halves never starve the chunks behind it.

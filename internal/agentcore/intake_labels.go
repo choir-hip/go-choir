@@ -1275,7 +1275,7 @@ func (rt *Runtime) askIntakeCall(ctx context.Context, lib *intakeLibrary, call i
 		} `json:"usage"`
 	}
 	if err := json.Unmarshal(raw, &distribution); err != nil {
-		return nil, fmt.Errorf("decode Jev's answer: %w", err)
+		return nil, &jevUndecodable{fmt.Errorf("decode Jev's answer: %w", err)}
 	}
 	total := len(call.questions)
 	out := make([][]intakeCallAnswer, len(call.asks))

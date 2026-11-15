@@ -52,6 +52,10 @@ func newFakeGateway(t *testing.T, inner CandidateJudge, refuse func(n, questions
 			w.WriteHeader(http.StatusBadGateway)
 			_, _ = w.Write([]byte(`{"error":"Jev judgment provider unavailable"}`))
 			return
+		case http.StatusBadRequest:
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"invalid judgment request"}`))
+			return
 		case http.StatusTooManyRequests:
 			w.Header().Set("Retry-After", "1")
 			w.WriteHeader(http.StatusTooManyRequests)

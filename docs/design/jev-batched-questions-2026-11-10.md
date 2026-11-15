@@ -811,7 +811,9 @@ in this order:
 2. A refusal whose text names a size (`max_tokens_exceeded`, "context length"
    and similar; a secondary hint the gateway does not relay today) halves the
    call at once, logged `forced_by=vendor_refused`.
-3. Any other failure is asked once more after a backoff. If it fails again and
+3. A failure the client says is not transient (a 400 invalid request) or an
+   undecodable answer is deterministic: it fails once, visibly.
+4. Any other failure is asked once more after a backoff. If it fails again and
    the call carries more than one unit, it is halved at a unit boundary, to two
    levels, logged `forced_by=call_failed` with the error. A half that fails
    halves again without a retry of its own.
@@ -876,6 +878,11 @@ The list is the sites not yet moved, each with its calls per job.
 **Residuals named by the third review round.** The support pass has no overall
 deadline (each call has its own), so a stuck store or call holds the queue until
 a stop cancels it. One intake flusher serves all computers of a runtime, so a
-slow flush delays another computer's labels (no lock is held). The gateway
-relaying the vendor's status and reason is a separate, later change on the
-gateway, which is a red surface and not part of this lane.
+slow flush delays another computer's labels (no lock is held); a failed flush
+can occupy it about nine minutes (2 + 2 + 4 calls of up to 69 s, plus backoff),
+four times main's. The event layer's retries and halves run under the index
+lock (`idx.mu`) for up to eight calls a chunk. The backoff ignores the
+gateway's `Retry-After`; using it needs the client to expose it, a follow-up on
+the client surface. The gateway relaying the vendor's status and reason is a
+separate, later change on the gateway, which is a red surface and not part of
+this lane.
