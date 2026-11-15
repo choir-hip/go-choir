@@ -361,7 +361,7 @@ func TestSelfDevelopmentJoinIgnoresProseAndPersistsInRevisionMetadata(t *testing
 			"type": textureAgentRevisionTaskType, "request_source": "update_coagent", "doc_id": docID,
 		},
 	}
-	mergeTextureSourceEntitiesIntoRunMetadata(rec, entities)
+	rec.Metadata[textureAvailableSourceEntitiesKey] = entities // a run started before the list left the run record
 	result := handler.buildAppagentRevisionMetadata(ctx, rec, doc, ownerID, nil, 0)
 	meta := decodeRevisionMetadata(result)
 	if meta[textureJoinOperationID] != operationID || meta[textureJoinBundleDigest] != bundleDigest {

@@ -44,7 +44,11 @@ func (h *Handler) ensureCoagentTextureRevisionRoute(ctx context.Context, parentR
 	}
 	callerProfile := req.CallerProfile
 	// Frozen processor/reconciler records can still replay their original
-	// Texture handoff, but no live profile can enter this path.
+	// Texture handoff, but no live profile can enter this path. The list of
+	// available source entities that coagentTextureSourceEntities reads from the
+	// parent run is no longer stored in a run record
+	// (docs/design/run-record-written-less-2026-11-15.md); a parent started now
+	// has none, so re-enabling this route needs its own source of that list.
 	if callerProfile != "processor" && callerProfile != "reconciler" {
 		return coagentTextureRouteDecision{}, fmt.Errorf("texture route requires frozen processor or reconciler caller")
 	}

@@ -63,7 +63,6 @@ var durableMetadataKeys = []string{
 	"selected_style_rationale",
 	"owner_email",
 	"llm_policy_overlay_id",
-	textureAvailableSourceEntitiesKey,
 	textureJoinOperationID,
 	textureJoinBundleDigest,
 	textureJoinReceiptID,
