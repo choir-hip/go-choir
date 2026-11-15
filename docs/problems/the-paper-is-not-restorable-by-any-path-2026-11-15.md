@@ -42,3 +42,12 @@ with the fact known.
 Whether a hand-bound checkpoint would pass is not tested. The repair is the
 first landing of the design: both tables move into the graph through the
 tape and are emptied everywhere, then checkpoints bind on every computer.
+
+## Correction, 2026-11-15, after design review round 3
+
+The belief above is too strong. Eligibility is read only by the
+replay-completeness report; no restore is refused on it. The paper has no
+bound checkpoint and a tail over an hour, and that is what stops a restore.
+The 150 rows matter only if they changed after the base a restore starts
+from. See
+docs/problems/restore-bases-design-three-review-rounds-structural-assessment-2026-11-15.md.

@@ -1,5 +1,7 @@
 # Restore bases that cost the change (2026-11-15)
 
+> Set aside on 2026-11-15 after a third review round asked for repair. Nothing is built from the landing list below. See docs/problems/restore-bases-design-three-review-rounds-structural-assessment-2026-11-15.md.
+
 Status: revised after review round 2. Round 1 had one seat (DeepSeek), which
 returned REPAIR. Round 2 had two (DeepSeek and Sonnet), both REPAIR. Sections
 8 and 9 list each finding, my verdict and what changed. Code references were
