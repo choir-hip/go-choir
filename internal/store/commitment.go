@@ -422,24 +422,32 @@ func calibrationSchemaMatch() objectgraph.JSONFieldMatch {
 	return objectgraph.JSONFieldMatch{JSONPath: "$.calibration.schema", Value: types.CalibrationSchemaV1}
 }
 
-// ListCalibrationRecordsExcludingAgentPrefix is ListCalibrationRecords with
-// the claims of one agent namespace left out in the query, before the limit:
-// a record whose stored claimant agent, trimmed and lower-cased, begins with
-// excludePrefix is not returned, and does not use up a place in limit. The
-// generic claims routes read through it so that one listener's day of
-// Autoradio forecasts cannot evict another agent's calibration from the
-// limit (design 4.3). Newest first. An empty excludePrefix excludes nothing.
-func (s *Store) ListCalibrationRecordsExcludingAgentPrefix(ctx context.Context, ownerID, computerID, agent, excludePrefix string, limit int) ([]types.CommitmentRecord, error) {
+// ListCalibrationRecordsExcludingAgentPrefixPage reads the owner's calibration
+// records, newest first, one page at a time, leaving out in the query every
+// record whose stored claimant agent, trimmed and lower-cased, begins with
+// excludePrefix: such a record does not use up a place in limit. The generic
+// claims routes read through it so that one listener's day of Autoradio
+// forecasts cannot evict another agent's calibration (design 4.3). before is
+// "" for the first page and the previous call's next after that; next is ""
+// on the last page. The SQL test is a prefix of the trimmed lower-cased agent;
+// a variant that only calibration.Slug folds in (a hyphen-led name) comes
+// through, so the caller drops what its own test reserves and pages on until
+// its limit is filled.
+func (s *Store) ListCalibrationRecordsExcludingAgentPrefixPage(ctx context.Context, ownerID, computerID, agent, excludePrefix, before string, limit int) ([]types.CommitmentRecord, string, error) {
 	if limit <= 0 {
 		limit = 200
 	}
 	ownerID, computerID, err := calibrationScope(ownerID, computerID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
+	}
+	cursor, err := calibrationCursor(before)
+	if err != nil {
+		return nil, "", err
 	}
 	q := objectgraph.BodyPageQuery{
 		Kind: string(ogKindCommitmentRecord), OwnerID: ownerID, ComputerID: computerID,
-		Matches: []objectgraph.JSONFieldMatch{calibrationSchemaMatch()}, Descending: true, Limit: limit,
+		Matches: []objectgraph.JSONFieldMatch{calibrationSchemaMatch()}, Descending: true, AfterObjID: cursor, Limit: limit,
 	}
 	if agent = strings.TrimSpace(agent); agent != "" {
 		q.Matches = append(q.Matches, objectgraph.JSONFieldMatch{JSONPath: "$.calibration.agent", Value: agent})
@@ -447,8 +455,7 @@ func (s *Store) ListCalibrationRecordsExcludingAgentPrefix(ctx context.Context, 
 	if prefix := strings.ToLower(strings.TrimSpace(excludePrefix)); prefix != "" {
 		q.ExcludePrefix = []objectgraph.JSONPrefix{{JSONPath: "$.calibration.agent", LowerPrefix: prefix}}
 	}
-	records, _, err := s.calibrationBodyPage(ctx, q)
-	return records, err
+	return s.calibrationBodyPage(ctx, q)
 }
 
 // ListCalibrationRecordsPage reads the owner's calibration records (claims
@@ -479,12 +486,16 @@ func (s *Store) ListCalibrationRecordsPage(ctx context.Context, ownerID, compute
 	return s.calibrationBodyPage(ctx, q)
 }
 
-// ListCalibrationClaimsByTagPage reads the owner's calibration claims that
-// carry tag (an exact element of the claim's tags, never a prefix), oldest
-// first, one page at a time, as ListCalibrationRecordsPage does.
-// JSONFieldMatch has only an exact value, so a tag held in an array needs
-// this query: it is how a stretch's forecasts are listed (design 3.3, 12.1).
-func (s *Store) ListCalibrationClaimsByTagPage(ctx context.Context, ownerID, computerID, tag, after string, limit int) ([]types.CommitmentRecord, string, error) {
+// ListCalibrationClaimsByTagPage reads the owner's calibration claims of one
+// claimant agent and one record_kind that carry tag (an exact element of the
+// claim's tags, never a prefix), oldest first, one page at a time, as
+// ListCalibrationRecordsPage does. JSONFieldMatch has only an exact value, so
+// a tag held in an array needs this query: it is how a stretch's forecasts are
+// listed (design 3.3, 12.1). agent and recordKind are required, so an ordinary
+// claim that happens to carry the tag is not a forecast. Cost: json_each runs
+// over each of the owner's calibration bodies, linear in them per listing;
+// revisit with an index when one listing is seen to take over a second.
+func (s *Store) ListCalibrationClaimsByTagPage(ctx context.Context, ownerID, computerID, agent, recordKind, tag, after string, limit int) ([]types.CommitmentRecord, string, error) {
 	if limit <= 0 {
 		limit = 200
 	}
@@ -492,8 +503,9 @@ func (s *Store) ListCalibrationClaimsByTagPage(ctx context.Context, ownerID, com
 	if err != nil {
 		return nil, "", err
 	}
-	if tag = strings.TrimSpace(tag); tag == "" {
-		return nil, "", fmt.Errorf("calibration claims by tag requires a tag")
+	agent, recordKind, tag = strings.TrimSpace(agent), strings.TrimSpace(recordKind), strings.TrimSpace(tag)
+	if tag == "" || agent == "" || recordKind == "" {
+		return nil, "", fmt.Errorf("calibration claims by tag requires an agent, a record kind and a tag")
 	}
 	cursor, err := calibrationCursor(after)
 	if err != nil {
@@ -501,7 +513,11 @@ func (s *Store) ListCalibrationClaimsByTagPage(ctx context.Context, ownerID, com
 	}
 	return s.calibrationBodyPage(ctx, objectgraph.BodyPageQuery{
 		Kind: string(ogKindCommitmentRecord), OwnerID: ownerID, ComputerID: computerID,
-		Matches:    []objectgraph.JSONFieldMatch{calibrationSchemaMatch()},
+		Matches: []objectgraph.JSONFieldMatch{
+			calibrationSchemaMatch(),
+			{JSONPath: "$.calibration.agent", Value: agent},
+			{JSONPath: "$.subject_refs.record_kind", Value: recordKind},
+		},
 		ArrayHas:   []objectgraph.JSONArrayHas{{JSONPath: "$.calibration.claim.tags", Value: tag}},
 		AfterObjID: cursor, Limit: limit,
 	})
