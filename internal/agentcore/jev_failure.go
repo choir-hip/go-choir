@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"errors"
+	"net"
 	"strings"
 )
 
@@ -27,13 +28,18 @@ import (
 //     fails to parse as JSON is a transient drop, not this case: it gets the
 //     ordinary retry. Any other status the client calls non-transient keeps
 //     the ordinary path.
+//   - A dial failure (jevTransportDown: no request left the guest: refused,
+//     unresolvable, or the dial deadline expired) fails the call at once, at any depth: asking
+//     again or asking a smaller call meets the same closed port. Evidence:
+//     every halving seen on 2026-11-15 was "connection refused" while the
+//     gateway restarted. Intake also stops sending the flush's other calls.
 //   - Any other failure is asked once more after a backoff; if it fails again
 //     and the call carries more than one unit, it is halved at a unit
 //     boundary, to jevHalvingDepth levels. A half that fails without a rate
 //     refusal halves again without a retry of its own (it follows two failures
 //     of its parent); a half that meets a rate refusal is asked again, whole.
 //
-// Worst case on a persistent failure, then: the call twice, its two halves,
+// Worst case on a persistent failure other than a dial failure (one call), then: the call twice, its two halves,
 // their four quarters, eight calls, and every capture of a persistent failure
 // unlabelled; a failure that a smaller request avoids loses nothing.
 const (
@@ -58,6 +64,11 @@ func jevNextStep(err error, retries, depth int, halvable bool) (act jevAction, f
 	}
 	canHalve := halvable && depth < jevHalvingDepth
 	switch {
+	case jevTransportDown(err):
+		// First: a dial error's address can contain the digits 429 or 529
+		// (a port), which the rate check below would read as a refusal. A
+		// real 429 carries a status, which jevTransportDown excludes.
+		return jevFail, ""
 	case jevRateRefused(err):
 		if retries < jevRateTries {
 			return jevRetry, ""
@@ -129,3 +140,18 @@ type jevUndecodable struct{ cause error }
 
 func (e *jevUndecodable) Error() string { return e.cause.Error() }
 func (e *jevUndecodable) Unwrap() error { return e.cause }
+
+// jevTransportDown reports a dial failure: no request left the guest (the
+// gateway's port refused, its name did not resolve, or the dial deadline
+// expired), so no status was received and
+// asking again at once, or asking a smaller call, meets the same closed port.
+func jevTransportDown(err error) bool {
+	if jevStatus(err) != 0 {
+		return false
+	}
+	var op *net.OpError
+	if errors.As(err, &op) && op.Op == "dial" {
+		return true
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "connection refused")
+}
