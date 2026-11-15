@@ -355,3 +355,37 @@ Each is read-only. None changes a write path.
    projection tape has a cipher bound (the `sealer` at
    `projection_tape.go:84`), or count batches with and without a
    `compression` field.
+
+## Measurement added 2026-11-15T18:48Z: base64 does not compress away
+
+A local bench on real data, not on the tape. Input: the 20 newest run
+records of the test computer as its run API returned them at about 15:00Z
+(mean 23,414 bytes, read-only). Each record was wrapped in a synthetic
+object op two ways, with the body as base64 (today's encoding of
+`objectgraph.Object.Body`) and with the body as inline JSON, then
+compressed with `zstd -3`, alone and in batches of five.
+
+| | plaintext, base64 body | plaintext, inline body | zstd, base64 body | zstd, inline body |
+| --- | --- | --- | --- | --- |
+| one op a batch | 627,648 | 471,490 | 195,463 | 110,158 |
+| five ops a batch | 627,632 | 471,474 | 138,111 | 72,038 |
+
+Plaintext grows by 1.33, as expected. After compression the base64 form
+is **1.77 to 1.92 times** the inline form: base64 moves JSON off its byte
+boundaries, so the compressor finds fewer repeats. The sealed envelope's
+own base64 multiplies both sides equally.
+
+What this does and does not show. It shows the encoding cost survives
+compression and grows. It does not measure the tape: the envelope is
+synthetic, the compression level and the sealed path's unit are taken from
+the code reading above, the records are run records of a Texture-heavy
+test computer that still carried the source-entities list, and other
+object kinds may compress differently. If object ops are two thirds of
+tape bytes and the ratio held for all of them, sealed tape bytes would
+fall by something like 30%; that number is an extrapolation, not a
+reading.
+
+Remaining error: the same bench on real op bodies of each large kind
+(`choir.event`, `choir.run`, `choir.texture_document`), which needs
+either a host-side read of sealed segments or a guest-side counter of
+compressed bytes per batch with and without the encoding. Neither exists.
