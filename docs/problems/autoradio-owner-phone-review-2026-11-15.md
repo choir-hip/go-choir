@@ -219,3 +219,16 @@ The owner tested onboarding, where the app helps set up the edition.
   "no synthesizer" finding searched for the wrong type name. Its weights are
   the folder `phonon/phonon-31m-en` of `FluidInference/pocket-tts-coreml`,
   about 173 MB, Apache-2.0 for that folder.
+- **The overnight ask, 23:36Z:** podcast clips; a podcast app inside
+  Autoradio (subscribe; a clip keeps playing into its full episode); a
+  reader for EPUB and PDF, read on screen, read aloud, and in universal
+  search; a URL in the prompt bar opens in the web view with a read-aloud
+  button; one queue for anything playable (story, page, book, podcast or
+  clip) that keeps playing while the reader goes elsewhere. All aimed at the
+  6am build. "I recognize this is still rapid prototyping. But I just want
+  to get the feel of the full experience."
+- **Design:** on the edit-edition page, "I know you can do better design.
+  Another thing to do overnight is generally improve the design." Evidence
+  from the screenshot: ten category chips as large saturated blobs, one per
+  row, all filled so selection says nothing; three unrelated left edges;
+  chips showing through the bottom bar.
