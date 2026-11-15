@@ -2809,6 +2809,7 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 	// Counted on the success path only: a lost condition or a failed outbox
 	// append commits nothing and counts nothing.
 	s.telemetryStats.countLifecycleCommandForm(form)
+	s.noteLifecycleRunWrites(result.Receipt.Kind, objects)
 	s.signalActorWakesIfAny(objects)
 	return result, nil
 }
@@ -3531,6 +3532,13 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 		}
 		return types.LifecycleResult{}, err
 	}
+	// Counter only: after the put committed. The run is runObj; its previous
+	// body is the stored one this write was conditional on, or none.
+	var previousRunBody []byte
+	if getRunErr == nil {
+		previousRunBody = existingRunObj.Body
+	}
+	s.noteRunWrite(runSiteActivation, previousRunBody, runObj.Body)
 	s.signalActorWakesIfAny(objects)
 	return types.LifecycleResult{Trajectory: trajectory}, nil
 }
