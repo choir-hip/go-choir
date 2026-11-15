@@ -142,3 +142,15 @@ The owner tested onboarding, where the app helps set up the edition.
   then a second sheet repeating the source with "Open original", then the
   page. Ruling: "Open source" opens the page directly; expand the inline
   source card rather than adding a second sheet.
+- **Progress noted by the owner:** single stories can now be listened to.
+- **Player requests:** speed as a slider, up to 3x; next and previous story
+  buttons beside the 15-second ones; when a story ends the next plays by
+  itself, "maybe with AI DJ transition between them".
+- **Open question from the owner: "where is the AI DJ now? Is it live
+  yet?"** Known: the server's programme route is deployed and wrote a
+  stretch for d@e through River today. Not known: whether the phone app
+  requests and plays a programme on any path the owner reaches. Being traced.
+- **Problem: the edition interview never finished.** Evidence: owner
+  screenshot of step 4 of 4: after "No that's it" the radio says "Good.
+  Writing your edition now." and the screen stays there. The summary held
+  only two topics. Cause not yet traced.
