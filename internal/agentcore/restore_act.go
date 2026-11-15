@@ -230,9 +230,13 @@ type restoreActs struct {
 
 // restoreActRun is an act in this process.
 type restoreActRun struct {
-	mu      sync.Mutex
-	rec     RestoreActRecord
-	dir     string
+	mu  sync.Mutex
+	rec RestoreActRecord
+	dir string
+	// id and computerID are the act's, fixed at acceptance. They are read
+	// without the lock (rec is replaced whole by every durable fact, so its
+	// fields are not).
+	id, computerID string
 	applied atomic.Uint64
 	// replayStarted is when the replay began (zero before).
 	replayStarted time.Time
@@ -585,7 +589,7 @@ func (rt *Runtime) acceptRestoreAct(ctx context.Context, kind, computerID string
 		return RestoreActRecord{}, err
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	run := &restoreActRun{dir: rt.restoreActDir(), rec: RestoreActRecord{
+	run := &restoreActRun{dir: rt.restoreActDir(), id: actID, computerID: computerID, rec: RestoreActRecord{
 		SchemaVersion: restoreActSchemaVersion, ActID: actID, Kind: kind, ComputerID: computerID,
 		CheckpointDigest: checkpoint.Digest, TargetHead: checkpoint.Request.AcceptedEventHead, IdempotencyKey: key,
 		State: restoreStateAccepted, AcceptedAt: now, UpdatedAt: now, StatusURL: restoreActStatusURL(computerID, actID),
@@ -749,7 +753,7 @@ func (rt *Runtime) restoreUnresolvedNow() []string {
 	running := ""
 	rt.restoreActs.mu.Lock()
 	if rt.restoreActs.running != nil {
-		running = rt.restoreActs.running.rec.ActID
+		running = rt.restoreActs.running.id
 	}
 	rt.restoreActs.mu.Unlock()
 	records, unreadable := readRestoreActRecordsStrict(dir)
@@ -827,11 +831,11 @@ func (rt *Runtime) runRestoreAct(run *restoreActRun, release func(), checkpoint 
 		defer func() {
 			if p := recover(); p != nil {
 				err = fmt.Errorf("restore act panicked: %v", p)
-				log.Printf("restore act %s: %v", run.rec.ActID, err)
+				log.Printf("restore act %s: %v", run.id, err)
 			}
 		}()
 		run.enter(restoreStateFetchingBase)
-		report, err = rt.RematerializeFromTape(ctx, run.rec.ComputerID, checkpoint)
+		report, err = rt.RematerializeFromTape(ctx, run.computerID, checkpoint)
 	}()
 	close(stopPersist)
 	switch {
@@ -846,13 +850,13 @@ func (rt *Runtime) runRestoreAct(run *restoreActRun, release func(), checkpoint 
 	case errors.Is(err, errRestoredRestartRequired):
 		// The computer is on the restored store with a store it could not
 		// reopen: it needs the restart, and nothing may move `current` under it.
-		log.Printf("restore act %s: %v", run.rec.ActID, err)
+		log.Printf("restore act %s: %v", run.id, err)
 		rt.restoreRestaged.Store(true)
 		report.RestartScheduled, report.RestartDeferred = rt.requestRestoreRestart(ctx, checkpoint.Digest)
 		run.finish(restoreStateRestored, nil, &report, err.Error(), restoreLiveRestored)
 	default:
 		refusal := restoreActRefusalOf(err)
-		log.Printf("restore act %s failed: %s: %v", run.rec.ActID, refusal.Name, err)
+		log.Printf("restore act %s failed: %s: %v", run.id, refusal.Name, err)
 		run.finish(restoreStateFailed, &refusal, nil, "", "")
 	}
 	acts.mu.Lock()
@@ -946,7 +950,7 @@ func (h *APIHandler) restoreActStatus(w http.ResponseWriter, r *http.Request, co
 	acts.mu.Lock()
 	running := acts.running
 	acts.mu.Unlock()
-	if running != nil && (actID == "" || actID == running.rec.ActID) {
+	if running != nil && (actID == "" || actID == running.id) {
 		writeAPIJSON(w, http.StatusOK, running.view())
 		return
 	}
