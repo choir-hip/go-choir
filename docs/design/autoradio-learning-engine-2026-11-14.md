@@ -11,7 +11,7 @@ in the places listed in section 9. Everything else in that design stands:
 stretches, segments, hand-offs, the slices.
 
 Revised after the station L0 review (two seats, both REPAIR). Tags: **[code]**
-read from code at `origin/main` 955d4527f; **[doc]** from the programme
+read from code; the Go tree is as at `origin/main` 955d4527f (main has since moved only in `mobile/`); **[doc]** from the programme
 design; **[new]** decided here. Line numbers drift.
 
 Terms. An **air event** is one playback report from the phone, stored once.
@@ -88,8 +88,8 @@ an instruction; widening what the DJ may try is a later owner act (section 7).
 ### 3.2 Validators
 
 Every validator drops the line (a stretch line, not the call) and notes the
-reason in the stretch's `timings`; three invalid lines of any kind end the call
-**[doc 2.3]**. A dropped line is never streamed and has no forecast, so it can
+reason in the stretch's `timings`; a run of three invalid lines, of any kind,
+ends the call **[doc 2.3]**. A dropped line is never streamed and has no forecast, so it can
 neither be settled nor count as unforecast.
 
 | Check | Failure |
@@ -97,11 +97,11 @@ neither be settled nor count as unforecast.
 | kind known; text non-empty; length in the kind's range; every `cite` in the candidate set | drop (as the programme design) |
 | content kind has `p_heard` and `caused_by` | drop |
 | `p_heard` a finite number in [0, 1] (endpoints are allowed and scored as stated) | drop |
-| `caused_by` grammar above, and it resolves: `lesson:<id>` names an active lesson in this call's input; `instruction:` names an instruction listed in this call's input; `edition:P<n>` with n within the numbered paragraphs | drop |
+| `caused_by` grammar above, and it resolves: `lesson:<id>` names an active lesson in this call's input; `instruction:turn/<turn_id>` names a turn whose request record `autoradio-turn-req:<turn_id>` **[code: `api_autoradio.go:282`]** is listed in this call's input (a failed or interrupted turn counts: the words were said); `instruction:note/<id>` names a listed notebook correction; `edition:P<n>` with n within the numbered paragraphs | drop |
 | a segment citing a lesson written in the same response | drop (the lesson is not in the input) |
-| lesson line: text one line, 300 characters or fewer; cites are `air:<event_id>` or `instruction:` refs, at least two air events or one instruction, every one listed in this call's input | drop |
+| lesson line: text one line, 300 characters or fewer; cites are `air:<event_id>` or `instruction:` refs, at least two air events or one instruction, every one listed in this call's input (6.1: an air event is listed as the settling event of a marked case, or as a gesture or correction event); an open or lapsed case has no settling event, so nothing about it can be cited | drop |
 | lesson line: `replaces` names an existing active lesson of this listener; a struck or unknown id | drop |
-| lesson line whose every cite is already cited by a struck lesson | drop (a struck lesson is not rewritten from the same evidence) |
+| lesson line whose every cite is already cited by a struck lesson (the struck lessons' cites are shown to the DJ, 6.1) | drop (a struck lesson is not rewritten from the same evidence) |
 | a lesson id or segment id sent by the model | ignored; the handler mints `L<n>` and the segment id |
 
 A failed claim write is not model invalidity. The handler ends the call with an
@@ -120,21 +120,41 @@ HTTP claim route does not expose it (section 4.3).
 | `agent.name`, `agent.model`, `session_id` | `autoradio-dj`; the model that wrote the stretch; the stretch id |
 | `type`, `p` | `forecast`; `p_heard` |
 | `claim` | "The listener hears segment `<id>` (`<kind>`: `<title>`) through." |
+| `criterion` | `caused_by=<the full ref>` (up to 2000 bytes), so an instruction or edition ref is never a tag |
 | `idempotency_key` | `<stretch_id>/<segment_id>`. The id is `calib:autoradio-dj:<hash>`, deterministic, so a replay writes nothing new **[code: `ClaimRecordID`, `records.go:185`]** |
 | `project` | the segment kind, so the existing `group_by=project` stratifies by kind **[code: `math.go` `ParseGroupBy`]** |
-| `deadline` | commit time plus 12 hours; past it the existing status `overdue` marks the forecast lapsed (section 4.2) |
+| `deadline` | the stretch's start time plus 12 hours, the same for every segment of the stretch (see below); past it the existing status `overdue` marks the forecast lapsed (section 4.2) |
 | `source_ref` | `autoradio:<stretch_id>/<segment_id>` |
-| `tags` (at most 20 of 64 bytes) | `autoradio`, `stretch:<id>`, `seg:<id>`, `kind:<kind>`, `cause:<class>`, `ref:<id>` (for `instruction`, `edition`, `lesson`), `sha:<first 32 hex of the text's sha256>`, `blocks:<n>` |
+| `tags` (at most 20 of 64 bytes) | `autoradio`, `stretch:<id>`, `seg:<id>`, `kind:<kind>`, `cause:<class>`, `lesson:L<n>` (only for cause `lesson`), `sha:<first 32 hex of the text's sha256>`, `blocks:<n>` with n at least 1 |
 
-`caused_by` and any lesson ref live in the tags, set at commit time and never
-edited (claims have no edit route). The tally and the heard handler read them
-there. The builder asserts every tag is at most 64 bytes.
+The cause class and any lesson ref live in the tags, the full ref in
+`criterion`, set at commit time and never edited (claims have no edit route).
+The tally and the heard handler read them there. Stretch and segment ids are
+minted by the handler and at most 40 bytes, so every tag fits; the builder
+checks tags with the same `cleanName` and length test `NewClaimRecord` uses.
+Every autoradio record, claims included, carries the owner-private label
+(`types.OwnerPrivateLabel`, as the turn records do **[code:
+`api_autoradio.go:348`]**) and `desk=app:autoradio` with a `record_kind`, set
+by the constructor, which `NewClaimRecord` does not set itself.
+
+**Stretch start and retry.** The stretch's start time is written once, in a
+`autoradio-stretch-start:<stretch_id>` record, before any claim; the deadline
+derives from it, so a replay of a claim is byte-identical **[code: `SameClaim`
+compares the whole claim, `records.go:319`]**. Each segment's text is written
+in a record `autoradio-seg:<stretch>/<segment>` (`record_kind`
+`autoradio.segment`) before its claim, so the server holds every streamed
+word. A crash closes the round "interrupted by a restart" and nothing resumes
+**[CLAUDE.md]**. A retry is a new call with a new `request_id` and a new
+stretch id; it never re-streams a claimed segment id, so a `sha:` tag and the
+text the phone holds cannot diverge. A replay of the same `request_id` returns
+what was committed.
 
 The **stretch index** is a record `autoradio-stretch:<stretch_id>`
 (`record_kind` `autoradio.stretch`, in the pattern of **[code:
 `internal/agentcore/api_autoradio.go:360`]**) whose `related_ids` are its claim
-ids. It is written at `done`. A stretch whose call never completes has no index
-and keeps its claims for the segments already streamed; those settle as usual.
+ids. It is written at `done`. A stretch whose call never completes has a start
+record and no index, and keeps its claims and texts for the segments already
+streamed; those settle as usual.
 The listing of a stretch's forecasts reads the claims by tag, never the index.
 
 ### 3.4 The order is the guarantee
@@ -157,47 +177,71 @@ on the programme request (a change to **[doc 2.2, 3.4]**). Two tests hold this
 (goal file): the programme call with a provider that tries to emit an event or
 a settlement, and a call-site test that the settle method has one caller.
 
-### 4.2 The heard rule, a function of the event set
+### 4.2 The heard rule: deterministic given receipt order
 
 An air event: `{event_id, session_id, stretch_id, segment_id, text_sha256,
 seq, type, last_block, block_count, started_at, ended_at, cites}`. `type` is
 one of: `finished`, `skipped` (terminal); `cut`, `resume`, `paused`, `left`
 (not terminal); `more`, `less`, `corrected` (signals, never settle). `seq` is
-the phone's counter for that segment; `last_block` is the last block that began
+the phone's counter for that segment, monotonic across app launches (it is
+kept in the signals file); `last_block` is the last block that began
 playing. The phone synthesises `left` at the next launch, since a killed app
 cannot send it.
 
-**Heard through.** A segment is heard through when its final block began
-playing: `last_block = block_count - 1`. This is the one notion that scores
-`p_heard`. The programme design's dedupe test, "to its end or past half"
-**[doc 2.6]**, is a different notion and is named **covered**: `last_block + 1`
-at least half of `block_count`. Dedupe uses covered; Brier uses heard through.
+**Blocks.** The claim's `blocks` (at least 1, tagged at commit) governs. An
+event whose `block_count` differs from it is refused, and so is a `last_block`
+that is not an integer in `0..blocks-1`; zero, negative and out-of-range
+values are refused.
 
-**Settlement.** For each segment, take its events in server receipt order (a
-batch is first sorted by stretch, segment, `seq`). The first `finished` or
-`skipped` settles the forecast: yes when `finished`, or when `skipped` with
-heard through; no when `skipped` earlier. Later terminal events, conflicting or
-not, are stored and ignored; the response says `ignored`. Settlement id is
-deterministic, one per segment (`<claim id>:settle:rule:autoradio_heard`
-**[code: `SettlementRecordID`]**), and the append is conditional on not
-existing, so two racing batches settle once. Evidence is `air:<event_id>`.
+**Heard through.** A segment is heard through when its final block began
+playing: `last_block = blocks - 1`. This is the one notion that scores
+`p_heard`. The programme design's dedupe test, "to its end or past half"
+**[doc 2.6]**, is a different notion and is named **covered**: more than half
+of the blocks began, `2 * (last_block + 1) > blocks`, or heard through.
+Dedupe uses covered; Brier uses heard through.
+
+**Settlement.** A settlement is evidence and is never rewritten. So the rule
+is plain: **the first terminal event the server receives for a segment settles
+it.** A batch is first sorted by stretch, segment, `seq`, so one batch is
+normalised; across batches the order is receipt order. The rule is therefore
+deterministic given receipt order, and idempotent under replay of the same
+events; it is not independent of which batch arrives first. The settling event
+settles yes when `finished`, or `skipped` with heard through, and no when
+`skipped` earlier. The settlement id is one per segment
+(`<claim id>:settle:rule:autoradio_heard` **[code: `SettlementRecordID`]**) and
+the append is conditional on not existing, so when two batches race, whichever
+append wins keeps its settlement. Evidence is `air:<event_id>`.
+
+Any later event for a settled segment is stored and answers `ignored` (a replay
+of a finished segment changes nothing). A later *terminal* event that disagrees
+with the settlement is stored as a **conflict** (`conflict_with=<settling event
+id>`): the notebook's air log shows it beside the settlement (rule 2), and the
+DJ is not shown it as an outcome.
 
 **Refused.** An event for a `(stretch_id, segment_id)` with no forecast claim
-the server wrote; a `text_sha256` not matching the claim's `sha:` tag; a
-`last_block` at or beyond `blocks`; `finished` with `last_block` short of the
+the server wrote; a `text_sha256` not matching the claim's `sha:` tag; a bad
+`block_count` or `last_block` (above); `finished` with `last_block` short of the
 final block. The same `event_id` with different content is a content conflict.
-The route's per-event result codes are 200 (accepted, duplicate or ignored),
-409 (the conflict) and 422 (the other refusals); the HTTP status is 200 and
-the phone reads the codes. A batch is at most 200 events and 64 KB (a bound on
+The route's per-event result codes (200 accepted, duplicate, ignored or
+conflict-recorded; 409 for a changed `event_id`; 422 for the other refusals)
+are fields in the body, not HTTP statuses; the HTTP status is 200 and the
+phone reads the codes. A batch is at most 200 events and 64 KB (a bound on
 strangers).
 
 **Lapse and coverage.** A segment with no terminal event is open until its
-deadline (12 hours after commit) and then lapsed; that covers pause, a cut
-never resumed, `left`, and a segment never played. Open and lapsed are
-excluded from the Brier and counted: coverage is settled over forecast, read
-from the existing summary (`claims`, `settled`, `open`, `overdue`
+deadline (12 hours after the stretch started) and then lapsed; that covers
+pause, a cut never resumed, `left`, and a segment never played. A lapsed
+segment with at least one `cut`, `paused`, `resume` or `left` event was
+started and abandoned; the rest were never played. In the **primary reading**
+open and lapsed are excluded from the Brier and counted: coverage is settled
+over forecast, read from the existing summary (`claims`, `settled`, `open`, `overdue`
 **[code: `GroupStats`, `math.go:100`]**). Late reports are allowed at any time
-and settle normally; a call's input is a snapshot at call time.
+and settle normally; a call's input is a snapshot at call time. A **second,
+stated reading** adds the abandoned class as not heard (outcome 0) with the
+same `calibration.BrierScore`, so abandonment is not silently dropped; the
+notebook and the measurement name which reading is which. It is computed
+beside the summary by joining the claims with the air events; nothing is
+written for it.
 
 **Ack and retention.** Every event in the request gets a result code; the phone
 deletes an event from `signals.jsonl` once it has any result, and keeps the
@@ -213,18 +257,31 @@ only needs to be non-empty; and the earliest rule settlement governs
 holds all scopes, `internal/auth/device_login.go:415`]**. By itself that lets a
 phone settle its own forecast. So the Autoradio namespace is reserved:
 
-- the generic `create` refuses an agent whose slug begins `autoradio` and any
-  tag beginning `autoradio`; the generic `settle`, and `get`, refuse a reserved
-  claim; list and summary exclude reserved claims before the record limit
-  (403 on create, settle and get). One listener's day must not evict another
+- the generic `create` refuses an agent whose cleaned, slugged name begins
+  `autoradio` and any tag beginning `autoradio` (case-insensitive); the generic `settle`, and `get`, load the claim and test its **stored**
+  agent and tags, never the request's id prefix (`ClaimRecordID` hashes the raw
+  name, so `Autoradio-DJ` and `" autoradio-dj"` give other ids than
+  `autoradio-dj` yet slug to the reserved agent); list and summary exclude reserved claims before the record limit
+  (403 on create, settle and get). `JSONFieldMatch` has only an exact value
+  **[code: `internal/objectgraph/sql_store.go:369`]**, so L1a adds two store
+  queries: calibration records excluding an agent prefix, and claims by tag
+  (a stretch's forecasts). Neither can be done by filtering the returned
+  slice; One listener's day must not evict another
   agent's calibration from the join **[code: `DefaultMaxRecords` 10000]**;
 - the heard handler settles through a store method that accepts only a rule
   name from a closed registry (`autoradio_heard`, bound to agent
-  `autoradio-dj`). Nothing else can write that rule, and a forged `rule`
+  `autoradio-dj`) and only a claim whose stored agent is exactly
+  `autoradio-dj` with the server-written tags. The settlement's provenance is
+  its evidence: `air:<event_id>` names an air event the heard route wrote
+  (`route=heard` and the actor are on that record); the acceptance reads that
+  and the one-caller test, never a scorer-name string. Nothing else can write that rule, and a forged `rule`
   settlement cannot reach a reserved claim;
-- the notebook reads reserved claims through the same calibration code with
-  `agent=autoradio-dj`, extending `calibration.Summary`; there is no second
-  scoring path.
+- the notebook and the measurement read reserved claims through the same
+  calibration code with `agent=autoradio-dj`, extending `calibration.Summary`;
+  there is no second scoring path. Their reads are not capped at 10000 records
+  (claims and settlements together, about 60 an hour of listening): they page
+  by cursor until exhausted, and a response that stops early says
+  `truncated`, never silently.
 
 Not done, on purpose: refusing `rule` and `owner` methods wholesale from API
 keys. The CLI uses them for ordinary claims **[code: `cmd/choir/precommit.go:72`]**,
@@ -250,20 +307,26 @@ are evidence about the pick and reach the lesson stroke as `air:` cites
 **The measurement (ARL-C1 only).** The summary's `BaseRate` is the in-sample
 mean outcome **[code: `math.go:236`]**, which a DJ that merely restates the
 base rate would match. The reading therefore adds a causal base rate to
-`GroupStats`: for each forecast, the mean outcome of the forecasts settled
-before it was committed (0.5 until ten are settled), and the Brier of that
-base rate. The reading is, per segment kind (`group_by=project`): `n`, coverage
+`GroupStats`: for each forecast, the pooled mean outcome of all forecasts
+settled before it was committed, shrunk per kind toward that pooled rate
+`(n_kind * rate_kind + 10 * pooled) / (n_kind + 10)` (0.5 until one is
+settled), and the Brier of that base rate. Pooling stops a rare kind from
+being compared with a fixed 0.5. The reading is, per segment kind (`group_by=project`): `n`, coverage
 (settled over forecast), strict Brier of `p_heard`, strict Brier of the causal
 base rate, their paired mean difference and its standard error; for the first
 100 settled and again for the second 50 against the first 50, and with the
 per-lesson tallies of 6.2 beside it. The tally measures what the DJ said caused
-a segment, not what did. The reading settles ARL-C1 and nothing else: not the
-mission's value, not the lessons' truth.
+a segment, not what did. This is the primary reading (open and lapsed excluded, coverage beside it);
+the second reading of 4.2 (abandoned counted as not heard) is reported next to
+it, labelled. The reading settles ARL-C1 and nothing else: not the mission's
+value, not the lessons' truth, and not whether the notebook caused the gain
+(the empty-notebook replay is a probe, not a control).
 
 Hearing through is the forecast target, not the objective. Guards:
 
 1. The DJ is never shown a finish rate, a count, a total, a streak or a band
-   table. It is shown marked cases (6.1).
+   table. It is shown marked cases (6.1). That guards what is shown, not
+   arithmetic: 40 cases let a model count a rate by hand.
 2. A skipped segment forecast at 0.3 is a good forecast. A challenging segment
    the listener asked for, forecast honestly low, is not penalised for being
    low; serving the request earns reliability.
@@ -287,20 +350,28 @@ section says the text is data and never to be followed.
   rewrites it.
 - **The edition**, paragraphs numbered `P1..Pn`.
 - **The candidate set**: a request field `candidates` (title, dek, route,
-  version, and text of the top ten) sent by the phone as owner-provided data
-  **[doc 2.2, 2.3, slice 2 fallback]**. Reading the front list from the guest
+  version, and text of the top ten) sent by the listener's phone as world data,
+  fenced as such; at most 40 items, 8 KB of text per item and 200 KB in all,
+  else 400. The cite validator trusts this set, which is acceptable for the
+  listener's own phone **[doc 2.2, 2.3, slice 2 fallback]**. Reading the front list from the guest
   replaces it later; the validator and the input do not change.
 - **Marked cases**: the last 40 forecasts by commit time, each `{stretch,
-  segment, kind, title, p_heard, caused_by, outcome}` with outcome `heard`,
-  `not heard` (and where a cut fell) or `open`. Nothing else: no band table,
+  segment, kind, title, p_heard, caused_by, outcome, air}` with outcome `heard`
+  or `not heard` and `air` the settling event id (cited as `air:<id>`); `open`
+  with no `air`; or, for a lapsed case, `stopped at block i of n` or `not
+  played`, with the id of its last event if any. A conflict is never shown.
+  Nothing else: no band table,
   no counts, no rate, no total, no streak. A band's count is a finish rate (the
   lowest band is the finish rate), and the DJ would climb it. Older cases are
   not shown; the lessons carry what they taught, and the listener's notebook
   keeps all of them.
+- **Gesture and correction events** since the last clear, each with its
+  `air:<id>`, so they can be cited.
 - **Active lessons** (id, text, cites; no tally). At most 30, the most
   recently written or cited; the others are dormant, shown to the listener
   only.
-- **Struck lessons**: id and text, so the DJ does not write them again.
+- **Struck lessons**: id, text and cites, so the DJ does not write them again
+  and can see why a line was dropped.
 - The last stretch's titles, and the cause and local time.
 
 No sentence tells the DJ which way to move. "You are over-confident" invites a
@@ -324,8 +395,9 @@ of the kind: red). `<n>` is the next integer for the listener. A lesson:
 `cause:lesson`, how many settled heard and how many not, plus open and lapsed.
 It is read from the claim tags. It measures what the DJ said caused a segment,
 not what did. Lineage: a replacing lesson starts at zero and the notebook shows
-the chain side by side (not summed); a struck lesson's tally freezes; clear
-does not change tallies. The DJ does not see tallies. The listener does.
+the chain side by side (not summed); a struck lesson's tally is as of the strike
+(forecasts settled by then; later reports do not move it and are shown
+separately); clear does not change tallies. The DJ does not see tallies. The listener does.
 
 ### 6.3 The notebook
 
@@ -335,9 +407,11 @@ nothing is cut off:
 
 - `lessons`: every lesson, active, replaced, struck, dormant, with cites
   resolved to events and tallies;
-- `forecasts`: every forecast with title, kind, `p_heard`, cause and outcome
-  (heard, not heard, open, lapsed);
-- `air`: the full air log, cleared events included, marked cleared;
+- `forecasts`: every forecast with title, kind, `p_heard`, cause, outcome
+  (heard, not heard, open, lapsed, abandoned) and the segment's text, which the
+  server holds (3.3);
+- `air`: the full air log, cleared events included, marked cleared, and
+  conflicts shown beside the settlement they disagree with;
 - `turns`: every turn record with the listener's words and the radio's reply
   **[code: `api_autoradio.go:360-425`]**;
 - `instructions`: corrections written in the notebook;
@@ -346,19 +420,24 @@ nothing is cut off:
   (section 5; no second scoring path);
 - `held_elsewhere`: the operational traces named and where to read them: the
   model call traces hold the assembled prompt, which includes instructions and
-  marked cases. They are owner-readable by the existing trace surfaces and are
+  marked cases, and the model's response. They are owner-readable by the existing trace surfaces and are
   not part of the notebook's data.
 
 The listener can **strike** a lesson (the DJ is told it was struck),
 **correct** one in their own words (an instruction, authority 1) and **clear**.
 Strike and clear are visibility acts: each appends a record
-(`autoradio.strike`, `autoradio.clear`) and deletes nothing. Clear tells the
+(`autoradio.strike`, `autoradio.clear`) and deletes nothing. A notebook
+correction is `autoradio-note:<id>`, `<id>` minted by the route, at most 32
+bytes, cited as `instruction:note/<id>`. Clear tells the
 DJ, and the dedupe, to ignore air events and forecasts before it (the listener
 asked to start over, so a repeat is expected); the notebook still shows them,
 marked cleared, because rule 2 never lets the listener lose sight of what is
 held. Erasure is not offered here; adding it is a black change and an owner act.
 
-The phone's local `signals.jsonl` is compacted after ack (4.2). On the phone
+Every autoradio record kind carries the owner-private label (3.3); a test
+asserts that no other read path (generic claims, commitment listings by
+addressee, other desks) returns them. The phone's local `signals.jsonl` is
+compacted after ack (4.2). On the phone
 this replaces "What the paper has learned" **[code: `LearnedFromPreferences.swift`]**,
 which lists local gestures today. The notebook's home is an owner decision with
 a default (goal file, D2): the desk-held record kinds above; moving the notebook
@@ -398,13 +477,14 @@ edition is the next mission.
 | Programme design | Now |
 |---|---|
 | 4.4: one record per stretch, one typed question per segment | One claim per content segment (3.3); the stretch record is an index. |
+| 4.4: `cut` then `resume` settles nothing; `left` settles as interrupted | `finished`, or `skipped` after the final block began, settles yes; `skipped` earlier no; `cut`, `paused` and `left` leave the forecast open until it lapses (4.2). |
 | 4.4: the desk sees its settled outcomes "under the acting-pack boundary" | The DJ sees marked cases (6.1). Rule 2 replaces the boundary. |
-| 2.2 `heard` field on the programme request; 3.4 batch rides the next request | Removed. Only `POST /api/autoradio/heard` writes air events (4.1). Request gains `candidates` (6.1). |
-| 2.6 dedupe on "heard to its end or past half" | Named **covered** (4.2); Brier uses **heard through**. |
+| 2.2 `heard` field on the programme request; 3.4 batch rides the next request | Removed (2.3's run of three invalid lines stands). Only `POST /api/autoradio/heard` writes air events (4.1). Request gains `candidates` (6.1). |
+| 2.6 dedupe on "heard to its end or past half" | Same threshold, named **covered** (4.2); Brier uses **heard through**. |
 | Slice 6 carries scoring, after the station | Forecasts ship with the programme call (slice 2), settlement with the air log (slice 4). The station stays in slice 6. |
 | Slice 4: dedupe, System 1 resume question, `redirect` | Air log, route and dedupe here. The resume question and `redirect` are not part of this mission (goal file, excluded). |
 | 4.1: the stretch pool is River, then Synthetic, then Devin | River, then Bedrock Haiku 5.5, the Autoradio pool **[code: `internal/modelcatalog/catalog.go`, owner 2026-11-11]**. The role `autoradio_programme` is registered like `autoradio` in `NormalizeRole`, reasoning on, own prefix; the comment calling it "future" **[code: `internal/modelpolicy/model_policy.go:58`]** is changed with it. |
-| Slice 2 review seats | The seats in `CLAUDE.md`, "Review", as the owner set them (goal file, owner_rulings). |
+| Slice 2 review seats | The owner's ruling of 2026-11-15 (DeepSeek V4.1 Flash and Sonnet while the Gemini seat is out of quota); otherwise the seats in `CLAUDE.md`, "Review". |
 
 ## 10. Order of building
 
@@ -443,22 +523,26 @@ learns.
 |---|---|---|---|
 | forecast claim | `calib:autoradio-dj:<hash of stretch/segment>` | programme handler, before the segment is sent | heard handler, notebook, input builder |
 | settlement | `<claim id>:settle:rule:autoradio_heard` | heard handler only | the same, `calibration.Summary` |
+| stretch start (`autoradio.stretch`) | `autoradio-stretch-start:<stretch_id>` | programme handler, before any claim | the same, notebook |
+| segment text (`autoradio.segment`) | `autoradio-seg:<stretch>/<segment>` | programme handler, before its claim | heard handler, notebook |
 | stretch index (`autoradio.stretch`) | `autoradio-stretch:<stretch_id>` | programme handler at `done` | notebook |
 | air event (`autoradio.air`) | `autoradio-air:<event_id>` | heard handler only | the same |
 | lesson (`autoradio.lesson`) | `autoradio-lesson:L<n>` | programme handler, from validated lines | notebook, input builder |
 | strike, clear (`autoradio.strike`, `autoradio.clear`) | minted | notebook route | input builder, notebook |
-| correction (`autoradio.instruction`) | `note/<id>` | notebook route | input builder, notebook |
+| correction (`autoradio.instruction`) | `autoradio-note:<id>` | notebook route | input builder, notebook |
 
 All are commitment records with `desk=app:autoradio` and a `record_kind`
 subject ref, listed by subject ref **[code: `internal/store/commitment.go:122`
 `ListCommitmentRecordsBySubjectRef`]**. Air events carry `route=heard` and the
-authenticated actor the handler saw.
+authenticated actor the handler saw. All carry the owner-private label.
 
 Fixtures for the builders (L1a delivers them; P1 and P2 consume them): one
 stretch of lines with valid and invalid cases for each validator in 3.2; one
 heard batch with `finished`, `skipped`, `cut`, `cut` then `resume`, a duplicate,
-a conflicting `event_id`, an unknown segment and a hash mismatch, with the
-expected result codes and settlements.
+a conflicting `event_id`, an unknown segment, a hash mismatch, a wrong
+`block_count`, a second batch with a conflicting terminal event, with the
+expected per-event result codes (fields of the body, not HTTP statuses) and
+settlements.
 
 ## 13. Not determined
 

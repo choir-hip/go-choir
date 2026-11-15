@@ -60,3 +60,33 @@ Append only. One entry per pass.
   | Found while verifying | `calibration.BaseRate` is the in-sample mean (`math.go:236`); the measurement needs a causal base rate, added to `GroupStats` in L1a. C90's wording says "the listener's base rate"; the test is the one in the goal file. |
 
   Left open (design 13): whether the guest can read the front list; whether the real model writes lessons worth reading; whether 40 marked cases and 30 lessons fit the useful context; whether the generic handler can ever tell a key from a session (not needed by this design).
+- 2026-11-15T03:20Z. **L0 round 2.** Sonnet seat (`claude.out`): ACCEPT, no blocking findings. DeepSeek V4.1 Flash seat (`omp-deepseek-v41-flash.out`): REPAIR, two blocking findings. Both hold round 1 closed and the rule 1 departure sound. The round 1 entry above names the seats by model; the files are `claude.out` and `omp-deepseek-v41-flash.out`. Revised on the same branch. Owner rulings added: none.
+
+  | Finding | Disposition |
+  |---|---|
+  | D blocking 1: heard rule arrival-order dependent across batches | Adopted by the lead's decision. A settlement is evidence and never rewritten: the first terminal event the server receives settles; section retitled "deterministic given receipt order"; one batch normalised by `seq`; the race outcome stated; a later disagreeing terminal event is a recorded conflict shown in the notebook's air log and not shown to the DJ as an outcome (4.2). L2 acceptance states exactly those properties. The claim's `blocks` governs the heard-through test and the refusal; a differing `block_count` is refused; 0, negative and out-of-range values defined (4.2). |
+  | D blocking 2: lesson cites not in the input | Adopted. Each marked case carries its settling `air:<id>`; gestures and corrections are listed with ids; open and lapsed cases cite nothing (3.2, 6.1). L3 acceptance adds a positive case and the open and lapsed negatives. |
+  | S should-fix 1: lapsed segments dropped | Adopted. The abandoned class (a lapsed segment with a `cut`, `paused`, `resume` or `left`) is reported; a second, labelled reading counts it as not heard; the primary reading is unchanged; the DJ sees "stopped at block i of n" (4.2, 6.1, 5). |
+  | S 2: weak comparator; ARL-C1 wording | Adopted. Pooled running rate shrunk per kind; ARL-C1 reworded to "separates better than the causal base rate", not testing that the notebook caused it (5, goal conjecture). |
+  | S 3: receipt order across batches | Covered by D blocking 1. |
+  | S 4, D store queries: 10000-record limit, no prefix or negation in `JSONFieldMatch` | Adopted. L1a names two store queries (agent-prefix exclusion, claims by tag); the notebook and measurement page by cursor and report truncation (4.3, L1a scope). |
+  | S, D: L1a reservation conditions | Adopted. Test the stored cleaned agent and tags, not the request or id prefix; the heard handler requires exact `autoradio-dj`; acceptance adds `" autoradio-dj"`, `Autoradio-DJ` and a case-varied tag (4.3, L1a acceptance). |
+  | S 6, D: deadline and commit time; partial stretch | Adopted. A start record is written once and the deadline derives from it; segment text is written before its claim; a retry is a new call and a new stretch id, never re-streaming a claimed segment; crash-and-retry is in the L1 acceptance (3.3). |
+  | S 5, D: tag encoding over 64 bytes | Adopted. Only `cause:` and `lesson:L<n>` are tags; the full ref goes in `criterion`; ids at most 40 bytes; the check uses `cleanName` (3.3). |
+  | D: "a run of three" | Adopted in 3.2, 9 and the L1 acceptance. |
+  | D: settlement provenance | Chose the air event: the settlement's evidence names an air event the heard route wrote, plus the one-caller test; the acceptance matches (4.3). No route or actor is added to the settlement record. |
+  | D: `covered` threshold | Same as the programme design ("past half"): more than half, `2 * (last_block + 1) > blocks` (4.2; 9). |
+  | D: rule 2 completeness, owner-private labels | Adopted. The server holds each streamed segment's text in `autoradio.segment` and the notebook returns it; the response trace is named; every autoradio kind, claims included, carries the owner-private label, with a test that no other read path reaches them (3.3, 6.3, 12, L1a). |
+  | D: instruction ref mapping | Adopted: `instruction:turn/<id>` names `autoradio-turn-req:<id>` (a failed turn counts); `instruction:note/<id>` names `autoradio-note:<id>` (3.2, 6.3). |
+  | D: struck cites and late tallies | Adopted. The DJ is shown struck lessons' cites; a struck tally is as of the strike, later reports shown separately (6.1, 6.2). |
+  | D, S 7: candidates | Adopted. Called listener-phone world data; at most 40 items, 8 KB each, 200 KB total, else 400; the cite validator trusting the phone is stated (6.1). |
+  | S 8: 40 cases are a finish rate by hand | Adopted as a plain statement in 5: the guard is on what is shown, not on arithmetic. No tighter bound or balanced sampling. |
+  | S 9: replay after the first terminal | Adopted: stored, `ignored`, nothing changes (4.2). |
+  | S nit: codes are body fields | Adopted (4.2, fixtures). |
+  | S nit: tag check calls `cleanName` | Adopted (3.3). |
+  | D nit: stale source ref | Adopted: the Go tree is as at 955d4527f, main having moved only in `mobile/` (design header, goal start). |
+  | D nit: seat citation | Adopted: design 9 cites the 2026-11-15 ruling. |
+  | D nit: 4.4 settlement-rule change missing from section 9 | Adopted: row added. |
+  | D nit: `better_means` and reliability | Adopted: corrections per hour are read as reliability evidence in the notebook, outside the ARL-C1 reading. |
+  | D nit: "owner-provided" candidates | Adopted. |
+  | D nit: ledger seat names | Noted above. |

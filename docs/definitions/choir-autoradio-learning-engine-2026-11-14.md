@@ -12,7 +12,7 @@ review:
 start:
   captured_at: 2026-11-14T19:07Z
   source:
-    canonical_ref: origin/main 955d4527f (revised after the L0 review; the first capture was 21e7860bd)
+    canonical_ref: origin/main 955d4527f for the Go tree (main has since moved only in mobile/; the first capture was 21e7860bd)
     deploy_identity: unknown (choir.news health answered ok at capture; the deployed commit was not read)
   worktrees:
     - path: /Users/wiz/Dev/go-choir
@@ -46,20 +46,20 @@ finish:
     player, the playback reports and the notebook screen. Design:
     docs/design/autoradio-learning-engine-2026-11-14.md.
   acceptance:
-    - action: L1a. A device key creates a claim as agent autoradio-dj, then settles a forecast the server wrote with method rule and name autoradio_heard, then with method owner; the generic list and summary are read with and without the agent filter
-      proves: create, settle and get on a reserved claim answer 403; the generic list and summary hold no reserved claim and are not truncated by 10001 of them; a forged rule settlement cannot govern
-      evidence_class: local test in CI, then the same calls on d@e; provenance is read from the route and the actor on the record, never from a scorer-name string
-    - action: L1. Run the programme route with a fake provider that emits valid lines and one line each for p_heard 1.7, no p_heard, an unknown cause, an unresolved instruction, an edition paragraph out of range, a same-response lesson cite, an unknown cite, three invalid lines in a row, and a claim write that fails
-      proves: only valid lines are streamed; each streamed segment has exactly one claim on the tape, committed before its segment event (order read from the tape and the event stream); a dropped line has no claim; a failed claim write ends the call with no segment; the stretch index lists its claims; a replay writes nothing new
+    - action: L1a. A device key creates a claim as agent autoradio-dj, then as " autoradio-dj", "Autoradio-DJ" and with a tag AutoRadio, then settles a forecast the server wrote with method rule and name autoradio_heard, then with method owner; the generic list and summary are read with and without the agent filter
+      proves: create, settle and get on a reserved claim answer 403, tested on the stored cleaned agent and tags and not on the request or the id prefix; the heard handler refuses a claim whose stored agent is not exactly autoradio-dj; every autoradio record kind carries the owner-private label and no other read path returns it; the generic list and summary hold no reserved claim and are not truncated by 10001 of them; a forged rule settlement cannot govern
+      evidence_class: local test in CI, then the same calls on d@e; provenance is read from the settlement's evidence (an air event the heard route wrote) and the one-caller test, never from a scorer-name string
+    - action: L1. Run the programme route with a fake provider that emits valid lines and one line each for p_heard 1.7, no p_heard, an unknown cause, an unresolved instruction, an edition paragraph out of range, a same-response lesson cite, an unknown cite, a run of three invalid lines, and a claim write that fails; then a crash mid-stretch followed by a retry; then candidates over the size bound
+      proves: only valid lines are streamed; each streamed segment has exactly one claim on the tape, committed before its segment event (order read from the tape and the event stream); a dropped line has no claim; a failed claim write ends the call with no segment; the stretch index lists its claims; a replay writes nothing new; a run of three invalid lines ends the call and three scattered ones do not; the deadline derives from the stretch start record; the crash leaves claims and texts for streamed segments and no index, the retry has a new stretch id and never re-streams a claimed segment id; oversize candidates answer 400
       evidence_class: local test in CI; then deployed proof on d@e with the real route, the stretch, the claim ids and the index
-    - action: L2. Drive the heard route from a script with the fixture batches, covering finished, skipped in the final block, skipped earlier, cut and never resumed, cut then resume then finished, paused, left, a duplicate, a conflicting event_id, an unknown segment, a hash mismatch, a late report after lapse, and every ordering of one batch
-      proves: settlements yes, yes, no, open, yes, open, open as design 4.2 gives; the same event set settles the same under every ordering and under replay; unknown segment and hash mismatch answer 422 and the conflict 409; each settlement's evidence resolves to an air event written by the heard route; open and lapsed are counted in coverage and excluded from the Brier
+    - action: L2. Drive the heard route from a script with the fixture batches, covering finished, skipped in the final block, skipped earlier, cut and never resumed, cut then resume then finished, paused, left, a duplicate, a conflicting event_id, an unknown segment, a hash mismatch, a late report after lapse, a wrong block_count, a block_count of 0, a negative last_block, a replay after settlement, two batches with conflicting terminal events in both arrival orders, and every ordering of one batch
+      proves: settlements yes, yes, no, open, yes, open, open as design 4.2 gives; one batch settles the same under every ordering of its events; replaying the same events settles and writes nothing new; across batches the first terminal event received settles and the later conflicting one is a recorded conflict, shown in the notebook's air log and not shown to the DJ as an outcome (the settlement is not rewritten whichever append wins); unknown segment, hash mismatch and bad block values answer per-event 422 and a changed event_id 409, as body fields; each settlement's evidence resolves to an air event written by the heard route; open and lapsed are counted in coverage and excluded from the Brier
       evidence_class: local test in CI; then deployed proof on d@e, the event ids and settlement ids read from the tape
     - action: L2. Run the test that drives the programme call with a provider that tries to emit an air event and a settlement, send a programme request carrying a heard field, and grep the call sites of the reserved settle method
       proves: the programme call has no path that writes an outcome (rule 1b); the heard field answers 400; the settle method has one caller, the heard handler
       evidence_class: local tests in CI
-    - action: L3. Assemble the programme input for a fixture history and compare it with the golden prompt; drive the lesson validators with a fake provider (cite not in the input, fewer than two air events, replaces a struck or unknown lesson, every cite already on a struck lesson, a model-sent lesson id, a lesson line past 300 characters); put an instruction holding a fence look-alike and a candidate title that says to ignore the edition through the frame
-      proves: the input holds marked cases only (no band table, count, rate, total or streak) in the exact shape of the golden file; each invalid lesson line is dropped; ids are minted by the handler; the hostile strings stay inside their fences as data
+    - action: L3. Assemble the programme input for a fixture history and compare it with the golden prompt; drive the lesson validators with a fake provider (a positive case first, two new air cites taken from marked cases and a gesture; then a cite to an open or lapsed case, a cite not in the input, fewer than two air events, replaces a struck or unknown lesson, every cite already on a struck lesson, a model-sent lesson id, a lesson line past 300 characters); put an instruction holding a fence look-alike and a candidate title that says to ignore the edition through the frame
+      proves: the input holds marked cases only (no band table, count, rate, total or streak) in the exact shape of the golden file, each settled case carrying its air id; the positive lesson is accepted; each invalid lesson line is dropped, with the struck lessons' cites visible in the input; ids are minted by the handler; the hostile strings stay inside their fences as data
       evidence_class: local tests in CI. A change to the golden file needs a seat to read it
     - action: L4. Read GET /api/autoradio/notebook on d@e after a scripted session with turns, a gesture, a correction, a strike and a clear; compare each section with a listing of the tape
       proves: the notebook returns every lesson, forecast with outcome, air event, turn record with its words and instruction on the tape, cleared ones marked; the struck lesson is absent from the next call's input and is not accepted again from the same cites; clear removes events from the next input and deletes nothing; the operational traces are named under held_elsewhere
@@ -86,9 +86,9 @@ finish:
 value:
   better_means: >
     The gap between what the DJ plays and what this listener wanted gets
-    smaller, shown by fewer corrections per listening hour and by p_heard
-    separating heard from skipped better than the causal base rate, per
-    segment kind, with coverage reported beside it, while everything Autoradio holds about the listener is readable by them.
+    smaller, shown by p_heard separating heard from skipped better than the causal base rate, per
+    segment kind, with coverage reported beside it (corrections per listening hour are read
+    as reliability evidence in the notebook, outside the ARL-C1 reading), while everything Autoradio holds about the listener is readable by them.
   goodharting_would_be: >
     A finish rate that rises because the programme got shorter, safer or
     more like a feed. Forecasts all at the base rate, calibrated and useless.
@@ -146,7 +146,7 @@ stations:
     status: working
   - id: L1a
     name: reserved namespace, forecast constructor, wire fixtures
-    scope: the generic claims routes refuse create, settle and get on the Autoradio namespace (403) and exclude it from list and summary before the record limit; calibration.NewAutoradioForecast; the settle method with its closed rule registry (autoradio_heard); extend calibration.Summary with the causal base-rate Brier; the fixtures of design section 12. Design 3.3, 4.3, 5, 12
+    scope: the generic claims routes refuse create, settle and get on the Autoradio namespace (403) and exclude it from list and summary before the record limit; calibration.NewAutoradioForecast; the settle method with its closed rule registry (autoradio_heard); two store queries (calibration records excluding an agent prefix, and claims by tag, since JSONFieldMatch has only an exact value) and cursor-paged reads for the notebook and the measurement that report truncation; the owner-private label on every autoradio kind; extend calibration.Summary with the pooled causal base-rate Brier; the fixtures of design section 12. Design 3.3, 4.3, 5, 12
     class: red (auth and evidence on the generic route). Conjecture delta, protected surfaces, evidence class, rollback and heresy delta are written in the commit body. Ring-Expedite names the defect it unblocks, "a device key can settle a forecast about its own listening".
     review: two seats
     depends_on: [L0]
@@ -154,7 +154,7 @@ stations:
     status: pending
   - id: L1
     name: programme call with forecasts
-    scope: programme design slice 2, plus p_heard and caused_by, the validators of design 3.2, one claim per content segment appended before its segment is streamed, the stretch index, the candidates request field, and the role autoradio_programme registered in NormalizeRole with the "future" comment changed (modelpolicy). Design 3, 9
+    scope: programme design slice 2, plus p_heard and caused_by, the validators of design 3.2, one claim per content segment appended before its segment is streamed, the stretch start record, segment text records and stretch index, the size bound on candidates, the candidates request field, and the role autoradio_programme registered in NormalizeRole with the "future" comment changed (modelpolicy). Design 3, 9
     class: red (provider role, first writer of forecast claims and the stretch index, device-key route). Red ceremony in the commit body; Ring-Expedite "the radio plays one article, not a programme".
     review: two seats
     depends_on: [L1a]
@@ -162,7 +162,7 @@ stations:
     status: pending
   - id: L2
     name: air log, heard route, settlement
-    scope: programme design slice 4's air log and dedupe (covered), POST /api/autoradio/heard with the rule, the result codes, lapse and ack of design 4.2, gesture and correction events, and the rule 1b tests of 4.1. Not the resume question or redirect
+    scope: programme design slice 4's air log and dedupe (covered), POST /api/autoradio/heard with the first-terminal-event rule, block checks, conflicts, the per-event result codes, lapse, the abandoned reading and ack of design 4.2, gesture and correction events, and the rule 1b tests of 4.1. Not the resume question or redirect
     class: red (settlements are evidence on the tape; first writer of air events)
     review: two seats
     depends_on: [L1]
@@ -271,16 +271,17 @@ now:
     id: ARL-C1
     calibration_claim: C90
     claim: >
-      Showing the DJ each marked case with its stated cause, and having it
-      write cited lessons, makes p_heard separate heard from skipped better
-      than the causal base rate within the first 100 settled segments of one
-      real listener.
+      With marked cases and cited lessons in its input, the DJ's p_heard
+      separates heard from skipped better than the causal base rate within
+      the first 100 settled segments of one real listener. The reading does
+      not test that the notebook caused it.
     test: >
       Design section 5: the strict Brier of p_heard against the strict Brier
-      of the causal base rate (the running rate over segments settled before
-      each forecast), per segment kind, with coverage (settled over forecast)
+      of the causal base rate (the pooled running rate over segments settled
+      before each forecast, shrunk per kind), per segment kind, with coverage (settled over forecast)
       beside it, over the first 100 settled and the second 50 against the
-      first 50, read from the extended calibration summary. It settles
+      first 50, read from the extended calibration summary, with the second
+      reading (abandoned counted as not heard) beside it, labelled. It settles
       ARL-C1 only.
     edge: missing_oracle
     delta_o: >
