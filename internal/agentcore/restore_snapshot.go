@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
@@ -51,6 +52,24 @@ func (p platformRestoreTape) GetChunk(ctx context.Context, digest string) ([]byt
 	return p.chunks.GetChunk(ctx, digest)
 }
 
+// HasChunk is what lets the install skip a snapshot the host has pruned before
+// downloading any of it (snapshot.ChunkProber). Without it the probe is skipped
+// silently and a pruned candidate downloads until its first missing chunk.
+func (p platformRestoreTape) HasChunk(ctx context.Context, digest string) (bool, error) {
+	return p.chunks.HasChunk(ctx, digest)
+}
+
+var _ snapshot.ChunkProber = platformRestoreTape{}
+
+// newPlatformRestoreTape is the one construction of the production restore tape
+// (the runtime and the tests through the production wiring both use it).
+func newPlatformRestoreTape(client *computerevent.HTTPClient, computerID string) platformRestoreTape {
+	return platformRestoreTape{
+		events: client,
+		chunks: snapshot.HTTPChunks{BaseURL: client.BaseURL(), ComputerID: strings.TrimSpace(computerID), Capability: client.Capability()},
+	}
+}
+
 // resolveRestoreTape returns the recovery source. An injected fake wins for
 // tests; otherwise the platform source is built from the event client the
 // runtime already holds. No source means no recovery: callers refuse.
@@ -65,11 +84,13 @@ func (rt *Runtime) resolveRestoreTape() (restoreTape, error) {
 	if !ok || client == nil {
 		return nil, fmt.Errorf("%w: restore authority is not configured", ErrRematerializeUnavailable)
 	}
-	return platformRestoreTape{
-		events: client,
-		chunks: snapshot.HTTPChunks{BaseURL: client.BaseURL(), ComputerID: strings.TrimSpace(rt.cfg.ComputerID), Capability: client.Capability()},
-	}, nil
+	return newPlatformRestoreTape(client, rt.cfg.ComputerID), nil
 }
+
+// restoreCandidateBudget bounds the time spent starting candidates after a
+// failed one, inside the restore's ten-minute request (scan and install of the
+// winner took about four minutes on d@e, the replay and witness need the rest).
+const restoreCandidateBudget = 2 * time.Minute
 
 // restorePlan is how a restore reaches its target head: install the newest
 // usable snapshot at or below the target and replay the tape after it, or
@@ -92,7 +113,7 @@ func planRestoreTarget(ctx context.Context, tape restoreTape, computerID, target
 	}
 	var target uint64
 	var found bool
-	candidates, err := snapshot.Scan(ctx, tape, computerID, func(d computerevent.DurableEvent) bool {
+	candidates, err := snapshot.ScanAll(ctx, tape, computerID, func(d computerevent.DurableEvent) bool {
 		if d.Request.Next.CanonicalEventHead == targetHead {
 			target, found = d.Request.Event.Sequence, true
 			return true
@@ -105,6 +126,10 @@ func planRestoreTarget(ctx context.Context, tape restoreTape, computerID, target
 	if !found {
 		return restorePlan{}, fmt.Errorf("%w: rematerialize: recovery target is not on the canonical chain", recoveryplan.ErrBaseRefused)
 	}
+	// Every snapshot event below the target within the recovery bound, not the
+	// newest four: the host keeps a chain of older roots and prunes the ones
+	// between, and the install probes the host for which are live.
+	candidates = snapshot.PlanCandidates(candidates, target, recoveryplan.MaxRecoveryTailEvents)
 	if len(candidates) == 0 && target > recoveryplan.MaxRecoveryTailEvents {
 		return restorePlan{}, fmt.Errorf("%w: no snapshot at or below recovery target %d, which exceeds the %d-event replay bound", recoveryplan.ErrBaseRefused, target, recoveryplan.MaxRecoveryTailEvents)
 	}
@@ -133,7 +158,12 @@ func (rt *Runtime) openStagedStore(ctx context.Context, tape restoreTape, stagin
 		Chunks:      tape,
 		Cipher:      rt.privateArtifactCipher,
 		MaxSequence: plan.sequence,
-		Verify:      VerifySnapshotFile,
+		// The candidate phase must not starve the replay inside the ten-minute
+		// request: failed candidates stop being started after two minutes. A
+		// candidate the host pruned costs a record fetch and a probe that stops
+		// at the first missing chunk (8 concurrent HEADs), not a download.
+		CandidateBudget: restoreCandidateBudget,
+		Verify:          VerifySnapshotFile,
 		// The staged workspace's partitions: the flip moves them with it.
 		PartitionDir: choirstore.TelemetryPartitionDir(marker),
 	}, plan.candidates)

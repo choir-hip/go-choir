@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -215,7 +216,15 @@ type ComputerEventAppender struct {
 	replayAppliedRows  uint64 // rows applied during this Reconstruct call
 	// replayPayloadNanos is time spent fetching projection-batch payloads
 	// from the host during a replay: one request per event.
-	replayPayloadNanos       atomic.Int64
+	replayPayloadNanos atomic.Int64
+	// replayRateBits is the float64 bits of the slowest replay rate (events/s)
+	// of the replays that applied at least minReplayRateEvents since the
+	// process started (0: none yet). The snapshot producer reads it to
+	// estimate how long a restore's tail takes; a fast boot replay must never
+	// relax what a slow restore replay showed. rateParent is the live appender
+	// a dry-run copy (the restore's replay) reports to.
+	rateParent               *ComputerEventAppender
+	replayRateBits           atomic.Uint64
 	replayCheckpointEvery    int
 	replayCheckpointInterval time.Duration
 }
@@ -450,6 +459,46 @@ func (a *ComputerEventAppender) ReplaySnapshot() ReplaySnapshot {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return ReplaySnapshot{InProgress: a.replayActive, Sequence: a.replaySeq, CommittedSequence: a.replayCommittedSeq, AppliedRows: a.replayAppliedRows}
+}
+
+// minReplayRateEvents is the fewest events a replay must apply for its rate to
+// count: a replay of a few events measures startup, not the apply rate.
+const minReplayRateEvents = 1000
+
+// recordReplayRate keeps the rate of a replay that applied enough events.
+func (a *ComputerEventAppender) recordReplayRate(applied uint64, elapsed time.Duration) {
+	if a == nil || applied < minReplayRateEvents || elapsed <= 0 {
+		return
+	}
+	if a.rateParent != nil {
+		a.rateParent.recordReplayRate(applied, elapsed)
+	}
+	rate := float64(applied) / elapsed.Seconds()
+	for {
+		old := a.replayRateBits.Load()
+		if old != 0 && math.Float64frombits(old) <= rate {
+			return
+		}
+		if a.replayRateBits.CompareAndSwap(old, math.Float64bits(rate)) {
+			return
+		}
+	}
+}
+
+// ReplayRate is the slowest events per second among the replays on this
+// computer, boot and restore alike, that applied at least minReplayRateEvents
+// (the figure the "replay applied" log line prints). False when no such replay
+// has run since the process started. It is process memory: it re-learns
+// downward after a restart.
+func (a *ComputerEventAppender) ReplayRate() (float64, bool) {
+	if a == nil {
+		return 0, false
+	}
+	bits := a.replayRateBits.Load()
+	if bits == 0 {
+		return 0, false
+	}
+	return math.Float64frombits(bits), true
 }
 
 // SetReplayCheckpointPolicy configures the durable checkpoint cadence during a
@@ -1420,6 +1469,7 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 			return
 		}
 		elapsed := time.Since(replayStarted)
+		a.recordReplayRate(snap.AppliedRows, elapsed)
 		log.Printf("computer event appender: replay applied %d events through seq=%d in %s (%.0f events/s; fetch %s in %d pages, payload prefetch %s, apply %s: reduce %s, verify %s, prepare %s, finalize %s of which payload fetch %s; commit %s)", snap.AppliedRows, snap.Sequence, elapsed.Round(time.Millisecond), float64(snap.AppliedRows)/max(elapsed.Seconds(), 1e-3),
 			replayFetch.Round(time.Millisecond), replayPages, replayPrefetch.Round(time.Millisecond), replayApply.Round(time.Millisecond),
 			replayReduce.Round(time.Millisecond), replayVerify.Round(time.Millisecond), replayPrepare.Round(time.Millisecond), replayFinalize.Round(time.Millisecond),
@@ -1784,15 +1834,10 @@ func (a *ComputerEventAppender) ReconstructThroughTarget(ctx context.Context, pr
 	return a.replayInto(ctx, projection, targetHead)
 }
 
-func (a *ComputerEventAppender) replayInto(ctx context.Context, projection ProjectionStore, targetHead string) error {
-	if a == nil || projection == nil {
-		return fmt.Errorf("computer event appender: replay projection is required")
-	}
-	source, ok := a.cas.(EventSource)
-	if !ok {
-		return fmt.Errorf("computer event appender: CAS does not expose event replay")
-	}
-	dryRun := &ComputerEventAppender{
+// dryRunCopy is the appender a replay into another projection runs on. Its
+// replay rate is the restore path's rate, so it reports to the live appender.
+func (a *ComputerEventAppender) dryRunCopy(projection ProjectionStore) *ComputerEventAppender {
+	return &ComputerEventAppender{
 		computerID:       a.computerID,
 		pins:             a.pins,
 		projection:       projection,
@@ -1802,7 +1847,19 @@ func (a *ComputerEventAppender) replayInto(ctx context.Context, projection Proje
 		cipher:           a.cipher,
 		replayProjection: true,
 		replayObserver:   a.replayObserver,
+		rateParent:       a,
 	}
+}
+
+func (a *ComputerEventAppender) replayInto(ctx context.Context, projection ProjectionStore, targetHead string) error {
+	if a == nil || projection == nil {
+		return fmt.Errorf("computer event appender: replay projection is required")
+	}
+	source, ok := a.cas.(EventSource)
+	if !ok {
+		return fmt.Errorf("computer event appender: CAS does not expose event replay")
+	}
+	dryRun := a.dryRunCopy(projection)
 	if targetHead == "" {
 		return dryRun.Reconstruct(ctx, source)
 	}

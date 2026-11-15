@@ -41,6 +41,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -842,6 +843,11 @@ type RestoreConfig struct {
 	// file. A snapshot with partitions and no PartitionDir is refused: its
 	// telemetry below the head would be lost without a word.
 	PartitionDir string
+	// CandidateBudget, when set, stops Install starting another candidate once
+	// this long has passed since it began and a candidate has failed: a long
+	// list of failures must not use the request the replay needs. The candidate
+	// being installed is never cut off by it.
+	CandidateBudget time.Duration
 }
 
 // Candidate is a snapshot_recorded event seen on the tape.
@@ -876,7 +882,12 @@ func Install(ctx context.Context, cfg RestoreConfig, candidates []Candidate) (Re
 		return Record{}, ErrNoSnapshot
 	}
 	var failures []error
+	began := time.Now()
 	for i := len(candidates) - 1; i >= 0; i-- {
+		if cfg.CandidateBudget > 0 && len(failures) > 0 && time.Since(began) > cfg.CandidateBudget {
+			failures = append(failures, fmt.Errorf("the %s candidate budget is spent after %d failed candidates; %d older ones were not tried", cfg.CandidateBudget, len(failures), i+1))
+			break
+		}
 		record, err := restoreOne(ctx, cfg, candidates[i])
 		if err == nil {
 			return record, nil
@@ -894,14 +905,58 @@ func Install(ctx context.Context, cfg RestoreConfig, candidates []Candidate) (Re
 const maxCandidates = 4
 
 // MaxCandidates is the number of newest snapshots a restore considers. The
-// platform keeps at least this many snapshot roots live
-// (internal/platform snapshot_roots.go), so every candidate's chunks survive.
+// platform keeps at least this many snapshot roots live for a small store (two
+// for a store over 8 GiB; internal/platform snapshot_roots.go), so the newest
+// candidates' chunks survive.
 const MaxCandidates = maxCandidates
+
+// MaxRestoreAttempts caps how many snapshot events a staged restore tries
+// (PlanCandidates keeps the newest). A candidate the host no longer holds
+// costs one record fetch and a few probes, not a download.
+//
+// The cap is not what bounds the work: the time budget (RestoreConfig.
+// CandidateBudget) is. The cap only keeps the list finite. A base up to the
+// chain gap (360,000 events) below a checkpoint is reached within it iff the
+// cadence inside the window is at least 360,000/1024 = 352 events; the
+// producer's fastest cadence is the tick bound (10 minutes of appends, about
+// 1,100 events at d@e's 1.8/s) or four minutes of replay at the measured rate,
+// whichever is later.
+const MaxRestoreAttempts = 1024
 
 // Scan reads the tape from its start and returns the newest snapshot_recorded
 // events (oldest first). visit, when set, sees every event in order and stops
 // the scan by returning true; the stopping event itself is still considered.
 func Scan(ctx context.Context, src Source, computerID string, visit func(computerevent.DurableEvent) (stop bool)) ([]Candidate, error) {
+	return scan(ctx, src, computerID, maxCandidates, visit)
+}
+
+// ScanAll is Scan without the newest-four cut: every snapshot_recorded event
+// the tape holds up to the stop (oldest first). The host prunes snapshot roots
+// the tape keeps naming, so which of them is usable is for the install to find
+// out (it probes the host), not for the scan to guess.
+func ScanAll(ctx context.Context, src Source, computerID string, visit func(computerevent.DurableEvent) (stop bool)) ([]Candidate, error) {
+	return scan(ctx, src, computerID, 0, visit)
+}
+
+// PlanCandidates is the restore's candidate list: the snapshot events at or
+// below target and not further than bound events behind it (a base further
+// back is a replay recovery refuses), oldest first, at most the newest
+// MaxRestoreAttempts. The tape alone supplies them: a host cannot add one.
+func PlanCandidates(all []Candidate, target, bound uint64) []Candidate {
+	var out []Candidate
+	for _, c := range all {
+		if c.Sequence > target || (target > bound && c.Sequence < target-bound) {
+			continue
+		}
+		out = append(out, c)
+	}
+	if len(out) > MaxRestoreAttempts {
+		out = out[len(out)-MaxRestoreAttempts:]
+	}
+	return out
+}
+
+func scan(ctx context.Context, src Source, computerID string, limit int, visit func(computerevent.DurableEvent) (stop bool)) ([]Candidate, error) {
 	if src == nil || strings.TrimSpace(computerID) == "" {
 		return nil, errors.New("snapshot: source and computer id are required")
 	}
@@ -920,7 +975,7 @@ func Scan(ctx context.Context, src Source, computerID string, visit func(compute
 			after = event.Sequence
 			if event.EventKind == computerevent.EventSnapshotRecorded && computerevent.IsSHA256(event.PayloadCommitment) {
 				candidates = append(candidates, Candidate{EventID: event.EventID, Digest: event.PayloadCommitment, Sequence: event.Sequence})
-				if len(candidates) > maxCandidates {
+				if limit > 0 && len(candidates) > limit {
 					candidates = candidates[1:]
 				}
 			}
@@ -973,6 +1028,18 @@ func restoreOne(ctx context.Context, cfg RestoreConfig, f Candidate) (Record, er
 			return Record{}, errors.New("record page geometry does not describe its manifest")
 		}
 		chunkBytes = int64(record.PageSize) * int64(record.PagesPerChunk)
+	}
+
+	// A snapshot the host has pruned fails here, before a chunk is downloaded:
+	// the restore tries the next older one, which may be a root the host keeps.
+	if prober, ok := cfg.Chunks.(ChunkProber); ok {
+		if err := probeChunks(ctx, prober, recordChunkDigests(record)); err != nil {
+			return Record{}, err
+		}
+	} else {
+		noProbeOnce.Do(func() {
+			log.Printf("snapshot: restore: the chunk store cannot probe the host, so a snapshot the host has pruned is downloaded until its first missing chunk")
+		})
 	}
 
 	dek, err := cfg.Cipher.ExportKeyForEscrow(ctx, cfg.ComputerID)
@@ -1037,6 +1104,61 @@ func restoreOne(ctx context.Context, cfg RestoreConfig, f Candidate) (Record, er
 		_ = d.Close()
 	}
 	return record, nil
+}
+
+// noProbeOnce makes the skipped probe a log line once, not a silence.
+var noProbeOnce sync.Once
+
+// recordChunkDigests is every chunk an install fetches: the state file's and
+// the telemetry partitions'.
+func recordChunkDigests(record Record) []string {
+	var out []string
+	for _, f := range record.Manifest.Files {
+		out = append(out, f.Chunks...)
+	}
+	for _, part := range record.Partitions {
+		out = append(out, part.Chunks...)
+	}
+	return out
+}
+
+// probeChunks fails when the host says it does not hold one of the chunks. A
+// probe error is unknown, not a refusal: the download decides.
+func probeChunks(ctx context.Context, prober ChunkProber, chunks []string) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var (
+		wg      sync.WaitGroup
+		mu      sync.Mutex
+		missing string
+		next    atomic.Int64
+	)
+	for w := 0; w < 8; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for ctx.Err() == nil {
+				i := int(next.Add(1)) - 1
+				if i >= len(chunks) {
+					return
+				}
+				if has, err := prober.HasChunk(ctx, chunks[i]); err == nil && !has {
+					mu.Lock()
+					if missing == "" {
+						missing = chunks[i]
+					}
+					mu.Unlock()
+					cancel()
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	if missing != "" {
+		return fmt.Errorf("the host no longer holds chunk %s: the root was pruned", missing)
+	}
+	return nil
 }
 
 // assemble fetches, opens and writes the chunks of one file to w, checking
