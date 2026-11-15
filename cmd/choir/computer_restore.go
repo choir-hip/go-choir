@@ -55,7 +55,7 @@ type restoreActView struct {
 }
 
 func (v restoreActView) ended() bool {
-	return v.State == "succeeded" || v.State == "failed" || v.State == "interrupted" || v.State == "restored"
+	return v.State == "succeeded" || v.State == "failed" || v.State == "interrupted" || v.State == "restored" || v.LiveState == "unresolved"
 }
 
 // progressLine is the one line printed when the act's state or count moves.
@@ -112,6 +112,9 @@ func awaitRestoreAct(x *call, label string, answer json.RawMessage) (any, error)
 				last = line
 			}
 			if view.ended() {
+				if view.State == "succeeded" && view.Reason != "" {
+					fmt.Fprintf(x.c.stderr, "%s: %s\n", label, view.Reason)
+				}
 				return restoreActOutcome(label, view)
 			}
 		case restoreStatusTransient(err):

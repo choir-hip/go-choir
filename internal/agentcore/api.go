@@ -693,12 +693,13 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	reads := h.rt.readHealthStore(r.Context(), healthStoreBudget)
 	if len(reads.unanswered) > 0 {
 		stalled := runtimeHealthStalledResponse{
-			Status:        "store_stalled",
-			Service:       "autoputer",
-			ComputerID:    h.rt.cfg.ComputerID,
-			RuntimeHealth: health,
-			RunningRuns:   h.rt.RunningCount(),
-			Build:         buildinfo.Snapshot("autoputer"),
+			Status:            "store_stalled",
+			Service:           "autoputer",
+			ComputerID:        h.rt.cfg.ComputerID,
+			RuntimeHealth:     health,
+			RunningRuns:       h.rt.RunningCount(),
+			Build:             buildinfo.Snapshot("autoputer"),
+			RestoreUnresolved: h.rt.restoreUnresolvedNow(),
 			StoreStalled: healthStoreStalled{
 				Unanswered: reads.unanswered,
 				BudgetMS:   healthStoreBudget.Milliseconds(),
@@ -729,7 +730,7 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		SelfdevActiveOps:     reads.selfdevActive,
 		LiveCapsules:         reads.liveCapsules,
 		RestoreInFlight:      h.rt.restoreInFlight(),
-		RestoreUnresolved:    h.rt.restoreUnresolved,
+		RestoreUnresolved:    h.rt.restoreUnresolvedNow(),
 		ActiveProvider:       h.rt.provider.ProviderName(),
 		Build:                buildinfo.Snapshot("autoputer"),
 	}
@@ -774,6 +775,9 @@ type runtimeHealthStalledResponse struct {
 	Build             buildinfo.Info           `json:"build"`
 	LayeringBootguard string                   `json:"layering_bootguard,omitempty"`
 	StoreStalled      healthStoreStalled       `json:"store_stalled"`
+	// RestoreUnresolved is named here too: a computer left with its store
+	// closed by an unresolved restore is exactly the one that answers stalled.
+	RestoreUnresolved []string `json:"restore_unresolved,omitempty"`
 }
 
 // healthStoreStalled names the reads that missed. The write connection can be

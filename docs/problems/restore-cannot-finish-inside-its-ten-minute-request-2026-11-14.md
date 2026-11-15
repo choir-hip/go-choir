@@ -971,7 +971,7 @@ Everything else follows from who calls what:
 | kill after the in-process undo, before the record | renames undone, staging present, `current` restored release, record `flip_started` | undo finds nothing to do, puts the release back, closes `interrupted`, removes staging | `TestRestoreCrashPoints/after_undo` |
 | panic between `flip_started` and the renames | nothing moved | the engine undoes (nothing), reopens, act `failed` on the pre-restore state, no deletion by the engine | `TestRestoreEnginePanicsAreSettledByTheRoutine/before_renames` |
 | panic after the renames | all renames made | the engine undoes them, reopens, `failed` pre_restore | `.../after_renames` |
-| live `-wal` present when `flip_started` is written, kill before any rename | sidecar at the original path, staged sidecar never existed | the live sidecar is left where it is | `TestRestoreCrashPoints/live_wal_at_flip_started` |
+| live `-wal` present when `flip_started` is written, kill before any rename | sidecar at the original path, staged sidecar never existed | the live sidecar is left where it is | `TestRestoreCrashPointLiveWalAtFlipStarted` |
 | `flip_completed` write fails, corrective write fails (double failure) | files flipped, store closed, record open | act open and unresolved, acceptance refuses; the next boot undoes from the fact on disk | `TestRestoreDoubleWriteFailureIsUnresolvedNotTerminal` |
 | prior release cannot be put back | store undone, `current` on the restored release | `unresolved`, record open | `TestRepairIsUnresolvedWhenThePriorReleaseCannotBePutBack` |
 | unresolved act, no boot since | open record | a new restore is refused from the record | same test |
