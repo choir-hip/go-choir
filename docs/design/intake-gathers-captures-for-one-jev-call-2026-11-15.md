@@ -252,7 +252,11 @@ down by at least 20%; **if that W is above 60 s there is no code-named bound
 for it and it is an owner decision** (a longer wait is a longer arrival delay
 for every source; the jev-batched-questions design said a hold of minutes "is a
 product decision, not a free choice"). Conservative default until then: 60 s,
-marked **invented-by-borrowing**.
+marked **invented-by-borrowing**. **Superseded by section 4.1: the replay was
+run on 5 hours of the largest computer's log; 60 s misses the 25% target and
+120 s is chosen from that data, pending the owner.** Sections 2.6 and 2.7
+below carry the first two-hour numbers; section 4.3 replaces their targets;
+section 3 is reordered by section 4.2.
 
 No early fire on a full call is proposed. It would need the plan (a story-index
 read and a build) to know when a call is full, or a capacity constant, which
@@ -465,3 +469,193 @@ that is an owner decision, outside this slice.
 Behind it, in order of calls saved and ease: the prompt router and classifier
 (two calls over one owner prompt, one call), then the three sub-call judges
 (one funnel, three calls a pass). Neither is designed here.
+
+**Reordered by section 4.2:** the event-layer merge is slice 3. Slice 2 is the
+per-capture option lists, which set how many captures a call holds.
+
+## 4. Amendment: the replay, capacity, and the four-call flushes
+
+Data: the coordinator's read-only extract of the largest computer's flush
+lines, 14:04Z to 19:07Z on 2026-11-15 (224 lines, 212 flushes; 5.0 h). It
+replaces the two-hour baseline of section 2.6 (which was 44% single and 0.32
+calls per capture; this window is worse).
+
+**Baseline, measured (M):** 212 flushes, 653 captures, 258 calls, 0.40 calls
+per capture; 113 single-capture flushes (53%); calls per flush: 0 for 3, 1 for
+174, 2 for 30, 4 for 4, 8 for 1.
+
+### 4.1 The replay, and the deadline chosen from it
+
+The replay forms a window from the first arrival (later arrivals do not move
+it) and counts calls as ceil(captures / capacity). It assumes no failures.
+
+| Window | Jobs | Single-capture jobs | Calls per capture at 6 per call | At 9 per call |
+| --- | --- | --- | --- | --- |
+| today (no wait) | 212 | 53% | 0.40 (measured, failures included) | |
+| 30 s | 147 | 34% | 0.29 | 0.27 |
+| 60 s | 126 | 31% | 0.27 | 0.24 |
+| 120 s | 82 | 10% | 0.22 | 0.19 |
+| 300 s | 47 | 4% | 0.20 | 0.15 |
+| 600 s | 26 | 0% | 0.18 | 0.13 |
+
+My Poisson bound in 2.2 was right to doubt 60 s: it leaves 31% single, above
+the 25% rule I set before looking. By the rule of 2.2 (the smallest window that
+gets singles under 25% and calls per capture down by a fifth) the answer is
+120 s: singles fall from 53% to 10%, calls per capture from 0.40 to 0.19 to
+0.22. The 0.40 includes failures, which the replay leaves out, so the like for
+like fall is smaller (4.3). From 120 s to 600 s calls per capture fall only
+from about 0.2 to 0.13 to 0.18: past 120 s the limit is capacity per call, not
+gathering (4.2).
+
+**Chosen: `intakeGatherDeadline` = 120 s, chosen from this replay, pending the
+owner's word.** It is no longer borrowed from a code constant, because 60 s
+does not meet the target; it is two minimum poll intervals and has no product
+source beyond the replay. A value past 120 s is not recommended: the extra
+saving is small and the delay doubles.
+
+**What 120 s costs downstream (from 1a):**
+
+- Every poll that carries captures waits up to 120 s plus the call before it
+  announces to management (`source_schedule.go:279-283`, announce after). That
+  delay is paid whether or not the window finds company.
+- The next poll moves by the same wait. `now` is taken after the labels
+  (`source_schedule.go:334`) and `NextDue = now + interval` (`:355`), so the
+  cycle of a source with captures is interval + wait. At the default 15
+  minutes that is 13% slower; at the minimum 60 s it is three times slower
+  (about 180 s): a source that asks to be polled every 60 s would be polled
+  every three minutes whenever it brings something new. I cannot say how many
+  sources are set under two minutes; the extract has no source intervals.
+  **Unverified.**
+- The smallest correct decoupling is not to unblock the poll but to stop the
+  wait moving its next tick: set `NextDue` from the poll's start, with the
+  present end time as a floor (`max(now, started + interval)`; `started` is
+  already in hand in `HandleSourcePollDue`). Then a source whose interval is at
+  least the wait loses no cadence, and a shorter one polls as fast as its poll
+  finishes, never less than once per wait. It is a small orange change, its own
+  commit, with a test for a poll that outlasts its interval. Without it, the
+  largest deadline that leaves cadence alone is 0, because any wait is added to
+  the cycle; so I recommend 120 s together with this change. The alternative,
+  a shorter deadline, costs singles: 60 s leaves 31%.
+- Unchanged: the poll still holds its ticket for the wait; a crash in it counts
+  against the crash-loop bound (failure item 7), now for up to 120 s.
+
+### 4.2 What fills a call; slice 2
+
+**Measured per-capture cost.** From the 174 one-call flushes in the extract,
+mean `est_tokens_max` by captures in the flush: 1: 28.1k (106 flushes), 2: 34.1k
+(43), 3: 39.9k (15), 4: 47.9k (4), 5: 53.7k (4), 6: 56.7k (2). The slope is
+about **5.7k estimated tokens per added capture** (4 questions each) over a
+**fixed part of about 22.4k**. This replaces my derived range of 3.7k to 8.1k
+in 1d with a measured value. Twelve captures need two calls at about 57k to
+64k each. Capacity at the 64k limit, by the estimator, is (64 - 22.4) / 5.7 =
+about **7 captures a call**; the estimator is weighted above the real tokenizer
+(`jevbudget.go`), so the vendor's own count may allow more; I did not measure
+real input tokens.
+
+**What the 5.7k is.** A capture whose options exceed 252 (the window's stories
+plus the other captures) is asked in two parts, each an event question and a
+topic question (`intake_job.go`, the parts loop). A choice question's options
+are the keys of its `criteria` map, `"c123":null,` each, about 10 tokens
+(`intakeOptionTokens`; `intakeCriteria`, `intake_labels.go:929`). So a
+capture's questions list about N story keys twice (event, topic) and its
+siblings once; for N of about 250 that is about 5k of the 5.7k. The rest is the
+capture's own entry and the question text. (This is a derivation from the code
+and the slope; I did not count tokens in a real request.)
+
+**Are those lists the same stories repeated per capture? Yes.** Every capture
+is compared with the whole recent window (`v.order` starts with every `recent`
+handle, `newIntakePoll`, `intake_labels.go`) and only its own up to 10 overlap
+picks differ (`intakeShortlistOverlap`). The lists are the same N keys, written
+again in each capture's questions. They are not repeated in the state: each
+story entry is in `state.stories` once (the fixed 22.4k).
+
+**But the repetition cannot be removed by stating the candidates once and
+referring to them.** The context already does that. It does not reach the
+question, because the vendor's choice question has only the `criteria` map and
+its keys are the options (jev-vendor.md section 3; SYSTEM1.md 3.1: "the vendor
+has only the `criteria` keys"); the reference pages show no way to say "the
+options are the handles in state.stories". I did not test the vendor. So the
+lever is the number of key lists per capture, not where the stories are
+stated. **Slice 2, named and sized, not designed:** cut the per-capture option
+lists, in the order the reference allows:
+
+1. The topic question repeats the whole story list to learn which story shares
+   the capture's topic. If the topic can be taken from the event question's own
+   `probabilities` (a distribution over the same stories), or from a short
+   list, the marginal falls by about half, 5.7k to about 3k, and capacity from
+   about 7 to about 14 captures a call: twelve captures fit one call and calls
+   per capture at a 120 s window fall from about 0.2 toward 0.1. Whether the
+   topic label is worth its list is a product question (management reads
+   `TopicHeadline`, `intake_view.go:42`).
+2. Shorter handles: `"c123"` costs about 10 tokens because digits count a
+   token each; shorter keys would save perhaps a fifth of the list, about 1k a
+   capture, capacity about 8.
+
+Estimate (**derived**, rough): captures per call 7 now; about 14 without the
+topic list; about 9 with shorter handles alone. This is **slice 2, ahead of
+merging the event layer** (section 3, now slice 3): it raises the capacity that
+bounds every window, where the merge adds the event questions to a call that
+is already near full.
+
+### 4.3 Proof targets, redone from the replay
+
+Baseline: 53% single, 0.40 calls per capture (5 h, M). Window 120 s, capacity
+7 (between the replay's 6 and 9, about 0.21 calls per capture):
+
+1. Single-capture flushes at most **15%** (replay 10%). Probability 0.7: the
+   replay runs the window over the real arrivals; the remaining error is that
+   gathering shifts when polls run.
+2. Calls per capture at most **0.28**, a fall of 30% from 0.40 (replay 0.19 to
+   0.22 without failures). Probability 0.65. The 0.40 includes 24 calls spent
+   on seven captures that all failed (4.4).
+3. Zero labels without a call and unexplained (unchanged), and no flush line
+   with more than one call unless a vendor limit is named (4.4 changes what
+   counts as a named reason).
+4. `waited_ms` at most 120 s plus one flush on every flush line, and no
+   source's poll cycle stretched past its configured interval plus one call if
+   the `NextDue` change of 4.1 lands (readable from the poll lines).
+
+### 4.4 Flushes with four or eight calls: a defect
+
+Five flushes in the extract made 4 or 8 calls (14:09:35, 17:57:37, 19:04:48,
+19:05:50, 19:06:53). **All five are fully unlabelled** (`unlabelled` equals
+`captures`): four are one capture with `calls=4 questions=12`, one is two
+captures with `calls=8 questions=32`. None is a split by a vendor limit. From
+the code:
+
+- A one-capture flush has four questions in two units (two parts).
+  `jevNextStep` (`jev_failure.go:55-78`) sends any failure that is not a rate
+  refusal, a size refusal or a deterministic 4xx to: retry once (`retries < 1`,
+  `:72`), then halve (`canHalve`, `:74`), with `forced_by="call_failed"`. The
+  calls are the first (4 questions), its retry (4), then the halves (2 and 2),
+  each failing and, at one unit, given up: 4 + 4 + 2 + 2 = 12 questions in 4
+  calls. The two-capture flush: 8 + 8, halves 4 + 4, halves of those 2 + 2 + 2
+  + 2 at depth 2: 32 questions in 8 calls. Both match the logged counts
+  exactly. The loop is in `labelPollWith` (`intake_labels.go`, the `work`
+  loop), with `jevHalvingDepth = 2` (`jev_failure.go:40`).
+- That is what commit 8b15ec2e9 says it does ("any other failure is asked once
+  more, then halved"). **It contradicts the rule it was written for** ("a
+  second call is right only when the vendor's limits refuse the first, and the
+  code says which limit"): a halve forced by "call_failed" is not a vendor
+  limit, it is a guess that the failure was size. A halved call sends the
+  shared state again in each half, so a failing one-capture flush spends about
+  4 x 27k = 110k estimated tokens to end unlabelled, and a failing two-capture
+  flush about 8 x 31k = 250k.
+- Cost: 24 of the 258 calls (9%), about 19 beyond one per flush, spent on
+  seven captures that got no label. They sit in three clusters (14:09, 17:57,
+  19:04 to 19:06), which suggests upstream conditions, not size. **What the
+  failure was, I do not know:** the extract has the flush lines only, not the
+  `call of N questions failed` lines that carry the error. Read those lines at
+  the three times before choosing the fix.
+
+**Defect to name:** `jev_failure.go:72-76`, halving on `call_failed`. The
+amendment to the design: a failed call is asked again whole once (same state,
+same questions), and halved only when the failure is a size refusal
+(`vendor_refused`, the gateway 413), as the owner's rule allows. A timeout of a
+call far under the limit is not evidence of size; whether a timeout of a big
+call is, is a question for the error lines. This is a fix in `jev_failure.go`
+and its tests, its own commit, red (provider calls), ahead of the gather
+commit: gathering makes each failed call lose more captures, so the retry
+policy has to be right first. Failure item 3 in 2.5 is amended to read "asked
+once more whole; halved only on a size refusal; what still fails is
+unlabelled".
