@@ -74,7 +74,7 @@ func TestJ4BothVendorLimitsBind(t *testing.T) {
 	// Many questions over a small state: only the request total binds.
 	many := map[string]json.RawMessage{}
 	q := raw(strings.Repeat("x ", 3000)) // about 1,500 tokens
-	for i := 0; i < 40; i++ {
+	for i := 0; i < 70; i++ {
 		many[fmt.Sprintf("q%d", i)] = q
 	}
 	est := Measure(raw("s"), many)
@@ -115,5 +115,26 @@ func TestJ5BudgetLine(t *testing.T) {
 	}
 	if fit == "" || over == "" || !Fits(raw(fit), map[string]json.RawMessage{"q": raw("which")}) {
 		t.Errorf("J5: no fit/over boundary found")
+	}
+}
+
+// Limit names the limit a request crosses, or "" when it fits: the request
+// total (64k tokens) is checked first, then the state plus one question (32k).
+func TestLimitNamesTheLimitThatForcesASplit(t *testing.T) {
+	small := json.RawMessage(`{"a":"b"}`)
+	q := map[string]json.RawMessage{"q": json.RawMessage(`{"type":"choice"}`)}
+	if got := Limit(small, q); got != "" {
+		t.Fatalf("a small request crosses %q", got)
+	}
+	bigState, _ := json.Marshal(map[string]string{"text": strings.Repeat("0123456789", 4000)}) // digits: about one token each
+	if got := Limit(bigState, q); got != LimitQuestion {
+		t.Fatalf("a 40k-token state with one question crosses %q; want %q", got, LimitQuestion)
+	}
+	many := map[string]json.RawMessage{}
+	for i := 0; i < 70; i++ {
+		many[fmt.Sprintf("q%d", i)], _ = json.Marshal(map[string]string{"instructions": strings.Repeat("0123456789", 100)})
+	}
+	if got := Limit(small, many); got != LimitRequest {
+		t.Fatalf("seventy 1k-token questions cross %q; want %q", got, LimitRequest)
 	}
 }

@@ -1157,15 +1157,15 @@ func TestIntakeBatchQuestionsOfferExactlyTheCriteriaKeys(t *testing.T) {
 				t.Fatalf("question %s names %s, which is not in state.captures", name, handle)
 			}
 			// A capture's options go out in parts of at most
-			// intakeMaxStoryOptions stories (the vendor's 255 choices a
+			// intakeStoryOptions stories (the vendor's 255 choices a
 			// question): event_n1, event_n1_s2, ...
 			part := 0
 			if partName != "" {
 				_, _ = fmt.Sscanf(partName, "s%d", &part)
 				part--
 			}
-			lo := min(part*intakeMaxStoryOptions, len(stories))
-			want := append([]string(nil), stories[lo:min(lo+intakeMaxStoryOptions, len(stories))]...)
+			lo := min(part*intakeStoryOptions(3), len(stories))
+			want := append([]string(nil), stories[lo:min(lo+intakeStoryOptions(3), len(stories))]...)
 			if kind == "event" {
 				if k == 0 && part == 0 { // the siblings ride the first chunk's first part only
 					for _, other := range []string{"n1", "n2", "n3"} {

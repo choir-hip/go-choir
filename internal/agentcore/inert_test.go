@@ -391,13 +391,13 @@ func TestInertSamplingCoversSubCallAndRecordsRouteCasts(t *testing.T) {
 	}
 }
 
-// A large sample is judged in chunks of the sub-call bound, and the
+// A large sample is judged in the fewest calls the vendor limits allow, and the
 // prediction text per record is bounded.
-func TestInertJudgeCallIsChunkedAndBounded(t *testing.T) {
+func TestInertJudgeCallIsOneCallAndBounded(t *testing.T) {
 	rt, s := testRuntime(t)
 	judge := &subCallJudge{}
 	rt.SetCandidateJudge(judge)
-	n := subCallJudgeBatchMax*2 + 3
+	n := 43
 	var recs []types.CommitmentRecord
 	for i := 0; i < n; i++ {
 		recs = append(recs, types.CommitmentRecord{RecordID: fmt.Sprintf("chunk-%d", i), Kind: types.CommitmentKindDirective,
@@ -408,16 +408,14 @@ func TestInertJudgeCallIsChunkedAndBounded(t *testing.T) {
 	if err := rt.judgeInertness(context.Background(), "owner-ch", "computer-ch", recs); err != nil {
 		t.Fatal(err)
 	}
-	if judge.inertCallCount() != 3 {
-		t.Fatalf("%d judge calls for %d records, want 3", judge.inertCallCount(), n)
-	}
-	for _, q := range judge.inertAsked {
-		if len(q) > subCallJudgeBatchMax {
-			t.Fatalf("a call carried %d questions", len(q))
-		}
+	// 43 records at the full prediction clip are about 2x the 32k state limit,
+	// so two calls is the fewest; the split is named in the log (limit
+	// state_plus_question_tokens_32k).
+	if judge.inertCallCount() != 2 {
+		t.Fatalf("%d judge calls for %d records at the full clip, want 2 (the fewest the 32k state limit allows)", judge.inertCallCount(), n)
 	}
 	for _, st := range judge.inertStates {
-		if len(st) > subCallJudgeBatchMax*(inertPredictionRunes*2+2000) {
+		if len(st) > n*(inertPredictionRunes*2+2000) {
 			t.Fatalf("state is %d bytes", len(st))
 		}
 	}

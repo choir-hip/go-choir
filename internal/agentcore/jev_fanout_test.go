@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"github.com/yusefmosiah/go-choir/internal/quotematch"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -154,66 +153,11 @@ func (j *heldJudge) drain(t *testing.T, n int) {
 	}
 }
 
-func TestSubCallGateAdmitsOneJudgeCallAtATime(t *testing.T) {
-	rt, _ := testRuntime(t)
-	judge := newHeldJudge(nil)
-	rt.SetCandidateJudge(judge)
-	var wg sync.WaitGroup
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if _, err := rt.callSubCallJudge(context.Background(), jevrecord.Meta{Site: "test"}, json.RawMessage(`{}`), map[string]json.RawMessage{"q": json.RawMessage(`{}`)}); err != nil {
-				t.Error(err)
-			}
-		}()
-	}
-	judge.waitStarted(t)
-	judge.drain(t, 5)
-	wg.Wait()
-}
-
-// A call queued behind a slow one is not failed by the time it spent queued:
-// its deadline starts when it holds the gate (and the same gate serves the
-// cast and inert judges).
-func TestSubCallQueuedBehindASlowCallIsNotFailedByTheWait(t *testing.T) {
-	old := subCallJudgeTimeout
-	subCallJudgeTimeout = 400 * time.Millisecond
-	t.Cleanup(func() { subCallJudgeTimeout = old })
-	rt, _ := testRuntime(t)
-	judge := newHeldJudge(nil)
-	rt.SetCandidateJudge(judge)
-	errs := make(chan error, 3)
-	for i := 0; i < 3; i++ {
-		go func() {
-			_, err := rt.callSubCallJudge(context.Background(), jevrecord.Meta{Site: "test"}, json.RawMessage(`{}`), map[string]json.RawMessage{"q": json.RawMessage(`{}`)})
-			errs <- err
-		}()
-	}
-	// Each call is held 250 ms, so the third waits 500 ms, over the 400 ms
-	// deadline, before it holds the gate.
-	for i := 0; i < 3; i++ {
-		judge.waitStarted(t)
-		time.Sleep(250 * time.Millisecond)
-		judge.release <- struct{}{}
-	}
-	for i := 0; i < 3; i++ {
-		select {
-		case err := <-errs:
-			if err != nil {
-				t.Fatalf("a queued call failed: %v", err)
-			}
-		case <-time.After(20 * time.Second):
-			t.Fatal("a call never returned")
-		}
-	}
-}
-
-func TestSubCallRoundOverTheBatchRunsOneCallAtATime(t *testing.T) {
+func TestSubCallRoundOfThirtyTwoCastsIsOneCall(t *testing.T) {
 	f := newSubCallFixture(t, map[string]string{"gamma": "findings for gamma"})
 	// The judge is down while two fan-outs of 16 are cast, so their Casts
-	// stay unsettled; then one round settles all 32: a batch of 20 and a
-	// batch of 12, one after the other.
+	// stay unsettled; then one round settles all 32 in one call (owner,
+	// 2026-11-15: as many questions in the same call as possible).
 	f.judge.err = errors.New("judge down")
 	var ids []string
 	for r := 0; r < 2; r++ {
@@ -234,7 +178,9 @@ func TestSubCallRoundOverTheBatchRunsOneCallAtATime(t *testing.T) {
 	if err := f.rt.settleSubCalls(context.Background(), f.owner, f.computer, "fan-serial", 0, ids); err != nil {
 		t.Fatal(err)
 	}
-	peak.assertSerial(t, 2)
+	if got := int(peak.calls.Load()); got != 1 {
+		t.Fatalf("judge calls = %d for 32 Casts that fit the vendor's limits; want exactly 1", got)
+	}
 	for _, id := range ids {
 		if !f.exists(types.SubCallSettlementRecordID(id, types.SubCallJudgeScorerID)) {
 			t.Fatalf("cast %s was not settled", id)
@@ -242,18 +188,20 @@ func TestSubCallRoundOverTheBatchRunsOneCallAtATime(t *testing.T) {
 	}
 }
 
-func TestDeskCastRoundOverTheBatchRunsOneCallAtATime(t *testing.T) {
+func TestDeskCastPassOfTwentyFiveCastsIsOneCall(t *testing.T) {
 	f := deskJudgeFixture(t)
 	peak := &peakJudge{inner: f.judge, delay: 10 * time.Millisecond}
 	f.rt.SetCandidateJudge(peak)
 	var casts []types.CommitmentRecord
-	for i := 0; i < deskCastJudgeBatchMax+5; i++ {
+	for i := 0; i < 25; i++ {
 		casts = append(casts, deskCast(fmt.Sprintf("dj-serial-%d", i), deskTex, deskRes, fmt.Sprintf("Question %d.", i), 0.6))
 	}
 	f.commitInbox(t, "dj-serial", nil, casts...)
 	f.commitInbox(t, "dj-serial-final", f.readAll(t, deskRes), deskReport("dj-serial-final", deskRes, deskTex, "Answers to every question.", true))
 	f.rt.waitSubCallJudge()
-	peak.assertSerial(t, 2)
+	if got := int(peak.calls.Load()); got != 1 {
+		t.Fatalf("judge calls = %d for 25 Casts that fit the vendor's limits; want exactly 1", got)
+	}
 	for _, c := range casts {
 		if !f.exists(judgeSettlementID(c.RecordID)) {
 			t.Fatalf("cast %s was not settled", c.RecordID)
@@ -261,12 +209,12 @@ func TestDeskCastRoundOverTheBatchRunsOneCallAtATime(t *testing.T) {
 	}
 }
 
-func TestInertTrayOverTheBatchRunsOneCallAtATime(t *testing.T) {
+func TestInertTrayOfFortyThreeRecordsIsOneCall(t *testing.T) {
 	rt, _ := testRuntime(t)
 	peak := &peakJudge{delay: 10 * time.Millisecond}
 	rt.SetCandidateJudge(peak)
 	var recs []types.CommitmentRecord
-	for i := 0; i < subCallJudgeBatchMax*2+3; i++ {
+	for i := 0; i < 43; i++ {
 		recs = append(recs, types.CommitmentRecord{RecordID: fmt.Sprintf("inert-serial-%d", i), Kind: types.CommitmentKindDirective,
 			Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast}, EmitterKind: types.CommitmentEmitterAgent,
 			Prediction: types.CommitmentPrediction{Hypothesis: "a prediction"}, PSuccess: fp(0.6), Weight: fp(0.5),
@@ -275,7 +223,9 @@ func TestInertTrayOverTheBatchRunsOneCallAtATime(t *testing.T) {
 	if err := rt.judgeInertness(context.Background(), "owner-in", "computer-in", recs); err != nil {
 		t.Fatal(err)
 	}
-	peak.assertSerial(t, 3)
+	if got := int(peak.calls.Load()); got != 1 {
+		t.Fatalf("judge calls = %d for 43 records that fit the vendor's limits; want exactly 1", got)
+	}
 }
 
 func TestEventLayerChunksAreAskedOneAtATime(t *testing.T) {

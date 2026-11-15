@@ -147,13 +147,17 @@ func (rt *Runtime) judgeInertness(ctx context.Context, owner, computer string, r
 	if len(todo) == 0 {
 		return nil
 	}
-	// One call per chunk, at the same bound as the sub-call judge so a
-	// large tray never makes one oversized request; over the bound the
-	// chunks are asked one after another (owner, 2026-11-10).
+	// One call for the whole tray, split only where the vendor's limits
+	// (jevbudget) refuse it; the split names the limit and is logged.
+	plan, err := planJevCalls("inert_judge", len(todo), func(lo, hi int) (json.RawMessage, map[string]json.RawMessage, error) {
+		return inertJudgeRequest(todo[lo:hi])
+	})
+	if err != nil {
+		return err
+	}
 	var firstErr error
-	for start := 0; start < len(todo); start += subCallJudgeBatchMax {
-		end := min(start+subCallJudgeBatchMax, len(todo))
-		if err := rt.judgeInertChunk(ctx, owner, computer, todo[start:end]); err != nil {
+	for _, r := range plan.Ranges {
+		if err := rt.judgeInertChunk(ctx, owner, computer, todo[r[0]:r[1]]); err != nil {
 			if ctx.Err() != nil {
 				return err
 			}

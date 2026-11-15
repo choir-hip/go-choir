@@ -104,9 +104,6 @@ var (
 	subCallStopWait = 10 * time.Second
 )
 
-// subCallJudgeBatchMax is the most children in one judge call; a larger
-// fan-out is scored in chunks.
-const subCallJudgeBatchMax = 20
 
 // subCallRuleCitationsMax is the most citations one Report's rule checks.
 const subCallRuleCitationsMax = 20
@@ -344,16 +341,24 @@ func (rt *Runtime) settleSubCalls(ctx context.Context, owner, computer, fanOut s
 			judged = append(judged, it)
 		}
 	}
-	// A round is one call; over the batch of subCallJudgeBatchMax the
-	// batches go one after another (owner, 2026-11-10: never call Jev
-	// concurrently when one call with more questions would do). The batches
-	// are independent (each Cast has its own settlement id), so a failed one
-	// does not stop the next; the first error in batch order is returned.
+	// A round is one call: every Cast of it goes in one context with one
+	// question each, and a split is made only where the vendor's limits
+	// (jevbudget) refuse the one call; the split names the limit and is
+	// logged (owner, 2026-11-15: as many questions in the same call as
+	// possible). The Casts are independent (each has its own settlement id),
+	// so a failed call does not stop the next; the first error is returned.
 	var firstErr error
-	for start := 0; start < len(judged); start += subCallJudgeBatchMax {
-		end := min(start+subCallJudgeBatchMax, len(judged))
-		if err := rt.judgeSubCallBatch(ctx, owner, computer, fanOut, judged[start:end], ruleRecs); err != nil && firstErr == nil {
-			firstErr = err
+	if len(judged) > 0 {
+		plan, err := planJevCalls("subcall_judge", len(judged), func(lo, hi int) (json.RawMessage, map[string]json.RawMessage, error) {
+			return subCallJudgeRequest(judged[lo:hi])
+		})
+		if err != nil {
+			return err
+		}
+		for _, r := range plan.Ranges {
+			if err := rt.judgeSubCallBatch(ctx, owner, computer, fanOut, judged[r[0]:r[1]], ruleRecs); err != nil && firstErr == nil {
+				firstErr = err
+			}
 		}
 	}
 	return firstErr
@@ -599,25 +604,11 @@ func (rt *Runtime) judgeSubCallBatch(ctx context.Context, owner, computer, fanOu
 	return nil
 }
 
-// callSubCallJudge makes the one judge call of a batch, with at most one in
-// flight on the computer. A call waits for the gate under the caller's
-// context only; its own subCallJudgeTimeout starts once it holds the gate, so
-// time queued behind another call never fails work that has not reached Jev.
-// A rate-limited answer waits and retries inside that timeout instead of
-// failing the work.
+// callSubCallJudge makes the one judge call of a batch. Its own
+// subCallJudgeTimeout bounds it. A rate-limited answer waits and retries
+// inside that timeout instead of failing the work. There is no gate: calls
+// are made as few as the vendor's limits allow, not queued.
 func (rt *Runtime) callSubCallJudge(ctx context.Context, meta jevrecord.Meta, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
-	rt.subCallJudgeMu.Lock()
-	if rt.subCallGate == nil {
-		rt.subCallGate = make(chan struct{}, 1)
-	}
-	gate := rt.subCallGate
-	rt.subCallJudgeMu.Unlock()
-	select {
-	case gate <- struct{}{}:
-		defer func() { <-gate }()
-	case <-ctx.Done():
-		return nil, fmt.Errorf("Jev: waiting for a judge slot: %w", ctx.Err())
-	}
 	callCtx, cancel := context.WithTimeout(ctx, subCallJudgeTimeout)
 	defer cancel()
 	backoff := subCallJudgeBackoff

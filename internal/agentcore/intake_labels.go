@@ -75,21 +75,19 @@ var (
 
 const (
 	// intakeFlushCaptures is the most captures one flush takes from the
-	// queue (the event layer's chunk size). All of them go in one call over
-	// one state, and the vendor-token policy below splits a call only when it
-	// would cross the vendor's limits (docs/design/
-	// jev-batched-questions-2026-11-10.md, F12, "Intake flush").
-	intakeFlushCaptures = 12
-	// intakeCallCaptures is the most captures one call carries: the whole
-	// flush, two questions each, so 24. CLAUDE.md (Delivery, owner,
-	// 2026-11-12) says every question about a state goes in the one call that
-	// carries that state, and a second call over the same state is the
-	// defect; a cap of 6 captures would make two calls over one state on
-	// every full flush. The vendor sets no limit on questions a request.
-	// Accuracy above 12 questions a call is unmeasured (SYSTEM1.md rule 7);
-	// that is what the shadow comparison (intake_shadow.go, cmd/intake-shadow)
-	// is for, and its result is a measured constant changed by a commit, not
-	// a setting. See F12 in the design record.
+	// queue, and one call carries: every waiting capture, up to what the
+	// vendor's 255 choices a question allow. An event question offers the
+	// poll's other captures (captures-1) and new beside the stories, so with
+	// intakeMinStoryOptions stories of room left that is 152 captures, 304
+	// questions. The only other bound on questions in a call is jevbudget's
+	// token limits (the vendor sets no maximum on questions). Past this a
+	// split is forced by the limit choices_255 and logged. Owner, 2026-11-15:
+	// as many questions in the same call as possible. Accuracy at large
+	// question counts is unmeasured (SYSTEM1.md rule 7): the shadow comparison
+	// (intake_shadow.go, cmd/intake-shadow) measures it; it is not a cap.
+	intakeMinStoryOptions = 100
+	intakeFlushCaptures   = jevbudget.VendorMaxChoices - intakeChoiceMargin - 1 - intakeMinStoryOptions
+	// intakeCallCaptures is the most captures one call carries: all of them.
 	intakeCallCaptures = intakeFlushCaptures
 	// intakeBatchCaptures is the count handed to labelPoll's grouping.
 	intakeBatchCaptures = intakeCallCaptures
@@ -117,12 +115,6 @@ const (
 	// state is sent once a capture.
 	intakeCallFixedTokens  = 1000
 	intakeCaptureKeyTokens = 10
-	// intakeMaxStoryOptions is the most stories one question offers: the
-	// vendor takes 255 choices a question (jevbudget.VendorMaxChoices), and an
-	// event question also offers the poll's other captures (at most
-	// intakeFlushCaptures-1) and new. A capture with more candidates in a call
-	// is asked in parts, every part over the same state.
-	intakeMaxStoryOptions = jevbudget.VendorMaxChoices - intakeFlushCaptures - intakeChoiceMargin
 	// intakeChoiceMargin is what a question leaves unused under the vendor's
 	// documented maximum of 255 choices; the poll's other captures and new are
 	// counted above, and the margin covers a count that differs by one or two.
@@ -774,7 +766,7 @@ func (p *intakePoll) chunk(k int) []intakeStory {
 }
 
 // intakeAsk is one capture's questions in one call. A capture's options are
-// cut into parts of at most intakeMaxStoryOptions stories, because the vendor
+// cut into parts of at most intakeStoryOptions stories, because the vendor
 // takes at most 255 choices a question; every part is a question over the same
 // state, so the call still carries the stories once.
 type intakeAsk struct {
@@ -859,12 +851,13 @@ func (rt *Runtime) buildIntakeCall(lib *intakeLibrary, p *intakePoll, k int, mem
 		if k == 0 {
 			siblingChoices = p.views[i].siblings
 		}
-		// A capture's options go out in parts of at most intakeMaxStoryOptions
+		// A capture's options go out in parts of at most intakeStoryOptions
 		// stories (the vendor's 255-choice limit a question). The first part
 		// keeps the capture's own order, so the option Jev leans toward is as
 		// it was; the siblings ride the first part only.
-		for n := 0; n == 0 || n*intakeMaxStoryOptions < len(own); n++ {
-			part := intakePart{eventName: "event_" + p.handles[i], storyChoices: own[min(n*intakeMaxStoryOptions, len(own)):min((n+1)*intakeMaxStoryOptions, len(own))]}
+		per := intakeStoryOptions(len(p.items))
+		for n := 0; n == 0 || n*per < len(own); n++ {
+			part := intakePart{eventName: "event_" + p.handles[i], storyChoices: own[min(n*per, len(own)):min((n+1)*per, len(own))]}
 			if n > 0 {
 				part.eventName += fmt.Sprintf("_s%d", n+1)
 			}
@@ -1417,4 +1410,12 @@ func callJudgeWithin(ctx context.Context, judge CandidateJudge, scope string, ti
 	case <-callCtx.Done():
 		return nil, fmt.Errorf("Jev: %w", callCtx.Err())
 	}
+}
+
+// intakeStoryOptions is the most stories one question offers when the poll
+// has captures captures: the vendor takes 255 choices a question, and an event
+// question also offers the other captures (captures-1) and new. A capture with
+// more candidates in a call is asked in parts, every part over the same state.
+func intakeStoryOptions(captures int) int {
+	return max(1, jevbudget.VendorMaxChoices-intakeChoiceMargin-max(captures, 1))
 }

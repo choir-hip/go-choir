@@ -118,3 +118,22 @@ func Fits(state json.RawMessage, questions map[string]json.RawMessage) bool {
 	e := Measure(state, questions)
 	return e.Request <= RequestBudgetTokens && e.WorstQuestion <= QuestionBudgetTokens
 }
+
+// The names of the limits a split can be forced by, as logged.
+const (
+	LimitRequest  = "request_tokens_64k"
+	LimitQuestion = "state_plus_question_tokens_32k"
+	LimitChoices  = "choices_255"
+)
+
+// Limit names the limit a request crosses, or "" when it fits.
+func Limit(state json.RawMessage, questions map[string]json.RawMessage) string {
+	e := Measure(state, questions)
+	switch {
+	case e.Request > RequestBudgetTokens:
+		return LimitRequest
+	case e.WorstQuestion > QuestionBudgetTokens:
+		return LimitQuestion
+	}
+	return ""
+}

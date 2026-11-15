@@ -56,8 +56,6 @@ import (
 // shorten it.
 var deskCastJudgeCoalesce = 3 * time.Second
 
-// deskCastJudgeBatchMax is the most Casts in one judge call.
-const deskCastJudgeBatchMax = subCallJudgeBatchMax
 
 // deskCastAnswerRunes bounds the recipient's text per round, and a Cast's own
 // targeted answers.
@@ -217,19 +215,26 @@ func (rt *Runtime) settleDeskCastRounds(ctx context.Context, owner, computer str
 		}
 		items = append(items, roundItems...)
 	}
-	// One call per batch of deskCastJudgeBatchMax, one after another (owner,
-	// 2026-11-10: never call Jev concurrently when one call with more
-	// questions would do). A round can span batches and its counters are
-	// plain fields; each batch's answers are applied before the next is asked.
-	for start := 0; start < len(items); start += deskCastJudgeBatchMax {
-		end := min(start+deskCastJudgeBatchMax, len(items))
-		var ask deskCastAsk
-		if err := ctx.Err(); err != nil { // the context ended before this batch started
-			ask = deskCastAsk{failure: system1Message(err)}
-		} else {
-			ask = rt.askDeskCastBatch(ctx, items[start:end])
+	// One call for every Cast of the pass, split only where the vendor's
+	// limits (jevbudget) refuse it; the split names the limit and is logged.
+	// A round can span calls and its counters are plain fields; each call's
+	// answers are applied before the next is asked.
+	if len(items) > 0 {
+		plan, err := planJevCalls("desk_cast_judge", len(items), func(lo, hi int) (json.RawMessage, map[string]json.RawMessage, error) {
+			return deskCastJudgeRequest(items[lo:hi])
+		})
+		if err != nil {
+			plan = jevSplit{Ranges: [][2]int{{0, len(items)}}}
 		}
-		rt.judgeDeskCastBatch(ctx, owner, computer, items[start:end], ask)
+		for _, r := range plan.Ranges {
+			var ask deskCastAsk
+			if err := ctx.Err(); err != nil { // the context ended before this call started
+				ask = deskCastAsk{failure: system1Message(err)}
+			} else {
+				ask = rt.askDeskCastBatch(ctx, items[r[0]:r[1]])
+			}
+			rt.judgeDeskCastBatch(ctx, owner, computer, items[r[0]:r[1]], ask)
+		}
 	}
 	for _, r := range rounds {
 		phase, reason := types.SubCallPhaseAnswered, r.reason
