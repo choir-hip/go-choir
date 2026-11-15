@@ -197,16 +197,11 @@ func newFixture(t *testing.T, bytesApprox int) *fixture {
 			Head: func(context.Context, *sql.Tx) (*computerevent.Head, error) {
 				return &computerevent.Head{ComputerID: testComputer, Sequence: 41, CanonicalEventHead: strings.Repeat("e", 64)}, nil
 			},
-			Witness: func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
-				digests, err := computerversion.SQLiteStateExtractor{Database: "texture"}.DigestsTx(ctx, tx)
-				if err != nil {
-					return selfdevprotocol.VMLocalContentWitness{}, err
-				}
-				return selfdevprotocol.WitnessFromDigests(digests)
-			},
-			Cipher:   cipher,
-			Chunks:   chunks,
-			Appender: tape,
+			Witness:    witnessOf,
+			ScratchDir: filepath.Join(t.TempDir(), "snapshot-tmp"),
+			Cipher:     cipher,
+			Chunks:     chunks,
+			Appender:   tape,
 		},
 	}
 }

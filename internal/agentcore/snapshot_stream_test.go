@@ -15,7 +15,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/dbx"
-	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/snapshot"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
@@ -188,9 +187,8 @@ func streamConfig(t *testing.T, store *choirstore.Store, tape *streamTape, ciphe
 		Head: func(ctx context.Context, tx *sql.Tx) (*computerevent.Head, error) {
 			return store.HeadTx(ctx, tx, streamComputer)
 		},
-		Witness: func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
-			return LiveStoreWitnessTx(ctx, tx)
-		},
+		Witness:     LiveStoreWitness,
+		ScratchDir:  filepath.Join(t.TempDir(), "snapshot-tmp"),
 		Cipher:      cipher,
 		Chunks:      tape,
 		Appender:    tape,

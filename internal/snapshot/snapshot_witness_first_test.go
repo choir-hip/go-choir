@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,17 +14,19 @@ import (
 // (the paper's failed snapshots wrote 6 GiB an hour, 2026-11-12), written
 // before the code:
 //
-//  W1. the witness runs after the page stream, so an attempt that cannot
-//      finish its witness inside the budget has already uploaded the store;
-//  W2. moving the witness first lets it describe a different state than the
-//      pages (it must run in the same read transaction, before the pages).
+//  W1. the witness runs after the upload, so an attempt that cannot finish its
+//      witness inside the budget has already uploaded the store.
+//
+// W2 (the witness shares the pages' transaction) is gone with the mechanism it
+// pinned: the witness runs on a static copy, tied to the head by the cross-check
+// (snapshot_static_copy_test.go).
 
 // W1: the witness is the long step on the paper (22 to 35 minutes); a budget
 // abort inside it must have uploaded nothing.
 func TestABudgetAbortInTheWitnessUploadsNothing(t *testing.T) {
 	f := newFixture(t, ChunkSize*3)
 	f.cfg.MaxDuration = 200 * time.Millisecond
-	f.cfg.Witness = func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
+	f.cfg.Witness = func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
 		<-ctx.Done()
 		return selfdevprotocol.VMLocalContentWitness{}, ctx.Err()
 	}
@@ -43,47 +44,4 @@ func TestABudgetAbortInTheWitnessUploadsNothing(t *testing.T) {
 		t.Fatalf("left %d events and %d roots", len(f.tape.events), len(f.chunks.roots))
 	}
 	assertWALReleased(t, f)
-}
-
-// W2: the witness finishes before the first page is read, in the same
-// transaction as the head and the pages, and a write that commits between the
-// witness and the stream stays out of both.
-func TestTheWitnessRunsBeforeThePagesInTheSameTransaction(t *testing.T) {
-	f := newFixture(t, ChunkSize*3)
-	live := liveWitness(t, f)
-	var witnessDone atomic.Bool
-	inner := f.cfg.Witness
-	f.cfg.Witness = func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
-		w, err := inner(ctx, tx)
-		// A commit after the witness read: the pages must not carry it.
-		if _, werr := f.db.Write.Exec(`INSERT INTO blobs (id, body, note) VALUES (?, ?, ?)`, 1_000_000, []byte("late"), "late"); werr != nil {
-			t.Error(werr)
-		}
-		witnessDone.Store(true)
-		return w, err
-	}
-	var pagesBeforeWitness atomic.Int64
-	f.cfg.pageHook = func(int64) {
-		if !witnessDone.Load() {
-			pagesBeforeWitness.Add(1)
-		}
-	}
-	ref, err := TakeSnapshot(context.Background(), f.cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n := pagesBeforeWitness.Load(); n != 0 {
-		t.Fatalf("%d pages were read before the witness finished", n)
-	}
-	if ref.Record.WitnessRoot != live.ContentRoot {
-		t.Fatalf("recorded witness %s, the store at the snapshot point had %s", ref.Record.WitnessRoot, live.ContentRoot)
-	}
-	restored, _ := restoreAndOpen(t, f)
-	got, err := witnessOf(context.Background(), restored.Read)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.ContentRoot != ref.Record.WitnessRoot {
-		t.Fatalf("restored witness %s differs from the recorded %s: pages and witness are not one state", got.ContentRoot, ref.Record.WitnessRoot)
-	}
 }

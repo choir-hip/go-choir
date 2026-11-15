@@ -215,16 +215,11 @@ func TestMaterializeRestoresTheNewestSnapshotWhenTheDiskIsMissing(t *testing.T) 
 		Head: func(context.Context, *sql.Tx) (*computerevent.Head, error) {
 			return &computerevent.Head{ComputerID: computerID, Sequence: 7, CanonicalEventHead: strings.Repeat("b", 64)}, nil
 		},
-		Witness: func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
-			digests, err := computerversion.SQLiteStateExtractor{Database: "texture"}.DigestsTx(ctx, tx)
-			if err != nil {
-				return selfdevprotocol.VMLocalContentWitness{}, err
-			}
-			return selfdevprotocol.WitnessFromDigests(digests)
-		},
-		Cipher:   cipher,
-		Chunks:   snapshot.HTTPChunks{BaseURL: server.URL, ComputerID: computerID, Capability: testCapability},
-		Appender: &snapshotTape{platform: platform},
+		Witness:    witnessOf,
+		ScratchDir: filepath.Join(t.TempDir(), "snapshot-tmp"),
+		Cipher:     cipher,
+		Chunks:     snapshot.HTTPChunks{BaseURL: server.URL, ComputerID: computerID, Capability: testCapability},
+		Appender:   &snapshotTape{platform: platform},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -277,17 +272,18 @@ func TestMaterializeRefusesASnapshotWhosePagesDisagreeWithItsWitness(t *testing.
 			return &computerevent.Head{ComputerID: computerID, Sequence: 7, CanonicalEventHead: strings.Repeat("b", 64)}, nil
 		},
 		// A producer bug: the witness of other content under the same schema.
-		Witness: func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
-			digests, err := computerversion.SQLiteStateExtractor{Database: "texture"}.DigestsTx(ctx, tx)
+		Witness: func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
+			digests, err := computerversion.SQLiteStateExtractor{DB: db, Database: "texture"}.Digests(ctx)
 			if err != nil {
 				return selfdevprotocol.VMLocalContentWitness{}, err
 			}
 			digests.Tables["notes"] = strings.Repeat("d", 64)
 			return selfdevprotocol.WitnessFromDigests(digests)
 		},
-		Cipher:   cipher,
-		Chunks:   snapshot.HTTPChunks{BaseURL: server.URL, ComputerID: computerID, Capability: testCapability},
-		Appender: &snapshotTape{platform: platform},
+		ScratchDir: filepath.Join(t.TempDir(), "snapshot-tmp"),
+		Cipher:     cipher,
+		Chunks:     snapshot.HTTPChunks{BaseURL: server.URL, ComputerID: computerID, Capability: testCapability},
+		Appender:   &snapshotTape{platform: platform},
 	}); err != nil {
 		t.Fatal(err)
 	}

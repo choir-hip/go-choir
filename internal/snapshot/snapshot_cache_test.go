@@ -2,22 +2,22 @@ package snapshot
 
 import (
 	"context"
-	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 )
 
 // Failure modes (written before the code):
-//   - The stream never advises the kernel, so a whole-store read leaves the
-//     source file cached against the guest's memory.
-//   - The advice runs only at the end, so a 20 GB stream still holds the cache
-//     while it runs: it must also run every sourceDropBytes.
-//   - The path is wrong (an empty or relative name), so the advice drops
-//     nothing: assert the path is an existing file.
-//   - A failed stream skips the advice: the drop is deferred.
-//   - The helper's failure fails the snapshot: it returns nothing and is
-//     best effort.
-func TestStreamDropsTheSourceCacheAsItGoes(t *testing.T) {
+//   - The copy and the upload never advise the kernel, so a whole-store write
+//     and read leave the scratch file cached against the guest's memory.
+//   - The advice runs only at the end, so a 20 GB copy still holds the cache
+//     while it runs: it must also run every scratchSyncBytes written and every
+//     sourceDropBytes uploaded.
+//   - The path is wrong (an empty or relative name): assert it is the scratch
+//     file, never the live store.
+//   - The helper's failure fails the snapshot: it returns nothing and is best
+//     effort.
+func TestTheCopyAndTheUploadDropTheScratchCacheAsTheyGo(t *testing.T) {
 	var mu sync.Mutex
 	var paths []string
 	type span struct{ off, n int64 }
@@ -37,27 +37,24 @@ func TestStreamDropsTheSourceCacheAsItGoes(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(paths) < 2 {
-		t.Fatalf("source cache dropped %d times, want a mid-stream drop and the final one", len(paths))
-	}
-	for _, p := range paths {
-		if p != paths[0] {
-			t.Fatalf("drops named different files: %q vs %q", p, paths[0])
+	want := filepath.Join(f.cfg.ScratchDir, scratchFileName)
+	var mid, whole int
+	for i, p := range paths {
+		if p != want {
+			t.Fatalf("a drop named %q, want only the scratch %q", p, want)
+		}
+		switch {
+		case spans[i] == (span{0, 0}):
+			whole++
+		case spans[i].n >= sourceDropBytes:
+			mid++
+		default:
+			t.Fatalf("drop %+v is neither a whole-file drop nor a range of at least %d bytes", spans[i], sourceDropBytes)
 		}
 	}
-	// Mid-stream drops are the ranges just read, in order and contiguous;
-	// the last is the whole file.
-	var next int64
-	for _, s := range spans[:len(spans)-1] {
-		if s.off != next || s.n < sourceDropBytes {
-			t.Fatalf("mid-stream drop %+v, want offset %d and at least %d bytes", s, next, sourceDropBytes)
-		}
-		next = s.off + s.n
-	}
-	if last := spans[len(spans)-1]; last != (span{0, 0}) {
-		t.Fatalf("final drop %+v, want the whole file", last)
-	}
-	if st, err := os.Stat(paths[0]); err != nil || st.IsDir() {
-		t.Fatalf("dropped path %q is not the database file: %v", paths[0], err)
+	// A mid-copy and a mid-upload range, and a whole-file drop after the
+	// witness and at the end of the upload.
+	if mid < 2 || whole < 2 {
+		t.Fatalf("%d range drops and %d whole-file drops: want at least 2 of each (%v)", mid, whole, spans)
 	}
 }

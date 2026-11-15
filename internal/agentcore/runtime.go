@@ -1276,6 +1276,13 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// every root is stale; even a maintenance hold must not keep them
 	// (docs/problems/apply-checkpoint-replay-fills-guest-tmp-2026-10-26.md).
 	rt.removeStaleReplayScratch()
+	// A snapshot capture killed in flight leaves its scratch copy, a store-sized
+	// file. autoputer.Run already removed it before the rebase, the store open and
+	// the replay; this is the second defence, for a runtime built without Run
+	// (docs/design/capture-static-copy-2026-11-15.md, 2.4).
+	if err := store.RemoveSnapshotScratch(rt.cfg.StorePath); err != nil {
+		log.Printf("runtime: %v", err)
+	}
 	// D6 S5: busy_cold's refault guard reads a rate over the minute before an
 	// act, which the kernel keeps no history of; one /proc/vmstat read every
 	// 10 s keeps it. Started before the maintenance hold return: it reads
