@@ -226,6 +226,7 @@ entered below as lapsed, not scored.
 | C91 | 2026-11-15T04:20Z | partial | deployed as 304a81277 (CI 43672725876, Node B 03:47:26Z). d@e bound checkpoint 998cd98d... at 04:04:55Z (sequence 114,093, witness version 4). `choir computer restore` started 04:05:54Z, answered 04:10:48Z: exit 0, method tape_reconstruct, `witness_matched: true`, base 108,786, 5,307 tail events; Caddy 200 after 283.1 s. Replay completeness 04:12Z to 04:18Z: `equivalent`, live and replay heads at sequence 114,177. Thirteen of the fourteen checks pass; the fourteenth compared doc2's head to a revision I had written down before a later drill revision, and the restored head is the right one. The epoch clause was wrong: the realization epoch was 13709 before and after, an in-place restore does not advance it. Scored as true with the wrong clause named | 0.2025 |
 | C94 | 2026-11-15T05:44Z | true | landed 04:50Z (57ff86475, c7eabe010); CI red on c7eabe010 (a restore-lane test took 501 s under race and timed out shard 7, twice), fixed by cc8ea803d, CI 43680650822, deployed 05:33Z. At 05:35Z d@e's block reads newest 108,788, head 114,385, 49.5 s estimated replay against 240 s, not due; at 05:36Z the paper's reads newest 11,537,493, head 11,851,857, 314,364 tail events, 46m22s estimated, `floor_limited` with the reason in `floor_why` (the last capture's cost is not recorded, so it waits for the event ceiling or the interval). d@e restore to checkpoint 95984c0a... (05:06:04Z, witness version 4) started 05:37:37Z, answered 05:43:40Z: exit 0, tape_reconstruct, `witness_matched: true`, base 108,786. The paper's own snapshot root stays 31 hours old: the claim did not cover it | 0.16 |
 | C92 | 2026-11-15T06:01Z | false | first report on cc8ea803d, corpusd journal 05:44:19Z (sweep started 05:39:54Z, 265 s): `capture-bodies` mode dry-run, scanned 416,916, live 416,864 (all named by rows), unreachable 52, in grace 6, eligible 46 with 5,814,768 bytes, deleted 0, errors 0. The nothing-deleted half held; the eligible count is 46, far under the 1,000 I set as the floor. Capture bodies are 99.99% referenced: their growth is live data, and activating deletion would return 5.8 MB | 0.25 |
+| C95 | 2026-11-15T11:17Z | true | landed 10:07Z (1f160b0ba, 2ad3cc9d2, b40edecb4), CI 43702528075, d@e on e9a0b757a at 10:28Z. First run at 10:32Z with the d@e key: `autoradio-dj`, ` autoradio-dj`, `Autoradio-DJ`, `-autoradio-dj` and a claim tagged `AUTORADIO:x` each 403 "the autoradio namespace is reserved for the server"; `my-autoradio` 201; an ordinary claim 201 and settled; GET claims (200 rows) and GET calibration name agents drill, l1a-proof, my-autoradio only | 0.0625 |
 
 ### Scorecard
 
@@ -236,5 +237,5 @@ false, 1 partial), 7 lapsed.
 |---|---|---|
 | 0.0 to 0.3 | 0 | n/a |
 | 0.3 to 0.6 | 11 | 2, and 2 partial |
-| 0.6 to 0.8 | 18 | 14, and 1 partial |
+| 0.6 to 0.8 | 19 | 15, and 1 partial |
 | 0.8 to 1.0 | 0 | n/a |
