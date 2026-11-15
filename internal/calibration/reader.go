@@ -23,7 +23,7 @@ const (
 // it is the last.
 type PagedLedger interface {
 	ListCalibrationRecordsPage(ctx context.Context, ownerID, computerID, agent, after string, limit int) ([]types.CommitmentRecord, string, error)
-	ListCalibrationClaimsByTagPage(ctx context.Context, ownerID, computerID, tag, after string, limit int) ([]types.CommitmentRecord, string, error)
+	ListCalibrationClaimsByTagPage(ctx context.Context, ownerID, computerID, agent, recordKind, tag, after string, limit int) ([]types.CommitmentRecord, string, error)
 }
 
 // Reader reads the reserved namespace by cursor until it is exhausted. The
@@ -78,11 +78,13 @@ func (r Reader) Records(ctx context.Context, ownerID, computerID string) (record
 	}, page, max)
 }
 
-// StretchForecasts reads the forecast claims of one stretch by its tag.
+// StretchForecasts reads the forecast claims of one stretch by its tag: claims
+// of agent autoradio-dj and the forecast record kind only, so an ordinary
+// claim that carries the same tag is not one.
 func (r Reader) StretchForecasts(ctx context.Context, ownerID, computerID, stretchID string) (claims []types.CommitmentRecord, truncated bool, err error) {
 	page, max := r.sizes()
 	return readPages(func(after string, limit int) ([]types.CommitmentRecord, string, error) {
-		return r.Ledger.ListCalibrationClaimsByTagPage(ctx, ownerID, computerID, "stretch:"+stretchID, after, limit)
+		return r.Ledger.ListCalibrationClaimsByTagPage(ctx, ownerID, computerID, AutoradioAgent, "autoradio.forecast", "stretch:"+stretchID, after, limit)
 	}, page, max)
 }
 
