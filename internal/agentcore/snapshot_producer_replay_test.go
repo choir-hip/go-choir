@@ -27,7 +27,18 @@ import (
 //     interval (they must fire regardless);
 //  f. a snapshot that is due and refused is visible only in the console log;
 //  g. "refused since" resets at every tick, or survives a taken snapshot;
-//  h. the observability route has no snapshot_producer block.
+//  h. the observability route has no snapshot_producer block;
+//  i. a restart forgets the last capture's cost, so every boot of a large
+//     store re-arms an immediate capture (review round 1, finding 1), or an
+//     existing snapshot with no recorded cost is treated as free;
+//  j. the host's retention keeps only the newest k roots, so a checkpoint
+//     inside the recovery bound has no base (internal/platform
+//     snapshot_roots_window_test.go);
+//  k. a fast boot replay relaxes the bound above the slow restore rate
+//     (internal/computerevent replay_rate_test.go);
+//  l. a replay-time capture starts with too little room for the WAL it pins
+//     and aborts after gigabytes of upload; the floor message repeats at every
+//     tick; the block is stale after a capture, or reports rate 0.
 
 // capturingHarness makes every Take spend dur on a fake clock and report
 // uploaded bytes.
@@ -46,17 +57,28 @@ func capturingHarness(t *testing.T, dur time.Duration, uploaded int64) (*produce
 	return h, clock
 }
 
+// seedCapture says the newest snapshot (h.newestAt) was captured in dur and
+// sealed bytes, as a previous producer persisted it.
+func (h *producerHarness) seedCapture(dur time.Duration, bytes int64) {
+	h.t.Helper()
+	if err := saveSnapshotCapture(h.deps.DataDir, snapshotCaptureRecord{StartedAt: h.newestAt.Add(-dur), DurationSeconds: dur.Seconds(), SealedBytes: bytes}); err != nil {
+		h.t.Fatal(err)
+	}
+}
+
 func TestReplayTimeBoundIsInsideTheRestoreRequest(t *testing.T) {
 	// The restore request is ten minutes; scan and install took about four on
 	// d@e. The replay bound must leave room for both, the witness and margin.
-	if snapshotReplayBound <= 0 || snapshotReplayBound+4*time.Minute+time.Minute >= restoreRequestBudget {
-		t.Fatalf("replay bound %s does not fit a %s request after 4 minutes of scan and install", snapshotReplayBound, restoreRequestBudget)
+	// scan and install 4 minutes, witness and flip 1, margin 1.
+	if snapshotReplayBound <= 0 || snapshotReplayBound+4*time.Minute+time.Minute+time.Minute > restoreRequestBudget {
+		t.Fatalf("replay bound %s does not fit a %s request after 4 minutes of scan and install, 1 of witness and 1 of margin", snapshotReplayBound, restoreRequestBudget)
 	}
 }
 
 func TestProducerSnapshotsWhenTheTailReplaysPastTheBound(t *testing.T) {
 	h, clock := capturingHarness(t, 11*time.Second, 1<<20)
 	h.newestFound, h.newestAt, h.newestSeq = true, clock.now.Add(-time.Hour), 1000
+	h.seedCapture(11*time.Second, 1<<20)
 	var p snapshotProducer
 	atBound := uint64(float64(snapshotReplayBound/time.Second) * snapshotAssumedReplayRate)
 	h.head = 1000 + atBound - 1
@@ -74,12 +96,24 @@ func TestProducerUsesAMeasuredReplayRate(t *testing.T) {
 	h, clock := capturingHarness(t, 11*time.Second, 1<<20)
 	h.newestFound, h.newestAt, h.newestSeq = true, clock.now.Add(-time.Hour), 1000
 	h.head = 1000 + 20000
+	h.seedCapture(11*time.Second, 1<<20)
 	var p snapshotProducer
-	// 20,000 events at 400/s is 50 s: not due. At 40/s it is 500 s: due.
+	// 20,000 events at 40/s is 500 s: due. A faster measurement never relaxes
+	// the bound above the assumed rate (finding 3): 30,000 events at a
+	// measured 400/s is still 265 s at the assumed 113/s, and is due.
 	h.deps.ReplayRate = func() (float64, bool) { return 400, true }
 	if outcome, _ := h.run(&p, clock.now); outcome != snapshotNotDue {
-		t.Fatalf("outcome=%s: fast measured rate, not due", outcome)
+		t.Fatalf("outcome=%s: 20,000 events at the assumed rate is 177 s, not due", outcome)
 	}
+	h.head = 1000 + 30000
+	if outcome, _ := h.run(&p, clock.now); outcome != snapshotTaken {
+		t.Fatalf("outcome=%s: a fast measured rate relaxed the bound", outcome)
+	}
+	h.newestAt, h.newestSeq = clock.now, h.head
+	h.seedCapture(11*time.Second, 1<<20)
+	p = snapshotProducer{}
+	clock.now = clock.now.Add(2 * time.Hour)
+	h.head += 20000
 	h.deps.ReplayRate = func() (float64, bool) { return 40, true }
 	if outcome, _ := h.run(&p, clock.now); outcome != snapshotTaken {
 		t.Fatalf("outcome=%s: slow measured rate, due", outcome)
@@ -91,6 +125,7 @@ func TestProducerUsesAMeasuredReplayRate(t *testing.T) {
 func TestReplayTimeRuleOnDE(t *testing.T) {
 	h, clock := capturingHarness(t, 11*time.Second, 200<<20)
 	h.newestFound, h.newestAt, h.newestSeq = true, clock.now.Add(-time.Hour), 100000
+	h.seedCapture(11*time.Second, 200<<20)
 	var p snapshotProducer
 	h.head = 100000 + 30000
 	if outcome, detail := h.run(&p, clock.now); outcome != snapshotTaken {
@@ -111,10 +146,11 @@ func TestReplayTimeRuleOnThePaperDoesNotCaptureContinuously(t *testing.T) {
 	h, clock := capturingHarness(t, capture, 4_800_000_000)
 	h.newestFound, h.newestAt, h.newestSeq = true, clock.now.Add(-30*time.Hour), 1_000_000
 	h.head = 1_000_000 + 282_000
+	h.seedCapture(capture, 4_800_000_000)
 	var p snapshotProducer
 	start := clock.now
-	// A day-old snapshot, 282,000 events of tail: well past the bound, and no
-	// capture is known yet, so there is no floor: due.
+	// A day-old snapshot, 282,000 events of tail: well past the bound and past
+	// its 13.4 hour floor: due.
 	if outcome, detail := h.run(&p, clock.now); outcome != snapshotTaken {
 		t.Fatalf("paper first: outcome=%s detail=%q", outcome, detail)
 	}
