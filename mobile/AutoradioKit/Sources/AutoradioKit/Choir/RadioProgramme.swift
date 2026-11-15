@@ -447,69 +447,35 @@ public final class RadioProgramme: Programme, @unchecked Sendable {
 
     /// The first speakable segment (or, with no stretch, the article), and what follows. The listener waits at most `firstSegmentDeadline`
     /// seconds, for the request and the first segment together (a computer that is waking up); then the article plays and the stretch is let go.
-    /// One result, set once: the first of the reader and the timer.
-    private final class Gate: @unchecked Sendable {
-        private let lock = NSLock()
-        private var result: First?
-        private var cont: CheckedContinuation<First, Never>?
-        func set(_ r: First) {
-            lock.lock()
-            if result != nil { lock.unlock(); return }
-            result = r; let c = cont; cont = nil
-            lock.unlock()
-            c?.resume(returning: r)
-        }
-        func wait() async -> First {
-            await withCheckedContinuation { c in
-                lock.lock()
-                if let r = result { lock.unlock(); c.resume(returning: r) } else { cont = c; lock.unlock() }
-            }
-        }
-    }
-
-    /// Append what follows the first segment to the player until the stretch ends or the task is cancelled.
-    private static func pump(_ box: IteratorBox, id: String, into player: ProgrammePlayer) async {
-        let env = ChoirEnvironment.shared
-        while !Task.isCancelled, let e = try? await box.next() {
-            switch e {
-            case .segment(let s):
-                if let p = SegmentPrep.prepare(s) { _ = player.appendSegment(p, toDocument: id) }
-            case .done: return
-            case .error(let m): env.log?.emit(.note("programme: the stretch ended with an error: \(m)")); return
-            }
-        }
-    }
-
     /// The first speakable segment (or, with no stretch, the article), and what follows. The listener waits at most `firstSegmentDeadline`
-    /// seconds, for the request and the first segment together (a computer that is waking up). After that the article plays, and the
-    /// stretch is still followed: if its first segment arrives later, the programme takes over at the next block boundary of the article
-    /// (`ProgrammePlayer.handOver`), never mid-sentence.
+    /// seconds, for the request and the first segment together (a computer that is waking up); then the article plays and the stretch is let go.
     public func open(cause: String = "open") async throws -> OpenedProgramme {
         let env = ChoirEnvironment.shared
         let deadline = firstSegmentDeadline
-        let gate = Gate()
-        let reader = Task { () -> First in let r = await self.readFirst(cause: cause); gate.set(r); return r }
-        let timer = Task { try? await Task.sleep(nanoseconds: UInt64(max(0, deadline) * 1_000_000_000)); if !Task.isCancelled { gate.set(.timedOut) } }
-        let first: First = await withTaskCancellationHandler { await gate.wait() } onCancel: { reader.cancel(); timer.cancel(); gate.set(.nothing) }
-        timer.cancel()
-        if Task.isCancelled { reader.cancel() }
+        let first: First = await withTaskGroup(of: First.self) { g in
+            g.addTask { await self.readFirst(cause: cause) }
+            g.addTask { try? await Task.sleep(nanoseconds: UInt64(max(0, deadline) * 1_000_000_000)); return .timedOut }
+            let r = await g.next() ?? .nothing
+            g.cancelAll()
+            return r
+        }
         try Task.checkCancellation()                                         // a cancelled open is cancelled, not a reason to fetch the article
         switch first {
         case .doc(let doc, let box):
             let id = doc.id
-            return OpenedProgramme(document: doc, usedFallback: false, follow: { player in await Self.pump(box, id: id, into: player) })
-        case .nothing: env.log?.emit(.note("programme: the stretch had nothing to say; playing the front page"))
-        case .failed(let e): env.log?.emit(.note("programme: no stretch (\(e)); playing the front page"))
-        case .timedOut:
-            env.log?.emit(.note("programme: no first segment in \(Int(deadline)) s; playing the front page, still following the stretch"))
-            let article: ProgrammeDocument
-            do { article = try await fallback() } catch { reader.cancel(); throw error }
-            return OpenedProgramme(document: article, usedFallback: true, follow: { player in
-                let late = await withTaskCancellationHandler { await reader.value } onCancel: { reader.cancel() }
-                guard !Task.isCancelled, case .doc(let doc, let box) = late else { return }
-                player.handOver(doc)
-                await Self.pump(box, id: doc.id, into: player)
+            return OpenedProgramme(document: doc, usedFallback: false, follow: { player in
+                while !Task.isCancelled, let e = try? await box.next() {
+                    switch e {
+                    case .segment(let s):
+                        if let p = SegmentPrep.prepare(s) { _ = player.appendSegment(p, toDocument: id) }
+                    case .done: return
+                    case .error(let m): env.log?.emit(.note("programme: the stretch ended with an error: \(m)")); return
+                    }
+                }
             })
+        case .nothing: env.log?.emit(.note("programme: the stretch had nothing to say; playing the front page"))
+        case .timedOut: env.log?.emit(.note("programme: no first segment in \(Int(deadline)) s; playing the front page"))
+        case .failed(let e): env.log?.emit(.note("programme: no stretch (\(e)); playing the front page"))
         }
         return OpenedProgramme(document: try await fallback(), usedFallback: true, follow: nil)
     }

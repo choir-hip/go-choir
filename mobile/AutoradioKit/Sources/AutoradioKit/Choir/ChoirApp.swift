@@ -177,6 +177,7 @@ public final class ChoirApp: @unchecked Sendable {
         await signIn.signOut()
         lock.lock(); loadToken += 1; loading = false; followTask?.cancel(); followTask = nil; lock.unlock()   // a load still in flight is stale now, and will not clear this itself
         runtime.player.pause()
+        runtime.player.clearQueue()
         runtime.player.setDocument(ProgrammeDocument(id: "none", title: "", blocks: []))
         lock.lock(); stories = []; message = ""; lock.unlock()
         onChange?()
