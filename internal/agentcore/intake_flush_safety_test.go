@@ -107,9 +107,8 @@ func TestIntakeFlushCallsShareNoDeadline(t *testing.T) {
 	rt, _ := testRuntime(t)
 	judge := &deadlineJudge{}
 	rt.SetCandidateJudge(judge)
-	per := storiesPerChunk(t, rt)
 	items := flushTestItems(12, "s")
-	labels := mustLabels(t, rt.labelPoll(context.Background(), pollLib(rt, 6*per), "owner", "computer", "src", items, intakeBatchCaptures))
+	labels := mustLabels(t, rt.labelPoll(context.Background(), pollLib(rt, storiesForCalls(t, rt, 12, items...)), "owner", "computer", "src", items, intakeBatchCaptures))
 	if len(labels) != 12 {
 		t.Fatalf("%d labels for 12 captures", len(labels))
 	}
@@ -135,7 +134,7 @@ func TestIntakeFlushTwoComputersNeverCallJevConcurrently(t *testing.T) {
 	t.Cleanup(f.rt.Stop)
 	f.rt.enqueueIntakeLabels(f.owner, "computer-a", "src", flushTestItems(12, "s"))
 	f.rt.enqueueIntakeLabels(f.owner, "computer-b", "src", flushTestItems(12, "s"))
-	waitFlush(t, "both flushes", func() bool { return len(judge.labelCalls()) >= 4 })
+	waitFlush(t, "both flushes", func() bool { return len(judge.labelCalls()) >= 2 })
 	if got := judge.maxSeen.Load(); got != 1 {
 		t.Fatalf("%d Jev calls in flight at once across computers; want 1", got)
 	}

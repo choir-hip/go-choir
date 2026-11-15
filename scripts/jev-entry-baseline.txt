@@ -1,0 +1,19 @@
+# path|direct Jev call sites|what it is and its calls per job today
+# The gate (scripts/check-jev-entry) requires every file with a direct Jev call
+# to be here with exactly this count, and, given --base, no file added and no
+# count raised against the base. A site that moves onto the job entry point
+# (internal/agentcore/jev_job.go) lowers its count or leaves the list.
+internal/agentcore/intake_labels.go|7|ENTRY: sends the intake jevJob's calls (judgeCall, callJudgeWithin, the Judge interface)
+internal/agentcore/intake_shadow.go|3|ENTRY adapter: the shadow comparison's usage wrapper
+cmd/intake-shadow/main.go|2|ENTRY adapter: the shadow tool's gateway client
+internal/autoputer/run.go|2|ENTRY adapter: the guest's gateway client
+internal/agentcore/event_layer.go|1|UNMOVED events: 1 call per flush (a flush runs 60 s after the first capture; the planner splits on choices_255, request_tokens_64k, state_plus_question_tokens_32k); with labels that is 2 calls per capture poll
+internal/agentcore/support_judge.go|1|UNMOVED support: 1 call per queue pass (revisions waiting during a call go out together); splits on state_plus_question_tokens_32k
+internal/agentcore/subcall_judge.go|3|UNMOVED sub-call: 1 call per round (planJevCalls splits on a named limit); the funnel desk-cast and inert also use
+internal/agentcore/desk_cast_judge.go|1|UNMOVED desk cast: 1 call per pass, via callSubCallJudge
+internal/agentcore/inert_judge.go|1|UNMOVED inert tray: 1 call per tray, via callSubCallJudge
+internal/agentcore/system1_verb.go|1|UNMOVED choir.System1: 1 call per verb call, at most 12 questions (our cap, yaegikernel.System1MaxQuestions, a cell-side bound the sectionlist and verb schema read); story analysis is 2 calls for 24 questions
+internal/agentcore/api_system1.go|1|UNMOVED System 1 API: 1 call per request
+internal/agentcore/oped_gate.go|1|UNMOVED op-ed gate: 1 call per verdict
+internal/deskjudge/choice.go|1|UNMOVED desk judge: 1 call per question
+internal/frontimportance/scorer.go|2|UNMOVED front-page scorer: questions packed under a 30,000-byte bound (a byte guard of ours), through jevrecord.Observe and Decide

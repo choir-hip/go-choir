@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/jevbudget"
 	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"github.com/yusefmosiah/go-choir/internal/outlet"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
@@ -40,10 +41,6 @@ var (
 )
 
 const (
-	// eventChunkSize is the most captures one Jev call resolves; chunks of
-	// a flush commit in order, so an event minted in one chunk is a
-	// candidate in the next.
-	eventChunkSize        = 12
 	eventShortlistRecent  = 30
 	eventShortlistOverlap = 10
 	// eventShortlistCorroborated is the overlap budget of corroborated
@@ -68,11 +65,11 @@ const (
 	// event-layer-false-merges-at-marginal-p-2026-10-16.md).
 	eventJoinP      = 0.92
 	eventTentativeP = 0.5
-	// eventStateMaxBytes keeps a call under Jev's default context (above
-	// about 32 KB, 1.14 runs a slower, less accurate long-context mode).
-	eventStateMaxBytes = 24 * 1024
-	eventSummaryRunes  = 400
-	eventRecentTitles  = 2
+	// A call is bounded by the vendor's token limits (jevbudget), not by the
+	// 24 KiB guard it had, which came from OpenRouter's "about 32,000 bytes"
+	// long-context line (a design choice of 2026-11-12, see the Delivery rules in CLAUDE.md).
+	eventSummaryRunes = 400
+	eventRecentTitles = 2
 	// eventIndexLoad bounds the rebuild read.
 	eventIndexLoadEvents      = 10000
 	eventIndexLoadMemberships = 20000
@@ -340,22 +337,49 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 		}
 		pending = append(pending, in)
 	}
+	// The fewest calls: the longest run of waiting captures whose one request
+	// fits the vendor's limits (jevbudget: 255 choices a question, 64k tokens a
+	// request, 32k state plus a question); a split names its limit in the log.
 	var chunks [][]eventInput
-	for len(pending) > 0 {
-		n := eventChunkSize
-		if n > len(pending) {
-			n = len(pending)
+	if len(pending) > 0 {
+		now := time.Now().UTC()
+		bounds := [][2]int{}
+		for lo := 0; lo < len(pending); {
+			hi := len(pending)
+			sub, err := planJevCalls("event_layer", hi-lo, func(a, b int) (json.RawMessage, map[string]json.RawMessage, error) {
+				state, questions, _ := eventBuildChunk(idx, pending[lo+a:lo+b], now)
+				return state, questions, nil
+			})
+			if err != nil || len(sub.Ranges) == 0 {
+				bounds = append(bounds, [2]int{lo, hi})
+				lo = hi
+				continue
+			}
+			// Only the first range is taken: the next is planned after this
+			// one, against the events it will have minted.
+			first := sub.Ranges[0]
+			bounds = append(bounds, [2]int{lo + first[0], lo + first[1]})
+			lo += first[1]
 		}
-		chunks = append(chunks, pending[:n])
-		pending = pending[n:]
+		for _, b := range bounds {
+			chunks = append(chunks, pending[b[0]:b[1]])
+		}
 	}
-	// One call at a time (owner, 2026-11-10): each chunk is asked after the
-	// previous chunk committed, so it sees the events that chunk minted.
-	// Each chunk has its own deadline, so a long flush never starves the
-	// chunks behind it; a chunk whose call fails leaves its captures in
-	// report.Left (an "unresolved" wake record, not retried).
+	// One call for every waiting capture; a split (past the choices or the
+	// token limits) is rare and asks the next chunk after the previous one
+	// committed, so it sees the events that chunk minted.
+	// Each call has its own deadline, so a long flush never starves the chunks
+	// behind it. A chunk whose call fails is asked again and halved
+	// (resolveEventChunkAt, jev_failure.go); what still fails leaves its
+	// captures in report.Left (an "unresolved" wake record, not retried again).
+	// The retries, their backoff and the halves run while resolveEvents holds
+	// idx.mu, so a failing flush holds the index for up to eight calls a
+	// chunk; only eventSummary readers wait on it, and the work is the flush's
+	// own.
 	for _, chunk := range chunks {
-		chunkCtx, cancel := context.WithTimeout(ctx, 2*eventCallTimeout)
+		// Each call has its own deadline (scaled to its size); a flush has none, so
+		// retries and halves never starve the chunks behind it.
+		chunkCtx, cancel := context.WithCancel(ctx)
 		rt.resolveEventChunk(chunkCtx, idx, ownerID, computerID, chunk, &report)
 		cancel()
 	}
@@ -368,27 +392,44 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 	return report, nil
 }
 
-// eventPrepareChunk builds the call for chunk against the index as it stands.
-// split is true when the request is over the byte bound and the chunk must be
-// halved first (the halves are prepared one after the other, each seeing the
-// previous half's events).
-func eventPrepareChunk(idx *eventIndex, chunk []eventInput, now time.Time) (state json.RawMessage, questions map[string]json.RawMessage, alias eventAliases, split bool) {
+// eventShortlistFor is the known events a chunk's questions offer.
+func eventShortlistFor(idx *eventIndex, chunk []eventInput, now time.Time) []*eventView {
 	tokens := map[string]bool{}
 	for _, in := range chunk {
 		for w := range titleTokens(in.Item.Title) {
 			tokens[w] = true
 		}
 	}
-	candidates := eventShortlist(idx, tokens, now)
-	state, questions, alias = eventQuestion(chunk, candidates, eventSummaryRunes)
+	return eventShortlist(idx, tokens, now)
+}
+
+// eventBuildChunkState is eventBuildChunk's state and questions, for naming the limit.
+func eventBuildChunkState(idx *eventIndex, chunk []eventInput, now time.Time) (json.RawMessage, map[string]json.RawMessage) {
+	state, questions, _ := eventBuildChunk(idx, chunk, now)
+	return state, questions
+}
+
+// eventBuildChunk is the request for chunk against the index as it stands,
+// with no bound applied.
+func eventBuildChunk(idx *eventIndex, chunk []eventInput, now time.Time) (json.RawMessage, map[string]json.RawMessage, eventAliases) {
+	return eventQuestion(chunk, eventShortlistFor(idx, chunk, now), eventSummaryRunes)
+}
+
+// eventPrepareChunk builds the call for chunk against the index as it stands.
+// split is true when the request is over the token budget and the chunk must be
+// halved first (the halves are prepared one after the other, each seeing the
+// previous half's events).
+func eventPrepareChunk(idx *eventIndex, chunk []eventInput, now time.Time) (state json.RawMessage, questions map[string]json.RawMessage, alias eventAliases, split bool) {
+	state, questions, alias = eventBuildChunk(idx, chunk, now)
+	candidates := eventShortlistFor(idx, chunk, now)
 	// The bound counts the questions too: each repeats every candidate's
 	// criteria, so they grow with chunk x candidates (code review, Devin
 	// B2). Split the chunk first; a single capture over the bound drops its
 	// summary, then its weakest candidates.
-	if eventRequestBytes(state, questions) > eventStateMaxBytes && len(chunk) > 1 {
+	if !jevbudget.Fits(state, questions) && len(chunk) > 1 {
 		return nil, nil, alias, true
 	}
-	for summary := eventSummaryRunes; eventRequestBytes(state, questions) > eventStateMaxBytes; {
+	for summary := eventSummaryRunes; !jevbudget.Fits(state, questions); {
 		if summary > 0 {
 			summary = 0
 		} else if len(candidates) > 0 {
@@ -407,22 +448,52 @@ func (rt *Runtime) askEventChunk(ctx context.Context, chunk []eventInput, state 
 	if len(chunk) > 0 {
 		meta.DecisionID = "event_chunk:" + strings.TrimSpace(chunk[0].Item.CaptureID)
 	}
-	return rt.judgeCall(ctx, meta, eventCallTimeout, state, questions)
+	// The deadline scales with the request: 30 s plus 1 s per thousand
+	// estimated tokens (a deadline is not a call limit).
+	timeout := eventCallTimeout + time.Duration(jevbudget.Measure(state, questions).Request/1000)*time.Second
+	return rt.judgeCall(ctx, meta, timeout, state, questions)
 }
 
 // resolveEventChunk asks Jev once about chunk and writes the result. The
 // caller holds idx.mu.
 func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, ownerID, computerID string, chunk []eventInput, report *eventResolveReport) {
+	rt.resolveEventChunkAt(ctx, idx, ownerID, computerID, chunk, report, 0, 0)
+}
+
+// resolveEventChunkAt is resolveEventChunk for a chunk that sits depth halvings
+// below the flush's call and has been tried retries more times: a failed call
+// is handled as intake's is (jev_failure.go): a rate refusal backs off, other
+// failures are asked once more and then halved to a bounded depth.
+func (rt *Runtime) resolveEventChunkAt(ctx context.Context, idx *eventIndex, ownerID, computerID string, chunk []eventInput, report *eventResolveReport, depth, retries int) {
 	now := time.Now().UTC()
 	stateRaw, questions, alias, split := eventPrepareChunk(idx, chunk, now)
 	if split {
 		half := len(chunk) / 2
-		rt.resolveEventChunk(ctx, idx, ownerID, computerID, chunk[:half], report)
-		rt.resolveEventChunk(ctx, idx, ownerID, computerID, chunk[half:], report)
+		log.Printf("jev split: site=event_layer items=%d calls=2 forced_by=map[%s:1]", len(chunk), jevbudget.Limit(eventBuildChunkState(idx, chunk, now)))
+		rt.resolveEventChunkAt(ctx, idx, ownerID, computerID, chunk[:half], report, depth, retries)
+		rt.resolveEventChunkAt(ctx, idx, ownerID, computerID, chunk[half:], report, depth, retries)
 		return
 	}
 	raw, err := rt.askEventChunk(ctx, chunk, stateRaw, questions)
 	report.Calls++
+	if err != nil && ctx.Err() == nil {
+		switch act, forcedBy := jevNextStep(err, retries, depth, len(chunk) > 1); act {
+		case jevRetry:
+			log.Printf("event layer: call of %d captures failed (%v); asking again after a backoff", len(chunk), err)
+			select {
+			case <-time.After(intakeRetryBackoff * time.Duration(retries+1)):
+			case <-ctx.Done():
+			}
+			rt.resolveEventChunkAt(ctx, idx, ownerID, computerID, chunk, report, depth, retries+1)
+			return
+		case jevHalve:
+			half := len(chunk) / 2
+			log.Printf("jev split: site=event_layer items=%d calls=2 forced_by=map[%s:1] error=%q", len(chunk), forcedBy, err.Error())
+			rt.resolveEventChunkAt(ctx, idx, ownerID, computerID, chunk[:half], report, depth+1, 1)
+			rt.resolveEventChunkAt(ctx, idx, ownerID, computerID, chunk[half:], report, depth+1, 1)
+			return
+		}
+	}
 	if err != nil {
 		report.Unresolved += len(chunk)
 		log.Printf("event layer: %d captures unresolved: %v", len(chunk), err)
@@ -585,16 +656,6 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 			}
 		}
 	}
-}
-
-// eventRequestBytes is what one call sends upstream: the state and every
-// question.
-func eventRequestBytes(state json.RawMessage, questions map[string]json.RawMessage) int {
-	n := len(state)
-	for _, q := range questions {
-		n += len(q)
-	}
-	return n
 }
 
 // writeMembership writes one capture's membership. ok is false when the
@@ -780,7 +841,9 @@ func eventQuestion(chunk []eventInput, candidates []*eventView, summaryRunes int
 		eventChoices = append(eventChoices, a)
 	}
 	captures := map[string]any{}
+	titles := make([]string, len(chunk))
 	for j, in := range chunk {
+		titles[j] = in.Item.Title
 		a := fmt.Sprintf("k%d", j+1)
 		alias.captures[a] = j + 1
 		c := map[string]any{"title": intakeClip(in.Item.Title, 200)}
@@ -807,15 +870,19 @@ func eventQuestion(chunk []eventInput, candidates []*eventView, summaryRunes int
 	questions := map[string]json.RawMessage{}
 	for j := range chunk {
 		a := fmt.Sprintf("k%d", j+1)
-		criteria := map[string]string{"new": "No known event and no other capture reports this incident."}
+		// The options are handles, read by name alone (a null description, as
+		// intake's are): a sentence under every option of every question put
+		// quadratically many tokens in the request, so a flush of a few dozen
+		// captures crossed the 64k limit and split.
+		criteria := map[string]any{"new": "No known event and no other capture reports this incident."}
 		choices := append([]string(nil), eventChoices...)
 		for _, e := range eventChoices {
-			criteria[e] = "state.events." + e + " reports the same incident as state.captures." + a + "."
+			criteria[e] = nil
 		}
 		for _, e := range eventLinkCandidates(chunk[j], candidates, aliasOf) {
 			after := "after_" + e
 			alias.after[after] = alias.events[e]
-			criteria[after] = "state.captures." + a + " reports a later development, or another incident, of the story state.events." + e + " reports, and not that incident itself: a new event that follows state.events." + e + "."
+			criteria[after] = "A later development of state.events." + e + ", not that incident itself."
 			choices = append(choices, after)
 		}
 		for i := range chunk {
@@ -823,13 +890,13 @@ func eventQuestion(chunk []eventInput, candidates []*eventView, summaryRunes int
 				continue
 			}
 			other := fmt.Sprintf("k%d", i+1)
-			criteria[other] = "state.captures." + other + " reports the same incident, and no known event does."
+			criteria[other] = nil
 			choices = append(choices, other)
 		}
 		choices = append(choices, "new")
 		raw, _ := json.Marshal(map[string]any{
 			"type":         "choice",
-			"instructions": eventDefinition + " Which known event or other capture reports the same incident as state.captures." + a + "? Prefer a known event over another capture when both match. Choose an after_ choice only for a later development of a known event.",
+			"instructions": eventDefinition + " Which known event or other capture reports the same incident as state.captures." + a + "? Prefer a known event over another capture when both match. The options are handles: e1, e2, … are the known events in state.events, k1, k2, … the other captures in state.captures, and new. Choose an after_ choice only for a later development of a known event.",
 			"criteria":     criteria,
 			"choices":      choices,
 		})
@@ -840,9 +907,9 @@ func eventQuestion(chunk []eventInput, candidates []*eventView, summaryRunes int
 }
 
 // enqueueEventResolution queues a poll's new captures for the next flush,
-// when intake.events is on. A flush runs at eventChunkSize queued captures
-// or eventFlushInterval after the first, whichever comes first, so captures
-// from many sources share calls. One flush at a time drains a computer's
+// when intake.events is on. A flush runs eventFlushInterval after the first
+// capture, so captures from many sources share one call; no count of queued
+// captures starts a flush early. One flush at a time drains a computer's
 // queue, in order; captures queued meanwhile are drained by the same flush.
 //
 // It reports whether it queued the captures.
@@ -871,10 +938,6 @@ func (rt *Runtime) enqueueEventResolution(ctx context.Context, ownerID, computer
 		}
 	}
 	if q.inFlight || len(q.items) == 0 {
-		return true
-	}
-	if len(q.items) >= eventChunkSize {
-		rt.startEventFlushLocked(ownerID, computerID, q)
 		return true
 	}
 	if q.timer == nil {

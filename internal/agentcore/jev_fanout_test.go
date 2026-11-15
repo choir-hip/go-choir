@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"github.com/yusefmosiah/go-choir/internal/quotematch"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -154,66 +153,11 @@ func (j *heldJudge) drain(t *testing.T, n int) {
 	}
 }
 
-func TestSubCallGateAdmitsOneJudgeCallAtATime(t *testing.T) {
-	rt, _ := testRuntime(t)
-	judge := newHeldJudge(nil)
-	rt.SetCandidateJudge(judge)
-	var wg sync.WaitGroup
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if _, err := rt.callSubCallJudge(context.Background(), jevrecord.Meta{Site: "test"}, json.RawMessage(`{}`), map[string]json.RawMessage{"q": json.RawMessage(`{}`)}); err != nil {
-				t.Error(err)
-			}
-		}()
-	}
-	judge.waitStarted(t)
-	judge.drain(t, 5)
-	wg.Wait()
-}
-
-// A call queued behind a slow one is not failed by the time it spent queued:
-// its deadline starts when it holds the gate (and the same gate serves the
-// cast and inert judges).
-func TestSubCallQueuedBehindASlowCallIsNotFailedByTheWait(t *testing.T) {
-	old := subCallJudgeTimeout
-	subCallJudgeTimeout = 400 * time.Millisecond
-	t.Cleanup(func() { subCallJudgeTimeout = old })
-	rt, _ := testRuntime(t)
-	judge := newHeldJudge(nil)
-	rt.SetCandidateJudge(judge)
-	errs := make(chan error, 3)
-	for i := 0; i < 3; i++ {
-		go func() {
-			_, err := rt.callSubCallJudge(context.Background(), jevrecord.Meta{Site: "test"}, json.RawMessage(`{}`), map[string]json.RawMessage{"q": json.RawMessage(`{}`)})
-			errs <- err
-		}()
-	}
-	// Each call is held 250 ms, so the third waits 500 ms, over the 400 ms
-	// deadline, before it holds the gate.
-	for i := 0; i < 3; i++ {
-		judge.waitStarted(t)
-		time.Sleep(250 * time.Millisecond)
-		judge.release <- struct{}{}
-	}
-	for i := 0; i < 3; i++ {
-		select {
-		case err := <-errs:
-			if err != nil {
-				t.Fatalf("a queued call failed: %v", err)
-			}
-		case <-time.After(20 * time.Second):
-			t.Fatal("a call never returned")
-		}
-	}
-}
-
-func TestSubCallRoundOverTheBatchRunsOneCallAtATime(t *testing.T) {
+func TestSubCallRoundOfThirtyTwoCastsIsOneCall(t *testing.T) {
 	f := newSubCallFixture(t, map[string]string{"gamma": "findings for gamma"})
 	// The judge is down while two fan-outs of 16 are cast, so their Casts
-	// stay unsettled; then one round settles all 32: a batch of 20 and a
-	// batch of 12, one after the other.
+	// stay unsettled; then one round settles all 32 in one call (owner,
+	// 2026-11-15: as many questions in the same call as possible).
 	f.judge.err = errors.New("judge down")
 	var ids []string
 	for r := 0; r < 2; r++ {
@@ -234,7 +178,9 @@ func TestSubCallRoundOverTheBatchRunsOneCallAtATime(t *testing.T) {
 	if err := f.rt.settleSubCalls(context.Background(), f.owner, f.computer, "fan-serial", 0, ids); err != nil {
 		t.Fatal(err)
 	}
-	peak.assertSerial(t, 2)
+	if got := int(peak.calls.Load()); got != 1 {
+		t.Fatalf("judge calls = %d for 32 Casts that fit the vendor's limits; want exactly 1", got)
+	}
 	for _, id := range ids {
 		if !f.exists(types.SubCallSettlementRecordID(id, types.SubCallJudgeScorerID)) {
 			t.Fatalf("cast %s was not settled", id)
@@ -242,18 +188,20 @@ func TestSubCallRoundOverTheBatchRunsOneCallAtATime(t *testing.T) {
 	}
 }
 
-func TestDeskCastRoundOverTheBatchRunsOneCallAtATime(t *testing.T) {
+func TestDeskCastPassOfTwentyFiveCastsIsOneCall(t *testing.T) {
 	f := deskJudgeFixture(t)
 	peak := &peakJudge{inner: f.judge, delay: 10 * time.Millisecond}
 	f.rt.SetCandidateJudge(peak)
 	var casts []types.CommitmentRecord
-	for i := 0; i < deskCastJudgeBatchMax+5; i++ {
+	for i := 0; i < 25; i++ {
 		casts = append(casts, deskCast(fmt.Sprintf("dj-serial-%d", i), deskTex, deskRes, fmt.Sprintf("Question %d.", i), 0.6))
 	}
 	f.commitInbox(t, "dj-serial", nil, casts...)
 	f.commitInbox(t, "dj-serial-final", f.readAll(t, deskRes), deskReport("dj-serial-final", deskRes, deskTex, "Answers to every question.", true))
 	f.rt.waitSubCallJudge()
-	peak.assertSerial(t, 2)
+	if got := int(peak.calls.Load()); got != 1 {
+		t.Fatalf("judge calls = %d for 25 Casts that fit the vendor's limits; want exactly 1", got)
+	}
 	for _, c := range casts {
 		if !f.exists(judgeSettlementID(c.RecordID)) {
 			t.Fatalf("cast %s was not settled", c.RecordID)
@@ -261,12 +209,12 @@ func TestDeskCastRoundOverTheBatchRunsOneCallAtATime(t *testing.T) {
 	}
 }
 
-func TestInertTrayOverTheBatchRunsOneCallAtATime(t *testing.T) {
+func TestInertTrayOfFortyThreeRecordsIsOneCall(t *testing.T) {
 	rt, _ := testRuntime(t)
 	peak := &peakJudge{delay: 10 * time.Millisecond}
 	rt.SetCandidateJudge(peak)
 	var recs []types.CommitmentRecord
-	for i := 0; i < subCallJudgeBatchMax*2+3; i++ {
+	for i := 0; i < 43; i++ {
 		recs = append(recs, types.CommitmentRecord{RecordID: fmt.Sprintf("inert-serial-%d", i), Kind: types.CommitmentKindDirective,
 			Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast}, EmitterKind: types.CommitmentEmitterAgent,
 			Prediction: types.CommitmentPrediction{Hypothesis: "a prediction"}, PSuccess: fp(0.6), Weight: fp(0.5),
@@ -275,16 +223,18 @@ func TestInertTrayOverTheBatchRunsOneCallAtATime(t *testing.T) {
 	if err := rt.judgeInertness(context.Background(), "owner-in", "computer-in", recs); err != nil {
 		t.Fatal(err)
 	}
-	peak.assertSerial(t, 3)
+	if got := int(peak.calls.Load()); got != 1 {
+		t.Fatalf("judge calls = %d for 43 records that fit the vendor's limits; want exactly 1", got)
+	}
 }
 
-func TestEventLayerChunksAreAskedOneAtATime(t *testing.T) {
-	// Every answer is omitted: no chunk mints an event, and each chunk costs
-	// exactly one call, asked after the previous chunk was resolved.
+func TestEventLayerFlushOfThirtySixCapturesIsOneCall(t *testing.T) {
+	// Every answer is omitted: no capture mints an event, and the 36 captures
+	// cost exactly one call.
 	judge := &eventJudge{answers: map[string]eventAnswer{}, omit: map[string]bool{}, delay: 20 * time.Millisecond}
 	rt, owner, computer := eventRuntime(t, judge)
 	var inputs []eventInput
-	for i := 0; i < eventChunkSize*3; i++ {
+	for i := 0; i < 36; i++ {
 		title := fmt.Sprintf("Story number %d about topic", i)
 		judge.omit[title] = true
 		inputs = append(inputs, capItem(fmt.Sprintf("p%d", i), title, fmt.Sprintf("https://outlet%d.com/a", i), ""))
@@ -296,8 +246,8 @@ func TestEventLayerChunksAreAskedOneAtATime(t *testing.T) {
 	judge.mu.Lock()
 	peak := judge.maxIn
 	judge.mu.Unlock()
-	if judge.callCount() != 3 || r.Calls != 3 || peak != 1 {
-		t.Fatalf("judge calls = %d, report calls = %d, most in flight = %d; want 3, 3 and 1", judge.callCount(), r.Calls, peak)
+	if judge.callCount() != 1 || r.Calls != 1 || peak != 1 {
+		t.Fatalf("judge calls = %d, report calls = %d, most in flight = %d; want 1, 1 and 1", judge.callCount(), r.Calls, peak)
 	}
 }
 
@@ -307,7 +257,7 @@ func TestEventLayerLongFlushResolvesEveryChunk(t *testing.T) {
 	judge := &eventJudge{answers: map[string]eventAnswer{}, omit: map[string]bool{}}
 	rt, owner, computer := eventRuntime(t, judge)
 	var inputs []eventInput
-	for i := 0; i < eventChunkSize*40; i++ {
+	for i := 0; i < 450; i++ {
 		title := fmt.Sprintf("Story number %d about topic", i)
 		inputs = append(inputs, capItem(fmt.Sprintf("long%d", i), title, fmt.Sprintf("https://outlet%d.com/a", i), ""))
 	}
@@ -315,18 +265,20 @@ func TestEventLayerLongFlushResolvesEveryChunk(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Calls < 40 || r.Unresolved != 0 || len(r.Left) != 0 {
-		t.Fatalf("report = calls %d, unresolved %d, left %d; want at least 40 (splits add more), 0, 0", r.Calls, r.Unresolved, len(r.Left))
+	// 450 captures are three calls under the 255-choice limit (199 each); the
+	// 64k request limit forces about seven more (logged, named); none is left.
+	if r.Calls < 3 || r.Calls > 20 || r.Unresolved != 0 || len(r.Left) != 0 {
+		t.Fatalf("report = calls %d, unresolved %d, left %d; want 3 to 20 calls, 0, 0", r.Calls, r.Unresolved, len(r.Left))
 	}
 }
 
-func TestEventLayerLaterChunkIsAskedAfterTheEarlierCommit(t *testing.T) {
+func TestEventLayerSiblingJoinNeedsNoLaterChunk(t *testing.T) {
 	// The first chunk mints events, so the second chunk's question offers
 	// them and the cross-chunk join happens: two calls, one at a time.
 	judge := &eventJudge{answers: map[string]eventAnswer{}, delay: 10 * time.Millisecond}
 	rt, owner, computer := eventRuntime(t, judge)
 	var inputs []eventInput
-	for i := 0; i < eventChunkSize+3; i++ {
+	for i := 0; i < 15; i++ {
 		inputs = append(inputs, capItem(fmt.Sprintf("y%d", i), fmt.Sprintf("Story number %d about topic", i), fmt.Sprintf("https://outlet%d.com/a", i), ""))
 	}
 	judge.answers[inputs[len(inputs)-1].Item.Title] = eventAnswer{target: inputs[0].Item.Title}
@@ -334,14 +286,14 @@ func TestEventLayerLaterChunkIsAskedAfterTheEarlierCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Calls != 2 || len(r.Corroborated) != 1 {
-		t.Fatalf("report = %+v; want 2 chunks and the cross-chunk join", r)
+	if r.Calls != 1 || len(r.Corroborated) != 1 {
+		t.Fatalf("report = %+v; want 1 call and the sibling join", r)
 	}
 	judge.mu.Lock()
 	peak := judge.maxIn
 	judge.mu.Unlock()
-	if judge.callCount() != 2 || peak != 1 {
-		t.Fatalf("judge calls = %d, most in flight = %d; want 2 and 1", judge.callCount(), peak)
+	if judge.callCount() != 1 || peak != 1 {
+		t.Fatalf("judge calls = %d, most in flight = %d; want 1 and 1", judge.callCount(), peak)
 	}
 }
 
@@ -365,18 +317,33 @@ func TestStoryAnalysisChunksAreAskedOneAtATime(t *testing.T) {
 	peak.assertSerial(t, 2)
 }
 
-func TestSupportRevisionsAreJudgedOneAtATime(t *testing.T) {
+// Revisions that wait while a call is in flight are one call, not one each
+// (owner, 2026-11-15: as many questions in the same call as possible, neither
+// concurrently nor in sequence): the first revision is asked at once, and the
+// two that arrive during its call go out together in the next.
+func TestSupportRevisionsThatWaitAreOneCall(t *testing.T) {
 	jev := &fakeSupportJudge{choice: "yes"}
 	hold := newHeldJudge(jev)
 	rt, s := supportRuntime(t, hold)
-	owner, computer := "owner-support-serial", rt.cfg.ComputerID
-	one := seedListedSupportPairs(t, s, owner, computer, "doc-serial-1", "cid-1")
-	two := seedListedSupportPairs(t, s, owner, computer, "doc-serial-2", "cid-2")
+	owner, computer := "owner-support-group", rt.cfg.ComputerID
+	one := seedListedSupportPairs(t, s, owner, computer, "doc-group-1", "cid-1")
+	two := seedListedSupportPairs(t, s, owner, computer, "doc-group-2", "cid-2")
+	three := seedListedSupportPairs(t, s, owner, computer, "doc-group-3", "cid-3")
 	rt.JudgeRevisionSupport(owner, computer, one.RunID, one.RevisionID, one.Pairs)
-	rt.JudgeRevisionSupport(owner, computer, two.RunID, two.RevisionID, two.Pairs)
 	hold.waitStarted(t)
-	hold.drain(t, 2)
+	rt.JudgeRevisionSupport(owner, computer, two.RunID, two.RevisionID, two.Pairs)
+	rt.JudgeRevisionSupport(owner, computer, three.RunID, three.RevisionID, three.Pairs)
+	hold.assertNoSecondCall(t)
+	hold.release <- struct{}{}
+	hold.waitStarted(t)
+	hold.release <- struct{}{}
 	rt.WaitSupportJudgements()
+	if got := hold.calls.Load(); got != 2 {
+		t.Fatalf("judge calls = %d for three revisions; want 2 (the first, then the two that waited together)", got)
+	}
+	if peak := hold.peak.Load(); peak != 1 {
+		t.Fatalf("most calls in flight = %d, want 1", peak)
+	}
 }
 
 // A revision queued behind a slow one waits as long as it takes; the queue has
@@ -421,7 +388,7 @@ func TestSupportRevisionQueuedBehindOneThatJudgedItsPairCallsNobody(t *testing.T
 	}
 }
 
-func TestSupportRevisionOverTheByteBoundSplitsIntoSequentialCalls(t *testing.T) {
+func TestSupportRevisionOverTheVendorBoundSplitsIntoTheFewestCalls(t *testing.T) {
 	jev := &fakeSupportJudge{choice: "yes"}
 	peak := &peakJudge{inner: jev, delay: 10 * time.Millisecond}
 	rt, _ := testRuntime(t)
@@ -430,7 +397,7 @@ func TestSupportRevisionOverTheByteBoundSplitsIntoSequentialCalls(t *testing.T) 
 	var pending []types.SupportVerdict
 	for i := 0; i < 3; i++ {
 		cid := fmt.Sprintf("big-%d", i)
-		text := strings.Repeat(fmt.Sprintf("passage %d words. ", i), 1000)[:16000]
+		text := strings.Repeat(fmt.Sprintf("passage %d words. ", i), 3000)[:40000]
 		blocks = append(blocks, quotematch.Block{ID: cid, Text: text})
 		pair := types.CitationPair{Key: "k-" + cid, Text: fmt.Sprintf("Sentence %d.", i), Cited: types.Ref{Doc: "cap-big", CID: cid, Hash: texturewrite.TextHash(text), Quote: "passage"}}
 		pending = append(pending, types.SupportVerdict{Key: pair.Key, Pair: &pair})
@@ -443,9 +410,15 @@ func TestSupportRevisionOverTheByteBoundSplitsIntoSequentialCalls(t *testing.T) 
 	if len(judged) != 3 {
 		t.Fatalf("judged %d of 3 pairs", len(judged))
 	}
-	// Two passages of 16,000 bytes do not fit one 30,000 byte call, so each
-	// goes alone, one after another.
-	peak.assertSerial(t, 3)
+	// Three passages of 40,000 bytes (about 14,000 estimated tokens each) are
+	// over the vendor's 32k per-question limit together; two fit, so two calls
+	// is the fewest (state_plus_question_tokens_32k forces the split).
+	if got := int(peak.calls.Load()); got != 2 {
+		t.Fatalf("judge calls = %d, want 2 (two passages fit the 32k limit together)", got)
+	}
+	if got := peak.peak.Load(); got != 1 {
+		t.Fatalf("most calls in flight = %d; a split's calls are not a reason to run them at once", got)
+	}
 }
 
 type scopeJudge struct {

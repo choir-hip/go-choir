@@ -648,6 +648,31 @@ jobs:
             exit "$rc"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # A Jev call goes through the job entry point (owner, 2026-11-15): a direct
+      # call outside the list, a second call site in a listed file, or a list that
+      # grew against the base fails. The base is chosen as the epoch check's is.
+      - name: Check the Jev entry point
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PLAN_BASE: ${{ needs.plan.outputs.base }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          scripts/selftest-jev-entry
+          case "$EVENT_NAME" in
+            pull_request) base="$PR_BASE" ;;
+            push) base="$PLAN_BASE" ;;
+            *) base="" ;;
+          esac
+          if [[ -z "$base" ]]; then
+            base="$(git rev-list -1 --first-parent --before=8.days HEAD)"
+          fi
+          if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            git fetch --no-tags --depth=1 origin "$base" || true
+          fi
+          scripts/check-jev-entry --base "$base"
+
   # The guest floor digest must not move on a commit-only change (D2 S1; review
   # 318 Low): pure Nix evaluation of the guest under two commit stamps. Runs when
   # the flake, go.mod or Go code changed (the sbom lane's inputs).
