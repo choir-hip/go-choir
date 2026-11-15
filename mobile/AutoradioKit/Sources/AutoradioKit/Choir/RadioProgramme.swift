@@ -347,8 +347,13 @@ public struct StretchDecoder {
 // MARK: Where a stretch comes from
 
 public protocol StretchSource: Sendable {
-    /// Throws before any event when there is no stretch to be had (a missing route, no sign-in, no connection).
+    /// Throws before any event when there is no stretch to be had (a missing route, no sign-in, no connection, no story to tell).
     func events(cause: String) async throws -> AsyncThrowingStream<StretchEvent, Error>
+    /// As `events(cause:)`, leaving the stories at these routes out (an `extend` request: they were already told).
+    func events(cause: String, excludingRoutes: Set<String>) async throws -> AsyncThrowingStream<StretchEvent, Error>
+}
+extension StretchSource {
+    public func events(cause: String, excludingRoutes: Set<String>) async throws -> AsyncThrowingStream<StretchEvent, Error> { try await events(cause: cause) }
 }
 
 /// `POST /api/autoradio/programme` on the listener's computer (design 2.2). Until station L1 is deployed it answers 404 or 503, which is
@@ -356,7 +361,9 @@ public protocol StretchSource: Sendable {
 public struct RouteStretchSource: StretchSource {
     let baseURL: String
     public init(baseURL: String) { self.baseURL = baseURL }
-    public func events(cause: String) async throws -> AsyncThrowingStream<StretchEvent, Error> {
+    public func events(cause: String) async throws -> AsyncThrowingStream<StretchEvent, Error> { try await events(cause: cause, excludingRoutes: []) }
+
+    public func events(cause: String, excludingRoutes: Set<String>) async throws -> AsyncThrowingStream<StretchEvent, Error> {
         let client = ChoirEnvironment.shared.client(baseURL: baseURL)
         let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd'T'HH:mm:ssXXXXX"
         let body: [String: Any] = ["request_id": "radio-" + UUID().uuidString.prefix(12).lowercased(), "cause": cause,
@@ -476,6 +483,30 @@ public final class RadioProgramme: Programme, @unchecked Sendable {
         case .failed(let e): env.log?.emit(.note("programme: no stretch (\(e)); playing the front page"))
         }
         return OpenedProgramme(document: try await fallback(), usedFallback: true, follow: nil)
+    }
+
+    /// More of the programme when the stretch has run out: ask again (cause `extend`), leaving out the stories already told, and return what to
+    /// run to append the new segments to the document `documentID`. Nil when there is nothing more to tell or the route is not there.
+    public func more(excludingRoutes: Set<String>, documentID: String) async -> (@Sendable (ProgrammePlayer) async -> Void)? {
+        let env = ChoirEnvironment.shared
+        do {
+            let stream = try await source.events(cause: "extend", excludingRoutes: excludingRoutes)
+            return { player in
+                do {
+                    for try await e in stream {
+                        try Task.checkCancellation()
+                        switch e {
+                        case .segment(let s): if let p = SegmentPrep.prepare(s) { _ = player.appendSegment(p, toDocument: documentID) }
+                        case .done: return
+                        case .error(let m): env.log?.emit(.note("programme: the next stretch ended with an error: \(m)")); return
+                        }
+                    }
+                } catch {}
+            }
+        } catch {
+            env.log?.emit(.note("programme: no more to tell (\(error))"))
+            return nil
+        }
     }
 
     private final class IteratorBox: @unchecked Sendable {

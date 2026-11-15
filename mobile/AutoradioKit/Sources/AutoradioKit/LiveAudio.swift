@@ -253,9 +253,10 @@ public final class LiveAudio: @unchecked Sendable {
     public func programmePlay() { wantPlaying = true; if virtual { virtualPaused = false } else if running { programmeNode.play(); nodeStopped = false } }
     public func programmePause() { wantPlaying = false; if virtual { virtualPaused = true } else if running { programmeNode.pause() } }
     public func programmeStop() { wantPlaying = false; if virtual { virtualPaused = true } else { programmeNode.stop(); nodeStopped = true; releaseWaiters() } }
-    /// Speed of the programme, 0.5 to 2, pitch kept. Applies at once, also to what is already scheduled.
+    /// Speed of the programme, 0.5 to 3, pitch kept (`PlaybackSpeed`). Applies at once, also to what is already scheduled. The time-pitch
+    /// unit takes 1/32 to 32, so 3 is well inside it; every voice is played through this unit, so none has a lower ceiling.
     public func setProgrammeRate(_ r: Double) {
-        let c = r.isNaN ? 1 : min(2, max(0.5, r))
+        let c = PlaybackSpeed.clamp(r)
         lock.lock(); rate = c; lock.unlock()
         timePitch.rate = Float(c)
     }
@@ -406,6 +407,12 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     public var userPaused: Bool { st.read { $0.userPaused } }
     public var rate: Double { st.read { $0.rate } }
     public var onChange: (@Sendable () -> Void)?
+    /// The loop ran out of blocks and nothing is queued behind it: (the document's id, whether any block of this run made sound).
+    /// A programme whose stretch is still arriving also runs dry between segments; the host decides what that means (autoplay).
+    public var onRanDry: (@Sendable (String, Bool) -> Void)?
+    /// The lock screen's next and previous: the host may take them as story moves (true: handled); else they skip a passage or segment.
+    public var onNextTrack: (@Sendable () -> Bool)?
+    public var onPreviousTrack: (@Sendable () -> Bool)?
     /// Where playback is, per segment (station P1): P2 observes it.
     public let playback = SegmentTracker()
     /// Tests only: runs in the loop after its last look at the document and before the write that ends it (the window of review finding R3).
@@ -460,13 +467,16 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     public func previous() {
         let (i, doc) = st.read { ($0.blockIndex, $0.document) }
         if let si = doc.segmentIndex(containingBlock: i) {
-            // The start of this segment, or the one before when already at its start.
+            // The start of this segment, or the one before when the segment has barely begun (the first block, under 3 seconds in).
             let here = doc.segments[si].firstBlock
-            start(at: i > here || si == 0 ? here : doc.segments[si - 1].firstBlock)
+            let seconds = renderPosition()?.seconds ?? 0
+            start(at: StoryCursor.previousRestartsCurrent(blockIndex: i - here, secondsIntoBlock: seconds) || si == 0 ? here : doc.segments[si - 1].firstBlock)
             return
         }
         start(at: max(i - 1, 0))
     }
+    /// How far into the story the listener is: the block and the seconds in it (0 when nothing has been scheduled yet or the player is paused at the start).
+    public func storyPosition() -> (block: Int, seconds: Double) { (blockIndex, renderPosition()?.seconds ?? 0) }
     /// The segment now playing; nil for a single article.
     public var currentSegmentIndex: Int? { st.read { $0.document.segmentIndex(containingBlock: $0.blockIndex) } }
     /// Go to the first block of segment `i`. Outside the list: nothing.
@@ -491,6 +501,16 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         return ok
     }
 
+    /// Start playing from block `i` now. The listener asked for it (a story chosen, next, previous), so a pause is over: the pause flag is
+    /// cleared before the loop first reads it. (`start(at:)` then `play()` raced: the loop could pause the audio after `play()` had started it,
+    /// and nothing started it again.)
+    func begin(at i: Int) {
+        st.write { $0.userPaused = false }
+        playback.paused(false)
+        start(at: i)
+        publishNowPlaying(); onChange?()
+    }
+
     func start(at i: Int) {
         let (old, my) = st.write { s -> (Task<Void, Never>?, Int) in
             let o = s.loop; s.epoch += 1; s.blockIndex = i; s.loop = nil; s.resumeAt = nil; return (o, s.epoch)
@@ -501,6 +521,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         let task = Task { [weak self] in
             guard let self else { return }
             var n = i
+            var anyPlayed = false                // a block of this run made sound: only then did the story "finish"
             outer: while !Task.isCancelled {
                 while !Task.isCancelled {
                     // One look at the state per block: the block to play, and whether this loop is still the current one.
@@ -515,6 +536,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
                     self.playback.unitBegan(n, in: doc)
                     let played = await self.playBlock(block, index: n)
                     if Task.isCancelled { break }
+                    if played { anyPlayed = true }
                     self.playback.unitEnded(n, played: played, in: self.st.read { $0.document })
                     n += 1
                 }
@@ -528,7 +550,10 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
                 }
                 if tail == 1 { continue outer }
                 // The story is over: what the listener asked to hear comes next, like the next story.
-                if tail == 2 { if let q = self.dequeue() { self.setDocument(q); self.start(at: 0) } else { self.onChange?() } }
+                if tail == 2 {
+                    if let q = self.dequeue() { self.setDocument(q); self.start(at: 0) }
+                    else { self.onChange?(); self.onRanDry?(self.st.read { $0.document.id }, anyPlayed) }
+                }
                 break
             }
         }
@@ -539,9 +564,9 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
 
     // MARK: Speed
 
-    /// Programme speed, 0.5 to 2, pitch kept (time-pitch in the audio engine). Applies to what is playing and to what follows.
+    /// Programme speed, 0.5 to 3, pitch kept (time-pitch in the audio engine). Applies to what is playing and to what follows.
     public func setRate(_ r: Double) {
-        let c = r.isNaN ? 1 : min(2, max(0.5, r))
+        let c = PlaybackSpeed.clamp(r)
         st.write { $0.rate = c }; audio.setProgrammeRate(c); publishNowPlaying(); onChange?()
     }
 
@@ -661,8 +686,16 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             guard let self else { return .commandFailed }
             if self.userPaused { self.play() } else { self.pause() }; return .success
         }
-        c.nextTrackCommand.addTarget { [weak self] _ in self?.next(); return .success }
-        c.previousTrackCommand.addTarget { [weak self] _ in self?.previous(); return .success }
+        c.nextTrackCommand.addTarget { [weak self] _ in
+            guard let self else { return .commandFailed }
+            if self.onNextTrack?() != true { self.next() }
+            return .success
+        }
+        c.previousTrackCommand.addTarget { [weak self] _ in
+            guard let self else { return .commandFailed }
+            if self.onPreviousTrack?() != true { self.previous() }
+            return .success
+        }
     }
     func publishNowPlaying() {
         let (doc, idx, paused, speed) = st.read { ($0.document, $0.blockIndex, $0.userPaused, $0.rate) }

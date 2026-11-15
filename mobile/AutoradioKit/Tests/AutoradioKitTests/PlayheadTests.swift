@@ -10,7 +10,7 @@ import XCTest
 //  R2. A rate set mid-block must apply to the rest of the block, and the position (source seconds) must not jump.
 //  R3. The tracker (the bar's progress, the sentence) must read the audio position when one exists, at any rate, and must
 //      not use wall time; a block that has no audio yet is at 0, not at the old block's position.
-//  R4. The speed picked in the player must reach the audio (speedSink), clamped to 0.5...2.
+//  R4. The speed picked in the player must reach the audio (speedSink), clamped to 0.5...3 (was 2; owner QA round 1).
 //
 // Interrupted:
 //  I1. The engine decides "interrupted" late (after the yield has paused the programme): it must ask at the moment the turn
@@ -161,7 +161,7 @@ final class RateAndPositionTests: XCTestCase {
 
     func testRateIsClamped() {
         let a = virtualAudio()
-        a.setProgrammeRate(9); XCTAssertEqual(a.programmeRate, 2)
+        a.setProgrammeRate(9); XCTAssertEqual(a.programmeRate, 3)
         a.setProgrammeRate(0.01); XCTAssertEqual(a.programmeRate, 0.5)
         a.setProgrammeRate(.nan); XCTAssertEqual(a.programmeRate, 1)
     }
@@ -218,7 +218,7 @@ final class RateAndPositionTests: XCTestCase {
         let got = PosBox2()
         tr.speedSink = { got.values.append($0) }
         tr.setSpeed(1.25); tr.setSpeed(9); tr.setSpeed(0.1)
-        XCTAssertEqual(got.values, [1.25, 2, 0.5])
+        XCTAssertEqual(got.values, [1.25, 3, 0.5])
         XCTAssertEqual(tr.speed, 0.5)
     }
     final class PosBox2: @unchecked Sendable { var values: [Double] = [] }

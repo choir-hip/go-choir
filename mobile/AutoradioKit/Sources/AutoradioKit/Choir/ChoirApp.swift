@@ -54,6 +54,17 @@ public final class ChoirApp: @unchecked Sendable {
     private var loadToken = 0
     public var onChange: (@Sendable () -> Void)?
 
+    // The list a story came from (player controls): next, previous and autoplay follow it. The host says what the paper's article
+    // stack is; without it the front list is used.
+    /// The paper's article stack in reading order, as the host last composed it. Empty or nil: not known.
+    public var storyOrder: (@Sendable () -> [StoryRef])?
+    private var listSnapshot: [StoryRef] = []
+    /// The document that ran dry while a turn was open: autoplay waits for the turn to end, then asks again.
+    private var pendingAutoplay: String?
+    private var followRunning = false
+    /// How many segments the programme had when the last `extend` was asked: a stretch that added nothing is not asked for again.
+    private var extendedAt = -1
+
     public init(runtime: LabRuntime, keys: KeyStore, baseURL: String = ChoirEnvironment.defaultBaseURL, openURL: (@Sendable (URL) -> Void)?) {
         self.runtime = runtime
         ChoirEnvironment.shared.keys = keys
@@ -65,12 +76,16 @@ public final class ChoirApp: @unchecked Sendable {
             if self.signIn.current.status == "idle", self.signIn.current.signedIn, self.signIn.current.message == "signed in" { Task { await self.refresh() } }
             self.onChange?()
         }
+        runtime.player.onRanDry = { [weak self] id, played in Task { await self?.ranDry(documentID: id, anyPlayed: played) } }
+        runtime.player.onNextTrack = { [weak self] in self?.takeRemote(.next) ?? false }
+        runtime.player.onPreviousTrack = { [weak self] in self?.takeRemote(.previous) ?? false }
         eventTask = Task { [weak self] in
             guard let self else { return }
             for await te in self.runtime.log.stream() {
                 if case .error(let stage, let m) = te.event, Self.surfacedErrorStages.contains(stage) {
                     self.say(Self.plain(stage: stage, message: m))
                 }
+                if case .phase(_, let to) = te.event, to == "playing" { await self.turnEnded() }
             }
         }
     }
@@ -104,9 +119,12 @@ public final class ChoirApp: @unchecked Sendable {
         await loadProgramme()
     }
 
+    private func frontBaseURL() -> String {
+        runtime.configuration.setting(.programme)?.params["baseURL"].map { "\($0)" } ?? signIn.baseURL
+    }
+
     public func loadStories() async {
-        let cfg = runtime.configuration.setting(.programme)
-        let base = cfg?.params["baseURL"].map { "\($0)" } ?? signIn.baseURL
+        let base = frontBaseURL()
         do {
             let list = try await ChoirFront.stories(client: ChoirEnvironment.shared.client(baseURL: base), limit: 30)
             lock.lock(); stories = list; lock.unlock()
@@ -138,11 +156,8 @@ public final class ChoirApp: @unchecked Sendable {
             runtime.player.setDocument(doc)
             runtime.player.start(at: 0)
             lock.lock(); currentRoute = ChoirEnvironment.shared.playing(doc.id)?.route ?? ""; lock.unlock()
-            if let follow {
-                let player = runtime.player
-                let t = Task { await follow(player) }
-                lock.lock(); if my == loadToken { followTask = t } else { t.cancel() }; lock.unlock()
-            }
+            lock.lock(); extendedAt = -1; lock.unlock()
+            if let follow { runFollow(follow, loadToken: my, documentID: doc.id) }
         } catch is CancellationError {
         } catch {
             guard current() else { return }
@@ -152,12 +167,168 @@ public final class ChoirApp: @unchecked Sendable {
         }
     }
 
+    /// Play a story from the paper. The list it came from (the paper's stack) is taken now, so next, previous and autoplay follow it.
     public func play(route: String) async {
-        runtime.setStage(.programme, id: ChoirFrontProgramme.stageID)
-        runtime.setParam(.programme, name: "route", value: route)
-        await loadProgramme()
-        await startPlaying()
-        runtime.setStage(.programme, id: RadioProgramme.stageID)           // the next reload is the programme again, not this one story
+        beginList(at: route)
+        if await startStory(StoryRef(route: route), report: true) { await startPlaying() }
+    }
+
+    /// The reader's Listen on a story page: the text plays as its own document; the list is taken for it as for `play(route:)`.
+    public func noteListening(address: String) {
+        guard address.hasPrefix("pub:") else { return }
+        beginList(at: String(address.dropFirst(4)))
+    }
+
+    // MARK: Next, previous, autoplay
+
+    public enum StoryMove: Sendable { case next, previous }
+
+    /// The route of the story in the player, when it is one a list can speak for: a `choir:` story or the reader's `text:pub:<route>`.
+    private func currentStoryRoute() -> String? {
+        let id = runtime.player.document.id
+        if let r = ChoirEnvironment.shared.playing(id)?.route, !r.isEmpty { return r }
+        return StoryCursor.route(ofTextDocument: id)
+    }
+
+    /// Take the list for a story that is starting now: the paper's stack when it holds it, else the front list, else nothing.
+    private func beginList(at route: String) {
+        let order = storyOrder?() ?? []
+        lock.lock(); let front = stories.map { StoryRef(route: $0.route, title: $0.title) }; lock.unlock()
+        let pick = order.contains { $0.route == route } ? order : (front.contains { $0.route == route } ? front : [])
+        lock.lock(); listSnapshot = pick; lock.unlock()
+    }
+    /// The list that speaks for `route`: the one taken when it started, else the stack or the front list if they hold it. Never a guess.
+    private func list(for route: String) -> [StoryRef] {
+        lock.lock(); let snap = listSnapshot; lock.unlock()
+        if snap.contains(where: { $0.route == route }) { return snap }
+        beginList(at: route)
+        lock.lock(); defer { lock.unlock() }
+        return listSnapshot
+    }
+
+    /// Load one story into the player and start it from its beginning. `report`: say why in the log when it fails (the plain words reach
+    /// the player); the autoplay path says its own words instead. A newer load wins, as in `loadProgramme`.
+    @discardableResult
+    private func startStory(_ ref: StoryRef, report: Bool) async -> Bool {
+        let (my, old) = { () -> (Int, Task<Void, Never>?) in
+            lock.lock(); defer { lock.unlock() }
+            loadToken += 1; loading = true; message = ""; pendingAutoplay = nil
+            let o = followTask; followTask = nil; followRunning = false
+            return (loadToken, o)
+        }()
+        old?.cancel(); onChange?()
+        func current() -> Bool { lock.lock(); defer { lock.unlock() }; return my == loadToken }
+        defer { lock.lock(); if my == loadToken { loading = false }; lock.unlock(); onChange?() }
+        do {
+            let doc = try await ChoirFront.load(route: ref.route, client: ChoirEnvironment.shared.client(baseURL: frontBaseURL()))
+            guard current() else { return true }                 // a newer load took over: nothing failed
+            runtime.player.setDocument(doc)
+            runtime.player.begin(at: 0)
+            lock.lock(); currentRoute = ref.route; lock.unlock()
+            return true
+        } catch is CancellationError {
+            return true
+        } catch {
+            guard current() else { return true }
+            if report { runtime.log.emit(.error(stage: "programme", message: "\(error)")) }
+            return false
+        }
+    }
+
+    /// Next or previous story from the buttons. In a programme it is the next or previous segment; where no list speaks for the story it is
+    /// the next or previous passage.
+    public func moveStory(_ move: StoryMove) async {
+        let p = runtime.player
+        if p.document.id.hasPrefix("radio:") || currentStoryRoute() == nil {
+            if move == .next { p.next() } else { p.previous() }
+            await startPlaying()
+            return
+        }
+        guard let route = currentStoryRoute() else { return }
+        let items = list(for: route)
+        switch move {
+        case .next:
+            guard let n = StoryCursor.neighbour(of: route, in: items, step: 1) else { return }          // the last story: nothing, no wrap
+            if await startStory(n, report: false) { await startPlaying() } else { say("Could not load \u{201C}\(n.title.isEmpty ? "that story" : n.title)\u{201D}.") }
+        case .previous:
+            let pos = p.storyPosition()
+            let before = StoryCursor.neighbour(of: route, in: items, step: -1)
+            if before == nil || StoryCursor.previousRestartsCurrent(blockIndex: pos.block, secondsIntoBlock: pos.seconds) {
+                p.begin(at: 0); await startPlaying()                                                        // restart this one
+            } else if let b = before {
+                if await startStory(b, report: false) { await startPlaying() } else { say("Could not load \u{201C}\(b.title.isEmpty ? "that story" : b.title)\u{201D}.") }
+            }
+        }
+    }
+
+    /// The lock screen's next or previous: taken as a story move when a list speaks for the story, else left to the player's passage skip.
+    private func takeRemote(_ move: StoryMove) -> Bool {
+        guard !runtime.player.document.id.hasPrefix("radio:"), let route = currentStoryRoute(), !list(for: route).isEmpty else { return false }
+        Task { await moveStory(move) }
+        return true
+    }
+
+    /// The player ran out of blocks. A programme asks for more; a story starts the next one in its list, unless the reader paused, nothing
+    /// was heard, or the list is over; and not over the reader's words (a turn is open): then it waits for the turn to end.
+    func ranDry(documentID: String, anyPlayed: Bool) async {
+        let p = runtime.player
+        guard p.document.id == documentID else { return }                 // a newer document replaced it
+        if documentID.hasPrefix("radio:") { await extendIfDry(documentID: documentID); return }
+        guard let route = currentStoryRoute() else { return }
+        let next = StoryCursor.neighbour(of: route, in: list(for: route), step: 1)
+        let turnOpen = runtime.snapshot().phase != "playing"
+        switch Autoplay.decide(userPaused: p.userPaused, turnOpen: turnOpen, anyPlayed: anyPlayed, hasNext: next != nil) {
+        case .advance: await autoAdvance(from: route)
+        case .waitForTurn: lock.lock(); pendingAutoplay = documentID; lock.unlock()
+        case .stop: break
+        }
+    }
+
+    /// A turn ended (the engine is back to playing): if autoplay was waiting for it, ask again.
+    func turnEnded() async {
+        lock.lock(); let id = pendingAutoplay; pendingAutoplay = nil; lock.unlock()
+        let p = runtime.player
+        guard let id, p.document.id == id, !p.loopIsActive, !p.userPaused, let route = currentStoryRoute() else { return }
+        await autoAdvance(from: route)
+    }
+
+    /// Start the story after `route`. One that fails to load is skipped, once, and the reader is told; a second failure stops.
+    private func autoAdvance(from route: String) async {
+        let items = list(for: route)
+        guard let a = StoryCursor.neighbour(of: route, in: items, step: 1) else { return }
+        if await startStory(a, report: false) { await startPlaying(); return }
+        let name = a.title.isEmpty ? "A story" : "\u{201C}\(a.title)\u{201D}"
+        guard let b = StoryCursor.neighbour(of: a.route, in: items, step: 1) else { say("\(name) could not be loaded. That was the last story."); return }
+        if await startStory(b, report: false) { await startPlaying(); say("\(name) could not be loaded; skipped it.") }   // said after the load: a load clears the line
+        else { say("The next two stories could not be loaded. Stopping here.") }
+    }
+
+    private func runFollow(_ follow: @escaping @Sendable (ProgrammePlayer) async -> Void, loadToken my: Int, documentID: String) {
+        let player = runtime.player
+        let t = Task { [weak self] in
+            await follow(player)
+            await self?.followEnded(token: my, documentID: documentID)
+        }
+        lock.lock(); if my == loadToken { followTask = t; followRunning = true } else { t.cancel() }; lock.unlock()
+    }
+    private func followEnded(token my: Int, documentID: String) async {
+        lock.lock(); let same = my == loadToken; if same { followRunning = false }; lock.unlock()
+        guard same else { return }
+        await extendIfDry(documentID: documentID)                           // the stream ended after the loop did
+    }
+
+    /// The stretch is told and the player has nothing left to say: one more request, leaving out the stories already told. Not while a stretch
+    /// is still arriving, not for a reader who paused, and not twice for a programme that did not grow.
+    private func extendIfDry(documentID: String) async {
+        let p = runtime.player
+        guard p.document.id == documentID, !p.loopIsActive, !p.userPaused else { return }
+        lock.lock(); let running = followRunning; let at = extendedAt; lock.unlock()
+        let doc = p.document
+        guard !running, doc.segments.count != at else { return }
+        guard let radio = (try? runtime.registry.make(.programme, as: Programme.self, runtime.configuration)) as? RadioProgramme else { return }
+        lock.lock(); extendedAt = doc.segments.count; let my = loadToken; lock.unlock()
+        guard let follow = await radio.more(excludingRoutes: StretchCandidates.routes(citedIn: doc), documentID: documentID) else { return }
+        runFollow(follow, loadToken: my, documentID: documentID)
     }
 
     /// Play/pause from the big button: starts the audio engine on first use.

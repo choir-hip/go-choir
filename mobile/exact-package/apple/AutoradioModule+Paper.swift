@@ -8,6 +8,7 @@ extension AutoradioModule {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
         let source = PaperSource(cacheFile: support.appendingPathComponent("paper-front.json"))
         let engine = LayoutEngine()
+        choir.storyOrder = { FrontOrder.shared.stories }
         handle("paperFront") { [weak self] args, reply in
             let section = args["section"] as? String ?? ""
             let edition = args["edition"] as? String ?? ""
@@ -19,6 +20,7 @@ extension AutoradioModule {
                 // A demo edition is dated by its own newest story; a live one by the clock.
                 let front = PaperComposer.front(stories: r.stories, section: section, width: width, now: Demo.isOn ? nil : Date(),
                                                 edition: edition, engine: engine, status: r.status, message: r.message)
+                FrontOrder.shared.set(routes: front.routes, titles: front.titles)      // the player's next, previous and autoplay follow this order
                 DispatchQueue.main.async { reply(self?.json(front) ?? [:]) }
             }
         }

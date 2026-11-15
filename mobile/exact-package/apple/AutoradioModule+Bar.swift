@@ -75,10 +75,24 @@ extension AutoradioModule {
             reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route)))
         }
 
-        // Reading speed. Stored and used for the sentence estimate; the audio side applies it once the engine takes a rate
-        // (see "Requests to the spine" in the lane report).
+        // Next or previous story (move "next" or "previous"): the next story in the list the current one came from, the previous one within
+        // its first 3 seconds and otherwise the start of this one; in a programme, the next or previous segment.
+        handle("radioStory") { [unowned self] args, reply in
+            let move: ChoirApp.StoryMove = (args["move"] as? String) == "previous" ? .previous : .next
+            Task { [weak self] in
+                guard let self else { return }
+                await self.choir.moveStory(move)
+                self.touch(["radioView", "barState"])
+                let route = ChoirEnvironment.shared.playing(self.runtime.player.document.id)?.route ?? ""
+                DispatchQueue.main.async { reply(self.json(tracker.radioInfo(player: self.choir.playerView(), snapshot: self.runtime.snapshot(), document: self.runtime.player.document, route: route))) }
+            }
+        }
+
+        // Reading speed, 0.5 to 3 in steps of 0.05. The tracker clamps and snaps it, hands it to the player (time-pitch in the audio
+        // engine, pitch kept, for every voice), and it is kept for the next launch. The saved speed is applied now.
+        if let saved = SpeedStore.standard.load() { tracker.setSpeed(saved) }
         handle("radioSpeed") { [unowned self] args, reply in
-            if let v = Double(args["speed"] as? String ?? "") { tracker.setSpeed(v) }
+            if let v = Double(args["speed"] as? String ?? "") { tracker.setSpeed(v); SpeedStore.standard.save(tracker.speed) }
             touch(["radioView"])
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
             reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route)))

@@ -86,6 +86,7 @@ extension AutoradioModule {
             let title = (args["title"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let text = ListenText.compose(title: title, body: args["text"] as? String ?? "")
             guard !address.isEmpty, !text.isEmpty else { return reply(self.json(self.runtime.snapshot())) }
+            self.choir.noteListening(address: address)                      // the story's list, for next, previous and autoplay
             Task { [weak self] in
                 guard let self else { return }
                 _ = await self.runtime.speakText(address: address, text: text, title: title.isEmpty ? nil : title, now: true)
