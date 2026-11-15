@@ -197,8 +197,10 @@ public final class AutoradioModule: ExactPackage {
         case "labTalkDown": runtime.talkDown(); reply(state())
         case "labTalkUp": runtime.talkUp(); reply(state())
         case "labPlayPause": if runtime.player.userPaused { runtime.player.play() } else { runtime.player.pause() }; reply(state())
-        case "labNext": runtime.player.next(); reply(state())
-        case "labPrevious": runtime.player.previous(); reply(state())
+        // Skip and previous move the programme: the player's view and the bar read the new position (found in the P1 simulator drive:
+        // with the engine paused nothing else asked for them again, so the view kept the old segment).
+        case "labNext": runtime.player.next(); touch(["radioView", "barState"]); reply(state())
+        case "labPrevious": runtime.player.previous(); touch(["radioView", "barState"]); reply(state())
         case "labSelectStage":
             if let k = StageKind(rawValue: args["kind"] as? String ?? ""), let id = args["id"] as? String {
                 runtime.setStage(k, id: id)
