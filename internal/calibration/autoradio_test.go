@@ -193,41 +193,45 @@ func TestNewAutoradioForecastRefuses(t *testing.T) {
 	now := mustTime(t, testNow)
 	long := "instruction:turn/" + strings.Repeat("a", 1990)
 	for name, mutate := range map[string]func(*AutoradioForecastInput){
-		"empty stretch":           func(in *AutoradioForecastInput) { in.StretchID = "" },
-		"stretch bad char":        func(in *AutoradioForecastInput) { in.StretchID = "st 1" },
-		"stretch leading dot":     func(in *AutoradioForecastInput) { in.StretchID = ".st1" },
-		"stretch too long":        func(in *AutoradioForecastInput) { in.StretchID = strings.Repeat("a", 33) },
-		"segment not stretch":     func(in *AutoradioForecastInput) { in.SegmentID = "other.s0" },
-		"segment no index":        func(in *AutoradioForecastInput) { in.SegmentID = "st1.s" },
-		"segment bad index":       func(in *AutoradioForecastInput) { in.SegmentID = "st1.sx" },
-		"kind empty":              func(in *AutoradioForecastInput) { in.Kind = "" },
-		"kind spaces":             func(in *AutoradioForecastInput) { in.Kind = "front page" },
-		"kind upper":              func(in *AutoradioForecastInput) { in.Kind = "Story" },
-		"title control":           func(in *AutoradioForecastInput) { in.Title = "a\x07b" },
-		"title newline":           func(in *AutoradioForecastInput) { in.Title = "a\nb" },
-		"title tab":               func(in *AutoradioForecastInput) { in.Title = "a\tb" },
-		"title over 200 bytes":    func(in *AutoradioForecastInput) { in.Title = strings.Repeat("x", 201) },
-		"model empty":             func(in *AutoradioForecastInput) { in.Model = "" },
-		"p above 1":               func(in *AutoradioForecastInput) { in.P = 1.01 },
-		"p below 0":               func(in *AutoradioForecastInput) { in.P = -0.01 },
-		"p NaN":                   func(in *AutoradioForecastInput) { in.P = math.NaN() },
-		"p Inf":                   func(in *AutoradioForecastInput) { in.P = math.Inf(1) },
-		"hash short":              func(in *AutoradioForecastInput) { in.TextSHA256 = testSHA[:32] },
-		"hash not hex":            func(in *AutoradioForecastInput) { in.TextSHA256 = strings.Repeat("z", 64) },
-		"hash upper":              func(in *AutoradioForecastInput) { in.TextSHA256 = strings.ToUpper(testSHA) },
-		"blocks zero":             func(in *AutoradioForecastInput) { in.Blocks = 0 },
-		"blocks negative":         func(in *AutoradioForecastInput) { in.Blocks = -1 },
-		"unknown cause":           func(in *AutoradioForecastInput) { in.Cause = "hunch" },
-		"lesson cause no id":      func(in *AutoradioForecastInput) { in.LessonID = "" },
-		"lesson id bad":           func(in *AutoradioForecastInput) { in.LessonID = "12" },
-		"lesson ref mismatch":     func(in *AutoradioForecastInput) { in.CausedBy = "lesson:L13" },
-		"lesson id on other":      func(in *AutoradioForecastInput) { in.Cause, in.CausedBy = CauseEdition, "edition:P1" },
-		"edition bad ref":         func(in *AutoradioForecastInput) { in.Cause, in.CausedBy, in.LessonID = CauseEdition, "edition:3", "" },
-		"instruction bad ref":     func(in *AutoradioForecastInput) { in.Cause, in.CausedBy, in.LessonID = CauseInstruction, "turn/t1", "" },
-		"instruction wrong class": func(in *AutoradioForecastInput) { in.Cause, in.CausedBy, in.LessonID = CauseInstruction, "lesson:L1", "" },
-		"importance with ref":     func(in *AutoradioForecastInput) { in.Cause, in.CausedBy, in.LessonID = CauseImportance, "edition:P1", "" },
-		"ref too long":            func(in *AutoradioForecastInput) { in.Cause, in.CausedBy, in.LessonID = CauseInstruction, long, "" },
-		"no start":                func(in *AutoradioForecastInput) { in.StretchStart = time.Time{} },
+		"empty stretch":        func(in *AutoradioForecastInput) { in.StretchID = "" },
+		"stretch bad char":     func(in *AutoradioForecastInput) { in.StretchID = "st 1" },
+		"stretch leading dot":  func(in *AutoradioForecastInput) { in.StretchID = ".st1" },
+		"stretch too long":     func(in *AutoradioForecastInput) { in.StretchID = strings.Repeat("a", 33) },
+		"segment not stretch":  func(in *AutoradioForecastInput) { in.SegmentID = "other.s0" },
+		"segment no index":     func(in *AutoradioForecastInput) { in.SegmentID = "st1.s" },
+		"segment bad index":    func(in *AutoradioForecastInput) { in.SegmentID = "st1.sx" },
+		"kind empty":           func(in *AutoradioForecastInput) { in.Kind = "" },
+		"kind spaces":          func(in *AutoradioForecastInput) { in.Kind = "front page" },
+		"kind upper":           func(in *AutoradioForecastInput) { in.Kind = "Story" },
+		"title control":        func(in *AutoradioForecastInput) { in.Title = "a\x07b" },
+		"title newline":        func(in *AutoradioForecastInput) { in.Title = "a\nb" },
+		"title tab":            func(in *AutoradioForecastInput) { in.Title = "a\tb" },
+		"title over 200 bytes": func(in *AutoradioForecastInput) { in.Title = strings.Repeat("x", 201) },
+		"model empty":          func(in *AutoradioForecastInput) { in.Model = "" },
+		"p above 1":            func(in *AutoradioForecastInput) { in.P = 1.01 },
+		"p below 0":            func(in *AutoradioForecastInput) { in.P = -0.01 },
+		"p NaN":                func(in *AutoradioForecastInput) { in.P = math.NaN() },
+		"p Inf":                func(in *AutoradioForecastInput) { in.P = math.Inf(1) },
+		"hash short":           func(in *AutoradioForecastInput) { in.TextSHA256 = testSHA[:32] },
+		"hash not hex":         func(in *AutoradioForecastInput) { in.TextSHA256 = strings.Repeat("z", 64) },
+		"hash upper":           func(in *AutoradioForecastInput) { in.TextSHA256 = strings.ToUpper(testSHA) },
+		"blocks zero":          func(in *AutoradioForecastInput) { in.Blocks = 0 },
+		"blocks negative":      func(in *AutoradioForecastInput) { in.Blocks = -1 },
+		"unknown cause":        func(in *AutoradioForecastInput) { in.Cause = "hunch" },
+		"lesson cause no id":   func(in *AutoradioForecastInput) { in.LessonID = "" },
+		"lesson id bad":        func(in *AutoradioForecastInput) { in.LessonID = "12" },
+		"lesson ref mismatch":  func(in *AutoradioForecastInput) { in.CausedBy = "lesson:L13" },
+		"lesson id on other":   func(in *AutoradioForecastInput) { in.Cause, in.CausedBy = CauseEdition, "edition:P1" },
+		"edition bad ref":      func(in *AutoradioForecastInput) { in.Cause, in.CausedBy, in.LessonID = CauseEdition, "edition:3", "" },
+		"instruction bad ref":  func(in *AutoradioForecastInput) { in.Cause, in.CausedBy, in.LessonID = CauseInstruction, "turn/t1", "" },
+		"instruction wrong class": func(in *AutoradioForecastInput) {
+			in.Cause, in.CausedBy, in.LessonID = CauseInstruction, "lesson:L1", ""
+		},
+		"importance with ref": func(in *AutoradioForecastInput) {
+			in.Cause, in.CausedBy, in.LessonID = CauseImportance, "edition:P1", ""
+		},
+		"ref too long": func(in *AutoradioForecastInput) { in.Cause, in.CausedBy, in.LessonID = CauseInstruction, long, "" },
+		"no start":     func(in *AutoradioForecastInput) { in.StretchStart = time.Time{} },
 	} {
 		in := forecastInput(t, "st1", 0)
 		mutate(&in)
@@ -451,7 +455,7 @@ func TestSettleAutoradioRefuses(t *testing.T) {
 			t.Fatalf("rule %s (%q) accepted", name, rule)
 		}
 	}
-	for name, ev := range map[string]string{"empty": "", "no prefix": "ev-1", "other ref": "commit:abc", "air empty": "air:", "bad id": "air:a b", "dot start": "air:.x", "long id": "air:" + strings.Repeat("a", 65)} {
+	for name, ev := range map[string]string{"empty": "", "colon": "air:ev-1", "other ref": "commit:abc", "air empty": "air:", "bad id": "air:a b", "dot start": "air:.x", "long id": "air:" + strings.Repeat("a", 65)} {
 		if _, err := SettleAutoradio(ctx, m, "o", "c", claim.RecordID, AutoradioHeardRule, true, ev, at); err == nil {
 			t.Fatalf("evidence %s (%q) accepted", name, ev)
 		}
@@ -462,17 +466,27 @@ func TestSettleAutoradioRefuses(t *testing.T) {
 
 	// A claim whose stored agent is not exactly autoradio-dj, whatever its id.
 	for name, mutate := range map[string]func(*types.CommitmentRecord){
-		"cased agent":      func(r *types.CommitmentRecord) { r.Calibration.Agent = "Autoradio-DJ" },
-		"padded agent":     func(r *types.CommitmentRecord) { r.Calibration.Agent = " autoradio-dj" },
-		"other agent":      func(r *types.CommitmentRecord) { r.Calibration.Agent = "autoradio-x" },
-		"no tags":          func(r *types.CommitmentRecord) { r.Calibration.Claim.Tags = nil },
-		"no stretch tag":   func(r *types.CommitmentRecord) { r.Calibration.Claim.Tags = dropPrefix(r.Calibration.Claim.Tags, "stretch:") },
-		"no seg tag":       func(r *types.CommitmentRecord) { r.Calibration.Claim.Tags = dropPrefix(r.Calibration.Claim.Tags, "seg:") },
-		"no sha tag":       func(r *types.CommitmentRecord) { r.Calibration.Claim.Tags = dropPrefix(r.Calibration.Claim.Tags, "sha:") },
-		"no blocks tag":    func(r *types.CommitmentRecord) { r.Calibration.Claim.Tags = dropPrefix(r.Calibration.Claim.Tags, "blocks:") },
-		"no autoradio tag": func(r *types.CommitmentRecord) { r.Calibration.Claim.Tags = dropPrefix(r.Calibration.Claim.Tags, "autoradio") },
-		"not a forecast":   func(r *types.CommitmentRecord) { r.Calibration.Claim.Type = types.CalibrationClaimAssertion },
-		"no record kind":   func(r *types.CommitmentRecord) { r.SubjectRefs = nil },
+		"cased agent":  func(r *types.CommitmentRecord) { r.Calibration.Agent = "Autoradio-DJ" },
+		"padded agent": func(r *types.CommitmentRecord) { r.Calibration.Agent = " autoradio-dj" },
+		"other agent":  func(r *types.CommitmentRecord) { r.Calibration.Agent = "autoradio-x" },
+		"no tags":      func(r *types.CommitmentRecord) { r.Calibration.Claim.Tags = nil },
+		"no stretch tag": func(r *types.CommitmentRecord) {
+			r.Calibration.Claim.Tags = dropPrefix(r.Calibration.Claim.Tags, "stretch:")
+		},
+		"no seg tag": func(r *types.CommitmentRecord) {
+			r.Calibration.Claim.Tags = dropPrefix(r.Calibration.Claim.Tags, "seg:")
+		},
+		"no sha tag": func(r *types.CommitmentRecord) {
+			r.Calibration.Claim.Tags = dropPrefix(r.Calibration.Claim.Tags, "sha:")
+		},
+		"no blocks tag": func(r *types.CommitmentRecord) {
+			r.Calibration.Claim.Tags = dropPrefix(r.Calibration.Claim.Tags, "blocks:")
+		},
+		"no autoradio tag": func(r *types.CommitmentRecord) {
+			r.Calibration.Claim.Tags = dropPrefix(r.Calibration.Claim.Tags, "autoradio")
+		},
+		"not a forecast": func(r *types.CommitmentRecord) { r.Calibration.Claim.Type = types.CalibrationClaimAssertion },
+		"no record kind": func(r *types.CommitmentRecord) { r.SubjectRefs = nil },
 		"wrong record kind": func(r *types.CommitmentRecord) {
 			r.SubjectRefs = map[string]string{"desk": "app:autoradio", "record_kind": "autoradio.air"}
 		},

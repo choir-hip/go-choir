@@ -20,7 +20,11 @@ import (
 type Ledger interface {
 	AppendCommitmentRecord(ctx context.Context, ownerID, computerID string, rec types.CommitmentRecord) (string, error)
 	GetCommitmentRecord(ctx context.Context, ownerID, computerID, recordID string) (*types.CommitmentRecord, error)
-	ListCalibrationRecords(ctx context.Context, ownerID, computerID, agent string, limit int) ([]types.CommitmentRecord, error)
+	// ListCalibrationRecordsExcludingAgentPrefix is the generic routes' only
+	// read of calibration records: it leaves the Autoradio namespace out in
+	// the query, before the limit (design 4.3). The unfiltered read is not on
+	// this interface, so no generic path can reach a reserved record.
+	ListCalibrationRecordsExcludingAgentPrefix(ctx context.Context, ownerID, computerID, agent, excludePrefix string, limit int) ([]types.CommitmentRecord, error)
 }
 
 // DefaultMaxRecords bounds how many calibration records one read joins.
@@ -151,6 +155,24 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func forbidden(w http.ResponseWriter) {
+	writeJSON(w, http.StatusForbidden, errorBody{Error: "the autoradio namespace is reserved for the server"})
+}
+
+// reservedRequest reports whether a claim request names the reserved
+// namespace by agent or by tag, on the cleaned (trimmed, slugged) names.
+func reservedRequest(req ClaimRequest) bool {
+	if IsReservedAgent(req.Agent.Name) {
+		return true
+	}
+	for _, tag := range req.Tags {
+		if IsReservedTag(tag) {
+			return true
+		}
+	}
+	return false
+}
+
 func decodeBody(r *http.Request, out any) error {
 	dec := json.NewDecoder(io.LimitReader(r.Body, maxBodyBytes))
 	dec.DisallowUnknownFields()
@@ -172,7 +194,7 @@ func (h *Handler) fail(w http.ResponseWriter, err error) {
 
 // view joins one claim with its settlements.
 func (h *Handler) view(ctx context.Context, sc scope, claim types.CommitmentRecord) (ClaimView, error) {
-	records, err := h.Ledger.ListCalibrationRecords(ctx, sc.owner, sc.computer, claim.Calibration.Agent, h.maxRecords())
+	records, err := h.Ledger.ListCalibrationRecordsExcludingAgentPrefix(ctx, sc.owner, sc.computer, claim.Calibration.Agent, AutoradioNamespace, h.maxRecords())
 	if err != nil {
 		return ClaimView{}, err
 	}
@@ -191,9 +213,19 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request, sc scope) {
 		h.fail(w, err)
 		return
 	}
+	// The Autoradio namespace is the server's: refused before validation, on
+	// the cleaned names, whatever the body says (design 4.3).
+	if reservedRequest(req) {
+		forbidden(w)
+		return
+	}
 	rec, err := NewClaimRecord(req, h.now(), randomHex())
 	if err != nil {
 		h.fail(w, err)
+		return
+	}
+	if IsReservedRecord(&rec) {
+		forbidden(w)
 		return
 	}
 	rec.ComputerID = sc.computer
@@ -250,6 +282,10 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request, sc scope, id strin
 		writeJSON(w, http.StatusNotFound, errorBody{Error: "no calibration claim " + id})
 		return
 	}
+	if IsReservedClaim(claim) {
+		forbidden(w)
+		return
+	}
 	v, err := h.view(r.Context(), sc, *claim)
 	if err != nil {
 		h.fail(w, err)
@@ -267,6 +303,13 @@ func (h *Handler) settle(w http.ResponseWriter, r *http.Request, sc scope, id st
 	}
 	if claim == nil {
 		writeJSON(w, http.StatusNotFound, errorBody{Error: "no calibration claim " + id})
+		return
+	}
+	// A reserved claim is settled only by the server's own path
+	// (SettleAutoradio), never by a key: judged on the stored claim, before
+	// the body is read.
+	if IsReservedClaim(claim) {
+		forbidden(w)
 		return
 	}
 	var req SettlementRequest
@@ -325,13 +368,24 @@ func filtersFrom(r *http.Request) Filters {
 }
 
 func (h *Handler) claims(ctx context.Context, sc scope, f Filters) ([]ClaimView, bool, error) {
+	if f.Agent != "" && IsReservedAgent(f.Agent) {
+		return nil, false, nil // the namespace is not listed, even when asked for by name
+	}
 	max := h.maxRecords()
-	records, err := h.Ledger.ListCalibrationRecords(ctx, sc.owner, sc.computer, f.Agent, max)
+	records, err := h.Ledger.ListCalibrationRecordsExcludingAgentPrefix(ctx, sc.owner, sc.computer, f.Agent, AutoradioNamespace, max)
 	if err != nil {
 		return nil, false, err
 	}
+	// The query leaves out reserved agents before the limit; a record
+	// reserved only by a tag (written before the reservation) is dropped here.
+	kept := make([]types.CommitmentRecord, 0, len(records))
+	for i := range records {
+		if !IsReservedRecord(&records[i]) {
+			kept = append(kept, records[i])
+		}
+	}
 	var out []ClaimView
-	for _, c := range JoinClaims(records, h.now()) {
+	for _, c := range JoinClaims(kept, h.now()) {
 		if f.Match(c) {
 			out = append(out, c)
 		}
