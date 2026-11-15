@@ -77,7 +77,7 @@ final class RepairPlayerTests: XCTestCase {
         XCTAssertEqual(s.kinds, ["segmentBegan:0", "blockBegan:0", "finished:0"], "paused: nothing plays")
         p.play()
         let c = await poll(10) { s.kinds.contains("finished:1") }; XCTAssertTrue(c)
-        XCTAssertEqual(s.kinds, ["segmentBegan:0", "blockBegan:0", "finished:0", "segmentBegan:1", "blockBegan:0", "finished:1"],
+        XCTAssertEqual(s.kinds, ["segmentBegan:0", "blockBegan:0", "finished:0", "segmentBegan:1", "blockBegan:1", "finished:1"],
                        "the old segment is not replayed or reported twice")
         XCTAssertEqual(p.blockIndex, 1)
     }

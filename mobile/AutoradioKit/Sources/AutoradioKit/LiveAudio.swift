@@ -386,6 +386,8 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         var level: PlayLevel = .play
         var userPaused = true
         var jumpTo: Int?
+        /// Where the loop stopped when the programme ran dry: the first block that was never played. Play starts there when blocks have come since.
+        var resumeAt: Int?
         var rate = 1.0
         var loop: Task<Void, Never>?
         var epoch = 0                           // bumped by every start: a loop that is no longer the current one writes nothing
@@ -419,7 +421,12 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     // MARK: Transport
 
     public func play() {
-        let (lvl, hasLoop, at) = st.write { s -> (PlayLevel, Bool, Int) in s.userPaused = false; return (s.level, s.loop != nil, s.blockIndex) }
+        let (lvl, hasLoop, at) = st.write { s -> (PlayLevel, Bool, Int) in
+            s.userPaused = false
+            // Ran dry, and more has come since: the first unplayed block, not the last played one again. With nothing new, play replays the last block as it always did.
+            let first = s.resumeAt.flatMap { $0 < s.document.blocks.count ? $0 : nil }
+            return (s.level, s.loop != nil, first ?? s.blockIndex)
+        }
         if lvl != .pause { audio.programmePlay() }
         playback.paused(false)
         if !hasLoop { start(at: at) }
@@ -474,7 +481,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
 
     func start(at i: Int) {
         let (old, my) = st.write { s -> (Task<Void, Never>?, Int) in
-            let o = s.loop; s.epoch += 1; s.blockIndex = i; s.loop = nil; return (o, s.epoch)
+            let o = s.loop; s.epoch += 1; s.blockIndex = i; s.loop = nil; s.resumeAt = nil; return (o, s.epoch)
         }
         old?.cancel()
         audio.programmeStop()
@@ -482,29 +489,35 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         let task = Task { [weak self] in
             guard let self else { return }
             var n = i
-            while !Task.isCancelled {
-                // One look at the state per block: the block to play, and whether this loop is still the current one.
-                let step = self.st.write { s -> (ProgrammeBlock, Bool, PlayLevel, ProgrammeDocument)? in
-                    guard s.epoch == my, n < s.document.blocks.count else { return nil }
-                    s.blockIndex = n
-                    return (s.document.blocks[n], s.userPaused, s.level, s.document)
+            outer: while !Task.isCancelled {
+                while !Task.isCancelled {
+                    // One look at the state per block: the block to play, and whether this loop is still the current one.
+                    let step = self.st.write { s -> (ProgrammeBlock, Bool, PlayLevel, ProgrammeDocument)? in
+                        guard s.epoch == my, n < s.document.blocks.count else { return nil }
+                        s.blockIndex = n
+                        return (s.document.blocks[n], s.userPaused, s.level, s.document)
+                    }
+                    guard let (block, paused, lvl, doc) = step else { break }
+                    self.audio.clearPlayhead(); self.onChange?(); self.publishNowPlaying()
+                    if paused { self.audio.programmePause() } else if lvl != .pause { self.audio.programmePlay() }
+                    self.playback.unitBegan(n, in: doc)
+                    let played = await self.playBlock(block, index: n)
+                    if Task.isCancelled { break }
+                    self.playback.unitEnded(n, played: played, in: self.st.read { $0.document })
+                    n += 1
                 }
-                guard let (block, paused, lvl, doc) = step else { break }
-                self.audio.clearPlayhead(); self.onChange?(); self.publishNowPlaying()
-                if paused { self.audio.programmePause() } else if lvl != .pause { self.audio.programmePlay() }
-                self.playback.unitBegan(n, in: doc)
-                let played = await self.playBlock(block, index: n)
                 if Task.isCancelled { break }
-                self.playback.unitEnded(n, played: played, in: self.st.read { $0.document })
-                n += 1
-            }
-            if !Task.isCancelled {
-                let finished = self.st.write { s -> Bool in
-                    guard s.epoch == my else { return false }
-                    s.blockIndex = min(n, max(s.document.blocks.count - 1, 0)); s.loop = nil; return true
+                self.beforeLoopTail?()
+                // The end, decided in one write with the look at the document: a segment appended since the last read is played, not lost.
+                let tail = self.st.write { s -> Int in
+                    guard s.epoch == my else { return 0 }
+                    if n < s.document.blocks.count, !s.userPaused { return 1 }
+                    s.blockIndex = min(n, max(s.document.blocks.count - 1, 0)); s.resumeAt = n; s.loop = nil; return 2
                 }
+                if tail == 1 { continue outer }
                 // The story is over: what the listener asked to hear comes next, like the next story.
-                if finished { if let q = self.dequeue() { self.setDocument(q); self.start(at: 0) } else { self.onChange?() } }
+                if tail == 2 { if let q = self.dequeue() { self.setDocument(q); self.start(at: 0) } else { self.onChange?() } }
+                break
             }
         }
         // Keep it unless a newer start has already replaced this one.
