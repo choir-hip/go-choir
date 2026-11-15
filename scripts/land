@@ -238,6 +238,10 @@ trap fin EXIT
 run() { echo "## \$*"; "\$@"; rc=\$?; [ \$rc -eq 0 ] || { echo "STEP FAILED (\$rc): \$*"; exit \$rc; }; }
 use=\$(df -P "\$HOME" 2>/dev/null | awk 'NR==2{gsub("%","",\$5);print \$5}'); [ "\${use:-0}" -gt 85 ] && go clean -cache
 EOF
+  # The script self-tests take seconds; they run before the suites, so a gate that
+  # refuses does so in the first minute and not after the 100-minute race suites
+  # (seen 2026-11-15).
+  [ "$GH" = 1 ] && echo 'for t in .github/scripts/*-test; do run timeout 300 bash "$t"; done' >>"$1"
   [ -n "$L_PLAIN" ] && echo "run go test -count=1 -timeout 30m -p=2$L_PLAIN" >>"$1"
   [ -n "$L_RACE" ] && echo "run go test -race -count=1 -timeout 30m -p=2$L_RACE" >>"$1"
   if [ "$SHARD" = 1 ]; then
@@ -246,7 +250,6 @@ EOF
   fi
   for p in $H_PLAIN; do echo "run go test -count=1 -timeout 90m -p=1 $p" >>"$1"; done
   for p in $H_RACE; do echo "run go test -race -count=1 -timeout 90m -p=1 $p" >>"$1"; done
-  [ "$GH" = 1 ] && echo 'for t in .github/scripts/*-test; do run timeout 300 bash "$t"; done' >>"$1"
   [ "$FE" = 1 ] && echo '(cd frontend && run pnpm install --frozen-lockfile && run pnpm run build) || exit $?' >>"$1"
   echo "exit 0" >>"$1"
 }
