@@ -15,7 +15,7 @@ or in `internal/modelpolicy`, `internal/appdesk`, `internal/apihandler`.
 
 ## Readings of the design taken here (where it could be read two ways)
 
-- R1. Non-content segments (`ident`, `bridge`, `answer`, `result`) are streamed
+- R1. Non-content segments (`ident`, `bridge`) are streamed
   with a segment record and no claim ("each streamed segment has exactly one
   claim" means each content segment; the design says they carry no forecast).
 - R2. The index (`autoradio.stretch`) is written whenever the handler itself
@@ -120,7 +120,7 @@ Validators (each one invalid line among valid ones is dropped, the others kept)
 Failures
 
 - F28. A claim write that fails ends the call with an `error` event, the
-  segment is not streamed, no later line is processed, no index is written.
+  segment is not streamed, no later line is processed, no index is written (status `store_failed` on the `error` event).
 - F29. A claim whose stored copy differs from the one written (`SameClaim`)
   ends the call the same way.
 - F30. A provider that refuses before any segment is streamed walks to the next
@@ -134,7 +134,7 @@ Failures
 - F33. A crash mid-stretch (a provider panic after two segments) leaves the
   start, the request record, the two segments' records and claims and no index;
   the same `request_id` replays the two stored segments and an `error`
-  (interrupted by a restart) with no model call (R3); a new `request_id` makes a
+  ("the stretch ended without an index; use a new request_id") with no model call (R3); a new `request_id` makes a
   new stretch with new segment ids, never re-streams a claimed id, and leaves
   the old claims as they were.
 - F34. The call creates no run, no inbox record, no directive addressed to a

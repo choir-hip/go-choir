@@ -173,7 +173,7 @@ before that, as each is finished (section 2.3). If the client disconnects,
 the call continues and the stretch still commits, because a write-ahead is
 useful later. A turn behaves differently: it cancels on disconnect [doc:
 fast-turns slice 1 failure list]. If the computer crashes mid-stream, the
-round closes as "interrupted by a restart" and nothing resumes. Whatever the
+stretch has no index and nothing resumes; a replay of its request_id streams the segments that have their claim and an error, "the stretch ended without an index; use a new request_id". Whatever the
 phone already played reaches the tape through the air log, which carries each
 segment's text hash and cites (section 3.4).
 
@@ -379,7 +379,7 @@ code is generic enough to reuse as it stands, or needs extracting, is
 - A planned restart with its marker [code:
   `internal/agentcore/planned_restart.go:128,192`] may redeliver a pending
   window wake once.
-- A crash closes an in-flight stretch write as "interrupted by a restart".
+- A crash leaves an in-flight stretch without an index; its request_id then answers "the stretch ended without an index; use a new request_id".
   The station stays on, with a new generation, and the next window or the
   next open writes afresh. Nothing resumes the half-written stretch.
 - If two consecutive crash boots interrupt a station write, the station is
@@ -739,7 +739,7 @@ the bar lane's now-playing and source chips.
 | Class | **red**: gateway and provider calls (a new streaming role), tape and evidence (the run sheet kind gets its first writer; the deletion of a reserved kind), auth and session (a device-key route) |
 | Protected surfaces untouched | Texture canonical writes (none), vmctl, deploy routing, checkpoint projection |
 | Review | two seats (Gemini 3.8 flash through `agy`, then Sonnet); the author is not one |
-| Failure list, before code | no auth 401; unknown field 400; replay of `request_id` returns the committed stretch with no second call; first `segment` is flushed before the call ends (a delaying fake provider); a cite outside the candidate set drops the line; three invalid lines end the call cleanly; client disconnect lets the stretch commit; crash mid-call closes the round "interrupted by a restart" and does not resume; dedupe drops a story heard at its current version and keeps one with a newer version as `update`; the reserved kind's deletion leaves no citer (a grep test) |
+| Failure list, before code | no auth 401; unknown field 400; replay of `request_id` returns the committed stretch with no second call; first `segment` is flushed before the call ends (a delaying fake provider); a cite outside the candidate set drops the line; three invalid lines end the call cleanly; client disconnect lets the stretch commit; crash mid-call leaves the stretch without an index, answers "the stretch ended without an index; use a new request_id", and does not resume; dedupe drops a story heard at its current version and keeps one with a newer version as `update`; the reserved kind's deletion leaves no citer (a grep test) |
 | Deployed proof | after CI and deploy, verify the deployed commit. Run a script from a host off Node B that opens a programme ten times against d@e and prints, per run: first byte, first `segment`, `done`, segment kinds, every cite resolved against the public resolve route, and the model. Pass: first segment at most 6 s median from a warm computer; every cite resolves; at least two kinds besides `ident` per stretch; no Texture document created. Then on the iPhone: open the app cold with the computer asleep, record audio, and show that sound starts within 2 s and a desk stretch takes over without a gap. Artifacts: the table and the recording. |
 | Precommit before landing (calibration ledger) | the proxy streams the programme SSE unbuffered, 85%; first segment at most 6 s median warm, 70%; at most 1 in 10 stretches has an invalid line, 60% |
 | Rollback | revert. The route, role and kind registration go together, and stretches already written stay on the tape as history. The app falls back to the cached front page. |

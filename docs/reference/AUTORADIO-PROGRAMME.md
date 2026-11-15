@@ -12,8 +12,7 @@ sees is pinned by `mobile/fixtures/learning/programme_stream.json`.
 
 One request, one streamed model call, one server-sent-events response. The
 model writes one JSON object per line; each valid line becomes one `segment`
-event. For each content segment (`story`, `update`, `headlines`, `mail`,
-`podcast_note`) the server first appends the segment record and one forecast
+event. For each content segment (`story`, `update`, `headlines`) the server first appends the segment record and one forecast
 claim (agent `autoradio-dj`, probability `p_heard`, a stated `caused_by`), and
 only then sends the event. The route never writes an outcome: it has no air
 event and no settlement (station L2's route does).
@@ -29,14 +28,14 @@ claim is made.
 ## Request
 
 `Content-Type: application/json`, at most 256 KB (413 over). Unknown fields are
-refused (400), so a request carrying `heard` or `after` answers 400.
+refused (400), so a request carrying `heard`, `after` or `interview_notes` answers 400.
 
 | Field | Rule |
 |---|---|
 | `request_id` | required; `[A-Za-z0-9][A-Za-z0-9_.-]{0,63}`; the idempotency key |
 | `cause` | required; `open`, `extend`, `turn` or `result` |
 | `local_time`, `tz` | optional; RFC 3339, and an IANA name (at most 64 bytes). A name the computer cannot resolve is not refused: the time is shown by its own offset |
-| `candidates` | optional; at most 40 items `{route, version, title, dek, text?}`, ordered by importance, highest first. `route` has no space, `@` or `#`; `version` is a whole number or a short string; `title` one line of at most 300 bytes; `dek` at most 1000; `text` at most 8 KB and only on the first ten items. A candidate's cite ref is `pub:<route>@v<version>`. Over a bound is 400 |
+| `candidates` | optional; at most 40 items `{route, version, title, dek, text?}`, ordered by importance, highest first. `route` has no space, `@` or `#`; `version` is a whole number or a short string; `title` one line of at most 300 bytes; `dek` required, at most 1000 bytes; `text` at most 8 KB and only on the first ten items. A candidate's cite ref is `pub:<route>@v<version>`. Over a bound is 400 |
 | `edition_text` | optional; at most 32 KB; its paragraphs (blank-line split, `calibration.SplitBlocks`) are numbered `edition:P1`, `edition:P2` and so on |
 
 Refusals are plain JSON `{"error": "..."}` before the stream starts: 401 no
@@ -58,7 +57,7 @@ was used with another `cause`, 413 body too large, 503 no streaming model bound.
 - `done`: `{stretch_id, status: "completed", replayed, segments, claims, dropped, provider, model, index_record_id, timings_ms, members_tried, usage}`.
 - `error`: `{stretch_id, spoken, reason, status}` instead of `done`: a claim
   write failed (`store_failed`), three invalid lines in a row (`invalid_run`),
-  the model failed after a segment (`failed`), or every pool member refused.
+  the model failed after a segment, or every pool member refused or ended with no valid line (`failed`), or the wall-clock or idle deadline passed (`deadline`).
   Segments already sent stand; the phone keeps playing what it has.
 
 Validators drop a line, never the call (design 3.2): unknown kind, empty or
@@ -66,8 +65,7 @@ over-long text, a content segment with no title, a title that is not one line
 of at most 200 bytes, a cite outside the candidate set, `p_heard` missing or
 outside [0, 1], `caused_by` missing or not one of `importance`, `explore`,
 `lesson:L<n>`, `instruction:turn/<id>`, `instruction:note/<id>`, `edition:P<n>`
-that resolves against this call's input, a forecast field on `ident`, `bridge`,
-`answer` or `result`. Three invalid lines in a row end the call. Lesson lines
+that resolves against this call's input, a forecast field on `ident` or `bridge`, a kind that is not `story`, `update`, `headlines`, `ident` or `bridge`. Three invalid lines in a row end the call. Lesson lines
 are recognised and ignored until station L3.
 
 ## Records

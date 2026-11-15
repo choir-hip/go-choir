@@ -64,7 +64,7 @@ func TestF45_APanicBetweenTheSegmentRecordAndItsClaimThenReplay(t *testing.T) {
 }
 
 // F46 (B2): a wall-clock deadline for the walk and an idle deadline between
-// deltas, both through the failed path; the request_id is not stuck.
+// deltas, both ending through the index with status "deadline"; the request_id is not stuck.
 func TestF46_TheWallClockAndIdleDeadlines(t *testing.T) {
 	stall := func(lines ...string) radioScript {
 		return func(n int, ctx context.Context, req provideriface.TextStreamRequest, onDelta func(string)) (*provideriface.TextStreamResponse, error) {

@@ -248,7 +248,7 @@ func parseP(raw json.RawMessage) (float64, string) {
 		return 0, fmt.Sprintf("p_heard %v is outside [0, 1]", p)
 	}
 	if p == 0 {
-		p = 0 // -0 is 0
+		p = 0 // the assignment is the point: it replaces -0 with +0, clearing the sign bit
 	}
 	return p, ""
 }

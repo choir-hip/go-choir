@@ -575,8 +575,8 @@ plus the word after the dot in `record_kind`. The L1a test iterates this table.
 
 The index's `status` is one of: `completed` (the model ended, or the segment
 cap of 12.7 ended the stretch; the replay answers `done`); `invalid_run` (three
-invalid lines in a row); `failed` (the model failed after a segment, or every
-pool member refused); `deadline` (the wall-clock or the idle deadline of 12.7).
+invalid lines in a row); `failed` (the model failed after a segment, every
+pool member refused, or every member ended cleanly with no valid segment); `deadline` (the wall-clock or the idle deadline of 12.7).
 Its refs also carry `dropped_count` (exact), `dropped` (the first 100 reasons)
 and `client_gone` (`true` when a write to the client failed, so a reader can tell
 "never delivered" from "delivered, not played"). Only `completed` is a finished
@@ -689,8 +689,8 @@ its first 32 digits with the tag. The hash-mismatch fixture pins this.
 | Marked cases in the input | the last 40 forecasts |
 | Active lessons in the input | at most 30 |
 | Lesson text | one line, at most 300 characters |
-| Instruction or note text in the prompt | at most 1,000 bytes each, cut on a rune boundary and marked `[truncated]` |
-| Segments per stretch | at most 30; a further valid line is dropped with the reason "segment cap" and the stretch ends as `completed` (a bound on what the model can cause, not on calls; the prompt asks for 10 to 15) |
+| Instruction or note text in the prompt | cut to at most 1,000 bytes on a rune boundary, then marked `[truncated]` (the prompt line is at most 1,012 bytes) |
+| Segments per stretch | at most 30; a further valid line is dropped with the reason "segment cap 30 reached: the stretch ended" and the stretch ends as `completed` (a bound on what the model can cause, not on calls; the prompt asks for 10 to 15) |
 | Programme call deadlines | 120 seconds of wall clock for the whole walk of the pool, and 30 seconds idle between two deltas (from the first); both end the call as `deadline`. Invented numbers: deadlines, not limits on model calls |
 | Segment kinds in station L1 | `story`, `update`, `headlines`, `ident`, `bridge`; `mail`, `podcast_note`, `answer` and `result` are dropped until their stations |
 

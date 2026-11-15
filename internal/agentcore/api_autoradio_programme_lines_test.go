@@ -186,7 +186,8 @@ func TestF22_Cites(t *testing.T) {
 		{"an unknown role", titled("j", map[string]any{"cites": []any{map[string]any{"ref": "pub:harbour-1@v1", "role": "boss"}}}), false},
 		{"a label with a newline", titled("k", map[string]any{"cites": []any{map[string]any{"ref": "pub:harbour-1@v1", "label": "a\nb"}}}), false},
 		{"cites not an array", titled("l", map[string]any{"cites": "pub:harbour-1@v1"}), false},
-		{"a mail ref with no mail candidates", titled("m", map[string]any{"kind": "mail", "cites": []any{"mail:abc"}}), false},
+		{"a mail ref with no mail candidates", titled("m", map[string]any{"kind": "bridge", "p_heard": nil, "caused_by": nil, "cites": []any{"mail:abc"}}), false},
+		{"an ident citing outside the set", titled("m2", map[string]any{"kind": "ident", "p_heard": nil, "caused_by": nil, "cites": []any{"pub:unknown-9@v1"}}), false},
 		{"a candidate cite", titled("n", map[string]any{"cites": []any{"pub:harbour-1@v1", "pub:budget-3@v1"}}), true},
 		{"a cite object", titled("o", map[string]any{"cites": []any{map[string]any{"ref": "pub:budget-3@v1", "role": "mentioned", "label": "Budget"}}}), true},
 		{"headlines", titled("p", map[string]any{"kind": "headlines", "cites": []any{"pub:harbour-1@v1", "pub:harbour-2@v1"}}), true},
@@ -202,7 +203,7 @@ func TestF23_ForecastFieldsOnNonContentKinds(t *testing.T) {
 		return progLine(m)
 	}
 	var cases []lineCase
-	for _, kind := range []string{"ident", "bridge", "answer", "result"} {
+	for _, kind := range []string{"ident", "bridge"} {
 		cases = append(cases,
 			lineCase{kind + " with p_heard", plain(kind, kind+"-p", map[string]any{"p_heard": 0.5}), false},
 			lineCase{kind + " with caused_by", plain(kind, kind+"-c", map[string]any{"caused_by": "explore"}), false},
