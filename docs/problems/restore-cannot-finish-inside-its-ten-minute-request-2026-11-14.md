@@ -276,3 +276,192 @@ the structs and decoders, not run against an old binary.
   new version 4 bind canonicalizes null and recovers. So "version 3
   checkpoints restore on either code" holds for stores whose live rows are
   `[]`, not for that class.
+
+## Investigation for the replay-time trigger (lane/snapshot-by-replay-time; code, read-only)
+
+Written before the build. Mutation class of the build: orange (runtime
+behavior of the producer; the snapshot and its tape record are unchanged).
+
+(i) How chunks are stored, shared and pruned.
+
+- `internal/store/snapshot_to.go` is the capsule store copy
+  (`SnapshotTo`, `:77`), not the snapshot capture. The capture is
+  `internal/snapshot/snapshot.go`. It writes no copy of the store: one
+  read-only transaction streams the pages of the WAL snapshot
+  (`snapshot.go:532`).
+- Chunks are content-addressed and shared across successive snapshots of one
+  computer. The page stream is cut into fixed page ranges, 4 MiB
+  (`ChunkSize`, `snapshot.go:66`; chunk i is pages `[i*N,(i+1)*N)`,
+  `:19`). Each is sealed with `filecas.SealChunk`, deterministic per key and
+  plaintext (`snapshot.go:441`), so an unchanged range has the same digest.
+  The uploader HEADs every digest and PUTs only the ones the host does not
+  hold (`snapshot.go:450-475`; stats `ChunksHeld`, `ChunksUploaded`,
+  `BytesUploaded`). A new snapshot therefore costs the changed ranges, not a
+  full copy. A range counts as changed if any page in it changed, so a
+  store that rewrites pages all over (the paper) shares little: the comment
+  at `snapshot_producer.go:56-60` records 20 GB a day in October and the
+  paper's 11-13 record gives 4.8 GB of sealed chunks added by a 46.7 GB,
+  37 min 40 s snapshot.
+- Retention, host side: each snapshot registers a root (digest list)
+  (`snapshot/http_chunks.go:100`), and `pruneSnapshotRoots`
+  (`internal/platform/snapshot_roots.go:203`) keeps the newest 4 roots the
+  tape names, 2 when the store is over 2048 chunks (8 GiB)
+  (`snapshot_roots.go:42-49`). Chunks no live root names become collectable
+  by the artifact sweep (`platform/artifact_gc.go:182`, after its grace).
+  Restore considers at most the newest 4 snapshots (`snapshot.MaxCandidates`,
+  `snapshot.go:896-899`), so on a large store a checkpoint older than the
+  second newest snapshot has no base.
+- Retention, guest side: nothing is kept locally. Only the
+  `snapshot_recorded` event stays on the tape, and the producer removes a
+  leftover VACUUM INTO copy (`snapshot_producer.go`, `snapshotLegacyTempDirName`).
+
+(ii) What the replay rate depends on, and whether it is measured.
+
+- The tail replay (`computerevent/appender.go:1396-1430`) pages events from
+  the host in 1,024-event pages (fetch), then reduces, verifies receipts,
+  projects rows and commits. The log line breaks the time into fetch,
+  payload prefetch, reduce, verify, prepare, finalize and commit. So the rate
+  depends on host fetch latency, payload fetches, the per-event projection
+  (which grows with the store's indexes and the cold page cache) and the
+  commit cadence. Measured: 206 to 380 events/s on d@e in October and early
+  November, 113 events/s on 2026-11-14 (restore of 33,332 events in 4 m 54 s).
+  The paper's replay rate has not been measured in the records.
+- At runtime it is a log line only: `replay applied N events ... (X events/s`
+  (`appender.go:1423`) is computed in a deferred function and kept nowhere.
+  `ReplaySnapshot().AppliedRows` is zeroed per replay (`:1404`). No counter
+  of the rate exists. The build adds one.
+
+(iii) Cost of a capture as a function of store size.
+
+- Time: the stream and the witness both read every page, so both scale with
+  the store. The paper's 46.7 GB took 37 min 40 s; the witness alone was 22 to
+  35 minutes on 21 GiB (`snapshot_producer.go:79-84`); d@e's 1 GiB took 11 s.
+- Held: one read transaction on the read pool for the whole capture
+  (`ReadTxTime`). Writers and appends do not wait, but the transaction pins
+  the WAL, which grew 3.7 GB in 30 minutes under load (comment at
+  `snapshot_producer.go:81-84`), so free space is the resource held; the
+  producer refuses under 2 GiB (`snapshotFreeFloor`) and the capture checks
+  it during the stream. Memory is a few 4 MiB buffers.
+- Written: sealed bytes to the host for the changed ranges only
+  (`BytesUploaded`), plus a probe per chunk, and the host keeps unreferenced
+  chunks through its grace.
+
+Consequence for the trigger: the cost of a capture (seconds on d@e, 37 minutes
+and several GB on the paper) is known after the fact from `Stats`, so the
+trigger can derive its own floor between captures from the last capture.
+
+## Repair: snapshot due by replay time (lane/snapshot-by-replay-time)
+
+The producer estimates a restore's replay as tail events over a replay rate
+(this computer's last measured replay of at least 1,000 events, otherwise 113
+events/s, d@e's slowest recent reading) and takes a snapshot when that exceeds
+four minutes (27,120 events at 113/s): ten minutes of request, four of scan and
+install, one for the witness and flip, one of margin. The 540,000-event ceiling
+and the seven-day interval stay and fire regardless. Replay-time captures keep a
+floor from the last capture's own cost: the larger of ten times its duration and
+its sealed bytes spread over 8 GiB a day. d@e (11 s, a small store): minutes to
+under an hour, so the bound decides (about every four hours at 1.8 events/s).
+The paper (37 min 40 s, 4.8 GB, 3.3 events/s): 13.4 hours, so the floor decides,
+about two captures a day against one every 45 hours by the ceiling, 4.6% of wall
+time, and its restore tail stays above the bound; the producer logs
+"snapshot floor-limited" and the observability block says `floor_limited`.
+Observability `snapshot_producer` carries the state, including how long a due
+snapshot has been refused. Not verified on a live computer.
+
+### Review round 1 repairs (same lane)
+
+- The floor survives a restart: the last capture's duration and sealed bytes
+  are written beside the store (`snapshot-producer.json` on the data volume)
+  and read back for the newest snapshot only if the snapshot event falls
+  inside that capture's window. A snapshot with no matching record has an
+  unknown floor, which binds replay-time captures until the 540,000-event
+  ceiling or the interval takes one and measures it (`capture_known:false` in
+  the block). Whether the data-volume directory survives a restore flip was
+  not verified.
+- Host retention: the newest k roots stay, and so does a chain beyond them
+  covering the recovery bound (the newest root at least 720,000 events behind
+  the newest root, plus roots at least 360,000 events apart above it), so a
+  base exists for every checkpoint a restore accepts and the nearest base is
+  inside the bound. This is more than "k plus one anchor": a single anchor
+  cannot advance, because the newest k roots span hours, not the bound, and
+  the root that will be the next anchor has been dropped before it is needed.
+  At most three extra roots; on the paper about two (about 9.6 GB of unique
+  chunks at 4.8 GB each). The rows are the collector's liveness, so their
+  chunks outlive the 24 hour upload grace.
+- The replay rate used is the slowest of 113 events/s and the slowest replay
+  measured since the process started, boot and restore alike (the restore's
+  dry-run copy reports to the live appender). It is process memory and
+  re-learns downward after a restart.
+- A replay-time capture also needs free space above the floor for the WAL it
+  pins: 2 MiB/s of the last capture's duration (paper: about 4.4 GiB more).
+- Still open, not in this lane: the restore's up-front refusal. For a
+  floor-limited computer (the paper) the four-minute scan and install figure
+  is d@e's on a 1 GiB store; it is not shown to hold for a 46.7 GB store, and
+  the replay bound there is probably optimistic.
+
+### Review round 2 repair: one selection (same lane)
+
+Round 1's chain could not be reached: `snapshot.Scan` kept the newest four
+`snapshot_recorded` events at or below the target from the tape, which knows
+nothing of the roots the host pruned, so with frequent snapshots the four were
+usually pruned rows and a live chain root a few events lower was never tried.
+
+- The plan now offers every snapshot event on the tape at or below the target
+  and not further than `MaxRecoveryTailEvents` behind it (`ScanAll`,
+  `PlanCandidates`), newest first, at most 1,024. The install probes the host
+  (the existing chunk HEAD route, `ChunkProber`) for the chunks of a candidate
+  (the state file's and the telemetry partitions') before downloading any. As
+  first landed (round 2) this was false of production: `platformRestoreTape`
+  had no `HasChunk`, so the probe was skipped silently and a pruned candidate
+  downloaded until its first missing chunk (round 3 found it). Now the tape
+  forwards `HasChunk`, and a pruned root costs a record fetch and probes that
+  stop at the first missing chunk (8 concurrent HEADs; at most one HEAD per
+  chunk of the candidate, about 1,150 on the paper's 4.8 GB-per-capture store,
+  about 11,400 for its whole file), then the next older one is tried. The
+  failed candidates share a two-minute budget (`restoreCandidateBudget`), after
+  which no further candidate is started, so a run of failures cannot starve the
+  replay. The 1,024 cap only keeps the list finite: the base up to 360,000
+  events below a checkpoint is reached within it iff the cadence in the window
+  is at least 352 events, and the producer's fastest cadence is the tick bound
+  (about 1,100 events at d@e's 1.8/s). A store that cannot probe logs that once. No new guest-host route: the
+  guest had no way to ask the host for its live roots, and a list-roots route
+  would have been a new one; the probe gives the same answer, the live roots
+  at or below the target, from the route that exists.
+- What a lying or stale host can and cannot cause. Candidates come only from
+  the tape, and a record opens only under the event identity it was sealed
+  for, its manifest root verifies, every chunk opens under the computer's key
+  at its digest, and the unsealed file is checked against the record's witness
+  before install. A host cannot hand the guest a root the tape does not
+  record (tested: a host that holds the chunks and the sealed record of an
+  unrecorded snapshot installs nothing), nor wrong state. It can deny: say
+  "not held" for a held chunk (an older base, longer replay, or a refusal) or
+  fail downloads (a refusal). An unreachable host or a probe error is "unknown"
+  and the download decides; an empty answer leaves the tape's candidates, as
+  before.
+- A target whose only snapshots are older than the bound now refuses up front;
+  before, the old plan installed that base and `PlanRecovery` then refused the
+  tail over the bound, after the install.
+
+Named residual, not fixed here: a restore from a chain root replays up to
+360,000 events (the chain gap), about 53 minutes at 113 events/s, far over the
+ten-minute request. The chain does not meet the restore budget. Old
+checkpoints become restorable in principle with this change, and in practice
+only when restore is an accepted act with a status (the next lane), which must
+also refuse up front when its replay estimate exceeds its budget.
+
+Open for the owner: the chain keeps up to three extra roots per computer, about
+9.6 to 14.4 GB of unique chunks on the paper (4.8 GB each; not measured). The
+host's free space on the paper belongs in the landing proof.
+
+### Round 3 structural note
+
+Twice the tests modelled production instead of running it. Round 2: the
+retention tests passed because they asserted a base existed, not that the
+guest's selection could reach it. Round 3: the probe tests passed because their
+fakes implemented `HasChunk` and production's `platformRestoreTape` did not.
+From now each restore-path claim in this lane has a test through the production
+wiring: the production tape type (built by `newPlatformRestoreTape`, the one
+constructor the runtime also uses), the real HTTP clients, a fake host that only
+speaks HTTP, and a compile-time assertion that the production type is a
+`ChunkProber`. The older `restoreTapeFake` has no `HasChunk`, as production did
+not; tests that need the probe use the production type.
