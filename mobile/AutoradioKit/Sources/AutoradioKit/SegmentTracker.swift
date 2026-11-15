@@ -54,6 +54,9 @@ public final class SegmentTracker: @unchecked Sendable {
     private let lock = NSLock()
     private var open: Open?
     private var userPaused = false
+    /// The segment last closed as failed or finished: its later blocks (the rest of a failed segment, a replay of a finished one) report
+    /// nothing, until a block of another segment begins or the document is replaced.
+    private var closedMark: (doc: String, seg: String)?
     private var observers: [@Sendable (PlaybackEvent) -> Void] = []
     private let now: @Sendable () -> Date
 
@@ -77,7 +80,10 @@ public final class SegmentTracker: @unchecked Sendable {
         if o.pending > o.lastBlock { o.lastBlock = o.pending; out.append(event(.blockBegan, o)) }
     }
     private func close(_ kind: PlaybackKind, into out: inout [PlaybackEvent]) {
-        if let o = open, o.announced { out.append(event(kind, o)) }
+        if let o = open {
+            if o.announced { out.append(event(kind, o)) }
+            if kind == .failed || kind == .finished { closedMark = (o.docID, o.segment.id) }
+        }
         open = nil
     }
 
@@ -87,6 +93,10 @@ public final class SegmentTracker: @unchecked Sendable {
         lock.lock()
         if let si = doc.segmentIndex(containingBlock: unit) {
             let seg = doc.segments[si]
+            if let m = closedMark {
+                if m.doc == doc.id, m.seg == seg.id { lock.unlock(); return }
+                closedMark = nil
+            }
             if let o = open, o.segment.id != seg.id || o.docID != doc.id {
                 close(o.docID != doc.id ? .superseded : (si > o.index ? .skipped : .rewound), into: &out)
             }
@@ -96,8 +106,9 @@ public final class SegmentTracker: @unchecked Sendable {
             o.pending = max(o.pending, block)
             if !userPaused { announce(&o, into: &out) }
             open = o
-        } else if open != nil {
-            close(.superseded, into: &out)                                     // moved to a block that belongs to no segment
+        } else {
+            closedMark = nil
+            if open != nil { close(.superseded, into: &out) }                  // moved to a block that belongs to no segment
         }
         lock.unlock()
         deliver(out)
@@ -150,7 +161,7 @@ public final class SegmentTracker: @unchecked Sendable {
     /// The player was given another document.
     public func documentReplaced() {
         var out: [PlaybackEvent] = []
-        lock.lock(); close(.superseded, into: &out); lock.unlock()
+        lock.lock(); close(.superseded, into: &out); closedMark = nil; lock.unlock()
         deliver(out)
     }
 }
