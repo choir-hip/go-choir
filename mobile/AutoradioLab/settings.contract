@@ -64,7 +64,7 @@ component SectionLabel
   props
     label: string
   view
-    text label font-family=th.fontUi font-size=tx.sizeMeta font-weight=700 color=th.accent2 text-transform="uppercase" margin-top=10
+    text label font-family=th.fontUi font-size=tx.sizeMeta font-weight=700 letter-spacing=0.9 color=th.muted text-transform="uppercase" margin-top=10
 
 component Hairline
   inject
