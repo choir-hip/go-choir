@@ -14,7 +14,7 @@
 //   ob-topics, ob-explainer, edit-edition, edit-edition-done, edit-edition-link, edit-edition-retry, edit-edition-leave, ob-topic-<label>, ob-topic-open-<label>, ob-trow-<row key>, ob-topic-input, ob-topic-add, ob-selection, ob-talk, ob-topics-done, ob-demo, ob-demo-say, ob-wait-slot, ob-writing-line,
 //   ob-edition-retry, ob-continue-anyway, ob-edition, ob-edition-open, ob-start-radio, firstrun-card, firstrun-open.
 use Theme, ChoirAuth, Onboarding from "@choir/autoradio"
-use Card, PaperCard, PageScroll, Btn from "./ui.contract"
+use Card, PaperCard, PageScroll, Btn, ListGroup, Hairline, SelectMark, PageHeader from "./ui.contract"
 use Mark from "./mark.contract"
 use VoiceStep from "./voice.contract"
 
@@ -120,32 +120,18 @@ component SetupRowItem
               button press=obFallback(stage) testId=`ob-fallback-${stage}` appearance="none"
                 Btn(label="Use the fallback", primary=false, wide=false)
 
-// One topic: a pill the reader taps to select, and taps again to deselect. A selected pill is filled with the accent; a category with
-// only some of its subtopics picked ("partial") has the accent ring and text. The border is the same width in every state and
-// nothing is added or removed on selection, so selecting never changes the chip's size or anything's position.
-component TopicChip
-  inject
-    th: Theme
-    obToggleTopic: action
-  props
-    label: string
-    selected: bool
-    partial: bool
-  derive chipLabel = partial ? `${label}, some inside picked` : label
-  view
-    button press=obToggleTopic(label) testId=`ob-topic-${label}` role="radio" aria-checked=selected aria-label=chipLabel appearance="none" flex-shrink=0
-      row padding="10px 14px" border-radius=th.radiusPill align-items="center" justify-content="center" min-height=44
-        background-color=(selected ? th.accent : th.paper2) border-width=2 border-style="solid" border-color=((selected or partial) ? th.accent : th.rule)
-        text label font-family=th.fontUi font-size=15 font-weight=600 color=(selected ? th.onAccent : (partial ? th.accent : th.fg))
-
-// One line of the topic tree. A category is a row: the disclosure control at the left edge (it opens and closes; it does not select),
-// then the chip (it selects), then a quiet note ("2 picked"). A subtopic sits indented beneath its category behind a vertical rule and an
-// elbow; one that sits under several categories shows "also in <the others>" and lights up under all of them, because it is one topic.
-// Opening and closing moves what is below, gently (not with Reduce Motion); selecting moves nothing.
+// One line of the topic tree, drawn as a grouped list (design system: ui.contract). A category is a row 52 tall with ONE left edge: the
+// disclosure chevron at the leading edge (a 48 by 52 tap target; it opens and closes, it does not select), the name as text, a quiet
+// count of what inside is picked, and the selection mark at the trailing edge (the row is the tap target that selects). A subtopic sits
+// under its category (48 tall) beside a hairline guide; one that sits under several categories says "also in <the others>" under its name
+// and lights up under all of them, because it is one topic. Unselected rows are plain; selected rows carry the accent mark and a faint wash;
+// "partial" (some inside picked) is the accent ring with a dash and a fainter wash. Only colour changes on a pick: the mark, the row and the
+// text keep their size, so selecting never moves anything. Opening and closing moves what is below, gently (not with Reduce Motion).
 component TopicRowItem
   inject
     th: Theme
     obExpandTopic: action
+    obToggleTopic: action
   props
     rowId: string
     label: string
@@ -155,33 +141,47 @@ component TopicRowItem
     expandable: bool
     expanded: bool
     note: string
+    first: bool
   derive discLabel = expanded ? `Close ${label}` : `Open ${label}`
-  derive discGlyph = expanded ? "▾" : "▸"
+  derive pickLabel = partial ? `${label}, some inside picked` : label
+  derive markState = selected ? "on" : (partial ? "partial" : "off")
+  derive wash = selected ? 0.12 : (partial ? 0.06 : 0)
+  derive sub = kind == "sub"
+  derive rowH = sub ? 48 : 52
   view
     column width="100%"
       if kind == "yoursHead"
-        text "Yours" testId="ob-topics-yours" font-family=th.fontUi font-size=13 color=th.muted margin-top=12
-      if kind == "category" or kind == "yours"
-        row align-items="center" gap=4 min-height=52 width="100%" testId=`ob-trow-${rowId}`
-          if expandable
-            button press=obExpandTopic(label) testId=`ob-topic-open-${label}` appearance="none" aria-label=discLabel width=44 height=44
-              row width=44 height=44 align-items="center" justify-content="center"
-                text discGlyph font-family=th.fontUi font-size=18 color=th.muted
-          if expandable == false
-            box width=44 height=44
-          TopicChip(label=label, selected=selected, partial=partial)
-          text note font-family=th.fontUi font-size=12 color=th.muted flex=1 min-width=0 margin-left=6
-      if kind == "sub"
-        row min-height=52 width="100%" align-items="stretch" padding="0px 0px 0px 22px" testId=`ob-trow-${rowId}`
-          animation=(th.reducedMotion ? "none" : "obReveal 220ms ease-out")
-          box width=2 background-color=th.rule
-          row align-items="center" flex=1 min-width=0
-            box width=16 height=2 background-color=th.rule
-            box width=8 height=2
-            TopicChip(label=label, selected=selected, partial=false)
-            text note font-family=th.fontUi font-size=12 color=th.muted flex=1 min-width=0 margin-left=6
+        text "Yours" testId="ob-topics-yours" font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted padding="16px 16px 6px 16px"
+      if kind != "yoursHead"
+        if first == false
+          Hairline(indent=48)
+        row align-items="center" width="100%" min-height=rowH position="relative" testId=`ob-trow-${rowId}`
+          animation=((sub and th.reducedMotion == false) ? "obReveal 220ms ease-out" : "none")
+          box position="absolute" inset=0 pointer-events="none" background-color=th.accent opacity=wash transition=`opacity ${th.motionFastMs}ms ease`
+          // the leading column: the chevron of a category that opens, the guide of a subtopic, or nothing
+          if kind == "category" and expandable
+            button press=obExpandTopic(label) testId=`ob-topic-open-${label}` appearance="none" aria-label=discLabel width=48 height=52
+              row width=48 height=52 align-items="center" justify-content="center"
+                row width=14 height=14 align-items="center" justify-content="center" rotate=(expanded ? 90 : 0) transition=(th.reducedMotion ? "none" : `rotate ${th.motionFastMs}ms ease`)
+                  image "symbol:forward-chevron" color=th.muted
+          if kind == "category" and expandable == false
+            box width=48 height=rowH
+          if kind == "yours"
+            box width=16 height=rowH
+          if sub
+            row width=48 align-self="stretch" justify-content="center"
+              box width=1 align-self="stretch" background-color=th.rule
+          button press=obToggleTopic(label) testId=`ob-topic-${label}` role="radio" aria-checked=selected aria-label=pickLabel appearance="none" flex=1 min-width=0
+            row align-items="center" gap=12 width="100%" box-sizing="border-box" min-height=rowH padding="0px 16px 0px 0px"
+              column flex=1 min-width=0 gap=1 align-items="flex-start"
+                text label font-family=th.fontUi font-size=(sub ? 16 : 17) font-weight=(sub ? 400 : 600) color=th.fg text-align="left"
+                if sub and note != ""
+                  text note font-family=th.fontUi font-size=13 color=th.muted text-align="left"
+              if sub == false and note != ""
+                text note font-family=th.fontUi font-size=13 color=th.muted
+              SelectMark(state=markState)
 
-// The topic tree with everything that goes with it: the explainer, the tree, a field to type your own, the selection, "Talk to it".
+// The topic tree with everything that goes with it: the one line of explanation, the tree, a field to type your own, the selection, "Talk to it".
 // The ONE implementation: the first-run topics step and the edit page (Settings, the paper, the launcher) both render this. The picks
 // save as they are made; what Continue or Done does is the caller's.
 component TopicPicker
@@ -196,13 +196,11 @@ component TopicPicker
   derive talkLabel = ob.talking ? "Stop talking" : "Talk to it"
   derive addLabel = ob.talking ? `Listening. ${ob.voiceHint}` : ob.voiceHint
   view
-    column width="100%" gap=14
-      Card(level=1, testId="ob-explainer", minHeight=0)
-        column padding=16 gap=8
-          text ob.explainer font-family=th.fontRead font-size=17 line-height=1.45 color=th.fg
-      column width="100%" testId="ob-topics"
-        for r in ob.tree key=r.key
-          TopicRowItem(rowId=r.key, label=r.label, kind=r.kind, selected=r.selected, partial=r.partial, expandable=r.expandable, expanded=r.expanded, note=r.note)
+    column width="100%" gap=16
+      text "Tap a topic to pick it. Open one to see what is inside; a topic that fits under several says “also in”." testId="ob-explainer" font-family=th.fontUi font-size=15 line-height=1.4 color=th.muted
+      ListGroup(testId="ob-topics")
+        for r, i in ob.tree key=r.key
+          TopicRowItem(rowId=r.key, label=r.label, kind=r.kind, selected=r.selected, partial=r.partial, expandable=r.expandable, expanded=r.expanded, note=r.note, first=(i == 0))
       row gap=8 align-items="center" width="100%"
         input value=obTopicText input=editObTopic submit=obAddTopic placeholder="Add your own topic" aria-label="Add your own topic" testId="ob-topic-input" enterkeyhint="done" flex=1 min-width=0 min-height=44
           font-family=th.fontRead font-size=17 color=th.fg padding="8px 12px" border-width=1 border-style="solid" border-color=th.rule border-radius=th.radiusControl background-color=th.paper2
@@ -210,12 +208,10 @@ component TopicPicker
             color=th.muted
         button press=obAddTopic testId="ob-topic-add" appearance="none" aria-label="Add this topic"
           Btn(label="Add", primary=false, wide=false)
-      Card(level=2, testId="ob-selection", minHeight=0)
-        column padding=16 gap=6
-          text ob.selectionLine font-family=th.fontRead font-size=17 line-height=1.4 color=th.fg
+      text ob.selectionLine testId="ob-selection" font-family=th.fontUi font-size=15 line-height=1.4 color=th.muted
       button press=obTalk testId="ob-talk" appearance="none" aria-label=talkLabel
         Btn(label=talkLabel, primary=false, wide=true)
-      text addLabel font-family=th.fontUi font-size=14 color=th.muted
+      text addLabel font-family=th.fontUi font-size=13 color=th.muted
       if ob.demo
         Card(level=1, testId="ob-demo", minHeight=0)
           column padding=14 gap=8
@@ -240,9 +236,7 @@ component EditEditionPage
   derive failed = ob.editing and ob.editionStatus == "failed"
   view
     PageScroll(id="edit-edition")
-      column gap=4 width="100%"
-        text "My edition" role="heading" aria-level=1 font-size=30 font-weight=700 line-height=1.1 testId="page-title" font-family=th.fontRead
-        text "These topics shape the paper. Change them any time." testId="edit-edition-line" font-family=th.fontUi font-size=15 color=th.muted
+      PageHeader(title="My edition", subtitle="These topics shape the paper. Change them any time.", subId="edit-edition-line")
       if busy
         Card(level=2, testId="edit-edition-writing", minHeight=0)
           column padding=18 gap=8 align-items="center"
