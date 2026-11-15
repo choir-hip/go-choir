@@ -75,14 +75,18 @@ final class StretchDecoderTests: XCTestCase {
     func testF03_TheFixtureStretch_PhoneDropsOnlyWhatItCannotSpeak() throws {
         let f = try LearningFixtures.json("stretch_lines.json")
         let lines = try XCTUnwrap(f["segment_lines"] as? [[String: Any]])
-        XCTAssertEqual(lines.count, 30, "the fixture changed: recount")
+        XCTAssertEqual(lines.count, 32, "the fixture changed: recount")
         var d = StretchDecoder()
         var got: [IncomingSegment] = []
         for l in lines { got += segs(d.feed(segmentLine(try XCTUnwrap(l["line"] as? [String: Any])) + "\n")) }
         got += segs(d.finish())
         XCTAssertEqual(d.droppedCount, 2, "an unknown kind (weather) and an empty text; the server validates the rest")
-        XCTAssertEqual(got.count, 28)
+        XCTAssertEqual(got.count, 30)
         XCTAssertFalse(got.contains { $0.kind == "weather" })
+        // a padded title is trimmed; an empty one (the server drops it) is spoken here under the kind's plain label
+        let titles = got.compactMap { SegmentPrep.prepare($0)?.segment.title }
+        XCTAssertFalse(titles.contains { $0 != $0.trimmingCharacters(in: .whitespaces) || $0.isEmpty })
+        XCTAssertTrue(titles.contains("A quiet harbour")); XCTAssertTrue(titles.contains("Story"))
         XCTAssertTrue(got.allSatisfy { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
         // every kept fixture line becomes a segment with one block ("The harbour reopened today." and the like)
         XCTAssertTrue(got.allSatisfy { SegmentPrep.prepare($0)?.blocks.count == 1 })

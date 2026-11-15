@@ -1,5 +1,5 @@
 {
- "about": "Stretch lines for the validators of design 3.2, each with a valid and an invalid case. `input` is what the call listed. Hand-written against the design: no code runs them until station L1 (the programme handler). `valid` is whether the line is kept; `drop_reason` is descriptive only. Segment lines are processed first, then lesson lines. A run is consecutive: three invalid segment lines in a row end the call, three scattered ones do not; an invalid lesson line never counts toward the run.",
+ "about": "Stretch lines for the validators of design 3.2, each with a valid and an invalid case. `input` is what the call listed. `input` is a validator harness, not the request shape of design 12.7 (candidates there are objects with title, dek, route and version). Hand-written against the design: no code runs them until station L1 (the programme handler). `valid` is whether the line is kept; `drop_reason` is descriptive only. Segment lines are processed first, then lesson lines. A run is consecutive: three invalid segment lines in a row end the call, three scattered ones do not; an invalid lesson line never counts toward the run.",
  "input": {
   "candidates": [
    "pub:harbour-1",
@@ -260,6 +260,37 @@
     "caused_by": "lesson:L1"
    },
    "drop_reason": "title control character"
+  },
+  {
+   "name": "title padded with spaces is trimmed",
+   "validator": "title one line, no control character",
+   "valid": true,
+   "line": {
+    "kind": "story",
+    "title": "  A quiet harbour  ",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "lesson:L1"
+   }
+  },
+  {
+   "name": "title empty",
+   "validator": "title non-empty (the server refuses an empty title: add it to 3.2)",
+   "valid": false,
+   "line": {
+    "kind": "story",
+    "title": "  ",
+    "text": "The harbour reopened today.",
+    "cites": [
+     "pub:harbour-1"
+    ],
+    "p_heard": 0.7,
+    "caused_by": "lesson:L1"
+   },
+   "drop_reason": "empty title"
   },
   {
    "name": "title over 200 bytes",
