@@ -91,6 +91,22 @@ Fixtures: `mobile/fixtures/learning/` (from the server builder, `lane/arl-l1a`).
 - `SplitBlocks` works on scalars with Go's `unicode.IsSpace` set, so it matches `calibration.SplitBlocks`. `fixtures/learning/blocks_unicode.json` holds 12 cases whose outputs came from running that Go function; it is a separate file so the L1a lane's `blocks.json` is not edited.
 - Left as is: `looksLikeRef` turns a one-word title such as "Note:important" into the kind's label (noted at the function). Some tests still wait with short sleeps and polling.
 
+### Review round 2 repairs (tests in `ProgrammePlayerRepair2Tests.swift`, written first)
+
+- B1 `resumeAt` (and a pending programme) are cleared by `setDocument`, which `speakText` uses, so a text read after a dry programme starts at its first paragraph.
+- S1 the tracker's closed marker holds the unit it closed on and swallows only a later unit of the same segment; a unit at or before it is a seek (previous, rewind, jump back, play at the end) and is reported as a new play (`segmentBegan`, `blockBegan`, `finished`).
+- S2 sign-out sets `loading` false. S3 titles lose only bidi controls (U+202A to U+202E, U+2066 to U+2069, U+200E, U+200F, U+061C), U+200B and U+FEFF; ZWJ and ZWNJ stay. The server's title rule (design 3.2: one line, no control character, 200 bytes) is about control characters only, so the phone strips more than the server checks; the two do not disagree, the phone is stricter on what it shows.
+- The 8-second first-segment deadline no longer loses a late programme: the article plays, the stretch is still followed, and `ProgrammePlayer.handOver` swaps it in at the next block boundary of the article (never mid-sentence); later segments join the waiting document.
+- Where per-document state lives and dies. `ProgrammePlayer`: `blockIndex`, `resumeAt`, `pendingDocument` are set by `setDocument` (also reached from `speakText` and the queue), `resumeAt` also by `start(at:)`; `pendingDocument` also by the swap itself. `SegmentTracker`: the open segment and the closed marker are cleared by `documentReplaced()` (from `setDocument`), and the marker by a block of another segment or of no segment. `ChoirApp`: the load token and `followTask` are replaced by every `loadProgramme` and by `signOut`, which also sets `loading` false.
+
+### Residuals (known, left as they are)
+
+- An `id:` or `retry:` line between `event:` and `data:` flushes the pending event early and the data line dispatches it again (a repeated `done` or `error` is harmless).
+- `appendSegment` can see `loop == nil` in the microseconds inside `start(at:)` between clearing the loop and storing the new task; its `start(at: old)` could then skip blocks a just-pressed skip was about to play.
+- A stale open (an older load) is not cancelled: it runs to its first segment or the deadline and may fetch the article for nothing; its result is dropped by the load token.
+- The slow relaunch (round 1 drive): a temporary probe (not committed) timed the path in the simulator on two launches, one fresh and one with kept storage, in demo mode: `refresh` to `loadProgramme` returned in 0.04 s, the request and first segment in 0.01 s. So the stretch path itself is not slow, and the more than 9 seconds seen earlier did not reproduce; the Mac's load average was in the tens to the nineties then, which is the only explanation left (not proven). Against a real computer the latency is unmeasured until L1 deploys the route; the deadline plus the hand-over covers a slow one.
+- The deadline covers the request and the first segment, not the article fetch after it. Some tests wait with short sleeps and polling.
+
 ## Acknowledgement timing (`ackTiming`): ways it can fail (written before the code)
 
 `LabConfiguration.ackTiming` is `immediate` (default) or `afterSystem1`. Measured on staging, the acknowledgement
