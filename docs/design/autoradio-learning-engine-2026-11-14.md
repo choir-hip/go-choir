@@ -154,11 +154,15 @@ A retry is a new call with a new `request_id` and a new stretch id; it never
 re-streams a claimed segment id, so the hash tag and the text the phone holds
 cannot diverge. A request record (12.2) maps the `request_id` to its stretch id, written with the stretch start; a replay of the same `request_id` returns that stretch from its segment records and makes no model call. Every claim write compares the stored claim with `SameClaim` after the append, as the generic handler does **[code: `handler.go:213-226`]**; a mismatch ends the call with an error and nothing is streamed.
 
-The **stretch index** (12.2) has the claim ids as `related_ids` and is written
-at `done`. A stretch whose call never completes has a start record and no
-index, and keeps its claims and texts for the segments already streamed; those
-settle as usual. A stretch's forecasts are listed by the tag query (4.3), never
-from the index.
+The **stretch index** (12.2) has the claim ids as `related_ids` and a `status`
+(12.2). The handler writes it whenever it itself ends the call, at `done` or at
+another ending (12.2 lists them); a reader must never treat "an index exists"
+as "completed" and must read `status`. A stretch whose process stops, or whose
+claim write fails, has a start record and no index, and keeps its claims and
+texts for the segments already streamed; those settle as usual. A replay of a
+`request_id` streams only the leading run of segment records whose claim exists
+(a content segment is never streamed without its forecast, 3.4). A stretch's
+forecasts are listed by the tag query (4.3), never from the index.
 
 ### 3.4 The order is the guarantee
 
@@ -562,12 +566,21 @@ plus the word after the dot in `record_kind`. The L1a test iterates this table.
 | `autoradio.settlement` | `<claim id>:settle:rule:autoradio_heard` | heard handler only | notebook, input builder, `calibration.Summary` |
 | `autoradio.stretch_start` | `autoradio-stretch-start:<stretch_id>` | programme handler, before any claim | notebook |
 | `autoradio.segment` | `autoradio-seg:<stretch_id>/<segment_id>` | programme handler, before its claim | heard handler, notebook |
-| `autoradio.stretch` (the index) | `autoradio-stretch:<stretch_id>` | programme handler at `done` | notebook |
+| `autoradio.stretch` (the index) | `autoradio-stretch:<stretch_id>` | programme handler when it ends the call itself, with a `status` (below); not after a crash or a failed claim write | notebook |
 | `autoradio.air` | `autoradio-air:<event_id>` | heard handler only (it carries the route and the actor) | heard handler, notebook, input builder, dedupe |
 | `autoradio.conflict` | `autoradio-conflict:<event_id>` (the later event's id) | heard handler only | notebook |
 | `autoradio.lesson` | `autoradio-lesson:<lesson_id>` | programme handler, from validated lines | notebook, input builder |
 | `autoradio.strike`, `autoradio.clear` | `autoradio-strike:<note_id>`, `autoradio-clear:<note_id>` | notebook route | input builder, notebook |
 | `autoradio.note` (a correction) | `autoradio-note:<note_id>` | notebook route | input builder, notebook |
+
+The index's `status` is one of: `completed` (the model ended, or the segment
+cap of 12.7 ended the stretch; the replay answers `done`); `invalid_run` (three
+invalid lines in a row); `failed` (the model failed after a segment, every
+pool member refused, or every member ended cleanly with no valid segment); `deadline` (the wall-clock or the idle deadline of 12.7).
+Its refs also carry `dropped_count` (exact), `dropped` (the first 100 reasons)
+and `client_gone` (`true` when a write to the client failed, so a reader can tell
+"never delivered" from "delivered, not played"). Only `completed` is a finished
+stretch.
 
 ### 12.3 Air events: fields, types, checks, result codes
 
@@ -676,6 +689,10 @@ its first 32 digits with the tag. The hash-mismatch fixture pins this.
 | Marked cases in the input | the last 40 forecasts |
 | Active lessons in the input | at most 30 |
 | Lesson text | one line, at most 300 characters |
+| Instruction or note text in the prompt | cut to at most 1,000 bytes on a rune boundary, then marked `[truncated]` (the prompt line is at most 1,012 bytes) |
+| Segments per stretch | at most 30; a further valid line is dropped with the reason "segment cap 30 reached: the stretch ended" and the stretch ends as `completed` (a bound on what the model can cause, not on calls; the prompt asks for 10 to 15) |
+| Programme call deadlines | 120 seconds of wall clock for the whole walk of the pool, and 30 seconds idle between two deltas (from the first); both end the call as `deadline`. Invented numbers: deadlines, not limits on model calls |
+| Segment kinds in station L1 | `story`, `update`, `headlines`, `ident`, `bridge`; `mail`, `podcast_note`, `answer` and `result` are dropped until their stations |
 
 Prompt bounds are not limits on model calls; whether they fit the model's
 useful context is open (13).
@@ -690,6 +707,11 @@ texts of 12.3, and a title with a control character, with the expected codes
 and settlements.
 
 ## 13. Not determined
+
+- A candidate's text can steer the model's `caused_by` to a real listed ref (an
+  instruction or a lesson that exists): a forged cause on a valid claim, which
+  skews the tally and the causal base rate. It cannot be validated by the
+  handler; it is a residual of putting world text in the input.
 
 - Whether the guest can read the front list itself. Plan A sends `candidates`
   from the phone, so nothing waits on it.

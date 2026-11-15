@@ -187,7 +187,7 @@ next member.
 
 | Pool | River's place |
 |---|---|
-| Autoradio (fast turn) | first; Bedrock Haiku 5.5 is the fallback |
+| Autoradio (fast turn, role `autoradio`, reasoning off; and the programme call, role `autoradio_programme`, reasoning `low`) | first; Bedrock Haiku 5.5 is the fallback |
 | default | fallback only, one part in ten of the paid tail |
 | self-development | fallback only |
 

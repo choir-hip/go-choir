@@ -194,6 +194,9 @@ type APIHandler struct {
 	// operatorReceipt, when set, records a platform operator's receipt in
 	// place of the runtime's tape append (a test seam; operator_receipt.go).
 	operatorReceipt func(ctx context.Context, ownerID string, kind types.EventKind, payload map[string]any) (string, error)
+	// autoradioLedgerOverride, when set, stands in for the runtime's store in
+	// the programme call (a test seam: a decorator that refuses a claim write).
+	autoradioLedgerOverride autoradioLedger
 }
 
 // NewAPIHandler creates an APIHandler for the given runtime.
