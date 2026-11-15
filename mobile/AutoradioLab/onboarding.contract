@@ -127,8 +127,7 @@ component TopicChip
     button press=obToggleTopic(label) testId=`ob-topic-${label}` role="radio" aria-checked=selected aria-label=label appearance="none" flex-shrink=0
       row padding="10px 14px" border-radius=th.radiusPill align-items="center" justify-content="center" min-height=44 gap=6
         background-color=(selected ? th.accent : th.paper2) border-width=1 border-style="solid" border-color=(selected ? th.accent : th.rule)
-        if selected
-          image "symbol:checkmark" color=th.onAccent
+        // No checkmark: a mark that appears on selection widens the chip and reflows the grid. The fill says selected.
         text label font-family=th.fontUi font-size=15 font-weight=600 color=(selected ? th.onAccent : th.fg)
 
 component OnboardingPage
