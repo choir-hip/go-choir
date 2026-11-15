@@ -303,7 +303,9 @@ defect (a dropped or duplicated page, a wrong size, a wrong file), not a mix of
 two snapshots inside one transaction, which cannot happen. Things produced at a
 different instant than the copy are unchanged: the partitions (read after,
 `snapshot.go:598-606`), `CreatedAt`, the manifest time, `RegisterSnapshotRoot` and
-the append (`snapshot.go:341`, `:365`).
+the append (`snapshot.go:341`, `:365`). `FileTreeRoot` is the one record field that
+could name yet another instant; it is unset in production (the producer's
+`snapshot.Config` sets no `FileTreeRoot`, `snapshot_producer.go:795-828`).
 
 The witness is then `LiveStoreWitness(ctx, copyDB)`, the code `VerifySnapshotFile`
 runs on an installed base (`restore_snapshot.go:243-246`, `:203-216`).
@@ -356,8 +358,10 @@ streak for a snapshot nobody wanted):
    deadline value: `context.WithTimeout(context.WithoutCancel(ctx),
    cfg.MaxDuration)` (a fresh span of that length from the hook's start, because
    the deadline of the run may already have passed in the cases the hook exists
-   for; no new constant; unbounded only when `MaxDuration` is zero, i.e. in a test
-   configuration). The caller cannot cancel it, the deadline can. On timeout the
+   for; no new constant). When `MaxDuration` is zero the hook gets no deadline at all
+   (the same `if cfg.MaxDuration > 0` guard `capture` uses, `snapshot.go:484-488`;
+   `WithTimeout(ctx, 0)` would be expired at once, which is wrong); production never
+   passes zero (`snapshot_producer.go:80`). The caller cannot cancel it, the deadline can. On timeout the
    hook logs and returns; it never fails the attempt (the checkpoint is best
    effort, as `CheckpointAfterLongRead` already treats an error, `wal_bound.go:94-98`).
    The goroutine is started after `PinTime` has been taken, so neither its start
@@ -442,8 +446,23 @@ S    = page_count x page_size from the read pool, read after the token and clean
   available before staging; none re-measured here, and the staged size is
   inferred): `free` about 43.9 GB against `need` 41.7 GB, admitted by about 2 GB;
   a staged copy a little larger, or a store a little larger, refuses.
-- **Capture and compaction exclude each other for the length of the other's copy**
-  (2.6): a due capture, including a replay-triggered one that protects the
+  **Floor against WAL growth during the pin.** Admission is `S + floor`, with no
+  WAL term; while the pin is open the WAL grows (the code's 2 MiB/s,
+  `snapshot_producer.go:120-124`, an unmeasured figure), and the 64 MiB guard
+  aborts the copy once `free` falls under the floor. So the band
+  `[S + floor, S + floor + WAL growth over the copy)` is **admitted and then
+  aborted**, not refused: the copy time is lost, nothing is uploaded, the scratch is
+  removed, and the producer backs off (`snapshotBackoffWait`). On the figures above
+  (a 2.15 GB margin) that is a copy that runs longer than about 18 minutes at
+  2 MiB/s, i.e. an effective copy rate under about 37 MB/s for S = 39.6 GB. This
+  floor is in addition to step 8's two rates. No WAL term is added to admission
+  (round 1 deleted the headroom on purpose: it protected an upload abort that no
+  longer exists); the abort band is stated instead and is part of R4.
+- **Capture and compaction exclude each other.** The token's scope is one
+  statement: **the whole of `evaluate` after step 1 of 2.4** (it is released by
+  `defer`). So a compaction can wait for a capture's pin, witness, upload, hook,
+  partitions and append; and a capture is refused for a compaction's whole
+  `prepareCompactCopy` (2.6): a due capture, including a replay-triggered one that protects the
   recovery bound, is refused while compaction holds the token, which is up to its
   own copy budget of 90 minutes plus its check (`compact.go:60`, `:343-385`); and
   compaction waits while a capture holds it. Refusals are counted for status only
@@ -495,7 +514,9 @@ idempotent (a `sync.Once`) and both callers `defer` it at acquisition.
 - The state store's read transaction: head read, page count, partition list and
   copy, plus the inline hash. This is the pin the lane shortens, from today's
   witness plus stream to the copy. The stages are serial on one goroutine (read, hash, buffered write, sync), so
-  its per-byte time is the sum of theirs, not the slowest (build VM: 450 MB/s hash, 560 MB/s write+fsync, 2.1 GB/s read;
+  its per-byte time is the sum of theirs, not the slowest (one run each of a throwaway Go program on `choir-agents`, 2026-11-15, 2 GiB, the
+  program not kept: 450 MB/s SHA-256 (4.57 s), 560 MB/s write plus fsync (3.65 s),
+  2.1 GB/s read (0.94 s, page cache warm);
   a guest is unmeasured). WAL growth is proportional to the pin; the set-aside
   design's cited growth (2.6 to 3.7 GB over a 37-minute capture) is a different
   rate from the code's 2 MiB/s (`snapshot_producer.go:120-124`), and neither is
@@ -507,7 +528,9 @@ idempotent (a `sync.Once`) and both callers `defer` it at acquisition.
   (round 1: the proof does not need it).
 - The partition hold (`gcMu.RLock`) lasts from before the transaction to the end
   of `capture`, as today (`snapshot.go:528-531`); partition GC waits for the
-  whole capture, as it already did.
+  whole capture, as it already did, and now also for the read-released hook,
+  because `capture` joins it before returning: up to `MaxDuration` longer than
+  today in the worst case (the hook is bounded by a fresh `MaxDuration`).
 - After the transaction nothing of the capture pins the state WAL. The PASSIVE
   checkpoint runs at release (2.4 step 5); ordinary autocheckpoints continue.
   The file keeps its high-water size until a writer restarts the WAL and
@@ -860,7 +883,7 @@ the deploy:
    growth of the last old capture. The 0.5, 1.5x and 0.8 of step 5 are proof
    thresholds chosen by the author, not runtime limits and not measured.
 8. **Precondition of the deploy, recorded before it:** the build-VM bench on a
-   synthetic 10 GB store (the VM has about 16 GB free) reports the copy rate in
+   synthetic store reports the copy rate in
    MB/s of the writer as built (read, inline hash, buffered write, sync). Two
    acceptance rates, from the code's own numbers, computed per S at the time:
    completion, `rate >= S / (MaxDuration - witness - upload)` (with the 90 minutes
@@ -869,13 +892,24 @@ the deploy:
    12.8 MB/s; inputs unverified), below which a capture never completes; and no-worse
    pin, `rate >= S / (pre-deploy read transaction of that computer)` (about 17.5
    MB/s on the same inputs), below which a capture completes with a longer pin than
-   today. The bench is on a build VM, not a guest disk; a pass is necessary, not
-   sufficient.
+   today; a third rate is the abort band's (2.5). The bench needs `S_bench` (the
+   store) plus `S_bench` (the scratch) plus the 2 GiB floor free on its volume: the
+   10 GB first named here cannot run on a VM with about 16 GB free (10 + 10 + 2.1 =
+   22.1 GB), so the bench size is `(free - 2.1 GB) / 2` rounded down, and the rates
+   are the bench's MB/s applied to the target computer's own S, not to the
+   bench's. The bench is on a build VM, not a guest disk; a pass is necessary, not
+   sufficient. Its results are recorded in section 9.
 9. **Rollback trigger:** if the largest computer's first capture after the deploy
-   fails, or its `last_pin_seconds` exceeds its pre-deploy read transaction, revert
-   (the record is unchanged and the revert restores today's behaviour).
+   fails, is refused (R4's band included), is admitted and aborted, or its
+   `last_pin_seconds` exceeds its pre-deploy read transaction, then either revert
+   (the record is unchanged and the revert restores today's behaviour) or record R4
+   as the result and stop: the owner's decision, made when the first outcome is
+   read, not a timer. A refusal produces no measurement, so it is itself the
+   outcome; the trigger does not wait for one.
 **Precommitted claim, re-stated so that it can fail** (entered in
-`docs/calibration/claude-ledger.md` at the landing, not before): on the largest
+`docs/calibration/claude-ledger.md` **before the deploy**, as the contract's
+"precommit, then score" requires; settle-by: the largest computer's first due
+capture after the deploy, or the owner's stop under step 9): on the largest
 computer's first capture after the deploy, `last_pin_seconds` is at most half of that
 computer's pre-deploy read transaction seconds recorded in step 1. Probability 0.5.
 It fails when the guest disk's effective copy rate is below about
@@ -906,7 +940,8 @@ Residuals (named, not solved here)
   The band: `free < S + floor` while `state.db.compact` sits beside the store
   (compaction stages "for the next planned restart", `compact.go:11-18`, and keeps
   it until one). On the set-aside design's unverified figures the margin is about
-  2 GB (2.5). Consequence: captures refuse (visible in `refusal`) until a planned
+  2 GB (2.5). Consequence: captures refuse, or are admitted and aborted in the band
+  of 2.5 (visible in `refusal` or in `last_detail`) until a planned
   restart consumes the staged copy or compaction's next pass drops it, and the tail
   grows meanwhile (R1's consequence). The d@e proof does not cover it. Default:
   accept; the capture never deletes `state.db.compact`. A drop-the-staged-copy
@@ -921,11 +956,15 @@ Residuals (named, not solved here)
   plus stream. Below the completion rate of proof step 8 a capture never completes
   (each attempt a pin of up to 90 minutes and nothing uploaded); between that rate
   and the no-worse rate it completes with a longer pin. The bench and the rollback
-  trigger of section 4 are the guards; no per-phase budget is added.
+  trigger of section 4 are the guards; no per-phase budget is added. The outer bound
+  of an attempt is not `MaxDuration`: the hook's fresh `MaxDuration` lets `Take`
+  return up to about twice `MaxDuration` after the pin starts in the worst case, and
+  `inFlight` (so a planned restart) waits that long.
 - **R6. A disk-image fork or VM checkpoint while the scratch exists** would carry it.
   `SnapshotInFlight` is read by restart-class paths only as far as I could verify
   (`planned_restart.go:567`, `clean_rebase.go:96`, `capsule_pause.go:247`,
-  `memory_cache_return.go:279`, `vmctl/owner_update.go:191`); whether a fork or
+  `memory_cache_return.go:279`; a `vmctl/owner_update.go:191` cite in an earlier
+  draft matches no reader in `internal` or `cmd` and is dropped); whether a fork or
   checkpoint consults it I did not establish. Default: named, not solved.
 - **R7. The digest covers write to upload, not write to witness.** A transient read
   corruption seen only by the witness is not detected by it. Remote; recorded.
@@ -999,7 +1038,7 @@ sound. Where a review and the code differ, the code is cited.
 
 | # | Finding | Disposition | Where |
 | --- | --- | --- | --- |
-| B1 | Token after cleanup and after measurement; compaction races | Adopted. Token first, then cleanup, then measure; held to scratch removal; refused token deletes nothing; compaction takes it before `removeSQLiteFiles(staging)` (`compact.go:267-269`) and holds to rename/remove; `removeSQLiteFiles` for sidecars | 2.4 steps 1-3 and 7, 2.6; failures 19, 20, 28 |
+| B1 | Token after cleanup and after measurement; compaction races | Adopted. Token first, then cleanup, then measure; held for the whole of `evaluate` after step 1 (round 2 corrected the first draft's "to scratch removal"); refused token deletes nothing; compaction takes it before `removeSQLiteFiles(staging)` (`compact.go:267-269`) and holds to rename/remove; `removeSQLiteFiles` for sidecars | 2.4 steps 1-3 and 7, 2.6; failures 19, 20, 28 |
 | B2 | `ReadReleased` only on the happy path; cancelled context | Adopted. Fires from the rollback closure once on every path (`snapshot.go:538-546`), with `context.WithoutCancel`; runs in its own goroutine so the witness does not wait; joined before `capture` returns | 2.4 step 5; failures 13, 14 |
 | B3 | Proof metric cannot fail; d@e small | Adopted. Primary metric is `last_pin_seconds`, independently timed; WAL growth per event; d@e is correctness only, size effect on the largest computer, read-only; claim restated | 2.2, 4 (two subsections); failure 12, 34 |
 | B4 | Boot cleanup after rebase/open/replay | Verified true in `internal/autoputer/run.go:213` (rebase), `:236` (open), `:786` (`rt.Start`), `:900-910` (replay). Scratch removal moved to the first boot step; `Start` second defence | 2.4 "Boot"; 2.8; failure 22 |
