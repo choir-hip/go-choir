@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -83,17 +84,44 @@ type CaptureWriteResponse = sourcegraph.CaptureWriteResult
 // CaptureBodyStore keeps capture bodies on host disk, addressed by sha256.
 type CaptureBodyStore struct {
 	root string
+	// reuseMu is the platform store's CAS reuse lock (Store.casReuseMu): the
+	// artifact collector re-checks and unlinks under it exclusively, so a
+	// write holds it shared. Nil only where no collector runs (tests that
+	// build a bare store).
+	reuseMu *sync.RWMutex
+}
+
+// newCaptureBodyStore builds the store for root; reuseMu is the platform
+// store's reuse lock, shared with the artifact collector.
+func newCaptureBodyStore(root string, reuseMu *sync.RWMutex) *CaptureBodyStore {
+	return &CaptureBodyStore{root: filepath.Clean(root), reuseMu: reuseMu}
 }
 
 // PutBody stores body under its hash and returns "sha256:<hex>". A body
-// already present is not rewritten; a new one is written to a temp file,
-// synced and renamed, so a crash never leaves a partial body under its hash.
+// already present is not rewritten, but its mtime is refreshed (under the
+// reuse lock, so the collector cannot unlink it between the check and the
+// touch); a new one is written to a temp file, synced and renamed, so a
+// crash never leaves a partial body under its hash.
 func (s *CaptureBodyStore) PutBody(body []byte) (string, error) {
 	sum := sha256.Sum256(body)
 	hash := hex.EncodeToString(sum[:])
 	path := s.path(hash)
+	if s.reuseMu != nil {
+		s.reuseMu.RLock()
+		defer s.reuseMu.RUnlock()
+	}
 	if _, err := os.Stat(path); err == nil {
-		return "sha256:" + hash, nil
+		// A reused body is new to the collector (artifact_gc.go): it reads
+		// the capture rows before this capture's row lands, so only the
+		// body's mtime says it is wanted again. A refresh that fails is an
+		// error: success would leave a row naming a collectable body.
+		now := time.Now()
+		if err := os.Chtimes(path, now, now); err == nil {
+			return "sha256:" + hash, nil
+		} else if !os.IsNotExist(err) {
+			return "", fmt.Errorf("capture body: refresh reused body: %w", err)
+		}
+		// Gone between the check and the touch (removed by hand): write it.
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return "", fmt.Errorf("capture body: %w", err)
@@ -152,7 +180,24 @@ func CaptureBodiesRoot(artifactsRoot string) string {
 
 // ConfigureCaptureBodies sets the host directory for capture bodies.
 func (h *ObjectGraphHandler) ConfigureCaptureBodies(root string) {
-	h.captureBodies = &CaptureBodyStore{root: filepath.Clean(root)}
+	var mu *sync.RWMutex
+	if og, ok := h.store.(*ObjectGraphStore); ok && og != nil && og.store != nil {
+		mu = &og.store.casReuseMu
+	}
+	h.captureBodies = newCaptureBodyStore(root, mu)
+}
+
+// ConfigureHostCaptureBodies is ConfigureCaptureBodies for the host process
+// (corpusd), where the artifact collector runs: it refuses, rather than
+// silently take no lock, when the handler's store has no CAS reuse lock to
+// share with the collector.
+func (h *ObjectGraphHandler) ConfigureHostCaptureBodies(root string) error {
+	og, ok := h.store.(*ObjectGraphStore)
+	if !ok || og == nil || og.store == nil {
+		return fmt.Errorf("capture bodies: the handler's store has no CAS reuse lock to share with the artifact collector")
+	}
+	h.captureBodies = newCaptureBodyStore(root, &og.store.casReuseMu)
+	return nil
 }
 
 // CaptureBodyStore returns the configured capture body store, or nil.

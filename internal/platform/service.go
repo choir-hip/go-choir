@@ -137,7 +137,7 @@ func NewService(store *Store, artifactsRoot, signingKeyPath string) *Service {
 	svc := &Service{
 		store:         store,
 		artifactsRoot: filepath.Clean(artifactsRoot),
-		captureBodies: &CaptureBodyStore{root: CaptureBodiesRoot(artifactsRoot)},
+		captureBodies: newCaptureBodyStore(CaptureBodiesRoot(artifactsRoot), &store.casReuseMu),
 	}
 	svc.related.init()
 	store.SetArtifactsRoot(artifactsRoot)
