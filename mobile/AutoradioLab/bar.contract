@@ -42,8 +42,10 @@ component BarGlyph
     on: bool
   view
     column align-items="center" justify-content="center" gap=1 width=52 height=48
-      row width=34 height=28 border-radius=14 align-items="center" justify-content="center"
+      row width=36 height=30 border-radius=15 align-items="center" justify-content="center" box-sizing="border-box"
+        border-width=1 border-style="solid" border-color=(on ? th.accent : th.rule)
         background-color=(on ? th.accent : "transparent")
+        transition=`background-color ${th.motionFastMs}ms ease, border-color ${th.motionFastMs}ms ease`
         if glyph == "mic"
           image "symbol:microphone" color=(on ? th.onAccent : th.fg)
         if glyph == "stop"
@@ -54,7 +56,7 @@ component BarGlyph
           image "symbol:pause-fill" color=(on ? th.onAccent : th.fg)
         if glyph == "send"
           image "symbol:send" color=(on ? th.onAccent : th.fg)
-      text caption font-family=th.fontUi font-size=10 font-weight=600 color=th.muted
+      text caption font-family=th.fontUi font-size=11 font-weight=600 color=(on ? th.fg : th.muted)
 
 component BarShell
   inject
@@ -131,7 +133,7 @@ component BarShell
         // a wash of the page colour inside the glass (theme data: th.lensWash, 0 for the native glass), so the controls stay legible over busy
         // content in light and dark (the lens itself is Exact's glass material, th.lensStyle: A native glass, B none, C ultra-thin)
         box position="absolute" inset=0 pointer-events="none" z-index=-1 border-top-left-radius=(th.radiusCard * 1.7) border-top-right-radius=(th.radiusCard * 1.7)
-          background-color=th.paper opacity=th.lensWash
+          background-color=th.paper opacity=max(th.lensWash, 0.55)
         // the state's tint
         box position="absolute" inset=0 pointer-events="none" border-top-left-radius=(th.radiusCard * 1.7) border-top-right-radius=(th.radiusCard * 1.7)
           background-color=tint opacity=tintOn
@@ -144,7 +146,7 @@ component BarShell
         // the deck's quiet count: where you are, in a hairline of text at the top of the lens (not over the page)
         if onbd == false and layer == ""
           row width="100%" align-items="center" justify-content="space-between" gap=8
-            text `On: ${aimTitle} · ${stackCount} in the deck` testId="page-indicator" aria-label=`On ${aimTitle}. ${stackCount} pages in the deck` line-clamp=1 flex=1 min-width=0 font-family=th.fontUi font-size=10 font-weight=600 letter-spacing=0.4 color=th.muted
+            text `On: ${aimTitle} · ${stackCount} in the deck` testId="page-indicator" aria-label=`On ${aimTitle}. ${stackCount} pages in the deck` line-clamp=1 flex=1 min-width=0 font-family=th.fontUi font-size=11 font-weight=600 letter-spacing=0.3 color=th.muted
             if topAddr.startsWith("pub:")
               button press=moreOfThis(topAddr) testId="story-more" appearance="none" aria-label="More stories like this one"
                 row padding="3px 10px" border-radius=th.radiusPill border-width=1 border-style="solid" border-color=th.rule align-items="center"
@@ -163,7 +165,7 @@ component BarShell
                 if lineMode == "paused"
                   image "symbol:pause" color=th.accent
                 column flex=1 min-width=0 gap=1 align-items="flex-start"
-                  text (lineMode == "playing" ? "NOW PLAYING" : "PAUSED") font-family=th.fontUi font-size=9 font-weight=700 letter-spacing=0.8 color=th.muted
+                  text (lineMode == "playing" ? "NOW PLAYING" : "PAUSED") font-family=th.fontUi font-size=10 font-weight=700 letter-spacing=0.8 color=th.muted
                   text loaded font-family=th.fontUi font-size=14 font-weight=600 color=th.fg line-clamp=1 text-align="left"
                 image "symbol:forward-chevron" color=th.muted
             box testId="bar-progress" height=2 border-radius=1 background-color="transparent" opacity=(ri.level == "play" ? 1 : 0.4) transition=`opacity ${th.motionFastMs}ms ease`
@@ -200,7 +202,7 @@ component BarShell
             column width=48 height=48 align-items="center" justify-content="center"
               Mark(state=markState)
           input appearance="none" value=ask input=editAsk submit=sendAsk focus=barFocus blur=barBlur placeholder=aim aria-label=aim testId="bar-field" enterkeyhint="send" flex=1 min-width=0 min-height=44
-            font-family=th.fontRead font-size=17 color=th.fg padding="8px 6px" border-width=0 background-color="transparent"
+            font-family=th.fontRead font-size=17 color=th.fg padding="8px 16px" border-width=1 border-style="solid" border-color=th.rule border-radius=th.radiusPill background-color=th.paper2
             ::placeholder
               color=th.muted
           if typing
