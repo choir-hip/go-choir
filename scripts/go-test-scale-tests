@@ -3,3 +3,4 @@
 # line; consumed by scripts/go-test-runtime-shards (exclusion) and the
 # go-test-scale CI job (execution with one retry).
 ^TestCancelRunTrajectoryDrainsMoreThanOneActivePage$
+^TestProbeAtANonzeroTrimBoundary$
