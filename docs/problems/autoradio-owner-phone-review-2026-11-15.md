@@ -84,3 +84,9 @@ The investigation is `docs/evidence/autoradio-phone-review-investigation-2026-11
 - **The app is pre-TestFlight and runs only on the owner's phone: hard
   cutover, no backwards compatibility.** No preference migration, no shim,
   no old path kept alive for a transition.
+- **Hands-free voice works first; four existing pieces are then worked back
+  in gradually**, because they have value: the local Qwen3 model that thinks
+  aloud as a holding line; the second set of parts (Silero, Parakeet, Kokoro,
+  Pocket TTS, LFM3 audio, the llama.cpp responder); the voice setup and
+  configurator with its model store; and the unmerged voice branches (the
+  responder ladder). They are kept for later, not merely deprecated.
