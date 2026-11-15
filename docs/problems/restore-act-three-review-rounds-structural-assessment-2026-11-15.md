@@ -70,3 +70,36 @@ quarantine without growing its own wide state machine is not yet read from
 the code. If the design review says it cannot, this goes to the owner.
 The quarantine directory each restore leaves (store-sized, unpruned,
 outside the disk floor) must be settled in that design.
+
+## Addendum, 2026-11-15T08:36Z: the swap is not the problem to solve first
+
+The boot-install design section is written (lane/restore-boot-install at
+0c9c357df, docs/design/restore-installs-at-boot-2026-11-15.md, unreviewed).
+Reading the boot code for it gave a finding that outranks the design:
+
+- After any install, the same boot replays the restored store forward to
+  the canonical head (internal/autoputer/run.go about 860,
+  internal/agentcore/projection_base.go about 140 to 148). The restore is
+  undone at that boot; only the release pointer stays restored.
+- A target more than 720,000 events behind the head makes that boot refuse
+  (internal/recoveryplan/recovery_plan.go about 22 and 131), and the
+  computer stays down.
+- The in-process restore on main ends in the same place, later: the next
+  append catches the store up (internal/agentcore/catchup.go).
+
+So a restore today is transient by construction, in every form. This is the
+open problem of 2026-10-30
+(docs/problems/restore-is-neither-forward-nor-durable-2026-10-30.md); its
+repair, a forward restore event on the tape, was designed and never built.
+Making the restore asynchronous, by either approach, polishes an act whose
+result does not last.
+
+Decision taken (conservative, no owner ask pending): nothing more is built
+on lane/restore-act or lane/restore-boot-install. Both stay as branches.
+The next step, when restore is wanted, is the forward restore event; the
+boot-install section is the install half of that design. The two d@e
+restores of 2026-11-15 (witness matched) proved the replay and the witness,
+not a durable restore.
+
+For the owner: whether to build the forward restore event now. The owner
+said on 2026-11-15 that restore is not urgent, so the default is no.
