@@ -8,7 +8,7 @@
 // paper-edition-<big|even|thin|default>, paper-signin, paper-status.
 use Theme, ChoirAuth, DemoInfo, PaperFront, PaperBand, PaperItem from "@choir/autoradio"
 use paperFront from "@choir/autoradio"
-use Card, Btn, BarClear, sectionName from "./ui.contract"
+use Card, Btn, BarClear, sectionName, SegmentedTrack, SegmentFace, Emerge from "./ui.contract"
 use FirstRunCard from "./onboarding.contract"
 
 // A headline with its dek and meta, as one story. `kicker` shows the section above, `listen` the play-from-here button.
@@ -24,16 +24,16 @@ component Story
   view
     column gap=6 align-items="flex-start" width="100%"
       if kicker
-        text sectionName(s.section) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
+        text sectionName(s.section) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
       button press=openPage(`pub:${s.route}`, s.title) appearance="none" testId=`paper-story-${s.route}` width="100%"
         column gap=6 align-items="flex-start" width="100%"
           text s.title font-family=th.fontRead font-size=s.size font-weight=s.weight line-height=s.lineHeight color=th.fg text-align="left" text-wrap="balance"
           if s.showDek
             text s.dek font-family=th.fontRead font-size=s.dekSize line-height=1.4 color=th.muted text-align="left"
       if s.meta != ""
-        text s.meta font-family=th.fontUi font-size=12 font-variant-numeric="tabular-nums" color=th.muted
+        text s.meta font-family=th.fontUi font-size=13 font-variant-numeric="tabular-nums" color=th.muted
       if s.entityLabels != ""
-        text s.entityLabels font-family=th.fontUi font-size=12 font-weight=600 color=th.accent2
+        text s.entityLabels font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
       if listen
         button press=playStory(s.route) appearance="none" testId=`paper-play-${s.route}` aria-label=`Play from ${s.title}`
           row gap=6 align-items="center" padding="6px 0"
@@ -57,11 +57,11 @@ component BriefRow
       row align-items="center" gap=4 width="100%" padding="10px 0" box-sizing="border-box"
         column flex=1 min-width=0 gap=3 align-items="flex-start"
           if kicker
-            text sectionName(s.section) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
+            text sectionName(s.section) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
           button press=openPage(`pub:${s.route}`, s.title) appearance="none" testId=`paper-story-${s.route}` width="100%"
             text s.title font-family=th.fontRead font-size=s.size font-weight=s.weight line-height=s.lineHeight color=th.fg text-align="left"
           if s.byline != ""
-            text s.byline font-family=th.fontUi font-size=12 color=th.muted
+            text s.byline font-family=th.fontUi font-size=13 color=th.muted
         button press=playStory(s.route) appearance="none" testId=`paper-play-${s.route}` width=44 height=44 aria-label=`Play from ${s.title}`
           image "symbol:play-fill" color=th.muted
 
@@ -80,7 +80,7 @@ component FollowRow
         button press=openPage(`pub:${s.route}`, s.title) appearance="none" testId=`paper-story-${s.route}` width="100%"
           text s.title font-family=th.fontRead font-size=s.size font-weight=s.weight line-height=s.lineHeight color=th.fg text-align="left"
         if s.entityLabels != ""
-          text s.entityLabels font-family=th.fontUi font-size=12 color=th.muted
+          text s.entityLabels font-family=th.fontUi font-size=13 color=th.muted
       button press=playStory(s.route) appearance="none" testId=`paper-play-${s.route}` width=44 height=44 aria-label=`Play from ${s.title}`
         image "symbol:play-fill" color=th.muted
 
@@ -119,13 +119,13 @@ component Band
       if b.module == "cluster"
         Card(level=1, testId=`paper-band-${b.id}`, minHeight=0)
           column padding=16 gap=2 width="100%" box-sizing="border-box"
-            text sectionName(b.label) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
+            text sectionName(b.label) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
             for s in b.items key=s.route
               FollowRow(s=s)
       if b.module == "briefs" or b.module == "opinion"
         Card(level=1, testId=`paper-band-${b.id}`, minHeight=0)
           column padding="14px 16px 4px 16px" width="100%" box-sizing="border-box"
-            text sectionName(b.label) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
+            text sectionName(b.label) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
             for s, i in b.items key=s.route
               BriefRow(s=s, kicker=(b.module == "briefs"), first=(i == 0))
       if b.module == "river"
@@ -133,13 +133,14 @@ component Band
           column padding="6px 16px 4px 16px" width="100%" box-sizing="border-box"
             button press=pickView(b.id.slice(6)) appearance="none" testId=`paper-more-${b.id.slice(6)}` width="100%"
               row align-items="center" justify-content="space-between" padding="10px 0 2px 0" width="100%" box-sizing="border-box"
-                text sectionName(b.label) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
+                text sectionName(b.label) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
                 image "symbol:forward-chevron" color=th.muted
             for s, i in b.items key=s.route
               BriefRow(s=s, kicker=false, first=(i == 0))
 
-// One chip of the view switcher. The row wraps (never a sideways scroller: the deck takes sideways drags). The set of chips does not change when
-// one is picked, only which one is filled, so a pick never moves the others.
+// One choice of the view switcher. The two main views (Front page, My edition: `segment`) are a segmented pair; the categories are
+// quiet outline chips in a wrapping row (never a sideways scroller: the deck takes sideways drags). The set does not change when one is
+// picked, only which one is filled, and the ring is the same width in both states, so a pick never moves or resizes anything.
 component ViewChip
   inject
     th: Theme
@@ -148,13 +149,18 @@ component ViewChip
   props
     vid: string
     label: string
-    strong: bool
+    segment: bool
   derive sel = paperView == vid
   view
-    button press=pickView(vid) appearance="none" testId=`paper-section-${vid}`
-      border-radius=th.radiusPill padding="6px 12px" flex-shrink=0 align-self="flex-start"
-      background-color=(sel ? th.accent : th.paper2)
-      text label font-family=th.fontUi font-size=13 font-weight=(strong ? 700 : 600) color=(sel ? th.onAccent : th.fg)
+    if segment
+      button press=pickView(vid) appearance="none" testId=`paper-section-${vid}` role="radio" aria-checked=sel flex=1 min-width=0
+        SegmentFace(label=label, selected=sel)
+    if segment == false
+      button press=pickView(vid) appearance="none" testId=`paper-section-${vid}` role="radio" aria-checked=sel flex-shrink=0 align-self="flex-start"
+        row align-items="center" justify-content="center" min-height=32 padding="0px 12px" box-sizing="border-box" border-radius=th.radiusPill
+          border-width=1 border-style="solid" border-color=(sel ? th.accent : th.rule) background-color=(sel ? th.accent : "transparent")
+          transition=`background-color ${th.motionFastMs}ms ease, border-color ${th.motionFastMs}ms ease`
+          text label font-family=th.fontUi font-size=13 font-weight=600 color=(sel ? th.onAccent : th.fg)
 
 component PaperPage
   inject
@@ -186,14 +192,16 @@ component PaperPage
             box height=1 background-color=th.fg width="100%"
             box height=1 background-color=th.fg width="100%" margin-top=2
             row justify-content="space-between" width="100%"
-              text (pfront.viewLabel == "" ? "Front page" : pfront.viewLabel) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent testId="paper-section-title"
+              text ((pfront.viewId == "front" or pfront.viewId == "mine" or pfront.viewLabel == "") ? "" : pfront.viewLabel) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted testId="paper-section-title"
               text pfront.updated font-family=th.fontUi font-size=12 color=th.muted testId="paper-updated"
-          // the views: Front page, My edition, then the categories the paper has (its live section list, in house order)
-          row flex-wrap="wrap" gap=8 width="100%" testId="paper-sections"
-            ViewChip(vid="front", label="Front page", strong=true)
-            ViewChip(vid="mine", label="My edition", strong=true)
-            for sec in pfront.sections key=sec.id
-              ViewChip(vid=sec.id, label=sec.label, strong=false)
+          // the views: Front page and My edition as a segmented pair, then the categories the paper has (its live section list, in house order) as quiet chips
+          column gap=10 width="100%"
+            SegmentedTrack(testId="paper-views")
+              ViewChip(vid="front", label="Front page", segment=true)
+              ViewChip(vid="mine", label="My edition", segment=true)
+            row flex-wrap="wrap" gap=8 width="100%" testId="paper-sections"
+              for sec in pfront.sections key=sec.id
+                ViewChip(vid=sec.id, label=sec.label, segment=false)
           // My edition: what it is built from, and the way to change it (the edit page is `onboarding:edit`, the topic tree with the saved picks preselected; the paper has no other edit link: the owner asked for it in My edition)
           if pfront.viewId == "mine"
             column gap=10 width="100%" align-items="flex-start"
@@ -233,10 +241,16 @@ component PaperPage
                   Btn(label="Sign in", primary=true, wide=false)
                 if au.message != ""
                   text au.message testId="paper-signin-message" font-family=th.fontUi font-size=13 color=th.muted
+          // nothing to read, or it failed: a line of plain words and one action
           if pfront.status == "offline" or pfront.status == "error" or pfront.status == "empty"
-            text pfront.message font-family=th.fontUi font-size=14 color=(pfront.status == "error" ? th.danger : th.muted) testId="paper-status"
-          for b in pfront.bands key=b.id
-            Band(b=b)
+            column align-items="center" gap=12 width="100%" box-sizing="border-box" padding="24px 16px"
+              text pfront.message font-family=th.fontRead font-size=18 line-height=1.4 color=(pfront.status == "error" ? th.danger : th.fg) text-align="center" testId="paper-status"
+              if pfront.status != "empty"
+                button press=paperReload testId="paper-retry" appearance="none"
+                  Btn(label="Try again", primary=false, wide=false)
+          for b, bi in pfront.bands key=b.id
+            Emerge(delay=((bi > 5 ? 5 : bi) * th.staggerMs))
+              Band(b=b)
           if pfront.count > 0
             text `${pfront.count} ${pfront.count == 1 ? "story" : "stories"} · pull down to refresh` font-family=th.fontUi font-size=12 color=th.muted text-align="center" width="100%"
           BarClear()
