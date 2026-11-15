@@ -643,19 +643,102 @@ the code:
   flush about 8 x 31k = 250k.
 - Cost: 24 of the 258 calls (9%), about 19 beyond one per flush, spent on
   seven captures that got no label. They sit in three clusters (14:09, 17:57,
-  19:04 to 19:06), which suggests upstream conditions, not size. **What the
-  failure was, I do not know:** the extract has the flush lines only, not the
-  `call of N questions failed` lines that carry the error. Read those lines at
-  the three times before choosing the fix.
+  19:04 to 19:06), which suggests upstream conditions, not size.
+- **The evidence, read by the coordinator from the paper's console
+  (read-only):** every one of the 13 Jev failure lines today is
+  `dial tcp <host>:8084: connect: connection refused` to the gateway, logged as
+  `jev split: site=intake_labels items=4 calls=2 forced_by=map[call_failed:1]`
+  (also one `site=event_layer items=2` and some support-judge lines). The three
+  clusters are the three gateway restarts today: 14:09 and 17:57 (deploys) and
+  19:02 to 19:07 (a credentials restart that drained for 4.5 minutes). So the
+  halving happened on a transport failure where **no request reached the
+  gateway, let alone the vendor**; a half cannot succeed where the whole cannot,
+  and each half only adds a doomed call. (My reading of the extract is now
+  confirmed; I did not read these lines myself.)
 
-**Defect to name:** `jev_failure.go:72-76`, halving on `call_failed`. The
-amendment to the design: a failed call is asked again whole once (same state,
-same questions), and halved only when the failure is a size refusal
-(`vendor_refused`, the gateway 413), as the owner's rule allows. A timeout of a
-call far under the limit is not evidence of size; whether a timeout of a big
-call is, is a question for the error lines. This is a fix in `jev_failure.go`
-and its tests, its own commit, red (provider calls), ahead of the gather
-commit: gathering makes each failed call lose more captures, so the retry
-policy has to be right first. Failure item 3 in 2.5 is amended to read "asked
-once more whole; halved only on a size refusal; what still fails is
-unlabelled".
+**Defect to name:** `jev_failure.go:72-76` (and the header comment's rule
+"any other failure is asked once more after a backoff ... then halved",
+`jev_failure.go:27-30`): halving on `call_failed`.
+
+### 4.5 The settled fix: its own commit, ahead of the gather commit
+
+**Rule: a failure that is not a size refusal is never halved.** Halving stays
+only for the two size signals the file already names, `jevSizeRefused` (the
+text hints) and a gateway 413 (`vendor_refused`, `gateway_body_cap`). The
+`case canHalve: return jevHalve, "call_failed"` arm and the loop's
+`call_failed` log are deleted; `jevNextStep` then has no path that halves
+without a named vendor or transport size limit, which is what "a second call
+only when a vendor limit refuses the first, and the code says which" asks.
+
+**Connection refused (and any dial failure to the gateway): no immediate
+retry, no halving.** No request left the guest, so asking again at once is a
+second doomed call inside the same second; the gateway is ours and is being
+restarted, so this is not a provider refusal and the allowance to back off
+after "a provider's real refusal" (CLAUDE.md) does not apply. What exists in
+code for backing off is the rate path: `jevRateRefused` (429, 529) with
+`jevRateTries = 2` and `intakeRetryBackoff` (2 s, then 4 s,
+`intakeRetryBackoff`, `intake_labels.go`). That path is for the provider's own refusal and
+stays as is. For a transport failure I add no limiter and no new wait; the
+wait is the gather deadline. Concretely:
+
+1. A new classification `jevTransportDown(err)`: the error is a dial or
+   connect failure (a `*net.OpError` with `Op == "dial"`, or the text
+   "connection refused" as the file's other checks are text-based) and no
+   typed HTTP status was received. `jevNextStep` returns `jevFail` for it with
+   no `forcedBy`, on the first failure, at any depth.
+2. The flush logs one line per failed call, as it does for `jevFail` today,
+   naming the error, and its captures are counted `unlabelled`.
+3. **The captures are re-held once, in the live process, for the next gather
+   window** (intake only; held in memory like any queued capture; the same
+   deadline, 120 s, is the back-off, no new timer and no new limit). A second
+   failure leaves them unlabelled, visible to management as `unlabelled`. A
+   crash drops them as it drops every held capture, and no boot step resumes
+   them (CLAUDE.md "Restarts": a re-hold in a live process is not a boot
+   resumer). With gathering the wait is at most one deadline, so a 20 s
+   restart is recovered and the 4.5 minute drain of 19:02 to 19:07 is not
+   (two windows fail, then unlabelled); I accept that over a loop with no
+   bound. Their wait handles were resolved when the first flush ended, so the
+   poll has already announced them unlabelled; the label, appended later as a
+   new version, is what management reads at its next record read.
+4. The event layer shares `jevNextStep` (`event_layer.go:480`) and so gets the
+   no-halve rule and the no-immediate-retry for transport failure; its own
+   handling of what then fails (captures left unresolved, not retried) is
+   unchanged. The support judge does not call `jevNextStep` (only intake and
+   the event layer do); its `connection refused` lines are outside this fix and
+   I did not read its retry path, so it is a named residual.
+
+**One residual, named.** The header comment says the gateway answers any
+upstream failure, a vendor size refusal included, with 502, so the caller
+cannot tell a size refusal from another 502; today the halve on `call_failed`
+was the only cure for a vendor size refusal returned as a 502. The estimator is
+weighted above the real tokenizer and a call is split before it is sent, so a
+true size refusal should be rare; I have not seen one in the log, and the
+evidence above is zero size refusals and 13 transport failures. If one appears,
+the cure is for the gateway to relay the vendor's reason as a 413 or 422 (a
+gateway change, red, its own slice), not a guessed halve. Until then a 502 is
+asked once more whole (`retries < 1`) and then fails unlabelled.
+
+**Class and reason: red.** It changes how calls to the provider path fail,
+which is "gateway and provider calls" in CLAUDE.md's red row, and it is shared
+by two callers (intake and the event layer). A defect here would be silent: a mis-classified failure that is
+never retried, or a size refusal no longer halved, loses captures with only a
+log line. So two seats, a conjecture delta, protected surfaces (the provider
+call path), the evidence above as evidence class, rollback by revert, and a
+heresy delta (the old rule was written in 8b15ec2e9 and is reversed here).
+Subject ends `(red; rollback: revert)`. It lands **before** the gather commit
+and does not depend on it: the gather makes each failed call lose more
+captures, so the failure policy has to be right first. The re-hold (item 3) is
+orange and rides the gather commit, since it needs the window.
+
+Failure item 3 in 2.5 is amended to read: "a failed call is asked again whole
+once only when the failure is a rate refusal, a transport-level 5xx or a short
+body; a dial failure is not asked again at once; halved only on a size refusal;
+what still fails is unlabelled, and re-held once when it was a dial failure."
+Proof tests for it, written first: a dial error never produces a second call
+and never a halve (the production gateway client against a closed port, as
+`jev_gateway_test.go` does); a 413 still halves; a 502 is asked once whole; a
+flush whose call is refused by a closed port re-holds its captures once, and
+the second refusal leaves them unlabelled with one log line each. Deployed
+proof: after the next gateway restart, the paper's console shows one failed
+call per flush, no `forced_by=map[call_failed` line, and the held captures
+labelled at the next window if the gateway is back.
