@@ -215,6 +215,11 @@ func TestCaptureBodiesSweepKeepsWhatTheRealWriterAndReadersUse(t *testing.T) {
 	if got := rep.Namespaces["capture-bodies"]; got.Live != 3 || got.Deleted != 1 {
 		t.Fatalf("sweep of real captures: %+v", got)
 	}
+	// doc_hash is "sha256:<hex>" in the row but names no body file: it must
+	// not inflate the report the admission reads.
+	if got := rep.Namespaces["capture-bodies"]; got.NamedByRows != 3 || got.NamedMissingOnDisk != 0 {
+		t.Fatalf("named %d missing %d, want 3 and 0 (doc_hash counted live?)", got.NamedByRows, got.NamedMissingOnDisk)
+	}
 	if exists(orphan) {
 		t.Fatal("orphan kept")
 	}
@@ -234,5 +239,25 @@ func TestCaptureBodiesSweepKeepsWhatTheRealWriterAndReadersUse(t *testing.T) {
 	h.HandleCaptureBody(rawOut, body)
 	if rawOut.Code != http.StatusOK || !bytes.Equal(rawOut.Body.Bytes(), page) {
 		t.Fatalf("raw body after the sweep: %d", rawOut.Code)
+	}
+}
+
+// The corpusd wiring takes the collector's reuse lock or fails loudly: a
+// store with no lock would let PutBody run unordered against the unlink.
+func TestConfigureHostCaptureBodiesRequiresTheReuseLock(t *testing.T) {
+	mem := objectgraph.NewMemoryStore()
+	svc := objectgraph.NewService(objectgraph.Config{Memory: mem, Durable: mem})
+	defer svc.Close()
+	if err := NewObjectGraphHandler(svc, mem).ConfigureHostCaptureBodies(t.TempDir()); err == nil {
+		t.Fatal("a handler whose store has no reuse lock was configured for host capture bodies")
+	}
+	f := newCaptureGCFixture(t)
+	ogStore := NewObjectGraphStore(f.store)
+	h := NewObjectGraphHandler(objectgraph.NewService(objectgraph.Config{Durable: ogStore}), ogStore)
+	if err := h.ConfigureHostCaptureBodies(CaptureBodiesRoot(f.root)); err != nil {
+		t.Fatal(err)
+	}
+	if h.captureBodies == nil || h.captureBodies.reuseMu != &f.store.casReuseMu {
+		t.Fatal("host capture bodies are not bound to the store's reuse lock")
 	}
 }
