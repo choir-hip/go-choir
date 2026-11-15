@@ -118,3 +118,18 @@ The owner tested onboarding, where the app helps set up the edition.
   investigation of the same day traced Play to `AVSpeechVoice`); the
   reference page lists Phonon at about 64 MB, under the 100 MB bundling
   line. Remaining error: no better voice has run on the phone.
+- **Correction to the voice belief** (owner, same round): switching the
+  voice in Settings loaded and spoke a better voice, so the neural voices
+  work on the phone. The defect is the default. Rulings: the better voice is
+  the default; the voice configurator belongs in onboarding, where the
+  reader can play the voices against each other ("make that fun and nice").
+- **Problem: a swiped-to card takes too long to show its content.**
+  Evidence: two owner screenshots: first a placeholder (the word STORY and a
+  lowercased title cut from the address), then the real title over a spinner
+  and an empty body. Rulings: remove the wait where possible; cover what is
+  left with animation; more animations of content emerging in general.
+  Belief: neighbours in the stack are not fetched ahead; unverified.
+- **Problem: the bar still says "Tap the microphone again to send."** under
+  "Listening" (seen in the same screenshots), against the ruling that tap to
+  talk is gone. Not yet traced: stale wording, or the bar's microphone still
+  on the button path.
