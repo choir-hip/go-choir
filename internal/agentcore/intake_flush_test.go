@@ -46,7 +46,7 @@ func waitClosed(t *testing.T, what string, ch <-chan struct{}) {
 	t.Helper()
 	select {
 	case <-ch:
-	case <-time.After(5 * time.Second):
+	case <-time.After(60 * time.Second): // a liveness guard, not a speed claim: 200 captures under -race took 6 s
 		t.Fatalf("F15: the wait handle did not close: %s", what)
 	}
 }
@@ -105,8 +105,8 @@ func TestIntakeFlushFirstCaptureIsAskedAtOnce(t *testing.T) {
 }
 
 // Burst: N enqueues made while a call is in flight go out together in the
-// next flush, at most 6 captures a call, one call at a time.
-func TestIntakeFlushBurstDuringACallBatchesIntoCeilNOverSix(t *testing.T) {
+// next flush, one call carrying all of them (up to 12), one call at a time.
+func TestIntakeFlushBurstDuringACallGoesOutTogether(t *testing.T) {
 	f := newIntakeFixture(t, "owner-flush-burst")
 	f.enable(t)
 	openTestStory(t, f.s, f.owner, f.computer, "Pope has lung surgery")
@@ -130,8 +130,8 @@ func TestIntakeFlushBurstDuringACallBatchesIntoCeilNOverSix(t *testing.T) {
 	for i, h := range handles {
 		waitClosed(t, fmt.Sprintf("capture %d", i+1), h)
 	}
-	if got, want := len(judge.labelCalls()), 1+(14+intakeCallCaptures-1)/intakeCallCaptures; got != want {
-		t.Fatalf("%d calls; want %d (the held one, then ceil(14/6) for the burst)", got, want)
+	if got, want := len(judge.labelCalls()), 2; got != want {
+		t.Fatalf("%d calls; want %d (the held one, then the whole burst in one)", got, want)
 	}
 	if got := judge.maxSeen.Load(); got != 1 {
 		t.Fatalf("F1: %d Jev calls in flight at once; want 1", got)
@@ -143,7 +143,7 @@ func TestIntakeFlushBurstDuringACallBatchesIntoCeilNOverSix(t *testing.T) {
 	}
 }
 
-func TestIntakeFlushPacksToTheByteGuardNotACount(t *testing.T) {
+func TestIntakeFlushPacksToTheVendorLimitsNotACount(t *testing.T) {
 	rt, _ := testRuntime(t)
 	judge := &fakeIntakeJudge{}
 	rt.SetCandidateJudge(judge)
@@ -156,20 +156,15 @@ func TestIntakeFlushPacksToTheByteGuardNotACount(t *testing.T) {
 	calls := judge.labelCalls()
 	total := 0
 	for _, c := range calls {
-		if c.bytes > intakeRequestMaxBytes {
-			t.Errorf("F4: a call is %d bytes; the guard is %d", c.bytes, intakeRequestMaxBytes)
+		if !c.fits {
+			t.Errorf("F4: a call of %d bytes is over the vendor's token budget", c.bytes)
 		}
 		total += len(c.questions)
 	}
-	if len(calls) < 1 || total != 24 {
-		t.Fatalf("calls=%d questions=%d; want 24 questions (two per capture, none split or dropped)", len(calls), total)
-	}
-	most := 0
-	for _, c := range calls {
-		most = max(most, len(c.questions))
-	}
-	if most > 2*intakeCallCaptures || most <= 8 {
-		t.Fatalf("the largest call has %d questions; want more than 8 and at most %d", most, 2*intakeCallCaptures)
+	// Twelve captures over 20 stories fit one call: 24 questions, the state
+	// once. Under the old byte guard this was three calls.
+	if len(calls) != 1 || total != 24 {
+		t.Fatalf("calls=%d questions=%d; want one call of 24 questions (two per capture, none split or dropped)", len(calls), total)
 	}
 	if judge.maxSeen.Load() != 1 {
 		t.Fatalf("F1: max in flight = %d", judge.maxSeen.Load())
@@ -221,11 +216,14 @@ func TestIntakeFlushPollAnnouncesAfterLabelsAndEvenWhenTheCallFails(t *testing.T
 	}
 }
 
-func TestIntakeFlushFailedCallLeavesCapturesUnlabelledAndNothingRetries(t *testing.T) {
+func TestIntakeFlushFailedCallIsAskedOnceMoreThenLeavesCapturesUnlabelled(t *testing.T) {
+	prev := intakeRetryBackoff
+	intakeRetryBackoff = time.Millisecond
+	t.Cleanup(func() { intakeRetryBackoff = prev })
 	f := newIntakeFixture(t, "owner-flush-fail")
 	f.enable(t)
 	openTestStory(t, f.s, f.owner, f.computer, "Pope has lung surgery")
-	judge := &fakeIntakeJudge{fail: fmt.Errorf("gateway: 429")}
+	judge := &fakeIntakeJudge{fail: fmt.Errorf("gateway client: Jev judgment rate limit exceeded")}
 	f.rt.SetCandidateJudge(judge)
 	t.Cleanup(f.rt.Stop)
 	items := flushTestItems(3, "s")
@@ -235,8 +233,8 @@ func TestIntakeFlushFailedCallLeavesCapturesUnlabelledAndNothingRetries(t *testi
 			t.Fatalf("F3: capture %d labelled by a failing Jev", i)
 		}
 	}
-	if got := judge.callCount(); got != 1 {
-		t.Fatalf("F3: %d calls; a failed capture is not retried", got)
+	if got := judge.callCount(); got != 3 {
+		t.Fatalf("F3: %d calls; a 429 is asked twice more after a backoff, then the captures are unlabelled", got)
 	}
 }
 
