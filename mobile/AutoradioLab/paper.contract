@@ -8,7 +8,7 @@
 use Theme, ChoirAuth, DemoInfo, PaperFront, PaperBand, PaperItem from "@choir/autoradio"
 use paperFront from "@choir/autoradio"
 use Card, Btn, BarClear, sectionName from "./ui.contract"
-use FirstRunCard from "./onboarding.contract"
+use FirstRunCard, EditEditionLink from "./onboarding.contract"
 
 // A headline with its dek and meta, as one story. `kicker` shows the section above, `listen` the play-from-here button.
 component Story
@@ -171,6 +171,7 @@ component PaperPage
               text pfront.updated font-family=th.fontUi font-size=12 color=th.muted testId="paper-updated"
           // Not set up yet: "Make it yours" (voice setup and the edition topics) until the listener has done it or skipped it.
           FirstRunCard()
+          EditEditionLink()
           // demo mode, Settings, Developer, "Demo controls": three editions to show how the page changes with the day
           if dm.on and devDetails
             column gap=8 width="100%" padding-top=8 box-sizing="border-box"

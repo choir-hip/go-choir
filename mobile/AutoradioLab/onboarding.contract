@@ -11,7 +11,7 @@
 // testIds: signin, signin-intro, signin-code, signin-open, signin-cancel, signin-message (unchanged);
 //   ob-steps, ob-mark-slot, ob-begin, ob-begin-mobile, ob-skip, ob-row-<stage>, ob-retry-<stage>, ob-fallback-<stage>,
 //   ob-summary, ob-mic-ask, ob-mic-level, ob-heard, ob-mic-next, ob-route, ob-hearing-yes, ob-hearing-no, ob-topics-start,
-//   ob-topics, ob-explainer, ob-topic-<label>, ob-topic-open-<label>, ob-trow-<row key>, ob-topic-input, ob-topic-add, ob-selection, ob-talk, ob-topics-done, ob-demo, ob-demo-say, ob-wait-slot, ob-writing-line,
+//   ob-topics, ob-explainer, edit-edition, edit-edition-done, edit-edition-link, edit-edition-retry, edit-edition-leave, ob-topic-<label>, ob-topic-open-<label>, ob-trow-<row key>, ob-topic-input, ob-topic-add, ob-selection, ob-talk, ob-topics-done, ob-demo, ob-demo-say, ob-wait-slot, ob-writing-line,
 //   ob-edition-retry, ob-continue-anyway, ob-edition, ob-edition-open, ob-start-radio, firstrun-card, firstrun-open.
 use Theme, ChoirAuth, Onboarding from "@choir/autoradio"
 use Card, PaperCard, PageScroll, Btn from "./ui.contract"
@@ -181,6 +181,100 @@ component TopicRowItem
             TopicChip(label=label, selected=selected, partial=false)
             text note font-family=th.fontUi font-size=12 color=th.muted flex=1 min-width=0 margin-left=6
 
+// The topic tree with everything that goes with it: the explainer, the tree, a field to type your own, the selection, "Talk to it".
+// The ONE implementation: the first-run topics step and the edit page (Settings, the paper, the launcher) both render this. The picks
+// save as they are made; what Continue or Done does is the caller's.
+component TopicPicker
+  inject
+    th: Theme
+    ob: Onboarding
+    obTopicText: string
+    editObTopic: action
+    obAddTopic: action
+    obTalk: action
+    obDemoSay: action
+  derive talkLabel = ob.talking ? "Stop talking" : "Talk to it"
+  derive addLabel = ob.talking ? `Listening. ${ob.voiceHint}` : ob.voiceHint
+  view
+    column width="100%" gap=14
+      Card(level=1, testId="ob-explainer", minHeight=0)
+        column padding=16 gap=8
+          text ob.explainer font-family=th.fontRead font-size=17 line-height=1.45 color=th.fg
+      column width="100%" testId="ob-topics"
+        for r in ob.tree key=r.key
+          TopicRowItem(rowId=r.key, label=r.label, kind=r.kind, selected=r.selected, partial=r.partial, expandable=r.expandable, expanded=r.expanded, note=r.note)
+      row gap=8 align-items="center" width="100%"
+        input value=obTopicText input=editObTopic submit=obAddTopic placeholder="Add your own topic" aria-label="Add your own topic" testId="ob-topic-input" enterkeyhint="done" flex=1 min-width=0 min-height=44
+          font-family=th.fontRead font-size=17 color=th.fg padding="8px 12px" border-width=1 border-style="solid" border-color=th.rule border-radius=th.radiusControl background-color=th.paper2
+          ::placeholder
+            color=th.muted
+        button press=obAddTopic testId="ob-topic-add" appearance="none" aria-label="Add this topic"
+          Btn(label="Add", primary=false, wide=false)
+      Card(level=2, testId="ob-selection", minHeight=0)
+        column padding=16 gap=6
+          text ob.selectionLine font-family=th.fontRead font-size=17 line-height=1.4 color=th.fg
+      button press=obTalk testId="ob-talk" appearance="none" aria-label=talkLabel
+        Btn(label=talkLabel, primary=false, wide=true)
+      text addLabel font-family=th.fontUi font-size=14 color=th.muted
+      if ob.demo
+        Card(level=1, testId="ob-demo", minHeight=0)
+          column padding=14 gap=8
+            text "Demo: no microphone here" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
+            button press=obDemoSay testId="ob-demo-say" appearance="none"
+              Btn(label=`Say: ${ob.demoWords}`, primary=false, wide=true)
+      text ob.message font-family=th.fontUi font-size=14 color=th.danger
+
+// The edit page: the same topic tree, preselected with the saved picks, without the first-run steps. Changes save as they are made;
+// Done rewrites the edition through the same completion path as onboarding (deadline, progress, Retry) and returns to where the reader was.
+component EditEditionPage
+  inject
+    th: Theme
+    ob: Onboarding
+    obEditDone: action
+    obEditLeave: action
+    obEditionRetry: action
+  props
+    address: string
+    title: string
+  derive busy = ob.editing and ob.editionStatus == "writing"
+  derive failed = ob.editing and ob.editionStatus == "failed"
+  view
+    PageScroll(id="edit-edition")
+      column gap=4 width="100%"
+        text "My edition" role="heading" aria-level=1 font-size=30 font-weight=700 line-height=1.1 testId="page-title" font-family=th.fontRead
+        text "These topics shape the paper. Change them any time." testId="edit-edition-line" font-family=th.fontUi font-size=15 color=th.muted
+      if busy
+        Card(level=2, testId="edit-edition-writing", minHeight=0)
+          column padding=18 gap=8 align-items="center"
+            text ob.writingLine testId="edit-edition-progress" font-family=th.fontRead font-size=19 text-align="center"
+            text "This takes a few seconds." font-family=th.fontUi font-size=13 color=th.muted
+      if failed
+        Card(level=2, testId="edit-edition-failed", minHeight=0)
+          column padding=18 gap=10 align-items="center"
+            text ob.editionError testId="edit-edition-error" font-family=th.fontRead font-size=18 text-align="center" line-height=1.35
+            text "Your topics are saved. The edition stays as it was until this works." font-family=th.fontUi font-size=13 color=th.muted text-align="center"
+            button press=obEditionRetry testId="edit-edition-retry" appearance="none"
+              Btn(label="Retry", primary=true, wide=true)
+            button press=obEditLeave testId="edit-edition-leave" appearance="none"
+              Btn(label="Leave it as it was", primary=false, wide=true)
+      if busy == false and failed == false
+        TopicPicker()
+        button press=obEditDone testId="edit-edition-done" appearance="none"
+          Btn(label="Done", primary=true, wide=true)
+
+// A small "Edit my edition" control for the places the edition is seen (the front page, Textures). Shown once there is an edition.
+component EditEditionLink
+  inject
+    th: Theme
+    ob: Onboarding
+    openPage: action
+  view
+    if ob.editionDone
+      button press=openPage("onboarding:edit", "My edition") testId="edit-edition-link" appearance="none" aria-label="Edit my edition" align-self="flex-start"
+        row align-items="center" gap=4 min-height=44
+          text "Edit my edition" font-family=th.fontUi font-size=14 font-weight=600 color=th.accent
+          image "symbol:forward-chevron" color=th.accent
+
 component OnboardingPage
   inject
     th: Theme
@@ -192,12 +286,7 @@ component OnboardingPage
     obHearingYes: action
     obHearingNo: action
     obTopics: action
-    obAddTopic: action
-    editObTopic: action
-    obTopicText: string
-    obTalk: action
     obTopicsDone: action
-    obDemoSay: action
     obEditionRetry: action
     obContinueAnyway: action
     obSkip: action
@@ -211,8 +300,6 @@ component OnboardingPage
   derive beginLabel = ob.setupStarted ? "Continue voice setup" : "Set up the voice"
   derive deviceLine = ob.device == "" ? "Choosing the models that fit this phone." : `Chosen for this phone: ${ob.device}.`
   derive micLabel = ob.mic == "unasked" ? "Allow the microphone" : "Try again"
-  derive talkLabel = ob.talking ? "Stop talking" : "Talk to it"
-  derive addLabel = ob.talking ? `Listening. ${ob.voiceHint}` : ob.voiceHint
   derive eyebrow = ob.step == "done" ? "ALL SET" : ob.step == "skipped" ? "WHEN YOU ARE READY" : `STEP ${n} OF 4`
   view
     PageScroll(id="onboarding")
@@ -321,32 +408,7 @@ component OnboardingPage
 
       // ---- the edition's topics: tap to select and deselect, type your own, or say it. Any number; none is the general edition.
       if ob.step == "topics"
-        Card(level=1, testId="ob-explainer", minHeight=0)
-          column padding=16 gap=8
-            text ob.explainer font-family=th.fontRead font-size=17 line-height=1.45 color=th.fg
-        column width="100%" testId="ob-topics"
-          for r in ob.tree key=r.key
-            TopicRowItem(rowId=r.key, label=r.label, kind=r.kind, selected=r.selected, partial=r.partial, expandable=r.expandable, expanded=r.expanded, note=r.note)
-        row gap=8 align-items="center" width="100%"
-          input value=obTopicText input=editObTopic submit=obAddTopic placeholder="Add your own topic" aria-label="Add your own topic" testId="ob-topic-input" enterkeyhint="done" flex=1 min-width=0 min-height=44
-            font-family=th.fontRead font-size=17 color=th.fg padding="8px 12px" border-width=1 border-style="solid" border-color=th.rule border-radius=th.radiusControl background-color=th.paper2
-            ::placeholder
-              color=th.muted
-          button press=obAddTopic testId="ob-topic-add" appearance="none" aria-label="Add this topic"
-            Btn(label="Add", primary=false, wide=false)
-        Card(level=2, testId="ob-selection", minHeight=0)
-          column padding=16 gap=6
-            text ob.selectionLine font-family=th.fontRead font-size=17 line-height=1.4 color=th.fg
-        button press=obTalk testId="ob-talk" appearance="none" aria-label=talkLabel
-          Btn(label=talkLabel, primary=false, wide=true)
-        text addLabel font-family=th.fontUi font-size=14 color=th.muted
-        if ob.demo
-          Card(level=1, testId="ob-demo", minHeight=0)
-            column padding=14 gap=8
-              text "Demo: no microphone here" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
-              button press=obDemoSay testId="ob-demo-say" appearance="none"
-                Btn(label=`Say: ${ob.demoWords}`, primary=false, wide=true)
-        text ob.message font-family=th.fontUi font-size=14 color=th.danger
+        TopicPicker()
         button press=obTopicsDone testId="ob-topics-done" appearance="none"
           Btn(label="Continue", primary=true, wide=true)
         button press=obSkip testId="ob-skip" appearance="none" padding=10

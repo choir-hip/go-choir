@@ -487,6 +487,7 @@ component ReaderBody
 component ReaderMessage
   inject
     th: Theme
+    openPage: action
   props
     title: string
     message: string
@@ -505,6 +506,9 @@ component ReaderMessage
               animation=(still ? "none" : `readerEmerge ${th.motionEnterMs}ms ${th.staggerMs * (i + 1)}ms ease-out both`)
       if message != ""
         text message testId="reader-message" font-family=th.fontUi color=th.muted
+        // An error is never a dead end: a way back to the paper.
+        button press=openPage("paper:front", "Paper") testId="reader-message-back" appearance="none" margin-top=8
+          Btn(label="Back to the paper", primary=false, wide=false)
 
 component ReaderPage
   inject

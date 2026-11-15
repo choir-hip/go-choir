@@ -262,3 +262,36 @@ final class EditionCompletionTests: XCTestCase {
         XCTAssertEqual(EditionCompletion.general().lines, ["What I follow", "The whole paper, until I say otherwise."])
     }
 }
+
+// The edition's address (owner finding: "Open edition" showed "Could not open this page. HTTP 404: document not found").
+// Cause: obOpenEdition (members-onboarding.contract) and OnboardingController.editionReady opened "texture:my-edition", which the
+// reader fetched as a document id; the writer is local, so the server never had that document.
+final class EditionAddressTests: XCTestCase {
+    func testTheEditionAddressResolvesToTheLocalPage() {
+        XCTAssertEqual(PageAddress.canonical("texture:my-edition"), "onboarding:edit")
+        XCTAssertEqual(PageAddress.canonical(" Texture:My-Edition "), "onboarding:edit")
+        XCTAssertEqual(PageAddress.canonical("texture:abc123"), "texture:abc123", "a real document is left alone")
+        XCTAssertEqual(PageAddress.kind(of: PageAddress.edition), "onboarding", "a page the onboarding source serves, not the reader")
+        XCTAssertEqual(PageAddress.defaultTitle("onboarding:edit"), "My edition")
+    }
+
+    func testOpeningTheOldAddressOpensTheLocalPageOnce() {
+        let p = OpenPages(file: nil)
+        let a = p.open("texture:my-edition", title: "My edition")
+        XCTAssertEqual(a.address, "onboarding:edit"); XCTAssertEqual(a.kind, "onboarding")
+        _ = p.open("onboarding:edit")
+        XCTAssertEqual(p.list().filter { $0.address.contains("edition") || $0.address.contains("edit") }.count, 1)
+        XCTAssertFalse(p.list().contains { $0.address == "texture:my-edition" }, "no path leaves the 404 address in the deck")
+    }
+
+    func testASavedDeckWithTheOldAddressIsRepaired() throws {
+        let f = FileManager.default.temporaryDirectory.appendingPathComponent("pages-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: f) }
+        let old = #"{"pages":[{"address":"paper:front","kind":"paper","title":"Paper","opener":"","pinned":false},{"address":"texture:my-edition","kind":"reader","title":"My edition","opener":"","pinned":false}],"recency":["texture:my-edition","paper:front"]}"#
+        try Data(old.utf8).write(to: f)
+        let p = OpenPages(file: f)
+        XCTAssertEqual(p.list().map(\.address).sorted(), ["onboarding:edit", "paper:front"])
+        XCTAssertEqual(p.list().first?.address, "onboarding:edit")
+        XCTAssertEqual(p.list().first?.kind, "onboarding")
+    }
+}

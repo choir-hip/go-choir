@@ -215,6 +215,9 @@ component RootScreen
   view
     ToolScroll(id="settings")
       ScreenTitle(label="Settings", back=false)
+      SectionLabel(label="Your edition")
+      Card(level=1, testId="settings-card-edition", minHeight=0)
+        NavRow(address="onboarding:edit", title="Edit my edition", subtitle="Topics you follow", testId="settings-edit-edition")
       SectionLabel(label="Appearance")
       ModePicker()
       for t in tc.rows key=t.id
@@ -231,7 +234,7 @@ component RootScreen
         NavRow(address="settings:computer", title="Computer", subtitle=(cmpt.updateAvailable ? "An update is waiting" : (cmpt.state == "" ? "Status, wake, restart to update" : cmpt.state)), testId="settings-nav-computer")
       SectionLabel(label="Listening")
       Card(level=1, testId="settings-card-listening", minHeight=0)
-        NavRow(address="onboarding:setup", title="Set up voice", subtitle="Download the voice models, check the microphone, tell the paper what you like", testId="settings-setup-voice")
+        NavRow(address="onboarding:setup", title="Voice setup", subtitle="Download the voice models and check the microphone", testId="settings-setup-voice")
         Hairline()
         NavRow(address="settings:voice", title="Voice and models", subtitle="The voice, and the models that hear you", testId="settings-nav-voice")
       SectionLabel(label="The paper")

@@ -4,7 +4,7 @@
 // testIds: page-title, textures-search, textures-edition, textures-make-edition, textures-new, textures-doc-<address>.
 use Theme, TextureList, TextureRow, Onboarding from "@choir/autoradio"
 use PageScroll, Card, Btn from "./ui.contract"
-use FirstRunCard from "./onboarding.contract"
+use FirstRunCard, EditEditionLink from "./onboarding.contract"
 
 component TextureRowView
   inject
@@ -63,6 +63,7 @@ component TexturesPage
             text "A front page written for you each morning from the sources you follow. Say what you want in it." font-family=th.fontRead font-size=16 line-height=1.45 color=th.muted width="100%"
             button press=editAsk("Make my edition: ") testId="textures-make-edition" appearance="none"
               Btn(label="Make your edition", primary=true, wide=false)
+      EditEditionLink()
       for r in edition key=r.address
         TextureRowView(r=r, pinned=true)
       if others.length > 0

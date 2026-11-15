@@ -451,7 +451,8 @@
       "voiceHint": "string",
       "talking": "bool",
       "pickedCount": "number",
-      "tree": "TopicRowView[]"
+      "tree": "TopicRowView[]",
+      "editing": "bool"
     },
     "TopicRowView": {
       "key": "string",
@@ -1722,7 +1723,7 @@
           "editionError": "",
           "editionTitle": "My edition",
           "editionIntro": "",
-          "editionAddress": "texture:my-edition",
+          "editionAddress": "onboarding:edit",
           "card": "",
           "cardBody": "",
           "aim": "",
@@ -1742,7 +1743,8 @@
           "voiceHint": "",
           "talking": false,
           "pickedCount": 0,
-          "tree": []
+          "tree": [],
+          "editing": false
         }
       }
     },
@@ -1821,6 +1823,14 @@
     },
     {
       "send": "onboardingEditionRetry",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingEditDone",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingEditLeave",
       "answers": "Onboarding"
     },
     {
