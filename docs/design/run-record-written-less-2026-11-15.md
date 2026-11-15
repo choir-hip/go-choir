@@ -404,3 +404,137 @@ rollback (this section), heresy delta (none: no switch, no limit added).
   line only.
 - The compressed on-disk effect of the saving.
 - Nothing here was compiled or run.
+
+## 9. What the first measurement showed, and the counter needed first
+
+Measured 2026-11-15 on d@e (the test computer) through the read-only API,
+GET only, one request every 21 seconds: `GET /api/runtime/observability` once,
+`GET /api/runs?limit=20` once, `GET /api/runs/{id}` for the 20 newest runs.
+Raw responses are in the session scratchpad, not in the repo.
+
+### 9.1 Read paths that exist, and what they cannot show
+
+| Path | Shows | Cannot show |
+| --- | --- | --- |
+| `GET /api/runtime/observability`, block `telemetry_batching.object_rewrites["choir.run"]` (`internal/store/telemetry_stats.go:303`, `object_rewrite_counters.go:110`) | ops, bytes, mean bytes per op, distinct objects, writes per object, since boot | any split by site, state or field |
+| `GET /api/runs/{id}` (`internal/agentcore/api.go:610-631`) | the run's current record only | any earlier write |
+| `GET /api/runs/{id}/events` | the run's `loop.*` events with times | the object writes |
+| `cmd/ledger-witness` (`cmd/ledger-witness/main.go`) | where named inbox records sit on the host's artifacts | run writes; needs the host's artifact files, which I may not read |
+
+No existing path lists the `choir.run` writes of one run with time, size and
+changed fields. So the per-write walk the design's step 0 names, the split of
+writes by site (W1 to W11), the share of runs that take W3 and whether W3
+changes only `updated_at` **could not be done**. I did not build one.
+
+### 9.2 What was measured
+
+Counter, d@e since its last boot: `choir.run` 10 ops, 151,219 bytes, mean
+15,122 bytes per op, 2 distinct objects, 5.0 writes per object. Two runs
+only: a sample too small to say anything about the paper's 4.7.
+
+Final bodies of the 20 newest runs (JSON length of each field in the current
+record; 6 management runs, 14 texture runs; 9 completed, 11 passivated):
+
+| Field | Mean | Max | Notes |
+| --- | --- | --- | --- |
+| `prompt` | 6,157 | 16,215 | texture runs 2.4 to 16.2 KB, management 873 B |
+| `result` | 149 | 741 | zero on 15 of 20 |
+| `error` | 0 | 0 | |
+| `metadata` | 16,404 | 81,159 | the largest field by far |
+| `labels` | 40 | 115 | |
+| whole record | 23,414 | 86,842 | before base64 (x 4/3 on the tape) |
+
+Inside `metadata`, one key decides it: `texture_available_source_entities`
+is 1.4 KB in a passivated texture run and 40 to 79 KB in a completed one
+(runs 13, 14, 15, 18, 20); a completed texture run's metadata is 42 to 81 KB.
+Without it, metadata is about 1 to 2 KB (`llm_fallbacks` 291 B, `llm_policy_source`
+48 B, ids). That key is a list merged into the run as evidence arrives
+(`internal/textureowner/texture_evidence_sources.go:459-465`,
+`texture_agent_revision.go:675-683`); it only grows during a run. It is the
+growing-list-in-a-mutable-object case the third clause of T2 names, and it
+lives inside `choir.run` itself.
+
+These are end-of-run sizes, not the sizes at each write: a run's earlier
+writes carry less of the list. The paper's 18.7 KB per write is lower than
+this sample's mean 23.4 KB x 4/3, so d@e's texture-heavy runs are heavier
+than the paper's mix (this is the sample, not the paper).
+
+### 9.3 What this does to the decision
+
+It weakens section 3 and section 0 as written:
+
+- The bulk of a run write is `metadata`, mean 70% of the body, nearly all of
+  it one list in texture runs. `prompt` is 26%. Everything else is under 3%.
+- Dropping W3 (A) removes one whole write per run that takes it; the size
+  of that saving is still unknown, and it does not touch the growth of the
+  list inside the other writes.
+- B for `prompt` only (open question 2) would remove at most about 26% of
+  the body per write after the first; B for the one list key would remove
+  more on texture runs and is smaller to build than a split of the whole map
+  (one key, read in `texture_evidence_sources.go:454` and written at the two
+  sites above), but it is still a stored-shape change with the rollback
+  hazard of section 2.1.
+
+I do not re-decide here. I state that the case for A rests on one write the
+tape has not been shown to contain, while the measured weight is in a list
+this document did not name when it chose. The design should be re-taken after
+the counter below has run for a day. Until then no code on this slice.
+
+### 9.4 The counter needed first (yellow, no code written)
+
+The smallest change that answers every question above is one new counter
+beside `object_rewrites`, filled where a run write is built, because the
+interceptor at `internal/store/projection_tape.go:105-120` sees only an
+object and `tallyTapeParts` is deliberately free of JSON decoding
+(`tape_write_counters.go:128-133`). A label cannot be recovered there.
+
+What it counts, per `choir.run` write, under the key `site/state/change`:
+
+- `site`: a fixed string at each writer, from this list of file:line:
+  `create` (`internal/store/graph_store.go:597`, and the create branch of
+  `internal/store/lifecycle.go:3528`), `activate` and `activation_update`
+  (`lifecycle.go:3528`, told apart by the stored state read at `:3333-3351`),
+  `terminalize` (`lifecycle.go:5573-5589`), `reactivate`
+  (`lifecycle.go:5690-5725`), `labels` (`internal/store/store.go:2501`),
+  `control_delivery` (`internal/store/lifecycle_control_delivery.go:646`),
+  `ogupdate` (`internal/store/graph_store.go:786-790`), `engineering_bind`
+  and `engineering_terminal` (`internal/store/engineering_assignments.go:1639`,
+  `:1910`). The `W3` write arrives through `activate`/`activation_update` and
+  is told apart by `change`, not by site.
+- `state`: the run's new `state`.
+- `change`: `updated_at_only` when the new record equals the stored one in
+  every field but `updated_at`, otherwise the sorted names of the changed
+  body keys and `metadata:<key>` for changed metadata keys. Every writer
+  except the label writer and `graph_store.go:786` already holds both the
+  stored record and the new one (`storedRun` at `lifecycle.go:3336`,
+  `existingRec` at `graph_store.go:739`, `run` after decode at
+  `lifecycle.go:5528`), so the comparison costs no extra read.
+- Bytes by field of the written body: `prompt`, `result`, `error`,
+  `metadata` (and the largest metadata key's name and size), `labels`,
+  `other`.
+
+Where it goes: a `runWrites map[string]RunWriteStat` in `tapeWriteMaps`
+(`internal/store/object_rewrite_counters.go:122-150`, next to
+`addRewrite`), a method on the store called by the writers above just
+before their conditional put, and the served field next to
+`ObjectRewrites` (`internal/store/telemetry_stats.go:303`). Keys are a closed
+set (sites x states x change names); the change name is capped to a bounded
+number of keys with an `other` bucket, as `bumpKey` does
+(`tape_write_counters.go:55-60`). It counts the writes the store accepted, so
+it must run after the conditional put succeeds, not before.
+
+This is class yellow (a counter, no behavior). It is the "counter that
+answers the premise" CLAUDE.md asks for before a fix. It answers: writes per
+run by site, the share of runs that take W3, whether W3 is `updated_at`
+only, and the field-by-field bytes at each write, from the paper's own work.
+
+### 9.5 What I could not see
+
+- Any individual write, its time or its diff (section 9.1).
+- W1 to W11 split, f, and whether W3 is `updated_at`-only.
+- Sizes at each write: only the end-of-run sizes above.
+- Whether `GET /api/runs/{id}` returns the stored body unprojected: I read
+  `HandleRunResource` (`api.go:626-631`) which returns `rt.GetRun`; I did not
+  read `GetRun`. The returned keys are the `RunRecord` fields, so I treat it
+  as the record.
+- The paper's mix: d@e is a test computer with a texture-heavy history.
