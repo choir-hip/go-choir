@@ -70,8 +70,10 @@ public protocol PlaybackControl: AnyObject, Sendable {
     /// The programme line being spoken this instant and how much of it has been heard; nil when nothing is being spoken
     /// (paused, a clip, nothing playing). Asked by the engine at the moment a listener begins, so a turn knows what it cut into.
     func spoken() async -> SpokenCut?
+    /// Stop the voice (an acknowledgement, a holding line, the desk's answer) at once: the listener spoke over it.
+    func stopVoice() async
 }
-public extension PlaybackControl { func spoken() async -> SpokenCut? { nil } }
+public extension PlaybackControl { func spoken() async -> SpokenCut? { nil }; func stopVoice() async {} }
 
 /// Replay's player: nothing audible, the document is tracked.
 public final class SimulatedPlayback: PlaybackControl, @unchecked Sendable {
@@ -143,6 +145,8 @@ public actor TurnEngine {
     /// A cancelled hold's release must not start a turn.
     var ignoreNextButtonUp = false
     var pipeline: Task<Void, Never>?
+    /// Hands-free listening state (HandsFree.swift): the turn policy, the open transcription session, what the radio has said aloud.
+    var hf = HandsFreeState()
 
     final class Turn {
         let id: String
@@ -470,6 +474,7 @@ public actor TurnEngine {
             await runPipelineBody(t, transcript: transcript, endedAt: endedAt, kids: kids)
         } onCancel: { kids.cancelAll() }
         kids.cancelAll()
+        if !Task.isCancelled { await hfAnswerEnded(turnID: t.id) }
     }
 
     private func runPipelineBody(_ t: Turn, transcript: String, endedAt: Double, kids: TaskBag) async {
@@ -495,6 +500,7 @@ public actor TurnEngine {
         var deskTask: Task<Void, Never>?
         var deskSpeakTask: Task<Void, Never>?
         let deskHeard = HeardLines()                                   // what the streamed desk said aloud
+        hfWatchHeard([heard, deskHeard])
         let localPlay = Locked<Task<Void, Never>?>(nil)                // the local stream's player and speaker: the desk's speaker waits for them
         let localSpeakerBox = Locked<LocalSpeaker?>(nil)
         var streaming = false

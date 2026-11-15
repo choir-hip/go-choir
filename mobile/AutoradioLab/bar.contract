@@ -202,11 +202,11 @@ component BarShell
             button testId="bar-send" press=sendAsk appearance="none" width=52 height=48 aria-label="Send"
               BarGlyph(glyph="send", caption="Send", on=true)
           else
-            button testId="bar-mic" press=micTap appearance="none" width=52 height=48 aria-label=(micOn ? "Stop listening and send" : "Talk")
+            button testId="bar-mic" press=micTap appearance="none" width=52 height=48 aria-label="Mute or unmute the microphone"
               box position="relative" width=52 height=48
                 if micOn
                   box position="absolute" left=9 top=3 width=34 height=28 border-radius=14 border-width=2 border-style="solid" border-color=th.danger pointer-events="none"
                     animation=(still ? "none" : "barPulse 1.1s ease-in-out infinite")
-                BarGlyph(glyph=(micOn ? "stop" : "mic"), caption=(micOn ? "Send" : "Talk"), on=micOn)
+                BarGlyph(glyph="mic", caption="Mic", on=micOn)
           button testId="bar-play" press=radioPlay appearance="none" width=52 height=48 aria-label=playLabel
             BarGlyph(glyph=(isPlaying ? "pause" : "play"), caption=playWord, on=false)

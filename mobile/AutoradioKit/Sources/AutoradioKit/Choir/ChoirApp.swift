@@ -12,12 +12,14 @@ extension StageRegistry {
     /// What the listener's app runs: the real programme, System 1 and desk on the listener's computer, and
     /// the best Apple stages for the rest. Stubs and fixtures stay registered and selectable in the Lab tab.
     public static func listenerConfiguration() -> LabConfiguration {
-        LabConfiguration(name: "listener", stages: [
-            .micSource: .init(id: "builtin"), .addressing: .init(id: "button"), .speechBounds: .init(id: "energy-vad"),
+        var c = LabConfiguration(name: "listener", stages: [
+            .micSource: .init(id: "builtin"), .addressing: .init(id: "open"), .speechBounds: .init(id: "energy-vad", params: ["hangoverSeconds": .number(0.25)]),
             .speakerCheck: .init(id: "none"), .transcriber: .init(id: "apple-speech"), .yieldPolicy: .init(id: "dip-then-pause"),
             .system1: .init(id: ChoirSystem1.stageID), .holder: .init(id: "local-ack"), .voice: .init(id: "avspeech"),
             .desk: .init(id: AutoradioDeskStage.stageID), .programme: .init(id: RadioProgramme.stageID),
         ])
+        c.audioPolicy = .alwaysTalking          // hands-free: voice processing for the whole session, so the radio's voice is cancelled from the microphone
+        return c
     }
 }
 func registerChoirStages(_ r: StageRegistry) { StageRegistry.registerChoirStages(r) }

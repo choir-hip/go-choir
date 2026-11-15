@@ -317,6 +317,13 @@ public final class LiveAudio: @unchecked Sendable {
         timer.cancel()
     }
 
+    /// Stop the voice node at once and release whoever waits on it (the listener spoke over the radio).
+    public func stopVoice() {
+        guard !virtual, running else { return }
+        voiceNode.stop()
+        releaseWaiters()
+    }
+
     /// Schedule a buffer on the programme node and wait until it has played. If the engine is restarted meanwhile
     /// (a session switch, a route change), carry on from the frames already rendered once it is back.
     func playProgramme(_ samples: [Float], rate: Double, tag: Int = -1) async {
@@ -629,6 +636,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         onChange?()
     }
     public func speak(_ frames: AsyncThrowingStream<AudioFrame, Error>) async { await audio.playVoice(frames) }
+    public func stopVoice() async { audio.stopVoice() }
     public func apply(_ r: Revision) async { st.write { $0.document = $0.document.applying(r); $0.jumpTo = r.fromBlock }; onChange?() }
     public func resume() async {
         let jump = st.write { s -> Int? in

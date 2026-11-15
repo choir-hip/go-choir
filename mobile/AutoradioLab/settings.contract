@@ -2,7 +2,6 @@
 //   settings:root (or settings:)  the list, with the theme picker and light/dark/system inline
 //   settings:appearance           themes as preview cards, light/dark/system, a theme from a Texture, the type and depth specimens
 //   settings:account              who am I, the device's key label, sign out
-//   settings:talk                 talk mode (button / word / open), set after onboarding
 //   settings:voice                voice and models: Components, and the voice setup card (lane 8)
 //   settings:computer             status, Wake, Restart to update
 //   settings:learned              what the paper has learned, with Reset
@@ -27,8 +26,6 @@ component SettingsPage
       AppearanceScreen()
     if screen == "account"
       AccountScreen()
-    if screen == "talk"
-      TalkScreen()
     if screen == "voice"
       VoiceScreen()
     if screen == "computer"
@@ -39,7 +36,7 @@ component SettingsPage
       GesturesScreen()
     if screen == "about"
       AboutScreen()
-    if screen != "appearance" and screen != "account" and screen != "talk" and screen != "voice" and screen != "computer" and screen != "learned" and screen != "gestures" and screen != "about"
+    if screen != "appearance" and screen != "account" and screen != "voice" and screen != "computer" and screen != "learned" and screen != "gestures" and screen != "about"
       RootScreen()
 
 // ---------------------------------------------------------------- shared pieces
@@ -212,7 +209,6 @@ component RootScreen
     cmpt: SettingsComputer
     dm: DemoInfo
     setDemo: action
-    talkRows: SettingRows
     devDetails: bool
     toggleDevDetails: action
   view
@@ -235,8 +231,6 @@ component RootScreen
       SectionLabel(label="Listening")
       Card(level=1, testId="settings-card-listening", minHeight=0)
         NavRow(address="onboarding:setup", title="Set up voice", subtitle="Download the voice models, check the microphone, tell the paper what you like", testId="settings-setup-voice")
-        Hairline()
-        NavRow(address="settings:talk", title="Talk", subtitle=(talkRows.rows.length > 0 ? talkRows.rows.map(r => r.valueLabel).join(", ") : "How you talk to the radio"), testId="settings-nav-talk")
         Hairline()
         NavRow(address="settings:voice", title="Voice and models", subtitle="The voice, and the models that hear you", testId="settings-nav-voice")
       SectionLabel(label="The paper")
@@ -388,17 +382,6 @@ component SettingChoices
                   column flex=1 min-width=0 gap=2 align-items="flex-start"
                     text o.label font-family=th.fontUi font-size=tx.sizeLabel font-weight=600 color=th.fg
                     text o.detail font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
-
-component TalkScreen
-  inject
-    th: Theme
-    tx: ThemeExtras
-    talkRows: SettingRows
-  view
-    ToolScroll(id="settings")
-      ScreenTitle(label="Talk", back=true)
-      text "You choose this once after the first run, and can change it here at any time. Holding the voice button always works." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
-      SettingChoices(rows=talkRows.rows)
 
 component GesturesScreen
   inject

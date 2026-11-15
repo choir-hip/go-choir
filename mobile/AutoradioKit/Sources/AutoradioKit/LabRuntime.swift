@@ -150,14 +150,18 @@ public final class LabRuntime: @unchecked Sendable {
         }
         if virtual { LabEnvironment.promptsAllowed = false; LabEnvironment.virtualAudio = true }
         do {
-            try await session.claim(.listening, preferBuiltInMic: true, reason: "start")
+            try await session.claim(.talking, preferBuiltInMic: true, reason: "start")    // voice processing from the start: the radio's voice is not the listener's
             let micOK = virtual ? true : await LiveAudio.requestMicPermission()
             if !micOK { log.emit(.error(stage: "mic", message: "microphone permission denied; button/typing only")) }
             try audio.start(bus: bus, clock: clock, wantMic: micOK, voiceProcessing: coordinator.current == .talking, virtual: virtual)
             if virtual { log.emit(.note("virtual audio: no hardware is opened; mic frames are injected")) }
             started = true
             let mic = bus.mic()
-            micTask = Task { [engine] in for await f in mic { await engine.ingest(f) } }
+            let echo = audio.voiceProcessing, muted = voiceMuted
+            micTask = Task { [engine] in
+                await engine.handsFreeConfigure(echoCancelled: echo)
+                for await f in mic where !muted.value { await engine.ingestHandsFree(f) }      // hands-free: no button, the policy decides (HandsFree.swift)
+            }
             player.play()
             lock.lock(); snap.running = true; snap.message = ""; lock.unlock()
         } catch {
@@ -195,6 +199,7 @@ public final class LabRuntime: @unchecked Sendable {
     public var pageTextProvider: (@Sendable (String) async -> String)?
     private var warmTask: Task<Void, Never>?
     private let warmKeys = Locked<(done: String, running: String)>(("", ""))
+    let voiceMuted = Locked<Bool>(false)
     static func warmKey(_ address: String, _ text: String) -> String { "\(address)|\(text.utf8.count)|\(text.hashValue)" }
     /// A page's text has arrived (or changed) while the page may already be in front: read it into the responder's cache unless that
     /// exact page and text has been read or is being read now.
@@ -245,8 +250,11 @@ public final class LabRuntime: @unchecked Sendable {
         return await engine.typedTurn(text, front: front)
     }
 
-    public func talkDown() { Task { await engine.buttonDown() } }
-    public func talkUp() { Task { await engine.buttonUp() } }
+    /// The bar's microphone control is voice on and off, not a talk button: hands-free listening goes on until it is muted. While
+    /// muted the microphone frames are not heard (the system's microphone indicator stays on until the radio is stopped).
+    public func talkDown() { voiceMuted.write { $0.toggle() } }
+    public func talkUp() { voiceMuted.write { $0.toggle() } }       // one tap, one call, whichever the bar sends: it toggles
+    public var isMuted: Bool { voiceMuted.value }
     /// Discard the turn being talked (Cancel beside Send): stop the capture, drop the audio and words, call nothing.
     public func cancelTalk() { Task { await engine.cancelTurn() } }
 
@@ -260,7 +268,7 @@ public final class LabRuntime: @unchecked Sendable {
         }
         log.emit(.note("injecting the fixture turn (\(mic.count / 16) ms) through the live engine"))
         // Press the button only when the configuration addresses by button; in open mode the audio alone must do it.
-        let useButton = ["button", "hybrid"].contains(configuration.setting(.addressing)?.id ?? "")
+        let useButton = false          // hands-free: the audio alone starts and ends the turn
         if useButton { await engine.buttonDown() }
         let n = 512   // 32 ms frames, paced in real time
         var i = 0
@@ -271,7 +279,7 @@ public final class LabRuntime: @unchecked Sendable {
             try? await Task.sleep(nanoseconds: 32_000_000)
         }
         // trailing silence so the VAD closes, then the button
-        for _ in 0..<20 {
+        for _ in 0..<50 {
             bus.pushMic(AudioFrame(samples: [Float](repeating: 0, count: n), sampleRate: busSampleRate, t: clock.now))
             try? await Task.sleep(nanoseconds: 32_000_000)
         }
