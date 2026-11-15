@@ -23,7 +23,7 @@ assert_output() {
 }
 
 assert_output docs-only $'docs/README.md\nAGENTS.md\n' \
-  'docs_only=true' 'non_docs=false' 'go=false' 'sbom=false' 'flakehub=false'
+  'docs_only=true' 'non_docs=false' 'go=false' 'sbom=false' 'flakehub=false' 'guest_unit=false'
 
 assert_output auth-change $'internal/auth/service.go\ninternal/auth/service_test.go\n' \
   'docs_only=false' 'go=true' 'sbom=true' 'flakehub=true' 'high_risk_race=false'
@@ -64,6 +64,31 @@ assert_output sbom-helper $'.github/scripts/build-sboms-differential\n' \
 assert_output sbom-verifier $'.github/scripts/verify-sbom-candidate\n' \
   'go=false' 'sbom=true' 'flakehub=false' 'ci=true'
 
+# The boot prune's unit test (scripts/updater-prune-unit-nix-test.sh) guards
+# the ordering line in nix/autoputer-vm.nix: it must run when any nix module
+# changes and when the script or the workflow does, and not for docs.
+assert_output nix-module-only $'nix/autoputer-vm.nix\n' \
+  'docs_only=false' 'non_docs=true' 'guest_unit=true' 'go=false' 'sbom=false'
+
+assert_output nix-unit-test-script-only $'scripts/updater-prune-unit-nix-test.sh\n' \
+  'docs_only=false' 'non_docs=true' 'guest_unit=true' 'go=false'
+
+assert_output nix-flake-inputs $'flake.nix\nflake.lock\n' \
+  'guest_unit=true'
+
+# The chaos scripts are read by a Go test, but their README is only docs.
+assert_output chaos-script $'scripts/chaos/s2-corpusd-crash.sh\n' \
+  'docs_only=false' 'go=true'
+
+assert_output chaos-readme-only $'scripts/chaos/README.md\n' \
+  'docs_only=true' 'go=false' 'guest_unit=false'
+
+assert_output nix-workflow-wiring $'.github/workflows/ci.yml\n' \
+  'guest_unit=true'
+
+assert_output nix-docs-and-dev-scripts-do-not-select-it $'docs/problems/x.md\nscripts/land\nskills/throughline/SKILL.md\n' \
+  'docs_only=true' 'guest_unit=false'
+
 # Docs-like paths (owner, 2026-11-12): skill text and developer-side scripts.
 assert_output skills-text-only $'skills/throughline/SKILL.md\nskills/throughline/references/format.md\nskills/agentic-consensus/agentic-consensus-runner.sh\n' \
   'docs_only=true' 'non_docs=false' 'go=false' 'sbom=false' 'flakehub=false' 'frontend=false'
@@ -85,6 +110,20 @@ assert_output ci-gate-script $'scripts/check-guest-security-epoch\n' \
 
 assert_output ci-gate-support $'scripts/lib/choir_internal.sh\nscripts/testdata/desk-names/good/internal/x/a.go\nscripts/store-handles-allowlist.json\n' \
   'docs_only=false'
+
+# The chaos scripts are read by a Go test, but their README is only docs.
+assert_output chaos-script $'scripts/chaos/s2-corpusd-crash.sh\n' \
+  'docs_only=false' 'go=true'
+
+assert_output chaos-readme-only $'scripts/chaos/README.md\n' \
+  'docs_only=true' 'go=false'
+
+assert_output receipts-swap-script $'scripts/receipts-index-swap\n' \
+  'docs_only=false' 'non_docs=true' 'go=true' 'receipts_swap=true'
+assert_output receipts-swap-test $'scripts/receipts-index-swap-test\n' \
+  'docs_only=false' 'non_docs=true' 'go=true' 'receipts_swap=true'
+assert_output receipts-swap-untouched $'internal/auth/service.go\n' \
+  'receipts_swap=false'
 
 assert_output scripts-go-file $'scripts/kernelgate/main.go\n' \
   'docs_only=false' 'go=true'
@@ -117,6 +156,10 @@ while ((${#queue[@]} > 0)); do
   queue=("${queue[@]:1}")
   [[ -n "${seen[$ref]:-}" ]] && continue
   seen[$ref]=1
+  # The one markdown file a script merely mentions (a usage line in
+  # scripts/chaos/run): documentation, not an input. Any other markdown file a
+  # script, unit or workflow names must stay non-docs, as nix/guest-release-policy.md is.
+  case "$ref" in scripts/chaos/README.md) continue ;; esac
   out="$tmpdir/ref.out"; : >"$out"
   printf '%s\n' "$ref" | "$classifier" --sha 0000000000000000000000000000000000000000 "$out" >/dev/null
   if ! grep -qxF 'docs_only=false' "$out"; then
@@ -157,7 +200,7 @@ grep -qxF 'sampled_race=true' "$sample_output"
 
 force_output="$tmpdir/force.out"
 printf '' | CI_FORCE_ALL=true "$classifier" --sha 1111111111111111111111111111111111111111 "$force_output" >/dev/null
-for expected in go=true frontend=true sbom=true flakehub=true high_risk_race=true ci=true; do
+for expected in go=true frontend=true sbom=true flakehub=true high_risk_race=true ci=true guest_unit=true; do
   grep -qxF "$expected" "$force_output"
 done
 

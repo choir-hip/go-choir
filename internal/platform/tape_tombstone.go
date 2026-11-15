@@ -115,6 +115,22 @@ func (s *Store) loadTapeTombstones(ctx context.Context) error {
 	return nil
 }
 
+// tapeTombstoneArchivePaths is the set of archive paths any tombstone names.
+func (s *Store) tapeTombstoneArchivePaths(ctx context.Context) (map[string]bool, error) {
+	if err := s.loadTapeTombstones(ctx); err != nil {
+		return nil, err
+	}
+	s.tombstones.mu.RLock()
+	defer s.tombstones.mu.RUnlock()
+	out := map[string]bool{}
+	for _, t := range s.tombstones.byID {
+		if t.ArchivePath != "" {
+			out[t.ArchivePath] = true
+		}
+	}
+	return out, nil
+}
+
 // TapeTombstone returns the computer's tombstone, if any.
 func (s *Store) TapeTombstone(ctx context.Context, computerID string) (TapeTombstone, bool, error) {
 	if s == nil || s.db == nil {

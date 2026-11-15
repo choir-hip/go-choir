@@ -5,7 +5,7 @@ Companion to
 It applies the precommitment-records practice to the mission that builds it:
 we score our own predictions as we go, with the same mechanism the mission
 gives the desks. The mechanism and scoring rules are in
-[docs/precommitment-records.md](../precommitment-records.md), sections 2 and 5.
+[docs/archive/learning/precommitment-records.md](../archive/learning/precommitment-records.md), sections 2 and 5.
 The format follows the data architecture ledger
 (`choir-data-architecture-selection-2026-10-28.precommit.md`). This file
 applies them by hand until desk records carry the work.

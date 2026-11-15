@@ -359,7 +359,7 @@ final class InterruptedTurnTests: XCTestCase {
         cfg.set(.addressing, .init(id: "button"))
         cfg.set(.system1, .init(id: "stub-s1", params: ["delay": .number(0), "asks": .string("yes")]))
         cfg.set(.voice, .init(id: "stub-voice")); cfg.set(.transcriber, .init(id: "text-tr"))
-        cfg.set(.holder, .init(id: "fixed-lines", params: ["maxLines": .number(0)]))
+        cfg.set(.holder, .init(id: "local-ack"))
         cfg.set(.desk, .init(id: "rec-desk"))
         RecordingDesk.turns = []
         let pb = CutPlayback(); pb.cut = cut

@@ -33,10 +33,19 @@ const maxCounterKeys = 64
 // telemetryCounters.mu.
 type tapeWriteMaps struct {
 	eventsByFamily  map[string]int64
+	opsByFamily     map[string]int64
 	bytesByFamily   map[string]int64
 	opsByObjectKind map[string]int64
 	opBytesByObject map[string]int64
 	runMemoryByKind map[string]int64
+	runMemoryBytes  map[string]int64        // body bytes of those entries, same keys
+	rewrites        map[string]*rewriteKind // object_rewrite_counters.go
+	// lifecycleForms counts lifecycle commands committed through
+	// commitLifecycleTransition (not the story-open start command, which is
+	// written by its own batch and is neither counted nor slimmed) by the form
+	// of their stored result (lifecycleForm* in lifecycle.go), so the saving of naming
+	// a revision instead of embedding it is read on a live computer.
+	lifecycleForms map[string]int64
 }
 
 func bumpKey(m *map[string]int64, key string, n int64) {
@@ -50,11 +59,20 @@ func bumpKey(m *map[string]int64, key string, n int64) {
 	(*m)[key] += n
 }
 
-// tapeFamily names the writer family of an event: the telemetry sealer by its
-// authority, otherwise the first op decides ("run_memory", "edge",
-// "object:<kind>" or the op kind). It reads ops[0] only, which is right while
-// an event holds one writer's ops; it must change when coalescing puts ops of
-// several families (riding telemetry first) into one event.
+// Per-event versus per-op attribution: tape_events_by_family and
+// tape_bytes_by_family give a whole event, whatever it holds, to the family of
+// its first op (continuity with earlier readings), so a batch [document,
+// revision, sources...] is all "object:<document kind>". The per-op numbers
+// (tape_ops_by_object_kind, tape_op_bytes_by_object_kind, object_rewrites,
+// run_memory_*_by_kind) count every op under its own kind and its own body
+// bytes and are the ones to read for what a kind costs.
+
+// tapeFamily names the writer family of one writer's ops: the telemetry sealer
+// by its authority, otherwise the first op decides ("run_memory", "edge",
+// "object:<kind>" or the op kind). One writer's ops are one family by their
+// first op. An event that carries several writers (coalescing, riding
+// telemetry) is classified per writer in tallyTapeParts; this function must
+// never be asked about the flat ops of such an event.
 func tapeFamily(authority string, ops []computerevent.ProjectionOp) string {
 	if authority == telemetryProjectionAuthority {
 		return "telemetry"
@@ -64,6 +82,9 @@ func tapeFamily(authority string, ops []computerevent.ProjectionOp) string {
 	}
 	return opFamily(ops[0])
 }
+
+// familyMixed names an event whose writers are not all of one family.
+const familyMixed = "mixed"
 
 func opFamily(op computerevent.ProjectionOp) string {
 	switch op.Kind {
@@ -89,23 +110,56 @@ func objectKindOf(canonicalID string) string {
 // before any lock is taken.
 type tapeEventTally struct {
 	family       string
+	partFamilies []string // one per writer, in order
+	partOps      []int
 	payloadBytes int64
 	objKinds     []string
 	objBytes     []int64
+	objHashes    []uint64 // of the canonical ids, parallel to objKinds
 	rmKeys       []string
+	rmBytes      []int64 // body bytes, parallel to rmKeys
 }
 
-// tallyTapeEvent classifies an event. It takes no lock and does no JSON decode.
+// tallyTapeEvent classifies an event written by one writer.
 func tallyTapeEvent(authority string, ops []computerevent.ProjectionOp, payloadBytes int) tapeEventTally {
-	t := tapeEventTally{family: tapeFamily(authority, ops), payloadBytes: int64(payloadBytes)}
-	for _, op := range ops {
-		switch op.Kind {
-		case computerevent.ProjectionOpObject:
-			t.objKinds = append(t.objKinds, objectKindOf(op.CanonicalID))
-			t.objBytes = append(t.objBytes, int64(len(op.Body)))
-		case computerevent.ProjectionOpRunMemoryEntry:
-			t.rmKeys = append(t.rmKeys, runMemoryKey(op.Body))
+	return tallyTapeParts(authority, [][]computerevent.ProjectionOp{ops}, false, payloadBytes)
+}
+
+// tallyTapeParts classifies an event by its writers: parts are the ops of each
+// writer in the order they sit in the event, the first being telemetry that
+// rode along when firstIsTelemetry. Each writer is counted under its own
+// family in ops_by_family; the event is counted once, under that family when
+// all writers agree and under "mixed" when they do not, so events_by_family
+// still sums to events. It takes no lock and does no JSON decode.
+func tallyTapeParts(authority string, parts [][]computerevent.ProjectionOp, firstIsTelemetry bool, payloadBytes int) tapeEventTally {
+	t := tapeEventTally{payloadBytes: int64(payloadBytes)}
+	for i, part := range parts {
+		fam := tapeFamily(authority, part)
+		if firstIsTelemetry && i == 0 {
+			fam = "telemetry"
 		}
+		t.partFamilies = append(t.partFamilies, fam)
+		t.partOps = append(t.partOps, len(part))
+		switch {
+		case i == 0:
+			t.family = fam
+		case t.family != fam:
+			t.family = familyMixed
+		}
+		for _, op := range part {
+			switch op.Kind {
+			case computerevent.ProjectionOpObject:
+				t.objKinds = append(t.objKinds, objectKindOf(op.CanonicalID))
+				t.objBytes = append(t.objBytes, int64(len(op.Body)))
+				t.objHashes = append(t.objHashes, hashID(op.CanonicalID))
+			case computerevent.ProjectionOpRunMemoryEntry:
+				t.rmKeys = append(t.rmKeys, runMemoryKey(op.Body))
+				t.rmBytes = append(t.rmBytes, int64(len(op.Body)))
+			}
+		}
+	}
+	if len(parts) == 0 {
+		t.family = "empty"
 	}
 	return t
 }
@@ -115,21 +169,40 @@ var (
 	rmReasonNeedle = []byte(`"reason":"`)
 )
 
+// runMemoryReasons is the closed list of reasons that may follow a run-memory
+// kind in a counter key. A reason is free text in the entry (a cell's fate
+// carries the error that ended it: on the paper, a reflect panic message), so
+// only these, the ones our own code writes, become part of a key; anything
+// else counts as "<kind>/other".
+var runMemoryReasons = map[string]bool{
+	"actor_rewarm":                    true, // message, compaction: a carried actor conversation
+	"threshold":                       true, // compaction
+	"context_overflow":                true, // compaction
+	"tray committed":                  true, // cell_fate
+	"tray recovered":                  true, // cell_fate
+	"cell terminal deadline exceeded": true, // cell_fate
+}
+
 // runMemoryKey is "kind" or "kind/reason" of a run memory entry body, or
 // "unknown". The body is a flat object of strings and numbers (see
 // RunMemoryEntryProjection), so a quote inside any string value is escaped and
 // the unescaped needle `"kind":"` can only be the top-level key: a scan finds
 // it without decoding the multi-KB message and details strings. A value with
-// an escape, or an absurd length, is "unknown".
+// an escape, or an absurd length, is "unknown". A reason outside
+// runMemoryReasons is "other", so the key space is bounded by the kinds.
 func runMemoryKey(body []byte) string {
 	kind, ok := flatStringField(body, rmKindNeedle)
 	if !ok || kind == "" {
 		return "unknown"
 	}
-	if reason, ok := flatStringField(body, rmReasonNeedle); ok && reason != "" {
-		return kind + "/" + reason
+	reason, ok := flatStringField(body, rmReasonNeedle)
+	if !ok || reason == "" {
+		return kind
 	}
-	return kind
+	if !runMemoryReasons[reason] {
+		reason = "other"
+	}
+	return kind + "/" + reason
 }
 
 func flatStringField(body, needle []byte) (string, bool) {
@@ -149,12 +222,24 @@ func flatStringField(body, needle []byte) (string, bool) {
 func (m *tapeWriteMaps) add(t tapeEventTally) {
 	bumpKey(&m.eventsByFamily, t.family, 1)
 	bumpKey(&m.bytesByFamily, t.family, t.payloadBytes)
+	for i, fam := range t.partFamilies {
+		bumpKey(&m.opsByFamily, fam, int64(t.partOps[i]))
+	}
 	for i, kind := range t.objKinds {
 		bumpKey(&m.opsByObjectKind, kind, 1)
 		bumpKey(&m.opBytesByObject, kind, t.objBytes[i])
+		var h uint64
+		hasHash := i < len(t.objHashes)
+		if hasHash {
+			h = t.objHashes[i]
+		}
+		m.addRewrite(kind, t.objBytes[i], h, hasHash)
 	}
-	for _, key := range t.rmKeys {
+	for i, key := range t.rmKeys {
 		bumpKey(&m.runMemoryByKind, key, 1)
+		if i < len(t.rmBytes) {
+			bumpKey(&m.runMemoryBytes, key, t.rmBytes[i])
+		}
 	}
 }
 
@@ -162,9 +247,24 @@ func (m *tapeWriteMaps) add(t tapeEventTally) {
 func (m *tapeWriteMaps) copyInto(out *TelemetryStats) {
 	out.TapeEventsByFamily = copyCounts(m.eventsByFamily)
 	out.TapeBytesByFamily = copyCounts(m.bytesByFamily)
+	out.TapeOpsByFamily = copyCounts(m.opsByFamily)
 	out.TapeOpsByObjectKind = copyCounts(m.opsByObjectKind)
 	out.TapeOpBytesByObjectKind = copyCounts(m.opBytesByObject)
 	out.RunMemoryOpsByKind = copyCounts(m.runMemoryByKind)
+	out.RunMemoryBytesByKind = copyCounts(m.runMemoryBytes)
+	out.ObjectRewrites = m.rewriteStats()
+	out.LifecycleCommandForms = copyCounts(m.lifecycleForms)
+}
+
+// countLifecycleCommandForm counts one committed lifecycle command by the
+// form of its stored result.
+func (c *telemetryCounters) countLifecycleCommandForm(form string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	bumpKey(&c.tapeWrites.lifecycleForms, form, 1)
+	c.mu.Unlock()
 }
 
 // enterTapeWrite counts a caller entering a tape write and returns the func

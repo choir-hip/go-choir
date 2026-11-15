@@ -106,7 +106,10 @@ type Store struct {
 	// retireCited is the cited-event-id snapshot (a JSON array) of the
 	// telemetry run in flight, nil outside one (telemetry_retire.go).
 	retireCited atomic.Pointer[string]
-	path        string
+	// runMemoryCensus is the last run-memory retirement pass's census
+	// (run_memory_census.go).
+	runMemoryCensus runMemoryCensusHolder
+	path            string
 	// sqlite is the state database (db is its write handle, readDB its read
 	// pool); texturePath is the sidecar directory beside it that holds the
 	// schema receipt, floor and lease markers (storeschema).
@@ -223,11 +226,11 @@ type Store struct {
 	// on in this process (telemetry_sealer.go).
 	telemetryStats telemetryCounters
 	telemetry      atomic.Pointer[telemetrySealer]
-	// tapeGroup is tape.group_commit's state (tape_group_commit.go).
+	// revalidationSource reads the bound appender's revalidation count; atomic
+	// because the hourly summary goroutine reads stats while a rebind may run.
+	revalidationSource atomic.Pointer[func() int64]
+	// tapeGroup is the coalescing state of queued tape writers (tape_group_commit.go).
 	tapeGroup groupCommit
-	// runMem is the run-memory window's tail cache and damage set
-	// (run_memory_batch.go).
-	runMem runMemoryState
 	// eventTableWrites is store.event_table as the runtime applied it: the
 	// writer stamps the storage class's ops for choir_events (event_table.go).
 	eventTableWrites atomic.Bool

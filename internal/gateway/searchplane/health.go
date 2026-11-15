@@ -118,13 +118,17 @@ func normalizeExpiredLocked(rec ProviderHealth, now time.Time) ProviderHealth {
 // concurrency (Parallel: three strikes, 96 h, from one 402;
 // docs/archive/problems/search-providers-cooling-most-of-the-time-2026-10-14.md).
 func sameEpisode(rec ProviderHealth, outcome Outcome) bool {
-	if outcome.At.IsZero() || rec.CooldownUntil == nil {
+	started := outcome.StartedAt
+	if started.IsZero() {
+		started = outcome.At
+	}
+	if started.IsZero() || rec.CooldownUntil == nil {
 		return false
 	}
 	if rec.State != StateCoolingDown && rec.State != StateDisabled {
 		return false
 	}
-	return rec.CooldownUntil.After(outcome.At)
+	return rec.CooldownUntil.After(started)
 }
 
 func applyOutcome(rec *ProviderHealth, outcome Outcome, policy BackoffPolicy, now time.Time) {
@@ -141,10 +145,30 @@ func applyOutcome(rec *ProviderHealth, outcome Outcome, policy BackoffPolicy, no
 	case OutcomeSkippedCoolingDown:
 		return
 	default:
+		// An empty-result streak and a failure run are separate counts: a
+		// change between them restarts the count, so nine empties and one
+		// error are one error, and five errors and five empties are five
+		// empties. A transient failure or auth error of an uncapped provider
+		// counts as one streak with the others, in either direction: entering
+		// or leaving it restarts the count, so four 403s then a 429 is a first
+		// 429 (60 s), not a fifth strike.
+		prev := OutcomeClass(rec.LastFailureClass)
+		if (outcome.Class == OutcomeSuccessEmpty) != (prev == OutcomeSuccessEmpty) ||
+			(outcome.Uncapped && uncappedStreakClass(outcome.Class) != uncappedStreakClass(prev)) {
+			rec.StrikeCount = 0
+		}
 		rec.StrikeCount++
 		rec.LastFailureClass = string(outcome.Class)
 		rec.LastErrorSummary = truncateSummary(outcome.Error)
 		d := policy.CooldownDuration(outcome.Class, rec.StrikeCount)
+		if outcome.Uncapped && uncappedStreakClass(outcome.Class) {
+			// Nothing behind this provider: a transient failure is not an
+			// exhausted quota. Bench it only after a run of them, briefly.
+			d = 0
+			if rec.StrikeCount >= TransientStrikesBeforeCooldown {
+				d = TransientBackoff
+			}
+		}
 		if d > 0 {
 			rec.State = StateCoolingDown
 			until := now.Add(d)

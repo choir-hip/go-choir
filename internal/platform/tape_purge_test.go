@@ -772,7 +772,7 @@ func TestPurgeArchiveCarriesNoKey(t *testing.T) {
 	if err != nil || json.Unmarshal(raw, &sc) != nil {
 		t.Fatalf("sidecar: %v", err)
 	}
-	if err := verifyTapeArchive(archive, sc); err != nil {
+	if err := verifyTapeArchive(context.Background(), archive, sc); err != nil {
 		t.Fatal(err)
 	}
 	file, _ := os.Open(archive)

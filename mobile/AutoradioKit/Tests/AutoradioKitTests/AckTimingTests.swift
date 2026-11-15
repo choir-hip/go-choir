@@ -43,6 +43,13 @@ final class StubTranscriber: Transcriber, @unchecked Sendable {
 final class AckTimingTests: XCTestCase {
     struct Run { let record: TurnRecord; let events: [TimedEvent]; let log: EventLog }
 
+    static let line = "Looking into the harbor story."
+    override func setUp() {
+        AckHistory.shared.clear()
+        LocalLanguage.model = FakeLocalModel(reply: Self.line)
+    }
+    override func tearDown() { LocalLanguage.model = nil; AckHistory.shared.clear() }
+
     func run(ack: AckTiming, asks: String, s1Delay: Double = 0.6, deskDelay: Double = 1.5) async throws -> Run {
         let r = StageRegistry.builtIn()
         r.register(.system1, StubS1.self) { StubS1($0) }
@@ -53,7 +60,7 @@ final class AckTimingTests: XCTestCase {
         cfg.set(.system1, .init(id: "stub-s1", params: ["delay": .number(s1Delay), "asks": .string(asks)]))
         cfg.set(.voice, .init(id: "stub-voice"))
         cfg.set(.transcriber, .init(id: "stub-tr"))
-        cfg.set(.holder, .init(id: "fixed-lines", params: ["maxLines": .number(0)]))
+        cfg.set(.holder, .init(id: "local-ack"))
         cfg.set(.desk, .init(id: "stub-echo", params: ["delaySeconds": .number(deskDelay)]))
         let log = EventLog(clock: LabClock())
         let pb = SimulatedPlayback(position: ProgramPosition(programmeID: "p", blockIndex: 0, context: "ctx"))
@@ -76,7 +83,7 @@ final class AckTimingTests: XCTestCase {
         let first = try XCTUnwrap(end(r, "voice.firstAudio")), s1 = try XCTUnwrap(end(r, "system1"))
         XCTAssertLessThan(first, s1, "the acknowledgement must start before System 1 has answered")
         XCTAssertLessThan(r.record.summary.turnEndToAckMs ?? 9999, 300)
-        XCTAssertEqual(r.record.summary.holdingLines, ["Got it.", "Let me look into that."], "the answers select the follow-up")
+        XCTAssertEqual(r.record.summary.holdingLines, [Self.line], "one line, written by the local model; nothing else is spoken")
         XCTAssertNil(r.record.summary.ackCancelled)
     }
 
@@ -84,7 +91,7 @@ final class AckTimingTests: XCTestCase {
         let r = try await run(ack: .afterSystem1, asks: "yes")
         let first = try XCTUnwrap(end(r, "voice.firstAudio")), s1 = try XCTUnwrap(end(r, "system1"))
         XCTAssertGreaterThan(first, s1)
-        XCTAssertEqual(r.record.summary.holdingLines, ["Got it. Let me look into that."])
+        XCTAssertEqual(r.record.summary.holdingLines, [Self.line])
     }
 
     func testCarryOnAnswerCancelsTheAckBeforeAnyAudio() async throws {
@@ -93,7 +100,7 @@ final class AckTimingTests: XCTestCase {
         // The ack is either cancelled outright or, if its first frame was already out, its line finished; either way no
         // second line, no desk revision, and the record says so.
         XCTAssertNotNil(r.record.summary.ackCancelled, "the record must say the acknowledgement was stopped")
-        XCTAssertEqual(r.record.summary.holdingLines.filter { $0 != "Got it." }, [])
+        XCTAssertEqual(r.record.summary.holdingLines.filter { $0 != Self.line }, [])
         XCTAssertTrue(r.record.summary.revisions.isEmpty, "the desk was not engaged")
     }
 
@@ -101,7 +108,7 @@ final class AckTimingTests: XCTestCase {
         let r = try await run(ack: .immediate, asks: "no", s1Delay: 0.5)
         let s = r.record.summary
         XCTAssertTrue(s.ackCancelled?.contains("already speaking") == true, "the ack was audible when System 1 answered: \(s.ackCancelled ?? "nil")")
-        XCTAssertEqual(s.holdingLines, ["Got it."])
+        XCTAssertEqual(s.holdingLines, [Self.line])
         XCTAssertTrue(s.revisions.isEmpty)
         XCTAssertNotNil(s.turnEndToAckMs)
     }

@@ -22,7 +22,9 @@ component TextureRowView
           text r.title font-family=th.fontRead font-size=21 font-weight=700 line-height=1.2 color=th.fg text-align="left"
           row align-items="center" gap=8
             if r.revising
-              progress aria-label="Being revised" width=16 height=16 color=th.accent
+              // A still glyph, not a spinner: a looping indeterminate progress on this page kept a sideways swipe from reaching the deck
+              // (the deck did not cycle past Textures while a document was being revised).
+              image "symbol:sparkles" color=th.accent aria-label="Being revised"
             text r.meta font-family=th.fontUi font-size=13 color=th.muted text-align="left"
 
 component TexturesPage

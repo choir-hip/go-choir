@@ -68,6 +68,17 @@ func (h *Handler) HandleTextureFork(w http.ResponseWriter, r *http.Request) {
 	writeAPIJSON(w, http.StatusAccepted, receipt.ownerRevisionResponse())
 }
 
+// forkStartFailure maps a failed start of the fork's document to its refusal.
+func forkStartFailure(err error) error {
+	if storedRevisionBroken(err) {
+		return refuseOwnerRevision(http.StatusInternalServerError, storedRevisionBrokenMessage)
+	}
+	if errors.Is(err, store.ErrLifecycleCommandConflict) {
+		return refuseOwnerRevision(http.StatusConflict, "client_request_id was used for another request")
+	}
+	return refuseOwnerRevision(http.StatusBadRequest, "fork rejected")
+}
+
 // forkDocument creates a document from a published version and commits its
 // first revision through the same commit and the same validation as the
 // revise call: with no text a take, with text a merge. Everything about the
@@ -103,11 +114,8 @@ func (h *Handler) forkDocument(ctx context.Context, req ForkRequest) (ReviseRece
 	title := firstNonEmpty(strings.TrimSpace(v.Title), "Fork")
 	created, err := h.startLifecycleTextureDocument(asOwner(ctx), ownerID, strings.TrimSpace(h.Core.TextureComputerID()), clientRequestID, title, strings.TrimSpace(v.Content))
 	if err != nil {
-		if errors.Is(err, store.ErrLifecycleCommandConflict) {
-			return ReviseReceipt{}, refuseOwnerRevision(http.StatusConflict, "client_request_id was used for another request")
-		}
 		log.Printf("texture api: fork document: %v", err)
-		return ReviseReceipt{}, refuseOwnerRevision(http.StatusBadRequest, "fork rejected")
+		return ReviseReceipt{}, forkStartFailure(err)
 	}
 	if created.Replay {
 		if doc, derr := h.Store.GetLifecycleDocument(asOwner(ctx), ownerID, strings.TrimSpace(h.Core.TextureComputerID()), created.DocID); derr == nil && doc.ArchivedAt != nil {

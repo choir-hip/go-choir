@@ -425,7 +425,7 @@ answer the questions that decide how fast to move when the answer is no:
 The research desk is built for this: read-only world-evidence authority
 (CLAUDE.md, desk ontology). The dogfooding slice is a **triage record per
 advisory** written as a precommitment record
-([docs/precommitment-records.md](../../precommitment-records.md)): a typed
+([docs/archive/learning/precommitment-records.md](../learning/precommitment-records.md)): a typed
 prediction committed before the evidence that resolves it. The predictions
 should be ones the deterministic feeds can resolve, or scoring becomes an
 argument:
@@ -1038,7 +1038,7 @@ Repository (code and documents): `flake.nix`, `flake.lock`,
 [restart subsystem design](../../restart-subsystem-design-2026-10-13.md),
 [S3 snapshot hibernate design](s3-snapshot-hibernate-design-2026-10-14.md),
 [VM density limits](../../reports/vm-density-limits-2026-10-14.md),
-[precommitment records](../../precommitment-records.md).
+[precommitment records](../learning/precommitment-records.md).
 
 Cited through the ladder report (not re-fetched here): Intel servicing for
 CPUID 906EA, Firecracker's production host guide on SMT, the Vercel Sandbox

@@ -13,6 +13,35 @@ package store
 //   - M6: an unbound store retires, which replay would not see;
 //   - M7: the dry run applies the delete;
 //   - M8: the selection scans the table, reading every message body.
+//
+// R-1 (docs/problems/run-memory-retirement-keeps-nearly-everything-2026-11-14.md)
+// adds the invariant the design states (docs/design/bounding-the-guest-store-
+// 2026-11-14.md): the newest completed or passivated runs of a document
+// custodian's agent keep their entries, the run the carry reader takes. Ways it
+// can fail:
+//   - N1: a run with no record anywhere, past the no-record hold, is kept;
+//   - N2: a run with no record inside the hold (7 to 30 days) is retired;
+//   - L1: a lifecycle (computer-scoped) run record is not found;
+//   - L2: the fixed lookup retires a lifecycle run that is passivated, blocked,
+//     running or finished inside the window, or reads another owner's record;
+//   - L3: an unreadable record, a tombstoned or mismatched owner-scoped row, or a
+//     second copy of the run that is not terminal decides wrongly;
+//   - P1: an agent that is not a document custodian keeps its newest runs;
+//   - P2: a document custodian's newest completed or passivated runs lose their
+//     entries (failed or cancelled runs taking their slots), so a carried
+//     conversation finds nothing; a failed, cancelled or record-less run takes
+//     a slot; the carry reader stops at a run holding only cursors;
+//   - G1: a run whose newest entry has no agent id groups under none and loses
+//     its protection;
+//   - R1: the selection reads through the write connection;
+//   - D1: live apply and replay disagree about the new cases;
+//   - D2: a second pass retires the same runs again (not idempotent);
+//   - B1: a backlog beyond one pass waits a day per 5,000 runs;
+//   - B2: the catch-up never stops, runs past its pass cap, ignores ready, or an
+//     error in it skips the rest of the maintenance;
+//   - E1: the census does not keep the first pass and the wake's totals, or is
+//     not finished on an error path;
+//   - O1: a no-record op says "finished runs".
 
 import (
 	"context"
@@ -23,6 +52,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -48,6 +78,9 @@ func memSeed(t *testing.T, h *tapeHarness, runID, agentID string, state types.Ru
 	}
 }
 
+// docAgent is the agent id of a document custodian for document n.
+func docAgent(n string) string { return deskmanifest.DocumentInbox("document-" + n) }
+
 func memRunsWithRows(t *testing.T, s *Store) map[string]int {
 	t.Helper()
 	rows, err := s.db.Query(`SELECT loop_id, COUNT(*) FROM run_memory_entries GROUP BY loop_id`)
@@ -69,17 +102,18 @@ func memRunsWithRows(t *testing.T, s *Store) map[string]int {
 
 func memScript(t *testing.T, h *tapeHarness, now time.Time) {
 	day := 24 * time.Hour
-	// agent-x: three finished runs; the newest two are protected (M2).
-	memSeed(t, h, "x-old", "agent-x", types.RunCompleted, 30*day, 30*day, now)
-	memSeed(t, h, "x-mid", "agent-x", types.RunCompleted, 20*day, 20*day, now)
-	memSeed(t, h, "x-new", "agent-x", types.RunFailed, 15*day, 15*day, now)
+	// A document custodian's agent: two completed runs hold the carry slots; the
+	// failed run, though newer, takes none (M2, P2).
+	memSeed(t, h, "x-old", docAgent("x"), types.RunCompleted, 30*day, 30*day, now)
+	memSeed(t, h, "x-mid", docAgent("x"), types.RunCompleted, 20*day, 20*day, now)
+	memSeed(t, h, "x-new", docAgent("x"), types.RunFailed, 15*day, 15*day, now)
 	// agent-y: an old run still running (M1), and one blocked.
 	memSeed(t, h, "y-running", "agent-y", types.RunRunning, 0, 40*day, now)
 	memSeed(t, h, "y2-blocked", "agent-y2", types.RunBlocked, 40*day, 40*day, now)
 	memSeed(t, h, "y3-passivated", "agent-y3", types.RunPassivated, 40*day, 40*day, now)
 	// agent-w: finished but inside the window (M1).
 	memSeed(t, h, "w-fresh", "agent-w", types.RunCompleted, 3*day, 3*day, now)
-	// agent-v: four old finished runs; two oldest go.
+	// agent-v is not a document custodian: all four old finished runs go (P1).
 	memSeed(t, h, "v1", "agent-v", types.RunCompleted, 50*day, 50*day, now)
 	memSeed(t, h, "v2", "agent-v", types.RunCancelled, 45*day, 45*day, now)
 	memSeed(t, h, "v3", "agent-v", types.RunCompleted, 44*day, 44*day, now)
@@ -94,7 +128,7 @@ func TestRunMemoryRetireSelectsOnlyFinishedAgedUnprotectedRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"v1", "v2", "x-old"}
+	want := []string{"v1", "v2", "v3", "v4", "x-new"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("selected %v, want %v", got, want)
 	}
@@ -112,13 +146,13 @@ func TestRunMemoryRetireKeepsCursorsAndReplayEqualsLive(t *testing.T) {
 		t.Fatalf("RetireRunMemory = %d, %v; want 1 op", ops, err)
 	}
 	after := memRunsWithRows(t, h.store)
-	for _, id := range []string{"v1", "v2", "x-old"} {
+	for _, id := range []string{"v1", "v2", "v3", "v4", "x-new"} {
 		if after[id] != 1 { // only the cursor row (M3)
 			t.Fatalf("%s kept %d rows, want just its cursor", id, after[id])
 		}
 	}
 	for id, n := range before {
-		if id == "v1" || id == "v2" || id == "x-old" {
+		if id == "v1" || id == "v2" || id == "v3" || id == "v4" || id == "x-new" {
 			continue
 		}
 		if after[id] != n {

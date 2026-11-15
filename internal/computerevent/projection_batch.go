@@ -205,7 +205,9 @@ type ProjectionBatch struct {
 
 // ObjectRetireKindEvent is the only object kind a retirement may name for
 // now: a retirement of any other class needs its own design (it can drop
-// state a reader needs, where an aged event line is a trace).
+// state a reader needs, where an aged event line is a trace). In particular a
+// Texture revision named by a choir.lifecycle_command (stored_result
+// revision_id) must never be retired: the command's replay rebuilds it by id.
 const ObjectRetireKindEvent = "choir.event"
 
 // Phase filters of an ObjectRetireProjection, on the event payload's phase

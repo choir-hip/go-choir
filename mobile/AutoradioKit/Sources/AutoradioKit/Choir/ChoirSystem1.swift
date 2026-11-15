@@ -10,7 +10,6 @@ public final class ChoirSystem1: System1, @unchecked Sendable {
         StageDescriptor(displayName: "Choir (Jev on your computer)",
                         summary: "One call per turn to your computer's System 1 route with every question; needs sign-in.",
                         params: [.text("baseURL", "Base URL", ChoirEnvironment.defaultBaseURL),
-                                 .number("timeoutSeconds", "Timeout (s)", 5, 0.5, 30),
                                  .text("label", "Record label", "autoradio", note: "recorded as the Jev site client:<label>")],
                         needsNetwork: true)
     }
@@ -18,10 +17,9 @@ public final class ChoirSystem1: System1, @unchecked Sendable {
     // Route limits (internal/agentcore/api_system1.go).
     static let maxQuestions = 12, maxChoices = 8, maxInstructions = 2000, maxState = 48 << 10, maxName = 64
 
-    let baseURL: String, timeout: Double, label: String
+    let baseURL: String, label: String
     public init(_ p: StageParams) {
         baseURL = p.string("baseURL", ChoirEnvironment.defaultBaseURL)
-        timeout = p.double("timeoutSeconds", 5)
         let l = p.string("label", "autoradio")
         label = l.range(of: "^[a-z0-9_.-]{1,40}$", options: .regularExpression) != nil ? l : "autoradio"
     }
@@ -64,8 +62,8 @@ public final class ChoirSystem1: System1, @unchecked Sendable {
         guard Self.enter() else { throw ChoirError.busy("a System 1 call is already in flight") }
         defer { Self.leave() }
         let env = ChoirEnvironment.shared
-        let client = env.client(baseURL: baseURL, timeout: timeout)
-        let r = try await client.postJSON("/api/system1/judgments", body, route: "/api/system1/judgments", timeout: timeout)
+        let client = env.client(baseURL: baseURL)       // no deadline: the idle transport timeout only
+        let r = try await client.postJSON("/api/system1/judgments", body, route: "/api/system1/judgments")
         let o = try r.object()
         guard let answers = o["answers"] as? [String: Any] else { throw ChoirError.decode("no answers") }
         var out: [System1Answer] = []

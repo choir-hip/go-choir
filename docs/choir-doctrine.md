@@ -21,8 +21,12 @@ Supporting docs:
 - [current-architecture.md](current-architecture.md),
   [computer-ontology.md](computer-ontology.md),
   [runtime-invariants.md](runtime-invariants.md)
-- [precommitment-records.md](precommitment-records.md) — the core
-  learning-and-oversight mechanism (precommitment records, PSA). The Markdown
+- [learning-engine.md](learning-engine.md) — the core learning-and-oversight
+  mechanism, the four-stroke learning engine (forecast, outcome, lesson,
+  trust); as built in
+  [precommitment-records-practice-2026-11-08.md](precommitment-records-practice-2026-11-08.md).
+  The earlier statements (precommitment records, PSA) are in
+  [archive/learning/](archive/learning/README.md). The Markdown
   [conjecture-assertion-ledger-2026-06.md](conjecture-assertion-ledger-2026-06.md)
   is its historical ancestor, not the live ledger.
 - [memo-per-computer-frontend-2026-08-13.md](memo-per-computer-frontend-2026-08-13.md)
@@ -57,15 +61,21 @@ owned, plurality is architecturally available, correction is an ordinary write.
 Supervision is the binding constraint on the frontier, and this system is the
 architecture supervision lives in.
 
-The core learning-and-alignment mechanism is **precommitment records**
-(prospective self-alignment, PSA; [precommitment-records.md](precommitment-records.md)):
-before a step with a verifiable outcome an agent commits a typed prediction; the
-outcome resolves and scores it; the scored log is the agent's evolving world
-model. Records live on the tape and in each desk's REPL, so feedback teaches in
-context without modifying weights; they make less-verifiable work scoreable; and
-the same records, viewed by role, are the organizational supervision surface.
-One mechanism serves learning (context packs), alignment (procedural fidelity)
-and audit.
+The core learning-and-alignment mechanism is the **four-stroke learning
+engine** ([learning-engine.md](learning-engine.md); owner, 2026-11-13 and
+2026-11-14). **Forecast:** before a step with a checkable outcome an agent says
+what it expects, with a probability (the record is still named a precommitment
+record on the wire). **Outcome:** someone other than the actor says what
+happened. **Lesson:** the actor writes down the most general thing learned,
+citing the records it rests on, where the next actor and whoever it is about
+can read it. **Trust:** what the actor is given ahead of the next outcome.
+Two rules bind it: you do not mark your own work, and nothing is held about
+you that you cannot read. Records live on the tape and in each desk's REPL, so
+feedback teaches in context without modifying weights; they make
+less-verifiable work scoreable; and the same records, viewed by role, are the
+organizational supervision surface. One mechanism serves learning, alignment
+(procedural fidelity) and audit. The lesson stroke is not built yet; the
+learning engine's section 9 separates the plan from the fact.
 
 The primary optimization target is not chat quality, local test passage, or
 short-term product smoothness. It is, in order: truth from facts; correct
@@ -401,7 +411,8 @@ the same way and under the same rules. "System" and "app" describe who
 publishes a desk (the first party or others), not a kind with its own rules.
 Each data kind has one custodian desk with sole read and write authority over
 it (the Texture desk for Texture revisions, the Mail agent for email). Desks
-reach each other only through precommitment records (PSA), and a desk's grant
+reach each other only through precommitment records (the forecast stroke of
+the learning engine), and a desk's grant
 over a data kind it does not hold flows through the custodian's lease. Roles
 that remain: research has read-only world and message authority;
 engineering mutates only through capsule-bound per-assignment sub-RLM cells;
@@ -427,7 +438,13 @@ counters as feedback; PSI pause/resume and zram are not required initially.
 Parallel Textures/trajectories and N concurrent assignments require an
 admission-ledger release gate after sequential correctness. The commitment
 ledger is the management supervision surface: its objects live on the tape,
-reports resolve commitments, and scores stay off the acting desk's context.
+reports resolve commitments, and the acting desk cannot write its own score.
+(Until 2026-11-14 this read "scores stay off the acting desk's context". The
+owner's no-hidden-dossiers ruling of 2026-11-13 replaces secrecy with write
+isolation: a desk may read every record held about it because it can write
+none of them. A blind arm or held-out sample may stay unseen only until its
+window closes. The code still hides more than this; see
+[learning-engine.md](learning-engine.md), section 9.)
 
 `I27` One object graph per computer, and one home per kind of data. Every
 meaningful kind of data a computer holds is an object graph kind with exactly
@@ -691,8 +708,8 @@ Product order follows the vision (choir-vision.md):
    self-supervision one architecture. Standing trajectory state selects
    observations; plurality (harness-owned provider choice, gateway holding
    credentials host-side) preserves dissent. Capsule effects are the typed
-   transaction on the audit log; correction is an ordinary write; precommitment
-   records are the learning and oversight mechanism. This is the supervised
+   transaction on the audit log; correction is an ordinary write; the
+   four-stroke learning engine is the learning and oversight mechanism. This is the supervised
    self-development center and the binding constraint.
 2. **Autopaper** (live since 2026-10-13), downstream of the
    artifact-and-provenance substrate: it indexes the world as reported —

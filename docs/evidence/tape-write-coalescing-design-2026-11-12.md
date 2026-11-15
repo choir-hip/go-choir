@@ -1,8 +1,11 @@
 # Lossless coalescing of tape writes: design record (2026-11-12)
 
 Station S5 of [storage solutions part 2](../definitions/choir-storage-solutions-2-2026-11-12.md),
-after owner ruling D8. Design only: nothing here is built, and
-`tape.group_commit` is untouched. Inputs: the
+after owner ruling D8. Built on `lane/s5-coalesce` (2026-11-13; see "Built"
+at the end): the setting `tape.group_commit` and both loss windows are deleted
+and coalescing is always on. The text below is the design as written on
+2026-11-12, kept as the record; where it speaks of the setting or of
+`run_memory_batch.go` as present, they are gone. Inputs: the
 [write census](tape-write-census-2026-11-12.md), the
 [group commit design of 2026-10-31](../design/tape-group-commit-2026-10-31.md),
 the [switch audit](switch-audit-2026-11-03.md) and
@@ -184,7 +187,10 @@ event (four to two, census row 3) is the better lever. Read the histogram for
 a full day on the paper before building.
 
 Evidence classes for the after-measure (CLAUDE.md "Proof"): events per day from
-the host receipts table (metadata) and `tape_events_by_family`; write-pool wait
+the host receipts table (metadata) and `tape_events`; per-family volume from
+`tape_ops_by_family` (an event that carries riding telemetry or several
+writers' families is counted once under `mixed` in `tape_events_by_family`,
+so that map no longer reads as a per-family event count); write-pool wait
 count and time from `store_pools`; `appender_call_mean_ms`; snapshot spacing
 from `snapshot_recorded`; replay seconds per event before and after. Enter the
 calibration claims (P(median depth at enter >= 3) = 0.75; P(events a day under
@@ -347,3 +353,36 @@ Two defects the counters exposed:
 
 Remaining error: one 17-minute window just after a boot, when queues may be
 deeper than in steady state. Read again after a day before fixing the shape.
+
+## Built (lane/s5-coalesce, 2026-11-13)
+
+Coalescing is the behaviour of every store; there is no setting.
+`tape.group_commit`, its registry entry, `telemetryGroupWindow`,
+`run_memory_batch.go` (the run-memory window, tail cache and damaged-run
+marks), `internal/agentcore/tape_group_commit.go` and the planned-restart
+window stamp are deleted. A marker written by an older build with a failed
+drain under an open window is still read once, so that boot closes its runs.
+The opening and carried run-memory messages are one write at the call site.
+A guarded batch (`PutBatchConditional`, `PutBatchSegments` with conditions)
+takes the direct path through a context flag from `objectgraph`.
+
+Counters: `tape_events_by_family` counts an event once, under its writers'
+common family or `mixed`; `tape_ops_by_family` counts every writer's ops under
+that writer's own family (riding telemetry as `telemetry`), and sums to
+`tape_ops`. The run-memory key takes a reason only from a fixed list; any other
+is `<kind>/other`.
+
+Corpusd calls per event, by reading the code: the two head reads were one
+read used twice (bind, then `appendLockedInner`); the append reuses the bind
+read (`boundHead`). A head that moves between the bind and the CAS fails at the
+CAS, as the old read would have failed the reducer. The two pins stay: the
+payload pin receipt is bound into the request commitment, the event body holds
+that commitment, and the event pin carries the body, so the event pin cannot
+precede or merge with the payload pin; the host checks both receipts. One call
+per pin needs a corpusd endpoint that pins a payload and an event together.
+The finalize `payload` fetch (the sixth call on the sealed path, where the
+live plaintext cache of `AppendNewPayload` is not kept by
+`AppendNewPrivatePayload`) is a further saving this change does not take.
+
+`telemetry_ridden` (in `group_commit`) is a lower bound on the telemetry that
+rode: it counts only records whose carrying event committed.

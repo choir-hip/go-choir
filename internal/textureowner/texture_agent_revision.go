@@ -112,10 +112,25 @@ func (e *ownerRevisionRefusal) Error() string { return e.message }
 // so a failed take is diagnosable from the response and not only from a
 // computer's journal.
 func refuseCommit(err error, message string) error {
+	if storedRevisionBroken(err) {
+		return refuseOwnerRevision(http.StatusInternalServerError, message+": "+storedRevisionBrokenMessage)
+	}
 	if errors.Is(err, store.ErrInvalidTextureRevision) {
 		return refuseOwnerRevision(http.StatusUnprocessableEntity, message+": "+shortCause(err))
 	}
 	return refuseOwnerRevision(http.StatusInternalServerError, message+": "+shortCause(err))
+}
+
+// storedRevisionBrokenMessage is what every surface says when a lifecycle
+// command exists but the revision it names cannot be read: a server invariant
+// break (a retired or lost revision), never a client error.
+const storedRevisionBrokenMessage = "lifecycle invariant broken: stored revision unavailable"
+
+// storedRevisionBroken reports that error. Every mapping of a store error
+// above a path into StartLifecycle, CommitLifecycleArtifactHead,
+// ApplyLifecycleUpdate or ApplyTextureTurn checks it first.
+func storedRevisionBroken(err error) bool {
+	return errors.Is(err, store.ErrLifecycleStoredRevisionUnavailable)
 }
 
 func refuseOwnerRevision(status int, message string) error {

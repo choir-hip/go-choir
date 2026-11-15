@@ -87,7 +87,16 @@ public struct System1Answer: Codable, Sendable, Equatable {
 public struct HolderInput: Sendable {
     public var listenerWords: String
     public var answers: [System1Answer]
-    public init(listenerWords: String, answers: [System1Answer]) { self.listenerWords = listenerWords; self.answers = answers }
+    /// The page in front of the listener when they spoke (title and kind), so the acknowledgement can name it.
+    public var pageTitle: String
+    public var pageKind: String
+    public var pageAddress: String
+    /// The text of the page the phone has (fetched by the holder when it needs it; nil: none).
+    public var pageText: (@Sendable () async -> String)?
+    public init(listenerWords: String, answers: [System1Answer], pageTitle: String = "", pageKind: String = "", pageAddress: String = "",
+                pageText: (@Sendable () async -> String)? = nil) {
+        self.listenerWords = listenerWords; self.answers = answers; self.pageTitle = pageTitle; self.pageKind = pageKind; self.pageAddress = pageAddress; self.pageText = pageText
+    }
 }
 
 public struct DeskTurn: Codable, Sendable {
@@ -100,10 +109,12 @@ public struct DeskTurn: Codable, Sendable {
     public var interrupted: Bool
     public var spokenText: String
     public var cutBlockIndex: Int?
+    /// The page in front when the listener asked (address, title, and the text the phone has), for a desk that answers about it.
+    public var page: DeskPage?
     public init(turnID: String, programmeID: String, blockIndex: Int, listenerWords: String,
-                interrupted: Bool = false, spokenText: String = "", cutBlockIndex: Int? = nil) {
+                interrupted: Bool = false, spokenText: String = "", cutBlockIndex: Int? = nil, page: DeskPage? = nil) {
         self.turnID = turnID; self.programmeID = programmeID; self.blockIndex = blockIndex; self.listenerWords = listenerWords
-        self.interrupted = interrupted; self.spokenText = spokenText; self.cutBlockIndex = cutBlockIndex
+        self.interrupted = interrupted; self.spokenText = spokenText; self.cutBlockIndex = cutBlockIndex; self.page = page
     }
     public init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
@@ -112,7 +123,29 @@ public struct DeskTurn: Codable, Sendable {
         interrupted = try c.decodeIfPresent(Bool.self, forKey: .interrupted) ?? false
         spokenText = try c.decodeIfPresent(String.self, forKey: .spokenText) ?? ""
         cutBlockIndex = try c.decodeIfPresent(Int.self, forKey: .cutBlockIndex)
+        page = try c.decodeIfPresent(DeskPage.self, forKey: .page)
     }
+}
+
+public struct DeskPage: Codable, Sendable, Equatable {
+    public var address: String, title: String, text: String
+    public init(address: String = "", title: String = "", text: String = "") { self.address = address; self.title = title; self.text = text }
+}
+
+/// One event of a streamed desk answer.
+public enum DeskEvent: Sendable, Equatable {
+    /// One complete sentence to speak, in order (`seq` from 0).
+    case sentence(seq: Int, text: String)
+    /// The turn failed: `spoken` is the plain line to speak (the server's own fallback line), `reason` is for the log.
+    case failed(spoken: String, reason: String)
+    /// The last event. `status`: completed, failed or interrupted. `serverFirstSentenceMs` and `serverDoneMs`: the server's own clock.
+    case done(status: String, sentences: Int, serverFirstSentenceMs: Double?, serverDoneMs: Double?)
+}
+
+/// A desk that answers as a stream of spoken sentences (the Autoradio desk's `POST /api/autoradio/turns`). The engine speaks each
+/// sentence as it arrives instead of waiting for a whole revision.
+public protocol StreamingDesk: Desk {
+    func speech(_ turn: DeskTurn, heard: HeardLines) -> AsyncThrowingStream<DeskEvent, Error>
 }
 
 // MARK: Audio-facing stages
@@ -205,10 +238,16 @@ public protocol Holder: Stage {
     func lines(for input: HolderInput, later: @escaping @Sendable () async -> [System1Answer]) -> AsyncStream<String>
     /// Stop producing lines (System 1 said the turn needs nothing, or the desk answered).
     func cancel()
+    /// Why the last call produced the line it did, or nothing (for the trace). Empty when there is nothing to say.
+    func diagnostics() -> String
+    /// What the local model's generation cost (prompt tokens, how many were already cached), for the trace.
+    func report() -> GenerationReport?
 }
 public extension Holder {
     func lines(for input: HolderInput, later: @escaping @Sendable () async -> [System1Answer]) -> AsyncStream<String> { lines(for: input) }
     func cancel() {}
+    func diagnostics() -> String { "" }
+    func report() -> GenerationReport? { nil }
 }
 
 /// Text in, audio out. The first frame's time is measured by whoever consumes the stream.
@@ -219,6 +258,12 @@ public protocol Voice: Stage {
 /// System 2 over the network: submit the turn at a place in the document, receive revisions.
 public protocol Desk: Stage {
     func submit(_ turn: DeskTurn) -> AsyncThrowingStream<Revision, Error>
+    /// The same, with what the phone has actually said aloud so far (read `heard.snapshot` when the request is built). A desk that
+    /// can use it (the streaming route's `heard` list) must not repeat it; the polling desk ignores it.
+    func submit(_ turn: DeskTurn, heard: HeardLines) -> AsyncThrowingStream<Revision, Error>
+}
+public extension Desk {
+    func submit(_ turn: DeskTurn, heard: HeardLines) -> AsyncThrowingStream<Revision, Error> { submit(turn) }
 }
 
 public protocol Programme: Stage {

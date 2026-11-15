@@ -81,6 +81,7 @@ type tapePurgeTable struct {
 var tapePurgeTables = []tapePurgeTable{
 	{name: "computer_event_append_receipts", where: "computer_id=?"},
 	{name: "computer_event_receipt_compaction", where: "computer_id=?"},
+	{name: "computer_event_receipt_compaction_v2", where: "computer_id=?"},
 	{name: "tape_sweep_ref_chunks", where: "computer_id=?", derived: true},
 	{name: "control_key_history", where: "computer_id=?"},
 	{name: "control_key_activations", where: "computer_id=?"},

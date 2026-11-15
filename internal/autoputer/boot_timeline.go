@@ -151,6 +151,7 @@ var goChoirSystemdUnits = []string{
 	"go-choir-guest-receipt-signer-state-migration.service",
 	"go-choir-guest-receipt-signer.service",
 	"go-choir-verifier-signer.service",
+	"go-choir-updater-prune.service",
 	"go-choir-kernel-capability-probe.service",
 	"go-choir-updater.service",
 	"go-choir-autoputer.service",

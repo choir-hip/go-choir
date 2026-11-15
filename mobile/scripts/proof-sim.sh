@@ -74,7 +74,7 @@ while :; do
     "tap bar-field" "clock +800 real" "clock data" "screenshot $SHOTS/12a-bar-field-focused.png window" \
     "tap bar-voice down" "clock +900 real" "clock data" tree "screenshot $SHOTS/12-talking.png" "tap up" "clock +800 real" "clock data" \
     "tap settings-components" "clock +700 real" "clock data" tree "screenshot $SHOTS/13-components.png" \
-    "tap stage-addressing-hybrid" "tap stage-transcriber-scripted" "tap stage-system1-fixed" "tap stage-holder-fixed-lines" \
+    "tap stage-addressing-hybrid" "tap stage-transcriber-scripted" "tap stage-system1-fixed" "tap stage-holder-local-ack" \
       "tap stage-desk-stub-echo" "tap stage-programme-fixture" "tap ack-immediate" "clock data" \
     "tap start" "clock +1500 real" "clock data" tree \
     "tap lab-talk down" "clock +700 real" "clock data" tree "tap up" "clock +1500 real" \

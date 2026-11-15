@@ -97,7 +97,6 @@ func (h *tapeHarness) startAcked(results chan<- writeResult, id, run string, wan
 // flight share the next event, and none is answered before that event's CAS.
 func TestGroupCommitMembersAckAfterSharedCommit(t *testing.T) {
 	h := newTapeHarness(t)
-	h.store.SetTapeGroupCommit(true)
 	h.warm()
 	gate := h.holdNextCAS()
 	results := make(chan writeResult, 8)
@@ -133,7 +132,7 @@ func TestGroupCommitMembersAckAfterSharedCommit(t *testing.T) {
 		t.Fatalf("lead event %v, shared %d: the held write must land first and alone", lead, shared[0])
 	}
 	st := h.store.TelemetryStats().GroupCommit
-	if !st.Enabled || st.Members < 6 || st.UnknownOutcome != 0 || st.RefusedSplits != 0 {
+	if st.Members < 6 || st.UnknownOutcome != 0 || st.RefusedSplits != 0 {
 		t.Fatalf("group commit stats = %+v", st)
 	}
 	for _, ev := range []string{"m0", "m4"} {
@@ -164,7 +163,6 @@ func distinctRunMemoryRuns(s *Store, n int) []string {
 // answer, in arrival order; the refused one alone fails.
 func TestGroupCommitRefusalSplitsToSingles(t *testing.T) {
 	h := newTapeHarness(t)
-	h.store.SetTapeGroupCommit(true)
 	h.warm()
 	h.dryRunHook = func(batch *computerevent.ProjectionBatch) error {
 		for _, op := range batch.Ops {
@@ -217,7 +215,6 @@ func TestGroupCommitRefusalSplitsToSingles(t *testing.T) {
 // F3: an unknown outcome is never retried; every member is told.
 func TestGroupCommitUnknownOutcomeIsNotRetried(t *testing.T) {
 	h := newTapeHarness(t)
-	h.store.SetTapeGroupCommit(true)
 	h.warm()
 	gate := h.holdNextCAS()
 	results := make(chan writeResult, 8)
@@ -302,7 +299,6 @@ func TestGroupCommitOnlyUnconditionalOpsGroup(t *testing.T) {
 func TestGroupCommitTelemetryRidesAheadOfMembers(t *testing.T) {
 	h := newTapeHarness(t)
 	sl := h.enableBatching(farFuture)
-	h.store.SetTapeGroupCommit(true)
 	h.warm()
 	ctx := context.Background()
 	for _, id := range []string{"t1", "t2"} {
@@ -371,7 +367,6 @@ func TestGroupCommitTelemetryRidesAheadOfMembers(t *testing.T) {
 // F6: a write issued after another's ack lands in a later event.
 func TestGroupCommitCausalOrderAcrossGoroutines(t *testing.T) {
 	h := newTapeHarness(t)
-	h.store.SetTapeGroupCommit(true)
 	h.warm()
 	gate := h.holdNextCAS()
 	results := make(chan writeResult, 4)
@@ -401,7 +396,6 @@ func TestGroupCommitCausalOrderAcrossGoroutines(t *testing.T) {
 func TestGroupCommitNoDeadlockUnderLoad(t *testing.T) {
 	h := newTapeHarness(t)
 	sl := h.enableBatching(5 * time.Millisecond)
-	h.store.SetTapeGroupCommit(true)
 	ctx := context.Background()
 	const workers, each = 32, 30
 	n := newIssued()
@@ -494,7 +488,6 @@ func TestGroupCommitReplayMatchesLive(t *testing.T) {
 	if err := live.ConfigureTelemetryBatching(TelemetryBatchConfig{Enabled: true, Window: time.Second}); err != nil {
 		t.Fatal(err)
 	}
-	live.SetTapeGroupCommit(true)
 	var wg sync.WaitGroup
 	const workers = 8
 	for w := 0; w < workers; w++ {
@@ -609,7 +602,6 @@ func TestGroupCommitCapsSplitGroups(t *testing.T) {
 // nothing of it reaches the tape.
 func TestGroupCommitCancelledBeforeTakenWritesNothing(t *testing.T) {
 	h := newTapeHarness(t)
-	h.store.SetTapeGroupCommit(true)
 	h.warm()
 	gate := h.holdNextCAS()
 	results := make(chan writeResult, 2)
@@ -636,71 +628,5 @@ func TestGroupCommitCancelledBeforeTakenWritesNothing(t *testing.T) {
 	}
 	if st := h.store.TelemetryStats().GroupCommit; st.Cancelled != 1 {
 		t.Fatalf("cancelled = %d, want 1", st.Cancelled)
-	}
-}
-
-// F15: off is the direct path: one event per write, at once, and turning it
-// off live takes effect for the next write.
-func TestGroupCommitOffIsTheDirectPath(t *testing.T) {
-	h := newTapeHarness(t)
-	h.warm()
-	gate := h.holdNextCAS()
-	results := make(chan writeResult, 4)
-	go func() {
-		results <- writeResult{"lead", h.store.AppendEvent(context.Background(), h.event("lead", "run-lead", "owner-1", types.EventRunCompleted, telemetryBase))}
-	}()
-	<-gate.entered
-	for i := 0; i < 3; i++ {
-		id := fmt.Sprintf("d%d", i)
-		go func() {
-			results <- writeResult{id, h.store.AppendEvent(context.Background(), h.event(id, "run-"+id, "owner-1", types.EventRunCompleted, telemetryBase))}
-		}()
-	}
-	time.Sleep(50 * time.Millisecond)
-	if h.pendingMembers() != 0 {
-		t.Fatal("writes queued for a group with group commit off")
-	}
-	close(gate.release)
-	for i := 0; i < 4; i++ {
-		if r := <-results; r.err != nil {
-			t.Fatal(r.err)
-		}
-	}
-	seen := map[int]bool{}
-	for i := 0; i < 3; i++ {
-		ev := h.eventsHolding(fmt.Sprintf("loop.completed:d%d", i))
-		if len(ev) != 1 || seen[ev[0]] {
-			t.Fatalf("d%d in %v: with group commit off every write is its own event", i, ev)
-		}
-		seen[ev[0]] = true
-	}
-	h.store.SetTapeGroupCommit(true)
-	h.store.SetTapeGroupCommit(false)
-	if h.store.TapeGroupCommitOn() {
-		t.Fatal("still on after off")
-	}
-	if st := h.store.TelemetryStats().GroupCommit; st.Groups != 0 {
-		t.Fatalf("groups = %d with group commit never on for a write", st.Groups)
-	}
-}
-
-// Part (a): with group commit on the sealer's deadline is 10 s; off, it is W.
-func TestGroupCommitWidensTheTelemetryWindow(t *testing.T) {
-	h := newTapeHarness(t)
-	sl := h.enableBatching(time.Second)
-	sl.mu.Lock()
-	off := sl.timerWindowLocked()
-	sl.mu.Unlock()
-	h.store.SetTapeGroupCommit(true)
-	sl.mu.Lock()
-	on := sl.timerWindowLocked()
-	sl.mu.Unlock()
-	if off != time.Second || on != telemetryGroupWindow {
-		t.Fatalf("window off %s on %s, want 1s and %s", off, on, telemetryGroupWindow)
-	}
-	// Repair note 4: the configured window keeps its old 2 s clamp; 10 s is
-	// only the deadline while the setting is on.
-	if got := clampTelemetryWindow(30 * time.Second); got != 2*time.Second {
-		t.Fatalf("clamp of 30 s = %s, want 2 s", got)
 	}
 }

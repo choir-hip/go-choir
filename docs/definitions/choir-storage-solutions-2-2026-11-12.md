@@ -172,8 +172,8 @@ stations:
     class: red
     review: two seats
     depends_on: [S5]
-    carrier: none yet
-    status: pending
+    carrier: moved 2026-11-14 to station T4 of docs/definitions/choir-storage-solutions-3-store-once-2026-11-14.md
+    status: superseded
   - id: S7
     name: the collector reaps by itself
     scope: destroyed computers on the hourly collector with the sweep's proof; a sweep job that survives a service restart (the first dry run died at the 20:53Z deploy); capture bodies archived past 30 days
@@ -188,7 +188,7 @@ stations:
     class: red
     review: two seats
     depends_on: [S3]
-    carrier: none yet
+    carrier: the compression half moved 2026-11-14 to station T5 of docs/definitions/choir-storage-solutions-3-store-once-2026-11-14.md; the archive half stays here
     status: pending
   - id: S9
     name: status scripts

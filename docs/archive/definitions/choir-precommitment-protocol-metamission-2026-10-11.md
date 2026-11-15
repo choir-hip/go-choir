@@ -5,8 +5,8 @@ definition_version: 4
 # "lock down the system so that all interagent comms are done through the
 # precommitment records protocol ... Gotta bring the future forward";
 # "Yes, this is a great plan", with the cross-computer scoring frame.
-# Design: docs/precommitment-records.md. Theory:
-# docs/precommitment-records.md. Unblocks Autopaper W2.
+# Design: docs/archive/learning/precommitment-records.md. Theory:
+# docs/archive/learning/precommitment-records.md. Unblocks Autopaper W2.
 readiness: executable
 
 review:
@@ -103,7 +103,7 @@ boundaries:
   mutation_class: red (lifecycle reducer, evidence ledger, desk surface)
   authority_sources:
     - owner 2026-10-11 (direction and plan approval)
-    - docs/precommitment-records.md
+    - docs/archive/learning/precommitment-records.md
   must_preserve:
     - Texture is the sole writer of a document's revisions
     - a crash restart never resumes work
@@ -133,7 +133,7 @@ now:
     what: design §9 decisions take their recommended defaults until the owner answers
     kind: architecture
     status: provisional
-    evidence_ref: docs/precommitment-records.md §9
+    evidence_ref: docs/archive/learning/precommitment-records.md §9
   belief:
     believed_state: >-
       every Texture dispatch is a cast record in its own commit (P1), and
@@ -155,7 +155,7 @@ receipts: []
 # One protocol between agents
 
 The design is
-[docs/precommitment-records.md](../../precommitment-records.md).
+[docs/archive/learning/precommitment-records.md](../learning/precommitment-records.md).
 This metamission lands it in five stations, each through the landing loop.
 P1 changes no desk surface; it makes every Texture dispatch a record. Each
 later station removes a side channel or adds a measurement.

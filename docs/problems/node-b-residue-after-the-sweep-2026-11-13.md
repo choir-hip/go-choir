@@ -42,3 +42,61 @@ The images were measured from the host only. The share of capture bodies
 that nothing references is unknown. One index on the receipts table
 (`receipt_id_idx`, 2.2 GiB, 2,184 scans) may be droppable; its readers are
 not yet identified.
+
+## Update, 2026-11-13T17:15Z
+
+- Capture bodies are nearly all referenced by a capture row (36 unreferenced
+  files, 5.7 MB, at the 2026-10-29 accounting; every reader goes through the
+  row). A collector would release megabytes, so `lane/capture-bodies-gc` is
+  parked, not landed. A bound needs an owner retention ruling on capture rows.
+  The filesystem already compresses (zstd:3; a 200-file sample compresses to
+  31%), so `du`'s 24 GiB overstates the disk used.
+- The data images are not a trim failure. Host allocation sits 0.3 to 2.5 GiB
+  above what each guest's filesystem reports as used. The volume holds about
+  27 GiB beside the store on both the paper and d@e, and no surface says
+  which directories. Unpruned by any code found: the updater's release
+  closures and store, the Go module cache, the Go build cache (its own 5 day
+  trim only), the seeded source checkout.
+- New problem: d@e's data volume is 95.5% used, 1.5 GB available (compute
+  status, about 17:05Z), under the 4 GiB capsule admission floor. Capsules there may
+  already be refused. Not verified.
+- A paper snapshot costs about 4 GB, not 25 (5,858 new chunks of 10,524 on
+  2026-11-12); the 25 GB in two code comments is from before chunk
+  compression. Design: docs/design/snapshots-cost-the-change-2026-11-13.md.
+
+Next: a `data_volume` section in guest observability (statfs and allocated
+bytes per top-level directory), then prune what it names.
+
+## Host survey, 2026-11-13T23:50Z (read-only)
+
+A second pass over every directory above 0.2 GiB found no unaccounted
+consumer on the host. Corrections and additions to the survey above:
+
+- `vm-state/candidate-fleet-bf04…` (19.2 GiB logical) is not a candidate: it
+  is b@c's VM directory under an old id scheme, registered and hibernated.
+  `candidate-fleet-e15cb…` is the owner's computer, active. Nothing creates
+  or reaps `candidate-fleet-*` as a class. A third such id in
+  `ownerships.json` has no directory (a dangling record).
+- `btrfs filesystem du` reports logical bytes. Per-path sums come to about
+  367 GiB against 305.7 GiB of data used; the gap is zstd compression and
+  links shared between `/nix`, the guest release store and the jails.
+- The nix store is bounded: two system generations, a collector every four
+  hours (9.3 GiB freed at 20:40Z). The "9.9 GiB in a day" was the gap
+  between collections.
+- The file-chunk collector is working: 10,193, 10,686 and 12,868 objects
+  deleted in three hourly runs (7.2 to 8.5 GB each), `in_grace` at 0.
+- Receipts: 28 GB, 12.6 M live rows, 2.8% dead, so the size is live rows,
+  not bloat. Five indexes total 10 GB; `receipt_id_idx` (2.3 GB) has 2,198
+  scans in its lifetime and its reader is not identified.
+- Unbounded and small: `artifact-gc-log` (1.5 GiB: applied sweep manifests
+  and compressed day logs nothing prunes), `tape_sweep_ref_chunks`
+  (935 MB of sweep resume state), `taperepack-work` (1.8 GiB from a one-time
+  run on 11-01, referenced by no unit).
+- Needing an owner decision: four tape directories (5.5 GiB) of computers
+  with no ownership record that the sweep skips as registered or routed;
+  three hibernated test-class VM directories (5.6 GiB) the retention prune
+  has not removed, cause not established.
+
+The two largest controllable items are live and inside the paper: its guest
+store (docs/problems/the-papers-store-doubles-in-eleven-days-2026-11-13.md)
+and its tape.

@@ -86,11 +86,11 @@ start:
     canonical_ref: origin/main 9b5eb066b5beef0e4b0036776d7661e467c0651c (fetched 21:28Z)
     deploy_identity: staging build.deployed_commit 93706d53c1cbd170529a50466add51f8a586599e, deployed 2026-11-04T18:25:03Z
     plan_ref: branch modplan @ 9f32a1a90 (unpushed), docs/design/modular-architecture-plan-2026-11-04.md
-    evidence_on_modplan: docs/evidence/gvisor-desk-capsule-x86-2026-11-04.md, docs/evidence/custody-inventory-2026-11-04.md, docs/design/bayesian-trust-2026-11-04.md (copy)
+    evidence_on_modplan: docs/evidence/gvisor-desk-capsule-x86-2026-11-04.md, docs/evidence/custody-inventory-2026-11-04.md, docs/archive/learning/bayesian-trust-2026-11-04.md (copy)
     worktrees:
       - {path: /Users/wiz/Dev/go-choir-plan, status: clean, class: goal_candidate, owner: FP0 and doc agents, touch: goal_owned, recovery: "branch modplan; lands on main after MA0.5"}
       - {path: /Users/wiz/Dev/go-choir-d0, status: clean, class: goal_candidate, owner: this mission, touch: read_only, recovery: "branch d0-protocol (632d98385, ad80f2330, e63e2f536), unpushed; bakes MessageTargets into the lock; re-cut by MA1.4 (cherry-pick tooling, drop the address surface); never merge as is"}
-      - {path: /Users/wiz/Dev/go-choir-land-docs, status: dirty, class: goal_candidate, owner: FP0, touch: read_only, recovery: "untracked docs/design/bayesian-trust-2026-11-04.md, left unpushed by owner order; the plan's copy supersedes it (Devin amendment 5)"}
+      - {path: /Users/wiz/Dev/go-choir-land-docs, status: dirty, class: goal_candidate, owner: FP0, touch: read_only, recovery: "untracked docs/archive/learning/bayesian-trust-2026-11-04.md, left unpushed by owner order; the plan's copy supersedes it (Devin amendment 5)"}
       - {path: /Users/wiz/Dev/go-choir-apl, status: clean, class: other_agent_wip, owner: Autopaper learning design, touch: forbidden, recovery: "branch autopaper-learning, equal to origin/main 9b5eb066b; belongs to the later Autopaper mission"}
       - {path: /Users/wiz/Dev/go-choir-sysmod, status: clean, class: goal_candidate, owner: this mission, touch: read_only, recovery: "branch sysmod 73e64110c; superseded designs, referenced by the plan, not landed separately"}
       - {path: /Users/wiz/Dev/go-choir-appdesk, status: clean, class: goal_candidate, owner: this mission, touch: read_only, recovery: "branch appdesk 069c18f84; as sysmod"}
@@ -371,7 +371,7 @@ proposal put to the owner.
 **2. Settled-decision conformance.** The plan conforms to no switches (it
 deletes CHOIR_APP_DESKS, app_packages.objects and the System 1 caps), the
 restart rules (MA4.2, MA4.4) and the keep set. Gaps covered: the doctrine I26 and CLAUDE.md "system desks" amendment is
-carried by MA8.0 (or an earlier green slice); the `docs/precommitment-records.md`
+carried by MA8.0 (or an earlier green slice); the `docs/archive/learning/precommitment-records.md`
 3.1 erratum pointer to R32 is in the plan (erratum, covered).
 
 **3. Deletion citers.** MA1.1, MA1.2, MA2.4 and MA4.11 carry grep gates for

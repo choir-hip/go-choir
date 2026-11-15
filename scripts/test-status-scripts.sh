@@ -265,5 +265,50 @@ mkpaper 'many(90, 100, PAPER, "devin", "swe-2-flash")'; mkstore 77926 '78 + 0.5 
 runhourly --json
 check "H1 --json emits one JSON object with both parts" 'python3 -c "import json;d=json.load(open(\"$root/out\"));assert \"paper\" in d and \"storage\" in d and \"line\" in d"'
 
+# Gap signals (status-gaps lane)
+#  G1 luna share and an other share, summing to 1 with the rest
+#  G2 pacer: latest hour shed share, calls, trips; trips>0 flags
+#  G3 search: requests, zero-provider share, per-provider counts; zero flags
+#  G4 a stale forecast ERROR (free figure >10 GiB from live df) is not a flag
+#  G5 wedge counts; began>cleared flags; receipts_since_last 0 flags
+mkpaper '
+many(60, 100, PAPER, "devin", "swe-2-flash")
+many(30, 100, PAPER, "chatgpt", "gpt-6-luna")
+many(10, 100, PAPER, "openrouter", "some-other-model")'
+python3 - "$root/paper.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+d["pacer_lines"] = ("2026/11/13 16:00:00 gateway: devin pacing hour=2026-11-13T14:00Z tokens=1 ceiling=2 budget=3 shed_share=0% shed_calls=1 of 9 trips=0 complete=true unsheddable_tokens=0\n"
+                    "2026/11/13 17:00:01 gateway: devin pacing hour=2026-11-13T16:00Z tokens=1 ceiling=2 budget=3 shed_share=12% shed_calls=58 of 1789 trips=2 complete=true unsheddable_tokens=0\n")
+sk = "skipped=[tavily=quota_limited brave=quota_limited parallel=quota_limited serper=error serpapi=quota_limited chatgpt=capped]"
+d["search_lines"] = "\n".join(["answered 1 of 1 providers (7 cooling, 0 pending) " + sk] * 9 + ["answered 0 of 1 providers (7 cooling, 0 pending) " + sk]) + "\n"
+json.dump(d, open(sys.argv[1], "w"))
+PY
+runpaper --json
+check "G1 luna 30%, other 10%, devin 60%" '[ "$(jq_ "round(d[\"shares\"][\"luna\"],2)")" = 0.3 ] && [ "$(jq_ "round(d[\"shares\"][\"other\"],2)")" = 0.1 ] && [ "$(jq_ "round(d[\"shares\"][\"devin\"],2)")" = 0.6 ]'
+check "G2 pacer is the newest hour: shed 58 of 1789, trips 2, flagged" '[ "$(jq_ "d[\"pacer\"][\"shed_calls\"]")" = 58 ] && [ "$(jq_ "d[\"pacer\"][\"trips\"]")" = 2 ] && jq_ "d[\"flags\"]" | grep -q "pacer tripped"'
+check "G3 search: 10 requests, 1 zero, tavily quota_limited 10, serper error 10, chatgpt capped 10; zero flagged" '[ "$(jq_ "d[\"search\"][\"requests\"]")" = 10 ] && [ "$(jq_ "d[\"search\"][\"zero\"]")" = 1 ] && [ "$(jq_ "d[\"search\"][\"by\"][\"tavily\"][\"quota_limited\"]")" = 10 ] && [ "$(jq_ "d[\"search\"][\"by\"][\"serper\"][\"error\"]")" = 10 ] && jq_ "d[\"flags\"]" | grep -q "answered by 0"'
+check "G3 serper erroring means not every paid provider is quota_limited" '! jq_ "d[\"flags\"]" | grep -q "every paid"'
+mkstore 77926 '78 + 0.25 * h' 3
+python3 - "$root/store.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+d["forecast"] = d["forecast"].replace("disk forecast ok: free 77 GiB", "disk forecast ERROR: free 40 GiB")
+d["wedge"] = "2 computer event appender: wedge began\n5 computer event appender: wedge continues\n1 computer event appender: wedge cleared\nrc=0\n"
+json.dump(d, open(sys.argv[1], "w"))
+PY
+runstore --json
+check "G4 a stale forecast ERROR (40 vs 76 GiB live) is not a flag, and is shown stale" '! jq_ "d[\"flags\"]" | grep -q "forecast unit" && [ "$(jq_ "\"forecast\" in d[\"forecast_stale\"]")" = True ]'
+check "G5 wedge began 2 cleared 1 is a flag" '[ "$(jq_ "d[\"wedge\"][\"began\"]")" = 2 ] && jq_ "d[\"flags\"]" | grep -q "wedge began 2, cleared 1"'
+python3 - "$root/store.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+d["ledger"] += ' ts: "2026-11-13T01:59:00Z" "pg.control.receipts_since_last.computer-1355b83bced1613eb048ee28d66688a8": 0\n'
+d["ledger"] = d["ledger"].replace(' ts:', ' "ts":')
+json.dump(d, open(sys.argv[1], "w"))
+PY
+runstore --json
+check "G5 receipts_since_last 0 on the newest row is a flag" '[ "$(jq_ "d[\"receipts_since_last\"]")" = 0 ] && jq_ "d[\"flags\"]" | grep -q "receipts_since_last"'
+
 echo "status-scripts: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

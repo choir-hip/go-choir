@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
@@ -27,22 +28,40 @@ func TestShotsOwedLineFramesARebase(t *testing.T) {
 // judged path.
 func TestShotReuseGateAnswersFromTheRunsState(t *testing.T) {
 	fx, _ := newHostBuildFixture(t, "computer-shot-reuse-runs", "done")
-	var captured struct {
+	// The hook runs in the reconcile drain's goroutine, the test reads in its
+	// own: the capture is guarded, and read once below under the same lock.
+	type capture struct {
 		operation selfdev.Operation
 		bundle    transaction.CapsuleEffectBundle
 		built     hostBuiltRelease
 	}
+	var capturedMu sync.Mutex
+	var latest capture
 	fx.configure(func(rt *Runtime) {
 		rt.shotsAskedHook = func(operation selfdev.Operation, bundle transaction.CapsuleEffectBundle, built hostBuiltRelease) {
-			captured.operation, captured.bundle, captured.built = operation, bundle, built
+			capturedMu.Lock()
+			defer capturedMu.Unlock()
+			latest = capture{operation, bundle, built}
 		}
 	})
 	operation, bundleDigest, _ := fx.seedOperationToAwaitingApproval(t, "op-shot-reuse-runs")
 	fx.appendDecision(t, operation, bundleDigest, "decision-shot-reuse-runs")
 	accepted := fx.waitForState(t, operation.OperationID, selfdev.StateAccepted)
+	// Hold the observer's reconcile drains out for the rest of the test: a
+	// drain running the same gate against the run state this test sets would
+	// commit its own shot_reuse under the same key with another payload
+	// ("idempotency commitment changed"). The drains wait on the read lock
+	// and the fixture cleanup joins them after this test's unlock.
+	fx.reconfigure.Lock()
+	defer fx.reconfigure.Unlock()
 	if err := fx.rt.materializeSelfDevelopmentOperation(context.Background(), accepted, false); !errors.Is(err, errCandidateShotPending) {
 		t.Fatalf("setup pass = %v", err)
 	}
+	// The setup pass above ran the gate in this goroutine and the hook has
+	// returned; take the capture once so later drains cannot move it under us.
+	capturedMu.Lock()
+	captured := latest
+	capturedMu.Unlock()
 	if captured.built.Job.JobID == "" {
 		t.Fatal("the judged path did not run")
 	}

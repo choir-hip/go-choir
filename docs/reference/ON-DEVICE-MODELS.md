@@ -272,3 +272,107 @@ llama.cpp xcframework includes libmtmd (PR merged 2026-06-25); open issue
 Everything in section 6 plus: Qwen3-0.6B Q4_K_M versus Q8_0, Qwen3.5-0.8B,
 LFM3-1.7B QAD-Q4_0 decode and prefill with a cached page; Phonon 31M first
 audio; `os_proc_available_memory()` at idle and after each load.
+
+
+## How the app uses them (round 3, 2026-11-11)
+
+- One catalog: `KnownModels` in the kit (`mobile/AutoradioKit/Sources/AutoradioKit/KnownModels.swift`), one store
+  (`ModelStore.shared`, created with the catalog registered), one provider (`HubModelProvider` in the models module,
+  installed by the app module's registrar) that fetches, loads and checks every model. Voice setup, the engine's stages
+  and `autoradio-models --setup` all go through them. The first phone walk's "model ... not registered" came from a store
+  of setup's own that nothing had registered into.
+- A build with no model libraries is refused: `scripts/build-lab.sh` runs `scripts/ensure-deps.sh` (xcframeworks from
+  `~/.cache/autoradio-deps`, else built), and `sync-exact-package.sh` exits unless `ALLOW_NO_MODELS=1`.
+- Verification: FluidAudio checks Hugging Face LFS SHA-256 object ids of the files it fetches (read in v0.18.3
+  `Shared/Download/ModelCache.swift`); the Qwen3 GGUF is checked against the pinned SHA-256 by the kit.
+- The responder (the voice that talks while the desk works) is its own setup stage ("Talking while it works"), separate from quick
+  decisions, each with its own llama.cpp context (a 0.6B model costs about 0.1 to 0.25 GB of KV cache per context at 1,024 to 2,048
+  tokens; two roles on one GGUF share the weights). Ladder: Qwen3-0.6B Q4_K_M, Q8_0, Qwen3.5-0.8B Q4_K_M, LFM3-1.7B QAD-Q4_0 (LFM Open
+  License: read it), then the soft cue alone. Sources and SHA-256 digests are the Hugging Face API listings of 2026-11-11.
+- The response is a stream, sentence by sentence, front-loaded, cut when the desk's speech is ready, with a hand-over sound. No
+  deterministic filters, word, token or time limits: it is steered by the prompt (`AckPrompt.system()`), and the recent lines ride in
+  the prompt (`AckPrompt.userSuffix`). The prompt is split so the cache can be reused: the fixed instructions and the page in front
+  (title, kind, text) are a byte-stable prefix read into the KV cache when the page comes to the front (`warmResponder`), and at end
+  of speech only the listener's words are read. The turn timeline records prompt tokens, tokens already cached and the prefill time.
+- Setup measures on the device: `os_proc_available_memory()` (iOS) instead of physical memory for the plan, and per candidate the
+  tokens per second reading and writing, first sound for a voice, memory in use and left, and the phone's temperature; a candidate
+  too slow or leaving too little memory fails its check and setup moves on. The numbers are shown in plain words on the result row.
+- Proof on the Mac: `SETUP=1 mobile/scripts/proof-models.sh` (setup's own path, every model); the phone-only facts are
+  listed in the round 3 report.
+
+### Responder sample runs on the Mac (2026-11-11, `SETUP=1 mobile/scripts/proof-models.sh`; Mac numbers, not phone)
+
+Four asks on invented demo pages, cold and warm cache, the same prompt for every model (`AckPrompt.system()`, the page as the stable prefix,
+recent lines of the same page in the suffix). Reading speed is prompt tokens per second, writing is decode tokens per second, memory is the
+whole Mac process resident after the load (all earlier models still loaded), so compare the models with each other, not with a phone.
+
+| Model | Read | Write | First sentence, warm | What it said |
+|---|---|---|---|---|
+| Qwen3-0.6B Q8_0 | 2,690 | 52 | 0.3 to 0.5 s | grounded on pages that have text; echoes the instructions at times ("Show that I understood what the listener asked."); invents on an empty page ("The park closed because it was not in the mail.") |
+| Qwen3.5-0.8B Q4_K_M | 1,671 | 51 | 0.3 to 0.9 s | relevant but wanders ("Today's paper is a newspaper rather than a magazine"), adds off-topic lines and questions to the listener |
+| Qwen3-0.6B Q4_K_M | 2,429 | 59 | 0.15 to 0.4 s | generic filler ("I understand your question, and the front page includes the top stories you mentioned."); little page content |
+| Qwen3-1.7B Q4_K_M | 892 | 30 | 0.4 to 0.5 s | echoes the prompt ("The most useful thing I can truthfully say right now is that ..."), fabricates on an empty page ("the park closed because of maintenance") |
+| LFM3-1.7B QAD-Q4_0 (non-thinking: the prompt ends `<think></think>` per its card) | 897 | 34 | 0.5 to 1.0 s | the most faithful to the page and the only one that says plainly when the page has nothing ("I do not have any information about a park"); but it repeats itself and does not stop (11 to 15 sentences) |
+
+Ladder order follows: Qwen3-0.6B Q8_0 (its file is the one the decision role loads, so no extra weights), Qwen3.5-0.8B, Qwen3-0.6B Q4_K_M,
+Qwen3-1.7B, then LFM3 last before the soft cue only because of its licence; the owner can move it up after reading section 5 of the licence.
+
+## The configurator (round 3, 2026-11-11)
+
+Owner: "I want all the models downloadable. None ship with the app. The point is to build a configurator that selects the best models for the
+user's specific device in the onboarding." Code: `mobile/AutoradioKit/Sources/AutoradioKit/ModelCandidates.swift` (the table),
+`Configurator.swift` (device probe, thresholds, planner, runner, record), `LiveConfigBackend.swift`, `VoiceSetup.swift` (rows),
+`HubModelProvider.swift` (measurement). Tests: `ConfiguratorTests.swift`.
+
+**Procedure.** Probe the device (model id, chip, physical memory, `os_proc_available_memory()`, free disk, thermal state, OS). Below about 6 GB
+the result is a plain "not supported" with every role on its built-in floor. Otherwise plan configurations (one candidate per role: voice
+activity, listener, voice, decision, responder), the WHOLE pipeline resident together: memory is estimated from file sizes and measured
+overheads, two roles on one file count its weights once, and configurations that could fit are ordered best quality first (score = sum of role
+weight times the candidate's quality rank; the responder weighs 10, the voice and listener 2, the decision and the voice-activity model 1).
+Then try them in order: download only what that configuration needs (resuming, SHA-256 or the library's own check), load everything at once,
+measure, and accept the first that leaves headroom and meets the speeds; otherwise unload it, delete what it fetched that the next does not need,
+and step down. At most six attempts (a count), then the built-in voice. Weights of every candidate not in the accepted configuration are
+deleted. The whole record (probe, plan, every attempt's downloads and measurements, reasons, the thresholds in force, the chosen configuration
+and one plain line per role) is saved and goes in the trace export (`configuration`).
+
+**Thresholds** (`ConfigThresholds.standard`, one place, each with its source in the code comment):
+
+| Threshold | Value | Where it came from |
+|---|---|---|
+| planning headroom | 600 MB | the Mac runs: a process grows 0.1 to 0.25 GB while generating; a guess to tune |
+| app base | 300 MB | unmeasured on a phone |
+| headroom after load | 500 MB | forum: iOS ends a process at its limit (2.2 to 2.3 GB on a 4 GB phone); a guess to tune |
+| responder writes | 15 tok/s | speech is about 4 tokens a second; 3 times ahead |
+| responder reads | 150 tok/s | a 400-token page cold in about 3 s (warm: only the question) |
+| first sound of the voice | 1,500 ms | hand-over from the phone's voice; Mac Kokoro 243 ms, Pocket 98 ms |
+| listener speed | 0.5 of real time | must keep up using half the compute; Mac 0.04 to 0.18 |
+| a decision | 1,500 ms | Mac 58 ms |
+| thermal after the run | nominal or fair | serious and critical mean throttling |
+| sustained run | 3 rounds of the same work | a fixed amount of work, not a duration |
+| available memory (assumed where the device cannot say) | 60% of physical | forum: 6.1 GB of an 8 GB phone with the increased-memory entitlement |
+
+**Candidate table.** Responder (quality rank is data, from our Mac sample runs of 2026-11-11; `*` = a quant we have not run ourselves, ranked within its family
+by the vendor's bit-depth ordering; sizes and digests are the Hugging Face API listings):
+
+| Id | Size | Rank | Min tier | Measured |
+|---|---|---|---|---|
+| lfm3-1.7b-q8_0 | 1,846 MB | 98 | 8 GB | no * |
+| lfm3-1.7b-q6_k | 1,428 MB | 96 | 8 GB | no * |
+| lfm3-1.7b-q5_k_m | 1,259 MB | 94 | 6 GB | no * |
+| lfm3-1.7b-qad-q4_0 | 1,050 MB | 93 | 6 GB | yes |
+| lfm3-1.7b-q4_k_m | 1,100 MB | 91 | 6 GB | no * |
+| lfm3-1.7b-nvfp4 | 1,280 MB | 90 | 8 GB | no (whether llama.cpp b12259 runs NVFP4 on iOS is unknown) |
+| qwen3.5-2b-q8_0 / q4_k_m | 2,012 / 1,281 MB | 66 / 64 | 12 GB / 8 GB | no (never run) |
+| qwen3-0.6b-q8_0 / q4_k_m | 639 / 397 MB | 62 / 52 | 6 GB | yes |
+| qwen3.5-0.8b-q8_0 / q4_k_m | 812 / 533 MB | 58 / 56 | 6 GB | q4 yes |
+| qwen3-1.7b-q8_0 / q6_k / q4_k_m | 1,834 / 1,418 / 1,107 MB | 50 / 49 / 47 | 8 / 8 / 6 GB | q4 yes |
+| cue-only | 0 | 0 | the floor | |
+
+LFM3-1.7B's repository (`LiquidAI/LFM3-1.7B-GGUF`) lists BF16, F16, NVFP4, Q4_K_M, Q5_K_M, Q6_K, Q8_0 and QAD-Q4_0; there is no plain Q4_0 and nothing under
+about 1.05 GB. BF16 and F16 (3.5 GB) are not in the table. Other roles: voice activity (Silero, level detector floor), listener (Parakeet TDT, Parakeet EOU, Apple
+floor), voice (Kokoro, Pocket, system voice floor), decision (Qwen3-0.6B Q8_0, the computer floor). LFM3's licence limit (commercial use at or above US$10M annual
+revenue needs a separate licence from Liquid AI) is recorded in the table; it does not lower its rank: that is the owner's call.
+
+**Mac proof** (`CONFIGURE=1 mobile/scripts/proof-models.sh`, simulated 6, 8 and 12 GB profiles; the planner enforces the memory budget, speeds are the Mac's):
+6 GB chose LFM3 QAD Q4_0 with Parakeet TDT, Pocket voice and Silero (decision through the computer); 8 GB chose LFM3 Q8_0 with Parakeet TDT, Kokoro and Silero; 12 GB
+chose LFM3 Q8_0 with the on-phone Qwen3-0.6B decision as well.

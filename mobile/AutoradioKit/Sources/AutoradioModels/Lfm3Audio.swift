@@ -66,24 +66,6 @@ public final class LFM3Transcriber: Transcriber, @unchecked Sendable {
     }
 }
 
-/// The holder over the LFM3 model. FluidAudio's manager exposes ASR and TTS, not text generation, so the lines are the
-/// same fixed acknowledgement and holding lines as `fixed-lines`; what this stage adds is that it names the model, so
-/// a configuration that picks transcriber, holder and voice from LFM3 loads exactly one model. A generated holding line
-/// is the next step if the library (or llama.cpp) exposes the model's text mode.
-public final class LFM3Holder: Holder, @unchecked Sendable {
-    public static let stageID = "lfm3-holder"
-    public static var descriptor: StageDescriptor {
-        var d = FixedLinesHolder.descriptor
-        d.displayName = "LFM3-Audio holder (fixed lines)"
-        d.summary = "Fixed acknowledgement and holding lines (the library exposes no text generation); keeps the one LFM3 model loaded for a full-LFM3 configuration."
-        d.needsModels = ["lfm3-audio-2b"]
-        return d
-    }
-    let inner: FixedLinesHolder
-    public init(_ p: StageParams) { inner = FixedLinesHolder(p) }
-    public func lines(for i: HolderInput) -> AsyncStream<String> { inner.lines(for: i) }
-}
-
 public final class LFM3Voice: Voice, @unchecked Sendable {
     public static let stageID = "lfm3-audio-tts"
     public static var descriptor: StageDescriptor {

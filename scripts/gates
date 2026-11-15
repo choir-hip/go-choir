@@ -30,6 +30,9 @@ run go test -count=1 ./skills/throughline/check
 run scripts/check-goal-files
 run bash scripts/test-status-scripts.sh
 run bash scripts/test-node-b-disk-forecast.sh
+# the boot prune is safe only while it is ordered before the daemon and the runtime
+# and cannot be re-run beside them; skips itself without nix or python3
+run bash scripts/updater-prune-unit-nix-test.sh
 run scripts/check-guest-security-epoch --base "$base" --head HEAD
 if [ "$f" = 0 ]; then echo "ALL GATES PASS"; else echo "GATES FAILED"; fi
 exit "$f"

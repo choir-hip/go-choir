@@ -160,6 +160,11 @@ type Updater struct {
 	storeSchemaPath string
 }
 
+// restagedOutcome marks the journal RestagePinnedRelease writes: a swap of
+// `current` that is no apply, recorded so the release it came from stays the
+// rollback predecessor.
+const restagedOutcome = "restaged"
+
 func New(root, computerID, realizationID string, service ServiceManager, health HealthProber, signer ReceiptSigner) (*Updater, error) {
 	return newUpdater(root, computerID, realizationID, service, health, signer, "")
 }
@@ -294,6 +299,7 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 			return refuse(fmt.Errorf("updater: resolve booted base image digest: %w", digestErr).Error())
 		}
 		if booted != request.Manifest.BaseImageManifestDigest {
+			u.dropStagedSource(request.SourceDir)
 			return refuse(fmt.Sprintf("updater: release base %s does not match booted base %s", request.Manifest.BaseImageManifestDigest, booted))
 		}
 	}
@@ -304,24 +310,44 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 	// the vm-3dc68688 stale-binary failure class, caught pre-restart instead
 	// of by a post-mortem health probe.
 	if cerr := u.checkStateCompatibility(request.Manifest); cerr != nil {
+		if isDeterministicRefusal(cerr) {
+			// The drop precedes the refusal's journal write: if that write
+			// fails the payload is gone and only the I/O error returns, which is
+			// acceptable for a refusal that no retry changes.
+			u.dropStagedSource(request.SourceDir)
+		}
 		return refuse(cerr.Error())
 	}
 
 	releaseDigest := request.Manifest.ContentDigest
-	sourceDir, serr := u.trustedSourceDir(request.SourceDir, releaseDigest)
-	if serr != nil {
-		return refuse(serr.Error())
-	}
-	request.SourceDir = sourceDir
 	releaseDir := filepath.Join(u.root, "releases", releaseDigest)
-	if serr := u.stageRelease(request.SourceDir, releaseDir, request.Manifest); serr != nil {
-		return refuse(serr.Error())
+	// A release already staged and verified needs no source: a resumed apply
+	// (its source was dropped when it first staged) and a replay both land
+	// here. Otherwise the source must be trusted, and once the release is
+	// verified and staged the source is dropped (prune.go).
+	if verifyManifest(releaseDir, request.Manifest) != nil {
+		sourceDir, serr := u.trustedSourceDir(request.SourceDir, releaseDigest)
+		if serr != nil {
+			return refuse(serr.Error())
+		}
+		request.SourceDir = sourceDir
+		if serr := u.stageRelease(request.SourceDir, releaseDir, request.Manifest); serr != nil {
+			// A failed stage may be transient (no space): the source is the only
+			// local copy of a downloaded payload, so it stays; the boot prune
+			// collects it once it is past its window.
+			return refuse(serr.Error())
+		}
+		u.dropStagedSource(sourceDir)
 	}
 	// Layered release: replay the app-layer narchive into the private store
 	// and GC-root it before the pointer swap. A failure here leaves `current`
 	// untouched and never publishes a restart — the running release keeps
 	// serving (fail-closed on the data path).
 	if serr := u.materializeReleaseClosure(releaseDir, request.Manifest); serr != nil {
+		// No drop: the release dir holds the verified copy, so the source is not
+		// needed again, and the failure may be a full volume. It is kept for
+		// diagnosis and, because its release is staged, the boot prune removes
+		// it at the first boot whatever its age.
 		return refuse(serr.Error())
 	}
 	if !found {
@@ -446,6 +472,24 @@ func (u *Updater) RestartCurrent(ctx context.Context) error {
 	return u.service.Restart(ctx)
 }
 
+// deterministicRefusal marks a refusal that does not change on a retry (the
+// release is wrong for this computer), as opposed to an I/O failure reading
+// what the check needs. Apply drops a payload only for the former
+// (dropStagedSource): the latter may be transient (no space) and the payload is
+// the only local copy.
+type deterministicRefusal struct{ error }
+
+// ErrDeterministicRefusal matches (errors.Is) a refusal that does not change on
+// a retry, like ErrStoreFloorRefused.
+var ErrDeterministicRefusal = errors.New("updater: deterministic refusal")
+
+func (r deterministicRefusal) Unwrap() error        { return r.error }
+func (r deterministicRefusal) Is(target error) bool { return target == ErrDeterministicRefusal }
+
+func isDeterministicRefusal(err error) bool {
+	return errors.Is(err, ErrDeterministicRefusal) || errors.Is(err, ErrStoreFloorRefused)
+}
+
 // ReasonBaseMovedSinceFreeze names the refusal of a release whose declared
 // base commit is not the booted base's: the candidate was built on a base the
 // computer no longer runs, and installing it would revert what the booted base
@@ -478,10 +522,10 @@ func (u *Updater) checkStateCompatibility(manifest ReleaseManifest) error {
 		}
 		persisted := receipt.Version
 		if manifest.StoreSchemaVersion != 0 && persisted > manifest.StoreSchemaVersion {
-			return fmt.Errorf("updater: guest store schema %d is newer than release's built schema %d; refusing stale binary", persisted, manifest.StoreSchemaVersion)
+			return deterministicRefusal{fmt.Errorf("updater: guest store schema %d is newer than release's built schema %d; refusing stale binary", persisted, manifest.StoreSchemaVersion)}
 		}
 		if manifest.MinStoreSchemaVersion != 0 && persisted < manifest.MinStoreSchemaVersion {
-			return fmt.Errorf("updater: guest store schema %d is older than release's minimum migratable schema %d; refusing unmigratable store", persisted, manifest.MinStoreSchemaVersion)
+			return deterministicRefusal{fmt.Errorf("updater: guest store schema %d is older than release's minimum migratable schema %d; refusing unmigratable store", persisted, manifest.MinStoreSchemaVersion)}
 		}
 	}
 	if manifest.BaseCommit != "" && u.guestImageManifestPath != "" {
@@ -491,13 +535,13 @@ func (u *Updater) checkStateCompatibility(manifest ReleaseManifest) error {
 		}
 		booted = strings.TrimSpace(booted)
 		if booted == "" {
-			return fmt.Errorf("updater: %s: release declares base_commit %s but the booted base carries no build_commit", ReasonBaseMovedSinceFreeze, manifest.BaseCommit)
+			return deterministicRefusal{fmt.Errorf("updater: %s: release declares base_commit %s but the booted base carries no build_commit", ReasonBaseMovedSinceFreeze, manifest.BaseCommit)}
 		}
 		// A commit is compared whole and without regard to case; a short
 		// commit is not a prefix match (it cannot be proven to name the
 		// booted commit).
 		if !strings.EqualFold(booted, strings.TrimSpace(manifest.BaseCommit)) {
-			return fmt.Errorf("updater: %s: release base commit %s does not match booted base commit %s", ReasonBaseMovedSinceFreeze, manifest.BaseCommit, booted)
+			return deterministicRefusal{fmt.Errorf("updater: %s: release base commit %s does not match booted base commit %s", ReasonBaseMovedSinceFreeze, manifest.BaseCommit, booted)}
 		}
 	}
 	return nil
@@ -941,6 +985,19 @@ func classifyPinnedReadError(err error) error {
 // stamped ops are replayed into it, so both are passed. An empty path is
 // skipped; none skips the check.
 func RestagePinnedRelease(root, releaseDigest string, storeSchemaPaths ...string) error {
+	return restagePinnedRelease(root, releaseDigest, true, storeSchemaPaths)
+}
+
+// RestagePinnedReleaseBestEffort is RestagePinnedRelease for a swap-back, where
+// the caller cannot refuse: a restage that cannot be journaled still swaps. The
+// consequence: the release it swapped away from has no journal naming it, so
+// the boot prune no longer keeps it as a predecessor and the next boot deletes
+// it, if nothing else keeps it; a revert that needed it then refuses cleanly.
+func RestagePinnedReleaseBestEffort(root, releaseDigest string, storeSchemaPaths ...string) error {
+	return restagePinnedRelease(root, releaseDigest, false, storeSchemaPaths)
+}
+
+func restagePinnedRelease(root, releaseDigest string, strict bool, storeSchemaPaths []string) error {
 	root = filepath.Clean(root)
 	if root == "." || !filepath.IsAbs(root) {
 		return fmt.Errorf("updater: restage requires an absolute updater root")
@@ -955,7 +1012,44 @@ func RestagePinnedRelease(root, releaseDigest string, storeSchemaPaths ...string
 		}
 	}
 	ensureReleaseEntrypoint(root, releaseDir, manifest)
+	if err := recordRestage(root, releaseDigest); err != nil && strict {
+		return fmt.Errorf("updater: restage not journaled, nothing swapped: %w", err)
+	}
 	return swapCurrentPointer(root, releaseDir)
+}
+
+// recordRestage journals a swap of `current` to releaseDigest that is no apply,
+// so the release it comes from stays the one rollback predecessor the prune
+// keeps (a boot frontend follow, a tape restore, a base restore, a package
+// migration). Best effort: a restage that cannot be recorded is still done.
+func recordRestage(root, releaseDigest string) error {
+	prior, priorTarget, err := currentReleaseOf(root)
+	if err != nil {
+		return err
+	}
+	if prior == "" || prior == releaseDigest {
+		return nil
+	}
+	suffix := make([]byte, 8)
+	if _, err := rand.Read(suffix); err != nil {
+		return err
+	}
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	key := "restage-" + now.Format("20060102T150405.000000") + "-" + hex.EncodeToString(suffix)
+	journal := operationJournal{
+		Phase: "completed", PriorReleaseDigest: prior, PriorReleaseTarget: priorTarget,
+		TargetReleaseDigest: releaseDigest, StartedAt: now,
+		Result: ApplyResult{ReleaseDigest: releaseDigest, PriorReleaseDigest: prior, Outcome: restagedOutcome},
+	}
+	if err := os.MkdirAll(operationsDir(root), 0o700); err != nil {
+		log.Printf("updater: restage journal: %v", err)
+		return err
+	}
+	if err := writeJournal(filepath.Join(operationsDir(root), safeName(key)+".json"), journal); err != nil {
+		log.Printf("updater: restage journal: %v", err)
+		return err
+	}
+	return nil
 }
 
 // ensureReleaseEntrypoint backfills releaseDir/layering-entrypoint for a
@@ -1235,11 +1329,14 @@ type operationJournal struct {
 	// RecoverySwapped / RecoveryRestartPublished dedup the recovery path the
 	// same way: a resumed apply while recovering must not swap or re-publish
 	// the recovery restart — the prior caller's recovery is already in flight.
-	RecoverySwapped          bool        `json:"recovery_swapped,omitempty"`
-	RecoveryRestartPublished bool        `json:"recovery_restart_published,omitempty"`
-	StartedAt                time.Time   `json:"started_at"`
-	Failure                  string      `json:"failure,omitempty"`
-	Result                   ApplyResult `json:"result"`
+	RecoverySwapped          bool      `json:"recovery_swapped,omitempty"`
+	RecoveryRestartPublished bool      `json:"recovery_restart_published,omitempty"`
+	StartedAt                time.Time `json:"started_at"`
+	// Verdict is what a fence arbitrated (journal_fence.go); empty on every
+	// other journal and on fences written before the field existed.
+	Verdict string      `json:"verdict,omitempty"`
+	Failure string      `json:"failure,omitempty"`
+	Result  ApplyResult `json:"result"`
 }
 
 func readJournal(path string) (operationJournal, bool, error) {

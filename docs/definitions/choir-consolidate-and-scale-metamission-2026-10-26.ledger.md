@@ -72,7 +72,7 @@ Entries before 12:1x on 2026-10-26 are in
   But we will bootstrap by doing it with an external agent like yourself
   initially."
 - Where it stands: the design is
-  `docs/design/tasks-precommit-icrl-2026-10-24.md` (round 4, green, nothing
+  `docs/archive/learning/tasks-precommit-icrl-2026-10-24.md` (round 4, green, nothing
   built; its last revision never re-reviewed: residual ST-08), with the
   status read `docs/archive/design/psa-precommitment-icrl-status-2026-10-24.md`
   (three precommitment loops in code, none feeds another, none closes the

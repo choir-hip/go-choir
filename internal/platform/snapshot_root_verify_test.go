@@ -36,6 +36,8 @@ func (f *gcFixture) snapChunk(name string, age time.Duration) (string, string) {
 
 func (f *gcFixture) snapDeclare(h *Handler, name string, head int64, chunks ...string) int {
 	f.t.Helper()
+	// The tape names the root: the host prunes by roots the tape names.
+	f.nameRoot(snapVerifyComputer, gcDigest("root/"+name), head)
 	return putSnapshotRoot(f.t, h, snapshotRootRequest{ComputerID: snapVerifyComputer, Root: gcDigest("root/" + name), HeadSequence: head, Chunks: chunks}, true)
 }
 

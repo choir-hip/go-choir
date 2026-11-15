@@ -83,6 +83,10 @@ func writeLifecycleAPIError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrLifecycleCursorExpired):
 		writeAPIJSON(w, http.StatusConflict, types.LifecycleEventPage{Schema: types.DurableWorkSchemaV1, CursorExpired: true, ReplayRequired: true})
+	case errors.Is(err, store.ErrLifecycleStoredRevisionUnavailable):
+		// A command that exists but names a revision the store cannot read is a
+		// server invariant break (a retired or lost revision), never a client error.
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "lifecycle invariant broken", Reason: err.Error()})
 	case errors.Is(err, store.ErrNotFound):
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "lifecycle object not found"})
 	case errors.Is(err, store.ErrLifecycleCommandConflict), errors.Is(err, store.ErrLifecycleInvalidTransition), errors.Is(err, store.ErrConcurrentStateChange):
