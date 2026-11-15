@@ -465,3 +465,18 @@ constructor the runtime also uses), the real HTTP clients, a fake host that only
 speaks HTTP, and a compile-time assertion that the production type is a
 `ChunkProber`. The older `restoreTapeFake` has no `HasChunk`, as production did
 not; tests that need the probe use the production type.
+
+## After the snapshot producer deployed (2026-11-15T05:44Z)
+
+- d@e: restore to a version 4 checkpoint answered 200 twice (04:10Z in 283 s
+  on 304a81277; 05:43Z in 363 s on cc8ea803d), `witness_matched: true` both
+  times; replay completeness after the first read `equivalent`.
+- The paper is not restorable inside one request and the new producer does
+  not change that yet. Its block at 05:36Z: 314,364 tail events, 46m22s
+  estimated replay, `floor_limited`: the cost of the last capture is not
+  recorded for its newest snapshot (2026-11-13T22:36Z), so a replay-time
+  capture waits for the 540,000-event ceiling or the interval to take one and
+  measure it. At about 7,400 events an hour the ceiling is roughly 30 hours
+  away. Until then a paper restore needs the async restore act (lane 3) or a
+  capture someone decides to take. Not acted on: the last paper capture took
+  37 minutes with the WAL pinned, which is what the floor protects.
