@@ -19,13 +19,25 @@ members Autoradio
   state px = 0
   state pdrag = false
   state flying = false
+  state flyDir = 1
 
   // Onboarding (the setup page and the interview) takes over the deck as before: one page, nothing to swipe.
   derive onbd = pg.top.startsWith("onboarding:")
   derive topAddr = order.slice(0, 1).join("")
   derive stackAddrs = order
   derive stackCount = order.length
-  derive deckWin = order.slice(0, 3)
+  // An open paper article is a card in a stack of the front page's articles (owner, 2026-11-15, item 1): a swipe goes to the next
+  // article (leftwards) or the previous one (rightwards) and never wraps or returns to the front page. The list is the front
+  // page's reading order (Kit: PaperFront.routes); while an article is open the paper page loads the front, not a section.
+  // A page that is not in that list (a Texture, a file) keeps the deck's own cycle.
+  derive curIdx = topAddr.startsWith("pub:") ? pfront.routes.indexOf(topAddr.slice(4)) : 0 - 1
+  derive inStack = curIdx >= 0
+  derive prevAddr = (inStack and curIdx > 0) ? `pub:${pfront.routes.slice(curIdx - 1, curIdx).join("")}` : ""
+  derive nextAddr = (inStack and curIdx < pfront.routes.length - 1) ? `pub:${pfront.routes.slice(curIdx + 1, curIdx + 2).join("")}` : ""
+  derive prevTitle = inStack ? pfront.titles.slice(max(curIdx - 1, 0), max(curIdx, 0)).join("") : ""
+  derive nextTitle = inStack ? pfront.titles.slice(curIdx + 1, curIdx + 2).join("") : ""
+  derive belowAddr = px > 0 ? prevAddr : nextAddr
+  derive deckWin = inStack ? (belowAddr == "" ? [topAddr] : [topAddr, belowAddr]) : order.slice(0, 3)
   derive shown = topAddr
   derive frontName = stackName(pg.rows, topAddr)
   derive frontKind = kindWord(kindOf(topAddr), topAddr)
@@ -64,8 +76,10 @@ members Autoradio
     pdrag = false
     if flying == false
       let far = px > vp.width * 0.25 or px < 0 - vp.width * 0.25 or vx > 700 or vx < 0 - 700
-      if far and stackCount > 1
-        let right = px > 0 or (px == 0 and vx > 0)
+      let right = px > 0 or (px == 0 and vx > 0)
+      let canGo = inStack ? (right ? prevAddr != "" : nextAddr != "") : stackCount > 1
+      if far and canGo
+        flyDir = right ? 0 - 1 : 1
         px = right ? vp.width * 1.3 : 0 - vp.width * 1.3
         flying = true
       else
@@ -74,11 +88,21 @@ members Autoradio
   task flyEnd when flying key=flying
     after(230, cycleDeck)
   action cycleDeck
-    let nxt = order.slice(1, 2).join("")
-    order = order.slice(1).concat(order.slice(0, 1))
-    px = 0
-    flying = false
-    send pm = pageOpen(address=nxt, title="")
+    if inStack
+      // The article is left behind (closed, not sent to the bottom): the stack is the paper's list, not the deck.
+      let go = flyDir < 0 ? prevAddr : nextAddr
+      let gone = topAddr
+      order = [go].concat(order.filter(a => a != go and a != gone))
+      px = 0
+      flying = false
+      send pm = pageOpen(address=go, title=(flyDir < 0 ? prevTitle : nextTitle))
+      send pc = pageClose(address=gone)
+    else
+      let nxt = order.slice(1, 2).join("")
+      order = order.slice(1).concat(order.slice(0, 1))
+      px = 0
+      flying = false
+      send pm = pageOpen(address=nxt, title="")
 
   // The deck takes in a page the Kit opened that the deck does not know (something outside the deck opened it). A focus that is only
   // behind the deck (the answer to a move still on its way) is never followed: that would undo a swipe.

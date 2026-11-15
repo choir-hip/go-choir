@@ -124,10 +124,29 @@ public struct PaperFront: Codable, Sendable, Equatable {
     public var count: Int
     public var sections: [PaperSection]
     public var bands: [PaperBand]
+    /// The stories of this page in reading order (band by band, item by item), each once. An open article is a card in the stack
+    /// these make: a swipe goes to the next or previous route here. `titles[i]` is the title of `routes[i]`.
+    public var routes: [String]
+    public var titles: [String]
+
+    /// The card a swipe from `route` lands on: `step` +1 is the next article, -1 the previous. Nil when `route` is not in the
+    /// stack or the swipe runs past either end (the card springs back; the stack never wraps and never leaves for the front page).
+    public func neighbor(of route: String, step: Int) -> Int? {
+        guard let i = routes.firstIndex(of: route) else { return nil }
+        let j = i + step
+        return routes.indices.contains(j) ? j : nil
+    }
+
+    /// Flatten bands into the stack order. A route in two bands is listed once, at its first place.
+    public static func stack(of bands: [PaperBand]) -> (routes: [String], titles: [String]) {
+        var seen = Set<String>(), routes: [String] = [], titles: [String] = []
+        for b in bands { for it in b.items where !it.route.isEmpty && seen.insert(it.route).inserted { routes.append(it.route); titles.append(it.title) } }
+        return (routes, titles)
+    }
 
     public static func empty(status: String = "empty", message: String = "") -> PaperFront {
         PaperFront(status: status, message: message, edition: "", layout: "", composition: "", dateLine: "", updated: "", sectionId: "", sectionLabel: "",
-                   count: 0, sections: [], bands: [])
+                   count: 0, sections: [], bands: [], routes: [], titles: [])
     }
 }
 

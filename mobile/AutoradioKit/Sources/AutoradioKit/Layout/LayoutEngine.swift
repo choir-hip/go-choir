@@ -245,9 +245,10 @@ public enum PaperComposer {
         let shown = section.isEmpty ? stories : stories.filter { PaperText.slug($0.section.isEmpty ? "News" : $0.section) == section }
         let bands = engine.compose(shown, width: width, now: at)
         let newest = shown.compactMap(\.updated).max()
+        let stack = PaperFront.stack(of: bands)
         return PaperFront(status: shown.isEmpty ? "empty" : status, message: shown.isEmpty && message.isEmpty ? "Nothing on the front page yet." : message,
                           edition: edition, layout: engine.doc.name, composition: LayoutEngine.composition(bands),
                           dateLine: PaperText.dateLine(at), updated: newest.map { "Updated \(PaperText.relative($0, now: at))" } ?? "",
-                          sectionId: section, sectionLabel: counts[section]?.label ?? "", count: shown.count, sections: sections, bands: bands)
+                          sectionId: section, sectionLabel: counts[section]?.label ?? "", count: shown.count, sections: sections, bands: bands, routes: stack.routes, titles: stack.titles)
     }
 }
