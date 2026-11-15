@@ -18,6 +18,12 @@ backup. It has 28 GiB left.
   ws-owner 9.2G / 65G, ws-01 to ws-04 about 0.27G / 33G each. The images
   are sparse (`home.img` on the runner is NOCOW), so the 160 GiB of
   apparent space not yet allocated can be claimed by guests writing.
+- Free space fell from 28.0 GiB (about 02:57Z) to 12.8 GiB (03:58Z), btrfs
+  data used 914.19 to 929.40 GiB, then held still over a minute's
+  measurement. The VM images' allocation grew by about 1 GiB in that time and
+  no file over 50 MB outside them changed; the cause of the other 14 GiB is
+  not known. Node B's nightly backup wrote to `/srv/choir-backup` (158G)
+  from 02:40 to 02:51Z, before the first reading.
 - Mike's staging check logged "disk: / is 91% full" at 2026-11-14 06:20Z.
 - `nix.gc` runs weekly with `--delete-older-than 14d` (last 2026-11-09,
   50 s, 7.1G written); the store is still 543G.

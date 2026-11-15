@@ -48,7 +48,7 @@
    boot.loader.efi.canTouchEfiVariables = true;
 --- a/infra/node-a/memory-budget.nix
 +++ b/infra/node-a/memory-budget.nix
-@@ -0,0 +1,111 @@
+@@ -0,0 +1,134 @@
 +# node-a memory budget (Choir owner, 2026-11-14, after the 06:42Z kill of the
 +# agents VM; go-choir docs/problems/node-a-oom-killed-the-agents-build-vm-2026-11-14.md).
 +#
@@ -68,9 +68,20 @@
 +#
 +# Two backstops for what the reserve does not cover (Node B's remote builds,
 +# Mike's container builds): a small zram swap as a cushion, so a burst becomes
-+# slowness instead of a kill, and an OOM order, so that if the kernel must still
-+# kill, it kills a Node B build first, then a Choir VM, and never one of Mike's
-+# workstations. Mike's workstations are also kept out of swap entirely.
++# slowness instead of a kill (the Choir VMs' guest pages become swappable, so
++# under pressure their vCPUs can stall on swap-in), and an OOM order, so that if
++# the kernel must still kill, it kills the agents VM, then the runner, and never
++# one of Mike's workstations. Mike's workstations are also kept out of swap.
++#
++# The order holds for any resident size. The kernel's badness is about
++# 1000 x (resident + swap) / RAM + oom_score_adj. A guest is capped at its
++# configured size, so the runner (adj 0, at most 10 GiB of 31.1) scores at
++# most 329, and the agents VM (adj 900) scores at least 900. -1000 exempts
++# Mike's VMs entirely. Node B's remote builds run as `nix-daemon --stdio` in a
++# root ssh session, not in nix-daemon.service, so they get no adj here.
++#
++# The guard runs every minute: after a VM restarts, it is unprotected for up to
++# a minute until the next run.
 +#
 +# Rollback: drop ./memory-budget.nix from configuration.nix and rebuild
 +# (test, fresh login, switch). The guard's runtime settings last until the next
@@ -91,27 +102,42 @@
 +
 +  # Mike's workstations: never the OOM victim, never swapped.
 +  mikeVms = lib.filter (n: lib.hasPrefix "ws-" n) started;
-+  # Choir's VMs: the victims, scratch first.
-+  choirOom = { agents = 500; runner = 300; };
++  # Choir's VMs: the victims, agents first (see the arithmetic above).
++  choirOom = { agents = 900; runner = 0; };
 +
 +  guard = pkgs.writeShellApplication {
 +    name = "node-a-memory-guard";
 +    runtimeInputs = [ pkgs.systemd pkgs.coreutils ];
 +    text = ''
 +      # Idempotent; runs at boot and every minute, so a VM that restarts gets
-+      # its settings back within a minute. Prints only what it changes.
-+      adj() { # unit value
-+        local pid cur
-+        pid=$(systemctl show -p MainPID --value "$1" 2>/dev/null || echo 0)
-+        [ "''${pid:-0}" -gt 0 ] || return 0
-+        cur=$(cat "/proc/$pid/oom_score_adj" 2>/dev/null) || return 0
-+        [ "$cur" = "$2" ] && return 0
-+        echo "$2" >"/proc/$pid/oom_score_adj" && echo "$1 (pid $pid): oom_score_adj $cur -> $2"
++      # its settings back within a minute. Prints only what it changes. Every
++      # step is allowed to fail on its own: one dead pid or failed call never
++      # skips the remaining units.
++      adj() { # unit value: every process in the unit's cgroup
++        local cg procs pid cur
++        cg=$(systemctl show -p ControlGroup --value "$1" 2>/dev/null || true)
++        procs="/sys/fs/cgroup$cg/cgroup.procs"
++        if [ -z "$cg" ] || [ ! -r "$procs" ]; then return 0; fi
++        while read -r pid; do
++          cur=$(cat "/proc/$pid/oom_score_adj" 2>/dev/null || true)
++          if [ -z "$cur" ] || [ "$cur" = "$2" ]; then continue; fi
++          if echo "$2" >"/proc/$pid/oom_score_adj" 2>/dev/null; then
++            echo "$1 pid $pid ($(cat "/proc/$pid/comm" 2>/dev/null || true)): oom_score_adj $cur -> $2"
++          else
++            echo "$1 pid $pid: could not set oom_score_adj" >&2
++          fi
++        done <"$procs"
++        return 0
 +      }
 +      noswap() { # unit
-+        systemctl is-active -q "$1" || return 0
-+        [ "$(systemctl show -p MemorySwapMax --value "$1")" = 0 ] && return 0
-+        systemctl set-property --runtime "$1" MemorySwapMax=0 && echo "$1: MemorySwapMax=0"
++        if ! systemctl is-active -q "$1"; then return 0; fi
++        if [ "$(systemctl show -p MemorySwapMax --value "$1" 2>/dev/null || true)" = 0 ]; then return 0; fi
++        if systemctl set-property --runtime "$1" MemorySwapMax=0; then
++          echo "$1: MemorySwapMax=0"
++        else
++          echo "$1: could not set MemorySwapMax=0" >&2
++        fi
++        return 0
 +      }
 +      for vm in ${lib.escapeShellArgs mikeVms}; do
 +        adj "microvm@$vm.service" -1000
@@ -120,9 +146,6 @@
 +      ${lib.concatStrings (lib.mapAttrsToList (vm: v: lib.optionalString (lib.elem vm started) ''
 +        adj "microvm@${vm}.service" ${toString v}
 +      '') choirOom)}
-+      # Node B's remote builds run under nix-daemon; its children inherit this
-+      # at fork, so a build dies before any VM.
-+      adj nix-daemon.service 800
 +    '';
 +  };
 +in
@@ -146,8 +169,8 @@
 +  };
 +
 +  systemd.services.node-a-memory-guard = {
-+    description = "Keep Mike's workstations out of the OOM killer's reach and out of swap";
-+    after = [ "microvms.target" "nix-daemon.service" ];
++    description = "OOM order and swap exclusion for the microVMs (memory-budget.nix)";
++    after = [ "microvms.target" ];
 +    wantedBy = [ "multi-user.target" ];
 +    serviceConfig = {
 +      Type = "oneshot";

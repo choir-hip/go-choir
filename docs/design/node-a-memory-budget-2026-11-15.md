@@ -58,9 +58,9 @@ so two at once fit and three would contend with the load-sensitive tests
 |---|---|---|
 | Right-size the VMs so the configured sum fits RAM minus reserve | Hard: a guest cannot exceed its configured RAM, so the sum is the worst case | Yes for the agents VM (idle); the runner only when it is idle |
 | Build-time assertion on that sum | A config that would overcommit does not evaluate | Yes |
-| OOM order (`oom_score_adj`): Mike's VMs -1000, Choir VMs +300/+500, Node B builds +800 | If the kernel must kill, it never picks Mike's | Yes, at runtime, no restart |
+| OOM order (`oom_score_adj` on every process of the unit): Mike's VMs -1000, agents 900, runner 0 | If the kernel must kill, it never picks Mike's; agents before the runner at any resident size | Yes, at runtime, no restart |
 | Keep Mike's VMs out of swap (`memory.swap.max=0`) | Their pages never go to zram | Yes, runtime, no restart |
-| zram swap, about 4.7 GiB, zstd | Turns a burst beyond the reserve (Node B builds, Mike's container builds) into slowness | Yes, as a cushion only |
+| zram swap, about 4.7 GiB of uncompressed capacity, zstd | Turns a burst beyond the reserve (Node B builds, Mike's container builds) into slowness: the Choir VMs' guest pages become swappable, so under pressure their vCPUs can stall on swap-in | Yes, as a cushion only |
 | Disk swapfile | Same cushion | No: the filesystem is 98% full |
 | `MemoryMax`/`MemoryHigh` per VM unit | Bounds only host page cache of the disk image (guest RAM is already bounded) | Not needed |
 | `MemoryLow` for Mike's VMs | Protects only their host page cache; needs `system.slice` low too (`vmctl-memory-low-protects-nothing-2026-10-24.md`) | Not needed |
@@ -82,8 +82,19 @@ guest full the host keeps its 5 GiB reserve, measured 1.2 GiB above what the
 host used at the kill. Two overlapping heavy suites run inside guests whose
 maxima are already in the sum; an overrun inside a guest is that guest's own
 OOM and kills a test there, never anything on the host. A burst on the host
-beyond the reserve meets zram first, then the OOM order: a Node B build, then
-the agents VM, then the runner, never ws-owner, ws-03 or ws-04.
+beyond the reserve meets zram first, then the OOM order: the agents VM, then
+the runner, never ws-owner, ws-03 or ws-04.
+
+The order's arithmetic. The kernel's badness is about 1000 x (resident + swap)
+/ RAM + oom_score_adj. A guest is capped at its configured size, so the runner
+(adj 0, at most 10 of 31.1 GiB) scores at most 329 and the agents VM (adj 900)
+at least 900, whatever either holds; -1000 exempts a process entirely. The
+first draft's 500/300 failed this: a freshly booted agents VM at 1 GiB scored
+532 against the full runner's 629. Node B's remote builds are not in the order:
+they run as `nix-daemon --stdio` in a root ssh session (the builder key's
+forced command), not in `nix-daemon.service`, which was not even running.
+After any VM restarts, it is unprotected for up to a minute, until the guard's
+next run.
 
 Durable, when the runner is idle: runner 6 GiB and agents 6 GiB (sum 24,576;
 2.1 GiB of slack beyond the reserve), each with room for one heavy suite and
@@ -110,39 +121,52 @@ What has to change to use it:
   VM (`agentcore-race-suite-runs-at-its-timeout-2026-11-14.md`), now that
   both VMs fit at once.
 
-## Apply (after review; on Node A as root)
+## Apply (on Node A as root; owner-approved 2026-11-15)
 
-0. Pre-checks. The agents VM is idle: `ssh choir-agents 'uptime; pgrep -c -x go; pgrep -c -f "[.]test( |$)"'`
-   (both counts 0). Record the baseline for Mike's VMs:
-   `systemctl show -p ActiveEnterTimestamp -p NRestarts -p MainPID microvm@ws-owner microvm@ws-03 microvm@ws-04`
-   (today: started 2026-10-23 01:03:58, 01:02:58, 01:03:27; PIDs 635435,
-   634347, 634862).
+The owner approved editing Mike's infra tree on Node A in place after a backup
+copy. Never stop, restart or resize ws-owner, ws-03, ws-04 or the runner. If
+anything differs from what the dry run predicted, stop and roll back.
+
+0. Pre-checks. Record the baseline of all five VMs:
+   `systemctl show -p ActiveEnterTimestamp -p NRestarts -p MainPID microvm@{ws-owner,ws-03,ws-04,runner,agents}`.
+   `MemAvailable` at least 4 GiB and at least 5 GiB free on `/` (the build is
+   a few store paths, the guard script, zram-generator's config and the agents
+   VM's runner; well under 1 GiB).
 1. `cp -a /root/mike-infra /root/mike-infra.before-memory-20261115`
 2. Copy the patch to `/root/`, then in `/root/mike-infra`:
    `patch -p2 --dry-run < /root/node-a-memory-budget-2026-11-15.patch` and,
    if clean, the same without `--dry-run`.
-3. `nixos-rebuild dry-activate --flake /root/mike-infra#node-a`. Stop if any
-   `microvm@` unit is listed to stop or restart. Expected: install-microvm-agents
-   restarts (it only relinks `current`), the guard and zram units start.
-4. `nixos-rebuild test --flake /root/mike-infra#node-a`, then a fresh
-   `ssh node-a` login; check that all five VMs are still active with the
-   baseline timestamps and PIDs, and that `ssh choir-runner true` works.
-5. `nixos-rebuild switch --flake /root/mike-infra#node-a`.
-6. Restart the agents VM at its new size: `systemctl restart microvm@agents`.
-   Until this step the agents VM may still grow to 10 GiB, so no builder
-   uses it before it.
+3. Every rebuild runs as the OOM victim, so a runaway evaluation never takes
+   the runner: `systemd-run --wait --pipe --collect -p OOMScoreAdjust=1000 nixos-rebuild <verb> --flake /root/mike-infra#node-a`.
+   First `dry-activate`. Stop if any `microvm@` unit other than agents is
+   listed to stop or restart. Expected: install-microvm-agents restarts (it
+   only relinks `current`), the guard, its timer and zram start.
+4. `test` the same way, then a fresh `ssh node-a` login; check that all five
+   VMs are still active with the baseline timestamps and PIDs, and that
+   `ssh choir-runner true` works.
+5. `switch` the same way.
+6. Restart the agents VM at its new size, only if nothing runs in it: list its
+   process names and counts (never command lines). If any `claude` or other
+   interactive process, any go or test process, or any login other than the
+   check's own is present, do not restart; the 4 GiB size then takes effect at
+   its next restart, and until then it must not run heavy suites (it can still
+   grow to 10 GiB). Otherwise `systemctl restart microvm@agents`.
 7. `systemctl start node-a-memory-guard` (or wait one minute).
-8. Commit the same patch on the Mike repo branch `infra/node-a-in-line-2026-11-14`
-   so the repo matches Node A (local; pushing is the owner's call).
+
+Owner's action, not an apply step: commit the same patch on the Mike repo
+branch `infra/node-a-in-line-2026-11-14` so the repo matches Node A (local;
+pushing is the owner's call).
 
 ## Proof (observations, no load test)
 
 - `swapon --show`: `/dev/zram0`, about 4.7G.
-- `oom_score_adj` of the MainPID of each unit: ws-owner, ws-03, ws-04 -1000;
-  agents 500; runner 300; nix-daemon 800 when running.
+- For every pid in each unit's `cgroup.procs`, its `comm` and
+  `oom_score_adj`: ws-owner, ws-03 and ws-04 show `cloud-hyperviso` (and the
+  vsock `socat`) at -1000; agents at 900; runner at 0. The check fails if a
+  unit lists no `cloud-hyperviso`, so it cannot pass vacuously.
   `memory.swap.max` of the three Mike units: 0.
-- `/var/lib/microvms/agents/booted/bin/microvm-run` carries `size=4096M`;
-  inside, `free -m` shows about 3.9 GiB total.
+- After the agents VM's restart: `/var/lib/microvms/agents/booted/bin/microvm-run`
+  carries `size=4096M`.
 - Mike's VMs untouched: the step-0 timestamps, PIDs and `NRestarts`
   unchanged after step 7, and again a day later.
 - The first time a landing on the runner overlaps a heavy suite on the
@@ -153,13 +177,20 @@ What has to change to use it:
 
 ## Rollback
 
-`nixos-rebuild switch --rollback` (or switch the flake in
-`/root/mike-infra.before-memory-20261115`). The guard's runtime settings then
-stay until reboot; `systemctl revert microvm@ws-owner microvm@ws-03
-microvm@ws-04` removes the swap setting without a restart, and writing 0 to
-each `oom_score_adj` restores the scores. The agents VM returns to 10 GiB only
-on its next restart, which brings back the overcommit unless the runner is
-shrunk first; do not restart it at 10 GiB.
+1. Before switching back, compare `swapon --show` USED with `MemAvailable`:
+   rolling back turns zram off, and swapoff must bring every swapped page back
+   into RAM. If USED is not well under MemAvailable, wait or free memory first.
+2. `systemd-run --wait --pipe --collect -p OOMScoreAdjust=1000 nixos-rebuild switch --rollback`
+   (or switch the flake in `/root/mike-infra.before-memory-20261115`).
+3. The guard's runtime settings outlive the rollback until reboot. Undo them
+   without a restart: `systemctl set-property --runtime microvm@<vm>.service MemorySwapMax=infinity`
+   for ws-owner, ws-03 and ws-04 (or delete only
+   `/run/systemd/system.control/microvm@ws-*.service.d` and `daemon-reload`;
+   do not use `systemctl revert`, which also touches the NixOS drop-ins), and
+   write 0 to each process's `oom_score_adj`.
+4. The agents VM returns to 10 GiB only on its next restart, which brings
+   back the overcommit unless the runner is shrunk first; do not restart it at
+   10 GiB.
 
 ## Heresy delta
 
