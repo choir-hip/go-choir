@@ -11,6 +11,7 @@ use PaperPage from "./paper.contract"
 use ReaderPage from "./reader.contract"
 use TexturesPage from "./textures.contract"
 use FilePage from "./files.contract"
+use BooksPage, DocPage from "./books.contract"
 use MailPage, MailboxPage from "./mail.contract"
 use ActivityPage from "./activity.contract"
 use SettingsPage from "./settings.contract"
@@ -24,7 +25,7 @@ component PageHost
     address: string
     kind: string
     title: string
-  derive known = ["paper", "reader", "textures", "file", "mail", "mailbox", "activity", "settings", "onboarding"].includes(kind) or (kind == "lab" and ["lab:components", "lab:trace", "lab:motion", "lab:wait"].includes(address))
+  derive known = ["paper", "reader", "textures", "file", "mail", "mailbox", "activity", "settings", "onboarding", "books", "doc"].includes(kind) or (kind == "lab" and ["lab:components", "lab:trace", "lab:motion", "lab:wait"].includes(address))
   view
     column position="absolute" inset=0
       // ---- one line per kind: a lane replaces the component, not this line ----
@@ -36,6 +37,10 @@ component PageHost
         TexturesPage(address=address, title=title)
       if kind == "file"
         FilePage(address=address, title=title)
+      if kind == "books"
+        BooksPage()
+      if kind == "doc"
+        DocPage(address=address, title=title)
       if kind == "mail"
         MailPage(address=address, title=title)
       if kind == "mailbox"

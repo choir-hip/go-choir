@@ -309,6 +309,77 @@
       "pages": "number[]",
       "message": "string"
     },
+    "LibraryRow": {
+      "id": "string",
+      "address": "string",
+      "title": "string",
+      "author": "string",
+      "kindLabel": "string",
+      "detail": "string",
+      "progress": "number"
+    },
+    "LibraryListing": {
+      "status": "string",
+      "message": "string",
+      "count": "number",
+      "rows": "LibraryRow[]"
+    },
+    "LibrarySectionRef": {
+      "index": "number",
+      "title": "string"
+    },
+    "LibraryDocInfo": {
+      "address": "string",
+      "id": "string",
+      "title": "string",
+      "author": "string",
+      "kind": "string",
+      "kindLabel": "string",
+      "status": "string",
+      "message": "string",
+      "src": "string",
+      "sections": "LibrarySectionRef[]",
+      "blockCount": "number",
+      "position": "number",
+      "resumeSection": "number",
+      "resumeBlock": "number"
+    },
+    "LibraryBlock": {
+      "n": "number",
+      "kind": "string",
+      "level": "number",
+      "text": "string",
+      "marker": "string"
+    },
+    "LibraryChapter": {
+      "index": "number",
+      "count": "number",
+      "title": "string",
+      "start": "number",
+      "status": "string",
+      "blocks": "LibraryBlock[]",
+      "page": "number"
+    },
+    "LibraryHit": {
+      "block": "number",
+      "section": "number",
+      "label": "string",
+      "snippet": "string"
+    },
+    "LibraryFind": {
+      "query": "string",
+      "hits": "LibraryHit[]",
+      "message": "string"
+    },
+    "LibraryFollowInfo": {
+      "address": "string",
+      "block": "number",
+      "section": "number"
+    },
+    "LibraryAck": {
+      "ok": "bool",
+      "message": "string"
+    },
     "MailRow": {
       "id": "string",
       "address": "string",
@@ -1586,6 +1657,139 @@
         "dir": "string"
       },
       "answers": "FileListing"
+    },
+    {
+      "source": "libraryList",
+      "live": true,
+      "answers": "LibraryListing",
+      "options": {
+        "at": "string"
+      },
+      "substitute": {
+        "default": {
+          "status": "loading",
+          "message": "",
+          "count": 0,
+          "rows": []
+        }
+      }
+    },
+    {
+      "source": "libraryDoc",
+      "live": true,
+      "answers": "LibraryDocInfo",
+      "options": {
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "address": "",
+          "id": "",
+          "title": "",
+          "author": "",
+          "kind": "",
+          "kindLabel": "",
+          "status": "loading",
+          "message": "",
+          "src": "",
+          "sections": [],
+          "blockCount": 0,
+          "position": 0,
+          "resumeSection": 0,
+          "resumeBlock": -1
+        }
+      }
+    },
+    {
+      "source": "libraryChapter",
+      "live": true,
+      "answers": "LibraryChapter",
+      "options": {
+        "address": "string",
+        "index": "number"
+      },
+      "substitute": {
+        "default": {
+          "index": 0,
+          "count": 0,
+          "title": "",
+          "start": 0,
+          "status": "loading",
+          "blocks": [],
+          "page": 1
+        }
+      }
+    },
+    {
+      "source": "libraryFind",
+      "live": true,
+      "answers": "LibraryFind",
+      "options": {
+        "address": "string",
+        "query": "string"
+      },
+      "substitute": {
+        "default": {
+          "query": "",
+          "hits": [],
+          "message": ""
+        }
+      }
+    },
+    {
+      "source": "libraryFollow",
+      "live": true,
+      "answers": "LibraryFollowInfo",
+      "options": {},
+      "substitute": {
+        "default": {
+          "address": "",
+          "block": -1,
+          "section": 0
+        }
+      }
+    },
+    {
+      "send": "libraryImport",
+      "options": {
+        "from": "string",
+        "name": "string"
+      },
+      "answers": "LibraryListing"
+    },
+    {
+      "send": "libraryRemove",
+      "options": {
+        "id": "string"
+      },
+      "answers": "LibraryListing"
+    },
+    {
+      "send": "libraryPlace",
+      "options": {
+        "address": "string",
+        "section": "number",
+        "block": "number"
+      },
+      "answers": "LibraryAck"
+    },
+    {
+      "send": "libraryReadAloud",
+      "options": {
+        "address": "string",
+        "section": "number",
+        "block": "number"
+      },
+      "answers": "LibraryAck"
+    },
+    {
+      "send": "libraryEnqueue",
+      "options": {
+        "address": "string",
+        "section": "number",
+        "block": "number"
+      },
+      "answers": "LibraryAck"
     },
     {
       "source": "mailBox",

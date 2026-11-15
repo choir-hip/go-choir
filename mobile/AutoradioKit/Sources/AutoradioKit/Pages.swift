@@ -25,7 +25,9 @@ public enum PageAddress {
     /// that holds it, lands on the local edit page instead.
     public static let edition = "onboarding:edit"
     public static func canonical(_ address: String) -> String {
-        address.trimmingCharacters(in: .whitespaces).lowercased() == "texture:my-edition" ? edition : address
+        // lane autoradio-reader: "doc:<id>@<block>" (a search hit) opens the document page and remembers the block once.
+        if let (id, block) = ShelfAddress.parse(address), let b = block { ShelfJump.shared.set(id, block: b); return ShelfAddress.address(id) }
+        return address.trimmingCharacters(in: .whitespaces).lowercased() == "texture:my-edition" ? edition : address
     }
 
     /// The renderer family for an address. One line per family; a lane adds its own here only if it adds a scheme.
@@ -41,6 +43,8 @@ public enum PageAddress {
         case "activity": return "activity"
         case "settings": return "settings"
         case "lab": return "lab"
+        case "books": return "books"      // lane autoradio-reader
+        case "doc": return "doc"
         case "onboarding": return "onboarding"      // lane 8 hook (first run); see mobile/README.md, Requests to the spine
         default: return "unknown"
         }
@@ -65,6 +69,7 @@ public enum PageAddress {
         case "onboarding:edit": return "My edition"
         case "mailbox:inbox": return "Mail"
         case "file:/", "file:": return "Files"
+        case "books:": return "Reader"
         default: break
         }
         switch kind(of: address) {
@@ -73,6 +78,7 @@ public enum PageAddress {
         case "file": return (rest as NSString).lastPathComponent
         case "mailbox": return "Mail · " + rest
         case "mail": return "Message"
+        case "doc": return "Document"
         case "reader": return rest.isEmpty ? "Story" : rest
         default: return address
         }
