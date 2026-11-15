@@ -79,7 +79,27 @@ import (
 //     an older binary refuses the split store twice over. The rollback is a
 //     manual recipe (scripts/rollback/header-body-split-rollback.sh): the
 //     presplit file back, the floor rewritten to 5, the prior release.
-const Version uint64 = 6
+//   - 7: object bodies inline on the tape, the reader
+//     (docs/design/object-bodies-inline-on-the-tape-2026-11-15.md). An object
+//     op may carry its body as raw JSON in "body_json", and a batch holding
+//     one is version 3. A binary below 7 refuses a version 3 batch at
+//     Validate (and would read the field as an empty body if it did not), so
+//     the reader must carry an epoch above every binary that lacks it: a floor
+//     of 7 then means exactly "a binary that reads this". This release reads
+//     the form and writes no floor and no version 3 batch; the writer release
+//     asserts floor 7 at every Open and Reopen. This release writes receipt 7
+//     on every Open and writes no floor of 7 (older floors, up to 6, are
+//     written as before). A binary at epoch 6 still boots a receipt-7 store,
+//     because boot checks only the floor. The updater's Apply refuses a
+//     release that declares an epoch below the persisted one
+//     (checkStateCompatibility, "refusing stale binary"). The rollback is to
+//     roll forward. A commit that lowers Version is not a supported rollback;
+//     scripts/check-store-schema-floor.sh refuses one without a
+//     Store-Floor-Override trailer when it is run, and it is not run by CI or
+//     by scripts/land today. For the writer release: the epoch does not prove
+//     a layer has the reader (a release can declare no epoch), so the
+//     writer's gate must check the binary.
+const Version uint64 = 7
 
 // File is the receipt filename inside the store's sidecar directory
 // (deriveTextureWorkspacePath(StorePath)).

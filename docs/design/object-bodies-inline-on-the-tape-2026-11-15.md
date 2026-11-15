@@ -453,12 +453,19 @@ show that the release manifests of both releases declare
 `store_schema_version` 7. This is not only a statement about self-development
 layers.
 
-Rollback from release 1 lands on the pre-reader release. Safe for tape (no
-version 3 batch exists). `Apply` of that epoch-6 release is refused once the
-receipt reads 7 (below); the revert path is restorePrior or a manual re-stage.
-`scripts/check-store-schema-floor.sh` also blocks a release-1 revert by
-construction (it refuses a lowered `Version`). State this in the landing
-report.
+Rollback from release 1. This release writes receipt 7 on every `Open`
+(`open.go:303`, `storeschema.Write`) and writes no floor of 7 (older floors, up
+to 6, are written as before). An epoch-6 binary still boots a receipt-7 store,
+because boot checks only the floor (`open.go:223`). The updater's `Apply`
+refuses a release that declares an epoch below the persisted one
+(`updater.go:524-525`, "refusing stale binary"). The rollback is to roll
+forward. A commit that lowers `Version` is not a supported rollback;
+`scripts/check-store-schema-floor.sh` refuses one without a
+`Store-Floor-Override` trailer when it is run, and it is not run by CI or by
+`scripts/land` today. State this in the landing report.
+
+For release 2: the epoch does not prove a layer has the reader (a release can
+declare no epoch), so the writer's gate checks the binary.
 
 ### What the epoch 7 receipt refuses (the cost of every epoch bump)
 
@@ -473,7 +480,8 @@ below 7 (`updater.go:524-527`, "refusing stale binary"). Concretely:
   r.StoreSchemaVersion` (`internal/agentcore/self_development_host_build.go:361`),
   and the builder stamps `storeschema.Version` of the **builder process**
   (`internal/builder/request.go:275`), not of the candidate source. Any apply
-  or revert whose bundle was built at epoch 6 declares 6 and is refused.
+  or revert whose host-built bundle declares 6 is refused. The epoch does not
+  prove a layer has the reader (section 5).
 - **In-flight frozen layers.** A layer frozen at epoch 6 and not yet applied
   becomes unappliable once the receipt reads 7.
 - **Checkpoint restore to a pre-release-1 release** (section 4).
@@ -518,6 +526,19 @@ constructor sets version 3, the two batch-level checks of section 3, the
 floor assertion at `Open` and `Reopen`, the telemetry. Class: red (tape and
 evidence, checkpoint and route projection, replay).
 
+Two requirements recorded by the round-1 code review of release 1:
+
+- **The writer emits the exact body bytes.** No compaction and no HTML
+  escaping: a default `json.Marshal` of a `RawMessage` changes bytes
+  (section 3, "The trap") and would silently stale the content hash, because
+  nothing on the read path re-verifies `content_hash`.
+- **Rule B is a test over the final batch bytes, including the decode depth
+  limit.** A version 3 batch whose inline body sits near the decoder's depth
+  limit (10000) fails the batch `Unmarshal` with a `*json.SyntaxError`, which
+  sealed replay downgrades to "applied as no change"
+  (`internal/computerevent/appender.go:1792-1805`). The writer's check on the
+  final bytes must refuse such a batch before it is appended, and a test must
+  prove it, not a comment.
 Rollback from release 2: the prior release is release 1 (it reads version 3),
 so a rollback by `restorePrior` or `Apply` lands on a binary that replays every
 batch. The floor stays 7 forever. Reverting the writer commit keeps the
@@ -785,11 +806,9 @@ Deployed:
 - Release 2 (writer): revert the commit. The reader (release 1) stays, so
   version 3 tape written meanwhile stays readable. The floor stays at 7; it is
   never lowered. The previous release (release 1) is a legal target.
-- Release 1 (reader): revert is safe while no version 3 batch exists. After
-  release 2 has written one it is not: the revert must not be taken, and the
-  floor refuses it (the epoch). Even before then `Apply` of an epoch-6 release
-  is refused once the receipt reads 7, and `check-store-schema-floor.sh`
-  blocks a lowered `Version` (section 5).
+- Release 1 (reader): roll forward. A commit that lowers `Version` is not a
+  supported rollback (section 5). After release 2 has written a version 3
+  batch the reader must not be removed at all.
 - Nothing is rewritten. Old tape is never touched.
 
 ## 11. Open questions, with conservative defaults
@@ -805,8 +824,7 @@ Deployed:
   on the tape today, and a base64 token can start with `AIza`). Default:
   record as its own problem, do not fix here.
 - **O8. Epoch bump in the reader release makes `Apply` of epoch-6 releases
-  refused, and blocks a release-1 revert via
-  `scripts/check-store-schema-floor.sh`.** Default: accept, as the earlier
+  refused; a commit that lowers `Version` is not a supported rollback.** Default: accept, as the earlier
   epochs did (section 5).
 
 (O2 and O4 of the first draft were the floor memo and are deleted; O6 was not
