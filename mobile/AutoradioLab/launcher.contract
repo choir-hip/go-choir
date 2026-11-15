@@ -6,7 +6,7 @@
 // testIds: launcher-layer, launcher-search, launcher-open-<address>, launcher-close-<address>, search-hit-<address>,
 // place-<slug> (paper, textures, files, mail, settings, activity, told, components), launcher-nohits.
 use Theme, PageList, LauncherData from "@choir/autoradio"
-use Layer, stackName, kindOf, kindWord, isFixed, pageName from "./ui.contract"
+use Layer, stackName, kindOf, kindWord, isFixed, pageName, SectionHeader from "./ui.contract"
 
 component PlaceRow
   inject
@@ -60,7 +60,7 @@ component StackRow
         row align-items="center" gap=10 width="100%" padding="6px 0"
           text `${index + 1}` font-family=th.fontMono font-size=12 color=th.muted width=18
           column flex=1 min-width=0 gap=1 align-items="flex-start"
-            text name font-family=th.fontUi font-size=16 font-weight=(here ? 700 : 500) color=th.fg line-clamp=1 text-align="left"
+            text name font-family=th.fontUi font-size=16 font-weight=600 color=th.fg line-clamp=1 text-align="left"
             text word font-family=th.fontUi font-size=11 font-weight=600 letter-spacing=0.6 text-transform="uppercase" color=(here ? th.accent : th.muted)
           if here
             box width=8 height=8 border-radius=4 background-color=th.accent
@@ -83,31 +83,33 @@ component Launcher
       scroll testId="launcher-scroll" overflow-x="hidden" flex=1 min-height=0 width="100%"
         column padding=20 gap=6 padding-bottom=24 box-sizing="border-box" width="100%" min-width=0
           input type="search" value=lq input=editLq placeholder="Search the paper and your pages" aria-label="Search" testId="launcher-search"
-            font-family=th.fontUi padding="10px 4px"
+            font-family=th.fontUi font-size=17 color=th.fg min-height=44 padding="8px 16px" border-width=1 border-style="solid" border-color=th.rule border-radius=th.radiusPill background-color=th.paper2
+            ::placeholder
+              color=th.muted
           if lnc.hasQuery
             for h in lnc.hits key=h.address
               button press=openPage(h.address, pageName(h.title, h.address)) testId=`search-hit-${h.address}` appearance="none" width="100%"
                 column padding="8px 0" gap=2 align-items="flex-start" width="100%"
                   text pageName(h.title, h.address) font-family=th.fontUi font-size=17 font-weight=600 color=th.fg text-align="left" line-clamp=2
                   row gap=6
-                    text kindWord(kindOf(h.address), h.address) font-family=th.fontUi font-size=12 font-weight=700 color=th.accent
+                    text kindWord(kindOf(h.address), h.address) font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
                     text h.detail font-family=th.fontUi font-size=13 color=th.muted text-align="left" line-clamp=2
             if lnc.searchNote != ""
               text lnc.searchNote testId="launcher-search-note" font-family=th.fontUi font-size=15 color=th.muted
             if lnc.hits.length == 0 and lnc.searchNote == ""
               text "Nothing found." testId="launcher-nohits" font-family=th.fontUi font-size=15 color=th.muted
           if lnc.hasQuery == false
-            text "Key pages" font-family=th.fontUi font-size=13 color=th.muted margin-top=4
+            SectionHeader(label="Key pages")
             row flex-wrap="wrap" gap=8 width="100%" testId="launcher-key-pages"
               ChipPlace(slug="paper", name="Paper", address="paper:front")
               ChipPlace(slug="textures", name="Textures", address="textures:")
               ChipPlace(slug="files", name="Files", address="file:/")
               ChipPlace(slug="mail", name="Mail", address="mailbox:inbox")
               ChipPlace(slug="settings", name="Settings", address="settings:root")
-            text "In the deck, top first" font-family=th.fontUi font-size=13 color=th.muted margin-top=8
+            SectionHeader(label="In the deck, top first")
             for a, i in stackAddrs key=a
               StackRow(address=a, index=i)
-            text "More" font-family=th.fontUi font-size=13 color=th.muted margin-top=12
+            SectionHeader(label="More")
             PlaceRow(slug="activity", name="Activity", address="activity:", line="What your computer has been doing")
             PlaceRow(slug="edit-edition", name="Edit my edition", address="onboarding:edit", line="Topics you follow")
             PlaceRow(slug="told", name="What I've told the paper", address="texture:what-i-told-the-paper", line="")
