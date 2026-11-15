@@ -634,15 +634,18 @@ a **group commit with no timer**:
   is in flight, draining the computers' queues in turn. The first capture is
   asked at once; captures that arrive while a call is in flight accumulate and
   go out together in the next flush (at most `intakeFlushCaptures` = 12
-  captures, and at most `intakeCallCaptures` = 6 to a call, further calls in
-  sequence). Under a burst the batches form by themselves; when quiet, the
+  captures, all in one call over one state; the call splits only where the
+  vendor's token limits would be crossed, `jevbudget`, see F12). Under a burst the batches form by themselves; when quiet, the
   latency is one call.
 - The poll enqueues, waits on the handle (or its ctx), then calls
   `announceCaptures` exactly as before, so labels exist before the wake again,
   the durable `PendingArrivals` retry machinery is untouched, and a capture
   whose label failed is still announced, unlabelled.
-- A call packs captures and candidate stories to the 30,000-byte guard
-  (`intakeChunkStateBytes` cuts story chunks by bytes).
+- A call packs captures and candidate stories to the vendor's token limits
+  (`intakeTokenPolicy`; before 2026-11-12 a 30,000-byte guard and 15,000-byte
+  story slices). The chunk bound reserves, for every capture of the poll, its
+  captures-block entry sized for a dense script, so a window near the ceiling
+  does not close every group at one capture.
 
 **Locks and scheduling at the wait.** `HandleSourcePollDue` releases
 `sourceScheduleMu` after writing the in-flight mark
@@ -695,9 +698,26 @@ Failure list:
   there, `l.running` cleared, flusher restarted if anything is held). Each
   leaves that flush's captures unlabelled.
 - F12. A call carries more questions than the measured 8 (accuracy above 12 is
-  unmeasured). Bound: at most `intakeCallCaptures` = 6 captures (12
-  questions) to a call. Raise it only after the shadow comparison measures
-  accuracy at the larger size.
+  unmeasured). Revised 2026-11-14; before, this said at most
+  `intakeCallCaptures` = 6 captures (12 questions) to a call, raised only
+  after the shadow comparison measured accuracy at the larger size. What
+  governs the size now: CLAUDE.md (Delivery, owner, 2026-11-12) says every
+  question about a state goes in the one call that carries that state, and a
+  second call over the same or an overlapping state is the defect. A cap of 6
+  would make two calls over one state on every full flush, which is that
+  defect, and it was an arbitrary size of ours, not a vendor limit. So a call
+  carries the whole flush (`intakeCallCaptures` = `intakeFlushCaptures` = 12,
+  24 questions) and is split only by the vendor's limits (64k tokens a
+  request, 32k for the state plus one question, at three quarters,
+  `jevbudget`). The accuracy concern is real and unmeasured: the vendor
+  publishes none for 24 questions, and ours stops at 12. The shadow comparison
+  (`cmd/intake-shadow -run` on d@e, over a recorded real flush) is therefore
+  not a gate on the size but the measurement of it: event and topic agreement
+  between the old slicing and one state, and billed against estimated tokens.
+  If it measures a loss at the larger size, the size is lowered by a commit
+  that changes the constant and names the measurement; there is no switch
+  and no cap on the number of calls. The shadow has been built and has not yet
+  been run. The residual until it is: a wrong label at 24 questions is silent.
 - F15. A handle that never closes strands a poll. Every exit path closes it:
   the flush's own defer (normal, failed and panicked), the stop drain
   (labelled or abandoned at the bound), and the refused enqueue. A test per
