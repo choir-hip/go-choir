@@ -90,3 +90,19 @@ Append only. One entry per pass.
   | D nit: `better_means` and reliability | Adopted: corrections per hour are read as reliability evidence in the notebook, outside the ARL-C1 reading. |
   | D nit: "owner-provided" candidates | Adopted. |
   | D nit: ledger seat names | Noted above. |
+- 2026-11-15T04:30Z. **L0 round 3, DeepSeek delta: REPAIR; round 3 structural assessment (rule 7).** Both round 2 blockers were closed. One new blocker came from the fix for them: the claim writer tagged `lesson:L<n>` while the tally read `ref:L`, so the notebook would have shown every tally as zero and no acceptance read a tally. **What recurred.** Each of rounds 1, 2 and 3 closed its findings and its edits opened a new inconsistency, because the design restated the same identifiers (tags, result codes, outcome classes, id grammars, the hash length) in prose in several sections and in the acceptance items, and each edit changed some copies and not others. **The change.** Patching is stopped. Design section 12 is now the one normative vocabulary, in tables: claim tags (12.1), record kinds with their label values, including the claim and settlement and the new conflict record (12.2), event fields, types, checks and result codes (12.3), outcome classes and the notebook enum (12.4), id and ref grammars (12.5), the hash comparison (12.6) and the bounds (12.7). Sections 3 to 6, 9 and the goal file refer to those tables by number and do not restate the literals; where prose and section 12 differ, section 12 wins. Fine detail that the tables do not fix is settled by each station's failure list, written before its tests, under that station's own review. Owner rulings added: none.
+
+  | Round 3 finding | Disposition |
+  |---|---|
+  | Blocker: tally reads a tag the writer does not write | Adopted. The tally tags are named once (12.1) and 6.2 refers to them; L4 acceptance gains the tally clause (one heard and one not heard forecast caused by one lesson, tally read from the tape; a zero tally fails); `delta_o` names the tally tags. |
+  | 1: last block zero both required and refused | Adopted (12.3): refuse a block count of zero and a negative or out-of-range last block; a first-block skip and a one-block finish are fixtures and in the L2 acceptance. |
+  | 2: abandoned vs heard through | Adopted (12.4): abandoned means the final block never began; a lapsed segment whose final block began is the class stopped late, counted as heard in the second reading; the notebook enum is the table; L2 acceptance reads the classes. |
+  | 3: lapsed case shown a forbidden id | Adopted: only a settled case carries an id (6.1, 3.2, L3 acceptance). |
+  | 4: two codes for a later disagreeing terminal event | Adopted (12.3, 4.2): duplicate, conflict-recorded, ignored, one each; L2 acceptance. |
+  | 5: padded name example wrong | Adopted: the id uses the cleaned name, so only the case variant differs; the padded name stays in the acceptance as a trim case (4.3, L1a). |
+  | 6: claim record kind and label unnamed | Adopted (12.2): the forecast and settlement kinds with labels; the L1a test iterates the table. |
+  | 7: 32 hex tag vs 64 hex event hash | Adopted (12.6, fixtures). |
+  | 8: event_id grammar, conflict id | Adopted (12.5 the turn route's regex; 12.2 a conflict record keyed by the later event's id). |
+  | 9: programme body cap | Adopted (12.7): 256 KB. |
+  | 10: candidates shape | Adopted (12.7): 40 items by importance, text on the first ten. |
+  | 11: false "only mobile moved"; wrong ParseGroupBy cite | Adopted: "mobile/ and three docs files; no Go file"; `handler.go:379`. Fixed in the design header and goal start. |
