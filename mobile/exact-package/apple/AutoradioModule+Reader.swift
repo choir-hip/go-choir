@@ -5,6 +5,21 @@
 //   readerAim             what the bar's prompt is aimed at: a document or one block of it
 // Sends: readerAimSet, readerStop (stop the desk's revision), readerRestore (a version as latest), readerReload, readerFollowSet.
 import Foundation
+import SafariServices
+import UIKit
+
+/// The in-app browser: SFSafariViewController over whatever is on screen, with Done to return.
+enum InAppBrowser {
+    static func present(_ url: URL) {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let window = scenes.first { $0.activationState == .foregroundActive }?.windows.first { $0.isKeyWindow } ?? scenes.flatMap { $0.windows }.first { $0.isKeyWindow }
+        guard var top = window?.rootViewController else { return }
+        while let next = top.presentedViewController, !next.isBeingDismissed { top = next }
+        let vc = SFSafariViewController(url: url)
+        vc.dismissButtonStyle = .done
+        top.present(vc, animated: true)
+    }
+}
 
 extension AutoradioModule {
     func registerReader() {
@@ -63,6 +78,15 @@ extension AutoradioModule {
             ReaderStore.shared.invalidate(args["address"] as? String ?? "")
             touch(["readerDoc"])
             reply(["ok": true])
+        }
+        // A source or article link: web pages open in an in-app browser sheet, mail and phone links go to the system, the rest is refused.
+        // Presenting does not touch the audio session, so the radio keeps playing under the sheet.
+        handle("readerOpenLink") { args, reply in
+            switch SourceLink.route(args["url"] as? String ?? "") {
+            case .inApp(let u): DispatchQueue.main.async { InAppBrowser.present(u) }; reply(["ok": true])
+            case .external(let u): DispatchQueue.main.async { UIApplication.shared.open(u) }; reply(["ok": true])
+            case .refused: reply(["ok": false])
+            }
         }
         handle("readerFollowSet") { [unowned self] args, reply in
             let address = args["address"] as? String ?? ""
