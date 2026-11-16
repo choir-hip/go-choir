@@ -445,7 +445,10 @@ func (d *Desk) ApplyJSON(text string) (drops []string) {
 	text = strings.TrimSpace(text)
 	if strings.HasPrefix(text, "```") {
 		text = strings.TrimPrefix(text, "```")
-		text = strings.TrimPrefix(text, "json")
+		text = strings.TrimLeft(text, " \t")
+		if len(text) >= 4 && strings.EqualFold(text[:4], "json") {
+			text = text[4:]
+		}
 		text = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(text), "```"))
 	}
 	if text == "" {
