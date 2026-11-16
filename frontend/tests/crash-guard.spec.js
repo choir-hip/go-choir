@@ -196,3 +196,26 @@ test('a failed desktop-state fetch does not leave an unguarded desktop', async (
     stateStatus = 200;
   }
 });
+
+test('a route opened at load is held when the previous boot died, with a failed state fetch', async ({ browser }) => {
+  stateStatus = 500;
+  try {
+    const { context, page } = await open(browser);
+    await page.goto('/pub/texture/a-story', { waitUntil: 'domcontentloaded' });
+    await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
+    // First load: the route's window opened and its body mounted, marker written.
+    await expect(page.locator('[data-window][data-window-app-id="texture"]')).toBeVisible();
+    await expect(page.locator('[data-app-host][data-app-id="texture"]')).toBeAttached();
+    expect(Object.keys(await pendingFor(page)).length).toBe(1);
+
+    // The page dies; the reload opens the same route with a fresh window id.
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
+    const held = page.locator('[data-window][data-window-app-id="texture"] [data-crash-held]');
+    await expect(held).toBeVisible();
+    await expect(page.locator('[data-app-host][data-app-id="texture"]')).toHaveCount(0);
+    await context.close();
+  } finally {
+    stateStatus = 200;
+  }
+});
