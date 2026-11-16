@@ -670,6 +670,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc(PodcastTranscriptsPath, h.HandlePodcastTranscripts)
 	s.HandleFunc(PodcastClipsWritePath, h.HandlePodcastClipsWrite)
 	s.HandleFunc(PodcastWorkerFeedsPath, h.HandlePodcastWorkerFeeds)
+	s.HandleFunc(PodcastFeedsListedPath, h.HandlePodcastFeedsListed)
 	s.HandleFunc(PodcastFeedsPath, h.HandlePodcastFeeds)
 	s.HandleFunc(PodcastPopularPath, h.HandlePodcastPopular)
 	s.HandleFunc(PodcastTranscriptPath, h.HandlePodcastTranscript)

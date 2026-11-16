@@ -151,3 +151,23 @@ func (c *Client) WorkerFeeds(ctx context.Context) ([]WorkerFeed, error) {
 	}
 	return ans.Feeds, nil
 }
+
+// ListFeeds tells the platform which feeds the operator lists as public (the
+// seed list). It is idempotent and writes nothing for a feed already listed.
+func (c *Client) ListFeeds(ctx context.Context, feeds []FeedSpec) error {
+	type item struct {
+		FeedURL string `json:"feed_url"`
+		Title   string `json:"title"`
+	}
+	for start := 0; start < len(feeds); start += 200 {
+		end := min(start+200, len(feeds))
+		var items []item
+		for _, f := range feeds[start:end] {
+			items = append(items, item{FeedURL: f.URL, Title: f.Show})
+		}
+		if err := c.do(ctx, http.MethodPut, opBase+"feeds/listed", map[string]any{"feeds": items, "listed": true}, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}

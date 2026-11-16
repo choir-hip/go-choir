@@ -20,7 +20,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math"
+	"net"
 	"net/url"
 	"sort"
 	"strings"
@@ -55,6 +57,7 @@ const (
 	// PodcastClipsDefaultWindow is how far back the unfiltered read looks.
 	PodcastClipsDefaultWindow = 72 * time.Hour
 	podcastClipsScan          = 1000
+	podcastEpisodeScan        = 5000
 	podcastClipsMaxRoutes     = 60
 	podcastClipsDefaultLimit  = 120
 	podcastClipsMaxLimit      = 200
@@ -107,9 +110,18 @@ type PodcastTranscript struct {
 	// the worker measured it. A publisher that stitches ads in serves another
 	// file on the next download, so this, not the feed's duration, is the
 	// length a clip's time is valid for.
-	FileSeconds float64          `json:"file_seconds,omitempty"`
-	StableFile  *bool            `json:"stable_file,omitempty"`
-	Segments    []PodcastSegment `json:"segments"`
+	FileSeconds float64 `json:"file_seconds,omitempty"`
+	StableFile  *bool   `json:"stable_file,omitempty"`
+	// Replace asks to overwrite a transcript that covers as much audio or
+	// more; without it a transcript is never replaced by a shorter one.
+	Replace bool `json:"replace,omitempty"`
+	// Partial is set by the service, never believed from the request: the
+	// transcript covers less of the file than the file holds (a worker that
+	// transcribes only the first minutes). A partial transcript is stored and
+	// its episode counts as transcribed; clips from it lie inside the part
+	// that was covered, and a longer transcript replaces it.
+	Partial  bool             `json:"partial,omitempty"`
+	Segments []PodcastSegment `json:"segments"`
 }
 
 // PodcastClipIn is one clip an operator, or the match job, proposes.
@@ -180,6 +192,9 @@ func podcastHashID(prefix, key string) string {
 
 // PodcastEpisodeID is an episode's id from its feed and guid.
 func PodcastEpisodeID(feedURL, guid string) string {
+	if norm, err := NormalizeFeedURL(feedURL); err == nil {
+		feedURL = norm // two spellings of one feed are one feed
+	}
 	return podcastHashID("ep-", feedURL+"\x00"+guid)
 }
 
@@ -215,8 +230,12 @@ func podcastObject(kind objectgraph.ObjectKind, id string, body any, metadata ma
 	}, nil
 }
 
-// checkPodcastURL admits an http or https URL with no credentials. The
-// service stores URLs and never fetches them.
+// checkPodcastURL admits an http or https URL with no credentials, on a named
+// public-looking host: no IP literal, no localhost, no .local, .internal or
+// .localhost name, no single-label name, and no port but 80 and 443. The
+// service stores URLs and never fetches them, but the operator's worker does
+// (review 1 of 2026-11-16, B1); the worker's dialer is the real guard and this
+// is the first one.
 func checkPodcastURL(name, raw string) error {
 	if raw == "" || len(raw) > podcastMaxURLBytes {
 		return podcastInvalid("%s is empty or over %d bytes", name, podcastMaxURLBytes)
@@ -224,6 +243,17 @@ func checkPodcastURL(name, raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil {
 		return podcastInvalid("%s is not an http or https URL without credentials", name)
+	}
+	host := strings.ToLower(u.Hostname())
+	if port := u.Port(); port != "" && port != "80" && port != "443" {
+		return podcastInvalid("%s: only ports 80 and 443 are admitted", name)
+	}
+	if net.ParseIP(host) != nil || strings.HasPrefix(host, "[") {
+		return podcastInvalid("%s: a host named by an address is not admitted", name)
+	}
+	if !strings.Contains(host, ".") || host == "localhost" || strings.HasSuffix(host, ".localhost") || strings.HasSuffix(host, ".local") ||
+		strings.HasSuffix(host, ".internal") || strings.HasSuffix(host, ".localdomain") || strings.HasSuffix(host, ".home.arpa") {
+		return podcastInvalid("%s: that host name is not admitted", name)
 	}
 	return nil
 }
@@ -305,7 +335,6 @@ func (s *Service) RecordPodcastEpisodes(ctx context.Context, in []PodcastEpisode
 		return 0, 0, err
 	}
 	now := time.Now().UTC()
-	noted := map[string]bool{}
 	for _, ep := range checked {
 		prev, err := s.getPodcastEpisode(ctx, og, ep.EpisodeID)
 		if err != nil {
@@ -330,12 +359,6 @@ func (s *Service) RecordPodcastEpisodes(ctx context.Context, in []PodcastEpisode
 			}
 		}
 		recorded++
-		if !noted[ep.FeedURL] {
-			noted[ep.FeedURL] = true
-			if err := s.notePodcastSeedFeed(ctx, og, ep.FeedURL, ep.Show, now); err != nil {
-				return recorded, fresh, err
-			}
-		}
 	}
 	s.podcastCache.reset()
 	return recorded, fresh, nil
@@ -407,9 +430,13 @@ func (s *Service) ListPodcastEpisodes(ctx context.Context, needTranscript bool, 
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	objs, err := og.ListObjects(ctx, objectgraph.ListFilter{Kind: ogKindPodcastEpisode, OwnerID: podcastOwner, Limit: 2000})
+	objs, err := og.ListObjects(ctx, objectgraph.ListFilter{Kind: ogKindPodcastEpisode, OwnerID: podcastOwner, Limit: podcastEpisodeScan})
 	if err != nil {
 		return nil, err
+	}
+	if len(objs) >= podcastEpisodeScan {
+		// A bound that truncates is said, not silent (residual: no paging yet).
+		log.Printf("corpusd: podcast episodes: the listing hit its scan bound of %d; older episodes are not seen", podcastEpisodeScan)
 	}
 	var out []PodcastEpisode
 	for _, o := range objs {
@@ -454,56 +481,68 @@ func (s *Service) ListPodcastEpisodes(ctx context.Context, needTranscript bool, 
 }
 
 // PutPodcastTranscript stores an episode's transcript and marks the episode.
-func (s *Service) PutPodcastTranscript(ctx context.Context, t PodcastTranscript) (int, error) {
+func (s *Service) PutPodcastTranscript(ctx context.Context, t PodcastTranscript) (n int, kept bool, err error) {
 	if t.EpisodeID == "" || len(t.Segments) == 0 || len(t.Segments) > podcastMaxSegments {
-		return 0, podcastInvalid("a transcript needs an episode_id and 1 to %d segments", podcastMaxSegments)
+		return 0, false, podcastInvalid("a transcript needs an episode_id and 1 to %d segments", podcastMaxSegments)
 	}
 	engine, err := boundField("engine", t.Engine, 100)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	t.Engine = engine
 	if err := finiteSeconds("audio_seconds", t.AudioSeconds); err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	if err := finiteSeconds("file_seconds", t.FileSeconds); err != nil {
-		return 0, err
+		return 0, false, err
 	}
-	prevEnd := 0.0
+	prevEnd, lastEnd := 0.0, 0.0
 	for i := range t.Segments {
 		seg := &t.Segments[i]
 		if err := finiteSeconds("segment start", seg.Start); err != nil {
-			return 0, err
+			return 0, false, err
 		}
 		if err := finiteSeconds("segment end", seg.End); err != nil {
-			return 0, err
+			return 0, false, err
 		}
 		seg.Text = strings.TrimSpace(seg.Text)
 		if seg.End <= seg.Start || seg.Start < prevEnd-0.5 || seg.Text == "" || len(seg.Text) > podcastMaxSegmentBytes || !utf8.ValidString(seg.Text) {
-			return 0, podcastInvalid("segment %d is empty, over %d bytes, ends before it starts, or is out of order", i, podcastMaxSegmentBytes)
+			return 0, false, podcastInvalid("segment %d is empty, over %d bytes, ends before it starts, or is out of order", i, podcastMaxSegmentBytes)
 		}
-		prevEnd = seg.End
+		prevEnd, lastEnd = seg.End, seg.End
 	}
 	og, err := s.podcastStore()
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	ep, err := s.getPodcastEpisode(ctx, og, t.EpisodeID)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	if ep == nil {
-		return 0, podcastInvalid("episode %q is not known", t.EpisodeID)
+		return 0, false, podcastInvalid("episode %q is not known", t.EpisodeID)
+	}
+	// No segment may end after the file does (the feed's duration, or the one
+	// measured on the download, whichever is longer, and a few seconds).
+	if limit := math.Max(ep.DurationSeconds, t.FileSeconds); limit > 0 && lastEnd > limit+5 {
+		return 0, false, podcastInvalid("a segment ends at %.0f s, after the episode's %.0f s", lastEnd, limit)
+	}
+	t.Partial = t.FileSeconds > 0 && t.AudioSeconds > 0 && t.AudioSeconds+5 < t.FileSeconds
+	// A transcript is never replaced by one that covers no more audio.
+	if existing, err := s.GetPodcastTranscript(ctx, og, t.EpisodeID); err != nil {
+		return 0, false, err
+	} else if existing != nil && !t.Replace && existing.AudioSeconds >= t.AudioSeconds {
+		return len(existing.Segments), true, nil
 	}
 	now := time.Now().UTC()
 	obj, err := podcastObject(ogKindPodcastTranscript, t.EpisodeID, t, map[string]any{
-		"episode_id": t.EpisodeID, "engine": t.Engine, "segments": len(t.Segments),
+		"episode_id": t.EpisodeID, "engine": t.Engine, "segments": len(t.Segments), "partial": t.Partial,
 	}, now)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	if err := og.PutObject(corpusdWriter(ctx), obj); err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	ep.HasTranscript = true
 	if t.StableFile != nil {
@@ -512,14 +551,14 @@ func (s *Service) PutPodcastTranscript(ctx context.Context, t PodcastTranscript)
 	switch {
 	case t.FileSeconds > 0:
 		ep.DurationSeconds = t.FileSeconds // what was downloaded beats what the feed said
-	case ep.DurationSeconds == 0:
+	case ep.DurationSeconds == 0 && !t.Partial:
 		ep.DurationSeconds = t.AudioSeconds
 	}
 	if err := s.putPodcastEpisode(ctx, og, *ep, now); err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	s.podcastCache.reset()
-	return len(t.Segments), nil
+	return len(t.Segments), false, nil
 }
 
 // GetPodcastTranscript reads an episode's transcript; nil when it has none.
@@ -590,6 +629,7 @@ func (s *Service) PutPodcastClips(ctx context.Context, in []PodcastClipIn) (int,
 	now := time.Now().UTC()
 	rows := make([]podcastClipRow, 0, len(in))
 	episodes := map[string]*PodcastEpisode{}
+	var listed map[string]bool
 	for i, c := range in {
 		st, ok := byRoute[strings.TrimSpace(c.StoryRoute)]
 		if !ok {
@@ -604,6 +644,14 @@ func (s *Service) PutPodcastClips(ctx context.Context, in []PodcastClipIn) (int,
 		}
 		if ep == nil {
 			return 0, podcastInvalid("clip %d: episode %q is not known", i, truncatePodcast(c.EpisodeID, 80))
+		}
+		if listed == nil {
+			if listed, err = s.listedFeedSet(ctx); err != nil {
+				return 0, err
+			}
+		}
+		if n, nerr := NormalizeFeedURL(ep.FeedURL); nerr != nil || !listed[n] {
+			return 0, podcastInvalid("clip %d: the episode's feed is not a listed feed", i)
 		}
 		if err := finiteSeconds("start", c.Start); err != nil {
 			return 0, err
@@ -632,7 +680,18 @@ func (s *Service) PutPodcastClips(ctx context.Context, in []PodcastClipIn) (int,
 			EpisodeID: c.EpisodeID, Start: c.Start, End: c.End, Quote: quote, Support: c.Support, MatchedAt: now.Format(time.RFC3339),
 		})
 	}
+	// Two clips of one story, episode and second are one clip: the last wins.
+	byID := map[string]int{}
+	var distinct []podcastClipRow
 	for _, row := range rows {
+		if at, ok := byID[row.ClipID]; ok {
+			distinct[at] = row
+			continue
+		}
+		byID[row.ClipID] = len(distinct)
+		distinct = append(distinct, row)
+	}
+	for _, row := range distinct {
 		obj, err := podcastObject(ogKindPodcastClip, row.ClipID, row, map[string]any{
 			"story_route": row.StoryRoute, "episode_id": row.EpisodeID, "matched_at": row.MatchedAt,
 		}, now)
@@ -644,7 +703,7 @@ func (s *Service) PutPodcastClips(ctx context.Context, in []PodcastClipIn) (int,
 		}
 	}
 	s.podcastCache.reset()
-	return len(rows), nil
+	return len(distinct), nil
 }
 
 func truncatePodcast(s string, n int) string {
@@ -692,6 +751,13 @@ func (s *Service) allPodcastClips(ctx context.Context) ([]PodcastClip, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(objs) >= podcastClipsScan {
+		log.Printf("corpusd: podcast clips: the read hit its scan bound of %d; older clips are not shown", podcastClipsScan)
+	}
+	listed, err := s.listedFeedSet(ctx)
+	if err != nil {
+		return nil, err
+	}
 	episodes := map[string]*PodcastEpisode{}
 	type joined struct {
 		clip    PodcastClip
@@ -715,6 +781,11 @@ func (s *Service) allPodcastClips(ctx context.Context) ([]PodcastClip, error) {
 			episodes[row.EpisodeID] = ep
 		}
 		if ep == nil {
+			continue
+		}
+		// Only a listed feed's clips are public: a private feed a reader
+		// reported must never become a public address.
+		if n, nerr := NormalizeFeedURL(ep.FeedURL); nerr != nil || !listed[n] {
 			continue
 		}
 		matched, _ := time.Parse(time.RFC3339, row.MatchedAt)

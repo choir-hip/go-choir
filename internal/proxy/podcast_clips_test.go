@@ -127,6 +127,7 @@ func TestOperatorPodcastRoutesPassTheRosterGate(t *testing.T) {
 		{http.MethodGet, "/api/platform/operator/podcasts/episodes"},
 		{http.MethodPut, "/api/platform/operator/podcasts/transcripts"},
 		{http.MethodPut, "/api/platform/operator/podcasts/clips"},
+		{http.MethodPut, "/api/platform/operator/podcasts/feeds/listed"},
 	}
 	for _, rt := range routes {
 		if w := call(rt.method, rt.path, `{}`, false); w.Code != http.StatusUnauthorized {
@@ -155,6 +156,9 @@ func TestOperatorPodcastRoutesPassTheRosterGate(t *testing.T) {
 	if w := call(http.MethodPut, "/api/platform/operator/podcasts/clips", `{"clips":[]}`, true); w.Code != http.StatusOK {
 		t.Fatalf("operator PUT clips = %d", w.Code)
 	}
+	if w := call(http.MethodPut, "/api/platform/operator/podcasts/feeds/listed", `{"feeds":[]}`, true); w.Code != http.StatusOK {
+		t.Fatalf("operator PUT feeds/listed = %d", w.Code)
+	}
 	if w := call(http.MethodDelete, "/api/platform/operator/podcasts/clips", ``, true); w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("DELETE clips = %d", w.Code)
 	}
@@ -165,6 +169,7 @@ func TestOperatorPodcastRoutesPassTheRosterGate(t *testing.T) {
 		"GET " + platform.PodcastEpisodesPath + "?" + url.Values{"need": {"transcript"}, "limit": {"5"}, "since": {"2026-11-15T00:00:00Z"}}.Encode(),
 		"PUT " + platform.PodcastTranscriptsPath + "?",
 		"PUT " + platform.PodcastClipsWritePath + "?",
+		"PUT " + platform.PodcastFeedsListedPath + "?",
 	}
 	if strings.Join(podcastCalls, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("corpusd saw\n%s\nwant\n%s", strings.Join(podcastCalls, "\n"), strings.Join(want, "\n"))
@@ -208,15 +213,23 @@ func TestPodcastSubscriptionRoutes(t *testing.T) {
 		return seen[len(seen)-1]
 	}
 	feeds := `{"feeds":[{"feed_url":"https://a.example.test/f.xml","title":"A"}]}`
-	if w := call(http.MethodPost, "/api/platform/podcast-feeds", feeds, false); w.Code != http.StatusOK || !strings.Contains(last(), "reporter= body="+feeds) {
-		t.Fatalf("anonymous report: %d %s", w.Code, last())
+	n := len(seen)
+	if w := call(http.MethodPost, "/api/platform/podcast-feeds", feeds, false); w.Code != http.StatusUnauthorized || len(seen) != n {
+		t.Fatalf("an anonymous report must be refused before corpusd: %d (%d calls)", w.Code, len(seen)-n)
+	}
+	badCookie := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/podcast-feeds", strings.NewReader(feeds))
+	badCookie.AddCookie(&http.Cookie{Name: "choir_access", Value: "not-a-token"})
+	wBad := httptest.NewRecorder()
+	h.HandleAPI(wBad, badCookie)
+	if wBad.Code != http.StatusUnauthorized || len(seen) != n {
+		t.Fatalf("a presented, invalid credential is a 401, not an anonymous report: %d", wBad.Code)
 	}
 	if w := call(http.MethodPost, "/api/platform/podcast-feeds", feeds, true); w.Code != http.StatusOK {
 		t.Fatalf("signed-in report: %d %s", w.Code, w.Body)
 	}
 	got := last()
 	if !strings.Contains(got, "reporter=sub-") || strings.Contains(got, "user-real") {
-		t.Fatalf("the reporter is not a salted hash: %s", got)
+		t.Fatalf("the reporter is not a hash: %s", got)
 	}
 	if w := call(http.MethodGet, "/api/platform/podcast-feeds", "", false); w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("GET feeds = %d", w.Code)
@@ -230,11 +243,11 @@ func TestPodcastSubscriptionRoutes(t *testing.T) {
 	if w := call(http.MethodGet, "/api/platform/podcast-popular?limit=5", "", false); w.Code != http.StatusOK || !strings.Contains(last(), "/podcast-popular?limit=5") {
 		t.Fatalf("popular: %d %s", w.Code, last())
 	}
-	n := len(seen)
+	n = len(seen)
 	if w := call(http.MethodGet, "/api/platform/podcast-transcript?feed=https://a.example.test/f.xml&guid=g", "", false); w.Code != http.StatusUnauthorized || len(seen) != n {
 		t.Fatalf("anonymous transcript = %d", w.Code)
 	}
-	if w := call(http.MethodGet, "/api/platform/podcast-transcript?feed=https://a.example.test/f.xml&guid=g", "", true); w.Code != http.StatusOK || !strings.Contains(last(), "/podcast-transcript?feed=https%3A%2F%2Fa.example.test%2Ff.xml&guid=g") {
+	if w := call(http.MethodGet, "/api/platform/podcast-transcript?feed=https://a.example.test/f.xml&guid=g", "", true); w.Code != http.StatusOK || !strings.Contains(last(), "/podcast-transcript?feed=https%3A%2F%2Fa.example.test%2Ff.xml&guid=g") || !strings.Contains(last(), "reporter=sub-") {
 		t.Fatalf("signed-in transcript = %d %s", w.Code, last())
 	}
 	if w := call(http.MethodGet, "/api/platform/podcast-transcript?feed=x", "", true); w.Code != http.StatusBadRequest {

@@ -37,6 +37,18 @@ func podcastFixtureEpisode(guid string, secs float64) PodcastEpisodeIn {
 	}
 }
 
+// listFeeds makes feeds public the way the operator does.
+func listFeeds(t *testing.T, f frontFixture, feedURLs ...string) {
+	t.Helper()
+	var list []PodcastFeedListing
+	for _, u := range feedURLs {
+		list = append(list, PodcastFeedListing{FeedURL: u, Title: "Listed"})
+	}
+	if _, err := f.svc.SetPodcastFeedsListed(context.Background(), list, true); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestPodcastEpisodesRefuseBadURLsWhole(t *testing.T) {
 	f := newFrontFixture(t)
 	ctx := context.Background()
@@ -70,10 +82,10 @@ func TestPodcastRepollKeepsTranscriptFlag(t *testing.T) {
 		t.Fatalf("first record: %d %d %v", rec, fresh, err)
 	}
 	id := PodcastEpisodeID(ep.FeedURL, ep.GUID)
-	if _, err := f.svc.PutPodcastTranscript(ctx, PodcastTranscript{EpisodeID: "ep-unknown", Engine: "t", AudioSeconds: 60, Segments: []PodcastSegment{{Start: 0, End: 5, Text: "x"}}}); !errors.Is(err, ErrPodcastInvalid) {
+	if _, _, err := f.svc.PutPodcastTranscript(ctx, PodcastTranscript{EpisodeID: "ep-unknown", Engine: "t", AudioSeconds: 60, Segments: []PodcastSegment{{Start: 0, End: 5, Text: "x"}}}); !errors.Is(err, ErrPodcastInvalid) {
 		t.Fatalf("a transcript of an unknown episode: err = %v", err)
 	}
-	if n, err := f.svc.PutPodcastTranscript(ctx, PodcastTranscript{EpisodeID: id, Engine: "t", AudioSeconds: 600, FileSeconds: 655.5, Segments: []PodcastSegment{{Start: 0, End: 5, Text: "one"}, {Start: 5, End: 9, Text: "two"}}}); err != nil || n != 2 {
+	if n, kept, err := f.svc.PutPodcastTranscript(ctx, PodcastTranscript{EpisodeID: id, Engine: "t", AudioSeconds: 600, FileSeconds: 655.5, Segments: []PodcastSegment{{Start: 0, End: 5, Text: "one"}, {Start: 5, End: 9, Text: "two"}}}); err != nil || n != 2 || kept {
 		t.Fatalf("put transcript: %d %v", n, err)
 	}
 	need, _ := f.svc.ListPodcastEpisodes(ctx, true, time.Time{}, 50)
@@ -104,7 +116,7 @@ func TestPodcastRepollKeepsTranscriptFlag(t *testing.T) {
 		"no segments":  nil,
 		"past a day":   {{Start: 0, End: 90000, Text: "x"}},
 	} {
-		if _, err := f.svc.PutPodcastTranscript(ctx, PodcastTranscript{EpisodeID: id, Engine: "t", Segments: segs}); !errors.Is(err, ErrPodcastInvalid) {
+		if _, _, err := f.svc.PutPodcastTranscript(ctx, PodcastTranscript{EpisodeID: id, Engine: "t", Segments: segs}); !errors.Is(err, ErrPodcastInvalid) {
 			t.Fatalf("%s: err = %v, want ErrPodcastInvalid", name, err)
 		}
 	}
@@ -116,6 +128,7 @@ func TestPodcastClipsValidationAndPublicRead(t *testing.T) {
 	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{podcastFixtureEpisode("g1", 900)}); err != nil {
 		t.Fatal(err)
 	}
+	listFeeds(t, f, "https://feeds.example.test/news.xml")
 	id := PodcastEpisodeID("https://feeds.example.test/news.xml", "g1")
 	harbor, bridge := f.routes["doc-harbor"], f.routes["doc-bridge"]
 	long := strings.Repeat("harbor ", 100)
@@ -142,7 +155,8 @@ func TestPodcastClipsValidationAndPublicRead(t *testing.T) {
 
 	in := []PodcastClipIn{clip(harbor, 100, 140), clip(harbor, 100.2, 140), clip(harbor, 300, 350), clip(harbor, 500, 540), clip(harbor, 700, 740)}
 	in[3].Quote = long
-	if n, err := f.svc.PutPodcastClips(ctx, in); err != nil || n != 5 {
+	// 100 and 100.2 round to the same second: one clip. Five proposed, four stored.
+	if n, err := f.svc.PutPodcastClips(ctx, in); err != nil || n != 4 {
 		t.Fatalf("put clips: %d %v", n, err)
 	}
 	if n, err := f.svc.PutPodcastClips(ctx, []PodcastClipIn{clip(bridge, 20, 60)}); err != nil || n != 1 {
@@ -255,13 +269,14 @@ func TestPodcastClipsOfAStableFileComeFirst(t *testing.T) {
 	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{stable, unstable}); err != nil {
 		t.Fatal(err)
 	}
+	listFeeds(t, f, stable.FeedURL)
 	yes, no := true, false
 	seg := []PodcastSegment{{Start: 0, End: 5, Text: "one"}}
 	idS, idU := PodcastEpisodeID(stable.FeedURL, "stable"), PodcastEpisodeID(unstable.FeedURL, "unstable")
-	if _, err := f.svc.PutPodcastTranscript(ctx, PodcastTranscript{EpisodeID: idS, Engine: "t", AudioSeconds: 900, StableFile: &yes, Segments: seg}); err != nil {
+	if _, _, err := f.svc.PutPodcastTranscript(ctx, PodcastTranscript{EpisodeID: idS, Engine: "t", AudioSeconds: 900, StableFile: &yes, Segments: seg}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.svc.PutPodcastTranscript(ctx, PodcastTranscript{EpisodeID: idU, Engine: "t", AudioSeconds: 900, StableFile: &no, Segments: seg}); err != nil {
+	if _, _, err := f.svc.PutPodcastTranscript(ctx, PodcastTranscript{EpisodeID: idU, Engine: "t", AudioSeconds: 900, StableFile: &no, Segments: seg}); err != nil {
 		t.Fatal(err)
 	}
 	harbor := f.routes["doc-harbor"]
