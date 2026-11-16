@@ -234,6 +234,15 @@ func DefaultRegistry() *Registry {
 		// evidence and stoplist state. Written by corpusd from the export.
 		{Kind: "choir.entity_review", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.entityReviewRow"},
 		{Kind: "choir.entity_stopword", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.entityStopwordRow"},
+		// Podcast clips (docs/design/podcast-clips-2026-11-15.md section 2): an
+		// episode's feed metadata, its timed transcript and a clip of it that
+		// sources a paper story. Public-corpus data; corpusd's podcast service
+		// is the only writer tonight (residual R1: a desk should be).
+		{Kind: "choir.podcast_episode", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.podcastEpisodeRow"},
+		{Kind: "choir.podcast_transcript", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.podcastTranscriptRow"},
+		{Kind: "choir.podcast_feed", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.podcastFeedRow"},
+		{Kind: "choir.podcast_index", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.podcastIndexDoc"},
+		{Kind: "choir.podcast_clip", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.podcastClipRow"},
 		// A published software release record (P7). Retired: its routes are
 		// deleted and nothing writes one (docs/design/package-install-2026-11-04.md);
 		// the records it left stay readable.

@@ -39,6 +39,13 @@ type Service struct {
 	artifactsRoot string
 	signingKey    *SigningKey
 	writeMu       sync.Mutex
+	// podcastCache is the public clips read's short-lived join (podcast.go).
+	podcastCache podcastReadCache
+	// podcastClipRowHook is a test seam: it runs before each clip row is
+	// written and may fail the write (nil in production).
+	podcastClipRowHook func(clipID string) error
+	// podcastFeedMu serialises writes to the feed rows and indexes (podcast_feeds.go).
+	podcastFeedMu sync.Mutex
 	// The notice sequence (publication_links.go): seeded from storage before
 	// the first one is issued or read.
 	seedMu        sync.Mutex

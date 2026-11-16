@@ -43,16 +43,29 @@ type programmeInput struct {
 
 	turnIDs, noteIDs, lessonIDs map[string]bool
 	byRef                       map[string]*programmeCandidate
+	// clipByID names every clip the request carries and the candidate it is for.
+	clipByID map[string]clipRef
+	// usedClips are the clips a podcast_clip segment has already placed in
+	// this stretch: a clip plays once.
+	usedClips map[string]bool
+}
+
+type clipRef struct {
+	cand *programmeCandidate
+	clip programmeClip
 }
 
 // buildInput reads what the call's input lists from the tape and the request.
 func (c *programmeCall) buildInput(ctx context.Context) (*programmeInput, error) {
 	in := &programmeInput{
 		candidates: c.req.Candidates, turnIDs: map[string]bool{}, noteIDs: map[string]bool{}, lessonIDs: map[string]bool{},
-		byRef: map[string]*programmeCandidate{},
+		byRef: map[string]*programmeCandidate{}, clipByID: map[string]clipRef{},
 	}
 	for i := range in.candidates {
 		in.byRef[in.candidates[i].ref] = &in.candidates[i]
+		for _, k := range in.candidates[i].Clips {
+			in.clipByID[k.ClipID] = clipRef{cand: &in.candidates[i], clip: k}
+		}
 	}
 	if text := strings.TrimSpace(c.req.EditionText); text != "" {
 		in.edition = calibration.SplitBlocks(text)
@@ -152,6 +165,9 @@ func (c *programmeCall) frame(in *programmeInput, local string) (stable, volatil
 			}
 			if strings.TrimSpace(cand.Text) != "" {
 				line("text: %s", safeLine(cand.Text))
+			}
+			for _, k := range cand.Clips {
+				line("clip: %s | show: %s | episode: %s | %.0f seconds | quote: %s", k.ClipID, safeLine(k.Show), safeLine(k.EpisodeTitle), k.Seconds, safeLine(k.Quote))
 			}
 			line("")
 		}
