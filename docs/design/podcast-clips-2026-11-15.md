@@ -150,6 +150,15 @@ next week probably". So `podcast-worker serve` is the long-running mode.
   buffer, and per episode a temporary download (tens of MB, at most 600 MB)
   and a 16 kHz WAV (about 115 MB an hour), both deleted when the episode ends.
   The build VM has 3.9 GB, so the 2 GB ceiling matters.
+- **The shared disk (lead, 2026-11-16).** The build VM's `/home` reached 100% on
+  2026-11-16. Before each download the worker reads the free space of the work
+  directory's filesystem and refuses under `--min-free-gb` (default 15), logging
+  the refusal; the episode stays pending and the loop waits as when idle, and a
+  refusal is not counted as the episode's failure. The downloaded file and the WAV
+  live in a per-episode directory deleted when the transcription ends, whatever
+  its outcome (the audio is gone before the transcript is posted). So the work
+  directory never holds more than one episode's audio, and the worker cannot fill
+  the disk below the floor.
 - **Observed.** One line per episode (episode, show, segments, seconds of audio,
   seconds of work), one volume line per hour (stored, failed, audio and work
   seconds), a line per failure with its skip, and no line per poll, so the log
