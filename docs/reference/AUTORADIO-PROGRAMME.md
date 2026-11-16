@@ -10,6 +10,23 @@ slice 2. Failure list and its tests:
 Code: `internal/agentcore/api_autoradio_programme*.go`. The stream the phone
 sees is pinned by `mobile/fixtures/learning/programme_stream.json`.
 
+**Opening first, then small writes (slice C, 2026-11-16).** A request with
+`cause: "open"` is answered by exactly one `opening` and then `done`; any
+other request by one to six entries. The model writes less per call because
+the provider may not stream, so the first sound waits on the whole answer:
+a timing fact, not a quota (the phone's `extend` trigger is timing, one
+request in flight). The kinds are `opening` (was `ident`) and `transition`
+(was `bridge`). The route sends the new names only, with no switch and no old
+wire names. **Order of landing:** the phone build that speaks `opening` and
+`transition` (and asks `open`, then `extend` by timing, and speaks first
+itself) goes on the device first, and this route lands after it; the installed
+build drops kinds it does not know, so this route alone would play nothing for
+it. Lines a model writes as `ident` or `bridge` are still parsed and renamed
+(parse tolerance for a stored prompt or an old model habit; they are never
+sent). Sections below that
+say `ident`, `bridge`, "ten to fifteen" or a cap of 30 are superseded by this
+paragraph and the section "Opening and ahead (slice C)".
+
 One request, one streamed model call, one server-sent-events response. The
 model writes one JSON object per line; each valid line becomes one `segment`
 event. For each content segment (`story`, `update`, `headlines`) the server first appends the segment record and one forecast
@@ -68,6 +85,64 @@ outside [0, 1], `caused_by` missing or not one of `importance`, `explore`,
 `lesson:L<n>`, `instruction:turn/<id>`, `instruction:note/<id>`, `edition:P<n>`
 that resolves against this call's input, a forecast field on `ident` or `bridge`, a kind that is not `story`, `update`, `headlines`, `ident` or `bridge`. Three invalid lines in a row end the call. Lesson lines
 are recognised and ignored until station L3.
+
+## Opening and ahead (slice C)
+
+- **Request:** `ahead_titles`, optional: the titles of the entries already
+  ahead, in play order. At most 20, each at most 300 bytes; over is 400.
+  They reach the model in a fenced `ahead` section, numbered from 1
+  (`ahead:1`, ...), in the volatile part of the user message, with its own
+  content-derived fence token, and only when the list is not empty (a request
+  without it sends the input as before). The stable prefix, the system prompt
+  and the cache key are byte-identical for requests that differ only in
+  `ahead_titles`. They let the desk avoid repeating them and write a
+  transition into them.
+- **open:** the first valid line must be an `opening`; a valid line of
+  another kind is dropped (and counts toward three invalid in a row). Once
+  the opening is sent, the next valid line of any kind is dropped, noted once
+  in the index's `dropped` and as `timings_ms.surplus_lines`, and the call
+  ends there (the upstream read is cancelled; the hop's outcome is
+  `opening_only`); the response is `done`, not an error. A lesson line or an
+  invalid line after the opening is not a surplus line: it is ignored or
+  noted, and reading goes on. An opening carries no forecast and no claim.
+- **Other causes:** the cap is 6 segments (was 30); a seventh line is dropped
+  and the call ends `completed`, as the old cap did.
+- **transition `between`:** the model may write
+  `between: {after_segment, before_segment}`, each `s<n>` (the n-th segment of
+  this response, from 0) or `ahead:<n>` (the n-th title of `ahead_titles`,
+  from 1). `after_segment` must name an entry that already exists: an
+  earlier `s<n>` of this response (n below the transition's own number) or an
+  `ahead:<n>` within the list. `before_segment` may be `ahead:<n>`, an
+  existing `s<n>`, or exactly `s<own number + 1>`, "the entry written next",
+  which must be below the cap of 6. That one forward reference is allowed and
+  is not held: the transition is committed and sent when its line validates,
+  like any entry, so the entry it names may never arrive if the response ends
+  first. The phone drops a transition whose `before` entry is not the entry
+  that follows it (it records `transition_orphaned`). When a response ends on a
+  transition whose `before` is that forward reference, the index's `dropped`
+  list carries a note (a note only; the event was already sent). `after_segment` and
+  `before_segment` must differ, and no other field is accepted. A line that fails is dropped. The
+  event carries `between: {after_segment, before_segment}` with `s<n>` made
+  the full `segment_id` (`<stretch_id>.s<n>`) and `ahead:<n>` left as
+  written, for the phone to resolve against the titles it sent. A transition
+  without `between` is valid (the old bridge had none); `between` on any
+  other kind, a podcast clip included, is dropped. The record keeps it (`between_after`,
+  `between_before`), so a replay returns it. The route checks shape and
+  bounds, not what the words say.
+- **Text bounds** in bytes: opening 1500 (was ident 800, raised so an opening
+  can name the top stories), transition 500.
+- **Prompt:** `firstparty_prompts/autoradio_programme.md` is rewritten as an
+  explanation of the system (the listener, time, signposting, transitions,
+  honesty, forecasts) with no rule lists, no fixed format for the opening and
+  no example lines (the podcast-clips suffix, appended only when the request
+  lists clips, still carries one example line). It still states the JSON-line form and the `caused_by`
+  grammar, which are runtime facts.
+- **Proof:** `scripts/prove-autoradio-programme --host ... --api-key-file ...
+  --computer ...` posts five `open` and five `extend` requests and prints the
+  time to the first `segment`, the kinds and the server's `first_delta`,
+  `first_segment_sent`, `first_segment` and `done`. The claim (p=0.7 that the
+  median `open` first segment is under 6 s) is entered in the ledger by the
+  lead before the proof is run.
 
 ## Records
 

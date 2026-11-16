@@ -69,7 +69,22 @@ var (
 	programmeIdleDeadline = 30 * time.Second  // between two deltas
 )
 
-const programmeMaxSegments = 30 // the prompt asks for 10 to 15
+// The size of one write. A request with cause open is answered by one
+// opening; every other request by one to six entries. This is the timing fact
+// of the route, not a quota on calls: a provider that does not stream makes the
+// first sound wait for the whole answer, so the answer is kept small. The next
+// write is a new request, and the extend trigger on the phone is timing.
+const (
+	programmeMaxSegments = 6
+	programmeOpenSegment = 1
+)
+
+func (c *programmeCall) maxSegments() int {
+	if c.req.Cause == "open" {
+		return programmeOpenSegment
+	}
+	return programmeMaxSegments
+}
 
 // programmePrompt is the programme prompt; a variable so a test can empty it.
 var programmePrompt = appdesk.ProgrammePrompt
@@ -132,7 +147,16 @@ type programmeRequest struct {
 	TZ          string               `json:"tz,omitempty"`
 	Candidates  []programmeCandidate `json:"candidates,omitempty"`
 	EditionText string               `json:"edition_text,omitempty"`
+	// AheadTitles are the titles of the entries already ahead of the one on
+	// air, in play order. They let the desk avoid repeating them and write a
+	// transition into them. At most 20, each at most 300 bytes.
+	AheadTitles []string `json:"ahead_titles,omitempty"`
 }
+
+const (
+	programmeMaxAhead      = 20
+	programmeMaxAheadTitle = 300
+)
 
 // parseProgrammeRequest validates the body. These are bounds on what a
 // stranger can cause (design 12.7), not timers; every refusal is 400, because
@@ -167,6 +191,14 @@ func parseProgrammeRequest(body []byte) (programmeRequest, error) {
 	}
 	if len(req.EditionText) > programmeMaxEdition {
 		return req, fmt.Errorf("edition_text exceeds %d bytes", programmeMaxEdition)
+	}
+	if len(req.AheadTitles) > programmeMaxAhead {
+		return req, fmt.Errorf("ahead_titles holds at most %d items", programmeMaxAhead)
+	}
+	for i, t := range req.AheadTitles {
+		if len(t) > programmeMaxAheadTitle {
+			return req, fmt.Errorf("ahead_titles[%d] exceeds %d bytes", i, programmeMaxAheadTitle)
+		}
 	}
 	if len(req.Candidates) > programmeMaxCands {
 		return req, fmt.Errorf("candidates holds at most %d items", programmeMaxCands)
@@ -270,6 +302,11 @@ type programmeCall struct {
 	startedAt time.Time
 	received  time.Time
 	firstSeg  time.Time
+	// firstDelta is when the first model text delta reached this route, and
+	// firstSent when the first segment event was written to the client: with
+	// the total they show which hop holds the lines.
+	firstDelta time.Time
+	firstSent  time.Time
 
 	// The member answering now, and the one that wrote the first segment.
 	provider, model string
@@ -291,10 +328,15 @@ type programmeCall struct {
 	// cancelUpstream cancels the model call in flight; set when the call must
 	// stop reading.
 	cancelUpstream context.CancelFunc
-	capped         bool        // the segment cap ended the call
-	timedOut       atomic.Bool // a deadline ended the call
-	writeErr       error       // the first write error: the client went away
-	prompt         string
+	capped         bool // the segment cap ended the call
+	// trailing is the last committed segment when it is a transition that leads
+	// into "the entry written next" (before_segment is s<its number + 1>): if
+	// the response ends there, that entry never comes, and the index says so.
+	trailing *programmeSegment
+	surplus  int         // lines after the opening of an open request: dropped, and the call ends
+	timedOut atomic.Bool // a deadline ended the call
+	writeErr error       // the first write error: the client went away
+	prompt   string
 }
 
 func (c *programmeCall) memberName() string {
@@ -311,7 +353,17 @@ func (c *programmeCall) timings(done time.Time) map[string]int64 {
 		}
 		return t.Sub(c.received).Milliseconds()
 	}
-	return map[string]int64{"first_segment": ms(c.firstSeg), "done": ms(done)}
+	out := map[string]int64{"first_segment": ms(c.firstSeg), "done": ms(done)}
+	if !c.firstDelta.IsZero() {
+		out["first_delta"] = ms(c.firstDelta)
+	}
+	if !c.firstSent.IsZero() {
+		out["first_segment_sent"] = ms(c.firstSent)
+	}
+	if c.surplus > 0 {
+		out["surplus_lines"] = int64(c.surplus)
+	}
+	return out
 }
 
 func (c *programmeCall) begin() {
@@ -360,6 +412,9 @@ func (c *programmeCall) segmentEvent(s programmeSegment) map[string]any {
 	ev := map[string]any{
 		"stretch_id": c.stretchID, "segment_id": s.ID, "kind": s.Kind, "title": s.Title, "text": s.Text,
 		"cites": cites, "block_count": s.Blocks, "est_seconds": estSeconds(s.Text), "cut_at": "sentence",
+	}
+	if s.BetweenAfter != "" {
+		ev["between"] = map[string]any{"after_segment": s.BetweenAfter, "before_segment": s.BetweenBefore}
 	}
 	if s.ClipID != "" {
 		// Real audio is cut only between segments (design 1.3), and the phone
@@ -566,6 +621,9 @@ func (c *programmeCall) run(ctx context.Context, streamer provideriface.TextStre
 			ConversationID: c.stretchID, CacheKey: programmeCachePrefix + c.rt.cfg.ComputerID + ":" + promptSum[:8],
 			System: prompt, StableUser: stable, User: volatile, MaxTokens: sel.MaxTokens,
 		}, func(delta string) {
+			if c.firstDelta.IsZero() {
+				c.firstDelta = time.Now()
+			}
 			if idle == nil {
 				idle = time.AfterFunc(programmeIdleDeadline, func() { c.timedOut.Store(true); cancel() })
 			} else {
@@ -594,6 +652,11 @@ func (c *programmeCall) run(ctx context.Context, streamer provideriface.TextStre
 			hop.Outcome = "invalid_run"
 			c.hops = append(c.hops, hop)
 			c.finish(ctx, "invalid_run", fmt.Sprintf("%d invalid lines in a row ended the stretch", programmeInvalidRun), true)
+			return
+		case c.surplus > 0:
+			hop.Outcome = "opening_only"
+			c.hops = append(c.hops, hop)
+			c.finish(ctx, "completed", "", true)
 			return
 		case c.capped:
 			hop.Outcome = "capped"
@@ -643,28 +706,60 @@ func (c *programmeCall) handleLine(line string, tooLong bool) bool {
 	c.lineNo++
 	var seg *programmeSegment
 	class, reason := lineInvalid, ""
+	c.input.nextSeg = c.segCount
 	if tooLong {
 		reason = fmt.Sprintf("line is over %d bytes", programmeMaxLine)
 	} else {
 		seg, class, reason = c.input.checkLine(line)
 	}
+	openDone := c.req.Cause == "open" && c.segCount >= programmeOpenSegment
 	switch class {
 	case lineLesson:
 		return true // station L3 reads lesson lines; here they are neither counted nor reset
 	case lineInvalid:
+		if openDone {
+			// After the opening of an open request an invalid line is noted and
+			// nothing more: it is not a content line and ends nothing.
+			c.dropped = append(c.dropped, droppedLine{N: c.lineNo, Reason: reason})
+			programmeDroppedTotal.Add(1)
+			return true
+		}
 		return c.drop(reason)
 	}
-	if c.segCount >= programmeMaxSegments {
-		c.dropped = append(c.dropped, droppedLine{N: c.lineNo, Reason: fmt.Sprintf("segment cap %d reached: the stretch ended", programmeMaxSegments)})
+	if openDone {
+		// An open request is answered by the opening alone. A valid line after
+		// it is dropped, noted once, and the call ends there: the rest of the
+		// answer is not read.
+		c.surplus++
+		c.dropped = append(c.dropped, droppedLine{N: c.lineNo, Reason: "an open request takes the opening only: the line is dropped and the call ends"})
+		programmeDroppedTotal.Add(1)
+		c.stop = true
+		if c.cancelUpstream != nil {
+			c.cancelUpstream()
+		}
+		return false
+	}
+	if c.req.Cause == "open" && seg.Kind != "opening" {
+		return c.drop(fmt.Sprintf("an open request is answered by an opening, not a %s", seg.Kind))
+	}
+	if c.segCount >= c.maxSegments() {
+		c.dropped = append(c.dropped, droppedLine{N: c.lineNo, Reason: fmt.Sprintf("segment cap %d reached: the stretch ended", c.maxSegments())})
 		c.capped, c.stop = true, true
 		if c.cancelUpstream != nil {
 			c.cancelUpstream()
 		}
 		return false
 	}
-	// A content segment's claim is checked before anything is written, so a
-	// line the constructor refuses leaves no segment record.
+	seg.lineNo = c.lineNo
+	return c.commit(seg)
+}
+
+// commit writes a valid segment and sends its event. A content segment's claim
+// is checked before anything is written, so a line the constructor refuses
+// leaves no segment record.
+func (c *programmeCall) commit(seg *programmeSegment) bool {
 	seg.ID = fmt.Sprintf("%s.s%d", c.stretchID, c.segCount)
+	seg.BetweenAfter, seg.BetweenBefore = c.qualify(seg.BetweenAfter), c.qualify(seg.BetweenBefore)
 	seg.Blocks = len(calibration.SplitBlocks(seg.Text))
 	seg.SHA256 = sha256Hex(seg.Text)
 	if seg.Content {
@@ -689,11 +784,18 @@ func (c *programmeCall) handleLine(line string, tooLong bool) bool {
 	}
 	c.segmentIDs = append(c.segmentIDs, seg.ID)
 	c.segCount++
+	c.trailing = nil
+	if seg.BetweenBefore == fmt.Sprintf("%s.s%d", c.stretchID, c.segCount) {
+		c.trailing = seg
+	}
 	if c.firstSeg.IsZero() {
 		c.firstSeg = time.Now()
 	}
 	programmeSegmentsTotal.Add(1)
 	c.event("segment", c.segmentEvent(*seg))
+	if c.firstSent.IsZero() {
+		c.firstSent = time.Now()
+	}
 	return true
 }
 
@@ -732,6 +834,11 @@ func (c *programmeCall) failStore(err error) bool {
 // finish ends the call: the index when the handler itself concluded the call,
 // then `done` or `error`.
 func (c *programmeCall) finish(ctx context.Context, status, reason string, index bool) {
+	if c.trailing != nil {
+		// A note only: the event was sent, and the phone drops a transition
+		// whose before entry is not the entry that follows it.
+		c.dropped = append(c.dropped, droppedLine{N: c.trailing.lineNo, Reason: "the last transition leads into the next entry, which was never written"})
+	}
 	indexID, indexErr := "", ""
 	if index {
 		id, err := c.writeIndex(ctx, status)
@@ -759,4 +866,14 @@ func (c *programmeCall) finish(ctx context.Context, status, reason string, index
 		data["index_error"] = indexErr
 	}
 	c.event("done", data)
+}
+
+// qualify gives an s<n> neighbour of a transition the stretch id, so the event
+// and the record carry a segment_id; an ahead:<n> stays as the model wrote it,
+// for the phone to resolve against the ahead_titles it sent.
+func (c *programmeCall) qualify(ref string) string {
+	if strings.HasPrefix(ref, "s") {
+		return c.stretchID + "." + ref
+	}
+	return ref
 }

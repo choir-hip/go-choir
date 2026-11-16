@@ -130,6 +130,9 @@ func (c *programmeCall) writeSegment(ctx context.Context, s *programmeSegment) e
 		"stretch_id": c.stretchID, "segment_id": s.ID, "kind": s.Kind, "sha256": s.SHA256,
 		"blocks": fmt.Sprint(s.Blocks), "forecast": fmt.Sprint(s.Content), "cites": string(cites),
 	}
+	if s.BetweenAfter != "" {
+		refs["between_after"], refs["between_before"] = s.BetweenAfter, s.BetweenBefore
+	}
 	if s.ClipID != "" {
 		refs["clip_id"], refs["clip_seconds"] = s.ClipID, fmt.Sprint(s.ClipSeconds)
 	}
@@ -212,6 +215,7 @@ func (c *programmeCall) readSegments(ctx context.Context, stretchID string, n in
 		_, _ = fmt.Sscanf(rec.SubjectRefs["blocks"], "%d", &s.Blocks)
 		_ = json.Unmarshal([]byte(rec.SubjectRefs["cites"]), &s.Cites)
 		s.Content = rec.SubjectRefs["forecast"] == "true"
+		s.BetweenAfter, s.BetweenBefore = rec.SubjectRefs["between_after"], rec.SubjectRefs["between_before"]
 		if id := rec.SubjectRefs["clip_id"]; id != "" {
 			s.ClipID = id
 			_, _ = fmt.Sscanf(rec.SubjectRefs["clip_seconds"], "%g", &s.ClipSeconds)
