@@ -25,17 +25,34 @@ import (
 // Bounds on what a stranger can cause. They refuse; none of them is a limit on
 // a model call.
 const (
-	MaxUpcoming    = 100
+	MaxUpcoming    = 50
 	MaxCandidates  = 40
 	MaxOps         = 8 // recorded ops per turn
 	MaxReasonBytes = 160
 	maxTitleBytes  = 300
-	maxStringBytes = 512
-	maxURLBytes    = 2048
+	maxRouteBytes  = 256
+	maxIDBytes     = 128 // a document id, an episode id
+	maxShowBytes   = 200
+	maxURLBytes    = 1024
 	maxAddedBy     = 32
 	maxPosition    = 1e7 // seconds
 	maxAttempts    = MaxOps * 4
 )
+
+// TooLargeError is a snapshot or candidate list that is well formed but over a
+// bound. The route answers the turn without the queue and says so, rather than
+// refusing a listener's words because their queue is long.
+type TooLargeError struct{ msg string }
+
+func (e *TooLargeError) Error() string { return e.msg }
+
+// IsTooLarge reports whether err is a TooLargeError.
+func IsTooLarge(err error) bool {
+	var t *TooLargeError
+	return errors.As(err, &t)
+}
+
+func tooLarge(format string, a ...any) error { return &TooLargeError{fmt.Sprintf(format, a...)} }
 
 var entryID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$`)
 
@@ -102,7 +119,7 @@ func ParseSnapshot(raw []byte) (Snapshot, error) {
 		return Snapshot{}, errors.New("queue.version must not be negative")
 	}
 	if len(s.Upcoming) > MaxUpcoming {
-		return Snapshot{}, fmt.Errorf("queue.upcoming holds at most %d entries", MaxUpcoming)
+		return Snapshot{}, tooLarge("queue.upcoming holds at most %d entries", MaxUpcoming)
 	}
 	seen := map[string]bool{}
 	check := func(where, id string, it Item) error {
@@ -129,7 +146,7 @@ func ParseSnapshot(raw []byte) (Snapshot, error) {
 			return Snapshot{}, err
 		}
 		if len(e.AddedBy) > maxAddedBy {
-			return Snapshot{}, fmt.Errorf("queue.upcoming[%d].added_by is too long", i)
+			return Snapshot{}, tooLarge("queue.upcoming[%d].added_by is too long", i)
 		}
 	}
 	if s.Upcoming == nil {
@@ -143,11 +160,11 @@ func validateItem(where string, it Item) error {
 		name, v string
 		max     int
 	}{
-		{"title", it.Title, maxTitleBytes}, {"route", it.Route, maxStringBytes}, {"url", it.URL, maxURLBytes},
-		{"id", it.ID, maxStringBytes}, {"show", it.Show, maxStringBytes}, {"episode_id", it.EpisodeID, maxStringBytes},
+		{"title", it.Title, maxTitleBytes}, {"route", it.Route, maxRouteBytes}, {"url", it.URL, maxURLBytes},
+		{"id", it.ID, maxIDBytes}, {"show", it.Show, maxShowBytes}, {"episode_id", it.EpisodeID, maxIDBytes},
 	} {
 		if len(f.v) > f.max {
-			return fmt.Errorf("%s.%s exceeds %d bytes", where, f.name, f.max)
+			return tooLarge("%s.%s exceeds %d bytes", where, f.name, f.max)
 		}
 	}
 	need := func(name, v string) error {
@@ -175,7 +192,7 @@ func ValidateCandidates(c []Candidate) error {
 		return fmt.Errorf("candidates holds at most %d stories", MaxCandidates)
 	}
 	for i, x := range c {
-		if x.Route == "" || len(x.Route) > maxStringBytes || strings.ContainsAny(x.Route, " \t\r\n@#") {
+		if x.Route == "" || len(x.Route) > maxRouteBytes || strings.ContainsAny(x.Route, " \t\r\n@#") {
 			return fmt.Errorf("candidates[%d].route is empty, too long or has a space, @ or #", i)
 		}
 		if len(x.Title) > maxTitleBytes {
@@ -242,8 +259,10 @@ func (d *Desk) Ops() []Op { return append([]Op(nil), d.ops...) }
 // BaseVersion is the version every op is against.
 func (d *Desk) BaseVersion() int64 { return d.base }
 
+var lineSeparators = strings.NewReplacer("\u2028", " ", "\u2029", " ")
+
 func oneLineBounded(s string, max int) string {
-	s = strings.Join(strings.Fields(s), " ")
+	s = strings.Join(strings.Fields(lineSeparators.Replace(s)), " ")
 	if len(s) <= max {
 		return s
 	}
@@ -294,14 +313,14 @@ func (d *Desk) knownStory(route string) bool {
 // story resolves an item to a named candidate, with the candidate's own title.
 func (d *Desk) story(it Item) (Item, error) {
 	if it.Kind != "story" {
-		return Item{}, fmt.Errorf("the DJ can add only a story named in candidates, not a %s", it.Kind)
+		return Item{}, fmt.Errorf("the DJ can add only a story named in candidates, not a %q", oneLineBounded(it.Kind, 80))
 	}
 	title, ok := d.cands[it.Route]
 	if !ok {
-		return Item{}, fmt.Errorf("story %q is not one of the candidates", it.Route)
+		return Item{}, fmt.Errorf("story %q is not one of the candidates", oneLineBounded(it.Route, 80))
 	}
 	if d.knownStory(it.Route) {
-		return Item{}, fmt.Errorf("story %q is already in the queue; move it instead", it.Route)
+		return Item{}, fmt.Errorf("story %q is already in the queue; move it instead", oneLineBounded(it.Route, 80))
 	}
 	return Item{Kind: "story", Route: it.Route, Title: title}, nil
 }
@@ -342,11 +361,11 @@ func (d *Desk) PlayNow(it Item, reason string) error {
 func (d *Desk) Move(id string, to int, reason string) error {
 	from := d.find(id)
 	if from < 0 {
-		return fmt.Errorf("no upcoming entry %q (a playing entry is skipped, not moved)", id)
+		return fmt.Errorf("no upcoming entry %q (a playing entry is skipped, not moved)", oneLineBounded(id, 80))
 	}
 	to = max(0, min(to, len(d.up)-1))
 	if to == from {
-		return fmt.Errorf("entry %q is already at index %d", id, to)
+		return fmt.Errorf("entry %q is already at index %d", oneLineBounded(id, 80), to)
 	}
 	if err := d.record(Op{Op: "move", ID: id, ToIndex: &to}, reason); err != nil {
 		return err
@@ -361,7 +380,7 @@ func (d *Desk) Move(id string, to int, reason string) error {
 func (d *Desk) Remove(id string, reason string) error {
 	i := d.find(id)
 	if i < 0 {
-		return fmt.Errorf("no upcoming entry %q (a playing entry is skipped, not removed)", id)
+		return fmt.Errorf("no upcoming entry %q (a playing entry is skipped, not removed)", oneLineBounded(id, 80))
 	}
 	if err := d.record(Op{Op: "remove", ID: id}, reason); err != nil {
 		return err
@@ -491,18 +510,24 @@ func (d *Desk) applyOne(m modelOp) error {
 	return fmt.Errorf("unknown op")
 }
 
-// Cut separates the model's spoken reply from the queue ops it appends after a
-// fence line ("<<<AR... queue>>>" then a JSON array). It reads the stream as
-// it arrives and holds back only a possible start of the fence, so speech is
-// never delayed by more than two bytes. A client's text is made fence-safe
-// before the model sees it, so "<<<" in the model's output is the model's own.
+// Cut separates the model's spoken reply from the queue ops it appends after
+// the request's fence line. The fence is exactly "<<<" + token + " queue>>>"
+// (the route puts that line in the request and tells the model to end with it),
+// so text the model quotes from the page, or any other "<<<", is speech and
+// passes through unchanged. It reads the stream as it arrives and holds back
+// only a suffix that could still become the fence; nothing else is delayed.
 type Cut struct {
+	fence   string
 	pending string
 	fenced  bool
 	ops     strings.Builder
 }
 
-const fence = "<<<"
+// FenceLine is the line the model ends its reply with for a token.
+func FenceLine(token string) string { return "<<<" + token + " queue>>>" }
+
+// NewCut reads a stream for the fence of token.
+func NewCut(token string) *Cut { return &Cut{fence: FenceLine(token)} }
 
 // Push takes the next delta and returns the speech in it that is certain.
 func (c *Cut) Push(delta string) string {
@@ -511,15 +536,15 @@ func (c *Cut) Push(delta string) string {
 		return ""
 	}
 	c.pending += delta
-	if i := strings.Index(c.pending, fence); i >= 0 {
+	if i := strings.Index(c.pending, c.fence); i >= 0 {
 		speech := c.pending[:i]
-		c.ops.WriteString(c.pending[i:])
+		c.ops.WriteString(c.pending[i+len(c.fence):])
 		c.pending, c.fenced = "", true
 		return speech
 	}
 	keep := 0
-	for k := min(len(fence)-1, len(c.pending)); k > 0; k-- {
-		if strings.HasSuffix(c.pending, fence[:k]) {
+	for k := min(len(c.fence)-1, len(c.pending)); k > 0; k-- {
+		if strings.HasSuffix(c.pending, c.fence[:k]) {
 			keep = k
 			break
 		}
@@ -529,31 +554,16 @@ func (c *Cut) Push(delta string) string {
 	return out
 }
 
-// Flush ends the stream and returns any speech still held.
+// Flush ends the stream and returns any speech still held (a start of the
+// fence that never completed is speech).
 func (c *Cut) Flush() string {
 	out := c.pending
 	c.pending = ""
 	return out
 }
 
-// Fenced reports whether the model began a fence, whether or not it was well
-// formed.
+// Fenced reports whether the model wrote the fence line.
 func (c *Cut) Fenced() bool { return c.fenced }
 
-// Ops returns the text after a well-formed `queue` fence line. ok is false when
-// there was no fence, the fence was not a queue fence, or it never closed.
-func (c *Cut) Ops() (text string, ok bool) {
-	if !c.fenced {
-		return "", false
-	}
-	s := strings.TrimPrefix(c.ops.String(), fence)
-	end := strings.Index(s, ">>>")
-	if end < 0 || end > 80 {
-		return "", false
-	}
-	header := strings.ToLower(s[:end])
-	if !strings.HasSuffix(strings.TrimSpace(header), "queue") {
-		return "", false
-	}
-	return s[end+3:], true
-}
+// Ops is the text after the fence line.
+func (c *Cut) Ops() string { return c.ops.String() }

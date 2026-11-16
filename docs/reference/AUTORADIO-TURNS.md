@@ -23,8 +23,8 @@ listener's own computer: send `X-Choir-Computer` with an owner-wide API key, as
 
 ## Request
 
-`POST /api/autoradio/turns`, `Content-Type: application/json`, at most 128 KB (80 KB until 2026-11-15, when the queue snapshot was added).
-Unknown fields anywhere are refused (`400`).
+`POST /api/autoradio/turns`, `Content-Type: application/json`, at most 256 KB (80 KB until 2026-11-15, when the queue snapshot was added). That is the sum of the part maxima with room: 48 KB of page text, about 21 KB for the words, what was heard, the history and the page's other fields, about 120 KB for a queue at its own bounds (51 entries at about 2.3 KB), about 24 KB for 40 candidates (about 213 KB), so every documented bound can be reached.
+Unknown fields are refused (`400`) everywhere except inside `queue` and inside each `candidates` item, which are read leniently so a newer phone's extra fields do not break an older server (an unknown top-level field, or one inside `page`, `heard` or `history`, is still `400`).
 
 ```json
 {
@@ -56,8 +56,8 @@ Unknown fields anywhere are refused (`400`).
 | `heard` | optional; `block_index` at least 0; `text` at most 2000 characters (more is `400`, never cut); send the last few sentences spoken |
 | `programme` | optional; at most 128 bytes; recorded and shown to the model |
 | `history` | optional; at most 8 lines, each `listener` or `radio`, 1 to 1000 bytes; the last few turns, oldest first |
-| `queue` | optional; the phone's play queue, see "The queue" below; `null` is the same as absent; a bad one is `400` |
-| `candidates` | optional; at most 40 `{route, title}`: the paper's stories the desk may add to the queue. Route has no space, `@` or `#`; at most 512 bytes; title at most 300 |
+| `queue` | optional; the phone's play queue, see "The queue" below; `null` is the same as absent; a malformed one is `400`, a well formed one over a bound is answered without it |
+| `candidates` | optional; at most 40 `{route, title}` (`400` over, a name sent, never cut): the paper's stories the desk may add to the queue. Route has no space, `@` or `#`; at most 256 bytes; title at most 300. Unknown fields in an item are ignored |
 
 Refusals are plain JSON `{"error": "..."}` before any stream starts: `401` no
 owner, `405` not POST, `400` bad body or fields, `409` the same `turn_id` is
@@ -170,16 +170,36 @@ change its order. An item is flat with a `kind` tag: `story` (`route`, `title`),
 }
 ```
 
-Bounds (`400`, naming the field): `version` a whole number, not negative; at most
-100 `upcoming`; an entry `id` is `[A-Za-z0-9][A-Za-z0-9_.-]{0,63}` and unique
-across `current` and `upcoming`; `kind` is one of the four, with the field
-its kind needs (`route`, `url`, `id`, `url`); a title at most 300 bytes, other
-strings 512 (a `url` 2048); `position_seconds` between 0 and 10,000,000;
-`added_by` at most 32 bytes. Unknown fields inside `queue` are ignored.
+Bounds. Malformed is `400`, naming the field: `version` a whole number, not
+negative; an entry `id` is `[A-Za-z0-9][A-Za-z0-9_.-]{0,63}` and unique across
+`current` and `upcoming`; `kind` is one of the four, with the field its kind
+needs (`route`, `url`, `id`, `url`); `position_seconds` between 0 and 10,000,000.
+Over a size bound is not a refusal: a listener's words are never refused because
+their queue is long. The turn is answered without the queue (the model is not
+shown it, no `queue_ops` is sent, `done` has no `queue_ops`) and, at the end of
+the answer, the desk says "I couldn't see your queue this time, it is too long
+for me." (the request record carries `queue_unused`). The size bounds: at most 50
+`upcoming`; a title 300 bytes, `url` 1024, `route` 256, `show` 200, a document
+or episode id 128, `added_by` 32. The body bound (`413`) is the only other way a
+queue is refused, and a queue within these bounds fits it. Unknown fields inside
+`queue` and its items are ignored.
+
+The model is shown the queue within a byte budget (12 KB of entry lines, 8 KB of
+candidate lines); past it the farthest entries appear as "and N more entries, not
+shown". The desk's copy holds them all, so an op may name one the model was not
+shown.
 
 When `queue` is present the desk may answer in the same single model call that
-writes the spoken reply, ending it with a queue fence and a JSON array of ops.
-The fence and the array are never spoken. The desk validates every op against
+writes the spoken reply. The queue block of the request gives the model the rules
+and the exact fence line for this request, `<<<AR... queue>>>` with the request's
+own token (the one on the request's other fences); the model ends its reply with
+that line and a JSON array of ops. Only that exact line starts the ops: any other
+`<<<` in the reply (a quote, a page fence, another token's, an end fence) is
+speech, unchanged. The fence and the array are never spoken. A turn with no
+`queue` sends the prompt and streams exactly as it did before the queue existed:
+no cut, no queue text, no `queue_ops` in `done`. A reply that is only the fence
+and ops is an answer (no walk to another pool member): the desk speaks "Okay."
+and the first op's reason. The desk validates every op against
 the queue as the earlier ops left it, then sends:
 
 ```
@@ -206,12 +226,16 @@ The phone's rule for ops against a changed queue: an op that names an entry
 `skip` only if the entry is still the one playing; an op that adds an item
 always applies; `clear` and `previous` apply only if the phone's version still
 equals `base_version`. A dropped op is not an error. The phone applies each
-`turn_id`'s ops once (a replay sends them again with `replayed: true`).
+`turn_id`'s ops once. A replay of a turn that sent ops sends `queue_ops` with
+`replayed: true`, and its `ops` are the recorded ones only when the retry's
+`queue.version` equals the recorded `base_version`; a retry with another version,
+no queue, or a queue over a bound gets the event with an empty `ops` list.
 
 The desk keeps no copy of the queue: the next request's snapshot is the truth.
 The request record carries `queue_version`, `queue_sha256` and `queue_entries`;
 the Report carries `queue_ops` (JSON) and `queue_base_version`. `done` has
-`queue_ops`, the number of ops sent. Not on the programme route tonight.
+`queue_ops` (the number of ops sent) when the request carried a usable queue, and
+no such key otherwise. Not on the programme route tonight.
 
 ## Idempotency and disconnects
 
