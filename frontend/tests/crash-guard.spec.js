@@ -4,7 +4,7 @@
  * after the quiet period restores it normally
  * (docs/problems/desktop-restore-reopens-the-window-that-crashed-the-page-crash-loop-2026-11-16.md).
  * Mocked backend; run against `vite preview` on :4173. "Died while pending"
- * is simulated by leaving the pending marker in localStorage and reloading,
+ * is simulated by blocking the leaving handlers and reloading (dieAndReload),
  * which is exactly what a page death leaves behind.
  */
 import { test, expect } from '@playwright/test';
@@ -44,6 +44,7 @@ async function mock(context) {
 async function open(browser) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await mock(context);
+  await context.addInitScript(DYING_INIT);
   const page = await context.newPage();
   const live = { ws: null };
   await page.routeWebSocket(/\/api\/ws/, (ws) => { live.ws = ws; ws.send(JSON.stringify({ type: 'connected' })); });
@@ -53,6 +54,21 @@ async function open(browser) {
 async function ready(page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
+}
+
+// A page that dies runs no handlers. An init script registers, before the app,
+// listeners that swallow pagehide and visibilitychange once window.__dying is
+// set; dieAndReload sets it and reloads: what a hung or killed page leaves
+// behind, and what a leaving page does not.
+const DYING_INIT = () => {
+  const stop = (e) => { if (window.__dying) e.stopImmediatePropagation(); };
+  window.addEventListener('pagehide', stop, true);
+  document.addEventListener('visibilitychange', stop, true);
+};
+
+async function dieAndReload(page) {
+  await page.evaluate(() => { window.__dying = true; });
+  await page.reload({ waitUntil: 'domcontentloaded' });
 }
 
 // Ctrl+K opens the desk; its overview button opens the window overview.
@@ -77,7 +93,7 @@ test('a window pending at the last death is held, reopened, and closed', async (
   await expect.poll(() => pendingFor(page)).toHaveProperty('w-settings');
 
   // The page "dies": nothing clears the marker; the tab is reloaded.
-  await page.reload({ waitUntil: 'domcontentloaded' });
+  await dieAndReload(page);
   await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
   const held = page.locator('[data-window][data-window-id="w-settings"] [data-crash-held]');
   await expect(held).toBeVisible();
@@ -91,7 +107,7 @@ test('a window pending at the last death is held, reopened, and closed', async (
   await expect.poll(() => pendingFor(page)).toHaveProperty('w-settings');
 
   // A second death: held again, now with the count and Close first.
-  await page.reload({ waitUntil: 'domcontentloaded' });
+  await dieAndReload(page);
   await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
   await expect(held).toHaveAttribute('data-crash-held-count', '2');
   await expect(held.locator('button').first()).toHaveAttribute('data-crash-held-close', '');
@@ -174,11 +190,11 @@ test('the pending marker exists in storage before the app body root exists', asy
   await context.close();
 });
 
-test('a planned reload (account switched in another tab) is not a crash', async ({ browser }) => {
+test('a reload inside the quiet period (account switched in another tab) is not a crash', async ({ browser }) => {
   const { context, page } = await open(browser);
   await ready(page);
   expect(Object.keys(await pendingFor(page))).not.toEqual([]);
-  // Still inside the quiet period: an unplanned reload here would hold the window.
+  // Still inside the quiet period: the page leaves alive, so its markers go with it.
   await Promise.all([
     page.waitForEvent('framenavigated'),
     page.evaluate(() => new BroadcastChannel('choir-accounts').postMessage({ type: 'account-switched', from: 'another-tab', user_id: 'user-1' })),
@@ -217,7 +233,7 @@ test('a route opened at load is held when the previous boot died, with a failed 
     expect(Object.keys(await pendingFor(page)).length).toBe(1);
 
     // The page dies; the reload opens the same route with a fresh window id.
-    await page.reload({ waitUntil: 'domcontentloaded' });
+    await dieAndReload(page);
     await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
     const held = page.locator('[data-window][data-window-app-id="texture"] [data-crash-held]');
     await expect(held).toBeVisible();
@@ -238,11 +254,12 @@ test('a hold is durable: held stays held across further reloads, and Reopen then
   await ready(page);
   await expect.poll(() => pendingFor(page)).toHaveProperty('w-settings');
   const held = page.locator('[data-window][data-window-id="w-settings"] [data-crash-held]');
-  const reload = async () => {
-    await page.reload({ waitUntil: 'domcontentloaded' });
+  const reload = async (dies = false) => {
+    if (dies) await dieAndReload(page);
+    else await page.reload({ waitUntil: 'domcontentloaded' });
     await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
   };
-  await reload();
+  await reload(true);
   await expect(held).toBeVisible();
   // Nothing is mounted while held, so there is no marker: only the durable hold keeps it so.
   await reload();
@@ -255,7 +272,7 @@ test('a hold is durable: held stays held across further reloads, and Reopen then
   // Reopen, then an immediate reload (no quiet period): held again, count up.
   await held.locator('[data-crash-held-reopen]').click();
   await expect(page.locator('[data-app-host][data-app-window-id="w-settings"]')).toBeAttached();
-  await reload();
+  await reload(true);
   await expect(held).toHaveAttribute('data-crash-held-count', '2');
   await context.close();
 });
@@ -278,7 +295,7 @@ test('a failed first fetch, then a remote update delivering a held window: held'
   await expect.poll(() => pendingFor(page)).toHaveProperty('w-settings');
   stateStatus = 500;
   try {
-    await page.reload({ waitUntil: 'domcontentloaded' });
+    await dieAndReload(page);
     await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
     await expect(page.locator('[data-window][data-window-id="w-settings"]')).toHaveCount(0);
     stateStatus = 200;
@@ -307,7 +324,7 @@ test('Reopen, then suspend, then reload: still held', async ({ browser }) => {
     const { context, page } = await open(browser);
     await ready(page);
     await expect(page.locator('[data-app-host][data-app-window-id="w-audio"]')).toBeAttached();
-    await page.reload({ waitUntil: 'domcontentloaded' });
+    await dieAndReload(page);
     await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
     const heldAudio = page.locator('[data-window][data-window-id="w-audio"] [data-crash-held]');
     await expect(heldAudio).toBeVisible();
@@ -328,6 +345,54 @@ test('Reopen, then suspend, then reload: still held', async ({ browser }) => {
     await expect(page.locator('[data-app-host][data-app-window-id="w-audio"]')).toHaveCount(0);
     await context.close();
   } finally {
+    stateWindows = WINDOWS;
+  }
+});
+
+test('closing a second tab inside the quiet period does not hold a healthy tab', async ({ browser }) => {
+  const { context, page } = await open(browser);
+  await ready(page);
+  // Tab A is healthy: every marker proven.
+  await expect.poll(() => pendingFor(page), { timeout: 20000 }).toEqual({});
+  // Tab B opens the same desktop and is closed a second later, before its quiet period.
+  const second = await context.newPage();
+  await second.routeWebSocket(/\/api\/ws/, (ws) => ws.send(JSON.stringify({ type: 'connected' })));
+  await second.goto('/', { waitUntil: 'domcontentloaded' });
+  await second.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
+  await expect.poll(() => pendingFor(second)).toHaveProperty('w-settings');
+  await second.waitForTimeout(1000);
+  await second.close();
+  // Tab A reloads: nothing is held.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
+  await expect(page.locator('[data-window][data-window-id="w-settings"]')).toBeVisible();
+  await expect(page.locator('[data-crash-held]')).toHaveCount(0);
+  await context.close();
+});
+
+test('a held automatic open also holds a restored window that matches it', async ({ browser }) => {
+  const routed = { window_id: 'w-route', app_id: 'texture', title: 'Texture', geometry: { x: 60, y: 40, width: 640, height: 480 }, mode: 'normal', z_index: 5, app_context: { windowTitle: 'Texture', publishedRoutePath: '/pub/texture/a-story', allowMultiple: true } };
+  stateWindows = [];
+  stateStatus = 500;
+  try {
+    const { context, page } = await open(browser);
+    await page.goto('/pub/texture/a-story', { waitUntil: 'domcontentloaded' });
+    await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
+    await expect(page.locator('[data-app-host][data-app-id="texture"]')).toBeAttached();
+    // The route's window dies the page (fresh window id, never saved); then the
+    // server does have a matching window, restored by id route and app.
+    await dieAndReload(page);
+    await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
+    await expect(page.locator('[data-window][data-window-app-id="texture"] [data-crash-held]')).toBeVisible();
+    stateStatus = 200;
+    stateWindows = [routed];
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
+    await expect(page.locator('[data-window][data-window-id="w-route"] [data-crash-held]')).toBeVisible();
+    await expect(page.locator('[data-app-host][data-app-id="texture"]')).toHaveCount(0);
+    await context.close();
+  } finally {
+    stateStatus = 200;
     stateWindows = WINDOWS;
   }
 });
