@@ -1,7 +1,7 @@
 import Foundation
 
-// The DJ and the other lanes (lane autoradio-dj-clips): the seam to the podcast lane, and the DJ's coming segments for "Up next".
-// Queue changes by the DJ travel only on POST /api/autoradio/turns (the talk lane's path); the programme stream carries none.
+// The desk and the other lanes: the seam to the podcast lane, and the "Hear it" rows on a story's page.
+// Plays go onto the run sheet (`RunSheetPlayer`): Play is `place now`, Add to queue is `place queued`.
 
 /// The podcast lane's `PodcastEpisodes.open(episodeId:feedURL:enclosureURL:at:title:show:)`: set by the host (`AutoradioModule+Podcasts.swift`). "Open episode".
 public enum PodcastBridge {
@@ -14,8 +14,9 @@ public enum PodcastBridge {
 
     /// The episode a playing audio item belongs to. A podcast-lane play carries the feed and the guid in its `episodeId`; a clip carries the bare
     /// guid (or none), so its feed comes from the clip set the phone holds, matched by guid and audio address. Nil when the phone cannot place it.
-    public static func target(of item: PlayItem?, store: ClipStore = .shared) -> Target? {
-        guard case .audio(let url, _, _, let start, _, let ep)? = item else { return nil }
+    public static func target(of item: RunSheetAudio?, store: ClipStore = .shared) -> Target? {
+        guard let item else { return nil }
+        let url = item.url, start = item.start, ep = item.episodeId
         if let ep, let k = PodcastKey.parseEpisode(ep), let feed = URL(string: k.feed) {
             return Target(episodeId: k.id, feedURL: feed, enclosureURL: url, at: start ?? 0)
         }
@@ -25,18 +26,10 @@ public enum PodcastBridge {
 
     /// "Open episode" from a playing item. False (and nothing happens) when the item has no episode page the phone can place.
     @MainActor @discardableResult
-    public static func openEpisode(of item: PlayItem?, store: ClipStore = .shared) -> Bool {
+    public static func openEpisode(of item: RunSheetAudio?, store: ClipStore = .shared) -> Bool {
         guard let open, let t = target(of: item, store: store) else { return false }
         open(t.episodeId, t.feedURL, t.enclosureURL, t.at)
         return true
-    }
-}
-
-/// The DJ's own coming segments, by title, for "Up next" (the queue shows what the DJ will play next beside what the reader queued).
-public enum DJUpcoming {
-    public static func titles(in doc: ProgrammeDocument, blockIndex: Int, limit: Int = 3) -> [String] {
-        guard doc.id.hasPrefix("radio:"), let si = doc.segmentIndex(containingBlock: blockIndex) else { return [] }
-        return doc.segments.dropFirst(si + 1).prefix(limit).map(\.title)
     }
 }
 
@@ -69,24 +62,24 @@ public enum HearIt {
         store.clips(forFeed: feed).prefix(10).map { row($0, store) }
     }
     /// Play: the clip when the audio is the transcribed file; else the episode from its start (the row then says "Open episode").
-    @MainActor public static func play(_ clipID: String, store: ClipStore = .shared, queue: PlayQueue = .shared, runner: DJClipRunner = .shared) async {
+    @MainActor public static func play(_ clipID: String, store: ClipStore = .shared, player: RunSheetPlayer = .shared) async {
         guard let c = store.clip(clipID) else { return }
-        if store.isMismatch(clipID) { queue.playNow(c.episodeItem); return }
-        queue.playNow(await runner.preflight(clipID) ? c.playItem : c.episodeItem)
+        if store.isMismatch(clipID) { player.playNow(c.episodeEntry); return }
+        player.playNow(await player.preflight(clipID, store: store) ? c.clipEntry : c.episodeEntry)
     }
-    @MainActor public static func enqueue(_ clipID: String, store: ClipStore = .shared, queue: PlayQueue = .shared) {
-        if let c = store.clip(clipID) { queue.enqueue(c.playItem) }
+    @MainActor public static func enqueue(_ clipID: String, store: ClipStore = .shared, player: RunSheetPlayer = .shared) {
+        if let c = store.clip(clipID) { player.queue(c.clipEntry) }
     }
 }
 
 /// What a clip row's Play, Queue and Open episode do. Returns the plain note the page shows ("" when nothing needs saying).
 public enum ClipActions {
     public static let gone = "That clip is not available any more."
-    @MainActor public static func run(op: String, clipID: String, store: ClipStore = .shared, queue: PlayQueue = .shared) async -> String {
+    @MainActor public static func run(op: String, clipID: String, store: ClipStore = .shared, player: RunSheetPlayer = .shared) async -> String {
         guard let c = store.clip(clipID) else { return gone }
         switch op {
-        case "play": await HearIt.play(clipID, store: store, queue: queue); return ""
-        case "queue": HearIt.enqueue(clipID, store: store, queue: queue); return "Added to the queue."
+        case "play": await HearIt.play(clipID, store: store, player: player); return ""
+        case "queue": HearIt.enqueue(clipID, store: store, player: player); return "Added to the queue."
         case "open": PodcastBridge.openEpisode(of: c); return ""
         default: return ""
         }

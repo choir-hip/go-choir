@@ -58,53 +58,14 @@ public enum StoryCursor {
     /// How long into a story "previous" still means the story before it; later it means the start of this one (the usual player rule).
     public static let restartAfterSeconds = 3.0
 
-    /// The story `step` places from `route` in `items`. Nil when `route` is not in the list (no guessing), or the move would leave it
-    /// (no wrap).
-    public static func neighbour(of route: String, in items: [StoryRef], step: Int) -> StoryRef? {
-        guard let i = items.firstIndex(where: { $0.route == route }) else { return nil }
-        let j = i + step
-        return items.indices.contains(j) ? items[j] : nil
-    }
-
     /// "Previous" restarts the story being played unless it has barely begun: the first block, and under `restartAfterSeconds` in.
     public static func previousRestartsCurrent(blockIndex: Int, secondsIntoBlock: Double) -> Bool {
         blockIndex > 0 || secondsIntoBlock >= restartAfterSeconds
     }
-
-    /// The route of a story the player is playing, from its document id: `text:pub:<route>` (the reader's Listen). A `choir:` document
-    /// is looked up in the environment by the caller.
-    public static func route(ofTextDocument id: String) -> String? {
-        guard id.hasPrefix("text:pub:") else { return nil }
-        let r = String(id.dropFirst("text:pub:".count))
-        return r.isEmpty ? nil : r
-    }
-}
-
-// MARK: Autoplay
-
-public enum AutoplayDecision: Equatable, Sendable {
-    /// Start the next story.
-    case advance
-    /// Not now: the reader is talking to the radio; the same question is asked when the turn is over.
-    case waitForTurn
-    /// Nothing follows: the reader paused, no story was heard, or the list is over.
-    case stop
-}
-
-public enum Autoplay {
-    /// What to do when the story that was playing has run out of blocks.
-    /// - userPaused: the reader pressed pause; nothing starts by itself.
-    /// - turnOpen: a hands-free or typed turn is in progress.
-    /// - anyPlayed: at least one block made sound (a story whose voice failed for every block did not finish).
-    /// - hasNext: the list has a story after this one.
-    public static func decide(userPaused: Bool, turnOpen: Bool, anyPlayed: Bool, hasNext: Bool) -> AutoplayDecision {
-        if userPaused || !anyPlayed || !hasNext { return .stop }
-        return turnOpen ? .waitForTurn : .advance
-    }
 }
 
 /// The paper's article stack as the host last composed it (the order a swipe goes in). The host writes it when the paper page composes the
-/// front; the player reads it when a story starts, so next, previous and autoplay follow the order the reader sees.
+/// front; the paper page and "Play" on a story use it for titles; it decides nothing about what plays next (the run sheet does).
 public final class FrontOrder: @unchecked Sendable {
     public static let shared = FrontOrder()
     private let lock = NSLock()

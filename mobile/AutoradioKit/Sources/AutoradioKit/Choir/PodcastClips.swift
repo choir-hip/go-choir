@@ -27,8 +27,8 @@ public struct PodcastClip: Sendable, Equatable {
 
     public var seconds: Double { end - start }
     /// The same episode from its start: no clip times (a file whose ads moved the range).
-    public var episodeItem: PlayItem {
-        .audio(url: audioURL, title: episodeTitle.isEmpty ? show : episodeTitle, show: show, start: nil, end: nil, episodeId: episodeGUID.isEmpty ? nil : episodeGUID)
+    public var episodeEntry: RunSheetEntry {
+        .audio(RunSheetAudio(url: audioURL, title: episodeTitle.isEmpty ? show : episodeTitle, show: show, start: nil, end: nil, episodeId: episodeGUID.isEmpty ? nil : episodeGUID))
     }
     /// How far the file's length may differ from the transcribed file's before the range is distrusted.
     public static let durationTolerance = 3.0
@@ -51,9 +51,9 @@ public struct PodcastClip: Sendable, Equatable {
                            quote: (o["quote"] as? String) ?? "", support: num(o["support"]))
     }
 
-    /// What the queue plays: the episode from `start`, stopping at `end` (Keep listening clears the end).
-    public var playItem: PlayItem {
-        .audio(url: audioURL, title: episodeTitle.isEmpty ? show : episodeTitle, show: show, start: start, end: end, episodeId: episodeGUID.isEmpty ? nil : episodeGUID)
+    /// What the run sheet plays: the episode from `start`, stopping at `end` (Keep listening clears the end).
+    public var clipEntry: RunSheetEntry {
+        .audio(RunSheetAudio(url: audioURL, title: episodeTitle.isEmpty ? show : episodeTitle, show: show, start: start, end: end, episodeId: episodeGUID.isEmpty ? nil : episodeGUID), clipID: clipID)
     }
 
     /// "56 s", "1 min 5 s": the length the reader is told.

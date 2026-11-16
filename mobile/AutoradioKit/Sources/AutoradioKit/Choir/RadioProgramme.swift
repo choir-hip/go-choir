@@ -67,9 +67,15 @@ public enum SegmentKinds {
     static let labels: [String: String] = [
         "story": "Story", "headlines": "Headlines", "update": "Update", "mail": "Mail", "podcast_note": "Podcast",
         "answer": "Answer", "result": "Result", "bridge": "Bridge", "ident": "Station break", "podcast_clip": "Podcast clip",
+        "opening": "Opening", "transition": "Transition",
     ]
     public static func isKnown(_ kind: String) -> Bool { labels[kind] != nil }
     public static func label(_ kind: String) -> String { labels[kind] ?? "" }
+}
+
+public struct IncomingBetween: Sendable, Equatable {
+    public var after: String, before: String
+    public init(after: String, before: String) { self.after = after; self.before = before }
 }
 
 /// A segment as it arrived: text not yet made into blocks.
@@ -84,8 +90,11 @@ public struct IncomingSegment: Sendable, Equatable {
     public var blockCount: Int?
     /// A `podcast_clip` segment's clip.
     public var clip: ProgrammeClipRef?
-    public init(stretchID: String, segmentID: String, kind: String, title: String, text: String, cites: [ProgrammeCite], blockCount: Int?, clip: ProgrammeClipRef? = nil) {
-        self.clip = clip
+    /// A `transition`: the `segment_id`s of the two segments it joins.
+    public var between: IncomingBetween?
+    public init(stretchID: String, segmentID: String, kind: String, title: String, text: String, cites: [ProgrammeCite], blockCount: Int?, clip: ProgrammeClipRef? = nil,
+                between: IncomingBetween? = nil) {
+        self.clip = clip; self.between = between
         self.stretchID = stretchID; self.segmentID = segmentID; self.kind = kind; self.title = title; self.text = text
         self.cites = cites; self.blockCount = blockCount
     }
@@ -177,7 +186,7 @@ public enum SegmentPrep {
     public static func title(_ raw: String, kind: String) -> String {
         let t = oneLine(raw)
         // A bridge has no name of its own to show: the programme's, never the word "Bridge".
-        return t.isEmpty || looksLikeRef(t) ? (kind == "bridge" ? "Autoradio" : SegmentKinds.label(kind)) : t
+        return t.isEmpty || looksLikeRef(t) ? (kind == "bridge" || kind == "transition" ? "Autoradio" : SegmentKinds.label(kind)) : t
     }
     static func label(_ raw: String) -> String {
         let t = oneLine(raw)
@@ -352,8 +361,12 @@ public struct StretchDecoder {
                     cites.append(ProgrammeCite(ref: r, role: d["role"] as? String ?? "", label: d["label"] as? String ?? ""))
                 }
             }
+            var between: IncomingBetween?
+            if let b = o["between"] as? [String: Any], let a = (b["after_segment"] ?? b["after"]) as? String, let z = (b["before_segment"] ?? b["before"]) as? String, !a.isEmpty, !z.isEmpty {
+                between = IncomingBetween(after: a, before: z)
+            }
             return [.segment(IncomingSegment(stretchID: st, segmentID: id, kind: kind, title: (o["title"] as? String) ?? "", text: text, cites: cites,
-                                             blockCount: Self.wholeNumber(o["block_count"]), clip: kind == "podcast_clip" ? clip : nil))]
+                                             blockCount: Self.wholeNumber(o["block_count"]), clip: kind == "podcast_clip" ? clip : nil, between: between))]
         case "stretch":
             if let id = o["stretch_id"] as? String, !id.isEmpty { stretchID = id }
             return []
@@ -376,6 +389,8 @@ public protocol StretchSource: Sendable {
     /// As `events(cause:)`, leaving the stories at these routes out (an `extend` request: they were already told).
     func events(cause: String, excludingRoutes: Set<String>) async throws -> AsyncThrowingStream<StretchEvent, Error>
     func events(cause: String, excludingRoutes: Set<String>, onlyRoutes: [String]?) async throws -> AsyncThrowingStream<StretchEvent, Error>
+    /// As above, with the titles of the entries ahead on the run sheet (`ahead_titles`, at most 20), so the desk does not repeat them.
+    func events(cause: String, excludingRoutes: Set<String>, onlyRoutes: [String]?, aheadTitles: [String]) async throws -> AsyncThrowingStream<StretchEvent, Error>
 }
 extension StretchSource {
     public func events(cause: String, excludingRoutes: Set<String>) async throws -> AsyncThrowingStream<StretchEvent, Error> { try await events(cause: cause) }
@@ -383,6 +398,9 @@ extension StretchSource {
     /// A source that does not know the scope ignores it.
     public func events(cause: String, excludingRoutes: Set<String>, onlyRoutes: [String]?) async throws -> AsyncThrowingStream<StretchEvent, Error> {
         try await events(cause: cause, excludingRoutes: excludingRoutes)
+    }
+    public func events(cause: String, excludingRoutes: Set<String>, onlyRoutes: [String]?, aheadTitles: [String]) async throws -> AsyncThrowingStream<StretchEvent, Error> {
+        try await events(cause: cause, excludingRoutes: excludingRoutes, onlyRoutes: onlyRoutes)
     }
 }
 
@@ -437,12 +455,24 @@ public struct RouteStretchSource: StretchSource {
     }
 
     public func events(cause: String, excludingRoutes: Set<String>, onlyRoutes: [String]?) async throws -> AsyncThrowingStream<StretchEvent, Error> {
+        try await events(cause: cause, excludingRoutes: excludingRoutes, onlyRoutes: onlyRoutes, aheadTitles: [])
+    }
+    public func events(cause: String, excludingRoutes: Set<String>, onlyRoutes: [String]?, aheadTitles: [String]) async throws -> AsyncThrowingStream<StretchEvent, Error> {
         let client = ChoirEnvironment.shared.client(baseURL: baseURL)
         let cands = try await candidates(client: client, skipping: excludingRoutes, onlyRoutes: onlyRoutes)
         let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd'T'HH:mm:ssXXXXX"
-        let body: [String: Any] = ["request_id": "radio-" + UUID().uuidString.prefix(12).lowercased(), "cause": cause,
+        var body: [String: Any] = ["request_id": "radio-" + UUID().uuidString.prefix(12).lowercased(), "cause": cause,
                                    "local_time": f.string(from: Date()), "tz": TimeZone.current.identifier, "candidates": cands]
-        let (_, lines) = try await client.postEventStream("/api/autoradio/programme", body, route: "/api/autoradio/programme")
+        let titles = aheadTitles.prefix(20).map { StretchCandidates.cut($0, bytes: 300) }.filter { !$0.isEmpty }
+        if !titles.isEmpty { body["ahead_titles"] = Array(titles) }
+        // `ahead_titles` is new on the route; a server that does not know it refuses the whole body (400) before any model call. That is a
+        // correctness refusal, so the request is made once more without it. Nothing else changes between the two.
+        let lines: AsyncLineSequence<URLSession.AsyncBytes>
+        do { (_, lines) = try await client.postEventStream("/api/autoradio/programme", body, route: "/api/autoradio/programme") }
+        catch ChoirError.server(let status, _) where status == 400 && body["ahead_titles"] != nil {
+            body["ahead_titles"] = nil
+            (_, lines) = try await client.postEventStream("/api/autoradio/programme", body, route: "/api/autoradio/programme")
+        }
         return AsyncThrowingStream { c in
             let task = Task {
                 var d = StretchDecoder()
@@ -464,147 +494,15 @@ public struct RouteStretchSource: StretchSource {
 
 // MARK: The stage
 
-public struct OpenedProgramme: Sendable {
-    public var document: ProgrammeDocument
-    /// True when no stretch was available and `document` is the front-page article.
-    public var usedFallback: Bool
-    /// Reads the rest of the stretch and appends each segment to the player until the stream ends or the task is cancelled. Nil for the article.
-    public var follow: (@Sendable (ProgrammePlayer) async -> Void)?
-}
-
-/// The programme stage that replaces ChoirFrontProgramme as the listener's default: a stretch from the programme route when there is one,
-/// else the front-page article, exactly as before. (The on-device cold-start ladder of design 2.1 is not part of P1.)
+/// The default programme stage's name. The run sheet decides what plays, so this stage reads nothing: the player is started by the
+/// phone's opening and by the desk's entries (`RunSheetPlayer`, `RunSheetWriter`). Kept so a configuration that names it still resolves,
+/// and so the setup interview can put it back.
 public final class RadioProgramme: Programme, @unchecked Sendable {
     public static let stageID = "radio"
     public static var descriptor: StageDescriptor {
-        StageDescriptor(displayName: "Autoradio programme", summary: "Plays the stretch your computer writes, segment by segment; reads one story from the public paper when there is no stretch.",
+        StageDescriptor(displayName: "Autoradio run sheet", summary: "Plays the run sheet: the phone's opening, then what the desk writes ahead. Loads nothing by itself.",
                         params: [.text("baseURL", "Base URL", ChoirEnvironment.defaultBaseURL)], needsNetwork: true)
     }
-    let source: StretchSource
-    let fallback: @Sendable () async throws -> ProgrammeDocument
-
-    public init(_ p: StageParams) {
-        let base = p.string("baseURL", ChoirEnvironment.defaultBaseURL)
-        source = RouteStretchSource(baseURL: base)
-        fallback = { try await ChoirFrontProgramme(StageParams()).load() }
-        firstSegmentDeadline = Self.defaultFirstSegmentDeadline
-    }
-    /// How long the listener waits in silence for the first segment before the article plays. The design names no figure; 8 seconds.
-    public static let defaultFirstSegmentDeadline: TimeInterval = 8
-    let firstSegmentDeadline: TimeInterval
-    public init(source: StretchSource, fallback: @escaping @Sendable () async throws -> ProgrammeDocument,
-                firstSegmentDeadline: TimeInterval = RadioProgramme.defaultFirstSegmentDeadline) {
-        self.source = source; self.fallback = fallback; self.firstSegmentDeadline = firstSegmentDeadline
-    }
-
-    /// The clips the phone fetched; the stage looks a `podcast_clip` up here before it keeps the segment.
-    public var clips: ClipStore = .shared
-    /// A segment ready to append. A `podcast_clip` whose id is not in the set the phone fetched is dropped whole (lead-in too): the
-    /// programme goes on with the next segment.
-    func prepare(_ s: IncomingSegment) -> PreparedSegment? {
-        if s.kind == "podcast_clip" {
-            guard let c = s.clip, clips.clip(c.clipID) != nil else {
-                ChoirEnvironment.shared.log?.emit(.note("programme: a podcast clip the phone does not have; skipped"))
-                return nil
-            }
-        }
-        return SegmentPrep.prepare(s)
-    }
-
-    /// As a plain Programme stage: the document to start with. The rest of a stretch is lost; ChoirApp uses `open`.
-    public func load() async throws -> ProgrammeDocument { try await open().document }
-
-    /// The first speakable segment (or, with no stretch, the article), and what follows.
-    private enum First: Sendable {
-        case doc(ProgrammeDocument, IteratorBox), nothing, timedOut, failed(Error)
-    }
-
-    /// Ask for the stretch and read up to its first speakable segment.
-    private func readFirst(cause: String, routes: [String]?) async -> First {
-        let env = ChoirEnvironment.shared
-        do {
-            let stream = try await source.events(cause: cause, excludingRoutes: [], onlyRoutes: routes)
-            let box = IteratorBox(stream.makeAsyncIterator())
-            // Station breaks and bridges at the head wait for the first thing to tell (a story, an update, headlines): a stretch of only
-            // breaks ("nothing to report, I'll let the music play") is not a programme, and the paper's story plays instead.
-            var lead: [PreparedSegment] = []
-            while let e = try await box.next() {
-                switch e {
-                case .segment(let s):
-                    guard let p = prepare(s) else { continue }
-                    if s.kind == "ident" || s.kind == "bridge" { lead.append(p); continue }
-                    var d = ProgrammeDocument(id: "radio:" + s.stretchID, title: "Autoradio", blocks: [])
-                    for l in lead { d.append(l) }
-                    d.append(p)
-                    return .doc(d, box)
-                case .done: return .nothing
-                case .error(let m): env.log?.emit(.note("programme: the stretch ended with an error: \(m)")); return .nothing
-                }
-            }
-            return .nothing
-        } catch { return .failed(error) }
-    }
-
-    /// The first speakable segment (or, with no stretch, the article), and what follows. The listener waits at most `firstSegmentDeadline`
-    /// seconds, for the request and the first segment together (a computer that is waking up); then the article plays and the stretch is let go.
-    public func open(cause: String = "open", routes: [String]? = nil) async throws -> OpenedProgramme {
-        let env = ChoirEnvironment.shared
-        let deadline = firstSegmentDeadline
-        let first: First = await withTaskGroup(of: First.self) { g in
-            g.addTask { await self.readFirst(cause: cause, routes: routes) }
-            g.addTask { try? await Task.sleep(nanoseconds: UInt64(max(0, deadline) * 1_000_000_000)); return .timedOut }
-            let r = await g.next() ?? .nothing
-            g.cancelAll()
-            return r
-        }
-        try Task.checkCancellation()                                         // a cancelled open is cancelled, not a reason to fetch the article
-        switch first {
-        case .doc(let doc, let box):
-            let id = doc.id
-            return OpenedProgramme(document: doc, usedFallback: false, follow: { player in
-                while !Task.isCancelled, let e = try? await box.next() {
-                    switch e {
-                    case .segment(let s):
-                        if let p = self.prepare(s) { _ = player.appendSegment(p, toDocument: id) }
-                    case .done: return
-                    case .error(let m): env.log?.emit(.note("programme: the stretch ended with an error: \(m)")); return
-                    }
-                }
-            })
-        case .nothing: env.log?.emit(.note("programme: the stretch had nothing to say; playing the front page"))
-        case .timedOut: env.log?.emit(.note("programme: no first segment in \(Int(deadline)) s; playing the front page"))
-        case .failed(let e): env.log?.emit(.note("programme: no stretch (\(e)); playing the front page"))
-        }
-        return OpenedProgramme(document: try await fallback(), usedFallback: true, follow: nil)
-    }
-
-    /// More of the programme when the stretch has run out: ask again (cause `extend`), leaving out the stories already told, and return what to
-    /// run to append the new segments to the document `documentID`. Nil when there is nothing more to tell or the route is not there.
-    public func more(excludingRoutes: Set<String>, documentID: String, routes: [String]? = nil) async -> (@Sendable (ProgrammePlayer) async -> Void)? {
-        let env = ChoirEnvironment.shared
-        do {
-            let stream = try await source.events(cause: "extend", excludingRoutes: excludingRoutes, onlyRoutes: routes)
-            return { player in
-                do {
-                    for try await e in stream {
-                        try Task.checkCancellation()
-                        switch e {
-                        case .segment(let s): if let p = self.prepare(s) { _ = player.appendSegment(p, toDocument: documentID) }
-                        case .done: return
-                        case .error(let m): env.log?.emit(.note("programme: the next stretch ended with an error: \(m)")); return
-                        }
-                    }
-                } catch {}
-            }
-        } catch {
-            env.log?.emit(.note("programme: no more to tell (\(error))"))
-            return nil
-        }
-    }
-
-    private final class IteratorBox: @unchecked Sendable {
-        private var it: AsyncThrowingStream<StretchEvent, Error>.Iterator
-        init(_ it: AsyncThrowingStream<StretchEvent, Error>.Iterator) { self.it = it }
-        func next() async throws -> StretchEvent? { try await it.next() }
-    }
+    public init(_ p: StageParams) {}
+    public func load() async throws -> ProgrammeDocument { ProgrammeDocument(id: "none", title: "", blocks: []) }
 }

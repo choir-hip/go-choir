@@ -1,0 +1,476 @@
+import XCTest
+@testable import AutoradioKit
+
+// Slice B: the phone on one run sheet. The failure list (each is a test below, in this order):
+//  1  the phone's opening is on air at once, with no network and no model, built from the front page it holds; with none it still opens
+//  2  the desk's entries are placed at the end and never change what is on air
+//  3  skip, next and a swipe are one op, `skip(on air)`; the next is the next entry, never the paper's neighbour
+//  4  skip with nothing ahead stops the sound and swaps nothing in
+//  5  an entry that ends is reported heard and the next one is aired
+//  6  a desk that fails is said once, plainly, and the sheet keeps playing what it has
+//  7  a desk that is slow does not swap a story in: the opening keeps playing
+//  8  only a play changes what is on air (reads and views change nothing)
+//  9  a transition whose neighbours changed is shown stale
+// 10  a skipped clip ends as skipped and its sound stops; a clip of another file is skipped without being spoken
+// 11  pending ops survive a relaunch, stay while the route says "not yet", and go when it answers
+// 12  the old kind names map: ident, bridge, update, headlines, podcast_clip
+// 13  the ahead list is bounded at 100; a listener's own placement is never refused
+// 14  an entry left on air by a dead app is closed as left, not resumed
+// 15  "queue this" goes after the listener's last placement; "play this" cuts and keeps what is ahead
+// 16  previous airs the entry before
+// 17  more is asked for when the time ahead is short, one at a time, and not again when it added nothing
+// 18  Up next is the first three ahead
+// 19  the turn route's queue words translate to and from the sheet, and a replayed turn applies once
+// 20  a duplicate op_id changes nothing; a batch is at most 64 ops
+
+@MainActor
+final class FakeEngine: PlaybackEngine {
+    var log: [String] = []
+    var failSpeak: Set<String> = []
+    var duration: Double?
+    var elapsed = 0.0
+    var position: (block: Int, seconds: Double) = (0, 0)
+    func speak(documentID: String, entry: RunSheetEntry, paragraphs: [String]) async -> Bool { log.append("speak:\(entry.id)"); return !failSpeak.contains(entry.id) }
+    func playStory(route: String, title: String) async -> String? { log.append("story:\(route)"); return failSpeak.contains(route) ? nil : "choir:\(route)" }
+    func restartSpoken() { log.append("restart") }
+    func spokenPosition() -> (block: Int, seconds: Double) { position }
+    func stopSpoken() { log.append("stopSpoken") }
+    func playRemote(url: URL, title: String, show: String, start: Double?, end: Double?) async -> Bool {
+        log.append("remote:\(url.lastPathComponent):\(start ?? -1):\(end ?? -1)"); return true
+    }
+    func pauseRemote() { log.append("pauseRemote") }
+    func resumeRemote() { log.append("resumeRemote") }
+    func stopRemote() { log.append("stopRemote") }
+    func seekRemote(by s: Double) { log.append("seekBy:\(s)") }
+    func seekRemote(to s: Double) { log.append("seekTo:\(s)") }
+    func clearRemoteEnd() { log.append("clearEnd") }
+    func remotePosition() -> (elapsed: Double, duration: Double?)? { (elapsed, 600) }
+    func setRemoteRate(_ r: Double) {}
+    func setRemoteLevel(_ l: PlayLevel) {}
+    func remoteDuration(url: URL, deadline: TimeInterval) async -> Double? { log.append("duration"); return duration }
+    var speaks: [String] { log.filter { $0.hasPrefix("speak:") } }
+}
+
+final class FakeFeed: RunSheetFeed, @unchecked Sendable {
+    let lock = NSLock()
+    var script: [RunSheetFeedEvent] = []
+    var scripts: [[RunSheetFeedEvent]] = []         // one per ask, when given
+    var failure: Error?
+    var hold = false
+    private(set) var calls: [RunSheetAsk] = []
+    private var cont: AsyncThrowingStream<RunSheetFeedEvent, Error>.Continuation?
+    func ask(_ a: RunSheetAsk) async throws -> AsyncThrowingStream<RunSheetFeedEvent, Error> {
+        lock.lock(); calls.append(a); let n = calls.count; let fail = failure; let events = scripts.indices.contains(n - 1) ? scripts[n - 1] : script; let h = hold; lock.unlock()
+        if let fail { throw fail }
+        return AsyncThrowingStream { c in
+            self.lock.lock(); self.cont = c; self.lock.unlock()
+            for e in events { c.yield(e) }
+            if !h { c.finish() }
+        }
+    }
+    func release() { lock.lock(); let c = cont; lock.unlock(); c?.finish() }
+}
+
+@MainActor
+final class RunSheetStoreTests: XCTestCase {
+    func make(storage: URL? = nil) -> (RunSheetPlayer, RunSheetStore, FakeEngine) {
+        let s = RunSheetStore(storage: storage)
+        let p = RunSheetPlayer(store: s)
+        let e = FakeEngine(); p.engine = e
+        p.pageText = { _, t in (t, ["one", "two", "three"]) }
+        p.registerTextSource(kind: "document") { _, at in Array(["a", "b", "c", "d"].dropFirst(at)) }
+        return (p, s, e)
+    }
+    func story(_ id: String, text: String = "Words.", kind: RunSheetKind = .story, secs: Double = 10) -> RunSheetEntry {
+        RunSheetEntry(id: id, kind: kind, placedBy: .desk, title: "T \(id)", text: text, estSeconds: secs)
+    }
+    func deskPlace(_ s: RunSheetStore, _ e: RunSheetEntry) { s.applyFromDesk(ProgrammeRouteFeed.placeOp(e, cause: "open")) }
+    func clipEntry(_ n: String, end: Double? = 30) -> RunSheetEntry { .audio(RunSheetAudio(url: URL(string: "https://x.test/\(n).mp3")!, title: "T \(n)", show: "Show", start: 10, end: end, episodeId: "e\(n)")) }
+    func lines(_ n: Int) -> [PhoneOpening.Line] { (1...n).map { PhoneOpening.Line(title: "Story \($0)", dek: "Dek \($0).") } }
+    /// An opening on air with `ahead` desk entries behind it.
+    func opened(_ ahead: [String], _ p: RunSheetPlayer, _ s: RunSheetStore) async -> String {
+        let o = PhoneOpening.entry(lines: lines(3), now: Date(timeIntervalSince1970: 1_700_000_000))
+        p.open(o); await p.settle()
+        for a in ahead { deskPlace(s, story(a)) }
+        return o.id
+    }
+
+    // 1
+    func test01_TheOpeningIsOnAirAtOnceFromTheFrontPageTheListenerHolds() async {
+        let (p, s, e) = make()
+        let o = PhoneOpening.entry(lines: lines(3))
+        XCTAssertEqual(o.kind, .opening); XCTAssertEqual(o.placedBy, .phone)
+        XCTAssertTrue(o.text!.contains("From the paper's front page: Story 1. Dek 1."), o.text!)
+        XCTAssertTrue(o.text!.contains("Story 2.") && o.text!.contains("Story 3."))
+        p.open(o); await p.settle()
+        XCTAssertEqual(s.onAir()?.id, o.id)
+        XCTAssertEqual(e.speaks, ["speak:" + o.id], "no network and no model were asked: the engine spoke the phone's own words")
+        XCTAssertEqual(s.pending.first?.op, .place)
+    }
+    func test01_WithNoFrontPageItStillOpens() async {
+        let (p, s, _) = make()
+        let o = PhoneOpening.entry(lines: [])
+        XCTAssertTrue(o.text!.contains("This is Autoradio."))
+        p.open(o); await p.settle()
+        XCTAssertEqual(s.onAir()?.kind, .opening)
+    }
+
+    // 2
+    func test02_TheDeskEntriesArePlacedAtTheEndAndTheOpeningStaysOnAir() async {
+        let (p, s, _) = make()
+        let o = await opened([], p, s)
+        let feed = FakeFeed()
+        feed.script = [.ops([ProgrammeRouteFeed.placeOp(story("d-1"), cause: "open")]), .ops([ProgrammeRouteFeed.placeOp(story("d-2"), cause: "open")]), .done]
+        let w = RunSheetWriter(store: s) { feed }
+        w.open(); await w.settle()
+        XCTAssertEqual(s.sheet.entries.map(\.id), [o, "d-1", "d-2"])
+        XCTAssertEqual(s.onAir()?.id, o)
+        XCTAssertEqual(s.pending.filter { $0.by == .desk }.count, 0, "the desk's ops are the desk's: not posted back")
+        XCTAssertEqual(feed.calls.first?.cause, "open")
+    }
+
+    // 3
+    func test03_SkipIsOneOpAndTheNextIsTheNextEntry() async {
+        let (p, s, e) = make()
+        let o = await opened(["d-1", "d-2"], p, s)
+        let before = s.pending.count
+        p.next(); await p.settle()
+        XCTAssertEqual(s.onAir()?.id, "d-1")
+        XCTAssertEqual(s.entry(o)?.state, .skipped); XCTAssertEqual(s.entry(o)?.ended?.outcome, .skipped)
+        XCTAssertEqual(s.pending[before...].map(\.op), [.skip, .aired], "one skip, then the phone reports the next on air")
+        XCTAssertFalse(e.log.contains { $0.hasPrefix("story:") }, "the paper's list is never asked what is next")
+        XCTAssertEqual(e.speaks.last, "speak:d-1")
+    }
+    func test03_TheLockScreensNextAndASwipeAreTheSameOp() async {
+        let (p, s, _) = make()
+        _ = await opened(["d-1", "d-2"], p, s)
+        // ChoirApp.moveStory(.next) is `RunSheetPlayer.next()`: the swipe, the card's next and the lock screen all call it.
+        p.next(); await p.settle()
+        XCTAssertEqual(s.pending.filter { $0.op == .skip }.count, 1)
+        XCTAssertEqual(s.onAir()?.id, "d-1")
+    }
+
+    // 4
+    func test04_SkipWithNothingAheadStopsTheSoundAndSwapsNothingIn() async {
+        let (p, s, e) = make()
+        let o = await opened([], p, s)
+        let spokeBefore = e.speaks.count
+        p.next(); await p.settle()
+        XCTAssertNil(s.onAir()); XCTAssertEqual(s.entry(o)?.state, .skipped)
+        XCTAssertEqual(e.speaks.count, spokeBefore, "nothing new was spoken")
+        XCTAssertTrue(e.log.contains("stopSpoken"))
+        // and when the desk's entry arrives later, the radio that was playing carries on
+        deskPlace(s, story("d-late")); await p.settle()
+        XCTAssertEqual(s.onAir()?.id, "d-late")
+    }
+
+    // 5
+    func test05_AnEntryThatEndsIsReportedHeardAndTheNextIsAired() async {
+        let (p, s, e) = make()
+        let o = await opened(["d-1"], p, s)
+        p.documentEnded(id: "rs:" + o, anyPlayed: true); await p.settle()
+        XCTAssertEqual(s.entry(o)?.state, .heard); XCTAssertEqual(s.entry(o)?.ended?.outcome, .finished)
+        XCTAssertEqual(s.onAir()?.id, "d-1"); XCTAssertEqual(e.speaks.last, "speak:d-1")
+        // a late end of a document that was replaced closes nothing
+        p.documentEnded(id: "rs:" + o, anyPlayed: true)
+        XCTAssertEqual(s.onAir()?.id, "d-1")
+    }
+    func test05_TheEndWaitsForTheListenersTurn() async {
+        let (p, s, _) = make()
+        let o = await opened(["d-1"], p, s)
+        var open = true
+        p.turnOpen = { open }
+        p.documentEnded(id: "rs:" + o, anyPlayed: true)
+        XCTAssertEqual(s.onAir()?.id, o, "the listener is talking: the entry is not closed over their words")
+        open = false
+        p.turnEnded(); await p.settle()
+        XCTAssertEqual(s.onAir()?.id, "d-1")
+    }
+    func test05_AnEntryThatCannotPlayIsSkippedOnceAndTwoInARowStop() async {
+        let (p, s, e) = make()
+        e.failSpeak = ["d-1", "d-2"]
+        _ = await opened(["d-1", "d-2", "d-3"], p, s)
+        p.next(); await p.settle(); await p.settle()
+        XCTAssertEqual(s.entry("d-1")?.state, .skipped); XCTAssertEqual(s.entry("d-2")?.state, .skipped)
+        XCTAssertNil(s.onAir(), "two in a row that make no sound stop the radio")
+        XCTAssertEqual(s.entry("d-3")?.state, .ahead)
+        XCTAssertFalse(p.message.isEmpty)
+    }
+
+    // 6, 7
+    func test06_ADeskThatFailsIsSaidOnceAndTheOpeningKeepsPlaying() async {
+        let (p, s, e) = make()
+        let o = await opened([], p, s)
+        let feed = FakeFeed(); feed.failure = ChoirError.transport("offline")
+        let w = RunSheetWriter(store: s) { feed }
+        w.open(); await w.settle()
+        XCTAssertEqual(s.onAir()?.id, o)
+        let said = s.ahead(limit: 5)
+        XCTAssertEqual(said.count, 1); XCTAssertEqual(said[0].kind, .answer); XCTAssertEqual(said[0].placedBy, .phone)
+        XCTAssertTrue(said[0].text!.contains("can't reach the desk"))
+        w.open(); await w.settle()
+        XCTAssertEqual(s.ahead(limit: 5).count, 1, "said once")
+        XCTAssertFalse(e.log.contains { $0.hasPrefix("story:") }, "no story was swapped in")
+    }
+    func test07_ASlowDeskSwapsNothingIn() async {
+        let (p, s, e) = make()
+        let o = await opened([], p, s)
+        let feed = FakeFeed(); feed.hold = true
+        let w = RunSheetWriter(store: s) { feed }
+        w.open()
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertTrue(w.inFlight)
+        XCTAssertEqual(s.onAir()?.id, o); XCTAssertEqual(e.speaks.count, 1)
+        XCTAssertFalse(e.log.contains { $0.hasPrefix("story:") })
+        feed.release(); await w.settle()
+    }
+
+    // 8
+    func test08_OnlyAPlayChangesWhatIsOnAir() async {
+        let (p, s, _) = make()
+        let o = await opened(["d-1"], p, s)
+        let v = s.sheet.version
+        _ = p.info(); _ = p.turnQueueJSON(); _ = s.ahead(limit: 3); _ = s.heard(limit: 3)      // everything the screens read
+        XCTAssertEqual(s.sheet.version, v, "reading changes nothing")
+        XCTAssertEqual(s.onAir()?.id, o)
+        p.playNow(.readAloud(address: "mail:m1", title: "A message"), words: ("A message", ["Hello."])); await p.settle()
+        XCTAssertEqual(s.onAir()?.kind, .mail, "reading a message aloud is a play, and a play is `place now`")
+        XCTAssertEqual(s.entry(o)?.ended?.outcome, .cut)
+        XCTAssertEqual(s.ahead(limit: 5).map(\.id), ["d-1"], "what was ahead stays ahead")
+    }
+
+    // 9
+    func test09_ATransitionWhoseNeighboursChangedIsShownStale() {
+        let (_, s, _) = make()
+        deskPlace(s, story("d-a"))
+        var t = story("d-t", text: "And now.", kind: .transition); t.between = RunSheetBetween(after: "d-a", before: "d-b")
+        deskPlace(s, t)
+        deskPlace(s, story("d-b"))
+        XCTAssertFalse(s.isStale(s.entry("d-t")!))
+        s.applyFromDesk(RunSheetOp(opId: "o-rm", by: .desk, op: .remove, id: "d-b", reason: "revised"))
+        XCTAssertTrue(s.isStale(s.entry("d-t")!), "the story after it is gone: the phone says so and leaves it")
+        XCTAssertEqual(s.entry("d-t")?.state, .ahead)
+    }
+
+    // 10
+    func test10_ASkippedClipEndsAsSkippedAndItsSoundStops() async {
+        let (p, s, e) = make()
+        let c = clipEntry("a")
+        p.playNow(c); await p.settle()
+        XCTAssertEqual(e.log.last, "remote:a.mp3:10.0:30.0")
+        XCTAssertTrue(p.isRemote)
+        p.next(); await p.settle()
+        XCTAssertEqual(s.entry(c.id)?.state, .skipped); XCTAssertEqual(s.entry(c.id)?.ended?.outcome, .skipped)
+        XCTAssertTrue(e.log.contains("stopRemote")); XCTAssertFalse(p.isRemote)
+    }
+    func test10_AClipThatEndsIsHeardAndKeepListeningHoldsIt() async {
+        let (p, s, e) = make()
+        let c = clipEntry("a")
+        p.playNow(c); await p.settle()
+        XCTAssertEqual(p.keepListeningTitle, "T a (Show)")
+        p.keepListening()
+        XCTAssertNil(p.keepListeningTitle); XCTAssertEqual(e.log.last, "clearEnd")
+        p.remoteEnded(generation: p.generation)
+        XCTAssertEqual(s.entry(c.id)?.state, .heard)
+    }
+    func test10_AClipOfAnotherFileIsSkippedWithoutBeingSpoken() async {
+        let (p, s, e) = make()
+        let store = ClipStore(); store.replace([PodcastClip.parse(["clip_id": "clip-0000000000a1", "story": ["route": "/a", "version": 1, "title": "S"], "show": "Show",
+            "audio_url": "https://example.test/x.mp3", "duration_seconds": 900, "start": 10, "end": 70, "quote": "q", "support": 0.9])!])
+        e.duration = 1200                                        // not the transcribed file
+        let ok = await p.preflight("clip-0000000000a1", store: store)
+        XCTAssertFalse(ok); XCTAssertTrue(store.isMismatch("clip-0000000000a1"))
+        e.duration = 901
+        let ok2 = await p.preflight("clip-0000000000a1", store: ClipStore())
+        XCTAssertFalse(ok2, "an unknown clip")
+        _ = s
+    }
+
+    // 11
+    final class FakePoster: RunSheetPoster, @unchecked Sendable {
+        let lock = NSLock()
+        var answer: RunSheetPostOutcome = .notYet
+        private(set) var posts: [[String]] = []
+        func post(ops: [RunSheetOp]) async -> RunSheetPostOutcome { lock.lock(); posts.append(ops.map(\.opId)); let a = answer; lock.unlock(); return a }
+    }
+    func test11_PendingOpsSurviveARelaunchAndGoWhenTheRouteAnswers() async {
+        let f = FileManager.default.temporaryDirectory.appendingPathComponent("rs-\(UUID().uuidString).json")
+        let (p, s, _) = make(storage: f)
+        let poster = FakePoster(); s.poster = poster; s.retryAfter = 3600
+        p.playNow(.paperStory(route: "a", title: "A")); await p.settle(); await s.flushTask?.value
+        XCTAssertEqual(s.pending.count, 1, "the route said not yet: the op stays, with its op_id")
+        let opId = s.pending[0].opId
+        // a relaunch
+        let s2 = RunSheetStore(storage: f); let p2 = RunSheetPlayer(store: s2); p2.engine = FakeEngine()
+        let poster2 = FakePoster(); s2.poster = poster2; s2.retryAfter = 3600
+        s2.restore(); await s2.flushTask?.value
+        XCTAssertEqual(s2.pending.map(\.opId).first, opId, "the same op, in order")
+        XCTAssertNil(s2.onAir(), "an entry that was on air is closed, not resumed")
+        XCTAssertEqual(s2.entry(s2.sheet.entries[0].id)?.ended?.outcome, .left)
+        poster2.answer = .answered([]); s2.flush(); await s2.flushTask?.value
+        XCTAssertTrue(s2.pending.isEmpty)
+        XCTAssertEqual(poster2.posts.last?.first, s2.sheet.appliedOps.first, "the first op sent is the first applied")
+        _ = p
+    }
+    func test11_Offline() async {
+        let (p, s, _) = make()
+        let poster = FakePoster(); poster.answer = .offline; s.poster = poster; s.retryAfter = 3600
+        p.playNow(.paperStory(route: "a", title: "A")); await s.flushTask?.value
+        XCTAssertEqual(s.pending.count, 1)
+    }
+
+    // 12
+    func test12_TheOldKindNamesMap() {
+        let clips = ClipStore(); clips.replace([PodcastClip.parse(["clip_id": "clip-0000000000b1", "story": ["route": "/a", "version": 1, "title": "S"], "show": "Show",
+            "audio_url": "https://example.test/b.mp3", "duration_seconds": 900, "start": 10, "end": 70, "quote": "q", "support": 0.9])!])
+        func seg(_ id: String, _ kind: String, clip: String? = nil, between: IncomingBetween? = nil) -> IncomingSegment {
+            IncomingSegment(stretchID: "st", segmentID: id, kind: kind, title: "Title \(id)", text: "Words for \(id).", cites: [ProgrammeCite(ref: "pub:a@v2", role: "subject", label: "A")],
+                            blockCount: nil, clip: clip.map { ProgrammeClipRef(clipID: $0) }, between: between)
+        }
+        func k(_ s: IncomingSegment) -> RunSheetKind? { ProgrammeRouteFeed.entry(from: s, clips: clips)?.kind }
+        XCTAssertEqual(k(seg("a", "ident")), .opening); XCTAssertEqual(k(seg("b", "opening")), .opening)
+        XCTAssertEqual(k(seg("c", "bridge")), .transition); XCTAssertEqual(k(seg("d", "transition")), .transition)
+        XCTAssertEqual(k(seg("e", "story")), .story); XCTAssertEqual(k(seg("f", "update")), .story); XCTAssertEqual(k(seg("g", "headlines")), .story)
+        XCTAssertEqual(k(seg("h", "podcast_clip", clip: "clip-0000000000b1")), .clip)
+        XCTAssertNil(k(seg("i", "podcast_clip", clip: "clip-nothere")), "a clip the phone does not have is not an entry")
+        let t = ProgrammeRouteFeed.entry(from: seg("t", "transition", between: IncomingBetween(after: "st/1", before: "st/2")), clips: clips)!
+        XCTAssertEqual(t.between, RunSheetBetween(after: "d-st-1", before: "d-st-2"))
+        XCTAssertEqual(t.id, "d-t"); XCTAssertEqual(t.placedBy, .desk); XCTAssertEqual(t.source?.ref, "pub:a@v2"); XCTAssertTrue(RunSheet.validId(t.id))
+        // the decoder reads `between` and the new names
+        var d = StretchDecoder()
+        let ev = d.feed("event: segment\ndata: {\"segment_id\":\"s2\",\"kind\":\"transition\",\"text\":\"Next.\",\"between\":{\"after_segment\":\"s1\",\"before_segment\":\"s3\"}}\n\n") + d.finish()
+        guard case .segment(let got)? = ev.first else { return XCTFail("no segment") }
+        XCTAssertEqual(got.between, IncomingBetween(after: "s1", before: "s3"))
+    }
+
+    // 13
+    func test13_TheAheadListIsBoundedAt100() {
+        let (_, s, _) = make()
+        for n in 0..<100 { deskPlace(s, story("d-\(n)")) }
+        XCTAssertEqual(s.ahead(limit: 1000).count, 100)
+        let r = s.applyFromDesk(ProgrammeRouteFeed.placeOp(story("d-over"), cause: "extend"))
+        XCTAssertFalse(r.applied); XCTAssertEqual(r.dropped, "ahead_full")
+        let mine = RunSheetEntry.paperStory(route: "r", title: "Mine")
+        XCTAssertTrue(s.place(mine, at: .end).applied, "a listener's own placement is never refused")
+        let ahead = s.ahead(limit: 1000)
+        XCTAssertEqual(ahead.count, 100); XCTAssertEqual(ahead.last?.id, mine.id); XCTAssertNil(s.entry("d-99"), "it took the place of the last entry")
+    }
+
+    // 14
+    func test14_AnEntryLeftOnAirByADeadAppIsClosedAsLeft() async {
+        let f = FileManager.default.temporaryDirectory.appendingPathComponent("rs-\(UUID().uuidString).json")
+        let (p, s, _) = make(storage: f)
+        let o = await opened(["d-1"], p, s)
+        let s2 = RunSheetStore(storage: f); let p2 = RunSheetPlayer(store: s2); let e2 = FakeEngine(); p2.engine = e2
+        s2.restore(); await p2.settle()
+        XCTAssertNil(s2.onAir()); XCTAssertEqual(s2.entry(o)?.state, .heard); XCTAssertEqual(s2.entry(o)?.ended?.outcome, .left)
+        XCTAssertTrue(e2.speaks.isEmpty, "a crash restart never resumes work")
+        XCTAssertEqual(s2.entry("d-1")?.state, .ahead)
+    }
+
+    func test14_AnOpeningTakesOffWhatAnEarlierListeningLeftAheadButKeepsTheListenersOwn() async {
+        let (p, s, _) = make()
+        deskPlace(s, story("d-old")); s.place(.paperStory(route: "mine", title: "Mine"), at: .end)
+        let o = PhoneOpening.entry(lines: lines(1))
+        p.open(o); await p.settle()
+        XCTAssertNil(s.entry("d-old")); XCTAssertEqual(s.ahead(limit: 5).count, 1); XCTAssertEqual(s.onAir()?.id, o.id)
+    }
+
+    // 15
+    func test15_QueueThisGoesAfterTheListenersLastAndPlayThisKeepsWhatIsAhead() async {
+        let (p, s, _) = make()
+        _ = await opened(["d-1", "d-2"], p, s)
+        let a = RunSheetEntry.paperStory(route: "a", title: "A"), b = RunSheetEntry.paperStory(route: "b", title: "B")
+        p.queue(a); p.queue(b)
+        // with no listener placement yet, `queued` is directly after the entry on air; the second goes after the first
+        XCTAssertEqual(s.ahead(limit: 10).map(\.id), [a.id, b.id, "d-1", "d-2"])
+        let c = RunSheetEntry.paperStory(route: "c", title: "C")
+        p.playNow(c); await p.settle()
+        XCTAssertEqual(s.onAir()?.id, c.id)
+        XCTAssertEqual(s.ahead(limit: 10).map(\.id), [a.id, b.id, "d-1", "d-2"], "play this cuts what was on air and keeps what was ahead")
+    }
+
+    // 16
+    func test16_PreviousAirsTheEntryBefore() async {
+        let (p, s, e) = make()
+        let o = await opened(["d-1"], p, s)
+        p.next(); await p.settle()
+        XCTAssertEqual(s.onAir()?.id, "d-1")
+        e.position = (0, 0.5)
+        p.previous(); await p.settle()
+        XCTAssertEqual(s.onAir()?.id, o, "barely begun: the one before")
+        XCTAssertEqual(e.speaks.last, "speak:" + o)
+        e.position = (2, 8)
+        let n = e.log.count
+        p.previous()
+        XCTAssertEqual(e.log.dropFirst(n).first, "restart", "well into it: its own start")
+    }
+
+    // 17
+    func test17_MoreIsAskedForWhenTheTimeAheadIsShortOneAtATimeAndNotAgainWhenItAddedNothing() async {
+        let (p, s, _) = make()
+        _ = await opened([], p, s)
+        let feed = FakeFeed()
+        feed.scripts = [[.ops([ProgrammeRouteFeed.placeOp(story("d-1", secs: 3), cause: "open")]), .done], [.done], [.done]]
+        let t0 = Date()
+        var tick = 0
+        let w = RunSheetWriter(store: s) { feed }
+        w.clock = { tick += 1; return t0.addingTimeInterval(Double(tick) * 4) }       // each look at the clock is 4 s later: the write took a few seconds
+        p.aheadChanged = { [weak w] in w?.checkAhead() }
+        w.open(); await w.settle(); await w.settle(); await w.settle()
+        XCTAssertGreaterThan(w.latency, 0)
+        XCTAssertEqual(feed.calls.map(\.cause), ["open", "extend"], "3 s ahead is less than twice the latency: one more is asked; it added nothing, so no third")
+        XCTAssertEqual(feed.calls[1].aheadTitles, ["T d-1"])
+        XCTAssertFalse(w.inFlight)
+        p.next(); await p.settle(); await w.settle()                                  // another entry starts: the desk may be asked again
+        XCTAssertEqual(feed.calls.count, 3)
+    }
+
+    // 18
+    func test18_UpNextIsTheFirstThreeAhead() async {
+        let (p, s, _) = make()
+        _ = await opened(["d-1", "d-2", "d-3", "d-4", "d-5"], p, s)
+        let i = p.info()
+        XCTAssertEqual(i.upcoming.map(\.id), ["d-1", "d-2", "d-3"])
+        XCTAssertTrue(i.upcoming.allSatisfy { $0.by == "From the desk" })
+        XCTAssertEqual(i.current, "Opening")
+    }
+
+    // 19
+    func test19_TheTurnRoutesQueueWordsTranslateAndAReplayedTurnAppliesOnce() async throws {
+        let (p, s, _) = make()
+        _ = await opened(["d-1"], p, s)
+        let mine = RunSheetEntry.paperStory(route: "r1", title: "Mine"); p.queue(mine)
+        let o = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(p.turnQueueJSON())) as? [String: Any])
+        let up = try XCTUnwrap(o["upcoming"] as? [[String: Any]])
+        XCTAssertEqual(up.first?["id"] as? String, mine.id)
+        XCTAssertEqual((up.first?["item"] as? [String: Any])?["kind"] as? String, "story")
+        XCTAssertEqual(up.first?["added_by"] as? String, "listener")
+        XCTAssertEqual(up.count, 1, "spoken entries have no address to hand over")
+        let body = #"{"turn_id":"t9","ops":[{"op":"enqueue","item":{"kind":"story","route":"r2","title":"Two"},"reason":"you asked"},{"op":"remove","id":"\#(mine.id)"},{"op":"remove","id":"nope"}]}"#
+        let r = p.applyTurnOps(Data(body.utf8))
+        XCTAssertEqual(r.applied, 2); XCTAssertEqual(r.dropped, 1)
+        XCTAssertNil(s.entry(mine.id)); XCTAssertEqual(s.ahead(limit: 10).last?.paperRoute, "r2")
+        let again = p.applyTurnOps(Data(body.utf8))
+        XCTAssertEqual(again.applied, 0, "a replayed turn changes nothing")
+        let skip = p.applyTurnOps(Data(#"[{"op":"skip"}]"#.utf8)); await p.settle()
+        XCTAssertEqual(skip.applied, 1); XCTAssertEqual(s.onAir()?.id, "d-1")
+    }
+
+    // 20
+    func test20_ADuplicateOpIdChangesNothingAndABatchIsAtMost64() async {
+        let (_, s, _) = make()
+        let e = RunSheetEntry.paperStory(route: "a", title: "A")
+        let op = RunSheetOp(opId: "p-dup00001", by: .listener, op: .place, at: .end, entry: e)
+        XCTAssertTrue(s.apply(op).applied)
+        let again = s.apply(op)
+        XCTAssertFalse(again.applied); XCTAssertEqual(again.dropped, RunSheetDropped.duplicate)
+        XCTAssertEqual(s.pending.count, 1)
+        for n in 0..<150 { s.place(.paperStory(route: "r\(n)", title: "R"), at: .end) }
+        let poster = FakePoster(); poster.answer = .answered([]); s.poster = poster
+        s.flush(); await s.flushTask?.value
+        XCTAssertTrue(s.pending.isEmpty)
+        XCTAssertTrue(poster.posts.allSatisfy { $0.count <= 64 }); XCTAssertGreaterThan(poster.posts.count, 2)
+        XCTAssertEqual(poster.posts.flatMap { $0 }, s.sheet.appliedOps, "every applied op was sent once, in order")
+    }
+}

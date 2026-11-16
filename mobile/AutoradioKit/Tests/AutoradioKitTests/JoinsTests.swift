@@ -21,8 +21,8 @@ private func hex(_ n: Int) -> String { "clip-" + String(format: "%012x", n) }
 @MainActor
 final class JoinOpenEpisodeTests: XCTestCase {
     func store(_ rows: [[String: Any]]) -> ClipStore { let s = ClipStore(); s.replace(rows.compactMap(PodcastClip.parse)); return s }
-    func audio(_ n: Int, ep: String?, start: Double? = 10, end: Double? = 70) -> PlayItem {
-        .audio(url: URL(string: "https://example.test/\(hex(n)).mp3")!, title: "Episode", show: "Show", start: start, end: end, episodeId: ep)
+    func audio(_ n: Int, ep: String?, start: Double? = 10, end: Double? = 70) -> RunSheetAudio {
+        RunSheetAudio(url: URL(string: "https://example.test/\(hex(n)).mp3")!, title: "Episode", show: "Show", start: start, end: end, episodeId: ep)
     }
 
     func testJ1_AClipOpensItsEpisodeAtItsStart() {
@@ -43,7 +43,7 @@ final class JoinOpenEpisodeTests: XCTestCase {
     }
     func testJ1_AudioThePhoneCannotPlaceOffersNothing() {
         XCTAssertNil(PodcastBridge.target(of: audio(4, ep: "zz"), store: ClipStore()))
-        XCTAssertNil(PodcastBridge.target(of: .story(route: "a", title: "S"), store: ClipStore()))
+        XCTAssertNil(PodcastBridge.target(of: nil, store: ClipStore()))
         let noFeed = store([clipRow(hex(5), feed: nil)])
         XCTAssertNil(PodcastBridge.target(of: audio(5, ep: "g"), store: noFeed))
     }
@@ -63,40 +63,10 @@ final class JoinOpenEpisodeTests: XCTestCase {
     }
     func testJ1_TheQueueSaysWhenItsCurrentClipCanOpenItsEpisode() async {
         let s = store([clipRow(hex(1), guid: "g1")])
-        let q = PlayQueue(); q.engine = FakeEngine()
-        q.playNow(audio(1, ep: "g1")); await q.settle()
+        let q = RunSheetPlayer(store: RunSheetStore()); q.engine = FakeEngine()
+        q.playNow(.audio(audio(1, ep: "g1"))); await q.settle()
         XCTAssertTrue(q.info(clips: s).canOpenEpisode)
         XCTAssertFalse(q.info(clips: ClipStore()).canOpenEpisode)
-    }
-}
-
-// MARK: J4 the DJ's coming segments in Up next
-
-@MainActor
-final class JoinComingTests: XCTestCase {
-    func make(_ titles: [String]?) -> PlayQueue {
-        let q = PlayQueue(); q.engine = FakeEngine()
-        if let titles { q.programmeComing = { titles } }
-        return q
-    }
-    func testJ4_UpToThreeComingSegmentsAreShownMarkedAsTheProgrammes() {
-        let q = make(["One", "Two", "Three", "Four", "Five"])
-        let i = q.info()
-        XCTAssertEqual(i.coming.map(\.title), ["One", "Two", "Three"])
-        XCTAssertTrue(i.coming.allSatisfy { $0.programme && $0.i == -1 && !$0.by.isEmpty })
-    }
-    func testJ4_TheyAreNotInTheRealQueue() {
-        let q = make(["One", "Two"])
-        q.enqueue(.story(route: "a", title: "S a"))
-        let i = q.info()
-        XCTAssertEqual(i.upcoming.map(\.title), ["S a"]); XCTAssertFalse(i.upcoming[0].programme)
-        XCTAssertEqual(q.upcoming.count, 1, "the queue holds only what was queued")
-        XCTAssertEqual(q.snapshotJSON().contains("One"), false, "the desk is not told the programme's titles as queue items")
-    }
-    func testJ4_NothingWhenThereIsNoProgrammeOrNoComing() {
-        XCTAssertTrue(make(nil).info().coming.isEmpty)
-        XCTAssertTrue(make([]).info().coming.isEmpty)
-        XCTAssertTrue(make(["", " "]).info().coming.isEmpty, "a segment with no title is not shown")
     }
 }
 
@@ -160,30 +130,30 @@ final class JoinHearItTests: XCTestCase {
         XCTAssertTrue(HearIt.rows(address: "doc:abc", store: s).isEmpty)
     }
     func testJ3_QueueAddsTheClipAndSaysSo() async {
-        let s = store([clipRow(hex(1))]); let q = PlayQueue(); q.engine = FakeEngine()
-        let note = await ClipActions.run(op: "queue", clipID: hex(1), store: s, queue: q)
-        XCTAssertEqual(q.upcoming.count, 1); XCTAssertEqual(note, "Added to the queue.")
+        let s = store([clipRow(hex(1))]); let q = RunSheetPlayer(store: RunSheetStore()); q.engine = FakeEngine()
+        let note = await ClipActions.run(op: "queue", clipID: hex(1), store: s, player: q)
+        XCTAssertEqual(q.store.ahead(limit: 10).count, 1); XCTAssertEqual(note, "Added to the queue.")
     }
     func testJ3_AClipThePhoneDoesNotHaveSaysSoAndDoesNothing() async {
-        let q = PlayQueue(); q.engine = FakeEngine()
+        let q = RunSheetPlayer(store: RunSheetStore()); q.engine = FakeEngine()
         for op in ["play", "queue", "open"] {
-            let note = await ClipActions.run(op: op, clipID: "gone", store: ClipStore(), queue: q)
+            let note = await ClipActions.run(op: op, clipID: "gone", store: ClipStore(), player: q)
             XCTAssertEqual(note, "That clip is not available any more.")
         }
-        XCTAssertTrue(q.upcoming.isEmpty); XCTAssertNil(q.current)
+        XCTAssertTrue(q.store.ahead(limit: 10).isEmpty); XCTAssertNil(q.store.onAir())
     }
     func testJ3_OpenEpisodeGoesToTheBridgeAtTheClipsStart() async {
         let s = store([clipRow(hex(1), guid: "g1")])
         var got: (String?, Double)?
         let saved = PodcastBridge.open; PodcastBridge.open = { e, _, _, at in got = (e, at) }; defer { PodcastBridge.open = saved }
-        let note = await ClipActions.run(op: "open", clipID: hex(1), store: s, queue: PlayQueue())
+        let note = await ClipActions.run(op: "open", clipID: hex(1), store: s, player: RunSheetPlayer(store: RunSheetStore()))
         XCTAssertEqual(got?.0, "g1"); XCTAssertEqual(got?.1, 10); XCTAssertEqual(note, "")
     }
     func testJ3_PlayOfAMismatchedFilePlaysTheEpisodeFromItsStartNotTheClip() async {
-        let s = store([clipRow(hex(1))]); s.markMismatch(hex(1)); let q = PlayQueue(); q.engine = FakeEngine()
-        _ = await ClipActions.run(op: "play", clipID: hex(1), store: s, queue: q); await q.settle()
-        guard case .audio(_, _, _, let start, let end, _)? = q.current else { return XCTFail("nothing playing") }
-        XCTAssertNil(start); XCTAssertNil(end)
+        let s = store([clipRow(hex(1))]); s.markMismatch(hex(1)); let q = RunSheetPlayer(store: RunSheetStore()); q.engine = FakeEngine()
+        _ = await ClipActions.run(op: "play", clipID: hex(1), store: s, player: q); await q.settle()
+        guard let a = q.store.onAir()?.audioSpec else { return XCTFail("nothing playing") }
+        XCTAssertNil(a.start); XCTAssertNil(a.end); XCTAssertEqual(q.store.onAir()?.kind, .episode)
     }
 }
 
@@ -220,26 +190,5 @@ final class JoinShowClipsTests: XCTestCase {
         s.didAsk(feed: "https://example.test/feed.xml", now: Date(timeIntervalSince1970: 0))
         XCTAssertFalse(s.shouldAsk(feed: "https://example.test/feed.xml/", now: Date(timeIntervalSince1970: 60)))
         XCTAssertTrue(s.shouldAsk(feed: "https://example.test/feed.xml", now: Date(timeIntervalSince1970: 1000)))
-    }
-}
-
-// MARK: J7 the queue the desk is sent is bounded
-
-@MainActor
-final class JoinSnapshotBoundTests: XCTestCase {
-    func testJ7_TheSnapshotCarriesTheFirstFiftyUpcomingAndTheQueueKeepsAll() throws {
-        let q = PlayQueue(); q.engine = FakeEngine()
-        for n in 0..<75 { q.enqueue(.story(route: "r\(n)", title: "S \(n)")) }
-        let o = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(q.snapshotJSON().utf8)) as? [String: Any])
-        let up = try XCTUnwrap(o["upcoming"] as? [[String: Any]])
-        XCTAssertEqual(up.count, 50)
-        XCTAssertTrue(q.snapshotJSON().contains("r0")); XCTAssertFalse(q.snapshotJSON().contains("\"r50\""))
-        XCTAssertEqual(q.upcoming.count, 75, "the local queue is unchanged")
-        XCTAssertEqual(q.snapshot().upcoming.count, 75)
-    }
-    func testJ7_AShortQueueIsSentWhole() throws {
-        let q = PlayQueue(); q.engine = FakeEngine(); q.enqueue(.story(route: "a", title: "A"))
-        let o = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(q.snapshotJSON().utf8)) as? [String: Any])
-        XCTAssertEqual((o["upcoming"] as? [Any])?.count, 1)
     }
 }

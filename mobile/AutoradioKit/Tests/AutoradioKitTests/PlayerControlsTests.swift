@@ -62,42 +62,19 @@ final class PlaybackSpeedTests: XCTestCase {
     }
 }
 
-// MARK: The list, previous and the autoplay decision
+// MARK: Previous, and the paper stack
 
 final class StoryCursorTests: XCTestCase {
     let items = ["a", "b", "c"].map { StoryRef(route: $0, title: "T\($0)") }
-    func testP7_NextAtTheLastAndPreviousAtTheFirstGoNowhere() {
-        XCTAssertEqual(StoryCursor.neighbour(of: "a", in: items, step: 1)?.route, "b")
-        XCTAssertEqual(StoryCursor.neighbour(of: "b", in: items, step: -1)?.route, "a")
-        XCTAssertNil(StoryCursor.neighbour(of: "c", in: items, step: 1), "no wrap")
-        XCTAssertNil(StoryCursor.neighbour(of: "a", in: items, step: -1))
-    }
-    func testP9_AStoryNotInTheListHasNoNeighbour() {
-        XCTAssertNil(StoryCursor.neighbour(of: "z", in: items, step: 1)); XCTAssertNil(StoryCursor.neighbour(of: "a", in: [], step: 1))
-    }
     func testP8_PreviousRestartsAfterThreeSecondsOrPastTheFirstBlock() {
         XCTAssertFalse(StoryCursor.previousRestartsCurrent(blockIndex: 0, secondsIntoBlock: 0))
         XCTAssertFalse(StoryCursor.previousRestartsCurrent(blockIndex: 0, secondsIntoBlock: 2.9))
         XCTAssertTrue(StoryCursor.previousRestartsCurrent(blockIndex: 0, secondsIntoBlock: 3))
         XCTAssertTrue(StoryCursor.previousRestartsCurrent(blockIndex: 1, secondsIntoBlock: 0))
     }
-    func testP10_TheReadersTextDocumentNamesItsRoute() {
-        XCTAssertEqual(StoryCursor.route(ofTextDocument: "text:pub:harbour"), "harbour")
-        XCTAssertNil(StoryCursor.route(ofTextDocument: "text:mail-1")); XCTAssertNil(StoryCursor.route(ofTextDocument: "text:pub:")); XCTAssertNil(StoryCursor.route(ofTextDocument: "choir:x"))
-    }
     func testP10_FrontOrderKeepsTheStackAsComposed() {
         let o = FrontOrder(); o.set(routes: ["x", "y"], titles: ["X"])
         XCTAssertEqual(o.stories, [StoryRef(route: "x", title: "X"), StoryRef(route: "y", title: "")])
-    }
-    func testP12to16_TheAutoplayDecision() {
-        func d(_ paused: Bool, _ turn: Bool, _ played: Bool, _ next: Bool) -> AutoplayDecision { Autoplay.decide(userPaused: paused, turnOpen: turn, anyPlayed: played, hasNext: next) }
-        XCTAssertEqual(d(false, false, true, true), .advance, "P12: simply on")
-        XCTAssertEqual(d(true, false, true, true), .stop, "P13: the reader paused")
-        XCTAssertEqual(d(false, true, true, true), .waitForTurn, "P13: the reader is talking")
-        XCTAssertEqual(d(false, false, false, true), .stop, "P15: nothing was heard")
-        XCTAssertEqual(d(false, false, true, false), .stop, "P16: the list is over")
-        XCTAssertEqual(d(false, true, true, false), .stop, "P16: over, even with a turn open")
-        XCTAssertEqual(d(true, true, true, true), .stop)
     }
 }
 
@@ -139,11 +116,6 @@ final class StretchCandidatesTests: XCTestCase {
         XCTAssertEqual(one[0]["text"] as? String, "Heading\n\nFirst bold link.\n\nSecond.")
         // a candidate with no text still goes
         XCTAssertNil(StretchCandidates.body([items[0]], texts: [:])[0]["text"])
-    }
-    func testP23_TheRoutesAlreadyToldCameFromTheCites() {
-        var d = segmentedDocument(["One.", "Two."])
-        d.segments[0].cites = [ProgrammeCite(ref: "pub:a@v2", label: "A"), ProgrammeCite(ref: "pub:b/c@v1"), ProgrammeCite(ref: "edition:P1")]
-        XCTAssertEqual(StretchCandidates.routes(citedIn: d), ["a", "b/c"])
     }
 }
 
@@ -201,193 +173,6 @@ final class PlayerAppTests: XCTestCase {
         return (app, rt)
     }
     func resolved() -> [String] { StubProtocol.seen.filter { $0.path == "/api/platform/publications/resolve" }.compactMap { $0.query["route"] } }
-
-    // P12, P16: a story ends and the next starts by itself; at the last it stops.
-    func testP12_P16_AutoplayRunsTheListAndStopsAtTheEnd() async {
-        let (app, rt) = await makeApp()
-        await app.play(route: "a")
-        let b = await poll(8) { rt.player.document.id == "choir:pv-b" }; XCTAssertTrue(b, "the second story started by itself")
-        let c = await poll(8) { rt.player.document.id == "choir:pv-c" }; XCTAssertTrue(c)
-        let over = await poll(5) { !rt.player.loopIsActive }; XCTAssertTrue(over)
-        try? await Task.sleep(nanoseconds: 600_000_000)
-        XCTAssertEqual(rt.player.document.id, "choir:pv-c", "it stopped at the end of the list")
-        XCTAssertEqual(resolved().filter { $0 == "a" || $0 == "b" || $0 == "c" }, ["a", "b", "c"], "each once, in the list's order")
-        rt.player.pause()
-    }
-
-    // P13: the reader paused.
-    func testP13_ThePausedReaderIsNotInterrupted() async {
-        let (app, rt) = await makeApp()
-        await app.play(route: "a")
-        rt.player.pause()
-        await app.ranDry(documentID: rt.player.document.id, anyPlayed: true)
-        XCTAssertEqual(rt.player.document.id, "choir:pv-a")
-        try? await Task.sleep(nanoseconds: 500_000_000)
-        XCTAssertEqual(rt.player.document.id, "choir:pv-a", "nothing started")
-        XCTAssertEqual(resolved(), ["a"])
-    }
-
-    // P13: the reader is talking to the radio: the next story waits for the end of the turn, then starts once.
-    func testP13_ATurnInProgressHoldsTheNextStoryUntilItEnds() async {
-        let (app, rt) = await makeApp()
-        rt.log.emit(.phase(from: "playing", to: "candidate"))
-        let open = await poll { rt.snapshot().phase == "candidate" }; XCTAssertTrue(open)
-        await app.play(route: "a")
-        let dry = await poll(5) { !rt.player.loopIsActive }; XCTAssertTrue(dry, "story a ran out of blocks")
-        try? await Task.sleep(nanoseconds: 600_000_000)
-        XCTAssertEqual(rt.player.document.id, "choir:pv-a", "not over the reader's words")
-        rt.log.emit(.phase(from: "candidate", to: "playing"))
-        let b = await poll(8) { rt.player.document.id == "choir:pv-b" || rt.player.document.id == "choir:pv-c" }
-        XCTAssertTrue(b, "the turn ended: it carries on")
-        rt.player.pause()
-    }
-
-    // P14: a story that fails to load is skipped once, and the reader is told.
-    func testP14_AFailedLoadIsSkippedOnceAndSaid() async {
-        let (app, rt) = await makeApp()
-        failing.write { $0 = ["b"] }
-        await app.play(route: "a")
-        let c = await poll(8) { rt.player.document.id == "choir:pv-c" }; XCTAssertTrue(c, "b was skipped")
-        XCTAssertTrue(app.playerView().message.contains("Story b"), "the reader is told which: \(app.playerView().message)")
-        XCTAssertTrue(app.playerView().message.contains("skipped"))
-        rt.player.pause()
-    }
-    func testP14_TwoFailuresInARowStop() async {
-        let (app, rt) = await makeApp()
-        failing.write { $0 = ["b", "c"] }
-        await app.play(route: "a")
-        let said = await poll(8) { app.playerView().message.contains("Stopping") }
-        XCTAssertTrue(said, app.playerView().message)
-        XCTAssertEqual(rt.player.document.id, "choir:pv-a")
-        XCTAssertEqual(resolved().filter { $0 == "b" || $0 == "c" }, ["b", "c"], "one try each, no more")
-        rt.player.pause()
-    }
-
-    // P15: a voice that makes no sound for any block is not a finished story.
-    func testP15_ASilentVoiceDoesNotRunThroughTheList() async {
-        let (app, rt) = await makeApp(voice: "empty-voice")
-        await app.play(route: "a")
-        let dry = await poll(5) { !rt.player.loopIsActive }; XCTAssertTrue(dry)
-        try? await Task.sleep(nanoseconds: 500_000_000)
-        XCTAssertEqual(rt.player.document.id, "choir:pv-a")
-        XCTAssertEqual(resolved(), ["a"], "no other story was fetched")
-        rt.player.pause()
-    }
-
-    // P7, P8: next and previous.
-    func testP7_P8_NextAndPreviousFollowTheList() async {
-        let (app, rt) = await makeApp(voice: "long-voice")                   // 3 s a block: the story stays put
-        await app.play(route: "a")
-        await app.moveStory(.previous)
-        XCTAssertEqual(rt.player.document.id, "choir:pv-a", "previous at the first story restarts it")
-        await app.moveStory(.next)
-        XCTAssertEqual(rt.player.document.id, "choir:pv-b")
-        await app.moveStory(.next)
-        XCTAssertEqual(rt.player.document.id, "choir:pv-c")
-        await app.moveStory(.next)
-        XCTAssertEqual(rt.player.document.id, "choir:pv-c", "next at the last story does nothing")
-        await app.moveStory(.previous)                                         // just begun: the story before
-        XCTAssertEqual(rt.player.document.id, "choir:pv-b")
-        rt.player.start(at: 1)                                                 // well into it
-        await app.moveStory(.previous)
-        XCTAssertEqual(rt.player.document.id, "choir:pv-b", "past the first seconds previous restarts this one")
-        XCTAssertEqual(rt.player.blockIndex, 0)
-        XCTAssertFalse(rt.player.userPaused)
-        rt.player.pause()
-    }
-
-    // P10: the paper's stack is the list when the host knows it.
-    func testP10_TheStackOrderWinsOverTheFrontList() async {
-        let (app, rt) = await makeApp(voice: "long-voice")
-        app.storyOrder = { ["c", "a", "b"].map { StoryRef(route: $0, title: "T") } }
-        await app.play(route: "c")
-        await app.moveStory(.next)
-        XCTAssertEqual(rt.player.document.id, "choir:pv-a", "the stack's order, not the front list's")
-        rt.player.pause()
-    }
-
-    // P9: text that is not in any list (mail's Read it to me): the buttons do not guess, they skip a passage.
-    func testP9_ATextOutsideTheListsIsNeverGuessed() async {
-        let (app, rt) = await makeApp(voice: "long-voice")
-        XCTAssertTrue(rt.player.speakText(address: "mail-1", text: "One.\n\nTwo.\n\nThree.", startNow: true))
-        await app.moveStory(.next)
-        XCTAssertEqual(rt.player.document.id, "text:mail-1")
-        XCTAssertEqual(rt.player.blockIndex, 1, "a passage, as the skip button does")
-        await app.ranDry(documentID: "text:mail-1", anyPlayed: true)
-        XCTAssertEqual(rt.player.document.id, "text:mail-1", "and nothing starts when it ends")
-        XCTAssertEqual(resolved(), [])
-        rt.player.pause()
-    }
-
-    // P10: the reader's Listen is a story of the list too.
-    func testP10_AListenedStoryHasItsListToo() async {
-        let (app, rt) = await makeApp(voice: "long-voice")
-        app.noteListening(address: "pub:b")
-        XCTAssertTrue(rt.player.speakText(address: "pub:b", text: "Text of b.", title: "Story b", startNow: true))
-        XCTAssertEqual(rt.player.document.id, "text:pub:b")
-        await app.moveStory(.next)
-        XCTAssertEqual(rt.player.document.id, "choir:pv-c")
-        rt.player.pause()
-    }
-
-    // P10: in a programme next and previous are segments.
-    func testP10_InAProgrammeTheStoryButtonsSkipSegments() async {
-        let (app, rt) = await makeApp(voice: "long-voice")
-        rt.player.setDocument(segmentedDocument(["One.", "Two.", "Three."]))
-        rt.player.start(at: 0); rt.player.play()
-        await app.moveStory(.next)
-        XCTAssertEqual(rt.player.currentSegmentIndex, 1)
-        await app.moveStory(.next)
-        await app.moveStory(.next)
-        XCTAssertEqual(rt.player.currentSegmentIndex, 2, "no wrap")
-        await app.moveStory(.previous)
-        XCTAssertEqual(rt.player.currentSegmentIndex, 1, "just begun: the segment before")
-        rt.player.pause()
-    }
-
-    // P11: the lock screen's buttons are the same moves.
-    func testP11_TheLockScreenButtonsTakeTheStoryMoves() async {
-        let (app, rt) = await makeApp(voice: "long-voice")
-        await app.play(route: "a")
-        XCTAssertEqual(rt.player.onNextTrack?(), true)
-        let b = await poll { rt.player.document.id == "choir:pv-b" }; XCTAssertTrue(b)
-        rt.player.setDocument(ProgrammeDocument(id: "text:mail-9", title: "M", blocks: [.speech(text: "x")]))
-        XCTAssertEqual(rt.player.onNextTrack?(), false, "no list speaks for it: the player's own skip")
-        rt.player.setDocument(segmentedDocument(["One.", "Two."]))
-        XCTAssertEqual(rt.player.onNextTrack?(), false, "a programme: the player's own segment skip")
-        _ = app
-        rt.player.pause()
-    }
-
-    // P23: a stretch ends: one more request, leaving out what was told; a stretch that adds nothing is not asked for again.
-    final class Told: StretchSource, @unchecked Sendable {
-        let lock = NSLock(); var calls: [(cause: String, skip: Set<String>)] = []; var script: [[IncomingSegment]]
-        init(_ s: [[IncomingSegment]]) { script = s }
-        func events(cause: String) async throws -> AsyncThrowingStream<StretchEvent, Error> { try await events(cause: cause, excludingRoutes: []) }
-        func events(cause: String, excludingRoutes: Set<String>) async throws -> AsyncThrowingStream<StretchEvent, Error> {
-            lock.lock(); let n = calls.count; calls.append((cause, excludingRoutes)); lock.unlock()
-            let segs = n < script.count ? script[n] : []
-            return AsyncThrowingStream { c in for s in segs { c.yield(.segment(s)) }; c.yield(.done); c.finish() }
-        }
-    }
-    func testP23_AnEndedStretchAsksOnceMoreAndStopsWhenNothingIsAdded() async {
-        func seg(_ n: Int, cite: String) -> IncomingSegment {
-            IncomingSegment(stretchID: "s\(n)", segmentID: "s\(n).s1", kind: "story", title: "S\(n)", text: "Words \(n).", cites: [ProgrammeCite(ref: "pub:\(cite)@v1", role: "subject", label: cite)], blockCount: nil)
-        }
-        let src = Told([[seg(1, cite: "a")], [seg(2, cite: "b")], []])
-        let (app, rt) = await makeApp()
-        app.stretchSource = nil                      // this one is about the registry's stage and its extend requests
-        let article = { @Sendable () async throws -> ProgrammeDocument in ProgrammeDocument(id: "choir:x", title: "X", blocks: [.speech(text: "x")]) }
-        rt.registry.register(.programme, RadioProgramme.self) { _ in RadioProgramme(source: src, fallback: article, firstSegmentDeadline: 5) }
-        await app.loadProgramme()
-        rt.player.play()
-        let two = await poll(8) { rt.player.document.segments.count == 2 }; XCTAssertTrue(two, "the second stretch was appended and played on")
-        let three = await poll(8) { src.calls.count == 3 }; XCTAssertTrue(three)
-        try? await Task.sleep(nanoseconds: 800_000_000)
-        XCTAssertEqual(src.calls.map(\.cause), ["open", "extend", "extend"], "and no more once a stretch adds nothing")
-        XCTAssertEqual(src.calls[1].skip, ["a"]); XCTAssertEqual(src.calls[2].skip, ["a", "b"])
-        rt.player.pause()
-    }
 }
 
 /// A programme route with no stretch (404): Play falls to the story plain, and asks for nothing else.

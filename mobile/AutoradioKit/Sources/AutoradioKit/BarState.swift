@@ -275,7 +275,7 @@ public final class BarTracker: @unchecked Sendable {
         return sentences.count - 1
     }
 
-    public func radioInfo(player p: ChoirPlayerView, snapshot s: LabSnapshot, document d: ProgrammeDocument, route: String, now: Date = Date()) -> RadioInfo {
+    public func radioInfo(player p: ChoirPlayerView, snapshot s: LabSnapshot, document d: ProgrammeDocument, route: String, nextTitle: String = "", now: Date = Date()) -> RadioInfo {
         lock.lock(); defer { lock.unlock() }
         var r = RadioInfo()
         let bp = clockProgress(s, doc: d, now: now)
@@ -283,14 +283,13 @@ public final class BarTracker: @unchecked Sendable {
         let idx = n == 0 ? 0 : min(max(s.blockIndex, 0), n - 1)
         r.title = d.title; r.source = route
         r.index = idx; r.count = n
-        r.position = n == 0 ? "" : "\(idx + 1) of \(n)"
-        // A programme (station P1): the header, the position and the list are the segments; the passage below is still the block.
+        // No "N of M": the bar shows what is on air and its progress. The entry on air is one segment: its title, kind and sources head the player.
+        r.position = ""
         let seg = n == 0 ? nil : d.segmentIndex(containingBlock: idx)
         if let si = seg {
             let np = ProgrammeNowPlaying.describe(document: d, blockIndex: idx)
             r.title = np.title; r.kind = np.kind; r.sources = np.sources
-            r.index = si; r.count = d.segments.count
-            r.position = "\(si + 1) of \(d.segments.count)"
+            r.index = 0; r.count = 1
         }
         r.playing = p.playing; r.paused = n > 0 && !p.playing
         r.level = s.level; r.speed = Self.speedName(speed); r.speedValue = speed
@@ -307,19 +306,12 @@ public final class BarTracker: @unchecked Sendable {
             let text = b.spokenText ?? b.summary
             r.sentences = Self.sentences(text)
             r.sentenceIndex = Self.sentenceIndex(r.sentences, progress: bp)
-            if let si = seg {
-                // The programme list is the segments: a window of at most 40 that holds the current one.
-                if si + 1 < d.segments.count { r.next = d.segments[si + 1].title }
-                let m = d.segments.count
-                let lo = max(0, min(si - 5, m - 40)), hi = min(m, lo + 40)
-                for i in lo..<hi {
-                    var it = RadioItem()
-                    it.i = i; it.current = i == si; it.done = i < si; it.text = d.segments[i].title; it.kind = "speech"
-                    r.items.append(it)
-                }
+            if seg != nil {
+                // The next is the run sheet's next entry, never the paper's neighbour; there is no list of segments to jump in.
+                r.next = nextTitle
                 return r
             }
-            if idx + 1 < n { r.next = d.blocks[idx + 1].spokenText ?? d.blocks[idx + 1].summary }
+            r.next = nextTitle
             // A window of at most 40 items that always holds the current block.
             let lo = max(0, min(idx - 5, n - 40)), hi = min(n, lo + 40)
             for i in lo..<hi {

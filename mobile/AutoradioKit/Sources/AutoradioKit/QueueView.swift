@@ -8,9 +8,8 @@ public struct QueueRow: Codable, Sendable, Equatable {
     public var kind = ""
     public var detail = ""
     public var id = ""
-    public var note = ""       // a quiet caption when the DJ changed the order ("DJ moved this up")
-    public var by = ""         // who put it there, as a sentence: "Added by you", "Added by the DJ", "From the station"
-    public var programme = false   // the programme's own coming segment (added_by: programme): not in the queue, not removable
+    public var note = ""       // a quiet caption: a transition written for other neighbours says so
+    public var by = ""         // who put it there, as a sentence: "Added by you", "From the desk", "From the phone"
     public init() {}
 }
 
@@ -28,7 +27,6 @@ public struct QueueInfo: Codable, Sendable, Equatable {
     public var remainingLabel = ""
     public var fraction = 0.0          // 0...1 for the scrubber
     public var upcoming: [QueueRow] = []
-    public var coming: [QueueRow] = []   // the DJ's coming segments (up to three), shown after the queued items
     public var message = ""
     public var webUrl = ""             // the page the bar opened ("" none)
     public var webHost = ""
@@ -44,31 +42,30 @@ public enum QueueClock {
     }
 }
 
-extension PlayQueue {
-    public static let maxComing = 3
+extension RunSheetPlayer {
+    /// Up next is the first three entries ahead on the run sheet (`ahead(limit: 3)`).
+    public static let upNextLimit = 3
     public func info(clips: ClipStore = .shared) -> QueueInfo {
         var q = QueueInfo()
-        q.current = current?.displayTitle ?? ""
-        q.currentKind = current?.kind ?? ""
-        q.audio = current?.isRemoteAudio ?? false
+        let air = store.onAir()
+        q.current = air?.displayTitle ?? ""
+        q.currentKind = air?.kindWord ?? ""
+        q.audio = isRemote
         q.playing = q.audio && !paused
-        q.clip = current?.isClip ?? false
+        q.clip = audio?.isClip ?? false
         q.keepTitle = keepListeningTitle ?? ""
-        q.canOpenEpisode = PodcastBridge.target(of: current, store: clips) != nil
+        q.canOpenEpisode = PodcastBridge.target(of: audio, store: clips) != nil
         if let p = remotePosition() {
             q.elapsed = p.elapsed; q.duration = p.duration ?? 0
             q.elapsedLabel = QueueClock.label(p.elapsed)
             if let d = p.duration { q.remainingLabel = "-" + QueueClock.label(max(0, d - p.elapsed)); q.fraction = min(1, max(0, p.elapsed / d)) }
         }
-        q.upcoming = entries.enumerated().map { i, e in
-            var r = QueueRow(); r.i = i; r.title = e.item.displayTitle; r.kind = e.item.kind; r.id = e.id
-            if case .audio(_, _, let show, _, _, _) = e.item { r.detail = show }
-            r.note = e.note
-            r.by = e.addedBy == .reader ? "Added by you" : (e.addedBy == .dj ? "Added by the DJ" : "From the station")
+        q.upcoming = store.ahead(limit: Self.upNextLimit).enumerated().map { i, e in
+            var r = QueueRow(); r.i = i; r.title = e.displayTitle; r.kind = e.kindWord; r.id = e.id
+            if let a = e.audioSpec { r.detail = a.show }
+            if store.isStale(e) { r.note = "Written for other neighbours" }
+            r.by = e.byWords
             return r
-        }
-        q.coming = (programmeComing?() ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.prefix(Self.maxComing).map { t in
-            var r = QueueRow(); r.i = -1; r.title = t; r.kind = "Programme"; r.by = "The programme's own"; r.programme = true; return r
         }
         q.message = message
         return q
@@ -76,10 +73,10 @@ extension PlayQueue {
 
     /// The remote audio shown as the radio: the bar's line, the player's title and position, and its play button follow the audio.
     public func overlay(_ r: RadioInfo) -> RadioInfo {
-        guard case .audio(_, let title, let show, _, _, _)? = current else { return r }
+        guard isRemote, let a = audio else { return r }
         var o = r
         let i = info()
-        o.title = title; o.kind = show.isEmpty ? i.currentKind.uppercased() : show; o.source = ""
+        o.title = a.title; o.kind = a.show.isEmpty ? i.currentKind.uppercased() : a.show; o.source = ""
         o.position = i.duration > 0 ? "\(i.elapsedLabel) of \(QueueClock.label(i.duration))" : i.elapsedLabel
         o.playing = i.playing; o.paused = !i.playing
         o.progress = i.fraction; o.blockProgress = i.fraction
@@ -88,7 +85,7 @@ extension PlayQueue {
         return o
     }
     public func overlay(_ b: BarInfo) -> BarInfo {
-        guard current?.isRemoteAudio == true, b.state == "idle" || b.state == "playing" || b.state == "paused" else { return b }
+        guard isRemote, b.state == "idle" || b.state == "playing" || b.state == "paused" else { return b }
         var o = b
         let i = info()
         o.state = i.playing ? "playing" : "paused"; o.text = i.current; o.playing = i.playing; o.progress = i.fraction
@@ -113,17 +110,17 @@ public final class EmbeddedPage: @unchecked Sendable {
     }
 }
 
-/// The item a screen's "Play" or "Add to queue" means. `kind` is "story" (ref a route), "page" (ref an address).
+/// The entry a screen's "Play" or "Add to queue" means. `kind` is "story" (ref a route), "page" (ref an address).
 public enum QueueRequest {
-    @MainActor public static func item(kind: String, ref: String, title: String) -> PlayItem? {
+    @MainActor public static func entry(kind: String, ref: String, title: String) -> RunSheetEntry? {
         switch kind {
         case "story":
             let r = ref.hasPrefix("pub:") ? String(ref.dropFirst(4)) : ref
-            return r.isEmpty ? nil : .story(route: r, title: title)
+            return r.isEmpty ? nil : .paperStory(route: r, title: title)
         case "page":
             guard case .inApp = SourceLink.route(ref), let c = EmbeddedPage.shared.current(for: ref) else { return nil }
             let t = title.isEmpty ? c.title : (c.title.isEmpty ? title : c.title)
-            return .page(url: c.url, title: t.isEmpty ? (c.url.host ?? "") : t)
+            return .webPage(url: c.url, title: t.isEmpty ? (c.url.host ?? "") : t)
         default: return nil
         }
     }

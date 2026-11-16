@@ -98,17 +98,6 @@ public enum StretchCandidates {
             return c.json
         }
     }
-
-    /// The routes a document's segments have already cited, from refs like `pub:<route>@v<n>`.
-    public static func routes(citedIn doc: ProgrammeDocument) -> Set<String> {
-        var out = Set<String>()
-        for s in doc.segments { for c in s.cites where c.ref.hasPrefix("pub:") {
-            let rest = c.ref.dropFirst(4)
-            out.insert(String(rest.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""))
-        } }
-        out.remove("")
-        return out
-    }
 }
 
 extension ChoirFront {

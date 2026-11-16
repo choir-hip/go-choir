@@ -96,34 +96,3 @@ public enum ChoirFront {
         return ProgrammeDocument(id: id, title: title, blocks: blocks.map { .speech(text: $0) })
     }
 }
-
-/// The public front page as a programme: the picked story (param `route`), or the first story with text.
-public final class ChoirFrontProgramme: Programme, @unchecked Sendable {
-    public static let stageID = "choir-front"
-    public static var descriptor: StageDescriptor {
-        StageDescriptor(displayName: "Choir front page", summary: "Reads a story from the public paper, block by block.",
-                        params: [.text("baseURL", "Base URL", ChoirEnvironment.defaultBaseURL),
-                                 .text("route", "Story route", "", note: "empty plays the newest story with text"),
-                                 .text("section", "Section", "", note: "e.g. world, tech_ai; empty for all"),
-                                 .number("maxBlocks", "Most blocks", 200, 5, 600)],
-                        needsNetwork: true)
-    }
-    let baseURL: String, route: String, section: String, maxBlocks: Int
-    public init(_ p: StageParams) {
-        baseURL = p.string("baseURL", ChoirEnvironment.defaultBaseURL); route = p.string("route"); section = p.string("section")
-        maxBlocks = p.int("maxBlocks", 200)
-    }
-    public func load() async throws -> ProgrammeDocument {
-        let client = ChoirEnvironment.shared.client(baseURL: baseURL)
-        if !route.isEmpty { return try await ChoirFront.load(route: route, client: client, maxBlocks: maxBlocks) }
-        let list = try await ChoirFront.stories(client: client, limit: 12, section: section)
-        if list.isEmpty { throw ChoirError.empty("the front page") }
-        var lastError: Error = ChoirError.empty("the front page")
-        for s in list {
-            do { return try await ChoirFront.load(route: s.route, client: client, maxBlocks: maxBlocks) }
-            catch is CancellationError { throw CancellationError() }
-            catch { lastError = error }   // unpublished since listed, or no text: try the next
-        }
-        throw lastError
-    }
-}

@@ -191,10 +191,10 @@ final class ChoirClientTests: XCTestCase {
         }
     }
 
-    func testFrontProgrammeLoadsBlocksWithoutAKey() async throws {
+    func testFrontStoryLoadsBlocksWithoutAKey() async throws {
         keys.delete(KeyAccount.apiKey)
         StubProtocol.handler = frontHandler
-        let doc = try await ChoirFrontProgramme(StageParams()).load()
+        let doc = try await ChoirFront.load(route: "/p/harbour", client: env.client())
         XCTAssertEqual(doc.blocks.map { $0.spokenText ?? "" }, ["Harbour", "The cranes moved inland.", "Residents said the quiet was strange. Then they stopped noticing it."])
         XCTAssertEqual(env.playing(doc.id)?.publicationVersionID, "pv-1")
         XCTAssertTrue(StubProtocol.seen.allSatisfy { $0.headers["authorization"] == nil })
@@ -202,14 +202,15 @@ final class ChoirClientTests: XCTestCase {
 
     func testEmptyFrontPage() async {
         StubProtocol.handler = { _ in .init(json: ["stories": []]) }
-        do { _ = try await ChoirFrontProgramme(StageParams()).load(); XCTFail() } catch { XCTAssertEqual(error as? ChoirError, .empty("the front page")) }
+        let list = try? await ChoirFront.stories(client: env.client())
+        XCTAssertEqual(list?.isEmpty, true)
     }
 
     // MARK: Desk
 
     func testDeskForksThenFollowsStreamAndSpeaksOnlyTheDesksRevision() async throws {
         StubProtocol.handler = frontHandler
-        let doc = try await ChoirFrontProgramme(StageParams()).load()
+        let doc = try await ChoirFront.load(route: "/p/harbour", client: env.client())
         nonisolated(unsafe) var streamPolls = 0
         StubProtocol.handler = { req in
             switch req.path {

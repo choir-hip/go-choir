@@ -259,25 +259,24 @@ final class SegmentedDocumentTests: XCTestCase {
         XCTAssertEqual(c.artist, "A story")
     }
 
-    func testF19_RadioInfoListsSegmentsAndNeverRawRefs() {
+    func testF19_RadioInfoNamesTheEntryOnAirHasNoNOfMAndNeverRawRefs() {
         var d = segmentedDocument(["One.\n\nTwo.", "Three."], kinds: ["story", "headlines"])
         d.segments[0].cites = [ProgrammeCite(ref: "pub:harbour-1", role: "subject", label: "The harbour story"), ProgrammeCite(ref: "pub:no-label", role: "quoted", label: "")]
         var snap = LabSnapshot(); snap.blockIndex = 1; snap.blockCount = 3; snap.running = true
         var pv = ChoirPlayerView(); pv.signedIn = true; pv.playing = true
         let tr = BarTracker()
-        let r = tr.radioInfo(player: pv, snapshot: snap, document: d, route: "", now: Date())
+        let r = tr.radioInfo(player: pv, snapshot: snap, document: d, route: "", nextTitle: "The next entry", now: Date())
         XCTAssertEqual(r.title, "Title 0"); XCTAssertEqual(r.kind, "Story")
         XCTAssertEqual(r.sources, ["The harbour story"])
-        XCTAssertEqual(r.position, "1 of 2"); XCTAssertEqual(r.count, 2); XCTAssertEqual(r.index, 0)
-        XCTAssertEqual(r.items.map(\.text), ["Title 0", "Title 1"], "the programme list is segments, not blocks")
-        XCTAssertEqual(r.items.map(\.current), [true, false])
-        XCTAssertEqual(r.next, "Title 1")
+        XCTAssertEqual(r.position, "", "no \"N of M\": the bar shows what is on air and its progress"); XCTAssertEqual(r.count, 1); XCTAssertEqual(r.index, 0)
+        XCTAssertTrue(r.items.isEmpty, "there is no list of segments to jump in: the next is the run sheet's")
+        XCTAssertEqual(r.next, "The next entry", "the run sheet's next entry, never the next segment of a stretch")
         XCTAssertEqual(r.sentences, ["Two."], "the passage being read is still the block")
         XCTAssertFalse(String(data: try! JSONEncoder().encode(r), encoding: .utf8)!.contains("pub:"), "no raw ref reaches the screen")
         // one article: unchanged
         let plain = ProgrammeDocument(id: "choir:x", title: "A story", blocks: [.speech(text: "One."), .speech(text: "Two.")])
         let p = tr.radioInfo(player: pv, snapshot: snap, document: plain, route: "/p/x", now: Date())
-        XCTAssertEqual(p.title, "A story"); XCTAssertEqual(p.kind, ""); XCTAssertEqual(p.sources, []); XCTAssertEqual(p.count, 2); XCTAssertEqual(p.position, "2 of 2")
+        XCTAssertEqual(p.title, "A story"); XCTAssertEqual(p.kind, ""); XCTAssertEqual(p.sources, []); XCTAssertEqual(p.count, 2); XCTAssertEqual(p.position, "")
     }
 }
 
@@ -486,130 +485,5 @@ final class SegmentPlayerTests: XCTestCase {
         p.setDocument(ProgrammeDocument(id: "choir:x", title: "T", blocks: [.speech(text: "Other.")]))
         XCTAssertEqual(s.events.last?.kind, .superseded)
         p.pause()
-    }
-}
-
-// MARK: F20-F21 the stage
-
-final class RadioProgrammeTests: XCTestCase {
-    var env: ChoirEnvironment!
-    override func setUp() {
-        let cfg = URLSessionConfiguration.ephemeral
-        cfg.protocolClasses = [StubProtocol.self]
-        env = ChoirEnvironment.shared
-        env.keys = InMemoryKeyStore([KeyAccount.apiKey: secretKey, KeyAccount.computerID: "comp-1"])
-        env.log = EventLog(clock: LabClock()); env.session = URLSession(configuration: cfg)
-        StubProtocol.seen = []
-    }
-    override func tearDown() { env.session = .shared }
-
-    func front(_ req: StubProtocol.Req) -> StubProtocol.Resp {
-        switch req.path {
-        case "/api/platform/publications/front":
-            return .init(json: ["stories": [["title": "Harbour", "dek": "d", "route": ["bare": "/p/harbour"], "section": "world", "words": 40]]])
-        case "/api/platform/publications/resolve":
-            return .init(json: ["publication": ["title": "Harbour"], "version": ["id": "pv-1", "manifest_hash": "mh-1"], "payload": ["text": "The cranes moved inland."]])
-        default: return .init(status: 404, json: ["error": "nope"])
-        }
-    }
-    func sse(_ segments: [(String, String)], done: Bool = true) -> String {
-        ": autoradio\n\nevent: stretch\ndata: {\"stretch_id\":\"st-1\"}\n\n"
-        + segments.enumerated().map { i, s in "event: segment\ndata: " + segmentLine(["stretch_id": "st-1", "segment_id": "st-1/\(i)", "kind": "story", "title": s.0, "text": s.1, "block_count": SplitBlocks.split(s.1).count]) + "\n\n" }.joined()
-        + (done ? "event: done\ndata: {\"stretch_id\":\"st-1\"}\n\n" : "")
-    }
-    func player(_ doc: ProgrammeDocument) -> ProgrammePlayer {
-        let r = StageRegistry.builtIn(); var cfg = StageRegistry.defaultConfiguration(); cfg.set(.voice, .init(id: "stub-voice"))
-        r.register(.voice, StubVoice.self) { StubVoice($0) }
-        return ProgrammePlayer(audio: virtualAudio(), registry: r, log: EventLog(clock: LabClock()), configuration: cfg, document: doc)
-    }
-
-    func testF20_NoRouteMeansTheArticleExactlyAsBefore() async throws {
-        for status in [404, 503, 401] {
-            StubProtocol.handler = { req in req.path == "/api/autoradio/programme" ? .init(status: status, json: ["error": "x"]) : self.front(req) }
-            let opened = try await RadioProgramme(StageParams()).open()
-            XCTAssertTrue(opened.usedFallback, "\(status)")
-            XCTAssertEqual(opened.document.id, "choir:pv-1"); XCTAssertEqual(opened.document.segments, [])
-            XCTAssertEqual(opened.document.blocks.map { $0.spokenText ?? "" }, ["Harbour.", "The cranes moved inland."])
-            XCTAssertNil(opened.follow)
-        }
-        // and as a plain Programme stage
-        let doc = try await RadioProgramme(StageParams()).load()
-        XCTAssertEqual(doc.id, "choir:pv-1")
-    }
-
-    func testF20_AStreamWithNoSpeakableSegmentFallsBack() async throws {
-        StubProtocol.handler = { req in req.path == "/api/autoradio/programme" ? .init(headers: ["Content-Type": "text/event-stream"], raw: self.sse([("T", "  ")])) : self.front(req) }
-        let opened = try await RadioProgramme(StageParams()).open()
-        XCTAssertTrue(opened.usedFallback)
-    }
-
-    func testTheRouteStretchPlaysAndTheRestFollows() async throws {
-        StubProtocol.handler = { req in req.path == "/api/autoradio/programme" ? .init(headers: ["Content-Type": "text/event-stream"], raw: self.sse([("One", "First words."), ("Two", "Second words.\n\nMore."), ("Three", "Third.")])) : self.front(req) }
-        let opened = try await RadioProgramme(StageParams()).open()
-        XCTAssertFalse(opened.usedFallback)
-        XCTAssertEqual(opened.document.id, "radio:st-1")
-        XCTAssertEqual(opened.document.segments.map(\.title), ["One"], "it plays as soon as the first segment is here")
-        let req = try XCTUnwrap(StubProtocol.seen.first { $0.path == "/api/autoradio/programme" })
-        XCTAssertEqual(req.method, "POST"); XCTAssertEqual(req.body["cause"] as? String, "open")
-        XCTAssertFalse((req.body["request_id"] as? String ?? "").isEmpty)
-        let p = player(opened.document)
-        await opened.follow?(p)
-        XCTAssertEqual(p.document.segments.map(\.title), ["One", "Two", "Three"])
-        XCTAssertEqual(p.document.segments.map(\.firstBlock), [0, 1, 3])
-        XCTAssertEqual(p.document.segments.map(\.serverBlockCount), [1, 2, 1])
-    }
-
-    /// A source the test drives by hand.
-    final class Manual: StretchSource, @unchecked Sendable {
-        var cont: AsyncThrowingStream<StretchEvent, Error>.Continuation!
-        func events(cause: String) async throws -> AsyncThrowingStream<StretchEvent, Error> { AsyncThrowingStream { self.cont = $0 } }
-    }
-    func incoming(_ n: Int) -> StretchEvent { .segment(IncomingSegment(stretchID: "m", segmentID: "m/\(n)", kind: "story", title: "S\(n)", text: "Words \(n).", cites: [], blockCount: nil)) }
-
-    func testF20_AStretchThatFailsAfterSomeSegmentsKeepsThemAndOneThatFailsAtOnceFallsBack() async throws {
-        let src = Manual()
-        let stage = RadioProgramme(source: src, fallback: { throw ChoirError.empty("x") })
-        let opening = Task { try await stage.open() }
-        _ = await poll { src.cont != nil }
-        src.cont.yield(incoming(0))
-        let opened = try await opening.value
-        XCTAssertFalse(opened.usedFallback)
-        let p = player(opened.document)
-        src.cont.yield(incoming(1))
-        src.cont.finish(throwing: URLError(.networkConnectionLost))        // dropped with no done
-        await opened.follow?(p)
-        XCTAssertEqual(p.document.segments.count, 2, "what arrived is kept")
-        // a stream that fails before any segment: the article
-        let src2 = Manual()
-        let stage2 = RadioProgramme(source: src2, fallback: { ProgrammeDocument(id: "choir:a", title: "A", blocks: [.speech(text: "Article.")]) })
-        let opening2 = Task { try await stage2.open() }
-        _ = await poll { src2.cont != nil }
-        src2.cont.finish(throwing: URLError(.networkConnectionLost))
-        let o2 = try await opening2.value
-        XCTAssertTrue(o2.usedFallback); XCTAssertEqual(o2.document.id, "choir:a")
-    }
-
-    func testF21_AReloadStopsTheOldFollowerAndALateSegmentNeverLands() async throws {
-        let src = Manual()
-        let stage = RadioProgramme(source: src, fallback: { throw ChoirError.empty("x") })
-        let opening = Task { try await stage.open() }
-        _ = await poll { src.cont != nil }
-        src.cont.yield(incoming(0))
-        let opened = try await opening.value
-        let p = player(opened.document)
-        let follower = Task { await opened.follow?(p) }
-        src.cont.yield(incoming(1))
-        let ok8 = await poll { p.document.segments.count == 2 }; XCTAssertTrue(ok8)
-        follower.cancel()                                   // a reload cancels it
-        _ = await follower.value
-        src.cont.yield(incoming(2))
-        try? await Task.sleep(nanoseconds: 300_000_000)
-        XCTAssertEqual(p.document.segments.count, 2, "nothing lands after the cancel")
-        // and a new document refuses what an old follower would send
-        p.setDocument(ProgrammeDocument(id: "choir:new", title: "T", blocks: [.speech(text: "New.")]))
-        let late = SegmentPrep.prepare(IncomingSegment(stretchID: "m", segmentID: "m/3", kind: "story", title: "Late", text: "Late.", cites: [], blockCount: nil))!
-        XCTAssertFalse(p.appendSegment(late, toDocument: "radio:m"))
-        XCTAssertEqual(p.document.segments, [])
-        src.cont.finish()
     }
 }

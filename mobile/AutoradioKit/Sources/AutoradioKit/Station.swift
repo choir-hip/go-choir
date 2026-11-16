@@ -4,13 +4,13 @@ import AVFoundation
 #endif
 
 /// The station: what plays when Autoradio opens. One station per user for now; later stations become a parameter here.
-/// The queue's saved current item resumes from its position; with none, the DJ's stretch starts (the same entry Play uses).
+/// The phone always speaks first: it places its own opening on the run sheet and plays it at once (the same entry Play uses).
 @MainActor public final class Station {
     public static let shared = Station()
 
     public enum Reason: String, Sendable { case launch, foreground }
 
-    /// The DJ's stretch: the entry Play uses today (the host sets it: `ChoirApp.startRadio`).
+    /// Opens the radio: the opening, then the desk's entries (the host sets it: `ChoirApp.startRadio`).
     public var startDJ: (() async -> Void)?
     /// Onboarding is complete (the host sets it). Before then nothing starts by itself.
     public var isReady: () -> Bool = { true }
@@ -22,7 +22,7 @@ import AVFoundation
         return false
         #endif
     }
-    public var queue: PlayQueue = .shared
+    public var player: RunSheetPlayer = .shared
     public private(set) var started = false
     public private(set) var lastReason: Reason?
 
@@ -35,8 +35,7 @@ import AVFoundation
         if reason == .foreground, started { return false }
         guard isReady(), !otherAudioPlaying() else { return false }
         started = true; lastReason = reason
-        if queue.hasRestoredCurrent { queue.resume(); return true }
-        if queue.current != nil { return false }                // already playing or paused by the reader this launch
+        if player.store.onAir() != nil { return false }         // already playing or paused by the reader this launch
         await startDJ?()
         return true
     }

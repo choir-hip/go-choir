@@ -6,13 +6,17 @@ import XCTest
 // The failure list is mobile/README.md, "Player controls", items 19 to 24.
 
 extension PlayerAppTests {
+    /// Make the request and read it to its end.
+    func drain(_ s: RouteStretchSource, cause: String = "open") async {
+        if let st = try? await s.events(cause: cause) { do { for try await _ in st {} } catch {} }
+    }
     // P19, P22: the programme request carries the stories; with none it is not made.
     func testP19_TheProgrammeRequestCarriesTheFrontListWithTextOnTheFirstTen() async throws {
         StubProtocol.handler = { [self] req in
             if req.path == "/api/autoradio/programme" { return .init(headers: ["Content-Type": "text/event-stream"], raw: ": autoradio\n\nevent: done\ndata: {}\n\n") }
             return front(req)
         }
-        _ = try? await RadioProgramme(StageParams()).open()
+        await drain(RouteStretchSource(baseURL: ChoirEnvironment.defaultBaseURL))
         let req = try XCTUnwrap(programmeCalls.first)
         let cands = try XCTUnwrap(req.body["candidates"] as? [[String: Any]])
         XCTAssertEqual(cands.compactMap { $0["route"] as? String }, ["a", "b", "c"], "the paper's weight first")
@@ -27,17 +31,17 @@ extension PlayerAppTests {
             if req.path == "/api/autoradio/programme" { return .init(headers: ["Content-Type": "text/event-stream"], raw: "event: done\ndata: {}\n\n") }
             return front(req)
         }
-        _ = try? await RadioProgramme(StageParams()).open()
+        await drain(RouteStretchSource(baseURL: ChoirEnvironment.defaultBaseURL))
         let cands = try XCTUnwrap(programmeCalls.first?.body["candidates"] as? [[String: Any]])
         XCTAssertEqual(cands.count, 3)
         XCTAssertNil(cands[1]["text"]); XCTAssertNotNil(cands[0]["text"]); XCTAssertNotNil(cands[2]["text"])
     }
-    func testP22_NoStoriesNoRequestAndTheFrontPageStoryPlaysAsBefore() async throws {
+    func testP22_NoStoriesNoRequest() async throws {
         StubProtocol.handler = { req in
             if req.path == "/api/platform/publications/front" { return .init(json: ["stories": []]) }
             return .init(status: 404, json: ["error": "nope"])
         }
-        do { _ = try await RadioProgramme(StageParams()).open(); XCTFail("nothing to play") } catch {}
+        do { _ = try await RouteStretchSource(baseURL: ChoirEnvironment.defaultBaseURL).events(cause: "open"); XCTFail("nothing to tell") } catch {}
         XCTAssertEqual(programmeCalls.count, 0, "a request with no candidates only buys station breaks: it is not made")
     }
 
@@ -50,34 +54,6 @@ extension PlayerAppTests {
     }
     func spoken(_ d: ProgrammeDocument) -> String { d.blocks.compactMap(\.spokenText).joined(separator: " ").lowercased() }
 
-    func testP24_StartingTheRadioWithStoriesInThePaperNeverSaysThereIsNothing() async {
-        let line = "You're with the Autoradio desk, and there's nothing to report now, so I'm just going to let the music play."
-        StubProtocol.handler = { [self] req in
-            req.path == "/api/autoradio/programme" ? .init(headers: ["Content-Type": "text/event-stream"], raw: idents([line])) : front(req)
-        }
-        let (app, rt) = await makeApp()
-        app.stretchSource = nil                      // the real programme route, here stubbed
-        XCTAssertEqual(rt.player.document.id, "fixture-1", "the player starts with the Lab's test edition")
-        await app.startRadio()
-        XCTAssertEqual(rt.player.document.id, "choir:pv-a", "the paper's first story plays, not the fixture and not a station break")
-        XCTAssertFalse(spoken(rt.player.document).contains("nothing to report")); XCTAssertFalse(spoken(rt.player.document).contains("music play"))
-        XCTAssertFalse(rt.player.userPaused)
-        XCTAssertEqual(programmeCalls.count, 1); XCTAssertEqual((programmeCalls[0].body["candidates"] as? [[String: Any]])?.count, 3, "and the request carried the stories")
-        rt.player.pause()
-    }
-    func testP24_BreaksAtTheHeadWaitForTheFirstStoryAndThenPlayBeforeIt() async throws {
-        let raw = idents(["You are with the Autoradio desk."]) .replacingOccurrences(of: "event: done", with: "event: segment\ndata: " + segmentLine(["stretch_id": "st-9", "segment_id": "st-9.s2", "kind": "story", "title": "Harbour", "text": "The cranes moved inland."]) + "\n\nevent: done")
-        StubProtocol.handler = { [self] req in req.path == "/api/autoradio/programme" ? .init(headers: ["Content-Type": "text/event-stream"], raw: raw) : front(req) }
-        let opened = try await RadioProgramme(StageParams()).open()
-        XCTAssertFalse(opened.usedFallback)
-        XCTAssertEqual(opened.document.segments.map(\.kind), ["ident", "story"])
-    }
-    func testP24_AStretchOfOnlyBreaksIsNotAProgramme() async throws {
-        StubProtocol.handler = { [self] req in req.path == "/api/autoradio/programme" ? .init(headers: ["Content-Type": "text/event-stream"], raw: idents(["Nothing to report.", "Back soon."])) : front(req) }
-        let opened = try await RadioProgramme(StageParams()).open()
-        XCTAssertTrue(opened.usedFallback, "the story plays instead")
-        XCTAssertEqual(opened.document.id, "choir:pv-a")
-    }
     func testP24_WhenThePaperCannotBeReachedItIsSaidPlainly() {
         XCTAssertTrue(ChoirApp.plain(stage: "programme", message: "network connection lost").contains("can't reach the paper"))
     }
