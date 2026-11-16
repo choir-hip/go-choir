@@ -19,6 +19,7 @@ const (
 	PodcastTranscriptsPath = "/internal/platform/operator/podcasts/transcripts"
 	PodcastClipsWritePath  = "/internal/platform/operator/podcasts/clips"
 	PodcastWorkerFeedsPath = "/internal/platform/operator/podcasts/feeds"
+	PodcastFeedsListedPath = "/internal/platform/operator/podcasts/feeds/listed"
 	PodcastFeedsPath       = "/internal/platform/podcast-feeds"
 	PodcastPopularPath     = "/internal/platform/podcast-popular"
 	PodcastTranscriptPath  = "/internal/platform/podcast-transcript"
@@ -154,12 +155,12 @@ func (h *Handler) HandlePodcastTranscripts(w http.ResponseWriter, r *http.Reques
 	if !decodePodcastBody(w, r, &t) {
 		return
 	}
-	n, err := h.service.PutPodcastTranscript(r.Context(), t)
+	n, kept, err := h.service.PutPodcastTranscript(r.Context(), t)
 	if err != nil {
 		podcastFail(w, "transcript put", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]int{"segments": n})
+	writeJSON(w, http.StatusOK, map[string]any{"segments": n, "kept": kept})
 }
 
 // HandlePodcastClipsWrite serves PUT of clips.
@@ -198,6 +199,10 @@ func (h *Handler) HandlePodcastFeeds(w http.ResponseWriter, r *http.Request) {
 		reporter = ""
 	}
 	resp, err := h.service.ReportPodcastFeeds(r.Context(), reporter, req)
+	if errors.Is(err, ErrPodcastSignInRequired) {
+		writeJSON(w, http.StatusUnauthorized, apiError{Error: err.Error()})
+		return
+	}
 	if err != nil {
 		podcastFail(w, "feeds report", err)
 		return
@@ -225,7 +230,11 @@ func (h *Handler) HandlePodcastTranscript(w http.ResponseWriter, r *http.Request
 		return
 	}
 	q := r.URL.Query()
-	resp, err := h.service.GetPodcastTranscriptFor(r.Context(), q.Get("feed"), q.Get("guid"))
+	reporter := strings.TrimSpace(r.Header.Get(PodcastReporterHeader))
+	if len(reporter) > 64 {
+		reporter = ""
+	}
+	resp, err := h.service.GetPodcastTranscriptFor(r.Context(), q.Get("feed"), q.Get("guid"), reporter)
 	if err != nil {
 		podcastFail(w, "transcript read", err)
 		return
@@ -248,4 +257,25 @@ func (h *Handler) HandlePodcastWorkerFeeds(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"feeds": list})
+}
+
+// HandlePodcastFeedsListed serves PUT of the operator's list of public feeds.
+func (h *Handler) HandlePodcastFeedsListed(w http.ResponseWriter, r *http.Request) {
+	if h.podcastRefuse(w, r, http.MethodPut) {
+		return
+	}
+	var req struct {
+		Feeds  []PodcastFeedListing `json:"feeds"`
+		Listed *bool                `json:"listed"`
+	}
+	if !decodePodcastBody(w, r, &req) {
+		return
+	}
+	listed := req.Listed == nil || *req.Listed
+	n, err := h.service.SetPodcastFeedsListed(r.Context(), req.Feeds, listed)
+	if err != nil {
+		podcastFail(w, "feeds listed", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"feeds": n})
 }

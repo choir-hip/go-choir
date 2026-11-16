@@ -41,10 +41,8 @@ type Service struct {
 	writeMu       sync.Mutex
 	// podcastCache is the public clips read's short-lived join (podcast.go).
 	podcastCache podcastReadCache
-	// podcastFeedMu serialises feed reports; podcastNewFeeds bounds the new
-	// feeds strangers can add in a day (podcast_feeds.go).
-	podcastFeedMu   sync.Mutex
-	podcastNewFeeds podcastDayCounter
+	// podcastFeedMu serialises feed reports (podcast_feeds.go).
+	podcastFeedMu sync.Mutex
 	// The notice sequence (publication_links.go): seeded from storage before
 	// the first one is issued or read.
 	seedMu        sync.Mutex

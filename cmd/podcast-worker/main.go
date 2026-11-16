@@ -131,6 +131,10 @@ func intake(ctx context.Context, c *podcastworker.Client, path string, perFeed i
 	for _, f := range list.Feeds {
 		seed = append(seed, podcastworker.FeedSpec{Show: f.Show, URL: f.URL})
 	}
+	// The operator's list is the public list: say so first, so its clips may be shown.
+	if err := c.ListFeeds(ctx, seed); err != nil {
+		log.Printf("the operator's feed list could not be published (it is still polled): %v", err)
+	}
 	// The feeds to poll are the operator's list and the feeds readers report.
 	reported, err := c.WorkerFeeds(ctx)
 	if err != nil {
