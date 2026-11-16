@@ -136,8 +136,9 @@ past silently: the listener sees no `error`.
 ### `queue_ops`
 
 Sent at most once, after the last `speech` and before `done`, and only when the
-request carried a `queue` and at least one op survived validation. See "The
-queue" below for the shape and the rule the phone applies.
+request carried a `queue` and at least one op survived validation, or when a
+replayed turn had sent ops (its `ops` may then be empty, see "The queue"). See
+"The queue" below for the shape and the rule the phone applies.
 
 ### `handoff`
 
@@ -181,8 +182,11 @@ the answer, the desk says "I couldn't see your queue this time, it is too long
 for me." (the request record carries `queue_unused`). The size bounds: at most 50
 `upcoming`; a title 300 bytes, `url` 1024, `route` 256, `show` 200, a document
 or episode id 128, `added_by` 32. The body bound (`413`) is the only other way a
-queue is refused, and a queue within these bounds fits it. Unknown fields inside
-`queue` and its items are ignored.
+queue is refused, and a queue of ordinary text within these bounds fits it (the
+bounds count decoded bytes; a body whose strings are mostly JSON escapes can be
+larger than the same text and reach the `413`). **The phone sends at most 50
+`upcoming` entries**: the first 50, in order. Unknown fields inside `queue` and
+its items are ignored.
 
 The model is shown the queue within a byte budget (12 KB of entry lines, 8 KB of
 candidate lines); past it the farthest entries appear as "and N more entries, not
@@ -193,9 +197,13 @@ When `queue` is present the desk may answer in the same single model call that
 writes the spoken reply. The queue block of the request gives the model the rules
 and the exact fence line for this request, `<<<AR... queue>>>` with the request's
 own token (the one on the request's other fences); the model ends its reply with
-that line and a JSON array of ops. Only that exact line starts the ops: any other
-`<<<` in the reply (a quote, a page fence, another token's, an end fence) is
-speech, unchanged. The fence and the array are never spoken. A turn with no
+that line and a JSON array of ops. Only that exact line starts the ops, and only
+when it starts a line and a `[` (or `{`, a malformed array that is dropped and
+said, never read aloud) is the next thing after it (blank space aside):
+any other `<<<` in the reply (a quote, a page fence, another token's, an end
+fence), and the exact line itself echoed in a sentence or followed by words, is
+speech, unchanged. Text after the closing `]` is ignored (logged); the array's
+ops stand. The fence and the array are never spoken. A turn with no
 `queue` sends the prompt and streams exactly as it did before the queue existed:
 no cut, no queue text, no `queue_ops` in `done`. A reply that is only the fence
 and ops is an answer (no walk to another pool member): the desk speaks "Okay."
