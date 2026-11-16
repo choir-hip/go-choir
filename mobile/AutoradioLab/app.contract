@@ -23,6 +23,7 @@ component Autoradio
   members "./members-mark.contract"
   members "./members-voice.contract"
   members "./members-queue.contract"          // lane autoradio-queue
+  members "./members-books.contract"
   // ---- end of members ----
 
   // What child components may `inject`. Bare names of this component's states, derives, resources and actions.
@@ -185,6 +186,35 @@ component Autoradio
     pageRelease
     cycleDeck
     syncDeck
+    // ---- lane autoradio-reader: reader and documents ----
+    lbList
+    lbNote
+    lbImport
+    lbPicked
+    lbRemove
+    ldInfo
+    ldChap
+    ldFound
+    ldFollow
+    ldAck
+    ldSec
+    ldBlock
+    ldText
+    ldToc
+    ldFindDraft
+    ldFind
+    ldShowPages
+    ldGo
+    ldJump
+    ldPlace
+    ldTocToggle
+    ldSetText
+    ldEditFind
+    ldDoFind
+    ldClearFind
+    ldRead
+    ldQueue
+    ldRemove
     // ---- lane 5: files and viewers ----
     fsList
     fsMode

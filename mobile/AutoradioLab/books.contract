@@ -1,0 +1,202 @@
+// The Reader (reader lane): the listener's EPUBs and PDFs. `books:` is the place (a list, Add); `doc:<id>` is one document, read on
+// screen (a PDF as its pages or as text, a book as text), read aloud from where the listener is, and searched. States and actions are in
+// members-books.contract. Built from the shared design components in ui.contract; no one-off styles.
+// testIds: reader-import, reader-list, reader-row-<id>, reader-empty, reader-note, doc-find, doc-read, doc-queue, doc-toc,
+// doc-chapter-<n>, doc-prev, doc-next, doc-mode, doc-block-<n>, doc-hit-<n>, doc-remove, doc-frame, page-title on every page.
+use Theme, PageList, ShelfListing, ShelfDocInfo, ShelfChapter, ShelfFind, ShelfFollowInfo, ShelfBlock from "@choir/autoradio"
+use PageScroll, BarClear, Emerge, PageHeader, SectionHeader, RowRule, ListGroup, ListRow, ChipFace, SegmentedTrack, SegmentFace, EmptyState from "./ui.contract"
+
+component BooksPage
+  inject
+    th: Theme
+    lbList: ShelfListing
+    lbNote: string
+    lbImport: action
+    lbPicked: action
+    openPage: action
+  view
+    PageScroll(id="books")
+      Emerge(delay=0)
+        PageHeader(title="Reader", subtitle=(lbList.count == 1 ? "1 document" : `${lbList.count.toFixed(0)} documents`), subId="reader-sub")
+      if lbNote != ""
+        text lbNote testId="reader-note" font-family=th.fontUi font-size=15 color=th.muted
+      if lbList.status == "empty"
+        Emerge(delay=th.staggerMs)
+          EmptyState(message="Nothing here yet", detail=lbList.message, testId="reader-empty")
+            button press=lbImport testId="reader-import" appearance="none" aria-label="Add an EPUB or PDF"
+              ChipFace(label="Add an EPUB or PDF", selected=true)
+      if lbList.status == "ready"
+        Emerge(delay=th.staggerMs)
+          button press=lbImport testId="reader-import" appearance="none" aria-label="Add an EPUB or PDF"
+            ChipFace(label="Add an EPUB or PDF", selected=true)
+        Emerge(delay=(2 * th.staggerMs))
+          ListGroup(testId="reader-list")
+            for r, i in lbList.rows key=r.id
+              if i > 0
+                RowRule(indent=16)
+              button press=openPage(r.address, r.title) testId=`reader-row-${r.id}` appearance="none" width="100%" aria-label=`Open ${r.title}`
+                ListRow(label=r.title, detail=r.detail, trailing="", chevron=true)
+      // The system file picker (Add) opens this input; its copy lands under app:/tmp/picked.
+      input type="file" id="lib-pick" change=lbPicked aria-label="Choose an EPUB or PDF to add" width=1 height=1 opacity=0
+
+// One paragraph, heading, quote or list item. A tap chooses it (read aloud starts here); the block the radio reads is lit too. Choosing
+// changes only the background colour: the padding is the same either way, so nothing moves.
+component DocBlockView
+  inject
+    th: Theme
+    pg: PageList
+    ldBlock: number
+    ldFollow: ShelfFollowInfo
+    ldPlace: action
+  props
+    b: ShelfBlock
+  derive lit = b.n == ldBlock or (ldFollow.address == pg.top and ldFollow.block == b.n)
+  derive isHead = b.kind == "heading"
+  view
+    button press=ldPlace(b.n) testId=`doc-block-${b.n}` appearance="none" width="100%"
+      column width="100%" box-sizing="border-box" padding="8px 10px" border-radius=th.radiusControl background-color=(lit ? th.paper2 : "transparent")
+        transition=`background-color ${th.motionFastMs}ms ease`
+        text (b.kind == "item" ? `${b.marker}${b.text}` : b.text) font-family=(isHead ? th.fontUi : th.fontRead) font-size=(isHead ? 22 : 19)
+          font-weight=(isHead ? 700 : 400) line-height=(isHead ? 1.25 : 1.65) color=(b.kind == "quote" ? th.muted : th.fg) text-align="left"
+
+component DocActions
+  inject
+    th: Theme
+    ldRead: action
+    ldQueue: action
+    ldTocToggle: action
+    ldToc: bool
+  view
+    row flex-wrap="wrap" gap=8 width="100%" align-items="center"
+      button press=ldRead testId="doc-read" appearance="none" aria-label="Read aloud from here"
+        ChipFace(label="Read aloud", selected=true)
+      button press=ldQueue testId="doc-queue" appearance="none" aria-label="Add to queue"
+        ChipFace(label="Add to queue", selected=false)
+      button press=ldTocToggle testId="doc-toc" appearance="none" aria-label="Contents"
+        ChipFace(label="Contents", selected=ldToc)
+
+component DocFind
+  inject
+    th: Theme
+    ldFound: ShelfFind
+    ldFind: string
+    ldFindDraft: string
+    ldEditFind: action
+    ldDoFind: action
+    ldClearFind: action
+    ldJump: action
+  view
+    column width="100%" gap=8
+      row gap=8 align-items="center" width="100%"
+        input type="search" value=ldFindDraft input=ldEditFind submit=ldDoFind placeholder="Find in this document" aria-label="Find in this document" testId="doc-find"
+          enterkeyhint="search" flex=1 min-width=0 font-family=th.fontUi font-size=16 color=th.fg padding="10px 4px"
+        if ldFind != ""
+          button press=ldClearFind testId="doc-find-clear" appearance="none" aria-label="Clear the search"
+            ChipFace(label="Clear", selected=false)
+      if ldFind != ""
+        if ldFound.hits.length == 0
+          text ldFound.message testId="doc-find-none" font-family=th.fontUi font-size=15 color=th.muted
+        else
+          ListGroup(testId="doc-hits")
+            for h, i in ldFound.hits key=h.block
+              if i > 0
+                RowRule(indent=16)
+              button press=ldJump(h.section, h.block) testId=`doc-hit-${h.block}` appearance="none" width="100%" aria-label=`Go to ${h.label}`
+                ListRow(label=h.label, detail=h.snippet, trailing="", chevron=false)
+
+component DocPage
+  inject
+    th: Theme
+    ldInfo: ShelfDocInfo
+    ldChap: ShelfChapter
+    ldSec: number
+    ldToc: bool
+    ldFind: string
+    ldShowPages: bool
+    ldGo: action
+    ldSetText: action
+    ldRemove: action
+  props
+    address: string
+    title: string
+  derive pdf = ldInfo.kind == "pdf"
+  derive unitWord = pdf ? "Page" : "Chapter"
+  view
+    if ldInfo.address != address or ldInfo.status == "loading"
+      PageScroll(id="doc-loading")
+        Emerge(delay=0)
+          PageHeader(title=title, subtitle="Opening…", subId="doc-sub")
+    else if ldInfo.status != "ready"
+      PageScroll(id="doc-missing")
+        Emerge(delay=0)
+          PageHeader(title=title, subtitle="", subId="doc-sub")
+        EmptyState(message=ldInfo.message, detail="", testId="doc-missing")
+    else if ldShowPages
+      // The PDF as its pages: the Files viewer's frame (PDFKit in an iframe), one page at a time, re-created on a page change.
+      column flex=1 min-height=0 width="100%" testId="doc-pages" padding-left=20 padding-right=20 padding-top="calc(env(safe-area-inset-top) + 12px)" box-sizing="border-box" gap=12
+        PageHeader(title=ldInfo.title, subtitle=(ldInfo.author != "" ? `${ldInfo.author} · ${ldInfo.sections.length.toFixed(0)} pages with text` : `${ldInfo.sections.length.toFixed(0)} pages with text`), subId="doc-sub")
+        SegmentedTrack(testId="doc-mode")
+          button press=ldSetText(false) appearance="none" flex=1 min-width=0 testId="doc-mode-pages"
+            SegmentFace(label="Pages", selected=true)
+          button press=ldSetText(true) appearance="none" flex=1 min-width=0 testId="doc-mode-text"
+            SegmentFace(label="Text", selected=false)
+        DocActions()
+        if ldToc
+          // The pages that have text, as a list to jump to.
+          scroll flex=1 min-height=0 overflow-x="hidden" width="100%" margin-bottom="calc(env(safe-area-inset-bottom) + 150px)"
+            ListGroup(testId="doc-contents")
+              for s, i in ldInfo.sections key=s.index
+                if i > 0
+                  RowRule(indent=16)
+                button press=ldGo(s.index) testId=`doc-chapter-${s.index}` appearance="none" width="100%"
+                  ListRow(label=s.title, detail="", trailing=(s.index == ldSec ? "Here" : ""), chevron=false)
+        else if ldFind != ""
+          scroll flex=1 min-height=0 overflow-x="hidden" width="100%" margin-bottom="calc(env(safe-area-inset-bottom) + 150px)"
+            DocFind()
+        else
+          DocFind()
+          row gap=8 align-items="center" width="100%"
+            button press=ldGo(ldSec - 1) testId="doc-prev" appearance="none" aria-label="Previous page"
+              ChipFace(label="‹", selected=false)
+            text `${ldChap.title} · ${(ldSec + 1).toFixed(0)} of ${ldInfo.sections.length.toFixed(0)}` testId="doc-position" font-family=th.fontUi font-size=14 color=th.fg flex=1 text-align="center"
+            button press=ldGo(ldSec + 1) testId="doc-next" appearance="none" aria-label="Next page"
+              ChipFace(label="›", selected=false)
+          column flex=1 min-height=0 margin-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 16px)" overflow="hidden" border-radius=th.radiusCard box-shadow=th.shadow1
+            for n in [ldChap.page] key=n
+              iframe src=`${ldInfo.src}#page=${ldChap.page.toFixed(0)}` testId="doc-frame" aria-label=ldInfo.title width="100%" flex=1 min-height=0
+    else
+      PageScroll(id="doc")
+        Emerge(delay=0)
+          PageHeader(title=ldInfo.title, subtitle=(ldInfo.author != "" ? `${ldInfo.author} · ${ldInfo.kindLabel}` : ldInfo.kindLabel), subId="doc-sub")
+        if pdf
+          SegmentedTrack(testId="doc-mode")
+            button press=ldSetText(false) appearance="none" flex=1 min-width=0 testId="doc-mode-pages"
+              SegmentFace(label="Pages", selected=false)
+            button press=ldSetText(true) appearance="none" flex=1 min-width=0 testId="doc-mode-text"
+              SegmentFace(label="Text", selected=true)
+        Emerge(delay=th.staggerMs)
+          DocActions()
+        DocFind()
+        if ldToc
+          ListGroup(testId="doc-contents")
+            for s, i in ldInfo.sections key=s.index
+              if i > 0
+                RowRule(indent=16)
+              button press=ldGo(s.index) testId=`doc-chapter-${s.index}` appearance="none" width="100%"
+                ListRow(label=s.title, detail="", trailing=(s.index == ldSec ? "Here" : ""), chevron=false)
+        else
+          SectionHeader(label=ldChap.title)
+          Emerge(delay=0)
+            column width="100%" max-width=620 gap=2
+              for b in ldChap.blocks key=b.n
+                DocBlockView(b=b)
+          row gap=8 align-items="center"
+            button press=ldGo(ldSec - 1) testId="doc-prev" appearance="none" aria-label=`Previous ${unitWord}`
+              ChipFace(label="‹ Previous", selected=false)
+            button press=ldGo(ldSec + 1) testId="doc-next" appearance="none" aria-label=`Next ${unitWord}`
+              ChipFace(label="Next ›", selected=false)
+          if not pdf
+            text "Pictures in the book are not shown yet." font-family=th.fontUi font-size=13 color=th.muted
+        button press=ldRemove(ldInfo.id) testId="doc-remove" appearance="none" aria-label="Remove from Reader"
+          row min-height=44 align-items="center"
+            text "Remove from Reader" font-family=th.fontUi font-size=15 font-weight=600 color=th.danger
