@@ -42,6 +42,11 @@
 //      a foreground step on a proven window arms it again.
 //  F20 (review nb) A planned reload (markPlanned) makes that page's markers
 //      clean at the next load, once; an unplanned death is still a death.
+//  F22 (round 2) beginBoot reports previousDead: an interrupted boot OR any
+//      dead page's pending marker (planned reloads excluded), so an automatic
+//      open at load (a route, a replay: a fresh window id, unmatchable) can be
+//      held when the last boot of this device died. An alive page's markers
+//      and this page's own do not count.
 //  F21 (review nb) crashes and steps are capped by count.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -170,7 +175,7 @@ test('F10 broken storage never throws and reports nothing', () => {
   const boom = { getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); }, removeItem() { throw new Error('x'); } };
   for (const storage of [null, undefined, boom]) {
     const g = pageOn(storage, 'p1');
-    assert.deepEqual(g.beginBoot(none), { interrupted: false });
+    assert.deepEqual(g.beginBoot(none), { interrupted: false, previousDead: false });
     g.markPending(win('w1'));
     g.step('w1', 'x', {});
     g.markPlanned();
@@ -379,4 +384,37 @@ test('F21 crashes and steps are capped by count', () => {
   const state = JSON.parse(s.getItem('k'));
   assert.ok(Object.keys(state.crashes).length <= RECORD_CAP);
   assert.ok(Object.keys(state.steps).length <= RECORD_CAP);
+});
+
+test('F22 previousDead: interrupted boot or any dead pending marker', () => {
+  const s = memory();
+  assert.equal(pageOn(s, 'p0').beginBoot(none).previousDead, false, 'a clean device');
+  // died with a boot marker only
+  const s1 = memory();
+  pageOn(s1, 'p1').beginBoot(none);
+  assert.equal(pageOn(s1, 'p2').beginBoot(none).previousDead, true);
+  // boot stable, but a window was still pending (an automatic open, fresh id)
+  const s2 = memory();
+  const a = pageOn(s2, 'p1');
+  a.beginBoot(none);
+  a.bootStable();
+  a.markPending(win('route-window-17'));
+  assert.equal(pageOn(s2, 'p2').beginBoot(none).previousDead, true);
+  // the same page, or a page that is alive, is not the previous boot
+  const s3 = memory();
+  const b = pageOn(s3, 'pb');
+  b.beginBoot(none);
+  b.markPending(win('w1'));
+  assert.equal(pageOn(s3, 'pa').beginBoot(new Set(['pb'])).previousDead, false);
+  const s3b = memory();
+  const own = pageOn(s3b, 'solo');
+  own.markPending(win('w1'));
+  assert.equal(own.beginBoot(none).previousDead, false, 'own markers are not dead to itself');
+  // planned reload: clean
+  const s4 = memory();
+  const c = pageOn(s4, 'p1');
+  c.beginBoot(none);
+  c.markPending(win('w1'));
+  c.markPlanned();
+  assert.equal(pageOn(s4, 'p2').beginBoot(none).previousDead, false);
 });
