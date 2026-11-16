@@ -65,21 +65,6 @@ export async function classifyPromptInput(text, docState, options = {}) {
   }
 }
 
-// askStory is "ask for a story" (lane F): the asker's own document that the
-// desk investigates. The receipt has doc_id.
-export async function askStory(text, options = {}) {
-  const res = await fetchWithRenewal('/api/autopaper/ask', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: trimText(text), command_id: options.commandId || crypto.randomUUID() }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Ask failed (${res.status})`);
-  }
-  return res.json();
-}
-
 // addSourceFeed is "add a source" (lane F). A refusal is thrown with the
 // server's code and reason so the bar can show both.
 export async function addSourceFeed(feedUrl) {

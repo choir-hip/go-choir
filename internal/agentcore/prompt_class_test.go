@@ -62,12 +62,12 @@ func TestClassifyInputFailureTakesTheDefault(t *testing.T) {
 	}
 }
 
-func TestClassifyInputWithNoDocumentTellsTheRequestKindsApart(t *testing.T) {
+func TestClassifyInputWithNoDocumentIsANewTextureOrAddSource(t *testing.T) {
 	f := newSystem1Fixture(t)
 	f.judge.first = 0.9
-	f.judge.prefer = map[string]string{promptroute.ClassQuestionID: promptroute.ClassAskStory}
+	f.judge.prefer = map[string]string{promptroute.ClassQuestionID: promptroute.ClassRequest}
 	c := f.rt.ClassifyPromptInput(context.Background(), f.owner, "cmd-5", "what happened at the harbor strike", promptroute.DocNone)
-	if c.Class != promptroute.ClassAskStory || c.Rule != promptroute.RuleJudge {
+	if c.Class != promptroute.ClassRequest || c.Rule != promptroute.RuleJudge {
 		t.Fatalf("%+v", c)
 	}
 	f.judge.prefer = map[string]string{promptroute.ClassQuestionID: promptroute.ClassAddSource}

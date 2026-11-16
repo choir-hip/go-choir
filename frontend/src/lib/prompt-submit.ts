@@ -15,7 +15,7 @@
 //  D4 a session that expired mid-submit shows an error instead of the sign-in.
 import { get, writable, type Readable } from 'svelte/store';
 import { AuthRequiredError } from './auth.js';
-import { addSourceFeed, askStory, classifyPromptInput, forkPublishedVersion, submitConductorPrompt, waitForConductorDecision } from './conductor.js';
+import { addSourceFeed, classifyPromptInput, forkPublishedVersion, submitConductorPrompt, waitForConductorDecision } from './conductor.js';
 import { TEXTURE_AGENT, promptAimOf, type PromptAim, type PromptFocus } from './prompt-focus';
 import {
   focusWindow,
@@ -185,11 +185,11 @@ export function createPromptSubmitter(host: PromptSubmitHost) {
     return m ? m[0].replace(/[.,;:!?]+$/, '') : '';
   }
 
-  // sendRequestKind sends "ask for a story" to POST /api/autopaper/ask and
-  // "add a source" to POST /api/autopaper/sources/schedules, from the owner's
-  // session. It returns false when the text is a plain request (or the classify
-  // failed, or an add-source text has no address), and the caller sends it to
-  // the agent as ever.
+  // sendRequestKind sends "add a source" to POST /api/autopaper/sources/schedules,
+  // from the owner's session. It returns false when the text is a plain request
+  // (or the classify failed, or an add-source text has no address), and the
+  // caller sends it to the prompt bar, which opens a new Texture: the one way
+  // to open a Texture.
   async function sendRequestKind(text: string, inputClass: string): Promise<boolean> {
     let cls = inputClass;
     try {
@@ -197,22 +197,9 @@ export function createPromptSubmitter(host: PromptSubmitHost) {
       showRoute('routing', 'Agent');
       if (!cls) {
         const got = await classifyPromptInput(text, 'none');
-        cls = got && ['request', 'ask_story', 'add_source'].includes(got.class) ? got.class : 'request';
+        cls = got && ['request', 'add_source'].includes(got.class) ? got.class : 'request';
       }
       last = { text, focus: null, windowId: '', aim: null };
-      if (cls === 'ask_story') {
-        sentAs = { class: cls, alternatives: [] };
-        const receipt = await askStory(text);
-        routing.set(false);
-        if (receipt.doc_id) {
-          showRoute('routed', appLabel('texture'));
-          openApp('texture', 'Texture', '📝', { windowTitle: text.length > 28 ? `${text.slice(0, 28)}…` : text, docId: receipt.doc_id, allowMultiple: true });
-        } else {
-          showRoute('');
-          host.toast('Asked');
-        }
-        return true;
-      }
       if (cls === 'add_source') {
         const url = feedUrlIn(text);
         if (url) {
@@ -226,7 +213,7 @@ export function createPromptSubmitter(host: PromptSubmitHost) {
       }
       // Still routing: the plain send below owns the end of it, so the owner's
       // one-tap choice is not cleared between the two.
-      sentAs = { class: 'request', alternatives: ['ask_story', 'add_source'] };
+      sentAs = { class: 'request', alternatives: ['add_source'] };
       return false;
     } catch (err) {
       routing.set(false);
