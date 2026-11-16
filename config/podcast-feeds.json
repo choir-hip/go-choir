@@ -230,10 +230,6 @@
    "url": "https://rss.dw.com/syndication/feeds/podcast_en_newsbrief.33191-mrss.xml"
   },
   {
-   "show": "The Debate",
-   "url": "https://apis.france24.com/products/get_product/podcast-f24-en-get-podcast-by-entreprise-id?token_application=33d60288-7e20-11e9-884b-005056a9c687&program.entrepriseId=WB4897007-F24-EN-20091009"
-  },
-  {
    "show": "Front Burner",
    "url": "https://www.cbc.ca/podcasting/includes/frontburner.xml"
   },

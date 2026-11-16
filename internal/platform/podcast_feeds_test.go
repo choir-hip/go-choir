@@ -354,3 +354,177 @@ func TestB13_TheQueueIsNewestFirst(t *testing.T) {
 		t.Fatalf("B13: queue %v", got)
 	}
 }
+
+// Round 4 repairs. Failure list: R1 a transcript stored but its episode write
+// failed leaves the episode unmarked, and the worker transcribes it for ever;
+// R2 the story's index is cut to 12 before the clip rows are written, so a row
+// failure drops an id whose clip was readable; R3 the public popular read does a
+// key read per featured feed on every request; R4 varying the query empties the
+// whole answer cache at its bound; R5 an episode of an unfeatured feed is in the
+// worker's queue; R6 https://host and https://host/ are two feeds.
+func TestR1_AKeptTranscriptMarksItsEpisode(t *testing.T) {
+	f := newFrontFixture(t)
+	ctx := context.Background()
+	ep := podcastFixtureEpisode("g1", 600)
+	if _, _, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{ep}); err != nil {
+		t.Fatal(err)
+	}
+	id := PodcastEpisodeID(ep.FeedURL, "g1")
+	tr := PodcastTranscript{EpisodeID: id, Engine: "t", AudioSeconds: 600, FileSeconds: 600, Segments: []PodcastSegment{{Start: 1, End: 300, Text: "first"}}}
+	if _, _, err := f.svc.PutPodcastTranscript(ctx, tr); err != nil {
+		t.Fatal(err)
+	}
+	// The failure: the transcript is stored, the episode still says it has none.
+	og := f.svc.ogStore()
+	stored, _ := f.svc.getPodcastEpisode(ctx, og, id)
+	stored.HasTranscript = false
+	if err := f.svc.putPodcastEpisode(ctx, og, *stored, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if need, _ := f.svc.ListPodcastEpisodes(ctx, true, time.Time{}, 10); len(need) != 1 {
+		t.Fatalf("R1: the setup did not leave the episode needing a transcript: %+v", need)
+	}
+	// The worker transcribes it again; the transcript is kept, and the episode is marked.
+	if _, kept, err := f.svc.PutPodcastTranscript(ctx, tr); err != nil || !kept {
+		t.Fatalf("R1: kept=%v err=%v", kept, err)
+	}
+	if need, _ := f.svc.ListPodcastEpisodes(ctx, true, time.Time{}, 10); len(need) != 0 {
+		t.Fatalf("R1: the episode is still in the queue after its transcript was kept: %+v", need)
+	}
+}
+
+func TestR2_TheStoryIndexIsNotCutBeforeTheRowsAreWritten(t *testing.T) {
+	f := newFrontFixture(t)
+	ctx := context.Background()
+	ep := podcastFixtureEpisode("g1", 900)
+	if _, _, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{ep}); err != nil {
+		t.Fatal(err)
+	}
+	id := PodcastEpisodeID(ep.FeedURL, "g1")
+	seedTranscript(t, f, id, 900, "the harbor reopened", nil)
+	harbor := f.routes["doc-harbor"]
+	clip := func(start float64) PodcastClipIn {
+		return PodcastClipIn{StoryRoute: harbor, EpisodeID: id, Start: start, End: start + 30, Quote: "the harbor reopened", Support: 0.9}
+	}
+	for i := 0; i < podcastClipsPerStoryIndex; i++ {
+		if _, err := f.svc.PutPodcastClips(ctx, []PodcastClipIn{clip(float64(10 + i*40))}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	og := f.svc.ogStore()
+	idx, _ := f.svc.getPodcastIndex(ctx, og, "clips:"+harbor)
+	first := idx.Clips[0]
+	if len(idx.Clips) != podcastClipsPerStoryIndex {
+		t.Fatalf("R2: %d ids after 12 clips", len(idx.Clips))
+	}
+	// A 13th clip whose row write fails: the displaced id must still be there.
+	f.svc.podcastClipRowHook = func(string) error { return errors.New("store failed") }
+	if _, err := f.svc.PutPodcastClips(ctx, []PodcastClipIn{clip(600)}); err == nil {
+		t.Fatal("R2: the row failure was swallowed")
+	}
+	idx, _ = f.svc.getPodcastIndex(ctx, og, "clips:"+harbor)
+	if !podcastContains(idx.Clips, first) || len(idx.Clips) != podcastClipsPerStoryIndex+1 {
+		t.Fatalf("R2: after a row failure the index is %d ids and keeps the first %v; want 13 and yes", len(idx.Clips), podcastContains(idx.Clips, first))
+	}
+	if canonical, _ := podcastCanonical(ogKindPodcastClip, first); canonical == "" {
+		t.Fatal("canonical")
+	} else if _, err := og.GetObject(ctx, canonical); err != nil {
+		t.Fatalf("R2: the first clip is no longer readable: %v", err)
+	}
+	// A repeat completes it and cuts the index to 12.
+	f.svc.podcastClipRowHook = nil
+	if _, err := f.svc.PutPodcastClips(ctx, []PodcastClipIn{clip(600)}); err != nil {
+		t.Fatal(err)
+	}
+	idx, _ = f.svc.getPodcastIndex(ctx, og, "clips:"+harbor)
+	if len(idx.Clips) != podcastClipsPerStoryIndex || podcastContains(idx.Clips, first) {
+		t.Fatalf("R2: after the repeat the index is %d ids (first kept: %v), want 12 and the oldest dropped", len(idx.Clips), podcastContains(idx.Clips, first))
+	}
+}
+
+func TestR3_PopularIsAnsweredFromTheCache(t *testing.T) {
+	f := newFrontFixture(t)
+	ctx := context.Background()
+	if _, _, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{podcastFixtureEpisode("g1", 600)}); err != nil {
+		t.Fatal(err)
+	}
+	first, err := f.svc.ListPodcastPopular(ctx, 5)
+	if err != nil || len(first) != 1 {
+		t.Fatalf("R3: %v %+v", err, first)
+	}
+	// Delete the featured index behind its back: a cached answer survives, an
+	// answer for another limit (another key) is read afresh, and a reset drops it.
+	if _, err := f.store.corpus().Exec(`DELETE FROM og_objects WHERE canonical_id = ?`, mustIndexCanonical(t, "meta")); err != nil {
+		t.Fatal(err)
+	}
+	again, _ := f.svc.ListPodcastPopular(ctx, 5)
+	if len(again) != 1 {
+		t.Fatalf("R3: the repeat was not answered from the cache: %+v", again)
+	}
+	other, _ := f.svc.ListPodcastPopular(ctx, 6)
+	if len(other) != 0 {
+		t.Fatalf("R3: another limit shares the cache key: %+v", other)
+	}
+	again[0].Title = "changed by a caller"
+	third, _ := f.svc.ListPodcastPopular(ctx, 5)
+	if third[0].Title == "changed by a caller" {
+		t.Fatal("R3: a caller changed the cached answer")
+	}
+	f.svc.podcastCache.reset()
+	if gone, _ := f.svc.ListPodcastPopular(ctx, 5); len(gone) != 0 {
+		t.Fatalf("R3: a reset did not drop the answer: %+v", gone)
+	}
+}
+
+func TestR4_AFullCacheEvictsOneAnswerNotAll(t *testing.T) {
+	var c podcastReadCache
+	for i := 0; i < podcastReadCacheEntries; i++ {
+		c.put(fmt.Sprintf("k%d", i), []PodcastClip{})
+		time.Sleep(time.Microsecond)
+	}
+	c.put("new", []PodcastClip{})
+	c.mu.Lock()
+	n := len(c.entries)
+	c.mu.Unlock()
+	if n != podcastReadCacheEntries {
+		t.Fatalf("R4: %d entries after one put into a full cache, want %d", n, podcastReadCacheEntries)
+	}
+	if _, ok := c.get("new"); !ok {
+		t.Fatal("R4: the new answer is not cached")
+	}
+	if _, ok := c.get("k0"); ok {
+		t.Fatal("R4: the oldest answer was not the one evicted")
+	}
+	if _, ok := c.get(fmt.Sprintf("k%d", podcastReadCacheEntries-1)); !ok {
+		t.Fatal("R4: a newer answer was dropped with the oldest")
+	}
+	// Putting a key that is already there evicts nothing.
+	c.put("new", []PodcastClip{})
+	if _, ok := c.get("k1"); !ok {
+		t.Fatal("R4: re-putting a key evicted another")
+	}
+}
+
+func TestR5_R6_AnUnfeaturedFeedLeavesTheQueueAndTheRootSlashIsOneFeed(t *testing.T) {
+	f := newFrontFixture(t)
+	ctx := context.Background()
+	ep := podcastFixtureEpisode("g1", 600)
+	if _, _, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{ep}); err != nil {
+		t.Fatal(err)
+	}
+	if need, _ := f.svc.ListPodcastEpisodes(ctx, true, time.Time{}, 10); len(need) != 1 {
+		t.Fatalf("R5: %+v", need)
+	}
+	if _, err := f.svc.SetPodcastFeedsListed(ctx, []PodcastFeedListing{{FeedURL: ep.FeedURL}}, false); err != nil {
+		t.Fatal(err)
+	}
+	if need, _ := f.svc.ListPodcastEpisodes(ctx, true, time.Time{}, 10); len(need) != 0 {
+		t.Fatalf("R5: an unfeatured feed's episode is still in the worker's queue: %+v", need)
+	}
+	a, _ := NormalizeFeedURL("https://host.example.test")
+	b, _ := NormalizeFeedURL("https://host.example.test/")
+	c, _ := NormalizeFeedURL("HTTPS://HOST.example.test.:443/")
+	if a != b || b != c {
+		t.Fatalf("R6: %q %q %q are not one feed", a, b, c)
+	}
+}

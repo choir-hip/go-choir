@@ -125,9 +125,9 @@ func (s *Service) MatchPodcasts(ctx context.Context, since time.Duration) (*Podc
 		queries = append(queries, podcastmatch.Query{ID: fmt.Sprint(i), Text: gists[i]})
 	}
 	// Transcripts of the newest episodes of the FEATURED feeds, read by key from
-	// each feed's row: a clip is public, so a private feed a reader reported is
-	// never matched, and no scan of "the newest N episodes" can hide a featured
-	// feed's episodes behind a stranger's.
+	// each feed's row: a clip is public, so only a feed the operator featured is
+	// matched, and no scan of "the newest N episodes" can hide a featured feed's
+	// episodes behind other rows.
 	earliest := time.Now().Add(-since - podcastEpisodesBefore)
 	featured, err := s.featuredFeedSet(ctx, og)
 	if err != nil {

@@ -11,8 +11,8 @@ import (
 	"time"
 )
 
-// The worker fetches addresses strangers choose: a feed a reader reports, the
-// enclosure a feed names, a now-playing audio URL. Everything it fetches goes
+// The worker fetches addresses it does not choose: the operator's seed feeds
+// and the enclosures those feeds name (a feed file is third-party text). Everything it fetches goes
 // through one client whose dialer resolves the name itself, refuses every
 // address that is not a public unicast address and dials the address it
 // checked, so a redirect, a name that resolves privately and a rebinding

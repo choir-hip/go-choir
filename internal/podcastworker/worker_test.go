@@ -212,3 +212,35 @@ func TestE2_AFailedChunkDoesNotStopTheNext(t *testing.T) {
 		t.Fatalf("E2: calls %d, recorded %d, new %d, skipped %d: the chunks after the failure must still go", calls, recorded, fresh, skipped)
 	}
 }
+
+func TestE3_ListFeedsContinuesPastAFailedChunk(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls++
+		n := calls
+		mu.Unlock()
+		if n == 1 {
+			http.Error(w, "boom", http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write([]byte(`{"feeds":1}`))
+	}))
+	defer srv.Close()
+	c, err := NewClient(srv.URL, "key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	feeds := make([]FeedSpec, 450) // chunks of 200, 200, 50
+	for i := range feeds {
+		feeds[i] = FeedSpec{Show: "s", URL: fmt.Sprintf("https://f%d.example.test/x.xml", i)}
+	}
+	err = c.ListFeeds(context.Background(), feeds)
+	if err == nil || !strings.Contains(err.Error(), "500") {
+		t.Fatalf("E3: the failed chunk is not reported: %v", err)
+	}
+	if calls != 3 {
+		t.Fatalf("E3: %d requests, want 3: the chunks after the failure must still go", calls)
+	}
+}

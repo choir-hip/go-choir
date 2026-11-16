@@ -219,8 +219,10 @@ func TestPodcastPublicReadRoutesAndTheNotBuiltReport(t *testing.T) {
 	}
 	feeds := `{"feeds":[{"feed_url":"https://a.example.test/f.xml","title":"A"}]}`
 	for _, signedIn := range []bool{false, true} {
-		if w := call(http.MethodPost, "/api/platform/podcast-feeds", feeds, signedIn); w.Code != http.StatusNotFound || len(seen) != 0 {
-			t.Fatalf("the feeds report (signed in %v) = %d with %d calls to corpusd, want 404 and none", signedIn, w.Code, len(seen))
+		for _, path := range []string{"/api/platform/podcast-feeds", "/api/platform/podcast-feeds/", "/api/platform/podcast-feeds/x"} {
+			if w := call(http.MethodPost, path, feeds, signedIn); w.Code != http.StatusNotFound || len(seen) != 0 {
+				t.Fatalf("the feeds report %s (signed in %v) = %d with %d calls to corpusd, want 404 and none", path, signedIn, w.Code, len(seen))
+			}
 		}
 	}
 	if w := call(http.MethodGet, "/api/platform/podcast-popular?limit=5", "", false); w.Code != http.StatusOK || !strings.Contains(last(), "/podcast-popular?limit=5") {
@@ -238,5 +240,64 @@ func TestPodcastPublicReadRoutesAndTheNotBuiltReport(t *testing.T) {
 	}
 	if w := call(http.MethodGet, "/api/platform/podcast-clips?feed=https://a.example.test/f.xml", "", false); w.Code != http.StatusOK || !strings.Contains(last(), "feed=https%3A%2F%2Fa.example.test%2Ff.xml") {
 		t.Fatalf("clips feed filter: %d %s", w.Code, last())
+	}
+}
+
+// The bounds on one public clips request at the proxy: 60 routes, 60 feeds,
+// 512 bytes a route, 2048 bytes a feed, a numeric limit; none reaches corpusd
+// when it is broken, and 60 of each does.
+func TestPodcastClipsRequestBounds(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"clips":[]}`))
+	}))
+	defer corpusd.Close()
+	autoputer := httptest.NewServer(http.NewServeMux())
+	defer autoputer.Close()
+	h, _ := opinionTestHandler(t, autoputer.URL, corpusd.URL)
+	get := func(q url.Values) int {
+		w := httptest.NewRecorder()
+		h.HandleAPI(w, httptest.NewRequest(http.MethodGet, "https://choir.news/api/platform/podcast-clips?"+q.Encode(), nil))
+		return w.Code
+	}
+	many := func(key string, n int, size int) url.Values {
+		q := url.Values{}
+		for i := 0; i < n; i++ {
+			v := fmt.Sprintf("/%s%d", key, i)
+			if size > 0 {
+				v = "https://" + strings.Repeat("a", size-len("https://")-len(".example.test/f.xml")) + ".example.test/f.xml"
+			}
+			q.Add(key, v)
+		}
+		return q
+	}
+	if c := get(many("route", podcastPublicMaxRoutes, 0)); c != http.StatusOK {
+		t.Fatalf("60 routes = %d", c)
+	}
+	if c := get(many("feed", podcastPublicMaxRoutes, 0)); c != http.StatusOK {
+		t.Fatalf("60 feeds = %d", c)
+	}
+	before := calls
+	for name, q := range map[string]url.Values{
+		"61 routes":      many("route", podcastPublicMaxRoutes+1, 0),
+		"61 feeds":       many("feed", podcastPublicMaxRoutes+1, 0),
+		"a feed of 2049": many("feed", 1, 2049),
+		"a route of 513": url.Values{"route": {"/" + strings.Repeat("r", 512)}},
+		"a bad limit":    url.Values{"limit": {"lots"}},
+	} {
+		if c := get(q); c != http.StatusBadRequest {
+			t.Errorf("%s = %d, want 400", name, c)
+		}
+	}
+	if calls != before {
+		t.Fatalf("a refused request reached corpusd (%d calls)", calls-before)
+	}
+	if c := get(many("feed", 1, 2048)); c != http.StatusOK {
+		t.Fatalf("a feed of 2048 bytes = %d", c)
 	}
 }

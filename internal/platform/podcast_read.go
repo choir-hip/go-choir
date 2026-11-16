@@ -24,16 +24,20 @@ const (
 	PodcastClipsDefaultWindow = 72 * time.Hour
 )
 
-// podcastReadCache holds recent answers for a short time, so the public
-// route's cost is bounded whatever strangers ask.
+// podcastReadCache holds recent answers of the public reads for a short time.
+// What bounds the work a stranger can cause is the bound on one request (at
+// most 60 routes of at most 12 clips each, or 100 popular feeds), not this
+// cache: it only saves repeats. It holds at most podcastReadCacheEntries
+// answers and, when full, evicts the oldest one, so varying the query evicts
+// one answer at a time and never empties the cache.
 type podcastReadCache struct {
 	mu      sync.Mutex
-	entries map[string]podcastCachedClips
+	entries map[string]podcastCachedAnswer
 }
 
-type podcastCachedClips struct {
+type podcastCachedAnswer struct {
 	at    time.Time
-	clips []PodcastClip
+	value any
 }
 
 func (c *podcastReadCache) reset() {
@@ -42,23 +46,33 @@ func (c *podcastReadCache) reset() {
 	c.mu.Unlock()
 }
 
-func (c *podcastReadCache) get(key string) ([]PodcastClip, bool) {
+func (c *podcastReadCache) get(key string) (any, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e, ok := c.entries[key]
 	if !ok || time.Since(e.at) > podcastReadCacheTTL {
 		return nil, false
 	}
-	return e.clips, true
+	return e.value, true
 }
 
-func (c *podcastReadCache) put(key string, clips []PodcastClip) {
+func (c *podcastReadCache) put(key string, value any) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.entries == nil || len(c.entries) >= podcastReadCacheEntries {
-		c.entries = map[string]podcastCachedClips{}
+	if c.entries == nil {
+		c.entries = map[string]podcastCachedAnswer{}
 	}
-	c.entries[key] = podcastCachedClips{at: time.Now(), clips: clips}
+	if _, present := c.entries[key]; !present && len(c.entries) >= podcastReadCacheEntries {
+		oldest, first := "", true
+		var oldestAt time.Time
+		for k, e := range c.entries {
+			if first || e.at.Before(oldestAt) {
+				oldest, oldestAt, first = k, e.at, false
+			}
+		}
+		delete(c.entries, oldest)
+	}
+	c.entries[key] = podcastCachedAnswer{at: time.Now(), value: value}
 }
 
 // storyClips reads one story's clips by key, best first: clips of a stable
@@ -99,8 +113,7 @@ func (s *Service) storyClips(ctx context.Context, og *ObjectGraphStore, route st
 		if ep == nil {
 			continue
 		}
-		// Only a featured feed's clips are public: a private feed a reader
-		// reported must never reach this read.
+		// Only a featured feed's clips are public.
 		if n, nerr := NormalizeFeedURL(ep.FeedURL); nerr != nil || !featured[n] {
 			continue
 		}
@@ -157,8 +170,10 @@ func (s *Service) ListPodcastClips(ctx context.Context, routes, feeds []string, 
 	if len(want) > 0 {
 		cacheKey = strings.Join(want, "\n")
 	}
-	clips, ok := s.podcastCache.get(cacheKey)
-	if !ok {
+	var clips []PodcastClip
+	if v, hit := s.podcastCache.get(cacheKey); hit {
+		clips, _ = v.([]PodcastClip)
+	} else {
 		og, err := s.podcastStore()
 		if err != nil {
 			return nil, err
