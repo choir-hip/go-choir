@@ -1,49 +1,253 @@
 {
-  "_note": "Public podcast feed URLs the operator's podcast worker polls (cmd/podcast-worker --feeds). Feed URLs are facts, not content. Edit this list to change what the paper's stories are matched against. Checked 2026-11-15: every enclosure answered a byte-range request. Shows that insert ads dynamically (NPR, NYT, Vox, Marketplace) serve a different file on each download, so a clip is valid only for the file that was transcribed.",
-  "feeds": [
-    {
-      "show": "Up First",
-      "url": "https://feeds.npr.org/510318/podcast.xml"
-    },
-    {
-      "show": "NPR News Now",
-      "url": "https://feeds.npr.org/500005/podcast.xml"
-    },
-    {
-      "show": "Consider This",
-      "url": "https://feeds.npr.org/510355/podcast.xml"
-    },
-    {
-      "show": "BBC Global News Podcast",
-      "url": "https://podcasts.files.bbci.co.uk/p02nq0gn.rss"
-    },
-    {
-      "show": "The Daily",
-      "url": "https://feeds.simplecast.com/54nAGcIl"
-    },
-    {
-      "show": "PBS News Hour",
-      "url": "https://www.pbs.org/newshour/feeds/rss/podcasts/show"
-    },
-    {
-      "show": "Today, Explained",
-      "url": "https://feeds.megaphone.fm/VMP5705694065"
-    },
-    {
-      "show": "Marketplace",
-      "url": "https://feeds.publicradio.org/public_feeds/marketplace"
-    },
-    {
-      "show": "Marketplace Morning Report",
-      "url": "https://feeds.publicradio.org/public_feeds/marketplace-morning-report"
-    },
-    {
-      "show": "WSJ What's News",
-      "url": "https://video-api.shdsvc.dowjones.io/api/podcasts/the%20wall%20street%20journal%20whats%20news/feed"
-    },
-    {
-      "show": "Pod Save America",
-      "url": "https://audioboom.com/channels/5166624.rss"
-    }
-  ]
+ "_note": "Public podcast feed URLs the operator's podcast worker polls (cmd/podcast-worker --feeds). Feed URLs are facts, not content. Edit this list to change what the paper's stories are matched against. Found through the public Apple podcast directory and checked 2026-11-16: each feed had at least 3 episodes in the last 14 days, the newest within 7 days, and its enclosure answered a byte-range request. Shows that insert ads dynamically (NPR, NYT, Vox, Marketplace) serve a different file on each download, so a clip is valid only for the file that was transcribed.",
+ "feeds": [
+  {
+   "show": "Up First",
+   "url": "https://feeds.npr.org/510318/podcast.xml"
+  },
+  {
+   "show": "NPR News Now",
+   "url": "https://feeds.npr.org/500005/podcast.xml"
+  },
+  {
+   "show": "Consider This",
+   "url": "https://feeds.npr.org/510355/podcast.xml"
+  },
+  {
+   "show": "BBC Global News Podcast",
+   "url": "https://podcasts.files.bbci.co.uk/p02nq0gn.rss"
+  },
+  {
+   "show": "The Daily",
+   "url": "https://feeds.simplecast.com/54nAGcIl"
+  },
+  {
+   "show": "PBS News Hour",
+   "url": "https://www.pbs.org/newshour/feeds/rss/podcasts/show"
+  },
+  {
+   "show": "Today, Explained",
+   "url": "https://feeds.megaphone.fm/VMP5705694065"
+  },
+  {
+   "show": "Marketplace",
+   "url": "https://feeds.publicradio.org/public_feeds/marketplace"
+  },
+  {
+   "show": "Marketplace Morning Report",
+   "url": "https://feeds.publicradio.org/public_feeds/marketplace-morning-report"
+  },
+  {
+   "show": "WSJ What's News",
+   "url": "https://video-api.shdsvc.dowjones.io/api/podcasts/the%20wall%20street%20journal%20whats%20news/feed"
+  },
+  {
+   "show": "Pod Save America",
+   "url": "https://audioboom.com/channels/5166624.rss"
+  },
+  {
+   "show": "Fresh Air",
+   "url": "https://feeds.npr.org/381444908/podcast.xml"
+  },
+  {
+   "show": "The NPR Politics Podcast",
+   "url": "https://feeds.npr.org/510310/podcast.xml"
+  },
+  {
+   "show": "Planet Money",
+   "url": "https://feeds.npr.org/510289/podcast.xml"
+  },
+  {
+   "show": "The Indicator from Planet Money",
+   "url": "https://feeds.npr.org/510325/podcast.xml"
+  },
+  {
+   "show": "Short Wave",
+   "url": "https://feeds.npr.org/510351/podcast.xml"
+  },
+  {
+   "show": "Newshour",
+   "url": "https://podcasts.files.bbci.co.uk/p002vsnk.rss"
+  },
+  {
+   "show": "World Business Report",
+   "url": "https://podcasts.files.bbci.co.uk/p00fvhj7.rss"
+  },
+  {
+   "show": "Business Daily",
+   "url": "https://podcasts.files.bbci.co.uk/p002vsxs.rss"
+  },
+  {
+   "show": "Today in Parliament",
+   "url": "https://podcasts.files.bbci.co.uk/b006qtqd.rss"
+  },
+  {
+   "show": "The Ezra Klein Show",
+   "url": "https://feeds.simplecast.com/kEKXbjuJ"
+  },
+  {
+   "show": "The Journal.",
+   "url": "https://video-api.shdsvc.dowjones.io/api/podcasts/the%20journal/feed"
+  },
+  {
+   "show": "Pod Save the World",
+   "url": "https://audioboom.com/channels/5166626.rss"
+  },
+  {
+   "show": "Political Gabfest",
+   "url": "https://my.slate.com/podcasts/feeds/political-gabfest/"
+  },
+  {
+   "show": "What Next | Daily News and Analysis",
+   "url": "https://my.slate.com/podcasts/feeds/what-next/"
+  },
+  {
+   "show": "Bulwark Takes",
+   "url": "https://audioboom.com/channels/5149464.rss"
+  },
+  {
+   "show": "The Dispatch Podcast",
+   "url": "https://feeds.megaphone.fm/DISPME9513417677"
+  },
+  {
+   "show": "Economist Podcasts",
+   "url": "https://access.acast.com/rss/ec380acc-fe13-46a0-991f-a1e508d126f8"
+  },
+  {
+   "show": "The Intelligence from The Economist",
+   "url": "https://access.acast.com/rss/d556eb54-6160-4c85-95f4-47d9f5216c49"
+  },
+  {
+   "show": "FT News Briefing",
+   "url": "https://feeds.acast.com/public/shows/73fe3ede-5c5c-4850-96a8-30db8dbae8bf"
+  },
+  {
+   "show": "Bloomberg Daybreak: US Edition",
+   "url": "https://www.omnycontent.com/d/playlist/e73c998e-6e60-432f-8610-ae210140c5b1/d15648c4-cee0-4e99-a5ca-af80014d921d/65ce2954-d8a8-4c66-9f42-af80014d923e/podcast.rss"
+  },
+  {
+   "show": "Bloomberg Surveillance",
+   "url": "https://www.omnycontent.com/d/playlist/e73c998e-6e60-432f-8610-ae210140c5b1/8e704079-ca57-4eac-9741-ae27003e2b7f/9739700c-72c3-4176-ae55-ae27003e2b96/podcast.rss"
+  },
+  {
+   "show": "Bloomberg Businessweek",
+   "url": "https://www.omnycontent.com/d/playlist/e73c998e-6e60-432f-8610-ae210140c5b1/3b082bbf-691d-443b-bc59-ae2b0012ff93/9222076a-d22a-4a9f-9d26-ae2b0012ffb4/podcast.rss"
+  },
+  {
+   "show": "Bloomberg Tech",
+   "url": "https://www.omnycontent.com/d/playlist/e73c998e-6e60-432f-8610-ae210140c5b1/41764a4f-fc64-4e11-89ba-ae7c0030ab5e/9caafc41-289c-4115-995d-ae7c0030ab75/podcast.rss"
+  },
+  {
+   "show": "Odd Lots",
+   "url": "https://www.omnycontent.com/d/playlist/e73c998e-6e60-432f-8610-ae210140c5b1/8a94442e-5a74-4fa2-8b8d-ae27003a8d6b/982f5071-765c-403d-969d-ae27003a8d83/podcast.rss"
+  },
+  {
+   "show": "Squawk Pod",
+   "url": "https://feeds.simplecast.com/VHAcgaw_"
+  },
+  {
+   "show": "Marketplace Tech",
+   "url": "https://feeds.publicradio.org/public_feeds/marketplace-tech"
+  },
+  {
+   "show": "Reuters World News",
+   "url": "https://feeds.megaphone.fm/reutersworldnews"
+  },
+  {
+   "show": "Face the Nation with Margaret Brennan",
+   "url": "https://rss.amperwave.net/v2/feed/audacynetwork/1f7cbcf4fc75edeae6e4b9e605092da5"
+  },
+  {
+   "show": "Meet the Press",
+   "url": "https://podcastfeeds.nbcnews.com/yf3E6y7x"
+  },
+  {
+   "show": "Start Here",
+   "url": "https://feeds.megaphone.fm/ESP8447327256"
+  },
+  {
+   "show": "The Fox News Rundown",
+   "url": "https://feeds.megaphone.fm/FOXM1880458659"
+  },
+  {
+   "show": "Today in Focus",
+   "url": "https://www.theguardian.com/news/series/todayinfocus/podcast.xml"
+  },
+  {
+   "show": "Politics Weekly UK",
+   "url": "https://www.theguardian.com/politics/series/politicsweekly/podcast.xml"
+  },
+  {
+   "show": "The New Yorker Radio Hour",
+   "url": "https://feeds.simplecast.com/TRuO_SRo"
+  },
+  {
+   "show": "The Playbook Podcast",
+   "url": "https://feeds.megaphone.fm/ASD6963560714"
+  },
+  {
+   "show": "Morning Brew Daily",
+   "url": "https://feeds.megaphone.fm/MOBI8777994188"
+  },
+  {
+   "show": "CNN 5 Things",
+   "url": "https://feeds.megaphone.fm/WMHY2007701094"
+  },
+  {
+   "show": "Top Story with Tom Llamas",
+   "url": "https://podcastfeeds.nbcnews.com/l7QocwtX"
+  },
+  {
+   "show": "The Vergecast",
+   "url": "https://feeds.megaphone.fm/vergecast"
+  },
+  {
+   "show": "Decoder with Nilay Patel",
+   "url": "https://feeds.megaphone.fm/recodedecode"
+  },
+  {
+   "show": "Tech Brew Ride Home",
+   "url": "https://feeds.megaphone.fm/ridehome"
+  },
+  {
+   "show": "Equity",
+   "url": "https://feeds.megaphone.fm/YFL6537156961"
+  },
+  {
+   "show": "Last Week in AI",
+   "url": "https://rss.art19.com/last-week-in-ai-podcast"
+  },
+  {
+   "show": "Pivot",
+   "url": "https://feeds.megaphone.fm/pivot"
+  },
+  {
+   "show": "The Rest Is Politics",
+   "url": "https://feeds.megaphone.fm/GLT9190936013"
+  },
+  {
+   "show": "DW News Brief",
+   "url": "https://rss.dw.com/syndication/feeds/podcast_en_newsbrief.33191-mrss.xml"
+  },
+  {
+   "show": "The Debate",
+   "url": "https://apis.france24.com/products/get_product/podcast-f24-en-get-podcast-by-entreprise-id?token_application=33d60288-7e20-11e9-884b-005056a9c687&program.entrepriseId=WB4897007-F24-EN-20091009"
+  },
+  {
+   "show": "Front Burner",
+   "url": "https://www.cbc.ca/podcasting/includes/frontburner.xml"
+  },
+  {
+   "show": "On with Kara Swisher",
+   "url": "https://feeds.megaphone.fm/VMP1684715893"
+  },
+  {
+   "show": "The News Agents",
+   "url": "https://feeds.captivate.fm/the-news-agents/"
+  },
+  {
+   "show": "The Rest Is Money",
+   "url": "https://feeds.megaphone.fm/therestismoney"
+  }
+ ]
 }

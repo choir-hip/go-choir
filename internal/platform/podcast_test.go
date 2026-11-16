@@ -245,3 +245,52 @@ func TestPodcastRoutesRefuseAnyoneButTheHost(t *testing.T) {
 		}
 	}
 }
+
+// A clip of a file the publisher served unchanged is shown before a clip of an
+// ad-stitched file, whatever their support (docs/design/podcast-clips-2026-11-15.md R4).
+func TestPodcastClipsOfAStableFileComeFirst(t *testing.T) {
+	f := newFrontFixture(t)
+	ctx := context.Background()
+	stable, unstable := podcastFixtureEpisode("stable", 900), podcastFixtureEpisode("unstable", 900)
+	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{stable, unstable}); err != nil {
+		t.Fatal(err)
+	}
+	yes, no := true, false
+	seg := []PodcastSegment{{Start: 0, End: 5, Text: "one"}}
+	idS, idU := PodcastEpisodeID(stable.FeedURL, "stable"), PodcastEpisodeID(unstable.FeedURL, "unstable")
+	if _, err := f.svc.PutPodcastTranscript(ctx, PodcastTranscript{EpisodeID: idS, Engine: "t", AudioSeconds: 900, StableFile: &yes, Segments: seg}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.PutPodcastTranscript(ctx, PodcastTranscript{EpisodeID: idU, Engine: "t", AudioSeconds: 900, StableFile: &no, Segments: seg}); err != nil {
+		t.Fatal(err)
+	}
+	harbor := f.routes["doc-harbor"]
+	clips := []PodcastClipIn{
+		{StoryRoute: harbor, EpisodeID: idU, Start: 10, End: 50, Quote: "u1", Support: 0.99},
+		{StoryRoute: harbor, EpisodeID: idU, Start: 100, End: 140, Quote: "u2", Support: 0.98},
+		{StoryRoute: harbor, EpisodeID: idS, Start: 200, End: 240, Quote: "s1", Support: 0.7},
+		{StoryRoute: harbor, EpisodeID: idS, Start: 300, End: 340, Quote: "s2", Support: 0.65},
+	}
+	if _, err := f.svc.PutPodcastClips(ctx, clips); err != nil {
+		t.Fatal(err)
+	}
+	f.svc.podcastCache.reset()
+	got, err := f.svc.ListPodcastClips(ctx, []string{harbor}, 0)
+	if err != nil || len(got.Clips) != 3 {
+		t.Fatalf("clips: %v %+v", err, got)
+	}
+	order := got.Clips[0].Quote + "," + got.Clips[1].Quote + "," + got.Clips[2].Quote
+	if order != "s1,s2,u1" {
+		t.Fatalf("order = %s, want the stable file's clips first (s1,s2,u1)", order)
+	}
+	// A re-poll of the feed keeps what the worker saw.
+	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{stable}); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := f.svc.ListPodcastEpisodes(ctx, false, time.Time{}, 10)
+	for _, e := range list {
+		if e.EpisodeID == idS && (e.StableFile == nil || !*e.StableFile) {
+			t.Fatalf("a re-poll forgot the stable flag: %+v", e)
+		}
+	}
+}

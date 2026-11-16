@@ -70,6 +70,12 @@ type Result struct {
 	Segments    []Segment
 	Seconds     float64
 	FileSeconds float64
+	// StableFile is whether the publisher served the same file (the same
+	// byte length) when the download began and again when the transcription
+	// ended, minutes later: nil when either probe failed. A publisher that
+	// stitches ads in answers differently each time, and a clip of such a
+	// file may not line up on the listener's copy.
+	StableFile *bool
 }
 
 // Transcribe downloads the enclosure, converts it to 16 kHz mono and runs
@@ -81,6 +87,11 @@ func (t *Transcriber) Transcribe(ctx context.Context, enclosureURL string) (Resu
 	}
 	defer os.RemoveAll(dir)
 	src := filepath.Join(dir, "in.audio")
+	client := t.HTTP
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Minute}
+	}
+	before := ProbeLength(ctx, client, enclosureURL)
 	if err := t.download(ctx, enclosureURL, src); err != nil {
 		return Result{}, err
 	}
@@ -118,7 +129,12 @@ func (t *Transcriber) Transcribe(ctx context.Context, enclosureURL string) (Resu
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Segments: Segments(parsed.Words), Seconds: seconds, FileSeconds: fileSeconds}, nil
+	res := Result{Segments: Segments(parsed.Words), Seconds: seconds, FileSeconds: fileSeconds}
+	if after := ProbeLength(ctx, client, enclosureURL); before > 0 && after > 0 {
+		stable := before == after
+		res.StableFile = &stable
+	}
+	return res, nil
 }
 
 func (t *Transcriber) download(ctx context.Context, rawURL, dst string) error {
@@ -152,6 +168,36 @@ func (t *Transcriber) download(ctx context.Context, rawURL, dst string) error {
 		return fmt.Errorf("download: over %d bytes", maxDownload)
 	}
 	return nil
+}
+
+// ProbeLength asks for one byte of the enclosure, following redirects, and
+// returns the file's total length from Content-Range (or Content-Length when
+// the server ignored the range). 0 means unknown.
+func ProbeLength(ctx context.Context, client *http.Client, rawURL string) int64 {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return 0
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Range", "bytes=0-0")
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<10))
+	if resp.StatusCode == http.StatusPartialContent {
+		if _, total, ok := strings.Cut(resp.Header.Get("Content-Range"), "/"); ok {
+			if n, err := strconv.ParseInt(strings.TrimSpace(total), 10, 64); err == nil && n > 0 {
+				return n
+			}
+		}
+		return 0
+	}
+	if resp.StatusCode == http.StatusOK && resp.ContentLength > 0 {
+		return resp.ContentLength
+	}
+	return 0
 }
 
 var durationRe = regexp.MustCompile(`Duration: (\d+):(\d+):(\d+(?:\.\d+)?)`)

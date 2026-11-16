@@ -12,6 +12,9 @@ package podcastworker
 //   6. HTML in show notes reaches the platform.
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -118,5 +121,34 @@ func TestParseParakeetOutput(t *testing.T) {
 	}
 	if _, err := ParseParakeet([]byte(`not json`)); err == nil {
 		t.Fatal("bad JSON is an error")
+	}
+}
+
+func TestProbeLengthReadsTheTotalAndAnswersZeroWhenUnknown(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/partial", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Range") != "bytes=0-0" {
+			t.Errorf("range header = %q", r.Header.Get("Range"))
+		}
+		w.Header().Set("Content-Range", "bytes 0-0/28235701")
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = w.Write([]byte{0})
+	})
+	mux.HandleFunc("/whole", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "1234")
+		_, _ = w.Write(make([]byte, 1234))
+	})
+	mux.HandleFunc("/redirect", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/partial", http.StatusFound) })
+	mux.HandleFunc("/broken", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusForbidden) })
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	ctx := context.Background()
+	for path, want := range map[string]int64{"/partial": 28235701, "/whole": 1234, "/redirect": 28235701, "/broken": 0, "/missing": 0} {
+		if got := ProbeLength(ctx, srv.Client(), srv.URL+path); got != want {
+			t.Errorf("ProbeLength(%s) = %d, want %d", path, got, want)
+		}
+	}
+	if got := ProbeLength(ctx, srv.Client(), "http://127.0.0.1:1/x"); got != 0 {
+		t.Errorf("a refused connection = %d", got)
 	}
 }

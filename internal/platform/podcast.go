@@ -85,6 +85,10 @@ type PodcastEpisode struct {
 	EnclosureURL    string    `json:"enclosure_url"`
 	Notes           string    `json:"notes,omitempty"`
 	HasTranscript   bool      `json:"has_transcript"`
+	// StableFile is whether the worker saw the publisher serve one file
+	// across the transcription; nil when it did not check. Clips of a stable
+	// file are shown first (an ad-stitched file may not line up).
+	StableFile *bool `json:"stable_file,omitempty"`
 }
 
 // PodcastSegment is one sentence or pause bounded stretch of a transcript.
@@ -104,6 +108,7 @@ type PodcastTranscript struct {
 	// file on the next download, so this, not the feed's duration, is the
 	// length a clip's time is valid for.
 	FileSeconds float64          `json:"file_seconds,omitempty"`
+	StableFile  *bool            `json:"stable_file,omitempty"`
 	Segments    []PodcastSegment `json:"segments"`
 }
 
@@ -310,6 +315,7 @@ func (s *Service) RecordPodcastEpisodes(ctx context.Context, in []PodcastEpisode
 		} else {
 			// A re-poll never forgets that a transcript exists.
 			ep.HasTranscript = prev.HasTranscript
+			ep.StableFile = prev.StableFile
 			if prev.HasTranscript || ep.DurationSeconds == 0 {
 				// The length measured on the transcribed file stands over
 				// whatever the feed says now.
@@ -465,6 +471,9 @@ func (s *Service) PutPodcastTranscript(ctx context.Context, t PodcastTranscript)
 		return 0, err
 	}
 	ep.HasTranscript = true
+	if t.StableFile != nil {
+		ep.StableFile = t.StableFile
+	}
 	switch {
 	case t.FileSeconds > 0:
 		ep.DurationSeconds = t.FileSeconds // what was downloaded beats what the feed said
@@ -652,6 +661,7 @@ func (s *Service) allPodcastClips(ctx context.Context) ([]PodcastClip, error) {
 	type joined struct {
 		clip    PodcastClip
 		matched time.Time
+		stable  bool
 	}
 	var rows []joined
 	for _, o := range objs {
@@ -673,17 +683,33 @@ func (s *Service) allPodcastClips(ctx context.Context) ([]PodcastClip, error) {
 			continue
 		}
 		matched, _ := time.Parse(time.RFC3339, row.MatchedAt)
-		rows = append(rows, joined{matched: matched, clip: PodcastClip{
+		rows = append(rows, joined{matched: matched, stable: ep.StableFile != nil && *ep.StableFile, clip: PodcastClip{
 			ClipID: row.ClipID, Story: PodcastClipStory{Route: row.StoryRoute, Version: row.StoryVersion, Title: row.StoryTitle},
 			Show: ep.Show, EpisodeTitle: ep.Title, EpisodeGUID: ep.GUID, FeedURL: ep.FeedURL, Published: ep.Published,
 			AudioURL: ep.EnclosureURL, DurationSeconds: ep.DurationSeconds, Start: row.Start, End: row.End, Quote: row.Quote, Support: row.Support,
 		}})
 	}
-	sort.SliceStable(rows, func(i, j int) bool {
-		if !rows[i].matched.Equal(rows[j].matched) {
-			return rows[i].matched.After(rows[j].matched)
+	// Stories in the order of their newest match; within a story, clips of a
+	// stable file first, then the best supported.
+	newest := map[string]time.Time{}
+	for _, r := range rows {
+		if r.matched.After(newest[r.clip.Story.Route]) {
+			newest[r.clip.Story.Route] = r.matched
 		}
-		return rows[i].clip.Support > rows[j].clip.Support
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		a, b := rows[i], rows[j]
+		if a.clip.Story.Route != b.clip.Story.Route {
+			na, nb := newest[a.clip.Story.Route], newest[b.clip.Story.Route]
+			if !na.Equal(nb) {
+				return na.After(nb)
+			}
+			return a.clip.Story.Route < b.clip.Story.Route
+		}
+		if a.stable != b.stable {
+			return a.stable
+		}
+		return a.clip.Support > b.clip.Support
 	})
 	out := make([]PodcastClip, 0, len(rows))
 	for _, r := range rows {
