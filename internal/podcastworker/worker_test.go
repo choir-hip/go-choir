@@ -157,7 +157,6 @@ func TestProbeLengthReadsTheTotalAndAnswersZeroWhenUnknown(t *testing.T) {
 	}
 }
 
-
 // Round 3: one bad item must not cost its request the others, and a failed
 // chunk must not stop the chunks after it.
 func TestE1_ValidEpisodesDropsWhatTheServerWouldRefuse(t *testing.T) {
