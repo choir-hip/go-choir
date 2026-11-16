@@ -152,7 +152,7 @@ component PlayerLayer
               row width=44 height=44 align-items="center" justify-content="center"
                 image "symbol:sf/backward.end.fill" color=th.fg
             if qv.audio
-              button press=queueDo("back15", "") testId="queue-back15" appearance="none" aria-label="Back 15 seconds" width=44 height=44
+              button press=queueDo("back15", "") testId="player-back15" appearance="none" aria-label="Back 15 seconds" width=44 height=44
                 image "symbol:skip-back-15" color=th.fg
             else
               button press=previous testId="player-prev" aria-label="Previous passage" appearance="none" width=44 height=44
@@ -164,7 +164,7 @@ component PlayerLayer
                 else
                   image "symbol:play-fill" width=36 height=36 color=th.accent
             if qv.audio
-              button press=queueDo("fwd15", "") testId="queue-fwd15" appearance="none" aria-label="Forward 15 seconds" width=44 height=44
+              button press=queueDo("fwd15", "") testId="player-fwd15" appearance="none" aria-label="Forward 15 seconds" width=44 height=44
                 image "symbol:skip-forward-15" color=th.fg
             else
               button press=next testId="player-next" aria-label="Next passage" appearance="none" width=44 height=44

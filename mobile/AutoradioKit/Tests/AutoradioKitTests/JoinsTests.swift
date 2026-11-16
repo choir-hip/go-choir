@@ -222,3 +222,24 @@ final class JoinShowClipsTests: XCTestCase {
         XCTAssertTrue(s.shouldAsk(feed: "https://example.test/feed.xml", now: Date(timeIntervalSince1970: 1000)))
     }
 }
+
+// MARK: J7 the queue the desk is sent is bounded
+
+@MainActor
+final class JoinSnapshotBoundTests: XCTestCase {
+    func testJ7_TheSnapshotCarriesTheFirstFiftyUpcomingAndTheQueueKeepsAll() throws {
+        let q = PlayQueue(); q.engine = FakeEngine()
+        for n in 0..<75 { q.enqueue(.story(route: "r\(n)", title: "S \(n)")) }
+        let o = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(q.snapshotJSON().utf8)) as? [String: Any])
+        let up = try XCTUnwrap(o["upcoming"] as? [[String: Any]])
+        XCTAssertEqual(up.count, 50)
+        XCTAssertTrue(q.snapshotJSON().contains("r0")); XCTAssertFalse(q.snapshotJSON().contains("\"r50\""))
+        XCTAssertEqual(q.upcoming.count, 75, "the local queue is unchanged")
+        XCTAssertEqual(q.snapshot().upcoming.count, 75)
+    }
+    func testJ7_AShortQueueIsSentWhole() throws {
+        let q = PlayQueue(); q.engine = FakeEngine(); q.enqueue(.story(route: "a", title: "A"))
+        let o = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(q.snapshotJSON().utf8)) as? [String: Any])
+        XCTAssertEqual((o["upcoming"] as? [Any])?.count, 1)
+    }
+}

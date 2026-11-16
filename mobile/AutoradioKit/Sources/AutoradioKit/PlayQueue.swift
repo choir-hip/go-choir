@@ -445,9 +445,13 @@ func onMainThread<T>(_ f: @MainActor () -> T) -> T {
         let cur = current.map { QueueSnapshot.Current(id: currentId ?? "", item: $0, positionSeconds: positionSeconds()) }
         return QueueSnapshot(version: version, current: cur, upcoming: entries.map { .init(id: $0.id, item: $0.item, addedBy: $0.addedBy) })
     }
-    public func snapshotJSON() -> String {
+    /// The server reads at most this many upcoming entries; more makes the desk say it cannot see the queue.
+    public static let maxSnapshotUpcoming = 50
+    public func snapshotJSON(maxUpcoming: Int = PlayQueue.maxSnapshotUpcoming) -> String {
         let e = JSONEncoder(); e.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        return (try? e.encode(snapshot())).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        var snap = snapshot()
+        if snap.upcoming.count > maxUpcoming { snap.upcoming = Array(snap.upcoming.prefix(maxUpcoming)) }
+        return (try? e.encode(snap)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
     }
     /// Apply what the desk answered (`{"queue_ops":[...]}` or an array), as the DJ.
     @discardableResult

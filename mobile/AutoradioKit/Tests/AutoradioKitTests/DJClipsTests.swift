@@ -47,7 +47,7 @@ final class ClipCandidatesTests: XCTestCase {
     }
     func testC9_HearItRowsAreTheStoryOwnClips() {
         let s = store([clipRow(hex(1)), clipRow(hex(2), route: "/b")])
-        XCTAssertEqual(HearIt.rows(route: "a", store: s), [HearItRow(clipID: hex(1), show: "Show", episode: "Episode", length: "1 min", quote: "A quote.")])
+        XCTAssertEqual(HearIt.rows(route: "a", store: s), [HearItRow(clipID: hex(1), show: "Show", episode: "Episode", length: "1 min", quote: "A quote.", story: "Story")])
         XCTAssertEqual(HearIt.rows(route: "/b", store: s).count, 1)
         XCTAssertTrue(HearIt.rows(route: "zzz", store: s).isEmpty)
     }

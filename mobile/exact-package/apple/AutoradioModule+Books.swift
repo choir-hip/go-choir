@@ -23,7 +23,7 @@ extension AutoradioModule {
         BarURL.importDocument = { [weak self] url in
             Task { [weak self] in
                 await BarDocumentImport.run(url: url, importer: { try await ReaderShelf.importFrom(url: $0).id },
-                    open: { address in self?.pages.open(address, title: lib.doc(ShelfAddress.parse(address)?.id ?? "")?.title ?? "Document") },
+                    open: { address in _ = self?.pages.open(address, title: lib.doc(ShelfAddress.parse(address)?.id ?? "")?.title ?? "Document") },
                     say: { line in BarTracker.shared.say(line); self?.touch(["barState"], now: true) })
             }
         }

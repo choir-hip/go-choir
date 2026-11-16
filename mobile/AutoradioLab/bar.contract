@@ -190,8 +190,8 @@ component BarShell
           text setupLine testId="bar-setup" font-family=th.fontUi font-size=14 font-weight=600 color=th.fg line-clamp=1 padding-left=4 animation=enter
         if lineMode == "playing" or lineMode == "paused"
           column gap=4 animation=enter
-            button press=showLayer("player") testId="bar-text" appearance="none" width="100%" aria-label=`${lineMode == "playing" ? "Now playing" : "Paused"}, ${loaded}. Open the player`
-              row gap=8 align-items="center" width="100%" padding-left=4 min-height=30
+            button press=showLayer("player") testId="bar-now" appearance="none" width="100%" aria-label=`${lineMode == "playing" ? "Now playing" : "Paused"}, ${loaded}. Open the player`
+              row gap=8 align-items="center" width="100%" padding-left=4 min-height=30 testId="bar-text"
                 if lineMode == "playing"
                   image "symbol:waveform" color=th.accent
                 if lineMode == "paused"
