@@ -40,6 +40,8 @@ members Autoradio
   state ldFind = ""
   state ldSeen = ""
   state ldFollowSeen = -1
+  // A block to bring into view once its chapter is on screen (a found passage, the place left off, the block being read); -1 for none.
+  state ldScrollTo = -1
   derive ldShowPages = ldInfo.kind == "pdf" and ldText == false
 
   // A different document starts where the listener left it.
@@ -54,12 +56,19 @@ members Autoradio
     ldFindDraft = ""
     ldFind = ""
     ldFollowSeen = -1
+    ldScrollTo = ldInfo.position > 0 ? ldInfo.position : -1
   // The chapter or page follows the voice while the radio reads this document.
   task ldFollowTask when ldFollow.address == pg.top and ldFollow.block != ldFollowSeen
     after(10, ldFollowGo)
   action ldFollowGo
     ldFollowSeen = ldFollow.block
     ldSec = ldFollow.section
+    ldScrollTo = ldFollow.block
+  task ldScrollTask when ldScrollTo >= 0 and ldChap.status == "ready" and ldScrollTo >= ldChap.start and ldScrollTo < ldChap.start + ldChap.blocks.length
+    after(60, ldScrollGo)
+  action ldScrollGo
+    scrollIntoView(`doc-block-${ldScrollTo.toFixed(0)}`)
+    ldScrollTo = -1
 
   action ldGo(n: number)
     ldSec = max(0, min(n, max(0, ldInfo.sections.length - 1)))
@@ -69,6 +78,7 @@ members Autoradio
   action ldJump(section: number, block: number)
     ldSec = section
     ldBlock = block
+    ldScrollTo = block
     ldToc = false
     ldText = true
     send ldAck = shelfPlace(address=pg.top, section=section, block=block)

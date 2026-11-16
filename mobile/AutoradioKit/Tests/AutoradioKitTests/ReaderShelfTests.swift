@@ -103,6 +103,19 @@ final class ShelfZipEpubTests: XCTestCase {
         XCTAssertEqual(t.blocks.filter { $0.kind == "item" }.count, 2)
         XCTAssertEqual(t.blocks.first { $0.text.hasPrefix("Quoted") }?.kind, "quote")
     }
+    func testChapterTitlesComeFromNavAndNcx() throws {
+        func make(_ manifestExtra: String, _ files: [(String, String)]) -> Data {
+            let opf = #"<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>T</dc:title></metadata><manifest><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/><item id="c2" href="c2.xhtml" media-type="application/xhtml+xml"/>"# + manifestExtra + #"</manifest><spine><itemref idref="c1"/><itemref idref="c2"/></spine></package>"#
+            return makeZip([("META-INF/container.xml", cont), ("OPS/book.opf", opf), ("OPS/c1.xhtml", chapter("One", "<p>Alpha.</p>")), ("OPS/c2.xhtml", chapter("Two", "<p>Beta.</p>"))] + files)
+        }
+        let nav = #"<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body><nav epub:type="toc"><ol><li><a href="c1.xhtml">The Beginning</a></li><li><a href="c2.xhtml#s1">The Harbour</a></li></ol></nav></body></html>"#
+        let a = try Epub.parse(data: make(#"<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>"#, [("OPS/nav.xhtml", nav)]))
+        XCTAssertEqual(a.chapters.map(\.title), ["The Beginning", "The Harbour"])
+        let ncx = #"<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/"><navMap><navPoint id="a"><navLabel><text>First Light</text></navLabel><content src="c1.xhtml"/></navPoint><navPoint id="b"><navLabel><text>Second Wind</text></navLabel><content src="c2.xhtml"/></navPoint></navMap></ncx>"#
+        let b = try Epub.parse(data: make(#"<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>"#, [("OPS/toc.ncx", ncx)]))
+        XCTAssertEqual(b.chapters.map(\.title), ["First Light", "Second Wind"])
+        XCTAssertEqual(try Epub.parse(data: make("", [])).chapters.map(\.title), ["One", "Two"])   // no contents: the headings
+    }
     func testProtectedBookIsRefusedButFontObfuscationIsNot() throws {
         let drm = #"<encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><EncryptedData xmlns="http://www.w3.org/2001/04/xmlenc#"><EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/><CipherData><CipherReference URI="OPS/c1.xhtml"/></CipherData></EncryptedData></encryption>"#
         XCTAssertThrowsError(try Epub.parse(data: book(extra: [("META-INF/encryption.xml", drm)]))) { XCTAssertEqual($0 as? EpubError, .protected) }

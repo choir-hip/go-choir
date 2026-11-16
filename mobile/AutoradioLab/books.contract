@@ -54,7 +54,7 @@ component DocBlockView
   derive isHead = b.kind == "heading"
   view
     button press=ldPlace(b.n) testId=`doc-block-${b.n}` appearance="none" width="100%"
-      column width="100%" box-sizing="border-box" padding="8px 10px" border-radius=th.radiusControl background-color=(lit ? th.paper2 : "transparent")
+      column id=`doc-block-${b.n}` width="100%" box-sizing="border-box" padding="8px 10px" border-radius=6 background-color=(lit ? th.paper2 : "transparent")
         transition=`background-color ${th.motionFastMs}ms ease`
         text (b.kind == "item" ? `${b.marker}${b.text}` : b.text) font-family=(isHead ? th.fontUi : th.fontRead) font-size=(isHead ? 22 : 19)
           font-weight=(isHead ? 700 : 400) line-height=(isHead ? 1.25 : 1.65) color=(b.kind == "quote" ? th.muted : th.fg) text-align="left"

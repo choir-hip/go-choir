@@ -134,10 +134,9 @@ extension AutoradioModule {
     }
 }
 
-/// The ONE place Reader meets the playback queue (Kit/PlayQueue.swift). Read aloud is `playNow(.document)`, Add to queue is `enqueue`; the queue
-/// asks the text source below for the blocks from a position, and tells `onDocumentPosition` which block is being read (the page lights it, and
-/// the saved place follows the voice). When the queue's engine is not wired in this build (`engine == nil`), Read aloud still speaks through the
-/// radio's own speakText path (the same as Listen); Add to queue then says so.
+/// The ONE place Reader meets the playback queue (Kit/PlayQueue.swift): Read aloud is `playNow(.document)`, Add to queue is `enqueue`. The queue asks
+/// the text source below for the blocks from a position and reports the block being read through `onDocumentPosition`, which lights it on the page
+/// and moves the saved place. Nothing here speaks by itself.
 enum ShelfPlayback {
     @MainActor static func register() {
         PlayQueue.shared.registerTextSource(kind: "document") { id, at in
@@ -148,24 +147,16 @@ enum ShelfPlayback {
     }
     static func play(module: AutoradioModule, doc: ShelfDoc, at: Int, done: @escaping (Bool) -> Void) {
         Task { @MainActor [weak module] in
+            guard let module else { return done(false) }
             ShelfFollow.shared.set(id: doc.id, block: at)
-            if PlayQueue.shared.engine != nil {
-                PlayQueue.shared.playNow(.document(id: doc.id, title: doc.title, at: at))
-                return done(true)
-            }
-            var text = "", used = 0
-            for b in ReaderShelf.shared.blocks(id: doc.id, from: at) {
-                if used > 60_000 { break }
-                text += b + "\n\n"; used += b.count
-            }
-            let words = ListenText.compose(title: "", body: text)
-            guard let module, !words.isEmpty else { return done(false) }
-            done(await module.runtime.speakText(address: doc.address, text: words, title: doc.title, now: true))
+            // As the queue's own add does: the engine is started first when it is not running.
+            if !module.runtime.snapshot().running { await module.runtime.start(virtual: module.virtualEngine) }
+            PlayQueue.shared.playNow(.document(id: doc.id, title: doc.title, at: at))
+            done(true)
         }
     }
     static func enqueue(module: AutoradioModule, doc: ShelfDoc, at: Int, done: @escaping (Bool, String) -> Void) {
         Task { @MainActor in
-            guard PlayQueue.shared.engine != nil else { return done(false, "The queue is not ready yet.") }
             PlayQueue.shared.enqueue(.document(id: doc.id, title: doc.title, at: at))
             done(true, "Added to the queue.")
         }
