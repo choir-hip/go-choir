@@ -237,6 +237,31 @@ func TestPoliteNeighbourSetsPriority(t *testing.T) {
 	}
 }
 
+func TestS7_MatchRunsOnceAfterTheQueueDrainsAndOnlyAfterWork(t *testing.T) {
+	b := &fakeBackend{pending: []PendingEpisode{ep("a"), ep("b")}}
+	e := &fakeEngine{}
+	matches := 0
+	var queueAtMatch int
+	cfg := ServeConfig{Match: func(context.Context) error {
+		matches++
+		b.mu.Lock()
+		queueAtMatch = len(b.pending)
+		b.mu.Unlock()
+		return errors.New("busy")
+	}}
+	runServe(t, b, e, 4, cfg)
+	if matches != 1 || queueAtMatch != 0 {
+		t.Fatalf("S7: match ran %d times with %d pending", matches, queueAtMatch)
+	}
+	// No work, no match.
+	idle := &fakeBackend{}
+	m2 := 0
+	runServe(t, idle, &fakeEngine{}, 3, ServeConfig{Match: func(context.Context) error { m2++; return nil }})
+	if m2 != 0 {
+		t.Fatalf("S7: an idle worker matched %d times", m2)
+	}
+}
+
 // The disk guard (owner and lead, 2026-11-16: the service must never fill the
 // shared disk). Ways it can fail, written first:
 //

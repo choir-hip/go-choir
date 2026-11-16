@@ -203,3 +203,29 @@ func TestHostJudgmentIsMeteredLikeAnyJevCall(t *testing.T) {
 		t.Fatalf("the exact upstream body must come back: %s", rec.Body.String())
 	}
 }
+
+// The podcast clips match is the second host caller: it is admitted by its
+// exact name and its receipt carries the gateway's own label for it.
+func TestHostJudgmentAdmitsThePodcastClipsCaller(t *testing.T) {
+	restore := hostauth.SetForTesting(hostauth.ModeEnforce, hostJudgmentToken)
+	defer restore()
+	h, _, receipts := hostJudgmentHandler(t)
+	for _, caller := range []string{"Podcast-Clips", "host:podcast-clips", "podcast_clips"} {
+		if rec := hostJudge(h, "127.0.0.1:6000", caller, hostJudgmentToken, hostJudgmentBody()); rec.Code != http.StatusForbidden {
+			t.Fatalf("caller %q: %d, want 403", caller, rec.Code)
+		}
+	}
+	if rec := hostJudge(h, "127.0.0.1:6000", "podcast-clips", hostJudgmentToken, hostJudgmentBody()); rec.Code != http.StatusOK {
+		t.Fatalf("podcast-clips: %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := hostJudge(h, "10.200.1.2:6000", "podcast-clips", hostJudgmentToken, hostJudgmentBody()); rec.Code != http.StatusForbidden {
+		t.Fatalf("podcast-clips from a guest address: %d, want 403", rec.Code)
+	}
+	data, err := os.ReadFile(receipts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"computer_id":"host:podcast-clips"`) {
+		t.Fatalf("the receipt does not carry the gateway's own label: %s", data)
+	}
+}

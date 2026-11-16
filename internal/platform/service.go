@@ -43,6 +43,9 @@ type Service struct {
 	podcastCache podcastReadCache
 	// podcastFeedMu serialises feed reports (podcast_feeds.go).
 	podcastFeedMu sync.Mutex
+	// podcastJudge and podcastMatchMu serve the match job (podcast_match.go).
+	podcastJudge   PodcastJudge
+	podcastMatchMu sync.Mutex
 	// The notice sequence (publication_links.go): seeded from storage before
 	// the first one is issued or read.
 	seedMu        sync.Mutex
