@@ -85,6 +85,8 @@ extension PlaybackEngine {
     /// The desk could not be reached or wrote nothing: a quiet line, never an entry. Set by the host from the writer.
     public var deskNotice: String? { didSet { if oldValue != deskNotice { onChange?() } } }
     /// The desk is writing what comes next.
+    /// The last write returned nothing new.
+    public var deskDry = false { didSet { if oldValue != deskDry { onChange?() } } }
     public var deskWriting = false { didSet { if oldValue != deskWriting { onChange?() } } }
     /// A plain line about the last thing that could not play ("" when nothing is wrong).
     public private(set) var message = ""
@@ -221,6 +223,12 @@ extension PlaybackEngine {
     /// it is on air it finishes the block it is on and the desk's follows it; once it was heard (or skipped) the desk's is not a second greeting
     /// and is dropped. Only for the opening write (`cause: open`).
     public func admitDesk(_ op: RunSheetOp, cause: String) -> RunSheetOp? {
+        // A desk that tells a story already on the sheet (heard, on air or ahead) is not heard twice: dropped, and the reason kept.
+        if op.op == .place, let e = op.entry, e.kind == .story,
+           store.sheet.entries.contains(where: { $0.kind == .story && $0.id != e.id && $0.title.lowercased() == e.title.lowercased() && !e.title.isEmpty }) {
+            droppedFromDesk.append((e.id, "title_already_on_sheet"))
+            return nil
+        }
         guard cause == "open", op.op == .place, var e = op.entry, e.kind == .opening, e.placedBy == .desk,
               let pid = currentOpeningId, let phone = store.entry(pid) else { return op }
         var o = op

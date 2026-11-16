@@ -156,6 +156,7 @@ public final class ChoirApp: @unchecked Sendable {
             me.writer = w
             w.admit = { op, cause in RunSheetPlayer.shared.admitDesk(op, cause: cause) }
             w.onNotice = { n in RunSheetPlayer.shared.deskNotice = n }
+            w.onDry = { d in RunSheetPlayer.shared.deskDry = d }
             w.onWriting = { on in RunSheetPlayer.shared.deskWriting = on }
             p.aheadChanged = { [weak w] in w?.checkAhead() }
             RunSheetStore.shared.poster = RouteSheetPoster(baseURL: me.signIn.baseURL)

@@ -65,7 +65,7 @@ component UpNext
       if qv.notice != ""
         text qv.notice testId="sheet-notice" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
       if qv.upcoming.length == 0
-        EmptyState(message=(qv.writing ? "The desk is writing what comes next." : (qv.notice != "" ? "Nothing is coming up yet." : "Nothing is coming up. Add a story, a page or a podcast and it plays next.")), detail="", testId="queue-empty")
+        EmptyState(message=(qv.writing ? "The desk is writing what comes next." : (qv.notice != "" ? "Nothing is coming up yet." : (qv.dry ? "Nothing is coming up. Add a story, a page or a podcast and it plays next." : "The desk will write more shortly."))), detail="", testId="queue-empty")
       else
         PlainList(testId="queue-list")
           for r, k in qv.upcoming key=r.id

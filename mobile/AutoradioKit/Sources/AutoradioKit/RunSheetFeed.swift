@@ -131,6 +131,9 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
     public var onNotice: ((String?) -> Void)?
     /// Told when a write starts and ends (the host shows "the desk is writing what comes next").
     public var onWriting: ((Bool) -> Void)?
+    /// True when the last ask returned nothing new (a repeat, or nothing), and no ask is in flight: only then is "nothing is coming" true.
+    public private(set) var dry = false
+    public var onDry: ((Bool) -> Void)?
     /// Sees each desk op before it is applied (the player decides about a second opening); nil drops it.
     public var admit: ((RunSheetOp, String) -> RunSheetOp?)?
     public var noticeWords: ((Error?) -> String?) = { RunSheetWriter.plainWords($0) }
@@ -196,6 +199,7 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
             if let f = first { self.latency = max(0.5, f.timeIntervalSince(started)) }
             self.inFlight = false
             self.onWriting?(false)
+            self.setDry(added == 0 && failure == nil)
             if added > 0 { self.quietOn = nil; self.setNotice(nil) }
             else {
                 self.quietOn = airId
@@ -209,6 +213,7 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
 
     enum WriterError: Error { case said(String) }
 
+    private func setDry(_ d: Bool) { guard d != dry else { return }; dry = d; onDry?(d) }
     private func setNotice(_ n: String?) {
         guard n != notice else { return }
         notice = n

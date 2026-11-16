@@ -65,7 +65,11 @@ final class DemoURLProtocol: URLProtocol {
         if url.path == "/api/autoradio/programme", request.httpMethod == "POST" {
             let resp = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "text/event-stream"])!
             client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: Data(DemoStretch.sse.utf8))
+            var sent = request.httpBody ?? Data()
+            if let st = request.httpBodyStream { st.open(); var buf = [UInt8](repeating: 0, count: 4096)
+                while st.hasBytesAvailable { let n = st.read(&buf, maxLength: buf.count); if n <= 0 { break }; sent.append(buf, count: n) }; st.close() }
+            let cause = ((try? JSONSerialization.jsonObject(with: sent)) as? [String: Any])?["cause"] as? String ?? "open"
+            client?.urlProtocol(self, didLoad: Data(DemoStretch.body(cause: cause).utf8))
             client?.urlProtocolDidFinishLoading(self)
             return
         }

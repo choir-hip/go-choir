@@ -29,6 +29,7 @@ public struct QueueInfo: Codable, Sendable, Equatable {
     public var upcoming: [QueueRow] = []
     public var message = ""
     public var notice = ""             // the desk could not be reached ("" when all is well): a quiet line, never a row
+    public var dry = false             // the last write brought nothing new and none is under way: "nothing is coming" is true
     public var writing = false         // the desk is writing what comes next
     public var webUrl = ""             // the page the bar opened ("" none)
     public var webHost = ""
@@ -70,7 +71,7 @@ extension RunSheetPlayer {
             return r
         }
         q.message = message
-        q.notice = deskNotice ?? ""; q.writing = deskWriting
+        q.notice = deskNotice ?? ""; q.writing = deskWriting; q.dry = deskDry && !deskWriting
         return q
     }
 

@@ -425,6 +425,8 @@ public struct RouteStretchSource: StretchSource {
         var items = StretchCandidates.fromFront(front, skipping: skipping, onlyRoutes: onlyRoutes)
         // The list handed over is told out (or none of it is in the front): the radio goes on with the front, it does not stop.
         if items.isEmpty, onlyRoutes != nil { items = StretchCandidates.fromFront(front, skipping: skipping) }
+        // Every story on the front was told already: the desk is still asked (it may have an update, or a different angle) with the whole list.
+        if items.isEmpty, !skipping.isEmpty { items = StretchCandidates.fromFront(front, onlyRoutes: onlyRoutes) }
         if items.isEmpty { throw ChoirError.empty("no story to tell") }
         enum Got: Sendable { case text(String, String), none, late, clips }
         let routes = items.prefix(StretchCandidates.maxTextItems).map(\.route)
