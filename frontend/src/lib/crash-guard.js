@@ -115,7 +115,7 @@ export function createCrashGuard({ storage, key, pageId, now = () => Date.now(),
       if (onlyAuto && !entry.autoKey) continue;
       delete state.pending[k];
       if (state.planned[entry.page] && !entry.busy) continue;
-      const holdKey = entry.autoKey ? `a:${entry.autoKey}` : restored && restored.has(entry.windowId) ? `w:${entry.windowId}` : '';
+      const holdKey = entry.autoKey ? `a:${entry.autoKey}` : restored === null || restored?.has(entry.windowId) ? `w:${entry.windowId}` : '';
       if (!holdKey) continue;
       const h = state.held[holdKey] || { key: holdKey, windowId: entry.autoKey ? '' : entry.windowId, appId: entry.appId || '', title: entry.title || '', count: 0 };
       if (!counted.has(holdKey)) {
@@ -237,7 +237,9 @@ export function createCrashGuard({ storage, key, pageId, now = () => Date.now(),
      */
     takeDeaths(restoredIds = [], alive = new Set()) {
       return mutate((state) => {
-        const dead = absorbDead(state, alive, new Set(restoredIds), false);
+        // null: the server's list is not known (a failed fetch): absorb every
+        // dead marker by window id and prune nothing.
+        const dead = absorbDead(state, alive, restoredIds === null ? null : new Set(restoredIds), false);
         for (const page of Object.keys(state.planned)) {
           if (isDead(page, alive)) delete state.planned[page];
         }
@@ -260,6 +262,19 @@ export function createCrashGuard({ storage, key, pageId, now = () => Date.now(),
         }
         return out;
       }) || {};
+    },
+    /** Every hold, {key: count}, for the reactive mirror. */
+    readHeld() {
+      const state = read();
+      const out = {};
+      if (state) for (const [k, h] of Object.entries(state.held)) out[k] = Number(h.count) || 1;
+      return out;
+    },
+    /** The window's body is no longer mounted (suspended, minimized away): drop this page's marker, keep every hold. */
+    unmark(windowId) {
+      mutate((state) => {
+        delete state.pending[entryKey(windowId)];
+      });
     },
     /** Count of an automatic open's hold (0 when none), keyed by app and route/context. */
     autoHeld(autoKey) {
@@ -289,6 +304,18 @@ export function createCrashGuard({ storage, key, pageId, now = () => Date.now(),
       });
     },
   };
+}
+
+/**
+ * The hold that keeps a window's body from mounting, derived: the window's
+ * durable hold (by id), or its automatic open's (by app+route key), unless the
+ * user Reopened it in this page. 0: the body may mount.
+ */
+export function crashHoldFor(win, held = {}, reopened = new Set()) {
+  if (!win || reopened.has(win.windowId)) return 0;
+  const byId = Number(held[`w:${win.windowId}`]) || 0;
+  const byKey = win.crashAutoKey ? Number(held[`a:${win.crashAutoKey}`]) || 0 : 0;
+  return Math.max(byId, byKey);
 }
 
 /**
