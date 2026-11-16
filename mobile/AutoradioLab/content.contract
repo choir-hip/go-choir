@@ -113,6 +113,53 @@ component DocExpanded
                   button press=ctlJump(h.section, h.block) testId=`doc-hit-${h.block}` appearance="none" width="100%" aria-label=`Go to ${h.label}`
                     LineRow(label=h.label, detail=h.snippet, trailing="", chevron=false)
 
+// A Texture document of your own: Edit, then the formatting row (Done, Bold, Italic, Heading, List, Quote, Code, Link). Nothing here is Markdown
+// syntax: each button is Exact's `format` on the editor, lit from the selection's `formats`.
+component TextureExpanded
+  inject
+    th: Theme
+    ctlPanel: string
+    edOn: bool
+    edFormats: string
+    edUnavail: string
+    edUrl: string
+    edBegin: action
+    edDone: action
+    edFormat: action
+    edHeading: action
+    edOpenLink: action
+    edUrlChanged: action
+    edApplyLink: action
+  view
+    column gap=8 width="100%" testId="content-open"
+      row flex-wrap="wrap" gap=8 width="100%" align-items="center"
+        if edOn == false
+          button press=edBegin testId="texture-edit" appearance="none" aria-label="Edit this document"
+            ChipFace(label="Edit", selected=false)
+        else
+          button press=edDone retainFocus=true testId="texture-done" appearance="none" aria-label="Done editing"
+            ChipFace(label="Done", selected=false)
+          button press=edFormat("bold") retainFocus=true testId="format-bold" appearance="none" aria-label="Bold"
+            ChipFace(label="Bold", selected=(` ${edFormats} `.includes(" bold ")))
+          button press=edFormat("italic") retainFocus=true testId="format-italic" appearance="none" aria-label="Italic"
+            ChipFace(label="Italic", selected=(` ${edFormats} `.includes(" italic ")))
+          button press=edHeading retainFocus=true testId="format-heading" appearance="none" aria-label="Heading"
+            ChipFace(label="Heading", selected=(` ${edFormats} `.includes(" heading2 ")))
+          button press=edFormat("bullet") retainFocus=true testId="format-list" appearance="none" aria-label="List"
+            ChipFace(label="List", selected=(` ${edFormats} `.includes(" bullet ")))
+          button press=edFormat("quote") retainFocus=true testId="format-quote" appearance="none" aria-label="Quote"
+            ChipFace(label="Quote", selected=(` ${edFormats} `.includes(" quote ")))
+          button press=edFormat("code") retainFocus=true testId="format-code" appearance="none" aria-label="Code"
+            ChipFace(label="Code", selected=(` ${edFormats} `.includes(" code ")))
+          button press=edOpenLink retainFocus=true testId="format-link" appearance="none" aria-label="Link"
+            ChipFace(label="Link", selected=(ctlPanel == "link"))
+      if ctlPanel == "link"
+        row gap=8 align-items="center" width="100%"
+          input id="texture-link-url" value=edUrl input=edUrlChanged submit=edApplyLink aria-label="Link address" placeholder="https://" testId="texture-link-url"
+            min-width=0 flex=1 font-family=th.fontLabel font-size=16 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
+          button press=edApplyLink retainFocus=true testId="texture-link-apply" appearance="none" aria-label="Apply the link"
+            ChipFace(label="Apply", selected=false)
+
 component WebExpanded
   inject
     th: Theme
@@ -150,18 +197,20 @@ component ContentRow
       if ctlUp
         if ctlMode == "doc"
           DocExpanded()
+        else if ctlMode == "texture"
+          TextureExpanded()
         else
           WebExpanded()
       row testId="content-line" width="100%" align-items="center" gap=4 min-height=36
         button press=ctlToggle testId="content-toggle" appearance="none" flex=1 min-width=0 aria-label=(ctlUp ? "Fewer controls" : "More controls for this page")
           row width="100%" align-items="center" gap=8 min-height=36 padding-left=4
-            text ctlTitle testId=(ctlMode == "doc" ? "content-title" : `${pre}-host`) font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg flex=1 min-width=0 line-clamp=1 text-align="left"
+            text ctlTitle testId=((ctlMode == "doc" or ctlMode == "texture") ? "content-title" : `${pre}-host`) font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg flex=1 min-width=0 line-clamp=1 text-align="left"
             if ctlBusy
               progress aria-label="Loading" width=16 height=16 color=th.accent
             if ctlPos != ""
-              text ctlPos testId="content-position" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted font-variant-numeric="tabular-nums"
+              text ctlPos testId=(ctlMode == "texture" ? "texture-saved" : "content-position") font-family=th.fontLabel font-size="-exact-footnote" color=th.muted font-variant-numeric="tabular-nums"
             text (ctlUp ? "Less" : "More") testId="content-more" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
-        if ctlMode == "doc"
+        if ctlMode == "doc" or ctlMode == "texture"
           button press=ctlCloseDoc testId="doc-close" appearance="none" aria-label="Close this document" width=36 height=36
             image "symbol:close" color=th.fg
         else if ctlMode == "barweb"

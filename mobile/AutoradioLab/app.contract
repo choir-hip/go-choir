@@ -228,6 +228,25 @@ component Autoradio
     ctlFor
     ctlPanel
     ctlMode
+    // ---- a Texture document in rich text (members-content.contract) ----
+    edInfo
+    edm
+    edOn
+    edFor
+    edDraft
+    edFormats
+    edUnavail
+    edCurLink
+    edUrl
+    edBegin
+    edDone
+    edInput
+    edSelected
+    edFormat
+    edHeading
+    edOpenLink
+    edUrlChanged
+    edApplyLink
     ctlKey
     ctlUp
     ctlClear

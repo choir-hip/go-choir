@@ -130,6 +130,7 @@ extension AutoradioModule {
 
         // Sends. Every one answers the open-page list, the shape the page host reads.
         handle("pageOpen") { [unowned self] args, reply in
+            Task { @MainActor in await TextureEditor.shared.flushAll() }      // leaving a page posts what was typed on it
             // A PDF or an e-book in Files opens in Reader, the one way a document opens (Kit/FilesInReader.swift).
             if let address = args["address"] as? String, let r = FilesInReader.current, FilesInReader.opensInReader(address) {
                 Task { [weak self] in
@@ -152,8 +153,8 @@ extension AutoradioModule {
             }
             pages.open(args["address"] as? String ?? "", title: args["title"] as? String); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList())
         }
-        handle("pageClose") { [unowned self] args, reply in pages.close(args["address"] as? String ?? ""); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }
-        handle("pageFocus") { [unowned self] args, reply in pages.focus(args["address"] as? String ?? ""); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }
+        handle("pageClose") { [unowned self] args, reply in Task { @MainActor in await TextureEditor.shared.flushAll() }; pages.close(args["address"] as? String ?? ""); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }
+        handle("pageFocus") { [unowned self] args, reply in Task { @MainActor in await TextureEditor.shared.flushAll() }; pages.focus(args["address"] as? String ?? ""); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }
         handle("pagePin") { [unowned self] args, reply in pages.togglePin(args["address"] as? String ?? ""); touch(["openPages"]); reply(pageList()) }
         handle("pageReopen") { [unowned self] _, reply in pages.reopenLastClosed(); touch(["openPages"]); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }
         handle("themeSet") { [unowned self] args, reply in

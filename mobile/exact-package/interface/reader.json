@@ -100,7 +100,10 @@
    "plain": "string",
    "textBlocks": "number",
    "markdown": "string",
-   "hearIt": "HearItRow[]"
+   "hearIt": "HearItRow[]",
+   "editable": "bool",
+   "source": "string",
+   "docId": "string"
   },
   "TextureRow": {
    "address": "string",
@@ -166,7 +169,10 @@
      "plain": "",
      "textBlocks": 0,
      "markdown": "",
-     "hearIt": []
+     "hearIt": [],
+     "editable": false,
+     "source": "",
+     "docId": ""
     }
    }
   },
