@@ -222,10 +222,11 @@ public final class AutoradioModule: ExactPackage {
         // Skip and previous move the programme: the player's view and the bar read the new position (found in the P1 simulator drive:
         // with the engine paused nothing else asked for them again, so the view kept the old segment).
         // While remote audio plays, the passage buttons are its 15 second skips (lane autoradio-queue).
-        case "labNext" where MainActor.assumeIsolated({ PlayQueue.shared.current?.isRemoteAudio == true }): MainActor.assumeIsolated { PlayQueue.shared.seek(by: 15) }; reply(state())
-        case "labPrevious" where MainActor.assumeIsolated({ PlayQueue.shared.current?.isRemoteAudio == true }): MainActor.assumeIsolated { PlayQueue.shared.seek(by: -15) }; reply(state())
-        case "labNext": runtime.player.next(); touch(["radioView", "barState"]); reply(state())
-        case "labPrevious": runtime.player.previous(); touch(["radioView", "barState"]); reply(state())
+        case "labNext" where onMainThread({ RunSheetPlayer.shared.isRemote }): onMainThread { RunSheetPlayer.shared.seek(by: 15) }; reply(state())
+        case "labPrevious" where onMainThread({ RunSheetPlayer.shared.isRemote }): onMainThread { RunSheetPlayer.shared.seek(by: -15) }; reply(state())
+        // Next and previous are the run sheet's: `skip(on air)` and `previous`, not a passage of the entry.
+        case "labNext": onMainThread { RunSheetPlayer.shared.next() }; touch(["radioView", "barState"]); reply(state())
+        case "labPrevious": onMainThread { RunSheetPlayer.shared.previous() }; touch(["radioView", "barState"]); reply(state())
         case "labSelectStage":
             if let k = StageKind(rawValue: args["kind"] as? String ?? ""), let id = args["id"] as? String {
                 runtime.setStage(k, id: id)

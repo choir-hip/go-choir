@@ -145,16 +145,16 @@ extension AutoradioModule {
     }
 }
 
-/// The ONE place Reader meets the playback queue (Kit/PlayQueue.swift): Read aloud is `playNow(.document)`, Add to queue is `enqueue`. The queue asks
+/// The ONE place Reader meets the run sheet (Kit/RunSheetPlayer.swift): Read aloud is `place now` of a book entry, Add to queue is `place queued`. The player asks
 /// the text source below for the blocks from a position and reports the block being read through `onDocumentPosition`, which lights it on the page
 /// and moves the saved place. Nothing here speaks by itself.
 enum ShelfPlayback {
     @MainActor static func register() {
-        PlayQueue.shared.registerTextSource(kind: "document") { id, at in
+        RunSheetPlayer.shared.registerTextSource(kind: "document") { id, at in
             let blocks = ReaderShelf.shared.blocks(id: id, from: at)
             return blocks.isEmpty ? nil : blocks
         }
-        PlayQueue.shared.onDocumentPosition = { id, block in ShelfFollow.shared.set(id: id, block: block) }
+        RunSheetPlayer.shared.onDocumentPosition = { id, block in ShelfFollow.shared.set(id: id, block: block) }
     }
     static func play(module: AutoradioModule, doc: ShelfDoc, at: Int, done: @escaping (Bool) -> Void) {
         Task { @MainActor [weak module] in
@@ -162,13 +162,13 @@ enum ShelfPlayback {
             ShelfFollow.shared.set(id: doc.id, block: at)
             // As the queue's own add does: the engine is started first when it is not running.
             if !module.runtime.snapshot().running { await module.runtime.start(virtual: module.virtualEngine) }
-            PlayQueue.shared.playNow(.document(id: doc.id, title: doc.title, at: at))
+            RunSheetPlayer.shared.playNow(.book(id: doc.id, title: doc.title, at: at))
             done(true)
         }
     }
     static func enqueue(module: AutoradioModule, doc: ShelfDoc, at: Int, done: @escaping (Bool, String) -> Void) {
         Task { @MainActor in
-            PlayQueue.shared.enqueue(.document(id: doc.id, title: doc.title, at: at))
+            RunSheetPlayer.shared.queue(.book(id: doc.id, title: doc.title, at: at))
             done(true, "Added to the queue.")
         }
     }

@@ -87,19 +87,20 @@ extension AutoradioModule {
             }
         }
 
-        // "Listen": the radio reads what is in front of the listener, through the one speakText path (LabRuntime.speakText ->
-        // ProgrammePlayer.speakText), with the player's own controls. The headline is read first. It replaces what is playing.
+        // "Listen": the radio reads what is in front of the listener, as a run sheet entry placed now (RunSheetPlayer.playNow), with the
+        // player's own controls. The headline is read first. It replaces what is on air; what was ahead stays ahead.
         // Text with nothing to say starts nothing.
         handle("choirListen") { [unowned self] args, reply in
             let address = args["address"] as? String ?? ""
             let title = (args["title"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let text = ListenText.compose(title: title, body: args["text"] as? String ?? "")
             guard !address.isEmpty, !text.isEmpty else { return reply(self.json(self.runtime.snapshot())) }
-            self.choir.noteListening(address: address)                      // the story's list, for next, previous and autoplay
             Task { [weak self] in
                 guard let self else { return }
-                _ = await self.runtime.speakText(address: address, text: text, title: title.isEmpty ? nil : title, now: true)
-                await MainActor.run { PlayQueue.shared.noteStarted(address.hasPrefix("pub:") ? .story(route: String(address.dropFirst(4)), title: title) : nil) }   // the queue shows what Listen plays
+                let paras = ChoirText.paragraphs(text, maxChars: ChoirText.speechChars)
+                let name = title.isEmpty ? paras.first.map { $0.split(separator: " ").prefix(6).joined(separator: " ") } ?? "" : title
+                // Listen is a play: `place now` of the page in front, with the words the page held. What was ahead stays ahead.
+                await MainActor.run { RunSheetPlayer.shared.playNow(.readAloud(address: address, title: name), words: (name, paras)) }
                 self.signals.record(SignalEvent(kind: "read-aloud", subject: address, detail: "listen"))
                 DispatchQueue.main.async { reply(self.json(self.runtime.snapshot())) }
             }

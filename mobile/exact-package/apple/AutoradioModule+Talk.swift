@@ -9,37 +9,31 @@ extension AutoradioModule {
     func registerTalk() {
         Conversation.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["barState", "conversationInfo"], now: true) } }
 
-        // The queue by voice (owner, 2026-11-15). The paper's list is what the DJ may add; the rest of the queue goes through the queue
-        // lane's PlayQueue (queue-wire.md): `snapshotJSON()` goes out with every turn, the `queue_ops` event comes back whole to `applyQueueOpsEvent`.
+        // The queue by voice (owner, 2026-11-15). The paper's list is what the DJ may add; the rest goes through the run sheet
+        // (Kit/TurnQueueWire.swift): `turnQueueJSON()` goes out with every turn as the `queue` field, the `queue_ops` event comes back whole to
+        // `applyTurnOps`, which translates the old words onto run sheet ops.
         var hooks = QueueVoice.hooks
         hooks.candidates = { [choir] in (choir?.storyRows() ?? []).prefix(40).map { (route: $0.route, title: $0.title) } }
-        // Plain commands go through the queue's one mutation, `PlayQueue.apply(_:by:)`, as the reader. A count of 0 (nothing queued to
-        // skip, no history to go back to) falls back to the paper's own list, which is what the lock screen's next and previous do.
+        // Plain commands are run sheet ops by the listener: "skip" is `skip(on air)`, the same op as the next button, a swipe on the
+        // card and the lock screen's next; "back" is `previous`; "play this next" is `place next`, "queue this" is `place queued`.
         hooks.perform = { [weak self] ops, front in
             guard let self, let op = ops.first else { return false }
             switch op {
             case .pause: self.runtime.player.pause(); return true
             case .resume: await self.choir.startPlaying(); return true
-            case .skip:
-                let n = await MainActor.run { PlayQueue.shared.apply([.skip()], by: .reader) }
-                if n == 0 { await self.choir.moveStory(.next) }
-                return true
-            case .previous:
-                let n = await MainActor.run { PlayQueue.shared.apply([.previous], by: .reader) }
-                if n == 0 { await self.choir.moveStory(.previous) }
-                return true
-            case .clear: _ = await MainActor.run { PlayQueue.shared.apply([.clear], by: .reader) }; return true
+            case .skip: await self.choir.moveStory(.next); return true
+            case .previous: await self.choir.moveStory(.previous); return true
+            case .clear: await MainActor.run { RunSheetPlayer.shared.clearUpcoming() }; return true
             case .playNext(.front), .enqueue(.front):
                 // Only a paper story in front can be queued by "this" tonight; a page, book or episode in front falls through to the desk.
                 guard let f = front, f.address.hasPrefix("pub:") else { return false }
-                let item = PlayItem.story(route: String(f.address.dropFirst(4)), title: f.title)
-                let queued: QueueOp = { if case .playNext = op { return .playNext(item) }; return .enqueue(item) }()
-                _ = await MainActor.run { PlayQueue.shared.apply([queued], by: .reader) }
+                let entry = RunSheetEntry.paperStory(route: String(f.address.dropFirst(4)), title: f.title)
+                await MainActor.run { if case .playNext = op { RunSheetPlayer.shared.playNext(entry) } else { RunSheetPlayer.shared.queue(entry) } }
                 return true
             }
         }
-        hooks.snapshot = { await MainActor.run { PlayQueue.shared.snapshotJSON().data(using: .utf8) } }       // the wire's `queue`
-        hooks.applyServerOps = { json in _ = await MainActor.run { PlayQueue.shared.applyQueueOpsEvent(json) } }  // rebase rule, dedupe, decoding: the queue's
+        hooks.snapshot = { await MainActor.run { RunSheetPlayer.shared.turnQueueJSON() } }       // the wire's `queue`
+        hooks.applyServerOps = { json in _ = await MainActor.run { RunSheetPlayer.shared.applyTurnOps(json) } }  // dedupe by turn, decoding, rebase: the sheet's
         QueueVoice.hooks = hooks
 
         // The reader's voice (lane autoradio-talk): the Core ML model is fetched quietly (about 8 MB) and, once loaded, the gate listens.

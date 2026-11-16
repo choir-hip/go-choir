@@ -54,14 +54,14 @@ extension AutoradioModule {
         }
 
         handle("barState") { [unowned self] _, reply in
-            let info = MainActor.assumeIsolated { PlayQueue.shared.overlay(tracker.barInfo(player: choir.playerView(), snapshot: runtime.snapshot())) }   // remote audio shows as the radio (lane autoradio-queue)
+            let info = MainActor.assumeIsolated { RunSheetPlayer.shared.overlay(tracker.barInfo(player: choir.playerView(), snapshot: runtime.snapshot())) }   // remote audio shows as the radio (lane autoradio-queue)
             scheduleExpiry()
             reply(json(info))
         }
 
         handle("radioView") { [unowned self] _, reply in
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
-            let info = MainActor.assumeIsolated { PlayQueue.shared.overlay(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route)) }   // lane autoradio-queue
+            let info = MainActor.assumeIsolated { RunSheetPlayer.shared.overlay(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: RunSheetStore.shared.ahead(limit: 1).first?.displayTitle ?? "")) }   // lane autoradio-queue
             ReaderFeed.shared.feed(info, route: route)
             reply(json(info))
         }
@@ -74,11 +74,11 @@ extension AutoradioModule {
             }
             touch(["radioView", "barState"])
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
-            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route)))
+            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: onMainThread { RunSheetStore.shared.ahead(limit: 1).first?.displayTitle ?? "" })))
         }
 
-        // Next or previous story (move "next" or "previous"): the next story in the list the current one came from, the previous one within
-        // its first 3 seconds and otherwise the start of this one; in a programme, the next or previous segment.
+        // Next or previous (move "next" or "previous"): the run sheet's `skip(on air)`, and its `previous` (the start of this entry when it has
+        // gone on a little, else the entry before it). The paper's list is never asked.
         handle("radioStory") { [unowned self] args, reply in
             let move: ChoirApp.StoryMove = (args["move"] as? String) == "previous" ? .previous : .next
             Task { [weak self] in
@@ -86,7 +86,7 @@ extension AutoradioModule {
                 await self.choir.moveStory(move)
                 self.touch(["radioView", "barState"])
                 let route = ChoirEnvironment.shared.playing(self.runtime.player.document.id)?.route ?? ""
-                DispatchQueue.main.async { reply(self.json(tracker.radioInfo(player: self.choir.playerView(), snapshot: self.runtime.snapshot(), document: self.runtime.player.document, route: route))) }
+                DispatchQueue.main.async { reply(self.json(tracker.radioInfo(player: self.choir.playerView(), snapshot: self.runtime.snapshot(), document: self.runtime.player.document, route: route, nextTitle: onMainThread { RunSheetStore.shared.ahead(limit: 1).first?.displayTitle ?? "" }))) }
             }
         }
 
@@ -97,7 +97,7 @@ extension AutoradioModule {
             if let v = Double(args["speed"] as? String ?? "") { tracker.setSpeed(v); SpeedStore.standard.save(tracker.speed) }
             touch(["radioView"])
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
-            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route)))
+            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: onMainThread { RunSheetStore.shared.ahead(limit: 1).first?.displayTitle ?? "" })))
         }
     }
 }

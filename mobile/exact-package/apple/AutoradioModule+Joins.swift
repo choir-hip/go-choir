@@ -1,7 +1,7 @@
 // Lane file: autoradio-joins. What the clip rows do ("Hear it" on a story's page, "Clips" on a show's page). Sources and sends are declared in
 // exact-package/interface/joins.json; the logic and its tests are in Kit/Choir/DJQueueAdapter.swift (HearIt, ClipActions) and PodcastClips.swift.
 //   showClips(address)   the clips found for a show (a podcast show page's address), quote first; the show's own fetch runs in the background
-//   clipAct(op, id)      op play | queue | open, id: the clip (play applies the 3 second length rule through DJClipRunner.preflight)
+//   clipAct(op, id)      op play | queue | open, id: the clip (play applies the 3 second length rule through RunSheetPlayer.preflight)
 import Foundation
 
 extension AutoradioModule {

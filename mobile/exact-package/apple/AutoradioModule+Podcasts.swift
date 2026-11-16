@@ -1,8 +1,8 @@
 // Lane file: podcasts (autoradio-podcasts). Sources and sends are declared in exact-package/interface/podcasts.json; the pages are
 // AutoradioLab/podcasts.contract; the data and the logic are Kit/PodcastService.swift and Kit/PodcastFeed.swift (tested there).
 //
-// This file is also THE ADAPTER to the shared playback queue: the only place the podcast app names `PlayQueue` and `PlayItem`.
-// If the queue's API changes, change `registerPodcastQueueAdapter` and nothing else.
+// This file is also THE ADAPTER to the shared playback queue: the only place the podcast app names the run sheet.
+// If the run sheet's API changes, change `registerPodcastQueueAdapter` and nothing else.
 import Foundation
 import UIKit
 
@@ -92,18 +92,18 @@ extension AutoradioModule {
         service.playHook = { req, enqueue in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    let item = PlayItem.audio(url: req.url, title: req.title, show: req.show, start: req.start, end: req.end, episodeId: req.episodeId)
-                    if enqueue { PlayQueue.shared.enqueue(item) } else { PlayQueue.shared.playNow(item) }
+                    let entry = RunSheetEntry.audio(RunSheetAudio(url: req.url, title: req.title, show: req.show, start: req.start, end: req.end, episodeId: req.episodeId))
+                    if enqueue { RunSheetPlayer.shared.queue(entry) } else { RunSheetPlayer.shared.playNow(entry) }
                 }
             }
         }
         service.nowHook = {
             onMain {
-                guard case .audio(_, _, _, let start, let end, let ep)? = PlayQueue.shared.current, let id = ep, PodcastKey.parseEpisode(id) != nil else { return nil }
-                let p = PlayQueue.shared.remotePosition()
-                return PodcastNow(episodeId: id, isClip: end != nil, start: start, elapsed: p?.elapsed, duration: p?.duration)
+                guard let a = RunSheetPlayer.shared.audio, RunSheetPlayer.shared.isRemote, let id = a.episodeId, PodcastKey.parseEpisode(id) != nil else { return nil }
+                let p = RunSheetPlayer.shared.remotePosition()
+                return PodcastNow(episodeId: id, isClip: a.end != nil, start: a.start, elapsed: p?.elapsed, duration: p?.duration)
             }
         }
-        service.keepHook = { DispatchQueue.main.async { MainActor.assumeIsolated { PlayQueue.shared.keepListening() } } }
+        service.keepHook = { DispatchQueue.main.async { MainActor.assumeIsolated { RunSheetPlayer.shared.keepListening() } } }
     }
 }

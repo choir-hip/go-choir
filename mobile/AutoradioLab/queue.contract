@@ -78,13 +78,6 @@ component UpNext
               button press=queueDo("remove", `${r.i}`) testId=`queue-remove-${r.i}` appearance="none" width=44 height=44 aria-label=`Remove ${r.title}`
                 row width=44 height=44 align-items="center" justify-content="center"
                   image "symbol:close" color=th.muted
-      // lane autoradio-joins: the DJ's own coming segments, after the reader's queued items. Quiet: no remove, no press (they are not in the queue).
-      if qv.coming.length > 0
-        column gap=0 width="100%" testId="queue-coming" margin-top=8
-          text "Coming up on the programme" font-family=th.fontUi font-size=12 font-weight=600 letter-spacing=0.6 color=th.muted padding="0px 0px 4px 0px"
-          for r, k in qv.coming key=k
-            column width="100%" box-sizing="border-box" min-height=36 justify-content="center" padding="4px 0px 4px 0px" testId=`queue-coming-${k}`
-              text r.title font-family=th.fontUi font-size=15 color=th.muted text-align="left" line-clamp=1
 
 keyframes barWebGrow
   from opacity=0 scale=0.96

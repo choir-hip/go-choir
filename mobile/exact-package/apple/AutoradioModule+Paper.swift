@@ -13,7 +13,6 @@ extension AutoradioModule {
         let source = PaperSource(cacheFile: support.appendingPathComponent("paper-front.json"))
         let topicsFile = support.appendingPathComponent("edition-topics.json")
         let engine = LayoutEngine()
-        choir.storyOrder = { FrontOrder.shared.stories }
         handle("paperFront") { [weak self] args, reply in
             let asked = args["view"] as? String ?? ""
             let view = asked.isEmpty ? PaperViews.front : asked
