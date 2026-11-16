@@ -1,0 +1,95 @@
+{
+ "name": "02_rewrite_heard_dropped",
+ "ops": [
+  {
+   "base_version": 0,
+   "by": "listener",
+   "id": "h",
+   "op": "rewrite",
+   "op_id": "o1",
+   "text": "new words"
+  },
+  {
+   "base_version": 0,
+   "by": "listener",
+   "id": "a",
+   "op": "rewrite",
+   "op_id": "o2",
+   "text": "fresh words"
+  }
+ ],
+ "results": [
+  {
+   "applied": false,
+   "dropped": "not_ahead",
+   "op_id": "o1",
+   "version": 7
+  },
+  {
+   "applied": true,
+   "op_id": "o2",
+   "version": 8
+  }
+ ],
+ "start": {
+  "entries": [
+   {
+    "ended": {
+     "at": "2026-11-16T12:00:00Z",
+     "last_block": 3,
+     "outcome": "finished"
+    },
+    "est_seconds": 30,
+    "id": "h",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "heard",
+    "text": "words of h",
+    "title": "T h"
+   },
+   {
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of a",
+    "title": "T a"
+   }
+  ],
+  "position_seconds": 0,
+  "version": 7
+ },
+ "want": {
+  "applied_ops": [
+   "o2"
+  ],
+  "entries": [
+   {
+    "ended": {
+     "at": "2026-11-16T12:00:00Z",
+     "last_block": 3,
+     "outcome": "finished"
+    },
+    "est_seconds": 30,
+    "id": "h",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "heard",
+    "text": "words of h",
+    "title": "T h"
+   },
+   {
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "fresh words",
+    "title": "T a"
+   }
+  ],
+  "position_seconds": 0,
+  "version": 8
+ }
+}
