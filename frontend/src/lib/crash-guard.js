@@ -114,9 +114,12 @@ export function createCrashGuard({ storage, key, pageId, now = () => Date.now(),
           if (!state.planned[page]) interrupted = true;
           delete state.boots[page];
         }
+        // A dead page's pending marker (even for a window nobody can match
+        // by id, such as one a route opened) also says the last boot died.
+        const deadPending = Object.values(state.pending).some((e) => isDead(e.page, alive) && !state.planned[e.page]);
         state.boots[pageId] = now();
-        return { interrupted };
-      }) || { interrupted: false };
+        return { interrupted, previousDead: interrupted || deadPending };
+      }) || { interrupted: false, previousDead: false };
     },
     /** The desktop has been stable for the quiet period. */
     bootStable() {

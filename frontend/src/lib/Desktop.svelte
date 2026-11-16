@@ -226,7 +226,7 @@
   $: if (mounted && desktopReady && publicRoutePath && publicRoutePath !== lastOpenedPublicRoutePath) {
     lastOpenedPublicRoutePath = publicRoutePath;
     const routed = links.resolveRoute(publicRoutePath);
-    if (routed) openRoutedApp(routed.appId, routed.appContext);
+    if (routed) openAutomatically(() => openRoutedApp(routed.appId, routed.appContext));
   }
   $: if (
     mounted &&
@@ -236,7 +236,7 @@
     appReplay.id !== lastAppReplayId
   ) {
     lastAppReplayId = appReplay.id;
-    openApp(appReplay.appId, appReplay.appName, appReplay.icon, appReplay.appContext || {});
+    openAutomatically(() => openApp(appReplay.appId, appReplay.appName, appReplay.icon, appReplay.appContext || {}));
   }
   $: overviewPreviewDecisions = desktopOverviewOpen
     ? createOverviewPreviewDecisions($windows, $activeWindowId, {
@@ -646,6 +646,7 @@
   let crashTicker = null;
   let removeStepSink = null;
   let removePlannedSink = null;
+  let crashAutoHold = false;
   let crashSteps = {};
   let crashLiveTabs = new Set();
   let stopPresence = null;
@@ -670,6 +671,7 @@
     crashVisibleMs = 0;
     crashBootStable = false;
     crashSteps = {};
+    crashAutoHold = false;
     crashLiveTabs = new Set();
   }
 
@@ -714,6 +716,8 @@
       });
       removePlannedSink = setPlannedReloadSink(() => crashGuard?.markPlanned());
       crashBoot = guard.beginBoot(crashLiveTabs);
+      // The last boot of this device died: what this load opens by itself is resumed work.
+      crashAutoHold = Boolean(crashBoot.previousDead);
     })();
     return crashArming;
   }
@@ -760,6 +764,22 @@
     }
   }
   $: syncCrashGuard($windows, authenticated, crashGateOpen);
+
+  // An automatic open at load (a public route, an app replay) is resumed work
+  // like a restore, but its window id is fresh each time, so a death cannot be
+  // matched by id. When the previous boot of this device died, every automatic
+  // open is opened held, until the user acts in this page.
+  function openAutomatically(open) {
+    const before = new Set(windowsSnapshot().map((w) => w.windowId));
+    open();
+    if (!crashAutoHold) return;
+    for (const win of windowsSnapshot()) {
+      if (!before.has(win.windowId) && win.mode !== 'closed' && win.mode !== 'hidden') setWindowCrashHold(win.windowId, 1);
+    }
+  }
+  function noteUserAct() {
+    crashAutoHold = false;
+  }
 
   function settleCrashWindows(ids) {
     for (const id of ids) {
@@ -1858,6 +1878,8 @@
     window.addEventListener('resize', refreshOverviewViewport);
     window.addEventListener('pagehide', handlePageHide);
     crashTicker = setInterval(crashTick, 1000);
+    window.addEventListener('pointerdown', noteUserAct, true);
+    window.addEventListener('keydown', noteUserAct, true);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     lastAuthenticated = authenticated;
     stopChangelogWatch = startChangelogWatch(() => authenticated, (message) => showToast(message, { durationMs: 9000 }));
@@ -1897,6 +1919,8 @@
     closeLiveChannel();
     if (saveTimer) clearTimeout(saveTimer);
     if (crashTicker) clearInterval(crashTicker);
+    window.removeEventListener('pointerdown', noteUserAct, true);
+    window.removeEventListener('keydown', noteUserAct, true);
     resetCrashGuardState({ settle: true });
     if (unsubscribeWindows) unsubscribeWindows();
     if (unsubscribeActive) unsubscribeActive();
