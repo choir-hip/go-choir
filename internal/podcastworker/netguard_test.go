@@ -1,7 +1,7 @@
 package podcastworker
 
-// The worker fetches URLs strangers can supply (a reader's feed, an episode's
-// enclosure). Ways it can fail, written first (review 1 of 2026-11-16, B1):
+// The worker fetches URLs a third party's feed file names (an episode's
+// enclosure) as well as the operator's seed feeds. Ways it can fail, written first (review 1 of 2026-11-16, B1):
 //   N1. a feed or enclosure on a loopback, private, link-local, CGNAT,
 //       unspecified or multicast address is fetched, in any spelling;
 //   N2. a public NAME that resolves to a private address is fetched (the

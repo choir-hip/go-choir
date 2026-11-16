@@ -291,7 +291,13 @@ file names (enclosures), so the guard stays.
   operator's feeds nothing can flood it. **R11.** A transcript replaced by a
   longer one (a different download of an ad-stitched file) leaves clips made from
   the old transcript's times in place until the match job runs again. **R12.**
-  Everything about feeds reported by accounts is Part 2 (3.2).
+  Everything about feeds reported by accounts is Part 2 (3.2). **R13.** The dial
+  guard refuses `64:ff9b::/96` but not NAT64's other prefixes (`64:ff9b:1::/48`).
+  **R14.** The quote check is a word-sequence `Contains` over the clip's
+  segments, so a short quote can match inside a longer word; the producers of
+  quotes are the operator's own code. **R15.** A story's one-clip-per-episode
+  memory is its 12-slot index: after more than 12 later clips for one story an
+  old episode can be asked about again.
 
 ## 4. What the phone receives (the exact shapes; do not change without the lead)
 
@@ -442,7 +448,7 @@ the operator's own matching posted through the clips route.
 ## 6. Residuals
 
 R1 no desk custodian (section 2). R2 no forecast claim per clip. R3 no
-retention for episodes and transcripts. R4 ad insertion offsets. R10 to R12 (section 3.4). R7 no server-side claim for more than one worker. R5 the
+retention for episodes and transcripts. R4 ad insertion offsets. R10 to R15 (section 3.4). R7 no server-side claim for more than one worker. R5 the
 support threshold (0.6) and the window size are guesses to be scored against
 listening outcomes. R6 matching is operator-triggered tonight, so clips appear
 when the lead runs the worker, not on a schedule.

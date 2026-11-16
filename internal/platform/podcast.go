@@ -106,8 +106,9 @@ type PodcastTranscript struct {
 	// length a clip's time is valid for.
 	FileSeconds float64 `json:"file_seconds,omitempty"`
 	StableFile  *bool   `json:"stable_file,omitempty"`
-	// Replace asks to overwrite a transcript that covers as much audio or
-	// more; without it a transcript is never replaced by a shorter one.
+	// Replace overwrites an existing transcript even when it covers at least as
+	// much audio; without it a transcript is replaced only by one that covers
+	// more audio than it does.
 	Replace bool `json:"replace,omitempty"`
 	// Partial is set by the service, never believed from the request: the
 	// transcript covers less of the file than the file holds (a worker that
@@ -457,6 +458,11 @@ func (s *Service) ListPodcastEpisodes(ctx context.Context, needTranscript bool, 
 		// A bound that truncates is said, not silent (residual: no paging yet).
 		log.Printf("corpusd: podcast episodes: the listing hit its scan bound of %d; older episodes are not seen", podcastEpisodeScan)
 	}
+	// An episode of a feed that is no longer featured is not the worker's to do.
+	featured, err := s.featuredFeedSet(ctx, og)
+	if err != nil {
+		return nil, err
+	}
 	var out []PodcastEpisode
 	for _, o := range objs {
 		if o.Tombstone {
@@ -464,6 +470,9 @@ func (s *Service) ListPodcastEpisodes(ctx context.Context, needTranscript bool, 
 		}
 		var ep PodcastEpisode
 		if json.Unmarshal(o.Body, &ep) != nil {
+			continue
+		}
+		if n, nerr := NormalizeFeedURL(ep.FeedURL); nerr != nil || !featured[n] {
 			continue
 		}
 		if needTranscript && ep.HasTranscript {
@@ -533,6 +542,16 @@ func (s *Service) PutPodcastTranscript(ctx context.Context, t PodcastTranscript)
 	if existing, err := s.GetPodcastTranscript(ctx, og, t.EpisodeID); err != nil {
 		return 0, false, err
 	} else if existing != nil && !t.Replace && existing.AudioSeconds >= t.AudioSeconds {
+		// The transcript is stored; if its episode write failed after it, the
+		// episode is still unmarked and the worker would transcribe it again
+		// for ever. Mark it now.
+		if !ep.HasTranscript {
+			ep.HasTranscript = true
+			if err := s.putPodcastEpisode(ctx, og, *ep, time.Now().UTC()); err != nil {
+				return 0, false, err
+			}
+			s.podcastCache.reset()
+		}
 		return len(existing.Segments), true, nil
 	}
 	now := time.Now().UTC()
@@ -701,10 +720,11 @@ func (s *Service) PutPodcastClips(ctx context.Context, in []PodcastClipIn) (int,
 		byID[row.ClipID] = len(distinct)
 		distinct = append(distinct, row)
 	}
-	// The story's index first (its 12 newest), then the clips: a failure
-	// between the two leaves an id with no clip, which the read skips and a
-	// repeat of the write completes; the other order would leave a clip no read
-	// can find.
+	// The story's index first, untruncated, then the clips, then the index cut to
+	// its 12 newest: a failure between the first two leaves an id with no clip,
+	// which the read skips and a repeat of the write completes, and never drops
+	// an id whose clip is still readable; the other order would leave a clip no
+	// read can find.
 	clipsOfRoute := map[string][]string{}
 	for _, row := range distinct {
 		clipsOfRoute[row.StoryRoute] = append(clipsOfRoute[row.StoryRoute], row.ClipID)
@@ -726,9 +746,6 @@ func (s *Service) PutPodcastClips(ctx context.Context, in []PodcastClipIn) (int,
 				changed = true
 			}
 		}
-		if len(idx.Clips) > podcastClipsPerStoryIndex {
-			idx.Clips = idx.Clips[len(idx.Clips)-podcastClipsPerStoryIndex:]
-		}
 		if changed {
 			if err := s.putPodcastIndex(ctx, og, key, idx, now); err != nil {
 				return 0, err
@@ -736,6 +753,11 @@ func (s *Service) PutPodcastClips(ctx context.Context, in []PodcastClipIn) (int,
 		}
 	}
 	for _, row := range distinct {
+		if s.podcastClipRowHook != nil {
+			if err := s.podcastClipRowHook(row.ClipID); err != nil {
+				return 0, err
+			}
+		}
 		obj, err := podcastObject(ogKindPodcastClip, row.ClipID, row, map[string]any{
 			"story_route": row.StoryRoute, "episode_id": row.EpisodeID, "matched_at": row.MatchedAt,
 		}, now)
@@ -744,6 +766,19 @@ func (s *Service) PutPodcastClips(ctx context.Context, in []PodcastClipIn) (int,
 		}
 		if err := og.PutObject(corpusdWriter(ctx), obj); err != nil {
 			return 0, err
+		}
+	}
+	for route := range clipsOfRoute {
+		key := "clips:" + route
+		idx, err := s.getPodcastIndex(ctx, og, key)
+		if err != nil {
+			return 0, err
+		}
+		if len(idx.Clips) > podcastClipsPerStoryIndex {
+			idx.Clips = idx.Clips[len(idx.Clips)-podcastClipsPerStoryIndex:]
+			if err := s.putPodcastIndex(ctx, og, key, idx, now); err != nil {
+				return 0, err
+			}
 		}
 	}
 	s.podcastCache.reset()

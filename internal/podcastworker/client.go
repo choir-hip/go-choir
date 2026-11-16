@@ -142,6 +142,7 @@ func (c *Client) ListFeeds(ctx context.Context, feeds []FeedSpec) error {
 		FeedURL string `json:"feed_url"`
 		Title   string `json:"title"`
 	}
+	var errs []error
 	for start := 0; start < len(feeds); start += 200 {
 		end := min(start+200, len(feeds))
 		var items []item
@@ -149,10 +150,10 @@ func (c *Client) ListFeeds(ctx context.Context, feeds []FeedSpec) error {
 			items = append(items, item{FeedURL: f.URL, Title: f.Show})
 		}
 		if err := c.do(ctx, http.MethodPut, opBase+"feeds/listed", map[string]any{"feeds": items, "listed": true}, nil); err != nil {
-			return err
+			errs = append(errs, err) // a failed chunk does not stop the next
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // MatchSummary is what a match run reports.

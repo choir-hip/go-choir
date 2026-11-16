@@ -116,8 +116,8 @@ func NormalizeFeedURL(raw string) (string, error) {
 	if port != "" {
 		u.Host = host + ":" + port
 	}
-	if len(u.Path) > 1 {
-		u.Path = strings.TrimRight(u.Path, "/")
+	if u.Path == "/" || len(u.Path) > 1 {
+		u.Path = strings.TrimRight(u.Path, "/") // https://host and https://host/ are one feed
 	}
 	return u.String(), nil
 }
@@ -337,6 +337,14 @@ func (s *Service) ListPodcastPopular(ctx context.Context, limit int) ([]PodcastP
 	if limit > podcastPopularLimit {
 		limit = podcastPopularLimit
 	}
+	// A public read that costs a key read per featured feed: the 30 s cache,
+	// keyed by the limit, answers repeats.
+	cacheKey := fmt.Sprintf("popular:%d", limit)
+	if v, hit := s.podcastCache.get(cacheKey); hit {
+		if cached, ok := v.([]PodcastPopularFeed); ok {
+			return append([]PodcastPopularFeed(nil), cached...), nil
+		}
+	}
 	og, err := s.podcastStore()
 	if err != nil {
 		return nil, err
@@ -364,6 +372,7 @@ func (s *Service) ListPodcastPopular(ctx context.Context, limit int) ([]PodcastP
 	if len(out) > limit {
 		out = out[:limit]
 	}
+	s.podcastCache.put(cacheKey, append([]PodcastPopularFeed(nil), out...))
 	return out, nil
 }
 
