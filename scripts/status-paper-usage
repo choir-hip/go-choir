@@ -189,21 +189,29 @@ def search_health(text):
             "answered_by": answered_by, "by": by}
 
 
+DEVIN_LINE_RE = re.compile(r"provider=devin|provider devin model")
+QUOTA_FLAG_MIN = 20
+
+
 def devin_errors(text, now):
     by = {}
+    quota = 0
     for ln in text.splitlines():
         m = STAMP_RE.match(ln)
-        if not m or "provider=devin" not in ln:
+        if not m or not DEVIN_LINE_RE.search(ln):
             continue
         if "inference succeeded" in ln or "inference request from" in ln:
             continue
         if not (now - 3600 < stamp_epoch(m.group(1)) <= now):
             continue
+        if "provider quota exhausted (devin)" in ln or ("quota" in ln.lower() and "provider=devin" in ln):
+            quota += 1
         for kind, rx in ERROR_KINDS:
             if rx.search(ln):
                 by[kind] = by.get(kind, 0) + 1
                 break
-    return {"total": sum(by.values()), "by_kind": by}
+    total = sum(by.values())
+    return {"total": total, "by_kind": by, "quota": quota, "other": total - quota}
 
 
 def compute(raw):
@@ -242,6 +250,8 @@ def compute(raw):
     if sh["devin"] is not None and sh["devin"] < DEVIN_SHARE_MIN:
         f.append("devin share %.0f%% under half" % (100 * sh["devin"]))
     pc = rep["pacer"]
+    if rep["devin_errors"]["quota"] > QUOTA_FLAG_MIN:
+        f.append("devin: %d quota refusals in the last hour" % rep["devin_errors"]["quota"])
     if pc and pc["trips"] > 0:
         f.append("pacer tripped %d times in hour %s" % (pc["trips"], pc["hour"]))
     sr = rep["search"]
@@ -286,7 +296,7 @@ def render(r):
     o.append("synthetic: %d calls last hour, %d today" % (y["hour_calls"], y["today_calls"]))
     e = r["devin_errors"]
     o.append("devin error|quota|429|hold lines, last hour: %d%s" % (
-        e["total"], " (%s)" % ", ".join("%s %d" % kv for kv in sorted(e["by_kind"].items())) if e["by_kind"] else ""))
+        e["total"], " (quota %d, other %d)" % (e["quota"], e["other"])))
     pc = r["pacer"]
     if pc:
         o.append("devin pacer, hour %s: shed %.0f%% (%d of %d calls), trips %d"
@@ -318,7 +328,7 @@ day=$(date -u +%Y-%m-%d)
 echo "##SUCCESS"
 journalctl -u go-choir-gateway --since "$day 00:00:00" --no-pager -o cat --utc 2>/dev/null | grep -a 'inference succeeded for autoputer'
 echo "##DEVIN"
-journalctl -u go-choir-gateway --since '-61 min' --no-pager -o cat --utc 2>/dev/null | grep -a 'provider=devin' | grep -a -v 'inference succeeded\|inference request from' | grep -a -iE 'error|quota|429|hold'
+journalctl -u go-choir-gateway --since '-61 min' --no-pager -o cat --utc 2>/dev/null | grep -a -E 'provider=devin|provider devin model' | grep -a -v 'inference succeeded\|inference request from' | grep -a -iE 'error|quota|429|hold'
 echo "##PACER"
 journalctl -u go-choir-gateway --since '-2 hours' --no-pager -o cat --utc 2>/dev/null | grep -a 'devin pacing hour=' | tail -n 1
 echo "##SEARCH"

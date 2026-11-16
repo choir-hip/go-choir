@@ -162,6 +162,14 @@ derr(100, "inference request from autoputer vm-x (provider=devin model=swe-2-fla
 runpaper --json
 check "P8 five error lines by kind: 429 x2, quota, hold, error" '[ "$(jq_ "d[\"devin_errors\"][\"total\"]")" = 5 ] && [ "$(jq_ "d[\"devin_errors\"][\"by_kind\"][\"429\"]")" = 2 ] && [ "$(jq_ "d[\"devin_errors\"][\"by_kind\"][\"quota\"]")" = 1 ] && [ "$(jq_ "d[\"devin_errors\"][\"by_kind\"][\"hold\"]")" = 1 ] && [ "$(jq_ "d[\"devin_errors\"][\"by_kind\"][\"error\"]")" = 1 ]'
 
+# P8b: the gateway's refusal form, "provider devin model", is counted as quota; over 20 flags
+mkpaper '
+many(60, 100, PAPER, "devin", "swe-2-flash", inp=14292)
+for i in range(21): derr(100 + i, "provider call failed for autoputer vm-1669020adcece51c2f5ff9b6df399ef5: provider devin model swe-2-flash: provider quota exhausted (devin); resets at 2026-11-16T22:35:55Z (estimated) (paced: this thread uses the next pool member this hour; circuit open))")
+derr(200, "provider=devin error: connection reset")'
+runpaper --json
+check "P8b refusal form counted: quota 21, other 1, flagged" '[ "$(jq_ "d[\"devin_errors\"][\"quota\"]")" = 21 ] && [ "$(jq_ "d[\"devin_errors\"][\"other\"]")" = 1 ] && grep -q "devin: 21 quota refusals in the last hour" "$root/out"'
+
 # P9/P10: publishing, devin share
 mkpaper 'many(60, 100, PAPER, "devin", "swe-2-flash")
 paper20 = 0'
