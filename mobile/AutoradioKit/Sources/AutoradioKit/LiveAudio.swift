@@ -51,7 +51,10 @@ public final class LiveAudio: @unchecked Sendable {
     private let lock = NSLock()
     private var bus: AudioBus?
     private var clock: LabClock?
-    private var wantMic = false
+    /// The microphone may be used at all (permission granted) and is wanted now (voice is on): the tap exists only while both hold.
+    private var micPermitted = false
+    private var micWanted = false
+    private var wantMic: Bool { micPermitted && micWanted }
     private var observer: NSObjectProtocol?
     /// Flags the audio thread, the notification queue, background tasks and the main thread all read: one lock (the repair of the
     /// app review; `running` was polled by `playProgramme` while `bring` and `takeDown` wrote it).
@@ -107,7 +110,7 @@ public final class LiveAudio: @unchecked Sendable {
 
     public func start(bus: AudioBus, clock: LabClock, wantMic: Bool, voiceProcessing: Bool = false, virtual: Bool = false) throws {
         if running { return }
-        self.bus = bus; self.clock = clock; self.wantMic = wantMic; self.virtual = virtual
+        self.bus = bus; self.clock = clock; self.micPermitted = wantMic; self.micWanted = wantMic; self.virtual = virtual
         if virtual { running = true; down = false; micActive = true; return }
         try bring(voiceProcessing: voiceProcessing)
         observe()
@@ -123,10 +126,15 @@ public final class LiveAudio: @unchecked Sendable {
     }
 
     /// Bring the engine back up after a category change; `voiceProcessing` for the talking state.
-    public func resume(voiceProcessing vp: Bool) throws {
+    /// `mic`: the microphone tap is wanted (voice is on); without it the engine only plays.
+    public func resume(voiceProcessing vp: Bool, mic: Bool? = nil) throws {
         guard !virtual, bus != nil else { return }
+        if let mic { micWanted = mic }
         try bring(voiceProcessing: vp)
     }
+
+    /// The engine should be making sound or ready to, and is not: it was taken down (interruption, failed restart) or never came back.
+    public var needsRecovery: Bool { !virtual && bus != nil && (down || !running) }
 
     /// Restart in place (route change, interruption end): the same voice processing setting.
     public func recover(reason: String) {
@@ -144,10 +152,19 @@ public final class LiveAudio: @unchecked Sendable {
         lock.lock(); generation += 1; lock.unlock()
         freezePlayhead()
         running = false; micActive = false
-        nodeStopped = true; releaseWaiters(); engine = AVAudioEngine(); programmeNode = AVAudioPlayerNode(); voiceNode = AVAudioPlayerNode(); timePitch = AVAudioUnitTimePitch()
-        wire()
+        nodeStopped = true; releaseWaiters(); replaceEngine()
         do { try bring(voiceProcessing: voiceProcessing); observe(); onNotice?("engine", "rebuilt after media services reset") }
         catch { down = true; onNotice?("error", "engine rebuild failed: \(error)") }
+    }
+
+    /// A new engine and nodes, wired as the old ones were. The caller starts it. Notifications of the old engine are dropped.
+    private func replaceEngine() {
+        if let o = observer { NotificationCenter.default.removeObserver(o); observer = nil }
+        let old = engine
+        if old.isRunning { old.stop() }
+        engine = AVAudioEngine(); programmeNode = AVAudioPlayerNode(); voiceNode = AVAudioPlayerNode(); timePitch = AVAudioUnitTimePitch()
+        wire()
+        observe()
     }
 
     public func stop() {
@@ -191,6 +208,9 @@ public final class LiveAudio: @unchecked Sendable {
 
     private func bring(voiceProcessing vp: Bool) throws {
         guard let bus, let clock else { return }
+        // Voice processing belongs to the input node and stays with the engine object: a playback-only engine after a talking one is a
+        // new engine, so nothing of the voice-processing unit is left in the output path.
+        if !wantMic, voiceProcessing { replaceEngine() }
         voiceProcessing = false
         if wantMic {
             #if os(iOS)
@@ -224,6 +244,7 @@ public final class LiveAudio: @unchecked Sendable {
         lastRestart = clock.now
         programmeNode.volume = volume
         if wantPlaying { programmeNode.play(); nodeStopped = false }
+        onNotice?("engine", "up: mic \(micActive), voice processing \(voiceProcessing), programme wanted \(wantPlaying)")
     }
 
     /// The engine stops itself when the route changes (AirPods in or out); restart it once, after the burst settles.
@@ -421,6 +442,9 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     public var onPreviousTrack: (@Sendable () -> Bool)?
     /// The lock screen's play, pause and toggle: the host may take them (true: handled) when something other than this player is playing (remote audio).
     public var onTransport: (@Sendable (String) -> Bool)?
+    /// Play was pressed: the host makes sure the audio session is claimed and active and the engine is up before sound is expected (it takes
+    /// the claim again when the session was doubted or the engine is down). Play does not wait for it: the node plays as the engine comes up.
+    public var onNeedsSession: (@Sendable () -> Void)?
     /// The yield level changed (a hands-free turn lowered or paused the programme): remote audio follows it.
     public var onLevel: (@Sendable (PlayLevel) -> Void)?
     /// Where playback is, per segment (station P1): P2 observes it.
@@ -456,6 +480,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             let first = s.resumeAt.flatMap { $0 < s.document.blocks.count ? $0 : nil }
             return (s.level, s.loop != nil, first ?? s.blockIndex)
         }
+        onNeedsSession?()
         if lvl != .pause { audio.programmePlay() }
         playback.paused(false)
         if !hasLoop { start(at: at) }
@@ -756,6 +781,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
 
     private func installRemoteCommands() {
         let c = MPRemoteCommandCenter.shared()
+        for cmd in [c.playCommand, c.pauseCommand, c.togglePlayPauseCommand, c.nextTrackCommand, c.previousTrackCommand] { cmd.isEnabled = true }
         c.playCommand.addTarget { [weak self] _ in if self?.onTransport?("play") == true { return .success }; self?.play(); return .success }
         c.pauseCommand.addTarget { [weak self] _ in if self?.onTransport?("pause") == true { return .success }; self?.pause(); return .success }
         c.togglePlayPauseCommand.addTarget { [weak self] _ in
@@ -781,6 +807,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             MPMediaItemPropertyTitle: np.title, MPMediaItemPropertyArtist: np.artist,
             MPNowPlayingInfoPropertyPlaybackRate: paused ? 0.0 : speed,
         ]
+        MPNowPlayingInfoCenter.default().playbackState = paused ? .paused : .playing
     }
 }
 

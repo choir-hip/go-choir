@@ -20,6 +20,7 @@ final class ExactSessionOwner: AudioSessionOwner, @unchecked Sendable {
 
     static func spec(_ s: AudioState) -> (mode: String, options: [String], expected: AVAudioSession.Mode) {
         switch s {
+        case .playing: return ("speech-playback", [], .spokenAudio)   // a playback session, no microphone (Exact's speech claim: .playback, spokenAudio, runs in the background)
         case .listening: return ("default", ["defaultToSpeaker", "allowBluetoothA2DP"], .default)
         case .talking: return ("voiceChat", ["defaultToSpeaker", "allowBluetoothHFP"], .voiceChat)
         }
@@ -47,7 +48,8 @@ final class ExactSessionOwner: AudioSessionOwner, @unchecked Sendable {
         if !ok { throw LabError.unavailable("Exact refused the audio session claim for \(state.rawValue)") }
     }
     func release() {
-        DispatchQueue.main.async { [self] in claim?.cancel(); claim = nil; held = nil; note("released") }
+        let drop = { [self] in claim?.cancel(); claim = nil; held = nil; note("released") }
+        if Thread.isMainThread { drop() } else { DispatchQueue.main.async(execute: drop) }       // in order with the claim that follows
     }
     func describe() -> String {
         let s = AVAudioSession.sharedInstance()
