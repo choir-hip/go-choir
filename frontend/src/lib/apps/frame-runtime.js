@@ -151,6 +151,8 @@
     var sdk = {
       SDK_VERSION: ctx.sdkVersion,
       sdkSatisfies: sdkSatisfies,
+      // A framed app cannot take the page down with it; the breadcrumb is a no-op here.
+      windowStep: function () { return function () {}; },
       buildInfo: function () { return Object.assign({}, ctx.build); },
       AuthRequiredError: AuthRequiredError,
       fetchWithRenewal: fetchWithRenewal,
