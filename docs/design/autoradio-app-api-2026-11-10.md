@@ -93,8 +93,9 @@ The block model (`internal/texturedoc/schema.go:257-349`):
   (`internal/texturedoc/embed.go:30-60`). Audio holds only `target.url` and
   a title.
 - There is no time-span, clip, speech or run-sheet block. The
-  `choir.autoradio_run_sheet` kind is reserved and unused
-  (`internal/kernelservice/kernelservice.go:45`).
+  `choir.autoradio_run_sheet` kind was reserved and unused when this was
+  written; it was deleted on 2026-11-16 (the run sheet is now
+  `docs/reference/AUTORADIO-SHEET.md`).
 
 ## 3. Prompting a document
 

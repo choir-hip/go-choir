@@ -1,0 +1,1879 @@
+{
+ "name": "28_previous_with_no_desk_entry_to_trim_is_ahead_full",
+ "ops": [
+  {
+   "base_version": 10,
+   "by": "listener",
+   "op": "previous",
+   "op_id": "o1"
+  }
+ ],
+ "results": [
+  {
+   "applied": false,
+   "dropped": "ahead_full",
+   "op_id": "o1",
+   "version": 10
+  }
+ ],
+ "start": {
+  "entries": [
+   {
+    "ended": {
+     "at": "2026-11-16T12:00:00Z",
+     "last_block": 2,
+     "outcome": "finished"
+    },
+    "est_seconds": 5,
+    "id": "h1",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "heard",
+    "text": "w",
+    "title": "T h1"
+   },
+   {
+    "est_seconds": 5,
+    "id": "on",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "on_air",
+    "text": "w",
+    "title": "T on"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l000",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l000",
+    "title": "T l000"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l001",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l001",
+    "title": "T l001"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l002",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l002",
+    "title": "T l002"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l003",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l003",
+    "title": "T l003"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l004",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l004",
+    "title": "T l004"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l005",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l005",
+    "title": "T l005"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l006",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l006",
+    "title": "T l006"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l007",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l007",
+    "title": "T l007"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l008",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l008",
+    "title": "T l008"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l009",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l009",
+    "title": "T l009"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l010",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l010",
+    "title": "T l010"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l011",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l011",
+    "title": "T l011"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l012",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l012",
+    "title": "T l012"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l013",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l013",
+    "title": "T l013"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l014",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l014",
+    "title": "T l014"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l015",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l015",
+    "title": "T l015"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l016",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l016",
+    "title": "T l016"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l017",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l017",
+    "title": "T l017"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l018",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l018",
+    "title": "T l018"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l019",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l019",
+    "title": "T l019"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l020",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l020",
+    "title": "T l020"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l021",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l021",
+    "title": "T l021"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l022",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l022",
+    "title": "T l022"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l023",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l023",
+    "title": "T l023"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l024",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l024",
+    "title": "T l024"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l025",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l025",
+    "title": "T l025"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l026",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l026",
+    "title": "T l026"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l027",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l027",
+    "title": "T l027"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l028",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l028",
+    "title": "T l028"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l029",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l029",
+    "title": "T l029"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l030",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l030",
+    "title": "T l030"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l031",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l031",
+    "title": "T l031"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l032",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l032",
+    "title": "T l032"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l033",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l033",
+    "title": "T l033"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l034",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l034",
+    "title": "T l034"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l035",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l035",
+    "title": "T l035"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l036",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l036",
+    "title": "T l036"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l037",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l037",
+    "title": "T l037"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l038",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l038",
+    "title": "T l038"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l039",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l039",
+    "title": "T l039"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l040",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l040",
+    "title": "T l040"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l041",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l041",
+    "title": "T l041"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l042",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l042",
+    "title": "T l042"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l043",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l043",
+    "title": "T l043"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l044",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l044",
+    "title": "T l044"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l045",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l045",
+    "title": "T l045"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l046",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l046",
+    "title": "T l046"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l047",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l047",
+    "title": "T l047"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l048",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l048",
+    "title": "T l048"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l049",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l049",
+    "title": "T l049"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l050",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l050",
+    "title": "T l050"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l051",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l051",
+    "title": "T l051"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l052",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l052",
+    "title": "T l052"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l053",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l053",
+    "title": "T l053"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l054",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l054",
+    "title": "T l054"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l055",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l055",
+    "title": "T l055"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l056",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l056",
+    "title": "T l056"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l057",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l057",
+    "title": "T l057"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l058",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l058",
+    "title": "T l058"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l059",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l059",
+    "title": "T l059"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l060",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l060",
+    "title": "T l060"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l061",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l061",
+    "title": "T l061"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l062",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l062",
+    "title": "T l062"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l063",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l063",
+    "title": "T l063"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l064",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l064",
+    "title": "T l064"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l065",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l065",
+    "title": "T l065"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l066",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l066",
+    "title": "T l066"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l067",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l067",
+    "title": "T l067"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l068",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l068",
+    "title": "T l068"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l069",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l069",
+    "title": "T l069"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l070",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l070",
+    "title": "T l070"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l071",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l071",
+    "title": "T l071"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l072",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l072",
+    "title": "T l072"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l073",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l073",
+    "title": "T l073"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l074",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l074",
+    "title": "T l074"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l075",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l075",
+    "title": "T l075"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l076",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l076",
+    "title": "T l076"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l077",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l077",
+    "title": "T l077"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l078",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l078",
+    "title": "T l078"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l079",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l079",
+    "title": "T l079"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l080",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l080",
+    "title": "T l080"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l081",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l081",
+    "title": "T l081"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l082",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l082",
+    "title": "T l082"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l083",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l083",
+    "title": "T l083"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l084",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l084",
+    "title": "T l084"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l085",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l085",
+    "title": "T l085"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l086",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l086",
+    "title": "T l086"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l087",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l087",
+    "title": "T l087"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l088",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l088",
+    "title": "T l088"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l089",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l089",
+    "title": "T l089"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l090",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l090",
+    "title": "T l090"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l091",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l091",
+    "title": "T l091"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l092",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l092",
+    "title": "T l092"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l093",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l093",
+    "title": "T l093"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l094",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l094",
+    "title": "T l094"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l095",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l095",
+    "title": "T l095"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l096",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l096",
+    "title": "T l096"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l097",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l097",
+    "title": "T l097"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l098",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l098",
+    "title": "T l098"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l099",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l099",
+    "title": "T l099"
+   }
+  ],
+  "on_air": "on",
+  "position_seconds": 0,
+  "version": 10
+ },
+ "want": {
+  "entries": [
+   {
+    "ended": {
+     "at": "2026-11-16T12:00:00Z",
+     "last_block": 2,
+     "outcome": "finished"
+    },
+    "est_seconds": 5,
+    "id": "h1",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "heard",
+    "text": "w",
+    "title": "T h1"
+   },
+   {
+    "est_seconds": 5,
+    "id": "on",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "on_air",
+    "text": "w",
+    "title": "T on"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l000",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l000",
+    "title": "T l000"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l001",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l001",
+    "title": "T l001"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l002",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l002",
+    "title": "T l002"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l003",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l003",
+    "title": "T l003"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l004",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l004",
+    "title": "T l004"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l005",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l005",
+    "title": "T l005"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l006",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l006",
+    "title": "T l006"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l007",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l007",
+    "title": "T l007"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l008",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l008",
+    "title": "T l008"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l009",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l009",
+    "title": "T l009"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l010",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l010",
+    "title": "T l010"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l011",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l011",
+    "title": "T l011"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l012",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l012",
+    "title": "T l012"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l013",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l013",
+    "title": "T l013"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l014",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l014",
+    "title": "T l014"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l015",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l015",
+    "title": "T l015"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l016",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l016",
+    "title": "T l016"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l017",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l017",
+    "title": "T l017"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l018",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l018",
+    "title": "T l018"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l019",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l019",
+    "title": "T l019"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l020",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l020",
+    "title": "T l020"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l021",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l021",
+    "title": "T l021"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l022",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l022",
+    "title": "T l022"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l023",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l023",
+    "title": "T l023"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l024",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l024",
+    "title": "T l024"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l025",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l025",
+    "title": "T l025"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l026",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l026",
+    "title": "T l026"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l027",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l027",
+    "title": "T l027"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l028",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l028",
+    "title": "T l028"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l029",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l029",
+    "title": "T l029"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l030",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l030",
+    "title": "T l030"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l031",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l031",
+    "title": "T l031"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l032",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l032",
+    "title": "T l032"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l033",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l033",
+    "title": "T l033"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l034",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l034",
+    "title": "T l034"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l035",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l035",
+    "title": "T l035"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l036",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l036",
+    "title": "T l036"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l037",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l037",
+    "title": "T l037"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l038",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l038",
+    "title": "T l038"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l039",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l039",
+    "title": "T l039"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l040",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l040",
+    "title": "T l040"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l041",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l041",
+    "title": "T l041"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l042",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l042",
+    "title": "T l042"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l043",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l043",
+    "title": "T l043"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l044",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l044",
+    "title": "T l044"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l045",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l045",
+    "title": "T l045"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l046",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l046",
+    "title": "T l046"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l047",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l047",
+    "title": "T l047"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l048",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l048",
+    "title": "T l048"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l049",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l049",
+    "title": "T l049"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l050",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l050",
+    "title": "T l050"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l051",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l051",
+    "title": "T l051"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l052",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l052",
+    "title": "T l052"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l053",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l053",
+    "title": "T l053"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l054",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l054",
+    "title": "T l054"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l055",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l055",
+    "title": "T l055"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l056",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l056",
+    "title": "T l056"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l057",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l057",
+    "title": "T l057"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l058",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l058",
+    "title": "T l058"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l059",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l059",
+    "title": "T l059"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l060",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l060",
+    "title": "T l060"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l061",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l061",
+    "title": "T l061"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l062",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l062",
+    "title": "T l062"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l063",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l063",
+    "title": "T l063"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l064",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l064",
+    "title": "T l064"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l065",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l065",
+    "title": "T l065"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l066",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l066",
+    "title": "T l066"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l067",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l067",
+    "title": "T l067"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l068",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l068",
+    "title": "T l068"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l069",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l069",
+    "title": "T l069"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l070",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l070",
+    "title": "T l070"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l071",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l071",
+    "title": "T l071"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l072",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l072",
+    "title": "T l072"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l073",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l073",
+    "title": "T l073"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l074",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l074",
+    "title": "T l074"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l075",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l075",
+    "title": "T l075"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l076",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l076",
+    "title": "T l076"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l077",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l077",
+    "title": "T l077"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l078",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l078",
+    "title": "T l078"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l079",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l079",
+    "title": "T l079"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l080",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l080",
+    "title": "T l080"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l081",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l081",
+    "title": "T l081"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l082",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l082",
+    "title": "T l082"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l083",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l083",
+    "title": "T l083"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l084",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l084",
+    "title": "T l084"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l085",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l085",
+    "title": "T l085"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l086",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l086",
+    "title": "T l086"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l087",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l087",
+    "title": "T l087"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l088",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l088",
+    "title": "T l088"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l089",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l089",
+    "title": "T l089"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l090",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l090",
+    "title": "T l090"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l091",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l091",
+    "title": "T l091"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l092",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l092",
+    "title": "T l092"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l093",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l093",
+    "title": "T l093"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l094",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l094",
+    "title": "T l094"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l095",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l095",
+    "title": "T l095"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l096",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l096",
+    "title": "T l096"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l097",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l097",
+    "title": "T l097"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l098",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l098",
+    "title": "T l098"
+   },
+   {
+    "est_seconds": 30,
+    "id": "l099",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of l099",
+    "title": "T l099"
+   }
+  ],
+  "on_air": "on",
+  "position_seconds": 0,
+  "version": 10
+ }
+}

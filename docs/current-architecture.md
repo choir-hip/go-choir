@@ -15,7 +15,7 @@ carries "checked" (the date someone read the code or proof). A row with no proof
 ## Read this first (the facts most often gotten wrong)
 
 1. There is no single play queue on the phone. Four lists decide what plays next, and skip consults them in a fixed order (section 6).
-2. There is no Autoradio desk that runs cells. The `autoradio` package desk is a manifest (verbs Report, Done; owns nothing). Its two server routes are one streamed model call each, no tools, no cell, no Texture document (sections 2, 5).
+2. There is no Autoradio desk that runs cells. The `autoradio` package desk is a manifest (verbs Report, Done; custodian of `choir.app.autoradio.run_sheet`, whose server store is built but not yet written by any desk). Its two server routes are one streamed model call each, no tools, no cell, no Texture document (sections 2, 5).
 3. An on-device language model runs in the phone app today (Qwen3-0.6B through llama.cpp), but it answers only from the reader's saved stories. It is not given the deck, the queue or the play history (section 6).
 4. The phone's voice turns call the computer's `/api/autoradio/turns` with the queue and 40 candidate stories. The DJ's stretch comes from `/api/autoradio/programme`. If no stretch segment arrives within 8 seconds, one front-page story plays.
 5. Texture writes one piece at a time. Research is read-only on the world. Engineering mutates only inside capsules. Management admits engineering.
@@ -57,7 +57,7 @@ Registered by the desk registry (`internal/deskmanifest/manifest.go`); app desks
 | research | system desk plus children `research_web`, `research_texture` | evidence (read-only on the world) | `research` | proven (78 s cited v2 on d@e, ACTIVE 2026-11-09) | `deskmanifest` |
 | engineering | system desk, capsule-bound | capsule mutation | `engineering` | partial (section 8) | `internal/capsule` |
 | prompt router (conductor) | System 1 question, not a cell desk | route records | Jev (System 1) | proven | `internal/promptroute` |
-| autoradio | package desk, image-required, manifest only | nothing (`owned_object_kinds: []`) | `autoradio`, `autoradio_programme` (River then Bedrock Haiku 5.5; reasoning off / low) | partial: two routes, no cell | `internal/appdesk/required.json`, `agentcore/api_autoradio*.go` |
+| autoradio | package desk, image-required, manifest only | the run sheet kind `choir.app.autoradio.run_sheet` (declared; the sheet itself is a fold of owner-private tape records, slice D1, built 2026-11-16, not deployed) | `autoradio`, `autoradio_programme` (River then Bedrock Haiku 5.5; reasoning off / low) | partial: two routes, no cell | `internal/appdesk/required.json`, `agentcore/api_autoradio*.go` |
 | mail | package desk, not required, handler plus drill | mail access via lease | n/a | built (drill `mail-reader-drill`); live use unknown: settle by a Mail lease record on d@e | `appdesk/firstparty.json`, `internal/maildesk` |
 
 Stale: the comment in `internal/appdesk/required.go` (line 29) says the required set is management, research, engineering,
@@ -90,11 +90,12 @@ Texture and the router; the file holds only `autoradio`.
 | `POST /api/autoradio/turns` | proven | Contract `docs/reference/AUTORADIO-TURNS.md` (its line-3 status is stale). Staging 2026-11-11: first speech median 1.37 s over 10 asks, all answered by the Bedrock fallback (ledger C51). Code `agentcore/api_autoradio.go` |
 | Turns: queue ops | proven on d@e | 2026-11-16 03:30Z: "put the long read next" moved the right entry 3 of 3; "what's coming up" changed nothing (overnight report) |
 | `POST /api/autoradio/programme` | proven | ledger C98 settled true 2026-11-15; clips: 3 of 15 segments on d@e 2026-11-16 (`prove-programme-clips.py`) |
+| Server run sheet (`GET /api/autoradio/sheet`, `POST .../sheet/ops`, `GET .../sheet/stream`) | built | Slice D1, lane `runsheet-server`, 2026-11-16: each applied op is one owner-private tape record, the sheet is the fold through `internal/runsheet`, rebuilt by replay; local tests only, not deployed, not proven (proof script `scripts/prove-autoradio-sheet`). Contract `docs/reference/AUTORADIO-SHEET.md`. No phone calls it yet and no desk writes to it |
 | Queue package | built | `internal/autoradioqueue`: structure, bounds, reducer, stream cut; driven from model JSON, not from a cell |
 | River model | proven (registered), built (usage) | Registered on the gateway since 2026-11-15T19:07Z (gateway log: `resolved river`); the `autoradio` and `autoradio_programme` roles route to it first and its calls are `stream=true` (Node B journal, 2026-11-16). Streamed calls now ask the provider for usage (`stream_options.include_usage`), so River's tokens and spend are recorded; a stream that ends with no usage logs `stream_usage_missing` (built; proven when a deployed River call logs tokens above zero). Whether the guest forwards segments as they arrive is unknown |
 | Forecast claims per segment | proven | agent `autoradio-dj`, `p_heard`, `caused_by` (C95, C98) |
 | Not built (from `design/autoradio-dj-programme-2026-11-11.md`) | specified | slice 3 mail headers; slice 4 air log and `/api/autoradio/heard`; slice 5 hand-offs and the `go` cell with Cast and Ask; slice 6 station and write-ahead; slice 7 podcast notes. Learning engine settlement (outcomes, lessons, trust): no route |
-| Not built (from `design/autoradio-queue-desk-2026-11-15.md` section 6) | specified | the `autoradio.queue` cell module; `queue` on the programme route; a server copy of the queue; claims for reorders |
+| Not built (from `design/autoradio-queue-desk-2026-11-15.md` section 6) | specified | the `autoradio.queue` cell module; `queue` on the programme route; claims for reorders (the server copy of the queue is now the run sheet above) |
 
 ## 6. Autoradio phone app (checked 2026-11-16)
 

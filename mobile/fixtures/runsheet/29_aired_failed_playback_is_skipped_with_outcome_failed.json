@@ -1,0 +1,83 @@
+{
+ "name": "29_aired_failed_playback_is_skipped_with_outcome_failed",
+ "ops": [
+  {
+   "base_version": 5,
+   "by": "phone",
+   "ended": {
+    "at": "2026-11-16T12:00:00Z",
+    "last_block": 0,
+    "outcome": "failed"
+   },
+   "id": "a",
+   "op": "aired",
+   "op_id": "o1",
+   "position_seconds": 0.0,
+   "state": "skipped"
+  }
+ ],
+ "results": [
+  {
+   "applied": true,
+   "op_id": "o1",
+   "version": 6
+  }
+ ],
+ "start": {
+  "entries": [
+   {
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "on_air",
+    "text": "words of a",
+    "title": "T a"
+   },
+   {
+    "est_seconds": 30,
+    "id": "b",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of b",
+    "title": "T b"
+   }
+  ],
+  "on_air": "a",
+  "position_seconds": 0.0,
+  "version": 5
+ },
+ "want": {
+  "applied_ops": [
+   "o1"
+  ],
+  "entries": [
+   {
+    "ended": {
+     "at": "2026-11-16T12:00:00Z",
+     "last_block": 0,
+     "outcome": "failed"
+    },
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "skipped",
+    "text": "words of a",
+    "title": "T a"
+   },
+   {
+    "est_seconds": 30,
+    "id": "b",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of b",
+    "title": "T b"
+   }
+  ],
+  "position_seconds": 0,
+  "version": 6
+ }
+}
