@@ -14,12 +14,20 @@
 
 export const QUIET_MS = 8000;
 export const HOLD_CLOSE_FIRST_AFTER = 2;
-const STALE_MS = 24 * 3600 * 1000;
+// A marker has no age limit (a user back after two days must not re-enter the
+// loop): it ends by proof, by close, or when the server no longer has the
+// window. Storage is bounded by count, oldest first.
+export const PENDING_CAP = 50;
+const BOOT_CAP = 20;
+export const HEARTBEAT_KEY = 'choir.crashGuard.beat';
+export const HEARTBEAT_MS = 2000;
+export const HEARTBEAT_STALE_MS = 6000;
+export const LOCK_PREFIX = 'choir-desktop-tab-';
 export const HISTORY_LIMIT = 10;
 const STEP_LIMIT = 200;
 
 function emptyState() {
-  return { v: 1, pending: {}, crashes: {}, steps: {}, history: [], boot: null };
+  return { v: 1, pending: {}, crashes: {}, steps: {}, history: [], boots: {} };
 }
 
 export function createCrashGuard({ storage, key, tabId, now = () => Date.now(), userAgent = '' } = {}) {
@@ -36,13 +44,11 @@ export function createCrashGuard({ storage, key, tabId, now = () => Date.now(), 
         crashes: parsed.crashes && typeof parsed.crashes === 'object' ? { ...parsed.crashes } : {},
         steps: parsed.steps && typeof parsed.steps === 'object' ? { ...parsed.steps } : {},
         history: Array.isArray(parsed.history) ? parsed.history.filter((h) => h && typeof h === 'object').slice(-HISTORY_LIMIT) : [],
-        boot: parsed.boot && typeof parsed.boot === 'object' ? parsed.boot : null,
+        boots: parsed.boots && typeof parsed.boots === 'object' && !Array.isArray(parsed.boots) ? { ...parsed.boots } : {},
       };
-      const cutoff = now() - STALE_MS;
       for (const [id, entry] of Object.entries(state.pending)) {
-        if (!entry || typeof entry !== 'object' || !(entry.since > cutoff)) delete state.pending[id];
+        if (!entry || typeof entry !== 'object') delete state.pending[id];
       }
-      if (state.boot && !(state.boot.since > cutoff)) state.boot = null;
       return state;
     } catch (_err) {
       return null;
@@ -52,7 +58,7 @@ export function createCrashGuard({ storage, key, tabId, now = () => Date.now(), 
   function write(state) {
     try {
       if (!storage) return;
-      const empty = !state.boot && !state.history.length && !Object.keys(state.pending).length && !Object.keys(state.crashes).length;
+      const empty = !Object.keys(state.boots).length && !state.history.length && !Object.keys(state.pending).length && !Object.keys(state.crashes).length;
       if (empty) storage.removeItem(key);
       else storage.setItem(key, JSON.stringify(state));
     } catch (_err) {
@@ -64,25 +70,42 @@ export function createCrashGuard({ storage, key, tabId, now = () => Date.now(), 
     const state = read();
     if (!state) return undefined;
     const out = fn(state);
+    capOldest(state.pending, (e) => e.since, PENDING_CAP);
+    capOldest(state.boots, (since) => since, BOOT_CAP);
     write(state);
     return out;
   }
 
+  function capOldest(map, ageOf, cap) {
+    const ids = Object.keys(map);
+    if (ids.length <= cap) return;
+    ids.sort((a, b) => (Number(ageOf(map[a])) || 0) - (Number(ageOf(map[b])) || 0));
+    for (const id of ids.slice(0, ids.length - cap)) delete map[id];
+  }
+
   const mine = (entry) => entry && entry.tab === tabId;
+  // A marker is a death unless its tab is another tab demonstrably alive now.
+  const isDead = (tab, alive) => tab === tabId || !alive.has(tab);
 
   return {
     /** Call once per page load, before anything mounts. interrupted: the last load of this tab never became stable. */
-    beginBoot() {
+    beginBoot(alive = new Set()) {
       return mutate((state) => {
-        const interrupted = Boolean(mine(state.boot));
-        state.boot = { tab: tabId, since: now() };
+        let interrupted = false;
+        for (const tab of Object.keys(state.boots)) {
+          if (isDead(tab, alive)) {
+            interrupted = true;
+            delete state.boots[tab];
+          }
+        }
+        state.boots[tabId] = now();
         return { interrupted };
       }) || { interrupted: false };
     },
     /** The desktop has been stable for the quiet period. */
     bootStable() {
       mutate((state) => {
-        if (mine(state.boot)) state.boot = null;
+        delete state.boots[tabId];
       });
     },
     /** Synchronously, before an app body mounts. */
@@ -133,12 +156,12 @@ export function createCrashGuard({ storage, key, tabId, now = () => Date.now(), 
      * mounted). Returns {windowId: deaths}. Markers for windows the server no
      * longer has are pruned. Other tabs' markers are left alone.
      */
-    takeDeaths(restoredIds = []) {
+    takeDeaths(restoredIds = [], alive = new Set()) {
       return mutate((state) => {
         const restored = new Set(restoredIds);
         const dead = {};
         for (const [id, entry] of Object.entries(state.pending)) {
-          if (!mine(entry)) continue;
+          if (!isDead(entry.tab, alive)) continue;
           delete state.pending[id];
           if (!restored.has(id)) continue;
           state.crashes[id] = (Number(state.crashes[id]) || 0) + 1;
@@ -167,7 +190,7 @@ export function createCrashGuard({ storage, key, tabId, now = () => Date.now(), 
     leaveCleanly() {
       mutate((state) => {
         const anyPending = Object.values(state.pending).some(mine);
-        if (!anyPending && mine(state.boot)) state.boot = null;
+        if (!anyPending) delete state.boots[tabId];
       });
     },
   };
@@ -204,4 +227,64 @@ export function createProofClock({ guard, quietMs = QUIET_MS } = {}) {
       return newlyProven;
     },
   };
+}
+
+/**
+ * Which tabs are demonstrably alive right now (async). Web Locks: each tab
+ * holds a lock named LOCK_PREFIX+id for its lifetime, released when the page
+ * dies. Without them: a heartbeat per tab in storage, fresh within
+ * HEARTBEAT_STALE_MS. Anything broken answers "nobody", which holds windows.
+ */
+export async function readLiveTabs({ locks, storage, now = () => Date.now() } = {}) {
+  const alive = new Set();
+  try {
+    if (locks && typeof locks.query === 'function') {
+      const snapshot = await locks.query();
+      for (const lock of snapshot?.held || []) {
+        const name = String(lock?.name || '');
+        if (name.startsWith(LOCK_PREFIX)) alive.add(name.slice(LOCK_PREFIX.length));
+      }
+      return alive;
+    }
+  } catch (_err) {
+    return new Set();
+  }
+  try {
+    if (!storage) return alive;
+    const beats = JSON.parse(storage.getItem(HEARTBEAT_KEY) || '{}');
+    for (const [tab, at] of Object.entries(beats || {})) {
+      if (now() - Number(at) < HEARTBEAT_STALE_MS) alive.add(tab);
+    }
+  } catch (_err) {
+    return new Set();
+  }
+  return alive;
+}
+
+/** Announce this tab as alive until the page dies. Returns a stop function. */
+export function startPresence({ locks, storage, tabId, now = () => Date.now(), setTimer = setInterval, clearTimer = clearInterval } = {}) {
+  try {
+    if (locks && typeof locks.request === 'function') {
+      // Held forever: the browser releases it when the page goes.
+      void locks.request(LOCK_PREFIX + tabId, () => new Promise(() => {})).catch(() => {});
+      return () => {};
+    }
+  } catch (_err) {
+    // fall through to the heartbeat
+  }
+  const beat = () => {
+    try {
+      if (!storage) return;
+      const beats = JSON.parse(storage.getItem(HEARTBEAT_KEY) || '{}') || {};
+      const t = now();
+      for (const [tab, at] of Object.entries(beats)) if (t - Number(at) > HEARTBEAT_STALE_MS * 10) delete beats[tab];
+      beats[tabId] = t;
+      storage.setItem(HEARTBEAT_KEY, JSON.stringify(beats));
+    } catch (_err) {
+      // inert
+    }
+  };
+  beat();
+  const timer = setTimer(beat, HEARTBEAT_MS);
+  return () => clearTimer(timer);
 }

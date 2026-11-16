@@ -100,3 +100,40 @@ test('a reload after the quiet period restores the window normally', async ({ br
   await expect(page.locator('[data-crash-held]')).toHaveCount(0);
   await context.close();
 });
+
+test('a pending marker from a tab that is gone holds the window in a brand-new tab', async ({ browser }) => {
+  // The first context leaves a pending marker and is abandoned without a clean exit.
+  const first = await open(browser);
+  await ready(first.page);
+  await expect.poll(() => pendingFor(first.page)).toHaveProperty('w-settings');
+  const stored = await first.page.evaluate((key) => localStorage.getItem(key), KEY);
+  await first.context.close();
+
+  // A second context has new sessionStorage (a new tab id) and, here, its own localStorage seeded
+  // with what the dead tab left behind.
+  const second = await open(browser);
+  await second.context.addInitScript(([key, value]) => {
+    if (!localStorage.getItem(key)) localStorage.setItem(key, value);
+  }, [KEY, stored]);
+  await ready(second.page);
+  const held = second.page.locator('[data-window][data-window-id="w-settings"] [data-crash-held]');
+  await expect(held).toBeVisible();
+  await second.context.close();
+});
+
+test('storage entirely unavailable: the desktop works as before, nothing held', async ({ browser }) => {
+  const { context, page } = await open(browser);
+  await context.addInitScript(() => {
+    const boom = () => { throw new Error('storage blocked'); };
+    for (const name of ['localStorage', 'sessionStorage']) {
+      Object.defineProperty(window, name, { configurable: true, get: boom });
+    }
+  });
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+  await ready(page);
+  await expect(page.locator('[data-window][data-window-id="w-settings"]')).toBeVisible();
+  await expect(page.locator('[data-crash-held]')).toHaveCount(0);
+  expect(errors.filter((e) => /crash|storage blocked/i.test(e))).toEqual([]);
+  await context.close();
+});

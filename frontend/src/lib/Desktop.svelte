@@ -26,7 +26,7 @@
 -->
 <script>
   import { createEventDispatcher } from 'svelte';
-  import { createCrashGuard, createProofClock, HOLD_CLOSE_FIRST_AFTER, QUIET_MS } from './crash-guard.js';
+  import { createCrashGuard, createProofClock, readLiveTabs, startPresence, HOLD_CLOSE_FIRST_AFTER, QUIET_MS } from './crash-guard.js';
   import { scopedKey } from './user-scope.js';
   import { setWindowStepSink } from './window-step';
   import { links } from './services/links';
@@ -519,6 +519,7 @@
     }
     try {
       const state = await fetchDesktopState();
+      if (state) await prepareCrashGuard();
       if (state) {
         applyPersistedDesktopState(() => {
           // Restore icon positions
@@ -569,6 +570,7 @@
               setWindows(restoredWindows, state.active_window_id || '');
             }
           } else {
+            takeCrashReport([]); // arms the guard for windows opened later
             restoreRecovery = null;
             restoreRecoveryWindows = [];
             restoreRecoveryActiveId = '';
@@ -627,6 +629,8 @@
   let removeStepSink = null;
   let crashSteps = {};
   let crashBootAt = 0;
+  let crashLiveTabs = new Set();
+  let stopPresence = null;
 
   function crashTabId() {
     try {
@@ -656,6 +660,26 @@
     return crashGuard;
   }
 
+  // Which other tabs are alive right now (Web Locks, else a heartbeat), then
+  // this tab announces itself. Async, and awaited before any restored window
+  // is set, so no app body mounts until the markers are judged: a marker from
+  // a tab that is not demonstrably alive is a death, so a new tab or a lost
+  // sessionStorage cannot walk back into the loop.
+  async function prepareCrashGuard() {
+    const guard = ensureCrashGuard();
+    if (!guard || crashBoot) return;
+    let storage = null;
+    try { storage = window.localStorage; } catch (_err) { storage = null; }
+    const locks = typeof navigator !== 'undefined' ? navigator.locks : null;
+    try {
+      crashLiveTabs = await readLiveTabs({ locks, storage });
+    } catch (_err) {
+      crashLiveTabs = new Set();
+    }
+    stopPresence?.();
+    stopPresence = startPresence({ locks, storage, tabId: crashTabId() });
+  }
+
   // At the page's first restore: which restored windows were opening when the
   // page last died, and did the last load die before anything was identified.
   function takeCrashReport(restoredRaw) {
@@ -668,8 +692,8 @@
       return { held, suspected: false };
     }
     crashBootAt = Date.now();
-    crashBoot = guard.beginBoot();
-    const held = guard.takeDeaths(restoredRaw.map((win) => win.windowId));
+    crashBoot = guard.beginBoot(crashLiveTabs);
+    const held = guard.takeDeaths(restoredRaw.map((win) => win.windowId), crashLiveTabs);
     for (const id of Object.keys(held)) crashSteps[id] = guard.lastStep(id);
     for (const entry of guard.history().filter((h) => held[h.windowId] && h.at >= crashBootAt)) {
       console.warn('[choir] the page stopped while a window was opening', entry);
@@ -1824,6 +1848,7 @@
     if (saveTimer) clearTimeout(saveTimer);
     if (crashTicker) clearInterval(crashTicker);
     removeStepSink?.();
+    stopPresence?.();
     if (unsubscribeWindows) unsubscribeWindows();
     if (unsubscribeActive) unsubscribeActive();
     if (unsubscribeIconPositions) unsubscribeIconPositions();
