@@ -249,3 +249,11 @@ The owner tested onboarding, where the app helps set up the edition.
     other features we sprint forward." The lead's reading for tonight: on at
     app open and by the button; off by the button and after three minutes
     with no turn from the reader. The three minutes is the lead's number.
+- **Design ruling, 00:2xZ on the 16th:** "I want no pills. No pills. No
+  outlined bubbles. Pills promote bad design, bad typography. It's a crutch
+  that shows things are buttons but that means otherwise it's too subtle."
+- **Podcasts, same hour:** transcribe every new episode of every show any
+  user subscribes to, once, shared; what is playing now first. "The long
+  tail / new recommendations to user A will be the subscriptions of user
+  B." YouTube transcripts can be fetched from the user's device, not the
+  server's address (design only on this night).
