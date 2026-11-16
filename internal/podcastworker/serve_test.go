@@ -16,6 +16,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -229,5 +234,143 @@ func TestPoliteNeighbourSetsPriority(t *testing.T) {
 	}
 	if MaxThreads != 4 {
 		t.Fatal("the thread cap is four")
+	}
+}
+
+// The disk guard (owner and lead, 2026-11-16: the service must never fill the
+// shared disk). Ways it can fail, written first:
+//
+//	D1. a download starts with less free space than the floor;
+//	D2. a refusal for space counts as the episode's failure and puts it on
+//	    the skip list for hours, so it is never retried when space returns;
+//	D3. the work directory keeps an episode's audio after its transcription
+//	    ends, whatever the outcome.
+func TestD1_TheDownloadIsRefusedUnderTheFloor(t *testing.T) {
+	var asked string
+	tr := &Transcriber{WorkDir: t.TempDir(), MinFreeBytes: 15 << 30, FFmpeg: "false", Parakeet: "false",
+		FreeBytes: func(dir string) (uint64, error) { asked = dir; return 14 << 30, nil }}
+	_, err := tr.Transcribe(context.Background(), "http://127.0.0.1:1/never")
+	if !errors.Is(err, ErrLowDisk) || !strings.Contains(err.Error(), "14.0 GiB free") || asked != tr.WorkDir {
+		t.Fatalf("D1: err = %v, asked %q", err, asked)
+	}
+	// At the floor the check passes (the download is then tried and fails on the dead address).
+	tr.FreeBytes = func(string) (uint64, error) { return 15 << 30, nil }
+	if _, err := tr.Transcribe(context.Background(), "http://127.0.0.1:1/never"); errors.Is(err, ErrLowDisk) || err == nil {
+		t.Fatalf("D1: at the floor: %v", err)
+	}
+	// A filesystem that cannot be read is refused too, never assumed empty of care.
+	tr.FreeBytes = func(string) (uint64, error) { return 0, errors.New("statfs failed") }
+	if _, err := tr.Transcribe(context.Background(), "http://127.0.0.1:1/never"); err == nil || !strings.Contains(err.Error(), "statfs failed") {
+		t.Fatalf("D1: unreadable: %v", err)
+	}
+	// The real reader answers something sensible for the temp dir.
+	if free, err := freeBytes(t.TempDir()); err != nil || free == 0 {
+		t.Fatalf("D1: freeBytes = %d %v", free, err)
+	}
+}
+
+func TestD2_ALowDiskIsNotTheEpisodesFailure(t *testing.T) {
+	b := &fakeBackend{pending: []PendingEpisode{ep("a")}}
+	low := true
+	e := &fakeEngine{fail: map[string]error{}}
+	eng := engineFunc{engine: e, before: func(url string) error {
+		if low {
+			return fmt.Errorf("%w: 3.0 GiB free", ErrLowDisk)
+		}
+		return nil
+	}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var logs []string
+	var sleeps []time.Duration
+	cfg := ServeConfig{MinIdle: time.Second, MaxIdle: time.Minute, FailBackoff: 24 * time.Hour,
+		Logf: func(f string, a ...any) { logs = append(logs, fmt.Sprintf(f, a...)) },
+		Sleep: func(_ context.Context, d time.Duration) {
+			sleeps = append(sleeps, d)
+			if len(sleeps) == 2 {
+				low = false // space is back
+			}
+			if len(sleeps) == 4 {
+				cancel()
+			}
+		}}
+	_ = Serve(ctx, b, eng, cfg)
+	if len(b.put) != 1 || b.put[0] != "a" {
+		t.Fatalf("D2: stored %v, sleeps %v, logs %v", b.put, sleeps, logs)
+	}
+	refusals := 0
+	for _, l := range logs {
+		if strings.Contains(l, "download refused") {
+			refusals++
+		}
+	}
+	if refusals != 2 {
+		t.Fatalf("D2: %d refusals logged: %v", refusals, logs)
+	}
+}
+
+// engineFunc wraps the fake engine with a check that runs first.
+type engineFunc struct {
+	engine *fakeEngine
+	before func(url string) error
+}
+
+func (e engineFunc) Engine() string { return "fake" }
+func (e engineFunc) Transcribe(ctx context.Context, url string) (Result, error) {
+	if err := e.before(url); err != nil {
+		return Result{}, err
+	}
+	return e.engine.Transcribe(ctx, url)
+}
+
+func TestD3_NoAudioSurvivesATranscription(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stubs")
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Range") != "" {
+			w.Header().Set("Content-Range", "bytes 0-0/4096")
+			w.WriteHeader(http.StatusPartialContent)
+			_, _ = w.Write([]byte{0})
+			return
+		}
+		_, _ = w.Write(make([]byte, 4096))
+	}))
+	defer srv.Close()
+	bin := t.TempDir()
+	write := func(name, body string) string {
+		p := filepath.Join(bin, name)
+		if err := os.WriteFile(p, []byte("#!/bin/sh\n"+body+"\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	// A stub ffmpeg: with -i alone it prints a duration; with an output it
+	// writes a 10 second WAV-sized file to the last argument.
+	ffmpeg := write("ffmpeg", `for last; do :; done
+case "$last" in *.wav) head -c 320044 /dev/zero > "$last" ;; *) echo "  Duration: 00:01:05.50, start: 0.0" >&2; exit 1 ;; esac`)
+	parakeet := write("parakeet", `echo '{"text":"x","words":[{"w":"Hello","start":0.1,"end":0.4},{"w":"world.","start":0.5,"end":0.9}]}'`)
+	work := t.TempDir()
+	tr := &Transcriber{FFmpeg: ffmpeg, Parakeet: parakeet, Model: "m/tdt_ctc-110m-q8_0.gguf", VAD: "v", WorkDir: work, MinFreeBytes: -1, HTTP: srv.Client()}
+	res, err := tr.Transcribe(context.Background(), srv.URL+"/a.mp3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Segments) != 1 || res.Segments[0].Text != "Hello world." || res.Seconds < 9.9 || res.Seconds > 10.1 || res.FileSeconds != 65.5 {
+		t.Fatalf("D3: result = %+v", res)
+	}
+	if res.StableFile == nil || !*res.StableFile {
+		t.Fatalf("D3: the file was served unchanged (4096 bytes twice) but StableFile = %v", res.StableFile)
+	}
+	if left, _ := os.ReadDir(work); len(left) != 0 {
+		t.Fatalf("D3: %d entries left in the work directory after a success", len(left))
+	}
+	// A failure leaves nothing either.
+	tr.FFmpeg = write("badffmpeg", `exit 1`)
+	if _, err := tr.Transcribe(context.Background(), srv.URL+"/a.mp3"); err == nil {
+		t.Fatal("D3: a failing ffmpeg must fail the episode")
+	}
+	if left, _ := os.ReadDir(work); len(left) != 0 {
+		t.Fatalf("D3: %d entries left in the work directory after a failure", len(left))
 	}
 }
