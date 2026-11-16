@@ -93,6 +93,8 @@ func main() {
 			Since: time.Duration(*sinceHours) * time.Hour, ListLimit: *maxEpisodes, IntakeEvery: *intakeEvery,
 			Intake: func(ctx context.Context) error { return intake(ctx, client, *feeds, *perFeed) },
 		}
+		handled := map[string]bool{}
+		cfg.Priority = func(ctx context.Context) error { return priority(ctx, client, handled) }
 		log.Printf("podcast-worker serving: engine %q, %d threads, one episode at a time", t.Engine(), *threads)
 		if err := podcastworker.Serve(ctx, client, t, cfg); err != nil && ctx.Err() == nil {
 			log.Fatalf("serve: %v", err)
@@ -125,18 +127,27 @@ func intake(ctx context.Context, c *podcastworker.Client, path string, perFeed i
 	if err := json.Unmarshal(raw, &list); err != nil {
 		return fmt.Errorf("feed list %s: %w", path, err)
 	}
+	var seed []podcastworker.FeedSpec
+	for _, f := range list.Feeds {
+		seed = append(seed, podcastworker.FeedSpec{Show: f.Show, URL: f.URL})
+	}
+	// The feeds to poll are the operator's list and the feeds readers report.
+	reported, err := c.WorkerFeeds(ctx)
+	if err != nil {
+		log.Printf("reported feeds unavailable (the operator's list alone is polled): %v", err)
+	}
+	feeds := podcastworker.MergeFeeds(seed, reported)
 	httpc := &http.Client{Timeout: 60 * time.Second}
 	var all []podcastworker.Episode
-	for _, f := range list.Feeds {
+	for _, f := range feeds {
 		eps, err := podcastworker.FetchFeed(ctx, httpc, f.URL, f.Show)
 		if err != nil {
-			log.Printf("feed %q skipped: %v", f.Show, err)
+			log.Printf("feed %q skipped: %v", f.URL, err)
 			continue
 		}
 		if len(eps) > perFeed {
 			eps = eps[:perFeed]
 		}
-		log.Printf("feed %q: %d items", f.Show, len(eps))
 		all = append(all, eps...)
 	}
 	if len(all) == 0 {
@@ -146,7 +157,45 @@ func intake(ctx context.Context, c *podcastworker.Client, path string, perFeed i
 	if err != nil {
 		return err
 	}
-	log.Printf("episodes recorded: %d (new %d)", recorded, fresh)
+	log.Printf("intake: %d feeds, episodes recorded: %d (new %d)", len(feeds), recorded, fresh)
+	return nil
+}
+
+// priority polls the feeds of episodes a phone is playing, once for each, so
+// they are in the queue at the next listing.
+func priority(ctx context.Context, c *podcastworker.Client, handled map[string]bool) error {
+	feeds, err := c.WorkerFeeds(ctx)
+	if err != nil {
+		return err
+	}
+	httpc := &http.Client{Timeout: 60 * time.Second}
+	for _, f := range feeds {
+		for _, w := range f.Wanted {
+			key := f.FeedURL + "\x00" + w.GUID
+			if handled[key] {
+				continue
+			}
+			handled[key] = true
+			eps, err := podcastworker.FetchFeed(ctx, httpc, f.FeedURL, f.Title)
+			if err != nil {
+				return err
+			}
+			if len(eps) > 5 {
+				// Keep the newest few and the one wanted.
+				keep := eps[:5]
+				for _, e := range eps[5:] {
+					if e.GUID == w.GUID {
+						keep = append(keep, e)
+					}
+				}
+				eps = keep
+			}
+			if _, _, err := c.PostEpisodes(ctx, eps); err != nil {
+				return err
+			}
+			log.Printf("priority: polled %s for a playing episode", f.FeedURL)
+		}
+	}
 	return nil
 }
 

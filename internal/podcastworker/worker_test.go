@@ -13,6 +13,7 @@ package podcastworker
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -150,5 +151,38 @@ func TestProbeLengthReadsTheTotalAndAnswersZeroWhenUnknown(t *testing.T) {
 	}
 	if got := ProbeLength(ctx, srv.Client(), "http://127.0.0.1:1/x"); got != 0 {
 		t.Errorf("a refused connection = %d", got)
+	}
+}
+
+func TestMergeFeedsIsTheUnionOnceWithTheOperatorsNamesFirst(t *testing.T) {
+	seed := []FeedSpec{{Show: "Seed", URL: "https://a.example.test/f.xml"}, {Show: "Dup", URL: "HTTPS://A.example.test:443/f.xml/"}}
+	reported := []WorkerFeed{{FeedURL: "https://a.example.test/f.xml", Title: "Reported A"}, {FeedURL: "https://b.example.test/f.xml", Title: "B"}}
+	got := MergeFeeds(seed, reported)
+	if len(got) != 2 || got[0].Show != "Seed" || got[1].URL != "https://b.example.test/f.xml" || got[1].Show != "B" {
+		t.Fatalf("merge = %+v", got)
+	}
+	if NormalizeFeedKey("HTTPS://A.example.test:443/f.xml/#x") != "https://a.example.test/f.xml" {
+		t.Fatal("the key does not match the platform's rule")
+	}
+}
+
+func TestS6_PriorityRunsBeforeEveryPollAndNeverStopsTheLoop(t *testing.T) {
+	b := &fakeBackend{pending: []PendingEpisode{ep("a")}}
+	e := &fakeEngine{}
+	var order []string
+	cfg := ServeConfig{Priority: func(context.Context) error {
+		order = append(order, "priority")
+		return errors.New("feed down")
+	}}
+	_, logs := runServe(t, b, e, 1, cfg)
+	if len(order) == 0 || strings.Join(b.put, ",") != "a" {
+		t.Fatalf("S6: priority ran %d times, stored %v", len(order), b.put)
+	}
+	failed := false
+	for _, l := range logs {
+		failed = failed || strings.Contains(l, "priority poll failed")
+	}
+	if !failed {
+		t.Fatalf("S6: the priority failure was not logged: %v", logs)
 	}
 }

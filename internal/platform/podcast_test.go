@@ -135,7 +135,7 @@ func TestPodcastClipsValidationAndPublicRead(t *testing.T) {
 			t.Fatalf("%s: err = %v, want ErrPodcastInvalid", name, err)
 		}
 	}
-	got, err := f.svc.ListPodcastClips(ctx, nil, 0)
+	got, err := f.svc.ListPodcastClips(ctx, nil, nil, 0)
 	if err != nil || len(got.Clips) != 0 {
 		t.Fatalf("refused requests left %d clips (err %v)", len(got.Clips), err)
 	}
@@ -151,7 +151,7 @@ func TestPodcastClipsValidationAndPublicRead(t *testing.T) {
 	f.svc.podcastCache.reset()
 
 	// One story asked for: at most three clips, and only its own.
-	one, err := f.svc.ListPodcastClips(ctx, []string{harbor}, 0)
+	one, err := f.svc.ListPodcastClips(ctx, []string{harbor}, nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +187,7 @@ func TestPodcastClipsValidationAndPublicRead(t *testing.T) {
 	}
 
 	// No routes: the recent front, both stories.
-	bulk, err := f.svc.ListPodcastClips(ctx, nil, 0)
+	bulk, err := f.svc.ListPodcastClips(ctx, nil, nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,10 +208,10 @@ func TestPodcastClipsValidationAndPublicRead(t *testing.T) {
 	for i := range many {
 		many[i] = "/r"
 	}
-	if _, err := f.svc.ListPodcastClips(ctx, many, 0); !errors.Is(err, ErrPodcastInvalid) {
+	if _, err := f.svc.ListPodcastClips(ctx, many, nil, 0); !errors.Is(err, ErrPodcastInvalid) {
 		t.Fatalf("too many routes: err = %v", err)
 	}
-	capped, _ := f.svc.ListPodcastClips(ctx, nil, 1)
+	capped, _ := f.svc.ListPodcastClips(ctx, nil, nil, 1)
 	if len(capped.Clips) != 1 {
 		t.Fatalf("limit 1 gave %d clips", len(capped.Clips))
 	}
@@ -275,7 +275,7 @@ func TestPodcastClipsOfAStableFileComeFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.svc.podcastCache.reset()
-	got, err := f.svc.ListPodcastClips(ctx, []string{harbor}, 0)
+	got, err := f.svc.ListPodcastClips(ctx, []string{harbor}, nil, 0)
 	if err != nil || len(got.Clips) != 3 {
 		t.Fatalf("clips: %v %+v", err, got)
 	}

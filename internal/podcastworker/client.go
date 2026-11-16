@@ -125,3 +125,26 @@ func (c *Client) PutTranscript(ctx context.Context, episodeID, engine string, r 
 		"stable_file": r.StableFile, "segments": r.Segments,
 	}, nil)
 }
+
+// WorkerFeed is a feed the platform wants polled: those readers report, most
+// followed first, with the episodes a phone is playing now.
+type WorkerFeed struct {
+	FeedURL     string `json:"feed_url"`
+	Title       string `json:"title"`
+	Subscribers int    `json:"subscribers"`
+	Wanted      []struct {
+		GUID     string `json:"guid"`
+		AudioURL string `json:"audio_url"`
+	} `json:"wanted,omitempty"`
+}
+
+// WorkerFeeds lists the feeds readers follow.
+func (c *Client) WorkerFeeds(ctx context.Context) ([]WorkerFeed, error) {
+	var ans struct {
+		Feeds []WorkerFeed `json:"feeds"`
+	}
+	if err := c.do(ctx, http.MethodGet, opBase+"feeds", nil, &ans); err != nil {
+		return nil, err
+	}
+	return ans.Feeds, nil
+}
