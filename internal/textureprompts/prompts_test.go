@@ -31,8 +31,6 @@ func TestPromptCoreTeachesWriteCitationsAndTurnVerbs(t *testing.T) {
 func TestPromptCoreKeepsTheOwnerRevisionShape(t *testing.T) {
 	prompt := DefaultSystemPrompt()
 	for _, want := range []string{
-		"V1, your first revision on a new request, is a fast acknowledgment",
-		"dispatched in the same cell",
 		"Every later revision rewrites the ideas, not a log. Never narrate actions.",
 		"Texture never writes programs.",
 		"state it plainly with its citation",
@@ -101,8 +99,15 @@ func TestPromptCoreRetiresTheOldWriteSurface(t *testing.T) {
 	// English and depth lines (lane Q, docs/problems/autopaper-article-
 	// quality-2026-11-09.md): the prompt named neither and 78% of stories
 	// were under 300 words.
-	if n := len(prompt); n > 6500 {
-		t.Errorf("prompt core is %d characters; the budget is about 6.5k", n)
+	//
+	// 12k (2026-11-16): the Texture prompt is to be rewritten as an
+	// explanation of the system, not a list of rules (owner: "the prompt needs
+	// to not just be an instruction of do this, don't do that, but an
+	// explanation of the system"; docs/why-texture-2026-06-15.md). The bound
+	// stays as a sanity check against a runaway prompt, not a cap on the
+	// explanation. The V1 wording is no longer pinned here for the same reason.
+	if n := len(prompt); n > 12000 {
+		t.Errorf("prompt core is %d characters; the sanity bound is 12k", n)
 	}
 }
 
