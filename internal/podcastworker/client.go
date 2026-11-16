@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -77,21 +78,26 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 
 const opBase = "/api/platform/operator/podcasts/"
 
-// PostEpisodes records feed items, in requests of at most 200.
-func (c *Client) PostEpisodes(ctx context.Context, eps []Episode) (recorded, fresh int, err error) {
+// PostEpisodes records feed items, in requests of at most 200. A chunk that
+// fails does not stop the ones after it; the errors are returned together.
+func (c *Client) PostEpisodes(ctx context.Context, eps []Episode) (recorded, fresh, skipped int, err error) {
+	var errs []error
 	for start := 0; start < len(eps); start += 200 {
 		end := min(start+200, len(eps))
 		var ans struct {
 			Recorded int `json:"recorded"`
 			New      int `json:"new"`
+			Skipped  int `json:"skipped"`
 		}
 		if err := c.do(ctx, http.MethodPost, opBase+"episodes", map[string]any{"episodes": eps[start:end]}, &ans); err != nil {
-			return recorded, fresh, err
+			errs = append(errs, err)
+			continue
 		}
 		recorded += ans.Recorded
 		fresh += ans.New
+		skipped += ans.Skipped
 	}
-	return recorded, fresh, nil
+	return recorded, fresh, skipped, errors.Join(errs...)
 }
 
 // PendingEpisode is an episode that needs a transcript.
@@ -127,29 +133,6 @@ func (c *Client) PutTranscript(ctx context.Context, episodeID, engine string, r 
 		"episode_id": episodeID, "engine": engine, "audio_seconds": r.Seconds, "file_seconds": r.FileSeconds,
 		"stable_file": r.StableFile, "segments": r.Segments,
 	}, nil)
-}
-
-// WorkerFeed is a feed the platform wants polled: those readers report, most
-// followed first, with the episodes a phone is playing now.
-type WorkerFeed struct {
-	FeedURL     string `json:"feed_url"`
-	Title       string `json:"title"`
-	Subscribers int    `json:"subscribers"`
-	Wanted      []struct {
-		GUID     string `json:"guid"`
-		AudioURL string `json:"audio_url"`
-	} `json:"wanted,omitempty"`
-}
-
-// WorkerFeeds lists the feeds readers follow.
-func (c *Client) WorkerFeeds(ctx context.Context) ([]WorkerFeed, error) {
-	var ans struct {
-		Feeds []WorkerFeed `json:"feeds"`
-	}
-	if err := c.do(ctx, http.MethodGet, opBase+"feeds", nil, &ans); err != nil {
-		return nil, err
-	}
-	return ans.Feeds, nil
 }
 
 // ListFeeds tells the platform which feeds the operator lists as public (the

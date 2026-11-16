@@ -22,9 +22,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -66,29 +68,63 @@ func seedTranscript(t *testing.T, f frontFixture, episodeID string, seconds floa
 	}
 }
 
-func TestPodcastEpisodesRefuseBadURLsWhole(t *testing.T) {
-	f := newFrontFixture(t)
-	ctx := context.Background()
-	good := podcastFixtureEpisode("g1", 600)
-	for name, mutate := range map[string]func(*PodcastEpisodeIn){
-		"credentials": func(e *PodcastEpisodeIn) { e.EnclosureURL = "https://user:pw@cdn.example.test/a.mp3" },
-		"ftp":         func(e *PodcastEpisodeIn) { e.EnclosureURL = "ftp://cdn.example.test/a.mp3" },
-		"feed":        func(e *PodcastEpisodeIn) { e.FeedURL = "javascript:alert(1)" },
-		"no guid":     func(e *PodcastEpisodeIn) { e.GUID = "" },
-		"bad date":    func(e *PodcastEpisodeIn) { e.Published = "yesterday" },
-		"huge":        func(e *PodcastEpisodeIn) { e.EnclosureURL = "https://x.example.test/" + strings.Repeat("a", 3000) },
-		"future":      func(e *PodcastEpisodeIn) { e.Published = time.Now().UTC().Add(48 * time.Hour).Format(time.RFC3339) },
-	} {
-		bad := podcastFixtureEpisode("g2", 600)
-		mutate(&bad)
-		_, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{good, bad})
-		if !errors.Is(err, ErrPodcastInvalid) {
-			t.Fatalf("%s: err = %v, want ErrPodcastInvalid", name, err)
+// recordFeatured features the feeds of the episodes (the operator's act) and
+// records them: a feed row, and so an episode, exists only for a featured feed.
+func recordFeatured(f frontFixture, ctx context.Context, eps []PodcastEpisodeIn) (recorded, fresh, skipped int, err error) {
+	seen := map[string]bool{}
+	var list []PodcastFeedListing
+	for _, e := range eps {
+		if _, nerr := NormalizeFeedURL(e.FeedURL); nerr == nil && !seen[e.FeedURL] {
+			seen[e.FeedURL] = true
+			list = append(list, PodcastFeedListing{FeedURL: e.FeedURL, Title: "Listed"})
 		}
 	}
-	list, err := f.svc.ListPodcastEpisodes(ctx, false, time.Time{}, 50)
-	if err != nil || len(list) != 0 {
-		t.Fatalf("after refused requests the store holds %d episodes (err %v), want 0", len(list), err)
+	if len(list) > 0 {
+		if _, err := f.svc.SetPodcastFeedsListed(ctx, list, true); err != nil {
+			return 0, 0, 0, err
+		}
+	}
+	return f.svc.RecordPodcastEpisodes(ctx, eps)
+}
+
+// One bad item costs only itself; only a malformed envelope is refused.
+func TestPodcastEpisodesSkipBadItemsAndKeepTheRest(t *testing.T) {
+	f := newFrontFixture(t)
+	ctx := context.Background()
+	listFeeds(t, f, "https://feeds.example.test/news.xml")
+	good := podcastFixtureEpisode("g1", 600)
+	bads := map[string]func(*PodcastEpisodeIn){
+		"credentials":  func(e *PodcastEpisodeIn) { e.EnclosureURL = "https://user:pw@cdn.example.test/a.mp3" },
+		"ftp":          func(e *PodcastEpisodeIn) { e.EnclosureURL = "ftp://cdn.example.test/a.mp3" },
+		"private":      func(e *PodcastEpisodeIn) { e.EnclosureURL = "http://192.168.1.10/a.mp3" },
+		"feed":         func(e *PodcastEpisodeIn) { e.FeedURL = "javascript:alert(1)" },
+		"no guid":      func(e *PodcastEpisodeIn) { e.GUID = "" },
+		"bad date":     func(e *PodcastEpisodeIn) { e.Published = "yesterday" },
+		"huge":         func(e *PodcastEpisodeIn) { e.EnclosureURL = "https://x.example.test/" + strings.Repeat("a", 3000) },
+		"future":       func(e *PodcastEpisodeIn) { e.Published = time.Now().UTC().Add(48 * time.Hour).Format(time.RFC3339) },
+		"not featured": func(e *PodcastEpisodeIn) { e.FeedURL = "https://private.example.test/token/f.xml" },
+	}
+	var in []PodcastEpisodeIn
+	for name, mutate := range bads {
+		bad := podcastFixtureEpisode("bad-"+strings.ReplaceAll(name, " ", "-"), 600)
+		mutate(&bad)
+		in = append(in, bad)
+	}
+	in = append(in, good)
+	rec, fresh, skipped, err := f.svc.RecordPodcastEpisodes(ctx, in)
+	if err != nil || rec != 1 || fresh != 1 || skipped != len(bads) {
+		t.Fatalf("recorded %d new %d skipped %d (%v); want 1, 1 and %d", rec, fresh, skipped, err, len(bads))
+	}
+	list, _ := f.svc.ListPodcastEpisodes(ctx, false, time.Time{}, 50)
+	if len(list) != 1 || list[0].GUID != "g1" {
+		t.Fatalf("the store holds %+v, want the one good episode", list)
+	}
+	// Only the envelope can be refused whole.
+	if _, _, _, err := f.svc.RecordPodcastEpisodes(ctx, nil); !errors.Is(err, ErrPodcastInvalid) {
+		t.Fatalf("an empty request: %v", err)
+	}
+	if _, _, _, err := f.svc.RecordPodcastEpisodes(ctx, make([]PodcastEpisodeIn, podcastMaxEpisodesPerRequest+1)); !errors.Is(err, ErrPodcastInvalid) {
+		t.Fatalf("an oversized request: %v", err)
 	}
 }
 
@@ -96,7 +132,7 @@ func TestPodcastRepollKeepsTranscriptFlag(t *testing.T) {
 	f := newFrontFixture(t)
 	ctx := context.Background()
 	ep := podcastFixtureEpisode("g1", 600)
-	if rec, fresh, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{ep}); err != nil || rec != 1 || fresh != 1 {
+	if rec, fresh, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{ep}); err != nil || rec != 1 || fresh != 1 {
 		t.Fatalf("first record: %d %d %v", rec, fresh, err)
 	}
 	id := PodcastEpisodeID(ep.FeedURL, ep.GUID)
@@ -110,7 +146,7 @@ func TestPodcastRepollKeepsTranscriptFlag(t *testing.T) {
 	if len(need) != 0 {
 		t.Fatalf("an episode with a transcript is still listed as needing one: %+v", need)
 	}
-	if rec, fresh, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{ep}); err != nil || rec != 1 || fresh != 0 {
+	if rec, fresh, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{ep}); err != nil || rec != 1 || fresh != 0 {
 		t.Fatalf("re-record: %d %d %v", rec, fresh, err)
 	}
 	need, _ = f.svc.ListPodcastEpisodes(ctx, true, time.Time{}, 50)
@@ -144,7 +180,7 @@ func TestPodcastClipsValidationAndPublicRead(t *testing.T) {
 	f := newFrontFixture(t)
 	ctx := context.Background()
 	listFeeds(t, f, "https://feeds.example.test/news.xml")
-	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{podcastFixtureEpisode("g1", 900)}); err != nil {
+	if _, _, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{podcastFixtureEpisode("g1", 900)}); err != nil {
 		t.Fatal(err)
 	}
 	id := PodcastEpisodeID("https://feeds.example.test/news.xml", "g1")
@@ -290,7 +326,7 @@ func TestPodcastClipsOfAStableFileComeFirst(t *testing.T) {
 	ctx := context.Background()
 	stable, unstable := podcastFixtureEpisode("stable", 900), podcastFixtureEpisode("unstable", 900)
 	listFeeds(t, f, stable.FeedURL)
-	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{stable, unstable}); err != nil {
+	if _, _, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{stable, unstable}); err != nil {
 		t.Fatal(err)
 	}
 	yes, no := true, false
@@ -325,7 +361,7 @@ func TestPodcastClipsOfAStableFileComeFirst(t *testing.T) {
 		t.Fatalf("order = %s, want the stable file's clips first (s1,s2,u1)", order)
 	}
 	// A re-poll of the feed keeps what the worker saw.
-	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{stable}); err != nil {
+	if _, _, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{stable}); err != nil {
 		t.Fatal(err)
 	}
 	list, _ := f.svc.ListPodcastEpisodes(ctx, false, time.Time{}, 10)
@@ -342,7 +378,7 @@ func TestPodcastRepeatPollWritesNothingUnlessSomethingChanged(t *testing.T) {
 	f := newFrontFixture(t)
 	ctx := context.Background()
 	ep := podcastFixtureEpisode("g1", 600)
-	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{ep}); err != nil {
+	if _, _, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{ep}); err != nil {
 		t.Fatal(err)
 	}
 	canonical, _ := podcastCanonical(ogKindPodcastEpisode, PodcastEpisodeID(ep.FeedURL, ep.GUID))
@@ -357,17 +393,36 @@ func TestPodcastRepeatPollWritesNothingUnlessSomethingChanged(t *testing.T) {
 		}
 		return obj.UpdatedAt.UTC()
 	}
-	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{ep}); err != nil {
+	if _, _, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{ep}); err != nil {
 		t.Fatal(err)
 	}
 	if !updatedAt().Equal(old) {
 		t.Fatalf("an unchanged item was rewritten: updated_at %v, want %v", updatedAt(), old)
 	}
 	ep.Title = "A new title"
-	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{ep}); err != nil {
+	if _, _, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{ep}); err != nil {
 		t.Fatal(err)
 	}
 	if updatedAt().Equal(old) {
 		t.Fatal("a changed item was not written")
 	}
+}
+
+// Test seams for the lost-index test.
+func mustIndexCanonical(t *testing.T, key string) string {
+	t.Helper()
+	id, err := podcastCanonical(ogKindPodcastIndex, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func onceReset() sync.Once { return sync.Once{} }
+
+// captureStdLog sends the standard logger's output to w until restored.
+func captureStdLog(w *strings.Builder) func() {
+	prev := log.Writer()
+	log.SetOutput(w)
+	return func() { log.SetOutput(prev) }
 }

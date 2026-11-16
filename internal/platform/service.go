@@ -41,7 +41,7 @@ type Service struct {
 	writeMu       sync.Mutex
 	// podcastCache is the public clips read's short-lived join (podcast.go).
 	podcastCache podcastReadCache
-	// podcastFeedMu serialises feed reports (podcast_feeds.go).
+	// podcastFeedMu serialises writes to the feed rows and indexes (podcast_feeds.go).
 	podcastFeedMu sync.Mutex
 	// podcastJudge and podcastMatchMu serve the match job (podcast_match.go).
 	podcastJudge   PodcastJudge

@@ -19,14 +19,9 @@ const (
 	PodcastTranscriptsPath = "/internal/platform/operator/podcasts/transcripts"
 	PodcastClipsWritePath  = "/internal/platform/operator/podcasts/clips"
 	PodcastMatchPath       = "/internal/platform/operator/podcasts/match"
-	PodcastWorkerFeedsPath = "/internal/platform/operator/podcasts/feeds"
 	PodcastFeedsListedPath = "/internal/platform/operator/podcasts/feeds/listed"
-	PodcastFeedsPath       = "/internal/platform/podcast-feeds"
 	PodcastPopularPath     = "/internal/platform/podcast-popular"
 	PodcastTranscriptPath  = "/internal/platform/podcast-transcript"
-	// PodcastReporterHeader carries the proxy's salted hash of the signed-in
-	// account that reported feeds ("" or absent: an anonymous report).
-	PodcastReporterHeader = "X-Choir-Podcast-Reporter"
 
 	podcastMaxBody           = 6 << 20
 	podcastMaxEpisodeListing = 500
@@ -49,10 +44,7 @@ func podcastFail(w http.ResponseWriter, what string, err error) {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
-	if errors.Is(err, errPodcastRowLimit) {
-		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: err.Error()})
-		return
-	}
+
 	log.Printf("corpusd: podcast %s: %v", what, err)
 	writeJSON(w, http.StatusInternalServerError, apiError{Error: "podcast service failed"})
 }
@@ -143,12 +135,12 @@ func (h *Handler) HandlePodcastEpisodes(w http.ResponseWriter, r *http.Request) 
 	if !decodePodcastBody(w, r, &req) {
 		return
 	}
-	recorded, fresh, err := h.service.RecordPodcastEpisodes(r.Context(), req.Episodes)
+	recorded, fresh, skipped, err := h.service.RecordPodcastEpisodes(r.Context(), req.Episodes)
 	if err != nil {
 		podcastFail(w, "episode record", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]int{"recorded": recorded, "new": fresh})
+	writeJSON(w, http.StatusOK, map[string]int{"recorded": recorded, "new": fresh, "skipped": skipped})
 }
 
 // HandlePodcastTranscripts serves PUT of one episode's transcript.
@@ -187,34 +179,6 @@ func (h *Handler) HandlePodcastClipsWrite(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]int{"clips": n})
 }
 
-// HandlePodcastFeeds serves POST of a phone's subscription report.
-func (h *Handler) HandlePodcastFeeds(w http.ResponseWriter, r *http.Request) {
-	if h.podcastRefuse(w, r, http.MethodPost) {
-		return
-	}
-	var req PodcastFeedsRequest
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil || dec.More() {
-		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
-		return
-	}
-	reporter := strings.TrimSpace(r.Header.Get(PodcastReporterHeader))
-	if len(reporter) > 64 {
-		reporter = ""
-	}
-	resp, err := h.service.ReportPodcastFeeds(r.Context(), reporter, req)
-	if errors.Is(err, ErrPodcastSignInRequired) {
-		writeJSON(w, http.StatusUnauthorized, apiError{Error: err.Error()})
-		return
-	}
-	if err != nil {
-		podcastFail(w, "feeds report", err)
-		return
-	}
-	writeJSON(w, http.StatusOK, resp)
-}
-
 // HandlePodcastPopular serves GET of the popular list.
 func (h *Handler) HandlePodcastPopular(w http.ResponseWriter, r *http.Request) {
 	if h.podcastRefuse(w, r, http.MethodGet) {
@@ -235,11 +199,7 @@ func (h *Handler) HandlePodcastTranscript(w http.ResponseWriter, r *http.Request
 		return
 	}
 	q := r.URL.Query()
-	reporter := strings.TrimSpace(r.Header.Get(PodcastReporterHeader))
-	if len(reporter) > 64 {
-		reporter = ""
-	}
-	resp, err := h.service.GetPodcastTranscriptFor(r.Context(), q.Get("feed"), q.Get("guid"), reporter)
+	resp, err := h.service.GetPodcastTranscriptFor(r.Context(), q.Get("feed"), q.Get("guid"))
 	if err != nil {
 		podcastFail(w, "transcript read", err)
 		return
@@ -249,19 +209,6 @@ func (h *Handler) HandlePodcastTranscript(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
-}
-
-// HandlePodcastWorkerFeeds serves GET of the feeds the worker should poll.
-func (h *Handler) HandlePodcastWorkerFeeds(w http.ResponseWriter, r *http.Request) {
-	if h.podcastRefuse(w, r, http.MethodGet) {
-		return
-	}
-	list, err := h.service.ListPodcastFeedsForWorker(r.Context())
-	if err != nil {
-		podcastFail(w, "worker feeds", err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"feeds": list})
 }
 
 // HandlePodcastFeedsListed serves PUT of the operator's list of public feeds.

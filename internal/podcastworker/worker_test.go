@@ -13,11 +13,14 @@ package podcastworker
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 const syntheticFeed = `<?xml version="1.0"?>
@@ -154,35 +157,59 @@ func TestProbeLengthReadsTheTotalAndAnswersZeroWhenUnknown(t *testing.T) {
 	}
 }
 
-func TestMergeFeedsIsTheUnionOnceWithTheOperatorsNamesFirst(t *testing.T) {
-	seed := []FeedSpec{{Show: "Seed", URL: "https://a.example.test/f.xml"}, {Show: "Dup", URL: "HTTPS://A.example.test:443/f.xml/"}}
-	reported := []WorkerFeed{{FeedURL: "https://a.example.test/f.xml", Title: "Reported A"}, {FeedURL: "https://b.example.test/f.xml", Title: "B"}}
-	got := MergeFeeds(seed, reported)
-	if len(got) != 2 || got[0].Show != "Seed" || got[1].URL != "https://b.example.test/f.xml" || got[1].Show != "B" {
-		t.Fatalf("merge = %+v", got)
+
+// Round 3: one bad item must not cost its request the others, and a failed
+// chunk must not stop the chunks after it.
+func TestE1_ValidEpisodesDropsWhatTheServerWouldRefuse(t *testing.T) {
+	now := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+	ok := Episode{FeedURL: "https://f.example.test/x.xml", GUID: "g", Show: "S", Title: "T", Published: "2026-11-16T09:00:00Z", EnclosureURL: "https://cdn.example.test/a.mp3"}
+	mut := func(f func(*Episode)) Episode { e := ok; f(&e); return e }
+	in := []Episode{
+		ok,
+		mut(func(e *Episode) { e.Published = "2026-11-18T09:00:00Z" }), // two days ahead
+		mut(func(e *Episode) { e.GUID = " " }),
+		mut(func(e *Episode) { e.Title = "" }),
+		mut(func(e *Episode) { e.Show = "" }),
+		mut(func(e *Episode) { e.Published = "yesterday" }),
+		mut(func(e *Episode) { e.EnclosureURL = "ftp://cdn.example.test/a.mp3" }),
+		mut(func(e *Episode) { e.FeedURL = "javascript:1" }),
+		mut(func(e *Episode) { e.Published = "2026-11-17T11:00:00Z" }), // 23 h ahead: allowed
 	}
-	if NormalizeFeedKey("HTTPS://A.example.test:443/f.xml/#x") != "https://a.example.test/f.xml" {
-		t.Fatal("the key does not match the platform's rule")
+	good, dropped := ValidEpisodes(in, now)
+	if len(good) != 2 || dropped != 7 {
+		t.Fatalf("E1: %d good and %d dropped, want 2 and 7", len(good), dropped)
 	}
 }
 
-func TestS6_PriorityRunsBeforeEveryPollAndNeverStopsTheLoop(t *testing.T) {
-	b := &fakeBackend{pending: []PendingEpisode{ep("a")}}
-	e := &fakeEngine{}
-	var order []string
-	cfg := ServeConfig{Priority: func(context.Context) error {
-		order = append(order, "priority")
-		return errors.New("feed down")
-	}}
-	_, logs := runServe(t, b, e, 1, cfg)
-	if len(order) == 0 || strings.Join(b.put, ",") != "a" {
-		t.Fatalf("S6: priority ran %d times, stored %v", len(order), b.put)
+func TestE2_AFailedChunkDoesNotStopTheNext(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Episodes []Episode `json:"episodes"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		calls++
+		n := calls
+		mu.Unlock()
+		if n == 1 {
+			http.Error(w, "boom", http.StatusInternalServerError)
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{"recorded":%d,"new":%d,"skipped":1}`, len(body.Episodes), len(body.Episodes))
+	}))
+	defer srv.Close()
+	c, err := NewClient(srv.URL, "key")
+	if err != nil {
+		t.Fatal(err)
 	}
-	failed := false
-	for _, l := range logs {
-		failed = failed || strings.Contains(l, "priority poll failed")
+	eps := make([]Episode, 450) // three chunks: 200, 200, 50
+	recorded, fresh, skipped, err := c.PostEpisodes(context.Background(), eps)
+	if err == nil || !strings.Contains(err.Error(), "500") {
+		t.Fatalf("E2: the failed chunk is not reported: %v", err)
 	}
-	if !failed {
-		t.Fatalf("S6: the priority failure was not logged: %v", logs)
+	if calls != 3 || recorded != 250 || fresh != 250 || skipped != 2 {
+		t.Fatalf("E2: calls %d, recorded %d, new %d, skipped %d: the chunks after the failure must still go", calls, recorded, fresh, skipped)
 	}
 }

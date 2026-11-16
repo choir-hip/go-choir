@@ -27,7 +27,6 @@ import (
 
 const (
 	podcastClipsPublicPath      = "/api/platform/podcast-clips"
-	podcastFeedsPublicPath      = "/api/platform/podcast-feeds"
 	podcastPopularPublicPath    = "/api/platform/podcast-popular"
 	podcastTranscriptPublicPath = "/api/platform/podcast-transcript"
 	podcastOperatorPrefix       = "/api/platform/operator/podcasts/"
@@ -40,7 +39,6 @@ var podcastOperatorRoutes = map[string]map[string]string{
 	podcastOperatorPrefix + "episodes":     {http.MethodGet: platform.PodcastEpisodesPath, http.MethodPost: platform.PodcastEpisodesPath},
 	podcastOperatorPrefix + "transcripts":  {http.MethodPut: platform.PodcastTranscriptsPath},
 	podcastOperatorPrefix + "clips":        {http.MethodPut: platform.PodcastClipsWritePath},
-	podcastOperatorPrefix + "feeds":        {http.MethodGet: platform.PodcastWorkerFeedsPath},
 	podcastOperatorPrefix + "feeds/listed": {http.MethodPut: platform.PodcastFeedsListedPath},
 	podcastOperatorPrefix + "match":        {http.MethodPost: platform.PodcastMatchPath},
 }
@@ -107,38 +105,6 @@ func (h *Handler) HandlePlatformPodcastClips(w http.ResponseWriter, r *http.Requ
 	h.lifecycle.record("platform_podcast_clips.list", lifecycleHTTPStatus(status), time.Since(started))
 }
 
-// HandlePlatformPodcastFeeds serves a phone's subscription report. It needs a
-// signed-in account (a credential that is presented and invalid is a 401, not
-// an anonymous report); the account counts once per feed, as a hash the proxy
-// makes, so corpusd never sees the account id.
-func (h *Handler) HandlePlatformPodcastFeeds(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
-		return
-	}
-	authResult, err := h.authenticate(r)
-	if err != nil || authResult == nil || strings.TrimSpace(authResult.UserID) == "" {
-		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
-		return
-	}
-	if !h.authorizeAPIKeyScope(w, r, authResult) {
-		return
-	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<10))
-	if err != nil {
-		writeJSON(w, http.StatusRequestEntityTooLarge, errorResponse{Error: "request body too large"})
-		return
-	}
-	headers := map[string]string{platform.PodcastReporterHeader: platform.PodcastReporter(authResult.UserID)}
-	status, raw, err := h.corpusdCallHeaders(r.Context(), http.MethodPost, platform.PodcastFeedsPath, "application/json", headers, body)
-	if err != nil {
-		log.Printf("proxy: podcast feeds: %v", err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "podcast service unavailable"})
-		return
-	}
-	relayJSON(w, status, raw)
-}
-
 // HandlePlatformPodcastPopular serves the popular list to anyone.
 func (h *Handler) HandlePlatformPodcastPopular(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -185,8 +151,7 @@ func (h *Handler) HandlePlatformPodcastTranscript(w http.ResponseWriter, r *http
 		return
 	}
 	path := platform.PodcastTranscriptPath + "?" + url.Values{"feed": {feed}, "guid": {guid}}.Encode()
-	headers := map[string]string{platform.PodcastReporterHeader: platform.PodcastReporter(authResult.UserID)}
-	status, raw, err := h.corpusdCallHeaders(r.Context(), http.MethodGet, path, "", headers, nil)
+	status, raw, err := h.corpusdCall(r.Context(), http.MethodGet, path, "", nil)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "podcast service unavailable"})
 		return

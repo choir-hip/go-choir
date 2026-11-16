@@ -99,8 +99,6 @@ func main() {
 			},
 		}
 		cfg.Match = func(ctx context.Context) error { return match(ctx, client, *matchHours) }
-		handled := map[string]bool{}
-		cfg.Priority = func(ctx context.Context) error { return priority(ctx, client, handled) }
 		if n, err := t.SweepWorkDir(); err != nil || n > 0 {
 			log.Printf("work directory swept: %d leftover episode directories removed (%v)", n, err)
 		}
@@ -156,15 +154,11 @@ func intake(ctx context.Context, c *podcastworker.Client, path string, perFeed i
 	if err := c.ListFeeds(ctx, seed); err != nil {
 		log.Printf("the operator's feed list could not be published (it is still polled): %v", err)
 	}
-	// The feeds to poll are the operator's list and the feeds readers report.
-	reported, err := c.WorkerFeeds(ctx)
-	if err != nil {
-		log.Printf("reported feeds unavailable (the operator's list alone is polled): %v", err)
-	}
-	feeds := podcastworker.MergeFeeds(seed, reported)
+	// The feeds polled are the operator's list, and only it.
 	httpc := podcastworker.SafeClient(60 * time.Second)
 	var all []podcastworker.Episode
-	for _, f := range feeds {
+	dropped := 0
+	for _, f := range seed {
 		eps, err := podcastworker.FetchFeed(ctx, httpc, f.URL, f.Show)
 		if err != nil {
 			log.Printf("feed %q skipped: %v", f.URL, err)
@@ -173,55 +167,18 @@ func intake(ctx context.Context, c *podcastworker.Client, path string, perFeed i
 		if len(eps) > perFeed {
 			eps = eps[:perFeed]
 		}
-		all = append(all, eps...)
+		// Items the server would refuse are not posted, so they cannot cost the
+		// others their request.
+		good, bad := podcastworker.ValidEpisodes(eps, time.Now())
+		dropped += bad
+		all = append(all, good...)
 	}
 	if len(all) == 0 {
-		return fmt.Errorf("no feed gave an item")
+		return fmt.Errorf("no feed gave a usable item (%d dropped)", dropped)
 	}
-	recorded, fresh, err := c.PostEpisodes(ctx, all)
-	if err != nil {
-		return err
-	}
-	log.Printf("intake: %d feeds, episodes recorded: %d (new %d)", len(feeds), recorded, fresh)
-	return nil
-}
-
-// priority polls the feeds of episodes a phone is playing, once for each, so
-// they are in the queue at the next listing.
-func priority(ctx context.Context, c *podcastworker.Client, handled map[string]bool) error {
-	feeds, err := c.WorkerFeeds(ctx)
-	if err != nil {
-		return err
-	}
-	httpc := podcastworker.SafeClient(60 * time.Second)
-	for _, f := range feeds {
-		for _, w := range f.Wanted {
-			key := f.FeedURL + "\x00" + w.GUID
-			if handled[key] {
-				continue
-			}
-			handled[key] = true
-			eps, err := podcastworker.FetchFeed(ctx, httpc, f.FeedURL, f.Title)
-			if err != nil {
-				return err
-			}
-			if len(eps) > 5 {
-				// Keep the newest few and the one wanted.
-				keep := eps[:5]
-				for _, e := range eps[5:] {
-					if e.GUID == w.GUID {
-						keep = append(keep, e)
-					}
-				}
-				eps = keep
-			}
-			if _, _, err := c.PostEpisodes(ctx, eps); err != nil {
-				return err
-			}
-			log.Printf("priority: polled %s for a playing episode", f.FeedURL)
-		}
-	}
-	return nil
+	recorded, fresh, skipped, err := c.PostEpisodes(ctx, all)
+	log.Printf("intake: %d feeds, episodes recorded: %d (new %d), %d dropped here, %d skipped by the server", len(seed), recorded, fresh, dropped, skipped)
+	return err
 }
 
 func transcribe(ctx context.Context, c *podcastworker.Client, t *podcastworker.Transcriber, since time.Duration, max int) error {

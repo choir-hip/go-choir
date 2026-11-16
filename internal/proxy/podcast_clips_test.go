@@ -183,16 +183,17 @@ func TestOperatorPodcastRoutesPassTheRosterGate(t *testing.T) {
 	}
 }
 
-// Subscriptions at the proxy: a signed-in report passes a salted hash, never
-// the account; an anonymous one passes none; the transcript needs a sign-in;
-// the popular list is public.
-func TestPodcastSubscriptionRoutes(t *testing.T) {
+// The public reads at the proxy. The popular list is public; the transcript
+// needs a sign-in; the feed filter reaches the clips read; and the report of
+// feeds by accounts is not built (design Part 2): it answers 404 at the proxy,
+// signed in or not, and reaches neither corpusd nor a computer.
+func TestPodcastPublicReadRoutesAndTheNotBuiltReport(t *testing.T) {
 	var mu sync.Mutex
 	var seen []string
 	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		mu.Lock()
-		seen = append(seen, r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery+" reporter="+r.Header.Get(platform.PodcastReporterHeader)+" body="+string(body))
+		seen = append(seen, r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery+" body="+string(body))
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ok":true}`))
@@ -217,47 +218,24 @@ func TestPodcastSubscriptionRoutes(t *testing.T) {
 		return seen[len(seen)-1]
 	}
 	feeds := `{"feeds":[{"feed_url":"https://a.example.test/f.xml","title":"A"}]}`
-	n := len(seen)
-	if w := call(http.MethodPost, "/api/platform/podcast-feeds", feeds, false); w.Code != http.StatusUnauthorized || len(seen) != n {
-		t.Fatalf("an anonymous report must be refused before corpusd: %d (%d calls)", w.Code, len(seen)-n)
+	for _, signedIn := range []bool{false, true} {
+		if w := call(http.MethodPost, "/api/platform/podcast-feeds", feeds, signedIn); w.Code != http.StatusNotFound || len(seen) != 0 {
+			t.Fatalf("the feeds report (signed in %v) = %d with %d calls to corpusd, want 404 and none", signedIn, w.Code, len(seen))
+		}
 	}
-	badCookie := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/podcast-feeds", strings.NewReader(feeds))
-	badCookie.AddCookie(&http.Cookie{Name: "choir_access", Value: "not-a-token"})
-	wBad := httptest.NewRecorder()
-	h.HandleAPI(wBad, badCookie)
-	if wBad.Code != http.StatusUnauthorized || len(seen) != n {
-		t.Fatalf("a presented, invalid credential is a 401, not an anonymous report: %d", wBad.Code)
-	}
-	if w := call(http.MethodPost, "/api/platform/podcast-feeds", feeds, true); w.Code != http.StatusOK {
-		t.Fatalf("signed-in report: %d %s", w.Code, w.Body)
-	}
-	got := last()
-	if !strings.Contains(got, "reporter=sub-") || strings.Contains(got, "user-real") {
-		t.Fatalf("the reporter is not a hash: %s", got)
-	}
-	if w := call(http.MethodGet, "/api/platform/podcast-feeds", "", false); w.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("GET feeds = %d", w.Code)
-	}
-	big := `{"feeds":[],"x":"` + strings.Repeat("a", 70<<10) + `"}`
-	before := len(seen)
-	if w := call(http.MethodPost, "/api/platform/podcast-feeds", big, false); w.Code == http.StatusOK || len(seen) != before {
-		t.Fatalf("an oversized report reached corpusd: %d", w.Code)
-	}
-	// Popular is public; the transcript is not.
 	if w := call(http.MethodGet, "/api/platform/podcast-popular?limit=5", "", false); w.Code != http.StatusOK || !strings.Contains(last(), "/podcast-popular?limit=5") {
 		t.Fatalf("popular: %d %s", w.Code, last())
 	}
-	n = len(seen)
+	n := len(seen)
 	if w := call(http.MethodGet, "/api/platform/podcast-transcript?feed=https://a.example.test/f.xml&guid=g", "", false); w.Code != http.StatusUnauthorized || len(seen) != n {
 		t.Fatalf("anonymous transcript = %d", w.Code)
 	}
-	if w := call(http.MethodGet, "/api/platform/podcast-transcript?feed=https://a.example.test/f.xml&guid=g", "", true); w.Code != http.StatusOK || !strings.Contains(last(), "/podcast-transcript?feed=https%3A%2F%2Fa.example.test%2Ff.xml&guid=g") || !strings.Contains(last(), "reporter=sub-") {
+	if w := call(http.MethodGet, "/api/platform/podcast-transcript?feed=https://a.example.test/f.xml&guid=g", "", true); w.Code != http.StatusOK || !strings.Contains(last(), "/podcast-transcript?feed=https%3A%2F%2Fa.example.test%2Ff.xml&guid=g") {
 		t.Fatalf("signed-in transcript = %d %s", w.Code, last())
 	}
 	if w := call(http.MethodGet, "/api/platform/podcast-transcript?feed=x", "", true); w.Code != http.StatusBadRequest {
 		t.Fatalf("transcript without a guid = %d", w.Code)
 	}
-	// The clips route forwards feed filters.
 	if w := call(http.MethodGet, "/api/platform/podcast-clips?feed=https://a.example.test/f.xml", "", false); w.Code != http.StatusOK || !strings.Contains(last(), "feed=https%3A%2F%2Fa.example.test%2Ff.xml") {
 		t.Fatalf("clips feed filter: %d %s", w.Code, last())
 	}

@@ -89,7 +89,7 @@ func matchFixture(t *testing.T, publishedAgo time.Duration) (frontFixture, strin
 	ep.Published = time.Now().UTC().Add(-publishedAgo).Format(time.RFC3339)
 	ctx := context.Background()
 	listFeeds(t, f, ep.FeedURL) // featured first: the feed's row remembers the episodes recorded after it
-	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{ep}); err != nil {
+	if _, _, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{ep}); err != nil {
 		t.Fatal(err)
 	}
 	id := PodcastEpisodeID(ep.FeedURL, ep.GUID)
@@ -292,19 +292,17 @@ func TestJ8_AnAnswerWithNoYesProbabilityIsLeftOut(t *testing.T) {
 	}
 }
 
-// J9. A private feed's transcript is never matched into a public clip.
-func TestJ9_AnUnlistedFeedIsNeverMatched(t *testing.T) {
+// J9. An episode of a feed the operator has not featured is not recorded, so
+// it can never be matched into a public clip.
+func TestJ9_AnUnfeaturedFeedIsNeverRecordedOrMatched(t *testing.T) {
 	f := newFrontFixture(t)
 	ctx := context.Background()
 	ep := podcastFixtureEpisode("g-private", 240)
 	ep.FeedURL = "https://feeds.example.test/private/TOKEN/f.xml"
 	ep.Published = time.Now().UTC().Add(-2 * time.Hour).Format(time.RFC3339)
-	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{ep}); err != nil {
-		t.Fatal(err)
-	}
-	id := PodcastEpisodeID(ep.FeedURL, ep.GUID)
-	if _, _, err := f.svc.PutPodcastTranscript(ctx, PodcastTranscript{EpisodeID: id, Engine: "test", AudioSeconds: 240, Segments: harborTranscript()}); err != nil {
-		t.Fatal(err)
+	rec, _, skipped, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{ep})
+	if err != nil || rec != 0 || skipped != 1 {
+		t.Fatalf("J9: recorded %d skipped %d (%v)", rec, skipped, err)
 	}
 	judge := &fakeJudge{answer: func(string, string, string) (float64, bool) { return 0.99, true }}
 	f.svc.SetPodcastJudge(judge)
@@ -323,7 +321,7 @@ func TestJ10_J11_J12_JudgeTaskStoredPairsAndDistinctEpisodes(t *testing.T) {
 	second := podcastFixtureEpisode("g-second", 240)
 	second.Show = "Second Show"
 	second.Published = time.Now().UTC().Add(-90 * time.Minute).Format(time.RFC3339)
-	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{second}); err != nil {
+	if _, _, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{second}); err != nil {
 		t.Fatal(err)
 	}
 	id2 := PodcastEpisodeID(second.FeedURL, second.GUID)
@@ -363,8 +361,10 @@ func TestJ10_J11_J12_JudgeTaskStoredPairsAndDistinctEpisodes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sum2.Pairs >= sum1.Pairs {
-		t.Fatalf("J11: the second run asked %d pairs, the first %d: stored pairs were judged again", sum2.Pairs, sum1.Pairs)
+	// Both episodes already gave this story a clip: nothing is asked, and the
+	// judge is not called at all (one clip per episode per story, across runs).
+	if sum2.Pairs != 0 || sum2.Clips != 0 || len(judge.states) != 0 {
+		t.Fatalf("J11: the second run asked %d pairs (first %d), stored %d clips, made %d calls", sum2.Pairs, sum1.Pairs, sum2.Clips, len(judge.states))
 	}
 	_ = id1
 }
