@@ -4,7 +4,7 @@
   "QueueInfo": {
    "current": "string", "currentKind": "string", "audio": "bool", "playing": "bool", "clip": "bool", "keepTitle": "string", "canOpenEpisode": "bool",
    "elapsed": "number", "duration": "number", "elapsedLabel": "string", "remainingLabel": "string", "fraction": "number",
-   "upcoming": "QueueRow[]", "message": "string", "webUrl": "string", "webHost": "string"
+   "upcoming": "QueueRow[]", "message": "string", "notice": "string", "writing": "bool", "webUrl": "string", "webHost": "string"
   }
  },
  "names": [
@@ -15,7 +15,7 @@
    "substitute": {
     "default": {
      "current": "", "currentKind": "", "audio": false, "playing": false, "clip": false, "keepTitle": "", "canOpenEpisode": false, "elapsed": 0, "duration": 0,
-     "elapsedLabel": "", "remainingLabel": "", "fraction": 0, "upcoming": [], "message": "", "webUrl": "", "webHost": ""
+     "elapsedLabel": "", "remainingLabel": "", "fraction": 0, "upcoming": [], "message": "", "notice": "", "writing": false, "webUrl": "", "webHost": ""
     }
    }
   },

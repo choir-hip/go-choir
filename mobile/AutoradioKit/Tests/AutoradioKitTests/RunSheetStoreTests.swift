@@ -506,4 +506,39 @@ final class RunSheetDemoTests: XCTestCase {
         XCTAssertEqual(all.filter { $0.placedBy == .phone }.count, 0, "no notice entry")
         XCTAssertNil(w.notice)
     }
+
+    /// The relaunch that hid the desk in the simulator: the sheet keeps what was heard (and the op_ids), and the demo desk wrote the same ids each time.
+    func testDemoDeskStillWritesAfterARelaunchWithTheSameSheet() async {
+        let env = ChoirEnvironment.shared
+        let saved = (env.session, env.keys)
+        Demo.install(into: env)
+        defer { env.session = saved.0; env.keys = saved.1 }
+        let f = FileManager.default.temporaryDirectory.appendingPathComponent("rs-\(UUID().uuidString).json")
+        for launch in 1...3 {
+            let s = RunSheetStore(storage: f); let p = RunSheetPlayer(store: s); p.engine = FakeEngine()
+            s.restore()
+            let w = RunSheetWriter(store: s) { ProgrammeRouteFeed(source: RouteStretchSource(baseURL: ChoirEnvironment.defaultBaseURL)) }
+            let o = PhoneOpening.entry(lines: [.init(title: "A", dek: "Dek.")])
+            p.open(o); await p.settle()
+            w.open(); await w.settle()
+            let i = p.info()
+            XCTAssertGreaterThanOrEqual(i.upcoming.count, 3, "launch \(launch): three desk entries under Up next")
+            XCTAssertEqual(i.upcoming.first?.by, "From the desk"); XCTAssertEqual(i.notice, ""); XCTAssertFalse(i.writing)
+        }
+    }
+
+    func testNothingOnAirIsNeverShownAsPlayingAndUpNextSaysWhatIsTrue() async {
+        let s = RunSheetStore(); let p = RunSheetPlayer(store: s); p.engine = FakeEngine()
+        var bar = BarInfo(); bar.state = "playing"; bar.playing = true; bar.text = "Autoradio"
+        let b = p.overlay(bar)
+        XCTAssertEqual(b.state, "idle"); XCTAssertFalse(b.playing); XCTAssertEqual(b.text, "")
+        var r = RadioInfo(); r.title = "Autoradio"; r.playing = true
+        let ro = p.overlay(r)
+        XCTAssertFalse(ro.playing); XCTAssertFalse(ro.paused); XCTAssertEqual(ro.title, "")
+        p.deskWriting = true
+        XCTAssertTrue(p.info().writing)
+        p.deskWriting = false; p.deskNotice = "The desk can't be reached right now."
+        XCTAssertEqual(p.info().notice, "The desk can't be reached right now.")
+        XCTAssertTrue(p.info().upcoming.isEmpty)
+    }
 }

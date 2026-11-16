@@ -62,14 +62,16 @@ component UpNext
   view
     column gap=8 testId="queue-up-next" width="100%"
       SectionHeader(label=(qv.upcoming.length > 0 ? `Up next · ${qv.upcoming.length}` : "Up next"))
+      if qv.notice != ""
+        text qv.notice testId="sheet-notice" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
       if qv.upcoming.length == 0
-        EmptyState(message="Nothing queued: add a story, a page or a podcast and it plays after this.", detail="", testId="queue-empty")
+        EmptyState(message=(qv.writing ? "The desk is writing what comes next." : (qv.notice != "" ? "Nothing is coming up yet." : "Nothing is coming up. Add a story, a page or a podcast and it plays next.")), detail="", testId="queue-empty")
       else
         PlainList(testId="queue-list")
           for r, k in qv.upcoming key=r.id
             if k > 0
               RowRule(indent=0)
-            row align-items="center" width="100%"
+            row align-items="center" width="100%" testId=`sheet-ahead-${k}`
               button press=queueDo("playAt", `${r.i}`) testId=`queue-row-${r.i}` appearance="none" flex=1 min-width=0 aria-label=`Play ${r.title} now`
                 row align-items="center" gap=8 width="100%"
                   column gap=2 align-items="flex-start" box-sizing="border-box" min-height=52 justify-content="center" padding="8px 0px 8px 0px" flex=1 min-width=0

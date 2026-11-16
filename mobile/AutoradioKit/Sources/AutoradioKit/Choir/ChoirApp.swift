@@ -154,7 +154,8 @@ public final class ChoirApp: @unchecked Sendable {
                 return ProgrammeRouteFeed(source: me.stretchSource?() ?? RouteStretchSource(baseURL: me.frontBaseURL()))
             }
             me.writer = w
-            w.onNotice = { [weak me] n in me?.say(n ?? "") }
+            w.onNotice = { n in RunSheetPlayer.shared.deskNotice = n }
+            w.onWriting = { on in RunSheetPlayer.shared.deskWriting = on }
             p.aheadChanged = { [weak w] in w?.checkAhead() }
             RunSheetStore.shared.poster = RouteSheetPoster(baseURL: me.signIn.baseURL)
             RunSheetStore.shared.restore()                 // the pending ops of the last launch; nothing plays
@@ -409,10 +410,12 @@ public final class ChoirApp: @unchecked Sendable {
         var v = ChoirPlayerView()
         v.signedIn = signIn.current.signedIn
         lock.lock(); v.loading = loading; v.message = message; lock.unlock()
+        let onAir = onMainThread { RunSheetStore.shared.onAir() != nil || RunSheetPlayer.shared.isRemote }
         v.title = p.document.title
         if let si = p.document.segmentIndex(containingBlock: p.blockIndex) { v.title = p.document.segments[si].title }   // the entry's title
         if p.document.blocks.indices.contains(p.blockIndex) { v.passage = p.document.blocks[p.blockIndex].spokenText ?? p.document.blocks[p.blockIndex].summary }
-        v.playing = snap.running && !p.userPaused
+        v.playing = onAir && snap.running && !p.userPaused          // nothing on air is never "playing"
+        if !onAir { v.title = ""; v.passage = "" }
         v.talking = snap.phase != "playing"
         v.heard = snap.phase == "playing" ? "" : snap.transcript
         if v.message.isEmpty, v.signedIn, !v.loading, p.document.blocks.isEmpty { v.message = "Pick a story below." }

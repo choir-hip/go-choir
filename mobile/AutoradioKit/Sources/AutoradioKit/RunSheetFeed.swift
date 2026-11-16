@@ -128,6 +128,8 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
     public private(set) var notice: String?
     /// Told when `notice` changes (the host shows it in the player's status line).
     public var onNotice: ((String?) -> Void)?
+    /// Told when a write starts and ends (the host shows "the desk is writing what comes next").
+    public var onWriting: ((Bool) -> Void)?
     public var noticeWords: ((Error?) -> String?) = { RunSheetWriter.plainWords($0) }
     public var clock: () -> Date = { Date() }
     private var task: Task<Void, Never>?
@@ -163,12 +165,13 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
     private func ask(cause: String) {
         guard !inFlight, let feed = feed() else { return }
         inFlight = true
+        onWriting?(true)
         asks.append(cause)
         let a = RunSheetAsk(cause: cause, aheadTitles: store.ahead(limit: 20).map(\.displayTitle), excludeRoutes: cause == "open" ? [] : toldRoutes())
         let started = clock()
         let airId = store.onAir()?.id
         task = Task { @MainActor in
-            var added = 0, first: Date?
+            var added = 0, received = 0, first: Date?
             var failure: Error?
             do {
                 let stream = try await feed.ask(a)
@@ -176,6 +179,7 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
                     switch e {
                     case .ops(let ops):
                         if first == nil { first = self.clock() }
+                        received += ops.count
                         for op in ops where self.store.applyFromDesk(op).applied { added += 1 }
                     case .done: break
                     case .error(let m): if added == 0 { failure = WriterError.said(m) }
@@ -185,8 +189,14 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
             } catch { failure = error }
             if let f = first { self.latency = max(0.5, f.timeIntervalSince(started)) }
             self.inFlight = false
+            self.onWriting?(false)
             if added > 0 { self.quietOn = nil; self.setNotice(nil) }
-            else { self.quietOn = airId; if failure != nil || cause == "open" { self.setNotice(self.noticeWords(failure)) } }
+            else {
+                self.quietOn = airId
+                // The desk answered but everything it wrote is already on the sheet (a repeat): that is not a failure.
+                if received > 0 && failure == nil { self.setNotice(nil) }
+                else if failure != nil || cause == "open" { self.setNotice(self.noticeWords(failure)) }
+            }
             if added > 0 { self.checkAhead() }
         }
     }

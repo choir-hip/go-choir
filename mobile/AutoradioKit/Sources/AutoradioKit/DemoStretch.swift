@@ -17,7 +17,8 @@ enum DemoStretch {
     ]
 
     static var sse: String {
-        let stretch = "demo-stretch-1"
+        // A new id for every request: the run sheet keeps what was heard across launches, and an entry id is never reused.
+        let stretch = "demo-" + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8).lowercased()
         func line(_ o: [String: Any]) -> String {
             String(decoding: (try? JSONSerialization.data(withJSONObject: o, options: [.sortedKeys])) ?? Data(), as: UTF8.self)
         }

@@ -28,6 +28,8 @@ public struct QueueInfo: Codable, Sendable, Equatable {
     public var fraction = 0.0          // 0...1 for the scrubber
     public var upcoming: [QueueRow] = []
     public var message = ""
+    public var notice = ""             // the desk could not be reached ("" when all is well): a quiet line, never a row
+    public var writing = false         // the desk is writing what comes next
     public var webUrl = ""             // the page the bar opened ("" none)
     public var webHost = ""
     public init() {}
@@ -68,11 +70,18 @@ extension RunSheetPlayer {
             return r
         }
         q.message = message
+        q.notice = deskNotice ?? ""; q.writing = deskWriting
         return q
     }
 
     /// The remote audio shown as the radio: the bar's line, the player's title and position, and its play button follow the audio.
     public func overlay(_ r: RadioInfo) -> RadioInfo {
+        if store.onAir() == nil, !isRemote {              // nothing on air: say so plainly; Play starts the opening or asks the desk
+            var o = r
+            o.title = ""; o.kind = ""; o.sources = []; o.source = ""; o.position = ""; o.playing = false; o.paused = false
+            o.progress = 0; o.blockProgress = 0; o.sentences = []; o.sentenceIndex = 0; o.items = []; o.next = ""
+            return o
+        }
         guard isRemote, let a = audio else { return r }
         var o = r
         let i = info()
@@ -85,6 +94,11 @@ extension RunSheetPlayer {
         return o
     }
     public func overlay(_ b: BarInfo) -> BarInfo {
+        if store.onAir() == nil, !isRemote, b.state == "playing" || b.state == "paused" {
+            var o = b
+            o.state = "idle"; o.text = ""; o.playing = false; o.progress = 0
+            return o
+        }
         guard isRemote, b.state == "idle" || b.state == "playing" || b.state == "paused" else { return b }
         var o = b
         let i = info()

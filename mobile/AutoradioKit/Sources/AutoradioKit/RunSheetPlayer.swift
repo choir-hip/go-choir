@@ -76,6 +76,10 @@ extension PlaybackEngine {
     /// How long a clip's audio may take to start before it is given up.
     public var startDeadline: TimeInterval = 6
 
+    /// The desk could not be reached or wrote nothing: a quiet line, never an entry. Set by the host from the writer.
+    public var deskNotice: String? { didSet { if oldValue != deskNotice { onChange?() } } }
+    /// The desk is writing what comes next.
+    public var deskWriting = false { didSet { if oldValue != deskWriting { onChange?() } } }
     /// A plain line about the last thing that could not play ("" when nothing is wrong).
     public private(set) var message = ""
     /// The listener paused remote audio (spoken entries are paused through the programme player's own transport).
