@@ -181,46 +181,51 @@ next week probably". So `podcast-worker serve` is the long-running mode.
   files in the image, the operator key as a credential file. More throughput
   means more such workers, which needs the claim of R7.
 
-### 3.2 Readers' subscriptions feed the worker (owner, 2026-11-15)
+### 3.2 The operator's feeds, and Part 2 (feeds reported by accounts: NOT BUILT)
 
-Owner: "we should auto get the transcript of all new episodes of users'
-subscribed podcasts. over time we will mostly be working in the universe of
-podcasts users subscribe to, and we can amortise over the userbase since one of
-our users will probably subscribe. and any given user probably wants to be shown
-clips of only a subset of podcasts anyway. the long tail/new recommendations to
-user a will be the subscriptions of user b." So the set of feeds is no longer the
-seed file alone: it is the union of the seed list and the feeds phones report.
-A transcript is stored once per episode and shared by every reader.
+**Built.** The feeds are the operator's: the seed list in
+`config/podcast-feeds.json`, which the worker publishes at each intake through
+`PUT .../operator/podcasts/feeds/listed`, and nothing else. A feed row exists only
+because the operator featured the feed, "featured" is the only kind of feed, and
+episodes of a feed that is not featured are skipped at intake. Feeds are keyed by
+their normalised URL (lower-case scheme and host, a trailing dot on the host, a
+default port, the fragment and a trailing slash dropped). The worker's queue is the
+episodes with no transcript, newest first. Public reads: `podcast-clips` (4.1),
+`podcast-popular` (4.6: the featured feeds the worker has fetched, newest episode
+first, `subscribers` always 0, the title the show name the worker parsed) and
+`podcast-transcript` (4.7: a featured feed's, to a signed-in account).
 
-- **Report.** `POST /api/platform/podcast-feeds` (section 4.5). A feed is added
-  to intake by its normalised URL (lower-case scheme and host, default port,
-  fragment and trailing slash dropped). A signed-in report (the only kind: section 3.4)
-  counts the account once per feed toward the feed's subscriber count; the row
-  keeps only a hash of the account (the proxy makes it; corpusd never sees the
-  account id), and nothing returns it. Bounds on what strangers can cause: 50
-  feeds a report, a 64 KB body, 500 subscriptions an account, 20 now-playing marks
-  a feed. A report that changes nothing writes nothing.
-- **Worker order.** The listing the worker reads (`need=transcript`) is ordered:
-  an episode a signed-in phone is playing now first (a mark lasts 24 hours), then
-  the operator's featured feeds, then the feeds the most accounts follow, then the
-  rest, newest first within each. The worker's
-  intake polls the union of the seed file and `GET .../operator/podcasts/feeds`,
-  and before every poll of the queue it fetches, once, the feed of any
-  now-playing episode, so the episode is known when the list is read.
-- **Recommendations.** `GET /api/platform/podcast-popular` (4.6): counts, never
-  who. A feed shows a count only when at least 3 distinct accounts report it
-  (k-anonymity); the seed feeds follow with a count of 0 as "featured". The route
-  never reveals who subscribes to what, and no route returns the stored hashes.
-- **The reader's transcript.** `GET /api/platform/podcast-transcript?feed=&guid=`
-  (4.7), for a signed-in account only, because it is third-party text. The phone
-  seeks by `start` only when the loaded file's duration matches
-  `episode.duration_seconds` within 3 seconds (the ad-insertion rule, R4).
-- **Clips of the reader's shows first.** `GET .../podcast-clips` takes an
-  optional repeatable `feed=<feed url>`: clips of those shows are listed first and
-  the rest follow, nothing dropped.
-- **Residual R9: a phone's guid.** A now-playing episode whose guid is not in
-  its feed is logged and not transcribed; the audio URL a phone sends is stored
-  but never fetched by the server.
+**Part 2, not built: feeds reported by accounts.** Owner, 2026-11-15: "we should
+auto get the transcript of all new episodes of users' subscribed podcasts. over
+time we will mostly be working in the universe of podcasts users subscribe to, and
+we can amortise over the userbase since one of our users will probably subscribe.
+and any given user probably wants to be shown clips of only a subset of podcasts
+anyway. the long tail/new recommendations to user a will be the subscriptions of
+user b." A first version (a signed-in `POST /api/platform/podcast-feeds`, a
+stored subscription per account, now-playing priority, subscriber counts, listing
+by two accounts) went through three rounds of two-seat review on 2026-11-16 and
+every blocker of every round was in that intake: the worker fetching an address an
+account chose (repaired in the worker's dialer, which stays), a feed row an account
+could create without bound, a feed made public by cheap accounts, a scan that
+stranger rows could push the public read out of. It was removed from this branch
+whole (see the structural assessment in `docs/problems/`), and the phone's report
+answers 404, which the phone treats as silence. A proper design must answer, before
+any of it is built:
+
+1. What an account may cause, and at what identity cost: how many feeds, how many
+   fetches, how many transcribed minutes, and what stops a free account from being
+   a thousand.
+2. Unsubscribe, and the collection of rows nobody follows.
+3. Per-feed bounds on episodes kept, transcribed and re-fetched, and on feed size.
+4. Queue fairness between the operator's feeds, many accounts' feeds and
+   now-playing, so one cannot starve or flood the others.
+5. How a followed show becomes public ("featured"): an operator act, or a rule
+   with an identity cost per account, never a bare count.
+6. Private (tokenised, paid) feeds: they must never become a public address, and
+   their transcripts are the subscriber's alone.
+7. What the public may learn of what accounts follow: counts only, with a
+   k-anonymity floor, and never who.
+8. Everything public read by key, never from a page of the newest rows.
 
 ### 3.3 Transcripts from a device (the owner's idea; design only tonight)
 
@@ -238,23 +243,16 @@ alignment between a video's times and the audio enclosure's are not built.
 
 ### 3.4 What strangers can cause (review of 2026-11-16)
 
-Two independent seats found the same blocker: a reported feed URL made the
-operator's worker fetch any address, from the operator's network position.
-Repaired in layers.
+Two independent seats found the same blocker in round 1: a reported feed URL made
+the operator's worker fetch any address, from the operator's network position. The
+reports of accounts are gone (3.2), but the worker still fetches URLs that a feed
+file names (enclosures), so the guard stays.
 
-- **Who can add a feed.** Only a signed-in account: `POST .../podcast-feeds`
-  answers 401 to no credential and to a credential that is presented and invalid.
-  A feed row is created only by a subscribed report, and counts toward the
-  account's 500 subscriptions (a stored per-account index, read by key); the
-  platform holds at most 20,000 feed rows and refuses (and logs) a new one past
-  that. `now_playing` is honoured only for a feed the account already subscribes
-  to (stored, or in the same request) and otherwise ignored (`now_playing_queued:
-  false`); it never creates a row. The seed list comes from the operator.
 - **What a URL may be.** A named public-looking host (no IP literal, `localhost`,
   `.local`, `.internal`, `.localhost` or `.localdomain`, trailing dot trimmed
   first, no single-label name), ports 80 and 443 only (`checkPodcastURL`, at
-  report, at episode intake and for now-playing); an episode dated more than 24
-  hours ahead is refused.
+  episode intake and for the feed list); an episode dated more than 24 hours ahead
+  is skipped.
 - **What the worker will dial.** One client for every outside fetch: the dialer
   resolves the name itself and refuses every address in these ranges, IPv4 and
   IPv6 alike: `0.0.0.0/8`, `10/8`, `100.64/10`, `127/8`, `169.254/16`,
@@ -268,46 +266,32 @@ Repaired in layers.
 - **What ffmpeg may open.** `-protocol_whitelist file`, and a download that
   begins with a playlist is refused before ffmpeg runs.
 - **The operator key** goes only over https, or http to this machine.
-- **Public means featured, and only that.** A reader's paid or tokenised feed URL
-  must not become a public address, and no number of accounts makes a feed public
-  (a hundred throwaway accounts cost nothing). A feed is public when the operator
-  features it: the seed list (the worker puts it through `PUT
-  .../operator/podcasts/feeds/listed` at each intake) or an operator mark. Only a
-  featured feed's clips are served or can be written, only featured feeds the
-  worker has fetched appear in `podcast-popular` (counts for those with at least
-  3 accounts, 0 otherwise; the title is the show name the worker parsed, never a
-  reporter's), and only featured feeds are matched. Any other feed is still
-  polled and transcribed for the account that subscribes to it, whose transcript
-  route answers it and nobody else (404, so existence is not revealed). The clip
-  shape is unchanged: `feed_url` is only ever a featured feed's.
-- **Read by key.** The featured set and the feed-row count are one small index
-  document, an account's subscriptions another, a story's clips (its 12 newest) a
-  third; the match job reads each featured feed's row, which remembers its 40
-  newest episodes. No public behaviour is derived from a page of "the newest N
-  rows"; the operator's own listings (the worker's queue and feed list) scan at
-  most the 20,000-row limit, and the episode listing logs when it reaches its 5000
-  scan bound.
+- **One bad item costs only itself.** `POST .../operator/podcasts/episodes` skips
+  an invalid item (or one of a feed that is not featured), logs the first five and
+  a count, records the rest and answers `{"recorded","new","skipped"}`; only a
+  malformed envelope (none, or over 200 items) is refused. The worker drops the
+  items the server would refuse before posting, and a failed chunk does not stop
+  the chunks or the feeds after it.
+- **Read by key.** The featured set is one small index document, a story's clips
+  (its 12 newest) another, and each feed's row remembers its 40 newest episodes,
+  which the match job reads. No public behaviour is derived from a page of "the
+  newest N rows". A lost featured index while feed rows exist fails closed and is
+  logged once per process. The story's index is written before its clips, so a
+  failure between them leaves an id with no clip, which the read skips and a repeat
+  of the write completes.
 - **The judge is told the passages are data.** The match job's task text says
   they are untrusted transcript text and never instructions. A stored quote is a
   prefix of what was said, cut on a word boundary with nothing added, and
   `PUT .../operator/podcasts/clips` verifies that it occurs in the episode's
   transcript within the clip's times, so the operator route cannot publish words
-  nobody said. The match job does not judge a pair it already stored, and a
-  story's clips come from distinct episodes.
-- **Hashes.** What is stored of an account is `sha256` of a fixed context and
-  the account id: it keeps the id out of the store and is not a secret (it is not
-  salted or keyed; an attacker with the store can test guessed ids). Nothing
-  returns it.
+  nobody said. The match job does not ask about an episode that already gave a
+  story a clip (one clip per episode per story, across runs).
 - **Residual R10.** The worker's episode queue is a scan of the 5000 newest
-  episode rows (logged when it truncates), not a query by need; it is the operator's
-  and affects no public read. **R11.** A transcript replaced by a longer one (a
-  different download of an ad-stitched file) leaves clips made from the old
-  transcript's times in place until the match job runs again. **R12.** Promoting
-  a widely subscribed feed to featured is an operator act. An automatic rule
-  (for example "N accounts") needs an identity cost per account first, because
-  accounts are cheap; until then "the subscriptions of user B become
-  recommendations to user A" is served by the popular counts over featured feeds
-  alone.
+  episode rows (logged when it truncates), not a query by need; with only the
+  operator's feeds nothing can flood it. **R11.** A transcript replaced by a
+  longer one (a different download of an ad-stitched file) leaves clips made from
+  the old transcript's times in place until the match job runs again. **R12.**
+  Everything about feeds reported by accounts is Part 2 (3.2).
 
 ## 4. What the phone receives (the exact shapes; do not change without the lead)
 
@@ -403,10 +387,11 @@ internal routes, which accept only the proxy's host credential.
 
 | Route | Body and answer |
 |---|---|
-| `POST /api/platform/operator/podcasts/episodes` | `{"episodes":[{"feed_url","guid","show","title","published","duration_seconds","enclosure_url","notes"}]}`, at most 200, `notes` cut to 2000 bytes; answers `{"recorded":n,"new":m}` |
+| `POST /api/platform/operator/podcasts/episodes` | `{"episodes":[{"feed_url","guid","show","title","published","duration_seconds","enclosure_url","notes"}]}`, at most 200, `notes` cut to 2000 bytes; answers `{"recorded":n,"new":m,"skipped":k}`; an invalid item, or one of a feed that is not featured, is skipped, not refused |
 | `GET /api/platform/operator/podcasts/episodes?need=transcript&since=<RFC3339>&limit=<n>` | `{"episodes":[{"episode_id","feed_url","guid","show","title","published","duration_seconds","enclosure_url"}]}`, newest first, episodes with no transcript |
 | `PUT /api/platform/operator/podcasts/transcripts` | `{"episode_id","engine","audio_seconds","file_seconds","segments":[{"start","end","text"}]}`, at most 6 MB; `file_seconds` (optional) is the length of the whole file as downloaded and replaces the feed's duration as the episode's `duration_seconds`; answers `{"segments":n}` |
-| `PUT /api/platform/operator/podcasts/clips` | `{"clips":[{"story_route","episode_id","start","end","quote","support"}]}`, at most 200; the story must be on the front list, the episode known, 5 to 120 s, inside the episode, quote cut to 280 characters; answers `{"clips":n}`. The clip id is made from story, episode and the start rounded to the second, so a repeat replaces |
+| `PUT /api/platform/operator/podcasts/clips` | `{"clips":[{"story_route","episode_id","start","end","quote","support"}]}`, at most 200; the story must be on the front list, the episode known, 5 to 120 s, inside the episode, quote cut to 280 characters; answers `{"clips":n}`; the quote must occur in the episode's transcript within the clip's times and is cut on a word boundary to 280 characters, and the episode's feed must be featured. The clip id is made from story, episode and the start rounded to the second, so a repeat replaces |
+| `PUT /api/platform/operator/podcasts/feeds/listed` | `{"feeds":[{"feed_url","title"}],"listed":true}` (default true), at most 200: features (or, with `listed:false`, unfeatures) feeds; the only way a feed row comes to exist; the worker puts the seed list through it at each intake; answers `{"feeds":n}` |
 | `POST /api/platform/operator/podcasts/match` | (the red commit) `{"since_hours":72}`; answers `{"stories","episodes","windows","pairs","jev_calls","clips","dropped","stories_with_clips"}` |
 
 Enclosure and feed URLs must be `http` or `https`, with no credentials in the
@@ -414,28 +399,25 @@ URL, at most 2048 bytes, a named host (no IP literal, `localhost`, `.local`,
 `.internal`, single-label name) and no port but 80 and 443. The server stores
 them and never fetches them; the worker does, under the policy of section 3.4.
 
-### 4.5 `POST /api/platform/podcast-feeds`
+### 4.5 `POST /api/platform/podcast-feeds`: not built
 
-Requires a signed-in account (401 otherwise, also for an invalid credential); the
-account counts once per feed. Request: `{"feeds":[{"feed_url","title"}],"now_playing":{"feed_url","episode_guid","audio_url"}}`,
-`now_playing` optional. Bounds (400 over): at most 50 feeds, URLs http(s) with no
-credentials and at most 2048 bytes, titles at most 200 bytes, a 64 KB body,
-unknown fields refused. Answer: `{"accepted":n,"new_feeds":m,"now_playing_queued":true|false}`. An
-account holds at most 500 subscriptions (400 over).
+The phone's report of the feeds its reader follows (Part 2, 3.2) answers 404 from
+the proxy, signed in or not, and reaches neither corpusd nor a computer.
 
 ### 4.6 `GET /api/platform/podcast-popular?limit=N`
 
-Public, `limit` default 30, at most 100. Answer: `{"feeds":[{"feed_url","title","subscribers","latest_episode_title","latest_published"}]}`.
-Only featured feeds the worker has fetched are listed; a feed with fewer than 3
-reporting accounts shows `subscribers: 0`. `title` is the show's name as the worker
-parsed it. No identity, hash or
-per-account fact is returned.
+Public, `limit` default 30, at most 100. Answer: `{"feeds":[{"feed_url","title","subscribers","latest_episode_title","latest_published"}]}`:
+the featured feeds the worker has fetched and parsed, the one with the newest
+episode first; `title` is the show's name as the worker parsed it; `subscribers`
+is always 0 until Part 2 exists (the shape is kept so the phone's decoder is
+unchanged).
 
 ### 4.7 `GET /api/platform/podcast-transcript?feed=<feed url>&guid=<episode guid>`
 
-A signed-in session or API key; a feed the operator has not featured answers only an account that subscribes to it (404 for anyone else). Answer: `{"episode":{"show","title","published","feed_url","guid","audio_url","duration_seconds"},"source":"parakeet.cpp tdt_ctc-110m-q8_0","verified":true,"blocks":[{"start","end","text"}]}`;
-404 when the episode has no transcript yet. The feed is matched by its normalised
-URL. `blocks` are the stored sentence or pause bounded segments.
+A signed-in session or API key. A feed that is not featured answers 404, as an
+episode with no transcript does. Answer: `{"episode":{"show","title","published","feed_url","guid","audio_url","duration_seconds"},"source":"parakeet.cpp tdt_ctc-110m-q8_0","verified":true,"blocks":[{"start","end","text"}]}`.
+The feed is matched by its normalised URL. `blocks` are the stored sentence or
+pause bounded segments.
 
 ### 4.8 `GET /api/platform/podcast-clips`: the `feed` parameter
 
@@ -460,7 +442,7 @@ the operator's own matching posted through the clips route.
 ## 6. Residuals
 
 R1 no desk custodian (section 2). R2 no forecast claim per clip. R3 no
-retention for episodes and transcripts. R4 ad insertion offsets. R9 (section 3.2) and R10 and R11 (section 3.4). R7 no server-side claim for more than one worker. R5 the
+retention for episodes and transcripts. R4 ad insertion offsets. R10 to R12 (section 3.4). R7 no server-side claim for more than one worker. R5 the
 support threshold (0.6) and the window size are guesses to be scored against
 listening outcomes. R6 matching is operator-triggered tonight, so clips appear
 when the lead runs the worker, not on a schedule.

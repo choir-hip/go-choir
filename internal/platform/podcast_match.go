@@ -182,6 +182,14 @@ func (s *Service) MatchPodcasts(ctx context.Context, since time.Duration) (*Podc
 	var passages []matchPassage
 	passageIdx := map[string]int{}
 	var pairs []matchPair
+	haveEpisode := make([]map[string]bool, len(stories))
+	for i, st := range stories {
+		eps, err := s.storyClipEpisodes(ctx, og, st.Route)
+		if err != nil {
+			return sum, err
+		}
+		haveEpisode[i] = eps
+	}
 	for i, st := range stories {
 		kept := 0
 		for _, h := range ranked[fmt.Sprint(i)] {
@@ -196,10 +204,9 @@ func (s *Service) MatchPodcasts(ctx context.Context, since time.Duration) (*Podc
 			if l.ep.DurationSeconds > 0 && clip.End > l.ep.DurationSeconds+5 {
 				continue
 			}
-			// A pair already stored as a clip is not judged again.
-			if exists, err := s.podcastClipExists(ctx, og, podcastClipID(st.Route, l.ep.EpisodeID, clip.Start)); err != nil {
-				return sum, err
-			} else if exists {
+			// A story has one clip per episode, across runs: an episode that
+			// already gave this story a clip is not asked about again.
+			if haveEpisode[i][l.ep.EpisodeID] {
 				continue
 			}
 			key := fmt.Sprintf("%s|%.1f|%.1f", l.ep.EpisodeID, clip.Start, clip.End)
@@ -236,8 +243,11 @@ func (s *Service) MatchPodcasts(ctx context.Context, since time.Duration) (*Podc
 	var clips []PodcastClipIn
 	for si, ps := range perStory {
 		sort.SliceStable(ps, func(a, b int) bool { return answers[ps[a].name] > answers[ps[b].name] })
-		taken := 0
+		taken := len(haveEpisode[si])
 		fromEpisode := map[string]bool{}
+		for e := range haveEpisode[si] {
+			fromEpisode[e] = true
+		}
 		for _, p := range ps {
 			ep := passages[p.passage].episode.EpisodeID
 			if taken == podcastClipsPerStory {
@@ -475,17 +485,30 @@ func PodcastJudgeFromEnv(s *Service) {
 	s.SetPodcastJudge(j)
 }
 
-// podcastClipExists reads a clip by key.
-func (s *Service) podcastClipExists(ctx context.Context, og *ObjectGraphStore, id string) (bool, error) {
-	canonical, err := podcastCanonical(ogKindPodcastClip, id)
+// storyClipEpisodes is the episodes that already gave a story a clip, read by
+// key through the story's index.
+func (s *Service) storyClipEpisodes(ctx context.Context, og *ObjectGraphStore, route string) (map[string]bool, error) {
+	idx, err := s.getPodcastIndex(ctx, og, "clips:"+route)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	if _, err := og.GetObject(ctx, canonical); err != nil {
-		if isNotFound(err) {
-			return false, nil
+	out := map[string]bool{}
+	for _, id := range idx.Clips {
+		canonical, err := podcastCanonical(ogKindPodcastClip, id)
+		if err != nil {
+			continue
 		}
-		return false, err
+		obj, err := og.GetObject(ctx, canonical)
+		if err != nil {
+			if isNotFound(err) {
+				continue // an id whose clip was never written
+			}
+			return nil, err
+		}
+		var row podcastClipRow
+		if !obj.Tombstone && json.Unmarshal(obj.Body, &row) == nil {
+			out[row.EpisodeID] = true
+		}
 	}
-	return true, nil
+	return out, nil
 }

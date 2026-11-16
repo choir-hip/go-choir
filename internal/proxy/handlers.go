@@ -993,8 +993,11 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case path == podcastClipsPublicPath:
 		h.HandlePlatformPodcastClips(w, r)
 		return
-	case path == podcastFeedsPublicPath:
-		h.HandlePlatformPodcastFeeds(w, r)
+	case path == "/api/platform/podcast-feeds":
+		// Feeds reported by accounts are not built (design Part 2): the phone
+		// treats this as silence. Answered here so the request never reaches a
+		// computer.
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 		return
 	case path == podcastPopularPublicPath:
 		h.HandlePlatformPodcastPopular(w, r)

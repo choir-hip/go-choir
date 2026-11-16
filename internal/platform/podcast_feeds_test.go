@@ -1,32 +1,25 @@
 package platform
 
-// Subscriptions reported by phones (docs/design/podcast-clips-2026-11-15.md
-// sections 3.2 and 3.4) after review round 2 of 2026-11-16: an account can
-// only cause what its own subscriptions are, a feed is public only when the
-// operator features it, and nothing public is read from a page of the newest
-// rows. Ways it can fail, written first:
-//   B1. two spellings of one feed are two feeds, a host that names a machine is
-//       admitted (an IP literal, localhost, a trailing-dot localhost, .internal,
-//       a single label, odd ports), or an episode dated days ahead is taken;
-//   B2. the popular list shows a hash, a feed no worker has fetched, a feed
-//       the operator has not featured (two accounts, three, a hundred), or a
-//       reporter's title in place of the one the worker parsed;
-//   B3. a signed-out report is taken, a bad item leaves the good ones before it
-//       written, one account holds more than 500 subscriptions, or the
-//       platform holds more feed rows than its limit;
-//   B4. now_playing creates a feed row, counts for a feed the account does not
-//       subscribe to, or the queue is not now-playing, featured, then the most
-//       followed;
-//   B5. a transcript is not found in any spelling, or a feed that is not
-//       featured shows its transcript to anyone but a subscriber;
+// The operator's feeds and the public reads (docs/design/podcast-clips-2026-11-15.md
+// 3.2 and 3.4), after the review rounds of 2026-11-16 cut feeds reported by
+// accounts out (Part 2, not built). Ways it can fail, written first:
+//   B1. two spellings of one feed are two feeds (a trailing dot on the host, a
+//       default port, case, a trailing slash), or a host that names a machine
+//       is admitted;
+//   B2. the popular list shows a feed no worker has fetched, a feed the
+//       operator has not featured, a count other than 0, or a reporter's title;
+//   B5. a transcript is not found in any spelling, or one of a feed that is not
+//       featured is shown;
 //   B6. the clips feed filter drops clips instead of ordering them;
-//   B7. a report that changes nothing writes anything, or flushes the cache;
-//   B8. a feed reported by any number of accounts becomes public, or clips can
-//       be written for it, or a match reads it;
 //   B9. a shorter or partial transcript replaces a full one, or a segment past
 //       the end of the episode is stored;
-//   B10. the public read changes when strangers add feed rows (it must read by
-//       key, not from the newest N).
+//   B10. the public read changes when other rows are written after it (it must
+//       read by key, not from the newest N);
+//   B11. a failure between a story's index and its clip hides the clip forever,
+//       or a dangling id breaks the read;
+//   B12. a lost featured index while feed rows exist is silent (it fails closed
+//       and says so, once);
+//   B13. the worker's queue is not newest first.
 
 import (
 	"context"
@@ -40,11 +33,17 @@ import (
 
 func TestB1_FeedSpellingsAreOneFeedAndMachineHostsAreRefused(t *testing.T) {
 	want := "https://feeds.example.test/news.xml"
-	for _, in := range []string{"https://feeds.example.test/news.xml", "HTTPS://Feeds.Example.test:443/news.xml/#frag", " https://feeds.example.test/news.xml/ "} {
+	for _, in := range []string{
+		"https://feeds.example.test/news.xml", "HTTPS://Feeds.Example.test:443/news.xml/#frag", " https://feeds.example.test/news.xml/ ",
+		"https://feeds.example.test./news.xml", "https://FEEDS.example.test.:443/news.xml/",
+	} {
 		got, err := NormalizeFeedURL(in)
 		if err != nil || got != want {
 			t.Errorf("NormalizeFeedURL(%q) = %q, %v; want %q", in, got, err, want)
 		}
+	}
+	if got, _ := NormalizeFeedURL("http://feeds.example.test.:80/a"); got != "http://feeds.example.test/a" {
+		t.Errorf("a default port and a trailing dot: %q", got)
 	}
 	for _, bad := range []string{
 		"", "ftp://x.example/a", "https://u:p@x.example/a", "javascript:1", "https://" + strings.Repeat("a", 3000),
@@ -56,230 +55,64 @@ func TestB1_FeedSpellingsAreOneFeedAndMachineHostsAreRefused(t *testing.T) {
 			t.Errorf("NormalizeFeedURL(%q) accepted: %v", truncatePodcast(bad, 40), err)
 		}
 	}
-	f := newFrontFixture(t)
-	e := podcastFixtureEpisode("g", 600)
-	e.EnclosureURL = "http://192.168.1.10/a.mp3"
-	if _, _, err := f.svc.RecordPodcastEpisodes(context.Background(), []PodcastEpisodeIn{e}); !errors.Is(err, ErrPodcastInvalid) {
-		t.Fatalf("B1: a private enclosure was taken: %v", err)
-	}
-	if PodcastEpisodeID("https://feeds.example.test/news.xml", "g") != PodcastEpisodeID("HTTPS://FEEDS.example.test:443/news.xml/", "g") {
+	if PodcastEpisodeID("https://feeds.example.test/news.xml", "g") != PodcastEpisodeID("HTTPS://FEEDS.example.test.:443/news.xml/", "g") {
 		t.Fatal("B1: two spellings of one feed gave two episode ids")
 	}
 }
 
-func report(t *testing.T, f frontFixture, reporter string, urls ...string) *PodcastFeedsResponse {
-	t.Helper()
-	var feeds []PodcastFeedReport
-	for _, u := range urls {
-		feeds = append(feeds, PodcastFeedReport{FeedURL: u, Title: "Reported " + u[len(u)-5:]})
-	}
-	resp, err := f.svc.ReportPodcastFeeds(context.Background(), reporter, PodcastFeedsRequest{Feeds: feeds})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return resp
-}
-
-func TestB2_PopularShowsOnlyFeaturedFetchedFeedsWithTheWorkersTitle(t *testing.T) {
+func TestB2_PopularShowsOnlyFeaturedFetchedFeedsNewestFirstWithTheWorkersTitle(t *testing.T) {
 	f := newFrontFixture(t)
 	ctx := context.Background()
-	seed, loved, quiet := "https://seed.example.test/s.xml", "https://loved.example.test/l.xml", "https://quiet.example.test/q.xml"
-	hundred, unfetched := "https://hundred.example.test/h.xml", "https://unfetched.example.test/u.xml"
-	listFeeds(t, f, seed, loved, quiet, unfetched)
-	for _, acct := range []string{"a", "b", "c"} {
-		report(t, f, PodcastReporter(acct), loved, hundred)
-	}
-	for i := 0; i < 100; i++ {
-		report(t, f, PodcastReporter(fmt.Sprint("sybil", i)), hundred) // not featured: never public
-	}
-	mk := func(feed, show, guid string) PodcastEpisodeIn {
+	older, newer, unfetched := "https://older.example.test/o.xml", "https://newer.example.test/n.xml", "https://unfetched.example.test/u.xml"
+	listFeeds(t, f, older, newer, unfetched)
+	mk := func(feed, show, guid string, ago time.Duration) PodcastEpisodeIn {
 		e := podcastFixtureEpisode(guid, 600)
 		e.FeedURL, e.Show = feed, show
+		e.Published = time.Now().UTC().Add(-ago).Format(time.RFC3339)
 		return e
 	}
-	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{
-		mk(seed, "Seed Show", "s1"), mk(loved, "Loved Show", "l1"), mk(quiet, "Quiet Show", "q1"), mk(hundred, "Hundred Show", "h1"),
-	}); err != nil {
+	if _, _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{mk(older, "Older Show", "o1", 10*time.Hour), mk(newer, "Newer Show", "n1", time.Hour)}); err != nil {
 		t.Fatal(err)
 	}
 	list, err := f.svc.ListPodcastPopular(ctx, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := map[string]PodcastPopularFeed{}
+	if len(list) != 2 || list[0].FeedURL != newer || list[1].FeedURL != older {
+		t.Fatalf("B2: popular = %+v, want the newer feed first and no unfetched feed", list)
+	}
 	for _, p := range list {
-		got[p.FeedURL] = p
+		if p.Subscribers != 0 {
+			t.Fatalf("B2: a count other than 0: %+v", p)
+		}
 	}
-	if len(list) != 3 || list[0].FeedURL != loved || list[0].Subscribers != 3 {
-		t.Fatalf("B2: popular = %+v, want the loved feed first with 3, then the seed and quiet feeds", list)
+	if list[0].Title != "Newer Show" || list[0].LatestEpisodeTitle == "" || list[0].LatestPublished.IsZero() {
+		t.Fatalf("B2: entry = %+v", list[0])
 	}
-	if got[seed].Subscribers != 0 || got[quiet].Subscribers != 0 {
-		t.Fatalf("B2: a feed under three accounts shows a count: %+v", list)
+	// A feed the operator unfeatures leaves the list.
+	if _, err := f.svc.SetPodcastFeedsListed(ctx, []PodcastFeedListing{{FeedURL: newer}}, false); err != nil {
+		t.Fatal(err)
 	}
-	if _, ok := got[hundred]; ok {
-		t.Fatalf("B2: a feed a hundred accounts report but the operator did not feature is public")
-	}
-	if _, ok := got[unfetched]; ok {
-		t.Fatalf("B2: a featured feed no worker has fetched is listed")
-	}
-	// The title is what the worker parsed, not what a reporter called it.
-	if got[loved].Title != "Loved Show" || got[seed].Title != "Seed Show" {
-		t.Fatalf("B2: titles = %q and %q", got[loved].Title, got[seed].Title)
+	list, _ = f.svc.ListPodcastPopular(ctx, 0)
+	if len(list) != 1 || list[0].FeedURL != older {
+		t.Fatalf("B2: after unfeaturing: %+v", list)
 	}
 	raw, _ := json.Marshal(list)
-	for _, banned := range []string{"sub-", "acct", "subscribers\":[", "hash", "sybil", "Reported"} {
+	for _, banned := range []string{"sub-", "hash", "Listed"} {
 		if strings.Contains(string(raw), banned) {
 			t.Fatalf("B2: the popular list leaks %q: %s", banned, raw)
 		}
 	}
 }
 
-func TestB3_ReportBoundsAndSignIn(t *testing.T) {
-	f := newFrontFixture(t)
-	ctx := context.Background()
-	acct := PodcastReporter("acct-x")
-	var many []PodcastFeedReport
-	for i := 0; i <= podcastMaxFeedsPerReport; i++ {
-		many = append(many, PodcastFeedReport{FeedURL: fmt.Sprintf("https://h%d.example.test/f.xml", i)})
-	}
-	if _, err := f.svc.ReportPodcastFeeds(ctx, acct, PodcastFeedsRequest{Feeds: many}); !errors.Is(err, ErrPodcastInvalid) {
-		t.Fatalf("B3: %d feeds taken: %v", len(many), err)
-	}
-	good := PodcastFeedReport{FeedURL: "https://good.example.test/f.xml"}
-	if _, err := f.svc.ReportPodcastFeeds(ctx, "", PodcastFeedsRequest{Feeds: []PodcastFeedReport{good}}); !errors.Is(err, ErrPodcastSignInRequired) {
-		t.Fatalf("B3: a signed-out report: %v", err)
-	}
-	for name, bad := range map[string]PodcastFeedsRequest{
-		"bad url":       {Feeds: []PodcastFeedReport{good, {FeedURL: "ftp://x.example/a"}}},
-		"private host":  {Feeds: []PodcastFeedReport{good, {FeedURL: "http://169.254.169.254/latest/"}}},
-		"long title":    {Feeds: []PodcastFeedReport{good, {FeedURL: "https://x.example.test/a", Title: strings.Repeat("t", 201)}}},
-		"empty":         {},
-		"now no guid":   {NowPlaying: &PodcastNowPlaying{FeedURL: "https://x.example.test/a", AudioURL: "https://x.example.test/a.mp3"}},
-		"now bad audio": {NowPlaying: &PodcastNowPlaying{FeedURL: "https://x.example.test/a", EpisodeGUID: "g", AudioURL: "file:///etc/passwd"}},
-		"now private":   {NowPlaying: &PodcastNowPlaying{FeedURL: "https://x.example.test/a", EpisodeGUID: "g", AudioURL: "http://127.0.0.1/a.mp3"}},
-	} {
-		if _, err := f.svc.ReportPodcastFeeds(ctx, acct, bad); !errors.Is(err, ErrPodcastInvalid) {
-			t.Fatalf("B3 %s: %v", name, err)
-		}
-	}
-	if feeds, _ := f.svc.ListPodcastFeedsForWorker(ctx); len(feeds) != 0 {
-		t.Fatalf("B3: refused reports wrote %d feeds", len(feeds))
-	}
-	// One account holds at most 500 subscriptions: ten requests of fifty, then one more.
-	for batch := 0; batch < podcastMaxSubscriptionsPerAccount/podcastMaxFeedsPerReport; batch++ {
-		var feeds []PodcastFeedReport
-		for i := 0; i < podcastMaxFeedsPerReport; i++ {
-			feeds = append(feeds, PodcastFeedReport{FeedURL: fmt.Sprintf("https://b%d-%d.example.test/f.xml", batch, i)})
-		}
-		if _, err := f.svc.ReportPodcastFeeds(ctx, acct, PodcastFeedsRequest{Feeds: feeds}); err != nil {
-			t.Fatalf("B3: batch %d: %v", batch, err)
-		}
-	}
-	if _, err := f.svc.ReportPodcastFeeds(ctx, acct, PodcastFeedsRequest{Feeds: []PodcastFeedReport{good}}); !errors.Is(err, ErrPodcastInvalid) {
-		t.Fatalf("B3: the 501st subscription: %v", err)
-	}
-	if _, err := f.svc.ReportPodcastFeeds(ctx, acct, PodcastFeedsRequest{Feeds: []PodcastFeedReport{{FeedURL: "https://b0-0.example.test/f.xml"}}}); err != nil {
-		t.Fatalf("B3: a repeat at the cap: %v", err)
-	}
-	if _, err := f.svc.ReportPodcastFeeds(ctx, PodcastReporter("acct-y"), PodcastFeedsRequest{Feeds: []PodcastFeedReport{good}}); err != nil {
-		t.Fatalf("B3: another account: %v", err)
-	}
-}
-
-func TestB3_ThePlatformHoldsAtMostItsLimitOfFeedRows(t *testing.T) {
-	f := newFrontFixture(t)
-	ctx := context.Background()
-	old := podcastMaxFeedRows
-	podcastMaxFeedRows = 3
-	defer func() { podcastMaxFeedRows = old }()
-	report(t, f, PodcastReporter("a"), "https://one.example.test/f.xml", "https://two.example.test/f.xml")
-	listFeeds(t, f, "https://seed.example.test/f.xml") // the third row
-	if _, err := f.svc.ReportPodcastFeeds(ctx, PodcastReporter("b"), PodcastFeedsRequest{Feeds: []PodcastFeedReport{{FeedURL: "https://four.example.test/f.xml"}}}); !errors.Is(err, errPodcastRowLimit) {
-		t.Fatalf("B3: a fourth row: %v", err)
-	}
-	// An existing feed is still joined at the limit.
-	if _, err := f.svc.ReportPodcastFeeds(ctx, PodcastReporter("b"), PodcastFeedsRequest{Feeds: []PodcastFeedReport{{FeedURL: "https://one.example.test/f.xml"}}}); err != nil {
-		t.Fatalf("B3: joining an existing feed at the limit: %v", err)
-	}
-	if feeds, _ := f.svc.ListPodcastFeedsForWorker(ctx); len(feeds) != 3 {
-		t.Fatalf("B3: %d rows, want 3", len(feeds))
-	}
-}
-
-func TestB4_NowPlayingNeverCreatesAFeedAndTheQueueIsPlayingFeaturedThenFollowed(t *testing.T) {
-	f := newFrontFixture(t)
-	ctx := context.Background()
-	mk := func(feed, guid string, ago time.Duration) PodcastEpisodeIn {
-		e := podcastFixtureEpisode(guid, 600)
-		e.FeedURL = feed
-		e.Published = time.Now().UTC().Add(-ago).Format(time.RFC3339)
-		return e
-	}
-	seed, popular, niche, stranger := "https://seed.example.test/f.xml", "https://popular.example.test/f.xml", "https://niche.example.test/f.xml", "https://stranger.example.test/f.xml"
-	listFeeds(t, f, seed)
-	for _, acct := range []string{"a", "b", "c"} {
-		report(t, f, PodcastReporter(acct), popular)
-	}
-	report(t, f, PodcastReporter("a"), niche)
-	_, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{
-		mk(niche, "niche-new", time.Hour), mk(popular, "pop-old", 5*time.Hour), mk(popular, "pop-new", 2*time.Hour), mk(seed, "seed-old", 9*time.Hour), mk(stranger, "stranger-new", 30*time.Minute),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	order := func() string {
-		list, err := f.svc.ListPodcastEpisodes(ctx, true, time.Time{}, 50)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var g []string
-		for _, e := range list {
-			g = append(g, e.GUID)
-		}
-		return strings.Join(g, ",")
-	}
-	// Featured first, then the most followed, then the feed nobody follows.
-	if got, want := order(), "seed-old,pop-new,pop-old,niche-new,stranger-new"; got != want {
-		t.Fatalf("B4: queue %s, want %s", got, want)
-	}
-	// Playing an episode of a feed the account does not subscribe to is ignored.
-	resp, err := f.svc.ReportPodcastFeeds(ctx, PodcastReporter("d"), PodcastFeedsRequest{NowPlaying: &PodcastNowPlaying{FeedURL: niche, EpisodeGUID: "niche-new", AudioURL: "https://cdn.example.test/n.mp3"}})
-	if err != nil || resp.NowPlayingQueued || resp.NewFeeds != 0 {
-		t.Fatalf("B4: an unsubscribed now_playing: %+v %v", resp, err)
-	}
-	// ... and one for an unknown feed makes no row at all.
-	before, _ := f.svc.ListPodcastFeedsForWorker(ctx)
-	resp, err = f.svc.ReportPodcastFeeds(ctx, PodcastReporter("d"), PodcastFeedsRequest{NowPlaying: &PodcastNowPlaying{FeedURL: "https://never.example.test/f.xml", EpisodeGUID: "g", AudioURL: "https://cdn.example.test/g.mp3"}})
-	after, _ := f.svc.ListPodcastFeedsForWorker(ctx)
-	if err != nil || resp.NowPlayingQueued || len(after) != len(before) {
-		t.Fatalf("B4: now_playing made a feed row: %+v %v (%d to %d)", resp, err, len(before), len(after))
-	}
-	if got, want := order(), "seed-old,pop-new,pop-old,niche-new,stranger-new"; got != want {
-		t.Fatalf("B4: queue moved after ignored now_playing: %s", got)
-	}
-	// A subscriber's now_playing goes first, in the same request as the subscription or after.
-	resp, err = f.svc.ReportPodcastFeeds(ctx, PodcastReporter("a"), PodcastFeedsRequest{NowPlaying: &PodcastNowPlaying{FeedURL: niche + "/", EpisodeGUID: "niche-new", AudioURL: "https://cdn.example.test/n.mp3"}})
-	if err != nil || !resp.NowPlayingQueued {
-		t.Fatalf("B4: a subscriber's now_playing: %+v %v", resp, err)
-	}
-	if got, want := order(), "niche-new,seed-old,pop-new,pop-old,stranger-new"; got != want {
-		t.Fatalf("B4: queue %s, want %s", got, want)
-	}
-	resp, err = f.svc.ReportPodcastFeeds(ctx, PodcastReporter("e"), PodcastFeedsRequest{Feeds: []PodcastFeedReport{{FeedURL: stranger}}, NowPlaying: &PodcastNowPlaying{FeedURL: stranger, EpisodeGUID: "stranger-new", AudioURL: "https://cdn.example.test/s.mp3"}})
-	if err != nil || !resp.NowPlayingQueued {
-		t.Fatalf("B4: subscribing and playing in one request: %+v %v", resp, err)
-	}
-}
-
-func TestB5_TranscriptByFeedAndGuidAndWhoMaySeeIt(t *testing.T) {
+func TestB5_TranscriptByFeedAndGuidOnlyForAFeaturedFeed(t *testing.T) {
 	f := newFrontFixture(t)
 	ctx := context.Background()
 	ep := podcastFixtureEpisode("g1", 600)
-	listFeeds(t, f, ep.FeedURL)
-	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{ep}); err != nil {
+	if _, _, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{ep}); err != nil {
 		t.Fatal(err)
 	}
-	if tr, err := f.svc.GetPodcastTranscriptFor(ctx, ep.FeedURL, "g1", ""); err != nil || tr != nil {
+	if tr, err := f.svc.GetPodcastTranscriptFor(ctx, ep.FeedURL, "g1"); err != nil || tr != nil {
 		t.Fatalf("B5: an episode with no transcript answered %+v %v", tr, err)
 	}
 	id := PodcastEpisodeID(ep.FeedURL, "g1")
@@ -287,8 +120,8 @@ func TestB5_TranscriptByFeedAndGuidAndWhoMaySeeIt(t *testing.T) {
 		Segments: []PodcastSegment{{Start: 1, End: 5, Text: "first block"}, {Start: 5, End: 9, Text: "second block"}}}); err != nil {
 		t.Fatal(err)
 	}
-	for _, spelling := range []string{ep.FeedURL, "HTTPS://FEEDS.EXAMPLE.TEST/news.xml/"} {
-		tr, err := f.svc.GetPodcastTranscriptFor(ctx, spelling, "g1", PodcastReporter("anyone"))
+	for _, spelling := range []string{ep.FeedURL, "HTTPS://FEEDS.EXAMPLE.TEST./news.xml/"} {
+		tr, err := f.svc.GetPodcastTranscriptFor(ctx, spelling, "g1")
 		if err != nil || tr == nil {
 			t.Fatalf("B5: %q: %+v %v", spelling, tr, err)
 		}
@@ -297,11 +130,18 @@ func TestB5_TranscriptByFeedAndGuidAndWhoMaySeeIt(t *testing.T) {
 			t.Fatalf("B5: transcript = %+v", tr)
 		}
 	}
-	if tr, _ := f.svc.GetPodcastTranscriptFor(ctx, ep.FeedURL, "nope", ""); tr != nil {
+	if tr, _ := f.svc.GetPodcastTranscriptFor(ctx, ep.FeedURL, "nope"); tr != nil {
 		t.Fatalf("B5: an unknown guid answered %+v", tr)
 	}
-	if _, err := f.svc.GetPodcastTranscriptFor(ctx, "ftp://x.example/a", "g", ""); !errors.Is(err, ErrPodcastInvalid) {
+	if _, err := f.svc.GetPodcastTranscriptFor(ctx, "ftp://x.example/a", "g"); !errors.Is(err, ErrPodcastInvalid) {
 		t.Fatalf("B5: bad feed: %v", err)
+	}
+	// Unfeatured: not found, as if there were none.
+	if _, err := f.svc.SetPodcastFeedsListed(ctx, []PodcastFeedListing{{FeedURL: ep.FeedURL}}, false); err != nil {
+		t.Fatal(err)
+	}
+	if tr, err := f.svc.GetPodcastTranscriptFor(ctx, ep.FeedURL, "g1"); err != nil || tr != nil {
+		t.Fatalf("B5: an unfeatured feed's transcript was shown: %+v %v", tr, err)
 	}
 }
 
@@ -311,8 +151,7 @@ func TestB6_TheClipsFeedFilterOrdersAndNeverDrops(t *testing.T) {
 	a, b := podcastFixtureEpisode("ga", 900), podcastFixtureEpisode("gb", 900)
 	b.FeedURL = "https://other.example.test/b.xml"
 	b.Show = "Other Show"
-	listFeeds(t, f, a.FeedURL, b.FeedURL)
-	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{a, b}); err != nil {
+	if _, _, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{a, b}); err != nil {
 		t.Fatal(err)
 	}
 	idA, idB := PodcastEpisodeID(a.FeedURL, "ga"), PodcastEpisodeID(b.FeedURL, "gb")
@@ -327,7 +166,7 @@ func TestB6_TheClipsFeedFilterOrdersAndNeverDrops(t *testing.T) {
 	}
 	f.svc.podcastCache.reset()
 	plain, _ := f.svc.ListPodcastClips(ctx, nil, nil, 0)
-	mine, err := f.svc.ListPodcastClips(ctx, nil, []string{"HTTPS://other.example.test/b.xml/"}, 0)
+	mine, err := f.svc.ListPodcastClips(ctx, nil, []string{"HTTPS://other.example.test./b.xml/"}, 0)
 	if err != nil || len(mine.Clips) != len(plain.Clips) || len(plain.Clips) != 2 {
 		t.Fatalf("B6: %v plain %d filtered %d", err, len(plain.Clips), len(mine.Clips))
 	}
@@ -336,97 +175,11 @@ func TestB6_TheClipsFeedFilterOrdersAndNeverDrops(t *testing.T) {
 	}
 }
 
-func TestB7_AReportThatChangesNothingWritesNothingAndKeepsTheCache(t *testing.T) {
-	f := newFrontFixture(t)
-	ctx := context.Background()
-	acct := PodcastReporter("acct-1")
-	feed := "https://a.example.test/a.xml"
-	np := &PodcastNowPlaying{FeedURL: feed, EpisodeGUID: "g", AudioURL: "https://cdn.example.test/g.mp3"}
-	req := PodcastFeedsRequest{Feeds: []PodcastFeedReport{{FeedURL: feed, Title: "A"}}, NowPlaying: np}
-	if _, err := f.svc.ReportPodcastFeeds(ctx, acct, req); err != nil {
-		t.Fatal(err)
-	}
-	canonical, _ := podcastCanonical(ogKindPodcastFeed, podcastFeedID(feed))
-	acctCanonical, _ := podcastCanonical(ogKindPodcastIndex, "acct:"+acct)
-	old := time.Now().UTC().Add(-48 * time.Hour).Truncate(time.Second)
-	for _, id := range []string{canonical, acctCanonical} {
-		if _, err := f.store.corpus().Exec(`UPDATE og_objects SET updated_at = ? WHERE canonical_id = ?`, old, id); err != nil {
-			t.Fatal(err)
-		}
-	}
-	f.svc.podcastCache.put("warm", nil)
-	if _, err := f.svc.ReportPodcastFeeds(ctx, acct, req); err != nil {
-		t.Fatal(err)
-	}
-	for _, id := range []string{canonical, acctCanonical} {
-		obj, err := f.svc.ogStore().GetObject(ctx, id)
-		if err != nil || !obj.UpdatedAt.UTC().Equal(old) {
-			t.Fatalf("B7: an unchanged report rewrote %s: %v %v", id, obj.UpdatedAt, err)
-		}
-	}
-	if _, warm := f.svc.podcastCache.get("warm"); !warm {
-		t.Fatal("B7: an unchanged report flushed the public read's cache")
-	}
-	if _, err := f.svc.ReportPodcastFeeds(ctx, PodcastReporter("acct-2"), req); err != nil {
-		t.Fatal(err)
-	}
-	obj, _ := f.svc.ogStore().GetObject(ctx, canonical)
-	if obj.UpdatedAt.UTC().Equal(old) {
-		t.Fatal("B7: a new subscriber was not written")
-	}
-}
-
-func TestB8_NoNumberOfAccountsMakesAFeedPublic(t *testing.T) {
-	f := newFrontFixture(t)
-	ctx := context.Background()
-	priv := "https://feeds.example.test/private/TOKEN123/f.xml"
-	for i := 0; i < 25; i++ {
-		report(t, f, PodcastReporter(fmt.Sprint("acct", i)), priv)
-	}
-	e := podcastFixtureEpisode("pg", 900)
-	e.FeedURL = priv
-	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{e}); err != nil {
-		t.Fatal(err)
-	}
-	id := PodcastEpisodeID(priv, "pg")
-	seedTranscript(t, f, id, 900, "a private episode", nil)
-	// Clips cannot be written for it.
-	if _, err := f.svc.PutPodcastClips(ctx, []PodcastClipIn{{StoryRoute: f.routes["doc-harbor"], EpisodeID: id, Start: 10, End: 50, Quote: "a private episode", Support: 0.9}}); !errors.Is(err, ErrPodcastInvalid) {
-		t.Fatalf("B8: a clip of an unfeatured feed was written: %v", err)
-	}
-	// Its transcript is the subscribers': 404 (nil) for everyone else, signed in or not.
-	if tr, err := f.svc.GetPodcastTranscriptFor(ctx, priv, "pg", PodcastReporter("acct3")); err != nil || tr == nil {
-		t.Fatalf("B8: a subscriber cannot read it: %v %v", tr, err)
-	}
-	for who, rep := range map[string]string{"another account": PodcastReporter("stranger"), "nobody": ""} {
-		if tr, err := f.svc.GetPodcastTranscriptFor(ctx, priv, "pg", rep); err != nil || tr != nil {
-			t.Fatalf("B8: %s read a private transcript: %v %v", who, tr, err)
-		}
-	}
-	list, _ := f.svc.ListPodcastPopular(ctx, 0)
-	for _, p := range list {
-		if strings.Contains(p.FeedURL, "TOKEN123") {
-			t.Fatalf("B8: a private feed is on the popular list: %+v", p)
-		}
-	}
-	// The operator features it: now it is public; unfeaturing takes it back.
-	listFeeds(t, f, priv)
-	if tr, _ := f.svc.GetPodcastTranscriptFor(ctx, priv, "pg", PodcastReporter("stranger")); tr == nil {
-		t.Fatal("B8: a featured feed's transcript is readable by any signed-in account")
-	}
-	if _, err := f.svc.SetPodcastFeedsListed(ctx, []PodcastFeedListing{{FeedURL: priv}}, false); err != nil {
-		t.Fatal(err)
-	}
-	if tr, _ := f.svc.GetPodcastTranscriptFor(ctx, priv, "pg", PodcastReporter("stranger")); tr != nil {
-		t.Fatal("B8: unfeaturing did not take the feed back")
-	}
-}
-
 func TestB9_ATranscriptIsNeverReplacedByOneThatCoversLess(t *testing.T) {
 	f := newFrontFixture(t)
 	ctx := context.Background()
 	ep := podcastFixtureEpisode("g1", 600)
-	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{ep}); err != nil {
+	if _, _, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{ep}); err != nil {
 		t.Fatal(err)
 	}
 	id := PodcastEpisodeID(ep.FeedURL, "g1")
@@ -468,15 +221,11 @@ func TestB9_ATranscriptIsNeverReplacedByOneThatCoversLess(t *testing.T) {
 	}
 }
 
-// B10. The public clips read does not depend on a page of the newest rows: a
-// seed feed featured long ago, and clips matched long ago, survive any number of
-// feed rows and episodes written after them.
-func TestB10_ThePublicReadSurvivesStrangersWritingAfterIt(t *testing.T) {
+func TestB10_ThePublicReadSurvivesRowsWrittenAfterIt(t *testing.T) {
 	f := newFrontFixture(t)
 	ctx := context.Background()
 	ep := podcastFixtureEpisode("g1", 900)
-	listFeeds(t, f, ep.FeedURL)
-	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{ep}); err != nil {
+	if _, _, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{ep}); err != nil {
 		t.Fatal(err)
 	}
 	id := PodcastEpisodeID(ep.FeedURL, "g1")
@@ -485,28 +234,123 @@ func TestB10_ThePublicReadSurvivesStrangersWritingAfterIt(t *testing.T) {
 	if _, err := f.svc.PutPodcastClips(ctx, []PodcastClipIn{{StoryRoute: harbor, EpisodeID: id, Start: 100, End: 140, Quote: "the harbor reopened", Support: 0.9}}); err != nil {
 		t.Fatal(err)
 	}
-	// Age every row of the seed, then let accounts write many newer feed rows.
+	// Age every podcast row, then write many newer ones (other feeds and episodes).
 	if _, err := f.store.corpus().Exec(`UPDATE og_objects SET updated_at = ? WHERE object_kind LIKE 'choir.podcast_%'`, time.Now().UTC().Add(-72*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	old := podcastMaxFeedRows
-	podcastMaxFeedRows = 300
-	defer func() { podcastMaxFeedRows = old }()
-	for batch := 0; batch < 4; batch++ {
-		var feeds []PodcastFeedReport
-		for i := 0; i < podcastMaxFeedsPerReport; i++ {
-			feeds = append(feeds, PodcastFeedReport{FeedURL: fmt.Sprintf("https://n%d-%d.example.test/f.xml", batch, i)})
-		}
-		if _, err := f.svc.ReportPodcastFeeds(ctx, PodcastReporter(fmt.Sprint("w", batch)), PodcastFeedsRequest{Feeds: feeds}); err != nil {
-			t.Fatal(err)
-		}
+	var feeds []PodcastFeedListing
+	for i := 0; i < 150; i++ {
+		feeds = append(feeds, PodcastFeedListing{FeedURL: fmt.Sprintf("https://n%d.example.test/f.xml", i)})
+	}
+	if _, err := f.svc.SetPodcastFeedsListed(ctx, feeds[:100], true); err != nil {
+		t.Fatal(err)
 	}
 	f.svc.podcastCache.reset()
 	got, err := f.svc.ListPodcastClips(ctx, []string{harbor}, nil, 0)
 	if err != nil || len(got.Clips) != 1 {
-		t.Fatalf("B10: the clip is gone after strangers wrote feed rows: %v %+v", err, got)
+		t.Fatalf("B10: the clip is gone after other rows were written: %v %+v", err, got)
 	}
-	if tr, _ := f.svc.GetPodcastTranscriptFor(ctx, ep.FeedURL, "g1", ""); tr == nil {
+	if tr, _ := f.svc.GetPodcastTranscriptFor(ctx, ep.FeedURL, "g1"); tr == nil {
 		t.Fatal("B10: the featured feed's transcript is gone")
+	}
+}
+
+// B11. The story's index is written before its clips; a failure between them
+// leaves an id with no clip, which the read skips and a repeat completes.
+func TestB11_AnIndexIdWithNoClipIsSkippedAndAWriteCompletesIt(t *testing.T) {
+	f := newFrontFixture(t)
+	ctx := context.Background()
+	ep := podcastFixtureEpisode("g1", 900)
+	if _, _, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{ep}); err != nil {
+		t.Fatal(err)
+	}
+	id := PodcastEpisodeID(ep.FeedURL, "g1")
+	seedTranscript(t, f, id, 900, "the harbor reopened", nil)
+	harbor := f.routes["doc-harbor"]
+	in := PodcastClipIn{StoryRoute: harbor, EpisodeID: id, Start: 100, End: 140, Quote: "the harbor reopened", Support: 0.9}
+	// The failure: the index names the clip, the clip was never written.
+	og := f.svc.ogStore()
+	if err := f.svc.putPodcastIndex(ctx, og, "clips:"+harbor, podcastIndexDoc{Clips: []string{podcastClipID(harbor, id, 100), "clip-deadbeefdeadbeefdeadbeef"}}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.svc.ListPodcastClips(ctx, []string{harbor}, nil, 0)
+	if err != nil || len(got.Clips) != 0 {
+		t.Fatalf("B11: a dangling id broke or fed the read: %v %+v", err, got)
+	}
+	// The same write again completes it: the id is already in the index.
+	if n, err := f.svc.PutPodcastClips(ctx, []PodcastClipIn{in}); err != nil || n != 1 {
+		t.Fatalf("B11: %d %v", n, err)
+	}
+	f.svc.podcastCache.reset()
+	got, err = f.svc.ListPodcastClips(ctx, []string{harbor}, nil, 0)
+	if err != nil || len(got.Clips) != 1 {
+		t.Fatalf("B11: the completed clip is not shown: %v %+v", err, got)
+	}
+	// And the order matters: the index is written first, so no clip can exist that
+	// its story's index does not name.
+	idx, _ := f.svc.getPodcastIndex(ctx, og, "clips:"+harbor)
+	if !podcastContains(idx.Clips, got.Clips[0].ClipID) {
+		t.Fatalf("B11: a stored clip is not in its story's index: %+v", idx)
+	}
+}
+
+func podcastContains(list []string, v string) bool {
+	for _, x := range list {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+// B12. A featured index that is lost while feed rows exist fails closed: nothing
+// is public, and it is said (once per process).
+func TestB12_ALostFeaturedIndexFailsClosedAndSaysSo(t *testing.T) {
+	f := newFrontFixture(t)
+	ctx := context.Background()
+	ep := podcastFixtureEpisode("g1", 900)
+	if _, _, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{ep}); err != nil {
+		t.Fatal(err)
+	}
+	id := PodcastEpisodeID(ep.FeedURL, "g1")
+	seedTranscript(t, f, id, 900, "the harbor reopened", nil)
+	if _, err := f.store.corpus().Exec(`DELETE FROM og_objects WHERE object_kind = 'choir.podcast_index' AND canonical_id = ?`, mustIndexCanonical(t, "meta")); err != nil {
+		t.Fatal(err)
+	}
+	podcastEmptyIndexLogged = onceReset()
+	var logged strings.Builder
+	restore := captureStdLog(&logged)
+	defer restore()
+	if tr, _ := f.svc.GetPodcastTranscriptFor(ctx, ep.FeedURL, "g1"); tr != nil {
+		t.Fatal("B12: a transcript was public with the featured index lost")
+	}
+	_, _ = f.svc.GetPodcastTranscriptFor(ctx, ep.FeedURL, "g1")
+	if n := strings.Count(logged.String(), "featured index is empty or missing"); n != 1 {
+		t.Fatalf("B12: logged %d times, want once: %q", n, logged.String())
+	}
+}
+
+// B13. The worker's queue is the episodes with no transcript, newest first.
+func TestB13_TheQueueIsNewestFirst(t *testing.T) {
+	f := newFrontFixture(t)
+	ctx := context.Background()
+	mk := func(guid string, ago time.Duration) PodcastEpisodeIn {
+		e := podcastFixtureEpisode(guid, 600)
+		e.Published = time.Now().UTC().Add(-ago).Format(time.RFC3339)
+		return e
+	}
+	if _, _, _, err := recordFeatured(f, ctx, []PodcastEpisodeIn{mk("old", 9*time.Hour), mk("new", time.Hour), mk("mid", 5*time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	list, err := f.svc.ListPodcastEpisodes(ctx, true, time.Time{}, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, e := range list {
+		got = append(got, e.GUID)
+	}
+	if strings.Join(got, ",") != "new,mid,old" {
+		t.Fatalf("B13: queue %v", got)
 	}
 }

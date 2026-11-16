@@ -55,6 +55,7 @@ const (
 	podcastClipsPerStory = 3
 	podcastEpisodeScan   = 5000
 	podcastMaxFuture     = 24 * time.Hour
+	podcastSkipLogMax    = 5
 )
 
 // PodcastEpisodeIn is one feed item as the operator's worker reports it.
@@ -311,27 +312,46 @@ func (s *Service) putPodcastEpisode(ctx context.Context, og *ObjectGraphStore, e
 
 // RecordPodcastEpisodes upserts feed items. It returns how many it took and
 // how many were new. A request is checked whole before anything is written.
-func (s *Service) RecordPodcastEpisodes(ctx context.Context, in []PodcastEpisodeIn) (recorded, fresh int, err error) {
+func (s *Service) RecordPodcastEpisodes(ctx context.Context, in []PodcastEpisodeIn) (recorded, fresh, skipped int, err error) {
 	if len(in) == 0 || len(in) > podcastMaxEpisodesPerRequest {
-		return 0, 0, podcastInvalid("a request carries 1 to %d episodes", podcastMaxEpisodesPerRequest)
-	}
-	checked := make([]PodcastEpisode, 0, len(in))
-	for i, e := range in {
-		ep, err := checkPodcastEpisode(e)
-		if err != nil {
-			return 0, 0, fmt.Errorf("episode %d: %w", i, err)
-		}
-		checked = append(checked, ep)
+		return 0, 0, 0, podcastInvalid("a request carries 1 to %d episodes", podcastMaxEpisodesPerRequest)
 	}
 	og, err := s.podcastStore()
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
+	}
+	featured, err := s.featuredFeedSet(ctx, og)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	// One bad item must not cost the rest of the request: an invalid item, or
+	// one of a feed that is not featured, is skipped and logged (the first few
+	// only), and the rest are recorded. Only a malformed envelope is refused.
+	var checked []PodcastEpisode
+	for i, e := range in {
+		ep, err := checkPodcastEpisode(e)
+		if err == nil {
+			if n, nerr := NormalizeFeedURL(ep.FeedURL); nerr != nil || !featured[n] {
+				err = podcastInvalid("the feed is not a featured feed")
+			}
+		}
+		if err != nil {
+			skipped++
+			if skipped <= podcastSkipLogMax {
+				log.Printf("corpusd: podcast episodes: item %d skipped: %v", i, err)
+			}
+			continue
+		}
+		checked = append(checked, ep)
+	}
+	if skipped > podcastSkipLogMax {
+		log.Printf("corpusd: podcast episodes: %d items skipped in all", skipped)
 	}
 	now := time.Now().UTC()
 	for _, ep := range checked {
 		prev, err := s.getPodcastEpisode(ctx, og, ep.EpisodeID)
 		if err != nil {
-			return recorded, fresh, err
+			return recorded, fresh, skipped, err
 		}
 		if prev == nil {
 			fresh++
@@ -348,16 +368,16 @@ func (s *Service) RecordPodcastEpisodes(ctx context.Context, in []PodcastEpisode
 		// A repeat poll of an unchanged item writes nothing.
 		if prev == nil || !sameEpisode(*prev, ep) {
 			if err := s.putPodcastEpisode(ctx, og, ep, now); err != nil {
-				return recorded, fresh, err
+				return recorded, fresh, skipped, err
 			}
 		}
 		recorded++
 	}
 	if err := s.notePodcastEpisodes(ctx, og, checked, now); err != nil {
-		return recorded, fresh, err
+		return recorded, fresh, skipped, err
 	}
 	s.podcastCache.reset()
-	return recorded, fresh, nil
+	return recorded, fresh, skipped, nil
 }
 
 // sameEpisode reports whether two rows hold the same facts.
@@ -455,57 +475,10 @@ func (s *Service) ListPodcastEpisodes(ctx context.Context, needTranscript bool, 
 		out = append(out, ep)
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Published.After(out[j].Published) })
-	if needTranscript {
-		// The worker's queue: what a signed-in phone is playing now, then the
-		// operator's featured feeds, then the feeds most accounts follow, then
-		// the rest; newest first within each (the sort is stable).
-		if rank, err := s.podcastQueueRank(ctx); err == nil {
-			sort.SliceStable(out, func(i, j int) bool { return rank(out[i]) < rank(out[j]) })
-		}
-	}
 	if len(out) > limit {
 		out = out[:limit]
 	}
 	return out, nil
-}
-
-// podcastQueueRank ranks an episode for the worker: 0 playing now, 1 a
-// featured feed, then 2 plus the inverse of the subscriber count.
-func (s *Service) podcastQueueRank(ctx context.Context) (func(PodcastEpisode) int, error) {
-	og, err := s.podcastStore()
-	if err != nil {
-		return nil, err
-	}
-	featured, err := s.featuredFeedSet(ctx, og)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := s.allPodcastFeeds(ctx)
-	if err != nil {
-		return nil, err
-	}
-	now := time.Now().UTC()
-	subs := map[string]int{}
-	wanted := map[string]map[string]bool{}
-	for _, r := range rows {
-		subs[r.Norm] = len(r.Subscribers)
-		for _, w := range pruneWanted(r.Wanted, now) {
-			if wanted[r.Norm] == nil {
-				wanted[r.Norm] = map[string]bool{}
-			}
-			wanted[r.Norm][w.GUID] = true
-		}
-	}
-	return func(e PodcastEpisode) int {
-		n, _ := NormalizeFeedURL(e.FeedURL)
-		switch {
-		case wanted[n][e.GUID]:
-			return 0
-		case featured[n]:
-			return 1
-		}
-		return 2 + podcastMaxSubscribers - subs[n]
-	}, nil
 }
 
 // PutPodcastTranscript stores an episode's transcript and marks the episode.
@@ -728,18 +701,10 @@ func (s *Service) PutPodcastClips(ctx context.Context, in []PodcastClipIn) (int,
 		byID[row.ClipID] = len(distinct)
 		distinct = append(distinct, row)
 	}
-	for _, row := range distinct {
-		obj, err := podcastObject(ogKindPodcastClip, row.ClipID, row, map[string]any{
-			"story_route": row.StoryRoute, "episode_id": row.EpisodeID, "matched_at": row.MatchedAt,
-		}, now)
-		if err != nil {
-			return 0, err
-		}
-		if err := og.PutObject(corpusdWriter(ctx), obj); err != nil {
-			return 0, err
-		}
-	}
-	// Each story's clip index (read by key by the public read) keeps its 12 newest.
+	// The story's index first (its 12 newest), then the clips: a failure
+	// between the two leaves an id with no clip, which the read skips and a
+	// repeat of the write completes; the other order would leave a clip no read
+	// can find.
 	clipsOfRoute := map[string][]string{}
 	for _, row := range distinct {
 		clipsOfRoute[row.StoryRoute] = append(clipsOfRoute[row.StoryRoute], row.ClipID)
@@ -768,6 +733,17 @@ func (s *Service) PutPodcastClips(ctx context.Context, in []PodcastClipIn) (int,
 			if err := s.putPodcastIndex(ctx, og, key, idx, now); err != nil {
 				return 0, err
 			}
+		}
+	}
+	for _, row := range distinct {
+		obj, err := podcastObject(ogKindPodcastClip, row.ClipID, row, map[string]any{
+			"story_route": row.StoryRoute, "episode_id": row.EpisodeID, "matched_at": row.MatchedAt,
+		}, now)
+		if err != nil {
+			return 0, err
+		}
+		if err := og.PutObject(corpusdWriter(ctx), obj); err != nil {
+			return 0, err
 		}
 	}
 	s.podcastCache.reset()
