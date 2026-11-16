@@ -70,8 +70,11 @@ phone / any client: GET /api/platform/podcast-clips   (public, bulk, one request
    are guest records started through an operator route (`/api/autopaper/sources/schedules`);
    that is a guest mechanism for Autopaper sources and not for a host-side
    store, so tonight the worker polls the feeds and the server only stores
-   what it is sent. The worker fetches feed XML itself, so the server never
-   fetches an operator-supplied URL.
+   what it is sent. The worker fetches feed XML itself. The server stores URLs and never fetches
+   one; the worker does, so every fetch of the worker (feed, enclosure, length
+   probe) goes through one client whose dialer refuses every address that is not
+   a public one and every port but 80 and 443, and ffmpeg runs with a protocol
+   whitelist (section 3.4).
 2. **Transcription runs in a worker program** (`cmd/podcast-worker`), which
    needs ffmpeg, `parakeet-cli`, the 110M GGUF and the Silero VAD GGUF, and
    runs anywhere that has them. Tonight the lead runs it by hand on the build
@@ -182,14 +185,12 @@ A transcript is stored once per episode and shared by every reader.
 
 - **Report.** `POST /api/platform/podcast-feeds` (section 4.5). A feed is added
   to intake by its normalised URL (lower-case scheme and host, default port,
-  fragment and trailing slash dropped). A signed-in report counts the account once
-  per feed toward the feed's subscriber count; the row keeps only a salted hash
-  of the account (the proxy hashes it; corpusd never sees the account id), and
-  nothing returns it. An anonymous report adds feeds and counts for nothing, so
-  counts cannot be stuffed by strangers. Bounds on what strangers can cause: 50
-  feeds a report, a 64 KB body, 200 distinct NEW feeds a day for the whole
-  platform (the rest of the day's are ignored, in a counter that resets with the
-  process), 20 now-playing marks a feed.
+  fragment and trailing slash dropped). A signed-in report (the only kind: section 3.4)
+  counts the account once per feed toward the feed's subscriber count; the row
+  keeps only a hash of the account (the proxy makes it; corpusd never sees the
+  account id), and nothing returns it. Bounds on what strangers can cause: 50
+  feeds a report, a 64 KB body, 500 subscriptions an account, 20 now-playing marks
+  a feed. A report that changes nothing writes nothing.
 - **Worker order.** The listing the worker reads (`need=transcript`) is ordered:
   an episode a phone is playing now first (a mark lasts 24 hours), then feeds with
   the most subscribers, then the rest, newest first within each. The worker's
@@ -207,8 +208,6 @@ A transcript is stored once per episode and shared by every reader.
 - **Clips of the reader's shows first.** `GET .../podcast-clips` takes an
   optional repeatable `feed=<feed url>`: clips of those shows are listed first and
   the rest follow, nothing dropped.
-- **Residual R8: the new-feed bound is per process.** A restart resets the day's
-  count; a persisted counter is the fix.
 - **Residual R9: a phone's guid.** A now-playing episode whose guid is not in
   its feed is logged and not transcribed; the audio URL a phone sends is stored
   but never fetched by the server.
@@ -226,6 +225,45 @@ never used by the match job and never cited in the paper, and becomes verified
 only when our own transcription of the same episode, or a second device's upload,
 agrees with it on a sample of passages. The route, its trust rule and the
 alignment between a video's times and the audio enclosure's are not built.
+
+### 3.4 What strangers can cause (review of 2026-11-16)
+
+Two independent seats found the same blocker: a reported feed URL made the
+operator's worker fetch any address, from the operator's network position.
+Repaired in layers.
+
+- **Who can add a feed.** Only a signed-in account: `POST .../podcast-feeds`
+  answers 401 to no credential and to a credential that is presented and invalid.
+  An account holds at most 500 subscriptions (a stored cap, no in-memory counter).
+  The seed list comes from the operator.
+- **What a URL may be.** A named public-looking host, ports 80 and 443 only
+  (`checkPodcastURL`, at report, at episode intake and for now-playing).
+- **What the worker will dial.** One client for every outside fetch: the dialer
+  resolves the name itself, refuses every address that is not public unicast
+  (loopback, RFC 1918, ULA, link-local, CGNAT, unspecified, multicast, reserved,
+  documentation and benchmarking ranges, IPv4-mapped forms), dials the address it
+  checked (so a rebinding answer and a redirect meet the same check), allows at
+  most 20 redirects and no proxy from the environment; each feed fetch has a 60 s
+  deadline.
+- **What ffmpeg may open.** `-protocol_whitelist file`, and a download that
+  begins with a playlist is refused before ffmpeg runs.
+- **The operator key** goes only over https, or http to this machine.
+- **Private feeds.** A reader's paid or tokenised feed URL must not become a
+  public address. A feed is public ("listed") when the operator lists it (the seed
+  list, `PUT .../operator/podcasts/feeds/listed`) or when at least 2 distinct
+  accounts report it. Only listed feeds' clips are served or can be written,
+  only listed feeds the worker has fetched appear in `podcast-popular`, and the
+  transcript of an unlisted feed answers 404 to everyone but an account that
+  reported it. An unlisted feed is still polled and transcribed for its
+  subscriber. The clip shape is unchanged: `feed_url` is only ever a listed feed's.
+- **Hashes.** What is stored of an account is `sha256` of a fixed context and
+  the account id: it keeps the id out of the store and is not a secret (it is not
+  salted or keyed; an attacker with the store can test guessed ids). Nothing
+  returns it.
+- **Residual R10.** Scans have bounds without paging (5000 episodes, 1000 clips,
+  5000 feeds); each logs when it truncates. **R11.** A transcript replaced by a
+  longer one (a different download of an ad-stitched file) leaves clips made from
+  the old transcript's times in place until the match job runs again.
 
 ## 4. What the phone receives (the exact shapes; do not change without the lead)
 
@@ -328,15 +366,18 @@ internal routes, which accept only the proxy's host credential.
 | `POST /api/platform/operator/podcasts/match` | (the red commit) `{"since_hours":72}`; answers `{"stories","episodes","windows","pairs","jev_calls","clips","published","dropped"}` |
 
 Enclosure and feed URLs must be `http` or `https`, with no credentials in the
-URL and at most 2048 bytes; the server stores them, never fetches them.
+URL, at most 2048 bytes, a named host (no IP literal, `localhost`, `.local`,
+`.internal`, single-label name) and no port but 80 and 443. The server stores
+them and never fetches them; the worker does, under the policy of section 3.4.
 
 ### 4.5 `POST /api/platform/podcast-feeds`
 
-Optional sign-in (a signed-in account counts once per feed; an anonymous report
-only adds feeds). Request: `{"feeds":[{"feed_url","title"}],"now_playing":{"feed_url","episode_guid","audio_url"}}`,
+Requires a signed-in account (401 otherwise, also for an invalid credential); the
+account counts once per feed. Request: `{"feeds":[{"feed_url","title"}],"now_playing":{"feed_url","episode_guid","audio_url"}}`,
 `now_playing` optional. Bounds (400 over): at most 50 feeds, URLs http(s) with no
 credentials and at most 2048 bytes, titles at most 200 bytes, a 64 KB body,
-unknown fields refused. Answer: `{"accepted":n,"new_feeds":m,"now_playing_queued":true|false}`.
+unknown fields refused. Answer: `{"accepted":n,"new_feeds":m,"now_playing_queued":true|false}`. An
+account holds at most 500 subscriptions (400 over).
 
 ### 4.6 `GET /api/platform/podcast-popular?limit=N`
 
@@ -347,7 +388,7 @@ per-account fact is returned.
 
 ### 4.7 `GET /api/platform/podcast-transcript?feed=<feed url>&guid=<episode guid>`
 
-A signed-in session or API key. Answer: `{"episode":{"show","title","published","feed_url","guid","audio_url","duration_seconds"},"source":"parakeet.cpp tdt_ctc-110m-q8_0","verified":true,"blocks":[{"start","end","text"}]}`;
+A signed-in session or API key; a feed that is not listed answers only an account that reported it (404 for anyone else). Answer: `{"episode":{"show","title","published","feed_url","guid","audio_url","duration_seconds"},"source":"parakeet.cpp tdt_ctc-110m-q8_0","verified":true,"blocks":[{"start","end","text"}]}`;
 404 when the episode has no transcript yet. The feed is matched by its normalised
 URL. `blocks` are the stored sentence or pause bounded segments.
 
@@ -374,7 +415,7 @@ the operator's own matching posted through the clips route.
 ## 6. Residuals
 
 R1 no desk custodian (section 2). R2 no forecast claim per clip. R3 no
-retention for episodes and transcripts. R4 ad insertion offsets. R8 and R9 (section 3.2). R7 no server-side claim for more than one worker. R5 the
+retention for episodes and transcripts. R4 ad insertion offsets. R9 (section 3.2) and R10 and R11 (section 3.4). R7 no server-side claim for more than one worker. R5 the
 support threshold (0.6) and the window size are guesses to be scored against
 listening outcomes. R6 matching is operator-triggered tonight, so clips appear
 when the lead runs the worker, not on a schedule.
