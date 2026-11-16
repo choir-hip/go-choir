@@ -123,11 +123,14 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
     public private(set) var latency: TimeInterval = 0
     public private(set) var inFlight = false
     public private(set) var asks: [String] = []
-    /// A plain line the listener hears once when the desk could not be reached or wrote nothing.
-    public var spokenError: ((Error?) -> String?) = { RunSheetWriter.plainWords($0) }
+    /// A quiet status line while the desk could not be reached or wrote nothing; nil when all is well. It is never an entry: the listener
+    /// cannot skip to it, it is not in Up next, and nothing is spoken for it.
+    public private(set) var notice: String?
+    /// Told when `notice` changes (the host shows it in the player's status line).
+    public var onNotice: ((String?) -> Void)?
+    public var noticeWords: ((Error?) -> String?) = { RunSheetWriter.plainWords($0) }
     public var clock: () -> Date = { Date() }
     private var task: Task<Void, Never>?
-    private var spoke = false
     private var quietOn: String?          // the entry that was on air when the last ask added nothing: not asked again until another one is
 
     public init(store: RunSheetStore, feed: @escaping () -> RunSheetFeed?) { self.store = store; self.feed = feed }
@@ -182,20 +185,18 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
             } catch { failure = error }
             if let f = first { self.latency = max(0.5, f.timeIntervalSince(started)) }
             self.inFlight = false
-            if added > 0 { self.spoke = false; self.quietOn = nil }
-            else { self.quietOn = airId; if failure != nil || cause == "open" { self.sayOnce(failure) } }
+            if added > 0 { self.quietOn = nil; self.setNotice(nil) }
+            else { self.quietOn = airId; if failure != nil || cause == "open" { self.setNotice(self.noticeWords(failure)) } }
             if added > 0 { self.checkAhead() }
         }
     }
 
     enum WriterError: Error { case said(String) }
 
-    /// The listener hears that the desk did not answer once, and the sheet plays on with what it has.
-    private func sayOnce(_ e: Error?) {
-        guard !spoke, let words = spokenError(e) else { return }
-        spoke = true
-        let entry = RunSheetEntry(id: RunSheetEntry.mintId("p-"), kind: .answer, placedBy: .phone, title: "The desk", text: words, estSeconds: RunSheetEntry.estimateSeconds(words: words))
-        store.place(entry, at: .next, by: .phone)
+    private func setNotice(_ n: String?) {
+        guard n != notice else { return }
+        notice = n
+        onNotice?(n)
     }
 
     /// Plain words for what went wrong, or nil when there is nothing to say (the front page has no story; a cancelled ask).
@@ -204,11 +205,11 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
         if let c = e as? ChoirError {
             switch c {
             case .empty: return nil
-            case .notSignedIn, .unauthorized: return "I can't reach the desk until you sign in. I'll play what I have."
-            case .transport, .timeout: return "I can't reach the desk right now. I'll play what I have."
+            case .notSignedIn, .unauthorized: return "Sign in to hear the desk."
+            case .transport, .timeout: return "The desk can't be reached right now."
             default: break
             }
         }
-        return "The desk isn't answering right now. I'll play what I have."
+        return "The desk isn't answering right now."
     }
 }

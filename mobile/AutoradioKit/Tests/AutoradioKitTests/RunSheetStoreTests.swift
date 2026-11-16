@@ -101,11 +101,22 @@ final class RunSheetStoreTests: XCTestCase {
         let o = PhoneOpening.entry(lines: lines(3))
         XCTAssertEqual(o.kind, .opening); XCTAssertEqual(o.placedBy, .phone)
         XCTAssertTrue(o.text!.contains("From the paper's front page: Story 1. Dek 1."), o.text!)
-        XCTAssertTrue(o.text!.contains("Story 2.") && o.text!.contains("Story 3."))
+        XCTAssertTrue(o.text!.contains("Story 2") && o.text!.contains("Story 3"))
         p.open(o); await p.settle()
         XCTAssertEqual(s.onAir()?.id, o.id)
         XCTAssertEqual(e.speaks, ["speak:" + o.id], "no network and no model were asked: the engine spoke the phone's own words")
         XCTAssertEqual(s.pending.first?.op, .place)
+    }
+    func test01_TheOpeningReadsNaturallyForOneTwoAndManyStoriesAndNeverReadsADekTwice() {
+        let d = Date(timeIntervalSince1970: 1_700_000_000)
+        let one = PhoneOpening.entry(lines: [.init(title: "Harbour barrier approved", dek: "Council voted seven to two. A long second sentence.")], now: d).text!
+        XCTAssertTrue(one.hasSuffix("From the paper's front page: Harbour barrier approved. Council voted seven to two."), one)
+        let two = PhoneOpening.entry(lines: [.init(title: "A", dek: "Dek a."), .init(title: "B", dek: "Dek b.")], now: d).text!
+        XCTAssertTrue(two.hasSuffix("A. Dek a. Also: B."), two); XCTAssertFalse(two.contains("Dek b"))
+        let many = PhoneOpening.entry(lines: (1...8).map { .init(title: "Story \($0)", dek: "Dek \($0).") }, now: d).text!
+        XCTAssertTrue(many.hasSuffix("Story 1. Dek 1. Also: Story 2; and Story 3."), many); XCTAssertFalse(many.contains("Story 4"))
+        let echo = PhoneOpening.entry(lines: [.init(title: "Tide barrier approved", dek: "Tide barrier approved by the council.")], now: d).text!
+        XCTAssertEqual(echo.components(separatedBy: "Tide barrier approved").count - 1, 1, "a dek that repeats the headline is not read")
     }
     func test01_WithNoFrontPageItStillOpens() async {
         let (p, s, _) = make()
@@ -198,19 +209,23 @@ final class RunSheetStoreTests: XCTestCase {
     }
 
     // 6, 7
-    func test06_ADeskThatFailsIsSaidOnceAndTheOpeningKeepsPlaying() async {
+    func test06_ADeskThatFailsIsAQuietNoticeNotAnEntryAndTheOpeningKeepsPlaying() async {
         let (p, s, e) = make()
         let o = await opened([], p, s)
         let feed = FakeFeed(); feed.failure = ChoirError.transport("offline")
         let w = RunSheetWriter(store: s) { feed }
+        var told: [String?] = []
+        w.onNotice = { told.append($0) }
         w.open(); await w.settle()
         XCTAssertEqual(s.onAir()?.id, o)
-        let said = s.ahead(limit: 5)
-        XCTAssertEqual(said.count, 1); XCTAssertEqual(said[0].kind, .answer); XCTAssertEqual(said[0].placedBy, .phone)
-        XCTAssertTrue(said[0].text!.contains("can't reach the desk"))
+        XCTAssertTrue(s.ahead(limit: 5).isEmpty, "no row for it: it is not in Up next and cannot be skipped to")
+        XCTAssertEqual(w.notice, "The desk can't be reached right now.")
         w.open(); await w.settle()
-        XCTAssertEqual(s.ahead(limit: 5).count, 1, "said once")
+        XCTAssertEqual(told.count, 1, "told once")
         XCTAssertFalse(e.log.contains { $0.hasPrefix("story:") }, "no story was swapped in")
+        feed.failure = nil; feed.script = [.ops([ProgrammeRouteFeed.placeOp(story("d-1"), cause: "open")]), .done]
+        w.open(); await w.settle()
+        XCTAssertNil(w.notice, "the notice goes when the desk answers")
     }
     func test07_ASlowDeskSwapsNothingIn() async {
         let (p, s, e) = make()
@@ -472,5 +487,23 @@ final class RunSheetStoreTests: XCTestCase {
         XCTAssertTrue(s.pending.isEmpty)
         XCTAssertTrue(poster.posts.allSatisfy { $0.count <= 64 }); XCTAssertGreaterThan(poster.posts.count, 2)
         XCTAssertEqual(poster.posts.flatMap { $0 }, s.sheet.appliedOps, "every applied op was sent once, in order")
+    }
+}
+
+// Demo mode: the programme route is answered from DemoStretch, so the desk's opening and entries arrive and no notice is placed.
+@MainActor
+final class RunSheetDemoTests: XCTestCase {
+    func testDemoDeskWritesEntriesAndSaysNothingAboutItself() async {
+        let env = ChoirEnvironment.shared
+        let saved = (env.session, env.keys)
+        Demo.install(into: env)
+        defer { env.session = saved.0; env.keys = saved.1 }
+        let s = RunSheetStore(); let p = RunSheetPlayer(store: s); p.engine = FakeEngine()
+        let w = RunSheetWriter(store: s) { ProgrammeRouteFeed(source: RouteStretchSource(baseURL: ChoirEnvironment.defaultBaseURL)) }
+        w.open(); await w.settle()
+        let all = s.sheet.entries
+        XCTAssertGreaterThanOrEqual(all.filter { $0.placedBy == .desk }.count, 3, "\(all.map { "\($0.id):\($0.kind)" })")
+        XCTAssertEqual(all.filter { $0.placedBy == .phone }.count, 0, "no notice entry")
+        XCTAssertNil(w.notice)
     }
 }

@@ -54,15 +54,29 @@ public enum PhoneOpening {
         let h = calendar.component(.hour, from: now)
         return h < 5 ? "Good evening." : h < 12 ? "Good morning." : h < 18 ? "Good afternoon." : "Good evening."
     }
+    /// The first sentence of a dek, with no closing mark; "" when it only says the headline again.
+    static func lead(dek: String, title: String) -> String {
+        guard let first = BarTracker.sentences(dek.trimmingCharacters(in: .whitespacesAndNewlines)).first else { return "" }
+        let d = first.trimmingCharacters(in: CharacterSet(charactersIn: ".!? \n"))
+        let t = title.trimmingCharacters(in: CharacterSet(charactersIn: ".!? \n")).lowercased()
+        if d.isEmpty || d.lowercased().hasPrefix(t) || t.hasPrefix(d.lowercased()) { return "" }
+        return d
+    }
+    /// A signpost: the greeting, the first story with its dek once, then at most two more headlines by name. One story, two, many: each reads as
+    /// ordinary sentences ("A. Dek. Also: B; and C.") and no dek is read twice or in full.
     public static func entry(lines: [Line], now: Date = Date(), calendar: Calendar = .current) -> RunSheetEntry {
-        let named = lines.filter { !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        var seen = Set<String>()
+        let named = lines.filter { l in
+            let t = l.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            return !t.isEmpty && seen.insert(t.lowercased()).inserted
+        }
         var text = greeting(now, calendar: calendar) + " This is Autoradio."
         if let first = named.first {
             text += " From the paper's front page: " + sentence(first.title)
-            let dek = sentence(first.dek)
-            if !dek.isEmpty { text += " " + dek }
-            let rest = named.dropFirst().prefix(2).map { sentence($0.title) }
-            if !rest.isEmpty { text += " Also: " + rest.joined(separator: " ") }
+            let dek = lead(dek: first.dek, title: first.title)
+            if !dek.isEmpty { text += " " + sentence(dek) }
+            let rest = named.dropFirst().prefix(2).map { $0.title.trimmingCharacters(in: CharacterSet(charactersIn: ".!? \n")) }
+            if !rest.isEmpty { text += " Also: " + rest.joined(separator: "; and ") + "." }
         } else {
             text += " I don't have the front page yet."
         }
@@ -140,6 +154,7 @@ public final class ChoirApp: @unchecked Sendable {
                 return ProgrammeRouteFeed(source: me.stretchSource?() ?? RouteStretchSource(baseURL: me.frontBaseURL()))
             }
             me.writer = w
+            w.onNotice = { [weak me] n in me?.say(n ?? "") }
             p.aheadChanged = { [weak w] in w?.checkAhead() }
             RunSheetStore.shared.poster = RouteSheetPoster(baseURL: me.signIn.baseURL)
             RunSheetStore.shared.restore()                 // the pending ops of the last launch; nothing plays
@@ -175,7 +190,7 @@ public final class ChoirApp: @unchecked Sendable {
     /// that could not be made or could not speak.
     static let surfacedErrorStages: Set<String> = ["system1", "desk", "programme", "start", "voice"]
 
-    private func say(_ m: String) { lock.lock(); message = m; lock.unlock(); onChange?() }
+    func say(_ m: String) { lock.lock(); message = m; lock.unlock(); onChange?() }
 
     /// Plain words for the listener; the details stay in the Trace.
     static func plain(stage: String, message m: String) -> String {

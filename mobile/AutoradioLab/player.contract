@@ -129,14 +129,10 @@ component PlayerLayer
                   for src, k in ri.sources key=k
                     row align-items="center" min-height=28 testId=`player-source-${k}`
                       text src font-family=th.fontLabel font-size="-exact-footnote" color=th.muted line-clamp=1
-            if ri.next != ""
-              column gap=4 testId="player-next-passage"
-                SectionHeader(label="Next passage")
-                text ri.next font-family=th.fontText font-size="-exact-callout" line-height=1.4 color=th.muted line-clamp=3
-            // the programme: tap a row to jump
+            // the passages of the entry on air: tap one to go to it
             if ri.items.length > 0
               column gap=4 width="100%"
-                SectionHeader(label="Programme")
+                SectionHeader(label="Passages")
                 column gap=0
                   for it in ri.items key=it.i
                     button press=jumpTo(it.i) testId=`player-item-${it.i}` appearance="none" width="100%"
@@ -158,7 +154,7 @@ component PlayerLayer
                 row width=44 height=44 align-items="center" justify-content="center"
                   image "symbol:skip-back-15" color=th.fg
             else
-              button press=previous testId="player-prev" aria-label="Previous passage" appearance="none" width=44 height=44
+              button press=previous testId="player-prev" aria-label="Previous" appearance="none" width=44 height=44
                 row width=44 height=44 align-items="center" justify-content="center"
                   image "symbol:sf/backward.fill" color=th.fg
             button press=radioPlay testId="player-play" aria-label=(ri.playing ? "Pause" : "Play") appearance="none" width=60 height=60
@@ -172,7 +168,7 @@ component PlayerLayer
                 row width=44 height=44 align-items="center" justify-content="center"
                   image "symbol:skip-forward-15" color=th.fg
             else
-              button press=next testId="player-next" aria-label="Next passage" appearance="none" width=44 height=44
+              button press=next testId="player-next" aria-label="Next" appearance="none" width=44 height=44
                 row width=44 height=44 align-items="center" justify-content="center"
                   image "symbol:sf/forward.fill" color=th.fg
             button press=nextStory testId="player-next-story" aria-label="Next story" appearance="none" width=44 height=44
