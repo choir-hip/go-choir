@@ -46,7 +46,7 @@ Then the worker would not run where it was designed to run. The build machine ha
 
 The result is real. The worker recorded one hundred and eighty three episodes from sixty one shows and transcribed them at about forty five times real time. In two passes an agent read four hundred and seventeen ranked candidates and passed thirty. I wrote twenty eight, the server refused none, and the public route now serves twenty six clips for eleven front page stories, from nine shows. On the phone, the story about the aviation ground stop shows a passage from Up First under the words "Hear it".
 
-What I cannot tell you is whether the host picks a clip in its mix. That needs a signed in session, and my simulator runs were signed out.
+And the host does mix them in. On the drill computer I asked for a stretch of radio with ten stories, four of them offering clips. It wrote fifteen segments and chose three clips, each placed straight after its story with a spoken lead in. After the ground stop story it said, "Here is how Up First described the moment the order came." What I have not seen is the phone playing that stretch while signed in, because my simulator runs were signed out.
 
 ## The paper, through the night
 
@@ -86,6 +86,6 @@ Problem records written tonight, all under `docs/problems/`:
 
 Goal file: `docs/definitions/choir-autoradio-full-experience-overnight-2026-11-15.md`, with its ledger beside it.
 
-Not built or not verified: sound, voice and clips on the device; the host choosing a clip while signed in; the Reader with a real book; opening a file from another app; captions fetched on the device from video sites (design only); the search step with Exa (not started, nothing spent); automatic matching; subscription intake; the worker as a durable service. One feed address that carried a public app identifier was removed from the seed list but remains in git history. The Jev call volume from the paper is about three hundred an hour, which I did not examine. Other gates may run only on the server and not in the landing script; I did not compare them one by one.
+Not built or not verified: sound, voice and clips on the device; the phone playing a stretch with clips while signed in (the server side is proven: three clip segments of fifteen, script  beside the queue script); the Reader with a real book; opening a file from another app; captions fetched on the device from video sites (design only); the search step with Exa (not started, nothing spent); automatic matching; subscription intake; the worker as a durable service. One feed address that carried a public app identifier was removed from the seed list but remains in git history. The Jev call volume from the paper is about three hundred an hour, which I did not examine. Other gates may run only on the server and not in the landing script; I did not compare them one by one.
 
 Rollback for each server change is a revert of its commits; the inline body reader is roll forward only, as its commit says.
