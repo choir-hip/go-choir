@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/autoradioqueue"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 )
 
@@ -69,6 +71,13 @@ import (
 //     whole, with no queue line (the fence counts at a line start, before a "[");
 // 22. text after the ops array does not drop the ops, and no failure line is
 //     spoken for them.
+//
+// Round 3 (068f5f61b):
+//
+// 23. the fence indented by spaces or a tab, or followed by a code fence, is
+//     still the ops fence, at every chunk split (autoradioqueue's sweep);
+// 24. a sentence that is the ops array or carries the fence token is never
+//     spoken on a queue turn (the last guard); a turn with no queue is untouched.
 
 const queueSnap = `{"version":7,"current":{"id":"q12","item":{"kind":"story","route":"front","title":"Strike in Nancy"},"position_seconds":4.5},` +
 	`"upcoming":[{"id":"q13","item":{"kind":"audio","url":"https://e.test/a.mp3","title":"Harbour talks","show":"Up First"},"added_by":"dj"},` +
@@ -152,7 +161,7 @@ func TestAutoradioQueueOnlyTheExactFenceStartsTheOps(t *testing.T) {
 	for name, reply := range map[string]string{
 		"quote":       "The sign says: <<< keep left. That is all.",
 		"page fence":  "The page is fenced as <<<AR0123456789abcdef page>>> and so on.",
-		"end queue":   "Closing with " + strings.Replace(queueFence, " queue>>>", " end queue>>>", 1) + " is not it.",
+		"end queue":   "Closing with " + strings.Replace(queueFence, " queue>>>", " end queue>>>", 1) + " is not it. Fine.",
 		"other token": "Fine. <<<AR0000000000000000 queue>>> " + moveOps,
 		"echo":        "To move it I would end with " + queueFence + " and then the ops. The long read is next in your queue.",
 	} {
@@ -164,7 +173,16 @@ func TestAutoradioQueueOnlyTheExactFenceStartsTheOps(t *testing.T) {
 				t.Errorf("(16) %s: a correction was spoken: %q", name, got)
 			}
 		}
-		if !strings.Contains(got, "<<<") || len(queueOpsOf(evs)) != 0 {
+		// the exact echo's own sentence carries the token and is not spoken (the
+		// last guard); the rest of the answer is
+		want := "<<<"
+		switch name {
+		case "echo":
+			want = "The long read is next in your queue."
+		case "end queue":
+			want = "Fine."
+		}
+		if !strings.Contains(got, want) || len(queueOpsOf(evs)) != 0 {
 			t.Errorf("(16) %s: speech %q ops %d", name, got, len(queueOpsOf(evs)))
 		}
 	}
@@ -472,6 +490,32 @@ func TestAutoradioQueueOpsThatCannotApplyAreSaidNotSilentlyDropped(t *testing.T)
 		}
 	}
 }
+
+// Last guard: whatever the cut let through, a sentence that is the ops array or
+// carries the fence token is never spoken on a queue turn.
+func TestAutoradioQueueNeverSpeaksTheOpsArrayOrTheToken(t *testing.T) {
+	rec := httptest.NewRecorder()
+	req := autoradioRequest{TurnID: "t-g", Page: autoradioPage{Address: "a", Title: "t", Text: "x"}}
+	snap, _ := autoradioqueue.ParseSnapshot([]byte(`{"version":1}`))
+	req.queue = &snap
+	turn := &autoradioTurn{w: rec, req: req, queue: autoradioqueue.New(snap, nil)}
+	token := autoradioFenceToken(req.Page)
+	for _, s := range []string{`[{"op":"clear","reason":"r"}]`, `  [{"op": "move"}]`, "see " + token + " here", queueFenceFor(req.Page)} {
+		turn.speak(s)
+	}
+	turn.speak("A real sentence.")
+	if len(turn.sentences) != 1 || turn.sentences[0] != "A real sentence." {
+		t.Fatalf("spoken %q", turn.sentences)
+	}
+	// a turn with no queue is untouched by the guard
+	plain := &autoradioTurn{w: httptest.NewRecorder(), req: req}
+	plain.speak(`[{"op":"clear"}]`)
+	if len(plain.sentences) != 1 {
+		t.Fatalf("the guard ran on a turn with no queue")
+	}
+}
+
+func queueFenceFor(p autoradioPage) string { return autoradioqueueFence(p) }
 
 func TestAutoradioQueueTextAfterTheArrayKeepsTheOps(t *testing.T) {
 	rt, _ := radioRuntime(t, okAnswer(fenced("Okay, the long read is next.", moveOps+" and that is all.")))

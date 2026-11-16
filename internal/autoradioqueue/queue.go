@@ -512,8 +512,10 @@ func (d *Desk) applyOne(m modelOp) error {
 // Cut separates the model's spoken reply from the queue ops it appends after
 // the request's fence line. The fence is exactly "<<<" + token + " queue>>>"
 // (the route puts that line in the request and tells the model to end with it),
-// and it counts only when it starts a line and the next thing after it, past
-// blank space, is "[" (the ops array) or "{" (a malformed one, never read aloud). Anything else is speech, released whole:
+// and it counts only when it starts a line (after a newline or the start of the
+// stream, spaces and tabs aside) and the next thing after it, past blank space,
+// is "[" (the ops array), "{" (a malformed one, never read aloud) or a code
+// fence "```" around the array. Anything else is speech, released whole:
 // text the model quotes from the page, any other "<<<", and the exact line
 // itself when the model merely echoes it in a sentence. It reads the stream as
 // it arrives and holds back only what could still become the fence, plus the
@@ -521,7 +523,7 @@ func (d *Desk) applyOne(m modelOp) error {
 type Cut struct {
 	fence     string
 	pending   string
-	lineStart bool // the byte before pending is a newline, or the stream just began
+	lineStart bool // what came before pending is the stream's start, or a newline and then only spaces and tabs
 	fenced    bool
 	ops       strings.Builder
 }
@@ -532,6 +534,17 @@ func FenceLine(token string) string { return "<<<" + token + " queue>>>" }
 // NewCut reads a stream for the fence of token.
 func NewCut(token string) *Cut { return &Cut{fence: FenceLine(token), lineStart: true} }
 
+// atLineStart reports whether position p in pending starts a line.
+func (c *Cut) atLineStart(p int) bool {
+	for p > 0 && (c.pending[p-1] == ' ' || c.pending[p-1] == '\t') {
+		p--
+	}
+	if p == 0 {
+		return c.lineStart
+	}
+	return c.pending[p-1] == '\n'
+}
+
 // findFence is the index in pending of a fence that starts a line, or -1.
 func (c *Cut) findFence() int {
 	for from := 0; from < len(c.pending); {
@@ -540,7 +553,7 @@ func (c *Cut) findFence() int {
 			return -1
 		}
 		p := from + k
-		if (p == 0 && c.lineStart) || (p > 0 && c.pending[p-1] == '\n') {
+		if c.atLineStart(p) {
 			return p
 		}
 		from = p + 1
@@ -550,8 +563,13 @@ func (c *Cut) findFence() int {
 
 // emit returns out as speech and remembers whether it ended a line.
 func (c *Cut) emit(out string) string {
-	if out != "" {
-		c.lineStart = out[len(out)-1] == '\n'
+	if out == "" {
+		return out
+	}
+	if k := strings.LastIndexByte(out, '\n'); k >= 0 {
+		c.lineStart = strings.Trim(out[k+1:], " \t") == ""
+	} else {
+		c.lineStart = c.lineStart && strings.Trim(out, " \t") == ""
 	}
 	return out
 }
@@ -572,12 +590,13 @@ func (c *Cut) Push(delta string) string {
 		rest := c.pending[i+len(c.fence):]
 		next := strings.TrimLeft(rest, " \t\r\n")
 		switch {
-		case next == "":
-			// the fence, and nothing yet to say what it is: hold it
+		case next == "" || (len(next) < 3 && strings.HasPrefix("```", next)):
+			// the fence, and not yet enough to say what follows it: hold it
 			out.WriteString(c.emit(c.pending[:i]))
 			c.pending = c.pending[i:]
 			return out.String()
-		case next[0] == '[' || next[0] == '{': // an object is a malformed array: dropped and said, never read aloud
+		case next[0] == '[' || next[0] == '{' || strings.HasPrefix(next, "```"):
+			// an object is a malformed array: dropped and said, never read aloud
 			out.WriteString(c.emit(c.pending[:i]))
 			c.ops.WriteString(next)
 			c.pending, c.fenced = "", true
@@ -590,7 +609,7 @@ func (c *Cut) Push(delta string) string {
 	keep := 0
 	for k := min(len(c.fence)-1, len(c.pending)); k > 0; k-- {
 		at := len(c.pending) - k
-		if strings.HasSuffix(c.pending, c.fence[:k]) && ((at == 0 && c.lineStart) || (at > 0 && c.pending[at-1] == '\n')) {
+		if strings.HasSuffix(c.pending, c.fence[:k]) && c.atLineStart(at) {
 			keep = k
 			break
 		}
