@@ -89,7 +89,7 @@ component PodcastsHome
             EmptyState(message="Loading your podcasts…", detail="", testId="podcasts-loading")
         if podHome.status == "empty"
           Emerge(delay=0)
-            EmptyState(message="No podcasts yet", detail=podHome.message, testId="podcasts-empty")
+            EmptyState(message="Search for a show above and subscribe: its episodes will be here.", detail="", testId="podcasts-empty")
         if podHome.shows.length > 0
           Emerge(delay=0)
             column gap=8 width="100%"
@@ -152,12 +152,12 @@ component PodcastShowPage
         Emerge(delay=0)
           PageHeader(title=title, subtitle="", subId="podcast-sub")
         Emerge(delay=0)
-          EmptyState(message="Opening the show…", detail="Reading its feed.", testId="podcast-loading")
+          EmptyState(message="Opening the show…", detail="", testId="podcast-loading")
       if podShow.status == "error"
         Emerge(delay=0)
           PageHeader(title=(podShow.title != "" ? podShow.title : title), subtitle="", subId="podcast-sub")
         Emerge(delay=0)
-          EmptyState(message="This show could not be opened", detail=podShow.message, testId="podcast-error")
+          EmptyState(message=(podShow.message != "" ? podShow.message : "This show could not be opened"), detail="", testId="podcast-error")
             button press=retryPodcasts testId="podcast-retry" appearance="none"
               PodAction(label="Try again", icon="", strong=false)
       if podShow.status == "ready" or podShow.status == "empty"
@@ -179,7 +179,7 @@ component PodcastShowPage
             if podShow.summary != ""
               text podShow.summary testId="podcast-summary" font-family=th.fontRead font-size=17 line-height=1.45 color=th.fg line-clamp=5
         if podShow.status == "empty"
-          EmptyState(message="No episodes yet", detail=podShow.message, testId="podcast-empty")
+          EmptyState(message="No episodes yet.", detail="", testId="podcast-empty")
         // lane autoradio-joins: clips the platform cut from stories out of this show's episodes; nothing is drawn when there are none
         if shClips.rows.length > 0
           Emerge(delay=60)
@@ -220,12 +220,12 @@ component PodcastEpisodePage
         Emerge(delay=0)
           PageHeader(title=title, subtitle="", subId="podcast-sub")
         Emerge(delay=0)
-          EmptyState(message="Opening the episode…", detail="Reading the show's feed.", testId="podcast-loading")
+          EmptyState(message="Opening the episode…", detail="", testId="podcast-loading")
       if podEp.status == "error"
         Emerge(delay=0)
           PageHeader(title=title, subtitle="", subId="podcast-sub")
         Emerge(delay=0)
-          EmptyState(message="This episode could not be opened", detail=podEp.message, testId="podcast-error")
+          EmptyState(message=(podEp.message != "" ? podEp.message : "This episode could not be opened"), detail="", testId="podcast-error")
             button press=retryPodcasts testId="podcast-retry" appearance="none"
               PodAction(label="Try again", icon="", strong=false)
       if podEp.status == "ready"

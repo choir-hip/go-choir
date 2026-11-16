@@ -3,7 +3,7 @@
 // reads fixtures/demo/changelog.json; live it is GET /api/changelog (kit: ActivityFeed.swift). A row with a document or a route opens it
 // as a page. testIds: activity-refresh, activity-section-<name>, activity-row-<id>, activity-status, activity-empty.
 use Theme, ThemeExtras, ActivityInfo, ActivityItem from "@choir/autoradio"
-use ToolScroll, Card, Btn from "./ui.contract"
+use ToolScroll, Card, Btn, PlainList from "./ui.contract"
 use SectionLabel, Hairline, ScreenTitle from "./settings.contract"
 
 component ActivityPage
@@ -41,7 +41,7 @@ component ActivitySection
     column gap=8 width="100%"
       if items.length > 0
         SectionLabel(label=label)
-        Card(level=1, testId=testId, minHeight=0)
+        PlainList(testId=testId)
           column width="100%"
             for ev, i in items key=ev.id
               column width="100%"
@@ -72,7 +72,7 @@ component ActivityBody
     ev: ActivityItem
     opens: bool
   view
-    row gap=12 align-items="flex-start" width="100%" box-sizing="border-box" padding="12px 16px"
+    row gap=12 align-items="flex-start" width="100%" box-sizing="border-box" padding="12px 0px"
       box width=3 height=18 margin-top=3 background-color=(ev.unseen ? th.accent : "transparent")
       column flex=1 min-width=0 gap=3 align-items="flex-start"
         row gap=8 width="100%" align-items="flex-start"

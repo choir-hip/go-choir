@@ -8,7 +8,7 @@
 // paper-edition-<big|even|thin|default>, paper-signin, paper-status.
 use Theme, ChoirAuth, DemoInfo, PaperFront, PaperBand, PaperItem from "@choir/autoradio"
 use paperFront from "@choir/autoradio"
-use Card, Btn, BarClear, sectionName, SegmentedTrack, SegmentFace, ChoiceWord, Emerge from "./ui.contract"
+use Card, CardFill, Btn, BarClear, sectionName, SegmentedTrack, SegmentFace, ChoiceWord, Emerge from "./ui.contract"
 use FirstRunCard from "./onboarding.contract"
 
 // A headline with its dek and meta, as one story. `kicker` shows the section above, `listen` the play-from-here button.
@@ -23,7 +23,7 @@ component Story
     kicker: bool
     listen: bool
   view
-    column gap=6 align-items="flex-start" width="100%"
+    column gap=6 align-items="flex-start" width="100%" flex=1
       if kicker
         text sectionName(s.section) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
       button press=openPage(`pub:${s.route}`, s.title) appearance="none" testId=`paper-story-${s.route}` width="100%"
@@ -36,6 +36,7 @@ component Story
       if s.entityLabels != ""
         text s.entityLabels font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
       if listen
+        box flex=1
         // the one rule for a card's actions at every width: an icon and one short word on one line each (the full words are the aria labels)
         row gap=12 align-items="center"
           button press=playStory(s.route) appearance="none" testId=`paper-play-${s.route}` aria-label=`Play from ${s.title}` flex-shrink=0
@@ -120,8 +121,9 @@ component Band
         row gap=12 width="100%" align-items="stretch" testId=`paper-band-${b.id}`
           for s in b.items key=s.route
             column flex=1 min-width=0
-              Card(level=1, testId=`paper-pair-${s.route}`, minHeight=0)
-                column padding=14 gap=8 width="100%" box-sizing="border-box"
+              // cards in a row are as tall as the tallest, and each card's actions sit at its bottom, so they are in the same place
+              CardFill(level=1, testId=`paper-pair-${s.route}`, minHeight=0)
+                column padding=14 gap=8 width="100%" box-sizing="border-box" flex=1
                   Story(s=s, kicker=true, listen=true)
       if b.module == "pair" and b.side == false
         column gap=12 width="100%" testId=`paper-band-${b.id}`

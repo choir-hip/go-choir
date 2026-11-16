@@ -4,7 +4,7 @@
 // testIds: reader-import, reader-list, reader-row-<id>, reader-empty, reader-note, doc-find, doc-read, doc-queue, doc-toc,
 // doc-chapter-<n>, doc-prev, doc-next, doc-mode, doc-block-<n>, doc-hit-<n>, doc-remove, doc-frame, page-title on every page.
 use Theme, PageList, ShelfListing, ShelfDocInfo, ShelfChapter, ShelfFind, ShelfFollowInfo, ShelfBlock from "@choir/autoradio"
-use PageScroll, BarClear, Emerge, PageHeader, SectionHeader, RowRule, ListGroup, ListRow, ChipFace, Btn, SegmentedTrack, SegmentFace, EmptyState from "./ui.contract"
+use PageScroll, BarClear, Emerge, PageHeader, SectionHeader, RowRule, PlainList, LineRow, ChipFace, Btn, SegmentedTrack, SegmentFace, EmptyState from "./ui.contract"
 
 component BooksPage
   inject
@@ -22,7 +22,7 @@ component BooksPage
         text lbNote testId="reader-note" font-family=th.fontUi font-size=15 color=th.muted
       if lbList.status == "empty"
         Emerge(delay=th.staggerMs)
-          EmptyState(message="Nothing here yet", detail=lbList.message, testId="reader-empty")
+          EmptyState(message="Add an EPUB or PDF to read it here, hear it read aloud and search it.", detail="", testId="reader-empty")
             button press=lbImport testId="reader-import" appearance="none" aria-label="Add an EPUB or PDF"
               Btn(label="Add an EPUB or PDF", primary=false, wide=false)
       if lbList.status == "ready"
@@ -30,12 +30,12 @@ component BooksPage
           button press=lbImport testId="reader-import" appearance="none" aria-label="Add an EPUB or PDF"
             Btn(label="Add an EPUB or PDF", primary=false, wide=false)
         Emerge(delay=(2 * th.staggerMs))
-          ListGroup(testId="reader-list")
+          PlainList(testId="reader-list")
             for r, i in lbList.rows key=r.id
               if i > 0
-                RowRule(indent=16)
+                RowRule(indent=0)
               button press=openPage(r.address, r.title) testId=`reader-row-${r.id}` appearance="none" width="100%" aria-label=`Open ${r.title}`
-                ListRow(label=r.title, detail=r.detail, trailing="", chevron=true)
+                LineRow(label=r.title, detail=r.detail, trailing="", chevron=true)
       // The system file picker (Add) opens this input; its copy lands under app:/tmp/picked.
       input type="file" id="lib-pick" change=lbPicked aria-label="Choose an EPUB or PDF to add" width=1 height=1 opacity=0
 
@@ -99,12 +99,12 @@ component DocFind
         if ldFound.hits.length == 0
           text ldFound.message testId="doc-find-none" font-family=th.fontUi font-size=15 color=th.muted
         else
-          ListGroup(testId="doc-hits")
+          PlainList(testId="doc-hits")
             for h, i in ldFound.hits key=h.block
               if i > 0
-                RowRule(indent=16)
+                RowRule(indent=0)
               button press=ldJump(h.section, h.block) testId=`doc-hit-${h.block}` appearance="none" width="100%" aria-label=`Go to ${h.label}`
-                ListRow(label=h.label, detail=h.snippet, trailing="", chevron=false)
+                LineRow(label=h.label, detail=h.snippet, trailing="", chevron=false)
 
 component DocPage
   inject
@@ -146,12 +146,12 @@ component DocPage
         if ldToc
           // The pages that have text, as a list to jump to.
           scroll flex=1 min-height=0 overflow-x="hidden" width="100%" margin-bottom="calc(env(safe-area-inset-bottom) + 150px)"
-            ListGroup(testId="doc-contents")
+            PlainList(testId="doc-contents")
               for s, i in ldInfo.sections key=s.index
                 if i > 0
-                  RowRule(indent=16)
+                  RowRule(indent=0)
                 button press=ldGo(s.index) testId=`doc-chapter-${s.index}` appearance="none" width="100%"
-                  ListRow(label=s.title, detail="", trailing=(s.index == ldSec ? "Here" : ""), chevron=false)
+                  LineRow(label=s.title, detail="", trailing=(s.index == ldSec ? "Here" : ""), chevron=false)
         else if ldFind != ""
           scroll flex=1 min-height=0 overflow-x="hidden" width="100%" margin-bottom="calc(env(safe-area-inset-bottom) + 150px)"
             DocFind()
@@ -180,12 +180,12 @@ component DocPage
           DocActions()
         DocFind()
         if ldToc
-          ListGroup(testId="doc-contents")
+          PlainList(testId="doc-contents")
             for s, i in ldInfo.sections key=s.index
               if i > 0
-                RowRule(indent=16)
+                RowRule(indent=0)
               button press=ldGo(s.index) testId=`doc-chapter-${s.index}` appearance="none" width="100%"
-                ListRow(label=s.title, detail="", trailing=(s.index == ldSec ? "Here" : ""), chevron=false)
+                LineRow(label=s.title, detail="", trailing=(s.index == ldSec ? "Here" : ""), chevron=false)
         else
           SectionHeader(label=ldChap.title)
           Emerge(delay=0)

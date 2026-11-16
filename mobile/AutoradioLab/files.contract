@@ -5,7 +5,7 @@
 // files-crumb-<path>, files-row-<path>, files-more-<path>, files-rename-input, files-rename-go, files-delete-<path>,
 // files-new-toggle, files-new-input, files-new-go, files-upload, files-banner, files-list, files-empty; page-title on every page.
 use Theme, FileListing, FileInfo, FileRow from "@choir/autoradio"
-use PageScroll, Card, RowRule from "./ui.contract"
+use PageScroll, Card, RowRule, PlainList from "./ui.contract"
 use Chip, ChoiceChip, NoPreview, ImageViewer, VideoViewer, AudioViewer, PdfViewer, EpubViewer, TextViewer, CsvViewer from "./viewers.contract"
 
 component FilePage
@@ -46,7 +46,7 @@ component RowBody
   props
     item: FileRow
   view
-    row width="100%" align-items="center" gap=14 padding="10px 0 10px 16px" min-height=56
+    row width="100%" align-items="center" gap=14 padding="10px 0 10px 0" min-height=56
       image item.symbol width=26 height=26 color=(item.isDir ? th.accent : th.muted) flex-shrink=0
       column flex=1 min-width=0 gap=2 align-items="flex-start"
         text item.name font-family=th.fontUi font-size=17 color=th.fg text-align="left" line-clamp=1
@@ -78,7 +78,7 @@ component FileRowItem
         button press=fsSelect(item.path, item.name) testId=`files-more-${item.path}` aria-label=`Actions for ${item.name}` appearance="none" width=44 height=44 flex-shrink=0
           image "symbol:sf/ellipsis" color=th.muted
       if fsSel == item.path
-        column padding="0 16px 14px 16px" gap=10
+        column padding="0 0 14px 0" gap=10
           input value=fsRenameText input=fsEditName submit=fsRename placeholder="New name" aria-label="New name" testId="files-rename-input"
             font-family=th.fontUi font-size=16 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
           RowRule(indent=0)
@@ -88,7 +88,7 @@ component FileRowItem
               row min-height=44 align-items="center"
                 text "Delete" font-family=th.fontUi font-size=15 font-weight=600 color=th.danger
       if not last
-        box height=1 margin-left=56 background-color=th.rule opacity=0.35
+        box height=1 margin-left=40 background-color=th.rule opacity=0.35
 
 component FileTile
   inject
@@ -191,7 +191,7 @@ component FilesPlace
       if fsList.status == "empty"
         text fsList.message font-family=th.fontUi font-size=15 color=th.muted testId="files-empty"
       if fsList.status == "ready" and fsGrid == false
-        Card(level=1, testId="files-list", minHeight=0)
+        PlainList(testId="files-list")
           column width="100%" padding="4px 0"
             for r, i in fsList.rows key=r.path
               FileRowItem(item=r, last=(i == fsList.rows.length - 1))

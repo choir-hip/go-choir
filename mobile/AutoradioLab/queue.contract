@@ -1,9 +1,9 @@
 // The queue's screens (lane autoradio-queue): "Up next" and the audio controls in the expanded player, and the page a URL typed in the bar
-// opens in place. Built from the design components in ui.contract (SectionHeader, ListGroup, RowRule, EmptyState).
+// opens in place. Built from the design components in ui.contract (SectionHeader, PlainList, RowRule, EmptyState).
 // testIds: queue-audio, queue-elapsed, queue-remaining, queue-scrub, player-keep, queue-up-next, queue-row-<i>, queue-remove-<i>,
 // queue-note-<i>, queue-empty, bar-web, bar-web-close, bar-web-read, bar-web-add, bar-web-host.
 use Theme, QueueInfo from "@choir/autoradio"
-use Card, Btn, SectionHeader, ListGroup, RowRule, EmptyState, BarClear, sentence from "./ui.contract"
+use Card, Btn, SectionHeader, PlainList, RowRule, EmptyState, BarClear, sentence from "./ui.contract"
 
 // The scrubber of remote audio, under the player's title: elapsed, the track, remaining. Dragged like the speed slider (the move is relative,
 // the position is sent when the finger lifts). The track is the width less 120 (`scrubMove` in members-queue.contract).
@@ -63,15 +63,15 @@ component UpNext
     column gap=8 testId="queue-up-next" width="100%"
       SectionHeader(label=(qv.upcoming.length > 0 ? `Up next · ${qv.upcoming.length}` : "Up next"))
       if qv.upcoming.length == 0
-        EmptyState(message="Nothing queued", detail="Add a story, a page or a podcast and it plays after this.", testId="queue-empty")
+        EmptyState(message="Nothing queued: add a story, a page or a podcast and it plays after this.", detail="", testId="queue-empty")
       else
-        ListGroup(testId="queue-list")
+        PlainList(testId="queue-list")
           for r, k in qv.upcoming key=r.id
             if k > 0
-              RowRule(indent=16)
+              RowRule(indent=0)
             row align-items="center" width="100%"
               button press=queueDo("playAt", `${r.i}`) testId=`queue-row-${r.i}` appearance="none" flex=1 min-width=0 aria-label=`Play ${r.title} now`
-                column gap=2 align-items="flex-start" width="100%" box-sizing="border-box" min-height=52 justify-content="center" padding="8px 0px 8px 16px"
+                column gap=2 align-items="flex-start" width="100%" box-sizing="border-box" min-height=52 justify-content="center" padding="8px 0px 8px 0px"
                   text r.title font-family=th.fontUi font-size=17 font-weight=600 color=th.fg text-align="left" line-clamp=2
                   // one quiet caption (one size): what it is (the show for audio, else the kind) and why it is here (the DJ's reason, else who added it)
                   text `${r.detail != "" ? r.detail : sentence(r.kind)} · ${r.note != "" ? r.note : r.by}` testId=`queue-note-${r.i}` font-family=th.fontUi font-size=13 color=th.muted text-align="left" line-clamp=2
@@ -81,9 +81,9 @@ component UpNext
       // lane autoradio-joins: the DJ's own coming segments, after the reader's queued items. Quiet: no remove, no press (they are not in the queue).
       if qv.coming.length > 0
         column gap=0 width="100%" testId="queue-coming" margin-top=8
-          text "Coming up on the programme" font-family=th.fontUi font-size=12 font-weight=600 letter-spacing=0.6 color=th.muted padding="0px 0px 4px 16px"
+          text "Coming up on the programme" font-family=th.fontUi font-size=12 font-weight=600 letter-spacing=0.6 color=th.muted padding="0px 0px 4px 0px"
           for r, k in qv.coming key=k
-            column width="100%" box-sizing="border-box" min-height=36 justify-content="center" padding="4px 0px 4px 16px" testId=`queue-coming-${k}`
+            column width="100%" box-sizing="border-box" min-height=36 justify-content="center" padding="4px 0px 4px 0px" testId=`queue-coming-${k}`
               text r.title font-family=th.fontUi font-size=15 color=th.muted text-align="left" line-clamp=1
 
 keyframes barWebGrow

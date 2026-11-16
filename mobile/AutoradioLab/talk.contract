@@ -19,8 +19,11 @@ component ConversationPage
       ScreenTitle(label="Conversation", back=false)
       if cv.empty
         text "Nothing asked yet. Type in the bar, or turn the voice on and ask." testId="conversation-empty" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted
-      for r in cv.rows key=r.id
-        ConversationEntryCard(r=r)
+      for r, i in cv.rows key=r.id
+        column width="100%"
+          if i > 0
+            Hairline()
+          ConversationEntryCard(r=r)
 
 component ConversationEntryCard
   inject
@@ -30,8 +33,8 @@ component ConversationEntryCard
   props
     r: ConversationRow
   view
-    Card(level=1, testId=`conversation-row-${r.id}`, minHeight=0)
-      column width="100%" gap=8 box-sizing="border-box" padding="12px 16px"
+    column testId=`conversation-row-${r.id}` width="100%"
+      column width="100%" gap=8 box-sizing="border-box" padding="12px 0px"
         text r.question font-family=th.fontUi font-size=tx.sizeLabel font-weight=700 color=th.fg
         if r.answer != ""
           text r.answer font-family=th.fontRead font-size=tx.sizeLabel line-height=1.4 color=th.fg

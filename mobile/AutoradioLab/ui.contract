@@ -51,6 +51,20 @@ component Card
       box-shadow=(level >= 3 ? th.shadow3 : level == 2 ? th.shadow2 : th.shadow1)
       children
 
+// A Card that fills the height its parent gives it (a card in a row of cards, whose cards should be as tall as the tallest): the same surface as Card.
+component CardFill
+  inject
+    th: Theme
+  props
+    level: number
+    testId: string
+    minHeight: number
+  slot
+  view
+    column testId=testId position="relative" flex=1 min-height=minHeight border-radius=th.radiusCard background-color=th.paper2
+      box-shadow=(level >= 3 ? th.shadow3 : level == 2 ? th.shadow2 : th.shadow1)
+      children
+
 component Layer
   inject
     th: Theme

@@ -417,7 +417,8 @@ final class OnboardingController: @unchecked Sendable {
         }
         let picked = session?.topics ?? []
         var card = "", cardBody = ""
-        if progress.editionDone { card = "" }
+        // the prompt is gone once the edition is made or the reader has skipped it ("Not now": a saved skip), and starting setup again brings it back
+        if progress.editionDone || progress.skipped { card = "" }
         else if progress.topicsStarted == true { card = "Choose your topics"; cardBody = "Pick up where you left off. What you chose is saved." }
         else if setup?.isStarted == true && setup?.isFinished == false { card = "Finish voice setup"; cardBody = "Setting up the voice on this phone takes a few minutes." }
         else { card = "Make your edition"; cardBody = "Pick the topics you care about, then your paper is yours." }

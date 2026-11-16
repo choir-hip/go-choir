@@ -53,8 +53,9 @@ component MailNotice
     retry: bool
   view
     column testId=testId gap=8 padding="24px 0" align-items="flex-start"
-      text title font-family=th.fontRead font-size=20 font-weight=700 color=th.fg
-      text body font-family=th.fontUi font-size=16 color=th.muted line-height=1.4
+      text title font-family=th.fontRead font-size=(body == "" ? 18 : 20) font-weight=(body == "" ? 400 : 700) color=th.fg
+      if body != ""
+        text body font-family=th.fontUi font-size=16 color=th.muted line-height=1.4
       if retry
         button press=retryMail testId="mail-retry" appearance="none"
           Btn(label="Try again", primary=false, wide=false)
@@ -83,11 +84,11 @@ component MailboxPage
             button press=openPage(f.address, `Mail · ${f.label}`) testId=`mail-folder-${f.name}` appearance="none" padding="0px 12px 0px 0px"
               ChoiceWord(label=(f.badge == "" ? f.label : `${f.label} ${f.badge}`), selected=f.current)
       if here == false
-        MailNotice(testId="mail-loading", title="Loading your mail…", body="Asking your computer for the latest messages.", retry=false)
+        MailNotice(testId="mail-loading", title="Loading your mail…", body="", retry=false)
       if here and mbx.status == "empty"
-        MailNotice(testId="mail-empty", title="Nothing here", body=mbx.message, retry=false)
+        MailNotice(testId="mail-empty", title=(mbx.message != "" ? mbx.message : "Nothing here"), body="", retry=false)
       if here and mbx.status == "error"
-        MailNotice(testId="mail-error", title="Your mail could not be opened", body=mbx.message, retry=true)
+        MailNotice(testId="mail-error", title=(mbx.message != "" ? mbx.message : "Your mail could not be opened"), body="", retry=true)
       if here and mbx.status == "offline"
         MailNotice(testId="mail-offline", title=(mbx.cached ? "Offline: showing what was last loaded" : "You are offline"), body=mbx.message, retry=true)
       if rowsShown
@@ -302,4 +303,4 @@ component MailPage
       if isCompose == false and isMessage == false
         PageScroll(id="mail-loading-page")
           text title role="heading" aria-level=1 font-family=th.fontRead font-size=28 font-weight=700 testId="page-title"
-          MailNotice(testId="mail-loading", title="Opening…", body="Asking your computer for this message.", retry=false)
+          MailNotice(testId="mail-loading", title="Opening…", body="", retry=false)

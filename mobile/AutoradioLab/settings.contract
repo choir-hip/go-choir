@@ -14,7 +14,7 @@
 //   settings-about-*, settings-voice-components.
 // Every colour, face, radius and shadow is a theme token (th.*, tx.*); a theme's own preview card paints from the card's data.
 use Theme, ThemeList, DemoInfo, ThemeCard, ThemeExtras, SettingsAccount, SettingsComputer, SettingRowInfo, LearnedInfo, AboutInfo, ThemeCards, SettingRows, ChoirAuth, VoiceProfile from "@choir/autoradio"
-use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace, SelectMark, RowRule from "./ui.contract"
+use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace, SelectMark, RowRule, PlainList from "./ui.contract"
 use VoiceCardsList from "./voice.contract"
 
 component SettingsPage
@@ -84,7 +84,7 @@ component NavRow
     subtitle: string
     testId: string
   view
-    button press=openPage(address, title) testId=testId appearance="none" width="100%" box-sizing="border-box" padding="14px 16px"
+    button press=openPage(address, title) testId=testId appearance="none" width="100%" box-sizing="border-box" padding="14px 0px"
       row align-items="center" gap=12 width="100%"
         column flex=1 min-width=0 gap=2 align-items="flex-start"
           text title font-family=th.fontUi font-size=17 font-weight=600 color=th.fg
@@ -103,7 +103,7 @@ component FactRow
     mono: bool
     testId: string
   view
-    row width="100%" box-sizing="border-box" gap=12 padding="10px 16px" align-items="flex-start" justify-content="space-between"
+    row width="100%" box-sizing="border-box" gap=12 padding="10px 0px" align-items="flex-start" justify-content="space-between"
       text label font-family=th.fontUi font-size=tx.sizeLabel color=th.muted
       text value testId=testId font-family=(mono ? th.fontMono : th.fontUi) font-size=tx.sizeLabel color=th.fg text-align="right" flex=1 min-width=0 overflow-wrap="anywhere"
 
@@ -211,7 +211,7 @@ component RootScreen
     ToolScroll(id="settings")
       ScreenTitle(label="Settings", back=false)
       SectionLabel(label="Your edition")
-      Card(level=1, testId="settings-card-edition", minHeight=0)
+      PlainList(testId="settings-card-edition")
         NavRow(address="onboarding:edit", title="Edit my edition", subtitle="Topics you follow", testId="settings-edit-edition")
       SectionLabel(label="Appearance")
       ModePicker()
@@ -219,16 +219,16 @@ component RootScreen
         ThemePreview(t=t, compact=true)
       for p in tc.problems key=p
         text p testId="settings-theme-problems" font-family=th.fontMono font-size=12 color=th.danger
-      Card(level=1, testId="settings-card-appearance", minHeight=0)
+      PlainList(testId="settings-card-appearance")
         NavRow(address="settings:appearance", title="Appearance in detail", subtitle="Type, depth, a theme from a Texture", testId="settings-nav-appearance")
       text `Showing ${th.name} (${th.scheme})` testId="settings-current" font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
       SectionLabel(label="You and your computer")
-      Card(level=1, testId="settings-card-you", minHeight=0)
+      PlainList(testId="settings-card-you")
         NavRow(address="settings:account", title="Account and devices", subtitle=(acctInfo.handle == "" ? "Who is signed in on this phone" : acctInfo.handle), testId="settings-nav-account")
         Hairline()
         NavRow(address="settings:computer", title="Computer", subtitle=(cmpt.updateAvailable ? "An update is waiting" : (cmpt.state == "" ? "Status, wake, restart to update" : cmpt.state)), testId="settings-nav-computer")
       SectionLabel(label="Listening")
-      Card(level=1, testId="settings-card-listening", minHeight=0)
+      PlainList(testId="settings-card-listening")
         NavRow(address="onboarding:setup", title="Voice setup", subtitle="Download the voice models and check the microphone", testId="settings-setup-voice")
         Hairline()
         NavRow(address="settings:voice", title="Voice and models", subtitle="The voice, and the models that hear you", testId="settings-nav-voice")
@@ -246,25 +246,25 @@ component RootScreen
           if voicep.credit != ""
             text voicep.credit font-family=th.fontUi font-size=10 color=th.muted
       SectionLabel(label="The paper")
-      Card(level=1, testId="settings-card-paper", minHeight=0)
+      PlainList(testId="settings-card-paper")
         NavRow(address="settings:learned", title="What the paper has learned", subtitle="Your more and less of this, with Reset", testId="settings-nav-learned")
         Hairline()
         NavRow(address="settings:gestures", title="Swipes", subtitle="What each swipe on a story means", testId="settings-nav-gestures")
         Hairline()
         NavRow(address="activity:", title="Activity", subtitle="What the computer and the desk are doing", testId="settings-nav-activity")
       SectionLabel(label="About")
-      Card(level=1, testId="settings-card-about", minHeight=0)
+      PlainList(testId="settings-card-about")
         NavRow(address="settings:about", title="About", subtitle="Builds and server", testId="settings-nav-about")
       SectionLabel(label="Developer")
-      Card(level=1, testId="settings-card-developer", minHeight=0)
+      PlainList(testId="settings-card-developer")
         NavRow(address="lab:components", title="Components and Trace", subtitle="Stages, parameters, kept turns", testId="settings-components")
         Hairline()
-        button press=setDemo(dm.on ? "false" : "true") testId="settings-demo" appearance="none" width="100%" box-sizing="border-box" padding="14px 16px"
+        button press=setDemo(dm.on ? "false" : "true") testId="settings-demo" appearance="none" width="100%" box-sizing="border-box" padding="14px 0px"
           column align-items="flex-start" gap=2 width="100%"
             text (dm.on ? "Demo mode is on" : "Demo mode is off") font-family=th.fontUi font-size=17 font-weight=600 color=th.fg
             text (dm.on ? "Takes effect at the next launch. Tap to turn off." : "Fixtures and no network, from the next launch. Tap to turn on.") font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
         Hairline()
-        button press=toggleDevDetails testId="settings-dev-details" appearance="none" width="100%" box-sizing="border-box" padding="14px 16px"
+        button press=toggleDevDetails testId="settings-dev-details" appearance="none" width="100%" box-sizing="border-box" padding="14px 0px"
           column align-items="flex-start" gap=2 width="100%"
             text (devDetails ? "Demo controls are shown" : "Demo controls are hidden") font-family=th.fontUi font-size=17 font-weight=600 color=th.fg
             text "The paper's editions and composition line, mail's demo states and the reader's demo menu (demo mode only)." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
@@ -295,8 +295,8 @@ component AppearanceScreen
       for p in tc.problems key=p
         text p testId="settings-theme-problems" font-family=th.fontMono font-size=12 color=th.danger
       SectionLabel(label="A theme from a Texture")
-      Card(level=1, testId="settings-card-texture", minHeight=0)
-        column gap=10 padding=16 width="100%" box-sizing="border-box"
+      PlainList(testId="settings-card-texture")
+        column gap=10 padding="8px 0px" width="100%" box-sizing="border-box"
           text "A theme is a Texture with one choir-theme block. Paste its id to add it here; the server checks it and so does the phone." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
           row gap=8 align-items="center" width="100%"
             column flex=1 min-width=0
@@ -324,13 +324,13 @@ component AppearanceScreen
           row gap=12 width="100%"
             column flex=1 min-width=0
               Card(level=1, testId="settings-depth-1", minHeight=56)
-                text "1" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted padding=16
+                text "1" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted padding="16px 0px"
             column flex=1 min-width=0
               Card(level=2, testId="settings-depth-2", minHeight=56)
-                text "2" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted padding=16
+                text "2" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted padding="16px 0px"
             column flex=1 min-width=0
               Card(level=3, testId="settings-depth-3", minHeight=56)
-                text "3" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted padding=16
+                text "3" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted padding="16px 0px"
           text `Cards ${th.material1}, the bar ${th.material2}, layers ${th.material3}. Corners ${th.radiusCard.toFixed(0)} pt.` font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
 
 // ---------------------------------------------------------------- account
@@ -346,7 +346,7 @@ component AccountScreen
   view
     ToolScroll(id="settings")
       ScreenTitle(label="Account and devices", back=true)
-      Card(level=1, testId="settings-card-account", minHeight=0)
+      PlainList(testId="settings-card-account")
         column width="100%" box-sizing="border-box" padding="6px 0"
           FactRow(label="Signed in", value=(au.signedIn ? "Yes" : "No"), mono=false, testId="settings-account-signed")
           Hairline()
@@ -385,13 +385,13 @@ component SettingChoices
   view
     column gap=14 width="100%"
       for r in rows key=r.id
-        Card(level=1, testId=`settings-setting-${r.id}`, minHeight=0)
+        PlainList(testId=`settings-setting-${r.id}`)
           column width="100%" box-sizing="border-box" padding="14px 0"
-            column gap=4 padding="0px 16px 10px 16px"
+            column gap=4 padding="0px 0px 10px 0px"
               text r.label font-family=th.fontUi font-size=17 font-weight=700 color=th.fg
               text r.help font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
             for o in r.choices key=o.id
-              button press=setSetting(r.id, o.id) testId=`settings-choice-${r.id}-${o.id}` role="radio" aria-checked=o.selected appearance="none" width="100%" box-sizing="border-box" padding="10px 16px"
+              button press=setSetting(r.id, o.id) testId=`settings-choice-${r.id}-${o.id}` role="radio" aria-checked=o.selected appearance="none" width="100%" box-sizing="border-box" padding="10px 0px"
                 row gap=12 align-items="flex-start" width="100%"
                   column flex=1 min-width=0 gap=2 align-items="flex-start"
                     text o.label font-family=th.fontUi font-size=tx.sizeLabel font-weight=600 color=(o.selected ? th.fg : th.muted)
@@ -420,7 +420,7 @@ component VoiceScreen
       ScreenTitle(label="Voice and models", back=true)
       text "The voice that reads the paper, and the models that hear you, run on this phone. Their sizes and checks are on the Components page." font-family=th.fontRead font-size=tx.sizeBody line-height=tx.lineBody color=th.fg
       VoiceCardsList()
-      Card(level=1, testId="settings-card-voice", minHeight=0)
+      PlainList(testId="settings-card-voice")
         NavRow(address="lab:components", title="Components", subtitle="Models, stages and parameters", testId="settings-voice-components")
         Hairline()
         NavRow(address="lab:trace", title="Trace", subtitle="The last turn, step by step", testId="settings-voice-trace")
@@ -439,7 +439,7 @@ component ComputerScreen
   view
     ToolScroll(id="settings")
       ScreenTitle(label="Computer", back=true)
-      Card(level=1, testId="settings-card-computer", minHeight=0)
+      PlainList(testId="settings-card-computer")
         column width="100%" box-sizing="border-box" padding="6px 0"
           FactRow(label="State", value=(cmpt.state == "" ? (cmpt.checked ? "Not reported" : "Checking…") : cmpt.state), mono=false, testId="settings-computer-state")
           Hairline()
@@ -471,14 +471,14 @@ component LearnedScreen
     ToolScroll(id="settings")
       ScreenTitle(label="What the paper has learned", back=true)
       text "Each time you asked for more or less of a story, in your own words. Your front page leans on these; the shared paper does not change." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
-      Card(level=1, testId="settings-card-learned", minHeight=0)
+      PlainList(testId="settings-card-learned")
         column width="100%" box-sizing="border-box" padding="6px 0"
           for r, i in learnt.rows key=i
-            column gap=2 padding="10px 16px" width="100%" box-sizing="border-box" testId="settings-learned-row"
+            column gap=2 padding="10px 0px" width="100%" box-sizing="border-box" testId="settings-learned-row"
               text r.line font-family=th.fontRead font-size=tx.sizeBody line-height=1.4 color=th.fg
               text r.ago font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
           if learnt.count == 0
-            text learnt.message testId="settings-learned-empty" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted padding=16
+            text learnt.message testId="settings-learned-empty" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted padding="16px 0px"
       if learnt.count > 0
         button press=resetLearned testId="settings-learned-reset" appearance="none"
           ActionButton(label="Reset what the paper has learned", testId="settings-learned-reset-box", primary=false, danger=true)
@@ -493,7 +493,7 @@ component AboutScreen
   view
     ToolScroll(id="settings")
       ScreenTitle(label="About", back=true)
-      Card(level=1, testId="settings-card-about-info", minHeight=0)
+      PlainList(testId="settings-card-about-info")
         column width="100%" box-sizing="border-box" padding="6px 0"
           FactRow(label="Autoradio", value=(about.app == "" ? "-" : about.app), mono=false, testId="settings-about-app")
           Hairline()

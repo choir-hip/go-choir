@@ -9,7 +9,7 @@
 //   PDF    `iframe` on a local .pdf shows PDFKit's PDFView: its own scrolling and pinch, page set by `#page=N` in src
 //   e-book chapters become Markdown for `text markup="markdown"` (no EPUB element in Exact; Kit/Epub.swift parses the book)
 use Theme, FileInfo, FileChapter, FilePages from "@choir/autoradio"
-use PageScroll, Card, RowRule from "./ui.contract"
+use PageScroll, Card, RowRule, PlainList from "./ui.contract"
 
 // The one control of the Files place and the viewers, drawn as a word (no pill: owner, 2026-11-15): a text action in the accent; when `active` (a
 // chosen mode, sort or zoom) it is full strength with a short accent rule under it. `press` is an action call from the caller.
@@ -225,8 +225,8 @@ component EpubViewer
         Chip(label="Listen", active=false, testId="epub-listen", press=listen(`${fvInfo.address}#${fvChap}`, fvChapter.title, fvChapter.markdown))
         text `Chapter ${(fvChap + 1).toFixed(0)} of ${fvInfo.chapters.length.toFixed(0)}` testId="epub-position" font-family=th.fontUi font-size=13 color=th.muted
       if fvToc
-        Card(level=1, testId="epub-contents", minHeight=0)
-          column padding="4px 16px"
+        PlainList(testId="epub-contents")
+          column padding="4px 0px"
             for c in fvInfo.chapters key=c.index
               button press=fvChapGo(c.index) testId=`epub-chapter-${c.index}` appearance="none" width="100%"
                 row padding="12px 0" align-items="center" width="100%"
