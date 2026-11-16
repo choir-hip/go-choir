@@ -13,7 +13,7 @@
 // ("Story · 7 in the deck") sits just above the lens. The launcher and the player rise from the lens, as sheets
 // above it, so the bar stays visible and usable under them.
 // testIds: bar-stack, bar, bar-mark, bar-field, bar-mic, bar-send, bar-play, bar-text, bar-aim, bar-setup, bar-yield, bar-progress,
-// page-indicator.
+// page-indicator, bar-answer, bar-asked, bar-answer-text, bar-answer-working, bar-answer-note, bar-answer-retry, bar-answer-cancel, bar-answer-close.
 use Theme, PageList, BarInfo, RadioInfo, ReaderAimInfo, Onboarding, MailMessageView from "@choir/autoradio"
 use Mark from "./mark.contract"
 use Launcher from "./launcher.contract"
@@ -82,6 +82,10 @@ component BarShell
     sendAsk: action
     micTap: action
     micCancel: action
+    openPage: action
+    answerRetry: action
+    answerDismiss: action
+    answerCancel: action
     radioPlay: action
     toggleLauncher: action
     showLayer: action
@@ -149,6 +153,35 @@ component BarShell
               button press=moreOfThis(topAddr) testId="story-more" appearance="none" aria-label="More stories like this one"
                 row padding="3px 10px" border-radius=th.radiusPill border-width=1 border-style="solid" border-color=th.rule align-items="center"
                   text (moreFor == topAddr ? "Noted" : "More of this") font-family=th.fontUi font-size=12 font-weight=600 color=th.fg
+        // ---- the conversation card (lane autoradio-talk): what the reader asked and what came back, above the line, never replacing it.
+        // working: heard, nothing yet; first: the phone's answer from the saved stories (the full one is on its way); full: the computer's
+        // answer; failed: plain words and a retry. Tapping the answer opens the conversation page, where every answer is kept.
+        if bi.answerState != "" and layer == "" and onbd == false
+          column gap=4 animation=enter padding-left=4 padding-right=4 testId="bar-answer"
+            row gap=8 align-items="center" width="100%"
+              text `You asked: ${bi.question}` testId="bar-asked" font-family=th.fontUi font-size=11 font-weight=600 color=th.muted line-clamp=1 flex=1 min-width=0
+              if bi.answerState == "working" or bi.answerState == "first"
+                button press=answerCancel testId="bar-answer-cancel" appearance="none" aria-label="Cancel this question"
+                  row padding="4px 10px" border-radius=th.radiusPill border-width=1 border-style="solid" border-color=th.rule align-items="center"
+                    text "Cancel" font-family=th.fontUi font-size=12 font-weight=600 color=th.fg
+              else
+                button press=answerDismiss testId="bar-answer-close" appearance="none" aria-label="Close the answer"
+                  row padding="4px 10px" border-radius=th.radiusPill border-width=1 border-style="solid" border-color=th.rule align-items="center"
+                    text "Close" font-family=th.fontUi font-size=12 font-weight=600 color=th.fg
+            if bi.answerState == "working"
+              text "Looking it up…" testId="bar-answer-working" font-family=th.fontUi font-size=14 color=th.fg
+            if bi.answerState == "first" or bi.answerState == "full"
+              button press=openPage("conversation:", "Conversation") testId="bar-answer-text" appearance="none" width="100%" aria-label="Open the conversation"
+                column gap=2 align-items="flex-start" width="100%"
+                  if bi.answerLabel != ""
+                    text bi.answerLabel font-family=th.fontUi font-size=9 font-weight=700 letter-spacing=0.8 color=th.muted
+                  text bi.answerText font-family=th.fontRead font-size=15 color=th.fg line-clamp=4 text-align="left"
+            if bi.answerNote != ""
+              text bi.answerNote testId="bar-answer-note" font-family=th.fontUi font-size=13 color=(bi.answerState == "failed" ? th.danger : th.muted) line-clamp=3
+            if bi.canRetry
+              button press=answerRetry("") testId="bar-answer-retry" appearance="none" aria-label="Ask again"
+                row padding="4px 12px" border-radius=th.radiusPill border-width=1 border-style="solid" border-color=th.accent align-items="center"
+                  text "Try again" font-family=th.fontUi font-size=12 font-weight=600 color=th.accent
         // ---- the line above the controls
         if lineMode == "aim"
           text `The radio answers aloud, from ${aimTitle}. Try “Summarize this” or “Who is involved?”` testId="bar-aim" font-family=th.fontUi font-size=13 color=th.muted line-clamp=2 padding-left=4 animation=enter

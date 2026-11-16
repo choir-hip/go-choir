@@ -118,6 +118,7 @@ public final class AutoradioModule: ExactPackage {
         registerMark()
         registerVoice()
         registerQueue()          // lane autoradio-queue
+        registerTalk()
         Task { [choir] in await choir?.refresh() }
     }
 
@@ -162,6 +163,11 @@ public final class AutoradioModule: ExactPackage {
     func json<T: Encodable>(_ v: T) -> [String: Any] {
         guard let d = try? JSONEncoder().encode(v), let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return [:] }
         return o
+    }
+
+    /// The app came back to the foreground: a new foreground session for voice (lane autoradio-talk; HandsFreeSwitch). Main thread.
+    public func foreground(_ shown: Bool) {
+        if shown { runtime.appBecameActive(); touch(["barState"], now: true) }
     }
 
     public func later(_ name: String, _ args: [String: Any], preferred: Any?, reply: @escaping ([String: Any]) -> Void) {

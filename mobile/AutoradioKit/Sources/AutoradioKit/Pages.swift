@@ -41,6 +41,7 @@ public enum PageAddress {
         case "activity": return "activity"
         case "settings": return "settings"
         case "lab": return "lab"
+        case "conversation": return "conversation"
         case "onboarding": return "onboarding"      // lane 8 hook (first run); see mobile/README.md, Requests to the spine
         default: return "unknown"
         }
@@ -61,6 +62,7 @@ public enum PageAddress {
         case "settings:", "settings:root": return "Settings"
         case "lab:components": return "Components"
         case "lab:trace": return "Trace"
+        case "conversation:": return "Conversation"
         case "onboarding:setup": return "Make it yours"
         case "onboarding:edit": return "My edition"
         case "mailbox:inbox": return "Mail"
