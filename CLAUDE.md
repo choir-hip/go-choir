@@ -209,13 +209,24 @@ record lands alone first. See
 ## Safety and hygiene
 
 - Assume the worktree holds other people's changes. Never commit in the
-  primary checkout; use a worktree, made with `lane new <name> --base
-  origin/main` ([docs/reference/LANE.md](docs/reference/LANE.md)). Never use
-  a bare `git stash`. Do not revert or destroy work that is not yours.
+  primary checkout. **Every worktree is a lane** (owner, 2026-11-15):
+  `cd` to the primary checkout, `git fetch`, then `lane new <name> --base
+  origin/main` (or `--base origin/lane/<branch>` to build on a branch);
+  remove it with `lane rm <name>`. Never `git worktree add` by hand, never
+  `lane new --dirty` from the primary checkout (it copies the secrets
+  there), never `lane init`. Every builder's brief says so. Read
+  [docs/reference/LANE.md](docs/reference/LANE.md) first. Never use a bare
+  `git stash`. Do not revert or destroy work that is not yours.
 - **One Mac build at a time, run by the lead** (2026-11-15). A mobile worker
-  writes code in a lane and may run one Swift package test; it never runs an
-  Exact build, a device build or a simulator. A simulator the lead needs
-  is slimmed first with `mobile/scripts/sim-slim.sh`.
+  writes code in a lane and may run Swift package tests, one at a time,
+  through the lock (`/usr/bin/lockf -k -t 7200
+  ~/.cache/autoradio-mac-build.lock ...`); it never runs an Exact build, a
+  device build or a simulator. The lead's builds take the same lock.
+- **Every simulator is slim** (owner, 2026-11-15). Get one only through
+  `AR_SIM_NAME=<your name> mobile/scripts/sim-device.sh`, which slims a new
+  simulator with `mobile/scripts/sim-slim.sh` before first use; check with
+  `sim-slim.sh <name> --status`, and shut the simulator down when the run
+  ends. Never boot a stock simulator, and never more than one at a time.
 - No secrets, tokens or the owner's email addresses in the repo or in output.
   Per-developer secrets live in the gitignored `.envrc.local`.
 - Risky mutation happens in disposable capsules inside the stable computer.

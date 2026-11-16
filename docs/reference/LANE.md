@@ -60,6 +60,19 @@ the landing loop is `scripts/land`.
   not lost work; check `git log origin/main..<name>` and use `--force` when
   it is empty.
 
+- **Relative worktree paths broke the landing gate (2026-11-15).** Lane was
+  first installed with relative paths, which set the repository extension
+  `extensions.relativeworktrees`. Nix refuses a repository with an extension
+  it does not know, so `nix eval` in `scripts/land` failed for every lane.
+  The installed lane is built from a local patch that writes absolute
+  paths; the extension was unset and `worktree.useRelativePaths` set to
+  false. A rebuild of lane from upstream must carry that patch or pass the
+  equivalent flag, and the test is `nix eval` in a fresh lane, not `lane
+  new` succeeding.
+- **`lane rm` refuses a lane whose commits local `main` does not have.**
+  Local `main` lags `origin/main` here by design, so the refusal is common.
+  Check the branch is pushed, then `lane rm <name> --force`.
+
 ## Sources
 
 - `https://github.com/lukeed/lane` readme, fetched 2026-11-15.
