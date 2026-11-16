@@ -66,6 +66,21 @@ public final class ChoirApp: @unchecked Sendable {
     /// How many segments the programme had when the last `extend` was asked: a stretch that added nothing is not asked for again.
     private var extendedAt = -1
 
+    // The DJ (lane autoradio-dj-clips): Play hands the list to the DJ's stretch.
+    /// The stretch's source; tests replace it. Default: the programme route on the paper's computer.
+    var stretchSource: (@Sendable () -> StretchSource)?
+    /// The last request for a stretch found none (route missing, nothing to tell): stories play plain and autoplay goes on as it did.
+    private var djUnavailable = false
+    /// The list the DJ was handed (the stories it may tell, in the reader's order); an `extend` asks for the same list.
+    private var djScope: [String]?
+    /// Stories the DJ has already told in this listening.
+    private var toldRoutes = Set<String>()
+    /// A stretch that arrived after the plain read began: it joins at the next boundary.
+    private var pendingStretch: OpenedProgramme?
+    private var openTask: Task<OpenedProgramme?, Never>?
+    /// How long the reader waits for the stretch's first segment before the story plays plain at once.
+    var djFirstSegmentWait: TimeInterval = 8
+
     public init(runtime: LabRuntime, keys: KeyStore, baseURL: String = ChoirEnvironment.defaultBaseURL, openURL: (@Sendable (URL) -> Void)?) {
         self.runtime = runtime
         ChoirEnvironment.shared.keys = keys
@@ -80,6 +95,15 @@ public final class ChoirApp: @unchecked Sendable {
         runtime.player.onRanDry = { [weak self] id, played in Task { await self?.ranDry(documentID: id, anyPlayed: played) } }
         runtime.player.onNextTrack = { [weak self] in self?.takeRemote(.next) ?? false }
         runtime.player.onPreviousTrack = { [weak self] in self?.takeRemote(.previous) ?? false }
+        runtime.player.clipHandler = { id in await DJClipRunner.shared.playClip(id) }
+        runtime.player.boundaryHandler = { [weak self] _ in
+            self?.noteTold()
+            await DJClipRunner.shared.yieldToQueue()
+        }
+        Task { @MainActor [weak self] in
+            DJClipRunner.shared.install()
+            DJClipRunner.shared.whenIdle = { [weak self] in await self?.continueIntoDJ() ?? false }
+        }
         eventTask = Task { [weak self] in
             guard let self else { return }
             for await te in self.runtime.log.stream() {
@@ -129,6 +153,7 @@ public final class ChoirApp: @unchecked Sendable {
         do {
             let list = try await ChoirFront.stories(client: ChoirEnvironment.shared.client(baseURL: base), limit: 30)
             lock.lock(); stories = list; lock.unlock()
+            ClipStore.shared.markStale()                          // the front is fresh: the next stretch asks for the clips again, once
             if list.isEmpty { say("The front page is empty right now.") }
         } catch { say(Self.plain(stage: "programme", message: "\(error)")) }
         onChange?()
@@ -151,7 +176,14 @@ public final class ChoirApp: @unchecked Sendable {
             let prog = try runtime.registry.make(.programme, as: Programme.self, runtime.configuration)
             var doc: ProgrammeDocument
             var follow: (@Sendable (ProgrammePlayer) async -> Void)?
-            if let radio = prog as? RadioProgramme { let o = try await radio.open(); doc = o.document; follow = o.follow }
+            if let radio = prog as? RadioProgramme {
+                // Play with no story chosen: the current list from the top (the front list when the paper has not composed one).
+                let scope = handedRoutes(from: nil)
+                lock.lock(); djScope = scope; lock.unlock()
+                if let f = stretchSource { let r = RadioProgramme(source: f(), fallback: { try await ChoirFrontProgramme(StageParams()).load() }); let o = try await r.open(routes: scope); doc = o.document; follow = o.follow; lock.lock(); djUnavailable = o.usedFallback; lock.unlock() }
+                else { let o = try await radio.open(routes: scope); doc = o.document; follow = o.follow; lock.lock(); djUnavailable = o.usedFallback; lock.unlock() }
+                lock.lock(); toldRoutes = []; lock.unlock()
+            }
             else { doc = try await prog.load() }
             guard current() else { return }
             runtime.player.setDocument(doc)
@@ -171,7 +203,121 @@ public final class ChoirApp: @unchecked Sendable {
     /// Play a story from the paper. The list it came from (the paper's stack) is taken now, so next, previous and autoplay follow it.
     public func play(route: String) async {
         beginList(at: route)
-        if await startStory(StoryRef(route: route), report: true) { await startPlaying() }
+        lock.lock(); toldRoutes = []; lock.unlock()
+        await playStack(from: route, reportFailure: true)
+    }
+
+    // MARK: Play hands the stack to the DJ
+
+    /// The stories the DJ is handed: the current list from `route` onward (the whole list when nil), without what it already told.
+    private func handedRoutes(from route: String?) -> [String]? {
+        let order = storyOrder?() ?? []
+        lock.lock(); let front = stories.map { StoryRef(route: $0.route, title: $0.title) }; let told = toldRoutes; lock.unlock()
+        var list = order.isEmpty ? front : order
+        if let route {
+            if let i = list.firstIndex(where: { $0.route == route }) { list = Array(list[i...]) }
+            else { list = [StoryRef(route: route)] }
+        }
+        let routes = list.map(\.route).filter { !told.contains($0) || $0 == route }
+        return routes.isEmpty ? nil : routes
+    }
+
+    private func noteTold() {
+        let doc = runtime.player.document
+        guard doc.id.hasPrefix("radio:") else { return }
+        let r = StretchCandidates.routes(citedIn: doc)
+        lock.lock(); toldRoutes.formUnion(r); lock.unlock()
+    }
+
+    private func radioForStack(fallbackRoute: String?) -> RadioProgramme {
+        let base = frontBaseURL()
+        let source: StretchSource = stretchSource?() ?? RouteStretchSource(baseURL: base)
+        return RadioProgramme(source: source, fallback: { [weak self] in
+            guard let route = fallbackRoute else { return try await ChoirFrontProgramme(StageParams()).load() }
+            _ = self
+            return try await ChoirFront.load(route: route, client: ChoirEnvironment.shared.client(baseURL: base))
+        }, firstSegmentDeadline: 120)
+    }
+
+    /// Start the DJ's stretch over the current list from `route` (or its top). The reader hears the stretch's first segment when it comes
+    /// within `djFirstSegmentWait`; slower than that, the story plays plain at once and the stretch joins at the next boundary.
+    func playStack(from route: String?, reportFailure: Bool = false) async {
+        let scope = handedRoutes(from: route)
+        let fallbackRoute = route ?? scope?.first
+        let (my, old) = { () -> (Int, Task<Void, Never>?) in
+            lock.lock(); defer { lock.unlock() }
+            loadToken += 1; loading = true; message = ""; pendingAutoplay = nil; pendingStretch = nil
+            openTask?.cancel()
+            let o = followTask; followTask = nil; followRunning = false
+            djScope = scope
+            return (loadToken, o)
+        }()
+        old?.cancel(); onChange?()
+        func current() -> Bool { lock.lock(); defer { lock.unlock() }; return my == loadToken }
+        let radio = radioForStack(fallbackRoute: fallbackRoute)
+        let task = Task { try? await radio.open(cause: "play", routes: scope) }
+        lock.lock(); openTask = task; lock.unlock()
+
+        enum Raced { case opened(OpenedProgramme?), slow }
+        let shot = OneShot<Raced>()
+        Task { shot.fire(.opened(await task.value)) }
+        let wait = djFirstSegmentWait
+        let timer = Task { try? await Task.sleep(nanoseconds: UInt64(max(0, wait) * 1_000_000_000)); shot.fire(.slow) }
+        let raced = await shot.wait()
+        timer.cancel()
+        guard current() else { return }
+
+        switch raced {
+        case .opened(let o?):
+            lock.lock(); loading = false; djUnavailable = o.usedFallback; lock.unlock()
+            install(o)
+            await startPlaying()
+            onChange?()
+        case .opened(nil), .slow:
+            lock.lock(); loading = false; lock.unlock()
+            // Plain read at once; the stretch joins later. Nothing to read at all: the failure is said once.
+            if let r = fallbackRoute {
+                let ok = await startStory(StoryRef(route: r), report: reportFailure)
+                if ok { await startPlaying() }
+                lock.lock(); let token = loadToken; lock.unlock()
+                if case .slow = raced {
+                    Task { [weak self] in
+                        guard let o = await task.value, !o.usedFallback else { self?.setUnavailable(); return }
+                        await self?.stretchArrived(o, token: token)
+                    }
+                } else { setUnavailable() }
+            } else { say("The paper has no stories to read yet."); setUnavailable() }
+        }
+    }
+    private func setUnavailable() { lock.lock(); djUnavailable = true; lock.unlock() }
+
+    /// Make an opened programme the one in the player and follow its stream.
+    private func install(_ o: OpenedProgramme) {
+        runtime.player.setDocument(o.document)
+        runtime.player.begin(at: 0)
+        lock.lock(); let my = loadToken; currentRoute = ChoirEnvironment.shared.playing(o.document.id)?.route ?? ""; extendedAt = -1; lock.unlock()
+        if let f = o.follow { runFollow(f, loadToken: my, documentID: o.document.id) }
+    }
+
+    /// The stretch came after a plain read began. If the story is over (or nothing plays) it starts now; else at the story's end.
+    private func stretchArrived(_ o: OpenedProgramme, token: Int) async {
+        lock.lock(); guard token == loadToken else { lock.unlock(); return }; pendingStretch = o; lock.unlock()
+        if !runtime.player.loopIsActive, !runtime.player.userPaused { _ = await joinPendingStretch() }
+    }
+    /// True when a waiting stretch took over from the plain read.
+    @discardableResult
+    private func joinPendingStretch() async -> Bool {
+        lock.lock(); let o = pendingStretch; pendingStretch = nil; lock.unlock()
+        guard let o else { return false }
+        install(o); await startPlaying(); onChange?()
+        return true
+    }
+
+    /// The end of what the reader played by hand or queued: the DJ goes on over the rest of the list.
+    func continueIntoDJ() async -> Bool {
+        guard signIn.current.signedIn || stretchSource != nil else { return false }
+        await playStack(from: nil)
+        return true
     }
 
     /// The reader's Listen on a story page: the text plays as its own document; the list is taken for it as for `play(route:)`.
@@ -240,6 +386,7 @@ public final class ChoirApp: @unchecked Sendable {
     /// the next or previous passage.
     public func moveStory(_ move: StoryMove) async {
         let p = runtime.player
+        if move == .next, await MainActor.run(body: { let r = DJClipRunner.shared; let parked = r.isParked; if parked { r.skipCurrent() }; return parked }) { return }
         if p.document.id.hasPrefix("radio:") || currentStoryRoute() == nil {
             if move == .next { p.next() } else { p.previous() }
             await startPlaying()
@@ -275,11 +422,12 @@ public final class ChoirApp: @unchecked Sendable {
         let p = runtime.player
         guard p.document.id == documentID else { return }                 // a newer document replaced it
         if documentID.hasPrefix("radio:") { await extendIfDry(documentID: documentID); return }
+        if !p.userPaused, await joinPendingStretch() { return }          // a stretch that came late joins now
         guard let route = currentStoryRoute() else { return }
         let next = StoryCursor.neighbour(of: route, in: list(for: route), step: 1)
         let turnOpen = runtime.snapshot().phase != "playing"
         switch Autoplay.decide(userPaused: p.userPaused, turnOpen: turnOpen, anyPlayed: anyPlayed, hasNext: next != nil) {
-        case .advance: await autoAdvance(from: route)
+        case .advance: await continueAfter(route)
         case .waitForTurn: lock.lock(); pendingAutoplay = documentID; lock.unlock()
         case .stop: break
         }
@@ -290,6 +438,13 @@ public final class ChoirApp: @unchecked Sendable {
         lock.lock(); let id = pendingAutoplay; pendingAutoplay = nil; lock.unlock()
         let p = runtime.player
         guard let id, p.document.id == id, !p.loopIsActive, !p.userPaused, let route = currentStoryRoute() else { return }
+        await continueAfter(route)
+    }
+
+    /// A hand-played story ended: the DJ's stretch over the rest of the list; plain autoplay when the paper has no stretch to give.
+    private func continueAfter(_ route: String) async {
+        lock.lock(); let dj = !djUnavailable; lock.unlock()
+        if dj, let n = StoryCursor.neighbour(of: route, in: list(for: route), step: 1) { await playStack(from: n.route); return }
         await autoAdvance(from: route)
     }
 
@@ -326,9 +481,13 @@ public final class ChoirApp: @unchecked Sendable {
         lock.lock(); let running = followRunning; let at = extendedAt; lock.unlock()
         let doc = p.document
         guard !running, doc.segments.count != at else { return }
-        guard let radio = (try? runtime.registry.make(.programme, as: Programme.self, runtime.configuration)) as? RadioProgramme else { return }
+        let radio: RadioProgramme
+        if let f = stretchSource { radio = RadioProgramme(source: f(), fallback: { throw ChoirError.empty("none") }) }
+        else if let r = (try? runtime.registry.make(.programme, as: Programme.self, runtime.configuration)) as? RadioProgramme { radio = r }
+        else { return }
         lock.lock(); extendedAt = doc.segments.count; let my = loadToken; lock.unlock()
-        guard let follow = await radio.more(excludingRoutes: StretchCandidates.routes(citedIn: doc), documentID: documentID) else { return }
+        lock.lock(); let scope = djScope; lock.unlock()
+        guard let follow = await radio.more(excludingRoutes: StretchCandidates.routes(citedIn: doc), documentID: documentID, routes: scope) else { return }
         runFollow(follow, loadToken: my, documentID: documentID)
     }
 
@@ -352,6 +511,14 @@ public final class ChoirApp: @unchecked Sendable {
     public func playPause() async {
         await ensureProgramme()
         if !runtime.snapshot().running { await runtime.start() }
+        // A clip is playing through the queue: the button pauses and resumes it, not the (waiting) programme.
+        let clip = await MainActor.run { () -> Bool in
+            guard DJClipRunner.shared.isParked, DJClipRunner.shared.queue.current?.isRemoteAudio == true else { return false }
+            let q = DJClipRunner.shared.queue
+            if q.paused { q.resume() } else { q.pause() }
+            return true
+        }
+        if clip { onChange?(); return }
         if runtime.player.userPaused { runtime.player.play() } else { runtime.player.pause() }
         onChange?()
     }

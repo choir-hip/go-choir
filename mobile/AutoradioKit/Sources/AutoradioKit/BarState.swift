@@ -287,6 +287,7 @@ public final class BarTracker: @unchecked Sendable {
                 case .speech(let t): it.text = t; it.kind = "speech"
                 case .listenerPassage(let t, _): it.text = t; it.kind = "you"
                 case .clip: it.text = d.blocks[i].summary; it.kind = "clip"
+                case .podcastClip: it.text = "Podcast clip"; it.kind = "clip"
                 }
                 r.items.append(it)
             }

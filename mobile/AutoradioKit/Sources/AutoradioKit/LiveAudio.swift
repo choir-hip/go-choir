@@ -410,6 +410,10 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     /// The loop ran out of blocks and nothing is queued behind it: (the document's id, whether any block of this run made sound).
     /// A programme whose stretch is still arriving also runs dry between segments; the host decides what that means (autoplay).
     public var onRanDry: (@Sendable (String, Bool) -> Void)?
+    /// Plays a `podcast_clip` segment's clip and returns when it (and what the reader queued behind it) is over.
+    public var clipHandler: (@Sendable (String) async -> ClipOutcome)?
+    /// Before a segment (not the first of a run): what the reader queued by hand plays now. Returns when it is over.
+    public var boundaryHandler: (@Sendable (Int) async -> Void)?
     /// The lock screen's next and previous: the host may take them as story moves (true: handled); else they skip a passage or segment.
     public var onNextTrack: (@Sendable () -> Bool)?
     public var onPreviousTrack: (@Sendable () -> Bool)?
@@ -533,6 +537,10 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
                     guard let (block, paused, lvl, doc) = step else { break }
                     self.audio.clearPlayhead(); self.onChange?(); self.publishNowPlaying()
                     if paused { self.audio.programmePause() } else if lvl != .pause { self.audio.programmePlay() }
+                    if n != i, let bh = self.boundaryHandler, doc.segments.contains(where: { $0.firstBlock == n }) {
+                        await bh(n)
+                        if Task.isCancelled { break }
+                    }
                     self.playback.unitBegan(n, in: doc)
                     let played = await self.playBlock(block, index: n)
                     if Task.isCancelled { break }
@@ -629,6 +637,15 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             startLookahead(after: tag)
             await audio.playProgramme(made.samples, rate: made.rate, tag: tag)
             return true
+        case .podcastClip(let id):
+            guard let h = clipHandler else { return false }
+            switch await h(id) {
+            case .played: return true
+            case .unknown: return false
+            case .failed:                                    // one plain line, then the programme goes on
+                _ = await playBlock(.speech(text: "I couldn't play that clip."), index: tag)
+                return true
+            }
         case .clip(let url, let start, let end, _):
             guard let u = FixtureResources.resolve(url), let all = try? AudioFiles.readMono(u, rate: 16_000) else {
                 log.emit(.error(stage: "player", message: "clip not found: \(url)")); return false
