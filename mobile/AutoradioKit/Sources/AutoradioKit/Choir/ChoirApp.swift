@@ -98,7 +98,15 @@ public final class ChoirApp: @unchecked Sendable {
         runtime.player.onRanDry = { [weak self] id, played in Task { await self?.ranDry(documentID: id, anyPlayed: played) } }
         runtime.player.onNextTrack = { [weak self] in self?.takeRemote(.next) ?? false }
         runtime.player.onPreviousTrack = { [weak self] in self?.takeRemote(.previous) ?? false }
-        runtime.player.clipHandler = { id in await DJClipRunner.shared.playClip(id) }
+        runtime.player.clipHandler = { [weak self] id in
+            let o = await DJClipRunner.shared.playClip(id)
+            self?.runtime.player.play()          // playing remote audio paused the programme's voice; the next segment is spoken
+            return o
+        }
+        runtime.player.segmentGate = { seg in
+            guard let c = seg.clip else { return true }
+            return await DJClipRunner.shared.preflight(c.clipID)
+        }
         runtime.player.boundaryHandler = { [weak self] _ in
             self?.noteTold()
             await DJClipRunner.shared.yieldToQueue()
@@ -376,7 +384,6 @@ public final class ChoirApp: @unchecked Sendable {
         guard signIn.current.signedIn || stretchSource != nil else { return false }
         await playStack(from: nil)
         return true
-    }
     }
 
     /// The reader's Listen on a story page: the text plays as its own document; the list is taken for it as for `play(route:)`.

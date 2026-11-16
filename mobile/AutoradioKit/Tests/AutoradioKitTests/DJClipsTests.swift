@@ -161,6 +161,16 @@ final class ClipPlaybackTests: XCTestCase {
         XCTAssertEqual(t.all.filter { $0 == "boundary" }.count, 2, "and one before the third segment")
         p.pause()
     }
+    func testC10_ASegmentThePreflightRefusesIsSkippedWholeAndNeverSpoken() async {
+        let p = player(doc()); let t = Trace()
+        p.segmentGate = { seg in t.add("gate:\(seg.id)"); return false }
+        p.clipHandler = { _ in t.add("clip"); return .played }
+        p.begin(at: 0)
+        let done = await poll { p.blockIndex >= 3 }; XCTAssertTrue(done)
+        XCTAssertFalse(t.all.contains("clip"), "the clip never started")
+        XCTAssertEqual(t.all, ["gate:t/1"])
+        p.pause()
+    }
     func testC5_AClipThatFailsIsSaidOnceAndTheProgrammeGoesOn() async {
         let p = player(doc())
         p.clipHandler = { _ in .failed }
@@ -196,6 +206,8 @@ final class ClipPlaybackTests: XCTestCase {
 final class DJFakeEngine: PlaybackEngine {
     var log: [String] = []
     var startsRemote = true
+    var duration: Double?
+    func remoteDuration(url: URL, deadline: TimeInterval) async -> Double? { log.append("duration"); return duration }
     var remoteDelay: UInt64 = 0
     func playStory(route: String, title: String) async -> Bool { log.append("story:\(route)"); return true }
     func speak(address: String, title: String, paragraphs: [String]) async -> Bool { log.append("speak"); return true }
@@ -269,6 +281,24 @@ final class DJClipRunnerTests: XCTestCase {
         let o = await r.playClip(hex(1))
         XCTAssertEqual(o, .failed); XCTAssertLessThan(Date().timeIntervalSince(t0), 2)
         XCTAssertTrue(e.log.contains("stop"))
+    }
+    func testC10_ATranscribedFileOfTheSameLengthPlays() async {
+        let (r, _, e) = make(); e.duration = 900                      // the row says 900 s
+        let ok = await r.preflight(hex(1)); XCTAssertTrue(ok)
+        e.duration = 902.5; let ok2 = await r.preflight(hex(1)); XCTAssertTrue(ok2, "within 3 s")
+        XCTAssertFalse(e.log.contains { $0.hasPrefix("remote:") }, "nothing was played to find out")
+    }
+    func testC10_AnotherFileSkipsTheSegmentAndMarksTheRow() async {
+        let (r, q, e) = make(); e.duration = 910
+        let ok = await r.preflight(hex(1)); XCTAssertFalse(ok)
+        XCTAssertTrue(r.store.isMismatch(hex(1)))
+        XCTAssertTrue(HearIt.rows(route: "a", store: r.store)[0].episodeOnly)
+        await HearIt.play(hex(1), store: r.store, queue: q, runner: r); await q.settle()
+        XCTAssertEqual(e.log.last, "remote:\(hex(1)).mp3:-1.0:-1.0", "the episode from its start, no clip times")
+    }
+    func testC10_AnUnknownLengthWithinTheDeadlineSkips() async {
+        let (r, _, e) = make(); e.duration = nil
+        let ok = await r.preflight(hex(1)); XCTAssertFalse(ok)
     }
     func testC3_AnIdThePhoneDoesNotHaveIsUnknown() async {
         let (r, _, e) = make()

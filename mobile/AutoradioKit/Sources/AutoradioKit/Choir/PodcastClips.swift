@@ -26,6 +26,12 @@ public struct PodcastClip: Sendable, Equatable {
     public var support: Double
 
     public var seconds: Double { end - start }
+    /// The same episode from its start: no clip times (a file whose ads moved the range).
+    public var episodeItem: PlayItem {
+        .audio(url: audioURL, title: episodeTitle.isEmpty ? show : episodeTitle, show: show, start: nil, end: nil, episodeId: episodeGUID.isEmpty ? nil : episodeGUID)
+    }
+    /// How far the file's length may differ from the transcribed file's before the range is distrusted.
+    public static let durationTolerance = 3.0
 
     static func bare(_ route: String) -> String { route.hasPrefix("/") ? String(route.dropFirst()) : route }
 
@@ -66,7 +72,11 @@ public final class ClipStore: @unchecked Sendable {
     private var fetchedAt: Date?
     private var stale = true
     private var lastFailed = false
+    private var mismatched = Set<String>()
     public init() {}
+    /// This clip's audio is not the file that was transcribed (its length differs): it is never played as a clip.
+    public func markMismatch(_ id: String) { lock.lock(); mismatched.insert(id); lock.unlock() }
+    public func isMismatch(_ id: String) -> Bool { lock.lock(); defer { lock.unlock() }; return mismatched.contains(id) }
 
     public func replace(_ clips: [PodcastClip], at: Date = Date(), failed: Bool = false) {
         lock.lock(); defer { lock.unlock() }

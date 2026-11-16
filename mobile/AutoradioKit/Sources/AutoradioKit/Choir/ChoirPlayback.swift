@@ -26,6 +26,7 @@ import Foundation
         return await remote.play(url: url, title: title, show: show, start: start, end: end, rate: BarTracker.shared.speed, generation: queue.generation)
     }
 
+    public func remoteDuration(url: URL, deadline: TimeInterval) async -> Double? { await remote.duration(of: url, deadline: deadline) }
     public func pauseRemote() { remote.pause() }
     public func resumeRemote() { remote.resume() }
     public func stopRemote() { remote.stop() }

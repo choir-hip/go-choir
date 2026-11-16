@@ -65,6 +65,16 @@ public enum ClipOutcome: Sendable, Equatable { case played, unknown, failed }
         idleSeen = true; failed = false; resume()
     }
 
+    /// Before the lead-in is spoken: is this the file the clip was cut from? Its length is read without playing (same deadline as a start).
+    /// False: unknown clip, no engine, no answer in time, or a length more than 3 s from the transcribed file's; the segment is skipped
+    /// silently and the clip is marked so its "Hear it" row offers the episode only.
+    public func preflight(_ id: String) async -> Bool {
+        guard let clip = store.clip(id), let engine = queue.engine else { return false }
+        guard let d = await engine.remoteDuration(url: clip.audioURL, deadline: startDeadline) else { return false }
+        if clip.duration > 0, abs(d - clip.duration) > PodcastClip.durationTolerance { store.markMismatch(id); return false }
+        return true
+    }
+
     /// Play the clip and wait until it, and anything the reader queued behind it, is over.
     public func playClip(_ id: String) async -> ClipOutcome {
         guard let clip = store.clip(id) else { return .unknown }

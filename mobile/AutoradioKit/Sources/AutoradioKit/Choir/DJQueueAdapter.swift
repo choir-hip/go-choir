@@ -23,13 +23,18 @@ public enum DJUpcoming {
 /// Add to queue. The reader page's host gives the rows to the contract and calls `play` / `enqueue` from its buttons.
 public struct HearItRow: Codable, Sendable, Equatable {
     public var clipID, show, episode, length, quote: String
+    /// The file is not the one transcribed: the row offers the episode only, no clip.
+    public var episodeOnly: Bool = false
 }
 public enum HearIt {
     public static func rows(route: String, store: ClipStore = .shared) -> [HearItRow] {
-        store.clips(forRoute: route).map { HearItRow(clipID: $0.clipID, show: $0.show, episode: $0.episodeTitle, length: $0.lengthLabel, quote: $0.quote) }
+        store.clips(forRoute: route).map { HearItRow(clipID: $0.clipID, show: $0.show, episode: $0.episodeTitle, length: $0.lengthLabel, quote: $0.quote, episodeOnly: store.isMismatch($0.clipID)) }
     }
-    @MainActor public static func play(_ clipID: String, store: ClipStore = .shared, queue: PlayQueue = .shared) {
-        if let c = store.clip(clipID) { queue.playNow(c.playItem) }
+    /// Play: the clip when the audio is the transcribed file; else the episode from its start (the row then says "Open episode").
+    @MainActor public static func play(_ clipID: String, store: ClipStore = .shared, queue: PlayQueue = .shared, runner: DJClipRunner = .shared) async {
+        guard let c = store.clip(clipID) else { return }
+        if store.isMismatch(clipID) { queue.playNow(c.episodeItem); return }
+        queue.playNow(await runner.preflight(clipID) ? c.playItem : c.episodeItem)
     }
     @MainActor public static func enqueue(_ clipID: String, store: ClipStore = .shared, queue: PlayQueue = .shared) {
         if let c = store.clip(clipID) { queue.enqueue(c.playItem) }

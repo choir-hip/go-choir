@@ -412,6 +412,8 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     public var onRanDry: (@Sendable (String, Bool) -> Void)?
     /// Plays a `podcast_clip` segment's clip and returns when it (and what the reader queued behind it) is over.
     public var clipHandler: (@Sendable (String) async -> ClipOutcome)?
+    /// Asked at the first block of a segment that carries a clip: false skips the whole segment (the lead-in is never spoken).
+    public var segmentGate: (@Sendable (ProgrammeSegment) async -> Bool)?
     /// Before a segment (not the first of a run): what the reader queued by hand plays now. Returns when it is over.
     public var boundaryHandler: (@Sendable (Int) async -> Void)?
     /// The lock screen's next and previous: the host may take them as story moves (true: handled); else they skip a passage or segment.
@@ -539,6 +541,10 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
                         return (s.document.blocks[n], s.userPaused, s.level, s.document)
                     }
                     guard let (block, paused, lvl, doc) = step else { break }
+                    if let g = self.segmentGate, let seg = doc.segments.first(where: { $0.firstBlock == n && $0.clip != nil }) {
+                        if !(await g(seg)) { if Task.isCancelled { break }; n = seg.firstBlock + seg.blockCount; continue }
+                        if Task.isCancelled { break }
+                    }
                     self.audio.clearPlayhead(); self.onChange?(); self.publishNowPlaying()
                     if paused { self.audio.programmePause() } else if lvl != .pause { self.audio.programmePlay() }
                     if n != i, let bh = self.boundaryHandler, doc.segments.contains(where: { $0.firstBlock == n }) {
