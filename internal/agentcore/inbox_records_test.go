@@ -290,6 +290,55 @@ func TestRecordsRecheckAfterTurn(t *testing.T) {
 	}
 }
 
+// A Texture turn that commits Wait (or Write, or anything else) while a
+// record arrives that its frame did not show parks the run; the park's
+// re-check starts the next turn at once, whatever the turn's verb was and
+// with no later event (owner, 2026-11-16: "Texture should be woken by new
+// messages"; the one place a record arms a wake is the actor's inbox_record
+// update, and the one place a committed turn parks is
+// passivateIdleToolLoopRun, which calls recheckRecordsInbox). Failure it
+// pins: the park skips a Texture's inbox, so mail that arrived mid-turn waits
+// for a later event.
+func TestTextureRunParkedWithMailItDidNotSeeStartsOneMoreTurn(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	owner, computer := "owner-texture-late", rt.cfg.ComputerID
+	research, texture := "research:doc-tl", "texture:doc-tl"
+	var woke []string
+	rt.SetDispatchActor(func(_ context.Context, _, _, to, kind, _, _, _ string) error {
+		if kind == "inbox_record" {
+			woke = append(woke, to)
+		}
+		return nil
+	})
+	start := time.Now().UTC()
+	commit := func(id string, at time.Time) {
+		t.Helper()
+		req := types.CommitInboxRecordsRequest{OwnerID: owner, ComputerID: computer, CommandID: "tl-" + id, Records: []types.CommitmentRecord{{
+			SchemaID: types.CommitmentRecordSchemaV1, RecordID: id, Kind: types.CommitmentKindReport,
+			Report: &types.CommitmentReport{Claims: []types.ReportClaim{{Text: "a packet"}}},
+			Inbox:  texture, SenderInbox: research, Addressee: texture, EmitterKind: types.CommitmentEmitterAgent,
+			Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: research, CommittedAt: at.Format(time.RFC3339Nano)},
+		}}}
+		req.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(req)
+		if _, err := s.CommitInboxRecords(ctx, req); err != nil {
+			t.Fatalf("commit %s: %v", id, err)
+		}
+	}
+	parked := &types.RunRecord{RunID: "run-texture-parked", AgentID: texture, OwnerID: owner, ComputerID: computer,
+		AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, State: types.RunPassivated, CreatedAt: start,
+		Metadata: map[string]any{"passivated_reason": "durable_transition_success"}}
+	rt.recheckRecordsInbox(ctx, parked)
+	if len(woke) != 0 {
+		t.Fatalf("a Texture run parked with an empty inbox woke its desk: %v", woke)
+	}
+	commit("arrived-during-the-turn", start.Add(time.Second))
+	rt.recheckRecordsInbox(ctx, parked)
+	if len(woke) != 1 || woke[0] != texture {
+		t.Fatalf("a Texture run parked with mail its turn did not see did not start the next turn: %v", woke)
+	}
+}
+
 // Cut 1 routing, invariant 6: engineering reaches Texture only through
 // management. The reducer refuses an engineering act addressed to Texture
 // by desk name or by a Texture inbox, for every addressed kind, before

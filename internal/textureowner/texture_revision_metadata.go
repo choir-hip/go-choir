@@ -54,17 +54,12 @@ func (rt *Handler) buildAppagentRevisionMetadata(_ context.Context, rec *types.R
 		meta["revision_role"] = textureRevisionRoleCanonical
 		meta["texture_version_stage"] = "article_revision"
 	}
-	if promptOnlyInitialModelPrior {
-		meta["grounding_status"] = "model_prior_interim"
-		meta["revision_grounding"] = "model_prior"
-		meta["texture_version_stage"] = "interim"
-		meta["model_prior_interim"] = true
-		if metadataStringValue(meta, "artifact_kind") == "article_revision" {
-			meta["artifact_kind"] = "working_revision"
-		}
-		if metadataStringValue(meta, "revision_role") == textureRevisionRoleCanonical {
-			meta["revision_role"] = textureRevisionRoleInput
-		}
+	// The from-weights stamp is not decided here: it belongs to the document's
+	// first agent revision when that revision cites nothing, which only the
+	// commit knows (markModelPriorInterim). Inherited from the parent it
+	// marked every later revision, v2 and after, as model prior.
+	if metadataStringValue(meta, "texture_version_stage") == "interim" {
+		delete(meta, "texture_version_stage")
 	}
 	// A story's seed role names the one empty revision its opening
 	// committed; it is never carried forward. Inherited, it marked every
@@ -85,6 +80,41 @@ func (rt *Handler) buildAppagentRevisionMetadata(_ context.Context, rec *types.R
 		return json.RawMessage(`{"source":"texture_cell","loop_id":"` + rec.RunID + `"}`)
 	}
 	return data
+}
+
+// isFirstAgentRevision reports whether base, the head a Write is committed
+// against, is the owner's seed: the document's request itself, with no parent.
+// The revision committed against it is the document's first from the desk, v1
+// when the desk answers at once.
+func isFirstAgentRevision(base types.Revision) bool {
+	return base.AuthorKind == types.AuthorUser && strings.TrimSpace(base.ParentRevisionID) == ""
+}
+
+// markModelPriorInterim stamps a revision as the desk's answer from its own
+// knowledge, uncited and provisional (owner, 2026-11-16: v1 is a fast
+// response from the model's weights). It stamps only the first agent revision
+// of a prompt document, and only when the revision cites no source (refs is
+// the result document's source refs, not the quote checks, which skip a cite
+// with no quote) and no message had reached the desk's inbox: a first Write
+// that cites a capture is grounded, one written after research messaged is
+// written from them, and every later revision is written from what arrived. The stamp is the fields the reader and the next turn
+// read (grounding_status, revision_grounding, model_prior_interim,
+// texture_version_stage).
+func markModelPriorInterim(rec *types.RunRecord, meta map[string]any, base types.Revision, refs int, researchMailSeen bool) bool {
+	if refs > 0 || researchMailSeen || !isFirstAgentRevision(base) || !promptOnlyInitialModelPriorTextureRevision(rec, meta) {
+		return false
+	}
+	meta["grounding_status"] = "model_prior_interim"
+	meta["revision_grounding"] = "model_prior"
+	meta["texture_version_stage"] = "interim"
+	meta["model_prior_interim"] = true
+	if metadataStringValue(meta, "artifact_kind") == "article_revision" {
+		meta["artifact_kind"] = "working_revision"
+	}
+	if metadataStringValue(meta, "revision_role") == textureRevisionRoleCanonical {
+		meta["revision_role"] = textureRevisionRoleInput
+	}
+	return true
 }
 
 func promptOnlyInitialModelPriorTextureRevision(rec *types.RunRecord, meta map[string]any) bool {

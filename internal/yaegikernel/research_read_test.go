@@ -287,7 +287,11 @@ func TestResearchRoleAndOverlayStayUnderTheirBound(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Before 2026-11-09: overlay 13,100 chars, role 5,586.
-	if len(overlay) > 7000 || len(raw) > 5000 || len(overlay)+len(raw) > 11800 {
-		t.Fatalf("research overlay %d + role %d chars: the dedupe grew back (bounds 7000, 5000, 11800 together)", len(overlay), len(raw))
+	// Relaxed 2026-11-16 to a sanity check (12k, 9k, 19k together): the research
+	// prompt is to be rewritten as an explanation of the system rather than
+	// rules (owner, 2026-11-16), and a longer explanation must not be refused
+	// by a bound written for the dedupe.
+	if len(overlay) > 12000 || len(raw) > 9000 || len(overlay)+len(raw) > 19000 {
+		t.Fatalf("research overlay %d + role %d chars: past the sanity bounds (12000, 9000, 19000 together)", len(overlay), len(raw))
 	}
 }

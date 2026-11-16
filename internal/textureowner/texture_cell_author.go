@@ -389,6 +389,12 @@ func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, 
 	if len(checks) > 0 {
 		meta[texturewrite.ChecksMetadataKey] = checks
 	}
+	// The first revision a prompt document gets from the desk, when it cites
+	// nothing, is v1 from the model's own knowledge, and says so.
+	// A store error is not "no mail": it stamps nothing.
+	if mailHead, headErr := h.Store.InboxHead(ctx, rec.OwnerID, doc.ComputerID, strings.TrimSpace(rec.AgentID)); headErr == nil {
+		markModelPriorInterim(rec, meta, baseRev, len(projection.SourceRefs), mailHead > 0)
+	}
 	if strings.TrimSpace(doc.TrajectoryID) == "" {
 		canonicalPath, err := h.ensureCanonicalTextureProjectionPath(ctx, rec.OwnerID, doc)
 		if err != nil {
