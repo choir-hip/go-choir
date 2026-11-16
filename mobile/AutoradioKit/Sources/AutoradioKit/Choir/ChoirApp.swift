@@ -6,6 +6,7 @@ extension StageRegistry {
         r.register(.programme, ChoirFrontProgramme.self) { ChoirFrontProgramme($0) }
         r.register(.programme, RadioProgramme.self) { RadioProgramme($0) }
         r.register(.desk, ChoirDeskStage.self) { ChoirDeskStage($0) }
+        r.register(.holder, SavedAnswerHolder.self) { SavedAnswerHolder($0) }
         r.register(.desk, AutoradioDeskStage.self) { AutoradioDeskStage($0) }
     }
 
@@ -16,7 +17,7 @@ extension StageRegistry {
         var c = LabConfiguration(name: "listener", stages: [
             .micSource: .init(id: "builtin"), .addressing: .init(id: "open"), .speechBounds: .init(id: "energy-vad", params: ["hangoverSeconds": .number(0.25)]),
             .speakerCheck: .init(id: "none"), .transcriber: .init(id: "apple-speech"), .yieldPolicy: .init(id: "dip-then-pause"),
-            .system1: .init(id: ChoirSystem1.stageID), .holder: .init(id: "local-ack"), .voice: voice,
+            .system1: .init(id: ChoirSystem1.stageID), .holder: .init(id: SavedAnswerHolder.stageID), .voice: voice,
             .desk: .init(id: AutoradioDeskStage.stageID), .programme: .init(id: RadioProgramme.stageID),
         ])
         c.audioPolicy = .alwaysTalking          // hands-free: voice processing for the whole session, so the radio's voice is cancelled from the microphone
@@ -176,6 +177,8 @@ public final class ChoirApp: @unchecked Sendable {
         do {
             let list = try await ChoirFront.stories(client: ChoirEnvironment.shared.client(baseURL: base), limit: 30)
             lock.lock(); stories = list; lock.unlock()
+            // The headlines and deks the phone now holds are part of what it can answer from first.
+            SavedCorpus.shared.setSource("front") { list.filter { !$0.dek.isEmpty }.map { SavedCorpus.Document(id: "front:" + $0.route, title: $0.title, address: "pub:" + $0.route, text: $0.dek) } }
             if list.isEmpty { say("The front page is empty right now.") }
         } catch { say(Self.plain(stage: "programme", message: "\(error)")) }
         onChange?()

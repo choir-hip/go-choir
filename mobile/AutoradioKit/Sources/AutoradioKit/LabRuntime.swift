@@ -159,7 +159,8 @@ public final class LabRuntime: @unchecked Sendable {
             try await session.claim(.talking, preferBuiltInMic: true, reason: "start")    // voice processing from the start: the radio's voice is not the listener's
             let micOK = virtual ? true : await LiveAudio.requestMicPermission()
             if !micOK { log.emit(.error(stage: "mic", message: "microphone permission denied; button/typing only")) }
-            HandsFreeSwitch.shared.decideFirstRun(micGranted: micOK)         // the default: ON when the microphone is granted, OFF when declined
+            micGranted = micOK
+            HandsFreeSwitch.shared.appOpened(micGranted: micOK)              // a launch is an app open: ON when the microphone is granted, OFF when declined
             try audio.start(bus: bus, clock: clock, wantMic: micOK, voiceProcessing: coordinator.current == .talking, virtual: virtual)
             if virtual { log.emit(.note("virtual audio: no hardware is opened; mic frames are injected")) }
             started = true
@@ -256,10 +257,19 @@ public final class LabRuntime: @unchecked Sendable {
     /// `pageAddress` is the address of the page the bar was showing when the listener asked (empty: the page in front now).
     @discardableResult
     public func ask(_ text: String, pageAddress: String = "") async -> Bool {
+        // A question that cannot be asked is kept, with the reason, so it is not lost with the cleared field: the card shows it with a retry.
+        func refused(_ why: String) -> Bool {
+            let id = "ask-" + UUID().uuidString.prefix(8).lowercased()
+            Conversation.shared.begin(id: id, question: text)
+            Conversation.shared.fail(id: id, note: why)
+            return false
+        }
         if !snapshot().running, let go = startRequest { await go() }
-        guard snapshot().running else { return false }
+        guard snapshot().running else { return refused("The radio could not start, so it could not hear that. Try again.") }
         let front = pageAddress.isEmpty ? nil : frontPageResolver?(pageAddress)
-        return await engine.typedTurn(text, front: front)
+        let started = await engine.typedTurn(text, front: front)
+        if !started, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return refused("The radio was busy with another question. Try again.") }
+        return started
     }
 
     /// Hands-free on or off (one state, kept across launches): on, the microphone is open and the turn policy opens and closes turns; off,
@@ -271,6 +281,15 @@ public final class LabRuntime: @unchecked Sendable {
     }
     /// The stored state again, after a screen's own turn-on.
     public func restoreHandsFree() { setHandsFree(HandsFreeSwitch.shared.isOn) }
+    private var micGranted = false
+    /// The app came back to the foreground: a new foreground session, so voice turns on again (when the microphone is granted) even if
+    /// the reader turned it off in the last one. Called by the module's `foreground(_:)`.
+    public func appBecameActive() {
+        guard started else { return }
+        HandsFreeSwitch.shared.appOpened(micGranted: micGranted)
+        Task { [engine] in await engine.handsFreeSet(HandsFreeSwitch.shared.isOn) }
+        refresh()
+    }
     public var handsFreeIsOn: Bool { handsFreeOverride ?? HandsFreeSwitch.shared.isOn }
     /// The lab's press and release buttons (not in the normal app): press turns hands-free on, release turns it off.
     public func talkDown() { setHandsFree(true) }
@@ -313,6 +332,8 @@ public final class LabRuntime: @unchecked Sendable {
         var c = conf
         // A configuration saved before the stock-phrase holder was removed names it; it now means the local model's holder.
         if c.setting(.holder)?.id == "fixed-lines" { c.set(.holder, StageSetting(id: LocalAckHolder.stageID)) }
+        // The local holder now answers first from the saved stories (and says what it looks up when they hold nothing).
+        if c.setting(.holder)?.id == LocalAckHolder.stageID { c.set(.holder, StageSetting(id: SavedAnswerHolder.stageID)) }
         lock.lock(); config = c; snap.configName = c.name; lock.unlock()
         let policyChanged = policyBox.value != c.audio
         policyBox.value = c.audio

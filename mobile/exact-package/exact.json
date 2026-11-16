@@ -972,7 +972,13 @@
       "talking": "bool",
       "signedIn": "bool",
       "handsFree": "bool",
-      "progress": "number"
+      "progress": "number",
+      "question": "string",
+      "answerText": "string",
+      "answerLabel": "string",
+      "answerState": "string",
+      "answerNote": "string",
+      "canRetry": "bool"
     },
     "DemoInfo": {
       "on": "bool"
@@ -985,6 +991,28 @@
     },
     "SignalList": {
       "rows": "SignalRow[]"
+    },
+    "ConversationRow": {
+      "id": "string",
+      "question": "string",
+      "first": "string",
+      "firstSource": "string",
+      "answer": "string",
+      "status": "string",
+      "note": "string",
+      "canRetry": "bool"
+    },
+    "ConversationInfo": {
+      "rows": "ConversationRow[]",
+      "empty": "bool"
+    },
+    "VoiceProfile": {
+      "learned": "bool",
+      "heard": "number",
+      "needed": "number",
+      "ready": "bool",
+      "line": "string",
+      "credit": "string"
     },
     "VoiceCard": {
       "id": "string",
@@ -2594,7 +2622,13 @@
           "talking": false,
           "signedIn": false,
           "handsFree": false,
-          "progress": 0
+          "progress": 0,
+          "question": "",
+          "answerText": "",
+          "answerLabel": "",
+          "answerState": "",
+          "answerNote": "",
+          "canRetry": false
         }
       }
     },
@@ -2680,6 +2714,48 @@
         "on": "string"
       },
       "answers": "PageList"
+    },
+    {
+      "source": "conversationInfo",
+      "live": true,
+      "answers": "ConversationInfo",
+      "substitute": {
+        "default": {
+          "rows": [],
+          "empty": true
+        }
+      }
+    },
+    {
+      "send": "answerAction",
+      "options": {
+        "action": "string",
+        "id": "string"
+      },
+      "answers": "SettingsAck"
+    },
+    {
+      "source": "voiceProfile",
+      "live": true,
+      "answers": "VoiceProfile",
+      "substitute": {
+        "default": {
+          "learned": false,
+          "heard": 0,
+          "needed": 3,
+          "ready": false,
+          "line": "",
+          "credit": ""
+        }
+      }
+    },
+    {
+      "send": "voiceLearn",
+      "answers": "SettingsAck"
+    },
+    {
+      "send": "voiceForget",
+      "answers": "SettingsAck"
     },
     {
       "source": "voiceCards",

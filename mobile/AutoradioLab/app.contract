@@ -24,6 +24,7 @@ component Autoradio
   members "./members-voice.contract"
   members "./members-queue.contract"          // lane autoradio-queue
   members "./members-books.contract"
+  members "./members-talk.contract"
   // ---- end of members ----
 
   // What child components may `inject`. Bare names of this component's states, derives, resources and actions.
@@ -330,6 +331,14 @@ component Autoradio
     refreshActivity
     devDetails
     toggleDevDetails
+    // ---- lane autoradio-talk: the conversation and the answer card ----
+    cv
+    answerRetry
+    answerDismiss
+    answerCancel
+    vp
+    learnVoice
+    forgetVoice
     // ---- lane 8: onboarding and the edition topics ----
     ob
     obBegin
