@@ -990,6 +990,24 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case path == "/api/platform/retrieval/search":
 		h.HandlePlatformRetrievalSearch(w, r)
 		return
+	case path == podcastClipsPublicPath:
+		h.HandlePlatformPodcastClips(w, r)
+		return
+	case path == "/api/platform/podcast-feeds" || strings.HasPrefix(path, "/api/platform/podcast-feeds/"):
+		// Feeds reported by accounts are not built (design Part 2): the phone
+		// treats this as silence. Answered here so the request never reaches a
+		// computer.
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
+		return
+	case path == podcastPopularPublicPath:
+		h.HandlePlatformPodcastPopular(w, r)
+		return
+	case path == podcastTranscriptPublicPath:
+		h.HandlePlatformPodcastTranscript(w, r)
+		return
+	case isPodcastOperatorPath(path):
+		h.HandlePlatformOperatorPodcasts(w, r)
+		return
 	case path == platformOperatorYankPath:
 		h.HandlePlatformOperatorYank(w, r)
 		return
