@@ -361,10 +361,21 @@ func TestJ10_J11_J12_JudgeTaskStoredPairsAndDistinctEpisodes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Both episodes already gave this story a clip: nothing is asked, and the
-	// judge is not called at all (one clip per episode per story, across runs).
-	if sum2.Pairs != 0 || sum2.Clips != 0 || len(judge.states) != 0 {
-		t.Fatalf("J11: the second run asked %d pairs (first %d), stored %d clips, made %d calls", sum2.Pairs, sum1.Pairs, sum2.Clips, len(judge.states))
+	// Both episodes already gave the harbor story (story 0) a clip: nothing is
+	// asked about it (one clip per episode per story, across runs). A story that
+	// got no clip, a spurious candidate the judge said no to, is asked again.
+	if sum2.Clips != 0 {
+		t.Fatalf("J11: the second run stored %d clips", sum2.Clips)
+	}
+	for _, qs := range judge.qs {
+		for name := range qs {
+			if strings.HasPrefix(name, "q0_") {
+				t.Fatalf("J11: the harbor story was asked about again: %s", name)
+			}
+		}
+	}
+	if sum2.Pairs >= sum1.Pairs {
+		t.Fatalf("J11: the second run asked %d pairs, the first %d", sum2.Pairs, sum1.Pairs)
 	}
 	_ = id1
 }
