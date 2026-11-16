@@ -89,29 +89,17 @@ component UpNext
 keyframes barWebGrow
   from opacity=0 scale=0.96
 
-// The page a URL typed in the bar opens, in place above the bar (the bar stays live): Read aloud and Add to queue sit on it.
+// The page a URL typed in the bar opens, in place above the bar (the bar stays live). It fills the screen from the status bar down to the top
+// of the lens; its host, Loading, Read aloud, Add to queue, Open in Safari and Close are the content row in the lens (content.contract).
 component BarWebLayer
   inject
     th: Theme
     qv: QueueInfo
-    queueDo: action
-    queuePlay: action
-    queueLater: action
     webMsg: action
-    webBusy: bool
+    ctlClear: number
   view
-    column testId="bar-web" position="absolute" left=0 right=0 top=0 bottom="calc(env(safe-area-inset-bottom) + 72px)" z-index=8
+    column testId="bar-web" position="absolute" left=0 right=0 top=0 bottom=`calc(env(safe-area-inset-bottom) + ${ctlClear}px)` z-index=8
       background-color=th.paper box-shadow=th.shadow2 border-bottom-left-radius=th.radiusCard border-bottom-right-radius=th.radiusCard overflow="hidden"
+      padding-top="env(safe-area-inset-top)" box-sizing="border-box"
       animation=(th.reducedMotion ? "none" : `barWebGrow ${th.motionEnterMs * 2}ms ease-out both`)
-      row align-items="center" gap=8 padding="calc(env(safe-area-inset-top) + 6px) 8px 6px 8px" width="100%" box-sizing="border-box"
-        button press=queueDo("closeWeb", "") testId="bar-web-close" appearance="none" aria-label="Close page" width=40 height=40
-          image "symbol:close" color=th.fg
-        text qv.webHost testId="bar-web-host" font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg flex=1 min-width=0 line-clamp=1
-        if webBusy
-          progress aria-label="Loading" width=18 height=18 color=th.accent
-      row gap=8 padding="0px 12px 8px 12px" width="100%" box-sizing="border-box"
-        button press=queuePlay("page", qv.webUrl, qv.webHost) testId="bar-web-read" appearance="none" aria-label="Read this page aloud" flex=1
-          Btn(label="Read aloud", primary=false, wide=true)
-        button press=queueLater("page", qv.webUrl, qv.webHost) testId="bar-web-add" appearance="none" aria-label="Add this page to the queue" flex=1
-          Btn(label="Add to queue", primary=false, wide=true)
       web-page page=qv.webUrl message=webMsg testId="bar-web-view" width="100%" flex=1 min-height=0

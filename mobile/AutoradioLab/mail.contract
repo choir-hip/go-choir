@@ -271,12 +271,12 @@ component MailCompose
         column gap=4
           text "To" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
           input value=mailCurTo input=editMailTo type="email" placeholder="name@example.com" aria-label="To" testId="mail-field-to"
-            font-family=th.fontLabel font-size=16 color=th.fg padding="10px 0px" border-width=0 background-color="transparent"
+            font-family=th.fontText font-size=16 color=th.fg padding="10px 0px" border-width=0 background-color="transparent"
           RowRule(indent=0)
         column gap=4
           text "Subject" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
           input value=mailCurSubject input=editMailSubject placeholder="Subject" aria-label="Subject" testId="mail-field-subject"
-            font-family=th.fontLabel font-size=16 color=th.fg padding="10px 0px" border-width=0 background-color="transparent"
+            font-family=th.fontText font-size=16 color=th.fg padding="10px 0px" border-width=0 background-color="transparent"
           RowRule(indent=0)
         column gap=4
           text "Message" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted

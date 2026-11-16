@@ -8,17 +8,20 @@
 //   the field      "Ask about this page...", aimed at the page in front (its address goes with the turn).
 //   the microphone tap to start talking, tap again to send (the lens says "Listening" plainly while it is open).
 //   play / pause   the radio; when nothing is loaded it starts the edition.
+// For a document in the Reader or an embedded web page the lens carries one more line at its top, the content row (content.contract),
+// and the page above it takes the whole screen (owner, 2026-11-16).
 // A line above the controls says what is going on: what is loaded when something plays or is paused (tap: the player), the
 // words as heard, the holding line, a revision, an error, the setup state, or the aim while typing. A quiet count
 // ("Story · 7 in the deck") sits just above the lens. The launcher and the player rise from the lens, as sheets
 // above it, so the bar stays visible and usable under them.
 // testIds: bar-stack, bar, bar-mark, bar-field, bar-mic, bar-send, bar-play, bar-text, bar-aim, bar-setup, bar-yield, bar-progress,
-// page-indicator, bar-answer, bar-asked, bar-answer-text, bar-answer-working, bar-answer-note, bar-answer-retry, bar-answer-cancel, bar-answer-close.
+// page-indicator, content-row (content.contract), bar-answer, bar-asked, bar-answer-text, bar-answer-working, bar-answer-note, bar-answer-retry, bar-answer-cancel, bar-answer-close.
 use Theme, PageList, BarInfo, RadioInfo, ReaderAimInfo, Onboarding, MailMessageView from "@choir/autoradio"
 use Mark from "./mark.contract"
 use Launcher from "./launcher.contract"
 use PlayerLayer from "./player.contract"
 use StackVp from "./ui.contract"
+use ContentRow from "./content.contract"
 
 keyframes barRise
   from opacity=0 translate="0px 6px"
@@ -77,6 +80,7 @@ component BarShell
     heardNow: bool
     onbd: bool
     topAddr: string
+    ctlMode: string
     moreFor: string
     moreOfThis: action
     stackCount: number
@@ -152,6 +156,10 @@ component BarShell
           border-top-left-radius=(th.radiusCard * 1.7) border-top-right-radius=(th.radiusCard * 1.7)
         box position="absolute" left=0 right=0 top=1 height=14 pointer-events="none" border-top-left-radius=(th.radiusCard * 1.7) border-top-right-radius=(th.radiusCard * 1.7)
           background-image="linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0))"
+        // the content row (content.contract): for a document in the Reader or an embedded web page, one line above the "On:" line that
+        // expands upward to the page's actions. The page itself carries no header; it runs down to the top of this lens.
+        if onbd == false and layer == "" and ctlMode != ""
+          ContentRow()
         // the deck's quiet count: where you are, in a hairline of text at the top of the lens (not over the page)
         if onbd == false and layer == ""
           row width="100%" align-items="center" justify-content="space-between" gap=8

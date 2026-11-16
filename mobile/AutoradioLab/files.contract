@@ -80,7 +80,7 @@ component FileRowItem
       if fsSel == item.path
         column padding="0 0 14px 0" gap=10
           input value=fsRenameText input=fsEditName submit=fsRename placeholder="New name" aria-label="New name" testId="files-rename-input"
-            font-family=th.fontLabel font-size=16 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
+            font-family=th.fontText font-size=16 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
           RowRule(indent=0)
           row gap=8 align-items="center"
             Chip(label="Rename", active=false, testId="files-rename-go", press=fsRename)
@@ -173,7 +173,7 @@ component FilesPlace
           row gap=8 align-items="center"
             column flex=1 min-width=0
               input value=fsNewName input=fsEditNew submit=fsMakeFolder placeholder="Folder name" aria-label="Folder name" testId="files-new-input"
-                min-width=0 font-family=th.fontLabel font-size=16 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
+                min-width=0 font-family=th.fontText font-size=16 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
               RowRule(indent=0)
             Chip(label="Create", active=true, testId="files-new-go", press=fsMakeFolder)
       if fsList.mode == "search"

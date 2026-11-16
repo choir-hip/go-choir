@@ -84,7 +84,7 @@ component Launcher
       scroll testId="launcher-scroll" overflow-x="hidden" flex=1 min-height=0 width="100%"
         column padding=20 gap=6 padding-bottom=24 box-sizing="border-box" width="100%" min-width=0
           input type="search" value=lq input=editLq placeholder="Search the paper and your pages" aria-label="Search" testId="launcher-search"
-            font-family=th.fontLabel font-size=17 color=th.fg min-height=48 padding="8px 0px" border-width=0 background-color="transparent"
+            font-family=th.fontText font-size=17 color=th.fg min-height=48 padding="8px 0px" border-width=0 background-color="transparent"
             ::placeholder
               color=th.muted
           RowRule(indent=0)

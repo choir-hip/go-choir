@@ -301,7 +301,7 @@ component AppearanceScreen
           row gap=8 align-items="center" width="100%"
             column flex=1 min-width=0
               input value=themeDoc input=editThemeDoc placeholder="Theme Texture id" aria-label="Theme Texture id" testId="settings-theme-doc" min-width=0
-                font-family=th.fontLabel font-size=16 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
+                font-family=th.fontText font-size=16 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
               RowRule(indent=0)
             button press=loadThemeDoc testId="settings-theme-load" appearance="none"
               Btn(label="Add", primary=false, wide=false)

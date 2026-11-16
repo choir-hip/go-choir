@@ -47,7 +47,7 @@ component TexturesPage
     PageScroll(id="textures")
       text "Textures" role="heading" aria-level=1 font-family=th.fontHead font-size="-exact-title1" font-weight=700 testId="page-title" color=th.fg
       input type="search" value=q input=editQ placeholder="Search your documents" aria-label="Search your documents" testId="textures-search"
-        font-family=th.fontLabel font-size=17 color=th.fg min-height=48 padding="8px 0px" border-width=0 background-color="transparent"
+        font-family=th.fontText font-size=17 color=th.fg min-height=48 padding="8px 0px" border-width=0 background-color="transparent"
         ::placeholder
           color=th.muted
       RowRule(indent=0)

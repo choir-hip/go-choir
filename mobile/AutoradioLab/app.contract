@@ -24,6 +24,7 @@ component Autoradio
   members "./members-voice.contract"
   members "./members-queue.contract"          // lane autoradio-queue
   members "./members-books.contract"
+  members "./members-content.contract"        // the content row above the bar (owner, 2026-11-16)
   members "./members-talk.contract"
   // ---- lane autoradio-podcasts ----
   members "./members-podcasts.contract"
@@ -222,6 +223,32 @@ component Autoradio
     ldRead
     ldQueue
     ldRemove
+    // ---- the content row (members-content.contract, content.contract) ----
+    ctlOpen
+    ctlFor
+    ctlPanel
+    ctlMode
+    ctlKey
+    ctlUp
+    ctlClear
+    ctlTitle
+    ctlBusy
+    ctlPos
+    ctlToggle
+    ctlHide
+    ctlPanelOf
+    ctlRead
+    ctlQueueDoc
+    ctlGo
+    ctlStep
+    ctlJump
+    ctlSetText
+    ctlCloseDoc
+    ctlWebRead
+    ctlWebLater
+    ctlSafari
+    ctlCloseWeb
+    ctlCloseBarWeb
     // ---- lane 5: files and viewers ----
     fsList
     fsMode
@@ -425,6 +452,9 @@ component Autoradio
       // lane autoradio-queue: the page a URL typed in the bar opened, in place above the bar
       if qv.webUrl != ""
         BarWebLayer()
+      // the content row is expanded: a tap on the page puts it away (a barely-there veil so the tap lands; the page does not dim)
+      if ctlUp and layer == ""
+        box testId="content-scrim" position="absolute" inset=0 z-index=9 background-color=th.fg opacity=0.02 press=ctlHide aria-label="Close the controls"
       // a sheet is up (the launcher or the player): the page dims behind it; a tap on it puts the sheet away
       if layer != ""
         box testId="layer-scrim" position="absolute" inset=0 background-color=th.fg opacity=(max(th.behindDim3, 0.4)) press=hideLayer
