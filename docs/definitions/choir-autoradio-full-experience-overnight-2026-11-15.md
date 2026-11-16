@@ -78,7 +78,7 @@ homotopy:
 
 boundaries:
   authority: owner's statements of 2026-11-15 (all recorded in docs/problems/autoradio-owner-phone-review-2026-11-15.md); standing install authorization for QA builds.
-  mutation_class: phone lanes orange (not on main). Server: design green; intake, clips route and programme segment orange; matching with a gateway host-caller entry red, two seats.
+  mutation_class: "phone lanes orange (not on main). Server: design green; intake, clips route and programme segment orange; matching with a gateway host-caller entry red, two seats."
   invariants:
     - One Mac build at a time, run by the lead. Builders run package tests only, through the lock.
     - No switches, no limits on our own model calls; one Jev call per matching run.
@@ -102,15 +102,69 @@ conjecture:
       scope: tonight's lanes
 
 stations:
-  - id: Q   # lane/autoradio-queue: PlayQueue, remote audio, Up next, URL in the bar
-  - id: P   # lane/autoradio-podcasts: the podcast app
-  - id: R   # lane/autoradio-reader: the Reader app, EPUB and PDF
-  - id: T   # lane/autoradio-talk: asking fixed, on-device first answer, the reader's voice
-  - id: D   # lane/autoradio-dj-clips: clips in the programme, Play hands the stack to the DJ
-  - id: V   # lane/autoradio-design: the design pass, with a screenshot round from the lead
-  - id: S   # lane/podcast-clips: the server pipeline and the operator proof
-  - id: K   # lane/autoradio-queue-desk: the desk sees the queue and returns ordered changes to it (server)
-  - id: M   # lead: merges and builds as lanes push; last merge 09:00Z; final install by 10:30Z; report
+  - id: Q
+    name: "the play queue, remote audio, Up next, a URL in the bar"
+    class: "orange"
+    review: "by tier before landing on main; the phone branch is not landed tonight"
+    depends_on: []
+    carrier: "lane/autoradio-queue"
+    status: working
+  - id: P
+    name: "the podcast app"
+    class: "orange"
+    review: "by tier before landing on main; the phone branch is not landed tonight"
+    depends_on: []
+    carrier: "lane/autoradio-podcasts"
+    status: working
+  - id: R
+    name: "the Reader app, EPUB and PDF"
+    class: "orange"
+    review: "by tier before landing on main; the phone branch is not landed tonight"
+    depends_on: []
+    carrier: "lane/autoradio-reader"
+    status: working
+  - id: T
+    name: "asking fixed, the on-device first answer, voice on and off, the reader's voice"
+    class: "orange"
+    review: "by tier before landing on main; the phone branch is not landed tonight"
+    depends_on: []
+    carrier: "lane/autoradio-talk"
+    status: working
+  - id: D
+    name: "clips in the programme, Play hands the list to the DJ"
+    class: "orange"
+    review: "by tier before landing on main; the phone branch is not landed tonight"
+    depends_on: []
+    carrier: "lane/autoradio-dj-clips"
+    status: working
+  - id: V
+    name: "the design pass, with screenshot rounds from the lead"
+    class: "green"
+    review: "by tier before landing on main; the phone branch is not landed tonight"
+    depends_on: []
+    carrier: "lane/autoradio-design"
+    status: working
+  - id: S
+    name: "podcast clips on the server and the transcription worker"
+    class: "orange, and red for the matching job"
+    review: "by tier before landing on main; the phone branch is not landed tonight"
+    depends_on: []
+    carrier: "lane/podcast-clips"
+    status: working
+  - id: K
+    name: "the desk sees the queue and returns ordered changes"
+    class: "orange"
+    review: "by tier before landing on main; the phone branch is not landed tonight"
+    depends_on: []
+    carrier: "lane/autoradio-queue-desk"
+    status: working
+  - id: M
+    name: "merges, builds, installs and the report"
+    class: "green"
+    review: "by tier before landing on main; the phone branch is not landed tonight"
+    depends_on: []
+    carrier: "the lead"
+    status: working
 
 now:
   status: working
