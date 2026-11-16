@@ -61,7 +61,8 @@ component StackRow
           text `${index + 1}` font-family=th.fontMono font-size=12 color=th.muted width=18
           column flex=1 min-width=0 gap=1 align-items="flex-start"
             text name font-family=th.fontUi font-size=16 font-weight=600 color=th.fg line-clamp=1 text-align="left"
-            text word font-family=th.fontUi font-size=11 font-weight=600 letter-spacing=0.6 text-transform="uppercase" color=(here ? th.accent : th.muted)
+            if name.startsWith(word) == false
+              text word font-family=th.fontUi font-size=11 font-weight=600 letter-spacing=0.6 text-transform="uppercase" color=th.muted
           if here
             box width=3 height=18 background-color=th.accent
       if isFixed(address) == false and here == false

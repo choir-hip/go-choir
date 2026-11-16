@@ -3,7 +3,7 @@
 // search field filters them. A document opens in the reader (`texture:<doc>`). "New document" is a prompt, not an empty editor.
 // testIds: page-title, textures-search, textures-edition, textures-make-edition, textures-new, textures-doc-<address>.
 use Theme, TextureList, TextureRow, Onboarding from "@choir/autoradio"
-use PageScroll, Card, Btn from "./ui.contract"
+use PageScroll, Card, Btn, RowRule from "./ui.contract"
 use FirstRunCard, EditEditionLink from "./onboarding.contract"
 
 component TextureRowView
@@ -47,7 +47,10 @@ component TexturesPage
     PageScroll(id="textures")
       text "Textures" role="heading" aria-level=1 font-family=th.fontRead font-size=30 font-weight=700 testId="page-title" color=th.fg
       input type="search" value=q input=editQ placeholder="Search your documents" aria-label="Search your documents" testId="textures-search"
-        font-family=th.fontUi padding="10px 4px"
+        font-family=th.fontUi font-size=17 color=th.fg min-height=48 padding="8px 0px" border-width=0 background-color="transparent"
+        ::placeholder
+          color=th.muted
+      RowRule(indent=0)
       // The generic "Make your edition" card is this page's own card below (found with real data: both showed, one under the other).
       if ob.card != "Make your edition"
         FirstRunCard()

@@ -455,5 +455,6 @@ component FirstRunCard
         column padding=16 gap=8
           text ob.card font-family=th.fontRead font-size=19 font-weight=700 color=th.fg
           text ob.cardBody font-family=th.fontUi font-size=14 line-height=1.4 color=th.muted
-          button press=openPage("onboarding:setup", "Make it yours") testId="firstrun-open" appearance="none" width="100%"
-            Btn(label=act, primary=true, wide=true)
+          // a prompt inside a card is a text action; the block is for a page whose one job is that action (the onboarding steps)
+          button press=openPage("onboarding:setup", "Make it yours") testId="firstrun-open" appearance="none" align-self="flex-start"
+            Btn(label=act, primary=false, wide=false)

@@ -66,7 +66,10 @@ component PodcastsHome
       Emerge(delay=0)
         PageHeader(title="Podcasts", subtitle="Your shows, and where to find more", subId="podcasts-sub")
       input type="search" value=podQ input=editPodQ placeholder="Search podcasts" aria-label="Search podcasts" testId="podcasts-search"
-        enterkeyhint="search" font-family=th.fontUi font-size=16 color=th.fg padding="10px 4px"
+        enterkeyhint="search" font-family=th.fontUi font-size=17 color=th.fg min-height=48 padding="8px 0px" border-width=0 background-color="transparent"
+        ::placeholder
+          color=th.muted
+      RowRule(indent=0)
       if podHome.hasQuery
         if podHome.results.length > 0
           Emerge(delay=0)
@@ -253,7 +256,10 @@ component PodcastEpisodePage
             column gap=8 width="100%" testId="podcast-transcript"
               SectionHeader(label="Transcript")
               input type="search" value=podFind input=editPodFind placeholder="Find in the transcript" aria-label="Find in the transcript" testId="podcast-find"
-                enterkeyhint="search" font-family=th.fontUi font-size=16 color=th.fg padding="10px 4px"
+                enterkeyhint="search" font-family=th.fontUi font-size=16 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
+                ::placeholder
+                  color=th.muted
+              RowRule(indent=0)
               if podEp.transcriptNote != ""
                 text podEp.transcriptNote testId="podcast-transcript-note" font-family=th.fontUi font-size=13 color=th.muted
               for t in podEp.transcript key=t.key

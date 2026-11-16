@@ -9,7 +9,7 @@
 //   PDF    `iframe` on a local .pdf shows PDFKit's PDFView: its own scrolling and pinch, page set by `#page=N` in src
 //   e-book chapters become Markdown for `text markup="markdown"` (no EPUB element in Exact; Kit/Epub.swift parses the book)
 use Theme, FileInfo, FileChapter, FilePages from "@choir/autoradio"
-use PageScroll, Card from "./ui.contract"
+use PageScroll, Card, RowRule from "./ui.contract"
 
 // The one control of the Files place and the viewers, drawn as a word (no pill: owner, 2026-11-15): a text action in the accent; when `active` (a
 // chosen mode, sort or zoom) it is full strength with a short accent rule under it. `press` is an action call from the caller.
@@ -168,8 +168,10 @@ component PdfViewer
         Chip(label="›", active=false, testId="pdf-next", press=fvGo(fvPage + 1))
         Chip(label="Share", active=false, testId="pdf-share", press=fvShare(fvInfo.name, fvInfo.src))
       row gap=8 padding-left=20 padding-right=20 padding-bottom=8 align-items="center" flex-shrink=0
-        input type="search" value=fvFindDraft input=fvEditFind submit=fvSearch placeholder="Find in this PDF" aria-label="Find in this PDF" testId="pdf-find"
-          enterkeyhint="search" flex=1 min-width=0 font-family=th.fontUi font-size=15 color=th.fg padding="8px 4px"
+        column flex=1 min-width=0
+          input type="search" value=fvFindDraft input=fvEditFind submit=fvSearch placeholder="Find in this PDF" aria-label="Find in this PDF" testId="pdf-find"
+            enterkeyhint="search" min-width=0 font-family=th.fontUi font-size=15 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
+          RowRule(indent=0)
         if fvPages.query != ""
           Chip(label="Clear", active=false, testId="pdf-find-clear", press=fvClearFind)
       if fvPages.query != ""

@@ -14,7 +14,7 @@
 //   settings-about-*, settings-voice-components.
 // Every colour, face, radius and shadow is a theme token (th.*, tx.*); a theme's own preview card paints from the card's data.
 use Theme, ThemeList, DemoInfo, ThemeCard, ThemeExtras, SettingsAccount, SettingsComputer, SettingRowInfo, LearnedInfo, AboutInfo, ThemeCards, SettingRows, ChoirAuth, VoiceProfile from "@choir/autoradio"
-use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace, SelectMark from "./ui.contract"
+use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace, SelectMark, RowRule from "./ui.contract"
 use VoiceCardsList from "./voice.contract"
 
 component SettingsPage
@@ -162,7 +162,7 @@ component ThemePreview
     column width="100%" gap=6 box-sizing="border-box"
       button press=setTheme(t.id) testId=`settings-theme-${t.id}` role="radio" aria-checked=t.current appearance="none" width="100%" box-sizing="border-box"
         aria-label=`${t.name}${t.current ? ", selected" : ""}`
-        column width="100%" box-sizing="border-box" align-items="stretch" gap=10 padding=16 background-color=t.paper border-radius=t.radiusCard box-shadow=t.shadow
+        column width="100%" box-sizing="border-box" align-items="stretch" gap=10 padding=16 background-color=t.paper border-radius=th.radiusCard box-shadow=t.shadow
           row align-items="center" gap=8 width="100%"
             text t.name font-family=t.fontRead font-size=22 font-weight=700 color=t.fg text-align="left" flex=1 min-width=0
             if t.contrast == "AAA"
@@ -299,7 +299,10 @@ component AppearanceScreen
         column gap=10 padding=16 width="100%" box-sizing="border-box"
           text "A theme is a Texture with one choir-theme block. Paste its id to add it here; the server checks it and so does the phone." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
           row gap=8 align-items="center" width="100%"
-            input value=themeDoc input=editThemeDoc placeholder="Theme Texture id" aria-label="Theme Texture id" testId="settings-theme-doc" flex=1 min-width=0
+            column flex=1 min-width=0
+              input value=themeDoc input=editThemeDoc placeholder="Theme Texture id" aria-label="Theme Texture id" testId="settings-theme-doc" min-width=0
+                font-family=th.fontUi font-size=16 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
+              RowRule(indent=0)
             button press=loadThemeDoc testId="settings-theme-load" appearance="none"
               Btn(label="Add", primary=true, wide=false)
           if dm.on

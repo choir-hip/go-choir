@@ -88,8 +88,10 @@ component DocFind
   view
     column width="100%" gap=8
       row gap=8 align-items="center" width="100%"
-        input type="search" value=ldFindDraft input=ldEditFind submit=ldDoFind placeholder="Find in this document" aria-label="Find in this document" testId="doc-find"
-          enterkeyhint="search" flex=1 min-width=0 font-family=th.fontUi font-size=16 color=th.fg padding="10px 0px"
+        column flex=1 min-width=0
+          input type="search" value=ldFindDraft input=ldEditFind submit=ldDoFind placeholder="Find in this document" aria-label="Find in this document" testId="doc-find"
+            enterkeyhint="search" min-width=0 font-family=th.fontUi font-size=16 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
+          RowRule(indent=0)
         if ldFind != ""
           button press=ldClearFind testId="doc-find-clear" appearance="none" aria-label="Clear the search"
             ChipFace(label="Clear", selected=false)
