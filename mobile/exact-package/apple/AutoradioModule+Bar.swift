@@ -52,14 +52,14 @@ extension AutoradioModule {
         }
 
         handle("barState") { [unowned self] _, reply in
-            let info = tracker.barInfo(player: choir.playerView(), snapshot: runtime.snapshot())
+            let info = MainActor.assumeIsolated { PlayQueue.shared.overlay(tracker.barInfo(player: choir.playerView(), snapshot: runtime.snapshot())) }   // remote audio shows as the radio (lane autoradio-queue)
             scheduleExpiry()
             reply(json(info))
         }
 
         handle("radioView") { [unowned self] _, reply in
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
-            let info = tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route)
+            let info = MainActor.assumeIsolated { PlayQueue.shared.overlay(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route)) }   // lane autoradio-queue
             ReaderFeed.shared.feed(info, route: route)
             reply(json(info))
         }

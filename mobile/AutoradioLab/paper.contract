@@ -17,6 +17,7 @@ component Story
     th: Theme
     openPage: action
     playStory: action
+    queueLater: action
   props
     s: PaperItem
     kicker: bool
@@ -35,10 +36,15 @@ component Story
       if s.entityLabels != ""
         text s.entityLabels font-family=th.fontUi font-size=12 font-weight=600 color=th.accent2
       if listen
-        button press=playStory(s.route) appearance="none" testId=`paper-play-${s.route}` aria-label=`Play from ${s.title}`
-          row gap=6 align-items="center" padding="6px 0"
-            image "symbol:play-fill" color=th.accent
-            text "Play from here" font-family=th.fontUi font-size=13 font-weight=600 color=th.accent
+        row gap=16 align-items="center"
+          button press=playStory(s.route) appearance="none" testId=`paper-play-${s.route}` aria-label=`Play from ${s.title}`
+            row gap=6 align-items="center" padding="6px 0"
+              image "symbol:play-fill" color=th.accent
+              text "Play from here" font-family=th.fontUi font-size=13 font-weight=600 color=th.accent
+          button press=queueLater("story", s.route, s.title) appearance="none" testId=`paper-queue-${s.route}` aria-label=`Add ${s.title} to the queue`
+            row gap=6 align-items="center" padding="6px 0"
+              image "symbol:sf/text.badge.plus" color=th.muted
+              text "Add to queue" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
 
 // A compact row: a small headline and a play button at the trailing edge. Used for briefs, river and opinion.
 component BriefRow
@@ -46,6 +52,7 @@ component BriefRow
     th: Theme
     openPage: action
     playStory: action
+    queueLater: action
   props
     s: PaperItem
     kicker: bool
@@ -64,6 +71,8 @@ component BriefRow
             text s.byline font-family=th.fontUi font-size=12 color=th.muted
         button press=playStory(s.route) appearance="none" testId=`paper-play-${s.route}` width=44 height=44 aria-label=`Play from ${s.title}`
           image "symbol:play-fill" color=th.muted
+        button press=queueLater("story", s.route, s.title) appearance="none" testId=`paper-queue-${s.route}` width=44 height=44 aria-label=`Add ${s.title} to the queue`
+          image "symbol:sf/text.badge.plus" color=th.muted
 
 // A cluster follow-up: indented under the lead behind an accent rule.
 component FollowRow
@@ -71,6 +80,7 @@ component FollowRow
     th: Theme
     openPage: action
     playStory: action
+    queueLater: action
   props
     s: PaperItem
   view
@@ -83,6 +93,8 @@ component FollowRow
           text s.entityLabels font-family=th.fontUi font-size=12 color=th.muted
       button press=playStory(s.route) appearance="none" testId=`paper-play-${s.route}` width=44 height=44 aria-label=`Play from ${s.title}`
         image "symbol:play-fill" color=th.muted
+      button press=queueLater("story", s.route, s.title) appearance="none" testId=`paper-queue-${s.route}` width=44 height=44 aria-label=`Add ${s.title} to the queue`
+        image "symbol:sf/text.badge.plus" color=th.muted
 
 component Band
   inject

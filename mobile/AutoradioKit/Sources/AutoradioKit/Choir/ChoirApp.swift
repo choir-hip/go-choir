@@ -62,6 +62,7 @@ public final class ChoirApp: @unchecked Sendable {
     private var listSnapshot: [StoryRef] = []
     /// The document that ran dry while a turn was open: autoplay waits for the turn to end, then asks again.
     private var pendingAutoplay: String?
+    private var pendingQueueEnd: String?
     private var followRunning = false
     /// How many segments the programme had when the last `extend` was asked: a stretch that added nothing is not asked for again.
     private var extendedAt = -1
@@ -78,6 +79,8 @@ public final class ChoirApp: @unchecked Sendable {
     /// A stretch that arrived after the plain read began: it joins at the next boundary.
     private var pendingStretch: OpenedProgramme?
     private var openTask: Task<OpenedProgramme?, Never>?
+    /// Play on this story was pressed: the queue's engine asks `playStoryDirect` for it, which starts the DJ over the list from it.
+    private var handToDJ: String?
     /// How long the reader waits for the stretch's first segment before the story plays plain at once.
     var djFirstSegmentWait: TimeInterval = 8
 
@@ -100,10 +103,7 @@ public final class ChoirApp: @unchecked Sendable {
             self?.noteTold()
             await DJClipRunner.shared.yieldToQueue()
         }
-        Task { @MainActor [weak self] in
-            DJClipRunner.shared.install()
-            DJClipRunner.shared.whenIdle = { [weak self] in await self?.continueIntoDJ() ?? false }
-        }
+        wireQueue()
         eventTask = Task { [weak self] in
             guard let self else { return }
             for await te in self.runtime.log.stream() {
@@ -112,6 +112,48 @@ public final class ChoirApp: @unchecked Sendable {
                 }
                 if case .phase(_, let to) = te.event, to == "playing" { await self.turnEnded() }
             }
+        }
+    }
+
+    /// The queue's engine and the hooks that feed it. Called once from `init`.
+    private func wireQueue() {
+        let me = self
+        Task { @MainActor in
+            let q = PlayQueue.shared
+            let engine = ChoirPlaybackEngine(app: me)
+            q.engine = engine
+            engine.remote.onEnded = { g in Task { @MainActor in await PlayQueue.shared.remoteEnded(generation: g) } }
+            engine.remote.onTick = { PlayQueue.shared.save() }
+            // Nothing queued behind a text, a page, a book or audio: the DJ's stretch carries on.
+            // The clip runner owns the idle moment: a programme parked behind a clip or a queued item goes on; otherwise the DJ's stretch.
+            DJClipRunner.shared.whenIdle = { [weak me] in await me?.continueIntoDJ() ?? false }
+            q.defaultSource = { await DJClipRunner.shared.queueIdle() }
+            q.restore()
+            Station.shared.startDJ = { [weak me] in await me?.startRadio() }       // the entry Play uses
+        }
+        runtime.player.onTransport = { cmd in
+            onMainThread { () -> Bool in
+                let q = PlayQueue.shared
+                guard q.current?.isRemoteAudio == true else { return false }
+                switch cmd {
+                case "play": q.resume()
+                case "pause": q.pause()
+                default: if q.paused { q.resume() } else { q.pause() }
+                }
+                return true
+            }
+        }
+        runtime.player.onLevel = { l in Task { @MainActor in PlayQueue.shared.setLevel(l) } }
+        BarTracker.shared.speedObservers.append { v in Task { @MainActor in PlayQueue.shared.setRate(v) } }
+    }
+
+    /// Reading moved: tell the queue which block of the spoken document it is on (the reader saves it), and keep the queue file current.
+    public func syncQueuePosition() {
+        let id = runtime.player.document.id
+        let idx = runtime.player.blockIndex
+        Task { @MainActor in
+            let q = PlayQueue.shared
+            if id == "text:q\(q.generation)" { q.spokenBlock(idx) }
         }
     }
 
@@ -202,9 +244,22 @@ public final class ChoirApp: @unchecked Sendable {
 
     /// Play a story from the paper. The list it came from (the paper's stack) is taken now, so next, previous and autoplay follow it.
     public func play(route: String) async {
+        let title = lock.withLock { stories.first { $0.route == route }?.title } ?? FrontOrder.shared.stories.first { $0.route == route }?.title ?? ""
+        lock.lock(); handToDJ = route; lock.unlock()
+        await MainActor.run { PlayQueue.shared.playNow(.story(route: route, title: title)) }       // the one queue decides; it comes back to `playStoryDirect`, which hands the list to the DJ
+    }
+
+    /// The queue's story engine: what `play(route:)` was before the queue.
+    @discardableResult
+    func playStoryDirect(route: String) async -> Bool {
         beginList(at: route)
-        lock.lock(); toldRoutes = []; lock.unlock()
-        await playStack(from: route, reportFailure: true)
+        let hand = lock.withLock { () -> Bool in let h = handToDJ == route; if h { handToDJ = nil }; return h }
+        if hand {                                                  // Play on a story: the DJ gets the list from it onward
+            lock.lock(); toldRoutes = []; lock.unlock()
+            return await playStack(from: route, reportFailure: true)
+        }
+        if await startStory(StoryRef(route: route), report: true) { await startPlaying(); return true }          // a story the reader queued: its own read
+        return false
     }
 
     // MARK: Play hands the stack to the DJ
@@ -241,7 +296,8 @@ public final class ChoirApp: @unchecked Sendable {
 
     /// Start the DJ's stretch over the current list from `route` (or its top). The reader hears the stretch's first segment when it comes
     /// within `djFirstSegmentWait`; slower than that, the story plays plain at once and the stretch joins at the next boundary.
-    func playStack(from route: String?, reportFailure: Bool = false) async {
+    @discardableResult
+    func playStack(from route: String?, reportFailure: Bool = false) async -> Bool {
         let scope = handedRoutes(from: route)
         let fallbackRoute = route ?? scope?.first
         let (my, old) = { () -> (Int, Task<Void, Never>?) in
@@ -265,7 +321,7 @@ public final class ChoirApp: @unchecked Sendable {
         let timer = Task { try? await Task.sleep(nanoseconds: UInt64(max(0, wait) * 1_000_000_000)); shot.fire(.slow) }
         let raced = await shot.wait()
         timer.cancel()
-        guard current() else { return }
+        guard current() else { return true }
 
         switch raced {
         case .opened(let o?):
@@ -273,6 +329,7 @@ public final class ChoirApp: @unchecked Sendable {
             install(o)
             await startPlaying()
             onChange?()
+            return true
         case .opened(nil), .slow:
             lock.lock(); loading = false; lock.unlock()
             // Plain read at once; the stretch joins later. Nothing to read at all: the failure is said once.
@@ -286,7 +343,8 @@ public final class ChoirApp: @unchecked Sendable {
                         await self?.stretchArrived(o, token: token)
                     }
                 } else { setUnavailable() }
-            } else { say("The paper has no stories to read yet."); setUnavailable() }
+                return ok
+            } else { say("The paper has no stories to read yet."); setUnavailable(); return false }
         }
     }
     private func setUnavailable() { lock.lock(); djUnavailable = true; lock.unlock() }
@@ -318,6 +376,7 @@ public final class ChoirApp: @unchecked Sendable {
         guard signIn.current.signedIn || stretchSource != nil else { return false }
         await playStack(from: nil)
         return true
+    }
     }
 
     /// The reader's Listen on a story page: the text plays as its own document; the list is taken for it as for `play(route:)`.
@@ -372,6 +431,10 @@ public final class ChoirApp: @unchecked Sendable {
             runtime.player.setDocument(doc)
             runtime.player.begin(at: 0)
             lock.lock(); currentRoute = ref.route; lock.unlock()
+            await MainActor.run {
+                if case .story(let r, _)? = PlayQueue.shared.current, r == ref.route { return }
+                PlayQueue.shared.noteStarted(.story(route: ref.route, title: ref.title))      // the paper's list moved on: the queue shows it
+            }
             return true
         } catch is CancellationError {
             return true
@@ -387,6 +450,10 @@ public final class ChoirApp: @unchecked Sendable {
     public func moveStory(_ move: StoryMove) async {
         let p = runtime.player
         if move == .next, await MainActor.run(body: { let r = DJClipRunner.shared; let parked = r.isParked; if parked { r.skipCurrent() }; return parked }) { return }
+        // Next with something queued by hand: that plays (the paper's list and the DJ's stretch come after it).
+        if move == .next, await MainActor.run(body: { () -> Bool in let q = PlayQueue.shared; if q.hasUpcoming || q.current?.isRemoteAudio == true { q.skip(); return true }; return false }) { return }
+        // The previous of remote audio is its start.
+        if move == .previous, await MainActor.run(body: { () -> Bool in let q = PlayQueue.shared; guard q.current?.isRemoteAudio == true else { return false }; q.seek(to: 0); return true }) { return }
         if p.document.id.hasPrefix("radio:") || currentStoryRoute() == nil {
             if move == .next { p.next() } else { p.previous() }
             await startPlaying()
@@ -411,6 +478,9 @@ public final class ChoirApp: @unchecked Sendable {
 
     /// The lock screen's next or previous: taken as a story move when a list speaks for the story, else left to the player's passage skip.
     private func takeRemote(_ move: StoryMove) -> Bool {
+        if onMainThread({ PlayQueue.shared.hasUpcoming || PlayQueue.shared.current?.isRemoteAudio == true }) {
+            Task { await moveStory(move) }; return true
+        }
         guard !runtime.player.document.id.hasPrefix("radio:"), let route = currentStoryRoute(), !list(for: route).isEmpty else { return false }
         Task { await moveStory(move) }
         return true
@@ -421,6 +491,14 @@ public final class ChoirApp: @unchecked Sendable {
     func ranDry(documentID: String, anyPlayed: Bool) async {
         let p = runtime.player
         guard p.document.id == documentID else { return }                 // a newer document replaced it
+        // The queue first: what the reader queued by hand plays before the paper's list and before the DJ's stretch.
+        let queueText = documentID.hasPrefix("text:q")
+        let turnOpenQ = runtime.snapshot().phase != "playing"
+        if anyPlayed, !p.userPaused, (queueText || currentStoryRoute() != nil || documentID.hasPrefix("radio:")) {
+            if turnOpenQ { lock.lock(); pendingQueueEnd = documentID; lock.unlock(); return }
+            if await queueAdvance(documentID: documentID) { return }
+        }
+        if queueText { return }                                            // a queued text with nothing behind it: the queue's default source decides
         if documentID.hasPrefix("radio:") { await extendIfDry(documentID: documentID); return }
         if !p.userPaused, await joinPendingStretch() { return }          // a stretch that came late joins now
         guard let route = currentStoryRoute() else { return }
@@ -433,8 +511,16 @@ public final class ChoirApp: @unchecked Sendable {
         }
     }
 
+    /// The document that ended hands over to the queue. True: the queue started its own next item.
+    private func queueAdvance(documentID: String) async -> Bool {
+        let route = currentStoryRoute()
+        return await PlayQueue.shared.advanceFromEnd(documentID: documentID, route: route)
+    }
+
     /// A turn ended (the engine is back to playing): if autoplay was waiting for it, ask again.
     func turnEnded() async {
+        lock.lock(); let qid = pendingQueueEnd; pendingQueueEnd = nil; lock.unlock()
+        if let qid, runtime.player.document.id == qid, !runtime.player.loopIsActive, !runtime.player.userPaused, await queueAdvance(documentID: qid) { return }
         lock.lock(); let id = pendingAutoplay; pendingAutoplay = nil; lock.unlock()
         let p = runtime.player
         guard let id, p.document.id == id, !p.loopIsActive, !p.userPaused, let route = currentStoryRoute() else { return }
@@ -509,6 +595,12 @@ public final class ChoirApp: @unchecked Sendable {
 
     /// Play/pause from the big button: starts the audio engine on first use.
     public func playPause() async {
+        if await MainActor.run(body: { () -> Bool in
+            let q = PlayQueue.shared
+            guard q.current?.isRemoteAudio == true else { return false }
+            if q.paused { q.resume() } else { q.pause() }
+            return true
+        }) { onChange?(); return }
         await ensureProgramme()
         if !runtime.snapshot().running { await runtime.start() }
         // A clip is playing through the queue: the button pauses and resumes it, not the (waiting) programme.

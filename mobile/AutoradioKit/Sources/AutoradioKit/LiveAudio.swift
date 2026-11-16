@@ -417,6 +417,10 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     /// The lock screen's next and previous: the host may take them as story moves (true: handled); else they skip a passage or segment.
     public var onNextTrack: (@Sendable () -> Bool)?
     public var onPreviousTrack: (@Sendable () -> Bool)?
+    /// The lock screen's play, pause and toggle: the host may take them (true: handled) when something other than this player is playing (remote audio).
+    public var onTransport: (@Sendable (String) -> Bool)?
+    /// The yield level changed (a hands-free turn lowered or paused the programme): remote audio follows it.
+    public var onLevel: (@Sendable (PlayLevel) -> Void)?
     /// Where playback is, per segment (station P1): P2 observes it.
     public let playback = SegmentTracker()
     /// Tests only: runs in the loop after its last look at the document and before the write that ends it (the window of review finding R3).
@@ -728,6 +732,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         case .pause: audio.programmePause()
         }
         onChange?()
+        onLevel?(l)
     }
     public func speak(_ frames: AsyncThrowingStream<AudioFrame, Error>) async { await audio.playVoice(frames) }
     public func stopVoice() async { audio.stopVoice() }
@@ -745,10 +750,11 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
 
     private func installRemoteCommands() {
         let c = MPRemoteCommandCenter.shared()
-        c.playCommand.addTarget { [weak self] _ in self?.play(); return .success }
-        c.pauseCommand.addTarget { [weak self] _ in self?.pause(); return .success }
+        c.playCommand.addTarget { [weak self] _ in if self?.onTransport?("play") == true { return .success }; self?.play(); return .success }
+        c.pauseCommand.addTarget { [weak self] _ in if self?.onTransport?("pause") == true { return .success }; self?.pause(); return .success }
         c.togglePlayPauseCommand.addTarget { [weak self] _ in
             guard let self else { return .commandFailed }
+            if self.onTransport?("toggle") == true { return .success }
             if self.userPaused { self.play() } else { self.pause() }; return .success
         }
         c.nextTrackCommand.addTarget { [weak self] _ in

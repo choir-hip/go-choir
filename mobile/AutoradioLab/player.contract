@@ -21,6 +21,8 @@
 // the finger lifts, so the voice does not stutter while it is dragged.
 use Theme, BarInfo, RadioInfo from "@choir/autoradio"
 use Layer, Card from "./ui.contract"
+use QueueInfo from "@choir/autoradio"
+use QueueAudio, UpNext from "./queue.contract"
 
 keyframes playerRise
   from opacity=0 translate="0px 56px"
@@ -38,6 +40,7 @@ component PlayerLayer
     th: Theme
     bi: BarInfo
     ri: RadioInfo
+    qv: QueueInfo
     hideLayer: action
     radioPlay: action
     previous: action
@@ -93,6 +96,10 @@ component PlayerLayer
                     text s testId=`player-sentence-${k}` font-family=th.fontRead font-size=19 line-height=1.5
                       color=(k == ri.sentenceIndex ? th.fg : th.muted) font-weight=(k == ri.sentenceIndex ? 600 : 400)
                       transition=`color ${th.motionFastMs * calm}ms ease`
+            // the one queue (lane autoradio-queue): remote audio's position, scrubber and Keep listening, then Up next
+            if qv.audio
+              QueueAudio()
+            UpNext()
             // the sources of the segment, as the server labelled them (a programme only; never raw refs)
             if ri.sources.length > 0
               row gap=8 flex-wrap="wrap" testId="player-sources"

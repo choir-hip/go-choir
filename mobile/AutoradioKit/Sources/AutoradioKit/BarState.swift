@@ -114,6 +114,8 @@ public final class BarTracker: @unchecked Sendable {
     public var positionSource: (@Sendable () -> RenderPosition?)?
     /// Told when the listener picks a speed, so the audio can apply it.
     public var speedSink: (@Sendable (Double) -> Void)?
+    /// Others that follow the speed (remote audio).
+    public var speedObservers: [@Sendable (Double) -> Void] = []
 
     public init() {}
 
@@ -163,6 +165,7 @@ public final class BarTracker: @unchecked Sendable {
     public func setSpeed(_ s: Double) {
         lock.lock(); speed = PlaybackSpeed.snap(s); let v = speed; let sink = speedSink; lock.unlock()
         sink?(v)
+        for o in speedObservers { o(v) }
     }
 
     /// When the bar's timed states next end, so the host can ask once more then (nil: nothing is timed).

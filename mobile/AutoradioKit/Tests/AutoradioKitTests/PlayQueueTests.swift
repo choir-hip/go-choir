@@ -156,3 +156,187 @@ final class PlayQueueTests: XCTestCase {
         XCTAssertEqual(r.paragraphs.first, "Hi & Bye")
     }
 }
+
+@MainActor
+final class QueueOpsTests: XCTestCase {
+    func story(_ n: String) -> PlayItem { .story(route: n, title: "S \(n)") }
+    func make() -> (PlayQueue, FakeEngine) { let q = PlayQueue(); let e = FakeEngine(); q.engine = e; return (q, e) }
+
+    func testOpsJSONAndSnapshot() async throws {
+        let (q, _) = make()
+        let json = #"{"queue_ops":[{"op":"enqueue","item":{"kind":"story","route":"a","title":"A"}},{"op":"enqueue","item":{"kind":"audio","url":"https://x.test/e.mp3","title":"E","show":"Sh","start":5,"end":20,"episode_id":"ep1"}},{"op":"bogus"},{"op":"play_next","item":{"kind":"page","url":"https://x.test/p","title":"P"}}]}"#
+        let ops = QueueOp.decode(Data(json.utf8))
+        XCTAssertEqual(ops.count, 3)
+        q.apply(ops, by: .dj)
+        XCTAssertEqual(q.entries.map(\.item.title), ["P", "A", "E"])
+        XCTAssertEqual(q.version, 3)
+        XCTAssertEqual(q.entries[0].note, "DJ added")
+        let snap = try JSONSerialization.jsonObject(with: Data(q.snapshotJSON().utf8)) as! [String: Any]
+        XCTAssertEqual(snap["version"] as? Int, 3)
+        let up = snap["upcoming"] as! [[String: Any]]
+        XCTAssertEqual(up.count, 3); XCTAssertEqual(up[0]["added_by"] as? String, "dj")
+        XCTAssertEqual((up[2]["item"] as! [String: Any])["episode_id"] as? String, "ep1")
+        // op encodes as the tag the desk reads
+        let enc = String(data: try JSONEncoder().encode(QueueOp.move(id: "x", toIndex: 0)), encoding: .utf8)!
+        XCTAssertTrue(enc.contains("\"op\":\"move\"") && enc.contains("\"to_index\":0"))
+    }
+
+    func testMoveRemoveByIdAndLog() async {
+        let (q, _) = make()
+        q.apply([.enqueue(story("a")), .enqueue(story("b")), .enqueue(story("c"))], by: .reader)
+        let c = q.entries[2].id
+        q.apply([.move(id: c, toIndex: 0)], by: .dj)
+        XCTAssertEqual(q.entries.map(\.item.title), ["S c", "S a", "S b"])
+        XCTAssertEqual(q.entries[0].note, "DJ moved this up")
+        q.apply([.remove(id: "nope")], by: .dj)                       // unknown id: nothing changes
+        XCTAssertEqual(q.entries.count, 3)
+        let v = q.version
+        q.apply([.remove(id: q.entries[1].id)], by: .reader)
+        XCTAssertEqual(q.version, v + 1)
+        XCTAssertEqual(q.log.last?.actor, .reader)
+        XCTAssertEqual(q.log.filter { $0.actor == .dj }.count, 1)
+        q.apply([.clear], by: .app)
+        XCTAssertTrue(q.entries.isEmpty)
+    }
+
+    func testSkipAndPreviousAndIds() async {
+        let (q, e) = make()
+        q.apply([.enqueue(story("a")), .enqueue(story("b"))], by: .reader)
+        let idA = q.entries[0].id
+        q.apply([.skip()], by: .dj); await q.settle()
+        XCTAssertEqual(q.current, story("a")); XCTAssertEqual(q.currentId, idA)
+        q.apply([.previous], by: .reader); await q.settle()
+        XCTAssertEqual(e.log.filter { $0 == "story:a" }.count, 2); XCTAssertEqual(q.currentId, idA)
+        XCTAssertEqual(q.snapshot().current?.id, idA)
+    }
+
+    func testStation() async {
+        let q = PlayQueue(); let e = FakeEngine(); q.engine = e
+        let s = Station(); s.queue = q
+        var dj = 0
+        s.startDJ = { dj += 1 }
+        s.otherAudioPlaying = { true }
+        let blocked = await s.start(reason: .launch)
+        XCTAssertFalse(blocked); XCTAssertEqual(dj, 0)
+        s.otherAudioPlaying = { false }
+        s.isReady = { false }
+        let notReady = await s.start(reason: .launch)
+        XCTAssertFalse(notReady)
+        s.isReady = { true }
+        let go = await s.start(reason: .launch)
+        XCTAssertTrue(go); XCTAssertEqual(dj, 1)
+        let again = await s.start(reason: .foreground)       // a short return does not restart it
+        XCTAssertFalse(again); XCTAssertEqual(dj, 1)
+    }
+
+    func testStationResumesSavedItem() async {
+        let f = FileManager.default.temporaryDirectory.appendingPathComponent("q-\(UUID()).json")
+        defer { try? FileManager.default.removeItem(at: f) }
+        let q = PlayQueue(storage: f); q.engine = FakeEngine()
+        q.apply([.enqueue(story("n"))], by: .reader)
+        q.noteStarted(story("cur")); q.save()
+        let q2 = PlayQueue(storage: f); let e2 = FakeEngine(); q2.engine = e2; q2.restore()
+        let s = Station(); s.queue = q2; s.otherAudioPlaying = { false }
+        var dj = 0; s.startDJ = { dj += 1 }
+        let ok = await s.start(reason: .launch); await q2.settle()
+        XCTAssertTrue(ok); XCTAssertEqual(dj, 0); XCTAssertEqual(e2.log, ["stopRemote", "story:cur"])
+        XCTAssertEqual(q2.entries.count, 1)
+    }
+}
+
+@MainActor
+final class QueueRebaseTests: XCTestCase {
+    func story(_ n: String) -> PlayItem { .story(route: n, title: "S \(n)") }
+    func make() -> (PlayQueue, FakeEngine) { let q = PlayQueue(); let e = FakeEngine(); q.engine = e; return (q, e) }
+
+    func testIdOpsApplyWhateverTheVersionAndDropWhenGone() {
+        let (q, _) = make()
+        q.apply([.enqueue(story("a")), .enqueue(story("b")), .enqueue(story("c"))], by: .reader)
+        let ids = q.entries.map(\.id)
+        q.apply([.remove(id: ids[0])], by: .reader)                       // the phone moved on: version is now 4
+        let r = q.apply(serverOps: [.move(id: ids[2], toIndex: 0, reason: "you asked for the long read next"),
+                                     .remove(id: ids[0], reason: "gone already"), .move(id: "q999", toIndex: 0)], turnId: "t1", baseVersion: 3)
+        XCTAssertEqual(r.applied, 1); XCTAssertEqual(r.dropped, 2)
+        XCTAssertEqual(q.entries.map(\.id), [ids[2], ids[1]])
+        XCTAssertEqual(q.entries[0].note, "you asked for the long read next")      // the reason is what Up next shows
+        // to_index is clamped
+        q.apply(serverOps: [.move(id: ids[2], toIndex: 99)], turnId: "t2", baseVersion: 1)
+        XCTAssertEqual(q.entries.map(\.id), [ids[1], ids[2]])
+    }
+
+    func testSkipOnlyIfStillCurrent() async {
+        let (q, _) = make()
+        q.apply([.enqueue(story("a")), .enqueue(story("b")), .enqueue(story("c"))], by: .reader)
+        q.apply([.skip()], by: .reader); await q.settle()
+        let cur = q.currentId!
+        let stale = q.apply(serverOps: [.skip(id: "q99")], turnId: "t1", baseVersion: 0)   // that entry already finished
+        XCTAssertEqual(stale.applied, 0); XCTAssertEqual(q.currentId, cur)
+        let ok = q.apply(serverOps: [.skip(id: cur, reason: "boring")], turnId: "t2", baseVersion: 0); await q.settle()
+        XCTAssertEqual(ok.applied, 1); XCTAssertNotEqual(q.currentId, cur)
+    }
+
+    func testAddOpsAlwaysApply() {
+        let (q, _) = make()
+        q.apply([.enqueue(story("a"))], by: .reader)
+        let r = q.apply(serverOps: [.playNext(story("x"), reason: "from the front page"), .enqueue(story("y"))], turnId: "t1", baseVersion: -5)
+        XCTAssertEqual(r.applied, 2)
+        XCTAssertEqual(q.entries.map(\.item.title), ["S x", "S a", "S y"])
+        XCTAssertEqual(q.entries[0].addedBy, .dj); XCTAssertEqual(q.entries[0].note, "from the front page")
+    }
+
+    func testClearAndPreviousNeedTheBaseVersion() {
+        let (q, _) = make()
+        q.apply([.enqueue(story("a"))], by: .reader)
+        let v = q.version
+        let stale = q.apply(serverOps: [.clear], turnId: "t1", baseVersion: v - 1)
+        XCTAssertEqual(stale.applied, 0); XCTAssertEqual(q.entries.count, 1)
+        let fresh = q.apply(serverOps: [QueueOp(.clear, reason: "start over", baseVersion: v)], turnId: "t2", baseVersion: nil)
+        XCTAssertEqual(fresh.applied, 1); XCTAssertTrue(q.entries.isEmpty)
+    }
+
+    func testBaseVersionIsTheBatchStartNotEachOp() {
+        let (q, _) = make()
+        q.apply([.enqueue(story("a"))], by: .reader)
+        let v = q.version
+        // an add then a clear in one turn, both based on v: the clear still applies (the add was this turn's own change)
+        let r = q.apply(serverOps: [.enqueue(story("b")), .clear], turnId: "t1", baseVersion: v)
+        XCTAssertEqual(r.applied, 2); XCTAssertTrue(q.entries.isEmpty)
+    }
+
+    func testTurnIsAppliedOnce() throws {
+        let (q, _) = make()
+        let ev = #"{"turn_id":"turn-9","base_version":0,"replayed":false,"ops":[{"op":"enqueue","item":{"kind":"story","route":"r1","title":"One"},"base_version":0,"reason":"top story"}]}"#
+        XCTAssertEqual(q.applyQueueOpsEvent(Data(ev.utf8)).applied, 1)
+        let again = ev.replacingOccurrences(of: "\"replayed\":false", with: "\"replayed\":true")
+        XCTAssertEqual(q.applyQueueOpsEvent(Data(again.utf8)).applied, 0)
+        XCTAssertEqual(q.entries.count, 1)
+        XCTAssertEqual(q.entries[0].note, "top story")
+    }
+
+    func testIdsNeverReusedAndMatchTheWireRule() {
+        let (q, _) = make()
+        q.apply([.enqueue(story("a")), .enqueue(story("b"))], by: .reader)
+        let first = q.entries.map(\.id)
+        q.apply([.clear], by: .reader)
+        q.apply([.enqueue(story("c"))], by: .reader)
+        XCTAssertFalse(first.contains(q.entries[0].id))
+        let re = try! NSRegularExpression(pattern: "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+        for id in first + q.entries.map(\.id) { XCTAssertNotNil(re.firstMatch(in: id, range: NSRange(id.startIndex..., in: id))) }
+    }
+
+    func testVersionBumpsWhenCurrentFinishesAndSnapshotIsTheWireShape() async throws {
+        let (q, _) = make()
+        q.playNow(.audio(url: URL(string: "https://x.test/e.mp3")!, title: "E", show: "S", start: nil, end: nil, episodeId: nil)); await q.settle()
+        let v = q.version
+        await q.remoteEnded(generation: q.generation)
+        XCTAssertGreaterThan(q.version, v)
+        let o = try JSONSerialization.jsonObject(with: Data(q.snapshotJSON().utf8)) as! [String: Any]
+        XCTAssertTrue(o["current"] is NSNull)
+        XCTAssertEqual(o["upcoming"] as? [Any] != nil, true)
+        q.apply([.enqueue(.audio(url: URL(string: "https://x.test/f.mp3")!, title: "F", show: "S", start: 1, end: nil, episodeId: nil))], by: .dj)
+        let o2 = try JSONSerialization.jsonObject(with: Data(q.snapshotJSON().utf8)) as! [String: Any]
+        let item = ((o2["upcoming"] as! [[String: Any]])[0])["item"] as! [String: Any]
+        XCTAssertEqual(item["kind"] as? String, "audio"); XCTAssertEqual(item["start"] as? Double, 1)
+        XCTAssertEqual(((o2["upcoming"] as! [[String: Any]])[0])["added_by"] as? String, "dj")
+    }
+}

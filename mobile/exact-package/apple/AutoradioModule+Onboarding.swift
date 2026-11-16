@@ -36,6 +36,8 @@ final class OnboardingController: @unchecked Sendable {
     private var progress = OnboardingProgress()
     private var setup: VoiceSetup?
     private var step = "welcome"
+    /// Onboarding is over (the edition is made, or the reader skipped it): the station may start by itself (lane autoradio-queue).
+    var finished: Bool { step == "done" || step == "skipped" }
     private var askMobile = false
     private var message = ""
     // microphone and hearing
