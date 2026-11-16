@@ -55,7 +55,7 @@
     savePrefs,
   } from './reader-prefs.js';
   import { modelFromPdfPages } from './pdf-text.js';
-  import { scopedKey } from '../../lib/app-sdk';
+  import { scopedKey, windowStep } from '../../lib/app-sdk';
   import {
     READER_UPLOAD_ACCEPT,
     READER_UPLOAD_ACCEPT_TYPES,
@@ -92,6 +92,8 @@
   let format = 'pdf';
 
   let pdfjsLibPromise = null;
+  // Breadcrumbs for the crash guard: if the page dies, the held window says which step it was in.
+  const step = windowStep();
   let jszipPromise = null;
   let pdfDoc = null;
   let pdfPage = 1;
@@ -236,8 +238,13 @@
   }
 
   async function parseEpub(arrayBuffer) {
+    step('EPUB file fetched (' + arrayBuffer.byteLength + ' bytes)');
+    step('importing the EPUB library');
     const JSZip = await loadJSZip();
+    step('EPUB library imported');
+    step('unpacking the EPUB');
     const zip = await JSZip.loadAsync(arrayBuffer);
+    step('reading the EPUB chapters');
     const containerText = await textFile(zip, 'META-INF/container.xml');
     if (!containerText) throw new Error('EPUB container.xml is missing');
     const opfPath = firstByLocalName(parseXML(containerText, 'container'), 'rootfile')?.getAttribute('full-path');
@@ -314,9 +321,11 @@
     });
     try {
       if (format === 'epub') {
+        step('fetching the EPUB file');
         const res = await fetch(sourceKey, sourceFetchOptions(sourceKey));
         if (!res.ok) throw new Error('EPUB source failed (' + res.status + ')');
         model = await parseEpub(await res.arrayBuffer());
+        step('EPUB read');
       } else {
         await loadPdfDocument(sourceKey);
       }
@@ -362,9 +371,11 @@
       if (format === 'epub') {
         let text = item?.text_content || extractedText;
         if (!text && key) {
+          step('fetching the EPUB file');
           const res = await fetch(key, sourceFetchOptions(key));
           if (!res.ok) throw new Error('EPUB source failed (' + res.status + ')');
           model = await parseEpub(await res.arrayBuffer());
+          step('EPUB read');
         } else {
           const sections = sectionsFromText(text, { title: source.title });
           if (!sections.length) throw new Error('The attached text is empty');
@@ -394,13 +405,20 @@
   }
 
   async function loadPdfDocument(url) {
+    firstPageDrawn = false;
+    step('fetching the PDF file');
     const res = await fetch(url, sourceFetchOptions(url));
     if (!res.ok) throw new Error('PDF source failed (' + res.status + ')');
     const buffer = await res.arrayBuffer();
+    step('PDF file fetched (' + buffer.byteLength + ' bytes)');
+    step('importing the PDF library');
     const pdfjsLib = await loadPdfjs();
+    step('PDF library imported');
+    step('starting the PDF worker and parsing the document');
     const doc = await pdfjsLib.getDocument({ data: buffer }).promise;
     pdfDoc = doc;
     pageCount = doc.numPages || 0;
+    step('PDF parsed (' + pageCount + ' pages)');
     pdfPage = clampNumber(pdfPage, 1, pageCount || 1);
     model = { format: 'pdf', title: source.title, sample: false, status: 'ready', sections: [] };
     await tick();
@@ -411,14 +429,17 @@
   // PDF text search reads the document once, in the background: search works
   // as soon as the pages it has read answer, and the rendered page never waits.
   let pdfSearchModel = null;
+  let firstPageDrawn = false;
   async function hydratePdfText(doc) {
     if (pdfSearchModel && pdfSearchModel.doc === doc) return pdfSearchModel.model;
     const pages = [];
     for (let index = 1; index <= doc.numPages; index++) {
+      step('reading the text of page ' + index + ' of ' + doc.numPages);
       const page = await doc.getPage(index);
       const content = await page.getTextContent();
       pages.push(content.items.map((entry) => entry.str || '').join(' ').replace(/\s+/g, ' ').trim());
     }
+    step('PDF text read');
     const modelForSearch = modelFromPdfPages(pages, { title: source.title });
     pdfSearchModel = { doc, model: modelForSearch };
     if (searchOpen && searchTerm.trim()) runSearch();
@@ -449,6 +470,7 @@
 
   async function renderPage() {
     const seq = ++renderSeq;
+    const drawingFirstPage = !rendered && !firstPageDrawn;
     // A page needs both the canvas being on the page and a measured page area.
     // Both are reactive: the canvas is bound when the page markup renders (a
     // draw asked for before that returns here and is asked for again when the
@@ -486,12 +508,14 @@
       canvas.style.width = Math.floor(viewport.width) + 'px';
       canvas.style.height = Math.floor(viewport.height) + 'px';
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      if (drawingFirstPage) step('drawing the first page');
       task = page.render({ canvasContext: context, viewport });
       activeRenderTask = task;
       activeRenderPromise = task.promise;
       await task.promise;
       if (seq !== renderSeq) return;
       rendered = true;
+      if (!firstPageDrawn) { firstPageDrawn = true; step('first page drawn'); }
       rememberPosition();
     } catch (err) {
       if (err?.name === 'RenderingCancelledException') return;

@@ -60,6 +60,7 @@ export type { ContextMenuEntry, ContextMenuItem, ContextMenuOptions, ContextMenu
 // Open with: the apps that open a file, and the file a window was launched on.
 export { canOpenWith, extensionsOpenedBy, fileExtension, isTextFileName, openersForFile } from './open-with';
 export type { FileOpener } from './open-with';
+export { windowStep } from './window-step';
 export { getLaunchFile, launchFileFromAppContext, launchFileStore } from './launch-file';
 export type { LaunchFile } from './launch-file';
 

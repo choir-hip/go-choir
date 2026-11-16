@@ -11,7 +11,7 @@ function isVisibleWindow(win) {
 function canUseLivePreview(win) {
   if (!isVisibleWindow(win)) return false;
   if (win.mode === 'minimized') return false;
-  if (win.restoreSuspended) return false;
+  if (win.restoreSuspended || win.crashHeld) return false;
   if (REDACTED_PREVIEW_APP_IDS.has(win.appId)) return false;
   return true;
 }
@@ -46,7 +46,7 @@ export function createOverviewPreviewDecisions(
 
   openWindows.forEach((win) => {
     let state = 'card';
-    if (win.restoreSuspended) {
+    if (win.restoreSuspended || win.crashHeld) {
       state = 'suspended';
     } else if (REDACTED_PREVIEW_APP_IDS.has(win.appId)) {
       state = 'redacted';

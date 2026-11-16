@@ -24,6 +24,6 @@ export const windowList: Readable<WindowEntry[]> = derived([windows, activeWindo
       icon: String(win.icon || ''),
       mode: String(win.mode),
       focused: win.windowId === $active,
-      restoreSuspended: Boolean(win.restoreSuspended),
+      restoreSuspended: Boolean(win.restoreSuspended || win.crashHeld),
     })),
 );
