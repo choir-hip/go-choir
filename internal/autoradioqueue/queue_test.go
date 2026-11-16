@@ -474,6 +474,20 @@ func TestCutTakesTheFenceIndentedAndBeforeACodeFence(t *testing.T) {
 	}
 }
 
+func TestApplyJSONStripsACodeFenceInfoStringInAnyCase(t *testing.T) {
+	arr := `[{"op":"remove","id":"q13","reason":"r"}]`
+	for name, text := range map[string]string{
+		"JSON": "```JSON\n" + arr + "\n```", "space json": "``` json\n" + arr + "\n```", "Json": "```Json\n" + arr + "```",
+		"bare": "```\n" + arr + "\n```", "lower": "```json\n" + arr + "\n```", "none": arr,
+	} {
+		d := New(snap3(), nil)
+		d.ApplyJSON(text)
+		if len(d.Ops()) != 1 {
+			t.Errorf("%s: ops %v", name, d.Ops())
+		}
+	}
+}
+
 func TestTextAfterTheArrayDoesNotCostTheOps(t *testing.T) {
 	d := New(snap3(), nil)
 	drops := d.ApplyJSON(`[{"op":"remove","id":"q13","reason":"r"}] and that is all, ` + strings.Repeat("x", 5000))
