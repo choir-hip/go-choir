@@ -115,7 +115,7 @@ public final class AutoradioModule: ExactPackage {
         registerOnboarding()
         registerMark()
         registerVoice()
-        registerReader()   // lane autoradio-reader
+        registerBooks()   // lane autoradio-reader
         Task { [choir] in await choir?.refresh() }
     }
 

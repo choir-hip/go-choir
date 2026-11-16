@@ -144,7 +144,7 @@ final class ShelfPDFTests: XCTestCase {
 }
 
 final class ShelfStoreTests: XCTestCase {
-    func make() -> (Reader, URL) { let d = tmpDir(); return (ReaderShelf(root: d.appendingPathComponent("lib")), d) }
+    func make() -> (ReaderShelf, URL) { let d = tmpDir(); return (ReaderShelf(root: d.appendingPathComponent("lib")), d) }
 
     func testImportEpubTwiceIsOneDocument() throws {
         let (lib, dir) = make(); defer { try? FileManager.default.removeItem(at: dir) }

@@ -9,12 +9,13 @@
 import Foundation
 
 extension AutoradioModule {
-    func registerReader() {
+    func registerBooks() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
         let lib = ReaderShelf(root: support.appendingPathComponent("books"))
         ReaderShelf.shared = lib
         lib.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["shelfList", "shelfDoc"]) } }
         ShelfFollow.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["shelfFollow", "shelfList"]) } }
+        Task { @MainActor in ShelfPlayback.register() }
         SearchProviders.register(name: "books") { q in lib.hits(query: q) }
         pageSources.register(BooksPageSource(lib: lib))
 
@@ -133,27 +134,41 @@ extension AutoradioModule {
     }
 }
 
-/// The ONE place the reader meets the playback queue. Until the queue lane's `PlayQueue` is in this tree, "Read aloud" speaks the next blocks
-/// through the radio's one speakText path (the same as Listen) and "Add to queue" says so honestly. When `PlayQueue` lands, both bodies become
-/// `PlayQueue.shared.playNow(.document(id:title:at:))` / `.enqueue(...)`, and `registerTextSource(kind: "document")` answers with `Reader.blocks`.
+/// The ONE place Reader meets the playback queue (Kit/PlayQueue.swift). Read aloud is `playNow(.document)`, Add to queue is `enqueue`; the queue
+/// asks the text source below for the blocks from a position, and tells `onDocumentPosition` which block is being read (the page lights it, and
+/// the saved place follows the voice). When the queue's engine is not wired in this build (`engine == nil`), Read aloud still speaks through the
+/// radio's own speakText path (the same as Listen); Add to queue then says so.
 enum ShelfPlayback {
-    static func play(module: AutoradioModule, doc: ShelfDoc, at: Int, done: @escaping (Bool) -> Void) {
-        var text = "", used = 0
-        for b in ReaderShelf.shared.blocks(id: doc.id, from: at) {
-            if used > 60_000 { break }
-            text += b + "\n\n"; used += b.count
+    @MainActor static func register() {
+        PlayQueue.shared.registerTextSource(kind: "document") { id, at in
+            let blocks = ReaderShelf.shared.blocks(id: id, from: at)
+            return blocks.isEmpty ? nil : blocks
         }
-        let words = ListenText.compose(title: "", body: text)
-        guard !words.isEmpty else { return done(false) }
-        ShelfFollow.shared.set(id: doc.id, block: at)
-        Task { [weak module] in
-            guard let module else { return done(false) }
-            let ok = await module.runtime.speakText(address: doc.address, text: words, title: doc.title, now: true)
-            done(ok)
+        PlayQueue.shared.onDocumentPosition = { id, block in ShelfFollow.shared.set(id: id, block: block) }
+    }
+    static func play(module: AutoradioModule, doc: ShelfDoc, at: Int, done: @escaping (Bool) -> Void) {
+        Task { @MainActor [weak module] in
+            ShelfFollow.shared.set(id: doc.id, block: at)
+            if PlayQueue.shared.engine != nil {
+                PlayQueue.shared.playNow(.document(id: doc.id, title: doc.title, at: at))
+                return done(true)
+            }
+            var text = "", used = 0
+            for b in ReaderShelf.shared.blocks(id: doc.id, from: at) {
+                if used > 60_000 { break }
+                text += b + "\n\n"; used += b.count
+            }
+            let words = ListenText.compose(title: "", body: text)
+            guard let module, !words.isEmpty else { return done(false) }
+            done(await module.runtime.speakText(address: doc.address, text: words, title: doc.title, now: true))
         }
     }
     static func enqueue(module: AutoradioModule, doc: ShelfDoc, at: Int, done: @escaping (Bool, String) -> Void) {
-        done(false, "The queue is not in this build yet.")
+        Task { @MainActor in
+            guard PlayQueue.shared.engine != nil else { return done(false, "The queue is not ready yet.") }
+            PlayQueue.shared.enqueue(.document(id: doc.id, title: doc.title, at: at))
+            done(true, "Added to the queue.")
+        }
     }
 }
 
