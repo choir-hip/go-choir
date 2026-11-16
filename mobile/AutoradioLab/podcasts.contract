@@ -5,7 +5,21 @@
 //   podcast-unsubscribe, podcast-episode-<key>, podcast-play-<key>, podcast-resume, podcast-play, podcast-queue, podcast-keep, podcast-note,
 //   podcast-playing-from, podcast-retry, podcast-notes.
 use Theme, PodHomeView, PodShowView, PodEpisodeView from "@choir/autoradio"
-use PageScroll, PageHeader, SectionHeader, ListGroup, ListRow, Hairline, EmptyState, Emerge, Btn from "./ui.contract"
+use PageScroll, PageHeader, SectionHeader, ListGroup, ListRow, Hairline, EmptyState, Emerge from "./ui.contract"
+
+// A text action: no capsule, no outline. Accent text (strong ones heavier) with an optional symbol; the caller wraps it in a button.
+component PodAction
+  inject
+    th: Theme
+  props
+    label: string
+    icon: string
+    strong: bool
+  view
+    row align-items="center" gap=8 min-height=44 width="100%" box-sizing="border-box"
+      if icon != ""
+        image icon color=th.accent
+      text label font-family=th.fontUi font-size=17 font-weight=(strong ? 700 : 500) color=th.accent text-align="left"
 
 component PodArt
   inject
@@ -138,7 +152,7 @@ component PodcastShowPage
         Emerge(delay=0)
           EmptyState(message="This show could not be opened", detail=podShow.message, testId="podcast-error")
             button press=retryPodcasts testId="podcast-retry" appearance="none"
-              Btn(label="Try again", primary=false, wide=false)
+              PodAction(label="Try again", icon="", strong=false)
       if podShow.status == "ready" or podShow.status == "empty"
         Emerge(delay=0)
           row gap=16 align-items="center" width="100%"
@@ -149,10 +163,10 @@ component PodcastShowPage
           column gap=12 width="100%"
             if podShow.subscribed
               button press=podUnsubscribeFrom(podShow.feedURL) testId="podcast-unsubscribe" appearance="none" width="100%" aria-label="Unsubscribe"
-                Btn(label="Subscribed. Tap to unsubscribe", primary=false, wide=true)
+                PodAction(label="Subscribed. Tap to unsubscribe", icon="", strong=false)
             if podShow.subscribed == false
               button press=podSubscribeTo(podShow.feedURL) testId="podcast-subscribe" appearance="none" width="100%" aria-label="Subscribe"
-                Btn(label="Subscribe", primary=true, wide=true)
+                PodAction(label="Subscribe", icon="", strong=true)
             if podNote != ""
               text podNote testId="podcast-note" font-family=th.fontUi font-size=13 color=th.muted
             if podShow.summary != ""
@@ -177,6 +191,8 @@ component PodcastEpisodePage
     podPlayEpisode: action
     podQueueEpisode: action
     retryPodcasts: action
+    podFind: string
+    editPodFind: action
   props
     address: string
     title: string
@@ -193,7 +209,7 @@ component PodcastEpisodePage
         Emerge(delay=0)
           EmptyState(message="This episode could not be opened", detail=podEp.message, testId="podcast-error")
             button press=retryPodcasts testId="podcast-retry" appearance="none"
-              Btn(label="Try again", primary=false, wide=false)
+              PodAction(label="Try again", icon="", strong=false)
       if podEp.status == "ready"
         Emerge(delay=0)
           row gap=16 align-items="center" width="100%"
@@ -210,27 +226,49 @@ component PodcastEpisodePage
             if podEp.playable
               if podEp.fromClip
                 button press=podPlayEpisode(podEp.address, "keep") testId="podcast-keep" appearance="none" width="100%" aria-label="Keep listening"
-                  Btn(label="Keep listening", primary=true, wide=true)
+                  PodAction(label="Keep listening", icon="symbol:play-fill", strong=true)
               if podEp.fromClip == false
                 if podEp.hasResume
                   button press=podPlayEpisode(podEp.address, "resume") testId="podcast-resume" appearance="none" width="100%" aria-label=podEp.resumeLabel
-                    Btn(label=podEp.resumeLabel, primary=true, wide=true)
+                    PodAction(label=podEp.resumeLabel, icon="symbol:play-fill", strong=true)
                   button press=podPlayEpisode(podEp.address, "start") testId="podcast-play" appearance="none" width="100%" aria-label="Play from the start"
-                    Btn(label="Play from the start", primary=false, wide=true)
+                    PodAction(label="Play from the start", icon="", strong=false)
                 if podEp.hasResume == false
                   button press=podPlayEpisode(podEp.address, "resume") testId="podcast-play" appearance="none" width="100%" aria-label="Play"
-                    Btn(label=(podEp.playingFrom != "" ? "Keep listening" : "Play"), primary=true, wide=true)
+                    PodAction(label=(podEp.playingFrom != "" ? "Keep listening" : "Play"), icon="symbol:play-fill", strong=true)
               button press=podQueueEpisode(podEp.address) testId="podcast-queue" appearance="none" width="100%" aria-label="Add to queue"
-                Btn(label="Add to queue", primary=false, wide=true)
+                PodAction(label="Add to queue", icon="", strong=false)
             if podEp.subscribed == false
               button press=podSubscribeTo(podEp.feedURL) testId="podcast-subscribe" appearance="none" width="100%" aria-label="Subscribe to the show"
-                Btn(label="Subscribe to this show", primary=false, wide=true)
+                PodAction(label="Subscribe to this show", icon="", strong=false)
             if podEp.subscribed
               text "You are subscribed to this show." testId="podcast-subscribed" font-family=th.fontUi font-size=13 color=th.muted
             if podEp.note != ""
               text podEp.note testId="podcast-episode-note" font-family=th.fontUi font-size=13 color=th.muted
             if podNote != ""
               text podNote testId="podcast-note" font-family=th.fontUi font-size=13 color=th.muted
+        // The platform's shared transcript: a line is a button that plays from there; the line being played is full-strength accent.
+        if podEp.transcriptState == "ready"
+          Emerge(delay=60)
+            column gap=8 width="100%" testId="podcast-transcript"
+              SectionHeader(label="Transcript")
+              input type="search" value=podFind input=editPodFind placeholder="Find in the transcript" aria-label="Find in the transcript" testId="podcast-find"
+                enterkeyhint="search" font-family=th.fontUi font-size=16 color=th.fg padding="10px 4px"
+              if podEp.transcriptNote != ""
+                text podEp.transcriptNote testId="podcast-transcript-note" font-family=th.fontUi font-size=13 color=th.muted
+              for t in podEp.transcript key=t.key
+                if t.seekable
+                  button press=podPlayEpisode(podEp.address, `at:${t.seconds}`) testId=`podcast-line-${t.key}` appearance="none" width="100%" aria-label=`Play from ${t.time}`
+                    row gap=12 align-items="flex-start" width="100%" padding="6px 0" box-sizing="border-box"
+                      text t.time font-family=th.fontMono font-size=13 color=(t.current ? th.accent : th.muted) width=48 flex-shrink=0
+                      text t.text font-family=th.fontRead font-size=17 line-height=1.45 color=(t.current ? th.accent : th.fg) font-weight=(t.current ? 700 : 400) text-align="left" flex=1 min-width=0
+                if t.seekable == false
+                  row gap=12 align-items="flex-start" width="100%" padding="6px 0" box-sizing="border-box" testId=`podcast-line-${t.key}`
+                    text t.time font-family=th.fontMono font-size=13 color=th.muted width=48 flex-shrink=0
+                    text t.text font-family=th.fontRead font-size=17 line-height=1.45 color=th.fg text-align="left" flex=1 min-width=0
+        if podEp.transcriptState == "pending"
+          Emerge(delay=60)
+            text podEp.transcriptNote testId="podcast-transcript-pending" font-family=th.fontUi font-size=13 color=th.muted
         if podEp.notes.length > 0
           Emerge(delay=80)
             column gap=8 width="100%" testId="podcast-notes"

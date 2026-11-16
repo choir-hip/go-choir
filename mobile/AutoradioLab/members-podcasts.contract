@@ -8,10 +8,11 @@ use PodHomeView, PodShowView, PodEpisodeView, PodAck from "@choir/autoradio"
 members Autoradio
   resource podHome = podcastHome(q=podQ, address=pg.top) as shape PodHomeView else empty()
   resource podShow = podcastShow(address=pg.top) as shape PodShowView else empty()
-  resource podEp = podcastEpisode(address=pg.top) as shape PodEpisodeView else empty()
+  resource podEp = podcastEpisode(address=pg.top, find=podFind) as shape PodEpisodeView else empty()
   mutation pak as shape PodAck
 
   state podQ = ""
+  state podFind = ""
   // The address a note belongs to ("" none), so one page's note never shows on another.
   state podNoteFor = ""
 
@@ -20,6 +21,8 @@ members Autoradio
 
   action editPodQ(v: string)
     podQ = v
+  action editPodFind(v: string)
+    podFind = v
   action podSubscribeTo(feed: string)
     podNoteFor = pg.top
     send pak = podcastSubscribe(feedURL=feed)

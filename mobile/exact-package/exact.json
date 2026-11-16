@@ -587,11 +587,23 @@
       "playable": "bool",
       "current": "bool",
       "fromClip": "bool",
-      "hasResume": "bool"
+      "hasResume": "bool",
+      "transcriptState": "string",
+      "transcriptNote": "string",
+      "transcriptSource": "string",
+      "transcript": "PodTranscriptRow[]"
     },
     "PodAck": {
       "status": "string",
       "message": "string"
+    },
+    "PodTranscriptRow": {
+      "key": "string",
+      "time": "string",
+      "text": "string",
+      "seconds": "number",
+      "current": "bool",
+      "seekable": "bool"
     },
     "QueueRow": {
       "i": "number",
@@ -2041,7 +2053,8 @@
       "live": true,
       "answers": "PodEpisodeView",
       "options": {
-        "address": "string"
+        "address": "string",
+        "find": "string"
       },
       "substitute": {
         "default": {
@@ -2063,7 +2076,11 @@
           "playable": false,
           "current": false,
           "fromClip": false,
-          "hasResume": false
+          "hasResume": false,
+          "transcriptState": "",
+          "transcriptNote": "",
+          "transcriptSource": "",
+          "transcript": []
         }
       }
     },

@@ -56,6 +56,28 @@ public struct PodcastNow: Equatable, Sendable {
     }
 }
 
+/// The platform's shared podcast routes (provisional shapes, owner direction 2026-11-15): the server transcribes the shows readers follow and
+/// recommends what other readers follow. A 404 or any failure is "not available yet" and is silent.
+public struct PodcastPlatformHooks: Sendable {
+    public var report: @Sendable ([PodcastShow], PodcastNowPlaying?) async -> Void
+    public var popular: @Sendable () async -> [PodcastShow]?
+    /// The shared transcript of an episode; nil when the platform has none (404, signed out, offline).
+    public var transcript: @Sendable (String, String) async -> PodcastTranscript?
+    public init(report: @escaping @Sendable ([PodcastShow], PodcastNowPlaying?) async -> Void, popular: @escaping @Sendable () async -> [PodcastShow]?,
+                transcript: @escaping @Sendable (String, String) async -> PodcastTranscript? = { _, _ in nil }) {
+        self.report = report; self.popular = popular; self.transcript = transcript
+    }
+}
+public struct PodcastTranscript: Equatable, Sendable {
+    public struct Block: Equatable, Sendable { public var start: Double; public var end: Double; public var text: String
+        public init(start: Double, end: Double, text: String) { self.start = start; self.end = end; self.text = text } }
+    public var durationSeconds: Double?
+    public var source: String
+    public var blocks: [Block]
+    public init(durationSeconds: Double?, source: String, blocks: [Block]) { self.durationSeconds = durationSeconds; self.source = source; self.blocks = blocks }
+}
+public struct PodcastNowPlaying: Equatable, Sendable { public var feedURL: String, episodeGuid: String, audioURL: String }
+
 public typealias PodcastFetch = @Sendable (URL) async throws -> Data
 
 private struct LibraryFile: Codable {
@@ -92,6 +114,11 @@ public final class PodcastService: @unchecked Sendable {
     public var nowHook: (@Sendable () -> PodcastNow?)?
     public var keepHook: (@Sendable () -> Void)?
     public var syncHooks: PodcastSyncHooks?
+    public var platform: PodcastPlatformHooks?
+    private var reportedThisLaunch = false
+    private var transcripts: [String: PodcastTranscript] = [:]
+    private var transcriptAsked: [String: Double] = [:]
+    private var playedKeys = Set<String>()
 
     // Search and suggestions.
     private var searchQuery = ""
@@ -173,6 +200,7 @@ public final class PodcastService: @unchecked Sendable {
                 if await hooks.push(s) { self?.markSynced(n) }
             }
         }
+        reportFeeds()
         refreshIfNeeded(s.feedURL, force: true)
         return true
     }
@@ -193,8 +221,15 @@ public final class PodcastService: @unchecked Sendable {
         if did, !lib.removed.contains(where: { PodcastKey.feed($0) == n }) { lib.removed.append(feedURL) }
         if did { saveLocked() }
         lock.unlock()
-        if did { changed() }
+        if did { changed(); reportFeeds() }
         return did
+    }
+
+    /// Tell the platform which feeds this reader follows (and what is playing now), so the server can transcribe them first.
+    public func reportFeeds(nowPlaying: PodcastNowPlaying? = nil) {
+        guard let hooks = platform else { return }
+        let feeds = subscriptions()
+        Task { await hooks.report(feeds, nowPlaying) }
     }
 
     private func markSynced(_ n: String) {
@@ -325,13 +360,14 @@ public final class PodcastService: @unchecked Sendable {
         Task { [weak self] in
             guard let self else { return }
             var out: [PodcastShow] = []
-            do {
+            if let pop = await self.platform?.popular(), !pop.isEmpty { out = pop }
+            if out.isEmpty { do {
                 let chart = try PodcastDirectory.decodeChartNews(try await self.fetchData(PodcastDirectory.topURL))
                 if !chart.isEmpty, let u = PodcastDirectory.lookupURL(ids: chart.map(\.id)) {
                     let found = try PodcastDirectory.decodeSearch(try await self.fetchData(u))
                     out = found
                 }
-            } catch {}
+            } catch {} }
             self.lock.lock(); self.suggestions = out; self.suggestionsAt = self.clock(); self.suggesting = false
             for x in out { let n = PodcastKey.feed(x.feedURL); if self.known[n] == nil { self.known[n] = x } }
             self.lock.unlock()
@@ -371,6 +407,22 @@ public final class PodcastService: @unchecked Sendable {
                 for s in added { self.refreshIfNeeded(s.feedURL) }
             } else { note = "Not in step with your computer's podcasts yet: it did not answer. Subscriptions here are kept on this phone." }
             self.lock.lock(); self.syncing = false; self.syncNote = note; self.lock.unlock()
+            self.changed()
+        }
+    }
+
+    // MARK: Transcripts (the platform's shared ones)
+
+    /// Ask for the transcript once per two minutes while there is none.
+    func transcriptIfNeeded(feed: String, id: String) {
+        guard let hooks = platform else { return }
+        let key = PodcastKey.episode(feed: PodcastKey.feed(feed), id: id), now = clock()
+        lock.lock()
+        if transcripts[key] != nil || (transcriptAsked[key].map { now - $0 < 120 } ?? false) { lock.unlock(); return }
+        transcriptAsked[key] = now; lock.unlock()
+        Task { [weak self] in
+            guard let t = await hooks.transcript(feed, id), let self else { return }
+            self.lock.lock(); self.transcripts[key] = t; self.lock.unlock()
             self.changed()
         }
     }
@@ -421,9 +473,15 @@ public final class PodcastService: @unchecked Sendable {
         public var subscribed = false, refreshing = false
         public var episodes: [EpisodeRow] = []
     }
+    public struct TranscriptRow: Codable, Equatable, Sendable {
+        public var key = "", time = "", text = ""
+        public var seconds = 0.0
+        public var current = false, seekable = false
+    }
     public struct EpisodeView: Codable, Equatable, Sendable {
         public var status = "loading", message = "", address = "", feedURL = "", showTitle = "", showAddress = "", title = "", stamp = "", duration = "", artwork = ""
-        public var playingFrom = "", resumeLabel = "", note = ""
+        public var playingFrom = "", resumeLabel = "", note = "", transcriptState = "", transcriptNote = "", transcriptSource = ""
+        public var transcript: [TranscriptRow] = []
         public var notes: [String] = []
         public var subscribed = false, playable = false, current = false, fromClip = false, hasResume = false
     }
@@ -446,6 +504,8 @@ public final class PodcastService: @unchecked Sendable {
 
     public func home(query raw: String) -> HomeView {
         syncIfDue(); loadSuggestionsIfNeeded()
+        lock.lock(); let first = !reportedThisLaunch; reportedThisLaunch = true; lock.unlock()
+        if first { reportFeeds() }
         var v = HomeView()
         let q = CorpusSearch.normalize(raw)
         v.query = q; v.hasQuery = !q.isEmpty
@@ -489,6 +549,12 @@ public final class PodcastService: @unchecked Sendable {
                           progress: progress, unplayed: pos == nil && e.playable, playable: e.playable, current: now?.episodeId == key)
     }
 
+    /// A transcript's times are good for this file when its length is within 3 s of the transcribed one's.
+    public static func durationsAgree(_ file: Double?, _ transcribed: Double?) -> Bool {
+        guard let f = file, let t = transcribed else { return false }
+        return abs(f - t) <= 3
+    }
+
     public func show(address: String) -> ShowView {
         var v = ShowView()
         guard let feed = Self.parseShow(address) else { v.status = "error"; v.message = "This show's address is not one the app can open."; return v }
@@ -512,7 +578,7 @@ public final class PodcastService: @unchecked Sendable {
         return v
     }
 
-    public func episode(address: String) -> EpisodeView {
+    public func episode(address: String, find: String = "") -> EpisodeView {
         var v = EpisodeView(address: address)
         guard let (feed, id) = Self.parseEpisode(address) else { v.status = "error"; v.message = "This episode's address is not one the app can open."; return v }
         sample()
@@ -544,6 +610,24 @@ public final class PodcastService: @unchecked Sendable {
         if v.current, let n = now, n.isClip, let s = n.start { v.fromClip = true; v.playingFrom = "Playing from " + PodcastText.clock(s) }
         else if let h = hint, let s = h.start, s > 0, !v.current { v.playingFrom = "From the clip at " + PodcastText.clock(s) }
         if let r = resumeSeconds(key) { v.hasResume = true; v.resumeLabel = "Resume from " + PodcastText.clock(r) }
+        // The shared transcript: shown when the platform has one; "on its way" only for an episode that was played here.
+        transcriptIfNeeded(feed: feed, id: id)
+        lock.lock(); let tr = transcripts[key]; let wasPlayed = playedKeys.contains(key); lock.unlock()
+        if let t = tr {
+            v.transcriptState = "ready"; v.transcriptSource = t.source
+            // Tap-to-seek only when the file that plays is the file that was transcribed (within 3 s).
+            let fileLength = (v.current ? now?.duration : nil) ?? e.duration
+            let seek = Self.durationsAgree(fileLength, t.durationSeconds)
+            if !seek { v.transcriptNote = "These times are for another recording of this episode, so tapping a line will not jump to it." }
+            let playhead = v.current ? now?.elapsed : nil
+            let q = find.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            var curIndex = -1
+            if let p = playhead { curIndex = t.blocks.lastIndex { $0.start <= p } ?? -1 }
+            for (i, b) in t.blocks.enumerated() where q.isEmpty || b.text.lowercased().contains(q) {
+                v.transcript.append(TranscriptRow(key: String(i), time: PodcastText.clock(b.start), text: b.text, seconds: b.start, current: i == curIndex, seekable: seek && v.playable))
+            }
+            if v.transcript.isEmpty, !q.isEmpty { v.transcriptNote = "Nothing in the transcript matches that." }
+        } else if wasPlayed || position(key) != nil { v.transcriptState = "pending"; v.transcriptNote = "Transcript on its way." }
         return v
     }
 
@@ -572,9 +656,15 @@ public final class PodcastService: @unchecked Sendable {
             let from = max(hint(r.key)?.start ?? 0, position(r.key)?.seconds ?? 0)
             r.request.start = from > 0 ? from : nil
         case "start": r.request.start = nil
+        case _ where mode.hasPrefix("at:"):
+            // From a transcript block: only from a second the transcript's own file can be trusted for (the page checked), never past 0.
+            let at = Double(mode.dropFirst(3)) ?? 0
+            r.request.start = at > 0 ? at : nil
         default: r.request.start = resumeSeconds(r.key)
         }
         hook(r.request, false)
+        lock.lock(); playedKeys.insert(r.key); lock.unlock()
+        if let (f, g) = PodcastKey.parseEpisode(r.key) { reportFeeds(nowPlaying: PodcastNowPlaying(feedURL: f, episodeGuid: g, audioURL: r.request.url.absoluteString)) }
         return Ack(status: "ok", message: "Playing.")
     }
 
@@ -667,5 +757,71 @@ public enum PodcastSyncCodec {
         PodcastSyncHooks(signedIn: { environment.client().hasKey },
                          push: { show in (try? await environment.client().podcastSubscribe(show)) != nil },
                          pull: { try? await environment.client().podcastSubscriptions() })
+    }
+}
+
+// MARK: The platform's shared podcast routes
+
+public enum PodcastPlatformCodec {
+    public static let feedsPath = "/api/platform/podcast-feeds"
+    public static let popularPath = "/api/platform/podcast-popular"
+    public static let transcriptPath = "/api/platform/podcast-transcript"
+
+    /// The wire's bounds: at most 50 feeds, http(s) URLs with no credentials of at most 2048 bytes, titles of at most 200 bytes.
+    static func clean(_ feeds: [PodcastShow]) -> [[String: String]] {
+        func ok(_ u: String) -> Bool { u.utf8.count <= 2048 && URL(string: u).map { $0.user == nil && $0.password == nil } == true && !PodcastText.webURL(u).isEmpty }
+        func cut(_ s: String, _ n: Int) -> String { var t = s; while t.utf8.count > n { t.removeLast() }; return t }
+        return feeds.filter { ok($0.feedURL) }.prefix(50).map { ["feed_url": $0.feedURL, "title": cut($0.title, 200)] }
+    }
+
+    /// `{episode:{duration_seconds,...},source,blocks:[{start,end,text}]}`; blocks without text are dropped.
+    public static func decodeTranscript(_ data: Data) -> PodcastTranscript? {
+        guard let o = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any], let list = o["blocks"] as? [[String: Any]] else { return nil }
+        let blocks = list.compactMap { b -> PodcastTranscript.Block? in
+            guard let t = (b["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty, let s = (b["start"] as? NSNumber)?.doubleValue, s >= 0 else { return nil }
+            return PodcastTranscript.Block(start: s, end: (b["end"] as? NSNumber)?.doubleValue ?? s, text: t)
+        }
+        guard !blocks.isEmpty else { return nil }
+        return PodcastTranscript(durationSeconds: ((o["episode"] as? [String: Any])?["duration_seconds"] as? NSNumber)?.doubleValue, source: (o["source"] as? String) ?? "", blocks: blocks)
+    }
+
+    public static func reportBody(_ feeds: [PodcastShow], nowPlaying: PodcastNowPlaying?) -> Data? {
+        var o: [String: Any] = ["feeds": clean(feeds)]
+        if let n = nowPlaying, !PodcastText.webURL(n.feedURL).isEmpty, !PodcastText.webURL(n.audioURL).isEmpty { o["now_playing"] = ["feed_url": n.feedURL, "episode_guid": n.episodeGuid, "audio_url": n.audioURL] }
+        return try? JSONSerialization.data(withJSONObject: o)
+    }
+
+    /// Shows other readers follow: `{shows:[{feed_url,title,author,artwork_url}]}` (provisional; `feeds` or `results` are read too).
+    public static func decodePopular(_ data: Data) -> [PodcastShow] {
+        guard let o = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return [] }
+        let list = (o["feeds"] ?? o["shows"]) as? [[String: Any]] ?? []
+        var seen = Set<String>(), out: [PodcastShow] = []
+        for r in list {
+            let feed = PodcastText.webURL((r["feed_url"] as? String) ?? "")
+            let title = ((r["title"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !feed.isEmpty, !title.isEmpty, seen.insert(PodcastKey.feed(feed)).inserted else { continue }
+            out.append(PodcastShow(feedURL: feed, title: title, author: (r["author"] as? String) ?? "",
+                                   artworkURL: PodcastText.https(PodcastText.webURL((r["artwork_url"] as? String) ?? ""))))
+        }
+        return out
+    }
+
+    public static func hooks(environment: ChoirEnvironment = .shared) -> PodcastPlatformHooks {
+        PodcastPlatformHooks(
+            report: { feeds, now in
+                guard let body = reportBody(feeds, nowPlaying: now) else { return }
+                let c = environment.client()
+                _ = try? await c.send("POST", feedsPath, body: body, authenticated: c.hasKey, route: feedsPath, okStatuses: [404])
+            },
+            popular: {
+                let c = environment.client()
+                guard let r = try? await c.send("GET", popularPath, query: ["limit": "30"], authenticated: false, route: popularPath, okStatuses: [404]), r.status == 200 else { return nil }
+                return decodePopular(r.data)
+            },
+            transcript: { feed, guid in
+                let c = environment.client()
+                guard c.hasKey, let r = try? await c.send("GET", transcriptPath, query: ["feed": feed, "guid": guid], route: transcriptPath, okStatuses: [404]), r.status == 200 else { return nil }
+                return decodeTranscript(r.data)
+            })
     }
 }

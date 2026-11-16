@@ -26,7 +26,7 @@ extension AutoradioModule {
         let service = PodcastService.shared
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
         service.configure(directory: support)
-        if !Demo.isOn { service.syncHooks = PodcastSyncCodec.hooks() }
+        if !Demo.isOn { service.syncHooks = PodcastSyncCodec.hooks(); service.platform = PodcastPlatformCodec.hooks() }
         service.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["podcastHome", "podcastShow", "podcastEpisode", "launcherData"]) } }
         service.opener = { [weak self] address, title in DispatchQueue.main.async { self?.pages.open(address, title: title) } }
         pageSources.register(PodcastPageSource(service: service))
@@ -47,7 +47,7 @@ extension AutoradioModule {
         handle("podcastEpisode") { args, reply in
             let a = args["address"] as? String ?? ""
             guard PodcastService.parseEpisode(a) != nil else { reply(self.json(PodcastService.EpisodeView())); return }
-            reply(self.json(service.episode(address: a)))
+            reply(self.json(service.episode(address: a, find: args["find"] as? String ?? "")))
         }
         handle("podcastSubscribe") { [weak self] args, reply in
             let feed = args["feedURL"] as? String ?? ""

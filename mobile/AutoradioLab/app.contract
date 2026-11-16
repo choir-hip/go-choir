@@ -360,6 +360,8 @@ component Autoradio
     podShow
     podEp
     podQ
+    podFind
+    editPodFind
     podNote
     editPodQ
     podSubscribeTo

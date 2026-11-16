@@ -249,4 +249,78 @@ final class PodcastTests: XCTestCase {
         XCTAssertEqual(PodcastKey.parseEpisode(PodcastKey.episode(feed: "https://f.example/a", id: "g/1"))?.id, "g/1")
         XCTAssertTrue(PageAddress.places.contains { $0.address == "podcasts:" })
     }
+
+    // MARK: Platform routes (provisional shapes; a 404 is silent)
+
+    func testPlatformReportsAndPopular() async throws {
+        let s = service()
+        let box = ReportBox()
+        s.platform = PodcastPlatformHooks(report: { f, n in box.add(f.map(\.feedURL), n) }, popular: { [PodcastShow(feedURL: "https://pop.example/p.xml", title: "Popular")] })
+        s.subscribe(PodcastShow(feedURL: feedURL, title: "S")); await settle(s, feedURL)
+        s.playHook = { _, _ in }
+        _ = s.play(address: PodcastService.episodeAddress(feed: feedURL, id: "guid-1"), mode: "resume")
+        for _ in 0..<100 { if box.count >= 2 { break }; try? await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertEqual(box.first?.0, [feedURL]); XCTAssertNil(box.first?.1)
+        XCTAssertEqual(box.last?.1?.episodeGuid, "guid-1"); XCTAssertEqual(box.last?.1?.audioURL, "https://cdn.example/one.mp3")
+        s.unsubscribe(feedURL)
+        for _ in 0..<100 { if box.count >= 3 { break }; try? await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertEqual(box.last?.0, [])
+        s.loadSuggestionsIfNeeded()
+        for _ in 0..<100 { if !s.home(query: "").suggestions.isEmpty { break }; try? await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertEqual(s.home(query: "").suggestions.map(\.title), ["Popular"], "the platform's popular list comes before the charts")
+    }
+    final class ReportBox: @unchecked Sendable {
+        let k = NSLock(); var l: [([String], PodcastNowPlaying?)] = []
+        func add(_ f: [String], _ n: PodcastNowPlaying?) { k.lock(); l.append((f, n)); k.unlock() }
+        var count: Int { k.lock(); defer { k.unlock() }; return l.count }
+        var first: ([String], PodcastNowPlaying?)? { k.lock(); defer { k.unlock() }; return l.first }
+        var last: ([String], PodcastNowPlaying?)? { k.lock(); defer { k.unlock() }; return l.last }
+    }
+
+    func testPlatformCodec() throws {
+        let b = try JSONSerialization.jsonObject(with: PodcastPlatformCodec.reportBody([PodcastShow(feedURL: "https://f.example/a.xml", title: "A")], nowPlaying: PodcastNowPlaying(feedURL: "https://f.example/a.xml", episodeGuid: "g", audioURL: "https://c.example/a.mp3"))!) as! [String: Any]
+        XCTAssertEqual((b["feeds"] as! [[String: String]])[0]["feed_url"], "https://f.example/a.xml")
+        XCTAssertEqual((b["now_playing"] as! [String: String])["episode_guid"], "g")
+        XCTAssertNil((try JSONSerialization.jsonObject(with: PodcastPlatformCodec.reportBody([], nowPlaying: nil)!) as! [String: Any])["now_playing"])
+        let p = PodcastPlatformCodec.decodePopular(Data(#"{"shows":[{"feed_url":"https://f.example/a.xml","title":"A"},{"feed_url":"","title":"x"},{"feed_url":"https://f.example/a.xml/","title":"dup"}]}"#.utf8))
+        XCTAssertEqual(p.map(\.title), ["A"]); XCTAssertEqual(PodcastPlatformCodec.decodePopular(Data("<html>".utf8)), [])
+    }
+
+    func testTranscriptShownSeekRuleAndFind() async throws {
+        let s = service()
+        let t = PodcastTranscript(durationSeconds: 3724, source: "test", blocks: [.init(start: 0, end: 5, text: "Hello there"), .init(start: 12, end: 20, text: "Second line about cats"), .init(start: 30, end: 40, text: "Third")])
+        s.platform = PodcastPlatformHooks(report: { _, _ in }, popular: { nil }, transcript: { _, _ in t })
+        s.subscribe(PodcastShow(feedURL: feedURL, title: "S")); await settle(s, feedURL)
+        let a = PodcastService.episodeAddress(feed: feedURL, id: "guid-1")   // 3723 s in the feed: within 3 s of 3724
+        _ = s.episode(address: a)
+        for _ in 0..<100 { if s.episode(address: a).transcriptState == "ready" { break }; try? await Task.sleep(nanoseconds: 10_000_000) }
+        var v = s.episode(address: a)
+        XCTAssertEqual(v.transcript.count, 3); XCTAssertTrue(v.transcript.allSatisfy(\.seekable)); XCTAssertEqual(v.transcript[1].time, "0:12")
+        v = s.episode(address: a, find: "CATS")
+        XCTAssertEqual(v.transcript.map(\.text), ["Second line about cats"])
+        XCTAssertTrue(s.episode(address: a, find: "zzz").transcriptNote.contains("Nothing"))
+        s.nowHook = { PodcastNow(episodeId: PodcastKey.episode(feed: self.feedURL, id: "guid-1"), isClip: false, start: nil, elapsed: 14, duration: 3723) }
+        XCTAssertEqual(s.episode(address: a).transcript.map(\.current), [false, true, false], "the block being played is marked")
+        s.nowHook = { PodcastNow(episodeId: PodcastKey.episode(feed: self.feedURL, id: "guid-1"), isClip: false, start: nil, elapsed: 14, duration: 3000) }
+        XCTAssertTrue(s.episode(address: a).transcript.allSatisfy { !$0.seekable }, "another recording: no tap-to-seek")
+        XCTAssertTrue(PodcastService.durationsAgree(100, 103)); XCTAssertFalse(PodcastService.durationsAgree(100, 104)); XCTAssertFalse(PodcastService.durationsAgree(nil, 100))
+    }
+
+    func testTranscriptPendingOnlyAfterPlaying() async throws {
+        let s = service()
+        s.platform = PodcastPlatformHooks(report: { _, _ in }, popular: { nil })
+        s.subscribe(PodcastShow(feedURL: feedURL, title: "S")); await settle(s, feedURL)
+        let a = PodcastService.episodeAddress(feed: feedURL, id: "guid-1")
+        XCTAssertEqual(s.episode(address: a).transcriptState, "", "never played: nothing is said")
+        s.playHook = { _, _ in }
+        _ = s.play(address: a, mode: "at:12")
+        XCTAssertEqual(s.episode(address: a).transcriptNote, "Transcript on its way.")
+    }
+
+    func testTranscriptDecode() {
+        let d = Data(#"{"episode":{"duration_seconds":100.5},"source":"x","verified":true,"blocks":[{"start":1,"end":2,"text":" hi "},{"start":3,"text":""},{"end":4,"text":"no start"}]}"#.utf8)
+        let t = PodcastPlatformCodec.decodeTranscript(d)
+        XCTAssertEqual(t?.blocks.map(\.text), ["hi"]); XCTAssertEqual(t?.durationSeconds, 100.5)
+        XCTAssertNil(PodcastPlatformCodec.decodeTranscript(Data("{}".utf8)))
+    }
 }
