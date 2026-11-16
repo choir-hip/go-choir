@@ -11,6 +11,22 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
+## Live station beside them (2026-11-15 night): Autoradio, the full experience
+
+Owner, 2026-11-15 23:36Z, an overnight order: podcast clips, a podcast app, a
+Reader, the DJ mixing news and clips, one play queue the DJ can edit, no
+pills. Goal:
+[`definitions/choir-autoradio-full-experience-overnight-2026-11-15.md`](definitions/choir-autoradio-full-experience-overnight-2026-11-15.md)
+(its ledger beside it). State at 08:15Z on the 16th: the phone build holds
+every lane and is installed, unheard on the device; staging serves the queue
+desk (proven on d@e) and podcast clips (13 served, matched by an operator's
+hand). Open and the owner's: the Jev entry point for automatic matching
+([problem](problems/podcast-clips-landed-and-was-backed-out-ci-jev-entry-gate-2026-11-16.md)),
+where the transcription worker and its key live
+([problem](problems/podcast-worker-cannot-fetch-from-the-build-vm-proxy-only-egress-2026-11-16.md)),
+and feeds reported by accounts
+([assessment](problems/podcast-clips-review-did-not-converge-structural-assessment-2026-11-16.md)).
+
 ## Live station (2026-11-13, from 16:40Z): storage solutions, part 2
 
 Owner, 2026-11-13: "Let's continue the storage solutions. Take them to the

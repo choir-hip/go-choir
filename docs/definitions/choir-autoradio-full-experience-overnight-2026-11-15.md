@@ -168,11 +168,11 @@ stations:
 
 now:
   status: working
-  slice: all stations started between 23:40Z and 23:58Z
-  believed_state: seven builders writing; the design system and the clip shapes are pushed; nothing merged yet
-  main_uncertainty: whether S deploys in time, and what breaks on a device
-  next_observation: the first lane pushes and the first merged build
-  next_action: merge and build each lane as it pushes; start S's reviews the moment it is green
+  slice: "K deployed and proven; S deployed with clips served, matched by hand; the phone lanes merged, built and installed through design sweep seven"
+  believed_state: "the phone build of 07:57Z holds every lane; staging serves the queue desk (a99e07d3b) and podcast clips (53747dcca), 13 clips over 5 front stories; the worker runs on the lead's Mac, not as a durable service"
+  main_uncertainty: "nothing has been heard on the device: audio, clips, voice, the DJ choosing a clip while signed in"
+  next_observation: "the owner's first listen on the phone"
+  next_action: "a second matching pass near 09:30Z, the morning report, then the owner's decisions: the Jev entry point for automatic matching, where the worker and its key live"
   blocker: none
 
 receipts: []
