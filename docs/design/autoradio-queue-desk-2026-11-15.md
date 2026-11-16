@@ -84,10 +84,14 @@ server; the desk simply never sees what it does not know). Optional too:
 `candidates`, `[{"route": "...", "title": "..."}]`, at most 40: the paper's
 stories the desk may put in the queue (the phone sends its front page's). The DJ
 can add only a story named there; it never invents an item. Bounds (bounds on
-what a stranger can cause, not on model calls): at most 100 upcoming entries;
-`id` is `[A-Za-z0-9][A-Za-z0-9_.-]{0,63}` and unique; a string field at most
-512 bytes, a title at most 300; a bad field is `400` naming it. The body bound
-rises from 80 KB to 128 KB for the snapshot; `page.text` stays at 48 KB.
+what a stranger can cause, not on model calls): at most 50 upcoming entries;
+`id` is `[A-Za-z0-9][A-Za-z0-9_.-]{0,63}` and unique; a title at most 300 bytes,
+a `url` 1024, other strings 128 to 256. A malformed snapshot is `400` naming
+the field; a well formed one over a size bound is answered without the queue and
+the desk says so (a listener's words are not refused because their queue is
+long). The body bound rises from 80 KB to 256 KB, the sum of the part maxima, so
+a queue within its bounds always fits; `page.text` stays at 48 KB. The reference
+page has the arithmetic.
 
 ### Response: the `queue_ops` event
 
@@ -141,11 +145,12 @@ activation, a worker, a module grant, the deskprotocol locks) is more than one
 night. Tonight's slice therefore does the conservative thing and says so:
 
 - The same single model call that writes the spoken reply also writes the ops.
-  The prompt tells the model to write its reply first and, only when the
-  listener asked to change the order, to end with one fence line `<<<... queue>>>`
-  and a JSON array of ops. `<<<` cannot occur in the reply: a client's text is
-  made fence-safe, and the stream filter cuts the speech at the first `<<<`, so
-  the ops are never spoken.
+  The queue block of the request tells the model to write its reply first and,
+  only when the listener asked to change the order, to end with the request's
+  own fence line (`<<<AR... queue>>>` with the request's token, given to it
+  verbatim) and a JSON array of ops. The stream cut starts the ops only at that
+  exact line; any other `<<<` the model writes is speech. The cut and the rules
+  exist only on turns that carry a queue: the desk's system prompt is unchanged.
 - The server validates every op through the **queue module** (below), which is
   the single place the rules live: unknown ids dropped, indexes clamped, an
   `enqueue` of anything but a named candidate dropped, at most 8 ops per turn
@@ -183,12 +188,16 @@ arrives; that is why the wire is frozen now.
 
 **What was built (2026-11-15).** The conservative slice: `internal/autoradioqueue`
 (the structure, bounds, reducer and the stream cut), the turn route's `queue`
-and `candidates` request fields and `queue_ops` event, and the desk prompt. The
-route is the contract: [AUTORADIO-TURNS.md](../reference/AUTORADIO-TURNS.md).
+and `candidates` request fields and `queue_ops` event, and the rules the model
+reads in the request's queue block. The route is the contract:
+[AUTORADIO-TURNS.md](../reference/AUTORADIO-TURNS.md). Review 1 repaired: the cut
+ran on every turn (now only with a queue, and only at the exact fence), a
+fence-only reply walked to a second pool member (now an answer), a replay re-sent
+ops to a queue it was not written for (now only to the same version), and the
+bounds could not hold a realistic queue.
 `play_now` forgets the entry it replaces for the rest of the turn (the phone
 decides what becomes of it); an entry added this turn has no id and cannot be
-named by a later op. The fence line is not required to carry the request's token
-(any `<<<... queue>>>` is read), because a client's text cannot contain `<<<`.
+named by a later op.
 
 ## 5. How the reader sees why the order changed
 
