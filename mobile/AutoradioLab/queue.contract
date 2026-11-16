@@ -16,14 +16,14 @@ component QueueScrub
     scrubPct: number
   view
     row gap=8 align-items="center" width="100%" testId="queue-audio-progress"
-      text qv.elapsedLabel testId="queue-elapsed" font-family=th.fontMono font-size=13 color=th.muted width=52
+      text qv.elapsedLabel testId="queue-elapsed" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted width=52 font-variant-numeric="tabular-nums"
       column flex=1 min-width=0 height=44 justify-content="center" pan=scrubMove panrelease=scrubEnd testId="queue-scrub" aria-label="Position"
         row width="100%" height=22 align-items="center" padding-left=11
           box width=`${scrubPct}%` height=4 background-color=th.accent
           row width=22 height=22 margin-left=-11 justify-content="center"
             box width=3 height=22 background-color=th.accent
           box flex=1 height=4 background-color=th.rule
-      text qv.remainingLabel testId="queue-remaining" font-family=th.fontMono font-size=13 color=th.muted width=60 text-align="right"
+      text qv.remainingLabel testId="queue-remaining" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted width=60 text-align="right" font-variant-numeric="tabular-nums"
 
 // A clip: it says what it is cut from and offers Keep listening (the episode carries on past the clip's end). The 15 second skips are the
 // player's transport (player.contract); the scrubber is QueueScrub. Nothing is drawn when the audio is a whole episode.
@@ -37,20 +37,20 @@ component QueueAudio
       Card(level=1, testId="queue-audio", minHeight=0)
         column padding=16 gap=12
           column gap=2
-            text "CLIP" font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 color=th.muted
-            text `From ${qv.keepTitle}` font-family=th.fontUi font-size=15 color=th.fg line-clamp=2
+            text "CLIP" font-family=th.fontLabel font-size="-exact-caption1" font-weight=600 letter-spacing=0.9 color=th.muted
+            text `From ${qv.keepTitle}` font-family=th.fontLabel font-size="-exact-subheadline" color=th.fg line-clamp=2
           button press=queueDo("keep", "") testId="player-keep" appearance="none" width="100%" aria-label=`Keep listening to ${qv.keepTitle}`
             Btn(label="Keep listening", primary=false, wide=false)
           // lane autoradio-joins: the clip's episode page, opened at the clip's time (the queue's `openEpisode` op)
           if qv.canOpenEpisode
             button press=queueDo("openEpisode", "") testId="queue-open-episode" appearance="none" aria-label=`Open the episode ${qv.keepTitle}`
               row min-height=44 align-items="center"
-                text "Open episode" font-family=th.fontUi font-size=15 font-weight=600 color=th.muted
+                text "Open episode" font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.muted
     // lane autoradio-joins: a whole episode has its page too
     if qv.audio and qv.clip == false and qv.canOpenEpisode
       button press=queueDo("openEpisode", "") testId="queue-open-episode" appearance="none" aria-label="Open the episode"
         row min-height=44 align-items="center"
-          text "Open episode" font-family=th.fontUi font-size=15 font-weight=600 color=th.accent
+          text "Open episode" font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.accent
 
 // Up next: what is queued, in order. Tap a row to play it now; the remove button takes it out. Each row has its title, what it is
 // (kind, and the show for audio) and one quiet caption: the DJ's own reason when it moved or added the item, else who added it.
@@ -72,19 +72,19 @@ component UpNext
             row align-items="center" width="100%"
               button press=queueDo("playAt", `${r.i}`) testId=`queue-row-${r.i}` appearance="none" flex=1 min-width=0 aria-label=`Play ${r.title} now`
                 column gap=2 align-items="flex-start" width="100%" box-sizing="border-box" min-height=52 justify-content="center" padding="8px 0px 8px 0px"
-                  text r.title font-family=th.fontUi font-size=17 font-weight=600 color=th.fg text-align="left" line-clamp=2
+                  text r.title font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg text-align="left" line-clamp=2
                   // one quiet caption (one size): what it is (the show for audio, else the kind) and why it is here (the DJ's reason, else who added it)
-                  text `${r.detail != "" ? r.detail : sentence(r.kind)} · ${r.note != "" ? r.note : r.by}` testId=`queue-note-${r.i}` font-family=th.fontUi font-size=13 color=th.muted text-align="left" line-clamp=2
+                  text `${r.detail != "" ? r.detail : sentence(r.kind)} · ${r.note != "" ? r.note : r.by}` testId=`queue-note-${r.i}` font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="left" line-clamp=2
               button press=queueDo("remove", `${r.i}`) testId=`queue-remove-${r.i}` appearance="none" width=44 height=44 aria-label=`Remove ${r.title}`
                 row width=44 height=44 align-items="center" justify-content="center"
                   image "symbol:close" color=th.muted
       // lane autoradio-joins: the DJ's own coming segments, after the reader's queued items. Quiet: no remove, no press (they are not in the queue).
       if qv.coming.length > 0
         column gap=0 width="100%" testId="queue-coming" margin-top=8
-          text "Coming up on the programme" font-family=th.fontUi font-size=12 font-weight=600 letter-spacing=0.6 color=th.muted padding="0px 0px 4px 0px"
+          text "Coming up on the programme" font-family=th.fontLabel font-size="-exact-caption1" color=th.muted padding="0px 0px 4px 0px"
           for r, k in qv.coming key=k
             column width="100%" box-sizing="border-box" min-height=36 justify-content="center" padding="4px 0px 4px 0px" testId=`queue-coming-${k}`
-              text r.title font-family=th.fontUi font-size=15 color=th.muted text-align="left" line-clamp=1
+              text r.title font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted text-align="left" line-clamp=1
 
 keyframes barWebGrow
   from opacity=0 scale=0.96
@@ -106,7 +106,7 @@ component BarWebLayer
       row align-items="center" gap=8 padding="calc(env(safe-area-inset-top) + 6px) 8px 6px 8px" width="100%" box-sizing="border-box"
         button press=queueDo("closeWeb", "") testId="bar-web-close" appearance="none" aria-label="Close page" width=40 height=40
           image "symbol:close" color=th.fg
-        text qv.webHost testId="bar-web-host" font-family=th.fontUi font-size=15 font-weight=600 color=th.fg flex=1 min-width=0 line-clamp=1
+        text qv.webHost testId="bar-web-host" font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg flex=1 min-width=0 line-clamp=1
         if webBusy
           progress aria-label="Loading" width=18 height=18 color=th.accent
       row gap=8 padding="0px 12px 8px 12px" width="100%" box-sizing="border-box"

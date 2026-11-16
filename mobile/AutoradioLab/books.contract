@@ -4,7 +4,7 @@
 // testIds: reader-import, reader-list, reader-row-<id>, reader-empty, reader-note, doc-find, doc-read, doc-queue, doc-toc,
 // doc-chapter-<n>, doc-prev, doc-next, doc-mode, doc-block-<n>, doc-hit-<n>, doc-remove, doc-frame, page-title on every page.
 use Theme, PageList, ShelfListing, ShelfDocInfo, ShelfChapter, ShelfFind, ShelfFollowInfo, ShelfBlock from "@choir/autoradio"
-use PageScroll, BarClear, Emerge, PageHeader, SectionHeader, RowRule, PlainList, LineRow, ChipFace, Btn, SegmentedTrack, SegmentFace, EmptyState from "./ui.contract"
+use PageScroll, BarClear, Emerge, PageHeader, SectionHeader, RowRule, PlainList, LineRow, ChipFace, Btn, SegmentedTrack, SegmentFace, EmptyState, dyn from "./ui.contract"
 
 component BooksPage
   inject
@@ -19,7 +19,7 @@ component BooksPage
       Emerge(delay=0)
         PageHeader(title="Reader", subtitle=(lbList.count == 1 ? "1 document" : `${lbList.count.toFixed(0)} documents`), subId="reader-sub")
       if lbNote != ""
-        text lbNote testId="reader-note" font-family=th.fontUi font-size=15 color=th.muted
+        text lbNote testId="reader-note" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted
       if lbList.status == "empty"
         Emerge(delay=th.staggerMs)
           EmptyState(message="Add an EPUB or PDF to read it here, hear it read aloud and search it.", detail="", testId="reader-empty")
@@ -56,7 +56,7 @@ component DocBlockView
     button press=ldPlace(b.n) testId=`doc-block-${b.n}` appearance="none" width="100%"
       column id=`doc-block-${b.n}` width="100%" box-sizing="border-box" padding="8px 10px" border-radius=6 background-color=(lit ? th.paper2 : "transparent")
         transition=`background-color ${th.motionFastMs}ms ease`
-        text (b.kind == "item" ? `${b.marker}${b.text}` : b.text) font-family=(isHead ? th.fontUi : th.fontRead) font-size=(isHead ? 22 : 19)
+        text (b.kind == "item" ? `${b.marker}${b.text}` : b.text) font-family=(isHead ? th.fontHead : th.fontText) font-size=dyn((isHead ? 22 : 19))
           font-weight=(isHead ? 700 : 400) line-height=(isHead ? 1.25 : 1.65) color=(b.kind == "quote" ? th.muted : th.fg) text-align="left"
 
 component DocActions
@@ -90,14 +90,14 @@ component DocFind
       row gap=8 align-items="center" width="100%"
         column flex=1 min-width=0
           input type="search" value=ldFindDraft input=ldEditFind submit=ldDoFind placeholder="Find in this document" aria-label="Find in this document" testId="doc-find"
-            enterkeyhint="search" min-width=0 font-family=th.fontUi font-size=16 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
+            enterkeyhint="search" min-width=0 font-family=th.fontLabel font-size=16 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
           RowRule(indent=0)
         if ldFind != ""
           button press=ldClearFind testId="doc-find-clear" appearance="none" aria-label="Clear the search"
             ChipFace(label="Clear", selected=false)
       if ldFind != ""
         if ldFound.hits.length == 0
-          text ldFound.message testId="doc-find-none" font-family=th.fontUi font-size=15 color=th.muted
+          text ldFound.message testId="doc-find-none" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted
         else
           PlainList(testId="doc-hits")
             for h, i in ldFound.hits key=h.block
@@ -160,7 +160,7 @@ component DocPage
           row gap=8 align-items="center" width="100%"
             button press=ldGo(ldSec - 1) testId="doc-prev" appearance="none" aria-label="Previous page"
               ChipFace(label="‹", selected=false)
-            text `${ldChap.title} · ${(ldSec + 1).toFixed(0)} of ${ldInfo.sections.length.toFixed(0)}` testId="doc-position" font-family=th.fontUi font-size=14 color=th.fg flex=1 text-align="center"
+            text `${ldChap.title} · ${(ldSec + 1).toFixed(0)} of ${ldInfo.sections.length.toFixed(0)}` testId="doc-position" font-family=th.fontLabel font-size="-exact-footnote" color=th.fg flex=1 text-align="center" font-variant-numeric="tabular-nums"
             button press=ldGo(ldSec + 1) testId="doc-next" appearance="none" aria-label="Next page"
               ChipFace(label="›", selected=false)
           column flex=1 min-height=0 margin-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 16px)" overflow="hidden" border-radius=th.radiusCard box-shadow=th.shadow1
@@ -198,7 +198,7 @@ component DocPage
             button press=ldGo(ldSec + 1) testId="doc-next" appearance="none" aria-label=`Next ${unitWord}`
               ChipFace(label="Next ›", selected=false)
           if not pdf
-            text "Pictures in the book are not shown yet." font-family=th.fontUi font-size=13 color=th.muted
+            text "Pictures in the book are not shown yet." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
         button press=ldRemove(ldInfo.id) testId="doc-remove" appearance="none" aria-label="Remove from Reader"
           row min-height=44 align-items="center"
-            text "Remove from Reader" font-family=th.fontUi font-size=15 font-weight=600 color=th.danger
+            text "Remove from Reader" font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.danger

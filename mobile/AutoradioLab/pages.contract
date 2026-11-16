@@ -87,8 +87,8 @@ component Placard
   derive listed = frontTitle(pfront.routes, pfront.titles, address)
   view
     column testId=`page-placard-${address}` position="absolute" inset=0 align-items="center" justify-content="center" gap=10 padding=40 box-sizing="border-box"
-      text kindWord(kindOf(address), address) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.accent
-      text (listed != "" ? listed : stackName(pg.rows, address)) font-family=th.fontRead font-size=26 font-weight=700 color=th.fg text-align="center" line-clamp=3
+      text kindWord(kindOf(address), address) font-family=th.fontLabel font-size="-exact-caption1" font-weight=600 letter-spacing=0.9 text-transform="uppercase" color=th.accent
+      text (listed != "" ? listed : stackName(pg.rows, address)) font-family=th.fontHead font-size="-exact-title1" font-weight=700 color=th.fg text-align="center" line-clamp=3
 
 // A page of the deck. A story has a visible "More of this" button on it (it was a swipe once).
 component PageFrame

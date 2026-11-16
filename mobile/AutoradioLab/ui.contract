@@ -9,6 +9,8 @@ shape StackVp
   width: number
   height: number
 
+// A size in points that follows Dynamic Type: rem is the system body size (17 at the default setting), so this is the same number of points by default.
+fn dyn(px: number): string = `${px / 17}rem`
 fn lastPart(address: string): string = address.split("/").filter(p => p != "").slice(0 - 1).join("").split("@").slice(0, 1).join("")
 fn sentence(s: string): string = `${s.slice(0, 1).toUpperCase()}${s.slice(1)}`
 fn plainWords(s: string): string = s.replaceAll("-", " ").replaceAll("_", " ")
@@ -109,7 +111,7 @@ component Btn
     row align-items="center" justify-content="center" min-height=44 padding=(primary ? "10px 16px" : "10px 4px") box-sizing="border-box"
       width=(wide ? "100%" : "auto") border-radius=(primary ? th.radiusControl : 0)
       background-color=(primary ? th.accent : "transparent")
-      text label font-family=th.fontUi font-size=15 font-weight=600 color=(primary ? th.onAccent : th.accent) text-align="center"
+      text label font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=(primary ? th.onAccent : th.accent) text-align="center"
 
 // ================================================================ the design system (lane autoradio-design, 2026-11-15)
 // One set of values, so a page inherits the look instead of choosing its own. Pages use these components and write no look of their own.
@@ -129,7 +131,7 @@ component Btn
 //   Cards are surfaces (the theme's paper colour and shadow), not outlines. A hairline (th.rule) separates rows; it never boxes a word.
 //   A Kit test (DesignRulesTests) fails when a contract outside this file draws an outlined box or a capsule.
 //   spacing   4, 8, 12, 16, 24, 32 (the page gutter is 20, a card's padding 16, a list row's side padding 16, gaps between blocks 12 or 16)
-//   type      page title 30/700 (fontRead); section label 12/700 caps, letter-spacing 0.9, muted; body 17; row title 17/600 (fontUi);
+//   type      page title 30/700 (fontHead); section label 12/600 caps, letter-spacing 0.8, muted (fontLabel); body 17 (fontText); row title 17/600 (fontHead); a press is fontAction 600 (mobile/docs/typography.md);
 //             secondary line 15 muted; caption 13 muted (counts, times, sources); the smallest text on a surface is 11 and is never body
 //   rows      one list row is 52 tall at least, its side padding is 16, a hairline (th.rule) separates rows and is inset to the text edge
 //   selection the mark is the same size in every state: choosing never resizes or moves anything (owner, 2026-11-15)
@@ -161,9 +163,9 @@ component PageHeader
     subId: string
   view
     column gap=4 width="100%" box-sizing="border-box" min-width=0
-      text title role="heading" aria-level=1 font-family=th.fontRead font-size=30 font-weight=700 line-height=1.1 testId="page-title"
+      text title role="heading" aria-level=1 font-family=th.fontHead font-size="-exact-title1" font-weight=700 line-height=1.1 testId="page-title"
       if subtitle != ""
-        text subtitle testId=subId font-family=th.fontUi font-size=15 line-height=1.35 color=th.muted
+        text subtitle testId=subId font-family=th.fontLabel font-size="-exact-subheadline" line-height=1.35 color=th.muted
 
 // A section label above a group of rows or cards: small, capitals, muted (the accent is not a label colour).
 component SectionHeader
@@ -172,7 +174,7 @@ component SectionHeader
   props
     label: string
   view
-    text label role="heading" aria-level=2 font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted padding="8px 0px 0px 0px"
+    text label role="heading" aria-level=2 font-family=th.fontLabel font-size="-exact-caption1" font-weight=600 letter-spacing=0.9 text-transform="uppercase" color=th.muted padding="8px 0px 0px 0px"
 
 // (RowRule) The hairline between rows, inset to the text edge (`indent` is the left margin).
 component RowRule
@@ -218,11 +220,11 @@ component LineRow
   view
     row align-items="center" gap=12 min-height=56 width="100%" box-sizing="border-box" padding="8px 0px"
       column flex=1 min-width=0 gap=2 align-items="flex-start"
-        text label font-family=th.fontUi font-size=17 font-weight=600 color=th.fg text-align="left"
+        text label font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg text-align="left"
         if detail != ""
-          text detail font-family=th.fontUi font-size=13 line-height=1.3 color=th.muted text-align="left"
+          text detail font-family=th.fontLabel font-size="-exact-footnote" line-height=1.3 color=th.muted text-align="left"
       if trailing != ""
-        text trailing font-family=th.fontUi font-size=13 color=th.muted
+        text trailing font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
       if chevron
         image "symbol:forward-chevron" color=th.muted
 
@@ -239,11 +241,11 @@ component ListRow
   view
     row align-items="center" gap=12 min-height=52 width="100%" box-sizing="border-box" padding="8px 16px"
       column flex=1 min-width=0 gap=2 align-items="flex-start"
-        text label font-family=th.fontUi font-size=17 font-weight=600 color=th.fg text-align="left"
+        text label font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg text-align="left"
         if detail != ""
-          text detail font-family=th.fontUi font-size=13 line-height=1.3 color=th.muted text-align="left"
+          text detail font-family=th.fontLabel font-size="-exact-footnote" line-height=1.3 color=th.muted text-align="left"
       if trailing != ""
-        text trailing font-family=th.fontUi font-size=13 color=th.muted
+        text trailing font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
       if chevron
         image "symbol:forward-chevron" color=th.muted
 
@@ -277,7 +279,7 @@ component ChoiceWord
     selected: bool
   view
     column align-items="flex-start" justify-content="center" min-height=44 gap=3 flex-shrink=0
-      text label font-family=th.fontUi font-size=15 font-weight=600 color=(selected ? th.fg : th.muted)
+      text label font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=(selected ? th.fg : th.muted)
         transition=`color ${th.motionFastMs}ms ease`
       box width=20 height=2 background-color=(selected ? th.accent : "transparent") transition=`background-color ${th.motionFastMs}ms ease`
 
@@ -291,7 +293,7 @@ component ChipFace
     selected: bool
   view
     column align-items="flex-start" justify-content="center" min-height=44 gap=3 flex-shrink=0 padding="0px 12px 0px 0px"
-      text label font-family=th.fontUi font-size=15 font-weight=600 color=(selected ? th.fg : th.accent)
+      text label font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=(selected ? th.fg : th.accent)
         transition=`color ${th.motionFastMs}ms ease`
       box width=20 height=2 background-color=(selected ? th.accent : "transparent") transition=`background-color ${th.motionFastMs}ms ease`
 
@@ -316,7 +318,7 @@ component SegmentFace
     selected: bool
   view
     column align-items="center" justify-content="center" min-height=44 gap=3 width="100%"
-      text label font-family=th.fontUi font-size=17 font-weight=600 color=(selected ? th.fg : th.muted) text-align="center"
+      text label font-family=th.fontAction font-size="-exact-body" font-weight=600 color=(selected ? th.fg : th.muted) text-align="center"
         transition=`color ${th.motionFastMs}ms ease`
       box width=24 height=2 background-color=(selected ? th.accent : "transparent") transition=`background-color ${th.motionFastMs}ms ease`
 
@@ -331,9 +333,9 @@ component EmptyState
   slot
   view
     column testId=testId align-items="center" gap=12 width="100%" box-sizing="border-box" padding="32px 24px"
-      text message font-family=th.fontRead font-size=18 line-height=1.4 color=th.fg text-align="center"
+      text message font-family=th.fontText font-size="-exact-body" line-height=1.4 color=th.fg text-align="center"
       if detail != ""
-        text detail font-family=th.fontUi font-size=14 line-height=1.4 color=th.muted text-align="center"
+        text detail font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.muted text-align="center"
       children
 
 // The room a scrolling page leaves at its end so nothing important sits under the bar: the bar's 56, its 8 above the home
@@ -353,7 +355,7 @@ component ToolScroll
   view
     scroll id=id overflow-x="hidden" flex=1 min-height=0 width="100%" margin-bottom="calc(env(safe-area-inset-bottom) + 140px)"
       column width="100%" box-sizing="border-box" min-width=0 padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20 padding-bottom=24 gap=12
-        font-family=th.fontRead color=th.fg
+        font-family=th.fontText color=th.fg
         children
 
 // A full-bleed scrolling page body: starts under the status bar, ends clear of the bar
@@ -367,7 +369,7 @@ component PageScroll
   view
     scroll id=id testId=`${id}-scroll` overflow-x="hidden" flex=1 min-height=0 width="100%"
       column width="100%" box-sizing="border-box" min-width=0 padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20
-        gap=12 font-family=th.fontRead color=th.fg
+        gap=12 font-family=th.fontText color=th.fg
         children
         BarClear()
 
@@ -380,9 +382,9 @@ component PlainPage
     lines: string[]
   view
     PageScroll(id="plain")
-      text title role="heading" aria-level=1 font-size=28 font-weight=700 testId="page-title"
+      text title role="heading" aria-level=1 font-size="-exact-title1" font-weight=700 testId="page-title" font-family=th.fontHead
       for l, i in lines key=i
-        text l font-size=17 line-height=1.5
+        text l font-size="-exact-body" line-height=1.5 font-family=th.fontText
 
 // The page behind an address nothing has built yet, or that could not be opened: one plain sentence.
 component NotYetPage
@@ -393,6 +395,6 @@ component NotYetPage
     title: string
   view
     PageScroll(id="notyet")
-      text title role="heading" aria-level=1 font-size=28 font-weight=700 testId="page-title"
-      text `${title} is not built yet.` testId="notyet" font-family=th.fontUi color=th.muted
-      text address font-family=th.fontMono font-size=13 color=th.muted
+      text title role="heading" aria-level=1 font-size="-exact-title1" font-weight=700 testId="page-title" font-family=th.fontHead
+      text `${title} is not built yet.` testId="notyet" font-family=th.fontLabel color=th.muted
+      text address font-family=th.fontMono font-size="-exact-footnote" color=th.muted

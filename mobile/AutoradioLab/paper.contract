@@ -8,7 +8,7 @@
 // paper-edition-<big|even|thin|default>, paper-signin, paper-status.
 use Theme, ChoirAuth, DemoInfo, PaperFront, PaperBand, PaperItem from "@choir/autoradio"
 use paperFront from "@choir/autoradio"
-use Card, CardFill, Btn, BarClear, sectionName, SegmentedTrack, SegmentFace, ChoiceWord, Emerge from "./ui.contract"
+use Card, CardFill, Btn, BarClear, sectionName, SegmentedTrack, SegmentFace, ChoiceWord, Emerge, dyn from "./ui.contract"
 use FirstRunCard from "./onboarding.contract"
 
 // The two actions of a story, one form everywhere (a card, a brief, a follow-up): an icon and one short word each on one line, Play in the accent and
@@ -26,11 +26,11 @@ component StoryActions
       button press=playStory(s.route) appearance="none" testId=`paper-play-${s.route}` aria-label=`Play from ${s.title}` flex-shrink=0
         row gap=4 align-items="center" min-height=tall
           image "symbol:play-fill" width=14 height=14 color=th.accent
-          text "Play" font-family=th.fontUi font-size=13 font-weight=600 color=th.accent line-clamp=1
+          text "Play" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent line-clamp=1
       button press=queueLater("story", s.route, s.title) appearance="none" testId=`paper-queue-${s.route}` aria-label=`Add ${s.title} to the queue` flex-shrink=0
         row gap=4 align-items="center" min-height=tall
           image "symbol:sf/text.badge.plus" width=16 height=16 color=th.muted
-          text "Queue" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted line-clamp=1
+          text "Queue" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.muted line-clamp=1
 
 // A headline with its dek and meta, as one story. `kicker` shows the section above, `listen` the play-from-here button.
 component Story
@@ -46,16 +46,16 @@ component Story
   view
     column gap=6 align-items="flex-start" width="100%" flex=1
       if kicker
-        text sectionName(s.section) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
+        text sectionName(s.section) font-family=th.fontLabel font-size="-exact-caption1" font-weight=600 letter-spacing=0.9 text-transform="uppercase" color=th.muted
       button press=openPage(`pub:${s.route}`, s.title) appearance="none" testId=`paper-story-${s.route}` width="100%"
         column gap=6 align-items="flex-start" width="100%"
-          text s.title font-family=th.fontRead font-size=s.size font-weight=s.weight line-height=s.lineHeight color=th.fg text-align="left" text-wrap="balance"
+          text s.title font-family=th.fontHead font-size=dyn(s.size) font-weight=s.weight line-height=s.lineHeight color=th.fg text-align="left" text-wrap="balance"
           if s.showDek
-            text s.dek font-family=th.fontRead font-size=s.dekSize line-height=1.4 color=th.muted text-align="left"
+            text s.dek font-family=th.fontText font-size=dyn(s.dekSize) line-height=1.4 color=th.muted text-align="left"
       if s.meta != ""
-        text s.meta font-family=th.fontUi font-size=13 font-variant-numeric="tabular-nums" color=th.muted
+        text s.meta font-family=th.fontLabel font-size="-exact-footnote" font-variant-numeric="tabular-nums" color=th.muted
       if s.entityLabels != ""
-        text s.entityLabels font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
+        text s.entityLabels font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
       if listen
         box flex=1
         StoryActions(s=s, tall=44)
@@ -78,11 +78,11 @@ component BriefRow
       row align-items="center" gap=4 width="100%" padding="10px 0" box-sizing="border-box"
         column flex=1 min-width=0 gap=3 align-items="flex-start"
           if kicker
-            text sectionName(s.section) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
+            text sectionName(s.section) font-family=th.fontLabel font-size="-exact-caption1" font-weight=600 letter-spacing=0.9 text-transform="uppercase" color=th.muted
           button press=openPage(`pub:${s.route}`, s.title) appearance="none" testId=`paper-story-${s.route}` width="100%"
-            text s.title font-family=th.fontRead font-size=s.size font-weight=s.weight line-height=s.lineHeight color=th.fg text-align="left"
+            text s.title font-family=th.fontHead font-size=dyn(s.size) font-weight=s.weight line-height=s.lineHeight color=th.fg text-align="left"
           if s.byline != ""
-            text s.byline font-family=th.fontUi font-size=13 color=th.muted
+            text s.byline font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
           StoryActions(s=s, tall=40)
 
 // A cluster follow-up: indented under the lead behind an accent rule.
@@ -99,9 +99,9 @@ component FollowRow
       box width=2 align-self="stretch" background-color=th.accent
       column flex=1 min-width=0 gap=2 align-items="flex-start" padding="8px 0 8px 10px"
         button press=openPage(`pub:${s.route}`, s.title) appearance="none" testId=`paper-story-${s.route}` width="100%"
-          text s.title font-family=th.fontRead font-size=s.size font-weight=s.weight line-height=s.lineHeight color=th.fg text-align="left"
+          text s.title font-family=th.fontHead font-size=dyn(s.size) font-weight=s.weight line-height=s.lineHeight color=th.fg text-align="left"
         if s.entityLabels != ""
-          text s.entityLabels font-family=th.fontUi font-size=13 color=th.muted
+          text s.entityLabels font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
         StoryActions(s=s, tall=40)
 
 component Band
@@ -140,13 +140,13 @@ component Band
       if b.module == "cluster"
         Card(level=1, testId=`paper-band-${b.id}`, minHeight=0)
           column padding=16 gap=2 width="100%" box-sizing="border-box"
-            text sectionName(b.label) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
+            text sectionName(b.label) font-family=th.fontLabel font-size="-exact-caption1" font-weight=600 letter-spacing=0.9 text-transform="uppercase" color=th.muted
             for s in b.items key=s.route
               FollowRow(s=s)
       if b.module == "briefs" or b.module == "opinion"
         Card(level=1, testId=`paper-band-${b.id}`, minHeight=0)
           column padding="14px 16px 4px 16px" width="100%" box-sizing="border-box"
-            text sectionName(b.label) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
+            text sectionName(b.label) font-family=th.fontLabel font-size="-exact-caption1" font-weight=600 letter-spacing=0.9 text-transform="uppercase" color=th.muted
             for s, i in b.items key=s.route
               BriefRow(s=s, kicker=(b.module == "briefs"), first=(i == 0))
       if b.module == "river"
@@ -154,7 +154,7 @@ component Band
           column padding="6px 16px 4px 16px" width="100%" box-sizing="border-box"
             button press=pickView(b.id.slice(6)) appearance="none" testId=`paper-more-${b.id.slice(6)}` width="100%"
               row align-items="center" justify-content="space-between" padding="10px 0 2px 0" width="100%" box-sizing="border-box"
-                text sectionName(b.label) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
+                text sectionName(b.label) font-family=th.fontLabel font-size="-exact-caption1" font-weight=600 letter-spacing=0.9 text-transform="uppercase" color=th.muted
                 image "symbol:forward-chevron" color=th.muted
             for s, i in b.items key=s.route
               BriefRow(s=s, kicker=false, first=(i == 0))
@@ -210,17 +210,17 @@ component PaperPage
     column flex=1 min-height=0 width="100%" resize=paperFit
       scroll id="paper" testId="paper-scroll" overflow-x="hidden" flex=1 min-height=0 width="100%" refresh=paperReload refreshing=paperLoading
         column width="100%" box-sizing="border-box" min-width=0 padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20 gap=14
-          font-family=th.fontRead color=th.fg
+          font-family=th.fontText color=th.fg
           // the masthead: nameplate, a double rule, the date and when it was last updated
           column gap=6 width="100%"
             row align-items="baseline" justify-content="space-between" width="100%"
-              text "AUTOPAPER" font-family=th.fontRead font-size=34 font-weight=700 letter-spacing=-0.3 color=th.fg testId="page-title" role="heading" aria-level=1
-              text pfront.dateLine font-family=th.fontUi font-size=13 font-weight=600 color=th.muted testId="paper-date"
+              text "AUTOPAPER" font-family=th.fontHead font-size="-exact-large-title" font-weight=700 letter-spacing=-0.3 color=th.fg testId="page-title" role="heading" aria-level=1
+              text pfront.dateLine font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="paper-date"
             box height=1 background-color=th.fg width="100%"
             box height=1 background-color=th.fg width="100%" margin-top=2
             row justify-content="space-between" width="100%"
-              text ((pfront.viewId == "front" or pfront.viewId == "mine" or pfront.viewLabel == "") ? "" : pfront.viewLabel) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted testId="paper-section-title"
-              text pfront.updated font-family=th.fontUi font-size=12 color=th.muted testId="paper-updated"
+              text ((pfront.viewId == "front" or pfront.viewId == "mine" or pfront.viewLabel == "") ? "" : pfront.viewLabel) font-family=th.fontLabel font-size="-exact-caption1" font-weight=600 letter-spacing=0.9 text-transform="uppercase" color=th.muted testId="paper-section-title"
+              text pfront.updated font-family=th.fontLabel font-size="-exact-caption1" color=th.muted testId="paper-updated"
           // the views: Front page and My edition as a segmented pair, then the categories the paper has (its live section list, in house order) as quiet chips
           column gap=10 width="100%"
             SegmentedTrack(testId="paper-views")
@@ -228,7 +228,7 @@ component PaperPage
               ViewChip(vid="mine", label="My edition", segment=true)
             button press=toggleSections testId="paper-sections-toggle" appearance="none" align-self="flex-start" aria-label=(secOpen ? "Close the sections" : "Open the sections")
               row align-items="center" gap=6 min-height=44
-                text ((secOpen or pfront.viewLabel == "" or pfront.viewId == "front" or pfront.viewId == "mine") ? "Sections" : `Sections · ${pfront.viewLabel}`) font-family=th.fontUi font-size=15 font-weight=600 color=th.accent
+                text ((secOpen or pfront.viewLabel == "" or pfront.viewId == "front" or pfront.viewId == "mine") ? "Sections" : `Sections · ${pfront.viewLabel}`) font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.accent
                 row width=12 height=12 align-items="center" justify-content="center" rotate=(secOpen ? 90 : 0) transition=(th.reducedMotion ? "none" : `rotate ${th.motionFastMs}ms ease`)
                   image "symbol:forward-chevron" color=th.accent
             if secOpen
@@ -241,12 +241,12 @@ component PaperPage
               if pfront.mineFrom != ""
                 row align-items="center" gap=10 width="100%" testId="paper-mine-from"
                   column flex=1 min-width=0
-                    text `From: ${pfront.mineFrom}` font-family=th.fontUi font-size=13 line-height=1.35 color=th.muted line-clamp=2 text-align="left"
+                    text `From: ${pfront.mineFrom}` font-family=th.fontLabel font-size="-exact-footnote" line-height=1.35 color=th.muted line-clamp=2 text-align="left"
                   button press=openPage("onboarding:edit", "My edition") appearance="none" testId="paper-edit-edition" aria-label="Edit my edition"
                     flex-shrink=0 padding="10px 4px"
-                    text "Edit my edition" font-family=th.fontUi font-size=13 font-weight=700 color=th.accent
+                    text "Edit my edition" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
               if pfront.note != ""
-                text pfront.note font-family=th.fontRead font-size=16 line-height=1.4 color=th.fg text-align="left" testId="paper-mine-note"
+                text pfront.note font-family=th.fontText font-size="-exact-callout" line-height=1.4 color=th.fg text-align="left" testId="paper-mine-note"
               if pfront.mineState == "nopicks"
                 button press=openPage("onboarding:edit", "My edition") appearance="none" testId="paper-choose-topics"
                   Btn(label="Choose topics", primary=false, wide=false)
@@ -258,7 +258,7 @@ component PaperPage
           // demo mode, Settings, Developer, "Demo controls": three editions to show how the page changes with the day
           if dm.on and devDetails
             column gap=8 width="100%" padding-top=8 box-sizing="border-box"
-              text `Composition: ${pfront.composition}` font-family=th.fontMono font-size=11 color=th.muted testId="paper-composition"
+              text `Composition: ${pfront.composition}` font-family=th.fontMono font-size="-exact-caption2" color=th.muted testId="paper-composition"
               row gap=8 width="100%"
                 button press=pickEdition("big") testId="paper-edition-big" appearance="none"
                   Btn(label="Big news", primary=false, wide=false)
@@ -274,18 +274,18 @@ component PaperPage
             row testId="paper-signin-card" align-items="center" gap=10 width="100%" box-sizing="border-box" min-height=44
               button press=signIn testId="paper-signin" appearance="none" flex-shrink=0 aria-label="Sign in to talk to your computer and to make this paper yours"
                 row align-items="center" gap=4 min-height=44
-                  text "Sign in" font-family=th.fontUi font-size=15 font-weight=600 color=th.accent
+                  text "Sign in" font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.accent
                   image "symbol:forward-chevron" color=th.accent
-              text "to make this paper yours" font-family=th.fontUi font-size=13 color=th.muted line-clamp=1 flex=1 min-width=0
+              text "to make this paper yours" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted line-clamp=1 flex=1 min-width=0
               button press=awaySignIn testId="paper-signin-away" appearance="none" aria-label="Not now" flex-shrink=0
                 row min-height=44 padding="0px 4px" align-items="center"
-                  text "Not now" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
+                  text "Not now" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.muted
           if au.signedIn == false and au.message != ""
-            text au.message testId="paper-signin-message" font-family=th.fontUi font-size=13 color=th.muted
+            text au.message testId="paper-signin-message" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
           // nothing to read, or it failed: a line of plain words and one action
           if pfront.status == "offline" or pfront.status == "error" or pfront.status == "empty"
             column align-items="center" gap=12 width="100%" box-sizing="border-box" padding="24px 16px"
-              text pfront.message font-family=th.fontRead font-size=18 line-height=1.4 color=(pfront.status == "error" ? th.danger : th.fg) text-align="center" testId="paper-status"
+              text pfront.message font-family=th.fontText font-size="-exact-body" line-height=1.4 color=(pfront.status == "error" ? th.danger : th.fg) text-align="center" testId="paper-status"
               if pfront.status != "empty"
                 button press=paperReload testId="paper-retry" appearance="none"
                   Btn(label="Try again", primary=false, wide=false)
@@ -293,5 +293,5 @@ component PaperPage
             Emerge(delay=((bi > 5 ? 5 : bi) * th.staggerMs))
               Band(b=b)
           if pfront.count > 0
-            text `${pfront.count} ${pfront.count == 1 ? "story" : "stories"} · pull down to refresh` font-family=th.fontUi font-size=12 color=th.muted text-align="center" width="100%"
+            text `${pfront.count} ${pfront.count == 1 ? "story" : "stories"} · pull down to refresh` font-family=th.fontLabel font-size="-exact-caption1" color=th.muted text-align="center" width="100%"
           BarClear()

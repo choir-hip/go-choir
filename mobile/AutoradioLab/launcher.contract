@@ -21,9 +21,9 @@ component PlaceRow
     button press=openPage(address, name) testId=`place-${slug}` appearance="none" width="100%" aria-label=`Open ${name}`
       row padding="10px 0" align-items="center" width="100%" gap=8 min-height=44
         column flex=1 gap=2 align-items="flex-start"
-          text name font-family=th.fontUi font-size=17 font-weight=600 color=th.fg text-align="left"
+          text name font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg text-align="left"
           if line != ""
-            text line font-family=th.fontUi font-size=13 color=th.muted text-align="left" line-clamp=1
+            text line font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="left" line-clamp=1
         image "symbol:forward-chevron" color=th.muted
 
 // A key page as a plain text action (no chip): tap to bring it to the top of the deck.
@@ -38,7 +38,7 @@ component ChipPlace
   view
     button press=openPage(address, name) testId=`place-${slug}` appearance="none" flex-shrink=0 aria-label=`Open ${name}`
       row padding="0px 16px 0px 0px" align-items="center" min-height=44
-        text name font-family=th.fontUi font-size=17 font-weight=600 color=th.fg
+        text name font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg
 
 // One page of the stack: tap to jump to it; a close button when it can be closed.
 component StackRow
@@ -58,11 +58,11 @@ component StackRow
     row width="100%" align-items="center" gap=4 min-height=48
       button press=focusPage(address) testId=`launcher-open-${address}` appearance="none" flex=1 min-width=0 aria-label=`${here ? "Current page, " : "Go to "}${name}, ${word}`
         row align-items="center" gap=10 width="100%" padding="6px 0"
-          text `${index + 1}` font-family=th.fontMono font-size=12 color=th.muted width=18
+          text `${index + 1}` font-family=th.fontLabel font-size="-exact-caption1" color=th.muted width=18 font-variant-numeric="tabular-nums"
           column flex=1 min-width=0 gap=1 align-items="flex-start"
-            text name font-family=th.fontUi font-size=16 font-weight=600 color=th.fg line-clamp=1 text-align="left"
+            text name font-family=th.fontHead font-size="-exact-callout" font-weight=600 color=th.fg line-clamp=1 text-align="left"
             if name.startsWith(word) == false
-              text word font-family=th.fontUi font-size=11 font-weight=600 letter-spacing=0.6 text-transform="uppercase" color=th.muted
+              text word font-family=th.fontLabel font-size="-exact-caption2" font-weight=600 letter-spacing=0.6 text-transform="uppercase" color=th.muted
           if here
             box width=3 height=18 background-color=th.accent
       if isFixed(address) == false and here == false
@@ -84,7 +84,7 @@ component Launcher
       scroll testId="launcher-scroll" overflow-x="hidden" flex=1 min-height=0 width="100%"
         column padding=20 gap=6 padding-bottom=24 box-sizing="border-box" width="100%" min-width=0
           input type="search" value=lq input=editLq placeholder="Search the paper and your pages" aria-label="Search" testId="launcher-search"
-            font-family=th.fontUi font-size=17 color=th.fg min-height=48 padding="8px 0px" border-width=0 background-color="transparent"
+            font-family=th.fontLabel font-size=17 color=th.fg min-height=48 padding="8px 0px" border-width=0 background-color="transparent"
             ::placeholder
               color=th.muted
           RowRule(indent=0)
@@ -92,14 +92,14 @@ component Launcher
             for h in lnc.hits key=h.address
               button press=openPage(h.address, pageName(h.title, h.address)) testId=`search-hit-${h.address}` appearance="none" width="100%"
                 column padding="8px 0" gap=2 align-items="flex-start" width="100%"
-                  text pageName(h.title, h.address) font-family=th.fontUi font-size=17 font-weight=600 color=th.fg text-align="left" line-clamp=2
+                  text pageName(h.title, h.address) font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg text-align="left" line-clamp=2
                   row gap=6
-                    text kindWord(kindOf(h.address), h.address) font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
-                    text h.detail font-family=th.fontUi font-size=13 color=th.muted text-align="left" line-clamp=2
+                    text kindWord(kindOf(h.address), h.address) font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+                    text h.detail font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="left" line-clamp=2
             if lnc.searchNote != ""
-              text lnc.searchNote testId="launcher-search-note" font-family=th.fontUi font-size=15 color=th.muted
+              text lnc.searchNote testId="launcher-search-note" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted
             if lnc.hits.length == 0 and lnc.searchNote == ""
-              text "Nothing found." testId="launcher-nohits" font-family=th.fontUi font-size=15 color=th.muted
+              text "Nothing found." testId="launcher-nohits" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted
           if lnc.hasQuery == false
             SectionHeader(label="Key pages")
             row flex-wrap="wrap" gap=8 width="100%" testId="launcher-key-pages"

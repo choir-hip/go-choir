@@ -20,17 +20,17 @@ component VoiceCardsList
             column padding=14 gap=8
               row gap=10 align-items="center"
                 column flex=1 min-width=0 gap=2
-                  text c.name font-family=th.fontUi font-size=18 font-weight=600 color=th.fg
-                  text `${c.blurb} · ${c.sizeLabel}` font-family=th.fontUi font-size=13 color=th.muted
+                  text c.name font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg
+                  text `${c.blurb} · ${c.sizeLabel}` font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
                 if c.playing
-                  text "Playing" font-family=th.fontUi font-size=13 font-weight=600 color=th.accent
+                  text "Playing" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
                 if c.playing == false and c.selected
                   image "symbol:checkmark" color=th.success
               if c.state == "downloading"
                 column height=4 background-color=th.rule width="100%"
                   box height=4 background-color=th.accent width=`${floor(c.progress * 100)}%`
               if c.note != ""
-                text c.note font-family=th.fontUi font-size=13 color=(c.state == "failed" ? th.danger : th.muted) line-height=1.35
+                text c.note font-family=th.fontLabel font-size="-exact-footnote" color=(c.state == "failed" ? th.danger : th.muted) line-height=1.35
 
 // The first-run step.
 component VoiceStep
@@ -41,8 +41,8 @@ component VoiceStep
     column gap=12 width="100%"
       Card(level=1, testId="ob-voice", minHeight=0)
         column padding=18 gap=8
-          text "Pick the voice you like." font-size=20 font-weight=700
-          text "Tap a voice to hear it. The one you tap is the one that reads the paper and talks with you. You can change it later in Settings." font-family=th.fontUi font-size=15 line-height=1.4 color=th.muted
+          text "Pick the voice you like." font-size="-exact-title3" font-weight=600 font-family=th.fontHead
+          text "Tap a voice to hear it. The one you tap is the one that reads the paper and talks with you. You can change it later in Settings." font-family=th.fontLabel font-size="-exact-subheadline" line-height=1.4 color=th.muted
       VoiceCardsList()
       button press=vcContinue testId="ob-voice-continue" appearance="none"
         Btn(label="Use this voice", primary=true, wide=true)

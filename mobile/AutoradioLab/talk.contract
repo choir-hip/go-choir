@@ -3,7 +3,7 @@
 // failure with a way to ask again. One entry per question; the bar's answer card opens this page. testIds: conversation-row-<id>,
 // conversation-retry-<id>, conversation-empty.
 use Theme, ThemeExtras, ConversationInfo, ConversationRow from "@choir/autoradio"
-use ToolScroll, Card, Btn from "./ui.contract"
+use ToolScroll, Card, Btn, dyn from "./ui.contract"
 use ScreenTitle, SectionLabel, Hairline from "./settings.contract"
 
 component ConversationPage
@@ -18,7 +18,7 @@ component ConversationPage
     ToolScroll(id="conversation")
       ScreenTitle(label="Conversation", back=false)
       if cv.empty
-        text "Nothing asked yet. Type in the bar, or turn the voice on and ask." testId="conversation-empty" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted
+        text "Nothing asked yet. Type in the bar, or turn the voice on and ask." testId="conversation-empty" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.muted
       for r, i in cv.rows key=r.id
         column width="100%"
           if i > 0
@@ -35,21 +35,21 @@ component ConversationEntryCard
   view
     column testId=`conversation-row-${r.id}` width="100%"
       column width="100%" gap=8 box-sizing="border-box" padding="12px 0px"
-        text r.question font-family=th.fontUi font-size=tx.sizeLabel font-weight=700 color=th.fg
+        text r.question font-family=th.fontHead font-size=dyn(tx.sizeLabel) font-weight=600 color=th.fg
         if r.answer != ""
-          text r.answer font-family=th.fontRead font-size=tx.sizeLabel line-height=1.4 color=th.fg
+          text r.answer font-family=th.fontText font-size=dyn(tx.sizeLabel) line-height=1.4 color=th.fg
         if r.first != "" and r.answer == ""
-          text "FROM YOUR SAVED STORIES" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.8 color=th.muted
+          text "FROM YOUR SAVED STORIES" font-family=th.fontLabel font-size="-exact-caption2" font-weight=600 letter-spacing=0.8 color=th.muted
           if r.firstSource != ""
-            text r.firstSource font-family=th.fontUi font-size=tx.sizeMeta font-weight=600 color=th.fg
-          text r.first font-family=th.fontRead font-size=tx.sizeLabel line-height=1.4 color=th.fg
+            text r.firstSource font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.fg
+          text r.first font-family=th.fontText font-size=dyn(tx.sizeLabel) line-height=1.4 color=th.fg
         if r.first != "" and r.answer != ""
-          text "FIRST HEARD, FROM YOUR SAVED STORIES" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.8 color=th.muted
-          text r.first font-family=th.fontRead font-size=tx.sizeMeta line-height=1.4 color=th.muted
+          text "FIRST HEARD, FROM YOUR SAVED STORIES" font-family=th.fontLabel font-size="-exact-caption2" color=th.muted
+          text r.first font-family=th.fontText font-size=dyn(tx.sizeMeta) line-height=1.4 color=th.muted
         if r.status == "asking"
-          text "Looking…" font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+          text "Looking…" font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
         if r.note != ""
-          text r.note font-family=th.fontUi font-size=tx.sizeMeta color=th.danger
+          text r.note font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.danger
         if r.canRetry
           button press=answerRetry(r.id) testId=`conversation-retry-${r.id}` appearance="none"
             Btn(label="Try again", primary=false, wide=false)
