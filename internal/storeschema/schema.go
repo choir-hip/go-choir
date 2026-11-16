@@ -96,7 +96,7 @@ import (
 //     roll forward. A commit that lowers Version is not a supported rollback;
 //     scripts/check-store-schema-floor.sh refuses one without a
 //     Store-Floor-Override trailer when it is run, and it is not run by CI or
-//     by scripts/land today. For the writer release: the epoch does not prove
+//     by the landing script today. For the writer release: the epoch does not prove
 //     a layer has the reader (a release can declare no epoch), so the
 //     writer's gate must check the binary.
 const Version uint64 = 7
