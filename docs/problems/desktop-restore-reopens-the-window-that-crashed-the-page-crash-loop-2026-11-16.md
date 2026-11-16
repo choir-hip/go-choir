@@ -48,3 +48,24 @@ Two separate defects.
   Safari. A crash guard makes it survivable, not fixed.
 - Other things that restore work at load (an app's own "reopen my last
   document", media that resumes) are the same category and are not yet listed.
+
+## Status, 2026-11-16 16:05Z
+
+The category fix landed as a43cf5013 (CI run 43898136595) and passed its
+deployed proof on staging in Chromium and WebKit
+(`frontend/tests/crash-guard-deployed.spec.js`, calibration claim C110). The
+review history and the change of approach are in
+[the structural assessment](desktop-crash-guard-review-did-not-converge-in-three-rounds-structural-assessment-2026-11-16.md).
+
+Still open:
+
+- The cause of the page death in Reader's PDF path. The guard now records the
+  step a window was on; the next occurrence will name it.
+- A signed-out visitor's desktop is not guarded (reproduced by a reviewer on a
+  public story route).
+- A crash later than the quiet period after an app's last foreground step is
+  not held.
+- A computer serves its own frontend. After a deploy, the drill computer took
+  the new build 12 minutes later; a fix is not live for a user until their
+  computer has taken the release. Whether the owner's computer has it was not
+  established (an operator read of its page returned the platform's build).
