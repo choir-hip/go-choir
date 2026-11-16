@@ -22,6 +22,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/yusefmosiah/go-choir/internal/appdesk"
 )
 
 func clipFixture(id string) map[string]any {
@@ -114,15 +116,17 @@ func TestC2_C3_C4_AClipSegmentIsStreamedWithItsStoryAndNoForecast(t *testing.T) 
 		clipLine(map[string]any{"clip": "clip-0000000000000000"}), // not in the request
 		clipLine(map[string]any{"clip": nil}),
 		titled("Second", map[string]any{"cites": []any{"pub:harbour-2@v1"}}),
+		clipLine(nil), // a clip plays once in a stretch: its second use is dropped
 		clipLine(map[string]any{"title": nil}),
-		clipLine(map[string]any{"p_heard": 0.5}),
 		titled("Third", map[string]any{"cites": []any{"pub:budget-3@v1"}}),
+		clipLine(map[string]any{"p_heard": 0.5}),
 		clipLine(map[string]any{"caused_by": "importance"}),
+		titled("Fourth", map[string]any{"cites": []any{"pub:budget-3@v1"}}),
 		clipLine(map[string]any{"text": ""}),
-		clipLine(map[string]any{"cites": []any{"pub:budget-3@v1"}}), // the model's cite is ignored, the line stands
+		clipLine(map[string]any{"clip": clipB, "cites": []any{"pub:budget-3@v1"}}), // the model's cite is ignored, the line stands
 	)
 	rt, _ := radioRuntime(t, script)
-	_, evs := progRun(t, rt, progBody(withClips(clipFixture(clipA))))
+	_, evs := progRun(t, rt, progBody(withClips(clipFixture(clipA), clipFixture(clipB))))
 	segs := segmentEvents(evs)
 	var clips []map[string]any
 	for _, s := range segs {
@@ -130,12 +134,15 @@ func TestC2_C3_C4_AClipSegmentIsStreamedWithItsStoryAndNoForecast(t *testing.T) 
 			clips = append(clips, s)
 		}
 	}
-	// The valid line and the one with a model-chosen cite (a second use of
-	// the same clip is the model's to avoid, the prompt says so).
+	// The valid line and the one with a model-chosen cite; the repeat of the
+	// first clip and the six malformed lines are dropped.
 	if len(clips) != 2 {
-		t.Fatalf("C2: %d podcast_clip segments streamed, want 2 (the six bad lines dropped): %+v", len(clips), segs)
+		t.Fatalf("C2: %d podcast_clip segments streamed, want 2 (the repeat and the six bad lines dropped): %+v", len(clips), segs)
 	}
-	for _, s := range clips {
+	if first, _ := clips[0]["clip"].(map[string]any); first["clip_id"] != clipA {
+		t.Fatalf("C2: the first clip is %v", clips[0]["clip"])
+	}
+	for _, s := range clips[:1] {
 		if s["cut_at"] != "segment" {
 			t.Errorf("C3: cut_at = %v, want segment", s["cut_at"])
 		}
@@ -154,8 +161,8 @@ func TestC2_C3_C4_AClipSegmentIsStreamedWithItsStoryAndNoForecast(t *testing.T) 
 	}
 	// (C4) one claim, for the story; none for the clips.
 	id := stretchIDOf(t, evs)
-	if n := len(stretchClaims(t, rt, id)); n != 3 {
-		t.Errorf("C4: %d claims, want 3 (the three stories', none for a clip)", n)
+	if n := len(stretchClaims(t, rt, id)); n != 4 {
+		t.Errorf("C4: %d claims, want 4 (the four stories', none for a clip)", n)
 	}
 	rec := getRecord(t, rt, segmentRecordID(id, clips[0]["segment_id"].(string)))
 	if rec == nil || rec.SubjectRefs["clip_id"] != clipA || rec.SubjectRefs["forecast"] != "false" {
@@ -200,5 +207,30 @@ func TestC5_C6_TheQuoteIsFencedDataAndNoClipsMeansNoClipLines(t *testing.T) {
 	progRun(t, rt2, progBody())
 	if strings.Contains(fake2.calls[0].req.StableUser, "clip:") {
 		t.Errorf("C6: a request with no clips has a clip line")
+	}
+}
+
+// C7. A request with no clips sends byte for byte the prompt it always did; a
+// request with clips sends that prompt and the clips section after it, and
+// nothing else changes.
+func TestC7_ThePromptIsUnchangedUnlessTheRequestListsClips(t *testing.T) {
+	base, _ := appdesk.ProgrammePrompt()
+	section, _ := appdesk.ProgrammeClipsPrompt()
+	if strings.Contains(base, "podcast_clip") || strings.Contains(base, "clip:") {
+		t.Fatal("C7: the base prompt names clips")
+	}
+	rt, fake := radioRuntime(t, twoStoryScript())
+	progRun(t, rt, progBody())
+	if got := fake.calls[0].req.System; got != base {
+		t.Fatalf("C7: a request with no clips sends a changed prompt (%d bytes, base %d)", len(got), len(base))
+	}
+	rt2, fake2 := radioRuntime(t, twoStoryScript())
+	progRun(t, rt2, progBody(withClips(clipFixture(clipA))))
+	got := fake2.calls[0].req.System
+	if !strings.HasPrefix(got, strings.TrimRight(base, "\n")) || !strings.Contains(got, strings.TrimSpace(section)) || !strings.Contains(got, "podcast_clip") {
+		t.Fatalf("C7: the clips request's prompt lacks the section")
+	}
+	if strings.Index(got, strings.TrimSpace(section)) < len(strings.TrimRight(base, "\n")) {
+		t.Fatal("C7: the clips section is not after the base prompt")
 	}
 }

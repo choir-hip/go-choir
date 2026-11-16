@@ -263,6 +263,13 @@ func (in *programmeInput) checkClipLine(seg *programmeSegment, raw map[string]js
 	if !ok {
 		return invalidf("clip %q is not one of this request's clips", truncate(id, 60))
 	}
+	if in.usedClips[id] {
+		return invalidf("clip %q is already used in this stretch", truncate(id, 60))
+	}
+	if in.usedClips == nil {
+		in.usedClips = map[string]bool{}
+	}
+	in.usedClips[id] = true
 	seg.ClipID, seg.ClipSeconds = id, ref.clip.Seconds
 	seg.Cites = []programmeCite{{Ref: ref.cand.ref, Role: "quoted", Label: truncate(oneLine(ref.cand.Title), programmeMaxLabel)}}
 	return seg, lineOK, ""

@@ -116,11 +116,14 @@ Request: a candidate's `clips` are `{clip_id, show, episode_title, published?, s
 in the request; `show` and `episode_title` are one line of at most 200 bytes;
 `seconds` is 5 to 300; `quote` is 1 to 400 bytes; at most 3 clips a candidate.
 Over a bound is 400. The clip lines reach the model inside the candidates fence,
-each as one fence-safe line.
+each as one fence-safe line. The prompt section that names `podcast_clip`
+(`autoradio_programme_clips.md`) is appended to the programme prompt only when the
+request lists at least one clip; a request with none sends the prompt byte for
+byte as before (test C7).
 
 The model writes `{"kind":"podcast_clip","title":...,"clip":"<clip id>","text":"<lead-in>"}`
 (text at most 800 bytes). A line is dropped when the clip is not one of the
-request's, `clip` or `title` is missing, or it carries `p_heard` or
+request's, or is already used in this stretch (a clip plays once), `clip` or `title` is missing, or it carries `p_heard` or
 `caused_by`. A `podcast_clip` writes a segment record (with `clip_id` and
 `clip_seconds`, so a replay returns it) and no forecast claim (residual R2 of the
 design). The segment cap and the invalid-run rule count it like any line.

@@ -45,6 +45,9 @@ type programmeInput struct {
 	byRef                       map[string]*programmeCandidate
 	// clipByID names every clip the request carries and the candidate it is for.
 	clipByID map[string]clipRef
+	// usedClips are the clips a podcast_clip segment has already placed in
+	// this stretch: a clip plays once.
+	usedClips map[string]bool
 }
 
 type clipRef struct {

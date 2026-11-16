@@ -79,6 +79,17 @@ func FirstPartyPrompt(pkg string) (string, bool) {
 	return string(raw), true
 }
 
+// ProgrammeClipsPrompt is the section appended to the programme prompt only
+// when the request lists podcast clips, so a request with none sends the
+// prompt it always did (docs/design/podcast-clips-2026-11-15.md 4.2).
+func ProgrammeClipsPrompt() (string, bool) {
+	raw, err := firstPartyPrompts.ReadFile("firstparty_prompts/autoradio_programme_clips.md")
+	if err != nil {
+		return "", false
+	}
+	return string(raw), true
+}
+
 // ProgrammePrompt is the prompt of the Autoradio programme call (role
 // autoradio_programme, design docs/design/autoradio-learning-engine-2026-11-14.md
 // section 3), shipped with the image beside the desk's own prompt. It is the

@@ -74,6 +74,19 @@ const programmeMaxSegments = 30 // the prompt asks for 10 to 15
 // programmePrompt is the programme prompt; a variable so a test can empty it.
 var programmePrompt = appdesk.ProgrammePrompt
 
+// programmeClipsPrompt is the section added to the prompt when, and only when,
+// the request lists clips.
+var programmeClipsPrompt = appdesk.ProgrammeClipsPrompt
+
+func (r programmeRequest) hasClips() bool {
+	for _, c := range r.Candidates {
+		if len(c.Clips) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 var programmeCauses = map[string]bool{"open": true, "extend": true, "turn": true, "result": true}
 var programmeVersionRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 var programmeIntRe = regexp.MustCompile(`^[0-9]{1,12}$`)
@@ -441,6 +454,15 @@ func (h *APIHandler) HandleAutoradioProgramme(w http.ResponseWriter, r *http.Req
 		log.Printf("autoradio programme: request %s: the programme prompt is not shipped", req.RequestID)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "the programme prompt is not available"})
 		return
+	}
+	if req.hasClips() {
+		clips, ok := programmeClipsPrompt()
+		if !ok || strings.TrimSpace(clips) == "" {
+			log.Printf("autoradio programme: request %s: the podcast clips prompt is not shipped", req.RequestID)
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "the programme prompt is not available"})
+			return
+		}
+		prompt = strings.TrimRight(prompt, "\n") + "\n\n" + strings.TrimSpace(clips) + "\n"
 	}
 	c.prompt = prompt
 	if c.input, err = c.buildInput(ctx); err != nil {
