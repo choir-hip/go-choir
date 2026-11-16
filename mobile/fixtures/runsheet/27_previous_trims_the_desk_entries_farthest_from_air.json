@@ -1,0 +1,1857 @@
+{
+ "name": "27_previous_trims_the_desk_entries_farthest_from_air",
+ "ops": [
+  {
+   "base_version": 10,
+   "by": "listener",
+   "op": "previous",
+   "op_id": "o1"
+  }
+ ],
+ "results": [
+  {
+   "applied": true,
+   "op_id": "o1",
+   "version": 11
+  }
+ ],
+ "start": {
+  "entries": [
+   {
+    "ended": {
+     "at": "2026-11-16T12:00:00Z",
+     "last_block": 2,
+     "outcome": "finished"
+    },
+    "est_seconds": 5,
+    "id": "h1",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "heard",
+    "text": "w",
+    "title": "T h1"
+   },
+   {
+    "est_seconds": 5,
+    "id": "on",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "on_air",
+    "text": "w",
+    "title": "T on"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d000",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d000",
+    "title": "T d000"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d001",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d001",
+    "title": "T d001"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d002",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d002",
+    "title": "T d002"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d003",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d003",
+    "title": "T d003"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d004",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d004",
+    "title": "T d004"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d005",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d005",
+    "title": "T d005"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d006",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d006",
+    "title": "T d006"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d007",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d007",
+    "title": "T d007"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d008",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d008",
+    "title": "T d008"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d009",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d009",
+    "title": "T d009"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d010",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d010",
+    "title": "T d010"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d011",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d011",
+    "title": "T d011"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d012",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d012",
+    "title": "T d012"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d013",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d013",
+    "title": "T d013"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d014",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d014",
+    "title": "T d014"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d015",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d015",
+    "title": "T d015"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d016",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d016",
+    "title": "T d016"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d017",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d017",
+    "title": "T d017"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d018",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d018",
+    "title": "T d018"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d019",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d019",
+    "title": "T d019"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d020",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d020",
+    "title": "T d020"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d021",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d021",
+    "title": "T d021"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d022",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d022",
+    "title": "T d022"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d023",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d023",
+    "title": "T d023"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d024",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d024",
+    "title": "T d024"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d025",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d025",
+    "title": "T d025"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d026",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d026",
+    "title": "T d026"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d027",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d027",
+    "title": "T d027"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d028",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d028",
+    "title": "T d028"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d029",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d029",
+    "title": "T d029"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d030",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d030",
+    "title": "T d030"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d031",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d031",
+    "title": "T d031"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d032",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d032",
+    "title": "T d032"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d033",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d033",
+    "title": "T d033"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d034",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d034",
+    "title": "T d034"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d035",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d035",
+    "title": "T d035"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d036",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d036",
+    "title": "T d036"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d037",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d037",
+    "title": "T d037"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d038",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d038",
+    "title": "T d038"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d039",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d039",
+    "title": "T d039"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d040",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d040",
+    "title": "T d040"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d041",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d041",
+    "title": "T d041"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d042",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d042",
+    "title": "T d042"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d043",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d043",
+    "title": "T d043"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d044",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d044",
+    "title": "T d044"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d045",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d045",
+    "title": "T d045"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d046",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d046",
+    "title": "T d046"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d047",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d047",
+    "title": "T d047"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d048",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d048",
+    "title": "T d048"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d049",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d049",
+    "title": "T d049"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d050",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d050",
+    "title": "T d050"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d051",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d051",
+    "title": "T d051"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d052",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d052",
+    "title": "T d052"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d053",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d053",
+    "title": "T d053"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d054",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d054",
+    "title": "T d054"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d055",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d055",
+    "title": "T d055"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d056",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d056",
+    "title": "T d056"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d057",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d057",
+    "title": "T d057"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d058",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d058",
+    "title": "T d058"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d059",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d059",
+    "title": "T d059"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d060",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d060",
+    "title": "T d060"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d061",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d061",
+    "title": "T d061"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d062",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d062",
+    "title": "T d062"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d063",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d063",
+    "title": "T d063"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d064",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d064",
+    "title": "T d064"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d065",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d065",
+    "title": "T d065"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d066",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d066",
+    "title": "T d066"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d067",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d067",
+    "title": "T d067"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d068",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d068",
+    "title": "T d068"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d069",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d069",
+    "title": "T d069"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d070",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d070",
+    "title": "T d070"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d071",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d071",
+    "title": "T d071"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d072",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d072",
+    "title": "T d072"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d073",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d073",
+    "title": "T d073"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d074",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d074",
+    "title": "T d074"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d075",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d075",
+    "title": "T d075"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d076",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d076",
+    "title": "T d076"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d077",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d077",
+    "title": "T d077"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d078",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d078",
+    "title": "T d078"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d079",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d079",
+    "title": "T d079"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d080",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d080",
+    "title": "T d080"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d081",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d081",
+    "title": "T d081"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d082",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d082",
+    "title": "T d082"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d083",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d083",
+    "title": "T d083"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d084",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d084",
+    "title": "T d084"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d085",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d085",
+    "title": "T d085"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d086",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d086",
+    "title": "T d086"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d087",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d087",
+    "title": "T d087"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d088",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d088",
+    "title": "T d088"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d089",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d089",
+    "title": "T d089"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d090",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d090",
+    "title": "T d090"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d091",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d091",
+    "title": "T d091"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d092",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d092",
+    "title": "T d092"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d093",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d093",
+    "title": "T d093"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d094",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d094",
+    "title": "T d094"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d095",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d095",
+    "title": "T d095"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d096",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d096",
+    "title": "T d096"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d097",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d097",
+    "title": "T d097"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d098",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d098",
+    "title": "T d098"
+   },
+   {
+    "est_seconds": 30,
+    "id": "L1",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of L1",
+    "title": "T L1"
+   }
+  ],
+  "on_air": "on",
+  "position_seconds": 0,
+  "version": 10
+ },
+ "want": {
+  "applied_ops": [
+   "o1"
+  ],
+  "entries": [
+   {
+    "est_seconds": 5,
+    "id": "h1",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "w",
+    "title": "T h1"
+   },
+   {
+    "est_seconds": 5,
+    "id": "on",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "w",
+    "title": "T on"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d000",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d000",
+    "title": "T d000"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d001",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d001",
+    "title": "T d001"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d002",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d002",
+    "title": "T d002"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d003",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d003",
+    "title": "T d003"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d004",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d004",
+    "title": "T d004"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d005",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d005",
+    "title": "T d005"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d006",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d006",
+    "title": "T d006"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d007",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d007",
+    "title": "T d007"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d008",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d008",
+    "title": "T d008"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d009",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d009",
+    "title": "T d009"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d010",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d010",
+    "title": "T d010"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d011",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d011",
+    "title": "T d011"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d012",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d012",
+    "title": "T d012"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d013",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d013",
+    "title": "T d013"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d014",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d014",
+    "title": "T d014"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d015",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d015",
+    "title": "T d015"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d016",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d016",
+    "title": "T d016"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d017",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d017",
+    "title": "T d017"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d018",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d018",
+    "title": "T d018"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d019",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d019",
+    "title": "T d019"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d020",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d020",
+    "title": "T d020"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d021",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d021",
+    "title": "T d021"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d022",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d022",
+    "title": "T d022"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d023",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d023",
+    "title": "T d023"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d024",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d024",
+    "title": "T d024"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d025",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d025",
+    "title": "T d025"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d026",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d026",
+    "title": "T d026"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d027",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d027",
+    "title": "T d027"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d028",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d028",
+    "title": "T d028"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d029",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d029",
+    "title": "T d029"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d030",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d030",
+    "title": "T d030"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d031",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d031",
+    "title": "T d031"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d032",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d032",
+    "title": "T d032"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d033",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d033",
+    "title": "T d033"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d034",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d034",
+    "title": "T d034"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d035",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d035",
+    "title": "T d035"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d036",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d036",
+    "title": "T d036"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d037",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d037",
+    "title": "T d037"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d038",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d038",
+    "title": "T d038"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d039",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d039",
+    "title": "T d039"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d040",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d040",
+    "title": "T d040"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d041",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d041",
+    "title": "T d041"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d042",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d042",
+    "title": "T d042"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d043",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d043",
+    "title": "T d043"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d044",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d044",
+    "title": "T d044"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d045",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d045",
+    "title": "T d045"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d046",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d046",
+    "title": "T d046"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d047",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d047",
+    "title": "T d047"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d048",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d048",
+    "title": "T d048"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d049",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d049",
+    "title": "T d049"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d050",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d050",
+    "title": "T d050"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d051",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d051",
+    "title": "T d051"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d052",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d052",
+    "title": "T d052"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d053",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d053",
+    "title": "T d053"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d054",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d054",
+    "title": "T d054"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d055",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d055",
+    "title": "T d055"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d056",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d056",
+    "title": "T d056"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d057",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d057",
+    "title": "T d057"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d058",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d058",
+    "title": "T d058"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d059",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d059",
+    "title": "T d059"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d060",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d060",
+    "title": "T d060"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d061",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d061",
+    "title": "T d061"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d062",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d062",
+    "title": "T d062"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d063",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d063",
+    "title": "T d063"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d064",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d064",
+    "title": "T d064"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d065",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d065",
+    "title": "T d065"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d066",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d066",
+    "title": "T d066"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d067",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d067",
+    "title": "T d067"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d068",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d068",
+    "title": "T d068"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d069",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d069",
+    "title": "T d069"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d070",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d070",
+    "title": "T d070"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d071",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d071",
+    "title": "T d071"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d072",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d072",
+    "title": "T d072"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d073",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d073",
+    "title": "T d073"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d074",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d074",
+    "title": "T d074"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d075",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d075",
+    "title": "T d075"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d076",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d076",
+    "title": "T d076"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d077",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d077",
+    "title": "T d077"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d078",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d078",
+    "title": "T d078"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d079",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d079",
+    "title": "T d079"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d080",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d080",
+    "title": "T d080"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d081",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d081",
+    "title": "T d081"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d082",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d082",
+    "title": "T d082"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d083",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d083",
+    "title": "T d083"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d084",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d084",
+    "title": "T d084"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d085",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d085",
+    "title": "T d085"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d086",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d086",
+    "title": "T d086"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d087",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d087",
+    "title": "T d087"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d088",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d088",
+    "title": "T d088"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d089",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d089",
+    "title": "T d089"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d090",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d090",
+    "title": "T d090"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d091",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d091",
+    "title": "T d091"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d092",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d092",
+    "title": "T d092"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d093",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d093",
+    "title": "T d093"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d094",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d094",
+    "title": "T d094"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d095",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d095",
+    "title": "T d095"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d096",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d096",
+    "title": "T d096"
+   },
+   {
+    "est_seconds": 30,
+    "id": "L1",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "text": "words of L1",
+    "title": "T L1"
+   }
+  ],
+  "position_seconds": 0,
+  "version": 11
+ }
+}

@@ -1,6 +1,10 @@
 package runsheet
 
-import "fmt"
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+)
 
 // Interpretations of the frozen interface (each is also in the slice report):
 //
@@ -20,8 +24,20 @@ import "fmt"
 //     entry to ahead, in place; nothing is on air afterwards.
 //   - An entry that goes on air is moved to the head of the ahead entries so the
 //     order stays tail, on_air, ahead.
-//   - Entries heard or skipped beyond the most recent 50 are trimmed. The ahead
-//     list is not capped here: place always applies.
+//   - Entries heard or skipped beyond the most recent 50 are trimmed. place is
+//     not capped here (the serving route bounds it); previous is: when it would
+//     leave more than MaxAhead entries ahead, the desk-placed ahead entries
+//     farthest from the air are dropped to make room, never a listener's or
+//     the phone's, and with none to drop the op is dropped as ahead_full.
+//   - A place of kind answer by the phone, placed_by phone, state heard
+//     records something already said: it lands after the last heard or skipped
+//     entry and never goes on air (at is ignored).
+//   - An entry on any op but place, and text on any op but rewrite, is invalid
+//     (the op is stored whole). A rewrite that would take the entry past
+//     MaxEntryJSON is invalid.
+//   - Every string, list and number of an entry is bounded (see the Max
+//     constants); an entry whose marshalled form exceeds MaxEntryJSON is
+//     invalid.
 //   - place needs state "ahead" (invalid otherwise), a fresh id, and the text
 //     the kind requires.
 //   - Check order: op shape, duplicate, aired's authority, reason, then the
@@ -49,7 +65,15 @@ func Apply(s RunSheet, op Op) (RunSheet, Result, error) {
 	if op.Op == OpAired && op.By != ByPhone {
 		return drop(DroppedNotPhone)
 	}
-	if len(op.Reason) > MaxReasonBytes {
+	// What an op does not use it does not carry: the op record is stored
+	// whole, so an ignored entry or text would be tape the client can add for
+	// nothing.
+	if (op.Entry != nil && op.Op != OpPlace) || (op.Text != "" && op.Op != OpRewrite) {
+		return drop(DroppedInvalid)
+	}
+	if len(op.Reason) > MaxReasonBytes || len(op.ID) > MaxIDBytes || len(op.After) > MaxIDBytes ||
+		len(op.Origin) > MaxShortBytes || (op.Ended != nil && !validEnded(op.Ended)) ||
+		(op.PositionSeconds != nil && (*op.PositionSeconds < 0 || *op.PositionSeconds > MaxEstSeconds)) {
 		return drop(DroppedInvalid)
 	}
 	if op.By == ByDesk && op.Reason == "" {
@@ -189,6 +213,10 @@ func (s *RunSheet) putAhead(e Entry, at At, after string, op Op) {
 	s.PositionSeconds = 0
 }
 
+func validEnded(e *Ended) bool {
+	return e.Outcome.valid() && len(e.At) <= MaxTimeBytes && e.LastBlock >= 0
+}
+
 func validEntry(e *Entry) bool {
 	if e == nil || !ValidID(e.ID) || !e.Kind.valid() || !e.PlacedBy.valid() {
 		return false
@@ -199,10 +227,67 @@ func validEntry(e *Entry) bool {
 	if e.Kind.TextRequired() && e.Text == "" {
 		return false
 	}
-	if e.Ended != nil && !e.Ended.Outcome.valid() {
+	if e.Ended != nil && !validEnded(e.Ended) {
 		return false
 	}
-	return true
+	if e.EstSeconds < 0 || e.EstSeconds > MaxEstSeconds || e.Revision < 0 ||
+		len(e.AirAt) > MaxTimeBytes || len(e.Origin) > MaxShortBytes {
+		return false
+	}
+	if s := e.Source; s != nil {
+		if len(s.Ref) > MaxURLBytes || len(s.Label) > MaxRefBytes || len(s.URL) > MaxURLBytes || len(s.ClipID) > MaxRefBytes {
+			return false
+		}
+		if (s.Start != nil && *s.Start < 0) || (s.End != nil && *s.End < 0) {
+			return false
+		}
+	}
+	if len(e.Cites) > MaxCites {
+		return false
+	}
+	for _, c := range e.Cites {
+		if !c.Role.valid() || len(c.Ref) > MaxURLBytes || len(c.Label) > MaxRefBytes {
+			return false
+		}
+	}
+	if b := e.Between; b != nil && (len(b.After) > MaxIDBytes || len(b.Before) > MaxIDBytes) {
+		return false
+	}
+	if f := e.Forecast; f != nil {
+		if !(f.PHeard >= 0 && f.PHeard <= 1) || len(f.CausedBy) > MaxShortBytes || len(f.ClaimID) > MaxShortBytes {
+			return false
+		}
+	}
+	return entryJSONSize(e) <= MaxEntryJSON
+}
+
+// entryJSONSize is the entry's size in the form a record carries it. The op
+// and snapshot records hold the entry's JSON (HTML escaping off) as a string
+// inside the commitment record, which is marshalled again with escaping on. So
+// the size is: encode the entry with HTML escaping off, marshal that text as a
+// JSON string, and drop the two quotes. A plain ASCII byte costs 1, < > and &
+// 6, a quote or backslash 4, a control character 7 (U+2028 and U+2029 too),
+// other characters their UTF-8 bytes. The Swift twin pins the same rule by
+// fixture 33.
+func entryJSONSize(e *Entry) int {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(e); err != nil {
+		return MaxEntryJSON + 1
+	}
+	carried, err := json.Marshal(string(bytes.TrimRight(b.Bytes(), "\n")))
+	if err != nil {
+		return MaxEntryJSON + 1
+	}
+	return len(carried) - 2
+}
+
+// isHeardAnswer is the one place that may arrive in a state other than ahead:
+// an answer the phone already said.
+func isHeardAnswer(op Op) bool {
+	e := op.Entry
+	return e != nil && e.Kind == KindAnswer && e.PlacedBy == ByPhone && e.State == StateHeard
 }
 
 // apply performs op on s (already a private copy) and returns the dropped
@@ -211,6 +296,26 @@ func (s *RunSheet) apply(op Op) string {
 	switch op.Op {
 	case OpPlace:
 		e := op.Entry
+		if isHeardAnswer(op) {
+			if op.By != ByPhone || !validEntry(e) {
+				return DroppedInvalid
+			}
+			if s.index(e.ID) >= 0 {
+				return DroppedDuplicateID
+			}
+			h := *e
+			if h.Ended == nil {
+				h.Ended = &Ended{Outcome: OutcomeFinished}
+			}
+			n := 0
+			for _, x := range s.Entries {
+				if x.State == StateHeard || x.State == StateSkipped {
+					n++
+				}
+			}
+			s.insertAt(n, h)
+			return ""
+		}
 		if !validEntry(e) || e.State != StateAhead || !op.At.valid() || (op.At == AtAfter && op.After == "") {
 			return DroppedInvalid
 		}
@@ -249,6 +354,9 @@ func (s *RunSheet) apply(op Op) string {
 			return DroppedNotAhead
 		}
 		s.Entries[i].Text = op.Text
+		if entryJSONSize(&s.Entries[i]) > MaxEntryJSON {
+			return DroppedInvalid
+		}
 
 	case OpSkip:
 		if op.ID == "" {
@@ -276,14 +384,19 @@ func (s *RunSheet) apply(op Op) string {
 		if last < 0 {
 			return DroppedNoPrevious
 		}
+		restored := map[string]bool{}
 		for i := range s.Entries {
 			if i == last || s.Entries[i].State == StateOnAir {
 				s.Entries[i].State = StateAhead
 				s.Entries[i].Ended = nil
+				restored[s.Entries[i].ID] = true
 			}
 		}
 		s.OnAir = ""
 		s.PositionSeconds = 0
+		if !s.trimAhead(restored) {
+			return DroppedAheadFull
+		}
 
 	case OpClear:
 		if op.BaseVersion != s.Version {
@@ -345,6 +458,31 @@ func (s *RunSheet) aired(op Op) string {
 		return DroppedBadTransition
 	}
 	return ""
+}
+
+// trimAhead brings the ahead list back to MaxAhead after previous, dropping
+// the desk-placed ahead entries farthest from the air (not the ones previous
+// just restored). It reports false when that cannot be done without dropping
+// anyone else's entry.
+func (s *RunSheet) trimAhead(keep map[string]bool) bool {
+	for {
+		n, far := 0, -1
+		for i, e := range s.Entries {
+			if e.State == StateAhead {
+				n++
+				if e.PlacedBy == ByDesk && !keep[e.ID] {
+					far = i
+				}
+			}
+		}
+		if n <= MaxAhead {
+			return true
+		}
+		if far < 0 {
+			return false
+		}
+		s.removeAt(far)
+	}
 }
 
 // trimTail keeps only the most recent MaxTail heard or skipped entries.

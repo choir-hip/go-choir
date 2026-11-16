@@ -1,0 +1,83 @@
+{
+ "name": "30_aired_left_on_sign_out_is_heard_with_outcome_left",
+ "ops": [
+  {
+   "base_version": 5,
+   "by": "phone",
+   "ended": {
+    "at": "2026-11-16T12:00:00Z",
+    "last_block": 4,
+    "outcome": "left"
+   },
+   "id": "a",
+   "op": "aired",
+   "op_id": "o1",
+   "position_seconds": 12.5,
+   "state": "heard"
+  }
+ ],
+ "results": [
+  {
+   "applied": true,
+   "op_id": "o1",
+   "version": 6
+  }
+ ],
+ "start": {
+  "entries": [
+   {
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "on_air",
+    "text": "words of a",
+    "title": "T a"
+   },
+   {
+    "est_seconds": 30,
+    "id": "b",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of b",
+    "title": "T b"
+   }
+  ],
+  "on_air": "a",
+  "position_seconds": 12.5,
+  "version": 5
+ },
+ "want": {
+  "applied_ops": [
+   "o1"
+  ],
+  "entries": [
+   {
+    "ended": {
+     "at": "2026-11-16T12:00:00Z",
+     "last_block": 4,
+     "outcome": "left"
+    },
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "heard",
+    "text": "words of a",
+    "title": "T a"
+   },
+   {
+    "est_seconds": 30,
+    "id": "b",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of b",
+    "title": "T b"
+   }
+  ],
+  "position_seconds": 0,
+  "version": 6
+ }
+}

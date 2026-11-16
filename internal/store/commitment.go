@@ -151,6 +151,45 @@ func (s *Store) ListCommitmentRecordsBySubjectRef(ctx context.Context, ownerID, 
 	return records, nil
 }
 
+// ListCommitmentRecordsBySubjectRefOfComputer is ListCommitmentRecordsBySubjectRef
+// with the computer filter in the query, so the limit counts only this
+// computer's rows (the run sheet replay pages by it: another identity's rows
+// must not shorten its window), and lenient: a row whose envelope does not
+// decode is skipped and counted, not an error. rows is every row the query
+// returned (decoded or not), so a caller can tell a short page from a full
+// one. Only a failed query is an error. A record written without a
+// computer_id in its body does not match.
+func (s *Store) ListCommitmentRecordsBySubjectRefOfComputer(ctx context.Context, ownerID, computerID, key, value string, limit int) (records []types.CommitmentRecord, undecodable, rows int, err error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	ownerID, computerID, value = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(value)
+	if ownerID == "" || computerID == "" || value == "" || !subjectRefKeyRe.MatchString(key) {
+		return nil, 0, 0, fmt.Errorf("commitment record list by subject ref requires owner, computer, a key and a value")
+	}
+	objs, err := s.ogListByOwnerAndBody(ctx, ogKindCommitmentRecord, ownerID, []objectgraph.JSONFieldMatch{
+		{JSONPath: "$.subject_refs." + key, Value: value},
+		{JSONPath: "$.computer_id", Value: computerID},
+	}, limit)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	records = make([]types.CommitmentRecord, 0, len(objs))
+	for _, obj := range objs {
+		rows++ // every row the query returned counts toward a full page
+		if obj.Tombstone || strings.TrimSpace(obj.ComputerID) != computerID {
+			continue
+		}
+		var rec types.CommitmentRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			undecodable++
+			continue
+		}
+		records = append(records, rec)
+	}
+	return records, undecodable, rows, nil
+}
+
 // ListCommitmentClaimRecords lists the newest records that are not
 // directives (note, escalate, cast, retract), filtered in the query before
 // its limit. Directives carry no scored claim, and every Texture control

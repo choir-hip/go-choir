@@ -102,3 +102,54 @@ func mustFirstPartyManifest(t *testing.T) Manifest {
 	}
 	return fp.Manifest
 }
+
+// Slice D1: the autoradio package desk is the one custodian of the run sheet
+// kind, and the reserved built-in kind it replaces is gone.
+func TestTheAutoradioDeskIsTheOnlyCustodianOfTheRunSheetKind(t *testing.T) {
+	const kind = "choir.app.autoradio.run_sheet"
+	fp, _ := FirstPartyDesk("autoradio")
+	if len(fp.Manifest.OwnedKinds) != 1 || fp.Manifest.OwnedKinds[0] != kind {
+		t.Fatalf("manifest owns %v", fp.Manifest.OwnedKinds)
+	}
+	req, err := ImageRequired()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range req {
+		if r.Package == "autoradio" && (len(r.Manifest.OwnedKinds) != 1 || r.Version != fp.Version) {
+			t.Fatalf("the required set carries %v at %s, the first-party file %s", r.Manifest.OwnedKinds, r.Version, fp.Version)
+		}
+	}
+	set, rs := Derive([]Event{install(1, fp.Manifest)})
+	if len(rs) != 0 {
+		t.Fatal(rs)
+	}
+	if err := Reconcile(set); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = Reconcile(Set{}) })
+	if _, err := objectgraph.DefaultRegistry().LookupKind(kind); err == nil {
+		t.Fatal("the package kind leaked into the built-in registry")
+	}
+	// The registered desk is the one custodian the manifests name for it: the
+	// kind is the desk's own, and the write gate's package seam (fed by the
+	// frontend package manifests) holds no other claim to it.
+	if len(set.Desks[0].OwnedKinds) != 1 || set.Desks[0].OwnedKinds[0] != kind {
+		t.Fatalf("desk owns %v", set.Desks[0].OwnedKinds)
+	}
+	if reg, ok := objectgraph.LookupPackageKind(kind); ok && reg.Writer != "desk:autoradio" {
+		t.Fatalf("package seam names writer %q", reg.Writer)
+	}
+	// No system desk or kernel service claims it too.
+	for _, c := range objectgraph.ManifestClaims() {
+		for _, k := range c.Kinds {
+			if k == kind {
+				t.Fatalf("%s also claims %s", c.Source, kind)
+			}
+		}
+	}
+	// The reserved kind it replaces is not registered.
+	if _, err := objectgraph.DefaultRegistry().LookupKind("choir.autoradio_run_sheet"); err == nil {
+		t.Fatal("the reserved kind is still registered")
+	}
+}

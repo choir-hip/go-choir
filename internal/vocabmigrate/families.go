@@ -140,7 +140,6 @@ var frozenOGObjectKinds = map[string]bool{
 	"choir.artifact_blob":                true,
 	"choir.artifact_manifest":            true,
 	"choir.audio_recording":              true,
-	"choir.autoradio_run_sheet":          true,
 	"choir.migration_marker":             true,
 	"choir.browser_session":              true,
 	"choir.capture_label":                true,

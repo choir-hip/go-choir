@@ -2,7 +2,8 @@
 // everything a listener hears, and the reducer that applies ops to it.
 //
 // The wire format is JSON with snake_case keys. The Swift twin is
-// mobile/AutoradioKit/Sources/AutoradioKit/RunSheet.swift; both read the
+// mobile/AutoradioKit/Sources/AutoradioKit/RunSheet.swift (on
+// origin/lane/autoradio-integ); both read the
 // shared fixtures in mobile/fixtures/runsheet and must agree on every one.
 //
 // The reducer holds mechanical invariants only. Nothing here interprets
@@ -24,6 +25,20 @@ const (
 	// MaxAppliedOps is how many applied op_ids the sheet remembers for the
 	// duplicate rule.
 	MaxAppliedOps = 512
+	// MaxAhead is how many entries may be ahead. place is bounded by the
+	// serving route (a place always applies in the reducer); previous, which
+	// moves entries back to ahead, is bounded here.
+	MaxAhead = 100
+
+	// Field bounds (bytes). An entry that passes none of them is invalid.
+	MaxIDBytes    = 64
+	MaxRefBytes   = 512  // source.label, clip_id; cites.label
+	MaxURLBytes   = 2048 // source.ref, source.url; cites.ref (real feed and enclosure URLs run long)
+	MaxCites      = 12
+	MaxShortBytes = 160 // forecast.caused_by, claim_id; origin
+	MaxTimeBytes  = 40  // RFC3339 strings
+	MaxEstSeconds = 86400
+	MaxEntryJSON  = 32 * 1024 // the entry as the record carries it (see entryJSONSize)
 )
 
 // enum is a closed string vocabulary. Unmarshalling a value outside the set
@@ -112,9 +127,12 @@ const (
 	OutcomeSkipped  Outcome = "skipped"
 	OutcomeCut      Outcome = "cut"
 	OutcomeLeft     Outcome = "left"
+	// OutcomeFailed: the phone could not make the entry play. It is not the
+	// listener's judgement and settles no forecast.
+	OutcomeFailed Outcome = "failed"
 )
 
-var outcomes = map[Outcome]bool{OutcomeFinished: true, OutcomeSkipped: true, OutcomeCut: true, OutcomeLeft: true}
+var outcomes = map[Outcome]bool{OutcomeFinished: true, OutcomeSkipped: true, OutcomeCut: true, OutcomeLeft: true, OutcomeFailed: true}
 
 func (o Outcome) valid() bool { return outcomes[o] }
 func (o *Outcome) UnmarshalJSON(b []byte) error {
@@ -222,6 +240,11 @@ type Entry struct {
 	Between    *Between  `json:"between,omitempty"`
 	EstSeconds float64   `json:"est_seconds"`
 	Forecast   *Forecast `json:"forecast,omitempty"`
+	// The additions of 2026-11-16 (master stream). Recorded, not interpreted:
+	// the reducer neither sets nor reads them.
+	AirAt    string `json:"air_at,omitempty"`
+	Origin   string `json:"origin,omitempty"`
+	Revision int    `json:"revision,omitempty"`
 }
 
 // RunSheet is the ordered list: heard/skipped tail (most recent 50), the entry
@@ -234,6 +257,15 @@ type RunSheet struct {
 	PositionSeconds float64  `json:"position_seconds"`
 	Entries         []Entry  `json:"entries"`
 	AppliedOps      []string `json:"applied_ops,omitempty"`
+	// The additions of 2026-11-16: recorded, not interpreted.
+	Station       string `json:"station,omitempty"`
+	MasterVersion int64  `json:"master_version,omitempty"`
+	ClockAt       string `json:"clock_at,omitempty"`
+	// SheetEpoch is the server's: zero until a replay had to repair the
+	// history (skip, step over or deduplicate records), then the repair's time
+	// in milliseconds. A client that holds another epoch must take the full
+	// sheet. Recorded, not interpreted, by the reducer.
+	SheetEpoch int64 `json:"sheet_epoch,omitempty"`
 }
 
 // Op is one change to a run sheet, the same vocabulary in both directions.
@@ -251,6 +283,8 @@ type Op struct {
 	PositionSeconds *float64 `json:"position_seconds,omitempty"`
 	BaseVersion     int64    `json:"base_version"`
 	Reason          string   `json:"reason,omitempty"`
+	// Origin is the 2026-11-16 addition: recorded, not interpreted here.
+	Origin string `json:"origin,omitempty"`
 }
 
 // Result is what the reducer says about one op. Dropped is empty when the op
@@ -276,6 +310,11 @@ const (
 	DroppedDuplicateID   = "duplicate_id"
 	DroppedReasonNeeded  = "reason_required"
 	DroppedInvalid       = "invalid"
+	DroppedAheadFull     = "ahead_full"
+	// DroppedReplaySkipped is what the server answers for an op whose tape
+	// record a replay could not fold (it did not decode, the reducer drops it
+	// today, or another record took its version). Never produced by Apply.
+	DroppedReplaySkipped = "replay_skipped"
 )
 
 // ValidID reports whether s matches [A-Za-z0-9][A-Za-z0-9_.-]{0,63}.

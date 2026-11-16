@@ -81,7 +81,6 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.media_item", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerAutoradio, Reserved: true},
 		{Kind: "choir.audio_recording", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerAutoradio, Reserved: true},
 		{Kind: "choir.transcript", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerAutoradio, Reserved: true},
-		{Kind: "choir.autoradio_run_sheet", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Versioned: true, Owner: OwnerAutoradio, Reserved: true},
 
 		// --- VM store: audited computer ---
 		{Kind: "choir.agent", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
