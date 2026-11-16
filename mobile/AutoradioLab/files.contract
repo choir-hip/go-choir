@@ -29,11 +29,11 @@ component FilePage
     else if fvInfo.kind == "audio"
       AudioViewer()
     else if fvInfo.kind == "pdf" or fvInfo.kind == "epub"
-      NoPreview(address=address, title=title, message="PDFs and books open in Reader.")
+      NoPreview(address=address, title=title, message="Opening…")
     else if fvInfo.kind == "csv"
       CsvViewer()
     else if fvInfo.kind == "markdown" or fvInfo.kind == "text" or fvInfo.kind == "code"
-      NoPreview(address=address, title=title, message="Text and Markdown open in Texture.")
+      NoPreview(address=address, title=title, message="Opening…")
     else
       NoPreview(address=address, title=title, message="There is no viewer for this kind of file yet, so it cannot be previewed here.")
 

@@ -50,8 +50,11 @@ members Autoradio
   derive prog = min(pxAbs / max(vp.width * 0.5, 1), 1)
 
   // Bring a page to the top of the deck (opening it when it is new).
+  // A file (not a folder) is opened by the Kit, which may answer with another page (a PDF is a Reader document, text a Texture document, either
+  // possibly already in the deck): the deck does not take the `file:` address on top, it follows the focus the Kit lands on (followOpen).
   action openPage(address: string, title: string)
-    order = address.startsWith("onboarding:") ? order : [address].concat(order.filter(a => a != address))
+    awaiting = (address.startsWith("file:") and address.endsWith("/") == false) ? address : ""
+    order = (address.startsWith("onboarding:") or awaiting != "") ? order : [address].concat(order.filter(a => a != address))
     px = 0
     pdrag = false
     flying = false
@@ -107,6 +110,32 @@ members Autoradio
       px = 0
       flying = false
       send pm = pageOpen(address=nxt, title="")
+
+  // The file the Kit is opening, until its page is in front: the deck follows the Kit's focus to whatever page that open lands on, whether the
+  // deck had it already or not. It is cleared when that happens, when another page is asked for, and after 20 seconds (a failed open: the bar says why).
+  state awaiting = ""
+  task followOpen when awaiting != "" and pg.top != "" and pg.top != topAddr key=pg.top
+    after(1, followOpenNow)
+  action followOpenNow
+    if awaiting != "" and pg.top != "" and pg.top != topAddr
+      order = [pg.top].concat(order.filter(a => a != pg.top))
+      awaiting = ""
+  task awaitingTimeout when awaiting != "" key=awaiting
+    after(20000, clearAwaiting)
+  action clearAwaiting
+    awaiting = ""
+
+  // A page in front of the deck that the Kit does not have open, or a deck whose top is not the Kit's focus for long, shows only a placard (the
+  // page's resources read the Kit's focus). Whichever it is, the deck is made to agree with the Kit: a top the Kit does not have is dropped, and a
+  // top the Kit has is asked for again.
+  task reconcileTop when pg.top != "" and topAddr != pg.top and awaiting == "" and onbd == false key=`${topAddr}|${pg.top}`
+    after(2500, reconcileTopNow)
+  action reconcileTopNow
+    if pg.top != "" and topAddr != pg.top and awaiting == "" and onbd == false
+      if pg.rows.filter(r => r.address == topAddr).length == 0
+        order = [pg.top].concat(order.filter(a => a != pg.top and a != topAddr))
+      else
+        send pm = pageOpen(address=topAddr, title="")
 
   // The deck takes in a page the Kit opened that the deck does not know (something outside the deck opened it). A focus that is only
   // behind the deck (the answer to a move still on its way) is never followed: that would undo a swipe.

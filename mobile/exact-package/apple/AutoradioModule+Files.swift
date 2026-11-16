@@ -23,7 +23,7 @@ extension AutoradioModule {
         FilesInTexture.current = FilesInTexture(files: service)
         // The run sheet finds its own copy of an audio file from Files again from the Files path (after a relaunch, downloading it if need be).
         Task { @MainActor in RunSheetPlayer.shared.fileResolver = { await FilesInReader.current?.audioURL(address: $0) } }
-        for p in pages.list() where FilesInReader.opensInReader(p.address) || FilesInTexture.opensInTexture(p.address) { pages.close(p.address) }
+        FilesOpen.purge(pages: pages)
 
         func str(_ args: [String: Any], _ k: String) -> String { args[k] as? String ?? "" }
         func num(_ args: [String: Any], _ k: String) -> Int { (args[k] as? NSNumber)?.intValue ?? Int(args[k] as? String ?? "") ?? 0 }

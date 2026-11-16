@@ -131,23 +131,13 @@ extension AutoradioModule {
         // Sends. Every one answers the open-page list, the shape the page host reads.
         handle("pageOpen") { [unowned self] args, reply in
             Task { @MainActor in await TextureEditor.shared.flushAll() }      // leaving a page posts what was typed on it
-            // A PDF or an e-book in Files opens in Reader, the one way a document opens (Kit/FilesInReader.swift).
-            if let address = args["address"] as? String, let r = FilesInReader.current, FilesInReader.opensInReader(address) {
+            // A PDF or an e-book in Files opens in Reader and text in Texture: the document's own page, never a `file:` page for it (Kit/FilesOpen.swift).
+            if let address = args["address"] as? String, FilesOpen.resolvesElsewhere(address) {
+                BarTracker.shared.say("Opening \(FilePath.name(FilePath.fromAddress(address)?.path ?? address))…")
                 Task { [weak self] in
                     guard let self else { return }
-                    do { let d = try await r.open(address: address); self.pages.open(d.address, title: d.title) }
-                    catch { BarTracker.shared.say(BarDocumentImport.failureLine(error, url: URL(fileURLWithPath: FilePath.fromAddress(address)?.path ?? address))) }
+                    if case .failed(let line) = await FilesOpen.open(address: address, title: args["title"] as? String, pages: self.pages) { BarTracker.shared.say(line) }
                     DispatchQueue.main.async { self.touch(["openPages", "barState", "shelfList"], now: true); self.runtime.warmResponder(address: self.pages.list().first?.address); reply(self.pageList()) }
-                }
-                return
-            }
-            // Text, Markdown and code in Files open in Texture, the way choir.news does it (Kit/FilesInTexture.swift).
-            if let address = args["address"] as? String, let t = FilesInTexture.current, FilesInTexture.opensInTexture(address) {
-                Task { [weak self] in
-                    guard let self else { return }
-                    do { let d = try await t.open(address: address); self.pages.open(d.address, title: d.title) }
-                    catch { BarTracker.shared.say("\(FilePath.name(FilePath.fromAddress(address)?.path ?? address)) could not be opened. \(FilesService.say(error))"); self.touch(["barState"], now: true) }
-                    DispatchQueue.main.async { self.touch(["openPages"], now: true); reply(self.pageList()) }
                 }
                 return
             }
