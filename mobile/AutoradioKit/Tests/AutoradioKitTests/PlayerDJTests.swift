@@ -56,6 +56,7 @@ extension PlayerAppTests {
             req.path == "/api/autoradio/programme" ? .init(headers: ["Content-Type": "text/event-stream"], raw: idents([line])) : front(req)
         }
         let (app, rt) = await makeApp()
+        app.stretchSource = nil                      // the real programme route, here stubbed
         XCTAssertEqual(rt.player.document.id, "fixture-1", "the player starts with the Lab's test edition")
         await app.startRadio()
         XCTAssertEqual(rt.player.document.id, "choir:pv-a", "the paper's first story plays, not the fixture and not a station break")

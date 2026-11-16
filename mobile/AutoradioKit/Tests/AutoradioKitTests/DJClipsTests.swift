@@ -391,8 +391,10 @@ final class DJPlayAppTests: XCTestCase {
         let (app, rt) = await makeApp(src)
         app.storyOrder = { ["a", "b", "c", "d"].map { StoryRef(route: $0, title: "T") } }
         await app.play(route: "c")
+        let asked = await poll { !src.scopes.read { $0 }.isEmpty }; XCTAssertTrue(asked)
         XCTAssertEqual(src.scopes.read { $0 }.first ?? nil, ["c", "d"])
-        XCTAssertEqual(rt.player.document.id, "choir:pv-c", "no stretch: the story plays plain, as before")
+        let plain = await poll { rt.player.document.id == "choir:pv-c" }
+        XCTAssertTrue(plain, "no stretch: the story plays plain, as before")
         rt.player.pause()
     }
     func testC8_ASlowStretchLetsTheStoryPlayAtOnceAndJoinsAtItsEnd() async {
@@ -400,7 +402,8 @@ final class DJPlayAppTests: XCTestCase {
         let (app, rt) = await makeApp(src)
         app.djFirstSegmentWait = 0.3
         await app.play(route: "a")
-        XCTAssertEqual(rt.player.document.id, "choir:pv-a", "plain read at once")
+        let plain = await poll { rt.player.document.id == "choir:pv-a" }
+        XCTAssertTrue(plain, "plain read at once")
         let ready = await poll { src.cont != nil }; XCTAssertTrue(ready)
         src.cont!.yield(.segment(IncomingSegment(stretchID: "m", segmentID: "m/0", kind: "story", title: "S", text: "Words.", cites: [], blockCount: nil)))
         let joined = await poll(15) { rt.player.document.id == "radio:m" }
@@ -411,7 +414,8 @@ final class DJPlayAppTests: XCTestCase {
         let src = Recording()
         let (app, rt) = await makeApp(src)
         await app.play(route: "b")
-        XCTAssertEqual(rt.player.document.id, "choir:pv-b")
+        let plain = await poll { rt.player.document.id == "choir:pv-b" }
+        XCTAssertTrue(plain)
         XCTAssertFalse(rt.player.userPaused)
         rt.player.pause()
     }

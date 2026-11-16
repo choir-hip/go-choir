@@ -255,6 +255,7 @@ public final class ChoirApp: @unchecked Sendable {
         let title = lock.withLock { stories.first { $0.route == route }?.title } ?? FrontOrder.shared.stories.first { $0.route == route }?.title ?? ""
         lock.lock(); handToDJ = route; lock.unlock()
         await MainActor.run { PlayQueue.shared.playNow(.story(route: route, title: title)) }       // the one queue decides; it comes back to `playStoryDirect`, which hands the list to the DJ
+        await PlayQueue.shared.settle()
     }
 
     /// The queue's story engine: what `play(route:)` was before the queue.
@@ -528,7 +529,8 @@ public final class ChoirApp: @unchecked Sendable {
     func turnEnded() async {
         lock.lock(); let qid = pendingQueueEnd; pendingQueueEnd = nil; lock.unlock()
         if let qid, runtime.player.document.id == qid, !runtime.player.loopIsActive, !runtime.player.userPaused, await queueAdvance(documentID: qid) { return }
-        lock.lock(); let id = pendingAutoplay; pendingAutoplay = nil; lock.unlock()
+        // A story that ended over the reader's words and had nothing queued behind it is still owed its autoplay.
+        lock.lock(); let id = pendingAutoplay ?? qid; pendingAutoplay = nil; lock.unlock()
         let p = runtime.player
         guard let id, p.document.id == id, !p.loopIsActive, !p.userPaused, let route = currentStoryRoute() else { return }
         await continueAfter(route)
