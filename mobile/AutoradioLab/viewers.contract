@@ -231,6 +231,7 @@ component EpubViewer
               button press=fvChapGo(c.index) testId=`epub-chapter-${c.index}` appearance="none" width="100%"
                 row padding="12px 0" align-items="center" width="100%"
                   text c.title font-family=th.fontHead font-size="-exact-callout" font-weight=(c.index == fvChap ? 700 : 400) color=th.fg flex=1 text-align="left"
+                  image "symbol:forward-chevron" color=th.muted
       else
         text fvChapter.title font-family=th.fontLabel font-size="-exact-footnote" color=th.accent testId="epub-chapter-title"
         column width="100%" max-width=620

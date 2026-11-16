@@ -248,7 +248,7 @@ component BarShell
             column width=48 height=48 align-items="center" justify-content="center"
               Mark(state=markState)
           input appearance="none" value=ask input=editAsk submit=sendAsk focus=barFocus blur=barBlur placeholder=(vp.width < 360 ? "Ask…" : aim) aria-label=aim testId="bar-field" enterkeyhint="send" flex=1 min-width=0 min-height=44
-            font-family=th.fontText font-size=(vp.width < 360 ? 16 : 17) color=th.fg padding="8px 6px" border-width=0 background-color="transparent"
+            font-family=(ask == "" ? th.fontLabel : th.fontText) font-size=(vp.width < 360 ? 16 : 17) color=th.fg padding="8px 6px" border-width=0 background-color="transparent"
             ::placeholder
               color=th.muted
           if typing

@@ -63,7 +63,7 @@ final class TypographyRulesTests: XCTestCase {
     static func faces(in s: String) -> [String] {
         guard let v = attr("font-family", in: s) else { return [] }
         let re = try! NSRegularExpression(pattern: "th\\.font[A-Za-z]+|t\\.font[A-Za-z]+|\"[^\"]*\"")
-        return re.matches(in: v, range: NSRange(v.startIndex..., in: v)).compactMap { Range($0.range, in: v).map { String(v[$0]) } }
+        return re.matches(in: v, range: NSRange(v.startIndex..., in: v)).compactMap { Range($0.range, in: v).map { String(v[$0]) } }.filter { !$0.hasPrefix("\"") || ($0.count > 3 && !$0.contains(" ") && $0.contains("-")) }
     }
     static func ancestors(_ els: [El], _ k: Int) -> [El] {
         var cur = els[k].indent; var out: [El] = []
@@ -170,6 +170,43 @@ final class TypographyRulesTests: XCTestCase {
     /// Words inside a button that name a thing rather than do something.
     static let titleWords: Set<String> = []
     static let verbs: Set<String> = ["Play", "Queue", "Cancel", "Close", "Sign in", "Not now", "Try again", "Delete", "Share", "Reload", "Skip for now", "Edit my edition", "Open episode", "Sections", "Source"]
+
+    // T9 (owner, 2026-11-16): type tells a button from a headline. Pure navigation (a word with no content behind it) is an Action; a tappable title of an
+    // object stays a Headline, and its button carries an action affordance: a chevron, or an Action word beside it. The serif alone never signals a tap.
+    func testATappableHeadlineCarriesAnActionAffordance() throws {
+        var headlineButtons = 0
+        for els in try Self.allElements() { for (k, b) in els.enumerated() where b.text.hasPrefix("button ") {
+            var inner: [El] = []; var j = k + 1
+            while j < els.count, els[j].indent > b.indent { inner.append(els[j]); j += 1 }
+            let heads = inner.filter { Self.isText($0) && Self.faces(in: $0.text).contains("th.fontHead") && !$0.text.contains("role=\"heading\"") }
+            if heads.isEmpty { continue }
+            headlineButtons += 1
+            let affordance = inner.contains { $0.text.contains("forward-chevron") || $0.text.contains("chevron=true") || $0.text.hasPrefix("text \"›\"") || $0.text.hasPrefix("SelectMark(")
+                || (Self.isText($0) && Self.faces(in: $0.text) == ["th.fontAction"]) }
+            // Where the serif is the whole content and a chevron would be noise, named with the reason: the paper's story headlines (the front page is the
+            // list; Play and Queue are Actions beside them), a block of a book (reading text; a tap places the voice), a file tile (its icon and card),
+            // a topic row and the two demo toggles (their line under the title says "Tap to ...").
+            let exempt = ["paper-story-", "doc-block-", "files-row-", "ob-topic-", "settings-demo", "settings-dev-details"].contains { b.text.contains("testId=`\($0)") || b.text.contains("testId=\"\($0)") }
+            let objectCard = inner.contains { $0.text.hasPrefix("Card(") || $0.text.hasPrefix("CardFill(") || $0.text.hasPrefix("PaperCard(") }
+            XCTAssertTrue(affordance || objectCard || exempt, "\(b.file):\(b.line) a button whose title is a Headline has no chevron or Action word: the serif alone does not say it is tappable")
+        } }
+        XCTAssertGreaterThan(headlineButtons, 3)
+    }
+    func testKeyPagesAreActionsAndThePlaceholderIsALabel() throws {
+        var chip = 0, field = false
+        for els in try Self.allElements() { for (k, e) in els.enumerated() {
+            if e.file == "launcher.contract", Self.isText(e), Self.ancestors(els, k).contains(where: { $0.text.hasPrefix("component ChipPlace") }) {
+                chip += 1; XCTAssertEqual(Self.faces(in: e.text), ["th.fontAction"], "a key page is an Action, not a headline")
+            }
+            if e.text.contains("testId=\"bar-field\"") {
+                field = true
+                let fam = Self.attr("font-family", in: e.text) ?? ""
+                XCTAssertTrue(fam.contains("th.fontLabel") && fam.contains("th.fontText"), "the ask field shows its placeholder as a Label and typed words as Reading text: \(fam)")
+            }
+            XCTAssertFalse(e.text.contains("content-close-word"), "the content row has the X and no Close word")
+        } }
+        XCTAssertEqual(chip, 1); XCTAssertTrue(field)
+    }
 
     // T7
     func testFiguresAreTabular() throws {

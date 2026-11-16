@@ -71,7 +71,7 @@ final class ContentFullScreenTests: XCTestCase {
     func testEveryFormerControlIsInTheRow() throws {
         let row = code(try read("content.contract"))
         has(row, ["label=\"Read aloud\"", "label=\"Add to queue\"", "label=\"Contents\"", "label=\"Find\"", "label=\"Pages\"", "label=\"Text\"",
-                  "label=\"Open in Safari\"", "label=\"Close\"", "‹ Previous", "Next ›"], "words")
+                  "label=\"Open in Safari\"", "‹ Previous", "Next ›"], "words")
         has(row, ["testId=\"doc-read\"", "testId=\"doc-queue\"", "testId=\"doc-toc\"", "testId=\"doc-find\"", "testId=\"doc-find-clear\"", "testId=\"doc-find-none\"",
                   "testId=\"doc-mode-pages\"", "testId=\"doc-mode-text\"", "testId=\"doc-prev\"", "testId=\"doc-next\"", "testId=\"doc-position\"", "doc-chapter-${s.index}", "doc-hit-${h.block}",
                   "${pre}-read", "${pre}-add", "${pre}-safari", "${pre}-host", "bar-web-close", "reader-web-close", "testId=\"doc-close\""], "test ids")

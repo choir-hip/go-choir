@@ -444,6 +444,7 @@ component ReaderBody
                         column flex=1 min-width=0 gap=2 align-items="flex-start"
                           text s.title font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg text-align="left"
                           text "Another Texture. Opens as a page" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="left"
+                        image "symbol:forward-chevron" color=th.muted
                   else
                     button press=openLink(s.url, s.host) testId=`reader-source-${s.number}` appearance="none" width="100%"
                       row padding="8px 0" gap=10 align-items="flex-start" width="100%"
@@ -451,14 +452,17 @@ component ReaderBody
                         column flex=1 min-width=0 gap=2 align-items="flex-start"
                           text s.title font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg text-align="left"
                           text s.host font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="left"
+                        image "symbol:forward-chevron" color=th.muted
             if rdoc.related.length > 0
               column width="100%" margin-top=remv(1.6) gap=2
                 text "More on this" role="heading" aria-level=2 font-family=th.fontHead font-size=remv(1.1875 * k) font-weight=600 color=th.fg margin-bottom=6
                 for r in rdoc.related key=r.address
                   button press=openPage(r.address, r.title) testId=`reader-related-${r.address}` appearance="none" width="100%"
-                    column padding="8px 0" gap=2 align-items="flex-start" width="100%"
-                      text r.title font-family=th.fontHead font-size=remv(1.0625 * k) font-weight=600 line-height=1.25 color=th.fg text-align="left"
-                      text r.dek font-family=th.fontText font-size="-exact-subheadline" line-height=1.4 color=th.muted text-align="left" line-clamp=2
+                    row align-items="center" gap=8 width="100%"
+                      column padding="8px 0" gap=2 align-items="flex-start" flex=1 min-width=0
+                        text r.title font-family=th.fontHead font-size=remv(1.0625 * k) font-weight=600 line-height=1.25 color=th.fg text-align="left"
+                        text r.dek font-family=th.fontText font-size="-exact-subheadline" line-height=1.4 color=th.muted text-align="left" line-clamp=2
+                      image "symbol:forward-chevron" color=th.muted
           BarClear()
       // the desk is writing a new version
       if rdoc.revising

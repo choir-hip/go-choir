@@ -7,11 +7,11 @@
 //   collapsed  one line: the document's title or the site's host, where you are ("2 of 5" in a paged document, "Loading" for a web
 //              page), the word More, and a Close icon. Tapping the line expands it; the content is not covered beyond this line.
 //   expanded   the actions as words, opening upward over the content (the lens grows up):
-//              a document      Read aloud, Add to queue, Contents, Find, Pages and Text (a PDF), Close, and the page (or chapter) stepper;
+//              a document      Read aloud, Add to queue, Contents, Find, Pages and Text (a PDF), and the page (or chapter) stepper;
 //                              Contents and Find open their list under the words (Find has its field and its hits)
-//              a web page      Read aloud, Add to queue, Open in Safari, Close
+//              a web page      Read aloud, Add to queue, Open in Safari (the X on the line closes it)
 //              It collapses after an action (not after a page step, so a page can be turned again) and on a tap outside (the scrim in app.contract).
-// testIds: content-row, content-line, content-toggle, content-title, content-position, content-more, content-open, content-close-word,
+// testIds: content-row, content-line, content-toggle, content-title, content-position, content-more, content-open,
 //   doc-close, doc-read, doc-queue, doc-toc, doc-find-open, doc-find, doc-find-clear, doc-find-none, doc-hits, doc-hit-<n>, doc-mode-pages,
 //   doc-mode-text, doc-prev, doc-position, doc-next, doc-contents, doc-chapter-<n>; for a web page reader-web-host, reader-web-close,
 //   reader-web-read, reader-web-add, reader-web-safari (the page typed into the bar: bar-web-host, bar-web-close, bar-web-read, bar-web-add, bar-web-safari).
@@ -49,7 +49,6 @@ component DocExpanded
     ctlQueueDoc: action
     ctlPanelOf: action
     ctlSetText: action
-    ctlCloseDoc: action
     ctlGo: action
     ctlStep: action
     ctlJump: action
@@ -62,7 +61,7 @@ component DocExpanded
     column width="100%" gap=0 testId="content-open"
       row flex-wrap="wrap" gap=8 width="100%" align-items="center"
         button press=ctlRead testId="doc-read" appearance="none" aria-label="Read aloud from here"
-          Btn(label="Read aloud", primary=false, wide=false)
+          ChipFace(label="Read aloud", selected=false)
         button press=ctlQueueDoc testId="doc-queue" appearance="none" aria-label="Add to queue"
           ChipFace(label="Add to queue", selected=false)
         button press=ctlPanelOf("contents") testId="doc-toc" appearance="none" aria-label="Contents"
@@ -74,8 +73,6 @@ component DocExpanded
             ChoiceWord(label="Pages", selected=ldShowPages)
           button press=ctlSetText(true) testId="doc-mode-text" appearance="none" aria-label="Show the text"
             ChoiceWord(label="Text", selected=(ldShowPages == false))
-        button press=ctlCloseDoc testId="content-close-word" appearance="none" aria-label="Close this document"
-          Btn(label="Close", primary=false, wide=false)
       row gap=8 align-items="center" width="100%"
         button press=ctlStep(ldSec - 1) testId="doc-prev" appearance="none" aria-label=`Previous ${unitWord}`
           ChipFace(label="‹ Previous", selected=false)
@@ -122,23 +119,15 @@ component WebExpanded
     ctlWebRead: action
     ctlWebLater: action
     ctlSafari: action
-    ctlCloseWeb: action
-    ctlCloseBarWeb: action
   derive pre = ctlMode == "barweb" ? "bar-web" : "reader-web"
   view
     row flex-wrap="wrap" gap=8 width="100%" align-items="center" testId="content-open"
       button press=ctlWebRead(ctlKey, ctlTitle) testId=`${pre}-read` appearance="none" aria-label="Read this page aloud"
-        Btn(label="Read aloud", primary=false, wide=false)
+        ChipFace(label="Read aloud", selected=false)
       button press=ctlWebLater(ctlKey, ctlTitle) testId=`${pre}-add` appearance="none" aria-label="Add this page to the queue"
-        Btn(label="Add to queue", primary=false, wide=false)
+        ChipFace(label="Add to queue", selected=false)
       button press=ctlSafari(ctlKey) testId=`${pre}-safari` appearance="none" aria-label="Open this page in Safari"
-        Btn(label="Open in Safari", primary=false, wide=false)
-      if ctlMode == "barweb"
-        button press=ctlCloseBarWeb testId="content-close-word" appearance="none" aria-label="Close page"
-          Btn(label="Close", primary=false, wide=false)
-      else
-        button press=ctlCloseWeb testId="content-close-word" appearance="none" aria-label="Close source"
-          Btn(label="Close", primary=false, wide=false)
+        ChipFace(label="Open in Safari", selected=false)
 
 component ContentRow
   inject

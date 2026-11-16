@@ -22,3 +22,13 @@ Rules the tests keep: every `font-family` is a role token; every `text` has one 
 Ternary roles exist on purpose: the breadcrumb (the current crumb is a Label, the others Actions), the player status line (the listener's words are a Spoken line, the radio's status a Label), a settings value (Code for a path, Label otherwise) and a Reader block (Headline for a heading, Reading text otherwise).
 
 Inline links in a document stay Reading text in the accent colour (a link in a paragraph is read, then pressed). Citation marks in a paragraph are Actions.
+
+## A tappable name (owner, 2026-11-16: type must tell a button from a headline)
+
+One rule for every tappable name of a thing:
+
+- **Navigation with no content behind the word** (the seven key pages: Paper, Textures, Files, Mail, Reader, Podcasts, Settings) is an **Action**: semibold sans in the accent colour.
+- **A tappable title of an object** (a deck row, a search hit, a document, a mail row, a queue item, a source, a now-playing title) stays a **Headline**, and its button carries an action-role affordance: a forward chevron, a "›", an Action word, or a selection mark. The serif alone never says "tap".
+- Named exceptions, in the test with reasons: the paper's story headlines (Play and Queue Actions sit beside them), a book's reading blocks, file tiles, a topic row and the two demo toggles.
+- A short word inside a button is always an Action. The content row of a document or web page has no word "Close": the X on its line closes it.
+- The ask field shows its placeholder as a Label (sans, muted) and typed words as Reading text: its face is `(ask == "" ? th.fontLabel : th.fontText)`, because a placeholder takes colour only.

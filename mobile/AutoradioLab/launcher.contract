@@ -38,7 +38,7 @@ component ChipPlace
   view
     button press=openPage(address, name) testId=`place-${slug}` appearance="none" flex-shrink=0 aria-label=`Open ${name}`
       row padding="0px 16px 0px 0px" align-items="center" min-height=44
-        text name font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg
+        text name font-family=th.fontAction font-size="-exact-body" font-weight=600 color=th.accent
 
 // One page of the stack: tap to jump to it; a close button when it can be closed.
 component StackRow
@@ -65,6 +65,7 @@ component StackRow
               text word font-family=th.fontLabel font-size="-exact-caption2" font-weight=600 letter-spacing=0.6 text-transform="uppercase" color=th.muted
           if here
             box width=3 height=18 background-color=th.accent
+          image "symbol:forward-chevron" color=th.muted
       if isFixed(address) == false and here == false
         button press=closePage(address) testId=`launcher-close-${address}` appearance="none" width=44 height=44 aria-label=`Remove ${name} from the deck`
           row width=44 height=44 align-items="center" justify-content="center"
@@ -91,11 +92,13 @@ component Launcher
           if lnc.hasQuery
             for h in lnc.hits key=h.address
               button press=openPage(h.address, pageName(h.title, h.address)) testId=`search-hit-${h.address}` appearance="none" width="100%"
-                column padding="8px 0" gap=2 align-items="flex-start" width="100%"
-                  text pageName(h.title, h.address) font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg text-align="left" line-clamp=2
-                  row gap=6
-                    text kindWord(kindOf(h.address), h.address) font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-                    text h.detail font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="left" line-clamp=2
+                row padding="8px 0" gap=8 align-items="center" width="100%"
+                  column gap=2 align-items="flex-start" flex=1 min-width=0
+                    text pageName(h.title, h.address) font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg text-align="left" line-clamp=2
+                    row gap=6
+                      text kindWord(kindOf(h.address), h.address) font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+                      text h.detail font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="left" line-clamp=2
+                  image "symbol:forward-chevron" color=th.muted
             if lnc.searchNote != ""
               text lnc.searchNote testId="launcher-search-note" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted
             if lnc.hits.length == 0 and lnc.searchNote == ""

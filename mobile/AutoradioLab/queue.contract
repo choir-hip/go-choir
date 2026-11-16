@@ -71,10 +71,12 @@ component UpNext
               RowRule(indent=0)
             row align-items="center" width="100%"
               button press=queueDo("playAt", `${r.i}`) testId=`queue-row-${r.i}` appearance="none" flex=1 min-width=0 aria-label=`Play ${r.title} now`
-                column gap=2 align-items="flex-start" width="100%" box-sizing="border-box" min-height=52 justify-content="center" padding="8px 0px 8px 0px"
-                  text r.title font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg text-align="left" line-clamp=2
-                  // one quiet caption (one size): what it is (the show for audio, else the kind) and why it is here (the DJ's reason, else who added it)
-                  text `${r.detail != "" ? r.detail : sentence(r.kind)} · ${r.note != "" ? r.note : r.by}` testId=`queue-note-${r.i}` font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="left" line-clamp=2
+                row align-items="center" gap=8 width="100%"
+                  column gap=2 align-items="flex-start" box-sizing="border-box" min-height=52 justify-content="center" padding="8px 0px 8px 0px" flex=1 min-width=0
+                    text r.title font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg text-align="left" line-clamp=2
+                    // one quiet caption (one size): what it is (the show for audio, else the kind) and why it is here (the DJ's reason, else who added it)
+                    text `${r.detail != "" ? r.detail : sentence(r.kind)} · ${r.note != "" ? r.note : r.by}` testId=`queue-note-${r.i}` font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="left" line-clamp=2
+                  image "symbol:forward-chevron" color=th.muted
               button press=queueDo("remove", `${r.i}`) testId=`queue-remove-${r.i}` appearance="none" width=44 height=44 aria-label=`Remove ${r.title}`
                 row width=44 height=44 align-items="center" justify-content="center"
                   image "symbol:close" color=th.muted

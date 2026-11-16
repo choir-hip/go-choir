@@ -40,6 +40,7 @@ component MailRowItem
               text `${count} in this thread` font-family=th.fontLabel font-size="-exact-caption1" color=th.muted
             if attachment
               text "With attachment" font-family=th.fontLabel font-size="-exact-caption1" color=th.muted
+        image "symbol:forward-chevron" color=th.muted
 
 // A state that is a whole screen: loading, empty, offline, error. A sentence, and when it helps, one action.
 component MailNotice
@@ -215,6 +216,7 @@ component MailMessage
               row gap=10 padding="8px 0" width="100%" align-items="baseline" border-top-width=1 border-right-width=0 border-bottom-width=0 border-left-width=0 border-style="solid" border-color=th.rule
                 text t.sender font-family=th.fontHead font-size="-exact-subheadline" font-weight=(t.current ? 700 : 400) color=th.fg flex=1 min-width=0 line-clamp=1 text-align="left"
                 text (t.current ? "this one" : t.stamp) font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+                image "symbol:forward-chevron" color=th.muted
         text mmsg.replyLabel font-family=th.fontLabel font-size="-exact-footnote" color=th.muted margin-top=8
         text "You can also say or type this in the bar below." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
 
