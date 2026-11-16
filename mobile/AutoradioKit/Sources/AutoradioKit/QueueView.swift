@@ -9,6 +9,7 @@ public struct QueueRow: Codable, Sendable, Equatable {
     public var detail = ""
     public var id = ""
     public var note = ""       // a quiet caption when the DJ changed the order ("DJ moved this up")
+    public var by = ""         // who put it there, as a sentence: "Added by you", "Added by the DJ", "From the station"
     public init() {}
 }
 
@@ -58,6 +59,7 @@ extension PlayQueue {
             var r = QueueRow(); r.i = i; r.title = e.item.displayTitle; r.kind = e.item.kind; r.id = e.id
             if case .audio(_, _, let show, _, _, _) = e.item { r.detail = show }
             r.note = e.note
+            r.by = e.addedBy == .reader ? "Added by you" : (e.addedBy == .dj ? "Added by the DJ" : "From the station")
             return r
         }
         q.message = message

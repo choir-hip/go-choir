@@ -181,6 +181,19 @@ final class QueueOpsTests: XCTestCase {
         XCTAssertTrue(enc.contains("\"op\":\"move\"") && enc.contains("\"to_index\":0"))
     }
 
+    // Design lane: Up next says who put each item there ("by", a whole sentence the screen shows as a quiet caption), and the DJ's own reason
+    // stays in `note`. A row the reader added says "Added by you"; the screen shows the note when there is one, else `by`.
+    func testUpNextRowsSayWhoAddedThem() async {
+        let (q, _) = make()
+        q.apply([.enqueue(story("a"))], by: .reader)
+        q.apply([.enqueue(story("b"))], by: .dj)
+        q.apply([.enqueue(story("c"))], by: .app)
+        let rows = q.info().upcoming
+        XCTAssertEqual(rows.map(\.by), ["Added by you", "Added by the DJ", "From the station"])
+        XCTAssertEqual(rows[0].note, "")
+        XCTAssertFalse(rows[1].note.isEmpty, "the DJ's reason stays in note")
+    }
+
     func testMoveRemoveByIdAndLog() async {
         let (q, _) = make()
         q.apply([.enqueue(story("a")), .enqueue(story("b")), .enqueue(story("c"))], by: .reader)

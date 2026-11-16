@@ -522,7 +522,10 @@
       "i": "number",
       "title": "string",
       "kind": "string",
-      "detail": "string"
+      "detail": "string",
+      "id": "string",
+      "note": "string",
+      "by": "string"
     },
     "QueueInfo": {
       "current": "string",

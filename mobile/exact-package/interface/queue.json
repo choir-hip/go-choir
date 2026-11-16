@@ -1,6 +1,6 @@
 {
  "shapes": {
-  "QueueRow": { "i": "number", "title": "string", "kind": "string", "detail": "string", "id": "string", "note": "string" },
+  "QueueRow": { "i": "number", "title": "string", "kind": "string", "detail": "string", "id": "string", "note": "string", "by": "string" },
   "QueueInfo": {
    "current": "string", "currentKind": "string", "audio": "bool", "playing": "bool", "clip": "bool", "keepTitle": "string",
    "elapsed": "number", "duration": "number", "elapsedLabel": "string", "remainingLabel": "string", "fraction": "number",
