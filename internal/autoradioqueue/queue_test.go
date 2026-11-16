@@ -437,6 +437,43 @@ func TestCutTakesTheFenceAtTheStartOfTheStreamAndAfterBlankSpace(t *testing.T) {
 	}
 }
 
+// The shapes a model plausibly writes the fence in: indented, and with the array
+// in a code fence. The ops never reach speech, whatever the chunking.
+func TestCutTakesTheFenceIndentedAndBeforeACodeFence(t *testing.T) {
+	arr := `[{"op":"clear","reason":"r"}]`
+	for name, text := range map[string]string{
+		"indented spaces": "Ok.\n  " + FenceLine("AR1234") + "\n" + arr,
+		"indented tab":    "Ok.\n\t" + FenceLine("AR1234") + "\n" + arr,
+		"indented first":  "  " + FenceLine("AR1234") + arr,
+		"code fence":      "Ok.\n" + FenceLine("AR1234") + "\n```json\n" + arr + "\n```",
+		"code fence bare": "Ok.\n" + FenceLine("AR1234") + "\n```\n" + arr + "\n```",
+		"indent and code": "Ok.\n \t" + FenceLine("AR1234") + " ```json\n" + arr + "\n```",
+	} {
+		for chunk := 1; chunk <= len(text); chunk++ {
+			c := NewCut("AR1234")
+			var got strings.Builder
+			for i := 0; i < len(text); i += chunk {
+				got.WriteString(c.Push(text[i:min(i+chunk, len(text))]))
+			}
+			got.WriteString(c.Flush())
+			if !c.Fenced() || strings.Contains(got.String(), "clear") || strings.Contains(got.String(), "<<<") || strings.Contains(got.String(), "`") {
+				t.Fatalf("%s (chunk %d): speech %q fenced=%t", name, chunk, got.String(), c.Fenced())
+			}
+			d := New(snap3(), nil)
+			d.ApplyJSON(c.Ops())
+			if len(d.Ops()) != 1 {
+				t.Fatalf("%s (chunk %d): the ops %q did not apply: %v", name, chunk, c.Ops(), d.Ops())
+			}
+		}
+	}
+	// an indented echo mid-sentence is still speech
+	c := NewCut("AR1234")
+	text := "Say " + FenceLine("AR1234") + " then more.\n   " + FenceLine("AR1234") + " words."
+	if got := c.Push(text) + c.Flush(); got != text || c.Fenced() {
+		t.Fatalf("%q", got)
+	}
+}
+
 func TestTextAfterTheArrayDoesNotCostTheOps(t *testing.T) {
 	d := New(snap3(), nil)
 	drops := d.ApplyJSON(`[{"op":"remove","id":"q13","reason":"r"}] and that is all, ` + strings.Repeat("x", 5000))

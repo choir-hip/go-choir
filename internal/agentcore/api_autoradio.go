@@ -374,6 +374,15 @@ func (t *autoradioTurn) event(name string, v any) {
 }
 
 func (t *autoradioTurn) speak(sentence string) {
+	if t.queue != nil {
+		// Last guard on a queue turn: the ops array and the fence's token are
+		// never speech, whatever the cut let through.
+		if trimmed := strings.TrimSpace(sentence); strings.HasPrefix(trimmed, `[{"op"`) || strings.HasPrefix(trimmed, `[ {"op"`) ||
+			strings.Contains(sentence, autoradioFenceToken(t.req.Page)) {
+			log.Printf("autoradio: turn %s: a sentence that looked like queue ops was not spoken (%d bytes)", t.req.TurnID, len(sentence))
+			return
+		}
+	}
 	if t.firstSentence.IsZero() {
 		t.firstSentence = time.Now()
 	}
@@ -798,13 +807,8 @@ func (t *autoradioTurn) run(ctx context.Context, streamer provideriface.TextStre
 		case len(t.sentences) > 0:
 			// A sentence has been sent: do not start another voice. The half
 			// sentence in the splitter is dropped.
-			if cut != nil {
-				// what the cut still held is speech like any other; a half
-				// sentence is dropped, as the splitter's is
-				for _, sentence := range splitter.Push(cut.Flush()) {
-					t.speak(sentence)
-				}
-			}
+			// what the cut still held is only the start of a fence, like the
+			// splitter's half sentence: dropped, never spoken
 			hop.Outcome = "failed_mid_stream"
 			t.hops = append(t.hops, hop)
 			status, reason = "failed", "the model failed mid-stream: "+err.Error()
