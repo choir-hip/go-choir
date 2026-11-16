@@ -111,11 +111,12 @@ component PlayerLayer
             QueueAudio()
             // the passage being read, the current sentence lit
             if ri.sentences.length > 0
-              Card(level=2, testId="player-card", minHeight=0)
+              // a quiet content card (the theme's card colour, solid, modest radius): the sentence being read at full strength, the others muted
+              Card(level=1, testId="player-card", minHeight=0)
                 column padding=18 gap=10
-                  column testId="player-passage" gap=6
+                  column testId="player-passage" gap=8
                     for s, k in ri.sentences key=k
-                      text s testId=`player-sentence-${k}` font-family=th.fontRead font-size=19 line-height=1.5
+                      text s testId=`player-sentence-${k}` font-family=th.fontRead font-size=20 line-height=1.5
                         color=(k == ri.sentenceIndex ? th.fg : th.muted) font-weight=(k == ri.sentenceIndex ? 600 : 400)
                         transition=`color ${th.motionFastMs * calm}ms ease`
             // Up next: the one queue, with who added each item
@@ -147,42 +148,43 @@ component PlayerLayer
                           text "You" font-family=th.fontUi font-size=12 font-weight=700 color=th.muted
         // transport: always the same five buttons in the same places; the two skips are 15 seconds for remote audio, a passage otherwise
         column gap=8 padding="8px 20px 4px" align-items="center"
-          row gap=14 justify-content="center" align-items="center"
+          row justify-content="space-around" align-items="center" width="100%"
             button press=previousStory testId="player-prev-story" aria-label="Previous story" appearance="none" width=44 height=44
               row width=44 height=44 align-items="center" justify-content="center"
                 image "symbol:sf/backward.end.fill" color=th.fg
+            // the two skips: 15 seconds for remote audio; for a story or a programme one passage (a segment) back and forward
             if qv.audio
               button press=queueDo("back15", "") testId="player-back15" appearance="none" aria-label="Back 15 seconds" width=44 height=44
-                image "symbol:skip-back-15" color=th.fg
+                row width=44 height=44 align-items="center" justify-content="center"
+                  image "symbol:skip-back-15" color=th.fg
             else
               button press=previous testId="player-prev" aria-label="Previous passage" appearance="none" width=44 height=44
-                image "symbol:skip-back-15" color=th.fg
+                row width=44 height=44 align-items="center" justify-content="center"
+                  image "symbol:sf/backward.fill" color=th.fg
             button press=radioPlay testId="player-play" aria-label=(ri.playing ? "Pause" : "Play") appearance="none" width=60 height=60
-              row width=56 height=56 align-items="center" justify-content="center"
+              row width=60 height=60 align-items="center" justify-content="center"
                 if ri.playing
                   image "symbol:pause-fill" width=36 height=36 color=th.accent
                 else
                   image "symbol:play-fill" width=36 height=36 color=th.accent
             if qv.audio
               button press=queueDo("fwd15", "") testId="player-fwd15" appearance="none" aria-label="Forward 15 seconds" width=44 height=44
-                image "symbol:skip-forward-15" color=th.fg
+                row width=44 height=44 align-items="center" justify-content="center"
+                  image "symbol:skip-forward-15" color=th.fg
             else
               button press=next testId="player-next" aria-label="Next passage" appearance="none" width=44 height=44
-                image "symbol:skip-forward-15" color=th.fg
+                row width=44 height=44 align-items="center" justify-content="center"
+                  image "symbol:sf/forward.fill" color=th.fg
             button press=nextStory testId="player-next-story" aria-label="Next story" appearance="none" width=44 height=44
               row width=44 height=44 align-items="center" justify-content="center"
                 image "symbol:sf/forward.end.fill" color=th.fg
-          // the speed: its value and a reset, then the slider from 0.5x to 3x between a minus and a plus (the drag maths in members-bar.contract
-          // assumes this track, the width less 120)
-          row gap=8 width="100%" align-items="center"
-            text "Speed" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
-            text `${speedShown}×` testId="player-speed" font-family=th.fontUi font-size=14 font-weight=700 color=th.fg flex=1
-            button press=speedReset testId="player-speed-reset" appearance="none" aria-label="Reset the speed to 1 times"
-              row min-height=44 padding="0px 4px" align-items="center" justify-content="center"
-                text "1×" font-family=th.fontUi font-size=15 font-weight=600 color=th.accent
-          row gap=6 width="100%" align-items="center"
-            button press=speedNudge(0 - 0.05) testId="player-speed-down" appearance="none" aria-label="Slower" width=44 height=44
-              row width=44 height=44 align-items="center" justify-content="center"
+          // the speed on one line: the label, the value, minus, the slider from 0.5x to 3x, plus, and a reset only when the speed is not 1x (its
+          // place is kept, so the slider never changes width). The drag maths in members-bar.contract assumes this track: the width less 250.
+          row gap=4 width="100%" align-items="center"
+            text "Speed" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted width=44
+            text `${speedShown}×` testId="player-speed" font-family=th.fontUi font-size=14 font-weight=700 color=th.fg width=44
+            button press=speedNudge(0 - 0.05) testId="player-speed-down" appearance="none" aria-label="Slower" width=36 height=44
+              row width=36 height=44 align-items="center" justify-content="center"
                 text "−" font-family=th.fontUi font-size=22 font-weight=600 color=th.fg
             column flex=1 min-width=0 height=44 justify-content="center" pan=speedMove panrelease=speedEnd testId="player-speed-slider" aria-label="Speed"
               row width="100%" height=22 align-items="center" padding-left=11
@@ -190,7 +192,13 @@ component PlayerLayer
                 row width=22 height=22 margin-left=-11 justify-content="center"
                   box width=3 height=22 background-color=th.accent
                 box flex=1 height=4 background-color=th.rule
-            button press=speedNudge(0.05) testId="player-speed-up" appearance="none" aria-label="Faster" width=44 height=44
-              row width=44 height=44 align-items="center" justify-content="center"
+            button press=speedNudge(0.05) testId="player-speed-up" appearance="none" aria-label="Faster" width=36 height=44
+              row width=36 height=44 align-items="center" justify-content="center"
                 text "+" font-family=th.fontUi font-size=22 font-weight=600 color=th.fg
+            if speedShown != 1
+              button press=speedReset testId="player-speed-reset" appearance="none" aria-label="Reset the speed to 1 times" width=32 height=44
+                row width=32 height=44 align-items="center" justify-content="center"
+                  text "1×" font-family=th.fontUi font-size=14 font-weight=600 color=th.accent
+            else
+              box width=32 height=44
         // the prompt is the bar's (one field, not two), so the player has none

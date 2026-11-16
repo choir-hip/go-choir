@@ -41,11 +41,13 @@ component Card
     testId: string
     minHeight: number
   slot
-  derive glass = (level >= 3 ? th.material3 : level == 2 ? th.material2 : th.material1) == "glass"
+  // A content card is a solid surface in the theme's card colour at every level (the level only deepens its shadow): a glass card over a plain page read as a
+  // light grey slab with low contrast (owner QA, 2026-11-15). Only level 3 may be glass.
+  derive glass = level >= 3 and th.material3 == "glass"
   view
     column testId=testId position="relative" min-height=minHeight border-radius=th.radiusCard
       backgroundMaterial=(glass ? "glass" : "none")
-      background-color=(glass ? "transparent" : (level >= 2 ? th.paper : th.paper2))
+      background-color=(glass ? "transparent" : th.paper2)
       box-shadow=(level >= 3 ? th.shadow3 : level == 2 ? th.shadow2 : th.shadow1)
       children
 

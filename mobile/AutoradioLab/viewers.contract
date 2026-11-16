@@ -27,6 +27,22 @@ component Chip
         text label font-family=th.fontUi font-size=15 font-weight=600 color=(active ? th.fg : th.accent)
         box width=20 height=2 background-color=(active ? th.accent : "transparent")
 
+// One choice of a set (a zoom, a mode, a page of results): the chosen one full strength with the short accent rule, the others MUTED (the accent is
+// for actions, never for a choice not taken). `press` is an action call from the caller.
+component ChoiceChip
+  inject
+    th: Theme
+  props
+    label: string
+    active: bool
+    testId: string
+    press: action
+  view
+    button press=press testId=testId appearance="none" flex-shrink=0 padding="0px 12px 0px 0px"
+      column align-items="flex-start" justify-content="center" min-height=44 gap=3
+        text label font-family=th.fontUi font-size=15 font-weight=600 color=(active ? th.fg : th.muted)
+        box width=20 height=2 background-color=(active ? th.accent : "transparent")
+
 // The page's heading, scrolling away with nothing: the viewers that fill the screen keep it above their frame.
 component ViewerHeader
   inject
@@ -67,9 +83,9 @@ component ImageViewer
     column flex=1 min-height=0 width="100%" testId="viewer-image"
       ViewerHeader(title=fvInfo.name, sub=`${fvInfo.kindLabel} · ${fvInfo.width.toFixed(0)} × ${fvInfo.height.toFixed(0)} · ${fvInfo.sizeLabel}`)
       row gap=8 padding-left=20 padding-right=20 padding-bottom=10 align-items="center" flex-shrink=0
-        Chip(label="Fit", active=(fvZoom == 1), testId="image-fit", press=fvZoomTo(1))
-        Chip(label="2×", active=(fvZoom == 2), testId="image-2x", press=fvZoomTo(2))
-        Chip(label="4×", active=(fvZoom == 4), testId="image-4x", press=fvZoomTo(4))
+        ChoiceChip(label="Fit", active=(fvZoom == 1), testId="image-fit", press=fvZoomTo(1))
+        ChoiceChip(label="2×", active=(fvZoom == 2), testId="image-2x", press=fvZoomTo(2))
+        ChoiceChip(label="4×", active=(fvZoom == 4), testId="image-4x", press=fvZoomTo(4))
         Chip(label="Center", active=false, testId="image-center", press=fvCenter)
         Chip(label="Share", active=false, testId="image-share", press=fvShare(fvInfo.name, fvInfo.src))
       // The frame: it clips the picture (a rounded wrapper), and ends above the bar.
@@ -181,7 +197,7 @@ component PdfViewer
           else
             text `On pages` font-family=th.fontUi font-size=13 color=th.muted
             for p in fvPages.pages key=p
-              Chip(label=`${p.toFixed(0)}`, active=(p == fvPage), testId=`pdf-hit-${p}`, press=fvGo(p))
+              ChoiceChip(label=`${p.toFixed(0)}`, active=(p == fvPage), testId=`pdf-hit-${p}`, press=fvGo(p))
       // A page change re-creates the frame: PDFView opens at src's #page=N, and does not follow a changed fragment on its own.
       column flex=1 min-height=0 margin-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 16px)" overflow="hidden" border-radius=th.radiusCard box-shadow=th.shadow1
         for n in [fvPage] key=n

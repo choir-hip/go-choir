@@ -227,9 +227,11 @@ component PaperPage
                 text pfront.note font-family=th.fontRead font-size=16 line-height=1.4 color=th.fg text-align="left" testId="paper-mine-note"
               if pfront.mineState == "nopicks"
                 button press=openPage("onboarding:edit", "My edition") appearance="none" testId="paper-choose-topics"
-                  Btn(label="Choose topics", primary=true, wide=false)
-          // Not set up yet: "Make it yours" (voice setup and the edition topics) until the listener has done it or skipped it.
-          FirstRunCard()
+                  Btn(label="Choose topics", primary=false, wide=false)
+          // Not set up yet: "Make it yours" (voice setup and the edition topics) until the listener has done it or skipped it. Not on My edition: that
+          // view already says it in its own paragraph with its own action (two prompts for one thing was one too many).
+          if pfront.viewId == "front"
+            FirstRunCard()
           // demo mode, Settings, Developer, "Demo controls": three editions to show how the page changes with the day
           if dm.on and devDetails
             column gap=8 width="100%" padding-top=8 box-sizing="border-box"

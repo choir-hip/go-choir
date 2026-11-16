@@ -117,6 +117,8 @@ component BarShell
   derive calm = still ? 0 : 1
   derive enter = still ? "none" : "barRise 220ms ease-out both"
   derive panelH = vp.height * 0.62
+  // the player is the page the reader lives in: more of the screen, so the passage and Up next have room above the fixed transport
+  derive playerH = vp.height * 0.8
   view
     column testId="bar-stack" position="absolute" left=0 right=0 bottom=0 z-index=20
       // the launcher and the player rise from the lens; the lens stays under them, visible and usable
@@ -124,7 +126,7 @@ component BarShell
         column testId="launcher" width="100%" height=panelH animation=(still ? "none" : "sheetUp 260ms ease-out both")
           Launcher()
       if layer == "player"
-        column testId="player" width="100%" height=panelH animation=(still ? "none" : "sheetUp 260ms ease-out both")
+        column testId="player" width="100%" height=playerH animation=(still ? "none" : "sheetUp 260ms ease-out both")
           PlayerLayer()
       // the lens: glass over the page, full width, top corners rounded, running off the bottom edge
       column testId="bar" position="relative" width="100%" box-sizing="border-box" gap=4

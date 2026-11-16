@@ -18,7 +18,7 @@ component TextureRowView
       Card(level=(pinned ? 2 : 1), testId=`textures-card-${r.address}`, minHeight=0)
         column padding=16 gap=6 align-items="flex-start" width="100%"
           if pinned
-            text "YOUR EDITION" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing="0.08em" color=th.accent
+            text "YOUR EDITION" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing="0.08em" color=th.muted
           text r.title font-family=th.fontRead font-size=21 font-weight=700 line-height=1.2 color=th.fg text-align="left"
           row align-items="center" gap=8
             if r.revising
@@ -61,7 +61,7 @@ component TexturesPage
       if tlist.status == "ready" and tlist.hasEdition == false and q == ""
         Card(level=2, testId="textures-make-edition-card", minHeight=0)
           column padding=18 gap=8 align-items="flex-start" width="100%" box-sizing="border-box"
-            text "YOUR EDITION" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing="0.08em" color=th.accent
+            text "YOUR EDITION" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing="0.08em" color=th.muted
             text "Make your edition" font-family=th.fontRead font-size=22 font-weight=700 color=th.fg
             text "A front page written for you each morning from the sources you follow. Say what you want in it." font-family=th.fontRead font-size=16 line-height=1.45 color=th.muted width="100%"
             button press=editAsk("Make my edition: ") testId="textures-make-edition" appearance="none"

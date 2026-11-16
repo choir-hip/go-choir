@@ -6,7 +6,7 @@
 // files-new-toggle, files-new-input, files-new-go, files-upload, files-banner, files-list, files-empty; page-title on every page.
 use Theme, FileListing, FileInfo, FileRow from "@choir/autoradio"
 use PageScroll, Card, RowRule from "./ui.contract"
-use Chip, NoPreview, ImageViewer, VideoViewer, AudioViewer, PdfViewer, EpubViewer, TextViewer, CsvViewer from "./viewers.contract"
+use Chip, ChoiceChip, NoPreview, ImageViewer, VideoViewer, AudioViewer, PdfViewer, EpubViewer, TextViewer, CsvViewer from "./viewers.contract"
 
 component FilePage
   inject
@@ -140,29 +140,28 @@ component FilesPlace
     fsPicked: action
   view
     PageScroll(id="files")
-      text "Files" role="heading" aria-level=1 testId="page-title" font-size=34 font-weight=700
+      // the title with the two things you can add at its trailing edge, as Mail's New message is
+      row align-items="center" gap=4 width="100%"
+        text "Files" role="heading" aria-level=1 testId="page-title" font-size=34 font-weight=700 flex=1 min-width=0
+        if fsMode == "browse"
+          Chip(label="New folder", active=fsNewing, testId="files-new-toggle", press=fsNewToggle)
+        Chip(label="Add a file", active=false, testId="files-upload", press=fsUpload)
       // Search the names under this folder (a bounded walk); Enter sends it. The field is the system's search field.
       input type="search" value=fsDraft input=fsEditQuery submit=fsSearch placeholder="Search files" aria-label="Search files" testId="files-search"
         enterkeyhint="search" font-family=th.fontUi font-size=17 color=th.fg min-height=48 padding="8px 0px" border-width=0 background-color="transparent"
         ::placeholder
           color=th.muted
       RowRule(indent=0)
-      row gap=8 align-items="center"
-        Chip(label="Browse", active=(fsMode == "browse"), testId="files-mode-browse", press=fsSetMode("browse"))
-        Chip(label="Recent", active=(fsMode == "recent"), testId="files-mode-recent", press=fsSetMode("recent"))
+      // one row: the two modes (a set) at the left; at the right the sort (tap to change what it sorts by; the arrow turns it round) and the view
+      row gap=4 align-items="center" width="100%" testId="files-sorts"
+        ChoiceChip(label="Browse", active=(fsMode == "browse"), testId="files-mode-browse", press=fsSetMode("browse"))
+        ChoiceChip(label="Recent", active=(fsMode == "recent"), testId="files-mode-recent", press=fsSetMode("recent"))
         box flex=1
-        Chip(label="List", active=(fsGrid == false), testId="files-view-list", press=fsSetGrid(false))
-        Chip(label="Grid", active=fsGrid, testId="files-view-grid", press=fsSetGrid(true))
-      if fsMode == "browse"
-        // Sort, direction and the two things you can add: one scrolling row.
-        row flex-wrap="wrap" gap=8 width="100%" testId="files-sorts"
-          Chip(label="Name", active=(fsSort == "name"), testId="files-sort-name", press=fsSortBy("name"))
-          Chip(label="Modified", active=(fsSort == "modified"), testId="files-sort-modified", press=fsSortBy("modified"))
-          Chip(label="Size", active=(fsSort == "size"), testId="files-sort-size", press=fsSortBy("size"))
-          Chip(label="Kind", active=(fsSort == "kind"), testId="files-sort-kind", press=fsSortBy("kind"))
+        if fsMode == "browse"
+          Chip(label=`Sort: ${fsSort == "name" ? "Name" : (fsSort == "modified" ? "Modified" : (fsSort == "size" ? "Size" : "Kind"))}`, active=false, testId="files-sort-cycle", press=fsSortBy(fsSort == "name" ? "modified" : (fsSort == "modified" ? "size" : (fsSort == "size" ? "kind" : "name"))))
           Chip(label=(fsDesc ? "↓" : "↑"), active=false, testId="files-sort-dir", press=fsFlip)
-          Chip(label="New folder", active=fsNewing, testId="files-new-toggle", press=fsNewToggle)
-          Chip(label="Add a file", active=false, testId="files-upload", press=fsUpload)
+        Chip(label=(fsGrid ? "List" : "Grid"), active=false, testId="files-view-toggle", press=fsSetGrid(fsGrid == false))
+      if fsMode == "browse"
         // Breadcrumbs: Files / Documents / ...
         row flex-wrap="wrap" gap=4 align-items="center" width="100%" testId="files-crumbs"
           for c, i in fsList.crumbs key=c.path
