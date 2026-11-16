@@ -17,10 +17,14 @@
 //      before the desktop was stable is not a crash).
 //  F8  A boot marker left by the previous load is reported as an interrupted
 //      boot; once the desktop was stable it is not.
-//  F9  Another tab's markers are neither reported nor removed.
+//  F9  Another tab's markers are not reported while that tab is demonstrably
+//      alive (nor removed), but ARE a death when that tab is not alive: a new
+//      tab with a new id must not walk into the loop. The same for boot markers.
 //  F10 Storage that is missing, throws, or holds garbage never throws, and
 //      reports nothing dead: the desktop behaves as today.
-//  F11 Markers older than a day are dropped, not held forever.
+//  F11 Markers do not expire by age (a user back after two days must not
+//      re-enter the loop); only proof, close, a window the server no longer
+//      has, or a count cap (oldest first) ends one.
 //  F12 A pending marker for a window the server no longer has is pruned.
 //  F13 The quiet period counts only visible time, restarts when a window is
 //      unmounted, proves each window once, and a late death (after mount but
@@ -28,6 +32,9 @@
 //  F15 The step an app reported last survives into the held record, the
 //      last-step lookup and a per-device history capped at 10 (appId, step,
 //      user agent, time, count). A step for an unknown window is ignored.
+//  F16 Liveness: with Web Locks, a tab is alive iff it holds its lock; without
+//      them, iff its heartbeat is fresher than 6 s; broken storage or locks
+//      mean nobody is alive (hold, the conservative answer).
 //  F14 hold-all is the page-level answer: interrupted boot with no window
 //      identified; with a window identified only that window is held.
 import test from 'node:test';
@@ -37,6 +44,9 @@ import {
   createProofClock,
   QUIET_MS,
   HOLD_CLOSE_FIRST_AFTER,
+  PENDING_CAP,
+  HEARTBEAT_KEY,
+  readLiveTabs,
 } from '../src/lib/crash-guard.js';
 
 function memory() {
@@ -133,18 +143,24 @@ test('F8 boot marker: interrupted until stable', () => {
   assert.equal(guardOn(s).beginBoot().interrupted, false);
 });
 
-test('F9 another tab is neither reported nor removed', () => {
+test('F9 another tab: left alone while alive, a death when not alive', () => {
   const s = memory();
   const other = createCrashGuard({ storage: s, key: 'k', tabId: 'tab-b', now: () => 1000 });
   other.beginBoot();
   other.markPending(win('w1'));
-  const mine = guardOn(s);
-  assert.equal(mine.beginBoot().interrupted, false);
-  assert.deepEqual(mine.takeDeaths(['w1']), {});
-  assert.deepEqual(
-    createCrashGuard({ storage: s, key: 'k', tabId: 'tab-b', now: () => 1000 }).takeDeaths(['w1']),
-    { w1: 1 },
-  );
+  const live = guardOn(s);
+  assert.equal(live.beginBoot(new Set(['tab-b'])).interrupted, false);
+  assert.deepEqual(live.takeDeaths(['w1'], new Set(['tab-b'])), {});
+  // tab-b still holds its markers; a fresh tab that finds it dead holds the window.
+  const fresh = createCrashGuard({ storage: s, key: 'k', tabId: 'tab-c', now: () => 1000 });
+  assert.equal(fresh.beginBoot(new Set()).interrupted, true);
+  assert.deepEqual(fresh.takeDeaths(['w1'], new Set()), { w1: 1 });
+});
+
+test('F9b a dead other tab holds the window; no alive set means dead', () => {
+  const s = memory();
+  createCrashGuard({ storage: s, key: 'k', tabId: 'tab-b', now: () => 1000 }).markPending(win('w1'));
+  assert.deepEqual(guardOn(s).takeDeaths(['w1']), { w1: 1 });
 });
 
 test('F10 broken storage never throws and reports nothing', () => {
@@ -165,11 +181,31 @@ test('F10 broken storage never throws and reports nothing', () => {
   assert.deepEqual(guardOn(s).takeDeaths(['w1']), {});
 });
 
-test('F11 old markers are dropped', () => {
+test('F11 markers never expire by age; the count is capped', () => {
   const s = memory();
   createCrashGuard({ storage: s, key: 'k', tabId: 'tab-a', now: () => 1000 }).markPending(win('w1'));
-  const later = createCrashGuard({ storage: s, key: 'k', tabId: 'tab-a', now: () => 1000 + 25 * 3600 * 1000 });
-  assert.deepEqual(later.takeDeaths(['w1']), {});
+  const later = createCrashGuard({ storage: s, key: 'k', tabId: 'tab-a', now: () => 1000 + 90 * 24 * 3600 * 1000 });
+  assert.deepEqual(later.takeDeaths(['w1']), { w1: 1 });
+  const s2 = memory();
+  for (let i = 0; i < PENDING_CAP + 5; i++) {
+    createCrashGuard({ storage: s2, key: 'k', tabId: 'tab-a', now: () => 1000 + i }).markPending(win('c' + i));
+  }
+  const ids = Array.from({ length: PENDING_CAP + 5 }, (_, i) => 'c' + i);
+  assert.equal(Object.keys(guardOn(s2).takeDeaths(ids)).length, PENDING_CAP);
+});
+
+test('F16 liveness from locks, heartbeat, or nothing', async () => {
+  const locks = (names) => ({ query: async () => ({ held: names.map((name) => ({ name })) }) });
+  let t = 100000;
+  const alive = await readLiveTabs({ locks: locks(['choir-desktop-tab-b', 'other-lock']), storage: null, now: () => t });
+  assert.deepEqual([...alive], ['b']);
+  const hb = memory();
+  hb.setItem(HEARTBEAT_KEY, JSON.stringify({ fresh: t - 1000, stale: t - 7000 }));
+  assert.deepEqual([...(await readLiveTabs({ locks: null, storage: hb, now: () => t }))], ['fresh']);
+  const boom = { getItem() { throw new Error('x'); }, setItem() {}, removeItem() {} };
+  assert.equal((await readLiveTabs({ locks: null, storage: boom, now: () => t })).size, 0);
+  assert.equal((await readLiveTabs({ locks: { query: async () => { throw new Error('x'); } }, storage: null, now: () => t })).size, 0);
+  assert.equal((await readLiveTabs({ locks: null, storage: null, now: () => t })).size, 0);
 });
 
 test('F12 a marker for a window the server no longer has is pruned', () => {
