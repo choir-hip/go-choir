@@ -22,9 +22,6 @@ const hostCallerHeader = "X-Choir-Host-Caller"
 // carry. A caller is added here in a reviewed change, never by a request.
 var hostJudgmentCallers = map[string]string{
 	"front-importance": "host:front-importance",
-	// The podcast clips match: one call a run, every (story, passage) pair
-	// (docs/design/podcast-clips-2026-11-15.md section 3).
-	"podcast-clips": "host:podcast-clips",
 }
 
 // HandleHostJudgment serves POST /provider/v1/host/judgments: the pinned Jev

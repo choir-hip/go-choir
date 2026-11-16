@@ -118,9 +118,6 @@ func main() {
 	}
 	store.SetReceiptCompaction(receiptPolicy)
 	log.Printf("corpusd: receipt compaction: %s", receiptPolicy)
-	// The podcast match job's Jev door: the gateway's host route, as the
-	// caller podcast-clips. Without it the job refuses and no clip is made.
-	platform.PodcastJudgeFromEnv(svc)
 	handler := platform.NewHandler(svc)
 	if cfg.VmctlURL != "" {
 		svc.SetComputerRegistry(platform.NewVmctlComputerRegistry(vmctl.NewClient(cfg.VmctlURL)))
