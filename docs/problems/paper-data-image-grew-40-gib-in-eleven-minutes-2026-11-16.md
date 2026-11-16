@@ -49,3 +49,24 @@ migration.
 
 The next hourly reading will show whether the snapshot root moved and
 whether the image is still at 84 GiB.
+
+## Settled, 01:40Z
+
+It was the snapshot capture. The paper's console shows the store held by
+`internal/snapshot.copyPages` and "a store snapshot is streaming" at
+00:35:58Z, then "checkpoint after snapshot capture" at 00:36:09Z. The
+snapshot is 41.76 GB: a whole copy of the store, written inside the guest.
+A second capture finished at 01:12:56Z (snapshot root f51787694d0a, head
+12,028,074) and the image stayed at 84 GiB, so the copy reuses the same
+blocks and the 40 GiB is paid once, not per capture.
+
+What is still open:
+
+- The paper now needs twice its store on disk for as long as captures are
+  whole copies. At 42 GB and growing, that is the largest single user of
+  the host's disk and it is not in the forecast.
+- During the copy the console prints `store_stalled` lines with the
+  snapshot and object-snapshot readers holding the store. Whether a turn
+  waited on them is not measured.
+- The host's fast-drain warning fired for this step (39.9 GiB in 6 h). It
+  will clear by itself when the step leaves the window; it is not a drain.
