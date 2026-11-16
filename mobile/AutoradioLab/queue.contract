@@ -19,9 +19,10 @@ component QueueScrub
       text qv.elapsedLabel testId="queue-elapsed" font-family=th.fontMono font-size=13 color=th.muted width=52
       column flex=1 min-width=0 height=44 justify-content="center" pan=scrubMove panrelease=scrubEnd testId="queue-scrub" aria-label="Position"
         row width="100%" height=22 align-items="center" padding-left=11
-          box width=`${scrubPct}%` height=6 border-radius=3 background-color=th.accent
-          box width=22 height=22 border-radius=11 margin-left=-11 background-color=th.accent box-shadow=th.shadow2
-          box flex=1 height=6 border-radius=3 background-color=th.rule
+          box width=`${scrubPct}%` height=4 background-color=th.accent
+          row width=22 height=22 margin-left=-11 justify-content="center"
+            box width=3 height=22 background-color=th.accent
+          box flex=1 height=4 background-color=th.rule
       text qv.remainingLabel testId="queue-remaining" font-family=th.fontMono font-size=13 color=th.muted width=60 text-align="right"
 
 // A clip: it says what it is cut from and offers Keep listening (the episode carries on past the clip's end). The 15 second skips are the

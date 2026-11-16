@@ -8,7 +8,7 @@
 // paper-edition-<big|even|thin|default>, paper-signin, paper-status.
 use Theme, ChoirAuth, DemoInfo, PaperFront, PaperBand, PaperItem from "@choir/autoradio"
 use paperFront from "@choir/autoradio"
-use Card, Btn, BarClear, sectionName, SegmentedTrack, SegmentFace, Emerge from "./ui.contract"
+use Card, Btn, BarClear, sectionName, SegmentedTrack, SegmentFace, ChoiceWord, Emerge from "./ui.contract"
 use FirstRunCard from "./onboarding.contract"
 
 // A headline with its dek and meta, as one story. `kicker` shows the section above, `listen` the play-from-here button.
@@ -150,9 +150,10 @@ component Band
             for s, i in b.items key=s.route
               BriefRow(s=s, kicker=false, first=(i == 0))
 
-// One choice of the view switcher. The two main views (Front page, My edition: `segment`) are a segmented pair; the categories are
-// quiet outline chips in a wrapping row (never a sideways scroller: the deck takes sideways drags). The set does not change when one is
-// picked, only which one is filled, and the ring is the same width in both states, so a pick never moves or resizes anything.
+// One choice of the view switcher. The two main views (Front page, My edition: `segment`) are a pair of words, the chosen one full strength with a
+// short accent rule under it; the categories are a plain wrapping line of words, the chosen one ruled the same way (never a sideways scroller: the
+// deck takes sideways drags; no capsule, no outline: owner, 2026-11-15). The set does not change when one is picked, only which word is
+// full strength, and the rule's space is always there, so a pick never moves or resizes anything.
 component ViewChip
   inject
     th: Theme
@@ -168,11 +169,8 @@ component ViewChip
       button press=pickView(vid) appearance="none" testId=`paper-section-${vid}` role="radio" aria-checked=sel flex=1 min-width=0
         SegmentFace(label=label, selected=sel)
     if segment == false
-      button press=pickView(vid) appearance="none" testId=`paper-section-${vid}` role="radio" aria-checked=sel flex-shrink=0 align-self="flex-start"
-        row align-items="center" justify-content="center" min-height=32 padding="0px 12px" box-sizing="border-box" border-radius=th.radiusPill
-          border-width=1 border-style="solid" border-color=(sel ? th.accent : th.rule) background-color=(sel ? th.accent : "transparent")
-          transition=`background-color ${th.motionFastMs}ms ease, border-color ${th.motionFastMs}ms ease`
-          text label font-family=th.fontUi font-size=13 font-weight=600 color=(sel ? th.onAccent : th.fg)
+      button press=pickView(vid) appearance="none" testId=`paper-section-${vid}` role="radio" aria-checked=sel flex-shrink=0 align-self="flex-start" padding="0px 12px 0px 0px"
+        ChoiceWord(label=label, selected=sel)
 
 component PaperPage
   inject

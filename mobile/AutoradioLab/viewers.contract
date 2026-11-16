@@ -11,7 +11,8 @@
 use Theme, FileInfo, FileChapter, FilePages from "@choir/autoradio"
 use PageScroll, Card from "./ui.contract"
 
-// A small pill: the one control shape of the Files place and the viewers. `press` is an action call from the caller.
+// The one control of the Files place and the viewers, drawn as a word (no pill: owner, 2026-11-15): a text action in the accent; when `active` (a
+// chosen mode, sort or zoom) it is full strength with a short accent rule under it. `press` is an action call from the caller.
 component Chip
   inject
     th: Theme
@@ -21,9 +22,10 @@ component Chip
     testId: string
     press: action
   view
-    button press=press testId=testId appearance="none" padding="7px 14px" border-radius=th.radiusPill flex-shrink=0
-      background-color=(active ? th.accent : th.paper2) box-shadow=(active ? th.shadow1 : "none")
-      text label font-family=th.fontUi font-size=14 font-weight=600 color=(active ? th.onAccent : th.fg)
+    button press=press testId=testId appearance="none" flex-shrink=0 padding="0px 12px 0px 0px"
+      column align-items="flex-start" justify-content="center" min-height=44 gap=3
+        text label font-family=th.fontUi font-size=15 font-weight=600 color=(active ? th.fg : th.accent)
+        box width=20 height=2 background-color=(active ? th.accent : "transparent")
 
 // The page's heading, scrolling away with nothing: the viewers that fill the screen keep it above their frame.
 component ViewerHeader

@@ -124,9 +124,9 @@ component SetupRowItem
 // disclosure chevron at the leading edge (a 48 by 52 tap target; it opens and closes, it does not select), the name as text, a quiet
 // count of what inside is picked, and the selection mark at the trailing edge (the row is the tap target that selects). A subtopic sits
 // under its category (48 tall) beside a hairline guide; one that sits under several categories says "also in <the others>" under its name
-// and lights up under all of them, because it is one topic. Unselected rows are plain; selected rows carry the accent mark and a faint wash;
-// "partial" (some inside picked) is the accent ring with a dash and a fainter wash. Only colour changes on a pick: the mark, the row and the
-// text keep their size, so selecting never moves anything. Opening and closing moves what is below, gently (not with Reduce Motion).
+// and lights up under all of them, because it is one topic. Unpicked rows have muted text and a quiet plus; picked rows have full-strength text,
+// an accent check and a faint wash; "partial" (some inside picked) has full-strength text and an accent dash. Only colour and the glyph change on
+// a pick: the mark, the row and the text keep their size, so selecting never moves anything. Opening and closing moves what is below, gently (not with Reduce Motion).
 component TopicRowItem
   inject
     th: Theme
@@ -145,7 +145,7 @@ component TopicRowItem
   derive discLabel = expanded ? `Close ${label}` : `Open ${label}`
   derive pickLabel = partial ? `${label}, some inside picked` : label
   derive markState = selected ? "on" : (partial ? "partial" : "off")
-  derive wash = selected ? 0.12 : (partial ? 0.06 : 0)
+  derive wash = selected ? 0.08 : 0
   derive sub = kind == "sub"
   derive rowH = sub ? 48 : 52
   view
@@ -174,7 +174,7 @@ component TopicRowItem
           button press=obToggleTopic(label) testId=`ob-topic-${label}` role="radio" aria-checked=selected aria-label=pickLabel appearance="none" flex=1 min-width=0
             row align-items="center" gap=12 width="100%" box-sizing="border-box" min-height=rowH padding="0px 16px 0px 0px"
               column flex=1 min-width=0 gap=1 align-items="flex-start"
-                text label font-family=th.fontUi font-size=(sub ? 16 : 17) font-weight=(sub ? 400 : 600) color=th.fg text-align="left"
+                text label font-family=th.fontUi font-size=(sub ? 16 : 17) font-weight=(sub ? 400 : 600) color=((selected or partial) ? th.fg : th.muted) text-align="left"
                 if sub and note != ""
                   text note font-family=th.fontUi font-size=13 color=th.muted text-align="left"
               if sub == false and note != ""
@@ -202,10 +202,12 @@ component TopicPicker
         for r, i in ob.tree key=r.key
           TopicRowItem(rowId=r.key, label=r.label, kind=r.kind, selected=r.selected, partial=r.partial, expandable=r.expandable, expanded=r.expanded, note=r.note, first=(i == 0))
       row gap=8 align-items="center" width="100%"
-        input value=obTopicText input=editObTopic submit=obAddTopic placeholder="Add your own topic" aria-label="Add your own topic" testId="ob-topic-input" enterkeyhint="done" flex=1 min-width=0 min-height=44
-          font-family=th.fontRead font-size=17 color=th.fg padding="8px 12px" border-width=1 border-style="solid" border-color=th.rule border-radius=th.radiusControl background-color=th.paper2
-          ::placeholder
-            color=th.muted
+        column flex=1 min-width=0
+          input value=obTopicText input=editObTopic submit=obAddTopic placeholder="Add your own topic" aria-label="Add your own topic" testId="ob-topic-input" enterkeyhint="done" min-height=44
+            font-family=th.fontRead font-size=17 color=th.fg padding="8px 0px" border-width=0 background-color="transparent"
+            ::placeholder
+              color=th.muted
+          RowRule(indent=0)
         button press=obAddTopic testId="ob-topic-add" appearance="none" aria-label="Add this topic"
           Btn(label="Add", primary=false, wide=false)
       text ob.selectionLine testId="ob-selection" font-family=th.fontUi font-size=15 line-height=1.4 color=th.muted
