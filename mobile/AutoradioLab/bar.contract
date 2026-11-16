@@ -109,7 +109,8 @@ component BarShell
   derive tint = st == "error" ? th.danger : (st == "revised" ? th.success : (st == "playing" ? th.accent2 : th.accent))
   derive tintOn = (lineMode == "none" or lineMode == "aim" or lineMode == "paused" or lineMode == "listen") ? 0 : (st == "playing" ? 0.08 : 0.12)
   derive markState = heardNow ? "listening" : (st == "paused" ? "idle" : st)
-  derive isPlaying = ri.playing or st == "playing"
+  // One truth for the button and the strip: the bar state decides; the radio view (which can lag a pause) only counts while the bar has no verdict.
+  derive isPlaying = st == "playing" or (st != "paused" and ri.playing)
   derive playWord = isPlaying ? "Pause" : "Play"
   derive playLabel = isPlaying ? "Pause the radio" : (st == "paused" ? "Resume the radio" : "Play the edition")
   derive still = th.reducedMotion

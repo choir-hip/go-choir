@@ -176,7 +176,8 @@ public enum SegmentPrep {
     }
     public static func title(_ raw: String, kind: String) -> String {
         let t = oneLine(raw)
-        return t.isEmpty || looksLikeRef(t) ? SegmentKinds.label(kind) : t
+        // A bridge has no name of its own to show: the programme's, never the word "Bridge".
+        return t.isEmpty || looksLikeRef(t) ? (kind == "bridge" ? "Autoradio" : SegmentKinds.label(kind)) : t
     }
     static func label(_ raw: String) -> String {
         let t = oneLine(raw)
