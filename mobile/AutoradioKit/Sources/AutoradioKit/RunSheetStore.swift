@@ -27,30 +27,48 @@ public struct AirReport: Equatable, Sendable {
 public enum RunSheetPostOutcome: Sendable {
     /// The route answered 200: every op of the batch is now the server's (replayed op_ids answer the same).
     case answered([RunSheetResult])
+    /// 200 with a `sheet_epoch`: the server's sheet was repaired and the epoch the phone held is not its own. The sender must take the sheet.
+    case answeredEpoch([RunSheetResult], epoch: Int64)
     /// 404 or 501: the route is not there yet. The ops stay pending.
     case notYet
-    /// No network, or the computer did not answer. The ops stay pending.
+    /// No network, the computer did not answer, or it is busy (429, 503). The ops stay pending and are sent again after a pause.
     case offline
 }
 
 public protocol RunSheetPoster: Sendable {
     func post(ops: [RunSheetOp]) async -> RunSheetPostOutcome
+    /// As `post(ops:)`, with the `sheet_epoch` the phone holds (0: none), which the server compares with its own.
+    func post(ops: [RunSheetOp], epoch: Int64) async -> RunSheetPostOutcome
+    /// GET /api/autoradio/sheet: the server's whole sheet (and its epoch), or nil when it cannot be had.
+    func fetchSheet() async -> RunSheet?
+}
+extension RunSheetPoster {
+    public func post(ops: [RunSheetOp], epoch: Int64) async -> RunSheetPostOutcome { await post(ops: ops) }
+    public func post(ops: [RunSheetOp]) async -> RunSheetPostOutcome { await post(ops: ops, epoch: 0) }
+    public func fetchSheet() async -> RunSheet? { nil }
 }
 
 /// The run sheet route on the listener's computer.
 public struct RouteSheetPoster: RunSheetPoster {
     let baseURL: String
     public init(baseURL: String) { self.baseURL = baseURL }
-    public func post(ops: [RunSheetOp]) async -> RunSheetPostOutcome {
-        struct Body: Encodable { var ops: [RunSheetOp] }
-        struct Answer: Decodable { var results: [RunSheetResult]? }
-        guard let data = try? JSONEncoder().encode(Body(ops: ops)) else { return .answered([]) }
+    public func post(ops: [RunSheetOp], epoch: Int64) async -> RunSheetPostOutcome {
+        struct Body: Encodable { var ops: [RunSheetOp]; var sheet_epoch: Int64? }
+        struct Answer: Decodable { var results: [RunSheetResult]?; var sheet_epoch: Int64? }
+        guard let data = try? JSONEncoder().encode(Body(ops: ops, sheet_epoch: epoch > 0 ? epoch : nil)) else { return .answered([]) }
         do {
             let r = try await ChoirEnvironment.shared.client(baseURL: baseURL).send("POST", "/api/autoradio/sheet/ops", body: data, route: "/api/autoradio/sheet/ops")
-            return .answered((try? JSONDecoder().decode(Answer.self, from: r.data))?.results ?? [])
-        } catch ChoirError.server(let status, _) where status == 404 || status == 501 || status == 503 { return .notYet }
+            let a = try? JSONDecoder().decode(Answer.self, from: r.data)
+            if let e = a?.sheet_epoch, e > 0 { return .answeredEpoch(a?.results ?? [], epoch: e) }
+            return .answered(a?.results ?? [])
+        } catch ChoirError.server(let status, _) where status == 404 || status == 501 || status == 503 || status == 429 || status >= 500 { return .notYet }
+        catch ChoirError.rateLimited { return .offline }
         catch ChoirError.server(let status, _) where (400..<500).contains(status) { return .answered([]) }    // a body the server refuses will never be accepted: not retried
         catch { return .offline }
+    }
+    public func fetchSheet() async -> RunSheet? {
+        guard let r = try? await ChoirEnvironment.shared.client(baseURL: baseURL).send("GET", "/api/autoradio/sheet", route: "/api/autoradio/sheet") else { return nil }
+        return try? JSONDecoder().decode(RunSheet.self, from: r.data)
     }
 }
 
@@ -64,6 +82,9 @@ public struct RouteSheetPoster: RunSheetPoster {
     public private(set) var sheet = RunSheet()
     /// Ops the phone applied that the server has not answered yet, oldest first.
     public private(set) var pending: [RunSheetOp] = []
+    /// The server's `sheet_epoch` the phone holds (0: none): sent with every post (and on a stream reconnect); when the server's differs, the phone
+    /// takes the server's sheet.
+    public private(set) var sheetEpoch: Int64 = 0
     public var onChange: (() -> Void)?
     public var poster: RunSheetPoster?
     /// The clock for `ended.at`. The reducer reads none.
@@ -125,6 +146,8 @@ public struct RouteSheetPoster: RunSheetPoster {
             _ = run(RunSheetOp(opId: mintOpId(), by: .phone, op: .remove, id: last.id, reason: "ahead_full: a listener's placement took the last place"), remote: false)
         }
         // Nothing the phone posts names a place on the phone: a `file://` address, the phone's home or its temporary folder.
+        // A ref cannot be cut (it names the thing): an entry whose ref is over the server's bound is not placed, and the listener is told in plain words.
+        if !remote, op.op == .place, op.entry?.refTooLong == true { return RunSheetResult(opId: op.opId, applied: false, dropped: "ref_too_long", version: sheet.version) }
         if !remote, Self.namesDevicePath(op) { return RunSheetResult(opId: op.opId, applied: false, dropped: "local_path", version: sheet.version) }
         if op.op == .previous || op.op == .clear, !remote { op.baseVersion = sheet.version }
         let (next, result) = sheet.applying(op)
@@ -199,17 +222,50 @@ public struct RouteSheetPoster: RunSheetPoster {
             defer { self.flushing = false }
             while let poster = self.poster, !self.pending.isEmpty {
                 let batch = self.nextBatch()
-                switch await poster.post(ops: batch) {
-                case .answered:
-                    let ids = Set(batch.map(\.opId))
-                    self.pending.removeAll { ids.contains($0.opId) }
-                    self.save()
+                switch await poster.post(ops: batch, epoch: self.sheetEpoch) {
+                case .answered(let results):
+                    self.acknowledge(batch, results)
+                case .answeredEpoch(let results, let epoch):
+                    self.acknowledge(batch, results)
+                    if epoch != self.sheetEpoch { await self.takeServerSheet(from: poster, epoch: epoch) }
                 case .notYet, .offline:
                     self.scheduleRetry()
                     return
                 }
             }
         }
+    }
+
+    /// The server answered these ops. They leave the pending list. An entry the server dropped (it is not on the sheet and never was: the server's bound,
+    /// a replay that could not fold it, a record too large) is not kept here: it is taken off the local sheet, quietly. A `duplicate` is the server
+    /// already having it. The version is never taken from a result.
+    func acknowledge(_ batch: [RunSheetOp], _ results: [RunSheetResult]) {
+        let ids = Set(batch.map(\.opId))
+        pending.removeAll { ids.contains($0.opId) }
+        let byId = Dictionary(results.map { ($0.opId, $0) }, uniquingKeysWith: { a, _ in a })
+        var changed = false
+        for op in batch where op.op == .place {
+            guard let r = byId[op.opId], !r.applied, r.dropped != RunSheetDropped.duplicate, let id = op.entry?.id,
+                  let i = sheet.entries.firstIndex(where: { $0.id == id }), sheet.entries[i].state == .ahead else { continue }
+            sheet.entries.remove(at: i); changed = true
+        }
+        save()
+        if changed { onChange?() }
+    }
+
+    /// The server's sheet replaces the local one (its epoch is then the phone's); what the phone has done since and the server has not answered is
+    /// applied on top again, in order.
+    func takeServerSheet(from poster: RunSheetPoster, epoch: Int64) async {
+        guard let theirs = await poster.fetchSheet() else { return }
+        adopt(theirs, epoch: theirs.sheetEpoch > 0 ? theirs.sheetEpoch : epoch)
+    }
+
+    /// Replace the local sheet with `theirs` (a GET, or a full `sheet` stream event) and remember its epoch; pending ops are applied again on top.
+    public func adopt(_ theirs: RunSheet, epoch: Int64) {
+        var s = theirs
+        for op in pending { s = s.applying(op).sheet }
+        sheet = s; sheetEpoch = epoch
+        save(); onChange?()
     }
 
     private func nextBatch() -> [RunSheetOp] {
@@ -235,18 +291,18 @@ public struct RouteSheetPoster: RunSheetPoster {
 
     // MARK: Saving
 
-    struct Saved: Codable { var sheet: RunSheet; var pending: [RunSheetOp] }
+    struct Saved: Codable { var sheet: RunSheet; var pending: [RunSheetOp]; var epoch: Int64? }
 
     public func save() {
         guard let storage else { return }
-        if let d = try? JSONEncoder().encode(Saved(sheet: sheet, pending: pending)) { try? d.write(to: storage, options: .atomic) }
+        if let d = try? JSONEncoder().encode(Saved(sheet: sheet, pending: pending, epoch: sheetEpoch)) { try? d.write(to: storage, options: .atomic) }
     }
 
     /// The sheet and the pending ops from the last launch. Nothing plays. An entry that was on air when the app died is closed as `left`
     /// (a crash restart never resumes work).
     public func restore() {
         guard let storage, let d = try? Data(contentsOf: storage), let s = try? JSONDecoder().decode(Saved.self, from: d) else { return }
-        sheet = s.sheet; pending = s.pending
+        sheet = s.sheet; pending = s.pending; sheetEpoch = s.epoch ?? 0
         if let e = sheet.onAirEntry { airedEnded(e.id, as: .heard, outcome: .left) }
         else { save() }
         onChange?()

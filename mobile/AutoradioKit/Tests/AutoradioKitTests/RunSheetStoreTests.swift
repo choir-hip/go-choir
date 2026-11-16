@@ -753,12 +753,104 @@ final class RunSheetStoreTests: XCTestCase {
         XCTAssertTrue(r.applied, r.dropped ?? "")
         let got = s.entry("x")!
         XCTAssertLessThanOrEqual(got.title.utf8.count, 300); XCTAssertLessThanOrEqual(got.text!.utf8.count, 8192)
-        XCTAssertLessThanOrEqual(got.source!.ref.utf8.count, 512); XCTAssertLessThanOrEqual(got.source!.label.utf8.count, 512); XCTAssertLessThanOrEqual(got.source!.url!.utf8.count, 512)
+        XCTAssertEqual(got.source!.ref.utf8.count, 900, "a ref is never cut"); XCTAssertLessThanOrEqual(got.source!.label.utf8.count, 512); XCTAssertEqual(got.source!.url!.utf8.count, 900)
         XCTAssertEqual(got.cites!.count, 12); XCTAssertEqual(got.estSeconds, 86400); XCTAssertEqual(got.forecast!.pHeard, 1)
         XCTAssertLessThanOrEqual(got.forecast!.causedBy.utf8.count, 160)
         XCTAssertLessThanOrEqual(RunSheet.entryJSONSize(got), RunSheetBounds.maxEntryJSON)
         let multibyte = RunSheetEntry.paperStory(route: "r", title: String(repeating: "\u{1F600}", count: 200))
         XCTAssertTrue(s.place(multibyte, at: .end).applied); XCTAssertLessThanOrEqual(s.entry(multibyte.id)!.title.utf8.count, 300)
+    }
+
+    // 26 the server's 2048 bound on refs and urls, the carried size, what an op may carry
+    func test26_ALongUrlIsLeftOutAndTheRefStaysAndALongRefIsNotPlaced() async {
+        let (p, s, e) = make()
+        let long = URL(string: "https://x.test/" + String(repeating: "a", count: 2500) + ".mp3")!
+        let audio = RunSheetEntry.audio(RunSheetAudio(url: long, title: "Long", show: "S", episodeId: "ep-1"))
+        XCTAssertTrue(s.place(audio, at: .end).applied)
+        XCTAssertNil(s.entry(audio.id)?.source?.url, "over 2048 bytes the url is not sent")
+        XCTAssertEqual(s.entry(audio.id)?.source?.ref, "episode:ep-1"); XCTAssertEqual(audio.audioSpec?.url, long, "the phone still has it to play")
+        let page = RunSheetEntry.webPage(url: URL(string: "https://x.test/" + String(repeating: "b", count: 2200))!, title: "P")
+        p.queue(page)
+        XCTAssertNil(s.entry(page.id), "a ref cannot be cut: it is not placed"); XCTAssertEqual(p.message, "That address is too long to add.")
+        var withCites = story("c1"); withCites.cites = [RunSheetCite(ref: "pub:" + String(repeating: "r", count: 2100), role: .mentioned, label: "L"), RunSheetCite(ref: "pub:ok", role: .subject, label: "OK")]
+        XCTAssertTrue(s.place(withCites, at: .end, by: .phone).applied); XCTAssertEqual(s.entry("c1")?.cites?.map(\.ref), ["pub:ok"])
+        _ = e
+    }
+
+    func test26_TheSizeBoundIsOfTheCarriedFormAndTheEntryIsCutToFit() {
+        let (_, s, _) = make()
+        XCTAssertGreaterThan(RunSheet.entryJSONSize(story("a", text: String(repeating: "<", count: 8192))), RunSheetBounds.maxEntryJSON)
+        XCTAssertLessThan(RunSheet.entryJSONSize(story("b", text: String(repeating: "<", count: 4000))), RunSheetBounds.maxEntryJSON)
+        let quotes = story("q", text: String(repeating: "\"", count: 8000))                  // 8000 quotes cost 32000 and the rest of the entry tips it over
+        XCTAssertTrue(s.place(quotes, at: .end, by: .phone).applied, "the phone cuts the text until it fits rather than have the server drop it")
+        XCTAssertLessThanOrEqual(RunSheet.entryJSONSize(s.entry("q")!), RunSheetBounds.maxEntryJSON)
+    }
+
+    func test26_AnOpCarriesNothingItDoesNotUse() {
+        let sheet = RunSheet()
+        let e = RunSheetEntry.paperStory(route: "r", title: "T")
+        let a = sheet.applying(RunSheetOp(opId: "o1", by: .listener, op: .remove, id: "x", entry: e)).result
+        XCTAssertEqual(a.dropped, "invalid", "an entry on any op but place")
+        let b = sheet.applying(RunSheetOp(opId: "o2", by: .listener, op: .remove, id: "x", text: "t")).result
+        XCTAssertEqual(b.dropped, "invalid", "a text on any op but rewrite")
+    }
+
+    // 27 answers
+    final class EpochPoster: RunSheetPoster, @unchecked Sendable {
+        var answer: RunSheetPostOutcome = .answered([])
+        var respond: (([RunSheetOp]) -> RunSheetPostOutcome)?
+        var fetched: RunSheet?
+        private(set) var epochs: [Int64] = []
+        func post(ops: [RunSheetOp], epoch: Int64) async -> RunSheetPostOutcome { epochs.append(epoch); return respond?(ops) ?? answer }
+        func fetchSheet() async -> RunSheet? { fetched }
+    }
+    func test27_AnEntryTheServerDroppedIsNotKeptAndNothingIsShown() async {
+        for why in ["replay_skipped", "record_too_large", "invalid", "ahead_full"] {
+            let (p, s, _) = make()
+            let poster = EpochPoster(); s.poster = poster
+            poster.respond = { ops in .answered(ops.map { RunSheetResult(opId: $0.opId, applied: false, dropped: why, version: 0) }) }
+            let mine = RunSheetEntry.paperStory(route: "r", title: "Mine")
+            s.place(mine, at: .end); await s.flushTask?.value
+            XCTAssertNil(s.entry(mine.id), why); XCTAssertTrue(s.pending.isEmpty); XCTAssertEqual(p.message, "", "nothing alarming is shown")
+            // a duplicate is the server already having it
+            poster.respond = { ops in .answered(ops.map { RunSheetResult(opId: $0.opId, applied: false, dropped: "duplicate", version: 3) }) }
+            let kept = RunSheetEntry.paperStory(route: "k", title: "Kept")
+            s.place(kept, at: .end); await s.flushTask?.value
+            XCTAssertNotNil(s.entry(kept.id), "duplicate: the server has it")
+        }
+    }
+
+    func test28_TheEpochIsRememberedSentAndAChangedOneTakesTheServersSheet() async {
+        let (_, s, _) = make()
+        let poster = EpochPoster(); s.poster = poster
+        poster.answer = .answeredEpoch([], epoch: 7)
+        var theirs = RunSheet(); theirs.sheetEpoch = 7; theirs.version = 40
+        theirs.entries = [RunSheetEntry(id: "srv1", kind: .story, placedBy: .desk, title: "Theirs", text: "t")]
+        poster.fetched = theirs
+        let mine = RunSheetEntry.paperStory(route: "r", title: "Mine")
+        s.place(mine, at: .end); await s.flushTask?.value
+        XCTAssertEqual(s.sheetEpoch, 7); XCTAssertNotNil(s.entry("srv1"), "the server's sheet replaced the local one")
+        // what the server has not answered is applied on top again; this one was answered, so it is not
+        poster.answer = .answered([])
+        s.place(.paperStory(route: "n", title: "Next"), at: .end); await s.flushTask?.value
+        XCTAssertEqual(poster.epochs.last, 7, "the epoch it holds goes with every post")
+        // the same epoch again changes nothing
+        poster.answer = .answeredEpoch([], epoch: 7); poster.fetched = nil
+        s.place(.paperStory(route: "m", title: "More"), at: .end); await s.flushTask?.value
+        XCTAssertEqual(s.sheetEpoch, 7); XCTAssertNotNil(s.entry("srv1"))
+    }
+
+    func test29_TheStreamRulesAreTheServers() {
+        XCTAssertEqual(RunSheetStreamPolicy.path(after: nil, epoch: 0), "/api/autoradio/sheet/stream")
+        XCTAssertEqual(RunSheetStreamPolicy.path(after: 12, epoch: 7), "/api/autoradio/sheet/stream?after=12&epoch=7", "the version and the epoch it holds")
+        XCTAssertEqual(RunSheetStreamPolicy.retry(status: 503, attempt: 1), .after(2)); XCTAssertEqual(RunSheetStreamPolicy.retry(status: 503, attempt: 9), .after(60))
+        XCTAssertEqual(RunSheetStreamPolicy.retry(status: 429, attempt: 2), .tooManyStreams(60)); XCTAssertEqual(RunSheetStreamPolicy.retry(status: 404, attempt: 0), .giveUp)
+        let (_, s, _) = make()
+        let full = #"{"version":9,"sheet_epoch":5,"entries":[{"id":"e1","kind":"story","placed_by":"desk","state":"ahead","title":"T","text":"x","est_seconds":3}]}"#
+        XCTAssertEqual(s.streamEvent(name: "sheet", data: Data(full.utf8)), .sheet)
+        XCTAssertEqual(s.sheetEpoch, 5); XCTAssertNotNil(s.entry("e1"))
+        XCTAssertEqual(s.streamEvent(name: "sheet_ops", data: Data(#"{"from_version":99,"to_version":100,"ops":[]}"#.utf8)), .resync(from: s.sheet.version))
+        XCTAssertEqual(s.streamEvent(name: "ping", data: Data()), .ignored)
     }
 }
 

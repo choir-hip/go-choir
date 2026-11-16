@@ -166,14 +166,17 @@ public struct RunSheet: Codable, Equatable, Sendable {
     public var station: String?
     public var masterVersion: Int64
     public var clockAt: String?
+    /// The server's: present once a replay had to repair its sheet. A phone that does not hold it takes the whole sheet.
+    public var sheetEpoch: Int64
     public init(version: Int64 = 0, onAir: String? = nil, positionSeconds: Double = 0, entries: [RunSheetEntry] = [], appliedOps: [String] = [],
-                station: String? = nil, masterVersion: Int64 = 0, clockAt: String? = nil) {
+                station: String? = nil, masterVersion: Int64 = 0, clockAt: String? = nil, sheetEpoch: Int64 = 0) {
+        self.sheetEpoch = sheetEpoch
         self.version = version; self.onAir = onAir; self.positionSeconds = positionSeconds; self.entries = entries; self.appliedOps = appliedOps
         self.station = station; self.masterVersion = masterVersion; self.clockAt = clockAt
     }
     enum CodingKeys: String, CodingKey {
         case version, onAir = "on_air", positionSeconds = "position_seconds", entries, appliedOps = "applied_ops"
-        case station, masterVersion = "master_version", clockAt = "clock_at"
+        case station, masterVersion = "master_version", clockAt = "clock_at", sheetEpoch = "sheet_epoch"
     }
     public init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
@@ -186,6 +189,7 @@ public struct RunSheet: Codable, Equatable, Sendable {
         station = try c.decodeIfPresent(String.self, forKey: .station).flatMap { $0.isEmpty ? nil : $0 }
         masterVersion = try c.decodeIfPresent(Int64.self, forKey: .masterVersion) ?? 0
         clockAt = try c.decodeIfPresent(String.self, forKey: .clockAt).flatMap { $0.isEmpty ? nil : $0 }
+        sheetEpoch = try c.decodeIfPresent(Int64.self, forKey: .sheetEpoch) ?? 0
     }
     public func encode(to e: Encoder) throws {
         var c = e.container(keyedBy: CodingKeys.self)
@@ -195,6 +199,7 @@ public struct RunSheet: Codable, Equatable, Sendable {
         if let station { try c.encode(station, forKey: .station) }
         if masterVersion != 0 { try c.encode(masterVersion, forKey: .masterVersion) }
         if let clockAt { try c.encode(clockAt, forKey: .clockAt) }
+        if sheetEpoch != 0 { try c.encode(sheetEpoch, forKey: .sheetEpoch) }
     }
 
     // Views: Up next, Previously and now-playing read these.
@@ -283,7 +288,7 @@ public enum RunSheetDropped {
 public enum RunSheetBounds {
     public static let maxTitleBytes = 300, maxTextBytes = 8 * 1024, maxReasonBytes = 160, maxTail = 50, maxAppliedOps = 512
     /// The server's field bounds (internal/runsheet/runsheet.go): an op that breaks one is dropped there as invalid, so the phone builds none.
-    public static let maxAhead = 100, maxIDBytes = 64, maxRefBytes = 512, maxCites = 12, maxShortBytes = 160, maxTimeBytes = 40
+    public static let maxAhead = 100, maxIDBytes = 64, maxRefBytes = 512, maxURLBytes = 2048, maxCites = 12, maxShortBytes = 160, maxTimeBytes = 40
     public static let maxEstSeconds = 86400.0, maxEntryJSON = 32 * 1024
 }
 
@@ -309,7 +314,8 @@ extension RunSheet {
         let reason = op.reason ?? ""
         if reason.utf8.count > RunSheetBounds.maxReasonBytes || (op.id ?? "").utf8.count > RunSheetBounds.maxIDBytes || (op.after ?? "").utf8.count > RunSheetBounds.maxIDBytes
             || (op.origin ?? "").utf8.count > RunSheetBounds.maxShortBytes || (op.ended.map { !Self.validEnded($0) } ?? false)
-            || (op.positionSeconds.map { $0 < 0 || $0 > RunSheetBounds.maxEstSeconds } ?? false) { return drop(RunSheetDropped.invalid) }
+            || (op.positionSeconds.map { $0 < 0 || $0 > RunSheetBounds.maxEstSeconds } ?? false)
+            || (op.entry != nil && op.op != .place) || (op.text != nil && op.op != .rewrite) { return drop(RunSheetDropped.invalid) }     // an op carries nothing it does not use
         if op.by == .desk && reason.isEmpty { return drop(RunSheetDropped.reasonRequired) }
         var out = self
         if let why = out.perform(op) { return drop(why) }
@@ -370,20 +376,34 @@ extension RunSheet {
         if let en = e.ended, !validEnded(en) { return false }
         if !(e.estSeconds >= 0 && e.estSeconds <= B.maxEstSeconds) || e.revision < 0 || (e.airAt?.utf8.count ?? 0) > B.maxTimeBytes || (e.origin?.utf8.count ?? 0) > B.maxShortBytes { return false }
         if let s = e.source {
-            if s.ref.utf8.count > B.maxRefBytes || s.label.utf8.count > B.maxRefBytes || (s.url?.utf8.count ?? 0) > B.maxRefBytes || (s.clipId?.utf8.count ?? 0) > B.maxRefBytes { return false }
+            if s.ref.utf8.count > B.maxURLBytes || s.label.utf8.count > B.maxRefBytes || (s.url?.utf8.count ?? 0) > B.maxURLBytes || (s.clipId?.utf8.count ?? 0) > B.maxRefBytes { return false }
             if (s.start ?? 0) < 0 || (s.end ?? 0) < 0 { return false }
         }
         if (e.cites?.count ?? 0) > B.maxCites { return false }
-        for c in e.cites ?? [] where c.ref.utf8.count > B.maxRefBytes || c.label.utf8.count > B.maxRefBytes { return false }
+        for c in e.cites ?? [] where c.ref.utf8.count > B.maxURLBytes || c.label.utf8.count > B.maxRefBytes { return false }
         if let b = e.between, b.after.utf8.count > B.maxIDBytes || b.before.utf8.count > B.maxIDBytes { return false }
         if let f = e.forecast, !(f.pHeard >= 0 && f.pHeard <= 1) || f.causedBy.utf8.count > B.maxShortBytes || f.claimId.utf8.count > B.maxShortBytes { return false }
         return entryJSONSize(e) <= B.maxEntryJSON
     }
 
-    /// The entry's compact JSON size, slashes unescaped (the form the server stores): escapes cannot slip past the string bounds.
+    /// The entry's size as a record carries it (the server's bound, fixture 33): the entry as compact JSON, marshalled as a JSON string (as a
+    /// record body is), minus the two quotes. A plain byte costs 1; `<` `>` `&` 6; a quote or a backslash 2 more than the plain byte it
+    /// escapes (a quote or backslash in the text is `\"` inside the entry and so 4 in all); a control character 7; U+2028 and U+2029 7.
     static func entryJSONSize(_ e: RunSheetEntry) -> Int {
         let enc = JSONEncoder(); enc.outputFormatting = [.withoutEscapingSlashes]
-        return (try? enc.encode(e).count) ?? RunSheetBounds.maxEntryJSON + 1
+        guard let d = try? enc.encode(e), let inner = String(data: d, encoding: .utf8) else { return RunSheetBounds.maxEntryJSON + 1 }
+        var n = 0
+        for u in inner.unicodeScalars {
+            switch u.value {
+            case 0x22, 0x5C: n += 2                                      // `"` and `\` are escaped again when the JSON text is marshalled as a string
+            case 0x3C, 0x3E, 0x26: n += 6                                // `<` `>` `&`
+            case 0x0A, 0x0D, 0x09: n += 2
+            case 0x00..<0x20: n += 6                                     // a control character not written short (inside the entry it is already \u00XX: this is the rest)
+            case 0x2028, 0x2029: n += 7                                  // the entry writes \u2028 (6), marshalled again it is 7
+            default: n += String(u).utf8.count
+            }
+        }
+        return n
     }
 
     /// An answer the phone already said: the one place that may arrive in a state other than ahead.
@@ -434,6 +454,8 @@ extension RunSheet {
         case .rewrite:
             guard let id = op.id, !id.isEmpty, let text = op.text, !text.isEmpty, text.utf8.count <= RunSheetBounds.maxTextBytes else { return RunSheetDropped.invalid }
             guard let i = entries.firstIndex(where: { $0.id == id }), entries[i].state == .ahead else { return RunSheetDropped.notAhead }
+            var changed = entries[i]; changed.text = text
+            if Self.entryJSONSize(changed) > RunSheetBounds.maxEntryJSON { return RunSheetDropped.invalid }          // after every rewrite the entry is within its bound
             entries[i].text = text
         case .skip:
             guard let id = op.id, !id.isEmpty else { return RunSheetDropped.invalid }

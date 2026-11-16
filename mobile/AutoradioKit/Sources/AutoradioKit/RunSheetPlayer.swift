@@ -152,17 +152,21 @@ extension PlaybackEngine {
         wants = true
         if let words { provided[e.id] = words }
         let cut = store.onAir() != nil ? report(final: false) : nil
-        store.place(e, at: .now, cutting: cut)
+        placed(store.place(e, at: .now, cutting: cut))
     }
     /// After the entry on air, before everything else ahead.
     public func playNext(_ e: RunSheetEntry, words: (title: String, paragraphs: [String])? = nil) {
         if let words { provided[e.id] = words }
-        store.place(e, at: .next)                   // when the radio is on and idle, the store's change starts it
+        placed(store.place(e, at: .next))                   // when the radio is on and idle, the store's change starts it
     }
     /// "Queue this": after what the listener placed before it.
     public func queue(_ e: RunSheetEntry, words: (title: String, paragraphs: [String])? = nil) {
         if let words { provided[e.id] = words }
-        store.place(e, at: .queued)
+        placed(store.place(e, at: .queued))
+    }
+    /// An address too long for the server is not placed, and the listener is told so.
+    private func placed(_ r: RunSheetResult) {
+        if r.dropped == "ref_too_long" { message = "That address is too long to add."; changed() }
     }
     public func remove(at i: Int) { let a = store.ahead(limit: i + 1); if a.indices.contains(i) { store.remove(id: a[i].id) } }
     /// Tap an item in Up next: play it now. The entries before it stay ahead.

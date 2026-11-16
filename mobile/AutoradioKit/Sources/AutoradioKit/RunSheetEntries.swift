@@ -49,14 +49,23 @@ extension RunSheetEntry {
         let kind: RunSheetKind = address.hasPrefix("mail:") ? .mail : .page
         return RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: kind, placedBy: by, title: cleanTitle(title), source: RunSheetSource(ref: address, label: cleanTitle(title)))
     }
+    /// Addresses too long for the server's bound (2048 bytes), kept on the phone by entry id: the entry names the audio by its ref and leaves its url out.
+    nonisolated(unsafe) private static var longURLs: [String: URL] = [:]
+    private static let longLock = NSLock()
+    static func longURL(_ id: String) -> URL? { longLock.lock(); defer { longLock.unlock() }; return longURLs[id] }
+
     public static func audio(_ a: RunSheetAudio, clipID: String? = nil, by: RunSheetBy = .listener) -> RunSheetEntry {
         let t = cleanTitle(a.title)
+        let id = mintId(by == .listener ? "l-" : "p-")
+        let long = a.url.absoluteString.utf8.count > RunSheetBounds.maxURLBytes
+        if long { longLock.lock(); longURLs[id] = a.url; longLock.unlock() }
+        let url: String? = long ? nil : a.url.absoluteString
         if a.end != nil || clipID != nil {
-            return RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: .clip, placedBy: by, title: t,
-                                 source: RunSheetSource(ref: "clip:" + (clipID ?? a.episodeId ?? "x"), label: cleanTitle(a.show), url: a.url.absoluteString, start: a.start, end: a.end, clipId: clipID))
+            return RunSheetEntry(id: id, kind: .clip, placedBy: by, title: t,
+                                 source: RunSheetSource(ref: "clip:" + (clipID ?? a.episodeId ?? "x"), label: cleanTitle(a.show), url: url, start: a.start, end: a.end, clipId: clipID))
         }
-        return RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: .episode, placedBy: by, title: t,
-                             source: RunSheetSource(ref: "episode:" + (a.episodeId ?? a.url.absoluteString), label: cleanTitle(a.show), url: a.url.absoluteString, start: a.start))
+        return RunSheetEntry(id: id, kind: .episode, placedBy: by, title: t,
+                             source: RunSheetSource(ref: "episode:" + (a.episodeId ?? (long ? "long" : a.url.absoluteString)), label: cleanTitle(a.show), url: url, start: a.start))
     }
 
     /// An audio file in Files. The entry names the file by its Files path (`file:<path>`), never by where the phone keeps a copy: that is a device
@@ -69,6 +78,9 @@ extension RunSheetEntry {
         guard kind == .episode || kind == .clip, let r = source?.ref, r.hasPrefix("file:") else { return nil }
         return r
     }
+
+    /// True when a ref the entry names is over its bound: a ref cannot be cut, so such an entry is not placed (the store says so).
+    public var refTooLong: Bool { (source?.ref.utf8.count ?? 0) > RunSheetBounds.maxURLBytes }
 
     /// The route of a paper story this entry reads in full.
     public var paperRoute: String? {
@@ -84,7 +96,7 @@ extension RunSheetEntry {
         return (String(r.dropFirst(4)), Int(source?.start ?? 0))
     }
     public var audioSpec: RunSheetAudio? {
-        guard kind == .clip || kind == .episode, let s = source, let u = s.url.flatMap(URL.init(string:)) else { return nil }
+        guard kind == .clip || kind == .episode, let s = source, let u = s.url.flatMap(URL.init(string:)) ?? Self.longURL(id) else { return nil }
         var ep: String?
         if kind == .episode, s.ref.hasPrefix("episode:") { ep = String(s.ref.dropFirst(8)) }
         return RunSheetAudio(url: u, title: title, show: s.label, start: s.start, end: s.end, episodeId: ep)
@@ -142,14 +154,17 @@ extension RunSheetEntry {
         if let a = e.airAt { e.airAt = Self.cut(a, B.maxTimeBytes) }
         if let o = e.origin { e.origin = Self.cut(o, B.maxShortBytes) }
         if var s = e.source {
-            s.ref = Self.cut(s.ref, B.maxRefBytes); s.label = Self.cut(Self.oneLine(s.label), B.maxRefBytes)
-            s.url = s.url.map { Self.cut($0, B.maxRefBytes) }; s.clipId = s.clipId.map { Self.cut($0, B.maxRefBytes) }
+            // A ref names the thing (a route, an address): it is never cut (the store refuses an entry whose ref is over its bound). A url is only
+            // the way to fetch it: over the bound it is left out and the ref stays.
+            s.label = Self.cut(Self.oneLine(s.label), B.maxRefBytes)
+            if let u = s.url, u.utf8.count > B.maxURLBytes { s.url = nil }
+            s.clipId = s.clipId.map { Self.cut($0, B.maxRefBytes) }
             if let v = s.start, v < 0 { s.start = 0 }
             if let v = s.end, v < 0 { s.end = 0 }
             e.source = s
         }
         if let cs = e.cites {
-            let kept = cs.prefix(B.maxCites).map { c -> RunSheetCite in var c = c; c.ref = Self.cut(c.ref, B.maxRefBytes); c.label = Self.cut(Self.oneLine(c.label), B.maxRefBytes); return c }
+            let kept = cs.filter { $0.ref.utf8.count <= B.maxURLBytes }.prefix(B.maxCites).map { c -> RunSheetCite in var c = c; c.label = Self.cut(Self.oneLine(c.label), B.maxRefBytes); return c }
             e.cites = kept.isEmpty ? nil : Array(kept)
         }
         if let b = e.between, b.after.utf8.count > B.maxIDBytes || b.before.utf8.count > B.maxIDBytes { e.between = nil }       // written for neighbours it cannot name
@@ -159,6 +174,8 @@ extension RunSheetEntry {
         }
         if let en = e.ended { e.ended = en.bounded() }
         if !RunSheet.validId(e.id) { e.id = Self.mintId(e.placedBy == .listener ? "l-" : (e.placedBy == .desk ? "d-" : "p-")) }
+        // The 32 KB bound is of the carried form (a quote costs 4, `<` 6): words are taken from the end of the text until the entry fits.
+        while RunSheet.entryJSONSize(e) > B.maxEntryJSON, let t = e.text, t.count > 1 { e.text = Self.cut(String(t.prefix(t.count * 3 / 4)), B.maxTextBytes) }
         return e
     }
 }
@@ -176,7 +193,8 @@ extension RunSheetOp {
     public func bounded() -> RunSheetOp {
         let B = RunSheetBounds.self
         var o = self
-        o.entry = o.entry?.bounded()
+        o.entry = o.op == .place ? o.entry?.bounded() : nil           // an op carries nothing it does not use
+        if o.op != .rewrite { o.text = nil } else if let t = o.text { o.text = StretchCandidates.cut(t, bytes: B.maxTextBytes) }
         o.ended = o.ended?.bounded()
         if let r = o.reason { o.reason = StretchCandidates.cut(r, bytes: B.maxReasonBytes) }
         if let a = o.after, a.utf8.count > B.maxIDBytes { o.after = nil; if o.at == .after { o.at = .next } }
