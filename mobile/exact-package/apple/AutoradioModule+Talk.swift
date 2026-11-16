@@ -4,7 +4,6 @@
 //   answerAction(action, id)   the card's buttons: "retry" asks the same words again, "dismiss" hides the card, "cancel" stops the turn
 import Foundation
 import ExactPackage
-import AutoradioKit
 
 extension AutoradioModule {
     func registerTalk() {
