@@ -20,7 +20,6 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 	s.HandleFunc("/api/prompt-bar", texture.HandlePromptBar)
 	s.HandleFunc("/api/prompt-bar/classify", texture.HandlePromptBarClassify)
 	s.HandleFunc("/api/prompt-bar/submissions/", texture.HandlePromptBarSubmission)
-	s.HandleFunc("/api/autopaper/ask", texture.HandleAskStory)
 	s.HandleFunc("/api/runs", h.HandleRunList)
 	s.HandleFunc("/api/runs/", h.HandleRunResource)
 	s.HandleFunc("/api/inboxes/", h.HandleInboxRecords)

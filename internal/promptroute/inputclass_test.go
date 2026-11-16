@@ -33,11 +33,11 @@ func TestClassCandidatesDependOnOwnership(t *testing.T) {
 		}
 	}
 	none := classNames(ClassCandidates(DocNone))
-	if len(none) != 3 || none[0] != ClassRequest || none[1] != ClassAskStory || none[2] != ClassAddSource {
-		t.Fatalf("no document: the plain request is the default, then the two request kinds: %v", none)
+	if len(none) != 2 || none[0] != ClassRequest || none[1] != ClassAddSource {
+		t.Fatalf("no document: the plain request (a new Texture) is the default, then add-source, which opens no Texture: %v", none)
 	}
 	for _, n := range owned {
-		if n == ClassAskStory || n == ClassAddSource {
+		if n == ClassAddSource {
 			t.Fatal("request kinds are offered only with no document in view")
 		}
 	}
@@ -59,5 +59,24 @@ func TestClassEvidenceNamesOnlyTheCandidates(t *testing.T) {
 	ev := ClassDestinations(ClassCandidates(DocForeign))
 	if !strings.Contains(ev, "- "+ClassComment) || !strings.Contains(ev, "- "+ClassRequest) || strings.Contains(ev, "- "+ClassEdit) {
 		t.Fatalf("evidence = %q", ev)
+	}
+}
+
+// Owner, 2026-11-16: the prompt bar router decides whether to open a new
+// Texture or work in an existing one, and a new Texture has one way to open.
+// With no document in view the only class that opens a Texture is request;
+// add_source opens none (it adds a feed). No class names a kind of ask.
+func TestTheRouterOffersOneNewTextureClassAndNoKindOfAsk(t *testing.T) {
+	for _, state := range []DocState{DocNone, DocOwned, DocForeign} {
+		for _, c := range ClassCandidates(state) {
+			switch c.Desk {
+			case ClassEdit, ClassComment, ClassRequest, ClassAddSource:
+			default:
+				t.Errorf("state %s offers class %q: a class that is neither a revision of an existing document, a new Texture, nor add-source", state, c.Desk)
+			}
+			if strings.Contains(c.Desk, "ask") {
+				t.Errorf("state %s offers an ask kind %q", state, c.Desk)
+			}
+		}
 	}
 }
