@@ -5,7 +5,7 @@
 // files-crumb-<path>, files-row-<path>, files-more-<path>, files-rename-input, files-rename-go, files-delete-<path>,
 // files-new-toggle, files-new-input, files-new-go, files-upload, files-banner, files-list, files-empty; page-title on every page.
 use Theme, FileListing, FileInfo, FileRow from "@choir/autoradio"
-use PageScroll, Card from "./ui.contract"
+use PageScroll, Card, RowRule from "./ui.contract"
 use Chip, NoPreview, ImageViewer, VideoViewer, AudioViewer, PdfViewer, EpubViewer, TextViewer, CsvViewer from "./viewers.contract"
 
 component FilePage
@@ -80,7 +80,8 @@ component FileRowItem
       if fsSel == item.path
         column padding="0 16px 14px 16px" gap=10
           input value=fsRenameText input=fsEditName submit=fsRename placeholder="New name" aria-label="New name" testId="files-rename-input"
-            font-family=th.fontUi font-size=16 color=th.fg padding="8px 4px"
+            font-family=th.fontUi font-size=16 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
+          RowRule(indent=0)
           row gap=8 align-items="center"
             Chip(label="Rename", active=false, testId="files-rename-go", press=fsRename)
             button press=fsDelete(item.path) testId=`files-delete-${item.path}` appearance="none" padding="0px 12px 0px 0px"
@@ -142,7 +143,10 @@ component FilesPlace
       text "Files" role="heading" aria-level=1 testId="page-title" font-size=34 font-weight=700
       // Search the names under this folder (a bounded walk); Enter sends it. The field is the system's search field.
       input type="search" value=fsDraft input=fsEditQuery submit=fsSearch placeholder="Search files" aria-label="Search files" testId="files-search"
-        enterkeyhint="search" font-family=th.fontUi font-size=16 color=th.fg padding="10px 4px"
+        enterkeyhint="search" font-family=th.fontUi font-size=17 color=th.fg min-height=48 padding="8px 0px" border-width=0 background-color="transparent"
+        ::placeholder
+          color=th.muted
+      RowRule(indent=0)
       row gap=8 align-items="center"
         Chip(label="Browse", active=(fsMode == "browse"), testId="files-mode-browse", press=fsSetMode("browse"))
         Chip(label="Recent", active=(fsMode == "recent"), testId="files-mode-recent", press=fsSetMode("recent"))
@@ -168,8 +172,10 @@ component FilesPlace
               text c.name font-family=th.fontUi font-size=15 font-weight=(i == fsList.crumbs.length - 1 ? 700 : 400) color=(i == fsList.crumbs.length - 1 ? th.fg : th.accent)
         if fsNewing
           row gap=8 align-items="center"
-            input value=fsNewName input=fsEditNew submit=fsMakeFolder placeholder="Folder name" aria-label="Folder name" testId="files-new-input"
-              flex=1 min-width=0 font-family=th.fontUi font-size=16 color=th.fg padding="8px 4px"
+            column flex=1 min-width=0
+              input value=fsNewName input=fsEditNew submit=fsMakeFolder placeholder="Folder name" aria-label="Folder name" testId="files-new-input"
+                min-width=0 font-family=th.fontUi font-size=16 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
+              RowRule(indent=0)
             Chip(label="Create", active=true, testId="files-new-go", press=fsMakeFolder)
       if fsList.mode == "search"
         row gap=8 align-items="center"

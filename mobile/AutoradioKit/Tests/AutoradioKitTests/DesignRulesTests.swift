@@ -86,6 +86,41 @@ final class DesignRulesTests: XCTestCase {
             }
         }
     }
+    /// One element is its own line plus the attribute-only lines that continue it (a line that starts `name=`), so a radius on one line and the size on
+    /// the next are read together.
+    static func elements(_ lines: [String], code: (String) -> String) -> [(line: Int, text: String)] {
+        var out: [(line: Int, text: String)] = []
+        let attr = try! NSRegularExpression(pattern: "^[a-z-]+=")
+        for (n, raw) in lines.enumerated() {
+            let t = code(raw).trimmingCharacters(in: .whitespaces)
+            if t.isEmpty { continue }
+            let isAttr = attr.firstMatch(in: t, range: NSRange(t.startIndex..., in: t)) != nil
+            if isAttr, !out.isEmpty { out[out.count - 1].text += " " + t } else { out.append((n + 1, t)) }
+        }
+        return out
+    }
+    static func sizes(_ key: String, in t: String) -> [Double] {
+        let re = try! NSRegularExpression(pattern: "(?:^| )" + key + "=([0-9.]+)(?![0-9.%])")
+        return re.matches(in: t, range: NSRange(t.startIndex..., in: t)).compactMap { m in Range(m.range(at: 1), in: t).flatMap { Double(t[$0]) } }
+    }
+    /// R5 across lines, in every contract including ui.contract: an element whose border-radius is half its width or height, or more, is a capsule or a
+    /// circle, wherever on the element the radius and the size are written.
+    func testNoElementIsACapsuleAcrossLines() throws {
+        var checked = 0, elements = 0
+        for f in try contracts() {
+            for e in Self.elements(f.lines, code: code) {
+                elements += 1
+                let radii = Self.radii(in: e.text).filter { $0 > 0 }
+                guard let r = radii.max() else { continue }
+                let dims = Self.sizes("height", in: e.text) + Self.sizes("width", in: e.text) + Self.sizes("min-height", in: e.text)
+                guard let d = dims.min() else { continue }
+                checked += 1
+                XCTAssertLessThan(Double(r) * 2, d, "\(f.name):\(e.line) radius \(r) on a box \(Int(d)) pt across (half or more of it)")
+            }
+        }
+        XCTAssertGreaterThan(elements, 2000, "the scan reads every element of every contract"); _ = checked
+    }
+
     static func number(after key: String, in l: String) -> Double? {
         guard let r = l.range(of: key) else { return nil }
         let digits = l[r.upperBound...].prefix { $0.isNumber || $0 == "." }

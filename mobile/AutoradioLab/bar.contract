@@ -174,7 +174,7 @@ component BarShell
               button press=openPage("conversation:", "Conversation") testId="bar-answer-text" appearance="none" width="100%" aria-label="Open the conversation"
                 column gap=2 align-items="flex-start" width="100%"
                   if bi.answerLabel != ""
-                    text bi.answerLabel font-family=th.fontUi font-size=9 font-weight=700 letter-spacing=0.8 color=th.muted
+                    text bi.answerLabel font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.8 color=th.muted
                   text bi.answerText font-family=th.fontRead font-size=15 color=th.fg line-clamp=4 text-align="left"
             if bi.answerNote != ""
               text bi.answerNote testId="bar-answer-note" font-family=th.fontUi font-size=13 color=(bi.answerState == "failed" ? th.danger : th.muted) line-clamp=3
@@ -196,7 +196,7 @@ component BarShell
                 if lineMode == "paused"
                   image "symbol:pause" color=th.accent
                 column flex=1 min-width=0 gap=1 align-items="flex-start"
-                  text (lineMode == "playing" ? "NOW PLAYING" : "PAUSED") font-family=th.fontUi font-size=10 font-weight=700 letter-spacing=0.8 color=th.muted
+                  text (lineMode == "playing" ? "NOW PLAYING" : "PAUSED") font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.8 color=th.muted
                   text loaded font-family=th.fontUi font-size=14 font-weight=600 color=th.fg line-clamp=1 text-align="left"
                 image "symbol:forward-chevron" color=th.muted
             box testId="bar-progress" height=2 background-color="transparent" opacity=(ri.level == "play" ? 1 : 0.4) transition=`opacity ${th.motionFastMs}ms ease`
