@@ -26,10 +26,13 @@ import (
 // the host credential.
 
 const (
-	podcastClipsPublicPath = "/api/platform/podcast-clips"
-	podcastOperatorPrefix  = "/api/platform/operator/podcasts/"
-	podcastOperatorMaxBody = 6 << 20
-	podcastPublicMaxRoutes = 60
+	podcastClipsPublicPath      = "/api/platform/podcast-clips"
+	podcastFeedsPublicPath      = "/api/platform/podcast-feeds"
+	podcastPopularPublicPath    = "/api/platform/podcast-popular"
+	podcastTranscriptPublicPath = "/api/platform/podcast-transcript"
+	podcastOperatorPrefix       = "/api/platform/operator/podcasts/"
+	podcastOperatorMaxBody      = 6 << 20
+	podcastPublicMaxRoutes      = 60
 )
 
 // podcastOperatorRoutes maps an operator path and method to corpusd's route.
@@ -37,6 +40,7 @@ var podcastOperatorRoutes = map[string]map[string]string{
 	podcastOperatorPrefix + "episodes":    {http.MethodGet: platform.PodcastEpisodesPath, http.MethodPost: platform.PodcastEpisodesPath},
 	podcastOperatorPrefix + "transcripts": {http.MethodPut: platform.PodcastTranscriptsPath},
 	podcastOperatorPrefix + "clips":       {http.MethodPut: platform.PodcastClipsWritePath},
+	podcastOperatorPrefix + "feeds":       {http.MethodGet: platform.PodcastWorkerFeedsPath},
 }
 
 func isPodcastOperatorPath(path string) bool {
@@ -64,6 +68,18 @@ func (h *Handler) HandlePlatformPodcastClips(w http.ResponseWriter, r *http.Requ
 		}
 		q.Add("route", route)
 	}
+	feeds := r.URL.Query()["feed"]
+	if len(feeds) > podcastPublicMaxRoutes {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "too many feeds"})
+		return
+	}
+	for _, feed := range feeds {
+		if len(feed) > 2048 {
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid feed"})
+			return
+		}
+		q.Add("feed", feed)
+	}
 	if limit := strings.TrimSpace(r.URL.Query().Get("limit")); limit != "" {
 		if n, err := strconv.Atoi(limit); err != nil || n < 0 {
 			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid limit"})
@@ -87,6 +103,93 @@ func (h *Handler) HandlePlatformPodcastClips(w http.ResponseWriter, r *http.Requ
 	}
 	relayJSON(w, status, raw)
 	h.lifecycle.record("platform_podcast_clips.list", lifecycleHTTPStatus(status), time.Since(started))
+}
+
+// HandlePlatformPodcastFeeds serves a phone's subscription report. A signed-in
+// account counts once per feed toward popularity, as a salted hash; an
+// anonymous report only adds feeds to intake.
+func (h *Handler) HandlePlatformPodcastFeeds(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
+	reporter := ""
+	if authResult, err := h.authenticate(r); err == nil && authResult != nil {
+		if !h.authorizeAPIKeyScope(w, r, authResult) {
+			return
+		}
+		reporter = platform.PodcastReporter(authResult.UserID)
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<10))
+	if err != nil {
+		writeJSON(w, http.StatusRequestEntityTooLarge, errorResponse{Error: "request body too large"})
+		return
+	}
+	headers := map[string]string{}
+	if reporter != "" {
+		headers[platform.PodcastReporterHeader] = reporter
+	}
+	status, raw, err := h.corpusdCallHeaders(r.Context(), http.MethodPost, platform.PodcastFeedsPath, "application/json", headers, body)
+	if err != nil {
+		log.Printf("proxy: podcast feeds: %v", err)
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "podcast service unavailable"})
+		return
+	}
+	relayJSON(w, status, raw)
+}
+
+// HandlePlatformPodcastPopular serves the popular list to anyone.
+func (h *Handler) HandlePlatformPodcastPopular(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
+	path := platform.PodcastPopularPath
+	if limit := strings.TrimSpace(r.URL.Query().Get("limit")); limit != "" {
+		if n, err := strconv.Atoi(limit); err != nil || n < 0 {
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid limit"})
+			return
+		}
+		path += "?limit=" + url.QueryEscape(limit)
+	}
+	status, raw, err := h.corpusdCall(r.Context(), http.MethodGet, path, "", nil)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "podcast service unavailable"})
+		return
+	}
+	if status == http.StatusOK {
+		w.Header().Set("Cache-Control", "public, max-age=60")
+	}
+	relayJSON(w, status, raw)
+}
+
+// HandlePlatformPodcastTranscript serves one episode's transcript to a
+// signed-in account: it is third-party text, so it is not public.
+func (h *Handler) HandlePlatformPodcastTranscript(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
+	authResult, err := h.authenticate(r)
+	if err != nil || authResult == nil {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
+		return
+	}
+	if !h.authorizeAPIKeyScope(w, r, authResult) {
+		return
+	}
+	feed, guid := r.URL.Query().Get("feed"), r.URL.Query().Get("guid")
+	if feed == "" || guid == "" || len(feed) > 2048 || len(guid) > 2048 {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "feed and guid are required"})
+		return
+	}
+	path := platform.PodcastTranscriptPath + "?" + url.Values{"feed": {feed}, "guid": {guid}}.Encode()
+	status, raw, err := h.corpusdCall(r.Context(), http.MethodGet, path, "", nil)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "podcast service unavailable"})
+		return
+	}
+	relayJSON(w, status, raw)
 }
 
 // HandlePlatformOperatorPodcasts serves the operator's podcast routes.

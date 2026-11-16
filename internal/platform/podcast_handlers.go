@@ -18,6 +18,13 @@ const (
 	PodcastEpisodesPath    = "/internal/platform/operator/podcasts/episodes"
 	PodcastTranscriptsPath = "/internal/platform/operator/podcasts/transcripts"
 	PodcastClipsWritePath  = "/internal/platform/operator/podcasts/clips"
+	PodcastWorkerFeedsPath = "/internal/platform/operator/podcasts/feeds"
+	PodcastFeedsPath       = "/internal/platform/podcast-feeds"
+	PodcastPopularPath     = "/internal/platform/podcast-popular"
+	PodcastTranscriptPath  = "/internal/platform/podcast-transcript"
+	// PodcastReporterHeader carries the proxy's salted hash of the signed-in
+	// account that reported feeds ("" or absent: an anonymous report).
+	PodcastReporterHeader = "X-Choir-Podcast-Reporter"
 
 	podcastMaxBody           = 6 << 20
 	podcastMaxEpisodeListing = 500
@@ -75,7 +82,13 @@ func (h *Handler) HandlePodcastClips(w http.ResponseWriter, r *http.Request) {
 			routes = append(routes, route)
 		}
 	}
-	resp, err := h.service.ListPodcastClips(r.Context(), routes, limit)
+	var feeds []string
+	for _, feed := range q["feed"] {
+		if feed = strings.TrimSpace(feed); feed != "" {
+			feeds = append(feeds, feed)
+		}
+	}
+	resp, err := h.service.ListPodcastClips(r.Context(), routes, feeds, limit)
 	if err != nil {
 		podcastFail(w, "clips read", err)
 		return
@@ -166,4 +179,73 @@ func (h *Handler) HandlePodcastClipsWrite(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"clips": n})
+}
+
+// HandlePodcastFeeds serves POST of a phone's subscription report.
+func (h *Handler) HandlePodcastFeeds(w http.ResponseWriter, r *http.Request) {
+	if h.podcastRefuse(w, r, http.MethodPost) {
+		return
+	}
+	var req PodcastFeedsRequest
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil || dec.More() {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		return
+	}
+	reporter := strings.TrimSpace(r.Header.Get(PodcastReporterHeader))
+	if len(reporter) > 64 {
+		reporter = ""
+	}
+	resp, err := h.service.ReportPodcastFeeds(r.Context(), reporter, req)
+	if err != nil {
+		podcastFail(w, "feeds report", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// HandlePodcastPopular serves GET of the popular list.
+func (h *Handler) HandlePodcastPopular(w http.ResponseWriter, r *http.Request) {
+	if h.podcastRefuse(w, r, http.MethodGet) {
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	list, err := h.service.ListPodcastPopular(r.Context(), limit)
+	if err != nil {
+		podcastFail(w, "popular", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"feeds": list})
+}
+
+// HandlePodcastTranscript serves GET of one episode's transcript.
+func (h *Handler) HandlePodcastTranscript(w http.ResponseWriter, r *http.Request) {
+	if h.podcastRefuse(w, r, http.MethodGet) {
+		return
+	}
+	q := r.URL.Query()
+	resp, err := h.service.GetPodcastTranscriptFor(r.Context(), q.Get("feed"), q.Get("guid"))
+	if err != nil {
+		podcastFail(w, "transcript read", err)
+		return
+	}
+	if resp == nil {
+		writeJSON(w, http.StatusNotFound, apiError{Error: "no transcript for that episode yet"})
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// HandlePodcastWorkerFeeds serves GET of the feeds the worker should poll.
+func (h *Handler) HandlePodcastWorkerFeeds(w http.ResponseWriter, r *http.Request) {
+	if h.podcastRefuse(w, r, http.MethodGet) {
+		return
+	}
+	list, err := h.service.ListPodcastFeedsForWorker(r.Context())
+	if err != nil {
+		podcastFail(w, "worker feeds", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"feeds": list})
 }

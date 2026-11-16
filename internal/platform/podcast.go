@@ -305,6 +305,7 @@ func (s *Service) RecordPodcastEpisodes(ctx context.Context, in []PodcastEpisode
 		return 0, 0, err
 	}
 	now := time.Now().UTC()
+	noted := map[string]bool{}
 	for _, ep := range checked {
 		prev, err := s.getPodcastEpisode(ctx, og, ep.EpisodeID)
 		if err != nil {
@@ -326,6 +327,12 @@ func (s *Service) RecordPodcastEpisodes(ctx context.Context, in []PodcastEpisode
 			return recorded, fresh, err
 		}
 		recorded++
+		if !noted[ep.FeedURL] {
+			noted[ep.FeedURL] = true
+			if err := s.notePodcastSeedFeed(ctx, og, ep.FeedURL, ep.Show, now); err != nil {
+				return recorded, fresh, err
+			}
+		}
 	}
 	s.podcastCache.reset()
 	return recorded, fresh, nil
@@ -412,6 +419,24 @@ func (s *Service) ListPodcastEpisodes(ctx context.Context, needTranscript bool, 
 		out = append(out, ep)
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Published.After(out[j].Published) })
+	if needTranscript {
+		// The worker's queue: what a phone is playing now, then the feeds
+		// the most readers follow, then the rest, newest first within each.
+		if counts, wanted, err := s.podcastFeedWeights(ctx); err == nil {
+			rank := func(e PodcastEpisode) (bool, int) {
+				n, _ := NormalizeFeedURL(e.FeedURL)
+				return wanted[n][e.GUID], counts[n]
+			}
+			sort.SliceStable(out, func(i, j int) bool {
+				wi, ci := rank(out[i])
+				wj, cj := rank(out[j])
+				if wi != wj {
+					return wi
+				}
+				return ci > cj
+			})
+		}
+	}
 	if len(out) > limit {
 		out = out[:limit]
 	}
@@ -723,9 +748,15 @@ func (s *Service) allPodcastClips(ctx context.Context) ([]PodcastClip, error) {
 
 // ListPodcastClips is the public read (design 4.1). With routes it answers
 // for those stories; without, for every clip matched within the window.
-func (s *Service) ListPodcastClips(ctx context.Context, routes []string, limit int) (*PodcastClipsResponse, error) {
-	if len(routes) > podcastClipsMaxRoutes {
-		return nil, podcastInvalid("at most %d routes", podcastClipsMaxRoutes)
+func (s *Service) ListPodcastClips(ctx context.Context, routes, feeds []string, limit int) (*PodcastClipsResponse, error) {
+	if len(routes) > podcastClipsMaxRoutes || len(feeds) > podcastClipsMaxRoutes {
+		return nil, podcastInvalid("at most %d routes and %d feeds", podcastClipsMaxRoutes, podcastClipsMaxRoutes)
+	}
+	preferred := map[string]bool{}
+	for _, f := range feeds {
+		if n, err := NormalizeFeedURL(f); err == nil {
+			preferred[n] = true
+		}
 	}
 	if limit <= 0 {
 		limit = podcastClipsDefaultLimit
@@ -766,9 +797,21 @@ func (s *Service) ListPodcastClips(ctx context.Context, routes []string, limit i
 		}
 		perStory[c.Story.Route]++
 		resp.Clips = append(resp.Clips, c)
-		if len(resp.Clips) >= limit {
-			break
+	}
+	if len(preferred) > 0 {
+		// The reader's own shows first, the order kept inside both groups.
+		var mine, rest []PodcastClip
+		for _, c := range resp.Clips {
+			if n, err := NormalizeFeedURL(c.FeedURL); err == nil && preferred[n] {
+				mine = append(mine, c)
+			} else {
+				rest = append(rest, c)
+			}
 		}
+		resp.Clips = append(mine, rest...)
+	}
+	if len(resp.Clips) > limit {
+		resp.Clips = resp.Clips[:limit]
 	}
 	return resp, nil
 }

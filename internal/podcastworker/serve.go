@@ -41,6 +41,10 @@ type ServeConfig struct {
 	MaxFailSkip time.Duration // longest skip (default 6 h)
 	Intake      func(ctx context.Context) error
 	IntakeEvery time.Duration // how often Intake runs (default 30 min); 0 with Intake nil is never
+	// Priority runs before every poll for the queue: it fetches the feed of an
+	// episode a phone is playing now, so the episode is known before the list
+	// is read. Its errors are logged and never stop the loop.
+	Priority    func(ctx context.Context) error
 	ReportEvery time.Duration // the volume line (default 1 h)
 	Now         func() time.Time
 	Sleep       func(ctx context.Context, d time.Duration) // a test seam
@@ -130,6 +134,11 @@ func Serve(ctx context.Context, b Backend, e Engine, cfg ServeConfig) error {
 			lastIntake = cfg.Now()
 			if err := cfg.Intake(ctx); err != nil && ctx.Err() == nil {
 				cfg.Logf("podcast-worker: intake failed: %v", err)
+			}
+		}
+		if cfg.Priority != nil {
+			if err := cfg.Priority(ctx); err != nil && ctx.Err() == nil {
+				cfg.Logf("podcast-worker: priority poll failed: %v", err)
 			}
 		}
 		pending, err := b.PendingEpisodes(ctx, cfg.Now().Add(-cfg.Since), cfg.ListLimit)

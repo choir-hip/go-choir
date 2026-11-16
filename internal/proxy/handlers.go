@@ -993,6 +993,15 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case path == podcastClipsPublicPath:
 		h.HandlePlatformPodcastClips(w, r)
 		return
+	case path == podcastFeedsPublicPath:
+		h.HandlePlatformPodcastFeeds(w, r)
+		return
+	case path == podcastPopularPublicPath:
+		h.HandlePlatformPodcastPopular(w, r)
+		return
+	case path == podcastTranscriptPublicPath:
+		h.HandlePlatformPodcastTranscript(w, r)
+		return
 	case isPodcastOperatorPath(path):
 		h.HandlePlatformOperatorPodcasts(w, r)
 		return

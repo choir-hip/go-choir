@@ -169,6 +169,64 @@ next week probably". So `podcast-worker serve` is the long-running mode.
   files in the image, the operator key as a credential file. More throughput
   means more such workers, which needs the claim of R7.
 
+### 3.2 Readers' subscriptions feed the worker (owner, 2026-11-15)
+
+Owner: "we should auto get the transcript of all new episodes of users'
+subscribed podcasts. over time we will mostly be working in the universe of
+podcasts users subscribe to, and we can amortise over the userbase since one of
+our users will probably subscribe. and any given user probably wants to be shown
+clips of only a subset of podcasts anyway. the long tail/new recommendations to
+user a will be the subscriptions of user b." So the set of feeds is no longer the
+seed file alone: it is the union of the seed list and the feeds phones report.
+A transcript is stored once per episode and shared by every reader.
+
+- **Report.** `POST /api/platform/podcast-feeds` (section 4.5). A feed is added
+  to intake by its normalised URL (lower-case scheme and host, default port,
+  fragment and trailing slash dropped). A signed-in report counts the account once
+  per feed toward the feed's subscriber count; the row keeps only a salted hash
+  of the account (the proxy hashes it; corpusd never sees the account id), and
+  nothing returns it. An anonymous report adds feeds and counts for nothing, so
+  counts cannot be stuffed by strangers. Bounds on what strangers can cause: 50
+  feeds a report, a 64 KB body, 200 distinct NEW feeds a day for the whole
+  platform (the rest of the day's are ignored, in a counter that resets with the
+  process), 20 now-playing marks a feed.
+- **Worker order.** The listing the worker reads (`need=transcript`) is ordered:
+  an episode a phone is playing now first (a mark lasts 24 hours), then feeds with
+  the most subscribers, then the rest, newest first within each. The worker's
+  intake polls the union of the seed file and `GET .../operator/podcasts/feeds`,
+  and before every poll of the queue it fetches, once, the feed of any
+  now-playing episode, so the episode is known when the list is read.
+- **Recommendations.** `GET /api/platform/podcast-popular` (4.6): counts, never
+  who. A feed shows a count only when at least 3 distinct accounts report it
+  (k-anonymity); the seed feeds follow with a count of 0 as "featured". The route
+  never reveals who subscribes to what, and no route returns the stored hashes.
+- **The reader's transcript.** `GET /api/platform/podcast-transcript?feed=&guid=`
+  (4.7), for a signed-in account only, because it is third-party text. The phone
+  seeks by `start` only when the loaded file's duration matches
+  `episode.duration_seconds` within 3 seconds (the ad-insertion rule, R4).
+- **Clips of the reader's shows first.** `GET .../podcast-clips` takes an
+  optional repeatable `feed=<feed url>`: clips of those shows are listed first and
+  the rest follow, nothing dropped.
+- **Residual R8: the new-feed bound is per process.** A restart resets the day's
+  count; a persisted counter is the fix.
+- **Residual R9: a phone's guid.** A now-playing episode whose guid is not in
+  its feed is logged and not transcribed; the audio URL a phone sends is stored
+  but never fetched by the server.
+
+### 3.3 Transcripts from a device (the owner's idea; design only tonight)
+
+Owner: "we can run youtube api calls for podcast transcripts from user devices
+(safe; not server ip) to get transcripts." For shows that publish on YouTube the
+phone would fetch the captions of a video it is playing, or one that matches a
+subscribed show, and upload the timed text to the same transcript store. Nothing
+fetches YouTube from the server. It needs a route that accepts a client-supplied
+transcript, and a trust rule, because anyone could upload a wrong one: such a
+transcript is stored with `source: "device:youtube"` and `verified: false`, is
+never used by the match job and never cited in the paper, and becomes verified
+only when our own transcription of the same episode, or a second device's upload,
+agrees with it on a sample of passages. The route, its trust rule and the
+alignment between a video's times and the audio enclosure's are not built.
+
 ## 4. What the phone receives (the exact shapes; do not change without the lead)
 
 ### 4.1 `GET /api/platform/podcast-clips`
@@ -272,6 +330,31 @@ internal routes, which accept only the proxy's host credential.
 Enclosure and feed URLs must be `http` or `https`, with no credentials in the
 URL and at most 2048 bytes; the server stores them, never fetches them.
 
+### 4.5 `POST /api/platform/podcast-feeds`
+
+Optional sign-in (a signed-in account counts once per feed; an anonymous report
+only adds feeds). Request: `{"feeds":[{"feed_url","title"}],"now_playing":{"feed_url","episode_guid","audio_url"}}`,
+`now_playing` optional. Bounds (400 over): at most 50 feeds, URLs http(s) with no
+credentials and at most 2048 bytes, titles at most 200 bytes, a 64 KB body,
+unknown fields refused. Answer: `{"accepted":n,"new_feeds":m,"now_playing_queued":true|false}`.
+
+### 4.6 `GET /api/platform/podcast-popular?limit=N`
+
+Public, `limit` default 30, at most 100. Answer: `{"feeds":[{"feed_url","title","subscribers","latest_episode_title","latest_published"}]}`.
+A feed with fewer than 3 reporting accounts is not listed with a count; the
+operator's seed feeds are listed with `subscribers: 0`. No identity, hash or
+per-account fact is returned.
+
+### 4.7 `GET /api/platform/podcast-transcript?feed=<feed url>&guid=<episode guid>`
+
+A signed-in session or API key. Answer: `{"episode":{"show","title","published","feed_url","guid","audio_url","duration_seconds"},"source":"parakeet.cpp tdt_ctc-110m-q8_0","verified":true,"blocks":[{"start","end","text"}]}`;
+404 when the episode has no transcript yet. The feed is matched by its normalised
+URL. `blocks` are the stored sentence or pause bounded segments.
+
+### 4.8 `GET /api/platform/podcast-clips`: the `feed` parameter
+
+Optional and repeatable (at most 60); the answer's shape is unchanged.
+
 ## 5. Mutation classes and rollback
 
 The slice lands in two parts so the first can deploy while the second is reviewed:
@@ -291,7 +374,7 @@ the operator's own matching posted through the clips route.
 ## 6. Residuals
 
 R1 no desk custodian (section 2). R2 no forecast claim per clip. R3 no
-retention for episodes and transcripts. R4 ad insertion offsets. R7 no server-side claim for more than one worker. R5 the
+retention for episodes and transcripts. R4 ad insertion offsets. R8 and R9 (section 3.2). R7 no server-side claim for more than one worker. R5 the
 support threshold (0.6) and the window size are guesses to be scored against
 listening outcomes. R6 matching is operator-triggered tonight, so clips appear
 when the lead runs the worker, not on a schedule.
