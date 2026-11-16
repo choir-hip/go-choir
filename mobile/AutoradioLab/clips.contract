@@ -1,4 +1,4 @@
-// A podcast clip as a row (lane autoradio-joins): the quote, where it is from, and Play, Add to queue and Open episode as text actions.
+// A podcast clip as a row (lane autoradio-joins): the quote set as a quotation, where it is from, and Play, Add to queue and Open episode as text actions.
 // Used by the article page's "Hear it" and a show page's "Clips". No pill, no outline: accent text, hairline between rows (RowRule).
 // testIds: clip-<id>, clip-play-<id>, clip-queue-<id>, clip-open-<id>.
 use Theme, HearItRow from "@choir/autoradio"
@@ -12,8 +12,11 @@ component ClipRow
     byStory: bool
     pad: number
   view
-    column gap=4 width="100%" box-sizing="border-box" padding-top=10 padding-bottom=6 padding-left=pad padding-right=pad testId=`clip-${r.clipID}`
-      text `“${r.quote}”` font-family=th.fontRead font-size=16 line-height=1.4 color=th.fg line-clamp=(byStory ? 3 : 1) text-align="left"
+    column gap=4 width="100%" box-sizing="border-box" padding-top=12 padding-bottom=6 padding-left=(pad + 18) padding-right=pad testId=`clip-${r.clipID}` position="relative"
+      // a quotation: the reading face at 17 pt, the opening mark hanging in the left gutter (outside the text's edge), the closing mark after the words
+      box position="absolute" left=pad top=6
+        text "“" font-family=th.fontRead font-size=34 line-height=1 color=th.muted
+      text `${r.quote}”` font-family=th.fontRead font-size=17 line-height=1.45 color=th.fg line-clamp=(byStory ? 4 : 3) text-align="left"
       text (byStory ? `${r.story} · ${r.show} · ${r.length}` : `${r.show} · ${r.episode} · ${r.length}`) font-family=th.fontUi font-size=13 color=th.muted line-clamp=1 text-align="left"
       row gap=20 align-items="center"
         button press=clipDo("play", r.clipID) testId=`clip-play-${r.clipID}` appearance="none" aria-label=`Play ${r.show}: ${r.quote}`

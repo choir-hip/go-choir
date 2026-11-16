@@ -410,7 +410,7 @@ component ReaderBody
               button press=listen(address, rdoc.title, rdoc.plain) testId="reader-listen" appearance="none" aria-label=`Listen to ${rdoc.title}`
                 Btn(label="Listen", primary=false, wide=false)
               button press=showSheet("menu") testId="reader-menu" appearance="none" aria-label="Page menu" width=44 height=44
-                image "symbol:more" color=th.muted
+                image "symbol:sf/ellipsis" color=th.muted
             text rdoc.title role="heading" aria-level=1 testId="page-title" text-wrap="balance"
               font-family=th.fontRead font-size=remv(titleSize) font-weight=700 line-height=1.12 color=th.fg margin-bottom=remv(0.6)
             if rdoc.dek != ""

@@ -11,6 +11,27 @@ use paperFront from "@choir/autoradio"
 use Card, CardFill, Btn, BarClear, sectionName, SegmentedTrack, SegmentFace, ChoiceWord, Emerge from "./ui.contract"
 use FirstRunCard from "./onboarding.contract"
 
+// The two actions of a story, one form everywhere (a card, a brief, a follow-up): an icon and one short word each on one line, Play in the accent and
+// Queue muted (one accent use per row). The full words are the aria labels.
+component StoryActions
+  inject
+    th: Theme
+    playStory: action
+    queueLater: action
+  props
+    s: PaperItem
+    tall: number
+  view
+    row gap=12 align-items="center"
+      button press=playStory(s.route) appearance="none" testId=`paper-play-${s.route}` aria-label=`Play from ${s.title}` flex-shrink=0
+        row gap=4 align-items="center" min-height=tall
+          image "symbol:play-fill" width=14 height=14 color=th.accent
+          text "Play" font-family=th.fontUi font-size=13 font-weight=600 color=th.accent line-clamp=1
+      button press=queueLater("story", s.route, s.title) appearance="none" testId=`paper-queue-${s.route}` aria-label=`Add ${s.title} to the queue` flex-shrink=0
+        row gap=4 align-items="center" min-height=tall
+          image "symbol:sf/text.badge.plus" width=16 height=16 color=th.muted
+          text "Queue" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted line-clamp=1
+
 // A headline with its dek and meta, as one story. `kicker` shows the section above, `listen` the play-from-here button.
 component Story
   inject
@@ -37,18 +58,9 @@ component Story
         text s.entityLabels font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
       if listen
         box flex=1
-        // the one rule for a card's actions at every width: an icon and one short word on one line each (the full words are the aria labels)
-        row gap=12 align-items="center"
-          button press=playStory(s.route) appearance="none" testId=`paper-play-${s.route}` aria-label=`Play from ${s.title}` flex-shrink=0
-            row gap=4 align-items="center" min-height=44
-              image "symbol:play-fill" width=14 height=14 color=th.accent
-              text "Play" font-family=th.fontUi font-size=13 font-weight=600 color=th.accent line-clamp=1
-          button press=queueLater("story", s.route, s.title) appearance="none" testId=`paper-queue-${s.route}` aria-label=`Add ${s.title} to the queue` flex-shrink=0
-            row gap=4 align-items="center" min-height=44
-              image "symbol:sf/text.badge.plus" width=16 height=16 color=th.muted
-              text "Queue" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted line-clamp=1
+        StoryActions(s=s, tall=44)
 
-// A compact row: a small headline and a play button at the trailing edge. Used for briefs, river and opinion.
+// A compact row: a small headline, a byline and the story actions under it. Used for briefs, river and opinion.
 component BriefRow
   inject
     th: Theme
@@ -71,10 +83,7 @@ component BriefRow
             text s.title font-family=th.fontRead font-size=s.size font-weight=s.weight line-height=s.lineHeight color=th.fg text-align="left"
           if s.byline != ""
             text s.byline font-family=th.fontUi font-size=13 color=th.muted
-        button press=playStory(s.route) appearance="none" testId=`paper-play-${s.route}` width=44 height=44 aria-label=`Play from ${s.title}`
-          image "symbol:play-fill" color=th.muted
-        button press=queueLater("story", s.route, s.title) appearance="none" testId=`paper-queue-${s.route}` width=44 height=44 aria-label=`Add ${s.title} to the queue`
-          image "symbol:sf/text.badge.plus" color=th.muted
+          StoryActions(s=s, tall=40)
 
 // A cluster follow-up: indented under the lead behind an accent rule.
 component FollowRow
@@ -93,10 +102,7 @@ component FollowRow
           text s.title font-family=th.fontRead font-size=s.size font-weight=s.weight line-height=s.lineHeight color=th.fg text-align="left"
         if s.entityLabels != ""
           text s.entityLabels font-family=th.fontUi font-size=13 color=th.muted
-      button press=playStory(s.route) appearance="none" testId=`paper-play-${s.route}` width=44 height=44 aria-label=`Play from ${s.title}`
-        image "symbol:play-fill" color=th.muted
-      button press=queueLater("story", s.route, s.title) appearance="none" testId=`paper-queue-${s.route}` width=44 height=44 aria-label=`Add ${s.title} to the queue`
-        image "symbol:sf/text.badge.plus" color=th.muted
+        StoryActions(s=s, tall=40)
 
 component Band
   inject
@@ -192,6 +198,14 @@ component PaperPage
   props
     address: string
     title: string
+  // The sections are one line (the current one, and a "Sections" word that opens the rest): ten words wrapped to three rows, and a sideways scroller would
+  // fight the deck's swipe (owner ruling), so the rest open and close in place. The sign-in line can be put away for the session ("Not now").
+  state secOpen = false
+  state signInAway = false
+  action toggleSections
+    secOpen = secOpen == false
+  action awaySignIn
+    signInAway = true
   view
     column flex=1 min-height=0 width="100%" resize=paperFit
       scroll id="paper" testId="paper-scroll" overflow-x="hidden" flex=1 min-height=0 width="100%" refresh=paperReload refreshing=paperLoading
@@ -212,9 +226,15 @@ component PaperPage
             SegmentedTrack(testId="paper-views")
               ViewChip(vid="front", label="Front page", segment=true)
               ViewChip(vid="mine", label="My edition", segment=true)
-            row flex-wrap="wrap" gap=8 width="100%" testId="paper-sections"
-              for sec in pfront.sections key=sec.id
-                ViewChip(vid=sec.id, label=sec.label, segment=false)
+            button press=toggleSections testId="paper-sections-toggle" appearance="none" align-self="flex-start" aria-label=(secOpen ? "Close the sections" : "Open the sections")
+              row align-items="center" gap=6 min-height=44
+                text ((secOpen or pfront.viewLabel == "" or pfront.viewId == "front" or pfront.viewId == "mine") ? "Sections" : `Sections · ${pfront.viewLabel}`) font-family=th.fontUi font-size=15 font-weight=600 color=th.accent
+                row width=12 height=12 align-items="center" justify-content="center" rotate=(secOpen ? 90 : 0) transition=(th.reducedMotion ? "none" : `rotate ${th.motionFastMs}ms ease`)
+                  image "symbol:forward-chevron" color=th.accent
+            if secOpen
+              row flex-wrap="wrap" gap=8 width="100%" testId="paper-sections"
+                for sec in pfront.sections key=sec.id
+                  ViewChip(vid=sec.id, label=sec.label, segment=false)
           // My edition: what it is built from, and the way to change it (the edit page is `onboarding:edit`, the topic tree with the saved picks preselected; the paper has no other edit link: the owner asked for it in My edition)
           if pfront.viewId == "mine"
             column gap=10 width="100%" align-items="flex-start"
@@ -232,7 +252,8 @@ component PaperPage
                   Btn(label="Choose topics", primary=false, wide=false)
           // Not set up yet: "Make it yours" (voice setup and the edition topics) until the listener has done it or skipped it. Not on My edition: that
           // view already says it in its own paragraph with its own action (two prompts for one thing was one too many).
-          if pfront.viewId == "front"
+          // one prompt line at most: the sign-in line first; the edition line once the reader is signed in or has put the sign-in line away
+          if pfront.viewId == "front" and (au.signedIn or signInAway)
             FirstRunCard()
           // demo mode, Settings, Developer, "Demo controls": three editions to show how the page changes with the day
           if dm.on and devDetails
@@ -248,14 +269,19 @@ component PaperPage
                 button press=pickEdition("") testId="paper-edition-default" appearance="none"
                   Btn(label="Default", primary=false, wide=false)
           // signed out: the paper reads and plays; talking to your computer needs an account
-          if au.signedIn == false
-            Card(level=2, testId="paper-signin-card", minHeight=0)
-              column padding=16 gap=10 width="100%" box-sizing="border-box"
-                text "Sign in to talk to your computer and to make this paper yours." font-family=th.fontRead font-size=17 line-height=1.35 color=th.fg
-                button press=signIn testId="paper-signin" appearance="none"
-                  Btn(label="Sign in", primary=false, wide=false)
-                if au.message != ""
-                  text au.message testId="paper-signin-message" font-family=th.fontUi font-size=13 color=th.muted
+          if au.signedIn == false and signInAway == false
+            // one quiet line, not a card: the accent action, what it is for, and Not now
+            row testId="paper-signin-card" align-items="center" gap=10 width="100%" box-sizing="border-box" min-height=44
+              button press=signIn testId="paper-signin" appearance="none" flex-shrink=0 aria-label="Sign in to talk to your computer and to make this paper yours"
+                row align-items="center" gap=4 min-height=44
+                  text "Sign in" font-family=th.fontUi font-size=15 font-weight=600 color=th.accent
+                  image "symbol:forward-chevron" color=th.accent
+              text "to make this paper yours" font-family=th.fontUi font-size=13 color=th.muted line-clamp=1 flex=1 min-width=0
+              button press=awaySignIn testId="paper-signin-away" appearance="none" aria-label="Not now" flex-shrink=0
+                row min-height=44 padding="0px 4px" align-items="center"
+                  text "Not now" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
+          if au.signedIn == false and au.message != ""
+            text au.message testId="paper-signin-message" font-family=th.fontUi font-size=13 color=th.muted
           // nothing to read, or it failed: a line of plain words and one action
           if pfront.status == "offline" or pfront.status == "error" or pfront.status == "empty"
             column align-items="center" gap=12 width="100%" box-sizing="border-box" padding="24px 16px"
