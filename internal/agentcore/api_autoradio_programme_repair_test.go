@@ -116,20 +116,20 @@ func TestF46_TheWallClockAndIdleDeadlines(t *testing.T) {
 
 func TestF47_ASegmentCapEndsTheStretch(t *testing.T) {
 	var lines []string
-	for i := 0; i < 35; i++ {
+	for i := 0; i < 10; i++ {
 		lines = append(lines, titled(fmt.Sprintf("S%d", i), nil))
 	}
 	rt, _ := radioRuntime(t, linesScript(lines...))
 	_, evs := progRun(t, rt, progBody())
 	sid := stretchIDOf(t, evs)
-	if n := len(segmentEvents(evs)); n != 30 {
+	if n := len(segmentEvents(evs)); n != 6 {
 		t.Fatalf("(F47) %d segments", n)
 	}
 	if len(eventsNamed(evs, "done")) != 1 {
 		t.Fatalf("(F47) events %+v", evs)
 	}
 	idx := getRecord(t, rt, "autoradio-stretch:"+sid)
-	if idx == nil || !strings.Contains(idx.SubjectRefs["dropped"], "cap") || len(stretchClaims(t, rt, sid)) != 30 {
+	if idx == nil || !strings.Contains(idx.SubjectRefs["dropped"], "cap") || len(stretchClaims(t, rt, sid)) != 6 {
 		t.Fatalf("(F47) index %+v", idx)
 	}
 }
