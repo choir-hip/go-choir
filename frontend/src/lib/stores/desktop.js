@@ -808,6 +808,21 @@ export function clearWindowRestoreSuspension(windowId) {
   );
 }
 
+/**
+ * Crash hold (lib/crash-guard.js): a window whose body was mounting when the
+ * page last died is held, whatever its app. `deaths` is how many times in a
+ * row; 0 releases it. Per device: never serialized into the saved desktop state.
+ */
+export function setWindowCrashHold(windowId, deaths) {
+  windows.update(($windows) =>
+    $windows.map((w) =>
+      w.windowId === windowId
+        ? { ...w, crashHeld: deaths > 0 ? deaths : 0, restoreSuspended: deaths > 0 ? w.restoreSuspended : false }
+        : w
+    )
+  );
+}
+
 export function suspendBackgroundHeavyWindows(activeId = '') {
   let suspended = 0;
   windows.update(($windows) => {

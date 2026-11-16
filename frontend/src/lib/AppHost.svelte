@@ -6,6 +6,7 @@
   import { writable } from 'svelte/store';
   import { provideLaunchContext } from './launch-file';
   import { providePackageIdentity } from './package-identity';
+  import { provideWindowStep } from './window-step';
 
   export let win: any;
   export let currentUser: any = null;
@@ -29,6 +30,7 @@
   const launchContext = writable<any>({});
   provideLaunchContext(launchContext);
   providePackageIdentity(() => win?.appId || '');
+  provideWindowStep(() => win?.windowId || '');
   $: launchContext.set(appContext);
   $: shellAttrs = app?.theme.shellDataAttr ? { [app.theme.shellDataAttr]: '' } : {};
   $: if (app && app !== loadedApp) {

@@ -26,6 +26,9 @@
 -->
 <script>
   import { createEventDispatcher } from 'svelte';
+  import { createCrashGuard, createProofClock, HOLD_CLOSE_FIRST_AFTER, QUIET_MS } from './crash-guard.js';
+  import { scopedKey } from './user-scope.js';
+  import { setWindowStepSink } from './window-step';
   import { links } from './services/links';
   import { onMount } from 'svelte';
   import { onDestroy } from 'svelte';
@@ -89,6 +92,7 @@
     moveWindow,
     resizeWindow,
     clearWindowRestoreSuspension,
+    setWindowCrashHold,
     suspendWindowBody,
     suspendBackgroundHeavyWindows,
     updateWindowAppContext,
@@ -539,13 +543,18 @@
                 : null,
               appContext: w.app_context ?? {},
             }));
+            // A crash never resumes work (lib/crash-guard.js): read once per
+            // page, at its first restore. Later loads (a remote update) keep
+            // the holds the windows already carry.
+            const crashReport = takeCrashReport(restoredWindowsRaw);
             const hydrationActiveId = state.active_window_id || pickTopRestoredWindow(restoredWindowsRaw, '')?.windowId || '';
             const lazyHydration = shouldLazyHydrateRestoredWindows(restoredWindowsRaw);
             const restoredWindows = restoredWindowsRaw.map((win) => ({
               ...win,
               restoreSuspended: shouldSuspendRestoredWindow(win, hydrationActiveId, lazyHydration),
+              crashHeld: crashReport.held[win.windowId] || 0,
             }));
-            const recovery = shouldEnterRestoreRecovery(restoredWindows, state.active_window_id || '');
+            const recovery = shouldEnterRestoreRecovery(restoredWindows, state.active_window_id || '', crashReport.suspected);
             if (recovery) {
               restoreRecovery = recovery;
               restoreRecoveryWindows = restoredWindows;
@@ -598,7 +607,126 @@
   }
 
   function isWindowAppBodySuspended(win) {
-    return Boolean(win?.restoreSuspended && isHeavyAppId(win.appId));
+    return Boolean(win?.crashHeld) || Boolean(win?.restoreSuspended && isHeavyAppId(win.appId));
+  }
+
+  // ---- Crash guard (lib/crash-guard.js; docs/problems/desktop-restore-reopens-
+  // the-window-that-crashed-the-page-crash-loop-2026-11-16.md). The page cannot
+  // see its own death, so a window is written pending before its body mounts
+  // and proven after a quiet period; a window still pending at the next load
+  // comes back held. Per device, per tab, per user; inert without storage. ----
+  let crashGuard = null;
+  let crashGuardKey = '';
+  let crashBoot = null;
+  let crashMarked = new Set();
+  const crashClock = { current: null };
+  let crashTickAt = 0;
+  let crashVisibleMs = 0;
+  let crashBootStable = false;
+  let crashTicker = null;
+  let removeStepSink = null;
+  let crashSteps = {};
+  let crashBootAt = 0;
+
+  function crashTabId() {
+    try {
+      const existing = window.sessionStorage.getItem('choir.crashGuard.tab');
+      if (existing) return existing;
+      const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      window.sessionStorage.setItem('choir.crashGuard.tab', id);
+      return id;
+    } catch (_err) {
+      return 'no-session-storage';
+    }
+  }
+
+  function ensureCrashGuard() {
+    if (typeof window === 'undefined') return null;
+    const key = scopedKey('choir.crashGuard.v1');
+    if (crashGuard && crashGuardKey === key) return crashGuard;
+    let storage = null;
+    try { storage = window.localStorage; } catch (_err) { storage = null; }
+    crashGuardKey = key;
+    crashGuard = createCrashGuard({ storage, key, tabId: crashTabId(), userAgent: (typeof navigator !== 'undefined' && navigator.userAgent) || '' });
+    crashClock.current = createProofClock({ guard: crashGuard });
+    removeStepSink?.();
+    removeStepSink = setWindowStepSink((windowId, text) => crashGuard?.step(windowId, text));
+    crashBoot = null;
+    crashMarked = new Set();
+    return crashGuard;
+  }
+
+  // At the page's first restore: which restored windows were opening when the
+  // page last died, and did the last load die before anything was identified.
+  function takeCrashReport(restoredRaw) {
+    const guard = ensureCrashGuard();
+    if (!guard) return { held: {}, suspected: false };
+    if (crashBoot) {
+      // Not the first restore of this page: keep the holds windows carry now.
+      const held = {};
+      for (const win of windowsSnapshot()) if (win.crashHeld) held[win.windowId] = win.crashHeld;
+      return { held, suspected: false };
+    }
+    crashBootAt = Date.now();
+    crashBoot = guard.beginBoot();
+    const held = guard.takeDeaths(restoredRaw.map((win) => win.windowId));
+    for (const id of Object.keys(held)) crashSteps[id] = guard.lastStep(id);
+    for (const entry of guard.history().filter((h) => held[h.windowId] && h.at >= crashBootAt)) {
+      console.warn('[choir] the page stopped while a window was opening', entry);
+    }
+    const suspected = crashBoot.interrupted && Object.keys(held).length === 0;
+    return { held, suspected };
+  }
+
+  function syncCrashGuard(list, isAuthenticated) {
+    if (!isAuthenticated || !crashGuard || !crashBoot) return;
+    const mountedNow = new Set();
+    for (const win of list || []) {
+      if (win.mode === 'closed' || win.mode === 'hidden') continue;
+      if (isWindowAppBodySuspended(win)) continue;
+      mountedNow.add(win.windowId);
+      if (!crashMarked.has(win.windowId)) {
+        crashGuard.markPending(win);
+        crashMarked.add(win.windowId);
+      }
+    }
+    const held = new Set((list || []).filter((win) => win.crashHeld).map((win) => win.windowId));
+    for (const id of [...crashMarked]) {
+      if (mountedNow.has(id)) continue;
+      crashMarked.delete(id);
+      if (!held.has(id)) crashGuard.settle(id);
+    }
+  }
+  $: syncCrashGuard($windows, authenticated);
+
+  function crashTick() {
+    if (!crashGuard || !crashBoot || !stateLoaded) return;
+    const nowMs = Date.now();
+    const dt = crashTickAt ? Math.min(nowMs - crashTickAt, 2000) : 0;
+    crashTickAt = nowMs;
+    const visible = typeof document === 'undefined' || document.visibilityState === 'visible';
+    crashClock.current.advance([...crashMarked], dt, visible);
+    if (visible && !crashBootStable) {
+      crashVisibleMs += dt;
+      if (crashVisibleMs >= QUIET_MS) {
+        crashBootStable = true;
+        crashGuard.bootStable();
+      }
+    }
+  }
+
+  function handleReopenCrashHeld(windowId) {
+    // Same pending marker as any mount (syncCrashGuard): a second death holds it again.
+    setWindowCrashHold(windowId, 0);
+    clearWindowRestoreSuspension(windowId);
+    focusWindow(windowId);
+    scheduleSave();
+  }
+
+  function handleCloseCrashHeld(windowId) {
+    closeWindow(windowId);
+    crashGuard?.settle(windowId);
+    scheduleSave();
   }
 
   function readOverviewPromptSurfaceSize() {
@@ -751,18 +879,20 @@
     return ['1', 'true', 'yes', 'on'].includes(recoveryValue) || ['1', 'true', 'yes', 'on'].includes(safeValue);
   }
 
-  function shouldEnterRestoreRecovery(restoredWindows, activeId = '') {
+  function shouldEnterRestoreRecovery(restoredWindows, activeId = '', crashSuspected = false) {
     const visibleWindows = visibleRestoredWindows(restoredWindows);
     const heavyWindows = visibleWindows.filter((win) => isHeavyAppId(win.appId));
     const urlRequested = restoreRecoveryRequestedByURL();
 
-    if (!urlRequested && visibleWindows.length <= RESTORE_RECOVERY_WINDOW_LIMIT && heavyWindows.length < RESTORE_RECOVERY_HEAVY_WINDOW_LIMIT) {
+    const crashBackstop = crashSuspected && visibleWindows.length > 0;
+
+    if (!urlRequested && !crashBackstop && visibleWindows.length <= RESTORE_RECOVERY_WINDOW_LIMIT && heavyWindows.length < RESTORE_RECOVERY_HEAVY_WINDOW_LIMIT) {
       return null;
     }
 
     const topWindow = pickTopRestoredWindow(restoredWindows, activeId);
     return {
-      reason: urlRequested ? 'url' : 'heavy-restore',
+      reason: urlRequested ? 'url' : crashBackstop ? 'crash' : 'heavy-restore',
       totalCount: restoredWindows.length,
       visibleCount: visibleWindows.length,
       heavyCount: heavyWindows.length,
@@ -926,6 +1056,7 @@
   let unsubscribeIconPositions;
 
   function handlePageHide() {
+    crashGuard?.leaveCleanly();
     if (saveTimer !== null) {
       void flushDesktopState({ keepalive: true });
     }
@@ -1220,6 +1351,7 @@
 
   function handleWindowClose(event) {
     closeWindow(event.detail.windowId);
+    crashGuard?.settle(event.detail.windowId);
     scheduleSave();
   }
 
@@ -1651,6 +1783,7 @@
     refreshOverviewViewport();
     window.addEventListener('resize', refreshOverviewViewport);
     window.addEventListener('pagehide', handlePageHide);
+    crashTicker = setInterval(crashTick, 1000);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     lastAuthenticated = authenticated;
     stopChangelogWatch = startChangelogWatch(() => authenticated, (message) => showToast(message, { durationMs: 9000 }));
@@ -1689,6 +1822,8 @@
     removeDriverInputListeners();
     closeLiveChannel();
     if (saveTimer) clearTimeout(saveTimer);
+    if (crashTicker) clearInterval(crashTicker);
+    removeStepSink?.();
     if (unsubscribeWindows) unsubscribeWindows();
     if (unsubscribeActive) unsubscribeActive();
     if (unsubscribeIconPositions) unsubscribeIconPositions();
@@ -1745,10 +1880,17 @@
           <div>
             <p class="recovery-kicker">Desktop recovery</p>
             <h2>Saved windows are paused</h2>
-            <p>
-              {restoreRecovery.visibleCount} visible windows, including {restoreRecovery.heavyCount} heavy app windows, were saved for this computer.
-              Loading them all at once can crash mobile Safari.
-            </p>
+            {#if restoreRecovery.reason === 'crash'}
+              <p data-desktop-recovery-crash>
+                The page stopped before the desktop finished opening last time, and it is not known which window was
+                the cause. {restoreRecovery.visibleCount} saved {restoreRecovery.visibleCount === 1 ? 'window is' : 'windows are'} waiting.
+              </p>
+            {:else}
+              <p>
+                {restoreRecovery.visibleCount} visible windows, including {restoreRecovery.heavyCount} heavy app windows, were saved for this computer.
+                Loading them all at once can crash mobile Safari.
+              </p>
+            {/if}
             {#if restoreRecovery.topWindowTitle}
               <p class="recovery-top-window">
                 Top saved window: <strong>{restoreRecovery.topWindowTitle}</strong>
@@ -1812,7 +1954,30 @@
             on:move={handleWindowMove}
             on:resize={handleWindowResize}
           >
-            {#if isWindowAppBodySuspended(win)}
+            {#if win.crashHeld}
+              <div class="app-content suspended-app-content" data-crash-held data-crash-held-count={win.crashHeld} data-suspended-app-id={win.appId}>
+                <div class="crash-held">
+                  <p class="crash-held-text">
+                    <strong>{win.title}</strong> was opening when the page stopped last time, so it has not been opened again.
+                    {#if crashSteps[win.windowId]}
+                      It stopped while: {crashSteps[win.windowId]}.
+                    {/if}
+                    {#if win.crashHeld >= HOLD_CLOSE_FIRST_AFTER}
+                      It has now stopped the page {win.crashHeld} times in a row. Closing it is the safer choice.
+                    {/if}
+                  </p>
+                  <p class="crash-held-actions">
+                    {#if win.crashHeld >= HOLD_CLOSE_FIRST_AFTER}
+                      <button type="button" data-crash-held-close on:click={() => handleCloseCrashHeld(win.windowId)}>Close</button>
+                      <button type="button" data-crash-held-reopen on:click={() => handleReopenCrashHeld(win.windowId)}>Reopen</button>
+                    {:else}
+                      <button type="button" data-crash-held-reopen on:click={() => handleReopenCrashHeld(win.windowId)}>Reopen</button>
+                      <button type="button" data-crash-held-close on:click={() => handleCloseCrashHeld(win.windowId)}>Close</button>
+                    {/if}
+                  </p>
+                </div>
+              </div>
+            {:else if isWindowAppBodySuspended(win)}
               <div class="app-content suspended-app-content" data-suspended-app data-suspended-app-id={win.appId}>
                 <div class="suspended-card">
                   <p class="suspended-kicker">Paused restore</p>
@@ -2148,6 +2313,35 @@
     align-items: center;
     justify-content: center;
     background: var(--choir-surface-pane);
+  }
+
+  .crash-held {
+    max-width: 28rem;
+    display: grid;
+    gap: 0.75rem;
+    padding: 1rem;
+    color: var(--choir-text-primary);
+  }
+
+  .crash-held p {
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  .crash-held-actions {
+    display: flex;
+    gap: 1.25rem;
+  }
+
+  .crash-held-actions button {
+    min-height: 2.35rem;
+    border: 0;
+    background: none;
+    color: var(--choir-text-accent);
+    cursor: pointer;
+    font: inherit;
+    font-weight: 800;
+    padding: 0;
   }
 
   .suspended-card {
