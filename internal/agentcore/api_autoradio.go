@@ -509,9 +509,7 @@ func fenceSafe(s string) string {
 
 // oneLine makes a client string a single fence-safe line, so it cannot start a
 // line of its own that looks like a section or a speaker.
-func oneLine(s string) string {
-	return fenceSafe(strings.Join(strings.Fields(strings.NewReplacer("\u2028", " ", "\u2029", " ").Replace(s)), " "))
-}
+func oneLine(s string) string { return fenceSafe(strings.Join(strings.Fields(s), " ")) }
 
 // frame is the user message in two parts: the stable prefix (the page block,
 // whose fences carry a content-derived token, so it is byte-identical from turn
@@ -800,6 +798,13 @@ func (t *autoradioTurn) run(ctx context.Context, streamer provideriface.TextStre
 		case len(t.sentences) > 0:
 			// A sentence has been sent: do not start another voice. The half
 			// sentence in the splitter is dropped.
+			if cut != nil {
+				// what the cut still held is speech like any other; a half
+				// sentence is dropped, as the splitter's is
+				for _, sentence := range splitter.Push(cut.Flush()) {
+					t.speak(sentence)
+				}
+			}
 			hop.Outcome = "failed_mid_stream"
 			t.hops = append(t.hops, hop)
 			status, reason = "failed", "the model failed mid-stream: "+err.Error()
@@ -832,13 +837,8 @@ func (t *autoradioTurn) resolveQueue(cut *autoradioqueue.Cut) {
 	if cut == nil || !cut.Fenced() {
 		return
 	}
-	var drops []string
-	if t.queue == nil {
-		drops = []string{"the request carried no queue"}
-	} else {
-		drops = t.queue.ApplyJSON(cut.Ops())
-		t.queueOps = t.queue.Ops()
-	}
+	drops := t.queue.ApplyJSON(cut.Ops()) // a cut exists only when there is a queue
+	t.queueOps = t.queue.Ops()
 	if len(drops) > 0 {
 		log.Printf("autoradio: turn %s: queue ops dropped (%d kept): %s", t.req.TurnID, len(t.queueOps), strings.Join(drops, "; "))
 	}

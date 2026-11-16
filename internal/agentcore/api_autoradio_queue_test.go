@@ -16,9 +16,10 @@ import (
 //
 //  1. no queue field: nothing changes: no queue_ops event, no queue block in
 //     the frame, the old body bound's behaviour for everything else;
-//  2. a hostile snapshot (101 upcoming, a bad or duplicate id, a 2 KB title, ten
-//     thousand entries, a string where an object belongs) is refused with 400
-//     (413 past the body bound) and no model is called;
+//  2. a hostile snapshot (a bad or duplicate id, ten thousand entries, a string
+//     where an object belongs) is refused with 400 (413 past the body bound) and
+//     no model is called; a well formed one over a size bound (51 upcoming, a
+//     2 KB title) is answered without the queue (19);
 //  3. unknown fields inside the queue and the snapshot's null parts are fine;
 //  4. the frame shows the queue: ids, positions, titles, who added each; hostile
 //     titles cannot forge a fence; the system prompt is unchanged between turns
@@ -28,8 +29,8 @@ import (
 //     and before done, with base_version and a reason on every op;
 //  6. the fence arrives split across deltas, and as one chunk (Bedrock): same;
 //  7. a question ("what's coming up?"): speech only, no queue_ops;
-//  8. ops that are all invalid (an id that is not in the queue), malformed JSON,
-//     a fence with no queue behind it: no queue_ops event, one more spoken
+//  8. ops that are all invalid (an id that is not in the queue), malformed JSON:
+//     no queue_ops event, one more spoken
 //     sentence saying the queue was not changed, and the Report holds it;
 //  9. some ops valid and some not: the valid ones are sent, nothing is said;
 // 10. the model invents an item (a story that was not a candidate): dropped;
@@ -61,6 +62,13 @@ import (
 //     name an entry that was not shown;
 // 20. candidates and queue ignore unknown fields (a newer phone); a line
 //     separator in a title cannot split the queue block.
+//
+// Round 2 (4eb297553):
+//
+// 21. the exact fence line quoted mid-sentence on a question turn is spoken
+//     whole, with no queue line (the fence counts at a line start, before a "[");
+// 22. text after the ops array does not drop the ops, and no failure line is
+//     spoken for them.
 
 const queueSnap = `{"version":7,"current":{"id":"q12","item":{"kind":"story","route":"front","title":"Strike in Nancy"},"position_seconds":4.5},` +
 	`"upcoming":[{"id":"q13","item":{"kind":"audio","url":"https://e.test/a.mp3","title":"Harbour talks","show":"Up First"},"added_by":"dj"},` +
@@ -146,6 +154,7 @@ func TestAutoradioQueueOnlyTheExactFenceStartsTheOps(t *testing.T) {
 		"page fence":  "The page is fenced as <<<AR0123456789abcdef page>>> and so on.",
 		"end queue":   "Closing with " + strings.Replace(queueFence, " queue>>>", " end queue>>>", 1) + " is not it.",
 		"other token": "Fine. <<<AR0000000000000000 queue>>> " + moveOps,
+		"echo":        "To move it I would end with " + queueFence + " and then the ops. The long read is next in your queue.",
 	} {
 		rt, _ := radioRuntime(t, okAnswer(reply))
 		evs := parseSSE(t, radioPost(rt, queueBody("t-e", "what do you see", queueSnap)).Body.String())
@@ -287,7 +296,6 @@ func TestAutoradioQueueARealisticFullQueueIsAnsweredWithTheQueueShown(t *testing
 	lastOp := `[{"op":"remove","id":"e49","reason":"you dropped the last one"}]`
 	rt, fake := radioRuntime(t, okAnswer(fenced("Okay, dropping the last one.", lastOp)))
 	body := fmt.Sprintf(`{"turn_id":"t-full","words":"drop the last one","page":{"address":"pub:front@3","title":"Front","text":%q},"queue":%s}`, "Body.", q)
-	body = strings.Replace(body, `"text":"Body."`, `"text":"Body."`, 1)
 	rec := radioPost(rt, body)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("(19) %d %.200s", rec.Code, rec.Body.String())
@@ -462,6 +470,14 @@ func TestAutoradioQueueOpsThatCannotApplyAreSaidNotSilentlyDropped(t *testing.T)
 		if err != nil || rep == nil || len(rep.Report.Claims) != 2 || rep.Report.Claims[1].Text != sorry {
 			t.Errorf("(8) %s: the Report does not hold the correction: %v %+v", name, err, rep)
 		}
+	}
+}
+
+func TestAutoradioQueueTextAfterTheArrayKeepsTheOps(t *testing.T) {
+	rt, _ := radioRuntime(t, okAnswer(fenced("Okay, the long read is next.", moveOps+" and that is all.")))
+	evs := parseSSE(t, radioPost(rt, queueBody("t-tail", "long read next", queueSnap)).Body.String())
+	if len(queueOpsOf(evs)) != 1 || len(speechOf(evs)) != 1 {
+		t.Fatalf("(22) %v", evs)
 	}
 }
 
