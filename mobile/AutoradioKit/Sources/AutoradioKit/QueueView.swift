@@ -10,6 +10,7 @@ public struct QueueRow: Codable, Sendable, Equatable {
     public var id = ""
     public var note = ""       // a quiet caption when the DJ changed the order ("DJ moved this up")
     public var by = ""         // who put it there, as a sentence: "Added by you", "Added by the DJ", "From the station"
+    public var programme = false   // the programme's own coming segment (added_by: programme): not in the queue, not removable
     public init() {}
 }
 
@@ -27,6 +28,7 @@ public struct QueueInfo: Codable, Sendable, Equatable {
     public var remainingLabel = ""
     public var fraction = 0.0          // 0...1 for the scrubber
     public var upcoming: [QueueRow] = []
+    public var coming: [QueueRow] = []   // the DJ's coming segments (up to three), shown after the queued items
     public var message = ""
     public var webUrl = ""             // the page the bar opened ("" none)
     public var webHost = ""
@@ -43,6 +45,7 @@ public enum QueueClock {
 }
 
 extension PlayQueue {
+    public static let maxComing = 3
     public func info(clips: ClipStore = .shared) -> QueueInfo {
         var q = QueueInfo()
         q.current = current?.displayTitle ?? ""
@@ -63,6 +66,9 @@ extension PlayQueue {
             r.note = e.note
             r.by = e.addedBy == .reader ? "Added by you" : (e.addedBy == .dj ? "Added by the DJ" : "From the station")
             return r
+        }
+        q.coming = (programmeComing?() ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.prefix(Self.maxComing).map { t in
+            var r = QueueRow(); r.i = -1; r.title = t; r.kind = "Programme"; r.by = "The programme's own"; r.programme = true; return r
         }
         q.message = message
         return q

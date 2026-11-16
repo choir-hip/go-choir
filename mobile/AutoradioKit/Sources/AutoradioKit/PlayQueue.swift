@@ -302,6 +302,8 @@ func onMainThread<T>(_ f: @MainActor () -> T) -> T {
 // MARK: The queue
 
 @MainActor public final class PlayQueue {
+    /// The titles of the DJ's coming segments, given by the host. Shown in Up next after the queued items; never part of the queue.
+    public var programmeComing: (@MainActor () -> [String])?
     public static let shared = PlayQueue(storage: PlayQueue.applicationSupportFile())
 
     public private(set) var current: PlayItem?

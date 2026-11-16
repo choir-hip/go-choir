@@ -15,6 +15,11 @@ extension AutoradioModule {
 
     func registerQueue() {
         onMainThread {
+            // lane autoradio-joins: the DJ's coming segments after the queued items (Up next); never put in the queue.
+            PlayQueue.shared.programmeComing = { [weak self] in
+                guard let self else { return [] }
+                return DJUpcoming.titles(in: self.runtime.player.document, blockIndex: self.runtime.snapshot().blockIndex)
+            }
             PlayQueue.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["queueView", "radioView", "barState"]) } }
             // The station starts by itself when Autoradio opens (after onboarding), and when the app comes back after it was closed.
             Station.shared.isReady = { OnboardingController.shared?.finished ?? false }

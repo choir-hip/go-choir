@@ -683,7 +683,8 @@
       "detail": "string",
       "id": "string",
       "note": "string",
-      "by": "string"
+      "by": "string",
+      "programme": "bool"
     },
     "QueueInfo": {
       "current": "string",
@@ -699,6 +700,7 @@
       "remainingLabel": "string",
       "fraction": "number",
       "upcoming": "QueueRow[]",
+      "coming": "QueueRow[]",
       "message": "string",
       "webUrl": "string",
       "webHost": "string"
@@ -2373,6 +2375,7 @@
           "remainingLabel": "",
           "fraction": 0,
           "upcoming": [],
+          "coming": [],
           "message": "",
           "webUrl": "",
           "webHost": ""

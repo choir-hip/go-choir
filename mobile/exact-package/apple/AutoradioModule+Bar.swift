@@ -30,10 +30,12 @@ extension AutoradioModule {
 
         // While the programme plays, the position inside the block moves: one gentle refresh, ~2.5 per second.
         DispatchQueue.main.async { [weak self] in
+            var lastBlock = -1
             let t = Timer(timeInterval: 0.4, repeats: true) { [weak self] timer in
                 guard let self else { timer.invalidate(); return }
                 let s = self.runtime.snapshot()
                 if s.running && !s.paused { self.touch(["radioView", "barState"]) }
+                if s.blockIndex != lastBlock { lastBlock = s.blockIndex; self.touch(["queueView"]) }   // lane autoradio-joins: the DJ's coming segments moved on
             }
             RunLoop.main.add(t, forMode: .common)
         }

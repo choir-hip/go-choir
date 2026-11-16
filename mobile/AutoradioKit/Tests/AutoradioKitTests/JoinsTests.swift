@@ -69,3 +69,33 @@ final class JoinOpenEpisodeTests: XCTestCase {
         XCTAssertFalse(q.info(clips: ClipStore()).canOpenEpisode)
     }
 }
+
+// MARK: J4 the DJ's coming segments in Up next
+
+@MainActor
+final class JoinComingTests: XCTestCase {
+    func make(_ titles: [String]?) -> PlayQueue {
+        let q = PlayQueue(); q.engine = FakeEngine()
+        if let titles { q.programmeComing = { titles } }
+        return q
+    }
+    func testJ4_UpToThreeComingSegmentsAreShownMarkedAsTheProgrammes() {
+        let q = make(["One", "Two", "Three", "Four", "Five"])
+        let i = q.info()
+        XCTAssertEqual(i.coming.map(\.title), ["One", "Two", "Three"])
+        XCTAssertTrue(i.coming.allSatisfy { $0.programme && $0.i == -1 && !$0.by.isEmpty })
+    }
+    func testJ4_TheyAreNotInTheRealQueue() {
+        let q = make(["One", "Two"])
+        q.enqueue(.story(route: "a", title: "S a"))
+        let i = q.info()
+        XCTAssertEqual(i.upcoming.map(\.title), ["S a"]); XCTAssertFalse(i.upcoming[0].programme)
+        XCTAssertEqual(q.upcoming.count, 1, "the queue holds only what was queued")
+        XCTAssertEqual(q.snapshotJSON().contains("One"), false, "the desk is not told the programme's titles as queue items")
+    }
+    func testJ4_NothingWhenThereIsNoProgrammeOrNoComing() {
+        XCTAssertTrue(make(nil).info().coming.isEmpty)
+        XCTAssertTrue(make([]).info().coming.isEmpty)
+        XCTAssertTrue(make(["", " "]).info().coming.isEmpty, "a segment with no title is not shown")
+    }
+}
