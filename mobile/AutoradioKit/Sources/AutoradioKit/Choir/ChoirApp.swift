@@ -218,7 +218,13 @@ public final class ChoirApp: @unchecked Sendable {
     /// Play a story from the paper. The list it came from (the paper's stack) is taken now, so next, previous and autoplay follow it.
     public func play(route: String) async {
         let title = lock.withLock { stories.first { $0.route == route }?.title } ?? FrontOrder.shared.stories.first { $0.route == route }?.title ?? ""
-        await MainActor.run { PlayQueue.shared.playNow(.story(route: route, title: title)) }       // the one queue decides; it comes back to `playStoryDirect`
+        // The one queue decides; it comes back to `playStoryDirect`. Waits for the story to start, as `play(route:)` always did.
+        await MainActor.run {
+            let q = PlayQueue.shared
+            if !((q.engine as? ChoirPlaybackEngine)?.app === self) { q.engine = ChoirPlaybackEngine(app: self) }
+            q.playNow(.story(route: route, title: title))
+        }
+        await PlayQueue.shared.settle()
     }
 
     /// The queue's story engine: what `play(route:)` was before the queue.
@@ -343,7 +349,9 @@ public final class ChoirApp: @unchecked Sendable {
         // The queue first: what the reader queued by hand plays before the paper's list and before the DJ's stretch.
         let queueText = documentID.hasPrefix("text:q")
         let turnOpenQ = runtime.snapshot().phase != "playing"
-        if anyPlayed, !p.userPaused, (queueText || currentStoryRoute() != nil || documentID.hasPrefix("radio:")) {
+        let hasUp = await MainActor.run { PlayQueue.shared.hasUpcoming }
+        let queueWants = queueText || hasUp
+        if anyPlayed, !p.userPaused, queueWants {
             if turnOpenQ { lock.lock(); pendingQueueEnd = documentID; lock.unlock(); return }
             if await queueAdvance(documentID: documentID) { return }
         }
