@@ -11,4 +11,4 @@
 - 07:43Z. An agent judged 240 ranked candidates; 14 clips written, 0 refused; 13 served over 5 front stories. The phone shows them under "Hear it" on a live story (simulator, signed out). C109 true.
 - 00:28Z to 07:57Z. Phone: eleven installs. Design sweeps one to seven (no pills, then no filled blocks outside flows, then no boxed rows, then the live paper's prompts). Queue fixes from the staging proof (e8446a5bb).
 - 08:10Z. Found and recorded, not fixed: the paper publishes stories whose headline is a failed search; the hourly script's search line misled (fixed, 59eec98ea).
-- 08:40Z. D proven on the server: a stretch on d@e with four clip-bearing candidates returned 15 segments, 3 of them podcast_clip, each after its story with a lead-in (DeepSeek V4.1 Flash on River, 47.7 s). Second matching pass: 26 clips over 11 stories from 9 shows. Report published.
+- 08:31Z. D proven on the server: a stretch on d@e with four clip-bearing candidates returned 15 segments, 3 of them podcast_clip, each after its story with a lead-in (DeepSeek V4.1 Flash on River, 47.7 s). Second matching pass: 26 clips over 11 stories from 9 shows. Report published.
