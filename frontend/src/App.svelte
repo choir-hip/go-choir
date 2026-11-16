@@ -23,6 +23,7 @@
 <script lang="ts">
   import AuthEntry from './lib/AuthEntry.svelte';
   import Desktop from './lib/Desktop.svelte';
+  import { notePlannedReload } from './lib/planned-reload';
   import LegalDocument from './lib/LegalDocument.svelte';
   import RecoverRoute from './lib/RecoverRoute.svelte';
   import EmailSignInRoute from './lib/EmailSignInRoute.svelte';
@@ -560,6 +561,7 @@
     const offAccountSwitched = onAccountSwitched(async () => {
       sessionCheckSeq++;
       try { await prepareAccountSwitch(); } catch (_err) { /* the reload follows */ }
+      notePlannedReload();
       window.location.reload();
     });
 

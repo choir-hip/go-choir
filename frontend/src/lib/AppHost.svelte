@@ -7,6 +7,7 @@
   import { provideLaunchContext } from './launch-file';
   import { providePackageIdentity } from './package-identity';
   import { provideWindowStep } from './window-step';
+  import { notePlannedReload } from './planned-reload';
 
   export let win: any;
   export let currentUser: any = null;
@@ -58,6 +59,7 @@
   }
 
   function reloadApp() {
+    notePlannedReload();
     window.location.reload();
   }
 

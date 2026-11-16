@@ -325,7 +325,7 @@
         const res = await fetch(sourceKey, sourceFetchOptions(sourceKey));
         if (!res.ok) throw new Error('EPUB source failed (' + res.status + ')');
         model = await parseEpub(await res.arrayBuffer());
-        step('EPUB read');
+        step('EPUB read', { done: true });
       } else {
         await loadPdfDocument(sourceKey);
       }
@@ -335,6 +335,7 @@
     } catch (err) {
       error = err?.message || 'Reader could not open this source';
       status = 'error';
+      step('could not open the source', { done: true });
     } finally {
       loading = false;
     }
@@ -375,7 +376,7 @@
           const res = await fetch(key, sourceFetchOptions(key));
           if (!res.ok) throw new Error('EPUB source failed (' + res.status + ')');
           model = await parseEpub(await res.arrayBuffer());
-          step('EPUB read');
+          step('EPUB read', { done: true });
         } else {
           const sections = sectionsFromText(text, { title: source.title });
           if (!sections.length) throw new Error('The attached text is empty');
@@ -389,6 +390,7 @@
       await restorePosition();
     } catch (err) {
       const detail = err?.message || 'Reader could not open this source';
+      step('could not open the source', { done: true });
       if (!authenticated) {
         // A signed-out window has no durable source: read the sample and say
         // why, so a visitor still has something to read instead of an error.
@@ -434,12 +436,12 @@
     if (pdfSearchModel && pdfSearchModel.doc === doc) return pdfSearchModel.model;
     const pages = [];
     for (let index = 1; index <= doc.numPages; index++) {
-      step('reading the text of page ' + index + ' of ' + doc.numPages);
+      step('reading the text of page ' + index + ' of ' + doc.numPages, { background: true });
       const page = await doc.getPage(index);
       const content = await page.getTextContent();
       pages.push(content.items.map((entry) => entry.str || '').join(' ').replace(/\s+/g, ' ').trim());
     }
-    step('PDF text read');
+    step('PDF text read', { background: true });
     const modelForSearch = modelFromPdfPages(pages, { title: source.title });
     pdfSearchModel = { doc, model: modelForSearch };
     if (searchOpen && searchTerm.trim()) runSearch();
@@ -515,7 +517,7 @@
       await task.promise;
       if (seq !== renderSeq) return;
       rendered = true;
-      if (!firstPageDrawn) { firstPageDrawn = true; step('first page drawn'); }
+      if (!firstPageDrawn) { firstPageDrawn = true; step('first page drawn', { done: true }); }
       rememberPosition();
     } catch (err) {
       if (err?.name === 'RenderingCancelledException') return;

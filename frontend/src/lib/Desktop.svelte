@@ -29,6 +29,7 @@
   import { createCrashGuard, createProofClock, readLiveTabs, startPresence, HOLD_CLOSE_FIRST_AFTER, QUIET_MS } from './crash-guard.js';
   import { scopedKey } from './user-scope.js';
   import { setWindowStepSink } from './window-step';
+  import { setPlannedReloadSink } from './planned-reload';
   import { links } from './services/links';
   import { onMount } from 'svelte';
   import { onDestroy } from 'svelte';
@@ -263,6 +264,8 @@
     clearInstalledPackages();
     void clearProviderSelections();
     closeLiveChannel();
+    // Signed out: nothing is mounting any more, so the markers are settled and the guard starts over at the next sign-in.
+    resetCrashGuardState({ settle: true });
     bootstrapData = null;
     bootstrapError = '';
     bootstrapStable = true;
@@ -517,9 +520,10 @@
       desktopReady = bootstrapStable && stateLoaded;
       return;
     }
+    // Armed before anything is fetched or mounted, and independent of the fetch.
+    await armCrashGuard();
     try {
       const state = await fetchDesktopState();
-      if (state) await prepareCrashGuard();
       if (state) {
         applyPersistedDesktopState(() => {
           // Restore icon positions
@@ -585,6 +589,8 @@
         return;
       }
     }
+    // Whatever the fetch did, the markers have been judged: app bodies may mount.
+    crashGateOpen = true;
     stateLoaded = true;
     desktopReady = bootstrapStable && stateLoaded;
   }
@@ -616,10 +622,22 @@
   // the-window-that-crashed-the-page-crash-loop-2026-11-16.md). The page cannot
   // see its own death, so a window is written pending before its body mounts
   // and proven after a quiet period; a window still pending at the next load
-  // comes back held. Per device, per tab, per user; inert without storage. ----
+  // comes back held. Per device, per page nonce, per user; inert without
+  // storage. No app body mounts (restore, route, replay, remote merge, launch)
+  // until the guard is armed and the first restore has judged the markers
+  // (crashGateOpen), even when the state fetch fails. ----
+  const crashPageId = (() => {
+    try {
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+    } catch (_err) { /* fall through */ }
+    return Math.random().toString(36).slice(2) + Date.now().toString(36);
+  })();
   let crashGuard = null;
   let crashGuardKey = '';
   let crashBoot = null;
+  let crashArming = null;
+  let crashGateOpen = false;
+  let crashRestoreTaken = false;
   let crashMarked = new Set();
   const crashClock = { current: null };
   let crashTickAt = 0;
@@ -627,83 +645,103 @@
   let crashBootStable = false;
   let crashTicker = null;
   let removeStepSink = null;
+  let removePlannedSink = null;
   let crashSteps = {};
-  let crashBootAt = 0;
   let crashLiveTabs = new Set();
   let stopPresence = null;
 
-  function crashTabId() {
-    try {
-      const existing = window.sessionStorage.getItem('choir.crashGuard.tab');
-      if (existing) return existing;
-      const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
-      window.sessionStorage.setItem('choir.crashGuard.tab', id);
-      return id;
-    } catch (_err) {
-      return 'no-session-storage';
-    }
+  function resetCrashGuardState({ settle = false } = {}) {
+    if (settle && crashGuard) for (const id of crashMarked) crashGuard.settle(id);
+    stopPresence?.();
+    removeStepSink?.();
+    removePlannedSink?.();
+    stopPresence = null;
+    removeStepSink = null;
+    removePlannedSink = null;
+    crashGuard = null;
+    crashGuardKey = '';
+    crashBoot = null;
+    crashArming = null;
+    crashGateOpen = false;
+    crashRestoreTaken = false;
+    crashMarked = new Set();
+    crashClock.current = null;
+    crashTickAt = 0;
+    crashVisibleMs = 0;
+    crashBootStable = false;
+    crashSteps = {};
+    crashLiveTabs = new Set();
   }
 
   function ensureCrashGuard() {
     if (typeof window === 'undefined') return null;
     const key = scopedKey('choir.crashGuard.v1');
     if (crashGuard && crashGuardKey === key) return crashGuard;
+    if (crashGuard) resetCrashGuardState();
     let storage = null;
     try { storage = window.localStorage; } catch (_err) { storage = null; }
     crashGuardKey = key;
-    crashGuard = createCrashGuard({ storage, key, tabId: crashTabId(), userAgent: (typeof navigator !== 'undefined' && navigator.userAgent) || '' });
+    crashGuard = createCrashGuard({ storage, key, pageId: crashPageId, userAgent: (typeof navigator !== 'undefined' && navigator.userAgent) || '' });
     crashClock.current = createProofClock({ guard: crashGuard });
-    removeStepSink?.();
-    removeStepSink = setWindowStepSink((windowId, text) => crashGuard?.step(windowId, text));
-    crashBoot = null;
-    crashMarked = new Set();
     return crashGuard;
   }
 
-  // Which other tabs are alive right now (Web Locks, else a heartbeat), then
-  // this tab announces itself. Async, and awaited before any restored window
-  // is set, so no app body mounts until the markers are judged: a marker from
-  // a tab that is not demonstrably alive is a death, so a new tab or a lost
-  // sessionStorage cannot walk back into the loop.
-  async function prepareCrashGuard() {
-    const guard = ensureCrashGuard();
-    if (!guard || crashBoot) return;
-    let storage = null;
-    try { storage = window.localStorage; } catch (_err) { storage = null; }
-    const locks = typeof navigator !== 'undefined' ? navigator.locks : null;
-    try {
-      crashLiveTabs = await readLiveTabs({ locks, storage });
-    } catch (_err) {
-      crashLiveTabs = new Set();
-    }
-    stopPresence?.();
-    stopPresence = startPresence({ locks, storage, tabId: crashTabId() });
+  // Arm: judge which other pages are alive (Web Locks, else a heartbeat), then
+  // announce this one and begin its boot. Async and idempotent; nothing mounts
+  // before loadDesktopState has awaited it. This page's own markers are never
+  // dead to itself (nonce), so arming early cannot make it hold its own windows.
+  function armCrashGuard() {
+    if (crashArming) return crashArming;
+    crashArming = (async () => {
+      const guard = ensureCrashGuard();
+      if (!guard) return;
+      let storage = null;
+      try { storage = window.localStorage; } catch (_err) { storage = null; }
+      const locks = typeof navigator !== 'undefined' ? navigator.locks : null;
+      try {
+        crashLiveTabs = await readLiveTabs({ locks, storage });
+      } catch (_err) {
+        crashLiveTabs = new Set();
+      }
+      stopPresence = startPresence({ locks, storage, pageId: crashPageId });
+      removeStepSink = setWindowStepSink((windowId, text, opts = {}) => {
+        if (!crashGuard || !crashGateOpen) return;
+        const win = windowsSnapshot().find((w) => w.windowId === windowId);
+        if (!win || win.crashHeld) return;
+        crashGuard.step(windowId, text, { background: Boolean(opts.background), win });
+        if (!opts.background) crashMarked.add(windowId);
+        crashClock.current?.noteStep(windowId, opts);
+      });
+      removePlannedSink = setPlannedReloadSink(() => crashGuard?.markPlanned());
+      crashBoot = guard.beginBoot(crashLiveTabs);
+    })();
+    return crashArming;
   }
 
-  // At the page's first restore: which restored windows were opening when the
+  // At the page's first restore: which restored windows were opening when a
   // page last died, and did the last load die before anything was identified.
   function takeCrashReport(restoredRaw) {
-    const guard = ensureCrashGuard();
-    if (!guard) return { held: {}, suspected: false };
-    if (crashBoot) {
+    const guard = crashGuard;
+    if (!guard || !crashBoot) return { held: {}, suspected: false };
+    if (crashRestoreTaken) {
       // Not the first restore of this page: keep the holds windows carry now.
       const held = {};
       for (const win of windowsSnapshot()) if (win.crashHeld) held[win.windowId] = win.crashHeld;
       return { held, suspected: false };
     }
-    crashBootAt = Date.now();
-    crashBoot = guard.beginBoot(crashLiveTabs);
+    crashRestoreTaken = true;
     const held = guard.takeDeaths(restoredRaw.map((win) => win.windowId), crashLiveTabs);
     for (const id of Object.keys(held)) crashSteps[id] = guard.lastStep(id);
-    for (const entry of guard.history().filter((h) => held[h.windowId] && h.at >= crashBootAt)) {
+    for (const entry of guard.history().filter((h) => held[h.windowId] && h.at >= crashPageStartedAt)) {
       console.warn('[choir] the page stopped while a window was opening', entry);
     }
     const suspected = crashBoot.interrupted && Object.keys(held).length === 0;
     return { held, suspected };
   }
+  const crashPageStartedAt = Date.now();
 
-  function syncCrashGuard(list, isAuthenticated) {
-    if (!isAuthenticated || !crashGuard || !crashBoot) return;
+  function syncCrashGuard(list, isAuthenticated, gateOpen) {
+    if (!isAuthenticated || !gateOpen || !crashGuard) return;
     const mountedNow = new Set();
     for (const win of list || []) {
       if (win.mode === 'closed' || win.mode === 'hidden') continue;
@@ -721,10 +759,17 @@
       if (!held.has(id)) crashGuard.settle(id);
     }
   }
-  $: syncCrashGuard($windows, authenticated);
+  $: syncCrashGuard($windows, authenticated, crashGateOpen);
+
+  function settleCrashWindows(ids) {
+    for (const id of ids) {
+      crashMarked.delete(id);
+      crashGuard?.settle(id);
+    }
+  }
 
   function crashTick() {
-    if (!crashGuard || !crashBoot || !stateLoaded) return;
+    if (!crashGuard || !crashBoot || !crashGateOpen) return;
     const nowMs = Date.now();
     const dt = crashTickAt ? Math.min(nowMs - crashTickAt, 2000) : 0;
     crashTickAt = nowMs;
@@ -749,7 +794,7 @@
 
   function handleCloseCrashHeld(windowId) {
     closeWindow(windowId);
-    crashGuard?.settle(windowId);
+    settleCrashWindows([windowId]);
     scheduleSave();
   }
 
@@ -971,6 +1016,8 @@
   }
 
   async function persistWindowSet(nextWindows, nextActiveId) {
+    const keptIds = new Set((nextWindows || []).map((w) => w.windowId));
+    settleCrashWindows(windowsSnapshot().map((w) => w.windowId).filter((id) => !keptIds.has(id)));
     setWindows(nextWindows, nextActiveId || '');
     await tick();
     await saveDesktopState({
@@ -983,6 +1030,8 @@
     restoreRecoverySaving = true;
     restoreRecoveryStatus = '';
     try {
+      const keptIds = new Set((nextWindows || []).map((w) => w.windowId));
+      settleCrashWindows((restoreRecoveryWindows || []).map((w) => w.windowId).filter((id) => !keptIds.has(id)));
       await persistWindowSet(nextWindows, nextActiveId || '');
       restoreRecovery = null;
       restoreRecoveryWindows = [];
@@ -1375,7 +1424,7 @@
 
   function handleWindowClose(event) {
     closeWindow(event.detail.windowId);
-    crashGuard?.settle(event.detail.windowId);
+    settleCrashWindows([event.detail.windowId]);
     scheduleSave();
   }
 
@@ -1567,6 +1616,7 @@
     const windowId = event.detail?.windowId || '';
     if (!windowId) return;
     closeWindow(windowId);
+    settleCrashWindows([windowId]);
     scheduleSave();
   }
 
@@ -1847,8 +1897,7 @@
     closeLiveChannel();
     if (saveTimer) clearTimeout(saveTimer);
     if (crashTicker) clearInterval(crashTicker);
-    removeStepSink?.();
-    stopPresence?.();
+    resetCrashGuardState({ settle: true });
     if (unsubscribeWindows) unsubscribeWindows();
     if (unsubscribeActive) unsubscribeActive();
     if (unsubscribeIconPositions) unsubscribeIconPositions();
@@ -1899,7 +1948,7 @@
     />
 
     <!-- Floating windows (rendered on top of icons) -->
-    {#if desktopReady}
+    {#if desktopReady && (!authenticated || crashGateOpen)}
       {#if restoreRecovery}
         <section class="desktop-recovery" data-desktop-recovery role="status" aria-live="polite">
           <div>
@@ -1983,7 +2032,7 @@
               <div class="app-content suspended-app-content" data-crash-held data-crash-held-count={win.crashHeld} data-suspended-app-id={win.appId}>
                 <div class="crash-held">
                   <p class="crash-held-text">
-                    <strong>{win.title}</strong> was opening when the page stopped last time, so it has not been opened again.
+                    <strong>{win.title}</strong> was still opening when the page was reloaded or stopped, so it has not been opened again.
                     {#if crashSteps[win.windowId]}
                       It stopped while: {crashSteps[win.windowId]}.
                     {/if}

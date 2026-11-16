@@ -14,6 +14,8 @@ const WINDOWS = [
 ];
 const KEY = 'choir.crashGuard.v1:user-1';
 
+let stateStatus = 200;
+
 async function mock(context) {
   await context.route('**/auth/**', (route) => {
     const p = new URL(route.request().url()).pathname;
@@ -27,6 +29,7 @@ async function mock(context) {
     const p = new URL(req.url()).pathname;
     const json = (b, s = 200) => route.fulfill({ status: s, contentType: 'application/json', body: JSON.stringify(b) });
     if (p === '/api/desktop/state') {
+      if (req.method() === 'GET' && stateStatus !== 200) return json({ error: 'down' }, stateStatus);
       if (req.method() === 'GET') return json({ owner_id: 'user-1', windows: WINDOWS, active_window_id: 'w-settings', icon_positions: {} });
       return json({ ok: true, updated_at: new Date().toISOString() });
     }
@@ -51,7 +54,11 @@ async function ready(page) {
 }
 
 const pendingFor = (page) =>
-  page.evaluate((key) => JSON.parse(localStorage.getItem(key) || '{}').pending || {}, KEY);
+  page.evaluate((key) => {
+    // Entries are keyed window|page; answer by window id.
+    const pending = JSON.parse(localStorage.getItem(key) || '{}').pending || {};
+    return Object.fromEntries(Object.values(pending).map((e) => [e.windowId, e]));
+  }, KEY);
 
 test('a window pending at the last death is held, reopened, and closed', async ({ browser }) => {
   const { context, page } = await open(browser);
@@ -66,7 +73,7 @@ test('a window pending at the last death is held, reopened, and closed', async (
   await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
   const held = page.locator('[data-window][data-window-id="w-settings"] [data-crash-held]');
   await expect(held).toBeVisible();
-  await expect(held).toContainText('was opening when the page stopped last time');
+  await expect(held).toContainText('was still opening when the page was reloaded or stopped');
   await expect(page.locator('[data-window][data-window-id="w-settings"] [data-suspended-app]')).toHaveCount(0);
   expect(await pendingFor(page)).toEqual({});
 
@@ -92,7 +99,9 @@ test('a reload after the quiet period restores the window normally', async ({ br
   const { context, page } = await open(browser);
   await ready(page);
   await expect(page.locator('[data-window][data-window-id="w-settings"]')).toBeVisible();
-  // Proven after about 8 s of the page being alive and visible.
+  // The marker was written first (an inert guard would pass the next line alone)...
+  expect(Object.keys(await pendingFor(page))).not.toEqual([]);
+  // ...and is proven away after about 8 s of the page being alive and visible.
   await expect.poll(() => pendingFor(page), { timeout: 20000 }).toEqual({});
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
@@ -136,4 +145,54 @@ test('storage entirely unavailable: the desktop works as before, nothing held', 
   await expect(page.locator('[data-crash-held]')).toHaveCount(0);
   expect(errors.filter((e) => /crash|storage blocked/i.test(e))).toEqual([]);
   await context.close();
+});
+
+test('the pending marker exists in storage before the app body root exists', async ({ browser }) => {
+  const { context, page } = await open(browser);
+  await context.addInitScript((key) => {
+    window.__order = { markerAtBodyRoot: null };
+    const check = () => {
+      if (window.__order.markerAtBodyRoot !== null) return;
+      if (!document.querySelector('[data-app-host][data-app-window-id="w-settings"]')) return;
+      window.__order.markerAtBodyRoot = Object.keys(JSON.parse(localStorage.getItem(key) || '{}').pending || {});
+    };
+    new MutationObserver(check).observe(document, { childList: true, subtree: true });
+  }, KEY);
+  await ready(page);
+  await expect(page.locator('[data-app-host][data-app-window-id="w-settings"]')).toBeAttached();
+  const seen = await page.evaluate(() => window.__order.markerAtBodyRoot);
+  expect(seen).not.toBeNull();
+  expect(seen.some((k) => k.startsWith('w-settings|'))).toBe(true);
+  await context.close();
+});
+
+test('a planned reload (account switched in another tab) is not a crash', async ({ browser }) => {
+  const { context, page } = await open(browser);
+  await ready(page);
+  expect(Object.keys(await pendingFor(page))).not.toEqual([]);
+  // Still inside the quiet period: an unplanned reload here would hold the window.
+  await Promise.all([
+    page.waitForEvent('framenavigated'),
+    page.evaluate(() => new BroadcastChannel('choir-accounts').postMessage({ type: 'account-switched', from: 'another-tab', user_id: 'user-1' })),
+  ]);
+  await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
+  await expect(page.locator('[data-window][data-window-id="w-settings"]')).toBeVisible();
+  await expect(page.locator('[data-crash-held]')).toHaveCount(0);
+  await context.close();
+});
+
+test('a failed desktop-state fetch does not leave an unguarded desktop', async ({ browser }) => {
+  stateStatus = 500;
+  try {
+    const { context, page } = await open(browser);
+    await ready(page);
+    await page.locator('[data-desktop-icon-id="settings"]').click();
+    const body = page.locator('[data-app-host][data-app-id="settings"]');
+    await expect(body).toBeAttached();
+    const keys = Object.keys(await pendingFor(page));
+    expect(keys.length).toBe(1);
+    await context.close();
+  } finally {
+    stateStatus = 200;
+  }
 });

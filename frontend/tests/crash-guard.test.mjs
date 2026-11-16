@@ -2,7 +2,9 @@
 //
 // FAILURE LIST (written before the code; owner, 2026-11-16: "No crash loops").
 // The page cannot see its own death, so a marker is written before an app body
-// mounts and cleared only when the window has proven itself.
+// mounts and cleared only when the window has proven itself. A page is
+// identified by a nonce that is new on every load (pageId), never by anything
+// a lost sessionStorage could change.
 //
 //  F1  A window pending when the page died is reported dead at the next load,
 //      with a count of 1, and is no longer pending (it is held, not mounted).
@@ -13,38 +15,44 @@
 //  F5  Proving a window resets its death count.
 //  F6  pagehide with a window still pending leaves the pending marker AND the
 //      boot marker (a user reloading a frozen page is the crash case).
-//  F7  pagehide with nothing pending clears the boot marker (a clean leave
-//      before the desktop was stable is not a crash).
+//  F7  pagehide with nothing pending clears the boot marker.
 //  F8  A boot marker left by the previous load is reported as an interrupted
 //      boot; once the desktop was stable it is not.
-//  F9  Another tab's markers are not reported while that tab is demonstrably
-//      alive (nor removed), but ARE a death when that tab is not alive: a new
-//      tab with a new id must not walk into the loop. The same for boot markers.
+//  F9  A marker from another page is left alone while that page is
+//      demonstrably alive, and is a death when it is not (a new tab, a lost
+//      sessionStorage, a duplicated tab cannot walk back into the loop).
 //  F10 Storage that is missing, throws, or holds garbage never throws, and
 //      reports nothing dead: the desktop behaves as today.
-//  F11 Markers do not expire by age (a user back after two days must not
-//      re-enter the loop); only proof, close, a window the server no longer
-//      has, or a count cap (oldest first) ends one.
-//  F12 A pending marker for a window the server no longer has is pruned.
+//  F11 Markers never expire by age; storage is bounded by count only.
+//  F12 A marker for a window the server no longer has is pruned.
 //  F13 The quiet period counts only visible time, restarts when a window is
-//      unmounted, proves each window once, and a late death (after mount but
-//      before the quiet period ends) is still reported at the next load.
+//      unmounted, proves each window once.
+//  F14 Boot interrupted with no window identified is the page-level backstop.
 //  F15 The step an app reported last survives into the held record, the
-//      last-step lookup and a per-device history capped at 10 (appId, step,
-//      user agent, time, count). A step for an unknown window is ignored.
-//  F16 Liveness: with Web Locks, a tab is alive iff it holds its lock; without
-//      them, iff its heartbeat is fresher than 6 s; broken storage or locks
-//      mean nobody is alive (hold, the conservative answer).
-//  F14 hold-all is the page-level answer: interrupted boot with no window
-//      identified; with a window identified only that window is held.
+//      last-step lookup and a per-device history capped at 10.
+//  F16 Liveness: Web Locks, else a heartbeat fresh within 6 s, else nobody.
+//  F17 (review B2) This page's own markers are never dead for itself, so the
+//      guard can be armed and windows marked before the first restore runs.
+//  F18 (review B4) Markers are per (window, page): another page's proof or
+//      close does not delete this page's marker nor the reverse; two dead
+//      pages with a marker for one window are one death, not two.
+//  F19 (review B3) Proof needs the quiet period after the mount AND after the
+//      latest foreground step; background steps do not count; a window that
+//      announced work and never finished is proven only at the busy ceiling;
+//      a foreground step on a proven window arms it again.
+//  F20 (review nb) A planned reload (markPlanned) makes that page's markers
+//      clean at the next load, once; an unplanned death is still a death.
+//  F21 (review nb) crashes and steps are capped by count.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createCrashGuard,
   createProofClock,
   QUIET_MS,
+  BUSY_MAX_MS,
   HOLD_CLOSE_FIRST_AFTER,
   PENDING_CAP,
+  RECORD_CAP,
   HEARTBEAT_KEY,
   readLiveTabs,
 } from '../src/lib/crash-guard.js';
@@ -59,144 +67,209 @@ function memory() {
   };
 }
 const win = (id, appId = 'reader') => ({ windowId: id, appId, title: `T ${id}` });
-const guardOn = (storage, extra = {}) =>
-  createCrashGuard({ storage, key: 'k', tabId: 'tab-a', now: () => 1000, ...extra });
+let clockNow = 1000;
+const pageOn = (storage, pageId, extra = {}) =>
+  createCrashGuard({ storage, key: 'k', pageId, now: () => clockNow, ...extra });
+const none = new Set();
 
 test('F1 a pending window is dead at the next load', () => {
   const s = memory();
-  const g1 = guardOn(s);
-  g1.beginBoot();
+  const g1 = pageOn(s, 'p1');
+  g1.beginBoot(none);
   g1.markPending(win('w1'));
-  const g2 = guardOn(s);
-  const boot = g2.beginBoot();
-  const dead = g2.takeDeaths(['w1', 'w2']);
-  assert.deepEqual(dead, { w1: 1 });
+  const g2 = pageOn(s, 'p2');
+  const boot = g2.beginBoot(none);
+  assert.deepEqual(g2.takeDeaths(['w1', 'w2'], none), { w1: 1 });
   assert.equal(boot.interrupted, true);
-  assert.deepEqual(guardOn(s).takeDeaths(['w1']), {}, 'no longer pending once held');
+  assert.deepEqual(pageOn(s, 'p3').takeDeaths(['w1'], none), {}, 'no longer pending once held');
 });
 
 test('F2 a proven window is not dead', () => {
   const s = memory();
-  const g1 = guardOn(s);
+  const g1 = pageOn(s, 'p1');
   g1.markPending(win('w1'));
-  g1.settle('w1', { proven: true });
-  assert.deepEqual(guardOn(s).takeDeaths(['w1']), {});
+  g1.settle('w1');
+  assert.deepEqual(pageOn(s, 'p2').takeDeaths(['w1'], none), {});
 });
 
 test('F3 closing clears pending and the count', () => {
   const s = memory();
-  const g = guardOn(s);
-  g.markPending(win('w1'));
-  guardOn(s).takeDeaths(['w1']);
+  pageOn(s, 'p1').markPending(win('w1'));
+  pageOn(s, 'p2').takeDeaths(['w1'], none);
+  const g = pageOn(s, 'p3');
   g.markPending(win('w1'));
   g.settle('w1');
-  assert.deepEqual(guardOn(s).takeDeaths(['w1']), {});
-  g.markPending(win('w1'));
-  assert.deepEqual(guardOn(s).takeDeaths(['w1']), { w1: 1 });
+  assert.deepEqual(pageOn(s, 'p4').takeDeaths(['w1'], none), {});
+  pageOn(s, 'p4').markPending(win('w1'));
+  assert.deepEqual(pageOn(s, 'p5').takeDeaths(['w1'], none), { w1: 1 });
 });
 
 test('F4 a second death counts two', () => {
   const s = memory();
-  guardOn(s).markPending(win('w1'));
-  assert.deepEqual(guardOn(s).takeDeaths(['w1']), { w1: 1 });
-  guardOn(s).markPending(win('w1')); // reopened
-  assert.deepEqual(guardOn(s).takeDeaths(['w1']), { w1: 2 });
+  pageOn(s, 'p1').markPending(win('w1'));
+  assert.deepEqual(pageOn(s, 'p2').takeDeaths(['w1'], none), { w1: 1 });
+  pageOn(s, 'p3').markPending(win('w1')); // reopened
+  assert.deepEqual(pageOn(s, 'p4').takeDeaths(['w1'], none), { w1: 2 });
   assert.ok(2 >= HOLD_CLOSE_FIRST_AFTER);
 });
 
 test('F5 proving resets the count', () => {
   const s = memory();
-  guardOn(s).markPending(win('w1'));
-  guardOn(s).takeDeaths(['w1']);
-  const g = guardOn(s);
+  pageOn(s, 'p1').markPending(win('w1'));
+  pageOn(s, 'p2').takeDeaths(['w1'], none);
+  const g = pageOn(s, 'p3');
   g.markPending(win('w1'));
-  g.settle('w1', { proven: true });
+  g.settle('w1');
   g.markPending(win('w1'));
-  assert.deepEqual(guardOn(s).takeDeaths(['w1']), { w1: 1 });
+  assert.deepEqual(pageOn(s, 'p4').takeDeaths(['w1'], none), { w1: 1 });
 });
 
 test('F6 pagehide with a pending window keeps both markers', () => {
   const s = memory();
-  const g = guardOn(s);
-  g.beginBoot();
+  const g = pageOn(s, 'p1');
+  g.beginBoot(none);
   g.markPending(win('w1'));
   g.leaveCleanly();
-  const g2 = guardOn(s);
-  assert.equal(g2.beginBoot().interrupted, true);
-  assert.deepEqual(g2.takeDeaths(['w1']), { w1: 1 });
+  const g2 = pageOn(s, 'p2');
+  assert.equal(g2.beginBoot(none).interrupted, true);
+  assert.deepEqual(g2.takeDeaths(['w1'], none), { w1: 1 });
 });
 
 test('F7 pagehide with nothing pending clears the boot marker', () => {
   const s = memory();
-  const g = guardOn(s);
-  g.beginBoot();
+  const g = pageOn(s, 'p1');
+  g.beginBoot(none);
   g.leaveCleanly();
-  assert.equal(guardOn(s).beginBoot().interrupted, false);
+  assert.equal(pageOn(s, 'p2').beginBoot(none).interrupted, false);
 });
 
 test('F8 boot marker: interrupted until stable', () => {
   const s = memory();
-  guardOn(s).beginBoot();
-  const g = guardOn(s);
-  assert.equal(g.beginBoot().interrupted, true);
+  pageOn(s, 'p1').beginBoot(none);
+  const g = pageOn(s, 'p2');
+  assert.equal(g.beginBoot(none).interrupted, true);
   g.bootStable();
-  assert.equal(guardOn(s).beginBoot().interrupted, false);
+  assert.equal(pageOn(s, 'p3').beginBoot(none).interrupted, false);
 });
 
-test('F9 another tab: left alone while alive, a death when not alive', () => {
+test('F9 another page: left alone while alive, a death when not alive', () => {
   const s = memory();
-  const other = createCrashGuard({ storage: s, key: 'k', tabId: 'tab-b', now: () => 1000 });
-  other.beginBoot();
+  const other = pageOn(s, 'pb');
+  other.beginBoot(none);
   other.markPending(win('w1'));
-  const live = guardOn(s);
-  assert.equal(live.beginBoot(new Set(['tab-b'])).interrupted, false);
-  assert.deepEqual(live.takeDeaths(['w1'], new Set(['tab-b'])), {});
-  // tab-b still holds its markers; a fresh tab that finds it dead holds the window.
-  const fresh = createCrashGuard({ storage: s, key: 'k', tabId: 'tab-c', now: () => 1000 });
-  assert.equal(fresh.beginBoot(new Set()).interrupted, true);
-  assert.deepEqual(fresh.takeDeaths(['w1'], new Set()), { w1: 1 });
-});
-
-test('F9b a dead other tab holds the window; no alive set means dead', () => {
-  const s = memory();
-  createCrashGuard({ storage: s, key: 'k', tabId: 'tab-b', now: () => 1000 }).markPending(win('w1'));
-  assert.deepEqual(guardOn(s).takeDeaths(['w1']), { w1: 1 });
+  const live = pageOn(s, 'pa');
+  assert.equal(live.beginBoot(new Set(['pb'])).interrupted, false);
+  assert.deepEqual(live.takeDeaths(['w1'], new Set(['pb'])), {});
+  // pb still holds its marker; a fresh page that finds pb dead holds the window.
+  const fresh = pageOn(s, 'pc');
+  assert.equal(fresh.beginBoot(none).interrupted, true);
+  assert.deepEqual(fresh.takeDeaths(['w1'], none), { w1: 1 });
 });
 
 test('F10 broken storage never throws and reports nothing', () => {
   const boom = { getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); }, removeItem() { throw new Error('x'); } };
   for (const storage of [null, undefined, boom]) {
-    const g = guardOn(storage);
-    assert.deepEqual(g.beginBoot(), { interrupted: false });
+    const g = pageOn(storage, 'p1');
+    assert.deepEqual(g.beginBoot(none), { interrupted: false });
     g.markPending(win('w1'));
+    g.step('w1', 'x', {});
+    g.markPlanned();
     g.settle('w1');
     g.bootStable();
     g.leaveCleanly();
-    assert.deepEqual(g.takeDeaths(['w1']), {});
+    assert.deepEqual(g.takeDeaths(['w1'], none), {});
   }
   const s = memory();
   s.setItem('k', '{not json');
-  assert.deepEqual(guardOn(s).takeDeaths(['w1']), {});
+  assert.deepEqual(pageOn(s, 'p1').takeDeaths(['w1'], none), {});
   s.setItem('k', '[1,2]');
-  assert.deepEqual(guardOn(s).takeDeaths(['w1']), {});
+  assert.deepEqual(pageOn(s, 'p1').takeDeaths(['w1'], none), {});
 });
 
 test('F11 markers never expire by age; the count is capped', () => {
   const s = memory();
-  createCrashGuard({ storage: s, key: 'k', tabId: 'tab-a', now: () => 1000 }).markPending(win('w1'));
-  const later = createCrashGuard({ storage: s, key: 'k', tabId: 'tab-a', now: () => 1000 + 90 * 24 * 3600 * 1000 });
-  assert.deepEqual(later.takeDeaths(['w1']), { w1: 1 });
+  clockNow = 1000;
+  pageOn(s, 'p1').markPending(win('w1'));
+  clockNow = 1000 + 90 * 24 * 3600 * 1000;
+  assert.deepEqual(pageOn(s, 'p2').takeDeaths(['w1'], none), { w1: 1 });
   const s2 = memory();
+  clockNow = 1000;
   for (let i = 0; i < PENDING_CAP + 5; i++) {
-    createCrashGuard({ storage: s2, key: 'k', tabId: 'tab-a', now: () => 1000 + i }).markPending(win('c' + i));
+    clockNow = 1000 + i;
+    pageOn(s2, 'p1').markPending(win('c' + i));
   }
   const ids = Array.from({ length: PENDING_CAP + 5 }, (_, i) => 'c' + i);
-  assert.equal(Object.keys(guardOn(s2).takeDeaths(ids)).length, PENDING_CAP);
+  assert.equal(Object.keys(pageOn(s2, 'p2').takeDeaths(ids, none)).length, PENDING_CAP);
+  clockNow = 1000;
+});
+
+test('F12 a marker for a window the server no longer has is pruned', () => {
+  const s = memory();
+  pageOn(s, 'p1').markPending(win('gone'));
+  assert.deepEqual(pageOn(s, 'p2').takeDeaths(['w1'], none), {});
+  assert.deepEqual(pageOn(s, 'p3').takeDeaths(['gone'], none), {});
+});
+
+test('F13 the quiet period counts visible time only', () => {
+  const s = memory();
+  const g = pageOn(s, 'p1');
+  g.markPending(win('w1'));
+  g.markPending(win('w2'));
+  const clock = createProofClock({ guard: g });
+  assert.deepEqual(clock.advance(['w1', 'w2'], QUIET_MS - 1000, true), []);
+  assert.deepEqual(clock.advance(['w1', 'w2'], 5000, false), [], 'hidden page does not count');
+  assert.deepEqual(clock.advance(['w1'], 500, true), [], 'w2 unmounted: its clock restarts');
+  assert.deepEqual(clock.advance(['w1'], 500, true), ['w1']);
+  assert.deepEqual(clock.advance(['w1'], 500, true), [], 'proved once');
+  assert.deepEqual(pageOn(s, 'p2').takeDeaths(['w1', 'w2'], none), { w2: 1 });
+});
+
+test('F14 interrupted boot is the backstop only when no window is identified', () => {
+  const s = memory();
+  pageOn(s, 'p1').beginBoot(none);
+  const g = pageOn(s, 'p2');
+  const boot = g.beginBoot(none);
+  const dead = g.takeDeaths(['w1', 'w2'], none);
+  assert.equal(boot.interrupted && Object.keys(dead).length === 0, true);
+  const s2 = memory();
+  const a = pageOn(s2, 'p1');
+  a.beginBoot(none);
+  a.markPending(win('w1'));
+  const b = pageOn(s2, 'p2');
+  const boot2 = b.beginBoot(none);
+  const dead2 = b.takeDeaths(['w1', 'w2'], none);
+  assert.equal(boot2.interrupted && Object.keys(dead2).length === 0, false);
+});
+
+test('F15 the last step survives into the held record and the history', () => {
+  const s = memory();
+  const mk = (p) => pageOn(s, p, { userAgent: 'UA/1' });
+  const g = mk('p1');
+  g.markPending(win('w1'));
+  g.step('w1', 'fetching the file', {});
+  g.step('w1', 'importing the PDF library', {});
+  g.step('nope', 'ignored', {});
+  assert.deepEqual(mk('p2').takeDeaths(['w1'], none), { w1: 1 });
+  const g2 = mk('p3');
+  assert.equal(g2.lastStep('w1'), 'importing the PDF library');
+  const [h] = g2.history();
+  assert.equal(h.appId, 'reader');
+  assert.equal(h.step, 'importing the PDF library');
+  assert.equal(h.userAgent, 'UA/1');
+  assert.equal(h.crashes, 1);
+  g2.settle('w1');
+  assert.equal(g2.lastStep('w1'), '');
+  assert.equal(mk('p4').history().length, 1, 'history outlives the window');
+  for (let i = 0; i < 12; i++) {
+    mk('q' + i).markPending(win('h' + i));
+    mk('r' + i).takeDeaths(['h' + i], none);
+  }
+  assert.equal(mk('z').history().length, 10);
 });
 
 test('F16 liveness from locks, heartbeat, or nothing', async () => {
   const locks = (names) => ({ query: async () => ({ held: names.map((name) => ({ name })) }) });
-  let t = 100000;
+  const t = 100000;
   const alive = await readLiveTabs({ locks: locks(['choir-desktop-tab-b', 'other-lock']), storage: null, now: () => t });
   assert.deepEqual([...alive], ['b']);
   const hb = memory();
@@ -208,69 +281,102 @@ test('F16 liveness from locks, heartbeat, or nothing', async () => {
   assert.equal((await readLiveTabs({ locks: null, storage: null, now: () => t })).size, 0);
 });
 
-test('F12 a marker for a window the server no longer has is pruned', () => {
+test('F17 the page that marks first is not dead to itself', () => {
   const s = memory();
-  guardOn(s).markPending(win('gone'));
-  assert.deepEqual(guardOn(s).takeDeaths(['w1']), {});
-  assert.deepEqual(guardOn(s).takeDeaths(['gone']), {});
+  const g = pageOn(s, 'p1');
+  g.markPending(win('w1')); // armed and marked before the first restore ran
+  assert.deepEqual(g.takeDeaths(['w1'], none), {});
+  assert.equal(g.beginBoot(none).interrupted, false);
+  assert.deepEqual(pageOn(s, 'p2').takeDeaths(['w1'], none), { w1: 1 }, 'but dead to the next load');
 });
 
-test('F13 the quiet period counts visible time only', () => {
+test('F18 markers are per window and page; one death counts once', () => {
   const s = memory();
-  const g = guardOn(s);
-  g.markPending(win('w1'));
-  g.markPending(win('w2'));
-  const clock = createProofClock({ guard: g });
-  assert.deepEqual(clock.advance(['w1', 'w2'], QUIET_MS - 1000, true), []);
-  assert.deepEqual(clock.advance(['w1', 'w2'], 5000, false), [], 'hidden page does not count');
-  assert.deepEqual(clock.advance(['w1'], 500, true), [], 'w2 unmounted: its clock restarts');
-  assert.deepEqual(clock.advance(['w1'], 500, true), ['w1']);
-  assert.deepEqual(clock.advance(['w1'], 500, true), [], 'proved once');
-  // w2 never proved: a death now is still reported.
-  assert.deepEqual(guardOn(s).takeDeaths(['w1', 'w2']), { w2: 1 });
-});
-
-test('F14 interrupted boot is the backstop only when no window is identified', () => {
-  const s = memory();
-  guardOn(s).beginBoot();
-  const g = guardOn(s);
-  const boot = g.beginBoot();
-  const dead = g.takeDeaths(['w1', 'w2']);
-  assert.equal(boot.interrupted && Object.keys(dead).length === 0, true);
-  const s2 = memory();
-  const a = guardOn(s2);
-  a.beginBoot();
+  const a = pageOn(s, 'pa');
+  const b = pageOn(s, 'pb');
   a.markPending(win('w1'));
-  const b = guardOn(s2);
-  const boot2 = b.beginBoot();
-  const dead2 = b.takeDeaths(['w1', 'w2']);
-  assert.equal(boot2.interrupted && Object.keys(dead2).length === 0, false);
+  b.markPending(win('w1'));
+  b.settle('w1'); // pb proved it; pa is still opening it
+  const next = pageOn(s, 'pc');
+  assert.deepEqual(next.takeDeaths(['w1'], new Set(['pb'])), { w1: 1 }, "pa's marker survives pb's proof");
+  const s2 = memory();
+  pageOn(s2, 'pa').markPending(win('w1'));
+  pageOn(s2, 'pb').markPending(win('w1'));
+  assert.deepEqual(pageOn(s2, 'pc').takeDeaths(['w1'], none), { w1: 1 }, 'two dead pages, one death');
+  const s3 = memory();
+  const x = pageOn(s3, 'px');
+  x.markPending(win('w1'));
+  pageOn(s3, 'py').settle('w1'); // another live page closing it
+  assert.deepEqual(pageOn(s3, 'pz').takeDeaths(['w1'], none), { w1: 1 }, "py's close does not delete px's marker");
 });
 
-test('F15 the last step survives into the held record and the history', () => {
+test('F19 proof needs quiet after mount and after the latest foreground step', () => {
   const s = memory();
-  const mk = () => guardOn(s, { userAgent: 'UA/1' });
-  const g = mk();
+  const g = pageOn(s, 'p1');
   g.markPending(win('w1'));
-  g.step('w1', 'fetching the file');
-  g.step('w1', 'importing the PDF library');
-  g.step('nope', 'ignored');
-  assert.deepEqual(mk().takeDeaths(['w1']), { w1: 1 });
-  const g2 = mk();
-  assert.equal(g2.lastStep('w1'), 'importing the PDF library');
-  const [h] = g2.history();
-  assert.equal(h.appId, 'reader');
-  assert.equal(h.step, 'importing the PDF library');
-  assert.equal(h.userAgent, 'UA/1');
-  assert.equal(h.crashes, 1);
-  assert.equal(h.at, 1000);
-  g2.settle('w1');
-  assert.equal(g2.lastStep('w1'), '');
-  assert.equal(mk().history().length, 1, 'history outlives the window');
-  for (let i = 0; i < 12; i++) {
-    const x = mk();
-    x.markPending(win('h' + i));
-    mk().takeDeaths(['h' + i]);
+  const clock = createProofClock({ guard: g });
+  assert.deepEqual(clock.advance(['w1'], 6000, true), []);
+  clock.noteStep('w1', {}); // foreground step at 6 s, work in flight
+  assert.deepEqual(clock.advance(['w1'], 6000, true), [], '12 s after mount, 6 s after the step: not proven');
+  assert.deepEqual(pageOn(s, 'p2').takeDeaths(['w1'], none), { w1: 1 }, 'a death at 12 s is still held');
+
+  const s2 = memory();
+  const g2 = pageOn(s2, 'p1');
+  g2.markPending(win('w1'));
+  const c2 = createProofClock({ guard: g2 });
+  c2.noteStep('w1', {});
+  assert.deepEqual(c2.advance(['w1'], QUIET_MS + 1000, true), [], 'announced work, never finished: not at the quiet period');
+  c2.noteStep('w1', { done: true });
+  assert.deepEqual(c2.advance(['w1'], QUIET_MS, true), ['w1'], 'done: quiet period after it');
+
+  const s3 = memory();
+  const g3 = pageOn(s3, 'p1');
+  g3.markPending(win('w1'));
+  const c3 = createProofClock({ guard: g3 });
+  c3.noteStep('w1', {});
+  assert.deepEqual(c3.advance(['w1'], BUSY_MAX_MS, true), ['w1'], 'a hang is proven at the ceiling');
+
+  const s4 = memory();
+  const g4 = pageOn(s4, 'p1');
+  g4.markPending(win('w1'));
+  const c4 = createProofClock({ guard: g4 });
+  c4.advance(['w1'], 7000, true);
+  c4.noteStep('w1', { background: true });
+  assert.deepEqual(c4.advance(['w1'], 1000, true), ['w1'], 'a background step does not restart proof');
+
+  const s5 = memory();
+  const g5 = pageOn(s5, 'p1');
+  g5.markPending(win('w1'));
+  const c5 = createProofClock({ guard: g5 });
+  c5.advance(['w1'], QUIET_MS, true);
+  g5.step('w1', 'opening another document', { win: win('w1') });
+  c5.noteStep('w1', {});
+  assert.deepEqual(pageOn(s5, 'p2').takeDeaths(['w1'], none), { w1: 1 }, 'a foreground step on a proven window arms it again');
+});
+
+test('F20 a planned reload is clean once; an unplanned death is not', () => {
+  const s = memory();
+  const g = pageOn(s, 'p1');
+  g.beginBoot(none);
+  g.markPending(win('w1'));
+  g.markPlanned();
+  const g2 = pageOn(s, 'p2');
+  assert.equal(g2.beginBoot(none).interrupted, false);
+  assert.deepEqual(g2.takeDeaths(['w1'], none), {});
+  assert.deepEqual(pageOn(s, 'p3').takeDeaths(['w1'], none), {}, 'consumed, and the marker is gone');
+  const s2 = memory();
+  const h = pageOn(s2, 'p1');
+  h.markPending(win('w1'));
+  assert.deepEqual(pageOn(s2, 'p2').takeDeaths(['w1'], none), { w1: 1 });
+});
+
+test('F21 crashes and steps are capped by count', () => {
+  const s = memory();
+  for (let i = 0; i < RECORD_CAP + 10; i++) {
+    pageOn(s, 'a' + i).markPending(win('w' + i));
+    pageOn(s, 'b' + i).takeDeaths(['w' + i], none);
   }
-  assert.equal(mk().history().length, 10);
+  const state = JSON.parse(s.getItem('k'));
+  assert.ok(Object.keys(state.crashes).length <= RECORD_CAP);
+  assert.ok(Object.keys(state.steps).length <= RECORD_CAP);
 });
