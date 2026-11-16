@@ -255,7 +255,7 @@ final class ShelfStoreTests: XCTestCase {
         XCTAssertNil(ShelfAddress.parse("doc:")); XCTAssertNil(ShelfAddress.parse("pub:x"))
         SearchProviders.register(name: "t") { q in [SearchHit(address: "doc:z", title: q, kind: "document", detail: "")] }
         SearchProviders.register(name: "t") { q in [SearchHit(address: "doc:y", title: q, kind: "document", detail: "")] }
-        XCTAssertEqual(SearchProviders.hits("k").map(\.address), ["doc:y"])
+        XCTAssertEqual(SearchProviders.hits(for: "k").map(\.address), ["doc:y"])
         XCTAssertTrue(ReaderShelf.canImport(URL(string: "https://example.com/a/b.PDF")!))
         XCTAssertFalse(ReaderShelf.canImport(URL(string: "https://example.com/a")!))
         XCTAssertFalse(ReaderShelf.canImport(URL(string: "ftp://example.com/a.pdf")!))
