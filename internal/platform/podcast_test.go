@@ -294,3 +294,39 @@ func TestPodcastClipsOfAStableFileComeFirst(t *testing.T) {
 		}
 	}
 }
+
+// A poll that finds nothing new writes nothing: the feeds are polled every
+// half hour and a rewrite of every item each time would be churn.
+func TestPodcastRepeatPollWritesNothingUnlessSomethingChanged(t *testing.T) {
+	f := newFrontFixture(t)
+	ctx := context.Background()
+	ep := podcastFixtureEpisode("g1", 600)
+	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{ep}); err != nil {
+		t.Fatal(err)
+	}
+	canonical, _ := podcastCanonical(ogKindPodcastEpisode, PodcastEpisodeID(ep.FeedURL, ep.GUID))
+	old := time.Now().UTC().Add(-48 * time.Hour).Truncate(time.Second)
+	if _, err := f.store.corpus().Exec(`UPDATE og_objects SET updated_at = ? WHERE canonical_id = ?`, old, canonical); err != nil {
+		t.Fatal(err)
+	}
+	updatedAt := func() time.Time {
+		obj, err := f.svc.ogStore().GetObject(ctx, canonical)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return obj.UpdatedAt.UTC()
+	}
+	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{ep}); err != nil {
+		t.Fatal(err)
+	}
+	if !updatedAt().Equal(old) {
+		t.Fatalf("an unchanged item was rewritten: updated_at %v, want %v", updatedAt(), old)
+	}
+	ep.Title = "A new title"
+	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{ep}); err != nil {
+		t.Fatal(err)
+	}
+	if updatedAt().Equal(old) {
+		t.Fatal("a changed item was not written")
+	}
+}
