@@ -1,0 +1,122 @@
+{
+ "name": "17_skip",
+ "ops": [
+  {
+   "base_version": 0,
+   "by": "listener",
+   "id": "b",
+   "op": "skip",
+   "op_id": "o1"
+  },
+  {
+   "base_version": 0,
+   "by": "listener",
+   "ended": {
+    "at": "2026-11-16T12:00:00Z",
+    "last_block": 6,
+    "outcome": "finished"
+   },
+   "id": "a",
+   "op": "skip",
+   "op_id": "o2"
+  }
+ ],
+ "results": [
+  {
+   "applied": false,
+   "dropped": "not_on_air",
+   "op_id": "o1",
+   "version": 5
+  },
+  {
+   "applied": true,
+   "op_id": "o2",
+   "version": 6
+  }
+ ],
+ "start": {
+  "entries": [
+   {
+    "ended": {
+     "at": "2026-11-16T12:00:00Z",
+     "last_block": 3,
+     "outcome": "finished"
+    },
+    "est_seconds": 30,
+    "id": "h",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "heard",
+    "text": "words of h",
+    "title": "T h"
+   },
+   {
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "on_air",
+    "text": "words of a",
+    "title": "T a"
+   },
+   {
+    "est_seconds": 30,
+    "id": "b",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of b",
+    "title": "T b"
+   }
+  ],
+  "on_air": "a",
+  "position_seconds": 9,
+  "version": 5
+ },
+ "want": {
+  "applied_ops": [
+   "o2"
+  ],
+  "entries": [
+   {
+    "ended": {
+     "at": "2026-11-16T12:00:00Z",
+     "last_block": 3,
+     "outcome": "finished"
+    },
+    "est_seconds": 30,
+    "id": "h",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "heard",
+    "text": "words of h",
+    "title": "T h"
+   },
+   {
+    "ended": {
+     "at": "2026-11-16T12:00:00Z",
+     "last_block": 6,
+     "outcome": "skipped"
+    },
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "skipped",
+    "text": "words of a",
+    "title": "T a"
+   },
+   {
+    "est_seconds": 30,
+    "id": "b",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of b",
+    "title": "T b"
+   }
+  ],
+  "position_seconds": 0,
+  "version": 6
+ }
+}
