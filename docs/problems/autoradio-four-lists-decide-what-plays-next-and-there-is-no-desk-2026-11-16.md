@@ -74,6 +74,34 @@ queue accepts.
   your queue and what was previously played as well, so that they can respond
   while the Autoradio desk is working, and then Autoradio desk can take over
   seamlessly."
+- Writing ahead, and one master stream: "I absolutely do want to be writing
+  ahead... We should have a universal stream. We'll make that public, in
+  fact. We should push it out to YouTube or something. Like, we should
+  actually just have a 24/7 radio station, which is like the default stream.
+  And so if you were to download the app and then skip through the onboarding,
+  that would just be what plays. And beyond that just being default, that's
+  also an important thing to have and improve on as a benchmark, because...
+  with Autopaper, we are writing new stories and updating existing stories
+  pretty frequently, you know, every minute. And so the radio stream should
+  similarly be incorporating new stories as breaking news occurs, and
+  simultaneously providing updates to ongoing stories, and have the right
+  balance between reiterating the top stories and mixing in novel and
+  long-tail stories... obviously that's going to be personalized for every
+  user, but we should have a single master stream. And then the
+  personalizations would kind of be diffs from that, rather than entirely
+  developed for every individual user... as we're scaling up to like
+  thousands of users, we're probably going to maybe scale up to like dozens of
+  master radio streams with minor personalizations on top of it."
+- Voice: "it's off unless you turn it on. And then when you turn it on,
+  hands-free voice stays on until you stop talking plus a couple minutes."
+  And: "I don't want press and hold talk."
+- Screen: "for reader and for the embedded web view, the content should get
+  the full screen except for the prompt bar area at the bottom."
+- Type: "use typography to signify... the difference between static text and
+  a button and a headline. Typography is too same same, sans serif."
+- Background: "Podcasts and everything else should play in the background,
+  even if you're not focused on the Autoradio app. Currently, they don't."
+  After a return to the foreground "you can't resume playing".
 - Going to the next thing and "I like this or I don't like this" are separate
   questions; the gesture semantics are undecided.
 
