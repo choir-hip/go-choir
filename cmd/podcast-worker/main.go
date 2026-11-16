@@ -42,7 +42,7 @@ type feedList struct {
 
 func main() {
 	if len(os.Args) < 2 || strings.HasPrefix(os.Args[1], "-") {
-		fmt.Fprintln(os.Stderr, "usage: podcast-worker {intake|transcribe|match|run|serve} [flags]")
+		fmt.Fprintln(os.Stderr, "usage: podcast-worker {intake|transcribe|run|serve|candidates|put-clips} [flags]")
 		os.Exit(2)
 	}
 	cmd := os.Args[1]
@@ -141,7 +141,7 @@ func main() {
 		}
 		stored, refused := client.PutClips(ctx, clips)
 		for _, r := range refused {
-			log.Printf("refused: %s", r)
+			log.Printf("refused: %q", r)
 		}
 		log.Printf("put-clips: %d of %d clips stored, %d refused", stored, len(clips), len(refused))
 		if len(refused) > 0 {
