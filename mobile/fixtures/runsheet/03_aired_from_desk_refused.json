@@ -1,0 +1,66 @@
+{
+ "name": "03_aired_from_desk_refused",
+ "ops": [
+  {
+   "base_version": 0,
+   "by": "desk",
+   "id": "a",
+   "op": "aired",
+   "op_id": "o1",
+   "reason": "because",
+   "state": "on_air"
+  },
+  {
+   "base_version": 0,
+   "by": "listener",
+   "id": "a",
+   "op": "aired",
+   "op_id": "o2",
+   "state": "on_air"
+  }
+ ],
+ "results": [
+  {
+   "applied": false,
+   "dropped": "not_phone",
+   "op_id": "o1",
+   "version": 2
+  },
+  {
+   "applied": false,
+   "dropped": "not_phone",
+   "op_id": "o2",
+   "version": 2
+  }
+ ],
+ "start": {
+  "entries": [
+   {
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of a",
+    "title": "T a"
+   }
+  ],
+  "position_seconds": 0,
+  "version": 2
+ },
+ "want": {
+  "entries": [
+   {
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of a",
+    "title": "T a"
+   }
+  ],
+  "position_seconds": 0,
+  "version": 2
+ }
+}

@@ -1,0 +1,43 @@
+{
+ "decode_error": true,
+ "name": "12_unknown_op_is_an_error",
+ "ops": [
+  {
+   "base_version": 0,
+   "by": "phone",
+   "op": "teleport",
+   "op_id": "o1"
+  }
+ ],
+ "results": [],
+ "start": {
+  "entries": [
+   {
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of a",
+    "title": "T a"
+   }
+  ],
+  "position_seconds": 0,
+  "version": 1
+ },
+ "want": {
+  "entries": [
+   {
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of a",
+    "title": "T a"
+   }
+  ],
+  "position_seconds": 0,
+  "version": 1
+ }
+}
