@@ -158,15 +158,24 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
     }
 
     /// Ask for the opening write. Called when the radio opens.
-    public func open() { ask(cause: "open") }
+    public func open() { opened = true; ask(cause: "open") }
 
     /// The sheet changed or an entry started: is the time ahead short? Called by the player after every change.
+    /// Writing ahead is the rule: ask when the spoken time ahead is under max(twice the measured write latency, `aheadFloorSeconds`), or at once
+    /// when fewer than two playable entries (transitions do not count) are ahead. One ask in flight; an all-repeat answer waits for the next entry.
     public func checkAhead() {
-        guard !inFlight, latency > 0 else { return }
+        guard opened, !inFlight else { return }
         if let q = quietOn, q == store.onAir()?.id { return }
-        guard store.aheadSeconds < 2 * latency else { return }
+        let playable = store.ahead(limit: Int.max).filter { $0.kind != .transition }.count
+        let estimate = latency > 0 ? latency : Self.unmeasuredLatencySeconds
+        guard playable < 2 || store.aheadSeconds < max(2 * estimate, Self.aheadFloorSeconds) else { return }
         ask(cause: "extend")
     }
+    /// The least spoken time kept written ahead of the listener.
+    public static let aheadFloorSeconds: Double = 180
+    /// The write latency assumed until one has been measured.
+    public static let unmeasuredLatencySeconds: Double = 30
+    private var opened = false
 
     private func ask(cause: String) {
         guard !inFlight, let feed = feed() else { return }

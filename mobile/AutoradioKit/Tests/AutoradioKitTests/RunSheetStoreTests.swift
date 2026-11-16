@@ -585,42 +585,57 @@ final class RunSheetStoreTests: XCTestCase {
         p.aheadChanged = { [weak w] in w?.checkAhead() }
         return w
     }
-    func test23_SkippingToTheLastEntryAsksForMoreAndShowsTheDeskWriting() async {
+    func ops(_ ids: [String], secs: Double, cause: String = "open") -> [RunSheetFeedEvent] {
+        ids.map { .ops([ProgrammeRouteFeed.placeOp(story($0, secs: secs), cause: cause)]) } + [.done]
+    }
+    // the trigger: spoken time ahead under max(2 x latency, 180 s), or fewer than two playable entries ahead
+    func test23_ThreeEntriesOf20SecondsAheadAskForMore() async {
         let (p, s, _) = make()
         _ = await opened([], p, s)
-        let feed = FakeFeed()
-        feed.scripts = [[.ops([ProgrammeRouteFeed.placeOp(story("d-1", secs: 20), cause: "open")]), .ops([ProgrammeRouteFeed.placeOp(story("d-2", secs: 20), cause: "open")]), .done],
-                        [.ops([ProgrammeRouteFeed.placeOp(story("d-3", secs: 20), cause: "extend")]), .done]]
+        let feed = FakeFeed(); feed.scripts = [ops(["d-1", "d-2", "d-3"], secs: 20)]
+        let w = wired(s, p, feed)
+        w.open(); await w.settle(); await w.settle()
+        XCTAssertEqual(feed.calls.map(\.cause), ["open", "extend"], "60 s ahead is under 180: written ahead")
+    }
+    func test23_ASkipToTheSecondLastEntryAsksAtOnceAndAFullSheetDoesNot() async {
+        let (p, s, _) = make()
+        _ = await opened([], p, s)
+        let feed = FakeFeed(); feed.scripts = [ops(["d-1", "d-2", "d-3"], secs: 100)]       // 300 s, three playable
         let w = wired(s, p, feed)
         w.open(); await w.settle()
-        XCTAssertEqual(feed.calls.count, 1, "40 s ahead is more than twice the latency: nothing more is asked yet")
-        p.next(); await p.settle()                                       // d-1 on air, d-2 ahead
-        feed.hold = true
-        p.next(); await p.settle()                                       // d-2 on air, nothing ahead
-        try? await Task.sleep(nanoseconds: 150_000_000)
-        XCTAssertEqual(feed.calls.map(\.cause), ["open", "extend"], "the last entry went on air with nothing behind it: an extend is asked")
-        XCTAssertTrue(p.deskWriting); XCTAssertTrue(p.info().writing); XCTAssertFalse(p.info().dry)
+        XCTAssertEqual(feed.calls.count, 1, "a full sheet (over 180 s, two or more entries) asks for nothing")
+        p.next(); await p.settle(); await w.settle()                     // d-1 on air, two ahead (200 s)
+        XCTAssertEqual(feed.calls.count, 1)
+        p.next(); await p.settle(); await w.settle()                     // d-2 on air, one ahead: fewer than two playable
+        XCTAssertEqual(feed.calls.map(\.cause), ["open", "extend"], "asked at once, though 100 s is still ahead")
+    }
+    func test23_NoSecondAskWhileOneIsInFlightAndWritingShows() async {
+        let (p, s, _) = make()
+        _ = await opened([], p, s)
+        let feed = FakeFeed(); feed.hold = true
+        let w = wired(s, p, feed)
+        w.open()
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        for _ in 0..<5 { w.checkAhead(); deskPlace(s, story("d-\(UUID().uuidString.prefix(4))")) }
+        XCTAssertEqual(feed.calls.count, 1, "one ask in flight")
+        XCTAssertTrue(p.deskWriting && p.info().writing)
         feed.release(); await w.settle()
-        XCTAssertEqual(p.info().upcoming.map(\.id), ["d-3"]); XCTAssertFalse(p.info().writing)
     }
     func test23_NothingIsComingOnlyWhenNoAskIsInFlightAndTheLastReturnedNothingNew() async {
         let (p, s, _) = make()
         _ = await opened([], p, s)
         let feed = FakeFeed()
         let told = story("d-1", secs: 20)
-        feed.scripts = [[.ops([ProgrammeRouteFeed.placeOp(told, cause: "open")]), .done],
-                        [.ops([ProgrammeRouteFeed.placeOp(story("d-1b", secs: 20), cause: "extend")]), .done]]       // d-1b repeats d-1's title
-        feed.scripts[1] = [.ops([ProgrammeRouteFeed.placeOp({ var e = story("d-1b", secs: 20); e.title = told.title; return e }(), cause: "extend")]), .done]
+        var again = story("d-1b", secs: 20); again.title = told.title                                // a desk repeating a title already on the sheet
+        feed.scripts = [[.ops([ProgrammeRouteFeed.placeOp(told, cause: "open")]), .done], [.ops([ProgrammeRouteFeed.placeOp(again, cause: "extend")]), .done]]
         let w = wired(s, p, feed)
-        w.open(); await w.settle()
-        XCTAssertFalse(p.info().dry, "before any ask came back empty")
-        p.next(); await p.settle(); await w.settle()                     // d-1 on air, nothing ahead: extend, which only repeats d-1
+        w.open(); await w.settle(); await w.settle()
         XCTAssertEqual(feed.calls.map(\.cause), ["open", "extend"])
         XCTAssertEqual(p.droppedFromDesk.map(\.reason), ["title_already_on_sheet"], "the repeat is a dropped reason")
-        XCTAssertTrue(p.info().dry); XCTAssertFalse(p.info().writing); XCTAssertTrue(p.info().upcoming.isEmpty)
+        XCTAssertTrue(p.info().dry); XCTAssertFalse(p.info().writing)
         w.checkAhead(); await w.settle()
-        XCTAssertEqual(feed.calls.count, 2, "no loop on a desk that keeps repeating: the next natural trigger asks again")
-        deskPlace(s, story("d-9", secs: 20)); p.next(); await p.settle(); await w.settle()       // a new entry starts: a natural trigger
+        XCTAssertEqual(feed.calls.count, 2, "no loop on a desk that keeps repeating: it waits for the next entry")
+        p.next(); await p.settle(); await w.settle()                                                 // d-1 goes on air: a natural trigger
         XCTAssertEqual(feed.calls.count, 3)
     }
     func testDemoExtendAnswersDifferentStoriesEachTime() {
