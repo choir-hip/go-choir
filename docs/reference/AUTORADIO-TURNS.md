@@ -201,13 +201,14 @@ that line and a JSON array of ops. Only that exact line starts the ops, and only
 when it starts a line (after a newline or the stream's start, spaces and tabs
 aside) and a `[` (or `{`, a malformed array that is dropped and said, never read
 aloud, or a code fence around the array) is the next thing after it (blank space
-aside). Any other `<<<` in the reply (a quote, a page fence, another token's, an
-end fence), and the exact line echoed in a sentence or followed by words, does
-not start the ops: it is speech, with no failure line. The ops fence and the
-array are never speech. As a last guard, a sentence on a queue turn that is the
-ops array or carries the request's fence token is not spoken (logged), so an
-echoed fence line costs its sentence but is never read aloud. Text after the
-closing `]` is ignored (logged); the array's ops stand. A turn with no
+aside). Text that is not the ops fence is speech, with no failure line (a quote,
+a page fence, another token's fence, an end fence, the exact line echoed in a
+sentence or followed by words), EXCEPT that on a queue turn a sentence that
+carries this request's fence token, or an ops object (it contains `{"op":` and
+`"reason":`, or begins with an array of ops, spaces aside), is dropped by a last
+guard and logged. The cost: a reply made only of such sentences yields no speech
+and walks to the next pool member. Text after the closing `]` is ignored
+(logged); the array's ops stand. A turn with no
 `queue` sends the prompt and streams exactly as it did before the queue existed:
 no cut, no queue text, no `queue_ops` in `done`. A reply that is only the fence
 and ops is an answer (no walk to another pool member): the desk speaks "Okay."

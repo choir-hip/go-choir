@@ -179,7 +179,7 @@ func TestAutoradioQueueOnlyTheExactFenceStartsTheOps(t *testing.T) {
 		switch name {
 		case "echo":
 			want = "The long read is next in your queue."
-		case "end queue":
+		case "end queue", "other token": // the rest carries the token or an ops object: dropped by the guard
 			want = "Fine."
 		}
 		if !strings.Contains(got, want) || len(queueOpsOf(evs)) != 0 {
@@ -500,7 +500,9 @@ func TestAutoradioQueueNeverSpeaksTheOpsArrayOrTheToken(t *testing.T) {
 	req.queue = &snap
 	turn := &autoradioTurn{w: rec, req: req, queue: autoradioqueue.New(snap, nil)}
 	token := autoradioFenceToken(req.Page)
-	for _, s := range []string{`[{"op":"clear","reason":"r"}]`, `  [{"op": "move"}]`, "see " + token + " here", queueFenceFor(req.Page)} {
+	for _, s := range []string{`[{"op":"clear","reason":"r"}]`, `  [{"op": "move"}]`, `[ {"op":"move"}]`, `[  { "op" : "move" }]`,
+		`Here are the ops: [{"op":"move","id":"q14","to_index":0,"reason":"long read next"}]`, `Ops {"op": "clear", "reason": "r"} done`,
+		"see " + token + " here", queueFenceFor(req.Page)} {
 		turn.speak(s)
 	}
 	turn.speak("A real sentence.")
@@ -512,6 +514,23 @@ func TestAutoradioQueueNeverSpeaksTheOpsArrayOrTheToken(t *testing.T) {
 	plain.speak(`[{"op":"clear"}]`)
 	if len(plain.sentences) != 1 {
 		t.Fatalf("the guard ran on a turn with no queue")
+	}
+}
+
+// The error path: what the cut holds when the stream dies is the start of a
+// fence, and it is never spoken.
+func TestAutoradioQueueAStreamThatDiesInsideTheFenceSpeaksOnlyWhatWasComplete(t *testing.T) {
+	rt, _ := radioRuntime(t, func(n int, ctx context.Context, req provideriface.TextStreamRequest, onDelta func(string)) (*provideriface.TextStreamResponse, error) {
+		onDelta("One. Two.")
+		onDelta("\n" + queueFence[:9])
+		return nil, errors.New("stream error: reset")
+	})
+	evs := parseSSE(t, radioPost(rt, queueBody("t-die", "next", queueSnap)).Body.String())
+	if sp := speechOf(evs); len(sp) != 1 || sp[0] != "One." {
+		t.Fatalf("speech %q", sp)
+	}
+	if d := eventsNamed(evs, "done")[0].Data; d["status"] != "failed" || len(queueOpsOf(evs)) != 0 {
+		t.Fatalf("%v", d)
 	}
 }
 
