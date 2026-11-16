@@ -103,6 +103,8 @@ component Launcher
               ChipPlace(slug="textures", name="Textures", address="textures:")
               ChipPlace(slug="files", name="Files", address="file:/")
               ChipPlace(slug="mail", name="Mail", address="mailbox:inbox")
+              // ---- lane autoradio-podcasts ----
+              ChipPlace(slug="podcasts", name="Podcasts", address="podcasts:")
               ChipPlace(slug="settings", name="Settings", address="settings:root")
             text "In the deck, top first" font-family=th.fontUi font-size=13 color=th.muted margin-top=8
             for a, i in stackAddrs key=a

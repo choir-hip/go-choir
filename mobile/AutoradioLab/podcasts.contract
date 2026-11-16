@@ -1,0 +1,252 @@
+// Podcasts: the podcast app inside Autoradio. Three pages: the home (podcasts:), a show (podcast:show/<feed>) and an episode
+// (podcast:episode/<feed>/<guid>), which a clip opens into. Built only from the design components of ui.contract. Playback goes through
+// the one queue (the module's adapter); nothing here plays audio. The pages read their model with `podHome`, `podShow`, `podEp`.
+// testIds: podcasts-search, podcasts-results, podcasts-shows, podcasts-suggestions, podcasts-empty, podcast-row-<feed>, podcast-subscribe,
+//   podcast-unsubscribe, podcast-episode-<key>, podcast-play-<key>, podcast-resume, podcast-play, podcast-queue, podcast-keep, podcast-note,
+//   podcast-playing-from, podcast-retry, podcast-notes.
+use Theme, PodHomeView, PodShowView, PodEpisodeView from "@choir/autoradio"
+use PageScroll, PageHeader, SectionHeader, ListGroup, ListRow, Hairline, EmptyState, Emerge, Btn from "./ui.contract"
+
+component PodArt
+  inject
+    th: Theme
+  props
+    src: string
+    size: number
+  view
+    box width=size height=size flex-shrink=0 border-radius=th.radiusControl background-color=th.paper2 overflow="hidden"
+      if src != ""
+        image src width=size height=size object-fit="cover"
+
+// One show in a list: artwork, its title and a line, a quiet word on the right. The whole row is one tap target.
+component PodShowItem
+  inject
+    th: Theme
+    openPage: action
+  props
+    feed: string
+    address: string
+    title: string
+    detail: string
+    artwork: string
+    trailing: string
+    first: bool
+  view
+    column width="100%" min-width=0
+      if first == false
+        Hairline(indent=88)
+      button press=openPage(address, title) testId=`podcast-row-${feed}` appearance="none" width="100%" aria-label=title
+        row align-items="center" padding-left=16 width="100%" box-sizing="border-box"
+          PodArt(src=artwork, size=56)
+          column flex=1 min-width=0
+            ListRow(label=title, detail=detail, trailing=trailing, chevron=true)
+
+component PodcastsHome
+  inject
+    th: Theme
+    podHome: PodHomeView
+    podQ: string
+    editPodQ: action
+  view
+    PageScroll(id="podcasts")
+      Emerge(delay=0)
+        PageHeader(title="Podcasts", subtitle="Your shows, and where to find more", subId="podcasts-sub")
+      input type="search" value=podQ input=editPodQ placeholder="Search podcasts" aria-label="Search podcasts" testId="podcasts-search"
+        enterkeyhint="search" font-family=th.fontUi font-size=16 color=th.fg padding="10px 4px"
+      if podHome.hasQuery
+        if podHome.results.length > 0
+          Emerge(delay=0)
+            column gap=8 width="100%"
+              SectionHeader(label="Podcasts found")
+              ListGroup(testId="podcasts-results")
+                for r, i in podHome.results key=r.feedURL
+                  PodShowItem(feed=r.feedURL, address=r.address, title=r.title, detail=r.author, artwork=r.artwork, trailing=(r.subscribed ? "Subscribed" : ""), first=(i == 0))
+        if podHome.searchNote != ""
+          Emerge(delay=0)
+            EmptyState(message=podHome.searchNote, detail="", testId="podcasts-search-note")
+      if podHome.hasQuery == false
+        if podHome.status == "loading"
+          Emerge(delay=0)
+            EmptyState(message="Loading your podcasts…", detail="", testId="podcasts-loading")
+        if podHome.status == "empty"
+          Emerge(delay=0)
+            EmptyState(message="No podcasts yet", detail=podHome.message, testId="podcasts-empty")
+        if podHome.shows.length > 0
+          Emerge(delay=0)
+            column gap=8 width="100%"
+              SectionHeader(label="Your shows")
+              ListGroup(testId="podcasts-shows")
+                for r, i in podHome.shows key=r.feedURL
+                  PodShowItem(feed=r.feedURL, address=r.address, title=r.title, detail=r.detail, artwork=r.artwork, trailing=(r.unplayedCount > 0 ? `${r.unplayedCount} new` : ""), first=(i == 0))
+        if podHome.suggestions.length > 0
+          Emerge(delay=60)
+            column gap=8 width="100%"
+              SectionHeader(label="Popular in news")
+              ListGroup(testId="podcasts-suggestions")
+                for r, i in podHome.suggestions key=r.feedURL
+                  PodShowItem(feed=r.feedURL, address=r.address, title=r.title, detail=r.author, artwork=r.artwork, trailing="", first=(i == 0))
+        if podHome.syncNote != ""
+          text podHome.syncNote testId="podcasts-sync" font-family=th.fontUi font-size=13 color=th.muted
+
+// One episode of a show: title, a line (date, length, where you stopped), a play button beside it.
+component PodEpisodeItem
+  inject
+    th: Theme
+    openPage: action
+    podPlayEpisode: action
+  props
+    ekey: string
+    address: string
+    title: string
+    detail: string
+    trailing: string
+    playable: bool
+    first: bool
+  view
+    column width="100%" min-width=0
+      if first == false
+        Hairline(indent=16)
+      row align-items="center" width="100%" box-sizing="border-box"
+        button press=openPage(address, title) testId=`podcast-episode-${ekey}` appearance="none" flex=1 min-width=0 aria-label=title
+          ListRow(label=title, detail=detail, trailing=trailing, chevron=false)
+        if playable
+          button press=podPlayEpisode(address, "resume") testId=`podcast-play-${ekey}` appearance="none" width=52 height=52 flex-shrink=0 aria-label=`Play ${title}`
+            row width=52 height=52 align-items="center" justify-content="center"
+              image "symbol:play-fill" color=th.accent
+
+component PodcastShowPage
+  inject
+    th: Theme
+    podShow: PodShowView
+    podNote: string
+    podSubscribeTo: action
+    podUnsubscribeFrom: action
+    retryPodcasts: action
+  props
+    address: string
+    title: string
+  view
+    PageScroll(id="podcast-show")
+      if podShow.status == "loading"
+        Emerge(delay=0)
+          PageHeader(title=title, subtitle="", subId="podcast-sub")
+        Emerge(delay=0)
+          EmptyState(message="Opening the show…", detail="Reading its feed.", testId="podcast-loading")
+      if podShow.status == "error"
+        Emerge(delay=0)
+          PageHeader(title=(podShow.title != "" ? podShow.title : title), subtitle="", subId="podcast-sub")
+        Emerge(delay=0)
+          EmptyState(message="This show could not be opened", detail=podShow.message, testId="podcast-error")
+            button press=retryPodcasts testId="podcast-retry" appearance="none"
+              Btn(label="Try again", primary=false, wide=false)
+      if podShow.status == "ready" or podShow.status == "empty"
+        Emerge(delay=0)
+          row gap=16 align-items="center" width="100%"
+            PodArt(src=podShow.artwork, size=88)
+            column flex=1 min-width=0
+              PageHeader(title=podShow.title, subtitle=podShow.author, subId="podcast-sub")
+        Emerge(delay=40)
+          column gap=12 width="100%"
+            if podShow.subscribed
+              button press=podUnsubscribeFrom(podShow.feedURL) testId="podcast-unsubscribe" appearance="none" width="100%" aria-label="Unsubscribe"
+                Btn(label="Subscribed. Tap to unsubscribe", primary=false, wide=true)
+            if podShow.subscribed == false
+              button press=podSubscribeTo(podShow.feedURL) testId="podcast-subscribe" appearance="none" width="100%" aria-label="Subscribe"
+                Btn(label="Subscribe", primary=true, wide=true)
+            if podNote != ""
+              text podNote testId="podcast-note" font-family=th.fontUi font-size=13 color=th.muted
+            if podShow.summary != ""
+              text podShow.summary testId="podcast-summary" font-family=th.fontRead font-size=17 line-height=1.45 color=th.fg line-clamp=5
+        if podShow.status == "empty"
+          EmptyState(message="No episodes yet", detail=podShow.message, testId="podcast-empty")
+        if podShow.episodes.length > 0
+          Emerge(delay=80)
+            column gap=8 width="100%"
+              SectionHeader(label=(podShow.unplayedLine != "" ? `Episodes · ${podShow.unplayedLine}` : "Episodes"))
+              ListGroup(testId="podcast-episodes")
+                for e, i in podShow.episodes key=e.key
+                  PodEpisodeItem(ekey=e.key, address=e.address, title=e.title, detail=(e.stamp + (e.duration != "" ? ` · ${e.duration}` : "")), trailing=(e.progress != "" ? e.progress : (e.unplayed ? "New" : "")), playable=e.playable, first=(i == 0))
+
+component PodcastEpisodePage
+  inject
+    th: Theme
+    podEp: PodEpisodeView
+    podNote: string
+    openPage: action
+    podSubscribeTo: action
+    podPlayEpisode: action
+    podQueueEpisode: action
+    retryPodcasts: action
+  props
+    address: string
+    title: string
+  view
+    PageScroll(id="podcast-episode")
+      if podEp.status == "loading"
+        Emerge(delay=0)
+          PageHeader(title=title, subtitle="", subId="podcast-sub")
+        Emerge(delay=0)
+          EmptyState(message="Opening the episode…", detail="Reading the show's feed.", testId="podcast-loading")
+      if podEp.status == "error"
+        Emerge(delay=0)
+          PageHeader(title=title, subtitle="", subId="podcast-sub")
+        Emerge(delay=0)
+          EmptyState(message="This episode could not be opened", detail=podEp.message, testId="podcast-error")
+            button press=retryPodcasts testId="podcast-retry" appearance="none"
+              Btn(label="Try again", primary=false, wide=false)
+      if podEp.status == "ready"
+        Emerge(delay=0)
+          row gap=16 align-items="center" width="100%"
+            PodArt(src=podEp.artwork, size=88)
+            column flex=1 min-width=0
+              PageHeader(title=podEp.title, subtitle=(podEp.stamp + (podEp.duration != "" ? ` · ${podEp.duration}` : "")), subId="podcast-sub")
+        Emerge(delay=40)
+          column gap=12 width="100%"
+            button press=openPage(podEp.showAddress, podEp.showTitle) testId="podcast-show-link" appearance="none" width="100%" aria-label=`Open ${podEp.showTitle}`
+              ListGroup(testId="podcast-show-card")
+                ListRow(label=(podEp.showTitle != "" ? podEp.showTitle : "The show"), detail="Open the show and its other episodes", trailing="", chevron=true)
+            if podEp.playingFrom != ""
+              text podEp.playingFrom testId="podcast-playing-from" font-family=th.fontUi font-size=15 font-weight=600 color=th.accent
+            if podEp.playable
+              if podEp.fromClip
+                button press=podPlayEpisode(podEp.address, "keep") testId="podcast-keep" appearance="none" width="100%" aria-label="Keep listening"
+                  Btn(label="Keep listening", primary=true, wide=true)
+              if podEp.fromClip == false
+                if podEp.hasResume
+                  button press=podPlayEpisode(podEp.address, "resume") testId="podcast-resume" appearance="none" width="100%" aria-label=podEp.resumeLabel
+                    Btn(label=podEp.resumeLabel, primary=true, wide=true)
+                  button press=podPlayEpisode(podEp.address, "start") testId="podcast-play" appearance="none" width="100%" aria-label="Play from the start"
+                    Btn(label="Play from the start", primary=false, wide=true)
+                if podEp.hasResume == false
+                  button press=podPlayEpisode(podEp.address, "resume") testId="podcast-play" appearance="none" width="100%" aria-label="Play"
+                    Btn(label=(podEp.playingFrom != "" ? "Keep listening" : "Play"), primary=true, wide=true)
+              button press=podQueueEpisode(podEp.address) testId="podcast-queue" appearance="none" width="100%" aria-label="Add to queue"
+                Btn(label="Add to queue", primary=false, wide=true)
+            if podEp.subscribed == false
+              button press=podSubscribeTo(podEp.feedURL) testId="podcast-subscribe" appearance="none" width="100%" aria-label="Subscribe to the show"
+                Btn(label="Subscribe to this show", primary=false, wide=true)
+            if podEp.subscribed
+              text "You are subscribed to this show." testId="podcast-subscribed" font-family=th.fontUi font-size=13 color=th.muted
+            if podEp.note != ""
+              text podEp.note testId="podcast-episode-note" font-family=th.fontUi font-size=13 color=th.muted
+            if podNote != ""
+              text podNote testId="podcast-note" font-family=th.fontUi font-size=13 color=th.muted
+        if podEp.notes.length > 0
+          Emerge(delay=80)
+            column gap=8 width="100%" testId="podcast-notes"
+              SectionHeader(label="Show notes")
+              for n, i in podEp.notes key=i
+                text n font-family=th.fontRead font-size=17 line-height=1.5 color=th.fg white-space="pre-wrap"
+
+// The page host's one line for this kind.
+component PodcastPage
+  props
+    address: string
+    title: string
+  view
+    if address == "podcasts:"
+      PodcastsHome()
+    if address.startsWith("podcast:show/")
+      PodcastShowPage(address=address, title=title)
+    if address.startsWith("podcast:episode/")
+      PodcastEpisodePage(address=address, title=title)

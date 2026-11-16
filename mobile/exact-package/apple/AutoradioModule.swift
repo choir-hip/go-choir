@@ -118,6 +118,7 @@ public final class AutoradioModule: ExactPackage {
         registerMark()
         registerVoice()
         registerQueue()          // lane autoradio-queue
+        registerPodcasts()      // lane autoradio-podcasts
         Task { [choir] in await choir?.refresh() }
     }
 

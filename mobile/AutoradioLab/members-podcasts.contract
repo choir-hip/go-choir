@@ -1,0 +1,38 @@
+// Lane members file (podcasts): the Podcasts app's states, resources, mutations and actions, as if written in the root.
+// Owned by the autoradio-podcasts lane. Shapes and source names live in exact-package/interface/podcasts.json; the module answering
+// them is exact-package/apple/AutoradioModule+Podcasts.swift (Kit: PodcastService.swift, PodcastFeed.swift). Every name a child
+// component injects is in the podcasts band of the `provide` list in app.contract.
+use podcastHome, podcastShow, podcastEpisode, podcastSubscribe, podcastUnsubscribe, podcastPlay, podcastQueue, podcastRefresh from "@choir/autoradio"
+use PodHomeView, PodShowView, PodEpisodeView, PodAck from "@choir/autoradio"
+
+members Autoradio
+  resource podHome = podcastHome(q=podQ, address=pg.top) as shape PodHomeView else empty()
+  resource podShow = podcastShow(address=pg.top) as shape PodShowView else empty()
+  resource podEp = podcastEpisode(address=pg.top) as shape PodEpisodeView else empty()
+  mutation pak as shape PodAck
+
+  state podQ = ""
+  // The address a note belongs to ("" none), so one page's note never shows on another.
+  state podNoteFor = ""
+
+  derive podNoteRaw = match pak { case some(a) => a.message, case none => "" }
+  derive podNote = podNoteFor == pg.top ? podNoteRaw : ""
+
+  action editPodQ(v: string)
+    podQ = v
+  action podSubscribeTo(feed: string)
+    podNoteFor = pg.top
+    send pak = podcastSubscribe(feedURL=feed)
+  action podUnsubscribeFrom(feed: string)
+    podNoteFor = pg.top
+    send pak = podcastUnsubscribe(feedURL=feed)
+  action podPlayEpisode(address: string, mode: string)
+    podNoteFor = pg.top
+    send pak = podcastPlay(address=address, mode=mode)
+  action podQueueEpisode(address: string)
+    podNoteFor = pg.top
+    send pak = podcastQueue(address=address)
+  action retryPodcasts
+    refresh podHome
+    refresh podShow
+    refresh podEp

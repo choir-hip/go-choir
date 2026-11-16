@@ -41,6 +41,7 @@ public enum PageAddress {
         case "activity": return "activity"
         case "settings": return "settings"
         case "lab": return "lab"
+        case "podcasts", "podcast": return "podcast"
         case "onboarding": return "onboarding"      // lane 8 hook (first run); see mobile/README.md, Requests to the spine
         default: return "unknown"
         }
@@ -64,6 +65,7 @@ public enum PageAddress {
         case "onboarding:setup": return "Make it yours"
         case "onboarding:edit": return "My edition"
         case "mailbox:inbox": return "Mail"
+        case "podcasts:": return "Podcasts"
         case "file:/", "file:": return "Files"
         default: break
         }
@@ -73,6 +75,7 @@ public enum PageAddress {
         case "file": return (rest as NSString).lastPathComponent
         case "mailbox": return "Mail · " + rest
         case "mail": return "Message"
+        case "podcast": return rest.hasPrefix("episode/") ? "Episode" : "Show"
         case "reader": return rest.isEmpty ? "Story" : rest
         default: return address
         }
@@ -81,7 +84,7 @@ public enum PageAddress {
     /// The places the launcher lists, in order (plan section 1): name, address.
     public static let places: [(name: String, address: String)] = [
         ("Paper", "paper:front"), ("Textures", "textures:"), ("Files", "file:/"),
-        ("Mail", "mailbox:inbox"), ("Activity", "activity:"), ("Settings", "settings:root"),
+        ("Mail", "mailbox:inbox"), ("Podcasts", "podcasts:"), ("Activity", "activity:"), ("Settings", "settings:root"),
     ]
 }
 

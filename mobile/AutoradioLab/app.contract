@@ -23,6 +23,8 @@ component Autoradio
   members "./members-mark.contract"
   members "./members-voice.contract"
   members "./members-queue.contract"          // lane autoradio-queue
+  // ---- lane autoradio-podcasts ----
+  members "./members-podcasts.contract"
   // ---- end of members ----
 
   // What child components may `inject`. Bare names of this component's states, derives, resources and actions.
@@ -353,6 +355,18 @@ component Autoradio
     scrubMove
     scrubEnd
     closeBarWeb
+    // ---- lane autoradio-podcasts ----
+    podHome
+    podShow
+    podEp
+    podQ
+    podNote
+    editPodQ
+    podSubscribeTo
+    podUnsubscribeFrom
+    podPlayEpisode
+    podQueueEpisode
+    retryPodcasts
 
   view
     main testId="app" width="100%" height="100%" position="relative" overflow="hidden" box-sizing="border-box"

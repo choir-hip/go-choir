@@ -170,6 +170,11 @@ extension AutoradioModule {
                 if case .done(let found) = status { hits = CorpusSearch.rows(found, after: local) }
                 searchNote = CorpusSearcher.note(status, hasHits: !hits.isEmpty)
             }
+            // Other apps of the app (podcasts, the reader) add their own group through one registry.
+            if !q.trimmingCharacters(in: .whitespaces).isEmpty {
+                let have = Set(hits.map(\.address))
+                hits += SearchProviders.hits(for: q).filter { !have.contains($0.address) }
+            }
             func hit(_ h: SearchHit) -> [String: Any] { ["address": h.address, "title": h.title, "kind": h.kind, "detail": h.detail] }
             reply(["query": q, "hasQuery": !q.trimmingCharacters(in: .whitespaces).isEmpty,
                    "places": places.map { ["slug": $0.slug, "name": $0.name, "address": $0.address, "line": $0.line] },
