@@ -31,7 +31,7 @@ export const HEARTBEAT_STALE_MS = 6000;
 export const LOCK_PREFIX = 'choir-desktop-tab-';
 
 function emptyState() {
-  return { v: 2, pending: {}, crashes: {}, steps: {}, history: [], boots: {}, planned: {} };
+  return { v: 3, pending: {}, held: {}, history: [], boots: {}, planned: {} };
 }
 
 const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? { ...v } : {});
@@ -51,10 +51,9 @@ export function createCrashGuard({ storage, key, pageId, now = () => Date.now(),
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return emptyState();
       const state = {
-        v: 2,
+        v: 3,
         pending: obj(parsed.pending),
-        crashes: obj(parsed.crashes),
-        steps: obj(parsed.steps),
+        held: obj(parsed.held),
         history: Array.isArray(parsed.history) ? parsed.history.filter((h) => h && typeof h === 'object').slice(-HISTORY_LIMIT) : [],
         boots: obj(parsed.boots),
         planned: obj(parsed.planned),
@@ -71,7 +70,7 @@ export function createCrashGuard({ storage, key, pageId, now = () => Date.now(),
   function write(state) {
     try {
       if (!storage) return;
-      const empty = !state.history.length && ['pending', 'crashes', 'steps', 'boots', 'planned'].every((k) => !Object.keys(state[k]).length);
+      const empty = !state.history.length && ['pending', 'held', 'boots', 'planned'].every((k) => !Object.keys(state[k]).length);
       if (empty) storage.removeItem(key);
       else storage.setItem(key, JSON.stringify(state));
     } catch (_err) {
@@ -94,8 +93,7 @@ export function createCrashGuard({ storage, key, pageId, now = () => Date.now(),
     capMap(state.pending, PENDING_CAP, (e) => e.since);
     capMap(state.boots, BOOT_CAP, (since) => since);
     capMap(state.planned, BOOT_CAP, (at) => at);
-    capMap(state.crashes, RECORD_CAP);
-    capMap(state.steps, RECORD_CAP);
+    capMap(state.held, RECORD_CAP, (h) => h.since);
     write(state);
     return out;
   }
@@ -104,8 +102,50 @@ export function createCrashGuard({ storage, key, pageId, now = () => Date.now(),
   // Dead: any page but this one that is not demonstrably alive right now.
   const isDead = (page, alive) => page !== pageId && !alive.has(page);
 
+  // A dead page's marker becomes a durable hold (state.held), counted once per
+  // key per call. A planned reload excuses a marker only when no foreground
+  // step was still in flight (a hung open is not laundered). Auto-open entries
+  // are keyed by app and route/context (their window id is fresh every load);
+  // others by window id, and only when the server still has the window.
+  function absorbDead(state, alive, restored, onlyAuto) {
+    const dead = {};
+    const counted = new Set();
+    for (const [k, entry] of Object.entries(state.pending)) {
+      if (!isDead(entry.page, alive)) continue;
+      if (onlyAuto && !entry.autoKey) continue;
+      delete state.pending[k];
+      if (state.planned[entry.page] && !entry.busy) continue;
+      const holdKey = entry.autoKey ? `a:${entry.autoKey}` : restored && restored.has(entry.windowId) ? `w:${entry.windowId}` : '';
+      if (!holdKey) continue;
+      const h = state.held[holdKey] || { key: holdKey, windowId: entry.autoKey ? '' : entry.windowId, appId: entry.appId || '', title: entry.title || '', count: 0 };
+      if (!counted.has(holdKey)) {
+        counted.add(holdKey);
+        h.count = (Number(h.count) || 0) + 1;
+        h.since = now();
+        state.history.push({
+          windowId: entry.windowId,
+          appId: entry.appId || '',
+          title: entry.title || '',
+          step: entry.step || '',
+          userAgent,
+          at: now(),
+          crashes: h.count,
+        });
+        state.history = state.history.slice(-HISTORY_LIMIT);
+      }
+      h.step = entry.step || h.step || '';
+      state.held[holdKey] = h;
+      if (!entry.autoKey) dead[entry.windowId] = h.count;
+    }
+    return dead;
+  }
+
   return {
-    /** Call once per page load. interrupted: a previous page of this device never became stable (planned reloads are clean). */
+    /**
+     * Call once per page load. interrupted: a previous page of this device never
+     * became stable (planned reloads are clean). previousDead: that, or any dead
+     * page's pending marker. Dead automatic opens are held here (no restore needed).
+     */
     beginBoot(alive = new Set()) {
       return mutate((state) => {
         let interrupted = false;
@@ -114,9 +154,8 @@ export function createCrashGuard({ storage, key, pageId, now = () => Date.now(),
           if (!state.planned[page]) interrupted = true;
           delete state.boots[page];
         }
-        // A dead page's pending marker (even for a window nobody can match
-        // by id, such as one a route opened) also says the last boot died.
-        const deadPending = Object.values(state.pending).some((e) => isDead(e.page, alive) && !state.planned[e.page]);
+        const deadPending = Object.values(state.pending).some((e) => isDead(e.page, alive) && !(state.planned[e.page] && !e.busy));
+        absorbDead(state, alive, null, true);
         state.boots[pageId] = now();
         return { interrupted, previousDead: interrupted || deadPending };
       }) || { interrupted: false, previousDead: false };
@@ -127,30 +166,38 @@ export function createCrashGuard({ storage, key, pageId, now = () => Date.now(),
         delete state.boots[pageId];
       });
     },
-    /** Synchronously, before an app body mounts. */
-    markPending(win) {
+    /** Synchronously, before an app body mounts. opts.autoKey: an automatic open (route, replay). */
+    markPending(win, opts = {}) {
       mutate((state) => {
-        state.pending[entryKey(win.windowId)] = {
+        const entry = {
           windowId: win.windowId,
           appId: win.appId || '',
           title: win.title || '',
           since: now(),
           page: pageId,
         };
+        if (opts.autoKey) entry.autoKey = String(opts.autoKey);
+        state.pending[entryKey(win.windowId)] = entry;
       });
     },
-    /** Proven, or closed: forget this page's marker and the window's death count and step. */
-    settle(windowId) {
+    /**
+     * Proven, or closed: forget this page's marker and the hold (a window's, and
+     * the automatic open's by key). A Reopen does not call this; only proof or Close.
+     */
+    settle(windowId, opts = {}) {
       mutate((state) => {
+        const entry = state.pending[entryKey(windowId)];
+        const autoKey = opts.autoKey || entry?.autoKey || '';
         delete state.pending[entryKey(windowId)];
-        delete state.crashes[windowId];
-        delete state.steps[windowId];
+        delete state.held[`w:${windowId}`];
+        if (autoKey) delete state.held[`a:${autoKey}`];
       });
     },
     /**
      * An app body says where it is, synchronously, so a death names the step
-     * it was in. opts.win ({windowId, appId, title}) lets a foreground step on
-     * an already proven window arm it again; a background step never does.
+     * it was in. opts.win lets a foreground step on an already proven window
+     * arm it again; a background step never does. A foreground step without
+     * done marks work in flight (a planned reload does not excuse it).
      */
     step(windowId, text, opts = {}) {
       mutate((state) => {
@@ -164,15 +211,18 @@ export function createCrashGuard({ storage, key, pageId, now = () => Date.now(),
             since: now(),
             page: pageId,
           };
+          if (opts.autoKey) entry.autoKey = String(opts.autoKey);
         }
         entry.step = String(text || '').slice(0, STEP_LIMIT);
         entry.stepAt = now();
+        if (!opts.background) entry.busy = !opts.done;
       });
     },
     /** The step a held window was in when the page died ('' when unknown). */
-    lastStep(windowId) {
+    lastStep(windowId, autoKey = '') {
       const state = read();
-      return state ? String(state.steps[windowId] || '') : '';
+      if (!state) return '';
+      return String(state.held[`w:${windowId}`]?.step || (autoKey ? state.held[`a:${autoKey}`]?.step : '') || '');
     },
     /** The last HISTORY_LIMIT deaths on this device, oldest first, for a later report. */
     history() {
@@ -180,51 +230,58 @@ export function createCrashGuard({ storage, key, pageId, now = () => Date.now(),
       return state ? state.history : [];
     },
     /**
-     * At load: which of the restored windows have a marker from a dead page.
-     * One count per window per call. The dead pages' markers go (the window is
-     * held, not mounted); a dead page that announced a planned reload is clean.
-     * Markers for windows the server no longer has are pruned; markers of
-     * pages that are alive, and this page's own, are left alone.
+     * At the first restore: dead pages' markers for restored windows become
+     * holds (one count per window per call). Returns {windowId: count} for the
+     * deaths absorbed now. Markers of windows the server no longer has are pruned;
+     * markers of pages that are alive, and this page's own, are left alone.
      */
     takeDeaths(restoredIds = [], alive = new Set()) {
       return mutate((state) => {
-        const restored = new Set(restoredIds);
-        const dead = {};
-        const deadPages = new Set();
-        for (const [k, entry] of Object.entries(state.pending)) {
-          if (!isDead(entry.page, alive)) continue;
-          deadPages.add(entry.page);
-          delete state.pending[k];
-          if (!restored.has(entry.windowId) || state.planned[entry.page]) continue;
-          if (!dead[entry.windowId]) {
-            state.crashes[entry.windowId] = (Number(state.crashes[entry.windowId]) || 0) + 1;
-            dead[entry.windowId] = state.crashes[entry.windowId];
-            state.steps[entry.windowId] = entry.step || '';
-            state.history.push({
-              windowId: entry.windowId,
-              appId: entry.appId || '',
-              title: entry.title || '',
-              step: entry.step || '',
-              userAgent,
-              at: now(),
-              crashes: state.crashes[entry.windowId],
-            });
-            state.history = state.history.slice(-HISTORY_LIMIT);
-          }
-        }
+        const dead = absorbDead(state, alive, new Set(restoredIds), false);
         for (const page of Object.keys(state.planned)) {
           if (isDead(page, alive)) delete state.planned[page];
         }
         return dead;
       }) || {};
     },
-    /** A planned reload (an update, an account switch): this page's markers are clean at the next load. */
+    /**
+     * The durable holds for restored windows: {windowId: count}, every load,
+     * with no dependence on boot markers or liveness. A hold for a window the
+     * server no longer has is pruned.
+     */
+    holds(restoredIds = []) {
+      return mutate((state) => {
+        const restored = new Set(restoredIds);
+        const out = {};
+        for (const [k, h] of Object.entries(state.held)) {
+          if (!k.startsWith('w:')) continue;
+          if (restored.has(h.windowId)) out[h.windowId] = Number(h.count) || 1;
+          else delete state.held[k];
+        }
+        return out;
+      }) || {};
+    },
+    /** Count of an automatic open's hold (0 when none), keyed by app and route/context. */
+    autoHeld(autoKey) {
+      const state = read();
+      return state ? Number(state.held[`a:${autoKey}`]?.count) || 0 : 0;
+    },
+    /** The previous boot died: hold this automatic open, durably. Returns its count. */
+    holdAuto(autoKey, meta = {}) {
+      return mutate((state) => {
+        const k = `a:${autoKey}`;
+        const h = state.held[k] || { key: k, windowId: '', appId: meta.appId || '', title: meta.title || '', count: 1, since: now() };
+        state.held[k] = h;
+        return Number(h.count) || 1;
+      }) || 0;
+    },
+    /** A planned reload (an update, an account switch): this page's settled markers are clean at the next load. */
     markPlanned() {
       mutate((state) => {
         state.planned[pageId] = now();
       });
     },
-    /** pagehide: only a page with nothing pending left cleanly. Never clears a pending window. */
+    /** pagehide: only a page with nothing pending left cleanly. Never clears a pending window or a hold. */
     leaveCleanly() {
       mutate((state) => {
         const anyPending = Object.values(state.pending).some((e) => e.page === pageId);
@@ -294,16 +351,17 @@ export async function readLiveTabs({ locks, storage, now = () => Date.now() } = 
         const name = String(lock?.name || '');
         if (name.startsWith(LOCK_PREFIX)) alive.add(name.slice(LOCK_PREFIX.length));
       }
-      return alive;
+      return alive; // locks are authoritative: a dead page's lock is gone at once, its heartbeat would linger
     }
   } catch (_err) {
     return new Set();
   }
   try {
-    if (!storage) return alive;
-    const beats = JSON.parse(storage.getItem(HEARTBEAT_KEY) || '{}');
-    for (const [tab, at] of Object.entries(beats || {})) {
-      if (now() - Number(at) < HEARTBEAT_STALE_MS) alive.add(tab);
+    if (storage) {
+      const beats = JSON.parse(storage.getItem(HEARTBEAT_KEY) || '{}');
+      for (const [tab, at] of Object.entries(beats || {})) {
+        if (now() - Number(at) < HEARTBEAT_STALE_MS) alive.add(tab);
+      }
     }
   } catch (_err) {
     return new Set();
@@ -311,16 +369,23 @@ export async function readLiveTabs({ locks, storage, now = () => Date.now() } = 
   return alive;
 }
 
-/** Announce this tab as alive until the page dies. Returns a stop function. */
+/** Announce this page as alive until it dies: a lock, or a heartbeat where Web Locks are missing or refuse. Returns a stop function. */
 export function startPresence({ locks, storage, pageId, now = () => Date.now(), setTimer = setInterval, clearTimer = clearInterval } = {}) {
+  let timer = null;
+  const startHeartbeat = () => {
+    if (timer) return;
+    beat();
+    timer = setTimer(beat, HEARTBEAT_MS);
+  };
+  let useLocks = false;
   try {
     if (locks && typeof locks.request === 'function') {
+      useLocks = true;
       // Held forever: the browser releases it when the page goes.
-      void locks.request(LOCK_PREFIX + pageId, () => new Promise(() => {})).catch(() => {});
-      return () => {};
+      void locks.request(LOCK_PREFIX + pageId, () => new Promise(() => {})).catch(startHeartbeat);
     }
   } catch (_err) {
-    // fall through to the heartbeat
+    useLocks = false;
   }
   const beat = () => {
     try {
@@ -334,7 +399,15 @@ export function startPresence({ locks, storage, pageId, now = () => Date.now(), 
       // inert
     }
   };
-  beat();
-  const timer = setTimer(beat, HEARTBEAT_MS);
-  return () => clearTimer(timer);
+  if (!useLocks) startHeartbeat();
+  return () => { if (timer) clearTimer(timer); };
+}
+
+export const LIVENESS_TIMEOUT_MS = 2000;
+
+/** Answer fallback when promise has not settled in ms (a never-resolving locks.query() must not hold the boot). */
+export function withTimeout(promise, ms, fallback, { setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
+  let timer;
+  const timeout = new Promise((resolve) => { timer = setTimer(() => resolve(fallback), ms); });
+  return Promise.race([Promise.resolve(promise).catch(() => fallback), timeout]).finally(() => clearTimer(timer));
 }

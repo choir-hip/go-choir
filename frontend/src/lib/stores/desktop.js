@@ -813,11 +813,16 @@ export function clearWindowRestoreSuspension(windowId) {
  * page last died is held, whatever its app. `deaths` is how many times in a
  * row; 0 releases it. Per device: never serialized into the saved desktop state.
  */
-export function setWindowCrashHold(windowId, deaths) {
+export function setWindowCrashHold(windowId, deaths, autoKey = '') {
   windows.update(($windows) =>
     $windows.map((w) =>
       w.windowId === windowId
-        ? { ...w, crashHeld: deaths > 0 ? deaths : 0, restoreSuspended: deaths > 0 ? w.restoreSuspended : false }
+        ? {
+            ...w,
+            crashHeld: deaths > 0 ? deaths : 0,
+            restoreSuspended: deaths > 0 ? w.restoreSuspended : false,
+            ...(autoKey ? { crashAutoKey: autoKey } : {}),
+          }
         : w
     )
   );

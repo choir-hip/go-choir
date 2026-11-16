@@ -26,7 +26,7 @@
 -->
 <script>
   import { createEventDispatcher } from 'svelte';
-  import { createCrashGuard, createProofClock, readLiveTabs, startPresence, HOLD_CLOSE_FIRST_AFTER, QUIET_MS } from './crash-guard.js';
+  import { createCrashGuard, createProofClock, readLiveTabs, startPresence, withTimeout, LIVENESS_TIMEOUT_MS, HOLD_CLOSE_FIRST_AFTER, QUIET_MS } from './crash-guard.js';
   import { scopedKey } from './user-scope.js';
   import { setWindowStepSink } from './window-step';
   import { setPlannedReloadSink } from './planned-reload';
@@ -226,7 +226,7 @@
   $: if (mounted && desktopReady && publicRoutePath && publicRoutePath !== lastOpenedPublicRoutePath) {
     lastOpenedPublicRoutePath = publicRoutePath;
     const routed = links.resolveRoute(publicRoutePath);
-    if (routed) openAutomatically(() => openRoutedApp(routed.appId, routed.appContext));
+    if (routed) openAutomatically(routed.appId, routed.appContext, () => openRoutedApp(routed.appId, routed.appContext));
   }
   $: if (
     mounted &&
@@ -236,7 +236,7 @@
     appReplay.id !== lastAppReplayId
   ) {
     lastAppReplayId = appReplay.id;
-    openAutomatically(() => openApp(appReplay.appId, appReplay.appName, appReplay.icon, appReplay.appContext || {}));
+    openAutomatically(appReplay.appId, appReplay.appContext || {}, () => openApp(appReplay.appId, appReplay.appName, appReplay.icon, appReplay.appContext || {}));
   }
   $: overviewPreviewDecisions = desktopOverviewOpen
     ? createOverviewPreviewDecisions($windows, $activeWindowId, {
@@ -647,12 +647,17 @@
   let removeStepSink = null;
   let removePlannedSink = null;
   let crashAutoHold = false;
+  const crashAutoKeyById = new Map();
   let crashSteps = {};
   let crashLiveTabs = new Set();
   let stopPresence = null;
 
   function resetCrashGuardState({ settle = false } = {}) {
-    if (settle && crashGuard) for (const id of crashMarked) crashGuard.settle(id);
+    if (settle && crashGuard) {
+      for (const id of crashMarked) crashGuard.settle(id, { autoKey: crashAutoKeyById.get(id) || '' });
+      crashGuard.leaveCleanly();
+    }
+    crashAutoKeyById.clear();
     stopPresence?.();
     removeStepSink?.();
     removePlannedSink?.();
@@ -701,7 +706,7 @@
       try { storage = window.localStorage; } catch (_err) { storage = null; }
       const locks = typeof navigator !== 'undefined' ? navigator.locks : null;
       try {
-        crashLiveTabs = await readLiveTabs({ locks, storage });
+        crashLiveTabs = await withTimeout(readLiveTabs({ locks, storage }), LIVENESS_TIMEOUT_MS, new Set());
       } catch (_err) {
         crashLiveTabs = new Set();
       }
@@ -710,7 +715,7 @@
         if (!crashGuard || !crashGateOpen) return;
         const win = windowsSnapshot().find((w) => w.windowId === windowId);
         if (!win || win.crashHeld) return;
-        crashGuard.step(windowId, text, { background: Boolean(opts.background), win });
+        crashGuard.step(windowId, text, { background: Boolean(opts.background), done: Boolean(opts.done), win, autoKey: win.crashAutoKey || '' });
         if (!opts.background) crashMarked.add(windowId);
         crashClock.current?.noteStep(windowId, opts);
       });
@@ -734,9 +739,12 @@
       return { held, suspected: false };
     }
     crashRestoreTaken = true;
-    const held = guard.takeDeaths(restoredRaw.map((win) => win.windowId), crashLiveTabs);
+    const ids = restoredRaw.map((win) => win.windowId);
+    const fresh = guard.takeDeaths(ids, crashLiveTabs);
+    // Holds are durable: every restored window in the device's held map is held, whatever the markers say.
+    const held = guard.holds(ids);
     for (const id of Object.keys(held)) crashSteps[id] = guard.lastStep(id);
-    for (const entry of guard.history().filter((h) => held[h.windowId] && h.at >= crashPageStartedAt)) {
+    for (const entry of guard.history().filter((h) => fresh[h.windowId] && h.at >= crashPageStartedAt)) {
       console.warn('[choir] the page stopped while a window was opening', entry);
     }
     const suspected = crashBoot.interrupted && Object.keys(held).length === 0;
@@ -752,7 +760,7 @@
       if (isWindowAppBodySuspended(win)) continue;
       mountedNow.add(win.windowId);
       if (!crashMarked.has(win.windowId)) {
-        crashGuard.markPending(win);
+        crashGuard.markPending(win, { autoKey: win.crashAutoKey || '' });
         crashMarked.add(win.windowId);
       }
     }
@@ -769,22 +777,35 @@
   // like a restore, but its window id is fresh each time, so a death cannot be
   // matched by id. When the previous boot of this device died, every automatic
   // open is opened held, until the user acts in this page.
-  function openAutomatically(open) {
+  // The hold is durable and keyed by app and route/context (not window id): it
+  // stays until the user Reopens and it proves, or Closes. A new automatic open
+  // is held when its key is held, or while the page is still booting and the
+  // previous boot died (and is then recorded in the held map).
+  function autoOpenKey(appId, context) {
+    const entries = Object.entries(context || {}).sort(([a], [b]) => (a < b ? -1 : 1));
+    return `${normalizeAppId(appId)}|${JSON.stringify(entries).slice(0, 300)}`;
+  }
+
+  function openAutomatically(appId, context, open) {
     const before = new Set(windowsSnapshot().map((w) => w.windowId));
     open();
-    if (!crashAutoHold) return;
+    if (!crashGuard) return;
+    const key = autoOpenKey(appId, context);
     for (const win of windowsSnapshot()) {
-      if (!before.has(win.windowId) && win.mode !== 'closed' && win.mode !== 'hidden') setWindowCrashHold(win.windowId, 1);
+      if (before.has(win.windowId) || win.mode === 'closed' || win.mode === 'hidden') continue;
+      let count = crashGuard.autoHeld(key);
+      if (!count && crashAutoHold && !crashBootStable) count = crashGuard.holdAuto(key, { appId: win.appId, title: win.title });
+      crashAutoKeyById.set(win.windowId, key);
+      if (count) crashSteps[win.windowId] = crashGuard.lastStep('', key);
+      setWindowCrashHold(win.windowId, count, key);
     }
-  }
-  function noteUserAct() {
-    crashAutoHold = false;
   }
 
   function settleCrashWindows(ids) {
     for (const id of ids) {
       crashMarked.delete(id);
-      crashGuard?.settle(id);
+      crashGuard?.settle(id, { autoKey: crashAutoKeyById.get(id) || '' });
+      crashAutoKeyById.delete(id);
     }
   }
 
@@ -1878,8 +1899,6 @@
     window.addEventListener('resize', refreshOverviewViewport);
     window.addEventListener('pagehide', handlePageHide);
     crashTicker = setInterval(crashTick, 1000);
-    window.addEventListener('pointerdown', noteUserAct, true);
-    window.addEventListener('keydown', noteUserAct, true);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     lastAuthenticated = authenticated;
     stopChangelogWatch = startChangelogWatch(() => authenticated, (message) => showToast(message, { durationMs: 9000 }));
@@ -1919,8 +1938,6 @@
     closeLiveChannel();
     if (saveTimer) clearTimeout(saveTimer);
     if (crashTicker) clearInterval(crashTicker);
-    window.removeEventListener('pointerdown', noteUserAct, true);
-    window.removeEventListener('keydown', noteUserAct, true);
     resetCrashGuardState({ settle: true });
     if (unsubscribeWindows) unsubscribeWindows();
     if (unsubscribeActive) unsubscribeActive();

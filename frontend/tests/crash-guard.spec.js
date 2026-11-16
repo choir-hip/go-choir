@@ -214,8 +214,52 @@ test('a route opened at load is held when the previous boot died, with a failed 
     const held = page.locator('[data-window][data-window-app-id="texture"] [data-crash-held]');
     await expect(held).toBeVisible();
     await expect(page.locator('[data-app-host][data-app-id="texture"]')).toHaveCount(0);
+    // Durable by app and route: the next load holds it again, with a fresh window id.
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
+    await expect(held).toBeVisible();
+    await expect(page.locator('[data-app-host][data-app-id="texture"]')).toHaveCount(0);
     await context.close();
   } finally {
     stateStatus = 200;
   }
+});
+
+test('a hold is durable: held stays held across further reloads, and Reopen then an immediate reload is held again', async ({ browser }) => {
+  const { context, page } = await open(browser);
+  await ready(page);
+  await expect.poll(() => pendingFor(page)).toHaveProperty('w-settings');
+  const held = page.locator('[data-window][data-window-id="w-settings"] [data-crash-held]');
+  const reload = async () => {
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
+  };
+  await reload();
+  await expect(held).toBeVisible();
+  // Nothing is mounted while held, so there is no marker: only the durable hold keeps it so.
+  await reload();
+  await expect(held).toBeVisible();
+  await reload();
+  await expect(held).toBeVisible();
+  await expect(held).toHaveAttribute('data-crash-held-count', '1');
+  await expect(page.locator('[data-app-host][data-app-window-id="w-settings"]')).toHaveCount(0);
+
+  // Reopen, then an immediate reload (no quiet period): held again, count up.
+  await held.locator('[data-crash-held-reopen]').click();
+  await expect(page.locator('[data-app-host][data-app-window-id="w-settings"]')).toBeAttached();
+  await reload();
+  await expect(held).toHaveAttribute('data-crash-held-count', '2');
+  await context.close();
+});
+
+test('a navigator.locks.query that never resolves does not hold the desktop on the boot screen', async ({ browser }) => {
+  const { context, page } = await open(browser);
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator.locks, 'query', { configurable: true, value: () => new Promise(() => {}) });
+  });
+  const started = Date.now();
+  await ready(page);
+  await expect(page.locator('[data-window][data-window-id="w-settings"]')).toBeVisible();
+  expect(Date.now() - started).toBeLessThan(15000);
+  await context.close();
 });
