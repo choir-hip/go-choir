@@ -178,7 +178,7 @@ func TestF5_SameRequestIDInFlightOrWithAnotherCause(t *testing.T) {
 	}
 	close(release)
 	<-done
-	if rec, _ := progPost(rt, progBody(func(m map[string]any) { m["cause"] = "extend" })); rec.Code != http.StatusConflict {
+	if rec, _ := progPost(rt, progBody(func(m map[string]any) { m["cause"] = "turn" })); rec.Code != http.StatusConflict {
 		t.Errorf("same id, another cause: %d", rec.Code)
 	}
 }
@@ -284,7 +284,7 @@ func TestF8_TheSegmentRecordAndTheClaimArePersistedBeforeTheSegmentEvent(t *test
 			t.Errorf("(F8) the segment event for %s went out before its segment record", seg)
 			return
 		}
-		if data["kind"] == "ident" {
+		if data["kind"] == "opening" {
 			checked++
 			return
 		}
@@ -364,7 +364,7 @@ func TestF10_F11_F12_StartRecordRequestRecordAndIndex(t *testing.T) {
 		t.Errorf("(F10) two claims of one stretch have two deadlines")
 	}
 	req := getRecord(t, rt, "autoradio-request:req-9")
-	if req == nil || req.SubjectRefs["stretch_id"] != sid || req.SubjectRefs["request_id"] != "req-9" || req.SubjectRefs["cause"] != "open" {
+	if req == nil || req.SubjectRefs["stretch_id"] != sid || req.SubjectRefs["request_id"] != "req-9" || req.SubjectRefs["cause"] != "extend" {
 		t.Fatalf("(F11) request record %+v", req)
 	}
 	idx := getRecord(t, rt, "autoradio-stretch:"+sid)

@@ -51,7 +51,7 @@ const progEdition = "The edition paragraph about the harbour.\n\nThe edition par
 // progBody is the default request body, with the mutations applied.
 func progBody(mutate ...func(map[string]any)) string {
 	m := map[string]any{
-		"request_id": "r-1", "cause": "open", "local_time": "2026-11-15T07:40:00+01:00", "tz": "Europe/Paris",
+		"request_id": "r-1", "cause": "extend", "local_time": "2026-11-15T07:40:00+01:00", "tz": "Europe/Paris",
 		"candidates": progCandidates(), "edition_text": progEdition,
 	}
 	for _, f := range mutate {

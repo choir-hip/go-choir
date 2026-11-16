@@ -31,7 +31,13 @@ const (
 // podcast_note wait for their sources (programme design slices 3 and 6), and
 // answer and result belong to the turn route and the hand-offs.
 var programmeContentKinds = map[string]bool{"story": true, "update": true, "headlines": true}
-var programmeOtherKinds = map[string]bool{"ident": true, "bridge": true, "podcast_clip": true}
+var programmeOtherKinds = map[string]bool{"opening": true, "transition": true, "podcast_clip": true}
+
+// programmeKindAliases are the old names of the two station kinds. A line that
+// still uses one is accepted and renamed, so a stored stretch and an old
+// prompt keep working; the names are deleted one release after the phone
+// speaks the new ones.
+var programmeKindAliases = map[string]string{"ident": "opening", "bridge": "transition"}
 var programmeLaterKinds = map[string]bool{"mail": true, "podcast_note": true, "answer": true, "result": true}
 
 // programmeTextRange is the longest text a kind may have, in bytes. The
@@ -40,7 +46,7 @@ var programmeLaterKinds = map[string]bool{"mail": true, "podcast_note": true, "a
 // steers, and are generous for twenty minutes of speech (about 150 words a
 // minute across ten to fifteen segments).
 var programmeTextRange = map[string]int{
-	"story": 8000, "update": 4000, "headlines": 3000, "bridge": 500, "ident": 800, "podcast_clip": 800,
+	"story": 8000, "update": 4000, "headlines": 3000, "transition": 500, "opening": 1500, "podcast_clip": 800,
 }
 
 var (
@@ -70,6 +76,13 @@ type programmeSegment struct {
 	// ClipID and ClipSeconds name the clip a podcast_clip segment leads in.
 	ClipID      string
 	ClipSeconds float64
+
+	lineNo int // the line this segment came from, for the index's notes
+
+	// BetweenAfter and BetweenBefore name the neighbours a transition was
+	// written for: a segment_id of this stretch, or ahead:<n>, the n-th
+	// (1-based) title of the request's ahead_titles. Both set or both empty.
+	BetweenAfter, BetweenBefore string
 
 	P        float64
 	Cause    string // the cause class
@@ -161,6 +174,9 @@ func (in *programmeInput) checkLine(line string) (*programmeSegment, lineClass, 
 	if kind == "lesson" {
 		return nil, lineLesson, ""
 	}
+	if renamed, ok := programmeKindAliases[kind]; ok {
+		kind = renamed
+	}
 	content := programmeContentKinds[kind]
 	if programmeLaterKinds[kind] {
 		return invalidf("kind %q is not produced until its station", kind)
@@ -204,6 +220,9 @@ func (in *programmeInput) checkLine(line string) (*programmeSegment, lineClass, 
 		return invalidf("a %s needs a title", kind)
 	}
 
+	if reason := in.checkBetween(seg, raw["between"]); reason != "" {
+		return invalidf("%s", reason)
+	}
 	if kind == "podcast_clip" {
 		return in.checkClipLine(seg, raw)
 	}
@@ -273,6 +292,71 @@ func (in *programmeInput) checkClipLine(seg *programmeSegment, raw map[string]js
 	seg.ClipID, seg.ClipSeconds = id, ref.clip.Seconds
 	seg.Cites = []programmeCite{{Ref: ref.cand.ref, Role: "quoted", Label: truncate(oneLine(ref.cand.Title), programmeMaxLabel)}}
 	return seg, lineOK, ""
+}
+
+// checkBetween reads the optional between of a transition:
+// {"after_segment": ..., "before_segment": ...}, each the s<n> of an entry of
+// this response (n counting from 0, as the segment ids do) or ahead:<n>. The
+// after_segment names an entry that already exists: an earlier s<n> of this
+// response or an ahead:<n> title. before_segment may also name one forward
+// reference, exactly the entry written next (s<this line's number + 1>), below
+// the cap; it may never arrive, and the phone drops a transition whose before
+// entry is not the entry that follows it. This is a shape check, not a
+// judgement of the words. A
+// transition that carries none stays valid (the old bridge had none).
+func (in *programmeInput) checkBetween(seg *programmeSegment, raw json.RawMessage) string {
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return ""
+	}
+	if seg.Kind != "transition" {
+		return fmt.Sprintf("between on a %s, which joins nothing", seg.Kind)
+	}
+	if string(bytes.TrimSpace(raw)) == "null" {
+		return ""
+	}
+	var b struct {
+		After  string `json:"after_segment"`
+		Before string `json:"before_segment"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&b); err != nil {
+		return "between is not {after_segment, before_segment}"
+	}
+	after, reason := in.resolveNeighbour(b.After, false)
+	if reason != "" {
+		return "between.after_segment: " + reason
+	}
+	before, reason := in.resolveNeighbour(b.Before, true)
+	if reason != "" {
+		return "between.before_segment: " + reason
+	}
+	if after == before {
+		return "between names one entry on both sides"
+	}
+	seg.BetweenAfter, seg.BetweenBefore = after, before
+	return ""
+}
+
+// resolveNeighbour checks one side of a between and returns it as the id the
+// event carries: the stretch-relative s<n> stays s<n> until the handler gives
+// it the stretch id (see qualifyBetween), and ahead:<n> stays as written.
+func (in *programmeInput) resolveNeighbour(ref string, before bool) (string, string) {
+	switch {
+	case strings.HasPrefix(ref, "ahead:"):
+		n, err := strconv.Atoi(strings.TrimPrefix(ref, "ahead:"))
+		if err != nil || strconv.Itoa(n) != strings.TrimPrefix(ref, "ahead:") || n < 1 || n > in.aheadCount {
+			return "", fmt.Sprintf("%q is not one of the %d ahead titles of this request", truncate(ref, 40), in.aheadCount)
+		}
+		return ref, ""
+	case strings.HasPrefix(ref, "s"):
+		n, err := strconv.Atoi(ref[1:])
+		if err != nil || strconv.Itoa(n) != ref[1:] || n < 0 || n >= programmeMaxSegments || n >= in.nextSeg && !(before && n == in.nextSeg+1) {
+			return "", fmt.Sprintf("%q is not an entry of this response", truncate(ref, 40))
+		}
+		return ref, ""
+	}
+	return "", fmt.Sprintf("%q is neither s<n> nor ahead:<n>", truncate(ref, 40))
 }
 
 func parseP(raw json.RawMessage) (float64, string) {

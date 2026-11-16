@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+"""Proof: how fast does the Autoradio programme route speak, and what does it write?
+
+Posts POST /api/autoradio/programme with cause "open" five times and cause
+"extend" five times (counts with --count), and prints for each request the time
+from sending to the first `segment` event and to `done`, the kinds returned and
+the dropped count. Then the median per cause. An open must return exactly one
+`opening`; an extend one to six entries. Exit 0 when every request completed
+and those two shapes held, 1 otherwise, 2 on bad arguments. The claim this
+checks (p=0.7): the median open time to first segment is under 6 s. Each line
+also prints the server's timings_ms from `done` (first_delta, first_segment_sent,
+first_segment, done): a first_delta far before done with first_segment_sent
+late points at the route; a late first_delta points at the provider, gateway or
+guest reader.
+
+The key goes only in the Authorization header and is never printed. An
+owner-wide key names no computer: pass --computer (X-Choir-Computer).
+
+  scripts/prove-autoradio-programme --host choir.news --api-key-file ~/key \\
+      --computer <the test computer>
+
+Run it from a host off Node B, against d@e. Shapes: docs/reference/AUTORADIO-PROGRAMME.md.
+"""
+import argparse
+import http.client
+import json
+import statistics
+import sys
+import time
+import uuid
+from datetime import datetime, timezone
+
+STORIES = [
+    ("harbour-reopens", "Harbour reopens", "Repairs to the harbour wall are finished and ferries sail again."),
+    ("ferry-timetable", "Ferry timetable", "Two extra sailings are added on weekdays from Monday."),
+    ("budget-vote", "Budget vote", "The council votes on next year's budget on Monday."),
+    ("school-strike", "School strike ends", "Staff in Nancy return to work after three weeks."),
+    ("rain-weekend", "Rain this weekend", "The weather service expects rain across the region through Sunday."),
+    ("bridge-works", "Bridge works", "Night closures of the north bridge begin next week."),
+]
+
+
+def read_key(path):
+    try:
+        with open(path) as f:
+            key = "".join(f.read().split())
+    except OSError as e:
+        sys.exit("cannot read the key file: %s" % e.strerror)
+    if not key:
+        sys.exit("the key file is empty")
+    return key
+
+
+def body(cause, request_id):
+    now = datetime.now(timezone.utc).astimezone()
+    b = {
+        "request_id": request_id, "cause": cause, "local_time": now.isoformat(timespec="seconds"),
+        "tz": "Europe/Paris",
+        "candidates": [{"route": r, "version": 1, "title": t, "dek": d, "text": d} for r, t, d in STORIES],
+    }
+    if cause == "extend":
+        b["ahead_titles"] = ["Harbour reopens", "Ferry timetable"]
+    return json.dumps(b)
+
+
+def one(args, key, cause):
+    headers = {"Authorization": "Bearer " + key, "Content-Type": "application/json", "Accept": "text/event-stream"}
+    if args.computer:
+        headers["X-Choir-Computer"] = args.computer
+    cls = http.client.HTTPConnection if args.insecure_http else http.client.HTTPSConnection
+    conn = cls(args.host, timeout=args.timeout or None)
+    t0 = time.monotonic()
+    out = {"cause": cause, "first": None, "done": None, "kinds": [], "dropped": None, "timings": {}, "error": None, "http": None}
+    try:
+        conn.request("POST", "/api/autoradio/programme", body(cause, "proof-%s-%s" % (cause, uuid.uuid4().hex[:10])), headers)
+        resp = conn.getresponse()
+        out["http"] = resp.status
+        if resp.status != 200:
+            out["error"] = "HTTP %d" % resp.status
+            return out
+        event = None
+        while True:
+            raw = resp.readline()
+            if not raw:
+                break
+            line = raw.decode("utf-8", "replace").rstrip("\r\n")
+            if line.startswith("event: "):
+                event = line[7:]
+            elif line.startswith("data: "):
+                data = json.loads(line[6:])
+                now = time.monotonic() - t0
+                if event == "segment":
+                    if out["first"] is None:
+                        out["first"] = now
+                    out["kinds"].append(data.get("kind"))
+                elif event == "done":
+                    out["done"], out["dropped"] = now, data.get("dropped")
+                    out["timings"] = data.get("timings_ms") or {}
+                    break
+                elif event == "error":
+                    out["error"] = "%s: %s" % (data.get("status"), data.get("reason"))
+                    break
+    except (OSError, ValueError) as e:
+        out["error"] = "%s" % type(e).__name__
+    finally:
+        conn.close()
+    return out
+
+
+def fmt(v):
+    return "-" if v is None else "%.2fs" % v
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Time the Autoradio programme route: open and extend.")
+    ap.add_argument("--host", required=True)
+    ap.add_argument("--api-key-file", required=True)
+    ap.add_argument("--computer", default="")
+    ap.add_argument("--count", type=int, default=5, help="requests per cause")
+    ap.add_argument("--timeout", type=float, default=0.0)
+    ap.add_argument("--insecure-http", action="store_true")
+    ap.add_argument("--dry-run", action="store_true")
+    args = ap.parse_args()
+    if args.count < 1:
+        ap.error("--count must be at least 1")
+    key = read_key(args.api_key_file)
+    if args.dry_run:
+        print("ok: arguments and key file read; nothing sent")
+        return 0
+    ok = True
+    for cause in ("open", "extend"):
+        firsts = []
+        print("cause %s" % cause)
+        for i in range(args.count):
+            r = one(args, key, cause)
+            shape = (r["kinds"] == ["opening"]) if cause == "open" else (1 <= len(r["kinds"]) <= 6)
+            good = r["error"] is None and r["done"] is not None and shape
+            ok = ok and good
+            if r["first"] is not None:
+                firsts.append(r["first"])
+            tm = r["timings"]
+            srv = " ".join("%s=%s" % (k, "-" if tm.get(k) is None else "%.2fs" % (tm[k] / 1000.0))
+                           for k in ("first_delta", "first_segment_sent", "first_segment", "done"))
+            print("  %d first=%s done=%s kinds=%s dropped=%s server[%s]%s%s" % (
+                i + 1, fmt(r["first"]), fmt(r["done"]), ",".join(k or "?" for k in r["kinds"]) or "-", r["dropped"], srv,
+                "" if shape else "  WRONG SHAPE", "  ERROR " + r["error"] if r["error"] else ""))
+        if firsts:
+            print("  median first segment: %.2fs (min %.2fs, max %.2fs)" % (statistics.median(firsts), min(firsts), max(firsts)))
+    print("PASS" if ok else "FAIL")
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
