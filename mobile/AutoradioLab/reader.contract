@@ -14,7 +14,7 @@ use ReaderFollowInfo, ReaderAimInfo, DemoInfo from "@choir/autoradio"
 use PageScroll, Card, Layer, Btn, BarClear from "./ui.contract"
 
 // Citations drawn as atom pills in the Markdown experiment (the page menu, demo mode). Atom styles are literals, not tokens.
-atom citation link="cite:" color="light-dark(#7a0a57, #ff9bd6)" background-color="light-dark(#f7e4f2, #3a2236)" border-radius="6px" padding-inline="3px"
+atom citation link="cite:" color="light-dark(#7a0a57, #ff9bd6)" padding-inline="3px"
 
 // A story's content emerging: it fades in and rises a little. Off under Reduce Motion (th.reducedMotion: the animation is "none").
 keyframes readerEmerge
@@ -50,13 +50,11 @@ component Runs
       if r.kind == "cite"
         text r.text testId=`reader-cite-${r.anchor}` press=toggleCite(ckey(address, r.anchor)) aria-label=`Source ${r.label}`
           font-family=th.fontUi font-size=remv(size * 0.8) font-weight=700 line-height=lh color=th.accent
-          background-color=tint(th.accent, "22") border-radius=6
       else if r.kind == "ref"
         text r.text testId=`reader-ref-${r.anchor}` press=toggleCite(ckey(address, r.anchor)) aria-label=`Document ${r.label}`
           font-family=th.fontUi font-size=remv(size * 0.82) font-weight=600 line-height=lh color=th.accent2
-          background-color=tint(th.accent, "1C") border-radius=6
       else if r.kind == "code"
-        text r.text font-family=th.fontMono font-size=remv(size * 0.88) line-height=lh color=th.fg background-color=th.paper2 border-radius=4
+        text r.text font-family=th.fontMono font-size=remv(size * 0.88) line-height=lh color=th.fg
       else if r.kind == "link"
         text r.text href=r.href font-family=th.fontRead font-size=remv(size) font-weight=(r.weight > weight ? r.weight : weight)
           font-style=(italic ? "italic" : r.slant) line-height=lh color=th.accent
@@ -65,7 +63,7 @@ component Runs
       else
         text r.text font-family=th.fontRead font-size=remv(size) font-weight=(r.weight > weight ? r.weight : weight)
           font-style=(italic ? "italic" : r.slant) line-height=lh color=th.fg
-          background-color=(hi == r.sent ? tint(th.accent, "30") : "") border-radius=3
+          background-color=(hi == r.sent ? tint(th.accent, "30") : "")
 
 // ---------------------------------------------------------------------------------------------------------------------
 // A citation's card, opened in place under its paragraph. A source on the web shows its host, title, the pinned quote with its
@@ -82,20 +80,19 @@ component CiteCard
   view
     row width="100%" margin-bottom=remv(1) gap=8 align-items="stretch" testId=`reader-card-row-${c.anchor}`
       if c.kind == "texture"
-        box width=3 border-radius=2 background-color=th.accent2
+        box width=3 background-color=th.accent2
       column flex=1 min-width=0
         Card(level=1, testId=`reader-card-${c.anchor}`, minHeight=0)
           column padding=14 gap=8
             row align-items="center" gap=8
-              text (c.kind == "texture" ? "Texture" : `${c.number}`) font-family=th.fontUi font-size=12 font-weight=700 color=th.accent
-                background-color=tint(th.accent, "22") border-radius=6 padding="2px 7px"
+              text (c.kind == "texture" ? "Texture" : `${c.number}`) font-family=th.fontUi font-size=13 font-weight=700 color=th.accent
               text (c.kind == "texture" ? "Another document" : c.host) font-family=th.fontUi font-size=13 color=th.muted flex=1 min-width=0 line-clamp=1
               button press=toggleCite(ckey(address, c.anchor)) testId=`reader-card-close-${c.anchor}` appearance="none" aria-label="Close" width=32 height=32
                 image "symbol:close" color=th.muted
             text c.title font-family=th.fontUi font-size=15 font-weight=600 color=th.fg
             if c.quote != ""
               row gap=10
-                box width=2 border-radius=1 background-color=th.accent
+                box width=2 background-color=th.accent
                 text `“${c.quote}”` font-family=th.fontRead font-style="italic" font-size=15 line-height=1.5 color=th.fg flex=1 min-width=0
             if c.kind != "texture"
               row align-items="center" gap=6
@@ -177,7 +174,7 @@ component BlockView
             Runs(runs=b.runs, address=address, size=size, weight=400, lh=lh, hi=hi, italic=false)
       if b.kind == "quote"
         row gap=14 width="100%" margin-bottom=remv(0.9) padding-left=remv((b.depth - 1) * 1.0)
-          box width=2 border-radius=1 background-color=th.accent
+          box width=2 background-color=th.accent
           text testId=`reader-block-${b.id}` flex=1 min-width=0 font-family=th.fontRead font-size=remv(size) line-height=lh overflow-wrap="anywhere" color=th.fg
             contextmenu=aimAt(address, b.id, clip(b.text, 64))
             Runs(runs=b.runs, address=address, size=size, weight=400, lh=lh, hi=hi, italic=true)
@@ -202,9 +199,9 @@ component BlockView
             image "symbol:document" color=th.muted
             text b.text font-family=th.fontUi font-size=14 color=th.muted flex=1
       if following
-        box testId="reader-following" position="absolute" left=-12 top=2 bottom=remv(0.9) width=3 border-radius=2 background-color=th.accent
+        box testId="reader-following" position="absolute" left=-12 top=2 bottom=remv(0.9) width=3 background-color=th.accent
       if aimed
-        box position="absolute" left=-12 top=2 bottom=remv(0.9) width=3 border-radius=2 background-color=th.accent2
+        box position="absolute" left=-12 top=2 bottom=remv(0.9) width=3 background-color=th.accent2
       for c in stacked key=c.anchor
         CiteCard(c=c, address=address)
 
@@ -447,16 +444,14 @@ component ReaderBody
                   if s.kind == "texture"
                     button press=openPage(s.target, s.title) testId=`reader-source-${s.number}` appearance="none" width="100%"
                       row padding="8px 0" gap=10 align-items="flex-start" width="100%"
-                        text `${s.number}` font-family=th.fontUi font-size=12 font-weight=700 color=th.accent width=24 text-align="center"
-                          background-color=tint(th.accent, "22") border-radius=6
+                        text `${s.number}` font-family=th.fontUi font-size=13 font-weight=700 color=th.accent width=24 text-align="center"
                         column flex=1 min-width=0 gap=2 align-items="flex-start"
                           text s.title font-family=th.fontUi font-size=15 font-weight=600 color=th.fg text-align="left"
                           text "Another Texture. Opens as a page" font-family=th.fontUi font-size=13 color=th.muted text-align="left"
                   else
                     button press=openLink(s.url, s.host) testId=`reader-source-${s.number}` appearance="none" width="100%"
                       row padding="8px 0" gap=10 align-items="flex-start" width="100%"
-                        text `${s.number}` font-family=th.fontUi font-size=12 font-weight=700 color=th.accent width=24 text-align="center"
-                          background-color=tint(th.accent, "22") border-radius=6
+                        text `${s.number}` font-family=th.fontUi font-size=13 font-weight=700 color=th.accent width=24 text-align="center"
                         column flex=1 min-width=0 gap=2 align-items="flex-start"
                           text s.title font-family=th.fontUi font-size=15 font-weight=600 color=th.fg text-align="left"
                           text s.host font-family=th.fontUi font-size=13 color=th.muted text-align="left"
@@ -519,7 +514,7 @@ component ReaderMessage
       if busy
         column gap=12 width="100%" margin-top=12 testId="reader-loading"
           for w, i in bars key=i
-            box height=14 border-radius=7 background-color=th.paper2 width=`${floor(w * 100)}%`
+            box height=14 border-radius=th.radiusControl background-color=th.paper2 width=`${floor(w * 100)}%`
               animation=(still ? "none" : `readerEmerge ${th.motionEnterMs}ms ${th.staggerMs * (i + 1)}ms ease-out both`)
       if message != ""
         text message testId="reader-message" font-family=th.fontRead font-size=18 line-height=1.4 color=th.muted

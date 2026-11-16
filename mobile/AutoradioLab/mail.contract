@@ -28,7 +28,7 @@ component MailRowItem
   view
     button press=openPage(address, subject) testId=`mail-row-${id}` appearance="none" width="100%"
       row gap=10 padding="12px 0" align-items="flex-start" width="100%" border-top-width=1 border-right-width=0 border-bottom-width=0 border-left-width=0 border-style="solid" border-color=th.rule
-        box width=8 height=8 margin-top=7 border-radius=4 background-color=(unread ? th.accent : "transparent")
+        box width=3 height=18 margin-top=3 background-color=(unread ? th.accent : "transparent")
         column flex=1 min-width=0 gap=2 align-items="flex-start"
           row width="100%" gap=8 align-items="baseline"
             text sender font-family=th.fontUi font-size=16 font-weight=(unread ? 700 : 500) color=th.fg flex=1 min-width=0 line-clamp=1 text-align="left"
@@ -182,7 +182,7 @@ component MailMessage
                 text b.text font-family=th.fontRead font-size=17 line-height=1.5 color=th.fg white-space="pre-wrap"
               if b.kind == "quote" and mailQuoted
                 row gap=10
-                  box width=3 background-color=th.rule border-radius=2
+                  box width=3 background-color=th.rule
                   text b.text font-family=th.fontRead font-size=16 line-height=1.45 color=th.muted flex=1 min-width=0 white-space="pre-wrap"
               if b.kind == "sig"
                 text b.text font-family=th.fontUi font-size=14 line-height=1.4 color=th.muted white-space="pre-wrap"

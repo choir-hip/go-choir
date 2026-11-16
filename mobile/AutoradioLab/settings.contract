@@ -14,7 +14,7 @@
 //   settings-about-*, settings-voice-components.
 // Every colour, face, radius and shadow is a theme token (th.*, tx.*); a theme's own preview card paints from the card's data.
 use Theme, ThemeList, DemoInfo, ThemeCard, ThemeExtras, SettingsAccount, SettingsComputer, SettingRowInfo, LearnedInfo, AboutInfo, ThemeCards, SettingRows, ChoirAuth, VoiceProfile from "@choir/autoradio"
-use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace from "./ui.contract"
+use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace, SelectMark from "./ui.contract"
 use VoiceCardsList from "./voice.contract"
 
 component SettingsPage
@@ -390,10 +390,10 @@ component SettingChoices
             for o in r.choices key=o.id
               button press=setSetting(r.id, o.id) testId=`settings-choice-${r.id}-${o.id}` role="radio" aria-checked=o.selected appearance="none" width="100%" box-sizing="border-box" padding="10px 16px"
                 row gap=12 align-items="flex-start" width="100%"
-                  text (o.selected ? "●" : "○") font-family=th.fontUi font-size=18 color=(o.selected ? th.accent : th.muted)
                   column flex=1 min-width=0 gap=2 align-items="flex-start"
-                    text o.label font-family=th.fontUi font-size=tx.sizeLabel font-weight=600 color=th.fg
+                    text o.label font-family=th.fontUi font-size=tx.sizeLabel font-weight=600 color=(o.selected ? th.fg : th.muted)
                     text o.detail font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+                  SelectMark(state=(o.selected ? "on" : "blank"))
 
 component GesturesScreen
   inject

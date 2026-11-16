@@ -58,11 +58,11 @@ component ComponentsPage
         text aud.route testId="audio-route" font-family=th.fontMono font-size=12 color=th.muted width="100%" min-width=0
         for pol in aud.policies key=pol
           button press=setPolicy(pol) role="radio" aria-checked=(aud.policy == pol) testId=`policy-${pol}` appearance="none"
-            Btn(label=`${aud.policy == pol ? "● " : "○ "}${pol}`, primary=false, wide=false)
+            Btn(label=`${aud.policy == pol ? "✓ " : ""}${pol}`, primary=false, wide=false)
         text "Acknowledgement" role="heading" aria-level=2 font-family=th.fontUi font-size=13 font-weight=700 color=th.accent2 text-transform="uppercase" margin-top=8
         for tm in aud.ackTimings key=tm
           button press=setAckTiming(tm) role="radio" aria-checked=(aud.ackTiming == tm) testId=`ack-${tm}` appearance="none"
-            Btn(label=`${aud.ackTiming == tm ? "● " : "○ "}${tm == "immediate" ? "Say it at once" : "Wait for System 1"}`, primary=false, wide=false)
+            Btn(label=`${aud.ackTiming == tm ? "✓ " : ""}${tm == "immediate" ? "Say it at once" : "Wait for System 1"}`, primary=false, wide=false)
         text yieldLabel testId="yield"
         text `Phase: ${st.phase} · mic ${st.micActive ? "on" : "off"} · config ${st.configName}` testId="phase" color=th.muted
         text st.message testId="lab-message" color=th.muted
@@ -91,7 +91,7 @@ component ComponentsPage
         text "Stages" role="heading" aria-level=2 font-family=th.fontUi font-size=13 font-weight=700 color=th.accent2 text-transform="uppercase" margin-top=8
         for r in stages.rows key=`${r.kind}.${r.id}`
           button press=pick(r.kind, r.id) role="radio" aria-checked=r.selected testId=`stage-${r.kind}-${r.id}` appearance="none"
-            Btn(label=`${r.selected ? "● " : "○ "}${r.kindLabel}: ${r.name}${r.network ? " (network)" : ""}`, primary=false, wide=false)
+            Btn(label=`${r.selected ? "✓ " : ""}${r.kindLabel}: ${r.name}${r.network ? " (network)" : ""}`, primary=false, wide=false)
         text "Parameters" role="heading" aria-level=2 font-family=th.fontUi font-size=13 font-weight=700 color=th.accent2 text-transform="uppercase" margin-top=8
         for p, i in params.rows key=i
           column gap=2

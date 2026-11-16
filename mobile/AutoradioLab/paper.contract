@@ -85,7 +85,7 @@ component FollowRow
     s: PaperItem
   view
     row align-items="center" gap=4 width="100%"
-      box width=2 align-self="stretch" background-color=th.accent border-radius=1
+      box width=2 align-self="stretch" background-color=th.accent
       column flex=1 min-width=0 gap=2 align-items="flex-start" padding="8px 0 8px 10px"
         button press=openPage(`pub:${s.route}`, s.title) appearance="none" testId=`paper-story-${s.route}` width="100%"
           text s.title font-family=th.fontRead font-size=s.size font-weight=s.weight line-height=s.lineHeight color=th.fg text-align="left"

@@ -197,7 +197,7 @@ component ListRow
         image "symbol:forward-chevron" color=th.muted
 
 // The selection mark, 24 points square in every state, an icon and no container: a check (picked), a dash (some of what is inside is
-// picked), a quiet plus (not picked: the sign that the row can be picked). Only the glyph changes, so choosing never resizes or moves anything.
+// picked), a quiet plus (not picked: the sign that the row can be picked); "blank" is nothing (a single-choice list shows only the chosen row). Only the glyph changes, so choosing never resizes or moves anything.
 component SelectMark
   inject
     th: Theme
@@ -205,13 +205,14 @@ component SelectMark
     state: string
   derive on = state == "on"
   derive part = state == "partial"
+  derive off = state == "off"
   view
     row width=24 height=24 flex-shrink=0 align-items="center" justify-content="center"
       if on
         image "symbol:checkmark" width=16 height=16 color=th.accent
       if part
         box width=12 height=2 background-color=th.accent
-      if on == false and part == false
+      if off
         image "symbol:sf/plus" width=14 height=14 color=th.muted
 
 // A choice in a set of words (a wrapping row of sections, filters): the chosen word at full strength with a short accent rule under it, the

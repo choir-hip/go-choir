@@ -199,16 +199,16 @@ component BarShell
                   text (lineMode == "playing" ? "NOW PLAYING" : "PAUSED") font-family=th.fontUi font-size=10 font-weight=700 letter-spacing=0.8 color=th.muted
                   text loaded font-family=th.fontUi font-size=14 font-weight=600 color=th.fg line-clamp=1 text-align="left"
                 image "symbol:forward-chevron" color=th.muted
-            box testId="bar-progress" height=2 border-radius=1 background-color="transparent" opacity=(ri.level == "play" ? 1 : 0.4) transition=`opacity ${th.motionFastMs}ms ease`
-              box height=2 border-radius=1 width=`${floor(bi.progress * 100)}%` background-color=th.accent
+            box testId="bar-progress" height=2 background-color="transparent" opacity=(ri.level == "play" ? 1 : 0.4) transition=`opacity ${th.motionFastMs}ms ease`
+              box height=2 width=`${floor(bi.progress * 100)}%` background-color=th.accent
         if lineMode == "listen"
           column gap=3 animation=enter padding-left=4
             if yielded
               row gap=5 align-items="center" testId="bar-yield" height=16
-                box width=6 height=6 border-radius=3 background-color=th.accent animation=(still ? "none" : "barBlink 1.1s ease-in-out infinite")
+                box width=3 height=12 background-color=th.accent animation=(still ? "none" : "barBlink 1.1s ease-in-out infinite")
                 text (ri.level == "pause" ? "Radio paused while you speak" : "Radio lowered while you speak") font-family=th.fontUi font-size=11 color=th.muted
             row gap=6 align-items="center" width="100%"
-              box width=8 height=8 border-radius=4 background-color=th.danger animation=(still ? "none" : "barBlink 1s ease-in-out infinite")
+              box width=3 height=12 background-color=th.danger animation=(still ? "none" : "barBlink 1s ease-in-out infinite")
               text "Listening" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.6 color=th.danger flex=1
               button press=micCancel testId="bar-cancel" appearance="none" aria-label="Cancel listening"
                 row padding="8px 4px" align-items="center"

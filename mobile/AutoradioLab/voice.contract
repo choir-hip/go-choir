@@ -27,8 +27,8 @@ component VoiceCardsList
                 if c.playing == false and c.selected
                   image "symbol:checkmark" color=th.success
               if c.state == "downloading"
-                column height=6 border-radius=3 background-color=th.rule width="100%"
-                  box height=6 border-radius=3 background-color=th.accent width=`${floor(c.progress * 100)}%`
+                column height=4 background-color=th.rule width="100%"
+                  box height=4 background-color=th.accent width=`${floor(c.progress * 100)}%`
               if c.note != ""
                 text c.note font-family=th.fontUi font-size=13 color=(c.state == "failed" ? th.danger : th.muted) line-height=1.35
 
