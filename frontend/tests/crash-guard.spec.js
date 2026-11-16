@@ -15,6 +15,7 @@ const WINDOWS = [
 const KEY = 'choir.crashGuard.v1:user-1';
 
 let stateStatus = 200;
+let stateWindows = WINDOWS;
 
 async function mock(context) {
   await context.route('**/auth/**', (route) => {
@@ -30,7 +31,7 @@ async function mock(context) {
     const json = (b, s = 200) => route.fulfill({ status: s, contentType: 'application/json', body: JSON.stringify(b) });
     if (p === '/api/desktop/state') {
       if (req.method() === 'GET' && stateStatus !== 200) return json({ error: 'down' }, stateStatus);
-      if (req.method() === 'GET') return json({ owner_id: 'user-1', windows: WINDOWS, active_window_id: 'w-settings', icon_positions: {} });
+      if (req.method() === 'GET') return json({ owner_id: 'user-1', windows: stateWindows, active_window_id: 'w-settings', icon_positions: {} });
       return json({ ok: true, updated_at: new Date().toISOString() });
     }
     if (p === '/api/preferences/theme') return json({ theme: { schema_version: 2, id: 'aero-chrome-heart' } });
@@ -44,13 +45,20 @@ async function open(browser) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await mock(context);
   const page = await context.newPage();
-  await page.routeWebSocket(/\/api\/ws/, (ws) => ws.send(JSON.stringify({ type: 'connected' })));
-  return { context, page };
+  const live = { ws: null };
+  await page.routeWebSocket(/\/api\/ws/, (ws) => { live.ws = ws; ws.send(JSON.stringify({ type: 'connected' })); });
+  return { context, page, live };
 }
 
 async function ready(page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
+}
+
+// Ctrl+K opens the desk; its overview button opens the window overview.
+async function openOverview(page) {
+  await page.keyboard.press('Control+k');
+  await page.locator('[data-desk-overview]').click();
 }
 
 const pendingFor = (page) =>
@@ -262,4 +270,64 @@ test('a navigator.locks.query that never resolves does not hold the desktop on t
   await expect(page.locator('[data-window][data-window-id="w-settings"]')).toBeVisible();
   expect(Date.now() - started).toBeLessThan(15000);
   await context.close();
+});
+
+test('a failed first fetch, then a remote update delivering a held window: held', async ({ browser }) => {
+  const { context, page, live } = await open(browser);
+  await ready(page);
+  await expect.poll(() => pendingFor(page)).toHaveProperty('w-settings');
+  stateStatus = 500;
+  try {
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
+    await expect(page.locator('[data-window][data-window-id="w-settings"]')).toHaveCount(0);
+    stateStatus = 200;
+    await expect.poll(() => live.ws !== null).toBe(true);
+    live.ws.send(JSON.stringify({
+      type: 'event',
+      kind: 'desktop.window_placement.updated',
+      stream_seq: 1,
+      payload: { source_session_id: 'another-session' },
+    }));
+    const held = page.locator('[data-window][data-window-id="w-settings"] [data-crash-held]');
+    await expect(held).toBeVisible();
+    await expect(page.locator('[data-app-host][data-app-window-id="w-settings"]')).toHaveCount(0);
+  } finally {
+    stateStatus = 200;
+  }
+  await context.close();
+});
+
+test('Reopen, then suspend, then reload: still held', async ({ browser }) => {
+  stateWindows = [
+    { ...WINDOWS[0] },
+    { window_id: 'w-audio', app_id: 'audio', title: 'Audio', geometry: { x: 760, y: 40, width: 600, height: 400 }, mode: 'normal', z_index: 3, app_context: { windowTitle: 'Audio' } },
+  ];
+  try {
+    const { context, page } = await open(browser);
+    await ready(page);
+    await expect(page.locator('[data-app-host][data-app-window-id="w-audio"]')).toBeAttached();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
+    const heldAudio = page.locator('[data-window][data-window-id="w-audio"] [data-crash-held]');
+    await expect(heldAudio).toBeVisible();
+    await heldAudio.locator('[data-crash-held-reopen]').click();
+    await expect(page.locator('[data-app-host][data-app-window-id="w-audio"]')).toBeAttached();
+
+    // Raise the settings window through the overview, then park the (heavy) audio window.
+    await openOverview(page);
+    await page.locator('[data-overview-card-window-id="w-settings"] [data-overview-card-focus]').click();
+    await openOverview(page);
+    await page.locator('[data-overview-card-window-id="w-audio"] [data-overview-card-suspend]').click();
+    await expect(page.locator('[data-window][data-window-id="w-audio"] [data-suspended-app]')).toBeVisible();
+    await expect(page.locator('[data-app-host][data-app-window-id="w-audio"]')).toHaveCount(0);
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('[data-desktop-ready="true"]').first().waitFor({ timeout: 30000 });
+    await expect(heldAudio).toBeVisible();
+    await expect(page.locator('[data-app-host][data-app-window-id="w-audio"]')).toHaveCount(0);
+    await context.close();
+  } finally {
+    stateWindows = WINDOWS;
+  }
 });

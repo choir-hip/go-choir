@@ -59,6 +59,13 @@
 //      holdAuto records a hold when the previous boot died; proof or Close by key ends it.
 //  F29 A hold survives a clean pagehide and a planned reload.
 //  F30 A liveness read that never resolves is bounded (withTimeout) and answers 'nobody alive'.
+//  F32 (round 3) The body may mount iff crashHoldFor(win, held, reopened) is 0:
+//      held by window id or by automatic-open key, unless Reopened in this page.
+//      No window object carries the hold, so no path can skip it.
+//  F33 Suspension (unmark) drops only the marker, never a hold; only proof,
+//      Close or a prune against a SUCCESSFULLY fetched list end a hold.
+//  F34 A failed fetch (takeDeaths(null)) holds every dead window by id and
+//      prunes nothing; holds() against a real list prunes the absent ones.
 //  F31 A planned reload does not launder a window with a foreground step in flight and no done.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -70,6 +77,7 @@ import {
   HOLD_CLOSE_FIRST_AFTER,
   PENDING_CAP,
   withTimeout,
+  crashHoldFor,
   RECORD_CAP,
   HEARTBEAT_KEY,
   readLiveTabs,
@@ -554,4 +562,39 @@ test('F31 a planned reload does not launder a window with work in flight', () =>
   const p2 = pageOn(s, 'p2');
   assert.equal(p2.beginBoot(none).previousDead, true);
   assert.deepEqual(p2.takeDeaths(['w1', 'w2'], none), { w1: 1 });
+});
+
+test('F32 the body may mount iff the derived hold is 0', () => {
+  const held = { 'w:w1': 2, 'a:texture|[]': 1 };
+  assert.equal(crashHoldFor({ windowId: 'w1' }, held, new Set()), 2);
+  assert.equal(crashHoldFor({ windowId: 'w2' }, held, new Set()), 0);
+  assert.equal(crashHoldFor({ windowId: 'fresh', crashAutoKey: 'texture|[]' }, held, new Set()), 1);
+  assert.equal(crashHoldFor({ windowId: 'fresh', crashAutoKey: 'other' }, held, new Set()), 0);
+  assert.equal(crashHoldFor({ windowId: 'w1' }, held, new Set(['w1'])), 0, 'Reopened in this page');
+  assert.equal(crashHoldFor({ windowId: 'fresh', crashAutoKey: 'texture|[]' }, held, new Set(['fresh'])), 0);
+  assert.equal(crashHoldFor(null, held, new Set()), 0);
+  assert.equal(crashHoldFor({ windowId: 'w1' }), 0, 'no held map: mount');
+});
+
+test('F33 suspension keeps the hold; readHeld mirrors the map', () => {
+  const s = memory();
+  dieHeld(s);
+  const p3 = pageOn(s, 'p3');
+  p3.markPending(win('w1')); // Reopened
+  p3.unmark('w1'); // then suspended: the body is gone, the hold is not
+  assert.deepEqual(p3.readHeld(), { 'w:w1': 1 });
+  assert.deepEqual(pageOn(s, 'p4').holds(['w1']), { w1: 1 });
+  p3.settle('w1');
+  assert.deepEqual(pageOn(s, 'p5').readHeld(), {});
+});
+
+test('F34 a failed fetch holds by id and prunes nothing; a real list prunes', () => {
+  const s = memory();
+  pageOn(s, 'p1').markPending(win('w1'));
+  pageOn(s, 'p1').markPending(win('w2'));
+  const p2 = pageOn(s, 'p2');
+  p2.takeDeaths(null, none); // the state fetch failed: server list unknown
+  assert.deepEqual(p2.readHeld(), { 'w:w1': 1, 'w:w2': 1 });
+  assert.deepEqual(p2.holds([]), {}, 'a successful but empty list prunes (the server has none)');
+  assert.deepEqual(p2.readHeld(), {});
 });

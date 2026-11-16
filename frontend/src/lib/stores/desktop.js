@@ -809,21 +809,14 @@ export function clearWindowRestoreSuspension(windowId) {
 }
 
 /**
- * Crash hold (lib/crash-guard.js): a window whose body was mounting when the
- * page last died is held, whatever its app. `deaths` is how many times in a
- * row; 0 releases it. Per device: never serialized into the saved desktop state.
+ * An automatic open's key (app + route/context) for the crash guard, so its
+ * hold is found by key and not by its fresh window id (lib/crash-guard.js).
+ * The hold itself lives in lib/stores/crash-hold.js; never serialized.
  */
-export function setWindowCrashHold(windowId, deaths, autoKey = '') {
+export function setWindowCrashAutoKey(windowId, autoKey) {
   windows.update(($windows) =>
     $windows.map((w) =>
-      w.windowId === windowId
-        ? {
-            ...w,
-            crashHeld: deaths > 0 ? deaths : 0,
-            restoreSuspended: deaths > 0 ? w.restoreSuspended : false,
-            ...(autoKey ? { crashAutoKey: autoKey } : {}),
-          }
-        : w
+      w.windowId === windowId ? { ...w, crashAutoKey: autoKey } : w
     )
   );
 }
