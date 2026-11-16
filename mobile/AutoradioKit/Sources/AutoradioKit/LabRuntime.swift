@@ -159,8 +159,6 @@ public final class LabRuntime: @unchecked Sendable {
             try await session.claim(.talking, preferBuiltInMic: true, reason: "start")    // voice processing from the start: the radio's voice is not the listener's
             let micOK = virtual ? true : await LiveAudio.requestMicPermission()
             if !micOK { log.emit(.error(stage: "mic", message: "microphone permission denied; button/typing only")) }
-            micGranted = micOK
-            HandsFreeSwitch.shared.appOpened(micGranted: micOK)              // a launch is an app open: ON when the microphone is granted, OFF when declined
             try audio.start(bus: bus, clock: clock, wantMic: micOK, voiceProcessing: coordinator.current == .talking, virtual: virtual)
             if virtual { log.emit(.note("virtual audio: no hardware is opened; mic frames are injected")) }
             started = true
@@ -272,7 +270,7 @@ public final class LabRuntime: @unchecked Sendable {
         return started
     }
 
-    /// Hands-free on or off (one state, kept across launches): on, the microphone is open and the turn policy opens and closes turns; off,
+    /// Hands-free on or off (one state, off at every launch): on, the microphone is open and the turn policy opens and closes turns; off,
     /// the engine hears nothing and an open turn is dropped now. `persist: false` is for one screen only (onboarding's "Talk to it").
     public func setHandsFree(_ on: Bool, persist: Bool = true) {
         if persist { overrideBox.write { $0 = nil }; HandsFreeSwitch.shared.set(on) } else { overrideBox.write { $0 = on } }
@@ -281,15 +279,6 @@ public final class LabRuntime: @unchecked Sendable {
     }
     /// The stored state again, after a screen's own turn-on.
     public func restoreHandsFree() { setHandsFree(HandsFreeSwitch.shared.isOn) }
-    private var micGranted = false
-    /// The app came back to the foreground: a new foreground session, so voice turns on again (when the microphone is granted) even if
-    /// the reader turned it off in the last one. Called by the module's `foreground(_:)`.
-    public func appBecameActive() {
-        guard started else { return }
-        HandsFreeSwitch.shared.appOpened(micGranted: micGranted)
-        Task { [engine] in await engine.handsFreeSet(HandsFreeSwitch.shared.isOn) }
-        refresh()
-    }
     public var handsFreeIsOn: Bool { handsFreeOverride ?? HandsFreeSwitch.shared.isOn }
     /// The lab's press and release buttons (not in the normal app): press turns hands-free on, release turns it off.
     public func talkDown() { setHandsFree(true) }

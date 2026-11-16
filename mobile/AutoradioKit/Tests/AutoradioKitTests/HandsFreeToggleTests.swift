@@ -1,7 +1,7 @@
 import XCTest
 @testable import AutoradioKit
 
-// Hands-free as one on/off state (HandsFreeSwitch.swift: T1 to T7) and when the listening state shows. The engine tests push frames as
+// Hands-free as one on/off state (HandsFreeSwitch.swift: T4 to T7) and when the listening state shows. The engine tests push frames as
 // HandsFreeTests does: loud frames are speech, quiet frames silence; the transcriber is scripted (LoudBounds, ScriptedTranscriber).
 final class HandsFreeToggleTests: XCTestCase {
     // ---- T7: when the listening state shows (pure) ----
@@ -25,49 +25,68 @@ final class HandsFreeToggleTests: XCTestCase {
         XCTAssertFalse(ListeningVisibility.visible(handsFree: false, speechMs: 5000, words: 9, addressed: true, notATurn: false))
     }
 
-    // ---- T1, T2, T3, T8, T9: when it is on (owner, 2026-11-15) ----
+    // ---- voice is off unless the listener turns it on (owner, 2026-11-16) ----
+    // Failure list, written first: V1 launch turns it on; V2 returning to the foreground turns it on; V3 playback start turns it on (the
+    // runtime's start, with the microphone granted, is the launch path); V4 a stored "on" turns it on at the next launch; V5 the explicit
+    // tap does not turn it on; V6 the quiet timeout does not turn it off; V7 the listener speaking does not restart the timer;
+    // V8 the explicit tap off does not turn it off; V9 a granted microphone answer turns it on.
     final class TestClock: @unchecked Sendable { var t = Date(timeIntervalSince1970: 1_000_000) }
     func make(_ c: TestClock) -> HandsFreeSwitch { HandsFreeSwitch(now: { c.t }) }
-    func testFreshLaunchIsUndecidedAndOff() {
-        let s = HandsFreeSwitch(); XCTAssertFalse(s.decided); XCTAssertFalse(s.isOn)
+    func testFreshSwitchIsOff() { XCTAssertFalse(HandsFreeSwitch().isOn) }
+    func testNothingButTheTapTurnsItOn() {
+        let c = TestClock(); let s = make(c)
+        s.readerSpoke(); c.t.addTimeInterval(5); XCTAssertFalse(s.expireIfIdle()); XCTAssertFalse(s.isOn, "a turn or the clock never turns it on")
+        s.set(true); XCTAssertTrue(s.isOn)
     }
-    func testAppOpenWithMicrophoneTurnsItOnAndDeclinedLeavesItOff() {
-        let c = TestClock(); let a = make(c), b = make(c)
-        a.appOpened(micGranted: true); b.appOpened(micGranted: false)
-        XCTAssertTrue(a.isOn); XCTAssertFalse(b.isOn)
-        b.decideFirstRun(micGranted: true)
-        XCTAssertFalse(b.isOn, "a later grant turns nothing on until the app is opened again")
+    func testOnIsNotKeptAcrossLaunches() {
+        let suite = UserDefaults(suiteName: "hf-\(UUID().uuidString)")!
+        let a = HandsFreeSwitch(defaults: suite); a.set(true)
+        XCTAssertFalse(HandsFreeSwitch(defaults: suite).isOn, "a new launch is off whatever the last one did")
+        XCTAssertFalse(HandsFreeSwitch().isOn)
     }
-    func testNothingIsKeptAcrossLaunches() {
-        let c = TestClock(); let a = make(c); a.appOpened(micGranted: true); a.set(false)
-        XCTAssertFalse(make(c).isOn, "a new launch starts undecided, whatever the last one did")
+    func testLaunchStartingTheRuntimeLeavesVoiceOff() async {
+        HandsFreeSwitch.shared.set(false)
+        let rt = LabRuntime(supportDir: FileManager.default.temporaryDirectory.appendingPathComponent("hf-\(UUID().uuidString)"), session: NullSessionOwner())
+        await rt.start(virtual: true)            // virtual: the microphone counts as granted, the case that used to turn it on
+        XCTAssertFalse(rt.handsFreeIsOn); XCTAssertFalse(HandsFreeSwitch.shared.isOn)
+        let closed = await poll(3) { await rt.engine.hf.enabled == false }
+        XCTAssertTrue(closed, "the engine looks at no frame")
+        rt.player.pause()
     }
-    func testThreeMinutesWithNoTurnTurnsItOffSilently() {
-        let c = TestClock(); let s = make(c); s.appOpened(micGranted: true)
+    func testExplicitTapTurnsItOnAndATapTurnsItOff() async {
+        HandsFreeSwitch.shared.set(false)
+        let rt = LabRuntime(supportDir: FileManager.default.temporaryDirectory.appendingPathComponent("hf-\(UUID().uuidString)"), session: NullSessionOwner())
+        await rt.start(virtual: true)
+        rt.setHandsFree(true)
+        XCTAssertTrue(rt.handsFreeIsOn)
+        rt.setHandsFree(false)
+        XCTAssertFalse(rt.handsFreeIsOn)
+        let heard = await poll(3) { await rt.engine.hf.enabled == false }
+        XCTAssertTrue(heard)
+        rt.player.pause()
+    }
+    func testOnStaysOnForTheQuietTimeoutThenGoesOffSilently() {
+        let c = TestClock(); let s = make(c); s.set(true)
         let told = Locked<Int>(0)
         s.onChange = { told.write { $0 += 1 } }
+        XCTAssertGreaterThanOrEqual(HandsFreeSwitch.idleLimit, 120)
         c.t.addTimeInterval(179); XCTAssertFalse(s.expireIfIdle()); XCTAssertTrue(s.isOn)
         c.t.addTimeInterval(2); XCTAssertTrue(s.expireIfIdle()); XCTAssertFalse(s.isOn)
         XCTAssertEqual(told.value, 1, "the bar re-reads; nothing is said")
         XCTAssertFalse(s.expireIfIdle())
     }
-    func testATurnResetsTheTimerAndPlayingOrPausingDoesNot() {
-        let c = TestClock(); let s = make(c); s.appOpened(micGranted: true)
+    func testTheListenerSpeakingRestartsTheTimerEachTime() {
+        let c = TestClock(); let s = make(c); s.set(true)
         c.t.addTimeInterval(170); s.readerSpoke()
         c.t.addTimeInterval(170); XCTAssertFalse(s.expireIfIdle(), "170 s since the turn")
-        // Playing or pausing never reaches the switch: there is no call for it, so only a turn can reset it.
+        s.readerSpoke()
+        c.t.addTimeInterval(170); XCTAssertFalse(s.expireIfIdle(), "restarted again")
         c.t.addTimeInterval(20); XCTAssertTrue(s.expireIfIdle())
     }
-    func testTurnedOffByHandStaysOffUntilTheNextAppOpen() {
-        let c = TestClock(); let s = make(c); s.appOpened(micGranted: true)
-        s.set(false); c.t.addTimeInterval(10); XCTAssertFalse(s.isOn)
-        s.decideFirstRun(micGranted: true); XCTAssertFalse(s.isOn)
-        s.appOpened(micGranted: true); XCTAssertTrue(s.isOn, "a new foreground session")
-    }
-    func testTheMicButtonTurnsItOnAtAnyTimeAndRestartsTheTimer() {
-        let c = TestClock(); let s = make(c); s.appOpened(micGranted: false)
-        c.t.addTimeInterval(1000); s.set(true); c.t.addTimeInterval(100)
-        XCTAssertFalse(s.expireIfIdle()); XCTAssertTrue(s.isOn)
+    func testTurnedOffByHandStaysOffAndTurningItOnAgainRestartsTheTimer() {
+        let c = TestClock(); let s = make(c); s.set(true)
+        s.set(false); c.t.addTimeInterval(1000); XCTAssertFalse(s.isOn)
+        s.set(true); c.t.addTimeInterval(100); XCTAssertFalse(s.expireIfIdle()); XCTAssertTrue(s.isOn)
     }
 
     // ---- the engine ----

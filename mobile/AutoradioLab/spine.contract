@@ -52,7 +52,7 @@ members Autoradio
     send acct = choirAsk(text=ask, aim=pg.top)
     ask = ""
   // The microphone button is the hands-free switch (owner, 2026-11-15): ON, the microphone is open and turns open and close by
-  // themselves; OFF, nothing is heard. One state, kept across launches by the Kit (bi.handsFree); no tap to talk, no push to talk.
+  // themselves; OFF, nothing is heard. One state, OFF at every launch and on until the listener has been quiet for three minutes or taps it off (bi.handsFree, owner 2026-11-16); no tap to talk, no push to talk.
   derive micOn = bi.handsFree
   // The listening state shows only when the engine has good reason to think the reader began saying something meant for the radio
   // (sustained speech with words, ListeningVisibility). It is an addition to the bar, never a replacement.

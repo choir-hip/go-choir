@@ -180,7 +180,6 @@ final class OnboardingController: @unchecked Sendable {
         set { mic = "checking"; message = "" }
         AVAudioApplication.requestRecordPermission { [weak self] granted in
             guard let self else { return }
-            HandsFreeSwitch.shared.decideFirstRun(micGranted: granted)        // the default for the whole app: ON after the grant, OFF if declined
             if !granted {
                 self.set { self.mic = "refused"; self.progress.micRefused = true; self.message = "Talking to the radio needs the microphone. You can allow it in Settings; you can always tap instead." }
                 self.save(); return

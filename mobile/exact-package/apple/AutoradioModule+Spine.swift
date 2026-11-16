@@ -78,7 +78,7 @@ extension AutoradioModule {
             }
         }
 
-        // The bar's microphone: hands-free on or off, one state kept across launches. Turning it on starts the engine if it is not running;
+        // The bar's microphone: hands-free on or off, one state, off at every launch. Turning it on starts the engine if it is not running;
         // turning it off drops an open turn at once and the engine hears nothing more.
         handle("choirHandsFreeToggle") { [unowned self] _, reply in
             Task { [weak self] in

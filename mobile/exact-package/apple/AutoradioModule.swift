@@ -168,9 +168,9 @@ public final class AutoradioModule: ExactPackage {
         return o
     }
 
-    /// The app came back to the foreground: a new foreground session for voice (lane autoradio-talk; HandsFreeSwitch). Main thread.
+    /// The app came back to the foreground. Voice is not touched: it stays as the listener left it (off unless they turned it on). Main thread.
     public func foreground(_ shown: Bool) {
-        if shown { runtime.appBecameActive(); touch(["barState"], now: true) }
+        if shown { touch(["barState"], now: true) }
     }
 
     public func later(_ name: String, _ args: [String: Any], preferred: Any?, reply: @escaping ([String: Any]) -> Void) {
