@@ -143,3 +143,82 @@ final class JoinLibraryTests: XCTestCase {
         XCTAssertEqual(reads, 1)
     }
 }
+
+// MARK: J3 Hear it on the article page, J6 Clips on a show page
+
+@MainActor
+final class JoinHearItTests: XCTestCase {
+    func store(_ rows: [[String: Any]]) -> ClipStore { let s = ClipStore(); s.replace(rows.compactMap(PodcastClip.parse)); return s }
+
+    func testJ3_ThePageOfAStoryHasItsClipsAndNothingElse() {
+        let s = store([clipRow(hex(1), route: "/a"), clipRow(hex(2), route: "/b")])
+        XCTAssertEqual(HearIt.rows(address: "pub:a", store: s).map(\.clipID), [hex(1)])
+        XCTAssertEqual(HearIt.rows(address: "pub:a/v3", store: s).map(\.clipID), [hex(1)], "a version of the story has the story's clips")
+        XCTAssertEqual(HearIt.rows(address: "pub:a", store: s)[0].story, "Story")
+        XCTAssertTrue(HearIt.rows(address: "pub:zzz", store: s).isEmpty)
+        XCTAssertTrue(HearIt.rows(address: "texture:doc1", store: s).isEmpty, "only a published story has clips")
+        XCTAssertTrue(HearIt.rows(address: "doc:abc", store: s).isEmpty)
+    }
+    func testJ3_QueueAddsTheClipAndSaysSo() async {
+        let s = store([clipRow(hex(1))]); let q = PlayQueue(); q.engine = FakeEngine()
+        let note = await ClipActions.run(op: "queue", clipID: hex(1), store: s, queue: q)
+        XCTAssertEqual(q.upcoming.count, 1); XCTAssertEqual(note, "Added to the queue.")
+    }
+    func testJ3_AClipThePhoneDoesNotHaveSaysSoAndDoesNothing() async {
+        let q = PlayQueue(); q.engine = FakeEngine()
+        for op in ["play", "queue", "open"] {
+            let note = await ClipActions.run(op: op, clipID: "gone", store: ClipStore(), queue: q)
+            XCTAssertEqual(note, "That clip is not available any more.")
+        }
+        XCTAssertTrue(q.upcoming.isEmpty); XCTAssertNil(q.current)
+    }
+    func testJ3_OpenEpisodeGoesToTheBridgeAtTheClipsStart() async {
+        let s = store([clipRow(hex(1), guid: "g1")])
+        var got: (String?, Double)?
+        let saved = PodcastBridge.open; PodcastBridge.open = { e, _, _, at in got = (e, at) }; defer { PodcastBridge.open = saved }
+        let note = await ClipActions.run(op: "open", clipID: hex(1), store: s, queue: PlayQueue())
+        XCTAssertEqual(got?.0, "g1"); XCTAssertEqual(got?.1, 10); XCTAssertEqual(note, "")
+    }
+    func testJ3_PlayOfAMismatchedFilePlaysTheEpisodeFromItsStartNotTheClip() async {
+        let s = store([clipRow(hex(1))]); s.markMismatch(hex(1)); let q = PlayQueue(); q.engine = FakeEngine()
+        _ = await ClipActions.run(op: "play", clipID: hex(1), store: s, queue: q); await q.settle()
+        guard case .audio(_, _, _, let start, let end, _)? = q.current else { return XCTFail("nothing playing") }
+        XCTAssertNil(start); XCTAssertNil(end)
+    }
+}
+
+final class JoinShowClipsTests: XCTestCase {
+    func body(_ rows: [[String: Any]]) -> Data { try! JSONSerialization.data(withJSONObject: ["clips": rows]) }
+
+    func testJ6_AShowListsItsOwnClipsMatchedByFeed() {
+        let s = ClipStore()
+        s.merge(PodcastClips.parse(body([clipRow(hex(1), feed: "https://example.test/feed.xml"), clipRow(hex(2), feed: "https://other.test/rss"), clipRow(hex(3), feed: "https://EXAMPLE.test/feed.xml/")])))
+        XCTAssertEqual(s.clips(forFeed: "https://example.test/feed.xml").map(\.clipID), [hex(1), hex(3)])
+        XCTAssertTrue(s.clips(forFeed: "https://none.test/x").isEmpty)
+        XCTAssertNotNil(s.clip(hex(2)), "a merged clip can be played by id")
+    }
+    func testJ6_MergeKeepsWhatTheBulkSetHeld() {
+        let s = ClipStore(); s.replace([clipRow(hex(1))].compactMap(PodcastClip.parse))
+        s.merge(PodcastClips.parse(body([clipRow(hex(2))])))
+        XCTAssertNotNil(s.clip(hex(1))); XCTAssertNotNil(s.clip(hex(2)))
+        s.merge(PodcastClips.parse(body([clipRow(hex(2))])))
+        XCTAssertEqual(s.all.count, 2, "a clip fetched twice is held once")
+    }
+    func testJ6_ABadOrEmptyBodyIsSilentlyNothing() {
+        XCTAssertTrue(PodcastClips.parse(Data("not json".utf8)).isEmpty)
+        XCTAssertTrue(PodcastClips.parse(Data("{}".utf8)).isEmpty)
+        XCTAssertTrue(PodcastClips.parse(body([])).isEmpty)
+    }
+    func testJ6_ARowCarriesQuoteStoryAndLength() {
+        let s = ClipStore(); s.merge(PodcastClips.parse(body([clipRow(hex(1), feed: "https://example.test/feed.xml")])))
+        let r = HearIt.rows(feed: "https://example.test/feed.xml", store: s)
+        XCTAssertEqual(r.count, 1); XCTAssertEqual(r[0].quote, "A quote."); XCTAssertEqual(r[0].story, "Story"); XCTAssertEqual(r[0].length, "1 min")
+    }
+    func testJ6_AFeedIsAskedForOnceAWhileNotOnEveryDraw() {
+        let s = ClipStore()
+        XCTAssertTrue(s.shouldAsk(feed: "https://example.test/feed.xml", now: Date(timeIntervalSince1970: 0)))
+        s.didAsk(feed: "https://example.test/feed.xml", now: Date(timeIntervalSince1970: 0))
+        XCTAssertFalse(s.shouldAsk(feed: "https://example.test/feed.xml/", now: Date(timeIntervalSince1970: 60)))
+        XCTAssertTrue(s.shouldAsk(feed: "https://example.test/feed.xml", now: Date(timeIntervalSince1970: 1000)))
+    }
+}

@@ -1,0 +1,27 @@
+// A podcast clip as a row (lane autoradio-joins): the quote, where it is from, and Play, Add to queue and Open episode as text actions.
+// Used by the article page's "Hear it" and a show page's "Clips". No pill, no outline: accent text, hairline between rows (RowRule).
+// testIds: clip-<id>, clip-play-<id>, clip-queue-<id>, clip-open-<id>.
+use Theme, HearItRow from "@choir/autoradio"
+
+component ClipRow
+  inject
+    th: Theme
+    clipDo: action
+  props
+    r: HearItRow
+    byStory: bool
+    pad: number
+  view
+    column gap=4 width="100%" box-sizing="border-box" padding-top=10 padding-bottom=6 padding-left=pad padding-right=pad testId=`clip-${r.clipID}`
+      text `“${r.quote}”` font-family=th.fontRead font-size=16 line-height=1.4 color=th.fg line-clamp=(byStory ? 3 : 1) text-align="left"
+      text (byStory ? `${r.story} · ${r.show} · ${r.length}` : `${r.show} · ${r.episode} · ${r.length}`) font-family=th.fontUi font-size=13 color=th.muted line-clamp=1 text-align="left"
+      row gap=20 align-items="center"
+        button press=clipDo("play", r.clipID) testId=`clip-play-${r.clipID}` appearance="none" aria-label=`Play ${r.show}: ${r.quote}`
+          row padding="8px 0px" align-items="center"
+            text (r.episodeOnly ? "Play episode" : "Play") font-family=th.fontUi font-size=15 font-weight=600 color=th.accent
+        button press=clipDo("queue", r.clipID) testId=`clip-queue-${r.clipID}` appearance="none" aria-label=`Add ${r.show} to the queue`
+          row padding="8px 0px" align-items="center"
+            text "Queue" font-family=th.fontUi font-size=15 font-weight=600 color=th.accent
+        button press=clipDo("open", r.clipID) testId=`clip-open-${r.clipID}` appearance="none" aria-label=`Open the episode of ${r.show}`
+          row padding="8px 0px" align-items="center"
+            text "Open episode" font-family=th.fontUi font-size=15 font-weight=600 color=th.accent

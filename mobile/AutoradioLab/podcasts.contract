@@ -6,6 +6,8 @@
 //   podcast-playing-from, podcast-retry, podcast-notes.
 use Theme, PodHomeView, PodShowView, PodEpisodeView from "@choir/autoradio"
 use PageScroll, PageHeader, SectionHeader, ListGroup, ListRow, RowRule, EmptyState, Emerge from "./ui.contract"
+use ClipRow from "./clips.contract"   // lane autoradio-joins
+use ClipRows from "@choir/autoradio"
 
 // A text action: no capsule, no outline. Accent text (strong ones heavier) with an optional symbol; the caller wraps it in a button.
 component PodAction
@@ -139,6 +141,8 @@ component PodcastShowPage
     podSubscribeTo: action
     podUnsubscribeFrom: action
     retryPodcasts: action
+    shClips: ClipRows
+    clipNote: string
   props
     address: string
     title: string
@@ -176,6 +180,17 @@ component PodcastShowPage
               text podShow.summary testId="podcast-summary" font-family=th.fontRead font-size=17 line-height=1.45 color=th.fg line-clamp=5
         if podShow.status == "empty"
           EmptyState(message="No episodes yet", detail=podShow.message, testId="podcast-empty")
+        // lane autoradio-joins: clips the platform cut from stories out of this show's episodes; nothing is drawn when there are none
+        if shClips.rows.length > 0
+          Emerge(delay=60)
+            column gap=0 width="100%" testId="podcast-clips"
+              SectionHeader(label="Clips")
+              for r, i in shClips.rows key=r.clipID
+                if i > 0
+                  RowRule(indent=0)
+                ClipRow(r=r, byStory=true, pad=0)
+              if clipNote != ""
+                text clipNote testId="podcast-clip-note" font-family=th.fontUi font-size=13 color=th.muted
         if podShow.episodes.length > 0
           Emerge(delay=80)
             column gap=8 width="100%"

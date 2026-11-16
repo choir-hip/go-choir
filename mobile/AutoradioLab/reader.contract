@@ -11,7 +11,8 @@
 //          reader-sheet(-layer, -scrim), reader-web(-close, -host, -safari, -view), reader-revising, reader-stop, reader-aim, reader-aim-clear, reader-md, reader-newer.
 use Theme, ReaderDoc, ReaderBlock, ReaderRun, ReaderCite from "@choir/autoradio"
 use ReaderFollowInfo, ReaderAimInfo, DemoInfo from "@choir/autoradio"
-use PageScroll, Card, Layer, Btn, BarClear from "./ui.contract"
+use PageScroll, Card, Layer, Btn, BarClear, RowRule from "./ui.contract"
+use ClipRow from "./clips.contract"   // lane autoradio-joins
 
 // Citations drawn as atom pills in the Markdown experiment (the page menu, demo mode). Atom styles are literals, not tokens.
 atom citation link="cite:" color="light-dark(#7a0a57, #ff9bd6)" padding-inline="3px"
@@ -385,6 +386,7 @@ component ReaderBody
     mdPress: action
     toggleCite: action
     listen: action
+    clipNote: string
   props
     address: string
   resource vp = exactViewport() as shape ReaderViewport
@@ -434,6 +436,16 @@ component ReaderBody
             else
               for b in rdoc.blocks key=b.id
                 BlockView(b=b, address=address, size=size, lh=lh, sideOn=sideOn)
+            // lane autoradio-joins: podcast clips cut from this story; nothing is drawn when there are none
+            if rdoc.hearIt.length > 0
+              column testId="reader-hear-it" width="100%" margin-top=remv(1.4) gap=0
+                text "Hear it" role="heading" aria-level=2 font-family=th.fontUi font-size=remv(1.1875 * k) font-weight=650 color=th.fg margin-bottom=2
+                for r, i in rdoc.hearIt key=r.clipID
+                  if i > 0
+                    RowRule(indent=0)
+                  ClipRow(r=r, byStory=false, pad=0)
+                if clipNote != ""
+                  text clipNote testId="reader-hear-note" font-family=th.fontUi font-size=13 color=th.muted
             // the end: disclosure, sources, related
             if rdoc.disclosure != ""
               text rdoc.disclosure testId="reader-disclosure" font-family=th.fontUi font-size=13 line-height=1.45 color=th.muted margin-top=remv(1.2)

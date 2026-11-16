@@ -99,7 +99,8 @@
    "permalink": "string",
    "plain": "string",
    "textBlocks": "number",
-   "markdown": "string"
+   "markdown": "string",
+   "hearIt": "HearItRow[]"
   },
   "TextureRow": {
    "address": "string",
@@ -164,7 +165,8 @@
      "permalink": "",
      "plain": "",
      "textBlocks": 0,
-     "markdown": ""
+     "markdown": "",
+     "hearIt": []
     }
    }
   },

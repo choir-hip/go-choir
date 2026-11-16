@@ -27,11 +27,17 @@ component Autoradio
   members "./members-talk.contract"
   // ---- lane autoradio-podcasts ----
   members "./members-podcasts.contract"
+  // ---- lane autoradio-joins ----
+  members "./members-joins.contract"
   // ---- end of members ----
 
   // What child components may `inject`. Bare names of this component's states, derives, resources and actions.
   // A lane adds the names it needs inside its own band, one name per line, and touches nothing outside it.
   provide
+    // ---- lane autoradio-joins ----
+    shClips
+    clipNote
+    clipDo
     // ---- spine ----
     th
     pg

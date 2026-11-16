@@ -46,10 +46,27 @@ public struct HearItRow: Codable, Sendable, Equatable {
     public var clipID, show, episode, length, quote: String
     /// The file is not the one transcribed: the row offers the episode only, no clip.
     public var episodeOnly: Bool = false
+    /// The story the clip was cut for (a show page lists clips by the story they were found for).
+    public var story: String = ""
 }
 public enum HearIt {
     public static func rows(route: String, store: ClipStore = .shared) -> [HearItRow] {
-        store.clips(forRoute: route).map { HearItRow(clipID: $0.clipID, show: $0.show, episode: $0.episodeTitle, length: $0.lengthLabel, quote: $0.quote, episodeOnly: store.isMismatch($0.clipID)) }
+        store.clips(forRoute: route).map { row($0, store) }
+    }
+    static func row(_ c: PodcastClip, _ store: ClipStore) -> HearItRow {
+        HearItRow(clipID: c.clipID, show: c.show, episode: c.episodeTitle, length: c.lengthLabel, quote: c.quote, episodeOnly: store.isMismatch(c.clipID), story: c.storyTitle)
+    }
+    /// The clips of the story at a page address (`pub:<route>`, with or without a version); at most three; none for any other page.
+    public static func rows(address: String, store: ClipStore = .shared) -> [HearItRow] {
+        let t = TextureAddress.parse(address)
+        guard t.kind == .publication else { return [] }
+        var found = store.clips(forRoute: t.route)
+        if found.isEmpty { found = store.clips(forRoute: TextureAddress.splitRoute(t.route).bare) }
+        return found.prefix(3).map { row($0, store) }
+    }
+    /// The clips found for a show, quote first (a show page's "Clips"); at most ten.
+    public static func rows(feed: String, store: ClipStore = .shared) -> [HearItRow] {
+        store.clips(forFeed: feed).prefix(10).map { row($0, store) }
     }
     /// Play: the clip when the audio is the transcribed file; else the episode from its start (the row then says "Open episode").
     @MainActor public static func play(_ clipID: String, store: ClipStore = .shared, queue: PlayQueue = .shared, runner: DJClipRunner = .shared) async {
@@ -61,3 +78,21 @@ public enum HearIt {
         if let c = store.clip(clipID) { queue.enqueue(c.playItem) }
     }
 }
+
+/// What a clip row's Play, Queue and Open episode do. Returns the plain note the page shows ("" when nothing needs saying).
+public enum ClipActions {
+    public static let gone = "That clip is not available any more."
+    @MainActor public static func run(op: String, clipID: String, store: ClipStore = .shared, queue: PlayQueue = .shared) async -> String {
+        guard let c = store.clip(clipID) else { return gone }
+        switch op {
+        case "play": await HearIt.play(clipID, store: store, queue: queue); return ""
+        case "queue": HearIt.enqueue(clipID, store: store, queue: queue); return "Added to the queue."
+        case "open": PodcastBridge.openEpisode(of: c); return ""
+        default: return ""
+        }
+    }
+}
+
+/// The wire shapes of the clip rows (interface/joins.json).
+public struct ClipRowsView: Codable, Sendable, Equatable { public var rows: [HearItRow]; public init(rows: [HearItRow] = []) { self.rows = rows } }
+public struct ClipAckView: Codable, Sendable, Equatable { public var status = "ok", message = ""; public init(message: String = "") { self.message = message } }

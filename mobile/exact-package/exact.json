@@ -380,6 +380,22 @@
       "pages": "number[]",
       "message": "string"
     },
+    "HearItRow": {
+      "clipID": "string",
+      "show": "string",
+      "episode": "string",
+      "length": "string",
+      "quote": "string",
+      "story": "string",
+      "episodeOnly": "bool"
+    },
+    "ClipRows": {
+      "rows": "HearItRow[]"
+    },
+    "ClipAck": {
+      "status": "string",
+      "message": "string"
+    },
     "MailRow": {
       "id": "string",
       "address": "string",
@@ -804,7 +820,8 @@
       "permalink": "string",
       "plain": "string",
       "textBlocks": "number",
-      "markdown": "string"
+      "markdown": "string",
+      "hearIt": "HearItRow[]"
     },
     "TextureRow": {
       "address": "string",
@@ -1936,6 +1953,27 @@
       "answers": "FileListing"
     },
     {
+      "source": "showClips",
+      "live": true,
+      "answers": "ClipRows",
+      "options": {
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "rows": []
+        }
+      }
+    },
+    {
+      "send": "clipAct",
+      "options": {
+        "op": "string",
+        "id": "string"
+      },
+      "answers": "ClipAck"
+    },
+    {
       "source": "mailBox",
       "live": true,
       "answers": "MailBoxView",
@@ -2434,7 +2472,8 @@
           "permalink": "",
           "plain": "",
           "textBlocks": 0,
-          "markdown": ""
+          "markdown": "",
+          "hearIt": []
         }
       }
     },

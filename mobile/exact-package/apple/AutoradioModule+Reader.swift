@@ -89,7 +89,14 @@ extension AutoradioModule {
                 let again = ReaderStore.shared.cached(address)?.revising ?? false
                 let d = await ReaderStore.shared.doc(address, force: again)
                 DispatchQueue.main.async {
-                    reply(self?.json(d) ?? [:])
+                    // lane autoradio-joins: "Hear it", the clips cut from this story (none: an empty list, nothing drawn). The clip set is
+                    // asked for once in a while; the page is read again when it arrives.
+                    var o = self?.json(d) ?? [:]
+                    o["hearIt"] = self?.json(ClipRowsView(rows: HearIt.rows(address: address)))["rows"] ?? []
+                    reply(o)
+                    if address.hasPrefix("pub:") {
+                        Task { [weak self] in if await PodcastClips.ensure(client: ChoirEnvironment.shared.client()) { self?.touch(["readerDoc"]) } }
+                    }
                     if d.revising { DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self?.touch(["readerDoc"]) } }
                 }
             }
