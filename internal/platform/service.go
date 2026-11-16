@@ -46,9 +46,6 @@ type Service struct {
 	podcastClipRowHook func(clipID string) error
 	// podcastFeedMu serialises writes to the feed rows and indexes (podcast_feeds.go).
 	podcastFeedMu sync.Mutex
-	// podcastJudge and podcastMatchMu serve the match job (podcast_match.go).
-	podcastJudge   PodcastJudge
-	podcastMatchMu sync.Mutex
 	// The notice sequence (publication_links.go): seeded from storage before
 	// the first one is issued or read.
 	seedMu        sync.Mutex

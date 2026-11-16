@@ -8,7 +8,10 @@
 //	    --model /path/tdt_ctc-110m-q8_0.gguf --vad-model /path/silero-vad-f16.gguf
 //
 // Commands: intake (feeds to episodes), transcribe (episodes to transcripts),
-// run (both, once) and serve (both, for good: it polls for episodes that need
+// run (both, once), candidates (rank the paper's stories against the stored
+// transcripts into a file for a person or an agent to judge; no model call),
+// put-clips (send the candidates judged support > 0 through the operator
+// route) and serve (intake and transcribe, for good: it polls for episodes that need
 // a transcript, transcribes one at a time at the lowest CPU and I/O priority
 // with at most four threads, and sleeps with a backoff when idle; SIGTERM
 // stops it and an unfinished episode stays pending). The API key is read from
@@ -58,12 +61,15 @@ func main() {
 	threads := fs.Int("threads", 4, "model threads")
 	minFreeGB := fs.Float64("min-free-gb", 15, "refuse to start a download when the work directory's filesystem has less than this many GiB free")
 	workDir := fs.String("work-dir", "", "scratch directory for downloads (default: the system temp)")
-	matchHours := fs.Int("match-hours", 72, "match: the paper's stories of this many hours")
+	stories := fs.Int("stories", 60, "candidates: how many of the front's newest stories")
+	perStory := fs.Int("per-story", 4, "candidates: passages offered per story, at most one per episode")
+	outFile := fs.String("out", "", "candidates: the file to write")
+	inFile := fs.String("in", "", "put-clips: the judged candidates file")
 	intakeEvery := fs.Duration("intake-every", 30*time.Minute, "serve: how often the feeds are polled")
 	if err := fs.Parse(os.Args[2:]); err != nil {
 		os.Exit(2)
 	}
-	if cmd != "intake" && cmd != "transcribe" && cmd != "run" && cmd != "serve" && cmd != "match" {
+	if cmd != "intake" && cmd != "transcribe" && cmd != "run" && cmd != "serve" && cmd != "candidates" && cmd != "put-clips" {
 		log.Fatalf("unknown command %q", cmd)
 	}
 	raw, err := os.ReadFile(*keyFile)
@@ -98,7 +104,6 @@ func main() {
 				return intake(ctx, client, *feeds, *perFeed)
 			},
 		}
-		cfg.Match = func(ctx context.Context) error { return match(ctx, client, *matchHours) }
 		if n, err := t.SweepWorkDir(); err != nil || n > 0 {
 			log.Printf("work directory swept: %d leftover episode directories removed (%v)", n, err)
 		}
@@ -109,9 +114,38 @@ func main() {
 		log.Printf("podcast-worker stopped")
 		return
 	}
-	if cmd == "match" {
-		if err := match(ctx, client, *matchHours); err != nil {
-			log.Fatalf("match: %v", err)
+	if cmd == "candidates" {
+		if *outFile == "" {
+			log.Fatal("candidates needs --out")
+		}
+		f, err := podcastworker.BuildCandidates(ctx, client, *stories, *perStory, log.Printf)
+		if err != nil {
+			log.Fatalf("candidates: %v", err)
+		}
+		if err := podcastworker.WriteCandidates(*outFile, f); err != nil {
+			log.Fatalf("candidates: %v", err)
+		}
+		log.Printf("candidates: %d passages for the front's newest %d stories written to %s; set \"support\" (0 to 1) on the ones that report the same event, then run put-clips", len(f.Candidates), *stories, *outFile)
+		return
+	}
+	if cmd == "put-clips" {
+		if *inFile == "" {
+			log.Fatal("put-clips needs --in")
+		}
+		clips, err := podcastworker.JudgedClips(*inFile)
+		if err != nil {
+			log.Fatalf("put-clips: %v", err)
+		}
+		if len(clips) == 0 {
+			log.Fatalf("put-clips: no candidate in %s has a support above 0", *inFile)
+		}
+		stored, refused := client.PutClips(ctx, clips)
+		for _, r := range refused {
+			log.Printf("refused: %s", r)
+		}
+		log.Printf("put-clips: %d of %d clips stored, %d refused", stored, len(clips), len(refused))
+		if len(refused) > 0 {
+			os.Exit(1)
 		}
 		return
 	}
@@ -128,11 +162,6 @@ func main() {
 		t := &podcastworker.Transcriber{FFmpeg: *ffmpeg, Parakeet: *parakeet, Model: *model, VAD: *vad, Threads: *threads, WorkDir: *workDir, MaxMinutes: *maxMinutes, MinFreeBytes: int64(*minFreeGB * (1 << 30))}
 		if err := transcribe(ctx, client, t, time.Duration(*sinceHours)*time.Hour, *maxEpisodes); err != nil {
 			log.Fatalf("transcribe: %v", err)
-		}
-	}
-	if cmd == "run" {
-		if err := match(ctx, client, *matchHours); err != nil {
-			log.Printf("match: %v", err)
 		}
 	}
 }
@@ -203,16 +232,5 @@ func transcribe(ctx context.Context, c *podcastworker.Client, t *podcastworker.T
 		log.Printf("episode %s (%s): %d segments, %.0f s of audio in %.0f s", ep.EpisodeID, ep.Show, len(res.Segments), res.Seconds, time.Since(started).Seconds())
 	}
 	log.Printf("transcripts stored: %d of %d", done, len(pending))
-	return nil
-}
-
-// match asks the platform to turn the transcripts into clips: one Jev call.
-func match(ctx context.Context, c *podcastworker.Client, hours int) error {
-	sum, err := c.Match(ctx, hours)
-	if err != nil {
-		return err
-	}
-	log.Printf("match: %d stories, %d episodes, %d windows, %d pairs asked in %d Jev call(s); %d clips for %d stories (%d dropped)",
-		sum.Stories, sum.Episodes, sum.Windows, sum.Pairs, sum.JevCalls, sum.Clips, sum.Covered, sum.Dropped)
 	return nil
 }

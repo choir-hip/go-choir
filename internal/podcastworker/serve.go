@@ -42,10 +42,6 @@ type ServeConfig struct {
 	MaxFailSkip time.Duration // longest skip (default 6 h)
 	Intake      func(ctx context.Context) error
 	IntakeEvery time.Duration // how often Intake runs (default 30 min); 0 with Intake nil is never
-	// Match runs once each time the queue drains after transcripts were
-	// stored: the platform's match job (one Jev call a run) turns them into
-	// clips. Its errors are logged and never stop the loop.
-	Match       func(ctx context.Context) error
 	ReportEvery time.Duration // the volume line (default 1 h)
 	Now         func() time.Time
 	Sleep       func(ctx context.Context, d time.Duration) // a test seam
@@ -106,12 +102,11 @@ type failure struct {
 func Serve(ctx context.Context, b Backend, e Engine, cfg ServeConfig) error {
 	cfg.defaults()
 	var (
-		failed           = map[string]failure{}
-		idle             = cfg.MinIdle
-		lastIntake       time.Time
-		storedSinceMatch int
-		windowFrom       = cfg.Now()
-		stats            struct {
+		failed     = map[string]failure{}
+		idle       = cfg.MinIdle
+		lastIntake time.Time
+		windowFrom = cfg.Now()
+		stats      struct {
 			stored, failed int
 			audio          float64
 			wall           time.Duration
@@ -157,12 +152,6 @@ func Serve(ctx context.Context, b Backend, e Engine, cfg ServeConfig) error {
 			break
 		}
 		if next == nil {
-			if cfg.Match != nil && storedSinceMatch > 0 {
-				storedSinceMatch = 0
-				if err := cfg.Match(ctx); err != nil && ctx.Err() == nil {
-					cfg.Logf("podcast-worker: match failed: %v", err)
-				}
-			}
 			cfg.Sleep(ctx, idle)
 			idle = min(idle*2, cfg.MaxIdle)
 			continue
@@ -202,7 +191,6 @@ func Serve(ctx context.Context, b Backend, e Engine, cfg ServeConfig) error {
 		}
 		delete(failed, next.EpisodeID)
 		stats.stored++
-		storedSinceMatch++
 		stats.audio += res.Seconds
 		mu.Unlock()
 		cfg.Logf("podcast-worker: episode %s (%s): %d segments, %.0f s of audio in %.0f s", next.EpisodeID, next.Show, len(res.Segments), res.Seconds, cfg.Now().Sub(started).Seconds())

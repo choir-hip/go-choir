@@ -155,25 +155,3 @@ func (c *Client) ListFeeds(ctx context.Context, feeds []FeedSpec) error {
 	}
 	return errors.Join(errs...)
 }
-
-// MatchSummary is what a match run reports.
-type MatchSummary struct {
-	Stories  int `json:"stories"`
-	Episodes int `json:"episodes"`
-	Windows  int `json:"windows"`
-	Pairs    int `json:"pairs"`
-	JevCalls int `json:"jev_calls"`
-	Clips    int `json:"clips"`
-	Dropped  int `json:"dropped"`
-	Covered  int `json:"stories_with_clips"`
-}
-
-// Match asks the platform to match the transcripts against the paper's
-// stories of the last sinceHours hours.
-func (c *Client) Match(ctx context.Context, sinceHours int) (*MatchSummary, error) {
-	var sum MatchSummary
-	if err := c.do(ctx, http.MethodPost, opBase+"match", map[string]int{"since_hours": sinceHours}, &sum); err != nil {
-		return nil, err
-	}
-	return &sum, nil
-}

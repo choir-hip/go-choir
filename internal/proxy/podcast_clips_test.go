@@ -159,8 +159,8 @@ func TestOperatorPodcastRoutesPassTheRosterGate(t *testing.T) {
 	if w := call(http.MethodPut, "/api/platform/operator/podcasts/feeds/listed", `{"feeds":[]}`, true); w.Code != http.StatusOK {
 		t.Fatalf("operator PUT feeds/listed = %d", w.Code)
 	}
-	if w := call(http.MethodPost, "/api/platform/operator/podcasts/match", `{"since_hours":72}`, true); w.Code != http.StatusOK {
-		t.Fatalf("operator POST match = %d", w.Code)
+	if w := call(http.MethodPost, "/api/platform/operator/podcasts/match", `{"since_hours":72}`, true); w.Code == http.StatusOK {
+		t.Fatalf("the match route is not built: operator POST match = %d", w.Code)
 	}
 	if w := call(http.MethodDelete, "/api/platform/operator/podcasts/clips", ``, true); w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("DELETE clips = %d", w.Code)
@@ -173,7 +173,6 @@ func TestOperatorPodcastRoutesPassTheRosterGate(t *testing.T) {
 		"PUT " + platform.PodcastTranscriptsPath + "?",
 		"PUT " + platform.PodcastClipsWritePath + "?",
 		"PUT " + platform.PodcastFeedsListedPath + "?",
-		"POST " + platform.PodcastMatchPath + "?",
 	}
 	if strings.Join(podcastCalls, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("corpusd saw\n%s\nwant\n%s", strings.Join(podcastCalls, "\n"), strings.Join(want, "\n"))

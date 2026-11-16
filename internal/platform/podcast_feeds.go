@@ -30,18 +30,10 @@ const (
 	ogKindPodcastIndex = objectgraph.ObjectKind("choir.podcast_index")
 
 	podcastMaxTitleBytes = 200
-	// podcastRecentPerFeed is how many of a feed's newest episodes its row
-	// remembers, for the match job to read by key.
-	podcastRecentPerFeed = 40
 	podcastPopularLimit  = 100
 	// podcastMaxFeatured bounds the featured set: the operator's own list.
 	podcastMaxFeatured = 1000
 )
-
-type podcastRecent struct {
-	EpisodeID string    `json:"episode_id"`
-	Published time.Time `json:"published"`
-}
 
 // podcastFeedRow is a stored, featured feed.
 type podcastFeedRow struct {
@@ -49,10 +41,9 @@ type podcastFeedRow struct {
 	Norm    string `json:"norm"`
 	// Title is what the operator called it; Show is what the worker parsed
 	// from the feed, and is what is shown publicly.
-	Title     string          `json:"title"`
-	Show      string          `json:"show,omitempty"`
-	FirstSeen string          `json:"first_seen"`
-	Recent    []podcastRecent `json:"recent,omitempty"`
+	Title     string `json:"title"`
+	Show      string `json:"show,omitempty"`
+	FirstSeen string `json:"first_seen"`
 	// LatestTitle and LatestPublished are the feed's newest parsed episode.
 	LatestTitle     string    `json:"latest_title,omitempty"`
 	LatestPublished time.Time `json:"latest_published,omitempty"`
@@ -261,8 +252,8 @@ func (s *Service) SetPodcastFeedsListed(ctx context.Context, feeds []PodcastFeed
 }
 
 // notePodcastEpisodes tells the feed rows what the worker parsed: the show's
-// name and the newest episodes, which the match job reads by key. Only a
-// featured feed has a row; the caller has already skipped the rest.
+// name and the newest episode (the popular list shows them). Only a featured feed
+// has a row; the caller has already skipped the rest.
 func (s *Service) notePodcastEpisodes(ctx context.Context, og *ObjectGraphStore, eps []PodcastEpisode, now time.Time) error {
 	byFeed := map[string][]PodcastEpisode{}
 	for _, e := range eps {
@@ -280,33 +271,14 @@ func (s *Service) notePodcastEpisodes(ctx context.Context, og *ObjectGraphStore,
 		if row == nil {
 			continue
 		}
-		before, _ := json.Marshal(row)
-		recent := map[string]time.Time{}
-		for _, r := range row.Recent {
-			recent[r.EpisodeID] = r.Published
-		}
+		before := *row
 		for _, e := range list {
-			recent[e.EpisodeID] = e.Published
 			row.Show = e.Show
 			if e.Published.After(row.LatestPublished) {
 				row.LatestPublished, row.LatestTitle = e.Published, e.Title
 			}
 		}
-		row.Recent = row.Recent[:0]
-		for id, p := range recent {
-			row.Recent = append(row.Recent, podcastRecent{EpisodeID: id, Published: p})
-		}
-		sort.Slice(row.Recent, func(i, j int) bool {
-			if !row.Recent[i].Published.Equal(row.Recent[j].Published) {
-				return row.Recent[i].Published.After(row.Recent[j].Published)
-			}
-			return row.Recent[i].EpisodeID < row.Recent[j].EpisodeID
-		})
-		if len(row.Recent) > podcastRecentPerFeed {
-			row.Recent = row.Recent[:podcastRecentPerFeed]
-		}
-		after, _ := json.Marshal(row)
-		if string(before) == string(after) {
+		if row.Show == before.Show && row.LatestTitle == before.LatestTitle && row.LatestPublished.Equal(before.LatestPublished) {
 			continue
 		}
 		if err := s.putPodcastFeed(ctx, og, *row, now); err != nil {

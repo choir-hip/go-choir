@@ -18,7 +18,6 @@ const (
 	PodcastEpisodesPath    = "/internal/platform/operator/podcasts/episodes"
 	PodcastTranscriptsPath = "/internal/platform/operator/podcasts/transcripts"
 	PodcastClipsWritePath  = "/internal/platform/operator/podcasts/clips"
-	PodcastMatchPath       = "/internal/platform/operator/podcasts/match"
 	PodcastFeedsListedPath = "/internal/platform/operator/podcasts/feeds/listed"
 	PodcastPopularPath     = "/internal/platform/podcast-popular"
 	PodcastTranscriptPath  = "/internal/platform/podcast-transcript"
@@ -230,36 +229,4 @@ func (h *Handler) HandlePodcastFeedsListed(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"feeds": n})
-}
-
-// HandlePodcastMatch serves POST of a match run.
-func (h *Handler) HandlePodcastMatch(w http.ResponseWriter, r *http.Request) {
-	if h.podcastRefuse(w, r, http.MethodPost) {
-		return
-	}
-	var req struct {
-		SinceHours int `json:"since_hours"`
-	}
-	if !decodePodcastBody(w, r, &req) {
-		return
-	}
-	if req.SinceHours < 0 || req.SinceHours > 14*24 {
-		writeJSON(w, http.StatusBadRequest, apiError{Error: "since_hours is 0 to 336"})
-		return
-	}
-	sum, err := h.service.MatchPodcasts(r.Context(), time.Duration(req.SinceHours)*time.Hour)
-	switch {
-	case errors.Is(err, ErrPodcastNoJudge):
-		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: err.Error()})
-	case errors.Is(err, ErrPodcastMatchBusy):
-		writeJSON(w, http.StatusConflict, apiError{Error: err.Error()})
-	case err != nil && sum != nil:
-		// The run reached the model and it failed: say what was done.
-		log.Printf("corpusd: podcast match failed: %v", err)
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "the support check failed", "summary": sum})
-	case err != nil:
-		podcastFail(w, "match", err)
-	default:
-		writeJSON(w, http.StatusOK, sum)
-	}
 }
