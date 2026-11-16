@@ -40,6 +40,33 @@ extension PlayItem {
         case .document(let id, _, _): return id
         }
     }
+    /// The same thing to listen to, whatever its title: a story's route, a page's address, a book's id, an audio file's address.
+    public func isSame(as o: PlayItem) -> Bool {
+        switch (self, o) {
+        case (.story(let a, _), .story(let b, _)): return a == b
+        case (.page(let a, _), .page(let b, _)): return a == b
+        case (.document(let a, _, _), .document(let b, _, _)): return a == b
+        case (.audio(let a, _, _, _, _, _), .audio(let b, _, _, _, _, _)): return a == b
+        default: return false
+        }
+    }
+    /// The item as the desk accepts it (docs/reference/AUTORADIO-TURNS.md, "The queue"): strings clamped to their byte bounds; nil when
+    /// an address or id is over its bound and cannot be clamped (the entry is then left out of what the desk is shown).
+    func forWire() -> PlayItem? {
+        func clamp(_ s: String, _ n: Int) -> String {
+            var out = "", used = 0
+            for ch in s { let c = String(ch).utf8.count; if used + c > n { break }; out.append(ch); used += c }
+            return out
+        }
+        switch self {
+        case .story(let r, let t): return r.utf8.count <= 256 ? .story(route: r, title: clamp(t, 300)) : nil
+        case .page(let u, let t): return u.absoluteString.utf8.count <= 1024 ? .page(url: u, title: clamp(t, 300)) : nil
+        case .document(let id, let t, let at): return id.utf8.count <= 128 ? .document(id: id, title: clamp(t, 300), at: at) : nil
+        case .audio(let u, let t, let show, let s, let e, let ep):
+            guard u.absoluteString.utf8.count <= 1024 else { return nil }
+            return .audio(url: u, title: clamp(t, 300), show: clamp(show, 200), start: s, end: e, episodeId: ep.flatMap { $0.utf8.count <= 128 ? $0 : nil })
+        }
+    }
     public var isRemoteAudio: Bool { if case .audio = self { return true }; return false }
     /// A clip: remote audio with an end.
     public var isClip: Bool { if case .audio(_, _, _, _, let end, _) = self { return end != nil }; return false }
@@ -368,7 +395,7 @@ func onMainThread<T>(_ f: @MainActor () -> T) -> T {
     /// A turn's ops apply once: a replayed turn_id changes nothing.
     @discardableResult
     public func apply(serverOps ops: [QueueOp], turnId: String, baseVersion: Int?) -> (applied: Int, dropped: Int) {
-        if !turnId.isEmpty {
+        if !turnId.isEmpty, !ops.isEmpty {
             if appliedTurns.contains(turnId) { return (0, ops.count) }
             appliedTurns.append(turnId); if appliedTurns.count > 100 { appliedTurns.removeFirst(appliedTurns.count - 100) }
         }
@@ -397,6 +424,10 @@ func onMainThread<T>(_ f: @MainActor () -> T) -> T {
                 if !did { dropped += 1; continue }
             }
             let caption = op.reason.isEmpty ? (actor == .dj ? "DJ added" : "") : op.reason
+            // Queueing what is playing right now adds nothing: said quietly, not an error.
+            if (op.kind == .playNext || op.kind == .enqueue), let it = op.item, let c = current, c.isSame(as: it) {
+                message = "Already playing."; dropped += 1; continue
+            }
             switch op.kind {
             case .playNow:
                 guard let item = op.item else { did = false; break }
@@ -442,8 +473,10 @@ func onMainThread<T>(_ f: @MainActor () -> T) -> T {
 
     /// The queue as the desk reads it.
     public func snapshot() -> QueueSnapshot {
-        let cur = current.map { QueueSnapshot.Current(id: currentId ?? "", item: $0, positionSeconds: positionSeconds()) }
-        return QueueSnapshot(version: version, current: cur, upcoming: entries.map { .init(id: $0.id, item: $0.item, addedBy: $0.addedBy) })
+        let cur = current.flatMap { $0.forWire() }.map { QueueSnapshot.Current(id: currentId ?? "", item: $0, positionSeconds: min(max(positionSeconds(), 0), 10_000_000)) }
+        // An entry the desk cannot take (an address over its bound) is left out; `snapshotJSON` sends the first 50 of the rest.
+        let up = entries.compactMap { e in e.item.forWire().map { QueueSnapshot.Upcoming(id: e.id, item: $0, addedBy: e.addedBy) } }
+        return QueueSnapshot(version: version, current: cur, upcoming: up)
     }
     /// The server reads at most this many upcoming entries; more makes the desk say it cannot see the queue.
     public static let maxSnapshotUpcoming = 50

@@ -353,3 +353,80 @@ final class QueueRebaseTests: XCTestCase {
         XCTAssertEqual(((o2["upcoming"] as! [[String: Any]])[0])["added_by"] as? String, "dj")
     }
 }
+
+@MainActor
+final class QueueDuplicateAndWireTests: XCTestCase {
+    func story(_ n: String, _ t: String = "") -> PlayItem { .story(route: n, title: t.isEmpty ? "S \(n)" : t) }
+    func make() -> (PlayQueue, FakeEngine) { let q = PlayQueue(); let e = FakeEngine(); q.engine = e; return (q, e) }
+
+    // 1. Queueing what is playing now is a no-op, said quietly. A second copy of something not playing stays allowed.
+    func testQueueingTheCurrentItemIsANoOp() async {
+        let (q, _) = make()
+        q.playNow(story("a")); await q.settle()
+        let v = q.version
+        q.enqueue(story("a", "A different title for the same story"))
+        q.playNext(story("a"))
+        XCTAssertTrue(q.entries.isEmpty); XCTAssertEqual(q.version, v)
+        XCTAssertEqual(q.message, "Already playing.")
+        q.enqueue(story("b")); q.enqueue(story("b"))                       // an intentional second copy of something not playing
+        XCTAssertEqual(q.entries.count, 2)
+        // the same holds for a page, a book and an audio file, from any actor
+        q.playNow(.page(url: URL(string: "https://x.test/p")!, title: "P")); await q.settle()
+        q.apply([.enqueue(.page(url: URL(string: "https://x.test/p")!, title: "Other"))], by: .dj)
+        XCTAssertEqual(q.entries.count, 2)
+        q.playNow(.audio(url: URL(string: "https://x.test/e.mp3")!, title: "E", show: "S", start: nil, end: nil, episodeId: "e1")); await q.settle()
+        q.enqueue(.audio(url: URL(string: "https://x.test/e.mp3")!, title: "E", show: "S", start: 5, end: 30, episodeId: "e1"))   // a clip of the episode that is playing
+        XCTAssertEqual(q.entries.count, 2)
+        // playing it again from the paper is allowed (a restart), and stationed items seeded by noteStarted are not queued
+        q.noteStarted(story("c")); q.enqueue(story("c")); XCTAssertEqual(q.entries.count, 2)
+    }
+
+    // 2. The snapshot keeps to the desk's bounds: at most 50 upcoming, strings clamped, an entry that cannot be clamped left out.
+    func testSnapshotKeepsToTheWireBounds() throws {
+        let (q, _) = make()
+        for i in 0..<60 { q.enqueue(story("r\(i)", String(repeating: "é", count: 400))) }
+        q.enqueue(.page(url: URL(string: "https://x.test/" + String(repeating: "a", count: 1100))!, title: "long"))
+        let o = try JSONSerialization.jsonObject(with: Data(q.snapshotJSON().utf8)) as! [String: Any]
+        let up = o["upcoming"] as! [[String: Any]]
+        XCTAssertEqual(up.count, 50)
+        XCTAssertTrue(up.allSatisfy { (($0["item"] as! [String: Any])["title"] as! String).utf8.count <= 300 })
+        XCTAssertEqual(up.first?["id"] as? String, q.entries[0].id)
+    }
+
+    // 3. The exact event the server sent in the staging proof, and the apply-once rule.
+    func testTheStagingEventDecodesAndAppliesOnce() {
+        let (q, _) = make()
+        for n in ["a", "b", "c", "d", "e"] { q.enqueue(story(n)) }          // ids q1 ... q5
+        let id4 = q.entries[3].id; XCTAssertEqual(id4, "q4")
+        let event = #"{"turn_id":"cmd-7f3a9c","base_version":7,"replayed":false,"ops":[{"op":"move","id":"q4","to_index":0,"base_version":7,"reason":"you asked for the long read next"}]}"#
+        XCTAssertEqual(QueueOp.decode(Data(event.utf8)), [QueueOp(.move, id: "q4", toIndex: 0, reason: "you asked for the long read next", baseVersion: 7)])
+        let r = q.applyQueueOpsEvent(Data(event.utf8))
+        XCTAssertEqual(r.applied, 1)
+        XCTAssertEqual(q.entries.first?.id, "q4")
+        XCTAssertEqual(q.entries.first?.note, "you asked for the long read next")        // the row shows the DJ's reason
+        XCTAssertEqual(q.info().upcoming.first?.note, "you asked for the long read next")
+        let replay = event.replacingOccurrences(of: "\"replayed\":false", with: "\"replayed\":true")
+        XCTAssertEqual(q.applyQueueOpsEvent(Data(replay.utf8)).applied, 0)
+    }
+
+    // A replay that arrives with no ops (the retry's version differed) is not the turn's application: a later delivery still applies.
+    func testAnEmptyReplayDoesNotConsumeTheTurn() {
+        let (q, _) = make()
+        q.enqueue(story("a")); q.enqueue(story("b"))
+        let empty = #"{"turn_id":"t9","base_version":3,"replayed":true,"ops":[]}"#
+        XCTAssertEqual(q.applyQueueOpsEvent(Data(empty.utf8)).applied, 0)
+        let real = #"{"turn_id":"t9","base_version":2,"replayed":false,"ops":[{"op":"move","id":"q2","to_index":0,"base_version":2,"reason":"r"}]}"#
+        XCTAssertEqual(q.applyQueueOpsEvent(Data(real.utf8)).applied, 1)
+    }
+
+    // 4. A candidate the desk would refuse (a route with a space, @ or #, or over 256 bytes) is left out, not sent.
+    func testCandidatesAreShapedForTheDesk() {
+        let cands = [DeskCandidate(route: "good-one", title: "Good"), DeskCandidate(route: "has space", title: "x"), DeskCandidate(route: "a@b", title: "x"),
+                     DeskCandidate(route: "a#b", title: "x"), DeskCandidate(route: String(repeating: "r", count: 257), title: "x"),
+                     DeskCandidate(route: "ok", title: String(repeating: "t", count: 400))]
+        let out = AutoradioDeskStage.wireCandidates(cands)
+        XCTAssertEqual(out.map { $0["route"] }, ["good-one", "ok"])
+        XCTAssertLessThanOrEqual(out[1]["title"]!.utf8.count, 300)
+        XCTAssertEqual(AutoradioDeskStage.wireCandidates((0..<60).map { DeskCandidate(route: "r\($0)", title: "t") }).count, 40)
+    }
+}
