@@ -740,6 +740,26 @@ final class RunSheetStoreTests: XCTestCase {
         XCTAssertEqual(stale?.by, .phone); XCTAssertNotNil(stale?.reason)
     }
 
+
+    // 25 no op the phone builds can break a server bound: cut at the bound, never dropped there
+    func test25_AnEntryBuiltTooBigIsCutAtTheBoundsAndApplies() {
+        let (_, s, _) = make()
+        let long = String(repeating: "word ", count: 600)
+        var e = RunSheetEntry(id: "x", kind: .story, placedBy: .desk, title: long, text: String(repeating: "a", count: 20_000),
+                              source: RunSheetSource(ref: String(repeating: "r", count: 900), label: long, url: String(repeating: "u", count: 900)),
+                              cites: (0..<20).map { RunSheetCite(ref: "pub:\($0)", role: .mentioned, label: long) }, estSeconds: 1e9)
+        e.forecast = RunSheetForecast(pHeard: 4, causedBy: String(repeating: "c", count: 400), claimId: "k")
+        let r = s.place(e, at: .end, by: .desk, reason: String(repeating: "r", count: 500))
+        XCTAssertTrue(r.applied, r.dropped ?? "")
+        let got = s.entry("x")!
+        XCTAssertLessThanOrEqual(got.title.utf8.count, 300); XCTAssertLessThanOrEqual(got.text!.utf8.count, 8192)
+        XCTAssertLessThanOrEqual(got.source!.ref.utf8.count, 512); XCTAssertLessThanOrEqual(got.source!.label.utf8.count, 512); XCTAssertLessThanOrEqual(got.source!.url!.utf8.count, 512)
+        XCTAssertEqual(got.cites!.count, 12); XCTAssertEqual(got.estSeconds, 86400); XCTAssertEqual(got.forecast!.pHeard, 1)
+        XCTAssertLessThanOrEqual(got.forecast!.causedBy.utf8.count, 160)
+        XCTAssertLessThanOrEqual(RunSheet.entryJSONSize(got), RunSheetBounds.maxEntryJSON)
+        let multibyte = RunSheetEntry.paperStory(route: "r", title: String(repeating: "\u{1F600}", count: 200))
+        XCTAssertTrue(s.place(multibyte, at: .end).applied); XCTAssertLessThanOrEqual(s.entry(multibyte.id)!.title.utf8.count, 300)
+    }
 }
 
 // Demo mode: the programme route is answered from DemoStretch, so the desk's opening and entries arrive and no notice is placed.

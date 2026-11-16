@@ -115,7 +115,7 @@ public struct RouteSheetPoster: RunSheetPoster {
     public func applyFromDesk(_ op: RunSheetOp) -> RunSheetResult { run(op, remote: true) }
 
     private func run(_ op: RunSheetOp, remote: Bool) -> RunSheetResult {
-        var op = op
+        var op = op.bounded()                         // the server's field bounds: cut here, never dropped there
         if op.op == .place, let e = op.entry, e.state == .ahead, op.at != .now, sheet.ahead().count >= Self.maxAhead {
             // The reducer does not cap the ahead list; the phone does. A listener's own placement is never refused: it takes the place
             // of the last entry. The desk's is refused.

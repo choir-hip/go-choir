@@ -237,6 +237,15 @@ text draft markup="markdown" atoms="citation" atompress=pressed
 
 (from the `Composer` example, `docs/contract-grammar.md:1479-1483`.)
 
+- **Local patch 0001: the iOS editor hides all syntax** (2026-11-16; `mobile/exact-patches/`). Stock Exact's Apple host dims Markdown
+  syntax (`MarkupEditor.swift`: markers at 0.3 ink, list markers 0.4) and hides only link destinations; the web editor hides syntax away from the
+  caret. The owner wants no syntax visible while editing, so we carry a patch: the editor asks the styler with no selection to reveal
+  (`exact_markup_style` takes `sel_start = u32::MAX` as "reveal nothing", `host/apple/src/markup.rs:252`), marks every hidden range
+  `.markupHidden` (the mechanism link destinations use), draws a bullet's `-` as a bullet glyph, hides a link's `[` too, and makes Backspace just
+  after a block's hidden prefix remove the prefix. It is a patch file applied by `scripts/setup-exact.sh` after the pin is checked out, not a
+  fork; upstream `main` (3007 commits past the pin at 2026-11-16) has the same dimming, so (a) a prop or (b) a pin move was not available.
+  Verified by `git apply --check` on the pin and unit tests of the pure rules (`MarkupSyntaxHidingTests`); **not compiled or run** by the lane
+  that wrote it. Drop it when upstream hides all syntax.
 - **No documented footnote tap.** `format(id, "footnote")` is an editor command
   (`contract-grammar.md:1412`); we found no footnote rendering or tap behaviour
   in the reader [src, by search only]. Citations as atoms is the **candidate

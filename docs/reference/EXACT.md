@@ -4,7 +4,9 @@ Observed: `expo/exact` at commit `76cd50f9e863129b3fc75db1673d6ad4bbf79258`
 (2026-11-10), Xcode 27.1, iOS 27 simulator, on an M1 Mac. The earlier handoff
 read `94b8671`; that pin is stale. Exact is pre-1.0 with "no API stability, no
 backwards compatibility, no migration guide, by design" (Exact `README.md`).
-Pin a commit and move the pin on purpose.
+Pin a commit and move the pin on purpose. We carry no fork: local changes to the pinned source are patch files in `mobile/exact-patches/`
+(applied by `mobile/scripts/setup-exact.sh`; each one explained in that directory's README and, for the Markdown editor, in
+`exact/capabilities.md` section 5).
 
 Owner ruling (2026-11-10): the app shell is built on Exact, with no SwiftUI
 host ("no swiftui please. lets do all exact"). This page and the subpages are

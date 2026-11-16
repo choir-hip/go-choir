@@ -245,6 +245,7 @@ component Autoradio
     edFormat
     edHeading
     edOpenLink
+    edOpenCurLink
     edUrlChanged
     edApplyLink
     ctlKey

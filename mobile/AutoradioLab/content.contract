@@ -123,6 +123,8 @@ component TextureExpanded
     edFormats: string
     edUnavail: string
     edUrl: string
+    edCurLink: string
+    edOpenCurLink: action
     edBegin: action
     edDone: action
     edFormat: action
@@ -153,6 +155,14 @@ component TextureExpanded
             ChipFace(label="Code", selected=(` ${edFormats} `.includes(" code ")))
           button press=edOpenLink retainFocus=true testId="format-link" appearance="none" aria-label="Link"
             ChipFace(label="Link", selected=(ctlPanel == "link"))
+      // The caret is in a link (the editor shows its text only): its address, with Edit and Open.
+      if edOn and edCurLink != ""
+        row gap=8 align-items="center" width="100%" testId="texture-link-row"
+          text edCurLink testId="texture-link-url-now" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted flex=1 min-width=0 line-clamp=1
+          button press=edOpenLink retainFocus=true testId="texture-link-edit" appearance="none" aria-label="Edit this link"
+            ChipFace(label="Edit link", selected=false)
+          button press=edOpenCurLink testId="texture-link-open" appearance="none" aria-label="Open this link"
+            ChipFace(label="Open link", selected=false)
       if ctlPanel == "link"
         row gap=8 align-items="center" width="100%"
           input id="texture-link-url" value=edUrl input=edUrlChanged submit=edApplyLink aria-label="Link address" placeholder="https://" testId="texture-link-url"

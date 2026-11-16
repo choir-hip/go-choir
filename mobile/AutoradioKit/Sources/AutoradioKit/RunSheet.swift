@@ -107,14 +107,20 @@ public struct RunSheetEntry: Codable, Equatable, Sendable, Identifiable {
     public var between: RunSheetBetween?
     public var estSeconds: Double
     public var forecast: RunSheetForecast?
+    /// The master stream's fields (recorded, never interpreted here): when it airs on the station's clock, where it came from, its revision.
+    public var airAt: String?
+    public var origin: String?
+    public var revision: Int
     public init(id: String, kind: RunSheetKind, placedBy: RunSheetBy, state: RunSheetState = .ahead, ended: RunSheetEnded? = nil, title: String = "",
                 text: String? = nil, source: RunSheetSource? = nil, cites: [RunSheetCite]? = nil, between: RunSheetBetween? = nil,
-                estSeconds: Double = 0, forecast: RunSheetForecast? = nil) {
+                estSeconds: Double = 0, forecast: RunSheetForecast? = nil, airAt: String? = nil, origin: String? = nil, revision: Int = 0) {
         self.id = id; self.kind = kind; self.placedBy = placedBy; self.state = state; self.ended = ended; self.title = title; self.text = text
         self.source = source; self.cites = cites; self.between = between; self.estSeconds = estSeconds; self.forecast = forecast
+        self.airAt = airAt; self.origin = origin; self.revision = revision
     }
     enum CodingKeys: String, CodingKey {
         case id, kind, placedBy = "placed_by", state, ended, title, text, source, cites, between, estSeconds = "est_seconds", forecast
+        case airAt = "air_at", origin, revision
     }
     public init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
@@ -132,9 +138,15 @@ public struct RunSheetEntry: Codable, Equatable, Sendable, Identifiable {
         between = try c.decodeIfPresent(RunSheetBetween.self, forKey: .between)
         estSeconds = try c.decodeIfPresent(Double.self, forKey: .estSeconds) ?? 0
         forecast = try c.decodeIfPresent(RunSheetForecast.self, forKey: .forecast)
+        airAt = try c.decodeIfPresent(String.self, forKey: .airAt).flatMap { $0.isEmpty ? nil : $0 }
+        origin = try c.decodeIfPresent(String.self, forKey: .origin).flatMap { $0.isEmpty ? nil : $0 }
+        revision = try c.decodeIfPresent(Int.self, forKey: .revision) ?? 0
     }
     public func encode(to e: Encoder) throws {
         var c = e.container(keyedBy: CodingKeys.self)
+        if let airAt { try c.encode(airAt, forKey: .airAt) }
+        if let origin { try c.encode(origin, forKey: .origin) }
+        if revision != 0 { try c.encode(revision, forKey: .revision) }
         try c.encode(id, forKey: .id); try c.encode(kind, forKey: .kind); try c.encode(placedBy, forKey: .placedBy)
         try c.encode(state, forKey: .state); try c.encodeIfPresent(ended, forKey: .ended); try c.encode(title, forKey: .title)
         try c.encodeIfPresent(text, forKey: .text); try c.encodeIfPresent(source, forKey: .source); try c.encodeIfPresent(cites, forKey: .cites)
@@ -150,10 +162,19 @@ public struct RunSheet: Codable, Equatable, Sendable {
     public var entries: [RunSheetEntry]
     /// The last 512 applied op_ids, oldest first: how a repeated op_id is recognised.
     public var appliedOps: [String]
-    public init(version: Int64 = 0, onAir: String? = nil, positionSeconds: Double = 0, entries: [RunSheetEntry] = [], appliedOps: [String] = []) {
+    /// A listener's sheet fed by a master stream: which station, the master version folded in, and the station's clock. Recorded, never interpreted here.
+    public var station: String?
+    public var masterVersion: Int64
+    public var clockAt: String?
+    public init(version: Int64 = 0, onAir: String? = nil, positionSeconds: Double = 0, entries: [RunSheetEntry] = [], appliedOps: [String] = [],
+                station: String? = nil, masterVersion: Int64 = 0, clockAt: String? = nil) {
         self.version = version; self.onAir = onAir; self.positionSeconds = positionSeconds; self.entries = entries; self.appliedOps = appliedOps
+        self.station = station; self.masterVersion = masterVersion; self.clockAt = clockAt
     }
-    enum CodingKeys: String, CodingKey { case version, onAir = "on_air", positionSeconds = "position_seconds", entries, appliedOps = "applied_ops" }
+    enum CodingKeys: String, CodingKey {
+        case version, onAir = "on_air", positionSeconds = "position_seconds", entries, appliedOps = "applied_ops"
+        case station, masterVersion = "master_version", clockAt = "clock_at"
+    }
     public init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
         version = try c.decodeIfPresent(Int64.self, forKey: .version) ?? 0
@@ -162,12 +183,18 @@ public struct RunSheet: Codable, Equatable, Sendable {
         positionSeconds = try c.decodeIfPresent(Double.self, forKey: .positionSeconds) ?? 0
         entries = try c.decodeIfPresent([RunSheetEntry].self, forKey: .entries) ?? []
         appliedOps = try c.decodeIfPresent([String].self, forKey: .appliedOps) ?? []
+        station = try c.decodeIfPresent(String.self, forKey: .station).flatMap { $0.isEmpty ? nil : $0 }
+        masterVersion = try c.decodeIfPresent(Int64.self, forKey: .masterVersion) ?? 0
+        clockAt = try c.decodeIfPresent(String.self, forKey: .clockAt).flatMap { $0.isEmpty ? nil : $0 }
     }
     public func encode(to e: Encoder) throws {
         var c = e.container(keyedBy: CodingKeys.self)
         try c.encode(version, forKey: .version); try c.encodeIfPresent(onAir, forKey: .onAir)
         try c.encode(positionSeconds, forKey: .positionSeconds); try c.encode(entries, forKey: .entries)
         if !appliedOps.isEmpty { try c.encode(appliedOps, forKey: .appliedOps) }
+        if let station { try c.encode(station, forKey: .station) }
+        if masterVersion != 0 { try c.encode(masterVersion, forKey: .masterVersion) }
+        if let clockAt { try c.encode(clockAt, forKey: .clockAt) }
     }
 
     // Views: Up next, Previously and now-playing read these.
@@ -193,14 +220,17 @@ public struct RunSheetOp: Codable, Equatable, Sendable {
     public var positionSeconds: Double?
     public var baseVersion: Int64
     public var reason: String?
+    /// The master stream an op came from (`master:<id>`): recorded, never interpreted here.
+    public var origin: String?
     public init(opId: String, by: RunSheetBy, op: RunSheetOpName, at: RunSheetAt? = nil, after: String? = nil, id: String? = nil,
                 entry: RunSheetEntry? = nil, text: String? = nil, state: RunSheetState? = nil, ended: RunSheetEnded? = nil,
-                positionSeconds: Double? = nil, baseVersion: Int64 = 0, reason: String? = nil) {
+                positionSeconds: Double? = nil, baseVersion: Int64 = 0, reason: String? = nil, origin: String? = nil) {
+        self.origin = origin
         self.opId = opId; self.by = by; self.op = op; self.at = at; self.after = after; self.id = id; self.entry = entry; self.text = text
         self.state = state; self.ended = ended; self.positionSeconds = positionSeconds; self.baseVersion = baseVersion; self.reason = reason
     }
     enum CodingKeys: String, CodingKey {
-        case opId = "op_id", by, op, at, after, id, entry, text, state, ended, positionSeconds = "position_seconds", baseVersion = "base_version", reason
+        case opId = "op_id", by, op, at, after, id, entry, text, state, ended, positionSeconds = "position_seconds", baseVersion = "base_version", reason, origin
     }
     public init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
@@ -217,6 +247,7 @@ public struct RunSheetOp: Codable, Equatable, Sendable {
         positionSeconds = try c.decodeIfPresent(Double.self, forKey: .positionSeconds)
         baseVersion = try c.decodeIfPresent(Int64.self, forKey: .baseVersion) ?? 0
         reason = try c.decodeIfPresent(String.self, forKey: .reason)
+        origin = try c.decodeIfPresent(String.self, forKey: .origin).flatMap { $0.isEmpty ? nil : $0 }
     }
     public func encode(to e: Encoder) throws {
         var c = e.container(keyedBy: CodingKeys.self)
@@ -225,6 +256,7 @@ public struct RunSheetOp: Codable, Equatable, Sendable {
         try c.encodeIfPresent(entry, forKey: .entry); try c.encodeIfPresent(text, forKey: .text); try c.encodeIfPresent(state, forKey: .state)
         try c.encodeIfPresent(ended, forKey: .ended); try c.encodeIfPresent(positionSeconds, forKey: .positionSeconds)
         try c.encode(baseVersion, forKey: .baseVersion); try c.encodeIfPresent(reason, forKey: .reason)
+        try c.encodeIfPresent(origin, forKey: .origin)
     }
 }
 
@@ -245,10 +277,14 @@ public enum RunSheetDropped {
     public static let duplicate = "duplicate", notAhead = "not_ahead", notOnAir = "not_on_air", notPhone = "not_phone"
     public static let badTransition = "bad_transition", otherOnAir = "other_on_air", unknownId = "unknown_id", staleVersion = "stale_version"
     public static let noPrevious = "no_previous", duplicateId = "duplicate_id", reasonRequired = "reason_required", invalid = "invalid"
+    public static let aheadFull = "ahead_full"
 }
 
 public enum RunSheetBounds {
     public static let maxTitleBytes = 300, maxTextBytes = 8 * 1024, maxReasonBytes = 160, maxTail = 50, maxAppliedOps = 512
+    /// The server's field bounds (internal/runsheet/runsheet.go): an op that breaks one is dropped there as invalid, so the phone builds none.
+    public static let maxAhead = 100, maxIDBytes = 64, maxRefBytes = 512, maxCites = 12, maxShortBytes = 160, maxTimeBytes = 40
+    public static let maxEstSeconds = 86400.0, maxEntryJSON = 32 * 1024
 }
 
 extension RunSheet {
@@ -271,7 +307,9 @@ extension RunSheet {
         if appliedOps.contains(op.opId) { return drop(RunSheetDropped.duplicate) }
         if op.op == .aired && op.by != .phone { return drop(RunSheetDropped.notPhone) }
         let reason = op.reason ?? ""
-        if reason.utf8.count > RunSheetBounds.maxReasonBytes { return drop(RunSheetDropped.invalid) }
+        if reason.utf8.count > RunSheetBounds.maxReasonBytes || (op.id ?? "").utf8.count > RunSheetBounds.maxIDBytes || (op.after ?? "").utf8.count > RunSheetBounds.maxIDBytes
+            || (op.origin ?? "").utf8.count > RunSheetBounds.maxShortBytes || (op.ended.map { !Self.validEnded($0) } ?? false)
+            || (op.positionSeconds.map { $0 < 0 || $0 > RunSheetBounds.maxEstSeconds } ?? false) { return drop(RunSheetDropped.invalid) }
         if op.by == .desk && reason.isEmpty { return drop(RunSheetDropped.reasonRequired) }
         var out = self
         if let why = out.perform(op) { return drop(why) }
@@ -322,16 +360,65 @@ extension RunSheet {
         positionSeconds = 0
     }
 
-    private static func validEntry(_ e: RunSheetEntry) -> Bool {
-        if !validId(e.id) || e.title.utf8.count > RunSheetBounds.maxTitleBytes || (e.text?.utf8.count ?? 0) > RunSheetBounds.maxTextBytes { return false }
+    static func validEnded(_ e: RunSheetEnded) -> Bool { e.at.utf8.count <= RunSheetBounds.maxTimeBytes && e.lastBlock >= 0 }
+
+    /// Every string, list and number of an entry is bounded (internal/runsheet validEntry); the server drops an entry that breaks one.
+    static func validEntry(_ e: RunSheetEntry) -> Bool {
+        let B = RunSheetBounds.self
+        if !validId(e.id) || e.title.utf8.count > B.maxTitleBytes || (e.text?.utf8.count ?? 0) > B.maxTextBytes { return false }
         if e.kind.textRequired && (e.text ?? "").isEmpty { return false }
-        return true
+        if let en = e.ended, !validEnded(en) { return false }
+        if !(e.estSeconds >= 0 && e.estSeconds <= B.maxEstSeconds) || e.revision < 0 || (e.airAt?.utf8.count ?? 0) > B.maxTimeBytes || (e.origin?.utf8.count ?? 0) > B.maxShortBytes { return false }
+        if let s = e.source {
+            if s.ref.utf8.count > B.maxRefBytes || s.label.utf8.count > B.maxRefBytes || (s.url?.utf8.count ?? 0) > B.maxRefBytes || (s.clipId?.utf8.count ?? 0) > B.maxRefBytes { return false }
+            if (s.start ?? 0) < 0 || (s.end ?? 0) < 0 { return false }
+        }
+        if (e.cites?.count ?? 0) > B.maxCites { return false }
+        for c in e.cites ?? [] where c.ref.utf8.count > B.maxRefBytes || c.label.utf8.count > B.maxRefBytes { return false }
+        if let b = e.between, b.after.utf8.count > B.maxIDBytes || b.before.utf8.count > B.maxIDBytes { return false }
+        if let f = e.forecast, !(f.pHeard >= 0 && f.pHeard <= 1) || f.causedBy.utf8.count > B.maxShortBytes || f.claimId.utf8.count > B.maxShortBytes { return false }
+        return entryJSONSize(e) <= B.maxEntryJSON
+    }
+
+    /// The entry's compact JSON size, slashes unescaped (the form the server stores): escapes cannot slip past the string bounds.
+    static func entryJSONSize(_ e: RunSheetEntry) -> Int {
+        let enc = JSONEncoder(); enc.outputFormatting = [.withoutEscapingSlashes]
+        return (try? enc.encode(e).count) ?? RunSheetBounds.maxEntryJSON + 1
+    }
+
+    /// An answer the phone already said: the one place that may arrive in a state other than ahead.
+    private static func isHeardAnswer(_ op: RunSheetOp) -> Bool {
+        guard let e = op.entry else { return false }
+        return e.kind == .answer && e.placedBy == .phone && e.state == .heard
+    }
+
+    /// Desk-placed ahead entries farthest from the air are dropped until at most `maxAhead` are ahead (never the ones `keep` names, never a
+    /// listener's or the phone's); false when that cannot be done.
+    private mutating func trimAhead(keeping keep: Set<String>) -> Bool {
+        while true {
+            var n = 0, far = -1
+            for (i, e) in entries.enumerated() where e.state == .ahead {
+                n += 1
+                if e.placedBy == .desk && !keep.contains(e.id) { far = i }
+            }
+            if n <= RunSheetBounds.maxAhead { return true }
+            if far < 0 { return false }
+            entries.remove(at: far)
+        }
     }
 
     /// Performs `op` on this private copy; returns the dropped reason, or nil when it applied.
     private mutating func perform(_ op: RunSheetOp) -> String? {
         switch op.op {
         case .place:
+            if Self.isHeardAnswer(op) {
+                guard op.by == .phone, let e = op.entry, Self.validEntry(e) else { return RunSheetDropped.invalid }
+                if entries.contains(where: { $0.id == e.id }) { return RunSheetDropped.duplicateId }
+                var h = e
+                if h.ended == nil { h.ended = RunSheetEnded(outcome: .finished) }
+                entries.insert(h, at: entries.filter { $0.state.isTail }.count)         // after the last heard or skipped entry; never on air
+                return nil
+            }
             guard let e = op.entry, Self.validEntry(e), e.state == .ahead, let at = op.at, !(at == .after && (op.after ?? "").isEmpty) else { return RunSheetDropped.invalid }
             if entries.contains(where: { $0.id == e.id }) { return RunSheetDropped.duplicateId }
             putAhead(e, at: at, after: op.after, op: op)
@@ -358,12 +445,15 @@ extension RunSheet {
         case .previous:
             if op.baseVersion != version { return RunSheetDropped.staleVersion }
             guard let last = entries.lastIndex(where: { $0.state.isTail }) else { return RunSheetDropped.noPrevious }
+            var restored = Set<String>()
             for i in entries.indices where i == last || entries[i].state == .onAir {
                 entries[i].state = .ahead
                 entries[i].ended = nil
+                restored.insert(entries[i].id)
             }
             onAir = nil
             positionSeconds = 0
+            if !trimAhead(keeping: restored) { return RunSheetDropped.aheadFull }
         case .clear:
             if op.baseVersion != version { return RunSheetDropped.staleVersion }
             entries.removeAll { $0.state == .ahead }

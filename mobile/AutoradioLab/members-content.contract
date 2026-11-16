@@ -126,6 +126,8 @@ members Autoradio
     ctlPanel = ctlPanel == "link" ? "" : "link"
     edUrl = edCurLink
     focus("texture-link-url")
+  action edOpenCurLink
+    send qm = queueAct(op="openWeb", arg=edCurLink)
   action edUrlChanged(value: string)
     edUrl = value
   action edApplyLink

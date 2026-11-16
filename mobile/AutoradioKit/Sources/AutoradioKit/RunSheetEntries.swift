@@ -123,3 +123,65 @@ extension RunSheetEntry {
     /// A rough time to speak it, from the words (2.6 a second).
     public static func estimateSeconds(words text: String) -> Double { max(1, (Double(text.split(whereSeparator: { $0.isWhitespace }).count) / BarTracker.wordsPerSecond).rounded()) }
 }
+
+// MARK: Bounds (the server's, internal/runsheet): the phone builds nothing the server would drop as invalid.
+
+extension RunSheetEntry {
+    private static func cut(_ s: String, _ n: Int) -> String { StretchCandidates.cut(s, bytes: n) }
+    private static func oneLine(_ s: String) -> String { StretchCandidates.oneLine(s) }
+
+    /// This entry with every string cut at its bound, at a character boundary, every list and number inside its range. A title is cut, never
+    /// refused; an id that is too long to cut (an id names a thing) is replaced by a fresh one of the same placer.
+    public func bounded() -> RunSheetEntry {
+        let B = RunSheetBounds.self
+        var e = self
+        e.title = Self.cut(Self.oneLine(e.title), B.maxTitleBytes)
+        if let t = e.text { let c = Self.cut(t, B.maxTextBytes); e.text = c.isEmpty ? nil : c }
+        e.estSeconds = min(max(e.estSeconds.isFinite ? e.estSeconds : 0, 0), B.maxEstSeconds)
+        e.revision = max(e.revision, 0)
+        if let a = e.airAt { e.airAt = Self.cut(a, B.maxTimeBytes) }
+        if let o = e.origin { e.origin = Self.cut(o, B.maxShortBytes) }
+        if var s = e.source {
+            s.ref = Self.cut(s.ref, B.maxRefBytes); s.label = Self.cut(Self.oneLine(s.label), B.maxRefBytes)
+            s.url = s.url.map { Self.cut($0, B.maxRefBytes) }; s.clipId = s.clipId.map { Self.cut($0, B.maxRefBytes) }
+            if let v = s.start, v < 0 { s.start = 0 }
+            if let v = s.end, v < 0 { s.end = 0 }
+            e.source = s
+        }
+        if let cs = e.cites {
+            let kept = cs.prefix(B.maxCites).map { c -> RunSheetCite in var c = c; c.ref = Self.cut(c.ref, B.maxRefBytes); c.label = Self.cut(Self.oneLine(c.label), B.maxRefBytes); return c }
+            e.cites = kept.isEmpty ? nil : Array(kept)
+        }
+        if let b = e.between, b.after.utf8.count > B.maxIDBytes || b.before.utf8.count > B.maxIDBytes { e.between = nil }       // written for neighbours it cannot name
+        if var f = e.forecast {
+            f.pHeard = min(max(f.pHeard.isFinite ? f.pHeard : 0, 0), 1); f.causedBy = Self.cut(f.causedBy, B.maxShortBytes); f.claimId = Self.cut(f.claimId, B.maxShortBytes)
+            e.forecast = f
+        }
+        if let en = e.ended { e.ended = en.bounded() }
+        if !RunSheet.validId(e.id) { e.id = Self.mintId(e.placedBy == .listener ? "l-" : (e.placedBy == .desk ? "d-" : "p-")) }
+        return e
+    }
+}
+
+extension RunSheetEnded {
+    func bounded() -> RunSheetEnded {
+        var e = self
+        e.at = StretchCandidates.cut(e.at, bytes: RunSheetBounds.maxTimeBytes); e.lastBlock = max(e.lastBlock, 0)
+        return e
+    }
+}
+
+extension RunSheetOp {
+    /// This op with every field cut or clamped to the server's bounds (its entry too), so the server never drops it as invalid.
+    public func bounded() -> RunSheetOp {
+        let B = RunSheetBounds.self
+        var o = self
+        o.entry = o.entry?.bounded()
+        o.ended = o.ended?.bounded()
+        if let r = o.reason { o.reason = StretchCandidates.cut(r, bytes: B.maxReasonBytes) }
+        if let a = o.after, a.utf8.count > B.maxIDBytes { o.after = nil; if o.at == .after { o.at = .next } }
+        if let g = o.origin { o.origin = StretchCandidates.cut(g, bytes: B.maxShortBytes) }
+        if let p = o.positionSeconds { o.positionSeconds = min(max(p.isFinite ? p : 0, 0), B.maxEstSeconds) }
+        return o
+    }
+}
