@@ -92,11 +92,18 @@ func main() {
 		t := &podcastworker.Transcriber{FFmpeg: *ffmpeg, Parakeet: *parakeet, Model: *model, VAD: *vad, Threads: *threads, WorkDir: *workDir, MaxMinutes: *maxMinutes, MinFreeBytes: int64(*minFreeGB * (1 << 30))}
 		cfg := podcastworker.ServeConfig{
 			Since: time.Duration(*sinceHours) * time.Hour, ListLimit: *maxEpisodes, IntakeEvery: *intakeEvery,
-			Intake: func(ctx context.Context) error { return intake(ctx, client, *feeds, *perFeed) },
+			Intake: func(ctx context.Context) error {
+				// Free space is logged at each intake, so a filling disk is seen.
+				log.Print(podcastworker.DescribeFreeSpace(*workDir))
+				return intake(ctx, client, *feeds, *perFeed)
+			},
 		}
 		cfg.Match = func(ctx context.Context) error { return match(ctx, client, *matchHours) }
 		handled := map[string]bool{}
 		cfg.Priority = func(ctx context.Context) error { return priority(ctx, client, handled) }
+		if n, err := t.SweepWorkDir(); err != nil || n > 0 {
+			log.Printf("work directory swept: %d leftover episode directories removed (%v)", n, err)
+		}
 		log.Printf("podcast-worker serving: engine %q, %d threads, one episode at a time", t.Engine(), *threads)
 		if err := podcastworker.Serve(ctx, client, t, cfg); err != nil && ctx.Err() == nil {
 			log.Fatalf("serve: %v", err)
@@ -114,6 +121,7 @@ func main() {
 		if err := intake(ctx, client, *feeds, *perFeed); err != nil {
 			log.Fatalf("intake: %v", err)
 		}
+		log.Print(podcastworker.DescribeFreeSpace(*workDir))
 	}
 	if cmd == "transcribe" || cmd == "run" {
 		if *model == "" || *vad == "" {

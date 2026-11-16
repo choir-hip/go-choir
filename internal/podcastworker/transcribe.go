@@ -57,6 +57,11 @@ func FetchFeed(ctx context.Context, client *http.Client, feedURL, show string) (
 // transcription ends, whatever its outcome.
 const DefaultMinFreeBytes = 15 << 30
 
+// DefaultWorkDirMaxBytes bounds what the worker's own episode directories may
+// hold: one episode's download and WAV are tens to hundreds of MB, so 2 GiB is
+// several episodes' worth, and only a crash can leave more than one behind.
+const DefaultWorkDirMaxBytes = 2 << 30
+
 // ErrLowDisk is the refusal to start a download for lack of free space.
 var ErrLowDisk = errors.New("not enough free disk space to start a download")
 
@@ -75,6 +80,69 @@ type Transcriber struct {
 	// check off for a test). FreeBytes reads it; a test replaces it.
 	MinFreeBytes int64
 	FreeBytes    func(dir string) (uint64, error)
+	// WorkDirMaxBytes is the most the worker's own episode directories in
+	// WorkDir may hold before a download is refused (0 means
+	// DefaultWorkDirMaxBytes; negative turns the check off).
+	WorkDirMaxBytes int64
+}
+
+func (t *Transcriber) workDir() string {
+	if t.WorkDir != "" {
+		return t.WorkDir
+	}
+	return os.TempDir()
+}
+
+// SweepWorkDir removes the episode directories a crashed or killed run left
+// in the work directory. They are the worker's own scratch and nothing else.
+func (t *Transcriber) SweepWorkDir() (removed int, err error) {
+	entries, err := os.ReadDir(t.workDir())
+	if err != nil {
+		return 0, err
+	}
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), "episode-") {
+			if rerr := os.RemoveAll(filepath.Join(t.workDir(), e.Name())); rerr == nil {
+				removed++
+			} else if err == nil {
+				err = rerr
+			}
+		}
+	}
+	return removed, err
+}
+
+// ownedBytes is the size of the worker's own episode directories.
+func (t *Transcriber) ownedBytes() int64 {
+	entries, err := os.ReadDir(t.workDir())
+	if err != nil {
+		return 0
+	}
+	var total int64
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), "episode-") {
+			continue
+		}
+		_ = filepath.Walk(filepath.Join(t.workDir(), e.Name()), func(_ string, info os.FileInfo, err error) error {
+			if err == nil && info.Mode().IsRegular() {
+				total += info.Size()
+			}
+			return nil
+		})
+	}
+	return total
+}
+
+// DescribeFreeSpace is a log line about the filesystem holding dir.
+func DescribeFreeSpace(dir string) string {
+	if dir == "" {
+		dir = os.TempDir()
+	}
+	free, err := freeBytes(dir)
+	if err != nil {
+		return fmt.Sprintf("free space of %s unknown: %v", dir, err)
+	}
+	return fmt.Sprintf("free space of %s: %.1f GiB", dir, float64(free)/(1<<30))
 }
 
 // httpClient is the guarded client every outside fetch goes through, unless a
@@ -89,16 +157,21 @@ func (t *Transcriber) httpClient() *http.Client {
 
 // checkDisk refuses when the work directory's filesystem is short of space.
 func (t *Transcriber) checkDisk() error {
+	dir := t.workDir()
+	if limit := t.WorkDirMaxBytes; limit >= 0 {
+		if limit == 0 {
+			limit = DefaultWorkDirMaxBytes
+		}
+		if held := t.ownedBytes(); held >= limit {
+			return fmt.Errorf("%w: the work directory %s holds %.1f GiB of its own episodes, the bound is %.1f GiB", ErrLowDisk, dir, float64(held)/(1<<30), float64(limit)/(1<<30))
+		}
+	}
 	min := t.MinFreeBytes
 	if min < 0 {
 		return nil
 	}
 	if min == 0 {
 		min = DefaultMinFreeBytes
-	}
-	dir := t.WorkDir
-	if dir == "" {
-		dir = os.TempDir()
 	}
 	free := t.FreeBytes
 	if free == nil {

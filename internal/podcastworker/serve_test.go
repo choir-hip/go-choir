@@ -399,3 +399,49 @@ case "$last" in *.wav) head -c 320044 /dev/zero > "$last" ;; *) echo "  Duration
 		t.Fatalf("D3: %d entries left in the work directory after a failure", len(left))
 	}
 }
+
+// The work directory is the worker's own and bounded: a crash cannot leave it
+// growing, and only its own episode directories are ever touched.
+func TestD4_TheWorkDirIsBoundedAndSweptAndOnlyTheWorkersOwnIsTouched(t *testing.T) {
+	work := t.TempDir()
+	leftover := filepath.Join(work, "episode-123")
+	if err := os.MkdirAll(leftover, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(leftover, "in.audio"), make([]byte, 3000), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	foreign := filepath.Join(work, "someone-elses-file")
+	if err := os.WriteFile(foreign, make([]byte, 5000), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	foreignDir := filepath.Join(work, "other-dir")
+	if err := os.MkdirAll(foreignDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tr := &Transcriber{WorkDir: work, MinFreeBytes: -1, WorkDirMaxBytes: 2000, FFmpeg: "false", Parakeet: "false"}
+	// The leftover (3000 bytes) is over the 2000-byte bound: refused as a full disk.
+	if _, err := tr.Transcribe(context.Background(), "http://127.0.0.1:1/x"); !errors.Is(err, ErrLowDisk) || !strings.Contains(err.Error(), "work directory") {
+		t.Fatalf("D4: err = %v", err)
+	}
+	// Foreign files do not count toward it.
+	tr.WorkDirMaxBytes = 4000
+	if _, err := tr.Transcribe(context.Background(), "http://127.0.0.1:1/x"); errors.Is(err, ErrLowDisk) {
+		t.Fatalf("D4: foreign bytes were counted: %v", err)
+	}
+	n, err := tr.SweepWorkDir()
+	if err != nil || n != 1 {
+		t.Fatalf("D4: swept %d (%v), want 1", n, err)
+	}
+	for _, keep := range []string{foreign, foreignDir} {
+		if _, err := os.Stat(keep); err != nil {
+			t.Fatalf("D4: the sweep touched %s: %v", keep, err)
+		}
+	}
+	if _, err := os.Stat(leftover); err == nil {
+		t.Fatal("D4: the leftover episode directory survived the sweep")
+	}
+	if line := DescribeFreeSpace(work); !strings.Contains(line, "GiB") {
+		t.Fatalf("D4: free space line = %q", line)
+	}
+}
