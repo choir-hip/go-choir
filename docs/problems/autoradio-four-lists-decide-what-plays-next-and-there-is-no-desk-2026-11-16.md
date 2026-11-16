@@ -67,6 +67,13 @@ queue accepts.
   introduction to the top... by signposting, by introducing, then it makes it
   more easy for me to interact with it as a user with my voice." The format is
   not fixed.
+- On-device models sit in front of the desk: "just like the Autoradio desk is
+  in front of texture, we're going to have the local language models in front
+  of the Autoradio desk. So when you give a voice prompt, it should be
+  responded to by an on-device model, which has context of your card stack and
+  your queue and what was previously played as well, so that they can respond
+  while the Autoradio desk is working, and then Autoradio desk can take over
+  seamlessly."
 - Going to the next thing and "I like this or I don't like this" are separate
   questions; the gesture semantics are undecided.
 
