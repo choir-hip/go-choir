@@ -1,0 +1,99 @@
+// The queue's screens (lane autoradio-queue): "Up next" and the audio controls in the expanded player, and the page a URL typed in the bar
+// opens in place. Built from the design components in ui.contract (SectionHeader, ListGroup, RowRule, EmptyState).
+// testIds: queue-audio, queue-elapsed, queue-remaining, queue-scrub, queue-keep, queue-up-next, queue-row-<i>, queue-remove-<i>,
+// queue-note-<i>, queue-empty, bar-web, bar-web-close, bar-web-read, bar-web-add, bar-web-host.
+use Theme, QueueInfo from "@choir/autoradio"
+use Card, Btn, SectionHeader, ListGroup, RowRule, EmptyState, BarClear from "./ui.contract"
+
+// The scrubber of remote audio, under the player's title: elapsed, the track, remaining. Dragged like the speed slider (the move is relative,
+// the position is sent when the finger lifts). The track is the width less 120 (`scrubMove` in members-queue.contract).
+component QueueScrub
+  inject
+    th: Theme
+    qv: QueueInfo
+    scrubMove: action
+    scrubEnd: action
+    scrubPct: number
+  view
+    row gap=8 align-items="center" width="100%" testId="queue-audio-progress"
+      text qv.elapsedLabel testId="queue-elapsed" font-family=th.fontMono font-size=13 color=th.muted width=52
+      column flex=1 min-width=0 height=44 justify-content="center" pan=scrubMove panrelease=scrubEnd testId="queue-scrub" aria-label="Position"
+        row width="100%" height=22 align-items="center" padding-left=11
+          box width=`${scrubPct}%` height=6 border-radius=3 background-color=th.accent
+          box width=22 height=22 border-radius=11 margin-left=-11 background-color=th.accent box-shadow=th.shadow2
+          box flex=1 height=6 border-radius=3 background-color=th.rule
+      text qv.remainingLabel testId="queue-remaining" font-family=th.fontMono font-size=13 color=th.muted width=60 text-align="right"
+
+// A clip: it says what it is cut from and offers Keep listening (the episode carries on past the clip's end). The 15 second skips are the
+// player's transport (player.contract); the scrubber is QueueScrub. Nothing is drawn when the audio is a whole episode.
+component QueueAudio
+  inject
+    th: Theme
+    qv: QueueInfo
+    queueDo: action
+  view
+    if qv.audio and qv.clip
+      Card(level=1, testId="queue-audio", minHeight=0)
+        column padding=16 gap=12
+          column gap=2
+            text "CLIP" font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 color=th.muted
+            text `From ${qv.keepTitle}` font-family=th.fontUi font-size=15 color=th.fg line-clamp=2
+          button press=queueDo("keep", "") testId="queue-keep" appearance="none" width="100%" aria-label=`Keep listening to ${qv.keepTitle}`
+            Btn(label="Keep listening", primary=true, wide=true)
+
+// Up next: what is queued, in order. Tap a row to play it now; the remove button takes it out. Each row has its title, what it is
+// (kind, and the show for audio) and one quiet caption: the DJ's own reason when it moved or added the item, else who added it.
+component UpNext
+  inject
+    th: Theme
+    qv: QueueInfo
+    queueDo: action
+  view
+    column gap=8 testId="queue-up-next" width="100%"
+      SectionHeader(label=(qv.upcoming.length > 0 ? `Up next · ${qv.upcoming.length}` : "Up next"))
+      if qv.upcoming.length == 0
+        EmptyState(message="Nothing queued", detail="Add a story, a page or a podcast and it plays after this.", testId="queue-empty")
+      else
+        ListGroup(testId="queue-list")
+          for r, k in qv.upcoming key=r.id
+            if k > 0
+              RowRule(indent=16)
+            row align-items="center" width="100%"
+              button press=queueDo("playAt", `${r.i}`) testId=`queue-row-${r.i}` appearance="none" flex=1 min-width=0 aria-label=`Play ${r.title} now`
+                column gap=2 align-items="flex-start" width="100%" box-sizing="border-box" min-height=52 justify-content="center" padding="8px 0px 8px 16px"
+                  text r.title font-family=th.fontUi font-size=17 font-weight=600 color=th.fg text-align="left" line-clamp=2
+                  text (r.detail != "" ? `${r.kind} · ${r.detail}` : r.kind) font-family=th.fontUi font-size=13 color=th.muted text-align="left" line-clamp=1
+                  text (r.note != "" ? r.note : r.by) testId=`queue-note-${r.i}` font-family=th.fontUi font-size=12 font-style="italic" color=th.muted text-align="left" line-clamp=2
+              button press=queueDo("remove", `${r.i}`) testId=`queue-remove-${r.i}` appearance="none" width=44 height=44 aria-label=`Remove ${r.title}`
+                row width=44 height=44 align-items="center" justify-content="center"
+                  image "symbol:close" color=th.muted
+
+keyframes barWebGrow
+  from opacity=0 scale=0.96
+
+// The page a URL typed in the bar opens, in place above the bar (the bar stays live): Read aloud and Add to queue sit on it.
+component BarWebLayer
+  inject
+    th: Theme
+    qv: QueueInfo
+    queueDo: action
+    queuePlay: action
+    queueLater: action
+    webMsg: action
+    webBusy: bool
+  view
+    column testId="bar-web" position="absolute" left=0 right=0 top=0 bottom="calc(env(safe-area-inset-bottom) + 72px)" z-index=8
+      background-color=th.paper box-shadow=th.shadow2 border-bottom-left-radius=th.radiusCard border-bottom-right-radius=th.radiusCard overflow="hidden"
+      animation=(th.reducedMotion ? "none" : `barWebGrow ${th.motionEnterMs * 2}ms ease-out both`)
+      row align-items="center" gap=8 padding="calc(env(safe-area-inset-top) + 6px) 8px 6px 8px" width="100%" box-sizing="border-box"
+        button press=queueDo("closeWeb", "") testId="bar-web-close" appearance="none" aria-label="Close page" width=40 height=40
+          image "symbol:close" color=th.fg
+        text qv.webHost testId="bar-web-host" font-family=th.fontUi font-size=15 font-weight=600 color=th.fg flex=1 min-width=0 line-clamp=1
+        if webBusy
+          progress aria-label="Loading" width=18 height=18 color=th.accent
+      row gap=8 padding="0px 12px 8px 12px" width="100%" box-sizing="border-box"
+        button press=queuePlay("page", qv.webUrl, qv.webHost) testId="bar-web-read" appearance="none" aria-label="Read this page aloud" flex=1
+          Btn(label="Read aloud", primary=true, wide=true)
+        button press=queueLater("page", qv.webUrl, qv.webHost) testId="bar-web-add" appearance="none" aria-label="Add this page to the queue" flex=1
+          Btn(label="Add to queue", primary=false, wide=true)
+      web-page page=qv.webUrl message=webMsg testId="bar-web-view" width="100%" flex=1 min-height=0

@@ -1,0 +1,25 @@
+{
+ "shapes": {
+  "QueueRow": { "i": "number", "title": "string", "kind": "string", "detail": "string", "id": "string", "note": "string", "by": "string" },
+  "QueueInfo": {
+   "current": "string", "currentKind": "string", "audio": "bool", "playing": "bool", "clip": "bool", "keepTitle": "string",
+   "elapsed": "number", "duration": "number", "elapsedLabel": "string", "remainingLabel": "string", "fraction": "number",
+   "upcoming": "QueueRow[]", "message": "string", "webUrl": "string", "webHost": "string"
+  }
+ },
+ "names": [
+  {
+   "source": "queueView",
+   "live": true,
+   "answers": "QueueInfo",
+   "substitute": {
+    "default": {
+     "current": "", "currentKind": "", "audio": false, "playing": false, "clip": false, "keepTitle": "", "elapsed": 0, "duration": 0,
+     "elapsedLabel": "", "remainingLabel": "", "fraction": 0, "upcoming": [], "message": "", "webUrl": "", "webHost": ""
+    }
+   }
+  },
+  { "send": "queueAdd", "options": { "mode": "string", "kind": "string", "ref": "string", "title": "string" }, "answers": "QueueInfo" },
+  { "send": "queueAct", "options": { "op": "string", "arg": "string" }, "answers": "QueueInfo" }
+ ]
+}

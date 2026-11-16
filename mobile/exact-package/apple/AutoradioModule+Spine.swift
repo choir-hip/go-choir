@@ -102,6 +102,7 @@ extension AutoradioModule {
             Task { [weak self] in
                 guard let self else { return }
                 _ = await self.runtime.speakText(address: address, text: text, title: title.isEmpty ? nil : title, now: true)
+                await MainActor.run { PlayQueue.shared.noteStarted(address.hasPrefix("pub:") ? .story(route: String(address.dropFirst(4)), title: title) : nil) }   // the queue shows what Listen plays
                 self.signals.record(SignalEvent(kind: "read-aloud", subject: address, detail: "listen"))
                 DispatchQueue.main.async { reply(self.json(self.runtime.snapshot())) }
             }
@@ -112,6 +113,13 @@ extension AutoradioModule {
         for name in ["choirAsk"] {
             handle(name) { [unowned self] args, reply in
                 let text = args["text"] as? String ?? ""
+                // A URL in the bar is not a question: it opens in place with Read aloud and Add to queue (lane autoradio-queue; the one early branch).
+                if let url = BarURL.detect(text) {
+                    if BarURL.isDocument(url), let importer = BarURL.importDocument { importer(url); return reply(self.json(self.runtime.snapshot())) }   // a .pdf or .epub: the Reader imports it
+                    self.barWebURL = url.absoluteString; EmbeddedPage.shared.opened(url.absoluteString)
+                    self.touch(["queueView"], now: true)
+                    return reply(self.json(self.runtime.snapshot()))
+                }
                 // `aim` (lane SHELL) is the front page's address; `address` is the older name. Either may be absent.
                 let address = (args["aim"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? args["address"] as? String ?? ""
                 Task { [weak self] in

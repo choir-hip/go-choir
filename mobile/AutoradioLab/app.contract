@@ -5,6 +5,7 @@
 use PageDeck from "./pages.contract"
 use BarShell from "./bar.contract"
 use SignInScreen from "./onboarding.contract"
+use BarWebLayer from "./queue.contract"
 
 component Autoradio
   members "./spine.contract"
@@ -21,6 +22,7 @@ component Autoradio
   members "./members-onboarding.contract"
   members "./members-mark.contract"
   members "./members-voice.contract"
+  members "./members-queue.contract"          // lane autoradio-queue
   // ---- end of members ----
 
   // What child components may `inject`. Bare names of this component's states, derives, resources and actions.
@@ -338,6 +340,19 @@ component Autoradio
     waitSince
     galReplay
     waitReplay
+    // ---- lane autoradio-queue ----
+    qv
+    qm
+    qVp
+    queuePlay
+    queueLater
+    queueDo
+    scrubLive
+    scrubShown
+    scrubPct
+    scrubMove
+    scrubEnd
+    closeBarWeb
 
   view
     main testId="app" width="100%" height="100%" position="relative" overflow="hidden" box-sizing="border-box"
@@ -348,6 +363,9 @@ component Autoradio
         scale=(layer != "" ? th.behindScale3 : 1)
         transition=`scale -exact-spring(${th.springStiffness}, ${th.springDamping}, ${th.springMass})`
         PageDeck()
+      // lane autoradio-queue: the page a URL typed in the bar opened, in place above the bar
+      if qv.webUrl != ""
+        BarWebLayer()
       // a sheet is up (the launcher or the player): the page dims behind it; a tap on it puts the sheet away
       if layer != ""
         box testId="layer-scrim" position="absolute" inset=0 background-color=th.fg opacity=(max(th.behindDim3, 0.4)) press=hideLayer
