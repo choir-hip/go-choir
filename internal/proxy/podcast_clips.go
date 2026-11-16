@@ -42,6 +42,7 @@ var podcastOperatorRoutes = map[string]map[string]string{
 	podcastOperatorPrefix + "clips":        {http.MethodPut: platform.PodcastClipsWritePath},
 	podcastOperatorPrefix + "feeds":        {http.MethodGet: platform.PodcastWorkerFeedsPath},
 	podcastOperatorPrefix + "feeds/listed": {http.MethodPut: platform.PodcastFeedsListedPath},
+	podcastOperatorPrefix + "match":        {http.MethodPost: platform.PodcastMatchPath},
 }
 
 func isPodcastOperatorPath(path string) bool {
