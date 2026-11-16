@@ -23,7 +23,7 @@ listener's own computer: send `X-Choir-Computer` with an owner-wide API key, as
 
 ## Request
 
-`POST /api/autoradio/turns`, `Content-Type: application/json`, at most 80 KB.
+`POST /api/autoradio/turns`, `Content-Type: application/json`, at most 128 KB (80 KB until 2026-11-15, when the queue snapshot was added).
 Unknown fields anywhere are refused (`400`).
 
 ```json
@@ -56,6 +56,8 @@ Unknown fields anywhere are refused (`400`).
 | `heard` | optional; `block_index` at least 0; `text` at most 2000 characters (more is `400`, never cut); send the last few sentences spoken |
 | `programme` | optional; at most 128 bytes; recorded and shown to the model |
 | `history` | optional; at most 8 lines, each `listener` or `radio`, 1 to 1000 bytes; the last few turns, oldest first |
+| `queue` | optional; the phone's play queue, see "The queue" below; `null` is the same as absent; a bad one is `400` |
+| `candidates` | optional; at most 40 `{route, title}`: the paper's stories the desk may add to the queue. Route has no space, `@` or `#`; at most 512 bytes; title at most 300 |
 
 Refusals are plain JSON `{"error": "..."}` before any stream starts: `401` no
 owner, `405` not POST, `400` bad body or fields, `409` the same `turn_id` is
@@ -131,6 +133,12 @@ sent), `empty` (the stream ended cleanly with nothing speakable), `failed_mid_st
 `client_gone`. A refusal or an empty stream before the first sentence is walked
 past silently: the listener sees no `error`.
 
+### `queue_ops`
+
+Sent at most once, after the last `speech` and before `done`, and only when the
+request carried a `queue` and at least one op survived validation. See "The
+queue" below for the shape and the rule the phone applies.
+
 ### `handoff`
 
 Reserved for slice 2 (design section 4). Slice 1 never sends it; ignore unknown
@@ -142,6 +150,68 @@ event names.
 gateway sends no header and both read `unknown`; `unknown` or `on` for reasoning
 means the flag did not take effect. **Deploy the gateway before the guests that
 call this route.** `in_force` is what the computer's policy gave the call.
+
+## The queue (2026-11-15)
+
+Design: [autoradio-queue-desk-2026-11-15.md](../design/autoradio-queue-desk-2026-11-15.md)
+(sections 3 and 4 are the contract). Code: `internal/autoradioqueue` (the
+bounds and the rules), `internal/agentcore/api_autoradio.go` (the route).
+
+The phone's play queue, sent with a turn so the DJ can answer about it and
+change its order. An item is flat with a `kind` tag: `story` (`route`, `title`),
+`page` (`url`, `title`), `document` (`id`, `title`, `at`) or `audio` (`url`,
+`title`, `show`, `start`, `end`, `episode_id`).
+
+```json
+"queue": {
+  "version": 7,
+  "current": {"id": "q12", "item": {"kind": "story", "route": "front", "title": "A strike ended in Nancy"}, "position_seconds": 41.2},
+  "upcoming": [{"id": "q13", "item": {"kind": "audio", "url": "https://example.test/a.mp3", "title": "Harbour talks", "show": "Up First"}, "added_by": "dj"}]
+}
+```
+
+Bounds (`400`, naming the field): `version` a whole number, not negative; at most
+100 `upcoming`; an entry `id` is `[A-Za-z0-9][A-Za-z0-9_.-]{0,63}` and unique
+across `current` and `upcoming`; `kind` is one of the four, with the field
+its kind needs (`route`, `url`, `id`, `url`); a title at most 300 bytes, other
+strings 512 (a `url` 2048); `position_seconds` between 0 and 10,000,000;
+`added_by` at most 32 bytes. Unknown fields inside `queue` are ignored.
+
+When `queue` is present the desk may answer in the same single model call that
+writes the spoken reply, ending it with a queue fence and a JSON array of ops.
+The fence and the array are never spoken. The desk validates every op against
+the queue as the earlier ops left it, then sends:
+
+```
+event: queue_ops
+data: {"turn_id":"cmd-7f3a9c","base_version":7,"replayed":false,"ops":[
+  {"op":"move","id":"q14","to_index":0,"base_version":7,"reason":"you asked for the long read next"}]}
+```
+
+Ops: `play_now`, `play_next`, `enqueue` (with `item`, always a `story` named in
+`candidates`, titled by the candidate), `remove`, `move` (`id`, `to_index` into
+`upcoming`), `skip` (`id` is the entry playing), `previous`, `clear`. Every op
+has `base_version` (the snapshot's `version`) and a one-line `reason` of at most
+160 bytes. Refused and dropped, not sent: an id not in the queue, a move or
+remove of the entry playing, a move to the entry's own place (a move past an end
+is clamped), a skip, previous or clear with nothing to act on, an add that is
+not a named story or is already queued, an op without a reason, malformed JSON,
+and any op past the eighth in a turn (a bound on what a stranger's page text
+can steer, not a model-call limit). If the model asked for a change and none
+survives, the desk speaks one more sentence ("Sorry, I couldn't change the
+queue.") and sends no `queue_ops`.
+
+The phone's rule for ops against a changed queue: an op that names an entry
+(`move`, `remove`) applies if that entry still exists, whatever the version, and
+`skip` only if the entry is still the one playing; an op that adds an item
+always applies; `clear` and `previous` apply only if the phone's version still
+equals `base_version`. A dropped op is not an error. The phone applies each
+`turn_id`'s ops once (a replay sends them again with `replayed: true`).
+
+The desk keeps no copy of the queue: the next request's snapshot is the truth.
+The request record carries `queue_version`, `queue_sha256` and `queue_entries`;
+the Report carries `queue_ops` (JSON) and `queue_base_version`. `done` has
+`queue_ops`, the number of ops sent. Not on the programme route tonight.
 
 ## Idempotency and disconnects
 

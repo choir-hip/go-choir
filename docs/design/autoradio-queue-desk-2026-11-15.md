@@ -109,7 +109,7 @@ ordered list: each is meant against the queue as the previous ones left it.
 The vocabulary is the phone's: `play_now`, `play_next`, `enqueue` (these three
 carry an `item`), `remove`, `move` (`id`, `to_index`, an index into
 `upcoming`), `skip`, `previous`, `clear`. The server's validator is stricter
-than the vocabulary (section 4). `turn_id` is the dedupe key: the same turn
+than the vocabulary (section 4). `reason` is required: an op with none is dropped. `turn_id` is the dedupe key: the same turn
 replayed sends the same event with `replayed: true`, and the phone remembers
 the turn ids it has applied and applies each once.
 
@@ -180,6 +180,15 @@ REPL cell and the route returns `q.Ops()` as the same `queue_ops` event. The
 module records ops; it does not reach the phone. Only the route, which holds
 the request, returns them. The wire above does not change when the cell
 arrives; that is why the wire is frozen now.
+
+**What was built (2026-11-15).** The conservative slice: `internal/autoradioqueue`
+(the structure, bounds, reducer and the stream cut), the turn route's `queue`
+and `candidates` request fields and `queue_ops` event, and the desk prompt. The
+route is the contract: [AUTORADIO-TURNS.md](../reference/AUTORADIO-TURNS.md).
+`play_now` forgets the entry it replaces for the rest of the turn (the phone
+decides what becomes of it); an entry added this turn has no id and cannot be
+named by a later op. The fence line is not required to carry the request's token
+(any `<<<... queue>>>` is read), because a client's text cannot contain `<<<`.
 
 ## 5. How the reader sees why the order changed
 
