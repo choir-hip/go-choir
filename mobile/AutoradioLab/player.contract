@@ -72,7 +72,7 @@ component PlayerLayer
         // what is playing: pull this down to put the player away
         column pan=sheetMove panrelease=sheetEnd padding="8px 20px 4px" gap=6
           row justify-content="center"
-            box width=36 height=4 border-radius=2 background-color=th.rule
+            box width=36 height=3 background-color=th.rule
           row align-items="center" gap=8
             column flex=1 min-width=0 gap=2
               text (ri.kind == "" ? "NOW PLAYING" : `NOW PLAYING · ${ri.kind.toUpperCase()}`) testId="player-kind" font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 color=th.muted line-clamp=1
@@ -92,7 +92,7 @@ component PlayerLayer
               column flex=1 min-width=0
                 button press=jumpTo(it.i) testId=`player-seg-${it.i}` appearance="none" width="100%" height=28 aria-label=`Go to passage ${it.i + 1}`
                   column height=28 justify-content="center" width="100%"
-                    box width="100%" height=(it.current ? 6 : 4) border-radius=3
+                    box width="100%" height=(it.current ? 6 : 4)
                       background-color=(it.current ? th.accent : (it.done ? th.muted : th.rule))
                       transition=`height ${th.motionFastMs * calm}ms ease, background-color ${th.motionFastMs * calm}ms ease`
         scroll overflow-x="hidden" flex=1 min-height=0 width="100%"
@@ -124,9 +124,9 @@ component PlayerLayer
             if ri.sources.length > 0
               column gap=8 width="100%"
                 SectionHeader(label="Sources")
-                row gap=8 flex-wrap="wrap" testId="player-sources"
+                row gap=16 flex-wrap="wrap" testId="player-sources"
                   for src, k in ri.sources key=k
-                    row padding="4px 12px" min-height=28 border-radius=th.radiusPill border-width=1 border-style="solid" border-color=th.rule align-items="center" testId=`player-source-${k}`
+                    row align-items="center" min-height=28 testId=`player-source-${k}`
                       text src font-family=th.fontUi font-size=13 color=th.muted line-clamp=1
             if ri.next != ""
               column gap=4 testId="player-next-passage"
@@ -158,12 +158,11 @@ component PlayerLayer
               button press=previous testId="player-prev" aria-label="Previous passage" appearance="none" width=44 height=44
                 image "symbol:skip-back-15" color=th.fg
             button press=radioPlay testId="player-play" aria-label=(ri.playing ? "Pause" : "Play") appearance="none" width=60 height=60
-              row width=56 height=56 border-radius=28 align-items="center" justify-content="center" background-color=th.accent
-                box-shadow=th.shadow2
+              row width=56 height=56 align-items="center" justify-content="center"
                 if ri.playing
-                  image "symbol:pause-fill" color=th.onAccent
+                  image "symbol:pause-fill" width=36 height=36 color=th.accent
                 else
-                  image "symbol:play-fill" color=th.onAccent
+                  image "symbol:play-fill" width=36 height=36 color=th.accent
             if qv.audio
               button press=queueDo("fwd15", "") testId="queue-fwd15" appearance="none" aria-label="Forward 15 seconds" width=44 height=44
                 image "symbol:skip-forward-15" color=th.fg
@@ -179,17 +178,18 @@ component PlayerLayer
             text "Speed" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
             text `${speedShown}×` testId="player-speed" font-family=th.fontUi font-size=14 font-weight=700 color=th.fg flex=1
             button press=speedReset testId="player-speed-reset" appearance="none" aria-label="Reset the speed to 1 times"
-              row min-height=32 padding="0px 12px" border-radius=th.radiusPill align-items="center" justify-content="center" border-width=1 border-style="solid" border-color=th.rule
-                text "1×" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
+              row min-height=44 padding="0px 4px" align-items="center" justify-content="center"
+                text "1×" font-family=th.fontUi font-size=15 font-weight=600 color=th.accent
           row gap=6 width="100%" align-items="center"
             button press=speedNudge(0 - 0.05) testId="player-speed-down" appearance="none" aria-label="Slower" width=44 height=44
               row width=44 height=44 align-items="center" justify-content="center"
                 text "−" font-family=th.fontUi font-size=22 font-weight=600 color=th.fg
             column flex=1 min-width=0 height=44 justify-content="center" pan=speedMove panrelease=speedEnd testId="player-speed-slider" aria-label="Speed"
               row width="100%" height=22 align-items="center" padding-left=11
-                box width=`${speedPct}%` height=6 border-radius=3 background-color=th.accent
-                box width=22 height=22 border-radius=11 margin-left=-11 background-color=th.accent box-shadow=th.shadow2
-                box flex=1 height=6 border-radius=3 background-color=th.rule
+                box width=`${speedPct}%` height=4 background-color=th.accent
+                row width=22 height=22 margin-left=-11 justify-content="center"
+                  box width=3 height=22 background-color=th.accent
+                box flex=1 height=4 background-color=th.rule
             button press=speedNudge(0.05) testId="player-speed-up" appearance="none" aria-label="Faster" width=44 height=44
               row width=44 height=44 align-items="center" justify-content="center"
                 text "+" font-family=th.fontUi font-size=22 font-weight=600 color=th.fg

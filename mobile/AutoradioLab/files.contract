@@ -83,8 +83,9 @@ component FileRowItem
             font-family=th.fontUi font-size=16 color=th.fg padding="8px 4px"
           row gap=8 align-items="center"
             Chip(label="Rename", active=false, testId="files-rename-go", press=fsRename)
-            button press=fsDelete(item.path) testId=`files-delete-${item.path}` appearance="none" padding="7px 14px" border-radius=th.radiusPill background-color=th.paper2
-              text "Delete" font-family=th.fontUi font-size=14 font-weight=600 color=th.danger
+            button press=fsDelete(item.path) testId=`files-delete-${item.path}` appearance="none" padding="0px 12px 0px 0px"
+              row min-height=44 align-items="center"
+                text "Delete" font-family=th.fontUi font-size=15 font-weight=600 color=th.danger
       if not last
         box height=1 margin-left=56 background-color=th.rule opacity=0.35
 

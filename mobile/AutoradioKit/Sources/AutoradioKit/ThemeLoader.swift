@@ -42,7 +42,7 @@ public struct Theme: Codable, Sendable, Equatable {
     public var scrim = "rgba(0,0,0,.7)", onScrim = "#FFFFFF"
     // type: CSS font stacks reduced to the one face Exact resolves; `fontRead` is the body face
     public var fontRead = "ui-serif", fontUi = "system-ui", fontMono = "ui-monospace", scale = "editorial"
-    public var radiusCard = 14.0, radiusControl = 12.0, radiusPill = 999.0, radiusRules = 0.0
+    public var radiusCard = 12.0, radiusControl = 6.0, radiusPill = 6.0, radiusRules = 0.0
     // elevation 1..3: shadow (CSS), edge (CSS), material (glass | solid), press scale, what is behind a level-3 layer
     public var shadow1 = "none", shadow2 = "none", shadow3 = "none"
     public var edge1 = "none", edge2 = "none", edge3 = "none"
@@ -429,6 +429,8 @@ public final class ThemeStore: @unchecked Sendable {
         func px(_ s: String?) -> Double? { s.flatMap { Double($0.replacingOccurrences(of: "px", with: "")) } }
         if let r = d.radii { t.radiusCard = px(r["card"]) ?? t.radiusCard; t.radiusControl = px(r["control"]) ?? t.radiusControl
             t.radiusPill = px(r["pill"]) ?? t.radiusPill; t.radiusRules = px(r["rules"]) ?? t.radiusRules }
+        // Owner ruling, 2026-11-15: "no pills". Cards 8 to 12, blocks 4 to 6, never half the height, whatever a theme asks for; the "pill" radius is a block's.
+        t.radiusCard = min(max(t.radiusCard, 8), 12); t.radiusControl = min(max(t.radiusControl, 4), 6); t.radiusPill = t.radiusControl
         func edge(_ s: String?) -> String {
             // "0 1px 0 rule" names a colour token: map it to the resolved rule colour.
             (s ?? "none").replacingOccurrences(of: " rule", with: " " + t.rule)

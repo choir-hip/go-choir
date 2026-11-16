@@ -67,7 +67,7 @@ component Layer
       children
 
 // An opaque card: the theme's surface colour with no material, so nothing behind it reads through (the pile's cards, the
-// interview's question). The shadow and a hairline keep the depth.
+// interview's question). The shadow keeps the depth; no outline.
 component PaperCard
   inject
     th: Theme
@@ -76,12 +76,12 @@ component PaperCard
     minHeight: number
   slot
   view
-    column testId=testId position="relative" min-height=minHeight border-radius=th.radiusCard background-color=th.paper2
-      border-width=1 border-style="solid" border-color=th.rule box-shadow=th.shadow3
+    column testId=testId position="relative" min-height=minHeight border-radius=th.radiusCard background-color=th.paper2 box-shadow=th.shadow3
       children
 
-// The one button face (primary: the accent; otherwise a quiet paper button with a hairline), in theme tokens only. It is the
-// content of a `button ... appearance="none"` that keeps its own press and testId, so no button draws the system's blue.
+// The one button face. primary: THE action of the page, a flat block in the accent (radius 4 to 6, never a capsule); otherwise a text action
+// in the accent colour. Neither has an outline. It is the content of a `button ... appearance="none"` that keeps its own press and testId,
+// so no button draws the system's blue.
 component Btn
   inject
     th: Theme
@@ -90,22 +90,30 @@ component Btn
     primary: bool
     wide: bool
   view
-    row align-items="center" justify-content="center" min-height=44 padding="10px 14px" box-sizing="border-box"
-      width=(wide ? "100%" : "auto") border-radius=th.radiusControl
-      background-color=(primary ? th.accent : th.paper2)
-      border-width=1 border-style="solid" border-color=(primary ? th.accent : th.rule)
-      text label font-family=th.fontUi font-size=15 font-weight=600 color=(primary ? th.onAccent : th.fg) text-align="center"
+    row align-items="center" justify-content="center" min-height=44 padding=(primary ? "10px 16px" : "10px 4px") box-sizing="border-box"
+      width=(wide ? "100%" : "auto") border-radius=(primary ? th.radiusControl : 0)
+      background-color=(primary ? th.accent : "transparent")
+      text label font-family=th.fontUi font-size=15 font-weight=600 color=(primary ? th.onAccent : th.accent) text-align="center"
 
 // ================================================================ the design system (lane autoradio-design, 2026-11-15)
-// One set of values, so a page inherits the look instead of choosing its own. Pages use these components and these numbers and write no
-// others. Colour comes from the theme only; the accent is for selection, the primary action and the playing state, and nothing else.
+// One set of values, so a page inherits the look instead of choosing its own. Pages use these components and write no look of their own.
+// THE RULE (owner, 2026-11-15: "no pills. no pills. no outlined bubbles. pills promote bad design, bad typography"):
+//   No pill, no capsule, no outline drawn around text. A control reads as a control through type, position and one consistent affordance:
+//     a choice in a set        the chosen word at full strength with a short accent rule under it, the others muted (ChoiceWord, SegmentFace)
+//     an action                a text action in the accent colour, weight 600 (Btn, not primary), or a row with a chevron (ListRow)
+//     THE action of a page     a flat full-width block, the accent fill, radius 4 to 6 (Btn, primary): one per page, never a capsule
+//     an icon control          the icon alone with a caption under it; on is the accent, off is muted: no ring, no circle (the bar)
+//     a field                  plain text on the surface with a hairline beneath, or the bar's own surface: no capsule, no box
+//     a mark of selection      a check at the trailing edge (picked), a dash (some inside picked), a quiet plus (not picked)
+//   Radii: 0 for rules and fields, 4 to 6 for blocks (th.radiusControl), 8 to 12 for content cards (th.radiusCard), never half the height.
+//   The Kit clamps every theme to these (ThemeLoader), so th.radiusPill is a block radius too; do not use it for a new look.
+//   Cards are surfaces (the theme's paper colour and shadow), not outlines. A hairline (th.rule) separates rows; it never boxes a word.
+//   A Kit test (DesignRulesTests) fails when a contract outside this file draws an outlined box or a capsule.
 //   spacing   4, 8, 12, 16, 24, 32 (the page gutter is 20, a card's padding 16, a list row's side padding 16, gaps between blocks 12 or 16)
 //   type      page title 30/700 (fontRead); section label 12/700 caps, letter-spacing 0.9, muted; body 17; row title 17/600 (fontUi);
 //             secondary line 15 muted; caption 13 muted (counts, times, sources); the smallest text on a surface is 11 and is never body
-//   radius    th.radiusControl (buttons, segments, inputs), th.radiusCard (cards and grouped lists), th.radiusPill (chips and badges)
 //   rows      one list row is 52 tall at least, its side padding is 16, a hairline (th.rule) separates rows and is inset to the text edge
-//   selection unselected is an outline or a plain row; selected is the accent with a mark; partly selected is the accent outline with a dash.
-//             The mark is the same size in every state: choosing never resizes or moves anything (owner, 2026-11-15)
+//   selection the mark is the same size in every state: choosing never resizes or moves anything (owner, 2026-11-15)
 //   motion    content emerges with `Emerge` (a fade and a short rise, th.motionEnterMs, off under Reduce Motion); a selection animates its
 //             colour with th.motionFastMs and never its size
 // Components below are faces and frames: the caller wraps a face in `button ... appearance="none"` that keeps its press and testId.
@@ -156,7 +164,7 @@ component RowRule
   view
     box height=1 align-self="stretch" margin-left=indent background-color=th.rule
 
-// A grouped list: rows sit in one rounded surface, separated by hairlines, clipped to its corners.
+// A grouped list: rows sit in one surface (modest radius, no outline), separated by hairlines, clipped to its corners.
 component ListGroup
   inject
     th: Theme
@@ -165,7 +173,6 @@ component ListGroup
   slot
   view
     column testId=testId width="100%" box-sizing="border-box" min-width=0 overflow="hidden" border-radius=th.radiusCard background-color=th.paper2
-      border-width=1 border-style="solid" border-color=th.rule
       children
 
 // One list row's content: a title, an optional caption under it, an optional quiet trailing word and an optional chevron. The caller wraps
@@ -189,8 +196,8 @@ component ListRow
       if chevron
         image "symbol:forward-chevron" color=th.muted
 
-// The selection mark: a 24 point circle in every state. "off" a quiet ring (muted: the ring is the only sign that the row can be picked), "on" the accent filled with a check, "partial" the accent ring with a
-// dash (some of what is inside is chosen). Only colour changes between states, so choosing never resizes or moves anything.
+// The selection mark, 24 points square in every state, an icon and no container: a check (picked), a dash (some of what is inside is
+// picked), a quiet plus (not picked: the sign that the row can be picked). Only the glyph changes, so choosing never resizes or moves anything.
 component SelectMark
   inject
     th: Theme
@@ -199,29 +206,40 @@ component SelectMark
   derive on = state == "on"
   derive part = state == "partial"
   view
-    row width=24 height=24 flex-shrink=0 border-radius=12 align-items="center" justify-content="center" box-sizing="border-box"
-      border-width=2 border-style="solid" border-color=((on or part) ? th.accent : th.muted) background-color=(on ? th.accent : "transparent")
-      transition=`background-color ${th.motionFastMs}ms ease, border-color ${th.motionFastMs}ms ease`
-      if part
-        box width=10 height=2 border-radius=1 background-color=th.accent
+    row width=24 height=24 flex-shrink=0 align-items="center" justify-content="center"
       if on
-        image "symbol:checkmark" width=12 height=12 color=th.onAccent
+        image "symbol:checkmark" width=16 height=16 color=th.accent
+      if part
+        box width=12 height=2 background-color=th.accent
+      if on == false and part == false
+        image "symbol:sf/plus" width=14 height=14 color=th.muted
 
-// A chip: a pill with a hairline ring; selected it is the accent. The ring is the same width in both states. For wrapping rows of choices
-// (never a sideways scroller). The caller wraps it in a button.
-component ChipFace
+// A choice in a set of words (a wrapping row of sections, filters): the chosen word at full strength with a short accent rule under it, the
+// others muted. The rule's space is there in every state (transparent when not chosen), so choosing moves nothing. No capsule, no outline.
+// The caller wraps it in a button. ChipFace is the old name, kept so pages that use it take the new look without edits.
+component ChoiceWord
   inject
     th: Theme
   props
     label: string
     selected: bool
   view
-    row align-items="center" justify-content="center" min-height=40 padding="0px 14px" box-sizing="border-box" flex-shrink=0 border-radius=th.radiusPill
-      border-width=1 border-style="solid" border-color=(selected ? th.accent : th.rule) background-color=(selected ? th.accent : "transparent")
-      transition=`background-color ${th.motionFastMs}ms ease, border-color ${th.motionFastMs}ms ease`
-      text label font-family=th.fontUi font-size=14 font-weight=600 color=(selected ? th.onAccent : th.fg)
+    column align-items="flex-start" justify-content="center" min-height=44 gap=3 flex-shrink=0
+      text label font-family=th.fontUi font-size=15 font-weight=600 color=(selected ? th.fg : th.muted)
+        transition=`color ${th.motionFastMs}ms ease`
+      box width=20 height=2 background-color=(selected ? th.accent : "transparent") transition=`background-color ${th.motionFastMs}ms ease`
 
-// A segmented control: the track and one face per choice (the caller wraps each face in a button with `flex=1 min-width=0`). Few choices only.
+// Deprecated name: use ChoiceWord. Draws the same.
+component ChipFace
+  props
+    label: string
+    selected: bool
+  view
+    ChoiceWord(label=label, selected=selected)
+
+// A set of a few words side by side (Front page and My edition, Light and Dark and System): the track is a plain row, no box. Each face is a
+// SegmentFace in a button with `flex=1 min-width=0`; the chosen one is full strength with its rule centred beneath it. The capsule track is
+// gone; the names stay so pages that use them take the new look without edits.
 component SegmentedTrack
   inject
     th: Theme
@@ -229,8 +247,7 @@ component SegmentedTrack
     testId: string
   slot
   view
-    row testId=testId gap=4 padding=4 width="100%" box-sizing="border-box" border-radius=th.radiusControl background-color=th.paper2
-      border-width=1 border-style="solid" border-color=th.rule
+    row testId=testId gap=8 width="100%" box-sizing="border-box" align-items="flex-start"
       children
 
 component SegmentFace
@@ -240,9 +257,10 @@ component SegmentFace
     label: string
     selected: bool
   view
-    row align-items="center" justify-content="center" min-height=40 border-radius=th.radiusControl
-      background-color=(selected ? th.accent : "transparent") transition=`background-color ${th.motionFastMs}ms ease`
-      text label font-family=th.fontUi font-size=15 font-weight=600 color=(selected ? th.onAccent : th.fg)
+    column align-items="center" justify-content="center" min-height=44 gap=3 width="100%"
+      text label font-family=th.fontUi font-size=17 font-weight=600 color=(selected ? th.fg : th.muted) text-align="center"
+        transition=`color ${th.motionFastMs}ms ease`
+      box width=24 height=2 background-color=(selected ? th.accent : "transparent") transition=`background-color ${th.motionFastMs}ms ease`
 
 // Nothing here, still loading or failed: a line of plain words and, when the caller adds one, a single action beneath it.
 component EmptyState

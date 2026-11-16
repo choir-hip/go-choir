@@ -14,7 +14,7 @@
 //   settings-about-*, settings-voice-components.
 // Every colour, face, radius and shadow is a theme token (th.*, tx.*); a theme's own preview card paints from the card's data.
 use Theme, ThemeList, DemoInfo, ThemeCard, ThemeExtras, SettingsAccount, SettingsComputer, SettingRowInfo, LearnedInfo, AboutInfo, ThemeCards, SettingRows, ChoirAuth from "@choir/autoradio"
-use ToolScroll, Card, Btn from "./ui.contract"
+use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace from "./ui.contract"
 use VoiceCardsList from "./voice.contract"
 
 component SettingsPage
@@ -107,7 +107,7 @@ component FactRow
       text label font-family=th.fontUi font-size=tx.sizeLabel color=th.muted
       text value testId=testId font-family=(mono ? th.fontMono : th.fontUi) font-size=tx.sizeLabel color=th.fg text-align="right" flex=1 min-width=0 overflow-wrap="anywhere"
 
-// A filled or bordered action button in the theme's shape.
+// An action: the primary is a flat accent block (radius 4 to 6), the others text actions (the accent, or the danger colour); no outline.
 component ActionButton
   inject
     th: Theme
@@ -118,12 +118,10 @@ component ActionButton
     primary: bool
     danger: bool
   view
-    column testId=testId align-items="center" justify-content="center" padding="12px 18px" min-height=44
-      border-radius=th.radiusControl
-      background-color=(primary ? th.accent : th.paper2)
-      box-shadow=(primary ? th.shadow1 : "none")
-      border-width=(primary ? 0 : 1) border-style="solid" border-color=(danger ? th.danger : th.rule)
-      text label font-family=th.fontUi font-size=tx.sizeLabel font-weight=600 color=(primary ? th.onAccent : (danger ? th.danger : th.fg))
+    column testId=testId align-items="center" justify-content="center" padding=(primary ? "12px 18px" : "12px 4px") min-height=44
+      border-radius=(primary ? th.radiusControl : 0)
+      background-color=(primary ? th.accent : "transparent")
+      text label font-family=th.fontUi font-size=tx.sizeLabel font-weight=600 color=(primary ? th.onAccent : (danger ? th.danger : th.accent))
 
 // light / dark / system: a segmented control in the theme's own colours and radius (the native button styles tint blue and
 // ignore the theme). The three buttons keep their test ids.
@@ -139,18 +137,13 @@ component ModeSegment
   derive picked = thl.mode == mode
   view
     button press=setMode(mode) testId=testId role="radio" aria-checked=picked appearance="none" flex=1 min-width=0
-      row align-items="center" justify-content="center" min-height=40 border-radius=th.radiusControl
-        background-color=(picked ? th.accent : "transparent")
-        box-shadow=(picked ? th.shadow1 : "none")
-        transition=`background-color ${th.motionFastMs}ms ease`
-        text label font-family=th.fontUi font-size=15 font-weight=600 color=(picked ? th.onAccent : th.fg)
+      SegmentFace(label=label, selected=picked)
 
 component ModePicker
   inject
     th: Theme
   view
-    row gap=4 padding=4 width="100%" box-sizing="border-box" border-radius=th.radiusControl background-color=th.paper2
-      border-width=1 border-style="solid" border-color=th.rule
+    SegmentedTrack(testId="settings-mode")
       ModeSegment(mode="light", label="Light", testId="settings-mode-light")
       ModeSegment(mode="dark", label="Dark", testId="settings-mode-dark")
       ModeSegment(mode="system", label="System", testId="settings-mode-system")
@@ -170,15 +163,14 @@ component ThemePreview
       button press=setTheme(t.id) testId=`settings-theme-${t.id}` role="radio" aria-checked=t.current appearance="none" width="100%" box-sizing="border-box"
         aria-label=`${t.name}${t.current ? ", selected" : ""}`
         column width="100%" box-sizing="border-box" align-items="stretch" gap=10 padding=16 background-color=t.paper border-radius=t.radiusCard box-shadow=t.shadow
-          border-width=2 border-style="solid" border-color=(t.current ? t.accent : "transparent")
           row align-items="center" gap=8 width="100%"
             text t.name font-family=t.fontRead font-size=22 font-weight=700 color=t.fg text-align="left" flex=1 min-width=0
             if t.contrast == "AAA"
-              row padding="3px 8px" border-radius=t.radiusControl border-width=1 border-style="solid" border-color=t.rule
-                text "AAA contrast" font-family=t.fontUi font-size=11 font-weight=700 color=t.fg
+              text "AAA contrast" font-family=t.fontUi font-size=12 font-weight=600 color=t.muted
             if t.current
-              row padding="3px 10px" border-radius=t.radiusControl background-color=t.accent
-                text "In use" font-family=t.fontUi font-size=11 font-weight=700 color=t.onAccent
+              row align-items="center" gap=4
+                image "symbol:checkmark" width=14 height=14 color=t.accent
+                text "In use" font-family=t.fontUi font-size=13 font-weight=700 color=t.accent
           if compact == false
             text "The harbor barrier vote moves to Thursday, and the council wants the storm-surge figures first." font-family=t.fontRead font-size=15 line-height=1.45 color=t.fg
           row gap=8 align-items="center" width="100%"
@@ -186,15 +178,15 @@ component ThemePreview
             box width=22 height=22 background-color=t.accent2 border-radius=t.radiusControl
             box width=22 height=22 background-color=t.fg border-radius=t.radiusControl
             box width=22 height=22 background-color=t.muted border-radius=t.radiusControl
-            box width=22 height=22 background-color=t.paper2 border-radius=t.radiusControl border-width=1 border-style="solid" border-color=t.rule
+            box width=22 height=22 background-color=t.paper2 border-radius=t.radiusControl
             row flex=1 min-width=0 justify-content="flex-end"
               text `${t.scale} · ${t.schemes.replaceAll(",", " + ")}${t.origin == "bundled" ? "" : " · " + t.origin}` font-family=t.fontUi font-size=12 color=t.muted
           if compact == false
             row gap=8 align-items="center"
               row padding="8px 16px" border-radius=t.radiusControl background-color=t.accent
                 text "Listen" font-family=t.fontUi font-size=15 font-weight=600 color=t.onAccent
-              row padding="8px 16px" border-radius=t.radiusControl background-color=t.paper2 border-width=1 border-style="solid" border-color=t.rule
-                text "Ask the desk" font-family=t.fontUi font-size=15 font-weight=600 color=t.fg
+              row padding="8px 4px"
+                text "Ask the desk" font-family=t.fontUi font-size=15 font-weight=600 color=t.accent
       if t.origin != "bundled" and compact == false
         button press=removeTheme(t.id) testId=`settings-theme-remove-${t.id}` appearance="none"
           text "Remove this theme" font-family=th.fontUi font-size=13 color=th.danger padding="2px 6px"

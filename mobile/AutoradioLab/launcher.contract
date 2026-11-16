@@ -6,7 +6,7 @@
 // testIds: launcher-layer, launcher-search, launcher-open-<address>, launcher-close-<address>, search-hit-<address>,
 // place-<slug> (paper, textures, files, mail, settings, activity, told, components), launcher-nohits.
 use Theme, PageList, LauncherData from "@choir/autoradio"
-use Layer, stackName, kindOf, kindWord, isFixed, pageName, SectionHeader from "./ui.contract"
+use Layer, stackName, kindOf, kindWord, isFixed, pageName, SectionHeader, RowRule from "./ui.contract"
 
 component PlaceRow
   inject
@@ -26,7 +26,7 @@ component PlaceRow
             text line font-family=th.fontUi font-size=13 color=th.muted text-align="left" line-clamp=1
         image "symbol:forward-chevron" color=th.muted
 
-// A key page as a chip: tap to bring it to the top of the deck.
+// A key page as a plain text action (no chip): tap to bring it to the top of the deck.
 component ChipPlace
   inject
     th: Theme
@@ -37,8 +37,8 @@ component ChipPlace
     address: string
   view
     button press=openPage(address, name) testId=`place-${slug}` appearance="none" flex-shrink=0 aria-label=`Open ${name}`
-      row padding="10px 12px" border-radius=th.radiusPill align-items="center" justify-content="center" min-height=44 background-color=th.paper2 border-width=1 border-style="solid" border-color=th.rule
-        text name font-family=th.fontUi font-size=15 font-weight=600 color=th.fg
+      row padding="0px 16px 0px 0px" align-items="center" min-height=44
+        text name font-family=th.fontUi font-size=17 font-weight=600 color=th.accent
 
 // One page of the stack: tap to jump to it; a close button when it can be closed.
 component StackRow
@@ -83,9 +83,10 @@ component Launcher
       scroll testId="launcher-scroll" overflow-x="hidden" flex=1 min-height=0 width="100%"
         column padding=20 gap=6 padding-bottom=24 box-sizing="border-box" width="100%" min-width=0
           input type="search" value=lq input=editLq placeholder="Search the paper and your pages" aria-label="Search" testId="launcher-search"
-            font-family=th.fontUi font-size=17 color=th.fg min-height=44 padding="8px 16px" border-width=1 border-style="solid" border-color=th.rule border-radius=th.radiusPill background-color=th.paper2
+            font-family=th.fontUi font-size=17 color=th.fg min-height=48 padding="8px 0px" border-width=0 background-color="transparent"
             ::placeholder
               color=th.muted
+          RowRule(indent=0)
           if lnc.hasQuery
             for h in lnc.hits key=h.address
               button press=openPage(h.address, pageName(h.title, h.address)) testId=`search-hit-${h.address}` appearance="none" width="100%"
