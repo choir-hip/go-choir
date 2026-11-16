@@ -76,6 +76,9 @@ func TestRegisterRoutesPreservesCanonicalTable(t *testing.T) {
 	}
 
 	for _, path := range []string{
+		// The story ask, deleted 2026-11-16 (owner: one way to open a Texture:
+		// the prompt bar).
+		"/api/autopaper/ask",
 		"/api/agent/spawn",
 		"/api/agent/status",
 		"/api/events",

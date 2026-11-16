@@ -1471,7 +1471,7 @@ Short paths: `AP` = `frontend/src/packages/autopaper`, `TX` =
 | Aim: "Edit <title>" (owned) or "Reply to <title>" (published), "v3 of v7" | none | `TX/texture-prompt-aim.ts:47-80` | design: the bar's aim line says the same |
 | Classify, then submit with focus and base revision; status poll | `POST /api/prompt-bar/classify`, `POST /api/prompt-bar`, `GET /api/prompt-bar/submissions/{id}` | `packages/prompt-bar/PromptBar.surface.svelte:358-410,493`; `L/prompt-submit.ts:100-260` | now (desk stage); design: the bar, typed or spoken |
 | Route chip, one-tap re-send under another class | | same | design: after a send, a chip "Edit / Comment / Ask" for 12 s |
-| Ask the paper; add a source feed | `POST /api/autopaper/ask`; `POST /api/autopaper/sources/schedules` | `L/conductor.js:15-140` | design: the bar on Paper's front page (no focus) |
+| Ask the paper (now `POST /api/prompt-bar`, 2026-11-16); add a source feed | `POST /api/prompt-bar`; `POST /api/autopaper/sources/schedules` | `L/conductor.js:15-140` | design: the bar on Paper's front page (no focus) |
 | Status ticker ("Texture created a new revision") | `/api/ws` | `PromptBar.surface.svelte:437-480` | design: the bar's states (section 1) carry this |
 
 ### A4. Files (custodian: ownerfiles)

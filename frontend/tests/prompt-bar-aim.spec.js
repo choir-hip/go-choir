@@ -14,7 +14,7 @@
  *   A3 a comment on a published story writes to the story instead of forking;
  *   A4 the class is not shown, or the one-tap re-send reuses the first command id;
  *   A7 a re-send is offered after an owner revision committed (a second identical write);
- *   A8 A9 a request kind does not reach the ask and source routes, or hides a 422's code and reason;
+ *   A9 an add-source request does not reach the source route, or hides a 422's code and reason;
  *   A5 a request goes to the document (it must go to the agent, with no focus);
  *   A6 the revision shown or sent is the head when the window reads an older one.
  *
@@ -51,7 +51,7 @@ function story(slug, title) {
 // mockComputer serves a signed-in owner whose desktop holds one Texture window.
 // classify answers {class} (or fails when classify is null). Every prompt-bar,
 // classify and fork body is recorded.
-async function mockComputer(page, { appContext, title, classify = { class: 'edit', rule: 'judge', alternatives: ['comment', 'request'] }, asks = [], schedules = [], scheduleAnswer = { status: 201, body: { source_id: 's1' } } }) {
+async function mockComputer(page, { appContext, title, classify = { class: 'edit', rule: 'judge', alternatives: ['comment', 'request'] }, schedules = [], scheduleAnswer = { status: 201, body: { source_id: 's1' } } }) {
   const seen = { submits: [], classifies: [], forks: [] };
   await page.route('**/auth/**', async (route) => {
     const pathname = new URL(route.request().url()).pathname;
@@ -75,10 +75,6 @@ async function mockComputer(page, { appContext, title, classify = { class: 'edit
             windows: [{ window_id: 'win-1', app_id: 'texture', title, geometry: { x: 120, y: 80, width: 760, height: 520 }, mode: 'normal', z_index: 2, app_context: appContext }],
           }
         : { ok: true, updated_at: '2026-11-10T00:00:01Z' };
-    } else if (path === '/api/autopaper/ask') {
-      asks.push(route.request().postDataJSON());
-      status = 202;
-      body = { schema: 'choir.durable_work.v1', submission_id: 'submission-ask', state: 'running', doc_id: 'doc-fork', command_id: 'c' };
     } else if (path === '/api/autopaper/sources/schedules' && method === 'POST') {
       schedules.push(route.request().postDataJSON());
       status = scheduleAnswer.status;
@@ -181,19 +177,6 @@ test('A7: after a committed edit or comment no re-send is offered (it would writ
 
 // No document in view: Jev tells the request kinds apart, and each reaches lane
 // F's route from the owner's session. The plain agent request is the default.
-test('A8: with no document in view, "ask for a story" asks, and the document opens', async ({ page }) => {
-  const asks = [];
-  const seen = await mockComputer(page, { title: 'Settings', appContext: {}, classify: { class: 'ask_story', rule: 'judge' }, asks });
-  await openDesktop(page);
-  await send(page, 'what happened at the harbor strike');
-  await expect.poll(() => asks.length).toBe(1);
-  expect(seen.classifies[0].doc_state).toBe('none');
-  expect(asks[0].text).toBe('what happened at the harbor strike');
-  expect(seen.submits, 'not the conductor').toHaveLength(0);
-  // The fixture's own Texture window plus the asked document's.
-  await expect(page.locator('[data-window][data-window-app-id="texture"]')).toHaveCount(2, { timeout: 10_000 });
-});
-
 test('A9: "add a source" posts the URL, shows the 422 code and reason, and without a URL goes to the agent', async ({ page }) => {
   const schedules = [];
   const seen = await mockComputer(page, {

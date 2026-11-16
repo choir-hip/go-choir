@@ -117,7 +117,7 @@ The block model (`internal/texturedoc/schema.go:257-349`):
   prompt or intent, client_request_id, base_revision_id,
   expected_head_revision_id, sources[], body}`
   (`internal/textureowner/revise.go:114`).
-- `POST /api/autopaper/ask` takes `{text, command_id}`.
+- ~~`POST /api/autopaper/ask` takes `{text, command_id}`.~~ Removed 2026-11-16 (owner: one way to open a Texture): send the text to `POST /api/prompt-bar`.
 
 How a client learns the result:
 
