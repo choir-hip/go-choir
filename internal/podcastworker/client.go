@@ -121,6 +121,7 @@ func (c *Client) PendingEpisodes(ctx context.Context, since time.Time, limit int
 // PutTranscript stores one episode's transcript.
 func (c *Client) PutTranscript(ctx context.Context, episodeID, engine string, r Result) error {
 	return c.do(ctx, http.MethodPut, opBase+"transcripts", map[string]any{
-		"episode_id": episodeID, "engine": engine, "audio_seconds": r.Seconds, "file_seconds": r.FileSeconds, "segments": r.Segments,
+		"episode_id": episodeID, "engine": engine, "audio_seconds": r.Seconds, "file_seconds": r.FileSeconds,
+		"stable_file": r.StableFile, "segments": r.Segments,
 	}, nil)
 }
