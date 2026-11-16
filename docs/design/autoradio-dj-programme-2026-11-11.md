@@ -133,7 +133,7 @@ was said.
 
 | Kind | Custodian (sole reader and writer) | Holds | Status |
 |---|---|---|---|
-| run sheet | `desk:autoradio` | stretches of segments: the plan | the kind is **reserved** as `choir.autoradio_run_sheet`: Dolt store, content-hash identity, versioned, owner "autoradio (reserved, no writer yet)", writer `system:autoradio` [code: `internal/objectgraph/registry.go:28,84`; `writer.go:68`; `internal/kernelservice/kernelservice.go:117`] |
+| run sheet | `desk:autoradio` | stretches of segments: the plan | the old reservation `choir.autoradio_run_sheet` was deleted on 2026-11-16 (slice D1); the `autoradio` package desk declares `choir.app.autoradio.run_sheet`, and the sheet is stored as owner-private tape records (`docs/reference/AUTORADIO-SHEET.md`) |
 | air log | `desk:autoradio` | what the phone played: segment, sentences heard, how it ended | new |
 | turn | `desk:autoradio` | a listener's turn and its answer | proposed in fast-turns slice 1 as `choir.app.autoradio.turn` [doc] |
 | station | owner intent, with owner edits allowed; the desk reads it | on or off; listening windows; the grant that lets the desk spend on write-ahead | new; same shape as `choir.source_schedule` [code: `internal/store/source_schedule.go`] |
@@ -143,7 +143,7 @@ Naming. The fast-turns note puts the desk's kinds in the package namespace
 that declares it [doc: `docs/choir-doctrine.md:432-466`]. So I recommend
 declaring `choir.app.autoradio.run_sheet` and `.air_log` in the `autoradio`
 package, and deleting the reservation of `choir.autoradio_run_sheet` in the
-same change. The reservation has no writer, so a rename should have nothing
+same change (done 2026-11-16). The reservation has no writer, so a rename should have nothing
 to migrate [assumed: no rows exist; check on staging]. Standing question 3
 applies to the deletion: the reservation is cited in `objectgraph/registry.go`,
 `writer.go`, `kernelservice.go`, `vocabmigrate/families.go:143` and their

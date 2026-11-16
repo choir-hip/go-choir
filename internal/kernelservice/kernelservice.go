@@ -115,7 +115,7 @@ var builtin = []Manifest{
 	}},
 	{Name: Lease, OwnedKinds: []string{"choir.lease"}},
 	{Name: Autoradio, OwnedKinds: []string{
-		"choir.media_item", "choir.audio_recording", "choir.transcript", "choir.autoradio_run_sheet",
+		"choir.media_item", "choir.audio_recording", "choir.transcript",
 	}},
 }
 

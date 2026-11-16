@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/calibration"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -320,5 +321,52 @@ func TestAppendRefusesAnUnlabelledAutoradioRecord(t *testing.T) {
 	}
 	if _, err := s.AppendCommitmentRecord(ctx, arOwner, arComputer, elsewhere); err != nil {
 		t.Fatalf("another desk's record refused: %v", err)
+	}
+}
+
+// ListCommitmentRecordsBySubjectRefOfComputer (run sheet replay): another
+// computer's rows do not count toward the limit; a row whose envelope does
+// not decode is counted and skipped, not an error.
+func TestListBySubjectRefOfComputerFiltersInTheQueryAndSkipsUndecodableRows(t *testing.T) {
+	s := openAutoradioStore(t)
+	ctx := context.Background()
+	label, _ := types.AutoradioKindLabel("autoradio.sheet_op")
+	mk := func(id, computer string) types.CommitmentRecord {
+		return types.CommitmentRecord{
+			SchemaID: types.CommitmentRecordSchemaV1, RecordID: id, Kind: types.CommitmentKindDirective,
+			Discrepancy: types.DiscrepancyUnresolved, ComputerID: computer,
+			Directive:   &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNotice, Objective: id},
+			Provenance:  types.CommitmentProvenance{AgentID: "app:autoradio:o1", Labels: types.NewLabelSet(label).Strings()},
+			SubjectRefs: map[string]string{"desk": "app:autoradio", "record_kind": "autoradio.sheet_op", "sheet_ops": "owner"},
+		}
+	}
+	for i := 0; i < 6; i++ {
+		if _, err := s.AppendCommitmentRecord(ctx, "o1", "c1", mk(fmt.Sprintf("mine-%d", i), "c1")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 10; i++ { // newer rows of another computer
+		if _, err := s.AppendCommitmentRecord(ctx, "o1", "c2", mk(fmt.Sprintf("theirs-%d", i), "c2")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	recs, bad, rows, err := s.ListCommitmentRecordsBySubjectRefOfComputer(ctx, "o1", "c1", "sheet_ops", "owner", 4)
+	if err != nil || len(recs) != 4 || bad != 0 || rows != 4 {
+		t.Fatalf("limit 4: %d records, %d bad, %d rows, %v (the other computer's rows must not use the limit)", len(recs), bad, rows, err)
+	}
+	// A row that matches the query but whose envelope does not decode.
+	now := time.Now().UTC()
+	body := map[string]any{"record_id": "broken", "computer_id": "c1", "scores": "not a list",
+		"subject_refs": map[string]string{"sheet_ops": "owner", "record_kind": "autoradio.sheet_op"}}
+	obj, err := lifecycleObject(ogKindCommitmentRecord, "o1", "c1", "broken", body, map[string]any{"record_id": "broken"}, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ogStore.PutBatchConditional(ctx, nil, objectgraph.Batch{Objects: []objectgraph.Object{obj}}); err != nil {
+		t.Fatal(err)
+	}
+	recs, bad, rows, err = s.ListCommitmentRecordsBySubjectRefOfComputer(ctx, "o1", "c1", "sheet_ops", "owner", 100)
+	if err != nil || len(recs) != 6 || bad != 1 || rows != 7 {
+		t.Fatalf("with a broken row: %d records, %d bad, %d rows, %v", len(recs), bad, rows, err)
 	}
 }

@@ -43,6 +43,9 @@ type autoradioLedger interface {
 	AppendCommitmentRecord(ctx context.Context, ownerID, computerID string, rec types.CommitmentRecord) (string, error)
 	GetCommitmentRecord(ctx context.Context, ownerID, computerID, recordID string) (*types.CommitmentRecord, error)
 	ListCommitmentRecordsBySubjectRef(ctx context.Context, ownerID, computerID, key, value string, limit int) ([]types.CommitmentRecord, error)
+	// ListCommitmentRecordsBySubjectRefOfComputer counts only this computer's
+	// rows toward the limit (the run sheet replay pages by it).
+	ListCommitmentRecordsBySubjectRefOfComputer(ctx context.Context, ownerID, computerID, key, value string, limit int) (records []types.CommitmentRecord, undecodable, rows int, err error)
 }
 
 func (h *APIHandler) programmeLedger() autoradioLedger {

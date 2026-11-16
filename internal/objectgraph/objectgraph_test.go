@@ -51,7 +51,6 @@ func TestDefaultRegistryIncludesNewsAndAutoradioKinds(t *testing.T) {
 		"choir.media_item",
 		"choir.audio_recording",
 		"choir.transcript",
-		"choir.autoradio_run_sheet",
 	} {
 		if _, err := registry.LookupKind(kind); err != nil {
 			t.Fatalf("LookupKind(%s) error = %v", kind, err)
@@ -91,16 +90,16 @@ func TestServiceCreatesDeterministicContentAddressedObjects(t *testing.T) {
 func TestServiceExternalIdentityKeepsIDWhileContentChanges(t *testing.T) {
 	ctx := context.Background()
 	registry := NewRegistry()
-	registry.RegisterKind(KindRegistration{Kind: "choir.autoradio_run_sheet", Store: StoreTypeMemory, IdentityMode: IdentityExternalKey, Versioned: true})
+	registry.RegisterKind(KindRegistration{Kind: "choir.test_versioned_external", Store: StoreTypeMemory, IdentityMode: IdentityExternalKey, Versioned: true})
 	store := NewMemoryStore()
 	svc := NewService(Config{Registry: registry, Memory: store, Durable: store})
 	defer svc.Close()
 
-	first, err := svc.CreateObject(ctx, CreateObjectRequest{Kind: "choir.autoradio_run_sheet", OwnerID: "user:alice", IdentityKey: "station:morning", Body: []byte("v1")})
+	first, err := svc.CreateObject(ctx, CreateObjectRequest{Kind: "choir.test_versioned_external", OwnerID: "user:alice", IdentityKey: "station:morning", Body: []byte("v1")})
 	if err != nil {
 		t.Fatalf("CreateObject() error = %v", err)
 	}
-	second, err := svc.CreateObject(ctx, CreateObjectRequest{Kind: "choir.autoradio_run_sheet", OwnerID: "user:alice", IdentityKey: "station:morning", Body: []byte("v2")})
+	second, err := svc.CreateObject(ctx, CreateObjectRequest{Kind: "choir.test_versioned_external", OwnerID: "user:alice", IdentityKey: "station:morning", Body: []byte("v2")})
 	if err != nil {
 		t.Fatalf("CreateObject() second error = %v", err)
 	}

@@ -82,6 +82,11 @@ var ErrPreGenesis = errors.New("computer is pre-genesis")
 // the store so that run handles and events survive autoputer process restarts
 // (VAL-RUNTIME-010).
 type Runtime struct {
+	// autoradioSheets holds the Autoradio run sheets this process has loaded
+	// (api_autoradio_sheet.go). One per runtime, so two API handlers over the
+	// same runtime never sequence one sheet twice.
+	autoradioSheetsMu sync.Mutex
+	autoradioSheets   *sheetStore
 	// deskLimits and deskRates hold the per-desk resource bounds of the
 	// package desks (desk_quota.go, MA3.9). The zero value is the defaults.
 	deskLimits deskLimits

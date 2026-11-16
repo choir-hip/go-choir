@@ -33,6 +33,8 @@ var AutoradioRecordKinds = []AutoradioRecordKind{
 	{"autoradio.strike", "autoradio_strike"},
 	{"autoradio.clear", "autoradio_clear"},
 	{"autoradio.note", "autoradio_note"},
+	{"autoradio.sheet_op", "autoradio_sheet_op"},
+	{"autoradio.sheet_snapshot", "autoradio_sheet_snapshot"},
 }
 
 // AutoradioKindPrefix begins every Autoradio record_kind.
