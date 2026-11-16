@@ -142,7 +142,11 @@ public final class ReaderStore: @unchecked Sendable {
                let o = try? lr.object() {
                 revisions = (o["revisions"] as? [[String: Any]]) ?? []
             }
-            return TextureDocParser.parseRevision(revObj, document: docObj, address: address, revisions: revisions)
+            var d = TextureDocParser.parseRevision(revObj, document: docObj, address: address, revisions: revisions)
+            d.docId = a.doc
+            d.source = (revObj["content"] as? String) ?? ""
+            d.editable = a.rev.isEmpty && d.status == "ready"
+            return d
         }
     }
 
@@ -370,6 +374,19 @@ public final class ReaderAim: @unchecked Sendable {
 // MARK: Demo routes (the reader's fixtures; Demo.swift calls these from its one `case`)
 
 enum TextureDemo {
+    /// The revisions the phone posted in demo mode, in order: (document, Markdown content, body_doc).
+    nonisolated(unsafe) static var posted: [(doc: String, content: String, body: [String: Any]?)] = []
+    private static let postLock = NSLock()
+
+    /// POST /api/texture/documents/{id}/revisions answers the revision it made; any other POST is not ours.
+    static func post(path: String, body: Data) -> Data? {
+        let parts = path.split(separator: "/").map(String.init)
+        guard parts.count == 5, parts[0] == "api", parts[1] == "texture", parts[2] == "documents", parts[4] == "revisions" else { return nil }
+        let o = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] ?? [:]
+        postLock.lock(); posted.append((parts[3], o["content"] as? String ?? "", o["body_doc"] as? [String: Any])); let n = posted.count; postLock.unlock()
+        return Data(#"{"revision_id":"demo-posted-\#(n)","version_number":\#(n + 3)}"#.utf8)
+    }
+
     /// "demo-ev-charging/v2" -> "demo-ev-charging": every version of a demo story is the one fixture.
     static func bareRoute(_ route: String) -> String { TextureAddress.splitRoute(route).bare }
 

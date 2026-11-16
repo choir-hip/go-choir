@@ -77,6 +77,14 @@ final class DemoURLProtocol: URLProtocol {
         var sent = request.httpBody ?? Data()
         if let st = request.httpBodyStream { st.open(); var buf = [UInt8](repeating: 0, count: 4096)
             while st.hasBytesAvailable { let n = st.read(&buf, maxLength: buf.count); if n <= 0 { break }; sent.append(buf, count: n) }; st.close() }
+        // A Texture revision posted from the phone's editor: demo mode keeps it and answers the new head (TextureDemo.posted).
+        if request.httpMethod == "POST", let answer = TextureDemo.post(path: url.path, body: sent) {
+            let resp = HTTPURLResponse(url: url, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
+            client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: answer)
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
         // Mail (lane 6) needs the method and the body, so it answers first; every other route is the one switch below.
         let (status, body) = MailDemo.answer(method: request.httpMethod ?? "GET", path: url.path, query: items,
                                              body: (try? JSONSerialization.jsonObject(with: sent)) as? [String: Any] ?? [:]) ?? Self.route(path: url.path, query: items)

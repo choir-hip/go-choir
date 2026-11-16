@@ -1,0 +1,99 @@
+{
+ "title": "Letter",
+ "body_doc": {
+  "schema": "choir.texture_doc.v1",
+  "doc": {
+   "type": "doc",
+   "attrs": {
+    "id": "d-2"
+   },
+   "content": [
+    {
+     "type": "heading",
+     "attrs": {
+      "id": "h1",
+      "level": 2
+     },
+     "content": [
+      {
+       "type": "text",
+       "text": "Dear neighbours"
+      }
+     ]
+    },
+    {
+     "type": "paragraph",
+     "attrs": {
+      "id": "p1"
+     },
+     "content": [
+      {
+       "type": "text",
+       "text": "The tide barrier vote is on "
+      },
+      {
+       "type": "text",
+       "text": "Tuesday",
+       "marks": [
+        {
+         "type": "strong"
+        },
+        {
+         "type": "emphasis"
+        }
+       ]
+      },
+      {
+       "type": "text",
+       "text": ". Bring a "
+      },
+      {
+       "type": "text",
+       "text": "lamp",
+       "marks": [
+        {
+         "type": "code"
+        }
+       ]
+      },
+      {
+       "type": "hard_break"
+      },
+      {
+       "type": "text",
+       "text": "and a friend."
+      },
+      {
+       "type": "source_ref",
+       "attrs": {
+        "id": "s1",
+        "source_entity_id": "e9",
+        "display_mode": "expanded_ref"
+       }
+      }
+     ]
+    },
+    {
+     "type": "embed",
+     "attrs": {
+      "id": "emb2",
+      "kind": "audio",
+      "src": "https://example.test/a.mp3"
+     }
+    },
+    {
+     "type": "paragraph",
+     "attrs": {
+      "id": "p2"
+     },
+     "content": [
+      {
+       "type": "text",
+       "text": "Yours, the committee."
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
