@@ -26,7 +26,6 @@ import (
 	"net/url"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -54,14 +53,8 @@ const (
 	podcastQuoteMaxRunes         = 280
 	// podcastClipsPerStory is how many clips one story shows.
 	podcastClipsPerStory = 3
-	// PodcastClipsDefaultWindow is how far back the unfiltered read looks.
-	PodcastClipsDefaultWindow = 72 * time.Hour
-	podcastClipsScan          = 1000
-	podcastEpisodeScan        = 5000
-	podcastClipsMaxRoutes     = 60
-	podcastClipsDefaultLimit  = 120
-	podcastClipsMaxLimit      = 200
-	podcastReadCacheTTL       = 30 * time.Second
+	podcastEpisodeScan   = 5000
+	podcastMaxFuture     = 24 * time.Hour
 )
 
 // PodcastEpisodeIn is one feed item as the operator's worker reports it.
@@ -244,11 +237,11 @@ func checkPodcastURL(name, raw string) error {
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil {
 		return podcastInvalid("%s is not an http or https URL without credentials", name)
 	}
-	host := strings.ToLower(u.Hostname())
+	host := strings.TrimRight(strings.ToLower(u.Hostname()), ".")
 	if port := u.Port(); port != "" && port != "80" && port != "443" {
 		return podcastInvalid("%s: only ports 80 and 443 are admitted", name)
 	}
-	if net.ParseIP(host) != nil || strings.HasPrefix(host, "[") {
+	if net.ParseIP(host) != nil {
 		return podcastInvalid("%s: a host named by an address is not admitted", name)
 	}
 	if !strings.Contains(host, ".") || host == "localhost" || strings.HasSuffix(host, ".localhost") || strings.HasSuffix(host, ".local") ||
@@ -360,6 +353,9 @@ func (s *Service) RecordPodcastEpisodes(ctx context.Context, in []PodcastEpisode
 		}
 		recorded++
 	}
+	if err := s.notePodcastEpisodes(ctx, og, checked, now); err != nil {
+		return recorded, fresh, err
+	}
 	s.podcastCache.reset()
 	return recorded, fresh, nil
 }
@@ -400,6 +396,9 @@ func checkPodcastEpisode(e PodcastEpisodeIn) (PodcastEpisode, error) {
 		return ep, podcastInvalid("published is not RFC 3339")
 	}
 	ep.Published = ep.Published.UTC()
+	if ep.Published.After(time.Now().Add(podcastMaxFuture)) {
+		return ep, podcastInvalid("published is more than %s in the future", podcastMaxFuture)
+	}
 	if err = finiteSeconds("duration_seconds", e.DurationSeconds); err != nil {
 		return ep, err
 	}
@@ -457,27 +456,56 @@ func (s *Service) ListPodcastEpisodes(ctx context.Context, needTranscript bool, 
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Published.After(out[j].Published) })
 	if needTranscript {
-		// The worker's queue: what a phone is playing now, then the feeds
-		// the most readers follow, then the rest, newest first within each.
-		if counts, wanted, err := s.podcastFeedWeights(ctx); err == nil {
-			rank := func(e PodcastEpisode) (bool, int) {
-				n, _ := NormalizeFeedURL(e.FeedURL)
-				return wanted[n][e.GUID], counts[n]
-			}
-			sort.SliceStable(out, func(i, j int) bool {
-				wi, ci := rank(out[i])
-				wj, cj := rank(out[j])
-				if wi != wj {
-					return wi
-				}
-				return ci > cj
-			})
+		// The worker's queue: what a signed-in phone is playing now, then the
+		// operator's featured feeds, then the feeds most accounts follow, then
+		// the rest; newest first within each (the sort is stable).
+		if rank, err := s.podcastQueueRank(ctx); err == nil {
+			sort.SliceStable(out, func(i, j int) bool { return rank(out[i]) < rank(out[j]) })
 		}
 	}
 	if len(out) > limit {
 		out = out[:limit]
 	}
 	return out, nil
+}
+
+// podcastQueueRank ranks an episode for the worker: 0 playing now, 1 a
+// featured feed, then 2 plus the inverse of the subscriber count.
+func (s *Service) podcastQueueRank(ctx context.Context) (func(PodcastEpisode) int, error) {
+	og, err := s.podcastStore()
+	if err != nil {
+		return nil, err
+	}
+	featured, err := s.featuredFeedSet(ctx, og)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.allPodcastFeeds(ctx)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	subs := map[string]int{}
+	wanted := map[string]map[string]bool{}
+	for _, r := range rows {
+		subs[r.Norm] = len(r.Subscribers)
+		for _, w := range pruneWanted(r.Wanted, now) {
+			if wanted[r.Norm] == nil {
+				wanted[r.Norm] = map[string]bool{}
+			}
+			wanted[r.Norm][w.GUID] = true
+		}
+	}
+	return func(e PodcastEpisode) int {
+		n, _ := NormalizeFeedURL(e.FeedURL)
+		switch {
+		case wanted[n][e.GUID]:
+			return 0
+		case featured[n]:
+			return 1
+		}
+		return 2 + podcastMaxSubscribers - subs[n]
+	}, nil
 }
 
 // PutPodcastTranscript stores an episode's transcript and marks the episode.
@@ -629,7 +657,11 @@ func (s *Service) PutPodcastClips(ctx context.Context, in []PodcastClipIn) (int,
 	now := time.Now().UTC()
 	rows := make([]podcastClipRow, 0, len(in))
 	episodes := map[string]*PodcastEpisode{}
-	var listed map[string]bool
+	featured, err := s.featuredFeedSet(ctx, og)
+	if err != nil {
+		return 0, err
+	}
+	transcripts := map[string]*PodcastTranscript{}
 	for i, c := range in {
 		st, ok := byRoute[strings.TrimSpace(c.StoryRoute)]
 		if !ok {
@@ -645,13 +677,8 @@ func (s *Service) PutPodcastClips(ctx context.Context, in []PodcastClipIn) (int,
 		if ep == nil {
 			return 0, podcastInvalid("clip %d: episode %q is not known", i, truncatePodcast(c.EpisodeID, 80))
 		}
-		if listed == nil {
-			if listed, err = s.listedFeedSet(ctx); err != nil {
-				return 0, err
-			}
-		}
-		if n, nerr := NormalizeFeedURL(ep.FeedURL); nerr != nil || !listed[n] {
-			return 0, podcastInvalid("clip %d: the episode's feed is not a listed feed", i)
+		if n, nerr := NormalizeFeedURL(ep.FeedURL); nerr != nil || !featured[n] {
+			return 0, podcastInvalid("clip %d: the episode's feed is not a featured feed", i)
 		}
 		if err := finiteSeconds("start", c.Start); err != nil {
 			return 0, err
@@ -672,8 +699,18 @@ func (s *Service) PutPodcastClips(ctx context.Context, in []PodcastClipIn) (int,
 		if quote == "" || !utf8.ValidString(quote) {
 			return 0, podcastInvalid("clip %d: the quote is empty", i)
 		}
-		if utf8.RuneCountInString(quote) > podcastQuoteMaxRunes {
-			quote = string([]rune(quote)[:podcastQuoteMaxRunes-1]) + "…"
+		quote = CutQuote(quote, podcastQuoteMaxRunes)
+		// The words must be in the transcript, inside the clip's times: the
+		// operator route cannot publish words nobody said.
+		tr, haveTr := transcripts[c.EpisodeID]
+		if !haveTr {
+			if tr, err = s.GetPodcastTranscript(ctx, og, c.EpisodeID); err != nil {
+				return 0, err
+			}
+			transcripts[c.EpisodeID] = tr
+		}
+		if tr == nil || !quoteInTranscript(tr, c.Start, c.End, quote) {
+			return 0, podcastInvalid("clip %d: the quote is not in the episode's transcript within the clip's times", i)
 		}
 		rows = append(rows, podcastClipRow{
 			ClipID: podcastClipID(st.Route, c.EpisodeID, c.Start), StoryRoute: st.Route, StoryVersion: st.Revision, StoryTitle: st.Title,
@@ -702,6 +739,37 @@ func (s *Service) PutPodcastClips(ctx context.Context, in []PodcastClipIn) (int,
 			return 0, err
 		}
 	}
+	// Each story's clip index (read by key by the public read) keeps its 12 newest.
+	clipsOfRoute := map[string][]string{}
+	for _, row := range distinct {
+		clipsOfRoute[row.StoryRoute] = append(clipsOfRoute[row.StoryRoute], row.ClipID)
+	}
+	s.podcastFeedMu.Lock()
+	defer s.podcastFeedMu.Unlock()
+	for route, ids := range clipsOfRoute {
+		key := "clips:" + route
+		idx, err := s.getPodcastIndex(ctx, og, key)
+		if err != nil {
+			return 0, err
+		}
+		have := podcastSet(idx.Clips)
+		changed := false
+		for _, id := range ids {
+			if !have[id] {
+				idx.Clips = append(idx.Clips, id)
+				have[id] = true
+				changed = true
+			}
+		}
+		if len(idx.Clips) > podcastClipsPerStoryIndex {
+			idx.Clips = idx.Clips[len(idx.Clips)-podcastClipsPerStoryIndex:]
+		}
+		if changed {
+			if err := s.putPodcastIndex(ctx, og, key, idx, now); err != nil {
+				return 0, err
+			}
+		}
+	}
 	s.podcastCache.reset()
 	return len(distinct), nil
 }
@@ -717,182 +785,33 @@ func truncatePodcast(s string, n int) string {
 	return s[:cut] + "..."
 }
 
-// podcastReadCache holds the joined clip list for a short time, so the public
-// route's cost is bounded whatever strangers ask.
-type podcastReadCache struct {
-	mu   sync.Mutex
-	at   time.Time
-	all  []PodcastClip
-	good bool
+// CutQuote cuts a quote to at most max runes on a word boundary, never adding
+// words: what is shown is a prefix of what was said.
+func CutQuote(q string, max int) string {
+	q = strings.Join(strings.Fields(q), " ")
+	r := []rune(q)
+	if len(r) <= max {
+		return q
+	}
+	cut := max
+	for cut > 0 && r[cut] != ' ' {
+		cut--
+	}
+	if cut == 0 {
+		cut = max
+	}
+	return strings.TrimSpace(string(r[:cut]))
 }
 
-func (c *podcastReadCache) reset() {
-	c.mu.Lock()
-	c.good = false
-	c.mu.Unlock()
-}
-
-// allPodcastClips joins every stored clip with its episode, newest match
-// first, best support first within a story.
-func (s *Service) allPodcastClips(ctx context.Context) ([]PodcastClip, error) {
-	c := &s.podcastCache
-	c.mu.Lock()
-	if c.good && time.Since(c.at) < podcastReadCacheTTL {
-		out := c.all
-		c.mu.Unlock()
-		return out, nil
-	}
-	c.mu.Unlock()
-	og, err := s.podcastStore()
-	if err != nil {
-		return nil, err
-	}
-	objs, err := og.ListObjects(ctx, objectgraph.ListFilter{Kind: ogKindPodcastClip, OwnerID: podcastOwner, Limit: podcastClipsScan})
-	if err != nil {
-		return nil, err
-	}
-	if len(objs) >= podcastClipsScan {
-		log.Printf("corpusd: podcast clips: the read hit its scan bound of %d; older clips are not shown", podcastClipsScan)
-	}
-	listed, err := s.listedFeedSet(ctx)
-	if err != nil {
-		return nil, err
-	}
-	episodes := map[string]*PodcastEpisode{}
-	type joined struct {
-		clip    PodcastClip
-		matched time.Time
-		stable  bool
-	}
-	var rows []joined
-	for _, o := range objs {
-		if o.Tombstone {
-			continue
-		}
-		var row podcastClipRow
-		if json.Unmarshal(o.Body, &row) != nil {
-			continue
-		}
-		ep, seen := episodes[row.EpisodeID]
-		if !seen {
-			if ep, err = s.getPodcastEpisode(ctx, og, row.EpisodeID); err != nil {
-				return nil, err
-			}
-			episodes[row.EpisodeID] = ep
-		}
-		if ep == nil {
-			continue
-		}
-		// Only a listed feed's clips are public: a private feed a reader
-		// reported must never become a public address.
-		if n, nerr := NormalizeFeedURL(ep.FeedURL); nerr != nil || !listed[n] {
-			continue
-		}
-		matched, _ := time.Parse(time.RFC3339, row.MatchedAt)
-		rows = append(rows, joined{matched: matched, stable: ep.StableFile != nil && *ep.StableFile, clip: PodcastClip{
-			ClipID: row.ClipID, Story: PodcastClipStory{Route: row.StoryRoute, Version: row.StoryVersion, Title: row.StoryTitle},
-			Show: ep.Show, EpisodeTitle: ep.Title, EpisodeGUID: ep.GUID, FeedURL: ep.FeedURL, Published: ep.Published,
-			AudioURL: ep.EnclosureURL, DurationSeconds: ep.DurationSeconds, Start: row.Start, End: row.End, Quote: row.Quote, Support: row.Support,
-		}})
-	}
-	// Stories in the order of their newest match; within a story, clips of a
-	// stable file first, then the best supported.
-	newest := map[string]time.Time{}
-	for _, r := range rows {
-		if r.matched.After(newest[r.clip.Story.Route]) {
-			newest[r.clip.Story.Route] = r.matched
+// quoteInTranscript reports whether quote occurs, as words, in the segments of
+// the transcript that overlap [start, end].
+func quoteInTranscript(t *PodcastTranscript, start, end float64, quote string) bool {
+	var parts []string
+	for _, seg := range t.Segments {
+		if seg.End > start-0.5 && seg.Start < end+0.5 {
+			parts = append(parts, seg.Text)
 		}
 	}
-	sort.SliceStable(rows, func(i, j int) bool {
-		a, b := rows[i], rows[j]
-		if a.clip.Story.Route != b.clip.Story.Route {
-			na, nb := newest[a.clip.Story.Route], newest[b.clip.Story.Route]
-			if !na.Equal(nb) {
-				return na.After(nb)
-			}
-			return a.clip.Story.Route < b.clip.Story.Route
-		}
-		if a.stable != b.stable {
-			return a.stable
-		}
-		return a.clip.Support > b.clip.Support
-	})
-	out := make([]PodcastClip, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, r.clip)
-	}
-	c.mu.Lock()
-	c.all, c.at, c.good = out, time.Now(), true
-	c.mu.Unlock()
-	return out, nil
-}
-
-// ListPodcastClips is the public read (design 4.1). With routes it answers
-// for those stories; without, for every clip matched within the window.
-func (s *Service) ListPodcastClips(ctx context.Context, routes, feeds []string, limit int) (*PodcastClipsResponse, error) {
-	if len(routes) > podcastClipsMaxRoutes || len(feeds) > podcastClipsMaxRoutes {
-		return nil, podcastInvalid("at most %d routes and %d feeds", podcastClipsMaxRoutes, podcastClipsMaxRoutes)
-	}
-	preferred := map[string]bool{}
-	for _, f := range feeds {
-		if n, err := NormalizeFeedURL(f); err == nil {
-			preferred[n] = true
-		}
-	}
-	if limit <= 0 {
-		limit = podcastClipsDefaultLimit
-	}
-	if limit > podcastClipsMaxLimit {
-		limit = podcastClipsMaxLimit
-	}
-	all, err := s.allPodcastClips(ctx)
-	if err != nil {
-		return nil, err
-	}
-	want := map[string]bool{}
-	for _, r := range routes {
-		want[normalizePublicationRoutePath(r)] = true
-	}
-	perStory := map[string]int{}
-	resp := &PodcastClipsResponse{GeneratedAt: time.Now().UTC(), Clips: []PodcastClip{}}
-	var recent map[string]bool
-	if len(want) == 0 {
-		stories, err := s.recentPodcastStories(ctx, PodcastClipsDefaultWindow)
-		if err != nil {
-			return nil, err
-		}
-		recent = map[string]bool{}
-		for _, st := range stories {
-			recent[st.Route] = true
-		}
-	}
-	for _, c := range all {
-		if len(want) > 0 && !want[c.Story.Route] {
-			continue
-		}
-		if recent != nil && !recent[c.Story.Route] {
-			continue
-		}
-		if perStory[c.Story.Route] >= podcastClipsPerStory {
-			continue
-		}
-		perStory[c.Story.Route]++
-		resp.Clips = append(resp.Clips, c)
-	}
-	if len(preferred) > 0 {
-		// The reader's own shows first, the order kept inside both groups.
-		var mine, rest []PodcastClip
-		for _, c := range resp.Clips {
-			if n, err := NormalizeFeedURL(c.FeedURL); err == nil && preferred[n] {
-				mine = append(mine, c)
-			} else {
-				rest = append(rest, c)
-			}
-		}
-		resp.Clips = append(mine, rest...)
-	}
-	if len(resp.Clips) > limit {
-		resp.Clips = resp.Clips[:limit]
-	}
-	return resp, nil
+	joined := strings.Join(strings.Fields(strings.Join(parts, " ")), " ")
+	return strings.Contains(joined, strings.Join(strings.Fields(quote), " "))
 }

@@ -1,12 +1,17 @@
 package platform
 
 // The feeds readers subscribe to (docs/design/podcast-clips-2026-11-15.md
-// section 3.2): a phone reports the feeds its reader follows and the episode
-// it is playing; the worker transcribes the union of those feeds and the seed
-// list, most subscribed first, and now-playing first of all. A transcript is
-// stored once per episode and shared by everyone. A feed row keeps a count of
-// distinct reporting accounts as salted hashes, never an identity, and the
-// popular list never says who subscribes to what.
+// sections 3.2 and 3.4): a signed-in phone reports the feeds its reader follows
+// and the episode it plays; the worker transcribes the featured feeds first and
+// then the subscribed ones, and now-playing before all. A transcript is stored
+// once per episode. A feed is PUBLIC (its clips, its popularity, its transcript)
+// only when the operator features it (the seed list, or an operator mark): a
+// feed an account reports stays that account's own.
+//
+// Everything public is read by key: the featured set and the platform's row
+// count live in one small index document, an account's subscriptions in
+// another, a story's clips in a third. No public behaviour depends on a page of
+// "the newest N rows".
 
 import (
 	"context"
@@ -18,32 +23,35 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
 
 const (
-	ogKindPodcastFeed = objectgraph.ObjectKind("choir.podcast_feed")
+	ogKindPodcastFeed  = objectgraph.ObjectKind("choir.podcast_feed")
+	ogKindPodcastIndex = objectgraph.ObjectKind("choir.podcast_index")
 
-	podcastMaxFeedsPerReport = 50
-	// podcastMaxSubscriptionsPerAccount bounds what one account can add to
-	// the platform's intake (review 1 of 2026-11-16: no stranger intake).
+	podcastMaxFeedsPerReport          = 50
 	podcastMaxSubscriptionsPerAccount = 500
 	podcastMaxTitleBytes              = 200
 	podcastMaxSubscribers             = 20000
 	podcastMaxWanted                  = 20
 	podcastWantedTTL                  = 24 * time.Hour
-	// podcastListedMin is how many distinct signed-in accounts must report a
-	// feed before it is public (clips, popular): a private, tokenised feed one
-	// subscriber was given must not become a public address.
-	podcastListedMin = 2
-	// podcastPopularMin is how many distinct accounts must report a feed
-	// before it is shown with a count (k-anonymity).
+	// podcastRecentPerFeed is how many of a feed's newest episodes its row
+	// remembers, for the match job to read by key.
+	podcastRecentPerFeed = 40
+	// podcastPopularMin is how many distinct accounts must report a featured
+	// feed before its count is shown (k-anonymity).
 	podcastPopularMin   = 3
 	podcastPopularLimit = 100
-	podcastFeedScan     = 5000
 )
+
+// podcastMaxFeedRows is the most feed rows the platform holds: new rows beyond
+// it are refused and logged, so no scan of them can truncate. A variable so a
+// test can lower it.
+var podcastMaxFeedRows = 20000
+
+var errPodcastRowLimit = errors.New("the platform holds its limit of feeds")
 
 // ErrPodcastSignInRequired marks a report with no signed-in account behind it.
 var ErrPodcastSignInRequired = errors.New("signing in is required to report subscriptions")
@@ -80,22 +88,68 @@ type podcastWanted struct {
 	At       string `json:"at"`
 }
 
+type podcastRecent struct {
+	EpisodeID string    `json:"episode_id"`
+	Published time.Time `json:"published"`
+}
+
 // podcastFeedRow is a stored feed.
 type podcastFeedRow struct {
 	FeedURL string `json:"feed_url"`
 	Norm    string `json:"norm"`
-	Title   string `json:"title"`
-	// Featured marks a feed the operator lists: the seed list, or an act of
-	// the operator's. A feed is public (listed) when it is featured or when
-	// at least podcastListedMin accounts report it.
-	Featured    bool            `json:"featured,omitempty"`
+	// Title is what a reporter or the operator called it; Show is what the
+	// worker parsed from the feed, and is what is shown publicly.
+	Title       string          `json:"title"`
+	Show        string          `json:"show,omitempty"`
 	FirstSeen   string          `json:"first_seen"`
 	Subscribers []string        `json:"subscribers,omitempty"` // hashes of accounts, never shown
 	Wanted      []podcastWanted `json:"wanted,omitempty"`
+	Recent      []podcastRecent `json:"recent,omitempty"`
+	// LatestTitle and LatestPublished are the feed's newest parsed episode.
+	LatestTitle     string    `json:"latest_title,omitempty"`
+	LatestPublished time.Time `json:"latest_published,omitempty"`
+}
+
+// podcastIndexDoc is one small index document of kind choir.podcast_index; the
+// key says which fields it uses.
+type podcastIndexDoc struct {
+	Featured []string `json:"featured,omitempty"` // "meta": normalised URLs of featured feeds
+	Rows     int      `json:"rows,omitempty"`     // "meta": how many feed rows exist
+	Subs     []string `json:"subs,omitempty"`     // "acct:<hash>": normalised URLs the account subscribes to
+	Clips    []string `json:"clips,omitempty"`    // "clips:<route>": clip ids of the story, oldest first
+}
+
+const podcastClipsPerStoryIndex = 12
+
+func (s *Service) getPodcastIndex(ctx context.Context, og *ObjectGraphStore, key string) (podcastIndexDoc, error) {
+	canonical, err := podcastCanonical(ogKindPodcastIndex, key)
+	if err != nil {
+		return podcastIndexDoc{}, err
+	}
+	obj, err := og.GetObject(ctx, canonical)
+	if err != nil {
+		if isNotFound(err) {
+			return podcastIndexDoc{}, nil
+		}
+		return podcastIndexDoc{}, err
+	}
+	var d podcastIndexDoc
+	if err := json.Unmarshal(obj.Body, &d); err != nil {
+		return podcastIndexDoc{}, err
+	}
+	return d, nil
+}
+
+func (s *Service) putPodcastIndex(ctx context.Context, og *ObjectGraphStore, key string, d podcastIndexDoc, now time.Time) error {
+	obj, err := podcastObject(ogKindPodcastIndex, key, d, map[string]any{"key": key}, now)
+	if err != nil {
+		return err
+	}
+	return og.PutObject(corpusdWriter(ctx), obj)
 }
 
 // NormalizeFeedURL makes two spellings of one feed one key: lower-case scheme
-// and host, default port and fragment dropped, trailing slash trimmed.
+// and host, default port, fragment and trailing slash dropped.
 func NormalizeFeedURL(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if err := checkPodcastURL("feed_url", raw); err != nil {
@@ -117,14 +171,14 @@ func NormalizeFeedURL(raw string) (string, error) {
 
 func podcastFeedID(norm string) string { return podcastHashID("feed-", norm) }
 
-// podcastSubscriberHash is what is kept of an account: a hash.
+// podcastSubscriberHash is what is kept of an account: sha256 of a fixed
+// context and the account id. It keeps the id out of the store and is not a
+// secret (it is neither salted nor keyed).
 func podcastSubscriberHash(accountID string) string {
 	return podcastHashID("sub-", "podcast-subscriber\x00"+accountID)
 }
 
-// PodcastReporter is the hash of an account (a fixed-context sha256, not a
-// secret: it keeps the account id out of the store, nothing more), for the
-// proxy to pass.
+// PodcastReporter is the hash of an account, for the proxy to pass.
 func PodcastReporter(accountID string) string {
 	if strings.TrimSpace(accountID) == "" {
 		return ""
@@ -153,7 +207,7 @@ func (s *Service) getPodcastFeed(ctx context.Context, og *ObjectGraphStore, norm
 
 func (s *Service) putPodcastFeed(ctx context.Context, og *ObjectGraphStore, row podcastFeedRow, now time.Time) error {
 	obj, err := podcastObject(ogKindPodcastFeed, podcastFeedID(row.Norm), row, map[string]any{
-		"norm": row.Norm, "subscribers": len(row.Subscribers), "featured": row.Featured,
+		"norm": row.Norm, "subscribers": len(row.Subscribers),
 	}, now)
 	if err != nil {
 		return err
@@ -161,10 +215,36 @@ func (s *Service) putPodcastFeed(ctx context.Context, og *ObjectGraphStore, row 
 	return og.PutObject(corpusdWriter(ctx), obj)
 }
 
+func podcastContains(list []string, v string) bool {
+	for _, x := range list {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+func podcastSet(list []string) map[string]bool {
+	out := make(map[string]bool, len(list))
+	for _, x := range list {
+		out[x] = true
+	}
+	return out
+}
+
+// featuredFeedSet is the normalised URLs of the featured feeds, read by key.
+func (s *Service) featuredFeedSet(ctx context.Context, og *ObjectGraphStore) (map[string]bool, error) {
+	meta, err := s.getPodcastIndex(ctx, og, "meta")
+	if err != nil {
+		return nil, err
+	}
+	return podcastSet(meta.Featured), nil
+}
+
 // ReportPodcastFeeds takes a phone's report from a signed-in account (reporter
-// is the hash of the account; empty is refused). Feeds join the worker's
-// intake, the account counts once per feed, and the playing episode is marked.
-// A report that changes nothing writes nothing.
+// is the hash of the account; empty is refused). The account subscribes to the
+// feeds it names, within its cap; a playing episode is marked only for a feed
+// the account subscribes to. A report that changes nothing writes nothing.
 func (s *Service) ReportPodcastFeeds(ctx context.Context, reporter string, req PodcastFeedsRequest) (*PodcastFeedsResponse, error) {
 	if reporter == "" {
 		return nil, ErrPodcastSignInRequired
@@ -175,12 +255,9 @@ func (s *Service) ReportPodcastFeeds(ctx context.Context, reporter string, req P
 	if len(req.Feeds) == 0 && req.NowPlaying == nil {
 		return nil, podcastInvalid("nothing reported")
 	}
-	type checked struct {
-		url, norm, title string
-		subscribe        bool
-	}
+	type checked struct{ url, norm, title string }
 	var feeds []checked
-	index := map[string]int{}
+	seen := map[string]bool{}
 	for i, f := range req.Feeds {
 		norm, err := NormalizeFeedURL(f.FeedURL)
 		if err != nil {
@@ -190,15 +267,16 @@ func (s *Service) ReportPodcastFeeds(ctx context.Context, reporter string, req P
 		if err != nil {
 			return nil, fmt.Errorf("feed %d: %w", i, err)
 		}
-		if _, dup := index[norm]; !dup {
-			index[norm] = len(feeds)
-			feeds = append(feeds, checked{url: strings.TrimSpace(f.FeedURL), norm: norm, title: title, subscribe: true})
+		if !seen[norm] {
+			seen[norm] = true
+			feeds = append(feeds, checked{url: strings.TrimSpace(f.FeedURL), norm: norm, title: title})
 		}
 	}
 	var np *PodcastNowPlaying
+	var npNorm string
 	if req.NowPlaying != nil {
-		npNorm, err := NormalizeFeedURL(req.NowPlaying.FeedURL)
-		if err != nil {
+		var err error
+		if npNorm, err = NormalizeFeedURL(req.NowPlaying.FeedURL); err != nil {
 			return nil, fmt.Errorf("now_playing: %w", err)
 		}
 		guid, err := boundField("episode_guid", req.NowPlaying.EpisodeGUID, podcastMaxURLBytes)
@@ -209,10 +287,6 @@ func (s *Service) ReportPodcastFeeds(ctx context.Context, reporter string, req P
 			return nil, fmt.Errorf("now_playing: %w", err)
 		}
 		np = &PodcastNowPlaying{FeedURL: npNorm, EpisodeGUID: guid, AudioURL: strings.TrimSpace(req.NowPlaying.AudioURL)}
-		if _, dup := index[npNorm]; !dup {
-			index[npNorm] = len(feeds)
-			feeds = append(feeds, checked{url: strings.TrimSpace(req.NowPlaying.FeedURL), norm: npNorm})
-		}
 	}
 	og, err := s.podcastStore()
 	if err != nil {
@@ -220,29 +294,29 @@ func (s *Service) ReportPodcastFeeds(ctx context.Context, reporter string, req P
 	}
 	s.podcastFeedMu.Lock()
 	defer s.podcastFeedMu.Unlock()
-	// The bound on what one account can add: a stored cap of subscriptions.
-	rows, err := s.allPodcastFeeds(ctx)
+	now := time.Now().UTC()
+	acctKey := "acct:" + reporter
+	acct, err := s.getPodcastIndex(ctx, og, acctKey)
 	if err != nil {
 		return nil, err
 	}
-	has := map[string]bool{}
-	mine := 0
-	for _, r := range rows {
-		if podcastContains(r.Subscribers, reporter) {
-			has[r.Norm] = true
-			mine++
-		}
-	}
+	have := podcastSet(acct.Subs)
+	var added []string
 	for _, f := range feeds {
-		if f.subscribe && !has[f.norm] {
-			mine++
+		if !have[f.norm] {
+			added = append(added, f.norm)
 		}
 	}
-	if mine > podcastMaxSubscriptionsPerAccount {
+	// The bound on what one account can add: a stored cap of subscriptions.
+	if len(acct.Subs)+len(added) > podcastMaxSubscriptionsPerAccount {
 		return nil, podcastInvalid("an account holds at most %d subscriptions", podcastMaxSubscriptionsPerAccount)
 	}
-	now := time.Now().UTC()
+	meta, err := s.getPodcastIndex(ctx, og, "meta")
+	if err != nil {
+		return nil, err
+	}
 	resp := &PodcastFeedsResponse{}
+	metaDirty := false
 	changed := false
 	for _, f := range feeds {
 		row, err := s.getPodcastFeed(ctx, og, f.norm)
@@ -251,25 +325,46 @@ func (s *Service) ReportPodcastFeeds(ctx context.Context, reporter string, req P
 		}
 		dirty := false
 		if row == nil {
+			if meta.Rows >= podcastMaxFeedRows {
+				log.Printf("corpusd: podcast feeds: the %d-row limit is reached; a new feed is refused", podcastMaxFeedRows)
+				return resp, errPodcastRowLimit
+			}
 			row = &podcastFeedRow{FeedURL: f.url, Norm: f.norm, Title: f.title, FirstSeen: now.Format(time.RFC3339)}
+			meta.Rows++
+			metaDirty, dirty = true, true
 			resp.NewFeeds++
-			dirty = true
 		}
 		if row.Title == "" && f.title != "" {
 			row.Title, dirty = f.title, true
 		}
-		if f.subscribe {
-			if !podcastContains(row.Subscribers, reporter) && len(row.Subscribers) < podcastMaxSubscribers {
-				row.Subscribers = append(row.Subscribers, reporter)
-				dirty = true
-			}
-			resp.Accepted++
+		if !podcastContains(row.Subscribers, reporter) && len(row.Subscribers) < podcastMaxSubscribers {
+			row.Subscribers = append(row.Subscribers, reporter)
+			dirty = true
 		}
-		if np != nil && f.norm == np.FeedURL {
-			kept := pruneWanted(row.Wanted, now)
-			if len(kept) != len(row.Wanted) {
-				dirty = true
+		resp.Accepted++
+		if dirty {
+			if err := s.putPodcastFeed(ctx, og, *row, now); err != nil {
+				return resp, err
 			}
+			changed = true
+		}
+	}
+	if len(added) > 0 {
+		acct.Subs = append(acct.Subs, added...)
+		if err := s.putPodcastIndex(ctx, og, acctKey, acct, now); err != nil {
+			return resp, err
+		}
+	}
+	// A playing episode counts only for a feed the account subscribes to
+	// (stored or just now); it never creates a feed row.
+	if np != nil && (have[npNorm] || podcastContains(added, npNorm)) {
+		row, err := s.getPodcastFeed(ctx, og, npNorm)
+		if err != nil {
+			return resp, err
+		}
+		if row != nil {
+			kept := pruneWanted(row.Wanted, now)
+			dirty := len(kept) != len(row.Wanted)
 			row.Wanted = kept
 			found := false
 			for i := range row.Wanted {
@@ -289,60 +384,46 @@ func (s *Service) ReportPodcastFeeds(ctx context.Context, reporter string, req P
 				}
 				dirty = true
 			}
+			if dirty {
+				if err := s.putPodcastFeed(ctx, og, *row, now); err != nil {
+					return resp, err
+				}
+				changed = true
+			}
 			resp.NowPlayingQueued = true
 		}
-		if dirty {
-			if err := s.putPodcastFeed(ctx, og, *row, now); err != nil {
-				return resp, err
-			}
-			changed = true
+	}
+	if metaDirty {
+		if err := s.putPodcastIndex(ctx, og, "meta", meta, now); err != nil {
+			return resp, err
 		}
 	}
-	if changed {
-		s.podcastCache.reset() // a feed may have just become public
+	if changed || len(added) > 0 {
+		s.podcastCache.reset()
 	}
 	return resp, nil
 }
 
-func podcastContains(list []string, v string) bool {
-	for _, x := range list {
-		if x == v {
-			return true
+func pruneWanted(w []podcastWanted, now time.Time) []podcastWanted {
+	var out []podcastWanted
+	for _, x := range w {
+		if t, err := time.Parse(time.RFC3339, x.At); err == nil && now.Sub(t) < podcastWantedTTL {
+			out = append(out, x)
 		}
 	}
-	return false
+	return out
 }
 
-// podcastFeedListed reports whether a feed is public: featured by the
-// operator or reported by at least podcastListedMin accounts.
-func podcastFeedListed(r podcastFeedRow) bool {
-	return r.Featured || len(r.Subscribers) >= podcastListedMin
-}
-
-// listedFeedSet is the normalised URLs of the public feeds.
-func (s *Service) listedFeedSet(ctx context.Context) (map[string]bool, error) {
-	rows, err := s.allPodcastFeeds(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := map[string]bool{}
-	for _, r := range rows {
-		if podcastFeedListed(r) {
-			out[r.Norm] = true
-		}
-	}
-	return out, nil
-}
-
-// PodcastFeedListing is one feed the operator lists.
+// PodcastFeedListing is one feed the operator features.
 type PodcastFeedListing struct {
 	FeedURL string `json:"feed_url"`
 	Title   string `json:"title"`
 }
 
-// SetPodcastFeedsListed lists (or unlists) feeds as the operator's own: the
-// seed list, or a feed the operator vouches for. Listing never touches the
-// subscriber counts. An unchanged feed writes nothing.
+// SetPodcastFeedsListed features (or unfeatures) feeds as the operator's own:
+// the seed list, or a feed the operator vouches for. A featured feed is the
+// only kind that is public. Featuring never touches the subscriber counts; an
+// unchanged feed writes nothing.
 func (s *Service) SetPodcastFeedsListed(ctx context.Context, feeds []PodcastFeedListing, listed bool) (int, error) {
 	if len(feeds) == 0 || len(feeds) > podcastMaxEpisodesPerRequest {
 		return 0, podcastInvalid("a request lists 1 to %d feeds", podcastMaxEpisodesPerRequest)
@@ -367,47 +448,111 @@ func (s *Service) SetPodcastFeedsListed(ctx context.Context, feeds []PodcastFeed
 	s.podcastFeedMu.Lock()
 	defer s.podcastFeedMu.Unlock()
 	now := time.Now().UTC()
-	changed := 0
+	meta, err := s.getPodcastIndex(ctx, og, "meta")
+	if err != nil {
+		return 0, err
+	}
+	featured := podcastSet(meta.Featured)
+	metaDirty := false
 	for _, f := range list {
 		row, err := s.getPodcastFeed(ctx, og, f.norm)
 		if err != nil {
-			return changed, err
+			return 0, err
 		}
-		dirty := false
-		if row == nil {
-			if !listed {
-				continue
+		if row == nil && listed {
+			if meta.Rows >= podcastMaxFeedRows {
+				log.Printf("corpusd: podcast feeds: the %d-row limit is reached; a featured feed is refused", podcastMaxFeedRows)
+				return 0, errPodcastRowLimit
 			}
-			row = &podcastFeedRow{FeedURL: f.url, Norm: f.norm, Title: f.title, FirstSeen: now.Format(time.RFC3339), Featured: true}
-			dirty = true
-		}
-		if row.Featured != listed {
-			row.Featured, dirty = listed, true
-		}
-		if f.title != "" && row.Title != f.title {
-			row.Title, dirty = f.title, true
-		}
-		if dirty {
+			row = &podcastFeedRow{FeedURL: f.url, Norm: f.norm, Title: f.title, FirstSeen: now.Format(time.RFC3339)}
+			meta.Rows++
+			metaDirty = true
 			if err := s.putPodcastFeed(ctx, og, *row, now); err != nil {
-				return changed, err
+				return 0, err
 			}
-			changed++
+		} else if row != nil && f.title != "" && row.Title != f.title {
+			row.Title = f.title
+			if err := s.putPodcastFeed(ctx, og, *row, now); err != nil {
+				return 0, err
+			}
+		}
+		if listed != featured[f.norm] {
+			metaDirty = true
+			if listed {
+				featured[f.norm] = true
+			} else {
+				delete(featured, f.norm)
+			}
 		}
 	}
-	if changed > 0 {
+	if metaDirty {
+		meta.Featured = meta.Featured[:0]
+		for n := range featured {
+			meta.Featured = append(meta.Featured, n)
+		}
+		sort.Strings(meta.Featured)
+		if err := s.putPodcastIndex(ctx, og, "meta", meta, now); err != nil {
+			return 0, err
+		}
 		s.podcastCache.reset()
 	}
 	return len(list), nil
 }
 
-func pruneWanted(w []podcastWanted, now time.Time) []podcastWanted {
-	var out []podcastWanted
-	for _, x := range w {
-		if t, err := time.Parse(time.RFC3339, x.At); err == nil && now.Sub(t) < podcastWantedTTL {
-			out = append(out, x)
+// notePodcastEpisodes tells the feed rows what the worker parsed: the show's
+// name and the newest episodes, which the match job reads by key. A feed with
+// no row (nobody subscribed, the operator did not feature it) is not tracked.
+func (s *Service) notePodcastEpisodes(ctx context.Context, og *ObjectGraphStore, eps []PodcastEpisode, now time.Time) error {
+	byFeed := map[string][]PodcastEpisode{}
+	for _, e := range eps {
+		if n, err := NormalizeFeedURL(e.FeedURL); err == nil {
+			byFeed[n] = append(byFeed[n], e)
 		}
 	}
-	return out
+	s.podcastFeedMu.Lock()
+	defer s.podcastFeedMu.Unlock()
+	for norm, list := range byFeed {
+		row, err := s.getPodcastFeed(ctx, og, norm)
+		if err != nil {
+			return err
+		}
+		if row == nil {
+			continue
+		}
+		before, _ := json.Marshal(row)
+		recent := map[string]time.Time{}
+		for _, r := range row.Recent {
+			recent[r.EpisodeID] = r.Published
+		}
+		for _, e := range list {
+			recent[e.EpisodeID] = e.Published
+			row.Show = e.Show
+			if e.Published.After(row.LatestPublished) {
+				row.LatestPublished, row.LatestTitle = e.Published, e.Title
+			}
+		}
+		row.Recent = row.Recent[:0]
+		for id, p := range recent {
+			row.Recent = append(row.Recent, podcastRecent{EpisodeID: id, Published: p})
+		}
+		sort.Slice(row.Recent, func(i, j int) bool {
+			if !row.Recent[i].Published.Equal(row.Recent[j].Published) {
+				return row.Recent[i].Published.After(row.Recent[j].Published)
+			}
+			return row.Recent[i].EpisodeID < row.Recent[j].EpisodeID
+		})
+		if len(row.Recent) > podcastRecentPerFeed {
+			row.Recent = row.Recent[:podcastRecentPerFeed]
+		}
+		after, _ := json.Marshal(row)
+		if string(before) == string(after) {
+			continue
+		}
+		if err := s.putPodcastFeed(ctx, og, *row, now); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // PodcastFeedForWorker is a feed as the worker's intake sees it.
@@ -418,17 +563,19 @@ type PodcastFeedForWorker struct {
 	Wanted      []podcastWanted `json:"wanted,omitempty"`
 }
 
+// allPodcastFeeds reads every feed row (there are at most podcastMaxFeedRows,
+// which is the scan's bound, so it never truncates).
 func (s *Service) allPodcastFeeds(ctx context.Context) ([]podcastFeedRow, error) {
 	og, err := s.podcastStore()
 	if err != nil {
 		return nil, err
 	}
-	objs, err := og.ListObjects(ctx, objectgraph.ListFilter{Kind: ogKindPodcastFeed, OwnerID: podcastOwner, Limit: podcastFeedScan})
+	objs, err := og.ListObjects(ctx, objectgraph.ListFilter{Kind: ogKindPodcastFeed, OwnerID: podcastOwner, Limit: podcastMaxFeedRows})
 	if err != nil {
 		return nil, err
 	}
-	if len(objs) >= podcastFeedScan {
-		log.Printf("corpusd: podcast feeds: the listing hit its scan bound of %d; older feeds are not seen", podcastFeedScan)
+	if len(objs) >= podcastMaxFeedRows {
+		log.Printf("corpusd: podcast feeds: the listing reached the %d-row limit", podcastMaxFeedRows)
 	}
 	var out []podcastFeedRow
 	for _, o := range objs {
@@ -440,19 +587,33 @@ func (s *Service) allPodcastFeeds(ctx context.Context) ([]podcastFeedRow, error)
 	return out, nil
 }
 
-// ListPodcastFeedsForWorker lists every feed with a subscriber, a seed mark or
-// a wanted episode, most subscribed first.
+// ListPodcastFeedsForWorker lists every feed, featured first, then the most
+// subscribed. It is the operator's worker's list, never a public one.
 func (s *Service) ListPodcastFeedsForWorker(ctx context.Context) ([]PodcastFeedForWorker, error) {
+	og, err := s.podcastStore()
+	if err != nil {
+		return nil, err
+	}
+	featured, err := s.featuredFeedSet(ctx, og)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := s.allPodcastFeeds(ctx)
 	if err != nil {
 		return nil, err
 	}
 	now := time.Now().UTC()
+	sort.SliceStable(rows, func(i, j int) bool {
+		fi, fj := featured[rows[i].Norm], featured[rows[j].Norm]
+		if fi != fj {
+			return fi
+		}
+		return len(rows[i].Subscribers) > len(rows[j].Subscribers)
+	})
 	out := make([]PodcastFeedForWorker, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, PodcastFeedForWorker{FeedURL: r.FeedURL, Title: r.Title, Subscribers: len(r.Subscribers), Wanted: pruneWanted(r.Wanted, now)})
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Subscribers > out[j].Subscribers })
 	return out, nil
 }
 
@@ -465,9 +626,10 @@ type PodcastPopularFeed struct {
 	LatestPublished    time.Time `json:"latest_published,omitempty"`
 }
 
-// ListPodcastPopular lists the feeds readers follow, with counts and never
-// who: a feed shows a count only when at least podcastPopularMin distinct
-// accounts report it; the operator's featured feeds follow with a zero.
+// ListPodcastPopular lists the featured feeds the worker has fetched, with a
+// subscriber count where at least podcastPopularMin accounts follow the feed
+// and 0 otherwise, never who. The title is the show's name as the worker parsed
+// it. Read by key: the featured set, then each feed's row.
 func (s *Service) ListPodcastPopular(ctx context.Context, limit int) ([]PodcastPopularFeed, error) {
 	if limit <= 0 {
 		limit = 30
@@ -475,80 +637,44 @@ func (s *Service) ListPodcastPopular(ctx context.Context, limit int) ([]PodcastP
 	if limit > podcastPopularLimit {
 		limit = podcastPopularLimit
 	}
-	rows, err := s.allPodcastFeeds(ctx)
+	og, err := s.podcastStore()
 	if err != nil {
 		return nil, err
 	}
-	eps, err := s.ListPodcastEpisodes(ctx, false, time.Time{}, 500)
+	meta, err := s.getPodcastIndex(ctx, og, "meta")
 	if err != nil {
 		return nil, err
 	}
-	latest := map[string]PodcastEpisode{}
-	for _, e := range eps {
-		if n, err := NormalizeFeedURL(e.FeedURL); err == nil {
-			if cur, ok := latest[n]; !ok || e.Published.After(cur.Published) {
-				latest[n] = e
-			}
+	var counted, rest []PodcastPopularFeed
+	for _, norm := range meta.Featured {
+		row, err := s.getPodcastFeed(ctx, og, norm)
+		if err != nil {
+			return nil, err
 		}
-	}
-	var counted, featured []PodcastPopularFeed
-	for _, r := range rows {
-		item := PodcastPopularFeed{FeedURL: r.FeedURL, Title: r.Title}
-		// Only a public feed the worker has fetched and parsed at least once:
-		// a phone cannot put an arbitrary name on the public list, and a
-		// private feed never appears.
-		e, fetched := latest[r.Norm]
-		if !fetched || !podcastFeedListed(r) {
-			continue
+		if row == nil || row.LatestTitle == "" {
+			continue // not fetched and parsed yet
 		}
-		item.LatestEpisodeTitle, item.LatestPublished = e.Title, e.Published
+		item := PodcastPopularFeed{FeedURL: row.FeedURL, Title: row.Show, LatestEpisodeTitle: row.LatestTitle, LatestPublished: row.LatestPublished}
 		if item.Title == "" {
-			item.Title = e.Show
+			item.Title = row.Title
 		}
-		switch {
-		case len(r.Subscribers) >= podcastPopularMin:
-			item.Subscribers = len(r.Subscribers)
+		if len(row.Subscribers) >= podcastPopularMin {
+			item.Subscribers = len(row.Subscribers)
 			counted = append(counted, item)
-		case r.Featured:
-			featured = append(featured, item)
+		} else {
+			rest = append(rest, item)
 		}
 	}
 	sort.SliceStable(counted, func(i, j int) bool { return counted[i].Subscribers > counted[j].Subscribers })
-	sort.SliceStable(featured, func(i, j int) bool { return featured[i].Title < featured[j].Title })
-	out := append(counted, featured...)
+	sort.SliceStable(rest, func(i, j int) bool { return rest[i].Title < rest[j].Title })
+	out := append(counted, rest...)
 	if len(out) > limit {
 		out = out[:limit]
-	}
-	for i := range out {
-		if utf8.RuneCountInString(out[i].Title) > 200 {
-			out[i].Title = string([]rune(out[i].Title)[:200])
-		}
 	}
 	return out, nil
 }
 
-// subscriberCounts maps normalised feed URLs to their subscriber counts, for
-// ordering the worker's queue.
-func (s *Service) podcastFeedWeights(ctx context.Context) (counts map[string]int, wanted map[string]map[string]bool, err error) {
-	rows, err := s.allPodcastFeeds(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	now := time.Now().UTC()
-	counts, wanted = map[string]int{}, map[string]map[string]bool{}
-	for _, r := range rows {
-		counts[r.Norm] = len(r.Subscribers)
-		for _, w := range pruneWanted(r.Wanted, now) {
-			if wanted[r.Norm] == nil {
-				wanted[r.Norm] = map[string]bool{}
-			}
-			wanted[r.Norm][w.GUID] = true
-		}
-	}
-	return counts, wanted, nil
-}
-
-// PodcastTranscriptResponse is the reader's transcript (design 4.4).
+// PodcastTranscriptResponse is the reader's transcript (design 4.7).
 type PodcastTranscriptResponse struct {
 	Episode  PodcastTranscriptEpisode `json:"episode"`
 	Source   string                   `json:"source"`
@@ -568,7 +694,9 @@ type PodcastTranscriptEpisode struct {
 }
 
 // GetPodcastTranscriptFor reads an episode's transcript by feed and guid for
-// the account reporter; nil when there is none or the caller may not see it.
+// the account reporter; nil when there is none or the caller may not see it. A
+// featured feed's transcript is for every signed-in account; any other feed's
+// only for an account that subscribes to it.
 func (s *Service) GetPodcastTranscriptFor(ctx context.Context, feedURL, guid, reporter string) (*PodcastTranscriptResponse, error) {
 	feedURL, guid = strings.TrimSpace(feedURL), strings.TrimSpace(guid)
 	if err := checkPodcastURL("feed", feedURL); err != nil || guid == "" || len(guid) > podcastMaxURLBytes {
@@ -582,19 +710,22 @@ func (s *Service) GetPodcastTranscriptFor(ctx context.Context, feedURL, guid, re
 	if err != nil || ep == nil {
 		return nil, err
 	}
-	// An unlisted feed's transcript is the subscriber's: it answers only an
-	// account that reported the feed, and "not found" for anyone else, so its
-	// existence is not revealed.
 	norm, err := NormalizeFeedURL(ep.FeedURL)
 	if err != nil {
 		return nil, nil
 	}
-	row, err := s.getPodcastFeed(ctx, og, norm)
+	featured, err := s.featuredFeedSet(ctx, og)
 	if err != nil {
 		return nil, err
 	}
-	if row == nil || (!podcastFeedListed(*row) && (reporter == "" || !podcastContains(row.Subscribers, reporter))) {
-		return nil, nil
+	if !featured[norm] {
+		row, err := s.getPodcastFeed(ctx, og, norm)
+		if err != nil {
+			return nil, err
+		}
+		if row == nil || reporter == "" || !podcastContains(row.Subscribers, reporter) {
+			return nil, nil // 404 for everyone else: existence is not revealed
+		}
 	}
 	tr, err := s.GetPodcastTranscript(ctx, og, ep.EpisodeID)
 	if err != nil || tr == nil {

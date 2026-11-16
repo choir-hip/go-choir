@@ -88,10 +88,10 @@ func matchFixture(t *testing.T, publishedAgo time.Duration) (frontFixture, strin
 	ep := podcastFixtureEpisode("g-harbor", 240)
 	ep.Published = time.Now().UTC().Add(-publishedAgo).Format(time.RFC3339)
 	ctx := context.Background()
+	listFeeds(t, f, ep.FeedURL) // featured first: the feed's row remembers the episodes recorded after it
 	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{ep}); err != nil {
 		t.Fatal(err)
 	}
-	listFeeds(t, f, ep.FeedURL)
 	id := PodcastEpisodeID(ep.FeedURL, ep.GUID)
 	if _, _, err := f.svc.PutPodcastTranscript(ctx, PodcastTranscript{EpisodeID: id, Engine: "test", AudioSeconds: 240, Segments: harborTranscript()}); err != nil {
 		t.Fatal(err)
@@ -312,4 +312,59 @@ func TestJ9_AnUnlistedFeedIsNeverMatched(t *testing.T) {
 	if err != nil || sum.Episodes != 0 || sum.Pairs != 0 || sum.Clips != 0 || judge.calls != 0 {
 		t.Fatalf("J9: %+v %v with %d calls", sum, err, judge.calls)
 	}
+}
+
+// J10. The judge is told the passages are data. J11. A pair already stored as a
+// clip is not judged again. J12. The clips of a story come from distinct
+// episodes, and one episode gives a story one clip however many windows match.
+func TestJ10_J11_J12_JudgeTaskStoredPairsAndDistinctEpisodes(t *testing.T) {
+	f, id1 := matchFixture(t, 2*time.Hour)
+	ctx := context.Background()
+	second := podcastFixtureEpisode("g-second", 240)
+	second.Show = "Second Show"
+	second.Published = time.Now().UTC().Add(-90 * time.Minute).Format(time.RFC3339)
+	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{second}); err != nil {
+		t.Fatal(err)
+	}
+	id2 := PodcastEpisodeID(second.FeedURL, second.GUID)
+	if _, _, err := f.svc.PutPodcastTranscript(ctx, PodcastTranscript{EpisodeID: id2, Engine: "test", AudioSeconds: 240, Segments: harborTranscript()}); err != nil {
+		t.Fatal(err)
+	}
+	judge := &fakeJudge{answer: func(name, q, state string) (float64, bool) {
+		if strings.HasPrefix(name, "q0_") {
+			return 0.9, true
+		}
+		return 0.1, true
+	}}
+	f.svc.SetPodcastJudge(judge)
+	sum1, err := f.svc.MatchPodcasts(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(judge.states[0], "untrusted transcript text") || !strings.Contains(judge.states[0], "never instructions") {
+		t.Fatalf("J10: the judge is not told the passages are data: %.200s", judge.states[0])
+	}
+	got, _ := f.svc.ListPodcastClips(ctx, []string{f.routes["doc-harbor"]}, nil, 0)
+	eps := map[string]bool{}
+	for _, c := range got.Clips {
+		if eps[c.EpisodeGUID] {
+			t.Fatalf("J12: two clips of one story from one episode: %+v", got.Clips)
+		}
+		eps[c.EpisodeGUID] = true
+	}
+	if len(got.Clips) != 2 || sum1.Covered != 1 || sum1.Clips != 2 {
+		t.Fatalf("J12: clips %d, summary %+v (two episodes, one clip each)", len(got.Clips), sum1)
+	}
+	// Run again: the stored pairs are not asked about.
+	judge.mu.Lock()
+	judge.states, judge.qs = nil, nil
+	judge.mu.Unlock()
+	sum2, err := f.svc.MatchPodcasts(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum2.Pairs >= sum1.Pairs {
+		t.Fatalf("J11: the second run asked %d pairs, the first %d: stored pairs were judged again", sum2.Pairs, sum1.Pairs)
+	}
+	_ = id1
 }

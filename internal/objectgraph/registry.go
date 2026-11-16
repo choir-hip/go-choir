@@ -241,6 +241,7 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.podcast_episode", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.podcastEpisodeRow"},
 		{Kind: "choir.podcast_transcript", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.podcastTranscriptRow"},
 		{Kind: "choir.podcast_feed", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.podcastFeedRow"},
+		{Kind: "choir.podcast_index", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.podcastIndexDoc"},
 		{Kind: "choir.podcast_clip", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.podcastClipRow"},
 		// A published software release record (P7). Retired: its routes are
 		// deleted and nothing writes one (docs/design/package-install-2026-11-04.md);
