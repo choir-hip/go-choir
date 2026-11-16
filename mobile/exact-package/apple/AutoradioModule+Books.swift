@@ -17,6 +17,7 @@ extension AutoradioModule {
         ShelfFollow.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["shelfFollow", "shelfList"]) } }
         Task { @MainActor in ShelfPlayback.register() }
         SearchProviders.register(name: "books") { q in lib.hits(query: q) }
+        SavedCorpus.shared.setSource("library", LibraryCorpusSource(shelf: lib).documents)   // lane autoradio-joins: a question can be answered from a book the reader has
         pageSources.register(BooksPageSource(lib: lib))
         // lane autoradio-joins: a .pdf or .epub typed in the bar is imported, then its page opens; a failure is said in the bar's line.
         BarURL.importDocument = { [weak self] url in

@@ -21,7 +21,7 @@ public enum SavedAnswerPrompt {
     public static let maxSentences = 3
     public static let noAnswer = "NO_ANSWER"
     public static func system() -> String {
-        "You answer a listener's question using ONLY the numbered passages you are given, which come from stories saved on their phone. "
+        "You answer a listener's question using ONLY the numbered passages you are given, which come from stories and books saved on their phone. "
             + "Never use anything you know that is not written in the passages, and never guess. "
             + "If the passages do not answer the question, write exactly \(noAnswer) and nothing else. "
             + "Otherwise answer in two or three short plain sentences that a voice can say, the most important first, each making sense on its own. "
@@ -37,6 +37,7 @@ public enum SavedAnswerPrompt {
     /// "From the paper's story on X" for a passage; "From this page" for the page in front.
     public static func source(_ h: PassageHit) -> String {
         if h.passage.docID.hasPrefix("page:") { return "From this page" }
+        if h.passage.docID.hasPrefix("book:") { return "From your book \(String(h.passage.title.prefix(90)))" }
         if let t = AckPrompt.usableTitle(h.passage.title) { return "From the paper's story on \(String(t.prefix(90)))" }
         return "From a story you saved"
     }
