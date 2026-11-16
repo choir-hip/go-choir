@@ -30,6 +30,7 @@
   import { scopedKey } from './user-scope.js';
   import { setWindowStepSink } from './window-step';
   import { setPlannedReloadSink } from './planned-reload';
+  import { crashHeldMap, crashReopened, crashHoldFor, currentCrashHold, markCrashReopened, forgetCrashReopened } from './stores/crash-hold.js';
   import { links } from './services/links';
   import { onMount } from 'svelte';
   import { onDestroy } from 'svelte';
@@ -93,7 +94,7 @@
     moveWindow,
     resizeWindow,
     clearWindowRestoreSuspension,
-    setWindowCrashHold,
+    setWindowCrashAutoKey,
     suspendWindowBody,
     suspendBackgroundHeavyWindows,
     updateWindowAppContext,
@@ -239,7 +240,7 @@
     openAutomatically(appReplay.appId, appReplay.appContext || {}, () => openApp(appReplay.appId, appReplay.appName, appReplay.icon, appReplay.appContext || {}));
   }
   $: overviewPreviewDecisions = desktopOverviewOpen
-    ? createOverviewPreviewDecisions($windows, $activeWindowId, {
+    ? createOverviewPreviewDecisions($windows.map((w) => ({ ...w, crashHeld: crashHoldFor(w, $crashHeldMap, $crashReopened) })), $activeWindowId, {
         viewportWidth: overviewViewportWidth,
       })
     : {};
@@ -557,7 +558,6 @@
             const restoredWindows = restoredWindowsRaw.map((win) => ({
               ...win,
               restoreSuspended: shouldSuspendRestoredWindow(win, hydrationActiveId, lazyHydration),
-              crashHeld: crashReport.held[win.windowId] || 0,
             }));
             const recovery = shouldEnterRestoreRecovery(restoredWindows, state.active_window_id || '', crashReport.suspected);
             if (recovery) {
@@ -589,6 +589,12 @@
         return;
       }
     }
+    // A fetch that failed (or gave nothing) leaves the server's list unknown:
+    // every dead marker still becomes a hold, by window id, and nothing is pruned.
+    if (crashGuard && !crashRestoreTaken) {
+      crashGuard.takeDeaths(null, crashLiveTabs);
+      refreshCrashHeld();
+    }
     // Whatever the fetch did, the markers have been judged: app bodies may mount.
     crashGateOpen = true;
     stateLoaded = true;
@@ -615,7 +621,7 @@
   }
 
   function isWindowAppBodySuspended(win) {
-    return Boolean(win?.crashHeld) || Boolean(win?.restoreSuspended && isHeavyAppId(win.appId));
+    return Boolean(currentCrashHold(win)) || Boolean(win?.restoreSuspended && isHeavyAppId(win.appId));
   }
 
   // ---- Crash guard (lib/crash-guard.js; docs/problems/desktop-restore-reopens-
@@ -671,6 +677,8 @@
     crashGateOpen = false;
     crashRestoreTaken = false;
     crashMarked = new Set();
+    crashHeldMap.set({});
+    crashReopened.set(new Set());
     crashClock.current = null;
     crashTickAt = 0;
     crashVisibleMs = 0;
@@ -714,13 +722,14 @@
       removeStepSink = setWindowStepSink((windowId, text, opts = {}) => {
         if (!crashGuard || !crashGateOpen) return;
         const win = windowsSnapshot().find((w) => w.windowId === windowId);
-        if (!win || win.crashHeld) return;
+        if (!win || currentCrashHold(win)) return;
         crashGuard.step(windowId, text, { background: Boolean(opts.background), done: Boolean(opts.done), win, autoKey: win.crashAutoKey || '' });
         if (!opts.background) crashMarked.add(windowId);
         crashClock.current?.noteStep(windowId, opts);
       });
       removePlannedSink = setPlannedReloadSink(() => crashGuard?.markPlanned());
       crashBoot = guard.beginBoot(crashLiveTabs);
+      refreshCrashHeld();
       // The last boot of this device died: what this load opens by itself is resumed work.
       crashAutoHold = Boolean(crashBoot.previousDead);
     })();
@@ -733,16 +742,15 @@
     const guard = crashGuard;
     if (!guard || !crashBoot) return { held: {}, suspected: false };
     if (crashRestoreTaken) {
-      // Not the first restore of this page: keep the holds windows carry now.
-      const held = {};
-      for (const win of windowsSnapshot()) if (win.crashHeld) held[win.windowId] = win.crashHeld;
-      return { held, suspected: false };
+      // Not the first restore of this page: the holds are derived, nothing to carry.
+      return { held: {}, suspected: false };
     }
     crashRestoreTaken = true;
     const ids = restoredRaw.map((win) => win.windowId);
     const fresh = guard.takeDeaths(ids, crashLiveTabs);
     // Holds are durable: every restored window in the device's held map is held, whatever the markers say.
-    const held = guard.holds(ids);
+    const held = guard.holds(ids); // prunes against this successfully fetched list only
+    refreshCrashHeld();
     for (const id of Object.keys(held)) crashSteps[id] = guard.lastStep(id);
     for (const entry of guard.history().filter((h) => fresh[h.windowId] && h.at >= crashPageStartedAt)) {
       console.warn('[choir] the page stopped while a window was opening', entry);
@@ -752,7 +760,13 @@
   }
   const crashPageStartedAt = Date.now();
 
-  function syncCrashGuard(list, isAuthenticated, gateOpen) {
+  // The guard's durable holds, mirrored for the reactive derivation of every
+  // body mount (stores/crash-hold.js). Called wherever the guard's holds change.
+  function refreshCrashHeld() {
+    crashHeldMap.set(crashGuard ? crashGuard.readHeld() : {});
+  }
+
+  function syncCrashGuard(list, isAuthenticated, gateOpen, _held, _reopened) {
     if (!isAuthenticated || !gateOpen || !crashGuard) return;
     const mountedNow = new Set();
     for (const win of list || []) {
@@ -764,14 +778,18 @@
         crashMarked.add(win.windowId);
       }
     }
-    const held = new Set((list || []).filter((win) => win.crashHeld).map((win) => win.windowId));
+    const present = new Map((list || []).filter((win) => win.mode !== 'closed' && win.mode !== 'hidden').map((win) => [win.windowId, win]));
     for (const id of [...crashMarked]) {
       if (mountedNow.has(id)) continue;
       crashMarked.delete(id);
-      if (!held.has(id)) crashGuard.settle(id);
+      // Present but not mounted (suspended, held): only the marker goes, never a hold.
+      // Gone: closed, so the hold ends too.
+      if (present.has(id)) crashGuard.unmark(id);
+      else { crashGuard.settle(id, { autoKey: crashAutoKeyById.get(id) || '' }); crashAutoKeyById.delete(id); forgetCrashReopened(id); }
     }
+    refreshCrashHeld();
   }
-  $: syncCrashGuard($windows, authenticated, crashGateOpen);
+  $: syncCrashGuard($windows, authenticated, crashGateOpen, $crashHeldMap, $crashReopened);
 
   // An automatic open at load (a public route, an app replay) is resumed work
   // like a restore, but its window id is fresh each time, so a death cannot be
@@ -797,8 +815,9 @@
       if (!count && crashAutoHold && !crashBootStable) count = crashGuard.holdAuto(key, { appId: win.appId, title: win.title });
       crashAutoKeyById.set(win.windowId, key);
       if (count) crashSteps[win.windowId] = crashGuard.lastStep('', key);
-      setWindowCrashHold(win.windowId, count, key);
+      setWindowCrashAutoKey(win.windowId, key);
     }
+    refreshCrashHeld();
   }
 
   function settleCrashWindows(ids) {
@@ -806,7 +825,9 @@
       crashMarked.delete(id);
       crashGuard?.settle(id, { autoKey: crashAutoKeyById.get(id) || '' });
       crashAutoKeyById.delete(id);
+      forgetCrashReopened(id);
     }
+    refreshCrashHeld();
   }
 
   function crashTick() {
@@ -827,7 +848,8 @@
 
   function handleReopenCrashHeld(windowId) {
     // Same pending marker as any mount (syncCrashGuard): a second death holds it again.
-    setWindowCrashHold(windowId, 0);
+    // Reopen lets this page mount it; the hold stays on disk until it proves.
+    markCrashReopened(windowId);
     clearWindowRestoreSuspension(windowId);
     focusWindow(windowId);
     scheduleSave();
@@ -2046,6 +2068,7 @@
       {/if}
       {#each $windows as win (win.windowId)}
         {#if win.mode !== 'closed' && win.mode !== 'hidden'}
+          {@const holdCount = crashHoldFor(win, $crashHeldMap, $crashReopened)}
           <FloatingWindow
             windowId={win.windowId}
             appId={win.appId}
@@ -2069,20 +2092,20 @@
             on:move={handleWindowMove}
             on:resize={handleWindowResize}
           >
-            {#if win.crashHeld}
-              <div class="app-content suspended-app-content" data-crash-held data-crash-held-count={win.crashHeld} data-suspended-app-id={win.appId}>
+            {#if holdCount}
+              <div class="app-content suspended-app-content" data-crash-held data-crash-held-count={holdCount} data-suspended-app-id={win.appId}>
                 <div class="crash-held">
                   <p class="crash-held-text">
                     <strong>{win.title}</strong> was still opening when the page was reloaded or stopped, so it has not been opened again.
                     {#if crashSteps[win.windowId]}
                       It stopped while: {crashSteps[win.windowId]}.
                     {/if}
-                    {#if win.crashHeld >= HOLD_CLOSE_FIRST_AFTER}
-                      It has now stopped the page {win.crashHeld} times in a row. Closing it is the safer choice.
+                    {#if holdCount >= HOLD_CLOSE_FIRST_AFTER}
+                      It has now stopped the page {holdCount} times in a row. Closing it is the safer choice.
                     {/if}
                   </p>
                   <p class="crash-held-actions">
-                    {#if win.crashHeld >= HOLD_CLOSE_FIRST_AFTER}
+                    {#if holdCount >= HOLD_CLOSE_FIRST_AFTER}
                       <button type="button" data-crash-held-close on:click={() => handleCloseCrashHeld(win.windowId)}>Close</button>
                       <button type="button" data-crash-held-reopen on:click={() => handleReopenCrashHeld(win.windowId)}>Reopen</button>
                     {:else}

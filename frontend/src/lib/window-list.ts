@@ -3,6 +3,7 @@
 // a window goes through focus, restore, windowAction and the other W1 verbs.
 import { derived, type Readable } from 'svelte/store';
 import { activeWindowId, windows } from './stores/desktop.js';
+import { crashHeldMap, crashHoldFor, crashReopened } from './stores/crash-hold.js';
 
 export type WindowEntry = {
   windowId: string;
@@ -14,7 +15,7 @@ export type WindowEntry = {
   restoreSuspended: boolean;
 };
 
-export const windowList: Readable<WindowEntry[]> = derived([windows, activeWindowId], ([$windows, $active]) =>
+export const windowList: Readable<WindowEntry[]> = derived([windows, activeWindowId, crashHeldMap, crashReopened], ([$windows, $active, $held, $reopened]) =>
   (($windows as any[]) || [])
     .filter((win) => win.mode !== 'closed' && win.mode !== 'hidden')
     .map((win) => ({
@@ -24,6 +25,6 @@ export const windowList: Readable<WindowEntry[]> = derived([windows, activeWindo
       icon: String(win.icon || ''),
       mode: String(win.mode),
       focused: win.windowId === $active,
-      restoreSuspended: Boolean(win.restoreSuspended || win.crashHeld),
+      restoreSuspended: Boolean(win.restoreSuspended || crashHoldFor(win, $held as any, $reopened as any)),
     })),
 );
