@@ -29,7 +29,6 @@
   import { createCrashGuard, createProofClock, readLiveTabs, startPresence, withTimeout, LIVENESS_TIMEOUT_MS, HOLD_CLOSE_FIRST_AFTER, QUIET_MS } from './crash-guard.js';
   import { scopedKey } from './user-scope.js';
   import { setWindowStepSink } from './window-step';
-  import { setPlannedReloadSink } from './planned-reload';
   import { crashHeldMap, crashReopened, crashHoldFor, currentCrashHold, markCrashReopened, forgetCrashReopened } from './stores/crash-hold.js';
   import { links } from './services/links';
   import { onMount } from 'svelte';
@@ -651,25 +650,19 @@
   let crashBootStable = false;
   let crashTicker = null;
   let removeStepSink = null;
-  let removePlannedSink = null;
   let crashAutoHold = false;
   const crashAutoKeyById = new Map();
   let crashSteps = {};
   let crashLiveTabs = new Set();
-  let stopPresence = null;
 
   function resetCrashGuardState({ settle = false } = {}) {
     if (settle && crashGuard) {
       for (const id of crashMarked) crashGuard.settle(id, { autoKey: crashAutoKeyById.get(id) || '' });
-      crashGuard.leaveCleanly();
+      crashGuard.leave();
     }
     crashAutoKeyById.clear();
-    stopPresence?.();
     removeStepSink?.();
-    removePlannedSink?.();
-    stopPresence = null;
     removeStepSink = null;
-    removePlannedSink = null;
     crashGuard = null;
     crashGuardKey = '';
     crashBoot = null;
@@ -710,15 +703,13 @@
     crashArming = (async () => {
       const guard = ensureCrashGuard();
       if (!guard) return;
-      let storage = null;
-      try { storage = window.localStorage; } catch (_err) { storage = null; }
       const locks = typeof navigator !== 'undefined' ? navigator.locks : null;
       try {
-        crashLiveTabs = await withTimeout(readLiveTabs({ locks, storage }), LIVENESS_TIMEOUT_MS, new Set());
+        crashLiveTabs = await withTimeout(readLiveTabs({ locks }), LIVENESS_TIMEOUT_MS, new Set());
       } catch (_err) {
         crashLiveTabs = new Set();
       }
-      stopPresence = startPresence({ locks, storage, pageId: crashPageId });
+      startPresence({ locks, pageId: crashPageId });
       removeStepSink = setWindowStepSink((windowId, text, opts = {}) => {
         if (!crashGuard || !crashGateOpen) return;
         const win = windowsSnapshot().find((w) => w.windowId === windowId);
@@ -727,7 +718,6 @@
         if (!opts.background) crashMarked.add(windowId);
         crashClock.current?.noteStep(windowId, opts);
       });
-      removePlannedSink = setPlannedReloadSink(() => crashGuard?.markPlanned());
       crashBoot = guard.beginBoot(crashLiveTabs);
       refreshCrashHeld();
       // The last boot of this device died: what this load opens by itself is resumed work.
@@ -809,10 +799,18 @@
     open();
     if (!crashGuard) return;
     const key = autoOpenKey(appId, context);
+    // What this open produced or brought forward: its new windows, and the
+    // window it focused (a restored or merged window that matches: a route
+    // already open, a singleton).
+    const activeId = currentActiveWindowIdSnapshot();
+    const wantedApp = normalizeAppId(appId);
     for (const win of windowsSnapshot()) {
-      if (before.has(win.windowId) || win.mode === 'closed' || win.mode === 'hidden') continue;
+      if (win.mode === 'closed' || win.mode === 'hidden') continue;
+      const isNew = !before.has(win.windowId);
+      if (!isNew && !(win.windowId === activeId && normalizeAppId(win.appId) === wantedApp)) continue;
       let count = crashGuard.autoHeld(key);
-      if (!count && crashAutoHold && !crashBootStable) count = crashGuard.holdAuto(key, { appId: win.appId, title: win.title });
+      if (!count && crashAutoHold && !crashBootStable) count = 1;
+      if (count) crashGuard.holdAuto(key, { appId: win.appId, title: win.title, windowId: win.windowId });
       crashAutoKeyById.set(win.windowId, key);
       if (count) crashSteps[win.windowId] = crashGuard.lastStep('', key);
       setWindowCrashAutoKey(win.windowId, key);
@@ -1192,16 +1190,37 @@
   let unsubscribeIconPositions;
 
   function handlePageHide() {
-    crashGuard?.leaveCleanly();
+    // The handler ran, so this page was not hung: it takes its markers with it.
+    crashGuard?.leave();
     if (saveTimer !== null) {
       void flushDesktopState({ keepalive: true });
     }
   }
 
+  // Shown again after leaving (a backgrounded tab, the back-forward cache): the
+  // windows still mounted and unproven are marked again and their quiet period
+  // starts over.
+  function rejoinCrashGuard() {
+    if (!crashGuard || !crashGateOpen) return;
+    crashGuard.rejoin(crashBootStable);
+    for (const id of crashMarked) {
+      if (crashClock.current?.isProven(id)) continue;
+      const win = windowsSnapshot().find((w) => w.windowId === id);
+      if (win) crashGuard.markPending(win, { autoKey: win.crashAutoKey || '' });
+    }
+    crashClock.current?.restart();
+  }
+
   function handleVisibilityChange() {
+    if (document.visibilityState === 'hidden') crashGuard?.leave();
+    else rejoinCrashGuard();
     if (document.visibilityState === 'hidden' && saveTimer !== null) {
       void flushDesktopState({ keepalive: true });
     }
+  }
+
+  function handlePageShow(event) {
+    if (event?.persisted) rejoinCrashGuard();
   }
 
   function handleLocalDriverInput() {
@@ -1920,6 +1939,7 @@
     refreshOverviewViewport();
     window.addEventListener('resize', refreshOverviewViewport);
     window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('pageshow', handlePageShow);
     crashTicker = setInterval(crashTick, 1000);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     lastAuthenticated = authenticated;
@@ -1955,6 +1975,7 @@
     void flushDesktopState({ keepalive: true });
     window.removeEventListener('resize', refreshOverviewViewport);
     window.removeEventListener('pagehide', handlePageHide);
+    window.removeEventListener('pageshow', handlePageShow);
     document.removeEventListener('visibilitychange', handleVisibilityChange);
     removeDriverInputListeners();
     closeLiveChannel();
