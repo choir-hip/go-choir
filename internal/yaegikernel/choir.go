@@ -1901,6 +1901,7 @@ func (s *ChoirScope) ReportPacket(toDesk string, packet any, resolverID string) 
 	if err != nil {
 		return "", err
 	}
+	packetJSON = liftPacketAliases(packetJSON)
 	if packetJSON, err = checkReportPacket(packetJSON); err != nil {
 		return "", err
 	}
